@@ -173,8 +173,87 @@ depth exceeded". Flat arrays are compared element by element, which is what make
 them stable. This cost a debugging cycle; it is written down so it costs nobody
 another.
 
+## The session / agent view (043)
+
+Meta bar, terminal, message row. The row is `MessageInput`, mounted by
+`CenterStage` and **keyed by entity id** — switching sessions remounts it, which
+both clears a half-typed message meant for somebody else and re-runs its
+autofocus.
+
+There is no `session-view.tsx` wrapper, though story 043 names one. The terminal
+belongs to the shared `TerminalHost`, so a component wrapping meta bar +
+terminal + input would have to reach into it; composition happens in the stage
+instead.
+
+The authority for that is the **UPDATED SPECS block on Jira ticket HIVE-20**
+("mount feature panels directly from this region's component in
+`src/components/layout/` … no composition module inside a feature slice"). Note
+that block exists only in Jira — `stories/040-center-stage.md` in this repo has
+not been synced with it, so do not go looking for it there.
+
+### Send is one action with an origin
+
+`sendToEntity(id, msg, origin)` handles both paths. The transcript records who
+spoke, so the echo differs — `❯ [orchestrator] msg` from the console, a blank
+line then `❯ msg` from the session's own row — but the acknowledgement is one
+shared line, because it means the same thing either way.
+
+One timer per message: two rapid sends produce two independent acknowledgements
+rather than one cancelling the other. `appendEntityLines` only applies a status
+to sessions, so agents stay `online` with no branch at the call site.
+
+### Click-to-focus, without eating the selection
+
+Clicking the terminal focuses the message row — but only when
+`window.getSelection()` is empty. Moving focus collapses the document selection,
+so an unconditional focus-on-click would delete the highlight the user's drag had
+only just made.
+
+## The new-session picker (044)
+
+Keyboard-first: New session → type a query → Enter → a live terminal, hands
+never leaving the keyboard. Pinned pills for the first four projects, two
+bespoke steppers for model and effort, and a search box over all projects.
+
+### Why the Radix primitive rather than `components/ui/dialog`
+
+The vendored `DialogContent` always portals to `document.body` and centres a
+fixed-position card. This picker **fills the center stage** — rails and header
+stay visible, as the concept shows — so it composes `Dialog.Root` and
+`Dialog.Content` from `radix-ui` directly and renders in place.
+
+What the story actually asks for is Radix's *behaviour*, and the parts that
+matter are kept: the focus trap, Escape, and `aria-modal` — all of which live in
+`Content`. `onOpenAutoFocus` is intercepted so focus lands on the search box
+rather than the container.
+
+**Scroll locking is not kept**, and that is deliberate: Radix implements it in
+`Dialog.Overlay`, which this picker omits because an overlay would paint a scrim
+across the whole app and destroy the full-stage look. The shell is a
+fixed-height, non-scrolling layout, so there is no page scroll to lock.
+
+### The steppers
+
+`OptionStepper` is bespoke and lives in this slice because nothing else uses it.
+Its *semantics* are a radio group, so that is the role it exposes — and the
+keyboard contract that role promises is implemented, not merely announced:
+arrow keys step the selection (clamped, not wrapped), focus follows selection,
+and roving `tabIndex` makes the group a single tab stop. Exposing `role="radio"`
+without those is worse than using plain buttons, because it advertises an
+interaction that does not exist. The track and fill are `aria-hidden`; the dots
+carry the meaning.
+
+Model and effort live in `ui-store`, not component state, so a deliberate choice
+survives closing and reopening the picker.
+
+### Spawn logging belongs to the store
+
+`spawnSession` writes its own console line (`spawned {id} on {repo}`). The
+`spawn` command used to write one too; that duplicate is gone. Logging at the
+action rather than at each call site is what keeps the transcript complete when a
+third caller — the picker today, a daemon event later — arrives.
+
 ## What later stories add here
 
-The session/agent view's input row (043) and the real new-session picker (044) —
-`CenterStage` currently renders a deliberately minimal picker placeholder so that
-state stays exitable. Then the activity rail and its three panels (050–053).
+The activity rail and its three panels (050–053), keyboard navigation (060), and
+simulation mode (061).
