@@ -80,7 +80,8 @@ one still fires.
 | everything except `src/stores/**` | `src/data/**` |
 | `electron/main/**` | `src/**` |
 | `electron/preload/**` | `src/**`, `electron/main/**` |
-| `src/**` | `electron/main/**`, `electron/preload/**` |
+| **`electron/pty-host/**`** | `src/**`, `electron/main/**`, `electron/preload/**` |
+| `src/**` | `electron/main/**`, `electron/preload/**`, `electron/pty-host/**` |
 
 `electron/shared/**` is the **only** module both processes may import, and it is
 types and constants only — no runtime imports, no Node APIs, no DOM APIs. The
