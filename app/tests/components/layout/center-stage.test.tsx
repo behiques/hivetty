@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { act } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetFitAddonInstances } from '../../../__mocks__/@xterm/addon-fit';
 import { resetWebLinksAddonInstances } from '../../../__mocks__/@xterm/addon-web-links';
@@ -12,11 +12,13 @@ import {
 
 import { CenterStage } from '@components/layout/center-stage';
 import { useHiveStore } from '@stores/hive-store';
+import { TERMINAL_CHORD_EVENT } from '@lib/terminal/keymap';
 import { useUiStore } from '@stores/ui-store';
 
 vi.mock('@xterm/xterm');
 vi.mock('@xterm/addon-fit');
 vi.mock('@xterm/addon-web-links');
+vi.mock('@xterm/addon-webgl');
 
 const metaBarFor = (id: string) => screen.queryByText(id);
 const pickerTitle = () => screen.queryByText('Start a new session');
@@ -132,5 +134,193 @@ describe('CenterStage', () => {
     expect(terminalInstances).toHaveLength(3);
     expect(terminalInstances.some((instance) => instance.disposed)).toBe(false);
     expect(visibleSurfaces()).toHaveLength(1);
+  });
+});
+
+/**
+ * Which surfaces accept input (story 095).
+ *
+ * The decision is `readOnly`, and it is derived from one predicate so a
+ * terminal can never report itself typable while its transport is a recording.
+ * These assert the rows of the story's table.
+ */
+describe('CenterStage — interactive terminals', () => {
+  /** A bridge complete enough for `PtyTransport` to attach without a process. */
+  function withBridge() {
+    (window as { hive?: unknown }).hive = {
+      pty: {
+        spawn: vi.fn(() => Promise.resolve()),
+        write: vi.fn(),
+        resize: vi.fn(),
+        kill: vi.fn(() => Promise.resolve()),
+        ack: vi.fn(),
+        onData: vi.fn(() => vi.fn()),
+        onExit: vi.fn(() => vi.fn()),
+        onLost: vi.fn(() => vi.fn()),
+      },
+    };
+  }
+
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+  });
+
+  afterEach(() => {
+    delete (window as { hive?: unknown }).hive;
+  });
+
+  /** The xterm instance backing a given surface, by construction order. */
+  const optionsFor = (index: number) => terminalInstances[index]!.options;
+
+  it('keeps every surface read-only in the browser target', () => {
+    // The demo surface is a recording end to end. A blinking cursor over one
+    // would be a trap — the user types and nothing happens.
+    render(<CenterStage />);
+    act(() => useUiStore.getState().openTab('hero-refresh'));
+
+    for (const instance of terminalInstances) {
+      expect(instance.options.disableStdin).toBe(true);
+      expect(instance.options.cursorBlink).toBe(false);
+    }
+  });
+
+  it('makes a desktop session typable, with a blinking cursor', () => {
+    withBridge();
+    render(<CenterStage />);
+    act(() => useUiStore.getState().openTab('hero-refresh'));
+
+    // Instance 0 is the orchestrator (mounted first); 1 is the session.
+    expect(optionsFor(1).disableStdin).toBe(false);
+    // A non-blinking cursor on a live prompt reads as a hung terminal.
+    expect(optionsFor(1).cursorBlink).toBe(true);
+  });
+
+  it('keeps the orchestrator console read-only ON DESKTOP TOO', () => {
+    /**
+     * The regression the whole branch exists to prevent. The console is a
+     * command surface, not a shell (story 041) — giving the desktop build real
+     * terminals must not quietly turn it into one.
+     */
+    withBridge();
+    render(<CenterStage />);
+
+    expect(optionsFor(0).disableStdin).toBe(true);
+    expect(optionsFor(0).cursorBlink).toBe(false);
+  });
+
+  it('keeps an agent read-only, because its transcript is a replay', () => {
+    withBridge();
+    render(<CenterStage />);
+    act(() => useUiStore.getState().openTab('slack-agent'));
+
+    expect(optionsFor(1).disableStdin).toBe(true);
+  });
+});
+
+describe('CenterStage — the escape chord', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+  });
+
+  /** Fire the event a terminal emits when it declines an app chord. */
+  const emitChord = (chord: string) =>
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(TERMINAL_CHORD_EVENT, { detail: { chord } }),
+      );
+    });
+
+  it('returns to the orchestrator when a terminal reports the chord', () => {
+    render(<CenterStage />);
+    act(() => useUiStore.getState().openTab('hero-refresh'));
+    expect(useUiStore.getState().activeTab).toBe('hero-refresh');
+
+    emitChord('back');
+
+    expect(useUiStore.getState().activeTab).toBe('orch');
+  });
+
+  it('ignores a chord it does not recognise', () => {
+    render(<CenterStage />);
+    act(() => useUiStore.getState().openTab('hero-refresh'));
+
+    emitChord('something-else');
+
+    expect(useUiStore.getState().activeTab).toBe('hero-refresh');
+  });
+
+  it('does NOT listen for the raw key combination anywhere in the app', () => {
+    /**
+     * The regression this design exists for. `Cmd+←` is "move caret to start of
+     * line" in every native text field and `Ctrl+Shift+←` is "extend selection
+     * by a word". An earlier revision listened for the combination on `window`,
+     * so typing in the new-session picker and pressing it closed the picker and
+     * discarded the query — with no terminal involved at all.
+     */
+    render(<CenterStage />);
+    act(() => useUiStore.getState().openTab('hero-refresh'));
+
+    for (const init of [
+      { key: 'ArrowLeft', metaKey: true },
+      { key: 'ArrowLeft', ctrlKey: true, shiftKey: true },
+    ]) {
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', init));
+      });
+    }
+
+    expect(useUiStore.getState().activeTab).toBe('hero-refresh');
+  });
+
+  it('stops listening once the stage unmounts', () => {
+    const { unmount } = render(<CenterStage />);
+    act(() => useUiStore.getState().openTab('hero-refresh'));
+    unmount();
+
+    emitChord('back');
+
+    expect(useUiStore.getState().activeTab).toBe('hero-refresh');
+  });
+});
+
+describe('CenterStage — text fields keep their native bindings', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+  });
+
+  it('lets the picker keep its query when the chord keys are pressed in it', async () => {
+    /**
+     * The bug this whole design replaced, asserted end to end through the real
+     * input rather than through a synthetic window event.
+     *
+     * `Cmd+←` is "move caret to start of line" and `Ctrl+Shift+←` is "extend
+     * selection by a word". With a `window` keydown listener matching on the
+     * combination, pressing either while typing a search query closed the
+     * picker and threw the query away — no terminal anywhere near it.
+     */
+    const user = userEvent.setup();
+    render(<CenterStage />);
+    act(() => useUiStore.getState().openPicker());
+
+    const search = screen.getByLabelText('Search all projects');
+    await user.click(search);
+    await user.keyboard('hero');
+    await user.keyboard('{Meta>}{ArrowLeft}{/Meta}');
+    await user.keyboard('{Control>}{Shift>}{ArrowLeft}{/Shift}{/Control}');
+
+    expect(pickerTitle()).toBeInTheDocument();
+    expect(search).toHaveValue('hero');
   });
 });
