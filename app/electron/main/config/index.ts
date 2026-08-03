@@ -1,18 +1,27 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname } from 'node:path';
 
 import {
-  CONFIG_PATH_ENV,
   DEFAULT_CLAUDE_COMMAND,
+  DEFAULT_PROJECT_ICON,
   DEFAULT_SHELL,
   emptySnapshot,
+  type AddProjectRequest,
   type ConfigSnapshot,
+  type RemoveProjectRequest,
 } from '@shared/config-contract';
 
+import { deriveProjectId } from './identity';
 import { parseConfig } from './parse';
-import { resolveProjects } from './resolve';
+import { configPath, describe } from './paths';
+import { resolveProject, resolveProjects } from './resolve';
 import { CONFIG_TEMPLATE } from './template';
+import {
+  WriteRefused,
+  writeConfig,
+  type ConfigDocument,
+  type WriteResult,
+} from './write';
 
 /**
  * The workspace config (story 090).
@@ -31,22 +40,9 @@ import { CONFIG_TEMPLATE } from './template';
 
 const LABEL = 'config';
 
-/**
- * Where the config lives.
- *
- * Read from the environment on every call rather than captured at module load:
- * story 085's Playwright fixture sets `HIVE_CONFIG_PATH` per test, and a
- * value frozen at import time would make the first spec to load this module
- * decide the path for all of them.
- */
-export function configPath(): string {
-  const override = process.env[CONFIG_PATH_ENV];
-  if (override !== undefined && override.trim() !== '') return override;
-  return join(homedir(), '.hive', 'config.json');
-}
-
-const describe = (cause: unknown): string =>
-  cause instanceof Error ? cause.message : String(cause);
+// Re-exported so every existing importer of `configPath` is untouched by the
+// move to `paths.ts`.
+export { configPath };
 
 /**
  * First run: create the directory, write the template, carry on.
@@ -117,4 +113,143 @@ export function getConfig(): ConfigSnapshot {
 export function reloadConfig(): ConfigSnapshot {
   cached = loadConfig();
   return cached;
+}
+
+/**
+ * Read the `projects` array off a raw document, tolerating a missing one.
+ *
+ * The document has already been parsed and found non-fatal by `writeConfig`, so
+ * a `projects` key that is not an array was reported there and is treated as
+ * absent here rather than throwing on the user's data.
+ */
+function projectsOf(document: ConfigDocument): unknown[] {
+  return Array.isArray(document.projects) ? document.projects : [];
+}
+
+/** A snapshot of the current config carrying one reason it could not change. */
+function refused(reason: string): ConfigSnapshot {
+  return { ...getConfig(), errors: [reason] };
+}
+
+/**
+ * Read one entry's declared id off a raw draft entry.
+ *
+ * The draft is the file as JSON parsed it, so entries are unknown shapes — this
+ * is the same untrusted data `parse.ts` guards, reached one step earlier.
+ */
+function idOf(entry: unknown): string | null {
+  if (typeof entry !== 'object' || entry === null) return null;
+  const id = (entry as Record<string, unknown>).id;
+  return typeof id === 'string' ? id : null;
+}
+
+/** Read one entry's declared path off a raw draft entry. */
+function pathOf(entry: unknown): string | null {
+  if (typeof entry !== 'object' || entry === null) return null;
+  const declared = (entry as Record<string, unknown>).path;
+  return typeof declared === 'string' ? declared : null;
+}
+
+/**
+ * Install a write's result as the new cache, or report why nothing changed.
+ *
+ * `writeConfig` says explicitly whether it wrote. Inferring that from the
+ * snapshot would be wrong in both directions, which is why {@link WriteResult}
+ * exists — see its doc comment.
+ */
+function commit(result: WriteResult): ConfigSnapshot {
+  if (!result.ok) return refused(result.reason);
+  cached = result.snapshot;
+  return cached;
+}
+
+/**
+ * Add a local directory (story 101).
+ *
+ * The incoming path re-runs the **entire** story 090 resolution — expand `~`,
+ * require absolute, `realpath`, require a directory. The native dialog is a UX
+ * step, not a capability grant: a renderer that skipped the dialog and posted a
+ * path directly gets exactly the same treatment, because main's validation is
+ * the actual gate either way.
+ *
+ * The path is stored **as the user wrote it**, tilde and all. Storing the
+ * resolved path instead would bake this machine's home directory into a file
+ * people keep in dotfile repos; `realpath` is used for identity and duplicate
+ * detection, which is what it is good for.
+ */
+export function addProject(request: AddProjectRequest): ConfigSnapshot {
+  const probe = resolveProject({ id: 'probe', path: request.path });
+  if (probe.status !== 'ok' || probe.path === null) {
+    return refused(`${LABEL}: cannot add ${request.path} (${probe.status})`);
+  }
+  const real = probe.path;
+
+  /**
+   * Identity and duplicate detection run against the **draft**, not the cache.
+   *
+   * The config is deliberately not watched, so the cached snapshot can be older
+   * than the file — a user who hand-edited it since launch (the workflow this
+   * story is replacing, not forbidding) would otherwise get a colliding id
+   * written to disk, which `resolveProjects` then disables on the next read.
+   * `writeConfig` re-reads from disk precisely so this check can be correct.
+   */
+  return commit(
+    writeConfig((draft) => {
+      const entries = projectsOf(draft);
+
+      for (const entry of entries) {
+        const declared = pathOf(entry);
+        if (declared === null) continue;
+        const resolved = resolveProject({ id: 'probe', path: declared });
+        if (resolved.path === real) {
+          throw new WriteRefused(
+            `${real} is already added as "${idOf(entry) ?? 'an existing entry'}"`,
+          );
+        }
+      }
+
+      const taken = new Set(
+        entries.map(idOf).filter((id): id is string => id !== null),
+      );
+
+      return {
+        ...draft,
+        projects: [
+          ...entries,
+          {
+            id: deriveProjectId(basename(real), taken),
+            name: request.name ?? basename(real),
+            path: request.path,
+            icon: DEFAULT_PROJECT_ICON,
+            origin: 'local',
+          },
+        ],
+      };
+    }),
+  );
+}
+
+/**
+ * Remove one entry by id (story 101).
+ *
+ * Whether removal is *allowed* — a project that owns live sessions — is the
+ * renderer's gate for this story: the button is disabled with a tooltip. Story
+ * 103 owns the confirmation flow that lifts it.
+ */
+export function removeProject(request: RemoveProjectRequest): ConfigSnapshot {
+  return commit(
+    writeConfig((draft) => {
+      const entries = projectsOf(draft);
+      // Checked against the draft for the same reason `addProject` is: the
+      // cache can be older than the file.
+      if (!entries.some((entry) => idOf(entry) === request.id)) {
+        throw new WriteRefused(`no project with id "${request.id}"`);
+      }
+
+      return {
+        ...draft,
+        projects: entries.filter((entry) => idOf(entry) !== request.id),
+      };
+    }),
+  );
 }

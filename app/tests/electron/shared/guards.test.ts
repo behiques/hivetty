@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   IpcValidationError,
+  parseAddProjectRequest,
   parseKillRequest,
+  parseRemoveProjectRequest,
   parseResizeRequest,
   parseSpawnRequest,
   parseWriteRequest,
@@ -232,5 +234,80 @@ describe('parseKillRequest', () => {
     expect(() => parseKillRequest({ toString: () => 'sess-1' })).toThrow(
       /expected a string/,
     );
+  });
+});
+
+describe('parseAddProjectRequest', () => {
+  it('accepts a path alone and a path with a name', () => {
+    expect(parseAddProjectRequest({ path: '/tmp/x' })).toEqual({ path: '/tmp/x' });
+    expect(parseAddProjectRequest({ path: '/tmp/x', name: 'X' })).toEqual({
+      path: '/tmp/x',
+      name: 'X',
+    });
+  });
+
+  it('does not create an own name key when none was sent', () => {
+    // An `undefined`-valued own key would be written to the config file and
+    // reported as unknown the next time it is read.
+    expect(Object.keys(parseAddProjectRequest({ path: '/tmp/x' }))).toEqual(['path']);
+  });
+
+  it('rejects __proto__', () => {
+    expect(() =>
+      parseAddProjectRequest(JSON.parse('{"path":"/tmp/x","__proto__":{}}')),
+    ).toThrow(/forbidden key/);
+  });
+
+  it('rejects a non-string path, a missing path, and an unexpected key', () => {
+    expect(() => parseAddProjectRequest({ path: 7 })).toThrow(/expected a string/);
+    expect(() => parseAddProjectRequest({})).toThrow(/missing key "path"/);
+    expect(() => parseAddProjectRequest({ path: '/x', nope: 1 })).toThrow(
+      /unexpected key/,
+    );
+  });
+
+  it('rejects an empty or whitespace-only path', () => {
+    expect(() => parseAddProjectRequest({ path: '' })).toThrow(/non-empty/);
+    expect(() => parseAddProjectRequest({ path: '   ' })).toThrow(/non-empty/);
+  });
+
+  it('rejects an empty name', () => {
+    expect(() => parseAddProjectRequest({ path: '/x', name: '' })).toThrow(
+      /must not be empty/,
+    );
+  });
+
+  /**
+   * `name` is a display string, so it takes the bounded, control-character-free
+   * guard rather than the deliberately permissive path one. A renderer that
+   * skipped the dialog could otherwise persist an unbounded name into the
+   * config, and control characters would reach a file the user hand-edits.
+   */
+  it('bounds the name and rejects control characters in it', () => {
+    expect(() =>
+      parseAddProjectRequest({ path: '/x', name: 'a'.repeat(4097) }),
+    ).toThrow(/too long/);
+    expect(() =>
+      parseAddProjectRequest({ path: '/x', name: 'evil\u001b[2Jname' }),
+    ).toThrow(/control characters/);
+  });
+
+  it('still accepts an unbounded path, which is about to be realpath-ed', () => {
+    const deep = `/${'nested/'.repeat(700)}repo`;
+    expect(parseAddProjectRequest({ path: deep }).path).toBe(deep);
+  });
+});
+
+describe('parseRemoveProjectRequest', () => {
+  it('accepts an id', () => {
+    expect(parseRemoveProjectRequest({ id: 'the-hive' })).toEqual({ id: 'the-hive' });
+  });
+
+  it('rejects a malformed id, a missing id, and __proto__', () => {
+    expect(() => parseRemoveProjectRequest({ id: '../etc' })).toThrow(/malformed id/);
+    expect(() => parseRemoveProjectRequest({})).toThrow(/missing key "id"/);
+    expect(() =>
+      parseRemoveProjectRequest(JSON.parse('{"id":"a","__proto__":{}}')),
+    ).toThrow(/forbidden key/);
   });
 });

@@ -1,4 +1,8 @@
 import type {
+  AddProjectRequest,
+  RemoveProjectRequest,
+} from './config-contract';
+import type {
   AckRequest,
   ResizeRequest,
   SpawnRequest,
@@ -220,4 +224,50 @@ export function parseAckRequest(input: unknown): AckRequest {
     sessionId: assertId(raw.sessionId, 'ack.sessionId'),
     seq: assertSeq(raw.seq, 'ack.seq'),
   };
+}
+
+/**
+ * A filesystem path arriving from the renderer (story 101).
+ *
+ * **Shape only.** Whether the path is absolute, exists, or is a directory is
+ * main's job and is re-checked there from scratch by `resolveProject` — this
+ * guard's contract is that what reaches `addProject` is a non-empty string,
+ * not that it is safe. Validating a path here as well would be two validators,
+ * which is one validator and one bug.
+ *
+ * Deliberately not bounded like `assertId`: a legitimate path on a deeply
+ * nested filesystem is long, and the length limit that protects a lookup key
+ * reaching process control buys nothing for a string that is about to be
+ * `realpath`'d and rejected if it does not resolve.
+ */
+function assertPath(value: unknown, label: string): string {
+  const path = assertString(value, label);
+  if (path.trim() === '') return fail(`${label}: expected a non-empty string`);
+  return path;
+}
+
+export function parseAddProjectRequest(input: unknown): AddProjectRequest {
+  const raw = assertShape(input, ['path'], 'addProject', ['name']);
+  /**
+   * `name` is a **display string**, not a path: it is rendered, never resolved.
+   * `assertText` is the guard for that — bounded and control-character free —
+   * where `assertPath` is deliberately unbounded and permissive, which is right
+   * for something about to be `realpath`'d and wrong for something about to be
+   * persisted and shown.
+   */
+  const name =
+    raw.name === undefined ? undefined : assertText(raw.name, 'addProject.name');
+
+  // Conditional spread for the same reason `parseSpawnRequest` uses it: an
+  // `undefined`-valued own key would be written to the config file and then
+  // reported as unknown the next time it is read.
+  return {
+    path: assertPath(raw.path, 'addProject.path'),
+    ...(name !== undefined ? { name } : {}),
+  };
+}
+
+export function parseRemoveProjectRequest(input: unknown): RemoveProjectRequest {
+  const raw = assertShape(input, ['id'], 'removeProject');
+  return { id: assertId(raw.id, 'removeProject.id') };
 }

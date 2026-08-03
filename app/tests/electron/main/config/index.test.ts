@@ -91,6 +91,12 @@ describe('path resolution', () => {
         // would be asserting that resolution did *not* happen.
         path: realpathSync(join(home, 'repos', 'apfm-web')),
         status: 'ok',
+        // The v1 upgrade, applied in memory (story 101). The file on disk is
+        // still v1 and stays that way until the user saves something.
+        name: 'apfm-web',
+        icon: 'ph-folder',
+        origin: 'local',
+        isRepo: false,
       },
     ]);
   });
@@ -338,5 +344,315 @@ describe('caching', () => {
       status: 'ok',
     });
     expect(module.getConfig().projects).toHaveLength(1);
+  });
+});
+
+describe('schema v1 compatibility (story 101)', () => {
+  it('reads a v1 file, defaults the new fields, and leaves the file byte-identical', async () => {
+    const repo = join(sandbox, 'legacy');
+    mkdirSync(repo);
+    const original = `${JSON.stringify(
+      {
+        '//': 'hand-written under story 090',
+        version: 1,
+        projects: [{ id: 'apfm-web', path: repo }],
+      },
+      null,
+      2,
+    )}\n`;
+    const path = join(sandbox, 'config.json');
+    writeFileSync(path, original);
+    process.env[CONFIG_PATH_ENV] = path;
+
+    const snapshot = await loadConfig();
+    const entry = snapshot.projects[0];
+
+    expect(entry?.status).toBe('ok');
+    expect(entry?.name).toBe('legacy');
+    expect(entry?.icon).toBe('ph-folder');
+    expect(entry?.origin).toBe('local');
+
+    // The upgrade is in memory. Reading someone's file and rewriting it before
+    // they asked for anything is a surprise, not a migration — a v1 file the
+    // user never edits through the UI stays v1 forever and keeps working.
+    expect(readFileSync(path, 'utf8')).toBe(original);
+  });
+
+  it('still accepts a v2 file', async () => {
+    const repo = join(sandbox, 'modern');
+    mkdirSync(repo);
+    writeConfig({
+      version: 2,
+      projects: [
+        {
+          id: 'modern',
+          name: 'Modern',
+          path: repo,
+          icon: 'ph-folder',
+          origin: 'local',
+        },
+      ],
+    });
+
+    const snapshot = await loadConfig();
+
+    expect(snapshot.errors).toEqual([]);
+    expect(snapshot.projects[0]).toMatchObject({
+      id: 'modern',
+      name: 'Modern',
+      origin: 'local',
+      status: 'ok',
+    });
+  });
+});
+
+/**
+ * Mutation (story 101).
+ *
+ * These go through the module's cache deliberately: `addProject` reads
+ * `getConfig()` to decide the id and to detect duplicates, so a test that
+ * bypassed the cache would not exercise the path the IPC handler takes.
+ */
+async function mutable() {
+  vi.resetModules();
+  return import('../../../../electron/main/config/index');
+}
+
+describe('addProject', () => {
+  it('adds a directory, deriving id and name from the basename', async () => {
+    const repo = join(sandbox, 'my-repo');
+    mkdirSync(repo);
+    writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    const snapshot = module.addProject({ path: repo });
+
+    expect(snapshot.errors).toEqual([]);
+    expect(snapshot.projects).toHaveLength(1);
+    expect(snapshot.projects[0]?.id).toBe('my-repo');
+    expect(snapshot.projects[0]?.name).toBe('my-repo');
+    expect(snapshot.projects[0]?.status).toBe('ok');
+    // The cache is refreshed, so main and the renderer cannot disagree.
+    expect(module.getConfig().projects).toHaveLength(1);
+  });
+
+  it('rejects a relative path, a file, and a missing directory without writing', async () => {
+    const file = join(sandbox, 'notes.txt');
+    writeFileSync(file, 'not a directory');
+    const path = writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    expect(module.addProject({ path: 'relative/path' }).errors[0]).toMatch(
+      /not-absolute/,
+    );
+    expect(module.addProject({ path: file }).errors[0]).toMatch(/not-a-directory/);
+    expect(module.addProject({ path: join(sandbox, 'nope') }).errors[0]).toMatch(
+      /missing/,
+    );
+
+    expect(module.getConfig().projects).toHaveLength(0);
+    expect(JSON.parse(readFileSync(path, 'utf8')).projects).toEqual([]);
+  });
+
+  it('expands ~ and stores the path as the user wrote it', async () => {
+    mkdirSync(join(home, 'tilde-repo'), { recursive: true });
+    const path = writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    const snapshot = module.addProject({ path: '~/tilde-repo' });
+
+    expect(snapshot.projects[0]?.status).toBe('ok');
+    // Resolved for identity and duplicate detection; stored verbatim, so the
+    // file stays portable across machines with different home directories.
+    expect(JSON.parse(readFileSync(path, 'utf8')).projects[0].path).toBe(
+      '~/tilde-repo',
+    );
+  });
+
+  it('is a no-op when the resolved path is already added', async () => {
+    const repo = join(sandbox, 'repo');
+    mkdirSync(repo);
+    writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    module.addProject({ path: repo });
+    const second = module.addProject({ path: repo });
+
+    expect(second.projects).toHaveLength(1);
+    expect(second.errors.some((error) => /already added/.test(error))).toBe(true);
+  });
+
+  it('suffixes a colliding id derived from the same basename', async () => {
+    const first = join(sandbox, 'one', 'api');
+    const second = join(sandbox, 'two', 'api');
+    mkdirSync(first, { recursive: true });
+    mkdirSync(second, { recursive: true });
+    writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    module.addProject({ path: first });
+    const snapshot = module.addProject({ path: second });
+
+    expect(snapshot.projects.map((entry) => entry.id)).toEqual(['api', 'api-2']);
+  });
+
+  it('honours an explicit name without changing the id', async () => {
+    const repo = join(sandbox, 'repo');
+    mkdirSync(repo);
+    writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    const snapshot = module.addProject({ path: repo, name: 'My Repo' });
+
+    expect(snapshot.projects[0]?.name).toBe('My Repo');
+    expect(snapshot.projects[0]?.id).toBe('repo');
+  });
+
+  it('adds a directory that is not a git repository, tagging it', async () => {
+    const plain = join(sandbox, 'plain');
+    mkdirSync(plain);
+    writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    const snapshot = module.addProject({ path: plain });
+
+    // A PTY needs a cwd, not a repo. Refusing here would be the app inventing
+    // a rule the shell does not have.
+    expect(snapshot.projects[0]?.status).toBe('ok');
+    expect(snapshot.projects[0]?.isRepo).toBe(false);
+  });
+
+  it('upgrades a v1 file on the first add', async () => {
+    const repo = join(sandbox, 'repo');
+    mkdirSync(repo);
+    const path = writeConfig({ '//': 'kept', version: 1, projects: [] });
+    const module = await mutable();
+
+    module.addProject({ path: repo });
+
+    const after = JSON.parse(readFileSync(path, 'utf8'));
+    expect(after.version).toBe(2);
+    expect(after['//']).toBe('kept');
+  });
+});
+
+describe('removeProject', () => {
+  it('drops exactly one entry and leaves every other line intact', async () => {
+    const keep = join(sandbox, 'keep');
+    const drop = join(sandbox, 'drop');
+    mkdirSync(keep);
+    mkdirSync(drop);
+    const path = writeConfig({
+      '//': 'kept',
+      version: 2,
+      projects: [
+        { id: 'keep', name: 'Keep', path: keep, icon: 'ph-folder', origin: 'local' },
+        { id: 'drop', name: 'Drop', path: drop, icon: 'ph-folder', origin: 'local' },
+      ],
+    });
+    const module = await mutable();
+
+    const snapshot = module.removeProject({ id: 'drop' });
+
+    expect(snapshot.errors).toEqual([]);
+    const after = JSON.parse(readFileSync(path, 'utf8'));
+    expect(after['//']).toBe('kept');
+    expect(after.projects.map((entry: { id: string }) => entry.id)).toEqual(['keep']);
+    expect(module.getConfig().projects).toHaveLength(1);
+  });
+
+  it('reports an unknown id without writing', async () => {
+    const path = writeConfig({ version: 2, projects: [] });
+    const before = readFileSync(path, 'utf8');
+    const module = await mutable();
+
+    const snapshot = module.removeProject({ id: 'ghost' });
+
+    expect(snapshot.errors.some((error) => /no project with id "ghost"/.test(error))).toBe(
+      true,
+    );
+    expect(readFileSync(path, 'utf8')).toBe(before);
+  });
+});
+
+/**
+ * Regressions from the PR #40 self review.
+ *
+ * Both are cases where the *cache* and the *file* disagree — which they can,
+ * because the config is deliberately not watched.
+ */
+describe('mutation against a file edited since load', () => {
+  it('does not clobber the cache when a write is refused', async () => {
+    const repo = join(sandbox, 'repo');
+    mkdirSync(repo);
+    const path = writeConfig({
+      version: 2,
+      projects: [
+        { id: 'repo', name: 'Repo', path: repo, icon: 'ph-folder', origin: 'local' },
+      ],
+    });
+    const module = await mutable();
+    expect(module.getConfig().projects).toHaveLength(1);
+
+    // Make the file unreadable *after* load, so the write must refuse.
+    writeFileSync(path, '{ not json');
+    const snapshot = module.removeProject({ id: 'repo' });
+
+    expect(snapshot.errors).toHaveLength(1);
+    // The refusal reports the reason and keeps the projects. Caching the
+    // failure would have made every mapped project unspawnable until an
+    // explicit reload, without anything on disk having changed.
+    expect(snapshot.projects).toHaveLength(1);
+    expect(module.getConfig().projects).toHaveLength(1);
+  });
+
+  it('derives the id against the file, not the cache, so a hand-edit cannot collide', async () => {
+    const first = join(sandbox, 'a', 'api');
+    mkdirSync(first, { recursive: true });
+    const path = writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    // The user hand-edits the file while the app is running — the workflow this
+    // story replaces but does not forbid — claiming the id `api`.
+    writeFileSync(
+      path,
+      JSON.stringify({
+        version: 2,
+        projects: [
+          { id: 'api', name: 'Hand written', path: sandbox, icon: 'ph-folder', origin: 'local' },
+        ],
+      }),
+    );
+
+    const snapshot = module.addProject({ path: first });
+
+    const ids = snapshot.projects.map((entry) => entry.id);
+    expect(ids).toEqual(['api', 'api-2']);
+    // Nothing was written that the reader would then disable.
+    expect(snapshot.projects.every((entry) => entry.status !== 'duplicate-id')).toBe(
+      true,
+    );
+  });
+
+  it('detects a duplicate path added by hand since load', async () => {
+    const repo = join(sandbox, 'repo');
+    mkdirSync(repo);
+    const path = writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    writeFileSync(
+      path,
+      JSON.stringify({
+        version: 2,
+        projects: [
+          { id: 'byhand', name: 'By hand', path: repo, icon: 'ph-folder', origin: 'local' },
+        ],
+      }),
+    );
+
+    const snapshot = module.addProject({ path: repo });
+
+    expect(snapshot.errors.some((error) => /already added/.test(error))).toBe(true);
+    expect(JSON.parse(readFileSync(path, 'utf8')).projects).toHaveLength(1);
   });
 });
