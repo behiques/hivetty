@@ -40,13 +40,27 @@ export interface BootstrapOptions {
    * explains it.
    */
   onSilentStart?: (entityId: string) => void;
+  /**
+   * The session has finished bootstrapping — every stage written, nothing left
+   * pending.
+   *
+   * The signal main needs to release input it held back: until this fires the
+   * session is a bare login shell, and a user's message written into it would
+   * be run by the *shell* as a command line rather than reaching the agent.
+   */
+  onComplete?: (entityId: string) => void;
   debounceMs?: number;
   fallbackMs?: number;
 }
 
 export interface Bootstrap {
-  /** Arm a freshly spawned session. Idempotent per entity. */
-  arm(entityId: string, command: string): void;
+  /**
+   * Arm a freshly spawned session. Idempotent per entity.
+   *
+   * With a `task`, the session gets a second stage: the command goes in first,
+   * then the task once *its* output has settled. See {@link createBootstrap}.
+   */
+  arm(entityId: string, command: string, task?: string): void;
   /** Report output. The first one starts the debounce. */
   sawOutput(entityId: string): void;
   /** Abandon a pending bootstrap — the session died before it ran. */
@@ -58,6 +72,29 @@ export interface Bootstrap {
 
 interface Pending {
   command: string;
+  /**
+   * Restart the debounce on **every** chunk rather than only the first.
+   *
+   * Set for the task stage, and the difference is the whole correctness of it.
+   * Stage one's first output genuinely is the shell's prompt, so first-chunk +
+   * debounce is right there — and restarting on every chunk would let a long
+   * motd postpone the bootstrap indefinitely, which is what the fallback and
+   * this flag's absence guard against.
+   *
+   * Stage two has no such luck: the first output after `claude\r` is the line
+   * discipline's **echo of the command**, arriving in milliseconds, so a
+   * first-chunk clock fires ~150ms after `claude` was invoked and long before
+   * its TUI has painted. Waiting for the output to go *quiet* is the observable
+   * that "the TUI has finished starting" actually has, and `fallbackMs` still
+   * caps it for a TUI that never stops animating.
+   */
+  settleOnEveryChunk?: boolean;
+  /**
+   * Written after the *next* settle, once `command`'s own output has quietened
+   * (story 097). Undefined for an ordinary bootstrap and for the second stage
+   * itself, which is what makes the re-arm terminate.
+   */
+  task?: string;
   timer: ReturnType<typeof setTimeout>;
   /** True once the first chunk has arrived and the debounce is running. */
   settling: boolean;
@@ -67,16 +104,20 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
   const {
     write,
     onSilentStart,
+    onComplete,
     debounceMs = BOOTSTRAP_DEBOUNCE_MS,
     fallbackMs = BOOTSTRAP_FALLBACK_MS,
   } = options;
 
   const pending = new Map<string, Pending>();
+  /** Absolute cap for a stage that restarts its debounce. See `Pending`. */
+  const deadlines = new Map<string, number>();
 
   function fire(entityId: string, silent: boolean): void {
     const entry = pending.get(entityId);
     if (!entry) return;
     pending.delete(entityId);
+    deadlines.delete(entityId);
     if (silent) onSilentStart?.(entityId);
     /**
      * `\r`, not `\n`. A pty's line discipline turns carriage return into the
@@ -85,14 +126,45 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
      * run.
      */
     write(entityId, `${entry.command}\r`);
+
+    /**
+     * The task is the same problem one level down, so it gets the same answer.
+     *
+     * `claude` has to start and paint its prompt before it will accept input,
+     * and writing into that window loses the text exactly as writing into the
+     * shell's startup would. The renderer cannot time it — `session:status`
+     * carries `working | idle | done` and deliberately nothing finer — so main
+     * does, with the mechanism it already has.
+     *
+     * Re-arming rather than chaining is what makes this cheap: `settling:
+     * false` means the TUI's first paint restarts the identical debounce, the
+     * fallback still covers a TUI that prints nothing, and `cancel` already
+     * reaches it — a session that dies between the two stages drops its task
+     * with everything else. The new entry carries no `task` of its own, which
+     * is what terminates the recursion.
+     */
+    if (entry.task === undefined) {
+      onComplete?.(entityId);
+      return;
+    }
+    pending.set(entityId, {
+      command: entry.task,
+      settleOnEveryChunk: true,
+      settling: false,
+      timer: setTimeout(() => fire(entityId, true), fallbackMs),
+    });
+    // The fallback is the cap on "quiet": a TUI that never stops painting still
+    // gets its instruction, once, rather than never.
+    deadlines.set(entityId, Date.now() + fallbackMs);
   }
 
   return {
-    arm(entityId, command) {
+    arm(entityId, command, task) {
       // Re-arming would stack a second timer and write the command twice.
       if (pending.has(entityId)) return;
       pending.set(entityId, {
         command,
+        ...(task === undefined ? {} : { task }),
         settling: false,
         timer: setTimeout(() => fire(entityId, true), fallbackMs),
       });
@@ -101,6 +173,22 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
     sawOutput(entityId) {
       const entry = pending.get(entityId);
       if (!entry) return;
+
+      if (entry.settleOnEveryChunk) {
+        /**
+         * Wait for quiet, capped by the fallback the stage was armed with.
+         *
+         * Without the cap this could be postponed forever by a TUI that paints
+         * continuously; without the restart it fires on the command's own echo.
+         */
+        const deadline = deadlines.get(entityId);
+        if (deadline !== undefined && Date.now() >= deadline) return;
+        entry.settling = true;
+        clearTimeout(entry.timer);
+        entry.timer = setTimeout(() => fire(entityId, false), debounceMs);
+        return;
+      }
+
       // Only the *first* chunk starts the clock. Restarting the debounce on
       // every chunk would postpone the bootstrap indefinitely behind a shell
       // that prints a long motd.
@@ -116,6 +204,7 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
       if (!entry) return;
       clearTimeout(entry.timer);
       pending.delete(entityId);
+      deadlines.delete(entityId);
     },
 
     isPending: (entityId) => pending.has(entityId),
@@ -123,6 +212,7 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
     dispose() {
       for (const entry of pending.values()) clearTimeout(entry.timer);
       pending.clear();
+      deadlines.clear();
     },
   };
 }

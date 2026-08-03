@@ -196,3 +196,215 @@ describe('bootstrap lifecycle', () => {
     expect(written).toEqual([]);
   });
 });
+
+/**
+ * Delivering a spawn's task as the session's first message (story 097).
+ *
+ * The renderer cannot time this — `session:status` carries
+ * `working | idle | done` and nothing finer — so main does, by applying the
+ * mechanism above a second time: the command settles, then the TUI's own
+ * output settles, then the task goes in.
+ */
+describe('the task stage', () => {
+  const DEBOUNCE = 150;
+  const FALLBACK = 5_000;
+  const armed = () =>
+    bootstrap({ debounceMs: DEBOUNCE, fallbackMs: FALLBACK });
+
+  it('writes the task after the TUI settles, not alongside the command', () => {
+    const boot = armed();
+    boot.arm('sess-a', 'claude', 'fix the hero');
+
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+    expect(written).toEqual([{ entityId: 'sess-a', data: 'claude\r' }]);
+
+    // The TUI paints; that is the signal the second stage waits for.
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+    expect(written).toEqual([
+      { entityId: 'sess-a', data: 'claude\r' },
+      { entityId: 'sess-a', data: 'fix the hero\r' },
+    ]);
+  });
+
+  it('submits the task with a carriage return too', () => {
+    const boot = armed();
+    boot.arm('sess-a', 'claude', 'fix the hero');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+
+    expect(written.at(-1)?.data.endsWith('\r')).toBe(true);
+    expect(written.at(-1)?.data).not.toContain('\n');
+  });
+
+  it('writes the task exactly once, however much the TUI paints', () => {
+    const boot = armed();
+    boot.arm('sess-a', 'claude', 'fix the hero');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+
+    boot.sawOutput('sess-a');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(FALLBACK * 2);
+
+    expect(written).toHaveLength(2);
+  });
+
+  it('writes the task even if the TUI prints nothing at all', () => {
+    const boot = armed();
+    boot.arm('sess-a', 'claude', 'fix the hero');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+
+    vi.advanceTimersByTime(FALLBACK);
+
+    expect(written.at(-1)?.data).toBe('fix the hero\r');
+  });
+
+  it('drops a pending task when the session dies between the stages', () => {
+    const boot = armed();
+    boot.arm('sess-a', 'claude', 'fix the hero');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+
+    boot.cancel('sess-a');
+    vi.advanceTimersByTime(FALLBACK * 2);
+
+    // Only the command went in. `cancel` reaches the second stage for free,
+    // which is the reason it is a re-arm rather than a chained timer.
+    expect(written).toHaveLength(1);
+  });
+
+  it('reports the task as still pending until it has been written', () => {
+    const boot = armed();
+    boot.arm('sess-a', 'claude', 'fix the hero');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+
+    expect(boot.isPending('sess-a')).toBe(true);
+
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+    expect(boot.isPending('sess-a')).toBe(false);
+  });
+
+  it('drops the second stage on dispose, so nothing outlives the app', () => {
+    const boot = armed();
+    boot.arm('sess-a', 'claude', 'fix the hero');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+
+    boot.dispose();
+    vi.advanceTimersByTime(FALLBACK * 2);
+
+    expect(written).toHaveLength(1);
+  });
+
+  it('waits for the TUI to go quiet, not for its echo of the command', () => {
+    /**
+     * The defect this pins: the first output after `claude\r` is the line
+     * discipline's echo of the command itself, arriving in milliseconds. A
+     * first-chunk-plus-debounce clock therefore fired ~150ms after `claude` was
+     * invoked — long before its TUI could accept input, which is exactly the
+     * failure this module exists to prevent.
+     */
+    const boot = armed();
+    boot.arm('sess-a', 'claude', 'fix the hero');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+    expect(written).toHaveLength(1);
+
+    // The echo, then a TUI that keeps painting for a while.
+    for (let i = 0; i < 8; i += 1) {
+      boot.sawOutput('sess-a');
+      vi.advanceTimersByTime(DEBOUNCE - 20);
+    }
+    expect(written).toHaveLength(1);
+
+    // It goes quiet — now, and only now, the task goes in.
+    vi.advanceTimersByTime(DEBOUNCE);
+    expect(written.at(-1)?.data).toBe('fix the hero\r');
+  });
+
+  it('caps the wait, so a TUI that never stops painting still gets its task', () => {
+    const boot = armed();
+    boot.arm('sess-a', 'claude', 'fix the hero');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+
+    for (let i = 0; i < 200; i += 1) {
+      boot.sawOutput('sess-a');
+      vi.advanceTimersByTime(DEBOUNCE - 20);
+    }
+
+    expect(written).toHaveLength(2);
+    expect(written.at(-1)?.data).toBe('fix the hero\r');
+  });
+
+  it('reports completion once, after the last stage', () => {
+    const done: string[] = [];
+    const boot = createBootstrap({
+      write: (entityId, data) => written.push({ entityId, data }),
+      onComplete: (entityId) => done.push(entityId),
+      debounceMs: DEBOUNCE,
+      fallbackMs: FALLBACK,
+    });
+
+    boot.arm('sess-a', 'claude', 'fix the hero');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+    // Stage one is done but the task is still pending — not complete yet.
+    expect(done).toEqual([]);
+
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(FALLBACK);
+
+    expect(done).toEqual(['sess-a']);
+  });
+
+  it('reports completion for a bootstrap with no task at all', () => {
+    const done: string[] = [];
+    const boot = createBootstrap({
+      write: (entityId, data) => written.push({ entityId, data }),
+      onComplete: (entityId) => done.push(entityId),
+      debounceMs: DEBOUNCE,
+      fallbackMs: FALLBACK,
+    });
+
+    boot.arm('sess-a', 'claude');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(DEBOUNCE);
+
+    expect(done).toEqual(['sess-a']);
+  });
+
+  it('is still a single write when there is no task', () => {
+    const boot = armed();
+    boot.arm('sess-a', 'claude');
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(FALLBACK * 2);
+
+    expect(written).toEqual([{ entityId: 'sess-a', data: 'claude\r' }]);
+  });
+
+  it('keeps two sessions’ task stages independent', () => {
+    const boot = armed();
+    boot.arm('sess-a', 'claude', 'first');
+    boot.arm('sess-b', 'claude', 'second');
+
+    for (const id of ['sess-a', 'sess-b']) {
+      boot.sawOutput(id);
+      vi.advanceTimersByTime(DEBOUNCE);
+      boot.sawOutput(id);
+      vi.advanceTimersByTime(DEBOUNCE);
+    }
+
+    expect(written.filter((entry) => entry.data === 'first\r')).toHaveLength(1);
+    expect(written.filter((entry) => entry.data === 'second\r')).toHaveLength(1);
+  });
+});
