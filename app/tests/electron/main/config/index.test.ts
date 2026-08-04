@@ -656,3 +656,394 @@ describe('mutation against a file edited since load', () => {
     expect(JSON.parse(readFileSync(path, 'utf8')).projects).toHaveLength(1);
   });
 });
+
+/**
+ * Story 103's mutating verbs.
+ *
+ * Same harness as `addProject` above: a real temporary config, the module
+ * imported fresh so its cache starts empty, and every assertion checked against
+ * the file on disk as well as the returned snapshot — a verb that updated the
+ * cache but not the file would otherwise pass.
+ */
+describe('renameProject', () => {
+  it('writes the new name and leaves the id and path alone', async () => {
+    const repo = join(sandbox, 'repo');
+    mkdirSync(repo);
+    const path = writeConfig({
+      version: 2,
+      projects: [{ id: 'repo', name: 'repo', path: repo, icon: 'ph-folder' }],
+    });
+    const module = await mutable();
+
+    const snapshot = module.renameProject({ id: 'repo', name: 'My Repo' });
+
+    expect(snapshot.errors).toEqual([]);
+    expect(snapshot.projects[0]?.name).toBe('My Repo');
+    // The id is machinery: sessions reference it, so it must never drift.
+    expect(snapshot.projects[0]?.id).toBe('repo');
+    const written = JSON.parse(readFileSync(path, 'utf8')).projects[0];
+    expect(written.name).toBe('My Repo');
+    expect(written.id).toBe('repo');
+    expect(written.path).toBe(repo);
+    expect(module.getConfig().projects[0]?.name).toBe('My Repo');
+  });
+
+  it('preserves per-entry keys it does not own', async () => {
+    const repo = join(sandbox, 'repo');
+    mkdirSync(repo);
+    const path = writeConfig({
+      version: 2,
+      projects: [
+        { id: 'repo', name: 'repo', path: repo, origin: 'cloned', note: 'keep me' },
+      ],
+    });
+    const module = await mutable();
+
+    module.renameProject({ id: 'repo', name: 'Renamed' });
+
+    // The entry is spread, never rebuilt — which is the only reason a key this
+    // build has never heard of survives the round trip.
+    const written = JSON.parse(readFileSync(path, 'utf8')).projects[0];
+    expect(written.origin).toBe('cloned');
+    expect(written.note).toBe('keep me');
+  });
+
+  it('refuses an id that is not in the file, writing nothing', async () => {
+    const path = writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    const snapshot = module.renameProject({ id: 'ghost', name: 'Ghost' });
+
+    expect(snapshot.errors[0]).toMatch(/no project with id "ghost"/);
+    expect(JSON.parse(readFileSync(path, 'utf8')).projects).toEqual([]);
+  });
+
+  it('upgrades a v1 file to v2 on the first rename, keeping its comments', async () => {
+    const repo = join(sandbox, 'repo');
+    mkdirSync(repo);
+    const path = writeConfig({
+      version: 1,
+      '// note': 'hand written',
+      projects: [{ id: 'repo', path: repo }],
+    });
+    const module = await mutable();
+
+    module.renameProject({ id: 'repo', name: 'Upgraded' });
+
+    const written = JSON.parse(readFileSync(path, 'utf8'));
+    expect(written.version).toBe(2);
+    expect(written['// note']).toBe('hand written');
+    expect(written.projects[0].name).toBe('Upgraded');
+  });
+});
+
+describe('repointProject', () => {
+  it('writes the new path as the user wrote it and keeps origin', async () => {
+    const old = join(sandbox, 'old');
+    const moved = join(home, 'moved');
+    mkdirSync(old);
+    mkdirSync(moved);
+    const path = writeConfig({
+      version: 2,
+      projects: [{ id: 'repo', name: 'Repo', path: old, origin: 'cloned' }],
+    });
+    const module = await mutable();
+
+    const snapshot = module.repointProject({ id: 'repo', path: '~/moved' });
+
+    expect(snapshot.errors).toEqual([]);
+    expect(snapshot.projects[0]?.status).toBe('ok');
+    const written = JSON.parse(readFileSync(path, 'utf8')).projects[0];
+    // Stored verbatim so the file stays portable across machines; resolved only
+    // for validation and identity.
+    expect(written.path).toBe('~/moved');
+    // Re-pointing changes where a project is, never where it came from.
+    expect(written.origin).toBe('cloned');
+    expect(written.name).toBe('Repo');
+  });
+
+  it('refuses a missing path, a file, and a relative path, writing nothing', async () => {
+    const old = join(sandbox, 'old');
+    const file = join(sandbox, 'a-file');
+    mkdirSync(old);
+    writeFileSync(file, '');
+    const path = writeConfig({
+      version: 2,
+      projects: [{ id: 'repo', name: 'Repo', path: old }],
+    });
+    const module = await mutable();
+
+    expect(module.repointProject({ id: 'repo', path: 'relative' }).errors[0]).toMatch(
+      /not-absolute/,
+    );
+    expect(module.repointProject({ id: 'repo', path: file }).errors[0]).toMatch(
+      /not-a-directory/,
+    );
+    expect(
+      module.repointProject({ id: 'repo', path: join(sandbox, 'nope') }).errors[0],
+    ).toMatch(/missing/);
+
+    expect(JSON.parse(readFileSync(path, 'utf8')).projects[0].path).toBe(old);
+  });
+
+  it('refuses a path another project already occupies', async () => {
+    const first = join(sandbox, 'first');
+    const second = join(sandbox, 'second');
+    mkdirSync(first);
+    mkdirSync(second);
+    writeConfig({
+      version: 2,
+      projects: [
+        { id: 'first', name: 'First', path: first },
+        { id: 'second', name: 'Second', path: second },
+      ],
+    });
+    const module = await mutable();
+
+    const snapshot = module.repointProject({ id: 'second', path: first });
+
+    expect(snapshot.errors[0]).toMatch(/already added as "first"/);
+  });
+
+  it('permits re-pointing a project at the folder it already has', async () => {
+    const repo = join(sandbox, 'repo');
+    mkdirSync(repo);
+    writeConfig({ version: 2, projects: [{ id: 'repo', name: 'Repo', path: repo }] });
+    const module = await mutable();
+
+    // The duplicate check skips the project being moved: a no-op is something
+    // the user is allowed to do, not a clash with itself.
+    const snapshot = module.repointProject({ id: 'repo', path: repo });
+
+    expect(snapshot.errors).toEqual([]);
+    expect(snapshot.projects[0]?.status).toBe('ok');
+  });
+
+  it('refuses an id that is not in the file', async () => {
+    writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+    const repo = join(sandbox, 'repo');
+    mkdirSync(repo);
+
+    expect(module.repointProject({ id: 'ghost', path: repo }).errors[0]).toMatch(
+      /no project with id "ghost"/,
+    );
+  });
+
+  it('preserves top-level comment and unknown keys', async () => {
+    const old = join(sandbox, 'old');
+    const moved = join(sandbox, 'moved');
+    mkdirSync(old);
+    mkdirSync(moved);
+    const path = writeConfig({
+      version: 2,
+      '// note': 'hand written',
+      somethingElse: { kept: true },
+      projects: [{ id: 'repo', name: 'Repo', path: old }],
+    });
+    const module = await mutable();
+
+    module.repointProject({ id: 'repo', path: moved });
+
+    const written = JSON.parse(readFileSync(path, 'utf8'));
+    expect(written['// note']).toBe('hand written');
+    expect(written.somethingElse).toEqual({ kept: true });
+  });
+
+  it('preserves per-entry keys it does not own', async () => {
+    const old = join(sandbox, 'old');
+    const moved = join(sandbox, 'moved');
+    mkdirSync(old);
+    mkdirSync(moved);
+    const path = writeConfig({
+      version: 2,
+      projects: [{ id: 'repo', name: 'Repo', path: old, note: 'keep me' }],
+    });
+    const module = await mutable();
+
+    module.repointProject({ id: 'repo', path: moved });
+
+    expect(JSON.parse(readFileSync(path, 'utf8')).projects[0].note).toBe('keep me');
+  });
+});
+
+describe('reorderProjects', () => {
+  /** Three real directories and a config listing them a, b, c. */
+  async function threeProjects() {
+    for (const name of ['a', 'b', 'c']) mkdirSync(join(sandbox, name));
+    const path = writeConfig({
+      version: 2,
+      projects: ['a', 'b', 'c'].map((id) => ({
+        id,
+        name: id.toUpperCase(),
+        path: join(sandbox, id),
+      })),
+    });
+    return { path, module: await mutable() };
+  }
+
+  const idsIn = (path: string): string[] =>
+    JSON.parse(readFileSync(path, 'utf8')).projects.map(
+      (entry: { id: string }) => entry.id,
+    );
+
+  it('rewrites the array into the given order', async () => {
+    const { path, module } = await threeProjects();
+
+    const snapshot = module.reorderProjects({ ids: ['c', 'a', 'b'] });
+
+    expect(snapshot.errors).toEqual([]);
+    expect(snapshot.projects.map((project) => project.id)).toEqual(['c', 'a', 'b']);
+    // The left rail reads this order positionally, so the array is the ordering
+    // — there is nowhere else for it to live.
+    expect(idsIn(path)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('carries each entry across whole, including keys it does not own', async () => {
+    mkdirSync(join(sandbox, 'a'));
+    mkdirSync(join(sandbox, 'b'));
+    const path = writeConfig({
+      version: 2,
+      projects: [
+        { id: 'a', name: 'A', path: join(sandbox, 'a'), origin: 'cloned', note: 'keep' },
+        { id: 'b', name: 'B', path: join(sandbox, 'b') },
+      ],
+    });
+    const module = await mutable();
+
+    module.reorderProjects({ ids: ['b', 'a'] });
+
+    const written = JSON.parse(readFileSync(path, 'utf8')).projects;
+    expect(written[0].id).toBe('b');
+    expect(written[1]).toMatchObject({ id: 'a', origin: 'cloned', note: 'keep' });
+  });
+
+  it('refuses an ordering that is not a permutation of the file', async () => {
+    const { path, module } = await threeProjects();
+
+    // Too few: a project the renderer never knew about would be dropped.
+    expect(module.reorderProjects({ ids: ['a', 'b'] }).errors[0]).toMatch(
+      /does not match the projects on disk/,
+    );
+    // An id that is not there.
+    expect(module.reorderProjects({ ids: ['a', 'b', 'z'] }).errors[0]).toMatch(
+      /does not match the projects on disk/,
+    );
+
+    expect(idsIn(path)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('refuses an ordering built before the file gained a project', async () => {
+    const { path, module } = await threeProjects();
+    // A hand edit between the renderer's read and its write. The config is
+    // deliberately not watched, so this is the ordinary case, not a race.
+    mkdirSync(join(sandbox, 'd'));
+    const document = JSON.parse(readFileSync(path, 'utf8'));
+    document.projects.push({ id: 'd', name: 'D', path: join(sandbox, 'd') });
+    writeFileSync(path, JSON.stringify(document));
+
+    const snapshot = module.reorderProjects({ ids: ['c', 'b', 'a'] });
+
+    expect(snapshot.errors[0]).toMatch(/does not match the projects on disk/);
+    expect(idsIn(path)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  /**
+   * The check that stops this verb destroying data.
+   *
+   * `parse.ts` reports an entry with no id and **skips** it, leaving it in the
+   * file, so the renderer posts only the ids it can see. Comparing the payload
+   * against the ids the map collected would agree with itself and write the
+   * survivors — reporting success while deleting an entry the user never saw.
+   */
+  it('refuses rather than dropping an entry that has no id', async () => {
+    for (const name of ['alpha', 'charlie']) mkdirSync(join(sandbox, name));
+    const path = writeConfig({
+      version: 2,
+      projects: [
+        { id: 'alpha', path: join(sandbox, 'alpha') },
+        { path: join(sandbox, 'draft'), note: 'my notes' },
+        { id: 'charlie', path: join(sandbox, 'charlie') },
+      ],
+    });
+    const module = await mutable();
+
+    const snapshot = module.reorderProjects({ ids: ['charlie', 'alpha'] });
+
+    expect(snapshot.errors[0]).toMatch(/no id, or share one/);
+    const after = JSON.parse(readFileSync(path, 'utf8')).projects;
+    expect(after).toHaveLength(3);
+    expect(after[1].note).toBe('my notes');
+  });
+
+  it('refuses rather than collapsing two entries that share an id', async () => {
+    mkdirSync(join(sandbox, 'a1'));
+    mkdirSync(join(sandbox, 'a2'));
+    mkdirSync(join(sandbox, 'b'));
+    const path = writeConfig({
+      version: 2,
+      projects: [
+        { id: 'a', path: join(sandbox, 'a1') },
+        { id: 'a', path: join(sandbox, 'a2') },
+        { id: 'b', path: join(sandbox, 'b') },
+      ],
+    });
+    const module = await mutable();
+
+    // Last-wins in the lookup would delete the entry `resolveProjects` marks
+    // `ok` and promote the one it disabled, silently repointing the project.
+    const snapshot = module.reorderProjects({ ids: ['b', 'a'] });
+
+    expect(snapshot.errors[0]).toMatch(/no id, or share one/);
+    expect(JSON.parse(readFileSync(path, 'utf8')).projects).toHaveLength(3);
+  });
+
+  it('does not wipe a file whose entries are all unreadable', async () => {
+    const path = writeConfig({
+      version: 2,
+      projects: [{ path: '/tmp/no-id-here' }],
+    });
+    const module = await mutable();
+
+    expect(module.reorderProjects({ ids: [] }).errors[0]).toMatch(
+      /no id, or share one/,
+    );
+    expect(JSON.parse(readFileSync(path, 'utf8')).projects).toHaveLength(1);
+  });
+
+  /**
+   * `idOf` accepts any string; `parse` requires `ID_PATTERN`. So the file can
+   * hold an entry main can address and the renderer cannot see, and the
+   * refusal must not tell the user to do something that cannot help.
+   */
+  it('refuses an ordering built without an entry whose id the reader rejects', async () => {
+    mkdirSync(join(sandbox, 'good'));
+    const path = writeConfig({
+      version: 2,
+      projects: [
+        { id: 'good', path: join(sandbox, 'good') },
+        { id: 'has space', path: join(sandbox, 'good') },
+      ],
+    });
+    const module = await mutable();
+
+    const snapshot = module.reorderProjects({ ids: ['good'] });
+
+    expect(snapshot.errors[0]).toMatch(/could not be read/);
+    expect(JSON.parse(readFileSync(path, 'utf8')).projects).toHaveLength(2);
+  });
+
+  it('accepts an empty ordering for an empty file', async () => {
+    writeConfig({ version: 2, projects: [] });
+    const module = await mutable();
+
+    expect(module.reorderProjects({ ids: [] }).errors).toEqual([]);
+  });
+
+  it('accepts the order the file already has', async () => {
+    const { path, module } = await threeProjects();
+
+    expect(module.reorderProjects({ ids: ['a', 'b', 'c'] }).errors).toEqual([]);
+    expect(idsIn(path)).toEqual(['a', 'b', 'c']);
+  });
+});

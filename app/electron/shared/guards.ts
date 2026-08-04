@@ -2,6 +2,9 @@ import type {
   AddProjectRequest,
   CloneRequest,
   RemoveProjectRequest,
+  RenameProjectRequest,
+  ReorderProjectsRequest,
+  RepointProjectRequest,
 } from './config-contract';
 import type {
   AckRequest,
@@ -139,6 +142,14 @@ function assertDimension(value: unknown, label: string): number {
  */
 const MAX_TEXT = 4096;
 
+/**
+ * Upper bound on a reorder payload (story 103).
+ *
+ * Generous — nobody maps a thousand repositories — but finite, which is the
+ * point: the legitimate value is bounded by the projects on disk.
+ */
+const MAX_PROJECT_IDS = 1000;
+
 function assertText(value: unknown, label: string): string {
   const text = assertString(value, label);
   if (text.length === 0) return fail(`${label}: must not be empty`);
@@ -271,6 +282,87 @@ export function parseAddProjectRequest(input: unknown): AddProjectRequest {
 export function parseRemoveProjectRequest(input: unknown): RemoveProjectRequest {
   const raw = assertShape(input, ['id'], 'removeProject');
   return { id: assertId(raw.id, 'removeProject.id') };
+}
+
+/**
+ * Payload guard for `config:rename-project` (story 103).
+ *
+ * `name` gets `assertText` for the same reason `addProject.name` does: it is a
+ * **display string**, rendered and never resolved, so it is bounded and
+ * control-character free where `assertPath` is deliberately neither.
+ */
+export function parseRenameProjectRequest(input: unknown): RenameProjectRequest {
+  const raw = assertShape(input, ['id', 'name'], 'renameProject');
+  const name = assertText(raw.name, 'renameProject.name');
+  /*
+    Trimmed here, not at the call site. `assertText` rejects an empty string but
+    not a whitespace-only one, and a project called "   " is indistinguishable
+    from an unnamed one on screen. Doing it at the boundary means main and the
+    renderer cannot disagree about what counts as blank.
+  */
+  const trimmed = name.trim();
+  if (trimmed === '') return fail('renameProject.name: must not be empty');
+  return { id: assertId(raw.id, 'renameProject.id'), name: trimmed };
+}
+
+/**
+ * Payload guard for `config:repoint-project` (story 103).
+ *
+ * `path` gets `assertPath`'s permissiveness, matching
+ * {@link parseAddProjectRequest}: this proves the *shape*, and main's
+ * `resolveProject` proves the *value* — expanded, made absolute, `realpath`'d,
+ * confirmed to be a directory. Two validators disagreeing about what a path may
+ * contain is how a rule gets quietly relaxed.
+ */
+export function parseRepointProjectRequest(
+  input: unknown,
+): RepointProjectRequest {
+  const raw = assertShape(input, ['id', 'path'], 'repointProject');
+  return {
+    id: assertId(raw.id, 'repointProject.id'),
+    path: assertPath(raw.path, 'repointProject.path'),
+  };
+}
+
+/**
+ * Payload guard for `config:reorder-projects` (story 103).
+ *
+ * Duplicates are rejected here rather than in the verb. A list containing one
+ * can never be a permutation of the file's ids, and refusing it at the boundary
+ * lets the verb's own check stay a plain set comparison.
+ */
+export function parseReorderProjectsRequest(
+  input: unknown,
+): ReorderProjectsRequest {
+  const raw = assertShape(input, ['ids'], 'reorderProjects');
+  if (!Array.isArray(raw.ids)) {
+    return fail(
+      `reorderProjects.ids: expected an array, got ${describe(raw.ids)}`,
+    );
+  }
+  /*
+    Bounded, like every other guard in this file. The legitimate value can
+    never exceed the number of projects on disk, and an unbounded array is
+    allocated twice in main before anything rejects it — a wedged main process
+    takes every terminal with it.
+  */
+  if (raw.ids.length > MAX_PROJECT_IDS) {
+    return fail('reorderProjects.ids: too many ids');
+  }
+  /*
+    `Array.from` first, so array holes become `undefined` and are rejected.
+    `.map`, `.every` and `Set` all *skip* holes, which would let a sparse array
+    through this guard and put a literal `null` into the config file. A
+    `contextBridge` clone happens to densify it today; main's only shape guard
+    should not rest on a renderer-side implementation detail.
+  */
+  const ids = Array.from(raw.ids as unknown[]).map((id, index) =>
+    assertId(id, `reorderProjects.ids[${index}]`),
+  );
+  if (new Set(ids).size !== ids.length) {
+    return fail('reorderProjects.ids: duplicate id');
+  }
+  return { ids };
 }
 
 /**

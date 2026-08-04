@@ -10,6 +10,9 @@ import {
   type ConfigSnapshot,
   type ProjectOrigin,
   type RemoveProjectRequest,
+  type RenameProjectRequest,
+  type ReorderProjectsRequest,
+  type RepointProjectRequest,
 } from '@shared/config-contract';
 
 import { deriveProjectId } from './identity';
@@ -261,6 +264,174 @@ export function removeProject(request: RemoveProjectRequest): ConfigSnapshot {
       return {
         ...draft,
         projects: entries.filter((entry) => idOf(entry) !== request.id),
+      };
+    }),
+  );
+}
+
+/**
+ * Change one project's display name (story 103).
+ *
+ * `name` only — the `id` is machinery and is never rewritten, because sessions
+ * reference projects by `entity.project` and an id that drifted when a folder
+ * was renamed would strand them.
+ *
+ * The entry is **spread, not rebuilt**. `addProject` and `removeProject` copy
+ * raw entries wholesale, which is the only reason per-entry keys this build
+ * does not know about survive a write; a rename that reconstructed an entry
+ * from `ProjectConfig` would quietly eat them, and the epic's preservation rule
+ * would hold for the top level while failing one level down.
+ */
+export function renameProject(request: RenameProjectRequest): ConfigSnapshot {
+  return commit(
+    writeConfig((draft) => {
+      const entries = projectsOf(draft);
+      // Checked against the draft rather than the cache, for the same reason
+      // `addProject` is: the file on disk can be newer than the snapshot.
+      if (!entries.some((entry) => idOf(entry) === request.id)) {
+        throw new WriteRefused(`no project with id "${request.id}"`);
+      }
+
+      return {
+        ...draft,
+        projects: entries.map((entry) =>
+          idOf(entry) === request.id
+            ? { ...(entry as Record<string, unknown>), name: request.name }
+            : entry,
+        ),
+      };
+    }),
+  );
+}
+
+/**
+ * Point a project at a folder that moved (story 103).
+ *
+ * The incoming path re-runs the **entire** story 090 resolution, exactly as
+ * `addProject` does — expand `~`, require absolute, `realpath`, require a
+ * directory. The native dialog is a UX step, not a capability grant: a renderer
+ * that skipped it and posted a path directly gets identical treatment.
+ *
+ * The path is stored **as the user wrote it**, tilde and all, for the same
+ * reason `addProject` stores it that way — `realpath` is used for identity and
+ * duplicate detection, which is what it is good for, and baking a resolved home
+ * directory into a file people keep in dotfile repos is what it is not.
+ *
+ * `origin` survives because the entry is spread and only `path` is overwritten.
+ * Re-pointing changes where a project *is*, never where it came from, so a
+ * cloned project stays `origin: "cloned"` — a property of the mutation's shape
+ * rather than a rule this function has to remember.
+ */
+export function repointProject(request: RepointProjectRequest): ConfigSnapshot {
+  const probe = resolveProject({ id: 'probe', path: request.path });
+  if (probe.status !== 'ok' || probe.path === null) {
+    return refused(
+      `${LABEL}: cannot re-point to ${request.path} (${probe.status})`,
+    );
+  }
+  const real = probe.path;
+
+  return commit(
+    writeConfig((draft) => {
+      const entries = projectsOf(draft);
+      if (!entries.some((entry) => idOf(entry) === request.id)) {
+        throw new WriteRefused(`no project with id "${request.id}"`);
+      }
+
+      for (const entry of entries) {
+        /*
+          Skip the project being moved. Re-pointing it at the folder it already
+          has is a no-op the user is allowed to perform — treating it as a
+          collision would make the verb refuse to confirm the status quo.
+        */
+        if (idOf(entry) === request.id) continue;
+        const declared = pathOf(entry);
+        if (declared === null) continue;
+        if (resolveProject({ id: 'probe', path: declared }).path === real) {
+          throw new WriteRefused(
+            `${real} is already added as "${idOf(entry) ?? 'an existing entry'}"`,
+          );
+        }
+      }
+
+      return {
+        ...draft,
+        projects: entries.map((entry) =>
+          idOf(entry) === request.id
+            ? { ...(entry as Record<string, unknown>), path: request.path }
+            : entry,
+        ),
+      };
+    }),
+  );
+}
+
+/**
+ * Rewrite the order of the `projects` array (story 103).
+ *
+ * The payload is the **whole** ordering, and it must be a permutation of the
+ * ids on disk *at write time*. That check is the reason the verb takes a full
+ * list rather than a delta: the config is deliberately not watched (story 107
+ * owns reload), so the renderer's list can be older than the file, and applying
+ * a stale ordering would silently drop the project a hand edit had just added
+ * — or resurrect one it had removed. Refusing and asking for a reload is honest
+ * and costs the user one click.
+ *
+ * The left rail reads this order positionally and the merged list is explicitly
+ * never sorted, so the array *is* the ordering — there is nowhere else it could
+ * be stored.
+ */
+export function reorderProjects(
+  request: ReorderProjectsRequest,
+): ConfigSnapshot {
+  return commit(
+    writeConfig((draft) => {
+      const entries = projectsOf(draft);
+      const byId = new Map<string, unknown>();
+      for (const entry of entries) {
+        const id = idOf(entry);
+        if (id !== null) byId.set(id, entry);
+      }
+
+      /*
+        Every entry must be addressable by a unique id before an ordering can
+        be applied at all.
+
+        This is the check that stops the verb destroying data. The rebuild
+        below is `request.ids.map(...)`, so any entry missing from `byId` is
+        simply not written — and entries go missing for two ordinary reasons,
+        neither of which the renderer can see: an entry with no `id` (or a
+        non-string one), which `parse.ts` reports and skips while leaving it in
+        the file, and two entries sharing an id, where the map keeps only the
+        last. In both cases the renderer posts exactly the ids it knows about,
+        a size comparison against `byId` alone would agree, and the write would
+        report success while deleting the entry the user could not see.
+
+        Comparing against `entries.length` instead is what makes the promise
+        below — that entries are carried across whole — actually true.
+      */
+      if (byId.size !== entries.length) {
+        throw new WriteRefused(
+          'some entries in the config have no id, or share one with another entry — give every project a unique id before reordering',
+        );
+      }
+
+      const matches =
+        byId.size === request.ids.length &&
+        request.ids.every((id) => byId.has(id));
+      if (!matches) {
+        throw new WriteRefused(
+          // Not just "reload": the file can also hold an entry whose id this
+          // build refuses, which no amount of reloading will change.
+          'the requested order does not match the projects on disk — reload, and check the file for an entry whose id could not be read',
+        );
+      }
+
+      return {
+        ...draft,
+        // Entries are carried across by reference, never rebuilt, so anything
+        // this build does not understand rides along untouched.
+        projects: request.ids.map((id) => byId.get(id)),
       };
     }),
   );
