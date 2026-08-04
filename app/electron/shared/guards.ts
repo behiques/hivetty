@@ -1,11 +1,15 @@
 import type {
   AddProjectRequest,
   CloneRequest,
+  DiagnoseCommandRequest,
   RemoveProjectRequest,
   RenameProjectRequest,
   ReorderProjectsRequest,
   RepointProjectRequest,
+  SetProjectRuntimeRequest,
+  SetRuntimeRequest,
 } from './config-contract';
+import { unsafeEnvReason } from './config-contract';
 import type {
   AckRequest,
   ResizeRequest,
@@ -389,5 +393,147 @@ export function parseCloneRequest(input: unknown): CloneRequest {
     parentPath: assertPath(raw.parentPath, 'startClone.parentPath'),
     cols: assertDimension(raw.cols, 'startClone.cols'),
     rows: assertDimension(raw.rows, 'startClone.rows'),
+  };
+}
+
+/** POSIX-portable environment variable name. */
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** The most variables one project may declare. */
+const MAX_ENV_ENTRIES = 200;
+
+/**
+ * An environment map arriving from the renderer.
+ *
+ * Values go **verbatim into a spawned process's environment**, which is as
+ * close to process control as this bridge gets — so every key is checked
+ * against a whitelist pattern rather than merely for absence of the obvious
+ * villains, and `assertText` bans control characters in the values (a `\n` in
+ * an env value is a plausible way to confuse whatever reads it downstream).
+ *
+ * Empty values are allowed: `FOO=` is a real and meaningful thing to set, so
+ * `assertString` is used for values rather than `assertText`'s non-empty rule —
+ * with the control-character check applied separately.
+ */
+function assertEnv(value: unknown, label: string): Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return fail(`${label}: expected an object, got ${describe(value)}`);
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length > MAX_ENV_ENTRIES) {
+    return fail(`${label}: too many variables (max ${MAX_ENV_ENTRIES})`);
+  }
+
+  const env: Record<string, string> = {};
+  for (const [key, raw] of entries) {
+    if (FORBIDDEN_KEYS.has(key)) return fail(`${label}: forbidden key "${key}"`);
+    if (!ENV_NAME.test(key)) {
+      return fail(`${label}: "${key}" is not a valid variable name`);
+    }
+    /**
+     * The refusal list lives in `config-contract.ts` so this boundary and the
+     * config-file reader enforce the *same* rule. Two copies would drift, and
+     * the copy that drifted would be the one nobody tested.
+     */
+    const unsafe = unsafeEnvReason(key);
+    if (unsafe !== null) return fail(`${label}: ${unsafe}`);
+
+    const text = assertString(raw, `${label}.${key}`);
+    if (text.length > MAX_TEXT) return fail(`${label}.${key}: too long`);
+    for (const char of text) {
+      const code = char.codePointAt(0) ?? 0;
+      if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) {
+        return fail(`${label}.${key}: control characters are not allowed`);
+      }
+    }
+    env[key] = text;
+  }
+  return env;
+}
+
+/**
+ * Top-level runtime settings (story 104).
+ *
+ * Both keys are optional so one can be saved without restating the other, but
+ * at least one must be present — an empty request is a bug at the call site,
+ * not a no-op worth writing the file for. Neither may be cleared: there is no
+ * lower level to fall back to.
+ */
+export function parseSetRuntimeRequest(input: unknown): SetRuntimeRequest {
+  const raw = assertShape(input, [], 'setRuntime', ['shell', 'claudeCommand']);
+  if (raw.shell === undefined && raw.claudeCommand === undefined) {
+    return fail('setRuntime: nothing to change');
+  }
+
+  return {
+    ...(raw.shell !== undefined
+      ? { shell: assertText(raw.shell, 'setRuntime.shell') }
+      : {}),
+    ...(raw.claudeCommand !== undefined
+      ? {
+          claudeCommand: assertText(
+            raw.claudeCommand,
+            'setRuntime.claudeCommand',
+          ),
+        }
+      : {}),
+  };
+}
+
+/**
+ * Per-project runtime overrides (story 104).
+ *
+ * `null` is accepted and distinct from absent — it removes the override. That
+ * is the one place this guard is deliberately more permissive than its
+ * siblings, and it is load-bearing: without it the UI could set an override but
+ * never take it back, and an emptied field would have to be stored as `""`,
+ * which spawns a shell named `""`.
+ */
+export function parseSetProjectRuntimeRequest(
+  input: unknown,
+): SetProjectRuntimeRequest {
+  const raw = assertShape(input, ['id'], 'setProjectRuntime', [
+    'shell',
+    'claudeCommand',
+    'env',
+  ]);
+
+  const optionalText = (value: unknown, label: string): string | null =>
+    value === null ? null : assertText(value, label);
+
+  return {
+    id: assertId(raw.id, 'setProjectRuntime.id'),
+    ...(raw.shell !== undefined
+      ? { shell: optionalText(raw.shell, 'setProjectRuntime.shell') }
+      : {}),
+    ...(raw.claudeCommand !== undefined
+      ? {
+          claudeCommand: optionalText(
+            raw.claudeCommand,
+            'setProjectRuntime.claudeCommand',
+          ),
+        }
+      : {}),
+    ...(raw.env !== undefined
+      ? {
+          env:
+            raw.env === null
+              ? null
+              : assertEnv(raw.env, 'setProjectRuntime.env'),
+        }
+      : {}),
+  };
+}
+
+/** Which command to explain. An absent id means the top-level command. */
+export function parseDiagnoseCommandRequest(
+  input: unknown,
+): DiagnoseCommandRequest {
+  const raw = assertShape(input, [], 'diagnoseCommand', ['id']);
+  return {
+    ...(raw.id !== undefined
+      ? { id: assertId(raw.id, 'diagnoseCommand.id') }
+      : {}),
   };
 }

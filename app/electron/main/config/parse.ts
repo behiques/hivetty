@@ -1,5 +1,6 @@
 import {
   SUPPORTED_CONFIG_VERSIONS,
+  unsafeEnvReason,
   type ProjectOrigin,
 } from '@shared/config-contract';
 import { assertId } from '@shared/guards';
@@ -27,6 +28,10 @@ export interface RawProject {
   name?: string;
   icon?: string;
   origin?: ProjectOrigin;
+  /** Story 104's per-project runtime overrides. Absent means "inherit". */
+  shell?: string;
+  claudeCommand?: string;
+  env?: Record<string, string>;
 }
 
 export interface ParsedConfig {
@@ -65,7 +70,109 @@ export interface ParsedConfig {
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 const TOP_LEVEL_KEYS = ['version', 'shell', 'claudeCommand', 'projects'];
-const PROJECT_KEYS = ['id', 'path', 'name', 'icon', 'origin'];
+/**
+ * `shell`, `claudeCommand` and `env` are story 104's per-project overrides.
+ *
+ * They are listed here so a hand-written override is *read* rather than
+ * reported as an unknown key. Unlisted keys are still preserved across a write
+ * — the mutations spread the raw entry — but they are ignored on load, which is
+ * not what a user who typed `"shell"` into their config expects to happen.
+ */
+const PROJECT_KEYS = [
+  'id',
+  'path',
+  'name',
+  'icon',
+  'origin',
+  'shell',
+  'claudeCommand',
+  'env',
+];
+
+/** POSIX-portable environment variable name. */
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * The same limits the IPC guard applies (`guards.ts`).
+ *
+ * Hand-editing the config file is an explicitly supported workflow, so this
+ * reader is a real entry point and not a formality — a rule enforced on only
+ * one of the two paths is a rule with a documented bypass.
+ */
+const MAX_ENV_ENTRIES = 200;
+const MAX_ENV_VALUE = 4096;
+
+/** C0 (including CR, LF and ESC), DEL, and the C1 block. */
+function hasControlCharacters(text: string): boolean {
+  for (const char of text) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) return true;
+  }
+  return false;
+}
+
+/**
+ * Read an entry's `env` map, rejecting the whole map on any bad member.
+ *
+ * All-or-nothing rather than per-key salvage: an env map is a set of
+ * assumptions a command is run under, and running with half of them is a
+ * stranger outcome than running with none and a message saying so.
+ */
+function optionalEnv(
+  record: Record<string, unknown>,
+  label: string,
+  errors: string[],
+): Record<string, string> | undefined {
+  const value = record.env;
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) {
+    errors.push(`${label}.env: expected an object — ignored`);
+    return undefined;
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length > MAX_ENV_ENTRIES) {
+    errors.push(`${label}.env: too many variables (max ${MAX_ENV_ENTRIES}) — env ignored`);
+    return undefined;
+  }
+
+  const env: Record<string, string> = {};
+  for (const [key, raw] of entries) {
+    if (FORBIDDEN_KEYS.has(key)) {
+      errors.push(`${label}.env: forbidden key "${key}" — env ignored`);
+      return undefined;
+    }
+    if (!ENV_NAME.test(key)) {
+      errors.push(`${label}.env: "${key}" is not a valid variable name — env ignored`);
+      return undefined;
+    }
+    /**
+     * Shared with the IPC guard, deliberately: a hand-edited `LD_PRELOAD` is
+     * exactly as dangerous as one posted over the bridge, and the file is the
+     * path an attacker would reach for precisely *because* it looks like the
+     * unguarded one.
+     */
+    const unsafe = unsafeEnvReason(key);
+    if (unsafe !== null) {
+      errors.push(`${label}.env: ${unsafe} — env ignored`);
+      return undefined;
+    }
+    if (typeof raw !== 'string') {
+      errors.push(`${label}.env.${key}: expected a string — env ignored`);
+      return undefined;
+    }
+    if (raw.length > MAX_ENV_VALUE) {
+      errors.push(`${label}.env.${key}: too long — env ignored`);
+      return undefined;
+    }
+    if (hasControlCharacters(raw)) {
+      errors.push(`${label}.env.${key}: control characters are not allowed — env ignored`);
+      return undefined;
+    }
+    env[key] = raw;
+  }
+  return env;
+}
 
 const ORIGINS: readonly string[] = ['local', 'cloned'];
 
@@ -239,6 +346,13 @@ export function parseConfig(text: string, label: string): ParsedConfig {
       origin = entry.origin;
     }
 
+    // Story 104's overrides. `optionalString` reports and returns null for a
+    // blank value, which is the right reading: an empty override is not a
+    // command, and inheriting beats spawning "".
+    const shellOverride = optionalString(entry, 'shell', at, errors);
+    const commandOverride = optionalString(entry, 'claudeCommand', at, errors);
+    const env = optionalEnv(entry, at, errors);
+
     // Conditional spread, matching `parseSpawnRequest`: an `undefined`-valued
     // own key would be reported as unknown the next time this file is read.
     projects.push({
@@ -247,6 +361,9 @@ export function parseConfig(text: string, label: string): ParsedConfig {
       ...(name !== undefined ? { name } : {}),
       ...(icon !== undefined ? { icon } : {}),
       ...(origin !== undefined ? { origin } : {}),
+      ...(shellOverride !== null ? { shell: shellOverride } : {}),
+      ...(commandOverride !== null ? { claudeCommand: commandOverride } : {}),
+      ...(env !== undefined ? { env } : {}),
     });
   });
 

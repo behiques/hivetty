@@ -157,3 +157,173 @@ describe('parseConfig — the new entry fields', () => {
     expect(icon.errors.some((error) => /icon/.test(error))).toBe(true);
   });
 });
+
+describe('per-project runtime overrides (story 104)', () => {
+  it('reads shell, claudeCommand and env off an entry', () => {
+    const result = parseConfig(
+      JSON.stringify({
+        version: 2,
+        projects: [
+          {
+            id: 'a',
+            path: '/tmp/a',
+            shell: '/bin/bash',
+            claudeCommand: '/opt/claude',
+            env: { API_URL: 'https://x.test', EMPTY: '' },
+          },
+        ],
+      }),
+      'config',
+    );
+
+    expect(result.errors).toEqual([]);
+    expect(result.projects[0]).toMatchObject({
+      shell: '/bin/bash',
+      claudeCommand: '/opt/claude',
+      env: { API_URL: 'https://x.test', EMPTY: '' },
+    });
+  });
+
+  it('leaves the keys absent when the entry omits them', () => {
+    const result = parseConfig(
+      JSON.stringify({ version: 2, projects: [{ id: 'a', path: '/tmp/a' }] }),
+      'config',
+    );
+
+    // Absence is the meaningful state: it is what "inherit" looks like.
+    expect('shell' in (result.projects[0] ?? {})).toBe(false);
+    expect('env' in (result.projects[0] ?? {})).toBe(false);
+  });
+
+  it('no longer reports them as unknown keys', () => {
+    const result = parseConfig(
+      JSON.stringify({
+        version: 2,
+        projects: [{ id: 'a', path: '/tmp/a', shell: '/bin/bash' }],
+      }),
+      'config',
+    );
+
+    expect(result.errors).toEqual([]);
+  });
+
+  it('drops a blank override rather than storing an empty command', () => {
+    const result = parseConfig(
+      JSON.stringify({
+        version: 2,
+        projects: [{ id: 'a', path: '/tmp/a', shell: '   ' }],
+      }),
+      'config',
+    );
+
+    // An empty override is not a command; inheriting beats spawning "".
+    expect(result.errors[0]).toMatch(/shell: expected a non-empty string/);
+    expect('shell' in (result.projects[0] ?? {})).toBe(false);
+  });
+
+  it('rejects the whole env map on any bad member', () => {
+    const bad = [
+      { env: { '1FOO': 'x' }, match: /not a valid variable name/ },
+      { env: { TERM: 'x' }, match: /set by the terminal/ },
+      { env: { FOO: 1 }, match: /expected a string/ },
+    ];
+
+    for (const { env, match } of bad) {
+      const result = parseConfig(
+        JSON.stringify({ version: 2, projects: [{ id: 'a', path: '/tmp/a', env }] }),
+        'config',
+      );
+
+      // All-or-nothing: an env map is a set of assumptions a command runs
+      // under, and running with half of them is stranger than running with none.
+      expect(result.errors.some((error) => match.test(error))).toBe(true);
+      expect('env' in (result.projects[0] ?? {})).toBe(false);
+    }
+  });
+
+  it('ignores an env that is not an object', () => {
+    const result = parseConfig(
+      JSON.stringify({
+        version: 2,
+        projects: [{ id: 'a', path: '/tmp/a', env: ['NOPE'] }],
+      }),
+      'config',
+    );
+
+    expect(result.errors.some((error) => /env: expected an object/.test(error))).toBe(
+      true,
+    );
+    expect('env' in (result.projects[0] ?? {})).toBe(false);
+  });
+
+  it('refuses the file when an env key is __proto__', () => {
+    const result = parseConfig(
+      '{"version":2,"projects":[{"id":"a","path":"/tmp/a","env":{"__proto__":"x"}}]}',
+      'config',
+    );
+
+    expect(result.errors.some((error) => /forbidden key/.test(error))).toBe(true);
+    expect('env' in (result.projects[0] ?? {})).toBe(false);
+  });
+});
+
+describe('env safety at the file boundary (story 104)', () => {
+  const withEnv = (env: Record<string, unknown>) =>
+    parseConfig(
+      JSON.stringify({
+        version: 2,
+        projects: [{ id: 'a', path: '/tmp/a', env }],
+      }),
+      'config',
+    );
+
+  /**
+   * The same refusals the IPC guard applies.
+   *
+   * Hand-editing the config file is an explicitly supported workflow, so this
+   * reader is a real entry point — a rule enforced on only one of the two paths
+   * is a rule with a documented bypass, and the file is the path someone would
+   * reach for precisely because it looks like the unguarded one.
+   */
+  it('refuses the dynamic-loader variables', () => {
+    for (const key of ['LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'DYLD_LIBRARY_PATH']) {
+      const result = withEnv({ [key]: '/tmp/evil.so' });
+      expect(result.errors.some((error) => /dynamic loader/.test(error))).toBe(true);
+      expect('env' in (result.projects[0] ?? {})).toBe(false);
+    }
+  });
+
+  it('refuses the interpreter hooks', () => {
+    for (const key of ['NODE_OPTIONS', 'BASH_ENV', 'ELECTRON_RUN_AS_NODE']) {
+      const result = withEnv({ [key]: 'x' });
+      expect(result.errors.some((error) => /run code/.test(error))).toBe(true);
+      expect('env' in (result.projects[0] ?? {})).toBe(false);
+    }
+  });
+
+  it('applies the same caps as the IPC guard', () => {
+    const tooMany = Object.fromEntries(
+      Array.from({ length: 201 }, (_, index) => [`V${index}`, 'x']),
+    );
+    expect(withEnv(tooMany).errors.some((e) => /too many variables/.test(e))).toBe(
+      true,
+    );
+
+    expect(
+      withEnv({ FOO: 'x'.repeat(4097) }).errors.some((e) => /too long/.test(e)),
+    ).toBe(true);
+
+    expect(
+      withEnv({ FOO: 'a\nb' }).errors.some((e) => /control characters/.test(e)),
+    ).toBe(true);
+  });
+
+  it('still accepts an ordinary variable', () => {
+    const result = withEnv({ API_URL: 'https://x.test', LDAP_URL: 'ldap://y' });
+    expect(result.errors).toEqual([]);
+    expect(result.projects[0]?.env).toEqual({
+      API_URL: 'https://x.test',
+      LDAP_URL: 'ldap://y',
+    });
+  });
+});
