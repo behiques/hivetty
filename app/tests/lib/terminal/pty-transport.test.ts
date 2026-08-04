@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TERM, toSgrForeground } from '@lib/terminal/ansi';
 import {
+  createCloneTransport,
   createPtyTransport,
   reopenChannel,
+  resetCloneChannel,
   requestSpawn,
   resetPtyChannels,
   sessionChannelState,
@@ -604,5 +606,133 @@ describe('requestSpawn', () => {
     // Attach-never-respawn: a tab switch past a finished session must not
     // silently start it working again (story 094).
     expect(bridge.spawn).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The clone transport (story 102).
+ *
+ * Everything that carries bytes is the session path's, already covered above.
+ * What is worth its own tests is the single difference — it never spawns — and
+ * the consequence that makes the story work: keystrokes reach `git`, so a
+ * credential prompt is answerable.
+ */
+describe('createCloneTransport', () => {
+  const CLONE_ID = 'hive.clone';
+
+  it('never spawns, because main already started git', () => {
+    const transport = createCloneTransport();
+
+    transport.onData(() => {});
+
+    expect(bridge.spawn).not.toHaveBeenCalled();
+  });
+
+  it('does not spawn even across a remount', () => {
+    const transport = createCloneTransport();
+
+    transport.onData(() => {})();
+    transport.onData(() => {})();
+
+    expect(bridge.spawn).not.toHaveBeenCalled();
+  });
+
+  it('writes keystrokes under the clone entity id', () => {
+    createCloneTransport().write('hunter2\r');
+
+    expect(bridge.write).toHaveBeenCalledWith({
+      sessionId: CLONE_ID,
+      data: 'hunter2\r',
+    });
+  });
+
+  it('forwards resize under the clone entity id', () => {
+    createCloneTransport().resize(120, 40);
+
+    expect(bridge.resize).toHaveBeenCalledWith({
+      sessionId: CLONE_ID,
+      cols: 120,
+      rows: 40,
+    });
+  });
+
+  it('delivers git output to its subscriber', () => {
+    const chunks: string[] = [];
+    createCloneTransport().onData((chunk) => chunks.push(chunk));
+
+    pushData(CLONE_ID, "Cloning into 'the-hive'...\r\n", 0);
+
+    expect(chunks.join('')).toContain("Cloning into 'the-hive'...");
+  });
+
+  it('replays what arrived before a late subscriber mounted', () => {
+    const transport = createCloneTransport();
+    transport.onData(() => {})();
+
+    pushData(CLONE_ID, 'remote: Counting objects\r\n', 0);
+
+    const chunks: string[] = [];
+    transport.onData((chunk) => chunks.push(chunk));
+
+    expect(chunks.join('')).toContain('remote: Counting objects');
+  });
+
+  it('unsubscribes without killing the process', () => {
+    const transport = createCloneTransport();
+
+    transport.onData(() => {})();
+
+    expect(bridge.kill).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Every clone reuses one entity id, so its channel has to be startable again.
+ *
+ * A session's channel is sticky on purpose — `closed` is a one-way latch and
+ * the buffer survives a remount — and both are wrong here. Without a reset the
+ * *second* clone of a session renders nothing at all: `onData` returns early on
+ * a channel the first clone closed, and the terminal sits empty while git runs
+ * perfectly well underneath it.
+ */
+describe('resetCloneChannel', () => {
+  const CLONE_ID = 'hive.clone';
+
+  it('lets a second clone deliver output after the first exited', () => {
+    const transport = createCloneTransport();
+    const first: string[] = [];
+    transport.onData((chunk) => first.push(chunk));
+
+    pushData(CLONE_ID, 'first clone\r\n', 0);
+    for (const cb of [...bridge.exit]) {
+      cb({ sessionId: CLONE_ID, exitCode: 0, signal: 0 });
+    }
+
+    // Without the reset this chunk is dropped and the terminal stays empty.
+    resetCloneChannel();
+
+    const second: string[] = [];
+    const stop = transport.onData((chunk) => second.push(chunk));
+    pushData(CLONE_ID, 'second clone\r\n', 0);
+    stop();
+
+    expect(second.join('')).toContain('second clone');
+  });
+
+  it('drops the previous clone transcript rather than replaying it', () => {
+    const transport = createCloneTransport();
+    transport.onData(() => {})();
+    pushData(CLONE_ID, 'first clone\r\n', 0);
+
+    resetCloneChannel();
+
+    const replayed: string[] = [];
+    transport.onData((chunk) => replayed.push(chunk));
+
+    expect(replayed.join('')).not.toContain('first clone');
+  });
+
+  it('is safe before any clone has run', () => {
+    expect(() => resetCloneChannel()).not.toThrow();
   });
 });

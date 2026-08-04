@@ -164,3 +164,81 @@ export interface AddProjectRequest {
 export interface RemoveProjectRequest {
   id: string;
 }
+
+/**
+ * The entity id a clone's terminal runs under (story 102).
+ *
+ * Reserved, single, and not a real entity: it is the id the existing PTY
+ * channels carry clone traffic on, which is what lets the clone terminal be
+ * *typable*. `pty:write` routes through the sessions layer's id translation
+ * (`electron/main/ipc/index.ts`), so a clone that bypassed the registry would
+ * stream output fine and silently swallow every keystroke — and no credential
+ * or host-key prompt could ever be answered, which is the whole reason this
+ * story runs `git` in a PTY at all.
+ *
+ * Being a single id also caps concurrency at one clone, which the focused
+ * sub-view already implies.
+ *
+ * **The dot is load-bearing, and so is the absence of a colon.**
+ *
+ * This id travels on `pty:write` as `sessionId`, where `assertId` requires
+ * `/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/`. An id with a colon fails that guard,
+ * and because `pty:write` is a `send` channel the rejection is logged and
+ * dropped rather than returned — so every keystroke would vanish silently and
+ * no credential prompt could ever be answered, which is the one thing this
+ * whole design exists to make possible.
+ *
+ * The dot also makes collision impossible: `deriveProjectId` (story 101) kebabs
+ * a directory basename to `[a-z0-9-]`, so no project can ever be given this id.
+ */
+export const CLONE_ENTITY_ID = 'hive.clone';
+
+/**
+ * Payload of `config:clone-start` (story 102).
+ *
+ * Note what is **absent**: a destination. The renderer supplies the *parent*
+ * directory and the URL; main derives the final path segment from the URL
+ * itself. That is how this story keeps the epic's rule that no verb takes a
+ * destination path (`stories/100-settings-epic.md:86`) while still writing a
+ * directory tree.
+ *
+ * `parentPath` is re-validated in main from scratch — expanded, made absolute,
+ * `realpath`'d, confirmed to be a directory — exactly like
+ * {@link AddProjectRequest}.
+ */
+export interface CloneRequest {
+  url: string;
+  parentPath: string;
+  /** The terminal's size at the moment the clone starts. */
+  cols: number;
+  rows: number;
+}
+
+/**
+ * What `startClone` answers with.
+ *
+ * Pre-flight only. It resolves as soon as the process is spawned — the clone
+ * itself streams through `pty:data` and concludes on {@link CloneDoneEvent}.
+ * `targetPath` is returned so the view can name the folder being created
+ * without deriving it a second time and risking a different answer.
+ */
+export type CloneStartResult =
+  | { ok: true; targetPath: string }
+  | { ok: false; reason: string };
+
+/**
+ * How a clone ended (story 102).
+ *
+ * Carries the fresh snapshot for the same reason every mutating config verb
+ * returns one: the renderer must never have to follow a write with a reload,
+ * and must never render a list the write already invalidated. On failure the
+ * snapshot is the unchanged current one.
+ */
+export interface CloneDoneEvent {
+  ok: boolean;
+  /** The directory that now exists, or `null` when the clone failed. */
+  targetPath: string | null;
+  /** Why it failed, or `null` on success. */
+  reason: string | null;
+  snapshot: ConfigSnapshot;
+}
