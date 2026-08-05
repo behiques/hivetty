@@ -227,6 +227,26 @@ deliberate:
   middle of a repository they were working in. Written as input it is an ordinary
   interactive command and the shell survives it.
 
+### The picker's choice becomes flags (109)
+
+`sessionCommand` appends `--model <alias> --effort <level>` before the `&&`, so
+they bind to `claude` and not to `exit`. Both are optional and **absent means say
+nothing** — a session nobody picked a model for gets the bare command and keeps
+whatever the user configured in `claude` itself.
+
+These two values are the only thing the renderer contributes to a command line
+main writes into a shell, so the IPC guard validates them against a **closed set**
+(`SESSION_MODELS` / `SESSION_EFFORTS` in `shared/session-contract.ts`) rather than
+as bounded text. `opus; rm -rf /` is perfectly well-formed printable text. An
+enum is what lets `sessionCommand` interpolate them unquoted.
+
+`src/types/entity.ts` aliases those two sets rather than declaring its own: a
+picker offering a value the guard rejects is a session that fails to start for a
+reason neither side can see.
+
+`restart` forwards them and still drops the `task` — a task is an instruction the
+previous generation may have acted on; a model is what the session *is*.
+
 The write waits for the shell's first output plus a ~150 ms settle, because
 characters written before the line discipline is installed land in a buffer the
 shell may discard — the session then sits at a bare prompt having silently
@@ -248,8 +268,16 @@ the tail of the conversation the user restarted to be rid of.
 | Quit | the host SIGTERMs every process group, waits 3 s, force-kills the rest |
 
 **Status is derived in main**, debounced: output → `working`, 2 s of silence →
-`idle`, exit → `done`. In main rather than the renderer because a per-chunk store
-write at firehose rates would re-render the shell continuously.
+`idle`, exit → `terminated`. In main rather than the renderer because a per-chunk
+store write at firehose rates would re-render the shell continuously.
+
+`terminated`, not `done` (story 108), and the distinction is the same discipline
+`waiting` gets below. An exit is an *observation* — the process is gone. "Done"
+is a claim about the work, and main has no way to evaluate it: `/exit` after an
+abandoned attempt and `/exit` after a merged PR produce byte-identical evidence.
+`DerivedStatus` no longer contains `done` at all, so main cannot make that claim
+by accident. A `terminated` session's tab is also closed to new visits — its pty
+is gone — which is enforced once, in `hive-store`'s `openEntity`.
 
 `waiting` is **not derived, and the type main sends cannot express it.** A TUI
 that has asked a question and one that is thinking both produce no output;

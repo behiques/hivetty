@@ -12,16 +12,24 @@
 /**
  * What main can honestly derive about a session from its pty.
  *
- * Deliberately **not** the full `SessionStatus`. The fixture model includes
- * `waiting` — blocked on the user — and it is not derivable here: a TUI that has
- * asked a question and a TUI that is thinking both produce no output.
- * Distinguishing them by scraping rendered text would be a heuristic that fails
- * silently, and the app's whole attention model is built on this field.
+ * Deliberately **not** the full `SessionStatus`, and the two omissions are for
+ * opposite reasons.
  *
- * The type is what enforces that. A `waiting` main could never produce cannot be
- * accidentally produced by a later edit.
+ * `waiting` — blocked on the user — is missing because it is not derivable here:
+ * a TUI that has asked a question and a TUI that is thinking both produce no
+ * output. Distinguishing them by scraping rendered text would be a heuristic
+ * that fails silently, and the app's whole attention model is built on this
+ * field.
+ *
+ * `done` is missing because it is not main's to say (story 108). Main sees a
+ * process exit and nothing more, which is `terminated`; whether the *work* was
+ * finished is a judgement no pty can make. Reporting an exit as `done`, which is
+ * what shipped before, quietly asserted that judgement on every `/exit`.
+ *
+ * The type is what enforces both. A status main could never honestly produce
+ * cannot be produced by a later edit either.
  */
-export type DerivedStatus = 'working' | 'idle' | 'done';
+export type DerivedStatus = 'working' | 'idle' | 'terminated';
 
 /** Main telling the renderer what a real session is doing. */
 export interface SessionStatusEvent {
@@ -29,6 +37,33 @@ export interface SessionStatusEvent {
   entityId: string;
   status: DerivedStatus;
 }
+
+/**
+ * The model and thinking effort a session may be started with (story 109).
+ *
+ * **Closed sets, and they live here rather than in `src/types/entity.ts`
+ * because they are now wire values.** These two strings are the only thing the
+ * renderer contributes to a command line the main process assembles and writes
+ * into a shell — so the boundary that validates them has to be able to name
+ * every acceptable value, and `electron/shared/**` is the only module both
+ * processes can read. `src/types/entity.ts` aliases these rather than declaring
+ * its own copy: a picker offering a model the guard rejects is a session that
+ * fails to start for a reason nobody can see from either side.
+ *
+ * The values are **passed to `claude` verbatim** — `--model opus`,
+ * `--effort high` — which is why they are spelled exactly as the CLI spells
+ * them. That is a real coupling and it is deliberate: a translation table would
+ * be a second place to get this wrong, and the vocabularies already agree.
+ *
+ * `claude --effort` also accepts `xhigh`, which the picker does not offer. The
+ * omission is the picker's to fix if it ever wants it; a value main would
+ * accept but nothing can send costs nothing.
+ */
+export const SESSION_MODELS = ['haiku', 'sonnet', 'opus', 'fable'] as const;
+export type SessionModel = (typeof SESSION_MODELS)[number];
+
+export const SESSION_EFFORTS = ['low', 'medium', 'high', 'max'] as const;
+export type SessionEffort = (typeof SESSION_EFFORTS)[number];
 
 /** Silence for this long means idle. */
 export const ACTIVITY_IDLE_MS = 2_000;
