@@ -1,9 +1,41 @@
 import {
   BOOTSTRAP_DEBOUNCE_MS,
   BOOTSTRAP_FALLBACK_MS,
+  isSendableSessionName,
+  SUBMIT_DELAY_MS,
   type SessionEffort,
   type SessionModel,
 } from '@shared/session-contract';
+
+/**
+ * `--session-id` takes a uuid and rejects anything else.
+ *
+ * Checked here rather than assumed because a malformed value makes `claude`
+ * exit non-zero, which `&&` turns into "the session opened and did nothing".
+ */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Single-quote a path for a POSIX shell.
+ *
+ * The one argument on this command line that genuinely needs it. `--name` and
+ * `--session-id` are filtered against closed patterns and `--model`/`--effort`
+ * against closed lists, so none of them can carry a metacharacter — but the
+ * settings path is `app.getPath('userData')`, and on macOS that is
+ * `~/Library/Application Support/the-hive/…`. **It contains a space on every
+ * Mac**, which the shell splits, so `claude` received `--settings
+ * /Users/…/Application` plus a stray positional argument it read as an initial
+ * prompt, and hook status never worked at all.
+ *
+ * An earlier comment here claimed an app-generated path "has none of them".
+ * That was wrong on the most common platform this app runs on, which is why the
+ * rule is now enforced in code instead of asserted in prose.
+ *
+ * Single quotes rather than escaping: inside them a POSIX shell interprets
+ * nothing, so the only character needing care is the single quote itself, and
+ * `'\''` closes, escapes and reopens.
+ */
+const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
 
 /**
  * When to write `claude` into a freshly spawned shell (story 096).
@@ -43,6 +75,46 @@ import {
 export interface SessionOptions {
   model?: SessionModel;
   effort?: SessionEffort;
+  /**
+   * What to call the session inside Claude (HIVE-61).
+   *
+   * The Hive's own entity id, so the agent's prompt box, its `/resume` picker
+   * entry and its terminal title all say `sess-07` rather than an auto-title
+   * derived from whatever the first message happened to be.
+   *
+   * Filtered by {@link isSendableSessionName} rather than trusted: unlike
+   * `--model` and `--effort` this has no closed list behind it, so the
+   * no-quoting rule below does not cover it on its own. A name that fails the
+   * pattern omits the flag — the session starts unnamed, which is what it did
+   * before this story, rather than starting with a mangled command line.
+   */
+  name?: string;
+  /**
+   * The conversation's session id, pinned rather than left to Claude.
+   *
+   * Pinning it makes the transcript path deterministic
+   * (`~/.claude/projects/<escaped-cwd>/<uuid>.jsonl`), which is what later work
+   * needs to resume a session, read its cost, or read the `custom-title` and
+   * `ai-title` records back. Cheap to add now and impossible to add
+   * retroactively for a session that has already started.
+   */
+  sessionUuid?: string;
+  /**
+   * A settings file to merge on top of the user's own (HIVE-62).
+   *
+   * Carries the hook configuration that reports session status back to the app.
+   * `--settings` *merges*, so the user's own hooks, permissions and preferences
+   * are untouched; the app never writes to `~/.claude/settings.json`.
+   *
+   * A path rather than the inline JSON `--settings` also accepts: inline JSON
+   * on a shell-parsed command line is braces, quotes and colons in exactly the
+   * position the no-quoting rule below does not cover.
+   *
+   * The path is **quoted** by {@link shellQuote}, and that is not belt and
+   * braces. It is `app.getPath('userData')`, which on macOS contains a space —
+   * so the unquoted version split into two arguments on every Mac.
+   */
+  settingsPath?: string;
 }
 
 /**
@@ -110,11 +182,22 @@ export interface SessionOptions {
  */
 export const sessionCommand = (
   claudeCommand: string,
-  { model, effort }: SessionOptions = {},
+  { model, effort, name, sessionUuid, settingsPath }: SessionOptions = {},
 ): string => {
   const flags = [
     ...(model === undefined ? [] : ['--model', model]),
     ...(effort === undefined ? [] : ['--effort', effort]),
+    /**
+     * Dropped rather than escaped when it fails the pattern. See
+     * {@link SessionOptions.name} — the guard is at the IPC boundary and this
+     * is the second, local check, because the value also reaches here from
+     * main's own spawn path where no IPC guard ever ran.
+     */
+    ...(name !== undefined && isSendableSessionName(name) ? ['--name', name] : []),
+    ...(sessionUuid !== undefined && UUID_PATTERN.test(sessionUuid)
+      ? ['--session-id', sessionUuid]
+      : []),
+    ...(settingsPath === undefined ? [] : ['--settings', shellQuote(settingsPath)]),
   ];
   return `${[claudeCommand, ...flags].join(' ')} && exit`;
 };
@@ -141,6 +224,8 @@ export interface BootstrapOptions {
   onComplete?: (entityId: string) => void;
   debounceMs?: number;
   fallbackMs?: number;
+  /** How long after a stage's text to send its submitting `\r` (HIVE-63). */
+  submitDelayMs?: number;
 }
 
 export interface Bootstrap {
@@ -197,11 +282,14 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
     onComplete,
     debounceMs = BOOTSTRAP_DEBOUNCE_MS,
     fallbackMs = BOOTSTRAP_FALLBACK_MS,
+    submitDelayMs = SUBMIT_DELAY_MS,
   } = options;
 
   const pending = new Map<string, Pending>();
   /** Absolute cap for a stage that restarts its debounce. See `Pending`. */
   const deadlines = new Map<string, number>();
+  /** Stages whose text is written and whose `\r` has not gone yet (HIVE-63). */
+  const submits = new Map<string, ReturnType<typeof setTimeout>>();
 
   function fire(entityId: string, silent: boolean): void {
     const entry = pending.get(entityId);
@@ -210,42 +298,88 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
     deadlines.delete(entityId);
     if (silent) onSilentStart?.(entityId);
     /**
-     * `\r`, not `\n`. A pty's line discipline turns carriage return into the
-     * "line submitted" signal; a bare newline is inserted as a literal in some
-     * shells and readline configurations, leaving the command typed but never
-     * run.
+     * The text and its `\r` go in as **two** writes (HIVE-63).
+     *
+     * `\r`, not `\n`, for the reason it always was: a pty's line discipline
+     * turns carriage return into the "line submitted" signal, and a bare
+     * newline is inserted as a literal in some shells and readline
+     * configurations, leaving the command typed but never run.
+     *
+     * The split is newer and fixes a defect one level up. Sent as a single
+     * write, a stage longer than ~64 characters is treated by Claude Code's TUI
+     * as a *paste*, and the trailing carriage return is inserted into the input
+     * box instead of submitting it — so the session sat there holding a task
+     * nobody could see it had been given. Separating them makes the text a
+     * paste (which it is) and the `\r` a keystroke (which is unambiguous).
+     *
+     * Every stage is split, not just the long ones. See {@link SUBMIT_DELAY_MS}
+     * for why a measured threshold is deliberately not branched on.
      */
-    write(entityId, `${entry.command}\r`);
-
+    write(entityId, entry.command);
     /**
-     * The task is the same problem one level down, so it gets the same answer.
-     *
-     * `claude` has to start and paint its prompt before it will accept input,
-     * and writing into that window loses the text exactly as writing into the
-     * shell's startup would. The renderer cannot time it — `session:status`
-     * carries `working | idle | done` and deliberately nothing finer — so main
-     * does, with the mechanism it already has.
-     *
-     * Re-arming rather than chaining is what makes this cheap: `settling:
-     * false` means the TUI's first paint restarts the identical debounce, the
-     * fallback still covers a TUI that prints nothing, and `cancel` already
-     * reaches it — a session that dies between the two stages drops its task
-     * with everything else. The new entry carries no `task` of its own, which
-     * is what terminates the recursion.
+     * Tracked so `cancel` and `dispose` can clear it. A session killed in the
+     * window between the text and its `\r` would otherwise write into a pty
+     * that is already gone.
      */
-    if (entry.task === undefined) {
-      onComplete?.(entityId);
-      return;
-    }
-    pending.set(entityId, {
-      command: entry.task,
-      settleOnEveryChunk: true,
-      settling: false,
-      timer: setTimeout(() => fire(entityId, true), fallbackMs),
-    });
-    // The fallback is the cap on "quiet": a TUI that never stops painting still
-    // gets its instruction, once, rather than never.
-    deadlines.set(entityId, Date.now() + fallbackMs);
+    submits.set(
+      entityId,
+      setTimeout(() => {
+        submits.delete(entityId);
+        write(entityId, '\r');
+
+        /**
+         * **Everything after the stage happens here, after the `\r`.**
+         *
+         * The first version of this split armed the next stage — and released
+         * held input — beside the *text* write, while the `\r` was still 300ms
+         * away. That is longer than the 150ms settle, and the pty's echo of the
+         * text is itself output, so the second stage's debounce started and
+         * fired inside the gap. The shell then received
+         * `…&& exitRefactor the checkout flow…`: the task appended to the
+         * command line, the command corrupted, the task lost. Which is
+         * precisely the defect the split exists to fix, reintroduced one level
+         * up and harder to see, because the text is not even left in an input
+         * box to look at.
+         *
+         * So the ordering rule is now structural rather than a matter of
+         * arithmetic between two constants: nothing follows a stage until that
+         * stage has actually been submitted.
+         */
+        if (entry.task === undefined) {
+          // Held input is released only now — releasing it beside the text
+          // would append the user's keystrokes to the command line itself.
+          onComplete?.(entityId);
+          return;
+        }
+
+        /**
+         * The task is the same problem one level down, so it gets the same
+         * answer.
+         *
+         * `claude` has to start and paint its prompt before it will accept
+         * input, and writing into that window loses the text exactly as writing
+         * into the shell's startup would. The renderer cannot time it —
+         * `session:status` carries `working | idle | done` and deliberately
+         * nothing finer — so main does, with the mechanism it already has.
+         *
+         * Re-arming rather than chaining is what makes this cheap: `settling:
+         * false` means the TUI's first paint restarts the identical debounce,
+         * the fallback still covers a TUI that prints nothing, and `cancel`
+         * already reaches it — a session that dies between the two stages drops
+         * its task with everything else. The new entry carries no `task` of its
+         * own, which is what terminates the recursion.
+         */
+        pending.set(entityId, {
+          command: entry.task,
+          settleOnEveryChunk: true,
+          settling: false,
+          timer: setTimeout(() => fire(entityId, true), fallbackMs),
+        });
+        // The fallback is the cap on "quiet": a TUI that never stops painting
+        // still gets its instruction, once, rather than never.
+        deadlines.set(entityId, Date.now() + fallbackMs);
+      }, submitDelayMs),
+    );
   }
 
   return {
@@ -290,6 +424,21 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
     },
 
     cancel(entityId) {
+      /**
+       * A pending `\r` is cancelled even when no *stage* is pending.
+       *
+       * The two are not the same window: `fire` deletes the pending entry
+       * before it writes, so a session killed between a stage's text and its
+       * carriage return has nothing in `pending` and a live timer in `submits`.
+       * Returning early on the entry alone would leave that timer to write into
+       * a dead pty.
+       */
+      const submit = submits.get(entityId);
+      if (submit !== undefined) {
+        clearTimeout(submit);
+        submits.delete(entityId);
+      }
+
       const entry = pending.get(entityId);
       if (!entry) return;
       clearTimeout(entry.timer);
@@ -297,12 +446,27 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
       deadlines.delete(entityId);
     },
 
-    isPending: (entityId) => pending.has(entityId),
+    /**
+     * A stage awaiting its `\r` counts as pending (HIVE-63).
+     *
+     * `fire` deletes the pending entry *before* it writes, so between the text
+     * and its carriage return there is no `pending` entry and the stage is
+     * demonstrably not finished. `sessions.write` gates held input on this, so
+     * the narrower reading opened a 300ms window in which a keystroke went
+     * straight to the pty and was appended to the command line — the shell then
+     * ran `claude --name sess-01 && exithello`.
+     *
+     * Moving `onComplete` after the `\r` fixed input that was *already* held;
+     * this fixes input that arrives inside the window the split opened.
+     */
+    isPending: (entityId) => pending.has(entityId) || submits.has(entityId),
 
     dispose() {
       for (const entry of pending.values()) clearTimeout(entry.timer);
+      for (const submit of submits.values()) clearTimeout(submit);
       pending.clear();
       deadlines.clear();
+      submits.clear();
     },
   };
 }
