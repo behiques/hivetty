@@ -6,11 +6,17 @@ import {
   KILL_GRACE_MS,
   MAX_SESSIONS,
   SCROLLBACK_BYTES,
+  SHUTDOWN_TIMEOUT_MS,
   type HostMessage,
   type SpawnCommand,
 } from '@shared/pty-host-protocol';
 
 import { TERM, buildEnv } from './env';
+import {
+  processControl,
+  type Descendant,
+  type ProcessControl,
+} from './process-tree';
 import { Scrollback } from './scrollback';
 import type { SessionOperations } from './sessions';
 
@@ -35,8 +41,11 @@ export interface SessionManagerOptions {
   killGraceMs?: number;
   /** The environment sessions inherit from. Injected so tests are hermetic. */
   baseEnv?: NodeJS.ProcessEnv;
-  /** Signals a process **group**. Injected so tests never signal anything. */
-  killGroup?: (pid: number, signal: NodeJS.Signals) => void;
+  /**
+   * Signals and process-table access. Injected so no test signals a real
+   * process or execs a real `ps`.
+   */
+  control?: ProcessControl;
   /** Injected so tests never load the real native addon. */
   spawn?: typeof spawnPty;
 }
@@ -77,17 +86,35 @@ interface Session {
   paused: boolean;
   cols: number;
   rows: number;
-  killTimer: ReturnType<typeof setTimeout> | null;
 }
 
-/** Kill the group, not just the shell. */
-function killProcessGroup(pid: number, signal: NodeJS.Signals): void {
-  // Negative pid means "the process group led by pid". SIGTERM to the shell
-  // alone leaves `claude` — and anything it spawned — running with a dangling
-  // pty, which is the difference between quitting the app and leaving a dozen
-  // agents running.
-  process.kill(-pid, signal);
-}
+/**
+ * A moment for a job that took SIGHUP to finish going.
+ *
+ * A courtesy, not a correctness requirement — the sweep would be correct
+ * without it, just quicker to SIGKILL something that was already leaving.
+ */
+const SWEEP_SETTLE_MS = 250;
+
+/**
+ * The wall clock the whole teardown has to finish inside.
+ *
+ * `supervisor.shutdown()` arms a `SHUTDOWN_TIMEOUT_MS` timer **before** it even
+ * posts the shutdown message, and force-kills the host when it fires. A
+ * teardown that overruns is killed mid-sweep — orphaning the descendant this
+ * code exists to reap, by way of the fix's own latency.
+ *
+ * So the budget is *derived* from that timeout and threaded through as a
+ * deadline, rather than summed from independent constants and hoped to fit.
+ * Summing is how the first version of this got it wrong: `ps` (up to 2s) then
+ * the grace (2s) then the settle (250ms) are sequential, not overlapping, so
+ * the real worst case was 4.25s against a 3s limit.
+ */
+const TEARDOWN_BUDGET_MS = SHUTDOWN_TIMEOUT_MS - 500;
+
+/** Whatever is left of the budget, never negative. */
+const remaining = (deadline: number): number =>
+  Math.max(0, deadline - Date.now());
 
 export function createSessionManager(
   options: SessionManagerOptions = {},
@@ -97,7 +124,7 @@ export function createSessionManager(
     scrollbackBytes = SCROLLBACK_BYTES,
     killGraceMs = KILL_GRACE_MS,
     baseEnv = process.env,
-    killGroup = killProcessGroup,
+    control = processControl,
     spawn = spawnPty,
   } = options;
 
@@ -121,20 +148,26 @@ export function createSessionManager(
   }
 
   /** Signal a group, tolerating a process that is already gone. */
-  function signal(session: Session, sig: NodeJS.Signals): void {
+  function signalGroup(pgid: number, sig: NodeJS.Signals): void {
     try {
-      killGroup(session.pid, sig);
+      control.signalGroup(pgid, sig);
     } catch {
       // ESRCH — it died between the decision and the signal. Nothing to do,
       // and certainly nothing to fail the app over.
     }
   }
 
-  function clearKillTimer(session: Session): void {
-    if (session.killTimer === null) return;
-    clearTimeout(session.killTimer);
-    session.killTimer = null;
+  /** Signal one process, same tolerance. */
+  function signalPid(pid: number, sig: NodeJS.Signals): void {
+    try {
+      control.signalPid(pid, sig);
+    } catch {
+      // As above.
+    }
   }
+
+  const delay = (ms: number): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, ms));
 
   function handleExit(
     sessionId: string,
@@ -147,8 +180,6 @@ export function createSessionManager(
     // contract, which promises exit lands after the final data flush — twice
     // means the second one lands after nothing.
     if (session.status === 'exited') return;
-
-    clearKillTimer(session);
 
     // Flush whatever the decoder was still holding, so a transcript never ends
     // mid-character.
@@ -170,6 +201,148 @@ export function createSessionManager(
     session.emit({ type: 'exit', sessionId, exitCode, signal: exitSignal });
 
     for (const watcher of [...exitWatchers]) watcher();
+  }
+
+  /** Wait for every target to exit, SIGKILLing whatever outlasts the grace. */
+  function waitForExit(
+    targets: readonly Session[],
+    deadline: number,
+  ): Promise<void> {
+    const allGone = () => targets.every((session) => session.status !== 'live');
+
+    // The grace is whichever is shorter: the usual one, or what is left of the
+    // budget once the sweep has been reserved its settle.
+    const grace = Math.min(
+      killGraceMs,
+      Math.max(0, remaining(deadline) - SWEEP_SETTLE_MS),
+    );
+
+    return new Promise<void>((resolve) => {
+      if (allGone()) {
+        resolve();
+        return;
+      }
+
+      const finish = () => {
+        clearTimeout(timer);
+        exitWatchers.delete(watcher);
+        resolve();
+      };
+
+      const timer = setTimeout(() => {
+        // Grace expired. Anything still alive gets SIGKILL, and the app stops
+        // waiting on it — "the app would not quit" is worse than "one teardown
+        // step was abrupt".
+        for (const session of targets) {
+          if (session.status === 'live') signalGroup(session.pid, 'SIGKILL');
+        }
+        finish();
+      }, grace);
+
+      const watcher = () => {
+        if (allGone()) finish();
+      };
+
+      exitWatchers.add(watcher);
+    });
+  }
+
+  /**
+   * Kill anything from the snapshot that is still running.
+   *
+   * Unconditional, and that is the point. The tempting shortcut — stop once
+   * the shells have exited — is exactly the leak HIVE-72 describes: a shell
+   * takes SIGHUP and goes promptly while a descendant that ignores hangup
+   * carries on, invisible, holding the tokens.
+   */
+  async function sweep(
+    snapshot: readonly Descendant[],
+    deadline: number,
+  ): Promise<void> {
+    if (snapshot.length === 0) return;
+
+    // Nothing to be courteous to. Checking before sleeping keeps the common
+    // case — every job took the hangup and left — off the quit path entirely.
+    if (!snapshot.some(({ pid }) => control.isAlive(pid))) return;
+
+    const settle = Math.min(SWEEP_SETTLE_MS, remaining(deadline));
+    if (settle > 0) await delay(settle);
+
+    const survivors = snapshot.filter(({ pid }) => control.isAlive(pid));
+    if (survivors.length === 0) return;
+
+    // The group first — it reaches children the job spawned after the snapshot
+    // was taken, which by definition are not in it.
+    for (const pgid of new Set(survivors.map((d) => d.pgid))) {
+      signalGroup(pgid, 'SIGKILL');
+    }
+
+    for (const { pid } of survivors) {
+      if (control.isAlive(pid)) signalPid(pid, 'SIGKILL');
+    }
+  }
+
+  /**
+   * Teardowns started by `kill` that have not finished yet.
+   *
+   * `killAll` waits on these as well as its own. Without that, closing a tab
+   * and then quitting within the sweep's settle window abandons the sweep: the
+   * shell is already `exited`, so `killAll` sees no live session, returns
+   * immediately, and `host.ts` calls `process.exit` out from under the pending
+   * work — leaving exactly the orphan this file exists to prevent.
+   */
+  const inFlight = new Set<Promise<void>>();
+
+  /** Track a teardown, and make sure a rejection cannot take the host down. */
+  function track(work: Promise<void>): void {
+    const settled = work.catch(() => {
+      /**
+       * Every signal inside teardown is already ESRCH-tolerant, so this can
+       * only fire for a `ProcessControl` whose `descendants` rejects. Losing
+       * one sweep is bad; an unhandled rejection killing the pty-host and
+       * every live session with it is worse.
+       */
+    });
+
+    inFlight.add(settled);
+    void settled.finally(() => inFlight.delete(settled));
+  }
+
+  /** The one teardown both `kill` and `killAll` run. */
+  async function teardown(
+    targets: readonly Session[],
+    sig: NodeJS.Signals,
+  ): Promise<void> {
+    if (targets.length === 0) return;
+
+    const deadline = Date.now() + TEARDOWN_BUDGET_MS;
+
+    /**
+     * Before any signal, without exception.
+     *
+     * Once a shell dies its children are reparented to launchd/init and the
+     * `ppid` linkage that identifies them is gone for good. There is no
+     * reading the tree afterwards — snapshot first or do not snapshot at all.
+     */
+    const snapshot = await control
+      .descendants(targets.map((session) => session.pid))
+      .catch(() => {
+        /**
+         * A tree we could not read must not stop the shells being killed.
+         *
+         * The shipped `ProcessControl` already answers `[]` for any failure,
+         * but the interface permits a rejection, and letting one propagate
+         * here would abandon teardown *before the first signal* — turning a
+         * failed `ps` into "no session was killed at all", which is far worse
+         * than the group-kill-only behaviour this degrades to.
+         */
+        return [] as Descendant[];
+      });
+
+    for (const session of targets) signalGroup(session.pid, sig);
+
+    await waitForExit(targets, deadline);
+    await sweep(snapshot, deadline);
   }
 
   return {
@@ -242,7 +415,6 @@ export function createSessionManager(
         paused: false,
         cols: Math.max(1, cols),
         rows: Math.max(1, rows),
-        killTimer: null,
       };
       sessions.set(sessionId, session);
 
@@ -309,20 +481,24 @@ export function createSessionManager(
       session.pty.resize(nextCols, nextRows);
     },
 
-    kill(sessionId, sig = 'SIGTERM') {
+    kill(sessionId, sig = 'SIGHUP') {
       const session = sessions.get(sessionId);
       if (!session || session.status !== 'live') return;
 
-      signal(session, sig as NodeJS.Signals);
-
-      // Ask, wait, then insist. A process that ignores SIGTERM must not be
-      // able to keep the app alive or leave a pty dangling.
-      clearKillTimer(session);
-      session.killTimer = setTimeout(() => {
-        session.killTimer = null;
-        if (session.status !== 'live') return;
-        signal(session, 'SIGKILL');
-      }, killGraceMs);
+      /**
+       * Ask, wait, then insist — and ask with SIGHUP.
+       *
+       * An interactive shell ignores SIGTERM, so the old escalation always
+       * reached SIGKILL, and a SIGKILLed shell cannot hang up its own jobs.
+       * SIGHUP is what a closing terminal sends, and the shell answers it by
+       * hanging up every job it owns.
+       *
+       * Closing one session leaks its background jobs by exactly the mechanism
+       * app-quit does, so it runs the same teardown. Fire-and-forget, because
+       * `SessionOperations.kill` is synchronous; every signal inside tolerates
+       * a process that is already gone.
+       */
+      track(teardown([session], sig as NodeJS.Signals));
     },
 
     pause(sessionId) {
@@ -343,46 +519,19 @@ export function createSessionManager(
     },
 
     async killAll() {
-      const live = [...sessions.values()].filter(
-        (session) => session.status === 'live',
+      await teardown(
+        [...sessions.values()].filter((session) => session.status === 'live'),
+        'SIGHUP',
       );
-      if (live.length === 0) return;
 
-      for (const session of live) {
-        clearKillTimer(session);
-        signal(session, 'SIGTERM');
-      }
-
-      const allGone = () => live.every((session) => session.status !== 'live');
-
-      await new Promise<void>((resolve) => {
-        if (allGone()) {
-          resolve();
-          return;
-        }
-
-        const finish = () => {
-          clearTimeout(timer);
-          exitWatchers.delete(watcher);
-          resolve();
-        };
-
-        const timer = setTimeout(() => {
-          // Grace expired. Anything still alive gets SIGKILL, and the app
-          // stops waiting on it — "the app would not quit" is worse than "one
-          // teardown step was abrupt".
-          for (const session of live) {
-            if (session.status === 'live') signal(session, 'SIGKILL');
-          }
-          finish();
-        }, killGraceMs);
-
-        const watcher = () => {
-          if (allGone()) finish();
-        };
-
-        exitWatchers.add(watcher);
-      });
+      /**
+       * Then wait out anything `kill` started and has not finished.
+       *
+       * Loops rather than awaiting once because a `kill` can land while the
+       * first batch is settling. It terminates: teardown never starts another
+       * teardown, so the set only drains.
+       */
+      while (inFlight.size > 0) await Promise.all([...inFlight]);
     },
 
     replay(sessionId) {
