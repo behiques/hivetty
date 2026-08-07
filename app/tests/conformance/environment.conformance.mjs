@@ -1,4 +1,4 @@
-import { assert, describe, it } from './harness.mjs';
+import { assert, describe, emitSentinel, it } from './harness.mjs';
 
 /**
  * Environment hygiene (story 098).
@@ -36,8 +36,54 @@ describe('environment', () => {
   it('no ELECTRON_* variable leaks', async (context) => {
     const session = await context.ready(context.open());
 
-    session.send('env | grep -c "^ELECTRON_" || echo ELECTRON-COUNT-0');
+    /**
+     * `emitSentinel`, not a bare `echo` — the sweep is worthless without it.
+     *
+     * A pty echoes what is typed into it, so `echo ELECTRON-COUNT-0` puts that
+     * token in the transcript *as part of the command line*, before the command
+     * has run. `waitForOutput` then resolves on the echo whatever `grep` goes on
+     * to find, and the assertion can never fail. `emitSentinel` splits the token
+     * across a quote boundary so only the shell's own output spells it whole.
+     */
+    session.send(
+      `env | grep -c "^ELECTRON_" || ${emitSentinel('ELECTRON-COUNT-0')}`,
+    );
     await session.waitForOutput('ELECTRON-COUNT-0');
+  });
+
+  it('no CLAUDE_* variable leaks into a session (HIVE-64)', async (context) => {
+    /**
+     * The most consequential entry on the deny list for *this* app.
+     *
+     * Launch The Hive from a terminal that is itself inside a Claude Code
+     * session — which is how it gets developed — and every pty would hand
+     * `CLAUDE_CODE_SESSION_ID` and `CLAUDE_CODE_CHILD_SESSION` to the `claude`
+     * it starts. That agent then joins the launching session instead of
+     * starting its own: every session opened under the launcher's name, and
+     * renaming any one of them renamed all of them at once.
+     *
+     * Injected explicitly rather than relying on the runner's own environment,
+     * so the assertion holds whether or not the suite was started from inside
+     * a session. That is the difference between this and the
+     * `ELECTRON_RUN_AS_NODE` row above, which can lean on the runner.
+     */
+    const session = await context.ready(
+      context.open({
+        env: {
+          CLAUDE_CODE_SESSION_ID: 'leaked-session-id',
+          CLAUDE_CODE_CHILD_SESSION: '1',
+          CLAUDECODE: '1',
+        },
+      }),
+    );
+
+    session.send('echo "CS=[$CLAUDE_CODE_SESSION_ID] CC=[$CLAUDECODE]"');
+    await session.waitForOutput('CS=[] CC=[]');
+
+    // Split token, for the echo reason spelled out on the ELECTRON_ sweep above.
+    // Without it this line passes even if every CLAUDE_* variable leaks.
+    session.send(`env | grep -c "^CLAUDE" || ${emitSentinel('CLAUDE-COUNT-0')}`);
+    await session.waitForOutput('CLAUDE-COUNT-0');
   });
 
   it('NODE_OPTIONS is not inherited', async (context) => {
