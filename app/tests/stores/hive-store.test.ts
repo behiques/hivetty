@@ -3,12 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isSession } from '@/types/entity';
 import { isDesktop } from '@config/runtime';
 import { peek } from '@lib/fake-clock';
+import { resetProjectConfig } from '@lib/project-config';
 import { requestSpawn } from '@lib/terminal/pty-transport';
 import { sendToSession } from '@lib/terminal/session-input';
 
 import { ACK_DELAY_MS, useHiveStore } from '@stores/hive-store';
 import { parseCommand } from '@features/orchestrator/utils/parse-command';
 import { useUiStore } from '@stores/ui-store';
+import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
 
 /**
  * The desktop half of the store is mocked at the module edge, not stubbed
@@ -44,6 +46,14 @@ vi.mock('@lib/terminal/pty-transport', () => ({
 describe('hive-store', () => {
   beforeEach(() => {
     useHiveStore.getState().reset();
+    seedDemoFleet();
+    /**
+     * The console's `spawn` verb validates its repo against the *config* now,
+     * not the store's `projects` slice — that slice was only ever authoritative
+     * because it arrived pre-seeded, and emptying it made every spawn answer
+     * "unknown repo" for a project sitting in the Projects panel.
+     */
+    seedDemoProjectConfig();
     useUiStore.getState().reset();
     // Call history as well as return values: "was the pty asked at all?" is
     // half the assertions below, and it is meaningless if it accumulates.
@@ -59,7 +69,6 @@ describe('hive-store', () => {
 
       expect(state.order).toHaveLength(10);
       expect(state.agentOrder).toHaveLength(3);
-      expect(state.projects).toHaveLength(5);
       expect(state.tickets).toHaveLength(8);
       expect(state.prs).toHaveLength(4);
       expect(state.notifs).toHaveLength(5);
@@ -436,13 +445,22 @@ describe('hive-store', () => {
         expect(useUiStore.getState().activeTab).toBe('orch');
       });
 
-      it('still opens a session that is merely done', () => {
-        // `done` is a fixture's judgement about the *work*, not an observation
-        // about a process. Its transcript is a recording and reads fine.
+      /**
+       * A `done` session is refused too, and for the opposite reason to a
+       * terminated one.
+       *
+       * This used to assert it *opened*: `done` was a fixture's judgement about
+       * the work, its transcript was a recording, and reading it was harmless.
+       * `done` means `/clear` now, and a cleared session's pty is very much
+       * alive — it belongs to the successor. Opening the retired row would put
+       * the new session's output on screen under the old session's name and let
+       * the user type into work they believe they finished.
+       */
+      it('refuses a session that was cleared, though its pty still runs', () => {
         useHiveStore.getState().setSessionStatus('webhooks', 'done');
 
-        expect(useHiveStore.getState().openEntity('webhooks')).toBe(true);
-        expect(useUiStore.getState().activeTab).toBe('webhooks');
+        expect(useHiveStore.getState().openEntity('webhooks')).toBe(false);
+        expect(useUiStore.getState().activeTab).toBe('orch');
       });
 
       it('passes an unknown id through rather than inventing an answer', () => {
@@ -552,6 +570,68 @@ describe('hive-store', () => {
           text: '  unknown repo: not-a-repo — try one from the Projects panel',
           color: 'red',
         });
+      });
+
+      /**
+       * The verb reads the config, not the store's `projects` slice.
+       *
+       * A regression guard with a real failure behind it. `spawn` used to
+       * validate against `state.projects`, which was authoritative only because
+       * it booted pre-seeded with five demo projects. Emptying that seed left
+       * the slice permanently empty, so the console answered "unknown repo" for
+       * every project the user could see in the Projects panel — a verb that
+       * refused everything, on a screen listing the things it was refusing.
+       */
+      it('accepts a project the config declares', () => {
+        const before = useHiveStore.getState().order.length;
+
+        run('spawn apfm-web do things');
+
+        expect(useHiveStore.getState().order).toHaveLength(before + 1);
+        expect(lastLine()?.text).not.toContain('unknown repo');
+      });
+
+      /**
+       * No snapshot means permissive, not empty.
+       *
+       * `loadProjectConfig()` is fired without awaiting and leaves the snapshot
+       * `null` when the IPC read throws — deliberately, so a broken hop
+       * degrades rather than locks the app. Reading `null` as "no projects"
+       * would make this verb refuse every repo for the first frames of a
+       * launch, and refuse them permanently after a failed read.
+       */
+      it('does not refuse every repo when the config has not been read', () => {
+        // Desktop explicitly: this suite defaults to the browser, where a null
+        // snapshot means something else entirely — see the case below.
+        vi.mocked(isDesktop).mockReturnValue(true);
+        resetProjectConfig();
+        const before = useHiveStore.getState().order.length;
+
+        run('spawn apfm-web do things');
+
+        expect(useHiveStore.getState().order).toHaveLength(before + 1);
+        expect(lastLine()?.text).not.toContain('unknown repo');
+      });
+
+      /**
+       * …but a *browser* has no snapshot for a different reason, and being
+       * permissive there mints a phantom fleet.
+       *
+       * On desktop `null` means "not read yet" and main gives the refusal a
+       * moment later. In a browser there is no bridge, so the snapshot is null
+       * **forever** and `spawnSession` never calls `requestSpawn` — no refusal
+       * can ever arrive, and the fabricated row stays in the rails and the
+       * header counts. That is the exact lie this branch exists to delete.
+       */
+      it('refuses any repo in a browser, where no refusal could ever arrive', () => {
+        vi.mocked(isDesktop).mockReturnValue(false);
+        resetProjectConfig();
+        const before = useHiveStore.getState().order.length;
+
+        run('spawn anything at all');
+
+        expect(useHiveStore.getState().order).toHaveLength(before);
+        expect(lastLine()?.text).toContain('unknown repo: anything');
       });
 
       /**
@@ -778,6 +858,7 @@ describe('hive-store', () => {
     it('rewinds the clock on reset', () => {
       useHiveStore.getState().spawnSession('apfm-web', 'a task');
       useHiveStore.getState().reset();
+    seedDemoFleet();
 
       expect(peek()).toBe('14:38');
     });

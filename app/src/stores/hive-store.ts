@@ -9,12 +9,11 @@ import type {
   Effort,
   Entity,
   Model,
-  Project,
   ProjectRow,
   Session,
   SessionStatus,
 } from '@/types/entity';
-import { isEnded, isSession, isTerminated } from '@/types/entity';
+import { isEnded, isSession, terminalOf } from '@/types/entity';
 import type { FeedItem } from '@/types/feed';
 import type { Notification } from '@/types/notification';
 import type { Pr, TicketPr } from '@/types/pull-request';
@@ -89,8 +88,15 @@ export type SendOutcome =
  * want five different things on screen and only one of them is an error.
  */
 export type TicketSource =
-  /** The browser demo. Fixtures are its data, not a degraded mode. */
-  | { kind: 'fixtures' }
+  /**
+   * A read is in flight and there is nothing yet.
+   *
+   * The boot state, and the state every refresh returns to. It replaced a
+   * `fixtures` variant that meant "these eight are sample data" — which is what
+   * made real issues arrive *behind* fake ones for a frame. There is nothing to
+   * show before the answer comes back, and saying so is the whole fix.
+   */
+  | { kind: 'loading' }
   /** Desktop with nothing configured. The panel explains rather than sits empty. */
   | { kind: 'unconfigured' }
   /** Desktop, at least one successful read. */
@@ -102,8 +108,14 @@ interface HiveState {
   entities: Record<string, Entity>;
   order: string[];
   agentOrder: string[];
-  projects: ReturnType<typeof createInitialState>['projects'];
-  tickets: ReturnType<typeof createInitialState>['tickets'];
+  /*
+   * No `projects` slice. It held the five seeded projects and was what
+   * `useProjects()` fell back to; both the seed and the fallback are gone, and
+   * a slice nothing reads is a slice that drifts. The project list is the
+   * config file's, read through `projectConfigSnapshot()`. Sessions still name
+   * a project through `entity.project` — that string needs no table here.
+   */
+  tickets: Ticket[];
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
   prs: ReturnType<typeof createInitialState>['prs'];
@@ -147,6 +159,13 @@ interface HiveState {
   setSessionStatus: (id: string, status: SessionStatus) => void;
   /** The agent reported a new display name (HIVE-61). */
   renameSession: (id: string, name: string) => void;
+  /**
+   * `/clear` ended this session's conversation; its terminal kept running.
+   *
+   * Retires the row as `done` and opens a successor on the same terminal.
+   * Answers the successor's id, or `null` if there was nothing to retire.
+   */
+  clearSession: (id: string) => string | null;
   reset: () => void;
 }
 
@@ -167,6 +186,86 @@ const NOTIF_CAP = 8;
  * orchestrator slower the longer the session had been running.
  */
 const ORCH_LINE_CAP = 200;
+
+/**
+ * How many cleared sessions the ENDED group keeps (per fleet, not per terminal).
+ *
+ * A terminal cleared every twenty minutes for a working day is twenty rows of
+ * history in a table whose job is showing what is *running*. Twenty is the same
+ * bet `NOTIF_CAP` and `FEED_CAP` make: enough to answer "what did I just
+ * finish?", few enough that the live rows stay above the fold.
+ *
+ * Only `done` rows are capped. A `terminated` row is a process that died and is
+ * the only record that it existed; dropping those would lose information the
+ * user cannot recover, while a cleared session's successor is right there.
+ */
+const DONE_CAP = 20;
+
+/**
+ * The row a terminal's events belong to **now**.
+ *
+ * Every hook a session sends carries `HIVE_SESSION_ID`, and that value is baked
+ * into the pty's environment at spawn — it never changes, because the pty never
+ * restarts. So after a `/clear`, main is still naming the row that has just been
+ * retired, and it cannot do better: it does not know the successor exists.
+ *
+ * Without this, `/clear` looked like it did nothing. The sequence is
+ * `SessionEnd{clear}` then `SessionStart{source:'clear'}`, and the second one
+ * maps to `idle` — so the row was marked `done` and then immediately un-marked,
+ * while every later status went on landing on the retired row and the successor
+ * never showed a status at all.
+ *
+ * Resolving here rather than adding a renderer→main verb keeps main speaking the
+ * only id it has and the renderer owning the ids it allocates. The fast path is
+ * the overwhelmingly common one: a terminal that has never been cleared answers
+ * its own id without a scan.
+ */
+/**
+ * The title a `/clear` leaves behind, per terminal.
+ *
+ * Claude names a session by writing it into the **terminal title**, and it
+ * repaints that title continuously — the activity glyph animates, so the same
+ * name arrives many times a second. `/clear` starts a new conversation with no
+ * name, but it does *not* reset the title: Claude goes on emitting the old one
+ * until the user renames again.
+ *
+ * That was invisible before, because the row already had the name and
+ * `renameSession` drops an unchanged value. A successor has no name, so the
+ * stale title landed on it as a rename and the new session inherited the
+ * finished one's identity.
+ *
+ * Held here rather than as a field on `Session` because it is not a property of
+ * the session — it is a fact about one terminal's title stream, and it stops
+ * being true the moment a different name arrives. Module-level for the same
+ * reason `spawnCounter` is, and cleared by `reset()` alongside it.
+ */
+const staleTitles = new Map<string, string>();
+
+function currentSessionIn(state: HiveState, terminalId: string): string {
+  const direct = state.entities[terminalId];
+  if (direct !== undefined && isSession(direct) && !isEnded(direct.status)) {
+    return terminalId;
+  }
+
+  for (const id of state.order) {
+    const entity = state.entities[id];
+    if (
+      entity !== undefined &&
+      isSession(entity) &&
+      terminalOf(entity) === terminalId &&
+      !isEnded(entity.status)
+    ) {
+      return id;
+    }
+  }
+
+  /**
+   * No live row — an id nothing has cleared, or a terminal whose last session
+   * really did end. Answering the original keeps every existing behaviour
+   * (a pty exit still marks the row it names) instead of silently dropping it.
+   */
+  return terminalId;
+}
 
 const capLines = (lines: TermLine[]) =>
   lines.length > ORCH_LINE_CAP ? lines.slice(lines.length - ORCH_LINE_CAP) : lines;
@@ -224,16 +323,48 @@ const line = (text: string, color: TermLine['color'] = 'ink'): TermLine => ({
   color,
 });
 
+/**
+ * The six slices that boot empty, because each now has a real producer.
+ *
+ * Sessions and agents arrive from PTYs the user starts, projects from the
+ * config file, tickets from Jira, and the console transcript from what the
+ * orchestrator actually does. Seeding any of them meant the app opened already
+ * claiming a fleet that was not running — the header counted ten sessions on a
+ * machine with none, and the WORK tab painted eight sample tickets that a real
+ * Jira read then replaced a frame later.
+ *
+ * Spelled out here rather than left to `createInitialState()` so the empty state
+ * is a deliberate, typed object instead of an absence: adding a slice to
+ * {@link HiveState} without deciding where it comes from will fail to compile.
+ *
+ * A factory, for the same reason `createInitialState()` is one — a shared
+ * constant would hand every store and every `reset()` the *same* arrays, so one
+ * test appending a session would leak into the next.
+ */
+const emptySeeds = (): Pick<
+  HiveState,
+  'entities' | 'order' | 'agentOrder' | 'tickets' | 'orchLines'
+> => ({
+  entities: {},
+  order: [],
+  agentOrder: [],
+  tickets: [],
+  orchLines: [],
+});
+
 export const useHiveStore = create<HiveState>()((set, get) => ({
+  ...emptySeeds(),
   ...createInitialState(),
   /**
-   * Fixtures until something says otherwise.
+   * Loading until the first read answers.
    *
-   * The browser target never leaves this state, which is the point: `pnpm dev`
-   * has no main process, so the fixtures are its data rather than a fallback
-   * from a read that failed.
+   * Not `unconfigured`, which is a *conclusion* — it would flash "no Jira
+   * connection" at every launch on a perfectly configured machine before the
+   * status read came back. The browser target reaches `unconfigured` a tick
+   * later, from {@link HiveState.refreshTickets}, because a browser genuinely
+   * has no bridge to Jira.
    */
-  ticketSource: { kind: 'fixtures' } as TicketSource,
+  ticketSource: { kind: 'loading' } as TicketSource,
 
   /**
    * Create a session and open its tab.
@@ -369,7 +500,19 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
      * from becoming typable while its transport stays a recording.
      */
     if (isDesktop() && isSession(entity)) {
-      const result = sendToSession(id, msg);
+      /**
+       * Addressed to the **terminal**, because that is what owns the channel.
+       *
+       * `pty-transport` keys its channels by the id `createPtyTransport` was
+       * given, and that is `terminalOf(session)`. A successor minted by
+       * `/clear` has a row id its terminal does not answer to, so sending on
+       * the row id refused every message — `sess-02 has no live session` — for
+       * a pty that was running and typable.
+       *
+       * The *messages* still name the row, because that is what the user typed
+       * and what they see in the rails.
+       */
+      const result = sendToSession(terminalOf(entity), msg);
 
       get().pushFeed({
         time: stamp(),
@@ -476,7 +619,17 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
      * blank stage. Duplicating that decision here would put two answers to one
      * question in two files.
      */
-    if (!isTerminated(get().entities[id])) {
+    /**
+     * Ended, however it ended — the gate widened with `/clear` (was
+     * `isTerminated`).
+     *
+     * A `done` session's pty is alive, which is exactly why it must be refused:
+     * that terminal belongs to the successor now. Opening the retired row would
+     * put the *new* session's output on screen under the *old* session's name,
+     * and let the user type into work they think they finished.
+     */
+    const entity = get().entities[id];
+    if (!(entity !== undefined && isSession(entity) && isEnded(entity.status))) {
       useUiStore.getState().openTab(id);
       return true;
     }
@@ -579,9 +732,39 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       }
 
       case 'spawn': {
-        const known = get().projects.some(
-          (project) => project.id === command.repo,
-        );
+        /**
+         * The config decides what exists, exactly as the rail and picker do.
+         *
+         * This read `state.projects` — the store's own slice — which worked
+         * only because that slice was seeded with five demo projects at boot.
+         * Emptying the seed left it always empty, so every `spawn` answered
+         * "unknown repo" for projects sitting right there in the Projects
+         * panel. One source for "which projects exist", and it is the config.
+         *
+         * **On desktop, no snapshot means permissive, not empty.** `main.tsx`
+         * fires `loadProjectConfig()` without awaiting, and `project-config.ts`
+         * leaves the snapshot `null` when that read throws — deliberately, so a
+         * broken IPC hop degrades rather than locks the app. Treating `null` as
+         * "no projects" would make this verb refuse every repo during the first
+         * frames of launch, and refuse them *permanently* after a failed read.
+         * `can.spawnSessionIn` already answers `true` with no snapshot; this
+         * agrees with it, and lets main — which has the file in front of it —
+         * give the refusal if there is one.
+         *
+         * **In a browser it means empty, and the distinction is load-bearing.**
+         * There is no bridge, so the snapshot is `null` *forever* rather than
+         * briefly, and nothing downstream can ever refuse: `spawnSession` skips
+         * `requestSpawn` off-desktop, so no main-side refusal arrives and the
+         * row stays. Being permissive there would let `spawn anything` mint a
+         * session with a fabricated transcript that the header counts and the
+         * rails list — a phantom fleet, which is the exact lie this branch
+         * exists to delete.
+         */
+        const snapshot = projectConfigSnapshot();
+        const known =
+          (snapshot === null && isDesktop()) ||
+          (snapshot?.projects.some((project) => project.id === command.repo) ??
+            false);
         if (!known) {
           pushOrch(
             `  unknown repo: ${command.repo} — try one from the Projects panel`,
@@ -658,10 +841,18 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    */
   setSessionStatus: (id, status) =>
     set((state) => {
-      const entity = state.entities[id];
+      /**
+       * Main names the *terminal*; this is the row that owns it now.
+       *
+       * A cleared session must not be un-retired by the `SessionStart` its own
+       * `/clear` produces, and the successor must receive the statuses that
+       * follow. See {@link currentSessionIn}.
+       */
+      const target = currentSessionIn(state, id);
+      const entity = state.entities[target];
       if (!entity || !isSession(entity) || entity.status === status) return state;
       return {
-        entities: { ...state.entities, [id]: { ...entity, status } },
+        entities: { ...state.entities, [target]: { ...entity, status } },
       };
     }),
 
@@ -681,12 +872,168 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    */
   renameSession: (id, name) =>
     set((state) => {
-      const entity = state.entities[id];
-      if (!entity || !isSession(entity) || entity.name === name) return state;
+      // The terminal's current row, for the reason `setSessionStatus` gives:
+      // a rename after a `/clear` describes the new conversation, not the
+      // finished one whose name is now history.
+      const target = currentSessionIn(state, id);
+      const entity = state.entities[target];
+      if (!entity || !isSession(entity)) return state;
+
+      /**
+       * Refuse the title the finished conversation left in the terminal.
+       *
+       * Suppressed until a *different* name arrives, not merely once: Claude
+       * repaints the title continuously, so the stale value comes back many
+       * times a second and a one-shot guard would let the second one through.
+       * Anything else means the agent has genuinely renamed itself, and the
+       * terminal stops being suspect from then on.
+       */
+      const terminal = terminalOf(entity);
+      const stale = staleTitles.get(terminal);
+      if (stale === name) return state;
+      if (stale !== undefined) staleTitles.delete(terminal);
+
+      if (entity.name === name) return state;
       return {
-        entities: { ...state.entities, [id]: { ...entity, name } },
+        entities: { ...state.entities, [target]: { ...entity, name } },
       };
     }),
+
+  /**
+   * `/clear` — the conversation ended, the terminal did not.
+   *
+   * Where `terminated` comes from a pty exit that main watched, this comes from
+   * a hook: `SessionEnd{reason:'clear'}`, fired on a session sitting alive at
+   * its prompt. So the row becomes `done` — the work finished — and a successor
+   * opens on the **same terminal**, which is the whole point. Nothing is
+   * spawned; there is already a process, and it is still running.
+   *
+   * ## What the successor inherits, and what it does not
+   *
+   * `terminalId`, `project`, `branch`, `model` and `effort` carry over: they
+   * describe the *terminal*, and a `/clear` changes none of them. `task`,
+   * `name`, `pr` and `lines` do not: they described a conversation that just
+   * ended, and carrying the old name forward would make the successor look like
+   * a continuation of work it cannot see. Claude renames it moments later
+   * anyway, through the same `renameSession` path any session uses.
+   *
+   * ## Ordering
+   *
+   * The successor takes the retired session's *place* in `order` rather than
+   * being appended. The rails read that array positionally, and a terminal the
+   * user has had open all day jumping to the bottom of the list because they
+   * typed `/clear` would be a navigation surprise with no cause they can see.
+   *
+   * An unknown id, an agent, or a session that already ended is a no-op — a
+   * hook can arrive for a row the user removed a moment earlier, and the honest
+   * answer to that race is to do nothing.
+   */
+  clearSession: (id) => {
+    /**
+     * Resolve to the terminal's live row first.
+     *
+     * A terminal cleared twice sends the same `HIVE_SESSION_ID` both times, so
+     * the second `/clear` names a row that is already `done`. Retiring by that
+     * id would no-op and leave the successor running under a conversation the
+     * user has just wiped.
+     */
+    const targetId = currentSessionIn(get(), id);
+    const current = get().entities[targetId];
+    if (!current || !isSession(current) || isEnded(current.status)) return null;
+
+    const successorId = nextSessionId();
+    const successor: Session = {
+      kind: 'session',
+      id: successorId,
+      terminalId: terminalOf(current),
+      project: current.project,
+      branch: current.branch,
+      status: 'idle',
+      task: '',
+      pr: null,
+      cost: '$0.00',
+      lines: [],
+      ...(current.model === undefined ? {} : { model: current.model }),
+      ...(current.effort === undefined ? {} : { effort: current.effort }),
+    };
+
+    /**
+     * The name the terminal is still advertising belongs to the conversation
+     * that just ended. Until Claude names the new one, ignore it.
+     */
+    if (current.name !== undefined) {
+      staleTitles.set(terminalOf(current), current.name);
+    }
+
+    set((state) => {
+      const retired: Session = { ...current, status: 'done' };
+      const entities: Record<string, Entity> = {
+        ...state.entities,
+        [targetId]: retired,
+        [successorId]: successor,
+      };
+
+      const at = state.order.indexOf(targetId);
+      const order =
+        at === -1
+          ? [...state.order, successorId]
+          : [
+              ...state.order.slice(0, at),
+              successorId,
+              targetId,
+              ...state.order.slice(at + 1),
+            ];
+
+      /**
+       * Drop the oldest `done` rows past the cap.
+       *
+       * Oldest by position in `order`, which is spawn order — the same
+       * definition of "oldest" every other capped list in this store uses.
+       * Their entities go with them; an entity nothing lists is a leak.
+       */
+      const doneIds = order.filter((entityId) => {
+        const entity = entities[entityId];
+        return entity !== undefined && isSession(entity) && entity.status === 'done';
+      });
+      const excess = new Set(doneIds.slice(0, Math.max(0, doneIds.length - DONE_CAP)));
+      if (excess.size > 0) {
+        for (const dropped of excess) delete entities[dropped];
+      }
+
+      return {
+        entities,
+        order: excess.size === 0 ? order : order.filter((e) => !excess.has(e)),
+      };
+    });
+
+    /**
+     * Follow the terminal, not the row.
+     *
+     * The user is looking at this terminal — they just typed into it. If the
+     * retired row was on screen, the successor has to take the stage or the
+     * next keystroke goes to a tab that no longer accepts one.
+     */
+    if (useUiStore.getState().activeTab === targetId) {
+      useUiStore.getState().openTab(successorId);
+    }
+
+    /**
+     * The console is the only place the retired session is now named.
+     *
+     * Its row is inert and carries no transcript, so without this line a
+     * session the user worked in for an hour would leave no trace of *what* it
+     * was — only that something called `sess-04` finished.
+     */
+    set((state) => ({
+      orchLines: capLines([
+        ...state.orchLines,
+        line(`  ✓ ${current.name ?? current.id} done — cleared`, 'green'),
+        line(`  ▸ ${successorId} started in the same terminal`, 'dim'),
+      ]),
+    }));
+
+    return successorId;
+  },
 
   /**
    * Install real issues (HIVE-69).
@@ -779,8 +1126,41 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * rather than an exception a panel would have to catch.
    */
   refreshTickets: async () => {
-    // The browser demo keeps its fixtures. Nothing to read, nothing to fail.
-    if (!isDesktop()) return;
+    /**
+     * A browser has no bridge, so it has no Jira — and that is a
+     * configuration answer, not a failure. It settles here rather than sitting
+     * on `loading` forever, which is what an early `return` would now mean.
+     */
+    if (!isDesktop()) {
+      get().reportTicketsUnconfigured();
+      return;
+    }
+
+    /**
+     * Announce the read — but only when there is nothing on screen to announce
+     * it *over*.
+     *
+     * A refresh with tickets already listed keeps them listed. Blanking a good
+     * list to a skeleton on every reopen would be the original bug wearing the
+     * opposite mask: content the user was reading, replaced by a placeholder,
+     * for the duration of a network round trip.
+     *
+     * It is also what keeps `reportTicketFailure` able to do its job. That
+     * action marks a *live* list stale rather than discarding it, and it decides
+     * by reading the source it is replacing — so moving an already-live source
+     * to `loading` here would turn every "could not reach Jira, these may be out
+     * of date" into a bare failure with the tickets thrown away.
+     *
+     * Keyed on the *source*, not on `tickets.length`. A successful read that
+     * matched nothing is `live` with an empty array, and the panel says "No
+     * issues matched your query." — a real answer. Counting rows would treat
+     * that answer as "nothing yet" and replace it with three pulsing
+     * placeholders on every reopen, which is the same content-for-placeholder
+     * swap the paragraph above rejects.
+     */
+    if (get().ticketSource.kind !== 'live') {
+      set({ ticketSource: { kind: 'loading' } });
+    }
 
     const status = await readJiraStatus();
     if (status === null) {
@@ -819,8 +1199,13 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
   reset: () => {
     spawnCounter = 0;
+    staleTitles.clear();
     resetClock();
-    set({ ...createInitialState(), ticketSource: { kind: 'fixtures' } });
+    set({
+      ...emptySeeds(),
+      ...createInitialState(),
+      ticketSource: { kind: 'loading' },
+    });
   },
 }));
 
@@ -931,6 +1316,41 @@ export const useSpawnSession = () => useHiveStore((state) => state.spawnSession)
 export const useRenameSession = () =>
   useHiveStore((state) => state.renameSession);
 
+/** `/clear`: main reports the conversation boundary through this. */
+export const useClearSession = () =>
+  useHiveStore((state) => state.clearSession);
+
+/**
+ * Which terminal an id runs in — the id itself for anything that is not a
+ * session, or a session that has never been cleared.
+ *
+ * A plain read rather than a hook, because its callers are inside `useMemo`
+ * bodies keyed on the id list, not render paths of their own. Subscribing would
+ * rebuild every transport whenever any unrelated slice changed, which is the
+ * one thing `center-stage.tsx`'s cache exists to prevent.
+ */
+/**
+ * The inverse of {@link terminalIdFor}: the row a terminal id names *now*.
+ *
+ * Main speaks terminal ids — they are baked into a pty's environment and never
+ * change — so anything arriving from main names a terminal, not a row. After a
+ * `/clear` that id belongs to the retired session, and acting on it directly
+ * targets history: an OS notification clicked minutes later would refuse to
+ * open (the row is ended) and drop the user on the orchestrator, instead of the
+ * live session the notification was actually about.
+ *
+ * A plain read, like its inverse — its callers are event handlers, not render
+ * paths, and a subscription would re-run them on unrelated writes.
+ */
+export function currentRowFor(id: string): string {
+  return currentSessionIn(useHiveStore.getState(), id);
+}
+
+export function terminalIdFor(id: string): string {
+  const entity = useHiveStore.getState().entities[id];
+  return entity !== undefined && isSession(entity) ? terminalOf(entity) : id;
+}
+
 /** Story 096: main pushes a real session's derived status through this. */
 export const useSetSessionStatus = () =>
   useHiveStore((state) => state.setSessionStatus);
@@ -952,16 +1372,14 @@ export const useSendToEntity = () => useHiveStore((state) => state.sendToEntity)
 export const useRunOrchCommand = () =>
   useHiveStore((state) => state.runOrchCommand);
 
-/** Ids of projects that still own at least one session (story 101). */
-const projectsOwningSessions = (state: HiveState): string[] => {
-  const ids: string[] = [];
-  for (const id of state.order) {
-    const entity = state.entities[id];
-    if (!entity || !isSession(entity)) continue;
-    if (!ids.includes(entity.project)) ids.push(entity.project);
-  }
-  return ids;
-};
+/*
+ * `projectsOwningSessions` used to live here — every project id owning at least
+ * one session, ended or not. Its only caller was the project-list merge, which
+ * needed it to decide whether a seeded project had earned its place in the rail.
+ * With no seeded projects there is nothing to decide, and a selector nobody
+ * reads is a selector that drifts. `projectsOwningLiveSessions` below is the one
+ * that survives, because the remove confirmation still has a number to state.
+ */
 
 /** Ids of projects owning a session that has not ended (story 101). */
 const projectsOwningLiveSessions = (state: HiveState): string[] => {
@@ -1009,63 +1427,38 @@ export const useLiveSessionCounts = () =>
   useHiveStore(useShallow(liveSessionCounts));
 
 /**
- * The project list: the config's, merged with the fixtures (stories 031, 101).
+ * The project list: the config file's, and only the config file's (story 031).
  *
- * | Situation | The list is |
- * |---|---|
- * | No snapshot — browser demo, first frames of launch | fixtures, unchanged |
- * | Snapshot with zero projects | fixtures, unchanged |
- * | Snapshot with projects | the config's, **plus** fixture projects that still own live sessions, marked `demo` |
+ * This used to be a merge. There were five seeded projects, so the rule was
+ * "config's, plus any fixture project that still owns a live session, marked
+ * `demo`" — three table rows of precedence to stop the demo's sessions being
+ * stranded by the first real project a user added.
  *
- * The third row is the load-bearing one. The work panel, the orchestrator
- * table and its console `ls`, and `lib/terminal/resolve-transport` all reach
- * sessions through `entity.project`; dropping fixture projects the moment a
- * real one is added would strand every one of them. Marking them `demo` is
- * honest and costs one field.
- *
- * A config project and a fixture project sharing an id collapse to a single
- * row and **config wins** — that is the upgrade path for anyone who already
- * mapped `apfm-web` under story 090.
+ * With no seeded projects there is nothing to merge and no precedence to
+ * resolve: a project exists because the user mapped it. An empty config means
+ * an empty list, which `projects-panel.tsx` says out loud rather than rendering
+ * as a blank column.
  *
  * **Config order is the file's order and is never sorted.** Story 103's
  * drag-reorder works by rewriting that array, and the left rail reads it
  * positionally, so sorting here would silently make 103 unimplementable.
  */
 export const useProjects = (): ProjectRow[] => {
-  const fixtures = useHiveStore(useShallow((state) => state.projects));
-  const owning = useHiveStore(useShallow(projectsOwningSessions));
   const snapshot = useSyncExternalStore(
     subscribeProjectConfig,
     projectConfigSnapshot,
     projectConfigSnapshot,
   );
 
-  return useMemo(() => {
-    const asDemo = (project: Project): ProjectRow => ({
-      ...project,
-      name: project.id,
-      source: 'demo',
-    });
-
-    const configured = snapshot?.projects ?? [];
-    if (configured.length === 0) return fixtures.map(asDemo);
-
-    const rows: ProjectRow[] = configured.map((entry) => ({
-      id: entry.id,
-      name: entry.name,
-      icon: entry.icon,
-      source: 'config',
-    }));
-    const claimed = new Set(rows.map((row) => row.id));
-
-    for (const fixture of fixtures) {
-      if (claimed.has(fixture.id)) continue; // config wins
-      if (!owning.includes(fixture.id)) continue; // no live sessions, drop it
-      rows.push(asDemo(fixture));
-    }
-
-    return rows;
-  }, [fixtures, owning, snapshot]);
+  return useMemo(
+    () =>
+      (snapshot?.projects ?? []).map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        icon: entry.icon,
+      })),
+    [snapshot],
+  );
 };
 
 /** Sessions for a project that have not ended (story 031). */
