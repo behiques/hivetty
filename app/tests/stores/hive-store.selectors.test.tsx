@@ -181,8 +181,163 @@ describe('hive-store selectors', () => {
     });
   });
 
+  describe('usePrs', () => {
+    /**
+     * The owning session is a *match*, not a stored field.
+     *
+     * Main has never heard of a session, so `PrRecord` carries a branch and
+     * this selector resolves the rest. #482 is on `feat/hero-refresh`, which is
+     * exactly what the `hero-refresh` session is working.
+     */
+    it('resolves each PR to the session on its branch', () => {
+      const { result } = renderHook(() => usePrs());
+
+      const hero = result.current.find((pr) => pr.n === 482);
+      expect(hero?.session).toBe('hero-refresh');
+    });
+
+    it('yields a null session when nothing is on the branch', () => {
+      act(() => {
+        useHiveStore.setState((state) => ({
+          prs: state.prs.map((pr) =>
+            pr.number === 482 ? { ...pr, branch: 'feat/orphan' } : pr,
+          ),
+        }));
+      });
+
+      const { result } = renderHook(() => usePrs());
+
+      expect(result.current.find((pr) => pr.n === 482)?.session).toBeNull();
+    });
+
+    /**
+     * A live session beats an ended one on the same branch.
+     *
+     * `/clear` retires a row and opens a successor on the same branch, and
+     * ended rows linger — so the first match in `order` is often a corpse.
+     * Opening it would land the user on a terminal they cannot type into.
+     */
+    it('prefers a live session over an ended one on the same branch', () => {
+      act(() => {
+        useHiveStore.setState((state) => ({
+          entities: {
+            ...state.entities,
+            'hero-refresh-old': {
+              ...(state.entities['hero-refresh'] as Session),
+              id: 'hero-refresh-old',
+              status: 'done',
+            },
+          },
+          // The ended one first, so a naive `find` would pick it.
+          order: ['hero-refresh-old', ...state.order],
+        }));
+      });
+
+      const { result } = renderHook(() => usePrs());
+
+      expect(result.current.find((pr) => pr.n === 482)?.session).toBe(
+        'hero-refresh',
+      );
+    });
+
+    /**
+     * The test that used to live here asserted the opposite — that an ended
+     * session is returned when it is the only match. That pinned a bug rather
+     * than a decision: `openEntity` refuses ended sessions, so the id it handed
+     * back bounced the user to the orchestrator instead of opening anything,
+     * and both surfaces lost their GitHub link in the process.
+     *
+     * It is the common case, not an edge one: the panel keeps PRs merged in the
+     * last 24 hours, and those are precisely the branches whose sessions have
+     * ended or been retired by `/clear`.
+     */
+    it('resolves to null when the only session on the branch has ended', () => {
+      const { result } = renderHook(() => usePrs());
+
+      // `tz-fix` is done, and it is the only session on `fix/timezone-bug`.
+      expect(result.current.find((pr) => pr.n === 77)?.session).toBeNull();
+    });
+
+    /**
+     * The same branch name in two repositories is normal — one ticket, a
+     * frontend and a backend session, both on `feat/shared`. Matching on branch
+     * alone would open whichever came first in `order`, which is a coin toss
+     * that lands the user in the wrong terminal half the time.
+     */
+    it('picks the session in the PR’s own repository when a branch is shared', () => {
+      act(() => {
+        useHiveStore.setState((state) => ({
+          entities: {
+            ...state.entities,
+            'fe-shared': {
+              ...(state.entities['hero-refresh'] as Session),
+              id: 'fe-shared',
+              project: 'apfm-web',
+              branch: 'feat/shared',
+            },
+            'be-shared': {
+              ...(state.entities['hero-refresh'] as Session),
+              id: 'be-shared',
+              project: 'referral-api',
+              branch: 'feat/shared',
+            },
+          },
+          // Frontend first, so a branch-only match would always answer `fe`.
+          order: ['fe-shared', 'be-shared', ...state.order],
+          prs: [
+            {
+              number: 900,
+              title: 'Backend half',
+              url: 'https://github.com/demo/referral-api/pull/900',
+              repo: 'referral-api',
+              owner: 'demo',
+              branch: 'feat/shared',
+              state: 'open' as const,
+              findings: 0,
+              checks: 'passing' as const,
+              updatedAt: '2026-08-09T15:00:00Z',
+            },
+          ],
+        }));
+      });
+
+      const { result } = renderHook(() => usePrs());
+
+      expect(result.current[0].session).toBe('be-shared');
+    });
+
+    /**
+     * Project **disambiguates**, it does not filter. A checkout directory named
+     * differently from its repository is common, and requiring equality would
+     * break the link for everyone who has one — so an unambiguous branch match
+     * still wins when no project matches.
+     */
+    it('still links when no session’s project matches the repository', () => {
+      act(() => {
+        useHiveStore.setState((state) => ({
+          prs: state.prs.map((pr) =>
+            pr.number === 482 ? { ...pr, repo: 'apfm-web-renamed' } : pr,
+          ),
+        }));
+      });
+
+      const { result } = renderHook(() => usePrs());
+
+      expect(result.current.find((pr) => pr.n === 482)?.session).toBe(
+        'hero-refresh',
+      );
+    });
+  });
+
   describe('useTicketPrs', () => {
-    it('returns the PRs reachable from a ticket\'s sessions', () => {
+    /**
+     * The link is the **branch**, resolved against the live PR list.
+     *
+     * This used to read `Session.pr` — a field nothing has ever written, which
+     * is why the PR section of a ticket card was permanently empty in the real
+     * app and only looked populated in tests.
+     */
+    it("returns the PRs on the branches of a ticket's sessions", () => {
       const { result } = renderHook(() => useTicketPrs('GRAC-3018'));
 
       expect(result.current).toEqual([
@@ -191,51 +346,183 @@ describe('hive-store selectors', () => {
           repo: 'apfm-web',
           state: 'open',
           findings: 2,
+          url: 'https://github.com/demo/apfm-web/pull/482',
           session: 'hero-refresh',
         },
       ]);
     });
 
-    it('returns nothing when no session has a PR', () => {
+    it('returns nothing when no PR is on any of the ticket’s branches', () => {
       // GRAC-3010 covers nplusone and e2e-quote, neither of which has a PR.
       const { result } = renderHook(() => useTicketPrs('GRAC-3010'));
       expect(result.current).toEqual([]);
     });
 
     /**
-     * The global list is the single source of truth. Fixture #219 is `approved`
-     * there but still `open` on the `webhooks` session — the stale copy must
-     * lose.
+     * The second match: the key in the PR's title.
+     *
+     * It catches the two cases a branch match misses — a PR raised outside the
+     * app, and one whose session has ended and aged out of the fleet.
      */
-    it('prefers the global list over the session\'s stale copy', () => {
-      const { result } = renderHook(() => useTicketPrs('GRAC-2991'));
-
-      expect(result.current[0].state).toBe('approved');
-      expect(useHiveStore.getState().entities['webhooks']).toMatchObject({
-        pr: { n: 219, state: 'open' },
+    it('matches a PR whose title names the ticket', () => {
+      act(() => {
+        useHiveStore.setState((state) => ({
+          tickets: [
+            {
+              key: 'HIVE-73',
+              status: 'In Progress',
+              statusCategory: 'in-progress',
+              title: 'Start a session from a ticket',
+            },
+            ...state.tickets,
+          ],
+          prs: [
+            {
+              number: 61,
+              title: 'feat(work): start a session from a ticket (HIVE-73)',
+              url: 'https://github.com/demo/the-hive/pull/61',
+              repo: 'the-hive',
+              owner: 'demo',
+              branch: 'goal/ticket-session-link',
+              state: 'open' as const,
+              findings: 0,
+              checks: 'passing' as const,
+              updatedAt: '2026-08-09T12:55:04Z',
+            },
+            ...state.prs,
+          ],
+        }));
       });
+
+      const { result } = renderHook(() => useTicketPrs('HIVE-73'));
+
+      expect(result.current).toHaveLength(1);
+      expect(result.current[0]).toMatchObject({ n: 61, session: null });
+    });
+
+    it('matches a PR whose branch names the ticket', () => {
+      act(() => {
+        useHiveStore.setState((state) => ({
+          tickets: [
+            {
+              key: 'HIVE-73',
+              status: 'In Progress',
+              statusCategory: 'in-progress',
+              title: 'Start a session from a ticket',
+            },
+            ...state.tickets,
+          ],
+          prs: [
+            {
+              number: 61,
+              title: 'Start a session from a ticket',
+              url: 'https://github.com/demo/the-hive/pull/61',
+              repo: 'the-hive',
+              owner: 'demo',
+              branch: 'feat/HIVE-73-session-link',
+              state: 'open' as const,
+              findings: 0,
+              checks: 'passing' as const,
+              updatedAt: '2026-08-09T12:55:04Z',
+            },
+            ...state.prs,
+          ],
+        }));
+      });
+
+      const { result } = renderHook(() => useTicketPrs('HIVE-73'));
+
+      expect(result.current.map((pr) => pr.n)).toEqual([61]);
     });
 
     /**
-     * The gap this selector was rewritten to close. `ecs-scaling` carries PR
-     * #31, which the global `prs` list has never heard of; filtering that list
-     * dropped GRAC-2954's PR section entirely.
+     * The key match is bounded by non-word characters, so a shorter key cannot
+     * claim a longer one's PR. Without the boundary, `HIVE-7` matches
+     * `HIVE-73` and every ticket in a project would collect its neighbours'
+     * pull requests.
      */
-    it('falls back to the session\'s own pr when the global list lacks it', () => {
-      expect(
-        useHiveStore.getState().prs.some((pr) => pr.n === 31),
-      ).toBe(false);
+    it('does not let HIVE-7 claim HIVE-73’s pull request', () => {
+      act(() => {
+        useHiveStore.setState((state) => ({
+          tickets: [
+            {
+              key: 'HIVE-7',
+              status: 'To Do',
+              statusCategory: 'todo',
+              title: 'A different ticket',
+            },
+            ...state.tickets,
+          ],
+          prs: [
+            {
+              number: 61,
+              title: 'feat(work): start a session from a ticket (HIVE-73)',
+              url: 'https://github.com/demo/the-hive/pull/61',
+              repo: 'the-hive',
+              owner: 'demo',
+              branch: 'goal/ticket-session-link',
+              state: 'open' as const,
+              findings: 0,
+              checks: 'passing' as const,
+              updatedAt: '2026-08-09T12:55:04Z',
+            },
+            ...state.prs,
+          ],
+        }));
+      });
 
-      const { result } = renderHook(() => useTicketPrs('GRAC-2954'));
+      const { result } = renderHook(() => useTicketPrs('HIVE-7'));
 
-      expect(result.current).toEqual([
-        {
-          n: 31,
-          repo: 'infra-terraform',
-          state: 'merged',
-          findings: 0,
-          session: 'ecs-scaling',
-        },
+      expect(result.current).toEqual([]);
+    });
+
+    /** A PR that matches by branch *and* by key is still listed once. */
+    it('lists a PR that matches both ways only once', () => {
+      act(() => {
+        useHiveStore.setState((state) => ({
+          prs: state.prs.map((pr) =>
+            pr.number === 482
+              ? { ...pr, title: 'Hero refresh (GRAC-3018)' }
+              : pr,
+          ),
+        }));
+      });
+
+      const { result } = renderHook(() => useTicketPrs('GRAC-3018'));
+
+      expect(result.current.map((pr) => pr.n)).toEqual([482]);
+    });
+
+    /**
+     * Cross-repo work on one ticket, which a number-keyed dedupe used to eat.
+     *
+     * A frontend #42 and a backend #42 are two pull requests, and a ticket
+     * worked across two repositories has to show both — that is the shape of
+     * nearly every change in this workspace.
+     */
+    it('keeps two PRs that share a number across repositories', () => {
+      const twin = (repo: string) => ({
+        number: 42,
+        title: 'Cross-repo change (GRAC-3018)',
+        url: `https://github.com/demo/${repo}/pull/42`,
+        repo,
+        owner: 'demo',
+        branch: `feat/cross-${repo}`,
+        state: 'open' as const,
+        findings: 0,
+        checks: 'passing' as const,
+        updatedAt: '2026-08-09T15:00:00Z',
+      });
+
+      act(() => {
+        useHiveStore.setState({ prs: [twin('apfm-web'), twin('referral-api')] });
+      });
+
+      const { result } = renderHook(() => useTicketPrs('GRAC-3018'));
+
+      expect(result.current.map((pr) => pr.repo)).toEqual([
+        'apfm-web',
+        'referral-api',
       ]);
     });
 
@@ -251,8 +538,9 @@ describe('hive-store selectors', () => {
             },
           ],
         });
-        // `hero-refresh` carries PR #482; `webhooks` carries #219 and stays on
-        // its own ticket, so a resolver that ignored the key would return two.
+        // `hero-refresh` is on the branch of PR #482; `webhooks` is on #219's
+        // and stays on its own ticket, so a resolver that ignored the key would
+        // return two.
         useHiveStore.setState((current) => ({
           entities: {
             ...current.entities,
@@ -450,10 +738,10 @@ describe('hive-store selectors', () => {
       expect(result.current[0].title).toBe('lead-form needs approval');
     });
 
-    it('usePrs returns the four fixture PRs', () => {
+    it('usePrs returns the seeded PRs, in order', () => {
       const { result } = renderHook(() => usePrs());
 
-      expect(result.current.map((pr) => pr.n)).toEqual([482, 219, 495, 77]);
+      expect(result.current.map((pr) => pr.n)).toEqual([482, 219, 495, 31, 77]);
     });
 
     it('useMarkRead marks exactly one notification read', () => {

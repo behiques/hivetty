@@ -22,6 +22,7 @@ import type { Ticket } from '@/types/ticket';
 
 import { isDesktop } from '@config/runtime';
 import { reset as resetClock } from '@lib/fake-clock';
+import { readPullRequests } from '@lib/github';
 import { readJiraStatus, searchJiraIssues } from '@lib/jira';
 import {
   projectConfigSnapshot,
@@ -29,6 +30,7 @@ import {
 } from '@lib/project-config';
 import { requestSpawn } from '@lib/terminal/pty-transport';
 import { sendToSession } from '@lib/terminal/session-input';
+import type { PrRecord } from '@shared/github-contract';
 import type { JiraIssue } from '@shared/jira-contract';
 import { useUiStore } from '@stores/ui-store';
 
@@ -103,6 +105,33 @@ export type TicketSource =
   /** Desktop, and the first read failed. There is nothing to keep. */
   | { kind: 'failed'; message: string };
 
+/**
+ * Where the PRs panel's list came from, and how much to trust it.
+ *
+ * Deliberately the same four shapes as {@link TicketSource}, because the two
+ * panels have the same four things to say and a user who has learned one rail
+ * should not have to learn the other. It is a *separate type* rather than a
+ * shared one because the variants carry different payloads — `capped` is a JQL
+ * concern with no GitHub counterpart, and `repos` is a GitHub concern with no
+ * Jira one. Unifying them would mean a union with fields that are meaningless
+ * on one side, which is how a shared type becomes a lie.
+ */
+export type PrSource =
+  /** A read is in flight and there is nothing yet. The boot state. */
+  | { kind: 'loading' }
+  /**
+   * Nothing to read from, and it is not an error.
+   *
+   * Three ways to get here and the panel says which: no `gh` on this machine,
+   * a `gh` that is not logged in, or no configured project that is a GitHub
+   * repository. The browser demo lands here too.
+   */
+  | { kind: 'unconfigured'; message: string }
+  /** At least one successful read. `repos` is how many were swept. */
+  | { kind: 'live'; stale: boolean; repos: number }
+  /** The first read failed, and there is nothing to keep. */
+  | { kind: 'failed'; message: string };
+
 interface HiveState {
   entities: Record<string, Entity>;
   order: string[];
@@ -117,7 +146,18 @@ interface HiveState {
   tickets: Ticket[];
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
-  prs: ReturnType<typeof createInitialState>['prs'];
+  /**
+   * The PRs GitHub reported, exactly as they crossed IPC.
+   *
+   * `PrRecord`, not `Pr`: the renderer's type carries an owning session, which
+   * is a *match* against the fleet rather than a fact about the PR. Storing the
+   * resolved shape would freeze that match at read time and leave it wrong the
+   * moment a session started or ended — so it is computed in `usePrs()` and
+   * `resolveTicketPrs()`, and never kept.
+   */
+  prs: PrRecord[];
+  /** Where {@link HiveState.prs} came from. */
+  prSource: PrSource;
   notifs: ReturnType<typeof createInitialState>['notifs'];
   orchLines: TermLine[];
 
@@ -131,6 +171,15 @@ interface HiveState {
   updateTicket: (issue: JiraIssue) => void;
   /** Read the configured query and install the answer (HIVE-69). */
   refreshTickets: () => Promise<void>;
+
+  /** Replace the PR list with what GitHub reported. */
+  hydratePrs: (prs: PrRecord[], repos: number) => void;
+  /** A sweep failed. Keeps the PRs it has and marks them stale. */
+  reportPrFailure: (message: string) => void;
+  /** There is nothing to read from, and that is not a failure. */
+  reportPrsUnconfigured: (message: string) => void;
+  /** Sweep GitHub and install the answer. Never throws. */
+  refreshPrs: () => Promise<void>;
 
   spawnSession: (
     repo: string,
@@ -237,6 +286,15 @@ const DONE_CAP = 20;
  */
 const staleTitles = new Map<string, string>();
 
+/**
+ * The GitHub sweep in flight, or `null`.
+ *
+ * Module scope rather than store state: it is not something a component renders,
+ * and putting it in the store would re-render every subscriber twice per poll
+ * to say "a request started" and "a request finished".
+ */
+let inFlightPrSweep: Promise<void> | null = null;
+
 function currentSessionIn(state: HiveState, terminalId: string): string {
   const direct = state.entities[terminalId];
   if (direct !== undefined && isSession(direct) && !isEnded(direct.status)) {
@@ -339,12 +397,19 @@ const line = (text: string, color: TermLine['color'] = 'ink'): TermLine => ({
  */
 const emptySeeds = (): Pick<
   HiveState,
-  'entities' | 'order' | 'agentOrder' | 'tickets' | 'orchLines'
+  'entities' | 'order' | 'agentOrder' | 'tickets' | 'prs' | 'orchLines'
 > => ({
   entities: {},
   order: [],
   agentOrder: [],
   tickets: [],
+  /*
+    `prs` moved here from the fixtures the day GitHub started feeding it. The
+    panel boots empty and says so, rather than painting four sample rows for a
+    frame and swapping them — which is the same flash story HIVE-69 fixed for
+    tickets.
+  */
+  prs: [],
   orchLines: [],
 });
 
@@ -361,6 +426,9 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * has no bridge to Jira.
    */
   ticketSource: { kind: 'loading' } as TicketSource,
+
+  /** Loading until the first sweep answers, for the same reason as above. */
+  prSource: { kind: 'loading' } as PrSource,
 
   /**
    * Create a session and open its tab.
@@ -1177,9 +1245,120 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     get().hydrateTickets(result.value.issues, result.value.capped);
   },
 
+  hydratePrs: (prs, repos) =>
+    set({ prs, prSource: { kind: 'live', stale: false, repos } }),
+
+  /**
+   * A sweep failed — **staleness over emptiness**, exactly as
+   * {@link HiveState.reportTicketFailure} does it.
+   *
+   * A live list stays listed and only `stale` flips. This matters more here
+   * than it does for tickets: the sweep runs every minute, so a single flaky
+   * minute would otherwise blank a panel the user is looking at and fill it
+   * again a minute later. With no live list there is nothing to keep, and the
+   * failure is the state.
+   */
+  reportPrFailure: (message) =>
+    set((state) => {
+      if (state.prSource.kind === 'live') {
+        return { prSource: { ...state.prSource, stale: true } };
+      }
+      return { prSource: { kind: 'failed', message } };
+    }),
+
+  /**
+   * Nothing to read from.
+   *
+   * Clears the list, unlike a failure: `unconfigured` is a *conclusion* — no
+   * `gh`, no login, or no GitHub-backed project — and rows from a previous
+   * configuration would be claiming to describe a setup that no longer exists.
+   */
+  reportPrsUnconfigured: (message) =>
+    set({ prs: [], prSource: { kind: 'unconfigured', message } }),
+
+  /**
+   * Sweep GitHub and install the answer.
+   *
+   * Lives on the store rather than in the hook that schedules it, for the same
+   * reason `refreshTickets` does: it is a domain action with a browser-target
+   * gate, and the gate is `isDesktop()` — feature-detecting the bridge, never
+   * the user agent. The hook owns *when*; this owns *what*.
+   *
+   * Never throws. `lib/github.ts` answers `null` instead of rejecting, and
+   * `null` here means the channel itself failed.
+   *
+   * **Nothing here sets `loading`.** That is the boot state and it is left to
+   * the first answer to clear, permanently. An earlier version announced every
+   * sweep that was not already `live`, which flickered the two states that most
+   * need to stay readable: an `unconfigured` explanation and a `failed` message
+   * with its retry button were both replaced by a skeleton once a minute, for
+   * as long as the sweep took — up to twenty seconds of every sixty in which
+   * the button the user was reaching for did not exist.
+   */
+  refreshPrs: async () => {
+    if (!isDesktop()) {
+      get().reportPrsUnconfigured(
+        'Pull requests need the desktop app — this is the browser preview.',
+      );
+      return;
+    }
+
+    /**
+     * One sweep at a time, however many callers ask.
+     *
+     * The poller already dedupes its own ticks, but "Try again" calls this
+     * directly — so a retry clicked while a slow sweep is out used to start a
+     * second `gh`. The harm is specific: if the retry answered first and the
+     * older sweep then timed out, `reportPrFailure` would mark the
+     * just-installed fresh list stale, putting a "may be out of date" banner
+     * over data a second old. Sharing the promise makes the retry *join* the
+     * sweep instead of racing it.
+     */
+    inFlightPrSweep ??= (async () => {
+      const result = await readPullRequests();
+
+      if (result === null) {
+        get().reportPrFailure('The app could not reach its own main process.');
+        return;
+      }
+
+      if (!result.ok) {
+        /**
+         * Three of the seven error kinds are *configuration*, not failure.
+         *
+         * They are the difference between a panel that explains what to set up
+         * and one that apologises for something the user did not do. The other
+         * four — offline, timeout, rate-limited, unknown — are failures, and a
+         * live list survives them as stale.
+         */
+        const { kind, message } = result.error;
+        if (
+          kind === 'not-installed' ||
+          kind === 'unauthenticated' ||
+          kind === 'no-repos'
+        ) {
+          get().reportPrsUnconfigured(message);
+          return;
+        }
+
+        get().reportPrFailure(message);
+        return;
+      }
+
+      get().hydratePrs(result.value.prs, result.value.repos);
+    })().finally(() => {
+      inFlightPrSweep = null;
+    });
+
+    return inFlightPrSweep;
+  },
+
   reset: () => {
     spawnCounter = 0;
     staleTitles.clear();
+    // A sweep from the previous state must not install its answer into the new
+    // one — dropping the handle makes the next caller start fresh.
+    inFlightPrSweep = null;
     /**
      * Nothing in this store stamps through the clock any more — the activity
      * feed was its only caller and the project explorer replaced it. The rewind
@@ -1192,6 +1371,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       ...emptySeeds(),
       ...createInitialState(),
       ticketSource: { kind: 'loading' },
+      prSource: { kind: 'loading' },
     });
   },
 }));
@@ -1532,50 +1712,142 @@ function liveSessionsForTicket(
 }
 
 /**
- * PRs reachable from a ticket's sessions, with their state resolved (story 032).
+ * The session that owns a PR, or `null`.
  *
- * Walks the ticket's sessions rather than filtering the global `prs` list,
- * because a session can carry a PR the global list has never heard of — fixture
- * `ecs-scaling` holds #31, which is absent from `prs`, and filtering would drop
- * ticket GRAC-2954's PR section entirely.
+ * ## Two signals, and why both are needed
  *
- * Where the global list *does* know the number it wins outright: it is the
- * single source of truth for state and findings, and a session's own `pr.state`
- * is a stale copy. Fixture #219 proves the difference — `approved` globally,
- * still `open` on the `webhooks` session.
+ * **Branch** is the strong one — it is the thing GitHub and the fleet genuinely
+ * share. But a branch name is not unique across repositories: cross-repo work
+ * routinely uses the same name in two of them (`feat/thing` in the frontend and
+ * the backend, one ticket, two PRs). Matching on branch alone would resolve a
+ * backend PR to whichever session happened to come first in `order` — possibly
+ * the frontend one — and clicking the card would open the wrong terminal, which
+ * is worse than opening nothing.
  *
- * Since HIVE-73 the sessions come from `sessionsForTicket` rather than from a
- * `sessions` array on the ticket. The ticket lookup stays: a key with no ticket
- * behind it returns nothing, so a card that has scrolled out of the list cannot
- * contribute PRs to a panel that is no longer showing it.
+ * So **project** narrows it, but only when it can: `entity.project` is a config
+ * id derived from a directory name and `repo` is GitHub's, and while they
+ * usually match they are not the same namespace. Requiring equality would break
+ * the link for anyone whose checkout is named differently from the repository.
+ * The rule is therefore *disambiguate, do not filter*: if any candidate's
+ * project matches the repository, only those candidates are considered;
+ * otherwise every candidate stays, and a single unambiguous one still wins.
+ *
+ * ## Live beats ended
+ *
+ * A branch outlives the session that made it — `/clear` retires a row and opens
+ * a successor on the same branch, and ended rows linger under `DONE_CAP` — so
+ * the first match in `order` is frequently a corpse. Opening it would land the
+ * user on a terminal that cannot be typed into, next to a PR that is very much
+ * alive.
+ */
+function sessionForPr(
+  pr: Pick<PrRecord, 'branch' | 'repo'>,
+  order: string[],
+  entities: Record<string, Entity>,
+): string | null {
+  const candidates: Session[] = [];
+
+  for (const id of order) {
+    const entity = entities[id];
+    if (entity && isSession(entity) && entity.branch === pr.branch) {
+      candidates.push(entity);
+    }
+  }
+
+  const sameProject = candidates.filter(
+    (session) => session.project.toLowerCase() === pr.repo.toLowerCase(),
+  );
+  const pool = sameProject.length > 0 ? sameProject : candidates;
+
+  /**
+   * A live match, or **nothing** — never an ended one.
+   *
+   * There used to be a `?? pool[0]?.id` fallback here, and it defeated both the
+   * paragraph above and the type's own contract (`Pr.session` is documented as
+   * `null` when no *live* session is on the branch). `openEntity` refuses ended
+   * sessions outright — it calls `backToOrch()` and returns `false` — so
+   * handing back a corpse did not open a terminal, it bounced the user to the
+   * orchestrator and swallowed the click.
+   *
+   * Worse, it did that in the **common** case rather than an exotic one: the
+   * panel deliberately keeps PRs merged in the last 24 hours, and those are
+   * exactly the branches whose sessions have finished or been retired by
+   * `/clear`. Returning `null` restores what both surfaces already do with it —
+   * open the PR on GitHub, as a real link that middle-click works on.
+   */
+  return pool.find((session) => !isEnded(session.status))?.id ?? null;
+}
+
+/**
+ * PRs reachable from a Jira ticket (story 032, rebuilt for live data).
+ *
+ * ## Why this stopped reading `Session.pr`
+ *
+ * It used to walk the ticket's sessions and read a `pr` field off each one.
+ * Nothing has ever written that field, so the section was permanently empty —
+ * the fixtures made it look otherwise. The live list is the single source of
+ * truth for state and findings, so the resolution now runs the other way: find
+ * the PRs, then work out which session owns each.
+ *
+ * ## Two matches, in this order
+ *
+ * 1. **By branch** — a PR whose head branch is one of the ticket's sessions'
+ *    branches. This is the strong link: the session was started for the ticket,
+ *    and the branch is the thing GitHub and the fleet genuinely share.
+ * 2. **By key** — a PR whose branch or title contains the ticket key. This
+ *    catches the two cases the first misses: a PR raised outside the app, and
+ *    one whose session has ended and aged out of the fleet. It is a text match
+ *    and it is deliberately narrow — the key is bounded by non-word characters
+ *    so `HIVE-7` cannot claim `HIVE-73`'s pull request.
+ *
+ * No dedupe. Each record is visited once and `prs` holds no duplicates, so a PR
+ * that satisfies both rules is still encountered exactly once — a guard keyed on
+ * the number would never fire, and would actively *drop* the case it looks like
+ * it protects: a frontend #42 and a backend #42 on one ticket are two pull
+ * requests, and both belong on the card.
  */
 export function resolveTicketPrs(
   ticketKey: string,
   tickets: Ticket[],
   order: string[],
   entities: Record<string, Entity>,
-  prs: Pr[],
+  prs: PrRecord[],
 ): TicketPr[] {
   const ticket = tickets.find((t) => t.key === ticketKey);
   if (!ticket) return [];
 
-  const resolved: TicketPr[] = [];
-
+  /** The branches this ticket's sessions are working on. */
+  const branches = new Set<string>();
   for (const sessionId of sessionsForTicket(ticketKey, order, entities)) {
     const entity = entities[sessionId];
-    if (!entity || !isSession(entity)) continue;
+    if (entity && isSession(entity)) branches.add(entity.branch);
+  }
 
-    const sessionPr = entity.pr;
-    if (!sessionPr) continue;
+  /*
+    Escaped, then bounded by non-word characters on both sides. A Jira key is
+    `ABC-123` — the hyphen is the only regex-significant character in practice,
+    but building the pattern from an escaped copy means a project key with a dot
+    in it cannot turn into a wildcard.
+  */
+  const escaped = ticketKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const mentionsKey = new RegExp(`(?:^|\\W)${escaped}(?:\\W|$)`, 'i');
 
-    const known = prs.find((pr) => pr.n === sessionPr.n);
+  const resolved: TicketPr[] = [];
+
+  for (const pr of prs) {
+    const matched =
+      branches.has(pr.branch) ||
+      mentionsKey.test(pr.branch) ||
+      mentionsKey.test(pr.title);
+    if (!matched) continue;
 
     resolved.push({
-      n: sessionPr.n,
-      repo: entity.project,
-      state: known?.state ?? sessionPr.state,
-      findings: known?.findings ?? 0,
-      session: sessionId,
+      n: pr.number,
+      repo: pr.repo,
+      state: pr.state,
+      findings: pr.findings,
+      url: pr.url,
+      session: sessionForPr(pr, order, entities),
     });
   }
 
@@ -1656,8 +1928,46 @@ export const useMarkAllRead = () => useHiveStore((state) => state.markAllRead);
 /** The inbox, newest first (story 051). */
 export const useNotifs = () => useHiveStore((state) => state.notifs);
 
-/** Every open PR the fleet produced (story 052). */
-export const usePrs = () => useHiveStore((state) => state.prs);
+/**
+ * Every PR the panel shows, with its owning session resolved (story 052).
+ *
+ * The match is made **here, on every render of the panel**, rather than stored
+ * on the record when it arrives. A PR's branch is fixed; which session is on
+ * that branch is not — one can be started, cleared or killed between two
+ * sweeps, and a session id frozen at read time would send the user to a
+ * terminal that is no longer there.
+ *
+ * Memoised over the three stable slices rather than wrapped in `useShallow`,
+ * for the reason spelled out on {@link useTicketPrs}: this builds new objects,
+ * and shallow-comparing freshly-built objects never matches.
+ */
+export const usePrs = (): Pr[] => {
+  const prs = useHiveStore((state) => state.prs);
+  const order = useHiveStore((state) => state.order);
+  const entities = useHiveStore((state) => state.entities);
+
+  return useMemo(
+    () =>
+      prs.map((pr) => ({
+        n: pr.number,
+        repo: pr.repo,
+        title: pr.title,
+        state: pr.state,
+        findings: pr.findings,
+        checks: pr.checks,
+        url: pr.url,
+        branch: pr.branch,
+        session: sessionForPr(pr, order, entities),
+      })),
+    [prs, order, entities],
+  );
+};
+
+/** Where the PR list came from, and how much to trust it. */
+export const usePrSource = () => useHiveStore((state) => state.prSource);
+
+/** Sweep GitHub. The poller's entry point — see `hooks/use-pr-refresh.ts`. */
+export const useRefreshPrs = () => useHiveStore((state) => state.refreshPrs);
 
 
 /** Mark one notification read, by its index in `notifs` (story 051). */

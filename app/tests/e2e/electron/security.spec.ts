@@ -68,6 +68,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     session: Object.keys(window.hive!.session).sort(),
     integrations: Object.keys(window.hive!.integrations).sort(),
     fs: Object.keys(window.hive!.fs).sort(),
+    github: Object.keys(window.hive!.github).sort(),
     notifications: Object.keys(window.hive!.notifications).sort(),
     jira: Object.keys(window.hive!.jira).sort(),
   }));
@@ -127,10 +128,22 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    *   thing a capability check would be defending against. It gates the UI;
    *   containment gates the disk.
    */
+  /**
+   * `github` arrived with the live PRs panel and was **not** added to this list
+   * by the branch that introduced it — so this assertion failed on that branch,
+   * which is precisely what it is for. With no CI on this repository, the list
+   * is the only thing standing between a widened bridge and a silent merge.
+   *
+   * What bounds it: one verb, taking **no argument at all**. Main sweeps the
+   * repositories named in the user's own config through `gh`; the renderer
+   * cannot name a repository, so this is a bounded read of what the user
+   * already mapped rather than a general-purpose GitHub client.
+   */
   expect(surface.top).toEqual([
     'appInfo',
     'config',
     'fs',
+    'github',
     'integrations',
     'jira',
     'notifications',
@@ -138,6 +151,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'session',
   ]);
   expect(surface.integrations).toEqual(['status']);
+  expect(surface.github).toEqual(['prs']);
   expect(surface.fs).toEqual([
     'onChanged',
     'readDir',
