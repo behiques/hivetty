@@ -15,9 +15,11 @@ import {
   type SessionEffort,
   type SessionModel,
   SESSION_NAME_DISPLAY_MAX,
+  type SessionBranchEvent,
   type SessionClearedEvent,
   type SessionNameEvent,
   type SessionStatusEvent,
+  type SessionTicketIntentEvent,
 } from '@shared/session-contract';
 
 import { effectiveRuntime } from '../config/runtime';
@@ -27,6 +29,7 @@ import type { PtyHostSupervisor } from '../pty-host/supervisor';
 
 import { createActivityTracker, type ActivityTracker } from './activity';
 import { createBootstrap, sessionCommand, type Bootstrap } from './bootstrap';
+import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
 import { createSessionRegistry, type SessionRegistry } from './registry';
 import { createTitleReader, type TitleReader } from './title';
 
@@ -70,6 +73,14 @@ export interface SessionsOptions {
    * and the command line is the whole observable behaviour of the spawn path.
    */
   newSessionUuid?: () => string;
+  /**
+   * How branches are read (HIVE-78).
+   *
+   * Injected for exactly the reason `newSessionUuid` is: the default shells out
+   * to `git`, and a unit test that did so would answer differently on every
+   * machine and in every checkout. Absent means the real reader.
+   */
+  branchReader?: BranchReaderOptions;
 }
 
 export interface OpenRequest {
@@ -95,6 +106,20 @@ export interface OpenRequest {
    */
   model?: SessionModel;
   effort?: SessionEffort;
+  /**
+   * What to call the session inside Claude (HIVE-78).
+   *
+   * Absent for every ordinary spawn, which falls back to the entity id — the
+   * HIVE-61 behaviour, unchanged. Present only when the renderer has a better
+   * name than `sess-07`, which today means one thing: the session was started
+   * from a ticket card and is called after its issue key.
+   *
+   * Validated twice before it reaches a command line — `assertSessionName` at
+   * the IPC boundary and `isSendableSessionName` in `bootstrap.ts` — because
+   * unlike `model` and `effort` this has no closed list behind it. A value that
+   * fails either simply omits the flag.
+   */
+  name?: string;
 }
 
 /**
@@ -186,6 +211,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     maxSessions = MAX_SESSIONS,
     hooks,
     newSessionUuid = randomUUID,
+    branchReader,
   } = options;
 
   const registry: SessionRegistry = createSessionRegistry();
@@ -320,6 +346,50 @@ export function createSessions(options: SessionsOptions): Sessions {
   /** One OSC-0 reader per session — a partial sequence is per-stream state. */
   const titles = new Map<string, TitleReader>();
 
+  /**
+   * Reads `git rev-parse` for a directory, cached and rate-limited (HIVE-78).
+   *
+   * One reader for the whole layer rather than one per session, because its
+   * cache is keyed by **directory** and two sessions in the same repository are
+   * asking the same question. A per-session reader would spawn `git` once per
+   * session for an answer the first one already had.
+   */
+  const branches = createBranchReader(
+    branchReader ?? {
+      /**
+       * Resolved against the **config-augmented** environment, not the bare
+       * one (HIVE-78).
+       *
+       * A GUI-launched Electron app on macOS inherits launchd's minimal
+       * `PATH`, which frequently has no `git` in it. That is the whole reason
+       * `runtime.path` exists in the config, and `gh` and `claude` are already
+       * resolved against it.
+       *
+       * **`process.env` is the base, with the config's env layered over it** —
+       * the identical merge `ipc/index.ts` makes for `gh`.
+       * `effectiveRuntime().env` holds *only* the project's own overrides and
+       * is not a complete environment, so using it alone leaves `PATH`
+       * undefined and every branch read answering `null`. Measured, not
+       * assumed: the first version of this line omitted the spread and broke
+       * `session-branch.spec.ts` — which is exactly what that spec is for.
+       *
+       * `config()` is read per call rather than captured, so a reload is picked
+       * up — the same reason `SessionsOptions.config` is a function at all.
+       */
+      gitPath: () =>
+        resolveGit({ ...process.env, ...effectiveRuntime(config(), null).env }),
+    },
+  );
+
+  /**
+   * The last branch and directory published per session.
+   *
+   * Not a cache — {@link branches} is the cache. This is what makes the channel
+   * quiet: it answers "would the renderer learn anything from this event", and
+   * the overwhelming majority of the time it would not.
+   */
+  const lastBranch = new Map<string, { branch: string | null; cwd: string }>();
+
   const activity: ActivityTracker = createActivityTracker({
     onStatus: (entityId, status) => {
       /**
@@ -371,11 +441,39 @@ export function createSessions(options: SessionsOptions): Sessions {
    * a hook for a session that has already exited must be refused, and the
    * registry is the thing that already knows.
    */
-  void hooks?.start(
-    (entityId) => registry.sessionFor(entityId) !== undefined,
-    (event) => publishHookStatus(event.entityId, event.status, event.event),
-    (entityId) => publishCleared(entityId),
-  );
+  void hooks?.start({
+    knowsSession: (entityId) => registry.sessionFor(entityId) !== undefined,
+    onEvent: (event) => {
+      publishHookStatus(event.entityId, event.status, event.event);
+      /**
+       * The branch read is deliberately **after** the status (HIVE-78).
+       *
+       * Status is the reason this channel exists and it is synchronous;
+       * resolving a branch may spawn a process. Doing it first would put a
+       * `git` spawn between a hook arriving and a status dot moving, on every
+       * event, which is the one thing the receiver was careful not to do.
+       */
+      if (event.cwd !== undefined) {
+        /**
+         * `Stop` reads **fresh** (HIVE-78).
+         *
+         * It is the end of a turn — the moment the agent has finished whatever
+         * it was doing, and the last event that will fire until the user types
+         * again. A `git checkout -b` inside a short turn lands inside the
+         * reader's rate-limit floor, so without this the rail keeps showing the
+         * old branch until the *next* prompt, which is exactly the window in
+         * which the user looks at it. Every other event still pays the floor.
+         */
+        void publishBranch(event.entityId, event.cwd, event.event === 'Stop');
+      }
+    },
+    onTicketIntent: (event) =>
+      send(CH.sessionTicketIntent, {
+        entityId: event.entityId,
+        key: event.key,
+      } satisfies SessionTicketIntentEvent),
+    onCleared: (entityId) => publishCleared(entityId),
+  });
 
   /**
    * A host error for a command session is that command's ending (story 102).
@@ -436,6 +534,57 @@ export function createSessions(options: SessionsOptions): Sessions {
    */
   function publishCleared(entityId: string): void {
     send(CH.sessionCleared, { entityId } satisfies SessionClearedEvent);
+  }
+
+  /**
+   * Where this session is working, and what is checked out there (HIVE-78).
+   *
+   * ## Only on a change
+   *
+   * `lastBranch` is what makes a hook boundary an affordable cadence. Hook
+   * events arrive several times a turn and the answer changes maybe twice a
+   * day, so without this every `Stop` would push an identical event into the
+   * renderer and every session row would re-render for nothing — the exact cost
+   * the four-store split exists to avoid.
+   *
+   * The key is the entity, and the compared value includes the **cwd**: an
+   * agent that moves from one worktree to another on the same branch name has
+   * changed something the explorer needs to know about, even though the branch
+   * string is identical.
+   *
+   * ## Never rejects
+   *
+   * Called fire-and-forget from a hook callback, where a rejection would be an
+   * unhandled promise on the main process. `BranchReader.read` already answers
+   * `null` rather than throwing for every failure it can see; this catch is for
+   * the ones it cannot.
+   */
+  async function publishBranch(
+    entityId: string,
+    cwd: string,
+    fresh = false,
+  ): Promise<void> {
+    let branch: string | null;
+    try {
+      branch = await branches.read(cwd, fresh);
+    } catch {
+      return;
+    }
+
+    /**
+     * Checked after the await, not before.
+     *
+     * The read is asynchronous, so a session can exit while it is in flight —
+     * and publishing then would push a branch for a row the renderer has
+     * already retired.
+     */
+    if (registry.sessionFor(entityId) === undefined) return;
+
+    const seen = lastBranch.get(entityId);
+    if (seen !== undefined && seen.branch === branch && seen.cwd === cwd) return;
+
+    lastBranch.set(entityId, { branch, cwd });
+    send(CH.sessionBranch, { entityId, branch, cwd } satisfies SessionBranchEvent);
   }
 
   /**
@@ -513,6 +662,21 @@ export function createSessions(options: SessionsOptions): Sessions {
      */
     titles.delete(entityId);
     hookDriven.delete(entityId);
+    /**
+     * Per-generation too, and for a sharper reason than the other two: a
+     * restarted session reuses the entity id, and a retained entry would make
+     * the *first* branch read of the new generation look like a repeat of the
+     * last one from the old — so the row would keep the dead session's branch
+     * until something else happened to change it.
+     */
+    /**
+     * The directory cache goes with it, so it is not append-only for the life
+     * of the app — an agent that works through several worktrees would leave an
+     * entry per directory behind it otherwise.
+     */
+    const seenBranch = lastBranch.get(entityId);
+    if (seenBranch !== undefined) branches.forget(seenBranch.cwd);
+    lastBranch.delete(entityId);
     // Same reason as the data path: a command's ending is not a session's.
     if (commandEntities.delete(entityId)) {
       // Nothing to tell the store about.
@@ -730,13 +894,39 @@ export function createSessions(options: SessionsOptions): Sessions {
          * A rename *inside* Claude is not a conflict with this: the new name
          * comes straight back out on the title stream and becomes the row's
          * name. This only decides what the session is called to begin with.
+         *
+         * HIVE-78 lets the renderer say what that name is, and it does so for
+         * exactly one case: a session started from a ticket card, which is
+         * called `HIVE-73` rather than `sess-07`. The **id** is untouched —
+         * it is the entities-map key and appears in every console line — so
+         * this is the display name and nothing more. Falling back to the id
+         * keeps every other spawn byte-identical to what HIVE-61 shipped.
          */
-        name: request.entityId,
+        name: request.name ?? request.entityId,
         sessionUuid: newSessionUuid(),
         ...(hooks?.settingsPath == null ? {} : { settingsPath: hooks.settingsPath }),
       }),
       request.task,
     );
+
+    /**
+     * The branch this session opens on (HIVE-78).
+     *
+     * **After the process exists**, because `publishBranch` refuses to speak for
+     * an entity the registry does not hold — a guard that earns its keep on the
+     * hook path, where a read can outlive the session that triggered it, and
+     * which would silently swallow this call if it ran before `startProcess`.
+     *
+     * Without a read here a session shows an em dash until its first hook lands
+     * — which, for a session the user opens and reads before typing into, is the
+     * whole time they are looking at it. `project.path` is the pty's cwd, so at
+     * this instant it is exactly right, and it stays right for a session with no
+     * hooks at all. That is the honest floor for this feature: the branch the
+     * session started on, never a branch nobody created.
+     *
+     * Fire-and-forget — a spawn must not wait on `git`, and this cannot reject.
+     */
+    void publishBranch(request.entityId, project.path);
   }
 
   return {
