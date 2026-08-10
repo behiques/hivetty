@@ -107,6 +107,102 @@ describe('SegmentedControl', () => {
     expect(onChange).toHaveBeenCalledWith('system');
   });
 
+  /**
+   * A single option the machine cannot honour — notification delivery with no
+   * desktop to deliver to. Distinct from `disabled`, which takes the whole
+   * group and would remove the choices that still work.
+   */
+  describe('disabledValues', () => {
+    const renderWithDead = (value: 'system' | 'dark' | 'light') => {
+      const onChange = vi.fn();
+      render(
+        <SegmentedControl
+          label="Theme"
+          options={OPTIONS}
+          value={value}
+          onChange={onChange}
+          disabledValues={['light']}
+        />,
+      );
+      return onChange;
+    };
+
+    it('disables only the named option', () => {
+      renderWithDead('dark');
+
+      expect(screen.getByRole('radio', { name: 'Light' })).toBeDisabled();
+      expect(screen.getByRole('radio', { name: 'Dark' })).toBeEnabled();
+      expect(screen.getByRole('radio', { name: 'System' })).toBeEnabled();
+    });
+
+    /** An arrow key that lands on a dead option reads as a broken control. */
+    it('steps over the dead option rather than stopping on it', async () => {
+      const user = userEvent.setup();
+      const onChange = renderWithDead('dark');
+
+      screen.getByRole('radio', { name: 'Dark' }).focus();
+      await user.keyboard('{ArrowRight}');
+
+      expect(onChange).toHaveBeenCalledWith('system');
+      expect(onChange).not.toHaveBeenCalledWith('light');
+    });
+
+    /**
+     * The APG puts Home/End on the ends of the *reachable* set. Passing the
+     * raw ends instead made End a silent no-op whenever the last option was
+     * the dead one — which is its position in the notifications pane, so every
+     * row on a machine with no daemon ignored the key.
+     */
+    it('sends End to the last selectable option, not the last one', async () => {
+      const user = userEvent.setup();
+      const onChange = renderWithDead('system');
+
+      screen.getByRole('radio', { name: 'System' }).focus();
+      await user.keyboard('{End}');
+
+      expect(onChange).toHaveBeenCalledWith('dark');
+      expect(onChange).not.toHaveBeenCalledWith('light');
+    });
+
+    /**
+     * The regression the tab-stop fallback introduced on its own.
+     *
+     * With the selection dead, focus sits on the fallback while `value` stays
+     * on the dead option. A walk anchored on `value` steps from an option the
+     * user is not standing on: Right re-selected whatever was already focused
+     * (so the key looked broken) and Left moved one to the right.
+     */
+    it('steps from where focus actually is when the selection is dead', async () => {
+      const user = userEvent.setup();
+      const onChange = renderWithDead('light');
+
+      // The fallback tab stop, not the dead selection.
+      screen.getByRole('radio', { name: 'System' }).focus();
+      await user.keyboard('{ArrowRight}');
+
+      expect(onChange).toHaveBeenCalledWith('dark');
+      expect(onChange).not.toHaveBeenCalledWith('system');
+    });
+
+    /**
+     * The selected option really can be the dead one — a kind defaulting to
+     * desktop delivery on a machine with none. A disabled button cannot hold
+     * focus, so without a fallback the group leaves the tab order entirely.
+     */
+    it('keeps a tab stop when the selected option is the dead one', () => {
+      renderWithDead('light');
+
+      expect(screen.getByRole('radio', { name: 'Light' })).toHaveAttribute(
+        'tabindex',
+        '-1',
+      );
+      expect(screen.getByRole('radio', { name: 'System' })).toHaveAttribute(
+        'tabindex',
+        '0',
+      );
+    });
+  });
+
   it('leaves other keys to the browser', async () => {
     const user = userEvent.setup();
     const onChange = renderControl('dark');
