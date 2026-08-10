@@ -28,6 +28,7 @@ const prNode = (over: Record<string, unknown> = {}) => ({
   updatedAt: '2026-08-09T11:00:00Z',
   mergedAt: null,
   author: { login: 'octocat' },
+  repository: { name: 'apfm-web', owner: { login: 'acme' } },
   reviewThreads: { nodes: [{ isResolved: false }] },
   commits: { nodes: [{ commit: { statusCheckRollup: { state: 'SUCCESS' } } }] },
   ...over,
@@ -37,12 +38,8 @@ const body = (over: Record<string, unknown> = {}) =>
   JSON.stringify({
     data: {
       viewer: { login: 'octocat' },
-      r0: {
-        name: 'apfm-web',
-        owner: { login: 'acme' },
-        open: { nodes: [prNode()] },
-        merged: { nodes: [] },
-      },
+      open: { nodes: [prNode()] },
+      merged: { nodes: [] },
       ...over,
     },
   });
@@ -90,8 +87,12 @@ describe('createGithubClient', () => {
     const [file, args] = run.mock.calls[0];
     expect(file).toBe('/usr/bin/gh');
     expect(args.slice(0, 3)).toEqual(['api', 'graphql', '-f']);
-    expect(args).toContain('owner0=acme');
-    expect(args).toContain('name0=apfm-web');
+    expect(args).toContain(
+      'open=is:pr author:@me is:open repo:acme/apfm-web sort:updated-desc',
+    );
+    expect(args).toContain(
+      'merged=is:pr author:@me is:merged repo:acme/apfm-web sort:updated-desc',
+    );
 
     const query = args.find((arg) => arg.startsWith('query='));
     expect(query).toBeDefined();
@@ -112,6 +113,33 @@ describe('createGithubClient', () => {
         message: 'No configured project is a GitHub repository.',
       },
     });
+  });
+
+  /**
+   * The dangerous half of the same rule, and the reason the guard counts
+   * qualifiers rather than repositories.
+   *
+   * A repository whose name cannot safely become a `repo:` qualifier is dropped,
+   * so a config full of them leaves a non-empty repository list and an *empty
+   * scope*. `is:pr author:@me sort:updated-desc` with no `repo:` is not an
+   * error — it is a valid search that answers with the user's pull requests from
+   * every repository they have ever touched. Sending it would quietly fill the
+   * panel with work from projects the user never configured.
+   */
+  it('refuses to call gh when no repository can be scoped safely', async () => {
+    const run = vi.fn<RunAsync>();
+
+    const result = await createGithubClient('/usr/bin/gh', run).sweep(
+      [{ owner: 'acme', name: 'web is:public' }],
+      NOW,
+    );
+
+    expect(run).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe('no-repos');
+    // Not "none of your projects is a GitHub repository" — they resolved fine.
+    expect(result.error.message).toContain('GitHub search');
   });
 
   /**
@@ -151,11 +179,12 @@ describe('createGithubClient', () => {
   });
 
   /**
-   * `viewer` is what "mine" means. Without it the sweep cannot filter by
-   * author, and showing everybody's PRs would be the wrong way to fail.
+   * `viewer` is the sentinel for "this request genuinely succeeded". Both
+   * searches answering empty is a legitimate outcome for a user with no open
+   * work, and indistinguishable from a failure without it.
    */
   it('fails rather than guessing when the viewer is unreadable', async () => {
-    const stdout = JSON.stringify({ data: { r0: null } });
+    const stdout = JSON.stringify({ data: { open: null, merged: null } });
 
     const result = await createGithubClient(
       '/usr/bin/gh',
@@ -163,6 +192,59 @@ describe('createGithubClient', () => {
     ).sweep(REPOS, NOW);
 
     expect(result.ok).toBe(false);
+  });
+
+  /**
+   * The failure `viewer` alone cannot see.
+   *
+   * `viewer` is a top-level field that resolves independently of the two
+   * searches, so a response where both connections failed still carries a good
+   * login. Reading that as a successful empty sweep would install a *live, not
+   * stale* empty list and put "No open pull requests of yours" on the panel with
+   * total confidence — the exact failure this integration was rewritten to stop.
+   */
+  it('fails when both searches came back null, however good the viewer is', async () => {
+    const stdout = JSON.stringify({
+      data: { viewer: { login: 'octocat' }, open: null, merged: null },
+      errors: [{ message: 'Something went wrong while executing your query.' }],
+    });
+
+    const result = await createGithubClient(
+      '/usr/bin/gh',
+      answering({ code: 1, stdout, stderr: 'timeout' }),
+    ).sweep(REPOS, NOW);
+
+    expect(result.ok).toBe(false);
+  });
+
+  /** An empty connection is not a missing one — a quiet user is not a failure. */
+  it('reads two empty searches as a successful empty sweep', async () => {
+    const stdout = JSON.stringify({
+      data: {
+        viewer: { login: 'octocat' },
+        open: { nodes: [] },
+        merged: { nodes: [] },
+      },
+    });
+
+    const result = await createGithubClient(
+      '/usr/bin/gh',
+      answering({ stdout }),
+    ).sweep(REPOS, NOW);
+
+    expect(result).toEqual({ ok: true, value: [] });
+  });
+
+  /** One search surviving is the partial-data case, and it is kept. */
+  it('keeps the search that answered when the other came back null', async () => {
+    const result = await createGithubClient(
+      '/usr/bin/gh',
+      answering({ code: 1, stdout: body({ merged: null }) }),
+    ).sweep(REPOS, NOW);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(1);
   });
 
   it('reports a gh that could not be executed', async () => {
