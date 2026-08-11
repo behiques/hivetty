@@ -245,6 +245,23 @@ export interface ConfigSnapshot {
    */
   jira: JiraConfig;
   /**
+   * Whether sessions authenticate on the Claude.ai plan (HIVE-79).
+   *
+   * `true` — the default — strips {@link AUTH_ENV_KEYS} from every session the
+   * app spawns, so `claude` uses the subscription credentials and its status
+   * line reports the rate limits the header renders. `false` inherits whatever
+   * the user exported, which is the pre-HIVE-79 behaviour and means the two
+   * limit gauges stay empty.
+   */
+  subscriptionAuth: boolean;
+  /**
+   * Whether the app injects its status line, and so whether the header's gauges
+   * have anything to show (HIVE-79).
+   *
+   * See {@link DEFAULT_SESSION_METRICS} for what turning it off costs and buys.
+   */
+  sessionMetrics: boolean;
+  /**
    * Human-readable problems, in the order they were found.
    *
    * Populated for file-level failures (unreadable, malformed JSON, wrong
@@ -354,6 +371,63 @@ export const SESSION_ENV_PREFIXES: readonly string[] = ['CLAUDE_'];
  */
 export const SESSION_ENV_KEYS: readonly string[] = ['CLAUDECODE'];
 
+/**
+ * The credentials that make `claude` bill an API account instead of a plan.
+ *
+ * Removed from every session the Hive spawns unless
+ * {@link ConfigSnapshot.subscriptionAuth} is turned off (HIVE-79).
+ *
+ * ## Why an app would touch a user's credentials at all
+ *
+ * Because leaving them alone silently costs the user the feature this epic
+ * exists for. `claude` prefers `ANTHROPIC_API_KEY` when it is exported, and a
+ * session authenticated that way reports **no `rate_limits` at all** in its
+ * status line — the field is documented as subscriber-only. So on any machine
+ * where the key is exported (which is most machines belonging to people who
+ * also build against the API), the header's session and weekly gauges would
+ * read `—` forever, for a reason nothing on screen could explain.
+ *
+ * ## Why this is not the app quietly deciding how the user pays
+ *
+ * It is a **billing** change and it is treated as one: it is a documented
+ * config key, not a hidden behaviour, and setting `"subscriptionAuth": false`
+ * restores the inherited credentials exactly. What it changes is only which of
+ * the user's *own* two credentials a session picks up, and the default matches
+ * what a session manager for a Claude.ai plan is for.
+ *
+ * Unlike {@link SESSION_ENV_KEYS} these are **not** in the pty host's
+ * unconditional deny list, because the removal is a choice rather than a
+ * correctness fix — the host is told which names to drop on each spawn.
+ */
+export const AUTH_ENV_KEYS: readonly string[] = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+];
+
+/**
+ * Sessions authenticate on the user's Claude.ai plan by default.
+ *
+ * See {@link AUTH_ENV_KEYS} for why the default is this way round.
+ */
+export const DEFAULT_SUBSCRIPTION_AUTH = true;
+
+/**
+ * Whether the app injects its own status line into the sessions it spawns.
+ *
+ * On by default, because it is the only source of the context and rate-limit
+ * numbers the header renders — see `metrics-contract.ts`. Off restores the
+ * user's own status line inside Hive sessions and leaves all three header
+ * gauges empty.
+ *
+ * It is switchable at all because injecting a status line is **not free inside
+ * the terminal**: Claude Code drops most of its footer keyboard hints (`esc to
+ * interrupt`, `? for shortcuts`, the voice-dictation hint) whenever one is
+ * configured, whether or not it renders anything. A user who would rather keep
+ * those hints than see the gauges is making a reasonable trade, and before this
+ * key existed they had no way to make it.
+ */
+export const DEFAULT_SESSION_METRICS = true;
+
 /** Why an environment variable name was refused, or `null` if it is fine. */
 export function unsafeEnvReason(key: string): string | null {
   if (RESERVED_ENV_KEYS.includes(key)) {
@@ -399,6 +473,8 @@ export function emptySnapshot(
     templateWritten: false,
     shell,
     claudeCommand: DEFAULT_CLAUDE_COMMAND,
+    subscriptionAuth: DEFAULT_SUBSCRIPTION_AUTH,
+    sessionMetrics: DEFAULT_SESSION_METRICS,
     projects: [],
     notifications: { ...DEFAULT_NOTIFICATIONS },
     jira: { ...DEFAULT_JIRA },

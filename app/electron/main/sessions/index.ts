@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { ConfigSnapshot } from '@shared/config-contract';
+import { AUTH_ENV_KEYS, type ConfigSnapshot } from '@shared/config-contract';
 import type {
   HookNotificationType,
   ObservedStatus,
@@ -13,6 +13,7 @@ import {
   type PtyDiagnostics,
   type SessionLostEvent,
 } from '@shared/ipc-contract';
+import type { SessionMetricsEvent } from '@shared/metrics-contract';
 import { MAX_SESSIONS } from '@shared/pty-host-protocol';
 import {
   spawnRefusal,
@@ -482,6 +483,24 @@ export function createSessions(options: SessionsOptions): Sessions {
         key: event.key,
       } satisfies SessionTicketIntentEvent),
     onCleared: (entityId) => publishCleared(entityId),
+    /**
+     * Usage, forwarded verbatim (HIVE-79).
+     *
+     * No `lastMetrics` guard, unlike `publishBranch` next door, and the
+     * asymmetry is deliberate. A branch is observed by *main* on every hook
+     * boundary and is almost always unchanged, so suppressing the no-op there
+     * is what makes a chatty observation affordable. These arrive only when
+     * Claude Code's own status line fires — an assistant message, a `/compact`,
+     * a 30-second idle tick — which is already the cadence at which the numbers
+     * genuinely move. The store drops an unchanged patch on arrival, so the
+     * one place that would benefit from the comparison already makes it, with
+     * the previous value in hand rather than a copy kept here.
+     */
+    onMetrics: (entityId, metrics) =>
+      send(CH.sessionMetrics, {
+        entityId,
+        metrics,
+      } satisfies SessionMetricsEvent),
   });
 
   /**
@@ -781,6 +800,8 @@ export function createSessions(options: SessionsOptions): Sessions {
     rows: number;
     /** Per-project environment (story 104). Empty for a clone. */
     env?: Record<string, string>;
+    /** Names the host must drop from the inherited environment (HIVE-79). */
+    stripEnv?: readonly string[];
   }): void {
     if (registry.size() >= maxSessions) {
       throw new Error(spawnRefusal({ reason: 'at-capacity', limit: maxSessions }));
@@ -813,6 +834,15 @@ export function createSessions(options: SessionsOptions): Sessions {
        * guard rather than accepted and silently overwritten.
        */
       env: request.env ?? {},
+      /**
+       * The credentials a session must **not** inherit (HIVE-79).
+       *
+       * Decided here rather than in the host because the host has no config: it
+       * is told the names on each spawn. Empty when the user has turned
+       * `subscriptionAuth` off, which restores exactly the pre-HIVE-79
+       * environment.
+       */
+      ...(request.stripEnv === undefined ? {} : { stripEnv: request.stripEnv }),
       cols: request.cols,
       rows: request.rows,
     });
@@ -885,6 +915,12 @@ export function createSessions(options: SessionsOptions): Sessions {
        * that does not exist would not.
        */
       env: { ...runtime.env, ...hooks?.envFor(request.entityId) },
+      /*
+        A session, unlike a clone, runs `claude` — so it is the one spawn whose
+        authentication matters. `snapshot` is the config already read for this
+        spawn, so this costs no extra read.
+      */
+      stripEnv: snapshot.subscriptionAuth ? AUTH_ENV_KEYS : [],
     });
 
     /**
@@ -924,6 +960,13 @@ export function createSessions(options: SessionsOptions): Sessions {
         name: request.name ?? request.entityId,
         sessionUuid: newSessionUuid(),
         ...(hooks?.settingsPath == null ? {} : { settingsPath: hooks.settingsPath }),
+        /*
+          Belt *and* braces, deliberately. `stripEnv` above covers the ambient
+          environment and a project's own `env` block; this covers the login
+          shell's profile, which re-exports whatever the user put in `~/.zshrc`
+          after the host has already sanitised. Neither one is sufficient alone.
+        */
+        subscriptionAuth: snapshot.subscriptionAuth,
       }),
       request.task,
     );

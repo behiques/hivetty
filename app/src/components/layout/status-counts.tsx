@@ -15,15 +15,23 @@ import { useCounts } from '@stores/hive-store';
  * much of the hive is no longer running — and a fifth number would cost the
  * header width it does not have (see below).
  *
- * `truncate` (with the `min-w-0` that actually lets a flex item shrink) is what
- * keeps this to one line, and it is load-bearing for the header's centred model
- * chip rather than mere defensiveness. Centring the chip on the header's true
- * midpoint means both side tracks size to the *wider* of the two, and this
- * cluster is the wider one; at 1440 that costs 113px more than the bar has. If
- * this paragraph cannot give, the deficit lands on the chip instead — so the
- * counts ellipsise from the tail (`done`, the least urgent number) and the chip
- * stays whole and centred. Above roughly 1553px nothing truncates at all. The
- * full string stays in the tooltip.
+ * `truncate` keeps this to one line. It is a backstop rather than the usual
+ * mechanism now: the chip beside it is what gives when the header narrows, so
+ * these numbers ordinarily render whole. If it ever does run out, the ellipsis
+ * eats the **tail** — `ended`, the least urgent number — and the full string
+ * stays in the `title`. That ordering is why `idle` and `ended` were merged into
+ * one `restText`: they are the two the user is least likely to be missing.
+ *
+ * ## Where its right edge lands
+ *
+ * On the activity rail's leading edge, which `header.tsx` arranges by giving the
+ * control cluster the rail's own width, and which `rail-alignment.spec.ts`
+ * measures in a real browser. The alignment is the reason there is no right
+ * padding here, and adding some would quietly undo it.
+ *
+ * This zone does **not** shrink — `header.tsx` marks it `shrink-0`. The model
+ * chip absorbs a narrow window instead, because it carries its full string in a
+ * `title` and these numbers carry nothing.
  */
 export function StatusCounts() {
   const { working, waiting, idle, done, terminated } = useCounts();
@@ -36,6 +44,9 @@ export function StatusCounts() {
 
   return (
     <p
+      /* Named so `chip-alignment.spec.ts` can measure this element's right edge
+         against the activity rail's border directly. */
+      data-testid="status-counts"
       title={`${workingText} · ${waitingText} · ${restText}`}
       className="min-w-0 truncate font-mono text-xs text-muted"
     >

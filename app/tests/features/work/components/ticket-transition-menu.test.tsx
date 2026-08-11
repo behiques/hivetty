@@ -51,8 +51,8 @@ const movedIssue: JiraIssue = {
 
 const open = async (): Promise<ReturnType<typeof userEvent.setup>> => {
   const user = userEvent.setup();
-  render(<TicketTransitionMenu issueKey="HIVE-70" />);
-  await user.click(screen.getByRole('button', { name: 'Move HIVE-70' }));
+  render(<TicketTransitionMenu issueKey="HIVE-70" status="In Progress" statusCategory="in-progress" />);
+  await user.click(screen.getByRole('button', { name: 'In Progress — move HIVE-70' }));
   return user;
 };
 
@@ -68,7 +68,7 @@ beforeEach(() => {
 
 describe('reading the list', () => {
   it('asks for nothing until the menu is opened', () => {
-    render(<TicketTransitionMenu issueKey="HIVE-70" />);
+    render(<TicketTransitionMenu issueKey="HIVE-70" status="In Progress" statusCategory="in-progress" />);
 
     // On render this would be one request per card, every time the panel opens.
     expect(readJiraTransitions).not.toHaveBeenCalled();
