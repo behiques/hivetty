@@ -9,14 +9,15 @@ import {
 } from '@shared/notification-contract';
 
 const setNotificationPrefs = vi.fn((_request: unknown) => Promise.resolve());
-let status: { notificationsSupported: boolean } | null = {
-  notificationsSupported: true,
+let status: { supported: boolean; refused: string | null } | null = {
+  supported: true,
+  refused: null,
 };
 let snapshot: unknown = { notifications: {} };
 
 vi.mock('@lib/project-config', () => ({
   setNotificationPrefs: (request: unknown) => setNotificationPrefs(request),
-  readIntegrationsStatus: () => Promise.resolve(status),
+  readNotificationDelivery: () => Promise.resolve(status),
 }));
 
 vi.mock('@hooks/use-project-config', () => ({
@@ -25,7 +26,7 @@ vi.mock('@hooks/use-project-config', () => ({
 
 beforeEach(() => {
   setNotificationPrefs.mockClear();
-  status = { notificationsSupported: true };
+  status = { supported: true, refused: null };
   snapshot = { notifications: {} };
 });
 
@@ -117,7 +118,7 @@ describe('NotificationsSection', () => {
    * between two machines without saying so.
    */
   it('disables the desktop option when the OS cannot present one', async () => {
-    status = { notificationsSupported: false };
+    status = { supported: false, refused: null };
     render(<NotificationsSection />);
 
     const group = await screen.findByRole('radiogroup', {
@@ -127,6 +128,78 @@ describe('NotificationsSection', () => {
       within(group).getByRole('radio', { name: 'System' }),
     ).toBeDisabled();
     expect(within(group).getByRole('radio', { name: 'Inbox' })).toBeEnabled();
+  });
+
+  /**
+   * The case the pane used to hide.
+   *
+   * `Notification.isSupported()` answers `true` on macOS and every send is then
+   * refused — measured, `UNErrorDomain error 1`. Without this the pane went on
+   * describing a "System" delivery that had never once been delivered, and the
+   * user had no way to find out.
+   */
+  it('says so when the OS claimed support and then refused delivery', async () => {
+    status = { supported: true, refused: 'UNErrorDomain error 1.' };
+    render(<NotificationsSection />);
+
+    const note = await screen.findByText(/refused this app/i);
+    expect(note).toHaveTextContent('UNErrorDomain error 1.');
+    // The actionable half: nothing was lost, and the dock still reacts.
+    expect(note).toHaveTextContent(/inbox/i);
+    expect(note).toHaveTextContent(/dock/i);
+  });
+
+  /** Two notes describing one system would be one note too many. */
+  it('shows only the unsupported note when the OS never claimed support', async () => {
+    status = { supported: false, refused: 'UNErrorDomain error 1.' };
+    render(<NotificationsSection />);
+
+    expect(
+      await screen.findByText(/cannot show desktop notifications/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/refused this app/i)).toBeNull();
+  });
+
+  /**
+   * The hole a single mount-time read leaves.
+   *
+   * `refused` is only knowable in main *after* a
+   * `both`-delivery notification has been attempted and refused — so the user
+   * who opens this pane to find out why nothing arrives is, at that instant,
+   * looking at `null`. Without the poll they would have to close and reopen
+   * Settings to be told the thing the note exists to tell them.
+   */
+  it('picks up a refusal that only happens after the pane is open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<NotificationsSection />);
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole('heading', { name: 'Notifications', level: 2 }),
+        ).toBeInTheDocument(),
+      );
+      expect(screen.queryByText(/refused this app/i)).toBeNull();
+
+      // A session raises one, and the OS turns it down — while the pane is open.
+      status = { supported: true, refused: 'UNErrorDomain error 1.' };
+
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      await vi.waitFor(() =>
+        expect(screen.getByText(/refused this app/i)).toBeInTheDocument(),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says nothing at all while delivery is working', async () => {
+    render(<NotificationsSection />);
+    // Awaited so the status fetch has resolved before the absence is asserted.
+    await screen.findByRole('heading', { name: 'Notifications', level: 2 });
+
+    expect(screen.queryByText(/refused this app/i)).toBeNull();
+    expect(screen.queryByText(/cannot show desktop notifications/i)).toBeNull();
   });
 
   /** Slack has no producer, so it must not appear (HIVE-77). */

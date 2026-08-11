@@ -16,7 +16,7 @@ import {
   type Page,
 } from '@playwright/test';
 
-import { launchHive } from './fixtures/hive-app';
+import { dockBadge, launchHive } from './fixtures/hive-app';
 
 /**
  * Cloning a repository, driven through the real app (story 102).
@@ -147,6 +147,117 @@ test('clones a repository and registers it as a project', async ({}, testInfo) =
     expect(entry).toBeDefined();
     expect(entry?.origin).toBe('cloned');
     expect(entry?.path).toBe(resolved);
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * What a raised notification does *outside* the window.
+ *
+ * A clone is the one producer this suite can drive end to end, and it is a
+ * `both` kind — so finishing one exercises the whole delivery path in the real
+ * app: the hub raises, the dock badge is pushed, and `present()` hands the OS a
+ * notification whose refusal, if there is one, must reach the settings pane
+ * rather than being swallowed.
+ *
+ * The refusal itself is **platform-dependent and asserted as such**. On the Mac
+ * this was written on, `Notification.isSupported()` answers `true` and every
+ * `show()` then fails with `UNErrorDomain error 1`; on a machine where delivery
+ * works it stays `null`. What is invariant — and what used to be missing
+ * entirely — is that the app now has an answer either way, and that the badge
+ * counts regardless.
+ */
+test('badges the dock and reports how the OS answered', async ({}, testInfo) => {
+  const { app, page } = await launchOnCloneForm((name) =>
+    testInfo.outputPath(name),
+  );
+
+  try {
+    /**
+     * Nothing has happened yet, so nothing is claimed.
+     *
+     * Coalesced rather than matched against a `/undefined/` pattern: off macOS
+     * `dockBadge` resolves the real `undefined`, and `expect(undefined)
+     * .toMatch()` fails outright with "received value must be a string" — it
+     * never stringifies the value, so the pattern could not match however it
+     * was written. That would have errored this spec on its first assertion on
+     * Linux and Windows instead of skipping the dock checks below, which is the
+     * intent.
+     */
+    expect((await dockBadge(app)) ?? '').toBe('');
+
+    const remote = makeBareRemote();
+    const parent = mkdtempSync(join(tmpdir(), 'hive-parent-'));
+
+    await page.getByLabel(/repository url/i).fill(remote);
+    await stubDirectoryDialog(app, [parent]);
+    await page.getByRole('button', { name: /choose/i }).click();
+    await page.getByRole('button', { name: 'Clone' }).click();
+
+    await expect(
+      page.getByRole('button', { name: /add project/i }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    /**
+     * One unread row, and the dock says so. Polled because the badge is pushed
+     * from main after the clone's own event, not before the button appears.
+     *
+     * Skipped where there is no dock at all rather than asserted loosely — a
+     * spec that passes on Linux because `undefined` is falsy is a spec that
+     * would go on passing after the badge stopped being set on macOS.
+     */
+    const badge = await dockBadge(app);
+    if (badge !== undefined) {
+      await expect.poll(() => dockBadge(app), { timeout: 10_000 }).toBe('1');
+    }
+
+    /**
+     * Asked through `notifications.delivery()`, which is the verb the pane
+     * itself polls — so this exercises the real path rather than a second one
+     * that happens to carry the same two facts.
+     */
+    const status = await page.evaluate(() =>
+      (
+        window as unknown as {
+          hive: {
+            notifications: {
+              delivery: () => Promise<{
+                supported: boolean;
+                refused: string | null;
+              }>;
+            };
+          };
+        }
+      ).hive.notifications.delivery(),
+    );
+
+    /**
+     * Printed, because the answer differs by machine and the run is the only
+     * record of which branch below was taken. A green tick alone cannot say
+     * whether this platform delivered the notification or refused it.
+     */
+    console.info(
+      `[hive-e2e] desktop notifications: supported=${status.supported} refused=${String(status.refused)} badge=${String(badge)}`,
+    );
+
+    // The field exists and carries a real answer — the thing that was silence.
+    expect(status).toHaveProperty('refused');
+    expect(
+      status.refused === null || typeof status.refused === 'string',
+    ).toBe(true);
+
+    /**
+     * And when it *is* a refusal, the pane says so rather than going on
+     * offering a delivery that has never been delivered.
+     */
+    if (status.refused !== null) {
+      await page
+        .getByRole('navigation', { name: 'Settings sections' })
+        .getByRole('button', { name: 'Notifications' })
+        .click();
+      await expect(page.getByText(/refused this app/i)).toBeVisible();
+    }
   } finally {
     await app.close();
   }

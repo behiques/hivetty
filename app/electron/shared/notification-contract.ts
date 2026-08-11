@@ -51,6 +51,22 @@ export type NotificationSource = 'session' | 'github' | 'agent' | 'app';
 /**
  * Every kind of thing the app will raise.
  *
+ * ## Why `session.input_needed` is a third waiting kind
+ *
+ * The two below cover a session blocked *mid-turn* — a tool wants a yes, an MCP
+ * server wants a sentence. Neither covers the commonest way a session ends up
+ * waiting on a human: the turn finished and nobody typed. That is not a
+ * question and not an approval; nothing was asked, and the session is simply
+ * done talking and out of instructions.
+ *
+ * It had no producer until this story because there was no event to hang it on.
+ * `Stop` is not it — `Stop` fires at the end of *every* turn, including the many
+ * the user is sitting and watching, and a row per turn is the notification
+ * stream nobody trusts. Claude's `Notification/idle_prompt` fires sixty seconds
+ * after `Stop` with nobody having typed, and that debounce is exactly the
+ * difference between "the turn ended" and "you walked away". Measured, not
+ * assumed — see `hook-contract.ts`.
+ *
  * ## Why `session.waiting` and `session.asked` are two kinds
  *
  * Both map to the *status* `waiting` — `hook-contract.ts` maps
@@ -71,6 +87,7 @@ export type NotificationSource = 'session' | 'github' | 'agent' | 'app';
 export const NOTIFICATION_KINDS = [
   'session.waiting',
   'session.asked',
+  'session.input_needed',
   'session.ended',
   'session.idle',
   'clone.done',
@@ -197,6 +214,43 @@ export const NOTIFICATION_KIND_SPECS: Record<
       'An agent needs an answer before it can carry on. Blocked, like an approval, but it wants words rather than a yes.',
     icon: 'ph-chat-circle-dots',
     tone: 'amber',
+    defaultDelivery: 'both',
+  },
+  'session.input_needed': {
+    source: 'session',
+    label: 'When a session runs out of instructions',
+    description:
+      'Its turn ended and a minute passed with nothing typed. Not a question — it has simply finished and is waiting on you.',
+    icon: 'ph-keyboard',
+    tone: 'amber',
+    /**
+     * `both`, and the argument for it is narrower than it first looks.
+     *
+     * The tempting version — "the sixty-second debounce proves the user is not
+     * looking, so a toast is always warranted" — is **wrong, and worth writing
+     * down so nobody re-derives it.** Claude's debounce measures typing into
+     * *that session*, not the user's presence. In a fleet only one terminal has
+     * focus at a time, so a session the user read and deliberately moved on
+     * from reaches sixty seconds exactly as a session they walked away from
+     * does, and the app cannot tell the two apart — there is no focus
+     * suppression anywhere in this pipeline, on purpose (see
+     * `notifications/index.ts`).
+     *
+     * What actually carries the default is the **shape of the repeat**, not the
+     * debounce. `session.input_needed` is announced once per stretch of
+     * waiting: the notifier suppresses it until the session has visibly stopped
+     * waiting, so a parked session costs one toast, not one a minute and not
+     * one per turn. That is the whole distance between this and `Stop`, which
+     * has no such cap and would fire on every turn including the watched ones.
+     *
+     * The honest cost, then: a user working across a dozen sessions gets a
+     * toast for each one they leave alone for a minute — once each. That is
+     * loud on a busy afternoon and precisely right at the end of one, and the
+     * per-kind control exists so the judgement is theirs rather than this
+     * record's. Defaulting quiet would answer the bug this kind was added for —
+     * "my session was waiting and nothing told me" — with a row in a panel
+     * nobody had open.
+     */
     defaultDelivery: 'both',
   },
   'session.ended': {
