@@ -8,7 +8,6 @@ import {
   modelLabel,
   pctLabel,
   pctOrNull,
-  UNKNOWN,
 } from '@/lib/session-metrics';
 
 /**
@@ -29,7 +28,14 @@ describe('pctOrNull', () => {
     expect(pctOrNull(-3)).toBe(0);
   });
 
-  it.each([undefined, Number.NaN, Number.POSITIVE_INFINITY])(
+  /**
+   * `null` is in this list for a different reason than the rest: it is what the
+   * session says when it reports a context window it cannot put a percentage on
+   * (after `/compact`), rather than a value that failed to parse. By the time it
+   * reaches a gauge the two mean the same thing — not known — and only the store
+   * needs to tell them apart.
+   */
+  it.each([undefined, null, Number.NaN, Number.POSITIVE_INFINITY])(
     'answers null for %s — absence must never become a number',
     (value) => {
       expect(pctOrNull(value)).toBeNull();
@@ -43,15 +49,16 @@ describe('pctLabel', () => {
   });
 
   /**
-   * The single most important assertion in this file.
+   * A reported zero is still a fact and still renders.
    *
-   * `rate_limits` is absent until a session's first API response and absent for
-   * the whole life of an API-key session. Rendering `0%` there would tell the
-   * user they have a full week of headroom, which may be the opposite of true.
+   * The em-dash case that used to live here is gone with the `null` argument
+   * with it: the refusal to invent a number moved up to `model-chip.tsx`,
+   * which renders no stat at all rather than a labelled empty one. What must
+   * never happen — an unreported limit reading `0%` — is now unrepresentable
+   * here rather than defended against.
    */
-  it('renders an em dash for a number nobody reported', () => {
-    expect(pctLabel(null)).toBe(UNKNOWN);
-    expect(pctLabel(null)).not.toContain('0');
+  it('renders a reported zero, which is not the same as no report', () => {
+    expect(pctLabel(0)).toBe('0%');
   });
 });
 

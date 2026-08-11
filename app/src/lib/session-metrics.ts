@@ -25,10 +25,18 @@ import type { SessionMetrics } from '@shared/metrics-contract';
  *
  * `rate_limits` appears only for Claude.ai subscribers, and only **after the
  * first API response** of a session. It is absent entirely when a session
- * authenticates with `ANTHROPIC_API_KEY`. Each window may be independently
- * absent. So every accessor here answers `null` rather than a default, and the
- * chip renders an em dash: "we have not been told" and "you have used none of
- * it" are different claims and only one of them is safe to make up.
+ * authenticates with `ANTHROPIC_API_KEY`. `context_window.used_percentage` is
+ * null until the session's first assistant turn — an idle session reports its
+ * rate limits every thirty seconds and no context percentage at all. Each value
+ * may be independently absent. So every accessor here answers `null` rather than
+ * a default: "we have not been told" and "you have used none of it" are
+ * different claims and only one of them is safe to make up.
+ *
+ * What the renderer does with that `null` has since changed. It used to be an
+ * em dash beside an empty ring; it is now **no stat at all**, because three
+ * placeholders is what the chip looked like at the start of every session and a
+ * labelled empty slot promises a number that may never arrive. See
+ * `model-chip.tsx`.
  */
 
 /** Model id → the name shown to the user, for a session that has not reported one. */
@@ -42,9 +50,6 @@ const MODEL_LABELS: Record<Model, string> = {
 /** Sessions with no explicit model are Opus at high effort, as in the concept. */
 export const DEFAULT_MODEL: Model = 'opus';
 export const DEFAULT_EFFORT = 'high';
-
-/** What the chip renders in place of a number nobody has reported. */
-export const UNKNOWN = '—';
 
 /**
  * A context window worth naming in the label.
@@ -61,8 +66,10 @@ const EXTENDED_WINDOW_TOKENS = 600_000;
  *
  * `0` is the value a null becomes when it passes through something that
  * defaults, and it renders as a perfectly plausible `12a` — a confident wrong
- * time in the one place the design insists on an em dash. Anything before this
- * app existed is not a reset time; it is a bug upstream or a field that meant
+ * time on a limit the user may be about to hit. A wrong reset is worse than no
+ * reset: the chip's fallback for an unknown one is the window's own name
+ * (`session`, `week`), which says nothing false. Anything before this app
+ * existed is not a reset time; it is a bug upstream or a field that meant
  * nothing. 2020-01-01, chosen because it needs only to be *after* the epoch and
  * *before* any real reset.
  */
@@ -102,15 +109,32 @@ export function chipLabel(
   return `${name}${window} · ${level}`;
 }
 
-/** A percentage the payload carried, clamped, or `null` when it carried none. */
-export function pctOrNull(value: number | undefined): number | null {
-  if (value === undefined || !Number.isFinite(value)) return null;
+/**
+ * A percentage the payload carried, clamped, or `null` when it carried none.
+ *
+ * Takes `null` as well as `undefined` because the two reach it by different
+ * routes and mean the same thing here: `contextPct` is explicitly nulled when a
+ * session reports a context window it cannot put a number on, where the limits
+ * are simply omitted. The distinction matters to the store, which must clear one
+ * and preserve the other; by the time a value is on its way to a gauge, both are
+ * just "not known".
+ */
+export function pctOrNull(value: number | null | undefined): number | null {
+  if (value === undefined || value === null || !Number.isFinite(value)) {
+    return null;
+  }
   return Math.min(Math.max(Math.round(value), 0), 100);
 }
 
-/** `46%`, or the em dash. */
-export function pctLabel(pct: number | null): string {
-  return pct === null ? UNKNOWN : `${pct}%`;
+/**
+ * `46%`.
+ *
+ * Takes a number rather than `number | null`, so there is no em-dash branch left
+ * to reach for: a percentage nobody reported has no label because it has no stat
+ * — the caller renders nothing at all.
+ */
+export function pctLabel(pct: number): string {
+  return `${pct}%`;
 }
 
 /**
