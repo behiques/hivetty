@@ -11,9 +11,15 @@ import {
   mergePath,
   parseLoginEnv,
   resetLoginEnvImport,
+  runLoginShell,
   startLoginEnvImport,
 } from '../../../../electron/main/config/login-env';
-import { LOGIN_ENV_DELIMITER } from '../../../../electron/shared/config-contract';
+import {
+  LOGIN_ENV_DELIMITER,
+  LOGIN_ENV_IMPORT_KEYS,
+  LOGIN_ENV_PROBE_ARGS,
+  LOGIN_ENV_RECORD_SEPARATOR,
+} from '../../../../electron/shared/config-contract';
 
 /**
  * The login-environment import (HIVE-84).
@@ -55,28 +61,59 @@ function script(name: string, body: string): string {
   return path;
 }
 
+const NUL = LOGIN_ENV_RECORD_SEPARATOR;
+
+/**
+ * A transcript shaped exactly as {@link LOGIN_ENV_PROBE_ARGS} emits one.
+ *
+ * Banner text ends at a newline and is followed by the probe's *leading* NUL,
+ * so the banner is a record of its own rather than being glued to the opening
+ * marker. That leading NUL is the whole reason the marker can be matched by
+ * equality instead of by "ends with".
+ */
+function transcript(records: readonly string[], banner = ''): string {
+  // Each record carries the newline `printenv` appends; the markers, printed by
+  // `printf`, do not. The parser has to tell those apart.
+  const body = records.map((record) => `${record}\n`);
+  return (
+    banner +
+    NUL +
+    [LOGIN_ENV_DELIMITER, ...body, LOGIN_ENV_DELIMITER].join(NUL) +
+    NUL
+  );
+}
+
+/**
+ * The shell lines that print a well-formed NUL-delimited transcript.
+ *
+ * Shared by every fake shell below, so the protocol is stated once — a
+ * hand-typed second copy is what let the old `echo`-per-line shape linger in
+ * two tests after the parser had moved on.
+ */
+function emit(records: readonly string[]): string[] {
+  const quoted = records.map((record) => `'${record}'`).join(' ');
+  return [
+    `printf '\\0%s\\0' '${LOGIN_ENV_DELIMITER}'`,
+    `printf '%s\\0' ${quoted}`,
+    `printf '%s\\0' '${LOGIN_ENV_DELIMITER}'`,
+  ];
+}
+
 /** A shell that prints a well-formed transcript, wrapped in rc-file noise. */
-function goodShell(lines: readonly string[]): string {
-  const body = [
-    "echo 'nvm: Now using node v22.14.0'",
-    `echo '${LOGIN_ENV_DELIMITER}'`,
-    ...lines.map((line) => `echo '${line}'`),
-    `echo '${LOGIN_ENV_DELIMITER}'`,
-  ].join('\n');
-  return script('good-shell', body);
+function goodShell(records: readonly string[]): string {
+  return script(
+    'good-shell',
+    ["echo 'nvm: Now using node v22.14.0'", ...emit(records)].join('\n'),
+  );
 }
 
 describe('parseLoginEnv', () => {
   it('reads only what falls between the markers', () => {
-    const stdout = [
-      'Last login: Tue Aug 12',
-      'MOTD=this line is before the marker',
-      LOGIN_ENV_DELIMITER,
-      'PATH=/opt/homebrew/bin',
-      'HOME=/Users/someone',
-      LOGIN_ENV_DELIMITER,
-      'TRAILING=after the marker',
-    ].join('\n');
+    const stdout =
+      transcript(
+        ['PATH=/opt/homebrew/bin', 'HOME=/Users/someone'],
+        'Last login: Tue Aug 12\nMOTD=this line is before the marker\n',
+      ) + 'TRAILING=after the marker';
 
     expect(parseLoginEnv(stdout)).toEqual({
       PATH: '/opt/homebrew/bin',
@@ -85,33 +122,200 @@ describe('parseLoginEnv', () => {
   });
 
   it('splits on the first = only, so a value may contain one', () => {
-    const stdout = [
-      LOGIN_ENV_DELIMITER,
-      'URL=https://example.com/?a=1&b=2',
-      LOGIN_ENV_DELIMITER,
-    ].join('\n');
-
-    expect(parseLoginEnv(stdout).URL).toBe('https://example.com/?a=1&b=2');
+    expect(
+      parseLoginEnv(transcript(['URL=https://example.com/?a=1&b=2'])).URL,
+    ).toBe('https://example.com/?a=1&b=2');
   });
 
   it('yields nothing when a marker is missing, rather than guessing', () => {
-    // A shell that never printed the closing marker did not reach `printenv`
-    // either — parsing its banner would invent variables.
-    expect(parseLoginEnv(`${LOGIN_ENV_DELIMITER}\nPATH=/opt/bin`)).toEqual({});
-    expect(parseLoginEnv('PATH=/opt/bin')).toEqual({});
+    // A shell that never printed the closing marker did not get as far as
+    // reporting its environment either — parsing what it did print would
+    // invent variables.
+    expect(
+      parseLoginEnv(`${NUL}${LOGIN_ENV_DELIMITER}${NUL}PATH=/opt/bin${NUL}`),
+    ).toEqual({});
+    expect(parseLoginEnv(`PATH=/opt/bin${NUL}`)).toEqual({});
   });
 
-  it('ignores lines that are not assignments', () => {
-    const stdout = [
-      LOGIN_ENV_DELIMITER,
-      'not an assignment',
-      '=leading equals is not a name',
-      'GOOD=yes',
-      LOGIN_ENV_DELIMITER,
-    ].join('\n');
-
-    expect(parseLoginEnv(stdout)).toEqual({ GOOD: 'yes' });
+  it('ignores records that are not assignments', () => {
+    expect(
+      parseLoginEnv(
+        transcript(['not an assignment', '=leading equals is not a name', 'GOOD=yes']),
+      ),
+    ).toEqual({ GOOD: 'yes' });
   });
+
+  /**
+   * The regression this protocol exists for (HIVE-86).
+   *
+   * A `PATH` may legitimately *contain newlines*. The case that produced this
+   * test is real and ordinary: `~/.zshrc` doing
+   * `export PATH="$PATH:$(npm bin -g)"`, where `npm bin` was removed in npm 9+
+   * and substitutes its multi-line "Unknown command" error straight into the
+   * value. The line-oriented `printenv` protocol this replaced truncated `PATH`
+   * at the first newline and silently dropped every entry after it.
+   */
+  it('keeps a value that contains newlines whole', () => {
+    const brokenPath = [
+      '/Users/someone/.bun/bin',
+      '/Users/someone/.local/bin',
+      '/usr/bin',
+      // Exactly what npm 9+ substitutes into the value.
+      'Unknown command: "bin"\n\nTo see a list of supported npm commands, run:\n  npm help',
+      '/Users/someone/.nvm/versions/node/v22.14.0/bin/npx',
+    ].join(':');
+
+    const vars = parseLoginEnv(transcript([`PATH=${brokenPath}`]));
+
+    expect(vars.PATH).toBe(brokenPath);
+    // The tail after the embedded newlines is what used to be lost.
+    expect(vars.PATH?.split(':')).toContain(
+      '/Users/someone/.nvm/versions/node/v22.14.0/bin/npx',
+    );
+  });
+
+  /**
+   * Exactly one trailing newline is `printenv`'s, and only that one is dropped.
+   *
+   * A value that genuinely ends in a newline arrives as `value\n` plus
+   * `printenv`'s own, and must come back with one still attached. Stripping
+   * greedily would corrupt it just as surely as not stripping at all.
+   */
+  it("removes printenv's newline without eating the value's own", () => {
+    // `transcript` appends printenv's newline; this value brings its own too.
+    expect(parseLoginEnv(transcript(['GH_TOKEN=ends-with\n'])).GH_TOKEN).toBe(
+      'ends-with\n',
+    );
+    expect(parseLoginEnv(transcript(['GH_TOKEN=no-newline'])).GH_TOKEN).toBe(
+      'no-newline',
+    );
+  });
+
+  /**
+   * An unset variable prints nothing, so its record is a bare `KEY=`.
+   *
+   * It arrives present-but-empty rather than absent, which `isSet` rejects —
+   * `importLoginEnv` must never write an empty token into `process.env`.
+   */
+  it('reads a variable the shell had no value for as empty', () => {
+    const stdout =
+      NUL +
+      [LOGIN_ENV_DELIMITER, 'GITHUB_TOKEN=', LOGIN_ENV_DELIMITER].join(NUL) +
+      NUL;
+
+    expect(parseLoginEnv(stdout)).toEqual({ GITHUB_TOKEN: '' });
+  });
+
+  /**
+   * A newline-bearing value must not be able to *forge* a variable either.
+   *
+   * Under the old protocol a continuation line of the form `NAME=value` was
+   * indistinguishable from a real assignment, so any process able to influence
+   * one variable could inject another — including one on the import allowlist.
+   */
+  it('cannot be made to invent a variable from inside a value', () => {
+    const vars = parseLoginEnv(
+      transcript([`MOTD=harmless\nGH_TOKEN=forged\nPATH=/injected`]),
+    );
+
+    expect(vars).toEqual({ MOTD: 'harmless\nGH_TOKEN=forged\nPATH=/injected' });
+    expect(vars.GH_TOKEN).toBeUndefined();
+    expect(vars.PATH).toBeUndefined();
+  });
+});
+
+describe('LOGIN_ENV_PROBE_ARGS', () => {
+  it('asks only for the allowlist, so no other value is ever emitted', () => {
+    const command = LOGIN_ENV_PROBE_ARGS.at(-1) ?? '';
+
+    for (const key of LOGIN_ENV_IMPORT_KEYS) {
+      expect(command).toContain(`printenv '${key}'`);
+    }
+    // The old protocol dumped the whole environment and filtered afterwards.
+    // A bare `printenv`, with no key, would do that again.
+    expect(command).not.toMatch(/printenv\s*(;|$)/);
+  });
+
+  it('is still a login, interactive shell — .zshrc is where PATH is built', () => {
+    expect(LOGIN_ENV_PROBE_ARGS.slice(0, 3)).toEqual(['-l', '-i', '-c']);
+  });
+
+  /**
+   * No variable-expansion syntax, because the login shell may not be POSIX.
+   *
+   * `defaultShell()` reads `getpwuid`, so fish is a login shell this probe can
+   * genuinely be handed. fish rejects `${` at parse time, which would abort the
+   * whole command before anything was printed — reinstating HIVE-84 for those
+   * users. `printf`, `printenv` and `;` are the only constructs used, exactly
+   * as in the protocol this replaced.
+   */
+  it('uses no shell variable expansion, so a non-POSIX login shell still answers', () => {
+    const command = LOGIN_ENV_PROBE_ARGS.at(-1) ?? '';
+
+    expect(command).not.toContain('${');
+    expect(command).not.toMatch(/\$[A-Za-z_]/);
+  });
+});
+
+/**
+ * The emitting half, executed for real (HIVE-86).
+ *
+ * Every other test in this file hand-rolls a transcript, which proves the
+ * parser and nothing about the command that is supposed to produce one. This
+ * PR changed *both* ends of the protocol at once, so a `printf` that did not
+ * honour `\0`, a quoting slip, or syntax one shell rejects would leave the
+ * whole suite green. This closes the loop: the real `LOGIN_ENV_PROBE_ARGS`, run
+ * by a real shell, parsed by the real `parseLoginEnv`.
+ *
+ * Every shell the config may name is covered, because portability across them
+ * is the property being asserted — not an implementation detail.
+ */
+describe('the probe and the parser agree, run against a real shell', () => {
+  /**
+   * The newline-bearing value is carried in `GH_TOKEN`, not `PATH`, on purpose.
+   *
+   * A login shell sources `/etc/profile`, which on macOS runs `path_helper` —
+   * it rewrites `PATH` wholesale, reordering entries and splitting on `:`. So
+   * an exact-match assertion on `PATH` would be asserting `path_helper`'s
+   * behaviour, not this protocol's. `GH_TOKEN` is passed through untouched by
+   * every system rc file, which makes it the honest place to prove that a value
+   * survives byte-for-byte. `PATH` is still checked, for what it can prove:
+   * that the entries handed in come back.
+   */
+  const NOISY_VALUE = 'ghp_first\n\nUnknown command: "bin"\n  npm help=yes';
+
+  for (const shell of ['/bin/sh', '/bin/bash', '/bin/zsh']) {
+    it(`round-trips a newline-bearing value through ${shell}`, async () => {
+      const { stdout } = await runLoginShell(shell, LOGIN_ENV_PROBE_ARGS, {
+        cwd: dir,
+        env: {
+          PATH: '/opt/hive-probe-one:/opt/hive-probe-two',
+          GH_TOKEN: NOISY_VALUE,
+          // A home with no rc files, so this asserts the protocol rather than
+          // whatever the developer running it keeps in ~/.zshrc.
+          HOME: dir,
+        },
+        timeout: 10_000,
+      });
+
+      const vars = parseLoginEnv(stdout);
+
+      // The property this protocol exists for: newlines and `=` both survive.
+      expect(vars.GH_TOKEN).toBe(NOISY_VALUE);
+
+      const entries = (vars.PATH ?? '').split(delimiter);
+      expect(entries).toContain('/opt/hive-probe-one');
+      expect(entries).toContain('/opt/hive-probe-two');
+
+      // Unset reads as empty, which `isSet` then rejects — never imported.
+      expect(vars.GITHUB_TOKEN).toBe('');
+
+      // Nothing outside the allowlist was ever printed by the shell at all.
+      expect(Object.keys(vars).sort()).toEqual(
+        [...LOGIN_ENV_IMPORT_KEYS].sort(),
+      );
+    });
+  }
 });
 
 describe('mergePath', () => {
@@ -315,12 +519,9 @@ describe('startLoginEnvImport', () => {
     const marker = join(dir, 'runs');
     const shell = script(
       'counting-shell',
-      [
-        `echo run >> '${marker}'`,
-        `echo '${LOGIN_ENV_DELIMITER}'`,
-        "echo 'PATH=/opt/homebrew/bin'",
-        `echo '${LOGIN_ENV_DELIMITER}'`,
-      ].join('\n'),
+      [`echo run >> '${marker}'`, ...emit(['PATH=/opt/homebrew/bin'])].join(
+        '\n',
+      ),
     );
     const target: NodeJS.ProcessEnv = { PATH: '/usr/bin' };
     const options = { enabled: true, shell, target, cwd: dir };
@@ -349,12 +550,7 @@ describe('startLoginEnvImport', () => {
   it('does not resolve until the environment has actually been repaired', async () => {
     const shell = script(
       'slow-shell',
-      [
-        '/bin/sleep 0.3',
-        `echo '${LOGIN_ENV_DELIMITER}'`,
-        "echo 'PATH=/opt/homebrew/bin'",
-        `echo '${LOGIN_ENV_DELIMITER}'`,
-      ].join('\n'),
+      ['/bin/sleep 0.3', ...emit(['PATH=/opt/homebrew/bin'])].join('\n'),
     );
     const target: NodeJS.ProcessEnv = { PATH: '/usr/bin' };
 
