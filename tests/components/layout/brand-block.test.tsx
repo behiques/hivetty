@@ -1,33 +1,74 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { BrandBlock } from '@components/layout/brand-block';
+import { DEFAULT_TEAM_NAME, useAppearanceStore } from '@stores/appearance-store';
 
 describe('BrandBlock', () => {
-  it('renders the wordmark and the eyebrow', () => {
+  afterEach(() => {
+    useAppearanceStore.setState({ teamName: DEFAULT_TEAM_NAME });
+  });
+
+  it('renders the wordmark and the team name under it', () => {
     render(<BrandBlock />);
 
     expect(screen.getByText('The Hive')).toBeInTheDocument();
-    expect(screen.getByText('APFM Engineering')).toBeInTheDocument();
+    expect(screen.getByText(DEFAULT_TEAM_NAME)).toBeInTheDocument();
   });
 
-  it('hides the mark from screen readers — the wordmark already says it', () => {
-    const { container } = render(<BrandBlock />);
+  it('shows whatever team was set, trimmed', () => {
+    useAppearanceStore.setState({ teamName: '  Zergling Battalion  ' });
+    render(<BrandBlock />);
 
-    const mark = container.querySelector('img');
-    expect(mark).toHaveAttribute('src', '/hive-mark.png');
-    expect(mark).toHaveAttribute('aria-hidden', 'true');
-    expect(mark).toHaveAttribute('alt', '');
+    expect(screen.getByText('Zergling Battalion')).toBeInTheDocument();
   });
 
   /**
-   * `bg-brand` would repaint the tile pale blue in dark mode — `--cc-brand` is
-   * a text colour and flips per theme. The logo must not.
+   * An empty line is not rendered rather than rendered empty: a 10px span with
+   * nothing in it still occupies a row, and the wordmark would sit off-centre
+   * against the tile for no reason the user could see.
    */
-  it('paints the tile with the theme-invariant brand fill', () => {
+  it('drops the line entirely when the team name is cleared', () => {
+    useAppearanceStore.setState({ teamName: '   ' });
     const { container } = render(<BrandBlock />);
 
-    const tile = container.querySelector('img')?.parentElement;
-    expect(tile).toHaveClass('bg-brand-fill-strong');
+    expect(container.querySelectorAll('span')).toHaveLength(1);
+    expect(screen.getByText('The Hive')).toBeInTheDocument();
+  });
+
+  it('hides the tile from screen readers — the wordmark already says it', () => {
+    const { container } = render(<BrandBlock />);
+
+    const tile = container.querySelector('img');
+    expect(tile).toHaveAttribute('aria-hidden', 'true');
+    expect(tile).toHaveAttribute('alt', '');
+  });
+
+  /**
+   * The tile and the app icon are one design cut from one master
+   * (`scripts/icon/generate-app-icon.py`). Pointing this back at a bare mark,
+   * or at any other file, silently splits the two apart again.
+   */
+  it('shows the tile cut from the app icon, not a bare mark', () => {
+    const { container } = render(<BrandBlock />);
+
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      '/hive-tile.png',
+    );
+  });
+
+  /**
+   * The tile carries its own colour. It used to be a `bg-brand-fill-strong`
+   * div, chosen over `bg-brand` because `--cc-brand` is a text colour that
+   * flips per theme and a logo must not. A baked raster keeps that guarantee,
+   * so what needs asserting now is that nothing tints or resizes it.
+   */
+  it('renders at its 30px slot with no theme-dependent fill behind it', () => {
+    const { container } = render(<BrandBlock />);
+
+    const tile = container.querySelector('img');
+    expect(tile).toHaveClass('size-[30px]');
+    expect(tile?.parentElement?.className).not.toMatch(/\bbg-/);
   });
 });
