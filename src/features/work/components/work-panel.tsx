@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 
 import { usePrRefresh } from '@/hooks/use-pr-refresh';
 
+import { EmptyState } from '@components/ui/empty-state';
 import { SwarmLine } from '@components/ui/swarm-line';
 import { TicketCard } from '@features/work/components/ticket-card';
 import { TicketListSkeleton } from '@features/work/components/ticket-card-skeleton';
@@ -175,12 +176,9 @@ export function WorkPanel() {
         the panel says so rather than showing a blank column.
       */}
       {tickets.length === 0 && source.kind === 'live' ? (
-        <div className="flex flex-col gap-[3px]">
-          <SwarmLine phraseKey="empty.work" />
-          <p className="px-1 text-[11.5px] leading-[1.45] text-subtle">
-            No issues matched your query.
-          </p>
-        </div>
+        <EmptyState phrase="empty.work" creature="spire">
+          No issues matched your query.
+        </EmptyState>
       ) : null}
     </div>
   );
