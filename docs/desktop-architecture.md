@@ -188,6 +188,64 @@ Supervisor behaviour worth knowing before changing it:
 Everything above is injected (`fork`, the clock, every timeout), so the whole
 story is asserted with fake timers instead of by killing real processes.
 
+### What a session costs in processes
+
+Written up because "several sessions are running and stray processes are eating
+CPU — is the app leaking them?" is a question that gets asked again, and reading
+the teardown is not an answer to it.
+
+**A Hive session's tree is swept, including the parts that escape the process
+group.** `teardown` in `session-manager.ts` snapshots descendants *before* it
+signals anything — once a shell dies its children reparent to launchd and the
+`ppid` linkage is gone for good — then group-kills, waits out the grace, and
+SIGKILLs whatever the snapshot says is still alive. `kill` (one tab) and
+`killAll` (quit) run the same function, so closing a tab is not the weaker path.
+
+The `descendants` conformance group measures this rather than asserting it from
+the source, using a job started under `set -m` so it lands in a **process group
+of its own** — the shape a group kill structurally cannot reach. It covers both
+endings (`kill` and `killAll`) and a leaf two levels down, each level in its own
+group so the depth case cannot be satisfied by a group kill of the middle node.
+It is mutation-verified twice: stubbing `sweep` fails it with five of five
+escaped children outliving their sessions, and making `walkDescendants` return
+only first-generation children fails the depth property alone.
+
+**A sweep that does not work says so.** SIGKILL is the last thing teardown can
+do, so there was nothing to report after sending it — which made "the descendant
+is still running" the one outcome nobody was told about. `sweep` now waits a
+short verify window and returns what outlived the signal, and `teardown` emits an
+`error` on each session in the batch naming the surviving pids. That is the only
+signal HIVE-72's guarantee did not hold; without it a leak arrives as "my machine
+is slow" a week later instead of as a bug with a pid attached. The report is
+deliberately quiet on the happy path — a warning that fires on ordinary teardowns
+is one nobody reads, and there is a test pinning that.
+
+**What the app does not own, and cannot.** Claude Code can run a detached
+`claude daemon run` (reparented to pid 1) that keeps a pool of pre-warmed
+`bg-spare` sessions. A session that claims a spare gets its MCP servers hosted
+under **that daemon**, not under the pty's shell — so those processes are not
+descendants of any session root, are invisible to the sweep, and outlive the app
+by design. The plugin-hosted ones are not free: a single Telegram channel MCP
+server measured ~96 MB RSS, and its `start` script runs `bun install` on every
+session start.
+
+The Hive opts out of that path already — `hookSettings` sets
+`disableAgentView: true` unconditionally, which also disables the on-demand
+daemon inside Hive sessions, so a Hive terminal's MCP servers are ordinary
+descendants of its shell and are swept with it.
+
+So when stray `bun`/`node` MCP processes are found, attribute before blaming:
+
+```sh
+# The ancestor chain decides whose they are.
+ps -Ao pid,ppid,pgid,%cpu,rss,command | grep -i mcp
+ps -o pid,ppid,pgid,command -p <ppid>   # walk up to the root
+```
+
+A chain rooting at `claude daemon run` is Claude Code's spare pool. A chain
+rooting at a Hive pty's `/bin/sh` is ours — and if one of those outlives its tab,
+the `descendants` group is the test that should have caught it.
+
 ### What makes a terminal real (story 092)
 
 Not the renderer — xterm.js has been rendering fixtures since story 042. What
@@ -506,10 +564,11 @@ Two traps that cost time when rediscovered, both handled by the harness:
   `session-manager.ts` carries the reasoning.
 - A process the user **explicitly backgrounds** (`pnpm dev &`) gets its own
   process group under an interactive shell's job control, so `kill(-shellPid)`
-  does not reach it and it survives app shutdown. `claude` is unaffected — the
-  bootstrap runs it in the foreground — but "no orphans on shutdown" is not
-  absolute. Recorded on HIVE-49; closing it means signalling the pty's *session*
-  rather than one process group.
+  does not reach it. Recorded on HIVE-49 when the suite found it, and **closed
+  by HIVE-72**: the descendant sweep walks `ps` rather than the process group,
+  so it reaches a job whatever group it escaped into. The `descendants` group
+  now measures that on the per-tab `kill` path as well as `killAll` — see
+  [What a session costs in processes](#what-a-session-costs-in-processes).
 
 ### Running it
 
