@@ -68,6 +68,7 @@ import {
   type IntegrationsStatus,
   type NotificationActivateEvent,
   type NotificationDeliveryStatus,
+  type NotificationDismissedEvent,
   type NotificationReadEvent,
 } from '@shared/ipc-contract';
 import type {
@@ -199,6 +200,176 @@ let sessions: Sessions | null = null;
 let cloneFlow: CloneFlow | null = null;
 /** The single project watcher, or `null` before registration. */
 let fsWatch: FsWatchLayer | null = null;
+
+/** A plain object, for the payload guards below. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * The terminal on the centre stage, as the renderer last reported it (HIVE-81).
+ *
+ * Module scope for the reason `systemNotificationRefusal` is: it is a fact
+ * about this process's window, not about notifications, and the hub is
+ * deliberately ignorant of what the user is looking at. The hub asks a
+ * predicate; it never holds this.
+ */
+let foregroundTerminalId: string | null = null;
+
+/**
+ * Whether **any** window of this app has focus right now.
+ *
+ * Read from `BrowserWindow` rather than published by the renderer, and that
+ * asymmetry is the whole design. A renderer-published focus boolean goes stale
+ * in exactly the case the feature exists for — the window hidden, the app in
+ * the background — because the renderer stops running to update it.
+ *
+ * ## "Any window", not "the main window", and that is on purpose
+ *
+ * The app creates three (`window.ts`, `splash.ts`, `about.ts`), so with the
+ * About panel focused over the main window this still answers `true` and the
+ * session on the stage still reads as foreground. That is the right answer,
+ * not a leak: About is a small frameless panel, the terminal is visible behind
+ * it, and the user is a keystroke from the window they were already watching.
+ * The question the gate asks is "is this session on the user's screen and in
+ * front of them", and it is.
+ *
+ * The failure mode worth avoiding is the opposite one — going quiet when the
+ * user cannot see anything — and no window of ours being focused is exactly
+ * that. Narrowing this to the main window would instead make the About panel
+ * (or the splash, during startup) turn every foreground session into an
+ * interruption about something on screen.
+ */
+const windowFocused = (): boolean =>
+  BrowserWindow.getAllWindows().some(
+    (window) => !window.isDestroyed() && window.isFocused(),
+  );
+
+/**
+ * Is this terminal the one the user is already looking at?
+ *
+ * Both halves, and neither alone is the question. A matching id with every
+ * window of ours behind another app is precisely when the notification is
+ * worth raising. See {@link windowFocused} for what "focused" counts as.
+ */
+export const isForeground = (terminalId: string): boolean =>
+  windowFocused() && foregroundTerminalId === terminalId;
+
+/** Told when foreground state changes, so the re-arm can run (HIVE-81). */
+const foregroundListeners = new Set<() => void>();
+
+/**
+ * Window focus changed, or the renderer reported a different terminal
+ * (HIVE-81). Called from the `CH.uiForeground` handler below, and — via
+ * {@link scheduleForegroundChange} — from the app-level window focus events.
+ */
+export const notifyForegroundChange = (): void => {
+  for (const listener of foregroundListeners) {
+    try {
+      listener();
+    } catch (cause) {
+      console.error('[hive] foreground listener failed:', cause);
+    }
+  }
+};
+
+/**
+ * Subscribe to foreground changes (HIVE-81's re-arm).
+ *
+ * The only way into `foregroundListeners`, which stays private: the notifier's
+ * subscription in `registerIpcHandlers` goes through here, so the path a test
+ * exercises is the path production runs.
+ *
+ * Answers a disposer. Nothing in the shipped app unsubscribes today — the one
+ * subscription lives as long as the process — but a subscribe with no way out
+ * is a leak waiting for its second caller, and the set was otherwise emptied
+ * only by the test-only `resetIpcHandlers`.
+ */
+export function onForegroundChange(listener: () => void): () => void {
+  foregroundListeners.add(listener);
+  return () => {
+    foregroundListeners.delete(listener);
+  };
+}
+
+/**
+ * A deferred re-evaluation, or `null`.
+ *
+ * See {@link scheduleForegroundChange} for why the deferral exists at all.
+ */
+let foregroundTick: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Re-evaluate foreground state **after the current focus shuffle settles**
+ * (HIVE-81 review).
+ *
+ * ## Why the app-level events, and not the window's own
+ *
+ * This was wired as `focus`/`blur` on the main window, in `window.ts`, while
+ * {@link windowFocused} counts *every* window of ours. The mismatch loses a
+ * real notification: main focused with a gated pending row, the user opens the
+ * About panel (main blurs, About focuses — still foreground, correctly nothing
+ * promoted), then switches to another application. It is **About** that blurs,
+ * and nothing was listening to it, so the re-arm never ran. The still-blocked
+ * session kept its silent, already-read row for as long as the user was away —
+ * exactly the failure the gate exists to prevent.
+ *
+ * `app.on('browser-window-blur' | 'browser-window-focus')` fires for every
+ * window, which is the same set the predicate reads. Wiring the two per-window
+ * instead — About, splash, and whatever comes next — is three sites to
+ * remember and is the mistake `aux-windows.ts` was written about.
+ *
+ * ## Why it is deferred by a tick
+ *
+ * Because the app-level events walk straight into the opposite bug. On macOS
+ * `blur` on the outgoing window fires **before** `focus` on the incoming one,
+ * so switching from the main window to About passes through a moment in which
+ * no window of ours is focused. Evaluating synchronously there promotes a
+ * gated row and shows a toast about a session the user can see behind the
+ * panel — contradicting {@link windowFocused}'s own reason for counting About
+ * as foreground.
+ *
+ * One timer, coalescing every event that lands before it runs, so the burst of
+ * a window switch becomes a single evaluation of the settled state. The re-arm
+ * is a decision about whether to interrupt someone who has walked away; a tick
+ * of latency is not a cost it can notice.
+ *
+ * ## The alternative that was rejected
+ *
+ * Narrowing {@link windowFocused} to `appWindows()` — the non-auxiliary
+ * windows — was the other candidate. It *removes* the ordering hazard, and it
+ * gets the answer wrong: with About focused no app window is focused, so every
+ * gated row would promote with a toast about a terminal visible right behind a
+ * small frameless panel. `isAuxiliary` answers "which windows are the app",
+ * which is the question `activate` and the updater's dialogs ask. It is not
+ * the question "is the app in front of the user", and this is that one.
+ */
+const scheduleForegroundChange = (): void => {
+  if (foregroundTick !== null) return;
+  foregroundTick = setTimeout(() => {
+    foregroundTick = null;
+    notifyForegroundChange();
+  }, 0);
+  // Never a reason to hold the process open; the app's own windows do that.
+  foregroundTick.unref?.();
+};
+
+/** Undo {@link watchWindowFocus}, or a no-op before it has run. */
+let unwatchWindowFocus: (() => void) | null = null;
+
+/**
+ * Wire the app-level focus events. Idempotent: a second call replaces the
+ * first rather than doubling the listeners.
+ */
+function watchWindowFocus(): void {
+  unwatchWindowFocus?.();
+  app.on('browser-window-blur', scheduleForegroundChange);
+  app.on('browser-window-focus', scheduleForegroundChange);
+  unwatchWindowFocus = () => {
+    app.removeListener('browser-window-blur', scheduleForegroundChange);
+    app.removeListener('browser-window-focus', scheduleForegroundChange);
+    unwatchWindowFocus = null;
+  };
+}
 
 /**
  * Guards the env diagnostic against concurrent invokes (story 108's fix
@@ -336,12 +507,21 @@ export function registerIpcHandlers(): void {
         window.webContents.send(CH.notificationsNew, notification);
       }
     },
-    announceRead: (id) => {
+    announceRead: (id, unread) => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (window.isDestroyed()) continue;
         window.webContents.send(CH.notificationsRead, {
           id,
+          unread,
         } satisfies NotificationReadEvent);
+      }
+    },
+    announceDismissed: (id) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (window.isDestroyed()) continue;
+        window.webContents.send(CH.notificationsDismissed, {
+          id,
+        } satisfies NotificationDismissedEvent);
       }
     },
     /**
@@ -412,9 +592,24 @@ export function registerIpcHandlers(): void {
       } satisfies NotificationActivateEvent);
     },
     now: () => Date.now(),
+    isForeground: (action) =>
+      action.type === 'session' && isForeground(action.entityId),
   });
 
-  const notifier = createNotifier({ hub });
+  const notifier = createNotifier({ hub, isForeground });
+
+  // The re-arm (HIVE-81): whatever is still blocked when the user looks away
+  // gets its row promoted back to unread. Through the exported subscriber
+  // rather than the set it wraps — one way in, so the set stays private and
+  // the function tests reach is the one production runs.
+  onForegroundChange(() => {
+    notifier.reevaluateForeground();
+  });
+
+  // The other half of the same signal: OS window focus, which no renderer can
+  // report because a hidden window has stopped running. See
+  // `scheduleForegroundChange`.
+  watchWindowFocus();
 
   /**
    * Two property reads and no subprocess, which is the entire point.
@@ -1007,6 +1202,28 @@ export function registerIpcHandlers(): void {
   );
 
   /**
+   * What the renderer is showing (HIVE-81). Guarded to reject rather than
+   * sanitise: a malformed payload is dropped and logged (see `on()` above),
+   * never coerced into `null` — a compromised or buggy renderer must not be
+   * able to make a fabricated shape read as "nothing on stage".
+   */
+  on(CH.uiForeground, (_event, payload) => {
+    if (!isRecord(payload)) throw new Error('ui:foreground expects an object');
+    const keys = Object.keys(payload);
+    if (keys.length !== 1 || keys[0] !== 'terminalId') {
+      throw new Error('ui:foreground expects exactly { terminalId }');
+    }
+    const { terminalId } = payload;
+    if (terminalId !== null && typeof terminalId !== 'string') {
+      throw new Error('ui:foreground expects a string terminalId or null');
+    }
+
+    if (foregroundTerminalId === terminalId) return;
+    foregroundTerminalId = terminalId;
+    notifyForegroundChange();
+  });
+
+  /**
    * The PTY channels (story 093).
    *
    * `spawn` and `kill` use `invoke` — both need a result. `write`, `resize`
@@ -1127,6 +1344,17 @@ export function resetIpcHandlers(): void {
   cloneFlow = null;
   fsWatch?.dispose();
   fsWatch = null;
+  // HIVE-81. Test-only: a fresh registration starts with nothing on stage and
+  // no listeners left over from a previous test — including the app-level
+  // focus wiring and any tick it has already scheduled, which would otherwise
+  // fire into the next test's handlers.
+  foregroundTerminalId = null;
+  foregroundListeners.clear();
+  unwatchWindowFocus?.();
+  if (foregroundTick !== null) {
+    clearTimeout(foregroundTick);
+    foregroundTick = null;
+  }
 }
 
 export { assertSender, isTrustedSender, IpcSenderError } from './sender';

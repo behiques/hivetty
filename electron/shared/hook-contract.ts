@@ -73,6 +73,7 @@ export const HOOK_EVENTS = [
   'UserPromptSubmit',
   'PermissionRequest',
   'Elicitation',
+  'PostToolUse',
   'Notification',
   'Stop',
   'SessionEnd',
@@ -159,8 +160,32 @@ export const HOOK_STATUS: Record<StatusHookEvent, ObservedStatus> = {
    * recognise still means Claude raised something at the user, and `waiting` is
    * the honest reading of that. The receiver refuses to publish an unrecognised
    * type anyway, so this value is reached only if that guard is ever relaxed.
+   *
+   * This floor is unchanged by `NOTIFICATION_TYPE_STATUS` splitting `idle_prompt`
+   * from `permission_prompt`: an unrecognised type has no per-type reading to
+   * fall back to, so `waiting` — Claude raised *something*, unread — is still
+   * the honest default for it.
    */
   Notification: 'waiting',
+  /**
+   * A tool finished, so whatever was blocking on a human is not blocking now.
+   *
+   * This is the only deterministic end-marker a permission block has.
+   * `PermissionRequest` sets `waiting` and nothing lowers it until `Stop`, so a
+   * session the user approved sat on "needs input" for the rest of the turn
+   * while the agent worked — and `hookDriven` (`sessions/index.ts`) means the
+   * pty cannot correct it.
+   *
+   * The pty *could* have been the signal and deliberately is not: Claude's TUI
+   * repaints while a permission prompt is on screen — a spinner, an elapsed
+   * timer — so `activity.ts` would read a redraw as work and clear the one
+   * status the whole attention model is built on.
+   *
+   * The cost is honest: this is the first high-frequency hook subscribed, and
+   * it fires per tool call. It is a loopback POST with no body worth parsing,
+   * on the same receiver the other seven already use.
+   */
+  PostToolUse: 'working',
   Stop: 'idle',
 };
 
@@ -195,17 +220,29 @@ export const isHookNotificationType = (
   (NOTIFICATION_TYPES as readonly string[]).includes(value);
 
 /**
- * Both recognised types mean the same thing about the *session*: it is blocked
- * on a human. They mean different things about the **inbox**, and that split is
- * `notifications/index.ts`'s to make — `permission_prompt` arrives behind a
- * `PermissionRequest` that has already raised a row, and must not raise a
- * second.
+ * What each recognised type means for the **status**, which is no longer the
+ * same question as what it means for the **inbox**.
+ *
+ * `permission_prompt` is a session blocked on a human: a tool is waiting for a
+ * yes and nothing proceeds until it gets one. `waiting` is the honest reading.
+ *
+ * `idle_prompt` is **not** that, and calling it `waiting` is what made the dot
+ * lie. It fires sixty seconds after `Stop`, when the turn is already over and
+ * the agent is sitting at an empty prompt — nothing is blocked, and there is no
+ * question outstanding. `Stop` set `idle` a minute earlier and `idle` is what
+ * the session still is.
+ *
+ * The signal is not lost by this: it moves to where it belongs. The inbox row
+ * is raised off the hook *event* in `notifications/index.ts`, independently of
+ * the status, so "you walked away and your agent wants you" still reaches the
+ * user — it just stops painting the fleet view amber for a session nobody is
+ * waiting on.
  */
 export const NOTIFICATION_TYPE_STATUS: Record<
   HookNotificationType,
   ObservedStatus
 > = {
-  idle_prompt: 'waiting',
+  idle_prompt: 'idle',
   permission_prompt: 'waiting',
 };
 

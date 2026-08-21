@@ -1101,6 +1101,37 @@ describe('hive-store', () => {
       expect(notifs.find((n) => n.id === 'b')?.unread).toBe(true);
     });
 
+    /**
+     * `applyRead` now carries a direction (HIVE-81): the foreground gate
+     * raises a row already-read and promotes it back to unread once the user
+     * looks away, and the renderer has to be told which way it went.
+     */
+    it('applyRead moves read-state in the direction it is given', () => {
+      useHiveStore.getState().hydrateNotifs([notif2({ id: 'a' })]);
+
+      useHiveStore.getState().applyRead('a', false);
+      expect(
+        useHiveStore.getState().notifs.find((n) => n.id === 'a')?.unread,
+      ).toBe(false);
+
+      useHiveStore.getState().applyRead('a', true);
+      expect(
+        useHiveStore.getState().notifs.find((n) => n.id === 'a')?.unread,
+      ).toBe(true);
+    });
+
+    it('applyRead(null, false) clears every notification', () => {
+      useHiveStore
+        .getState()
+        .hydrateNotifs([notif2({ id: 'a' }), notif2({ id: 'b' })]);
+
+      useHiveStore.getState().applyRead(null, false);
+
+      expect(useHiveStore.getState().notifs.every((n) => !n.unread)).toBe(
+        true,
+      );
+    });
+
     it('markAllRead clears every notification', () => {
       useHiveStore
         .getState()
@@ -1109,6 +1140,46 @@ describe('hive-store', () => {
       expect(
         useHiveStore.getState().notifs.every((n) => !n.unread),
       ).toBe(true);
+    });
+
+    /**
+     * HIVE-81: `applyDismiss` is the echo of a dismissal main decided on its
+     * own — a clicked desktop toast — so, unlike `dismissNotif`, it must not
+     * write back to main. Doing so would tell main about the thing it just
+     * told the renderer.
+     */
+    describe('applyDismiss', () => {
+      afterEach(() => {
+        delete window.hive;
+      });
+
+      it('removes the row and does not write back to main', () => {
+        const dismiss = vi.fn();
+        window.hive = {
+          notifications: { dismiss },
+        } as unknown as Window['hive'];
+
+        useHiveStore
+          .getState()
+          .hydrateNotifs([notif2({ id: 'a' }), notif2({ id: 'b' })]);
+
+        useHiveStore.getState().applyDismiss('a');
+
+        expect(
+          useHiveStore.getState().notifs.map((n) => n.id),
+        ).toEqual(['b']);
+        expect(dismiss).not.toHaveBeenCalled();
+      });
+
+      it('is a no-op for an id it does not hold', () => {
+        useHiveStore.getState().hydrateNotifs([notif2({ id: 'a' })]);
+
+        useHiveStore.getState().applyDismiss('nope');
+
+        expect(
+          useHiveStore.getState().notifs.map((n) => n.id),
+        ).toEqual(['a']);
+      });
     });
   });
 

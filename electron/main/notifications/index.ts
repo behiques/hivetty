@@ -41,24 +41,61 @@ import type { NotificationHub } from './hub';
  * people stop reading. Claude's `Notification/idle_prompt` fires sixty seconds
  * later with nobody having typed, and that debounce is the whole difference.
  *
- * ## No focus suppression
+ * ## The foreground gate (HIVE-81)
  *
- * The obvious rule — stay quiet while the app is focused — is not implementable
- * *correctly* from here. Main cannot know which session the user is looking at;
- * `activeTab` is renderer state. The only version main could apply on its own is
- * "quiet whenever any window is focused", which would suppress precisely the
- * case this feature exists for: a background session finishing while the user
- * works in another terminal. The per-kind delivery is the control, and there is
- * no second, invisible one.
+ * "Main cannot know which session the user is looking at; `activeTab` is
+ * renderer state" was correct when this was written, and it was an argument
+ * against a rule main could only get wrong: the sole fact it could observe
+ * on its own was window focus, and applying that alone would go quiet
+ * whenever any window was focused — suppressing precisely the case this
+ * feature exists for, a background session finishing while the user works in
+ * another terminal.
+ *
+ * What changed is that `activeTab` stopped being renderer-only. The renderer
+ * now reports the terminal id on the centre stage over `CH.uiForeground`
+ * every time it changes; main holds that alongside `BrowserWindow` focus
+ * (`isForeground` in `ipc/index.ts`), and a session only reads as "the one
+ * being watched" when both agree — the id matches *and* the window has OS
+ * focus. That composed predicate is threaded into this module as
+ * `NotifierOptions.isForeground` and into the hub as its own
+ * `NotificationHub` option of the same name, so a background session behind
+ * a focused window, or the right tab behind an unfocused one, still
+ * interrupts.
+ *
+ * The gate this predicate drives lives in the hub, not here (see
+ * `raise`'s "downgrade, never drop" in `hub.ts`): a notification for the
+ * foreground session is kept — not suppressed — and raised already-read, so
+ * the inbox row exists for anyone who scrolls back but the toast, the dock
+ * bounce and the unread badge stay quiet. `reevaluateForeground` below is
+ * the other half — the re-arm when the user looks away while still blocked.
  */
 
 export interface NotifierOptions {
   hub: NotificationHub;
+  /**
+   * Is this session's terminal the one the user is looking at right now
+   * (HIVE-81)?
+   *
+   * Takes an entity id rather than a `NotificationAction`, unlike the hub's own
+   * `isForeground` — this module never sees an action, only the payloads on the
+   * broadcast it taps. The adapter that reconciles the two lives at the
+   * `createNotificationHub` call site in `ipc/index.ts`.
+   */
+  isForeground: (entityId: string) => boolean;
 }
 
 export interface Notifier {
   /** Called for every main → renderer broadcast. Most are not event classes. */
   observe(channel: string, payload: unknown): void;
+  /**
+   * Foreground state changed — window focus, or a different tab (HIVE-81).
+   *
+   * Anything still blocked that the user can no longer see gets its row
+   * promoted. Called by main on focus, blur and every foreground report;
+   * cheap, because the map is empty except while a session is blocked on a
+   * tab the user is actually looking at.
+   */
+  reevaluateForeground(): void;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -173,8 +210,107 @@ function waitingKind(
   return Object.hasOwn(WAITING_KIND, event) ? WAITING_KIND[event] : undefined;
 }
 
+/**
+ * Is a row raised silently still worth chasing the user about (HIVE-81)?
+ *
+ * **Relevance is a property of the kind, not of the status**, and getting that
+ * backwards is what a review of this branch caught. A single
+ * `status === 'waiting'` test was applied to every gated row, which was right
+ * for the two kinds that come *from* a blocked status and silently wrong for
+ * the one that does not: after Part 3.1, `idle_prompt` reports `idle`, so a
+ * gated `session.input_needed` was never recorded as pending at all — while
+ * `announcedInputNeeded` had already been spent on it. The row existed,
+ * already-read, with no toast, no badge and no path back to unread; on a
+ * machine where the OS refuses toasts that is the notification never being
+ * delivered by any route.
+ *
+ * So each kind is cleared by its own rule, and the two are exactly the rules
+ * already written down elsewhere in this file rather than a third idea:
+ *
+ * - `session.input_needed` asks nothing of the session — it says the user has
+ *   gone quiet — so only the **user** can end it. That is
+ *   `announcedInputNeeded`'s rule verbatim, which is the point: the mark and
+ *   the pending row are two halves of one announcement, and they must expire
+ *   together or the announcement is lost between them.
+ * - `session.waiting` and `session.asked` are questions the *session* is
+ *   blocked on, so they end when it stops being blocked — with one exception,
+ *   below, that a plain `status === 'waiting'` test gets wrong.
+ *
+ * ## Why `PostToolUse` does not end a block
+ *
+ * **A tool finishing tells you nothing about whether a *different* tool is
+ * still waiting on you.** Claude routinely runs tools in parallel: tool B asks
+ * for permission, the session goes `waiting`, the row is raised gated and
+ * recorded pending — and then tool A, a sibling in the same batch, completes.
+ * `PostToolUse` reports `working`, the old rule dropped the entry, and tool B's
+ * permission was still outstanding. Nothing re-records it either:
+ * `Notification/permission_prompt` maps to `undefined` in
+ * {@link NOTIFICATION_TYPE_KIND} by design, so it never raises and never
+ * records. The user looks away and finds a session that is blocked and silent.
+ *
+ * So a blocked kind survives a non-`waiting` status when the event that
+ * carried it was `PostToolUse`. `UserPromptSubmit` (the user is demonstrably
+ * back), `Stop` (the turn ended, so nothing in it can still be blocked),
+ * `terminated`, and any pty-derived status change all still end it.
+ *
+ * ### The trade-off, stated rather than hidden
+ *
+ * This buys the elimination of a false negative with a possible false
+ * positive, knowingly. **What it costs:** if the user answers the permission
+ * and the turn then runs for several minutes, the entry survives until `Stop`;
+ * a blur in that window promotes a row about a block already answered. The
+ * user looks, finds the session working, moves on. **Why that is the right
+ * direction:** the alternative is silence about a genuinely blocked session,
+ * which is the one failure the whole attention model exists to prevent — the
+ * spec says so in as many words ("Suppression must not lose a real
+ * notification"). A stale interruption is recoverable in a glance; a lost one
+ * is not recoverable at all.
+ *
+ * **Why we cannot do better here.** `StatusHookPayload` carries no tool
+ * identity, so main cannot tell the blocked tool's `PostToolUse` from a
+ * sibling's. Counting `PermissionRequest`s against `PostToolUse`s does not
+ * work either: `PostToolUse` fires for *every* tool, not only the
+ * permission-gated ones, so the count drains on tools that were never blocked.
+ *
+ * ### A related consequence, deliberately not fixed here
+ *
+ * That same sibling `PostToolUse` also moves the session's **status dot** off
+ * "needs input" while a permission is genuinely outstanding. That is a display
+ * bug in the status pipeline (`hook-contract.ts`'s `HOOK_STATUS`, Part 3.4),
+ * not in the notifier, and it is out of scope on this branch.
+ */
+function stillRelevant(
+  kind: NotificationKind,
+  status: string,
+  event: unknown,
+): boolean {
+  if (kind === 'session.input_needed') {
+    return !(event === 'UserPromptSubmit' || status === 'terminated');
+  }
+  return status === 'waiting' || event === 'PostToolUse';
+}
+
 export function createNotifier(options: NotifierOptions): Notifier {
-  const { hub } = options;
+  const { hub, isForeground } = options;
+
+  /*
+   * A note on `/clear`, which `observe` does not handle and does not need to.
+   *
+   * Both per-session maps below (`announcedInputNeeded`, `pendingForeground`)
+   * are keyed by **terminal** id and survive a `/clear`, because `observe`
+   * reads `sessionStatus`, `sessionName` and `configCloneDone` and never
+   * `CH.sessionCleared`. That is deliberate rather than overlooked, and it is
+   * stated here because everything else in this file is.
+   *
+   * `/clear` ends the conversation, not the terminal — `publishCleared`
+   * (`sessions/index.ts`) tears nothing down and the entity id is unchanged —
+   * so the entries are not stale in the sense of naming something gone. And
+   * both clear on the same act that always follows a `/clear`: the user types,
+   * which is `UserPromptSubmit`, which is the engagement rule both maps
+   * already use. The blocked kinds are covered a second way over — a `/clear`
+   * cannot be typed past an outstanding permission prompt, so a pending
+   * `session.waiting` is answered before a `/clear` is even reachable.
+   */
 
   /**
    * Sessions already announced as out of instructions.
@@ -187,12 +323,70 @@ export function createNotifier(options: NotifierOptions): Notifier {
    * time.
    *
    * So the suppression is stated in terms of the *session* rather than the
-   * event: announced once, and not again until the session has visibly stopped
-   * waiting. Any non-`waiting` status clears it — the user typed and it went
-   * `working`, or it exited — which makes the next `idle_prompt` a new fact
-   * rather than the same one restated.
+   * event: announced once, and cleared only by **engagement**, never by
+   * idleness itself. See the `event === 'UserPromptSubmit' || status ===
+   * 'terminated'` check below for what engagement means and why.
+   *
+   * ## A dismissal does not clear it, and that is the decision
+   *
+   * Dismissing a gated `session.input_needed` row leaves the session's mark in
+   * place, so it stays quiet until the user actually types. Reviewed and kept
+   * (HIVE-81, finding 9): **a dismissal is acknowledgement.** The user was told
+   * the session is waiting on them and swiped it away; re-announcing the same
+   * unchanged fact sixty seconds later is the behaviour this branch exists to
+   * end — the running app said "is waiting on you" four times in twenty-six
+   * minutes about one idle session. Clearing the mark on dismiss would hand
+   * that back, with the dismissal itself as the trigger. Recorded here so the
+   * next reader does not read it as an oversight and repair it.
    */
   const announcedInputNeeded = new Set<string>();
+
+  /**
+   * What each session calls itself, as the rail shows it (HIVE-81).
+   *
+   * A notification that says `sess-01` names something the user has never seen.
+   * The rail, the tab and the meta bar all read `INCORP-478`, because the
+   * session renamed itself from its own terminal title — and an interruption
+   * that cannot be matched to the thing it interrupted about is most of the way
+   * to useless.
+   *
+   * Populated from `CH.sessionName`, which already passes through this
+   * observer on its way to the renderer; this simply stops ignoring it. The
+   * entity id remains the fallback, because a session that has not renamed
+   * itself yet genuinely has no better name.
+   *
+   * Never pruned. An entry is two short strings, the map is bounded by the
+   * number of sessions this process has ever spawned, and a session that has
+   * exited can still be the subject of a `session.ended` notification.
+   */
+  const names = new Map<string, string>();
+
+  /** What to call this session in a title or a body. */
+  const nameFor = (entityId: string): string => names.get(entityId) ?? entityId;
+
+  const nameEvent = (payload: Record<string, unknown>): void => {
+    const { entityId, name } = payload;
+    if (typeof entityId !== 'string' || typeof name !== 'string') return;
+    names.set(entityId, name);
+  };
+
+  /**
+   * Rows raised silently because the user was watching, and the session they
+   * are about (HIVE-81).
+   *
+   * Keyed by session so a second block replaces the first: only the current
+   * question is worth promoting, and the previous one is either answered or
+   * superseded.
+   *
+   * The **kind** is kept alongside the id because the promotion has a
+   * condition — the row must still be worth chasing the user about — and the
+   * foreground change that triggers it carries nothing of its own to test.
+   * See {@link stillRelevant} for why the kind is the right thing to keep.
+   */
+  const pendingForeground = new Map<
+    string,
+    { id: string; kind: NotificationKind }
+  >();
 
   const sessionEvent = (payload: Record<string, unknown>): void => {
     const { entityId, status, event, notificationType } = payload;
@@ -200,66 +394,122 @@ export function createNotifier(options: NotifierOptions): Notifier {
 
     const action = { type: 'session', entityId } as const;
 
-    if (status !== 'waiting') announcedInputNeeded.delete(entityId);
+    /**
+     * Cleared when the **user** comes back, and by nothing else.
+     *
+     * This has now been wrong twice in opposite directions. It first cleared on
+     * any non-`waiting` status, so every turn boundary re-armed it. Task 1
+     * narrowed that to `working`, which held until `PostToolUse` was
+     * subscribed — a backgrounded agent runs tools, every tool reports
+     * `working`, and the mark was cleared again on work the user had no part
+     * in. Observed in the running app: the same "is waiting on you" row four
+     * times in twenty-six minutes, while a background agent worked and nothing
+     * was waiting on anybody.
+     *
+     * The rule the set has always been reaching for is "announced once, until
+     * the user comes back". A tool finishing is not that. A turn ending is not
+     * that. `UserPromptSubmit` is exactly that — it is the user typing — and
+     * `terminated` ends the question by ending the session.
+     *
+     * What this deliberately does not do is guess *why* a session is idle. Main
+     * cannot tell "idle because a background agent is running" from "idle
+     * because you walked away"; Claude fires `idle_prompt` for both. So this
+     * does not try to suppress the first — it makes the app say it once instead
+     * of four times, which is the part that was actually wrong.
+     */
+    if (event === 'UserPromptSubmit' || status === 'terminated') {
+      announcedInputNeeded.delete(entityId);
+    }
 
-    if (status === 'waiting') {
-      /**
-       * A `waiting` with no hook event is dropped rather than guessed at.
-       *
-       * The status is only reachable from a hook, so an event without one is a
-       * shape this build does not understand — and picking either kind would
-       * show the user a glyph and a sentence describing a different question
-       * than the one their session is actually asking.
-       */
+    /**
+     * The pending row expires by its own kind's rule (HIVE-81).
+     *
+     * For `session.waiting` and `session.asked` that is a different rule from
+     * `announcedInputNeeded`'s just above — they end when the session stops
+     * being blocked, except by a `PostToolUse`, which may be a sibling tool in
+     * the same batch and says nothing about the one still asking. For
+     * `session.input_needed` it is deliberately the *same* rule, applied to the
+     * same event, because the mark and the pending row are two halves of one
+     * announcement. See {@link stillRelevant}.
+     */
+    const pending = pendingForeground.get(entityId);
+    if (pending !== undefined && !stillRelevant(pending.kind, status, event)) {
+      pendingForeground.delete(entityId);
+    }
+
+    /**
+     * The inbox is routed off the hook **event**, never off the status.
+     *
+     * These are two different questions that used to share one branch. The
+     * status answers "is this session blocked" — it drives the dot and the
+     * fleet counts. The notification answers "did something happen worth
+     * telling you about". `idle_prompt` is the case that proves they are not
+     * the same: nothing is blocked, and the user still needs to know.
+     *
+     * `waitingKind` already keys purely off the event, so every hook that is
+     * not an inbox event — `Stop`, `UserPromptSubmit`, `SessionStart`,
+     * `permission_prompt` behind a `PermissionRequest` — answers `undefined`
+     * and we stop here. That is the same set that was silent before.
+     */
+    if (event !== undefined) {
       const kind = waitingKind(event, notificationType);
       if (kind === undefined) return;
 
+      /*
+        Marked before the raise, and deliberately not rolled back when the raise
+        is gated. The gate downgrades, it does not drop: the row exists, and the
+        promotion below is what delivers it. A repeat while the user is still
+        watching must therefore raise nothing — a second row for a fact already
+        sitting in the inbox — and the one pending entry carries the
+        announcement the rest of the way.
+      */
       if (kind === 'session.input_needed') {
         if (announcedInputNeeded.has(entityId)) return;
         announcedInputNeeded.add(entityId);
       }
 
       const copy = WAITING_COPY[kind];
-      hub.raise({
+      const raised = hub.raise({
         kind,
-        title: `${entityId} ${copy.title}`,
+        title: `${nameFor(entityId)} ${copy.title}`,
         body: copy.body,
         action,
       });
+
+      /*
+        Remember it if, and only if, it was gated — `unread: false` off a raise
+        that happened is the hub saying "kept, but delivered to nobody". No
+        status test: every kind that reaches here is one of the three the user
+        is owed (`session.waiting`, `session.asked`, `session.input_needed`),
+        and how long each stays owed is `stillRelevant`'s job, above.
+        `session.idle` and `session.ended` cannot reach here at all — they are
+        records rather than questions, and they are raised on the pty-derived
+        path below, which records nothing.
+      */
+      if (raised !== null && !raised.unread) {
+        pendingForeground.set(entityId, { id: raised.id, kind });
+      }
       return;
     }
 
     /**
-     * A hook-driven `idle` is **not** "this session went quiet" (HIVE-75).
+     * Only pty-derived statuses reach here — they carry no hook event.
      *
-     * `HOOK_STATUS` maps both `SessionStart` and `Stop` to `idle`, so without
-     * this every session spawn announced "has gone quiet" the instant it
-     * started — false on its face — and every agent turn announced it again.
-     * None of them dedup, so a working hour of thirteen sessions filled the
-     * buffer with idle rows and evicted the approval request the user actually
-     * walked away from.
-     *
-     * The event this notification has always been about is the *pty* going
-     * silent for `ACTIVITY_IDLE_MS`, which `activity.ts` derives and which
-     * carries no hook event. That is the one kept.
+     * This is the same guarantee the old `status === 'idle' && event !== undefined`
+     * line bought, stated once for every status instead of specially for one.
+     * The event it keeps is the pty going silent for `ACTIVITY_IDLE_MS`, which
+     * is what `session.idle` has always been about (HIVE-75).
      */
-    if (status === 'idle' && event !== undefined) return;
-
     const kind = SESSION_KIND[status as DerivedStatus];
     if (kind === undefined) return;
 
     const terminated = kind === 'session.ended';
     hub.raise({
       kind,
-      /**
-       * "Ended", not "finished". The notification reports what main saw — the
-       * process is gone — and claiming the *work* finished is the judgement
-       * story 108 took out of this path.
-       */
       title: terminated ? 'Session ended' : 'Session idle',
       body: terminated
-        ? `${entityId} has exited.`
-        : `${entityId} has gone quiet.`,
+        ? `${nameFor(entityId)} has exited.`
+        : `${nameFor(entityId)} has gone quiet.`,
       action,
     });
   };
@@ -295,9 +545,21 @@ export function createNotifier(options: NotifierOptions): Notifier {
        */
       try {
         if (channel === CH.sessionStatus) sessionEvent(payload);
+        else if (channel === CH.sessionName) nameEvent(payload);
         else if (channel === CH.configCloneDone) cloneEvent(payload);
       } catch (cause) {
         console.error('[hive] notification failed:', cause);
+      }
+    },
+
+    reevaluateForeground(): void {
+      // Delete only on success. `hub.promote` answers `false` when a
+      // collaborator (typically `prefs`) threw partway through — the entry
+      // stays pending so the next focus change tries again, rather than the
+      // session going silently un-rearmed for good.
+      for (const [entityId, pending] of pendingForeground) {
+        if (isForeground(entityId)) continue;
+        if (hub.promote(pending.id)) pendingForeground.delete(entityId);
       }
     },
   };

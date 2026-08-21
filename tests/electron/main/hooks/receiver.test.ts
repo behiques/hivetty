@@ -72,6 +72,7 @@ describe('hook receiver', () => {
     ['UserPromptSubmit', 'working'],
     ['PermissionRequest', 'waiting'],
     ['Elicitation', 'waiting'],
+    ['PostToolUse', 'working'],
     ['Stop', 'idle'],
   ])('maps %s to %s', async (event, status) => {
     const response = await post({ hook_event_name: event, session_id: 'uuid' });
@@ -177,8 +178,11 @@ describe('hook receiver', () => {
      * 204 rather than 4xx: Claude may deliver more than was asked for, and a
      * failing hook prints an error in the user's session for something the app
      * simply does not care about.
+     *
+     * `PreToolUse` rather than `PostToolUse` (HIVE-81): the latter is now
+     * subscribed — see the `maps %s to %s` table above.
      */
-    const response = await post({ hook_event_name: 'PostToolUse' });
+    const response = await post({ hook_event_name: 'PreToolUse' });
     expect(response.status).toBe(204);
     expect(events).toEqual([]);
   });
@@ -193,9 +197,17 @@ describe('hook receiver', () => {
    * blocked on a human; what they mean for the *inbox* is decided downstream.
    */
   describe('the Notification hook', () => {
-    it.each(['idle_prompt', 'permission_prompt'])(
-      'maps %s to waiting, carrying the type through',
-      async (notificationType) => {
+    /**
+     * HIVE-81: the two types no longer share a status. `permission_prompt` is a
+     * session blocked on a human; `idle_prompt` fires a minute after the turn
+     * already ended, and `idle` is what the session already was.
+     */
+    it.each([
+      ['idle_prompt', 'idle'],
+      ['permission_prompt', 'waiting'],
+    ])(
+      'maps %s to %s, carrying the type through',
+      async (notificationType, status) => {
         const response = await post({
           hook_event_name: 'Notification',
           notification_type: notificationType,
@@ -207,7 +219,7 @@ describe('hook receiver', () => {
           {
             entityId: 'sess-01',
             event: 'Notification',
-            status: 'waiting',
+            status,
             notificationType,
           },
         ]);
@@ -254,7 +266,7 @@ describe('hook receiver', () => {
         {
           entityId: 'sess-01',
           event: 'Notification',
-          status: 'waiting',
+          status: 'idle',
           notificationType: 'idle_prompt',
         },
       ]);
