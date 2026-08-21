@@ -329,4 +329,235 @@ describe('createStatusTracker', () => {
 
     expect(t.apply({ entityId: e, event: 'Stop' })).toEqual({ status: 'idle' });
   });
+
+  /**
+   * HIVE-86. The bookkeeping leaks below are deliberately invisible to
+   * `derive()` — `resolve()` prefers the newest match, so a stale entry loses
+   * every race it could enter and no status is ever wrong because of one.
+   * That is exactly why they need `held()`: the defect is the growth itself,
+   * and asserting on status could never catch it.
+   */
+  it('forgets a tool whose permission the user escaped', () => {
+    const t = createStatusTracker();
+    const e = 'sess-16';
+
+    /*
+      Measured against Claude Code 2.1.239: Escape at a permission prompt emits
+      no event whatsoever — no PostToolUse, no PermissionDenied, not even Stop,
+      though the TUI cancels the prompt and ends the turn. Fifty seconds of
+      silence in the probe. So the `PreToolUse` entry can only be cleared at the
+      next prompt, never by an event of its own.
+    */
+    t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    for (const id of ['A', 'B', 'C']) {
+      t.apply({ entityId: e, event: 'PreToolUse', toolUseId: id, toolName: 'Bash' });
+      t.apply({ entityId: e, event: 'PermissionRequest', toolName: 'Bash' });
+      // The user hits Escape. Nothing arrives. The next thing is them typing.
+      t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    }
+
+    // Three escaped prompts, nothing retained — not three entries, nor one.
+    expect(t.held(e)).toEqual({ outstanding: 0, blocked: 0, agents: 0, bgShells: 0 });
+  });
+
+  /**
+   * The hazard the naive fix would have introduced, and the reason a blanket
+   * clear on `UserPromptSubmit` is wrong: the internal re-invoke that delivers
+   * a subagent's result *is* a `UserPromptSubmit`, indistinguishable from a
+   * typed one (measured — identical key sets, see the tracker's comment). Only
+   * entries that are also `blocked` may be dropped there.
+   */
+  it('keeps a subagent tool in flight across the internal re-invoke', () => {
+    const t = createStatusTracker();
+    const e = 'sess-17';
+
+    t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    t.apply({ entityId: e, event: 'SubagentStart', agentId: 'S' });
+    t.apply({
+      entityId: e,
+      event: 'PreToolUse',
+      toolUseId: 'T',
+      toolName: 'Bash',
+      agentId: 'S',
+    });
+    t.apply({ entityId: e, event: 'Stop' });
+
+    // A second subagent finishing re-invokes the agent while S's tool runs on.
+    t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    expect(t.held(e)).toEqual({
+      outstanding: 1,
+      blocked: 0,
+      agents: 1,
+      bgShells: 0,
+    });
+
+    // And it still pairs when it completes.
+    t.apply({
+      entityId: e,
+      event: 'PostToolUse',
+      toolUseId: 'T',
+      toolName: 'Bash',
+      agentId: 'S',
+    });
+    expect(t.held(e).outstanding).toBe(0);
+  });
+
+  /**
+   * The sweep's known cost, pinned so it stays known: a subagent's blocked
+   * tool *is* dropped by a re-invoke. `resolve()` matches on `agentId`, so a
+   * subagent's `PermissionRequest` resolves to its own id and lands in
+   * `blocked` — which the intersection then drops.
+   *
+   * This is not a regression: `blocked.clear()` already discarded that id
+   * before HIVE-86, so the status is identical either way. The test exists so
+   * that anyone widening the sweep sees what it already gives up.
+   */
+  it('drops a subagent block on the re-invoke, exactly as blocked.clear() already did', () => {
+    const t = createStatusTracker();
+    const e = 'sess-23';
+
+    t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    t.apply({ entityId: e, event: 'SubagentStart', agentId: 'S' });
+    t.apply({
+      entityId: e,
+      event: 'PreToolUse',
+      toolUseId: 'T',
+      toolName: 'Bash',
+      agentId: 'S',
+    });
+    expect(
+      t.apply({ entityId: e, event: 'PermissionRequest', toolName: 'Bash', agentId: 'S' }),
+    ).toEqual({ status: 'waiting' });
+    expect(t.held(e)).toEqual({ outstanding: 1, blocked: 1, agents: 1, bgShells: 0 });
+
+    // Another subagent's result re-invokes the agent. Nobody answered anything.
+    t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    expect(t.held(e)).toEqual({ outstanding: 0, blocked: 0, agents: 1, bgShells: 0 });
+  });
+
+  /**
+   * Asymmetric truncation: a small `tool_input` keeps `tool_use_id` on the
+   * `PreToolUse`, and a large `tool_response` truncates it off the matching
+   * `PostToolUse` — a `Read` of a big file. `blocked` already recovers by
+   * unique name; `outstanding` never did.
+   */
+  it('pairs an id-less PostToolUse with its outstanding entry by name', () => {
+    const t = createStatusTracker();
+    const e = 'sess-18';
+
+    t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    t.apply({ entityId: e, event: 'PreToolUse', toolUseId: 'R', toolName: 'Read' });
+    t.apply({ entityId: e, event: 'PostToolUse', toolName: 'Read' });
+
+    expect(t.held(e).outstanding).toBe(0);
+  });
+
+  it('leaves an ambiguous id-less PostToolUse alone', () => {
+    const t = createStatusTracker();
+    const e = 'sess-19';
+
+    t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    t.apply({ entityId: e, event: 'PreToolUse', toolUseId: 'R1', toolName: 'Read' });
+    t.apply({ entityId: e, event: 'PreToolUse', toolUseId: 'R2', toolName: 'Read' });
+    t.apply({ entityId: e, event: 'PostToolUse', toolName: 'Read' });
+
+    // Two candidates: releasing either would be a guess about which finished.
+    expect(t.held(e).outstanding).toBe(2);
+  });
+
+  /**
+   * The trap in "exactly one match": uniqueness among *recorded* entries is not
+   * uniqueness among *running tools*. A tool whose own `PreToolUse` was
+   * truncated (a large `tool_input` — the documented `Write`/`Edit` case) was
+   * never recorded at all, so the one match left is a different tool that is
+   * still running, and retiring it strands the session.
+   */
+  it('leaves outstanding alone while a same-named unrecorded tool is in flight', () => {
+    const t = createStatusTracker();
+    const e = 'sess-22';
+
+    t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    // The small one: `tool_use_id` survives, so it is recorded.
+    t.apply({ entityId: e, event: 'PreToolUse', toolUseId: 'SMALL', toolName: 'Write' });
+    // The big one: truncated past `tool_use_id`, so nothing is recorded for it.
+    t.apply({ entityId: e, event: 'PreToolUse', toolName: 'Write' });
+
+    // The big one finishes first, also truncated. SMALL is the only *recorded*
+    // Write — and it is emphatically not the one that just completed.
+    t.apply({ entityId: e, event: 'PostToolUse', toolName: 'Write' });
+    expect(t.held(e).outstanding).toBe(1);
+
+    // Which matters because SMALL is what the permission is about. If it were
+    // gone, this resolves to UNPAIRED and nothing can ever clear it.
+    expect(t.apply({ entityId: e, event: 'PermissionRequest', toolName: 'Write' })).toEqual(
+      { status: 'waiting' },
+    );
+    expect(
+      t.apply({ entityId: e, event: 'PostToolUse', toolUseId: 'SMALL', toolName: 'Write' }),
+    ).toEqual({ status: 'working' });
+    expect(t.apply({ entityId: e, event: 'Stop' })).toEqual({ status: 'idle' });
+  });
+
+  /**
+   * With a subagent live, an id-less `PostToolUse` retires nothing at all.
+   *
+   * Not because `agentId` distinguishes them — it cannot. `receiver.ts`
+   * recovers no agent id from a truncated body, so `input.agentId` is
+   * `undefined` on every event that reaches this branch, whether it came from
+   * the main agent or from inside a subagent. Since whose completion this is
+   * genuinely cannot be known, the only safe answer is to retire nothing and
+   * let the entry leak.
+   */
+  it('retires nothing from an id-less PostToolUse while a subagent is live', () => {
+    const t = createStatusTracker();
+    const e = 'sess-20';
+
+    t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    t.apply({ entityId: e, event: 'SubagentStart', agentId: 'S' });
+    // One tool in each: the subagent's, and the main agent's.
+    t.apply({
+      entityId: e,
+      event: 'PreToolUse',
+      toolUseId: 'SUB',
+      toolName: 'Read',
+      agentId: 'S',
+    });
+    t.apply({ entityId: e, event: 'PreToolUse', toolUseId: 'MAIN', toolName: 'Read' });
+
+    // Truncated, so indistinguishable in origin. Neither may be retired — and
+    // in particular this must not retire MAIN, which is still running.
+    t.apply({ entityId: e, event: 'PostToolUse', toolName: 'Read' });
+    expect(t.held(e).outstanding).toBe(2);
+
+    // Once the subagent is gone, the ambiguity is too.
+    t.apply({ entityId: e, event: 'SubagentStop', agentId: 'S' });
+    t.apply({ entityId: e, event: 'PostToolUse', toolUseId: 'SUB', toolName: 'Read' });
+    t.apply({ entityId: e, event: 'PostToolUse', toolName: 'Read' });
+    expect(t.held(e).outstanding).toBe(0);
+  });
+
+  /**
+   * `resolve()` walks `outstanding` without copying it (HIVE-86). The property
+   * that rewrite must preserve: the newest matching entry wins, and one
+   * already blocked is skipped.
+   */
+  it('still resolves a permission to the newest unblocked tool of that name', () => {
+    const t = createStatusTracker();
+    const e = 'sess-21';
+
+    t.apply({ entityId: e, event: 'UserPromptSubmit' });
+    t.apply({ entityId: e, event: 'PreToolUse', toolUseId: 'OLD', toolName: 'Bash' });
+    t.apply({ entityId: e, event: 'PermissionRequest', toolName: 'Bash' });
+    // OLD is blocked. A second Bash starts and blocks too.
+    t.apply({ entityId: e, event: 'PreToolUse', toolUseId: 'NEW', toolName: 'Bash' });
+    t.apply({ entityId: e, event: 'PermissionRequest', toolName: 'Bash' });
+
+    // Answering NEW leaves OLD blocked: two distinct blocks, not one.
+    expect(
+      t.apply({ entityId: e, event: 'PostToolUse', toolUseId: 'NEW', toolName: 'Bash' }),
+    ).toEqual({ status: 'waiting' });
+    expect(
+      t.apply({ entityId: e, event: 'PostToolUse', toolUseId: 'OLD', toolName: 'Bash' }),
+    ).toEqual({ status: 'working' });
+  });
 });
