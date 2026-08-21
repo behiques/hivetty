@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils';
 import type { SessionStatus } from '@/types/entity';
 
+import type { IdleDetail } from '@shared/hook-contract';
+
 /** Sessions have five states; agents are always `online`. */
 export type DotStatus = SessionStatus | 'online';
 
@@ -57,6 +59,40 @@ export const STATUS_LABEL: Record<DotStatus, string> = {
   online: 'online',
 };
 
+/**
+ * The hollow variant: a ring in the same colour, for a session that is quiet
+ * but not empty (HIVE-83).
+ *
+ * Filled means nothing is running; hollow means something is. It costs no new
+ * colour and no new glyph, and the one genuinely free session is then the only
+ * solid grey dot on the panel — which is the glance the fleet view exists to
+ * serve. A ring is a border rather than a fill, so it survives the light theme
+ * where a lightened grey washes out.
+ *
+ * **Only ever applied to grey.** `waiting` keeps its solid amber so "something
+ * needs you" stays the loudest thing on screen.
+ */
+const STATUS_RING: Record<DotStatus, string> = {
+  working: 'border-green',
+  waiting: 'border-amber',
+  idle: 'border-subtle',
+  done: 'border-brand',
+  terminated: 'border-muted',
+  online: 'border-green',
+};
+
+/**
+ * The word beside the dot, including what is still running.
+ *
+ * A function rather than a sixth entry in `STATUS_LABEL`, because the detail is
+ * orthogonal to the status: `SessionStatus` keeps its five members and the dot
+ * keeps its five colours.
+ */
+export function statusLabel(status: DotStatus, detail?: IdleDetail): string {
+  if (status === 'idle' && detail !== undefined) return `idle (${detail})`;
+  return STATUS_LABEL[status];
+}
+
 interface StatusDotProps {
   status: DotStatus;
   /** Defaults to pulsing only while `working`. Pass `false` to force it off. */
@@ -70,6 +106,15 @@ interface StatusDotProps {
    * accessibility tree rather than duplicating the text next to it.
    */
   label?: string;
+  /**
+   * What a quiet session is still running (HIVE-83), folded into the sr-only
+   * text alongside `label`.
+   *
+   * Without this, a labelled dot on a hollow `idle` session announced plain
+   * "idle" — the exact distinction the ring exists to carry, dropped for the
+   * one audience that cannot see the ring at all.
+   */
+  detail?: IdleDetail;
   className?: string;
 }
 
@@ -79,21 +124,36 @@ interface StatusDotProps {
  * The pulse is `animate-ccpulse` from `global.css` — never a hand-written
  * keyframe, so one definition drives every pulsing surface in the app.
  */
-export function StatusDot({ status, pulse, label, className }: StatusDotProps) {
+export function StatusDot({
+  status,
+  pulse,
+  label,
+  detail,
+  className,
+}: StatusDotProps) {
   const pulsing = pulse ?? status === 'working';
+  /**
+   * Derived, not passed in (HIVE-83 review fix). A caller used to hand-compute
+   * this from `idleDetail` alone, which could not see `status` — a `done` row
+   * with a stale `idleDetail` (see `hive-store.ts`'s `/clear` retirement) would
+   * then draw a hollow ring in `STATUS_RING.done`, the brand colour, instead of
+   * the solid fill. Gating on `status === 'idle'` here makes a hollow non-grey
+   * dot unrepresentable regardless of what the caller passes.
+   */
+  const hollow = status === 'idle' && detail !== undefined;
 
   return (
     <span
       aria-hidden={label ? undefined : 'true'}
       className={cn(
         'inline-flex size-[7px] shrink-0 rounded-full',
-        STATUS_FILL[status],
+        hollow ? `border-[1.5px] ${STATUS_RING[status]}` : STATUS_FILL[status],
         pulsing && 'animate-ccpulse',
         className,
       )}
     >
       {label ? (
-        <span className="sr-only">{`${label}: ${STATUS_LABEL[status]}`}</span>
+        <span className="sr-only">{`${label}: ${statusLabel(status, detail)}`}</span>
       ) : null}
     </span>
   );

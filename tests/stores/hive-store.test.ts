@@ -9,7 +9,7 @@ import { requestSpawn } from '@lib/terminal/pty-transport';
 import { sendToSession } from '@lib/terminal/session-input';
 
 import { useAppearanceStore } from '@stores/appearance-store';
-import { ACK_DELAY_MS, useHiveStore } from '@stores/hive-store';
+import { ACK_DELAY_MS, statusWord, useHiveStore } from '@stores/hive-store';
 import { parseCommand } from '@features/orchestrator/utils/parse-command';
 import { useUiStore } from '@stores/ui-store';
 import { NOTIFICATION_CAP } from '@shared/notification-contract';
@@ -453,6 +453,23 @@ describe('hive-store', () => {
         const leadForm = rows.find((l) => l.text.includes('lead-form'));
         expect(leadForm).toMatchObject({ color: 'amber' });
         expect(leadForm?.text).toContain('needs input');
+      });
+
+      /**
+       * Review Fix 3: `statusWord()` had zero production callers, so this
+       * table printed plain `idle` for a session the dot shows hollow. Wired
+       * up at the `status` command's row builder — this is the console's own
+       * evidence that the wiring is live, not just that `statusWord` is
+       * unit-tested in isolation.
+       */
+      it('spells out what a quiet session is still running, not just plain idle', () => {
+        useHiveStore.getState().setSessionStatus('hero-refresh', 'idle', 'agents');
+
+        run('status');
+        const rows = useHiveStore.getState().orchLines.slice(4);
+
+        const heroRefresh = rows.find((l) => l.text.includes('hero-refresh'));
+        expect(heroRefresh?.text).toContain('idle (agents)');
       });
     });
 
@@ -1343,6 +1360,63 @@ describe('hive-store', () => {
       });
 
       expect(useHiveStore.getState().metrics['slack-agent']).toBeUndefined();
+    });
+  });
+
+  describe('setSessionStatus — idleDetail (HIVE-83)', () => {
+    const detailOf = (id: string) => {
+      const entity = useHiveStore.getState().entities[id];
+      return isSession(entity) ? entity.idleDetail : undefined;
+    };
+
+    it('carries the detail alongside idle', () => {
+      const id = useHiveStore.getState().spawnSession('apfm-web');
+      useHiveStore.getState().setSessionStatus(id, 'idle', 'agents');
+
+      expect(detailOf(id)).toBe('agents');
+    });
+
+    /**
+     * The assertion this describe block exists for.
+     *
+     * A snapshot compares keys, not values, so an explicit `idleDetail:
+     * undefined` is not the same as the key being absent — the reducer must
+     * delete it outright, or `idle (agents) → working` would keep the ring lit
+     * for a session with nothing left running.
+     */
+    it('clears a stale detail when the next event carries none', () => {
+      const id = useHiveStore.getState().spawnSession('apfm-web');
+      useHiveStore.getState().setSessionStatus(id, 'idle', 'agents');
+      expect(detailOf(id)).toBe('agents');
+
+      useHiveStore.getState().setSessionStatus(id, 'working');
+
+      const entity = useHiveStore.getState().entities[id];
+      expect(isSession(entity) && 'idleDetail' in entity).toBe(false);
+    });
+
+    it('clears a stale detail on a same-status update that drops it', () => {
+      const id = useHiveStore.getState().spawnSession('apfm-web');
+      useHiveStore.getState().setSessionStatus(id, 'idle', 'script');
+
+      useHiveStore.getState().setSessionStatus(id, 'idle');
+
+      expect(detailOf(id)).toBeUndefined();
+    });
+
+    it('ignores a report for an id that is not a session', () => {
+      useHiveStore.getState().setSessionStatus('slack-agent', 'idle', 'agents');
+
+      expect(detailOf('slack-agent')).toBeUndefined();
+    });
+  });
+
+  describe('statusWord', () => {
+    it('names what is still running, mirroring the dot label', () => {
+      expect(statusWord('idle', 'agents')).toBe('idle (agents)');
+      expect(statusWord('idle', 'script')).toBe('idle (script)');
+      expect(statusWord('idle')).toBe('idle');
+      expect(statusWord('waiting')).toBe('needs input');
     });
   });
 });

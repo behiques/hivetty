@@ -81,6 +81,68 @@ describe('hook receiver', () => {
   });
 
   /**
+   * Tool and agent identity (HIVE-83): the tracker that pairs a permission
+   * request with the tool call that resolves it needs these carried through
+   * whole, not cherry-picked away with the rest of the body.
+   */
+  describe('tool and agent identity', () => {
+    it('forwards tool identity off a PostToolUse', async () => {
+      const response = await post({
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'echo hi', run_in_background: true },
+        tool_use_id: 'toolu_01',
+      });
+
+      expect(response.status).toBe(204);
+      expect(events[0]).toMatchObject({
+        event: 'PostToolUse',
+        toolName: 'Bash',
+        toolUseId: 'toolu_01',
+        runInBackground: true,
+      });
+    });
+
+    it('forwards the agent id off a subagent event', async () => {
+      const response = await post({
+        hook_event_name: 'SubagentStart',
+        agent_id: 'a828e337',
+        agent_type: 'general-purpose',
+      });
+
+      expect(response.status).toBe(204);
+      expect(events[0]).toMatchObject({ event: 'SubagentStart', agentId: 'a828e337' });
+    });
+
+    /**
+     * A `Write` or `Edit` needing permission carries the whole file in
+     * `tool_input`, which is exactly what pushes the body past
+     * `HOOK_MAX_BODY_BYTES`. Measured against real Claude Code 2.1.238, the
+     * wire order is `..., tool_name, tool_input, tool_use_id` — so
+     * `tool_name` sits before the field that grows unbounded and survives
+     * truncation, while `tool_use_id` sits after it and never does.
+     */
+    it('recovers tool_name from an oversized PermissionRequest, but not tool_use_id', async () => {
+      const response = await post({
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'Write',
+        tool_input: 'x'.repeat(256 * 1024),
+        tool_use_id: 'toolu_01',
+      });
+
+      expect(response.status).toBe(204);
+      expect(events).toEqual([
+        {
+          entityId: 'sess-01',
+          event: 'PermissionRequest',
+          status: 'waiting',
+          toolName: 'Write',
+        },
+      ]);
+    });
+  });
+
+  /**
    * `SessionEnd` and the `reason` gate.
    *
    * Only `clear` may be acted on. The others all mean the process is going
@@ -179,10 +241,10 @@ describe('hook receiver', () => {
      * failing hook prints an error in the user's session for something the app
      * simply does not care about.
      *
-     * `PreToolUse` rather than `PostToolUse` (HIVE-81): the latter is now
-     * subscribed — see the `maps %s to %s` table above.
+     * `PreCompact` rather than `PreToolUse` (HIVE-83): the latter is now
+     * subscribed too — see the bookkeeping pair in `HOOK_EVENTS`.
      */
-    const response = await post({ hook_event_name: 'PreToolUse' });
+    const response = await post({ hook_event_name: 'PreCompact' });
     expect(response.status).toBe(204);
     expect(events).toEqual([]);
   });
