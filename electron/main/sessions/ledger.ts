@@ -31,15 +31,16 @@ import {
  * app quit. A history feature that can stop the app opening is a far worse bug
  * than one that can lose a page.
  *
- * ## Why nothing here ever writes `closed`
+ * ## Why nothing here ever records an app close
  *
  * Because nothing here can observe it. `runShutdown()` invokes every hook body
  * synchronously and then awaits them together, so a flush registered there
  * *races* the pty teardown rather than following it — and a crash, a SIGKILL or
  * a power loss writes nothing at all. So the ledger stores the last status it
- * was told about, and the renderer infers `closed` at hydrate: a record
- * claiming to be `working` plainly is not. That inference cannot be raced,
- * cannot be interrupted, and needs no quit-time write to be correct.
+ * was told about, and the renderer infers the ending at hydrate: a record
+ * claiming to be `working` plainly is not, and becomes `done` with
+ * `endedBy: 'app-closed'`. That inference cannot be raced, cannot be
+ * interrupted, and needs no quit-time write to be correct.
  */
 
 /**
@@ -163,6 +164,7 @@ function reviveRecord(raw: unknown): SessionRecord | undefined {
     branch: text(raw.branch),
     cwd: text(raw.cwd),
     sessionUuid: text(raw.sessionUuid),
+    ...(raw.endedBy === 'finished' ? { endedBy: 'finished' as const } : {}),
     endedAt: finite(raw.endedAt),
     /*
       `model` and `effort` are closed lists on the renderer side, and this does
@@ -333,8 +335,25 @@ export function createSessionLedger(
   };
 
   const resumableUuid = (id: string): string | undefined => {
-    if (startedThisRun.has(id)) return undefined;
-    return records.get(id)?.sessionUuid;
+    const record = records.get(id);
+    if (record === undefined) return undefined;
+    /**
+     * A session this run started is only unresumable **while it is running**
+     * (HIVE-93).
+     *
+     * The bar was `startedThisRun` alone, and the reasoning was right: resuming
+     * a conversation that is currently open means a second `claude` against one
+     * transcript. But that reasoning is about the process, not about the run —
+     * and `/done` produces a session that started this run and is now over. Its
+     * transcript is closed, its uuid still names it, and offering to reopen it
+     * is the whole point of the feature.
+     *
+     * So the test is "started this run **and** has not ended", which is the
+     * condition the original was standing in for while every ending arrived
+     * after a restart.
+     */
+    if (startedThisRun.has(id) && !hasEnded(record)) return undefined;
+    return record.sessionUuid;
   };
 
   return {

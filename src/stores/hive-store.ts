@@ -38,7 +38,7 @@ import {
 } from '@lib/project-config';
 import { noteSessionTicket } from '@lib/session-history';
 import { pickPhrase } from '@lib/swarm/phrases';
-import { requestSpawn } from '@lib/terminal/pty-transport';
+import { reopenChannel, requestSpawn } from '@lib/terminal/pty-transport';
 import { sendToSession } from '@lib/terminal/session-input';
 import type { PrRecord } from '@shared/github-contract';
 import type { IdleDetail } from '@shared/hook-contract';
@@ -342,6 +342,24 @@ interface HiveState {
    * Answers the successor's id, or `null` if there was nothing to retire.
    */
   clearSession: (id: string) => string | null;
+  /**
+   * `/done` ended this session and its terminal with it (HIVE-93).
+   *
+   * The mirror of {@link HiveState.clearSession}, and the differences are the
+   * point: no successor is minted, the row keeps its conversation so Resume can
+   * offer it, and the centre stage falls back to the orchestrator if this was
+   * the tab in front of the user — its terminal is gone, so there is nothing
+   * left to look at.
+   */
+  finishSession: (id: string, resumable: boolean) => void;
+  /**
+   * Pick an ended session's conversation back up (HIVE-93).
+   *
+   * The affordance `closed` used to carry as a status, now a verb. Puts the row
+   * back in a live state and opens its tab; the transport that mounts reads
+   * {@link Session.resumable} and asks main to `--resume` rather than begin.
+   */
+  resumeSession: (id: string) => void;
   reset: () => void;
 }
 
@@ -498,7 +516,6 @@ const STATUS_WORD: Record<SessionStatus, string> = {
   idle: 'idle',
   done: 'done',
   terminated: 'terminated',
-  closed: 'closed',
 };
 
 /**
@@ -524,13 +541,6 @@ const STATUS_COLOR: Record<SessionStatus, TermLine['color']> = {
    * carries the priority.
    */
   terminated: 'dim',
-  /**
-   * Dim, for the same reason `terminated` is (HIVE-87). A restored row has even
-   * less behind it than a terminated one — the process it describes died with
-   * the app that owned it, a launch ago — so it certainly does not earn the
-   * colour that means "there is something here".
-   */
-  closed: 'dim',
 };
 
 let spawnCounter = 0;
@@ -559,19 +569,16 @@ let spawnCounter = 0;
  *
  * Three answers, and the middle one is the feature:
  *
- * - An ending that was **observed** — `done`, `terminated` — comes back exactly
+ * - An ending that was **recorded** — `done`, `terminated` — comes back exactly
  *   as it was. `terminated` especially: it is never capped, on the grounds that
  *   it is the only record a process existed, and rewriting it here would forfeit
  *   that.
- * - Anything **live** becomes `closed`. A record claiming to be `working` is
- *   describing a process that died with the app that owned it, a launch ago.
+ * - Anything **live** becomes `done` with `endedBy: 'app-closed'`. A record
+ *   claiming to be `working` is describing a process that died with the app that
+ *   owned it, a launch ago. The user quit; that is a deliberate ending.
  * - Anything **unrecognised** is `undefined`, and its record is dropped. The
  *   file may have been written by a build that knew a status this one does not,
  *   and a row the table cannot render is worse than a row missing from it.
- *
- * `closed` itself is not accepted, deliberately. Nothing writes it — see
- * `session-history-contract.ts` — so a file containing one was not written by
- * this app, and honouring it would be trusting a value no code path produces.
  */
 /**
  * The closed lists, checked rather than assumed (HIVE-87).
@@ -587,10 +594,48 @@ const isKnownModel = (value: string | undefined): value is Model =>
 const isKnownEffort = (value: string | undefined): value is Effort =>
   value !== undefined && (SESSION_EFFORTS as readonly string[]).includes(value);
 
-function restoredStatus(stored: string): SessionStatus | undefined {
-  if (stored === 'done' || stored === 'terminated') return stored;
+/**
+ * How a stored record reads once the app it described is gone (HIVE-93).
+ *
+ * Returns the ending **and how it was arrived at**, because the two are no
+ * longer the same question. A record that says `working` is not working — the
+ * process died with the app that owned it — and that inference used to be
+ * spelled by mapping it to a `closed` status. With `closed` folded into `done`,
+ * the status alone can no longer distinguish an *inferred* ending from a
+ * *recorded* one, and hydrate genuinely needs to: `live` is exactly "main says
+ * there is a process behind an id whose record claims one".
+ *
+ * `undefined` means a status this build does not know — a record written by a
+ * newer one. The caller drops such a row rather than guessing at it.
+ */
+function restoredStatus(
+  stored: string,
+  recorded?: string,
+): { status: SessionStatus; endedBy?: Session['endedBy'] } | undefined {
+  /*
+    Recorded endings keep whatever they were. `done` here is a `/clear` or a
+    `/done` that main wrote down; which one it was is not recoverable from the
+    file, and `endedReason` treats an absent `endedBy` as the older of the two.
+  */
+  if (stored === 'done') {
+    /*
+      The record's own answer where it has one (HIVE-93). Without it every
+      restored `/done` row is described as "was cleared", which is the one
+      sentence that is false for all of them — and shown beside a Resume button,
+      so the tooltip and the control contradict each other.
+    */
+    return recorded === 'finished'
+      ? { status: 'done', endedBy: 'finished' }
+      : { status: 'done' };
+  }
+  if (stored === 'terminated') return { status: 'terminated' };
+  /*
+    An inferred ending. The record claims to be live and plainly is not, so it
+    ended when the app did — which is a deliberate ending in the user's terms
+    (they quit) and therefore `done`, with `endedBy` carrying the how.
+  */
   if (stored === 'working' || stored === 'waiting' || stored === 'idle') {
-    return 'closed';
+    return { status: 'done', endedBy: 'app-closed' };
   }
   return undefined;
 }
@@ -1136,22 +1181,24 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
      * and let the user type into work they think they finished.
      */
     /**
-     * `closed` opens (HIVE-88), and it is the one ending that does.
+     * **No ending opens any more** (HIVE-93).
      *
-     * The gate exists to keep the user out of a terminal that is gone or is
-     * someone else's. A closed row is neither: its process did not survive the
-     * app, and *opening it is how it gets one* — the surface mounts, the
-     * transport asks main to `--resume` the conversation the ledger kept, and
-     * the first live status moves the row from PREVIOUS RUN to ACTIVE. Refusing
-     * here made that path unreachable from every surface at once.
+     * A restored row used to be the exception: refusing it made resuming
+     * unreachable, because clicking the row *was* the resume. That is no longer
+     * true — Resume is its own control on rows that carry
+     * {@link Session.resumable}, so the affordance has somewhere to live that is
+     * not "the status happens to permit a click".
+     *
+     * Which leaves this gate saying one thing: an ended row is not a terminal
+     * you can walk into. Opening one would show a pty that is gone, or one that
+     * belongs to a successor.
      */
     const entity = get().entities[id];
     if (
       !(
         entity !== undefined &&
         isSession(entity) &&
-        isEnded(entity.status) &&
-        entity.status !== 'closed'
+        isEnded(entity.status)
       )
     ) {
       useUiStore.getState().openTab(id);
@@ -1604,23 +1651,29 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           `live` is main saying a pty is running under this id right now
           (HIVE-88). Such a row is this run's fleet, whatever the file says
           about when it started: it keeps the status it was last seen in
-          rather than being written down to `closed`, and it is not `restored`
+          rather than being written down to an ending, and it is not `restored`
           — PREVIOUS RUN is for rows the app outlived, and this one it did not.
           Only a record in a live status is promoted: main never writes an
           ended status for a pty it still holds, so a live record claiming
           one is a file this build did not write, and the status it claims
           wins over the mark.
+
+          Keyed on `endedBy === 'app-closed'` rather than on the status, because
+          the status can no longer tell the two apart (HIVE-93): an inferred
+          ending and a recorded `/clear` are both `done`, and promoting the
+          latter would resurrect a retired row as live.
         */
-        const stored = restoredStatus(item.status);
-        const live = item.live === true && stored === 'closed';
-        const status = live ? (item.status as SessionStatus) : stored;
+        const stored = restoredStatus(item.status, item.endedBy);
         /*
           A status this build does not know is a record written by one that did.
           Dropped rather than guessed at — an unrenderable row in the fleet
           table is worse than a row missing from it, and the ledger is a
           convenience, not a source of truth about anything.
         */
-        if (status === undefined) continue;
+        if (stored === undefined) continue;
+
+        const live = item.live === true && stored.endedBy === 'app-closed';
+        const status = live ? (item.status as SessionStatus) : stored.status;
 
         entities[item.id] = {
           kind: 'session',
@@ -1628,6 +1681,16 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           project: item.project,
           status,
           task: item.task,
+          /*
+            How it ended, and whether it can come back (HIVE-93). A live row is
+            not ended at all, so it carries neither — and `resumable` is main's
+            answer rather than an inference from the record: it holds the uuid
+            and knows whether this run already opened that conversation.
+          */
+          ...(live || stored.endedBy === undefined
+            ? {}
+            : { endedBy: stored.endedBy }),
+          ...(!live && item.resumable === true ? { resumable: true } : {}),
           /*
             The three required fields the record deliberately does not carry.
             `lines: []` is the honest one: a restored row has no transcript
@@ -2003,6 +2066,143 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * hook can arrive for a row the user removed a moment earlier, and the honest
    * answer to that race is to do nothing.
    */
+  resumeSession: (id) => {
+    const current = get().entities[id];
+    if (current === undefined || !isSession(current)) return;
+    /*
+      Both guards are refusals rather than no-ops with side effects: opening the
+      tab anyway would put the user in front of a terminal this action has not
+      arranged to exist.
+    */
+    if (!isEnded(current.status)) return;
+    if (current.resumable !== true) return;
+
+    set((state) => {
+      /*
+        Live again *before* the tab opens, and that ordering is the whole of
+        this action. `center-stage.tsx` reads `isTerminated` on mount to decide
+        whether to disable stdin, and `resolve-transport` reads the row to build
+        the spawn — so a row still marked ended would mount a read-only surface
+        over the very session it was asked to reopen.
+
+        `idle` rather than `working`: nothing is running yet. The process reports
+        its own status within a turn, and claiming activity we have not observed
+        is the habit `activity.ts` exists to avoid.
+      */
+      const revived: Session = { ...current, status: 'idle' };
+      /*
+        The ending is over, so the record of *how* it ended goes with it —
+        otherwise `isTerminated` keeps answering yes and the surface stays
+        read-only. `resumable` deliberately stays: a session resumed once can be
+        finished and resumed again, and it is still what tells the transport to
+        continue rather than begin.
+      */
+      delete revived.endedBy;
+      /*
+        And it is no longer a row the app merely *outlived* (HIVE-88). Left set,
+        `useRestoredSessions` keys on it while `useActiveSessions` keys on the
+        status — so a resumed row satisfies both and the table draws it twice,
+        under ACTIVE and under PREVIOUS RUN, sharing one selection index. That
+        double-draw is the exact bug HIVE-88 fixed; `reviveIfLive` clears the
+        flag when a live status arrives, and this is the other way in.
+      */
+      delete revived.restored;
+      return { entities: { ...state.entities, [id]: revived } };
+    });
+
+    /**
+     * **Actually start a process.** The store update above only changes how the
+     * row reads; without this the surface would re-enable stdin over a pty that
+     * exited and swallow every keystroke, with the Resume control now gone
+     * because it is gated on the row being ended. There is no way back from
+     * that state, which makes it worse than refusing outright.
+     *
+     * Two calls, because two different latches are in the way:
+     *
+     * - `reopenChannel` clears the renderer's per-entity latch. `PtyTransport`
+     *   marks a channel `closed` on exit and never clears it — that is what
+     *   stops a tab switch resurrecting a finished agent — and it also drops
+     *   `spawnResult`, so the request below genuinely asks rather than handing
+     *   back the previous answer.
+     * - `requestSpawn` is the spawn path rather than `pty.restart`, and the
+     *   distinction is load-bearing: `ptyRestart` deliberately does not forward
+     *   `resume` ("a restart is never a resume"), so restarting here would start
+     *   a **new** conversation under the promise of continuing the old one.
+     *
+     * Keyed on the *terminal*, like every other spawn: a successor minted by
+     * `/clear` inherits its predecessor's pty, and the channel is keyed the same
+     * way.
+     */
+    const terminalId = terminalOf(current);
+    reopenChannel(terminalId);
+    void requestSpawn(terminalId, current.project, {
+      ...(current.model === undefined ? {} : { model: current.model }),
+      ...(current.effort === undefined ? {} : { effort: current.effort }),
+      theme: currentTheme(),
+      resume: true,
+    });
+
+    useUiStore.getState().openTab(id);
+  },
+
+  finishSession: (id, resumable) => {
+    /**
+     * Resolved to the terminal's **current** row, like every other session
+     * write in this file — see {@link currentSessionIn}.
+     *
+     * Main always names the terminal: `HIVE_SESSION_ID` is baked into the pty's
+     * environment at spawn and never changes, so after a `/clear` it is still
+     * calling the row that was retired. Reading `entities[id]` directly meant
+     * `spawn → /clear → /done` found an already-ended row, returned early, and
+     * left the successor `idle` on a pty that had exited — with no "terminal has
+     * died" notice, stdin enabled, and no ending for any cap to reap. Main takes
+     * the finished branch instead of publishing `terminated`, so nothing else
+     * was coming to correct it either.
+     */
+    const target = currentSessionIn(get(), id);
+    const current = get().entities[target];
+    if (current === undefined || !isSession(current)) return;
+    /*
+      Already ended is a no-op rather than a re-write. `/done` posts once, but
+      the exit that follows can reach `settleExit` by two routes — `ptyExit` and
+      `ptyLost` — and a second pass must not resurrect a row the cap has since
+      dropped, nor bounce the user out of a tab they have moved on to.
+    */
+    if (isEnded(current.status)) return;
+
+    set((state) => {
+      const finished: Session = {
+        ...current,
+        status: 'done',
+        endedBy: 'finished',
+        /*
+          Main's answer, carried on the event — not inferred from the fact of a
+          finish. `/done` usually keeps its uuid where `/clear` drops it, but a
+          terminal that was cleared *and then* finished has no uuid left and no
+          way to get one, so offering Resume there would start a new
+          conversation while promising the old one. This flag is also what
+          exempts the row from `DONE_CAP`.
+        */
+        resumable,
+      };
+      /*
+        `idleDetail` is only ever set alongside `idle`; carrying one across
+        would draw a hollow ring on an ended row (HIVE-83).
+      */
+      delete finished.idleDetail;
+      return { entities: { ...state.entities, [target]: finished } };
+    });
+
+    /*
+      Only when it is the tab actually on screen. Bouncing unconditionally
+      would throw the user out of whatever they were reading because some other
+      session finished in the background — which is precisely the kind of
+      attention theft the fleet view exists to prevent.
+    */
+    const ui = useUiStore.getState();
+    if (ui.activeTab === target) ui.backToOrch();
+  },
+
   clearSession: (id) => {
     /**
      * Resolve to the terminal's live row first.
@@ -2073,7 +2273,23 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
        * from `status === 'idle'` too, so this is belt and braces rather than
        * the only guard.
        */
-      const retired: Session = { ...current, status: 'done' };
+      /*
+        `endedBy` is what keeps this row distinguishable from a `/done` one now
+        that both are `done` (HIVE-93), and it is what stops the centre stage
+        showing "this terminal has died" over a pty that is very much alive —
+        the successor is using it.
+
+        `resumable: false` is stated rather than omitted. Main drops this
+        conversation's uuid on `/clear` (`sessions/index.ts`), so there is
+        nothing to resume, and an absent field would read as "not yet known"
+        to anything that later learns otherwise.
+      */
+      const retired: Session = {
+        ...current,
+        status: 'done',
+        endedBy: 'cleared',
+        resumable: false,
+      };
       delete retired.idleDetail;
       const entities: Record<string, Entity> = {
         ...state.entities,
@@ -2093,15 +2309,32 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
             ];
 
       /**
-       * Drop the oldest `done` rows past the cap.
+       * Drop the oldest `done` rows past the cap — but never a resumable one.
        *
        * Oldest by position in `order`, which is spawn order — the same
        * definition of "oldest" every other capped list in this store uses.
        * Their entities go with them; an entity nothing lists is a leak.
+       *
+       * **The `resumable` exemption is not a refinement, it is what keeps the
+       * cap honest** (HIVE-93). Capping `done` was justified by one sentence:
+       * "a cleared session's successor is right there", so nothing is lost. The
+       * moment `done` also meant `/done` and an app quit, that stopped being
+       * true — neither has a successor, and both keep a conversation the user
+       * can reopen. Dropping those would delete the row *and* the only visible
+       * route back to a transcript that still exists on disk.
+       *
+       * A cleared row is still capped, and still for the original reason: its
+       * uuid was dropped, so `resumable` is false and there is nothing behind it
+       * that its successor does not already carry.
        */
       const doneIds = order.filter((entityId) => {
         const entity = entities[entityId];
-        return entity !== undefined && isSession(entity) && entity.status === 'done';
+        return (
+          entity !== undefined &&
+          isSession(entity) &&
+          entity.status === 'done' &&
+          entity.resumable !== true
+        );
       });
       const excess = new Set(doneIds.slice(0, Math.max(0, doneIds.length - DONE_CAP)));
       if (excess.size > 0) {
@@ -2590,7 +2823,6 @@ export const useCounts = () =>
         idle: 0,
         done: 0,
         terminated: 0,
-        closed: 0,
       };
       for (const id of state.order) {
         const entity = state.entities[id];
@@ -2773,6 +3005,38 @@ export const useSetSessionTicket = () =>
 /** `/clear`: main reports the conversation boundary through this. */
 export const useClearSession = () =>
   useHiveStore((state) => state.clearSession);
+
+/**
+ * Open the selected row, or resume it when that is what it needs (HIVE-93).
+ *
+ * The keyboard's half of the Resume control. `openEntity` now refuses every
+ * ended row, so without this a user could arrow onto a finished or restored
+ * session, press Enter, and get nothing — with the only way through being a
+ * mouse. That is the "unreachable from every surface at once" failure the
+ * HIVE-88 comment this story deleted was written about, arriving from the
+ * opposite direction.
+ */
+export const openOrResume = (id: string): boolean => {
+  const entity = useHiveStore.getState().entities[id];
+  if (
+    entity !== undefined &&
+    isSession(entity) &&
+    isEnded(entity.status) &&
+    entity.resumable === true
+  ) {
+    useHiveStore.getState().resumeSession(id);
+    return true;
+  }
+  return useHiveStore.getState().openEntity(id);
+};
+
+/** Pick an ended session's conversation back up (HIVE-93). */
+export const useResumeSession = () =>
+  useHiveStore((state) => state.resumeSession);
+
+/** `/done`: main reports the session's own ending through this (HIVE-93). */
+export const useFinishSession = () =>
+  useHiveStore((state) => state.finishSession);
 
 /**
  * Which terminal an id runs in — the id itself for anything that is not a
