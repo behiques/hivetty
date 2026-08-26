@@ -11,6 +11,7 @@ import {
 } from '@lib/terminal/fonts';
 import { applyThemeColors } from '@lib/theme/apply';
 import { BUILT_IN_THEME } from '@lib/theme/built-in';
+import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
 import { BUILT_IN_THEME_ID, type HiveTheme } from '@lib/theme/contract';
 import { isHiveTheme } from '@lib/theme/validate';
 
@@ -296,16 +297,38 @@ function applyDensity(density: Density) {
 }
 
 /**
- * The theme actually active, resolved from the library.
+ * The theme actually active, resolved from the built-ins and then the library.
+ *
+ * `null` does **not** mean "no theme" — it means *the Hive*, and specifically
+ * that nothing needs to be written: `tokens.css` is already that palette, so
+ * `applyThemeColors(null)` removes the style element and lets the stylesheet
+ * paint. Every other shipped theme resolves to a real theme object and
+ * paints through the same generated `<style>` an imported theme does.
  *
  * A dangling `activeThemeId` — a theme removed elsewhere, a store that only
- * half-restored — resolves to `null` (the built-in) rather than throwing: a
- * store in that state still has to paint something.
+ * half-restored — resolves to `null` rather than throwing: a store in that
+ * state still has to paint something.
+ *
+ * Built-ins are looked up **before** the library so a shipped id can never be
+ * shadowed by a stored one, whatever found its way into `localStorage`.
+ *
+ * Every lookup is `Object.hasOwn`, never `in` or a bare `?? `. `'toString' in
+ * BUILT_IN_THEMES` is `true` for any object literal and the lookup yields
+ * `Object.prototype.toString` — a function rather than `undefined`, so `??`
+ * does not fire and a stored `activeThemeId` of `"toString"` reached
+ * `applyThemeColors` and the terminal-palette selector as a function, throwing
+ * on `.modes` on every render. That is the same unrecoverable boot this
+ * store's rehydrate guard was written to close, arriving through the id
+ * instead of through the theme.
  */
 export function activeThemeOf(
   state: Pick<AppearanceState, 'themes' | 'activeThemeId'>,
 ): HiveTheme | null {
-  return state.themes[state.activeThemeId] ?? null;
+  const { activeThemeId } = state;
+  if (activeThemeId === BUILT_IN_THEME_ID) return null;
+  if (Object.hasOwn(BUILT_IN_THEMES, activeThemeId)) return BUILT_IN_THEMES[activeThemeId];
+  if (Object.hasOwn(state.themes, activeThemeId)) return state.themes[activeThemeId];
+  return null;
 }
 
 /** Push everything that lives on `<body>` (and the theme style element) at once — rehydration and reset. */
@@ -413,16 +436,48 @@ export function sanitizeThemeState(state: Record<string, unknown>): {
 } {
   const raw = state.themes;
   const themes: Record<string, HiveTheme> = {};
+  /** Old id -> the id it was moved to, so the active pointer can follow it. */
+  const rekeyed = new Map<string, string>();
+
   if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
     for (const [id, theme] of Object.entries(raw)) {
-      if (isHiveTheme(theme)) themes[id] = theme;
+      if (!isHiveTheme(theme)) continue;
+
+      // A library entry that collides with a shipped id is moved aside rather
+      // than dropped. Before the shipped set landed only `hive` was
+      // reserved, so a theme
+      // imported as "Graphite" legitimately took the key `graphite`; now that
+      // a built-in owns it, `activeThemeOf` resolves the shipped one first and
+      // the imported theme becomes unreachable — while the gallery renders two
+      // cards under one name, both ringed active. Re-keying keeps the person's
+      // own theme, which dropping it would not.
+      let key = id;
+      if (Object.hasOwn(BUILT_IN_THEMES, key)) {
+        let suffix = 2;
+        while (
+          Object.hasOwn(BUILT_IN_THEMES, `${id}-${suffix}`) ||
+          Object.hasOwn(themes, `${id}-${suffix}`)
+        ) {
+          suffix += 1;
+        }
+        key = `${id}-${suffix}`;
+        rekeyed.set(id, key);
+      }
+
+      themes[key] = theme;
     }
   }
 
   const requested = state.activeThemeId;
+  // If the active id was the one just moved, follow it: that theme is what was
+  // on screen before the upgrade, and the shipped theme is not a substitute
+  // for it.
+  const followed =
+    typeof requested === 'string' ? (rekeyed.get(requested) ?? requested) : undefined;
   const activeThemeId =
-    typeof requested === 'string' && (requested === BUILT_IN_THEME_ID || requested in themes)
-      ? requested
+    followed !== undefined &&
+    (Object.hasOwn(BUILT_IN_THEMES, followed) || Object.hasOwn(themes, followed))
+      ? followed
       : BUILT_IN_THEME_ID;
 
   return { themes, activeThemeId };
@@ -562,13 +617,16 @@ export const useAppearanceStore = create<AppearanceState>()(
         set((state) => ({ themes: { ...state.themes, [id]: theme } })),
 
       activateTheme: (id) => {
-        applyThemeColors(get().themes[id] ?? null);
+        applyThemeColors(activeThemeOf({ themes: get().themes, activeThemeId: id }));
         set({ activeThemeId: id });
       },
 
       removeTheme: (id) => {
         const { themes, activeThemeId } = get();
-        if (!(id in themes)) return;
+        // A built-in is not a key of `themes`, so this is also what makes a
+        // shipped theme unremovable — the gallery hides the control, and this
+        // is the guard behind it.
+        if (!Object.hasOwn(themes, id)) return;
 
         const { [id]: _removed, ...rest } = themes;
         const wasActive = activeThemeId === id;
