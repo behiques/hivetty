@@ -1,3 +1,4 @@
+import { useLastUsed } from '@/hooks/use-relative-time';
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 import { cn } from '@/lib/utils';
 import {
@@ -6,6 +7,7 @@ import {
   entityLabel,
   isEnded,
   isSession,
+  recencyOf,
 } from '@/types/entity';
 
 import { statusLabel, statusText } from '@components/ui/status-dot';
@@ -93,12 +95,21 @@ import { useActiveTab, useSelId, useSetSelId } from '@stores/ui-store';
  *
  * Not "at no width at all" — that would be the same over-claim the budget made,
  * one threshold lower. Once the flexible three are at zero, what is left is the
- * `shrink-0` cells, and **they** overflow: 12 caret + 132 `STATUS` + 34 `PR` +
- * 52 Resume + 60 gaps + 16 `px-2` = **306px**. Below a 306px flex line the
- * header's fixed cells overflow the line while a row's overflow the button, and
- * `PR` and Resume diverge again by the difference.
+ * `shrink-0` cells, and **they** overflow: 12 caret + 132 `STATUS` + 80
+ * `LAST USED` + 34 `PR` + 52 Resume + 70 gaps + 16 `px-2` = **396px**. Below a
+ * 396px flex line the header's fixed cells overflow the line while a row's
+ * overflow the button, and `PR` and Resume diverge again by the difference.
  *
- * The basis moves that threshold from ~518px to 306px, which is what puts every
+ * **`LAST USED` raised that threshold by 90px**, from 306, and it is the one
+ * cost of the column worth writing down. It buys nothing back: a fixed column
+ * is a term in this sum by definition, which is the price of a value that
+ * cannot be truncated. What makes it affordable is that the sum is now the
+ * *only* rule — under the floors it replaced, the same 90px had to come out of
+ * `SESSION`, `PROJECT` and `BRANCH`, which at 1100px meant a `PROJECT` of four
+ * characters and a header word reading `PRO…`. The basis charges it once, to
+ * the threshold, instead of to every row at every width.
+ *
+ * The basis moves that threshold from ~518px to 396px, which is what puts every
  * default layout — including the 1100px window with a Resume column, the case
  * this file was rewritten for — comfortably inside it. What remains outside is
  * a user's own doing: HIVE-105 made the rails draggable, and
@@ -187,6 +198,30 @@ const COL = {
   status: 'w-[132px] shrink-0 whitespace-nowrap',
   project: 'flex-[1_1_64px] truncate',
   branch: 'flex-[2_1_76px] truncate',
+  /*
+    Fixed, and `whitespace-nowrap`, for exactly `STATUS`'s reasons rather than
+    by analogy with it.
+
+    A relative age has no recognisable prefix. `feat/session-la…` is still that
+    branch and `the-hi…` is still that project, which is what makes those three
+    safe to shrink; `5 min a…` is not a shorter way of saying `5 min ago`, it is
+    the column having stopped saying it. And dropping `truncate` for
+    `whitespace-nowrap` keeps the one declaration that matters — a value too
+    wide stays on one line and overflows visibly, where wrapping at the space
+    would double the row's height and take every other row's alignment with it.
+
+    80px is the longest value `formatLastUsed` can produce — `59 min ago` and
+    `6 days ago`, ten characters, 75.2px in this face at 12.5px — plus the same
+    few pixels of margin `STATUS` carries, and for the same reason: that
+    measurement is one machine's font stack, and the fallback chain ends in a
+    generic `monospace`.
+
+    That a longest value *exists* is the formatter's doing, not this column's.
+    Plain day-counting has no ceiling — a ledger row from last spring reads
+    `412 days ago` — so the vocabulary stops at weeks and then months precisely
+    so that a width can be chosen at all.
+  */
+  lastUsed: 'w-[80px] shrink-0 whitespace-nowrap',
   pr: 'w-[34px] shrink-0',
   action: 'w-[52px] shrink-0',
 } as const;
@@ -272,6 +307,20 @@ export function SessionTable() {
         </span>
         <span className={COL.branch} title="BRANCH">
           BRANCH
+        </span>
+        {/*
+          A third measurement handle. `LAST USED` is a `shrink-0` cell, so it is
+          a term in the 396px threshold above rather than something that gives
+          way — which makes it exactly the kind of column that takes the ones to
+          its right with it when it is re-sized by someone who has not read the
+          arithmetic.
+
+          `title` for the same reason its neighbours gained one: a narrow window
+          shortens the label now instead of letting it overflow, and `LAST US…`
+          should still be certain.
+        */}
+        <span className={COL.lastUsed} data-col="last-used" title="LAST USED">
+          LAST USED
         </span>
         {/*
           `data-col` is a measurement handle, not a style hook (HIVE-100). The
@@ -387,6 +436,18 @@ function SessionTableRow({
    * `null` for anything that is not a session.
    */
   const pr = useSessionPr(id);
+  /**
+   * When this row last mattered, and the same number the two fleet lists are
+   * sorted by — so the column explains the order it is sitting in rather than
+   * offering a second opinion about it.
+   *
+   * Resolved before the guard for `useSessionPr`'s reason: `useLastUsed` ticks,
+   * so it is a hook, and a hook cannot sit behind an early return. `0` is what
+   * `recencyOf` itself answers for an untimestamped row, so the non-session
+   * case lands on the same "nobody knows" the cell already renders.
+   */
+  const usedAt = entity && isSession(entity) ? recencyOf(entity) : 0;
+  const lastUsed = useLastUsed(usedAt);
 
   if (!entity || !isSession(entity)) return null;
 
@@ -509,6 +570,29 @@ function SessionTableRow({
         title={branchLabel(entity)}
       >
         {branchLabel(entity)}
+      </span>
+      {/*
+        Inside the button, unlike `PR` and Resume: it is text and not a control,
+        so nothing forces it out — and a cell that stays in is one more cell
+        dividing the same leftover as its header, which is what the docblock
+        above means by the two shrinking identically.
+
+        `title` carries the exact moment, which is the one question the relative
+        label cannot answer. Between them the cell says both how long ago and
+        when, without spending a fixed column on a date it could not truncate.
+      */}
+      <span
+        className={cn(COL.lastUsed, 'text-subtle')}
+        data-col="last-used"
+        title={usedAt > 0 ? new Date(usedAt).toLocaleString() : undefined}
+      >
+        {usedAt > 0 ? (
+          lastUsed
+        ) : (
+          <span title="no recorded activity">
+            —<span className="sr-only"> no recorded activity</span>
+          </span>
+        )}
       </span>
     </button>
     {/*

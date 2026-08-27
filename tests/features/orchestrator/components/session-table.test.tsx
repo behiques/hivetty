@@ -654,4 +654,96 @@ describe('SessionTable', () => {
       expect(within(rows[0]!).getByText('idle')).toBeInTheDocument();
     });
   });
+
+  /**
+   * The `LAST USED` column.
+   *
+   * It reads {@link recencyOf} — the same value `useActiveSessions` and
+   * `useEndedSessions` sort on — so the column is the table explaining its own
+   * order rather than a second opinion about it. That is the break these tests
+   * catch: a cell wired to `createdAt` alone would look right on every live row
+   * and quietly contradict the sort on every ended one.
+   */
+  describe('the LAST USED column', () => {
+    const MIN = 60_000;
+    const HR = 60 * MIN;
+
+    /**
+     * Scoped to the row shell rather than the button: the cell sits inside the
+     * button today, and pinning the assertion to that would fail the day it
+     * moves out for the reason `PR` and Resume did.
+     */
+    const lastUsedOf = (label: string): HTMLElement => {
+      const row = rows().find((r) => r.textContent?.includes(label));
+      const cell = shellOf(row!).querySelector('[data-col="last-used"]');
+      if (!(cell instanceof HTMLElement)) {
+        throw new Error(`no last-used cell on ${label}`);
+      }
+      return cell;
+    };
+
+    /** Timestamps one fixture row, which the demo fleet leaves unstamped. */
+    const stamp = (id: string, over: Partial<Session>): void => {
+      act(() => {
+        useHiveStore.setState((state) => ({
+          entities: {
+            ...state.entities,
+            [id]: { ...(state.entities[id] as Session), ...over },
+          },
+        }));
+      });
+    };
+
+    it('names itself in the header', () => {
+      render(<SessionTable />);
+
+      expect(screen.getByText('LAST USED')).toBeInTheDocument();
+    });
+
+    it('ages a live row from when it started', () => {
+      stamp('hero-refresh', { createdAt: Date.now() - 5 * MIN });
+      render(<SessionTable />);
+
+      expect(lastUsedOf('hero-refresh')).toHaveTextContent('5 min ago');
+    });
+
+    /**
+     * A resumed row is the row mattering again, and the column has to agree with
+     * the sort that puts it back at the top. Reading `createdAt` here would say
+     * `3 hr ago` about the row the user acted on a minute ago.
+     */
+    it('ages a resumed row from the resume, not from its first start', () => {
+      stamp('hero-refresh', {
+        createdAt: Date.now() - 3 * HR,
+        resumedAt: Date.now() - 2 * MIN,
+      });
+      render(<SessionTable />);
+
+      expect(lastUsedOf('hero-refresh')).toHaveTextContent('2 min ago');
+    });
+
+    it('ages an ended row from when it ended', () => {
+      stamp('tz-fix', {
+        createdAt: Date.now() - 6 * HR,
+        endedAt: Date.now() - 2 * HR,
+      });
+      render(<SessionTable />);
+
+      expect(lastUsedOf('tz-fix')).toHaveTextContent('2 hr ago');
+    });
+
+    /**
+     * The case that has no answer, and the one worth protecting: a fixture or a
+     * ledger record from before the timestamps existed has `recencyOf` of `0`.
+     * Measured as an age that reads `56 years ago` — a confident lie about a row
+     * the app knows nothing about. An em dash is the honest cell, and it is the
+     * one `PR` already renders for the same reason.
+     */
+    it('says nothing about a row nobody timestamped', () => {
+      render(<SessionTable />);
+
+      expect(lastUsedOf('webhooks')).toHaveTextContent('—');
+      expect(lastUsedOf('webhooks')).not.toHaveTextContent('ago');
+    });
+  });
 });

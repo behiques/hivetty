@@ -350,6 +350,11 @@ test('the columns hold together at the minimum window with a resumable row', asy
     alignedAt(await prColumnXs(page));
     alignedAt(
       await page
+        .locator('[data-col="last-used"]')
+        .evaluateAll((cells) => cells.map((c) => c.getBoundingClientRect().x)),
+    );
+    alignedAt(
+      await page
         .locator('[data-col="action"]')
         .evaluateAll((cells) => cells.map((c) => c.getBoundingClientRect().x)),
     );
@@ -367,5 +372,77 @@ test('the columns hold together at the minimum window with a resumable row', asy
     expect(overflow.scroll).toBeLessThanOrEqual(overflow.client);
   } finally {
     await second.close();
+  }
+});
+
+/**
+ * `LAST USED` holds its widest label at the minimum window size.
+ *
+ * ## Why this is a measurement and not arithmetic
+ *
+ * `WIDEST_STATUS`'s reason exactly. The docblock computes the width — ten
+ * characters at 12.5px in this monospace face is about 75px — and that
+ * computation is right until the type scale, the density or the font stack
+ * moves under it. happy-dom performs no layout, so a component test can prove
+ * the cell renders `59 min ago` and never that the column is wide enough to
+ * show it.
+ *
+ * It matters more here than for a flexible column because this one is
+ * `shrink-0`: `SESSION` and `BRANCH` answer a shortfall by truncating to a
+ * prefix that is still recognisably themselves, and a relative age has no such
+ * prefix — `5 min a…` is not a shorter way of saying `5 min ago`.
+ *
+ * ## Why the label is measured rather than produced
+ *
+ * A row that has genuinely been idle for 59 minutes is an hour of waiting away.
+ * Measuring the string in the cell's own resolved font, against the cell's own
+ * resolved width, asserts the same fact without manufacturing the state.
+ *
+ * The **alignment** half of this column's claim is not here — it is in the test
+ * above, which drives the case that actually breaks it: the minimum window with
+ * a Resume column, where `LAST USED` is one more `shrink-0` term in the 396px
+ * threshold. Asserting alignment on a fresh profile would be asserting the
+ * first test again under a different name.
+ */
+const WIDEST_LAST_USED = '59 min ago';
+
+test('the LAST USED column fits its widest label at the minimum window size', async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
+
+  const app = await launchHive({
+    userDataDir: testInfo.outputPath('user-data'),
+    configPath,
+  });
+  const page = await app.firstWindow();
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForSelector('header');
+
+  try {
+    await resizeTo(app, page, 1100);
+
+    await startSession(page, PROJECT);
+    await page.getByRole('button', { name: 'Back to overmind' }).click();
+
+    const cell = page.locator('[data-col="last-used"]').last();
+    await expect(cell).toBeVisible();
+
+    const fits = await cell.evaluate(async (node, label: string) => {
+      // Web fonts settle after first paint; measuring before they do measures
+      // the fallback face, which is not the one on screen.
+      await document.fonts.ready;
+      const style = getComputedStyle(node);
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d')!;
+      context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      return {
+        text: context.measureText(label).width,
+        column: node.getBoundingClientRect().width,
+      };
+    }, WIDEST_LAST_USED);
+
+    expect(fits.text).toBeLessThanOrEqual(fits.column);
+  } finally {
+    await app.close();
   }
 });

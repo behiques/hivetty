@@ -397,6 +397,35 @@ export const isEnded = (status: SessionStatus): boolean =>
   status === 'done' || status === 'terminated';
 
 /**
+ * When a row last mattered — what every fleet list sorts on, descending, and
+ * what its `LAST USED` column reads.
+ *
+ * `endedAt` for a row that is over, and for one that is not, the later of when
+ * it was resumed and when it was created — `0` for a row nobody timestamped.
+ *
+ * `resumedAt` sits between them rather than being folded into `createdAt`,
+ * because a resume is the row mattering *again* and `createdAt` is when it
+ * first started; both are true and the sort wants the more recent one. Without
+ * it, resuming a session from this morning put it below everything spawned
+ * since — the row the user had just acted on, furthest from the header.
+ *
+ * Zero rather than `Infinity` is the whole point of the last fallback: a
+ * fixture or a record from an older build has no claim to being the newest
+ * thing on the table, and sorting unknowns to the *top* would put exactly the
+ * least-known rows in the position the eye reads first. The fleet table reads
+ * the same zero as "nobody knows" and renders an em dash for it, rather than
+ * measuring an age against the epoch.
+ *
+ * **Here rather than in `hive-store.ts`, where it was born.** The store sorts
+ * on it and the fleet table now displays it, and a feature may not import from
+ * a store's internals — the same move `endedReason` made in HIVE-93, for the
+ * same reason. One definition, so the column can never disagree with the order
+ * it is sitting in.
+ */
+export const recencyOf = (session: Session): number =>
+  session.endedAt ?? session.resumedAt ?? session.createdAt ?? 0;
+
+/**
  * Whether this session's process is gone and cannot be typed into.
  *
  * Narrower than {@link isEnded}: every ended row closes its tab to new visits,

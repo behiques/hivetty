@@ -18,6 +18,7 @@ import {
   entityLabel,
   isEnded,
   isSession,
+  recencyOf,
   resolveEntityRef,
   terminalOf,
 } from '@/types/entity';
@@ -25,7 +26,6 @@ import type { HiveNotification } from '@/types/notification';
 import type { Pr, SessionPr, TicketPr } from '@/types/pull-request';
 import type { TermLine } from '@/types/terminal';
 import type { Ticket } from '@/types/ticket';
-
 
 import { isDesktop } from '@config/runtime';
 import { reset as resetClock } from '@lib/fake-clock';
@@ -819,25 +819,6 @@ function stampLifecycle(session: Session): Session {
   return session;
 }
 
-/**
- * When a row last mattered — what every fleet list sorts on, descending.
- *
- * `endedAt` for a row that is over, and for one that is not, the later of when
- * it was resumed and when it was created — `0` for a row nobody timestamped.
- *
- * `resumedAt` sits between them rather than being folded into `createdAt`,
- * because a resume is the row mattering *again* and `createdAt` is when it
- * first started; both are true and the sort wants the more recent one. Without
- * it, resuming a session from this morning put it below everything spawned
- * since — the row the user had just acted on, furthest from the header.
- *
- * Zero rather than `Infinity` is the whole point of the last fallback: a
- * fixture or a record from an older build has no claim to being the newest
- * thing on the table, and sorting unknowns to the *top* would put exactly the
- * least-known rows in the position the eye reads first.
- */
-const recencyOf = (session: Session): number =>
-  session.endedAt ?? session.resumedAt ?? session.createdAt ?? 0;
 
 /**
  * Newest first, and **stable** for everything that ties.
