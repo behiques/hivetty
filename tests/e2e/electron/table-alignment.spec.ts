@@ -1,6 +1,11 @@
 import { join } from 'node:path';
 
-import { test as base, expect, type Page } from '@playwright/test';
+import {
+  test as base,
+  expect,
+  type ElectronApplication,
+  type Page,
+} from '@playwright/test';
 
 import {
   launchHive,
@@ -50,6 +55,32 @@ async function prColumnXs(page: Page): Promise<number[]> {
   return page.locator('[data-col="pr"]').evaluateAll((cells) =>
     cells.map((cell) => cell.getBoundingClientRect().x),
   );
+}
+
+/**
+ * Resize, and **wait for the renderer to agree**.
+ *
+ * `setBounds` is a main-process call: the promise resolves when main returns,
+ * not when the renderer has relaid out. The very next round trip is usually the
+ * measurement itself, so without this a test can measure the *previous* window
+ * — and at 1440px every claim these tests make is trivially true, because there
+ * is slack for a seventh column. That is the worst kind of failure for a
+ * regression test: it goes green at the width the regression does not happen
+ * at, while claiming to have checked the width it does.
+ */
+async function resizeTo(
+  app: ElectronApplication,
+  page: Page,
+  width: number,
+): Promise<void> {
+  await app.evaluate(
+    ({ BrowserWindow }, w: number) =>
+      BrowserWindow.getAllWindows()[0]!.setBounds({ x: 0, y: 0, width: w, height: 800 }),
+    width,
+  );
+  await expect
+    .poll(() => page.evaluate(() => window.innerWidth))
+    .toBeLessThanOrEqual(width);
 }
 
 /**
@@ -194,14 +225,7 @@ test('the status column fits its widest label at the minimum window size', async
 
   try {
     // The window the arithmetic in `COL` is written against.
-    await app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows()[0]!.setBounds({
-        x: 0,
-        y: 0,
-        width: 1100,
-        height: 800,
-      }),
-    );
+    await resizeTo(app, page, 1100);
 
     await startSession(page, PROJECT);
     await page.getByRole('button', { name: 'Back to overmind' }).click();
@@ -245,5 +269,103 @@ test('the status column fits its widest label at the minimum window size', async
     alignedAt(await prColumnXs(page));
   } finally {
     await app.close();
+  }
+});
+
+/**
+ * The case the two tests above each half-missed.
+ *
+ * `the PR header still sits over the PR cells beside a resume control` runs at
+ * the **default** window, where there is slack for a seventh column. `the
+ * status column fits its widest label at the minimum window size` runs at
+ * 1100px, but on a fresh profile, where nothing is resumable and the Resume
+ * column is not reserved. Neither covers a restored fleet on the smallest
+ * window — which is not an exotic combination at all: it is what every launch
+ * after a session ran looks like, on the smallest window the app allows.
+ *
+ * Measured there before the fix, with `min-w-[Npx]` floors on the three text
+ * columns: the header's `PR` sat **54px** right of the row's, and the `#124`
+ * link was painted over the middle of the branch name.
+ *
+ * ## And it was silent
+ *
+ * `expect(scroll).toBeLessThanOrEqual(client)` is asserted here too, and it
+ * passed *before* the fix as well — which is the point of asserting the x
+ * positions rather than trusting the scroll box. The cells overflowed their own
+ * flex line without ever making the scroll container wider than itself, so
+ * there was no scrollbar, no clipping, and nothing on screen to say the table
+ * had come apart. A test that only checked for overflow would have called this
+ * healthy.
+ */
+test('the columns hold together at the minimum window with a resumable row', async ({}, testInfo) => {
+  const userDataDir = testInfo.outputPath('user-data');
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
+
+  const first = await launchHive({ userDataDir, configPath });
+  const firstWindow = await first.firstWindow();
+  await firstWindow.waitForLoadState('domcontentloaded');
+  await firstWindow.waitForSelector('header');
+  await startSession(firstWindow, PROJECT);
+
+  // The ledger write is debounced at 400ms — see `session-history.spec.ts`.
+  await firstWindow.waitForTimeout(700);
+  await first.close();
+
+  const second = await launchHive({ userDataDir, configPath });
+  const page = await second.firstWindow();
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForSelector('header');
+
+  try {
+    await resizeTo(second, page, 1100);
+
+    /*
+      Wait for the restored fleet to paint **before** counting.
+
+      `count()` does not auto-wait, and the ledger arrives over IPC after
+      `waitForSelector('header')` has already resolved. Counting straight away
+      can therefore find zero Resume controls simply because no row has
+      rendered yet — and the `test.skip` below is this test's only guard, so a
+      premature count skips it green while never exercising the regression at
+      all. `session-history.spec.ts` waits on the same divider for the same
+      reason.
+    */
+    await expect(page.getByText('ENDED', { exact: true })).toBeVisible();
+
+    /*
+      Same skip as the test above, and the same reason: whether the quit
+      produced a resumable row or a terminated one is a race the ledger
+      documents and refuses to arbitrate. Without a Resume control on screen
+      this would be asserting the 1100px test again under a different name.
+    */
+    const resume = page.getByRole('button', { name: /^resume / });
+    test.skip(
+      (await resume.count()) === 0,
+      'the quit produced a terminated row — nothing to resume, so no Resume column',
+    );
+
+    // The claim: every column is a column, at the width where it used to stop
+    // being one.
+    alignedAt(await prColumnXs(page));
+    alignedAt(
+      await page
+        .locator('[data-col="action"]')
+        .evaluateAll((cells) => cells.map((c) => c.getBoundingClientRect().x)),
+    );
+    alignedAt(
+      await page
+        .locator('[data-col="status"]')
+        .evaluateAll((cells) => cells.map((c) => c.getBoundingClientRect().x)),
+    );
+
+    const table = page.getByTestId('session-table');
+    const overflow = await table.evaluate((node) => ({
+      scroll: node.scrollWidth,
+      client: node.clientWidth,
+    }));
+    expect(overflow.scroll).toBeLessThanOrEqual(overflow.client);
+  } finally {
+    await second.close();
   }
 });
