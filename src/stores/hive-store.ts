@@ -42,6 +42,7 @@ import { reopenChannel, requestSpawn } from '@lib/terminal/pty-transport';
 import { sendToSession } from '@lib/terminal/session-input';
 import type { PrRecord } from '@shared/github-contract';
 import type { IdleDetail } from '@shared/hook-contract';
+import type { SessionNameReport } from '@shared/ipc-contract';
 import type { JiraIssue } from '@shared/jira-contract';
 import type { SessionMetrics } from '@shared/metrics-contract';
 import { NOTIFICATION_CAP } from '@shared/notification-contract';
@@ -3395,6 +3396,128 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 /** One entity, or undefined. */
 export const useEntity = (id: string) =>
   useHiveStore((state) => state.entities[id]);
+
+/**
+ * NUL, because it is the one byte neither an entity id nor a
+ * `hiveNameFromTitle` output can contain — so it can never appear inside either
+ * half of an encoded pair.
+ */
+const SESSION_NAME_SEPARATOR = '\u0000';
+
+const sessionNameFieldsSelector = (state: HiveState): string[] =>
+  state.order.flatMap((id) => {
+    const entity = state.entities[id];
+    if (entity === undefined || !isSession(entity) || isEnded(entity.status)) {
+      return [];
+    }
+    /*
+      `name ?? id` — the string the rail is actually showing, so main's toast and
+      the rail agree even before Claude has titled the session (HIVE-108).
+    */
+    return [
+      `${terminalOf(entity)}${SESSION_NAME_SEPARATOR}${entity.name ?? id}`,
+    ];
+  });
+
+/**
+ * Every live session, as `{ terminalId, name }` (HIVE-110).
+ *
+ * Encoded as strings and parsed back, for the reason `editor-store`'s
+ * `tabFieldsSelector` spells out: `useShallow` compares one level deep, so a
+ * selector returning freshly-built objects compares unequal on every render and
+ * tears the subscriber down with "Maximum update depth exceeded". Strings it
+ * can compare, so this re-renders when a session is opened, renamed or ended —
+ * and not on a keystroke, a status change or a transcript line.
+ *
+ * **Live rows only.** An ended row keeps its own name and shares its terminal
+ * with the successor a `/clear` minted, so including both would report two
+ * names for one terminal and let the retired one win by list order.
+ */
+export const useSessionNameReports = (): SessionNameReport[] => {
+  const encoded = useHiveStore(useShallow(sessionNameFieldsSelector));
+
+  return useMemo(
+    () =>
+      encoded.map((entry) => {
+        /*
+          `-1` cannot happen — the encoder above always writes the separator —
+          but it would decode silently and wrongly if it ever did (`slice(0, -1)`
+          truncates the id, `slice(0)` returns the whole pair as the name). The
+          fallback keeps the invariant in the code rather than only in a comment.
+        */
+        const at = entry.indexOf(SESSION_NAME_SEPARATOR);
+        if (at === -1) return { terminalId: entry, name: entry };
+        return {
+          terminalId: entry.slice(0, at),
+          name: entry.slice(at + SESSION_NAME_SEPARATOR.length),
+        };
+      }),
+    [encoded],
+  );
+};
+
+/**
+ * What to call the session a **terminal** id names, right now (HIVE-110).
+ *
+ * The inbox's answer to a notification that outlives the name it was raised
+ * under. Main raises a row carrying the terminal and the predicate alone
+ * (`HiveNotification.subject`), and this resolves the words in front of it on
+ * every render — so a session that titles itself an hour after the row landed
+ * renames the row too, and a `sess-11` the user has never seen anywhere else
+ * never appears.
+ *
+ * Resolved through `currentSessionIn`, the same mapping `currentRowFor` applies
+ * to the click. That identity is the load-bearing part: whatever this hook names,
+ * the click goes to, so the two can never describe different sessions — including
+ * in the awkward case below, where the answer is debatable but is at least the
+ * *same* debatable answer at both ends.
+ *
+ * ## What it answers once a terminal's whole lineage has ended
+ *
+ * `currentSessionIn` looks for a **live** row on the terminal and falls back to
+ * the id it was given. For a terminal whose sessions have all ended, that id is
+ * the original session — the pre-`/clear` predecessor, where there was a
+ * `/clear` — and its entity is still in the store, so this renders the
+ * *predecessor's* name rather than the successor's. Left as it is rather than
+ * made to hunt for the most recently ended row: it names a session that really
+ * did run on that terminal, `currentRowFor` sends the click to exactly that row,
+ * and a notification about a lineage that is entirely over is a row on its way
+ * out.
+ *
+ * The terminal id is the fallback for a terminal the store knows nothing about,
+ * and `name ?? id` for a session Claude has not titled yet (HIVE-108) — which is
+ * what the rail itself shows, so the row and the rail agree even while neither
+ * has a name.
+ *
+ * Returns a **string**, so a subscriber re-renders when the name changes and
+ * not when anything else about the entity does.
+ */
+export const useDisplayName = (terminalId: string): string =>
+  useHiveStore((state) => {
+    /*
+      A row about no session at all — `pr.*`, `clone.done`, `app.update_*` —
+      calls this with `''`, because a hook cannot be conditional. Answered before
+      `currentSessionIn`, which would otherwise miss its `entities[terminalId]`
+      fast path and walk the whole fleet on every store write, for a value the
+      card then discards.
+    */
+    if (terminalId === '') return terminalId;
+
+    /*
+      Narrowed to a session rather than reading `name` off `Entity`, because an
+      `Agent` has no name.
+    */
+    const id = currentSessionIn(state, terminalId);
+    const entity = state.entities[id];
+    /*
+      The **row** id rather than the terminal, because that is what every other
+      surface shows: after a `/clear` the two differ and the rail is naming the
+      successor.
+    */
+    return entity !== undefined && isSession(entity)
+      ? (entity.name ?? id)
+      : terminalId;
+  });
 
 /** Session counts by status — drives the header (story 021). */
 export const useCounts = () =>
