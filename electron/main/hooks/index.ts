@@ -6,6 +6,8 @@ import {
 } from '@shared/hook-contract';
 import type { SessionMetrics } from '@shared/metrics-contract';
 
+import type { Ledger } from '../ledger';
+
 import { createReceiver, type Receiver } from './receiver';
 import { writeHookSettings } from './settings';
 
@@ -28,6 +30,16 @@ import { writeHookSettings } from './settings';
 export interface HookRuntimeOptions {
   /** Where the settings file is written. Electron's `app.getPath('userData')`. */
   userDataPath: string;
+  /**
+   * The ledger (HIVE-111), threaded through rather than constructed here.
+   *
+   * This runtime has no opinion about where `~/.hive/ledger` lives or who
+   * counts as a known party — `ipc/index.ts` is where both of those facts are
+   * already reachable, from `configPath()` and the session registry. Handing
+   * over a constructed `Ledger` keeps this module's only job the receiver's
+   * lifecycle, the same division `HookHandlers` draws for everything else.
+   */
+  ledger: Ledger;
   /**
    * Whether to inject the status line that reports usage (HIVE-79).
    *
@@ -112,7 +124,7 @@ export interface HookRuntime {
 }
 
 export function createHookRuntime(options: HookRuntimeOptions): HookRuntime {
-  const { userDataPath, port, sessionMetrics = () => true } = options;
+  const { userDataPath, port, sessionMetrics = () => true, ledger } = options;
 
   let receiver: Receiver | null = null;
   let settingsPath: string | null = null;
@@ -138,6 +150,20 @@ export function createHookRuntime(options: HookRuntimeOptions): HookRuntime {
         onMetrics,
         onDone,
         onReady,
+        /*
+          `caller` is the session id off `x-hive-session` (HIVE-111) — never
+          trusted from the body, which is what `parseLedgerPostBody` already
+          drops it from.
+
+          The query goes down **unmodified**: `visibleTo` in the receiver
+          narrows the result to "addressed to me, or broadcast, or from me",
+          and defaulting `to: caller` here is strictly narrower than that —
+          it would drop a caller's own ask, which is `from: sess-a,
+          to: overmind`, and so leave no query at all by which a session could
+          read back its own correspondence.
+        */
+        onLedgerRead: (_caller, query) => ledger.read(query),
+        onLedgerPost: (caller, request) => ledger.append({ ...request, from: caller }),
         knowsSession,
         ...(port === undefined ? {} : { port }),
       });

@@ -1,17 +1,41 @@
 // @vitest-environment node
+import { mkdtempSync, rmSync } from 'node:fs';
+import { request as httpRequest } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
+  HOOK_MAX_BODY_BYTES,
   type HookStatusEvent,
   type HookTicketIntentEvent,
 } from '../../../../electron/shared/hook-contract';
 import {
+  LEDGER_BODY_MAX,
+  LEDGER_POST_PATH,
+  LEDGER_READ_PATH,
+  type LedgerSnapshot,
+} from '../../../../electron/shared/ledger-contract';
+import {
   METRICS_PATH,
   type SessionMetrics,
 } from '../../../../electron/shared/metrics-contract';
+import { createLedger, type Ledger } from '../../../../electron/main/ledger';
 import { createReceiver, type Receiver } from '../../../../electron/main/hooks/receiver';
+
+/**
+ * Every call site below that is not exercising the ledger routes still needs
+ * these two — they are required options — but has no reason to care what they
+ * answer. A refusal that names itself keeps a test that *does* hit one of them
+ * by accident loud rather than silently green.
+ */
+const noLedger = {
+  onLedgerRead: (): LedgerSnapshot => ({ entries: [], openAsks: [], claims: {} }),
+  onLedgerPost: () => ({ ok: false as const, status: 503, reason: 'not exercised by this test' }),
+};
 
 /**
  * The receiver is exercised over a real loopback socket rather than by calling
@@ -30,6 +54,8 @@ describe('hook receiver', () => {
   let dones: string[];
   let readies: string[];
   let url: string;
+  let dir: string;
+  let ledger: Ledger;
 
   beforeEach(async () => {
     events = [];
@@ -37,6 +63,8 @@ describe('hook receiver', () => {
     cleared = [];
     dones = [];
     readies = [];
+    dir = mkdtempSync(join(tmpdir(), 'hive-receiver-ledger-'));
+    ledger = createLedger({ dir, knowsParty: (id) => id !== 'sess-gone' });
     receiver = createReceiver({
       onCleared: (entityId) => cleared.push(entityId),
       onEvent: (event) => events.push(event),
@@ -46,6 +74,10 @@ describe('hook receiver', () => {
       // Every session exists except the one explicitly named as gone.
       knowsSession: (entityId) => entityId !== 'sess-gone',
       onMetrics: () => {},
+      // The wiring `hooks/index.ts` uses: the query goes down untouched and
+      // `visibleTo` inside the receiver is the only identity filter.
+      onLedgerRead: (_caller, query) => ledger.read(query),
+      onLedgerPost: (caller, request) => ledger.append({ ...request, from: caller }),
     });
     const started = await receiver.start();
     expect(started).not.toBeNull();
@@ -54,6 +86,7 @@ describe('hook receiver', () => {
 
   afterEach(async () => {
     await receiver.stop();
+    rmSync(dir, { recursive: true, force: true });
   });
 
   const post = (
@@ -261,6 +294,371 @@ describe('hook receiver', () => {
 
       expect(response.status).toBe(204);
       expect(dones).toEqual(['sess-01']);
+    });
+  });
+
+  describe('the ledger routes', () => {
+    // `url` is the `/hook` route's full address, not the socket's origin.
+    const origin = () => new URL(url).origin;
+
+    const post = async (path: string, body: unknown, headers: Record<string, string>) =>
+      fetch(`${origin()}${path}`, {
+        method: 'POST',
+        headers: { [HOOK_HEADER_TOKEN]: receiver.token, ...headers },
+        body: JSON.stringify(body),
+      });
+
+    it('refuses a post with the wrong token', async () => {
+      const response = await fetch(`${origin()}${LEDGER_POST_PATH}`, {
+        method: 'POST',
+        headers: { [HOOK_HEADER_TOKEN]: 'wrong', [HOOK_HEADER_SESSION]: 'sess-a' },
+        body: JSON.stringify({ kind: 'post', body: 'hi' }),
+      });
+
+      expect(response.status).toBe(403);
+    });
+
+    it('refuses a post from a session the app does not have', async () => {
+      const response = await post(
+        LEDGER_POST_PATH,
+        { kind: 'post', body: 'hi' },
+        { [HOOK_HEADER_SESSION]: 'sess-gone' },
+      );
+
+      expect(response.status).toBe(404);
+    });
+
+    it('stores the header session as `from`, ignoring the body', async () => {
+      const response = await post(
+        LEDGER_POST_PATH,
+        { from: 'someone-else', kind: 'post', body: 'hi' },
+        { [HOOK_HEADER_SESSION]: 'sess-a' },
+      );
+      expect(response.status).toBe(200);
+
+      const read = await post(LEDGER_READ_PATH, {}, { [HOOK_HEADER_SESSION]: 'sess-a' });
+      // Every ledger reply carries a body, unlike the four routes that predate
+      // HIVE-111 — a caller reading it as JSON is relying on this header.
+      expect(read.headers.get('content-type')).toBe('application/json');
+      const snapshot = (await read.json()) as LedgerSnapshot;
+
+      expect(snapshot.entries).toHaveLength(1);
+      expect(snapshot.entries[0].from).toBe('sess-a');
+    });
+
+    /**
+     * This is the ledger's own body cap (`LEDGER_BODY_MAX`, 16 KB), enforced by
+     * the write layer `onLedgerPost` calls into — not the transport cap the
+     * route table buffers against. The body posted here (16385 bytes) is well
+     * under `HOOK_MAX_BODY_BYTES`, so `truncated` is false and this exercises
+     * the pass-through of `LedgerResult`'s refusal, not `handleLedgerPost`'s
+     * own `truncated` branch. See the next test for that.
+     */
+    it('passes a 413 from the write layer through, reason and all', async () => {
+      const response = await post(
+        LEDGER_POST_PATH,
+        { kind: 'post', body: 'x'.repeat(LEDGER_BODY_MAX + 1) },
+        { [HOOK_HEADER_SESSION]: 'sess-a' },
+      );
+
+      expect(response.status).toBe(413);
+      expect((await response.json()) as { reason: string }).toMatchObject({
+        reason: expect.stringContaining(String(LEDGER_BODY_MAX)),
+      });
+    });
+
+    /**
+     * `handleLedgerPost`'s own branch: a body past the *transport* cap
+     * (`HOOK_MAX_BODY_BYTES`) is refused rather than drained, unlike every
+     * other route on this receiver — see the comment at its `truncated` check.
+     * This never reaches `JSON.parse` or the write layer at all.
+     */
+    it('refuses, rather than drains, a body over the transport cap', async () => {
+      const response = await post(
+        LEDGER_POST_PATH,
+        { kind: 'post', body: 'x'.repeat(HOOK_MAX_BODY_BYTES + 1) },
+        { [HOOK_HEADER_SESSION]: 'sess-a' },
+      );
+
+      expect(response.status).toBe(413);
+      expect((await response.json()) as { reason: string }).toMatchObject({
+        reason: expect.stringContaining(String(HOOK_MAX_BODY_BYTES)),
+      });
+    });
+
+    it('answers 400 with a reason when an answer names no open thread', async () => {
+      const response = await post(
+        LEDGER_POST_PATH,
+        { kind: 'answer', thread: 'a99', body: 'yes' },
+        { [HOOK_HEADER_SESSION]: 'sess-a' },
+      );
+
+      expect(response.status).toBe(400);
+      expect((await response.json()) as { reason: string }).toMatchObject({
+        reason: expect.stringContaining('a99'),
+      });
+    });
+
+    it('answers 400 for a body that is not JSON', async () => {
+      const response = await fetch(`${origin()}${LEDGER_POST_PATH}`, {
+        method: 'POST',
+        headers: { [HOOK_HEADER_TOKEN]: receiver.token, [HOOK_HEADER_SESSION]: 'sess-a' },
+        body: 'not json',
+      });
+
+      expect(response.status).toBe(400);
+    });
+
+    it('refuses GET on a ledger route', async () => {
+      const response = await fetch(`${origin()}${LEDGER_READ_PATH}`, {
+        method: 'GET',
+        headers: { [HOOK_HEADER_TOKEN]: receiver.token, [HOOK_HEADER_SESSION]: 'sess-a' },
+      });
+
+      expect(response.status).toBe(404);
+    });
+
+    it('shows a third party only the broadcast, not what was addressed elsewhere', async () => {
+      await post(LEDGER_POST_PATH, { to: 'sess-b', kind: 'post', body: 'private' }, { [HOOK_HEADER_SESSION]: 'sess-a' });
+      await post(LEDGER_POST_PATH, { kind: 'post', body: 'everyone' }, { [HOOK_HEADER_SESSION]: 'sess-a' });
+
+      const read = await post(LEDGER_READ_PATH, {}, { [HOOK_HEADER_SESSION]: 'sess-c' });
+      const snapshot = (await read.json()) as LedgerSnapshot;
+
+      expect(snapshot.entries.map((entry) => entry.body)).toEqual(['everyone']);
+    });
+
+    /**
+     * The write path is header-locked — `from` is always the caller, never the
+     * body. The read path must be too: naming another party in the query's
+     * `to` field must never widen what a caller is shown beyond what it is
+     * already entitled to see. `handleLedgerRead` enforces this itself, after
+     * `onLedgerRead` returns, precisely so it holds no matter how the next
+     * task wires the ledger in.
+     */
+    it('does not let a caller widen what it sees by naming another party in `to`', async () => {
+      await post(
+        LEDGER_POST_PATH,
+        { to: 'sess-b', kind: 'post', body: 'for b only' },
+        { [HOOK_HEADER_SESSION]: 'sess-a' },
+      );
+
+      const asA = await post(
+        LEDGER_READ_PATH,
+        { to: 'sess-a' },
+        { [HOOK_HEADER_SESSION]: 'sess-c' },
+      );
+      const asB = await post(
+        LEDGER_READ_PATH,
+        { to: 'sess-b' },
+        { [HOOK_HEADER_SESSION]: 'sess-c' },
+      );
+
+      expect(((await asA.json()) as LedgerSnapshot).entries).toEqual([]);
+      expect(((await asB.json()) as LedgerSnapshot).entries).toEqual([]);
+
+      // The addressee itself still sees it — the filter narrows, not blocks.
+      const asBItself = await post(
+        LEDGER_READ_PATH,
+        {},
+        { [HOOK_HEADER_SESSION]: 'sess-b' },
+      );
+      expect(((await asBItself.json()) as LedgerSnapshot).entries).toHaveLength(1);
+    });
+
+    /**
+     * The other half of `visibleTo` (HIVE-111 final review, finding 2).
+     *
+     * An ask is written `from: sess-a, to: overmind`, so any `to: caller`
+     * default upstream — which is what the wiring used to apply — hides a
+     * session's own questions from it and leaves no query at all by which it
+     * could read its own correspondence back. The `from === caller` branch is
+     * what makes that possible, and it is only reachable once the query
+     * reaches `ledger.read` unmodified.
+     */
+    it('lets a session read back its own ask, addressed though it is to the overmind', async () => {
+      const written = await post(
+        LEDGER_POST_PATH,
+        { to: 'overmind', kind: 'ask', body: 'may I merge?' },
+        { [HOOK_HEADER_SESSION]: 'sess-a' },
+      );
+      expect(written.status).toBe(200);
+
+      const asA = await post(LEDGER_READ_PATH, {}, { [HOOK_HEADER_SESSION]: 'sess-a' });
+      const mine = (await asA.json()) as LedgerSnapshot;
+      expect(mine.entries.map((entry) => entry.body)).toEqual(['may I merge?']);
+      expect(mine.openAsks.map((ask) => ask.body)).toEqual(['may I merge?']);
+
+      // And a party to neither end of it still sees nothing.
+      const asC = await post(LEDGER_READ_PATH, {}, { [HOOK_HEADER_SESSION]: 'sess-c' });
+      expect(((await asC.json()) as LedgerSnapshot).entries).toEqual([]);
+    });
+
+    /**
+     * The ask-openness rule on the *HTTP* path (HIVE-111 final review,
+     * finding 1).
+     *
+     * `Ledger.answer` is reachable from IPC alone; every out-of-process
+     * party — the MCP host of HIVE-112 included — arrives at `Ledger.append`
+     * through this route. Since `openAsks` closes an ask on any answer naming
+     * it, a second answer accepted here would silently retire a question.
+     */
+    it('refuses an answer to an already-closed thread, and appends nothing', async () => {
+      // Addressed to `sess-b`, which answers it: only a party to a thread may
+      // close it, and this spec is about the openness rule, not that one.
+      const asked = await post(
+        LEDGER_POST_PATH,
+        { to: 'sess-b', kind: 'ask', body: 'ship it?' },
+        { [HOOK_HEADER_SESSION]: 'sess-a' },
+      );
+      const { id: thread } = (await asked.json()) as { id: string };
+
+      const first = await post(
+        LEDGER_POST_PATH,
+        { kind: 'answer', thread, body: 'yes' },
+        { [HOOK_HEADER_SESSION]: 'sess-b' },
+      );
+      expect(first.status).toBe(200);
+
+      const second = await post(
+        LEDGER_POST_PATH,
+        { kind: 'answer', thread, body: 'no, wait' },
+        { [HOOK_HEADER_SESSION]: 'sess-b' },
+      );
+      expect(second.status).toBe(400);
+      expect((await second.json()) as { reason: string }).toMatchObject({
+        reason: expect.stringContaining('not open'),
+      });
+
+      // Nothing was written: the log still holds the ask and its one answer.
+      expect(ledger.read({}).entries.map((entry) => entry.body)).toEqual([
+        'ship it?',
+        'yes',
+      ]);
+    });
+
+    /**
+     * `resolveRef` matches *any* entry id, not only an ask's, so a `thread`
+     * naming an ordinary post resolves — and the openness check is what stops
+     * an `answer` from being written against it.
+     */
+    it('refuses an answer whose thread names something that was never an ask', async () => {
+      const posted = await post(
+        LEDGER_POST_PATH,
+        { kind: 'post', body: 'just talking' },
+        { [HOOK_HEADER_SESSION]: 'sess-a' },
+      );
+      const { id: thread } = (await posted.json()) as { id: string };
+
+      const response = await post(
+        LEDGER_POST_PATH,
+        { kind: 'answer', thread, body: 'answering a post' },
+        { [HOOK_HEADER_SESSION]: 'sess-b' },
+      );
+
+      expect(response.status).toBe(400);
+      expect(ledger.read({}).entries).toHaveLength(1);
+    });
+
+    it('answers 413, naming the transport cap, for an oversized read query', async () => {
+      const response = await post(
+        LEDGER_READ_PATH,
+        { since: 'x'.repeat(HOOK_MAX_BODY_BYTES + 1) },
+        { [HOOK_HEADER_SESSION]: 'sess-a' },
+      );
+
+      expect(response.status).toBe(413);
+      expect((await response.json()) as { reason: string }).toMatchObject({
+        reason: expect.stringContaining(String(HOOK_MAX_BODY_BYTES)),
+      });
+    });
+
+    /**
+     * An answer is private to the thread it closes (HIVE-111 ship review).
+     *
+     * `Ledger.answer` used to write no `to` at all, and `visibleTo` reads an
+     * absent `to` as a broadcast — so the overmind's reply to one session's
+     * private question was readable by every other session over this route.
+     * Answered here rather than in the ledger's own spec because the leak was
+     * only observable at the boundary that filters.
+     */
+    it('shows an answer to a private ask only to the party that asked', async () => {
+      const asked = await post(
+        LEDGER_POST_PATH,
+        { to: 'overmind', kind: 'ask', body: 'may I merge?' },
+        { [HOOK_HEADER_SESSION]: 'sess-a' },
+      );
+      const { id: thread } = (await asked.json()) as { id: string };
+
+      // The overmind replies over its own (IPC) path, which is what `answer`
+      // exists for; the read below is the one that crosses the wire.
+      expect(ledger.answer({ thread, body: 'yes, go ahead' }, 'overmind')).toMatchObject({
+        ok: true,
+      });
+
+      const asC = await post(LEDGER_READ_PATH, {}, { [HOOK_HEADER_SESSION]: 'sess-c' });
+      expect(((await asC.json()) as LedgerSnapshot).entries).toEqual([]);
+
+      const asA = await post(LEDGER_READ_PATH, {}, { [HOOK_HEADER_SESSION]: 'sess-a' });
+      expect(((await asA.json()) as LedgerSnapshot).entries.map((entry) => entry.body)).toEqual([
+        'may I merge?',
+        'yes, go ahead',
+      ]);
+    });
+
+    /**
+     * A multibyte character straddling a TCP chunk boundary (HIVE-111 ship
+     * review).
+     *
+     * The body used to be assembled with `chunk.toString('utf8')` per chunk,
+     * which decodes each chunk in isolation: a character whose bytes are split
+     * across two of them became a replacement character on both sides. That
+     * was survivable while the only field ever read here was an ASCII
+     * `hook_event_name`; a ledger body is agent-written markdown appended to a
+     * file nothing ever edits, so the mangling would be permanent.
+     *
+     * The write is split *inside* the two-byte `é`, and the two halves are
+     * sent far enough apart (and with Nagle off) to arrive as separate `data`
+     * events.
+     */
+    it('keeps a multibyte character that straddles a chunk boundary intact', async () => {
+      const body = 'déjà vu — 🐝 ünicode';
+      const payload = Buffer.from(JSON.stringify({ kind: 'post', body }), 'utf8');
+      // 0xC3 is the lead byte of `é`; cutting after it leaves its continuation
+      // byte in the second chunk.
+      const cut = payload.indexOf(0xc3) + 1;
+      expect(cut).toBeGreaterThan(0);
+
+      const target = new URL(`${origin()}${LEDGER_POST_PATH}`);
+      await new Promise<void>((resolve, reject) => {
+        const request = httpRequest(
+          {
+            hostname: target.hostname,
+            port: target.port,
+            path: target.pathname,
+            method: 'POST',
+            headers: {
+              [HOOK_HEADER_TOKEN]: receiver.token,
+              [HOOK_HEADER_SESSION]: 'sess-a',
+              'content-type': 'application/json',
+              'content-length': String(payload.byteLength),
+            },
+          },
+          (response) => {
+            response.resume();
+            response.on('end', () => {
+              if (response.statusCode === 200) resolve();
+              else reject(new Error(`unexpected status ${String(response.statusCode)}`));
+            });
+          },
+        );
+        request.on('error', reject);
+        request.on('socket', (socket) => socket.setNoDelay(true));
+        request.write(payload.subarray(0, cut));
+        setTimeout(() => request.end(payload.subarray(cut)), 25);
+      });
+
+      expect(ledger.read({}).entries.map((entry) => entry.body)).toEqual([body]);
     });
   });
 
@@ -876,6 +1274,7 @@ describe('hook receiver', () => {
         onReady: () => {},
         knowsSession: () => true,
         onMetrics: () => {},
+        ...noLedger,
       });
       const started = (await ordered.start()) as string;
 
@@ -978,6 +1377,7 @@ describe('hook receiver', () => {
       onReady: () => {},
       knowsSession: () => true,
       onMetrics: () => {},
+      ...noLedger,
       port: 1,
     });
     await expect(doomed.start()).resolves.toBeNull();
@@ -995,6 +1395,7 @@ describe('hook receiver', () => {
       onReady: () => {},
       knowsSession: () => true,
       onMetrics: () => {},
+      ...noLedger,
     });
     const started = await exploding.start();
     const response = await fetch(started as string, {
@@ -1012,14 +1413,14 @@ describe('hook receiver', () => {
 
 describe('hook receiver tokens', () => {
   it('gives each receiver a distinct token', () => {
-    const a = createReceiver({ onEvent: () => {}, onCleared: () => {}, onTicketIntent: () => {}, onMetrics: () => {}, onDone: () => {}, onReady: () => {}, knowsSession: () => true });
-    const b = createReceiver({ onEvent: () => {}, onCleared: () => {}, onTicketIntent: () => {}, onMetrics: () => {}, onDone: () => {}, onReady: () => {}, knowsSession: () => true });
+    const a = createReceiver({ onEvent: () => {}, onCleared: () => {}, onTicketIntent: () => {}, onMetrics: () => {}, onDone: () => {}, onReady: () => {}, knowsSession: () => true, ...noLedger });
+    const b = createReceiver({ onEvent: () => {}, onCleared: () => {}, onTicketIntent: () => {}, onMetrics: () => {}, onDone: () => {}, onReady: () => {}, knowsSession: () => true, ...noLedger });
     expect(a.token).not.toBe(b.token);
     expect(a.token).toHaveLength(36);
   });
 
   it('has no url before it starts', () => {
-    const receiver = createReceiver({ onEvent: () => {}, onCleared: () => {}, onTicketIntent: () => {}, onMetrics: () => {}, onDone: () => {}, onReady: () => {}, knowsSession: () => true });
+    const receiver = createReceiver({ onEvent: () => {}, onCleared: () => {}, onTicketIntent: () => {}, onMetrics: () => {}, onDone: () => {}, onReady: () => {}, knowsSession: () => true, ...noLedger });
     expect(receiver.url).toBeNull();
   });
 });
@@ -1048,6 +1449,7 @@ describe('the status line path', () => {
       onDone: () => {},
       onReady: () => {},
       knowsSession: (entityId) => entityId !== 'sess-gone',
+      ...noLedger,
     });
     const started = await receiver.start();
     expect(started).not.toBeNull();
@@ -1085,6 +1487,7 @@ describe('the status line path', () => {
       onDone: () => {},
       onReady: () => {},
       knowsSession: () => true,
+      ...noLedger,
     });
     expect(unbound.metricsUrl).toBeNull();
   });

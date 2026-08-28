@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import {
   BrowserWindow,
@@ -45,6 +45,9 @@ import {
   parseDiagnoseEnvRequest,
   parseSpawnRequest,
   parseKillRequest,
+  parseLedgerAnswerRequest,
+  parseLedgerPostBody,
+  parseLedgerReadQuery,
   parseRemoveProjectRequest,
   parseRenameProjectRequest,
   parseSetProjectKeyRequest,
@@ -93,6 +96,7 @@ import type {
   JiraStatus,
   JiraTransition,
 } from '@shared/jira-contract';
+import { LEDGER_DIR, OVERMIND } from '@shared/ledger-contract';
 import { SESSION_NAME_DISPLAY_MAX } from '@shared/session-contract';
 import {
   SESSION_HISTORY_FILE,
@@ -138,6 +142,7 @@ import { createGithub } from '../integrations/github';
 import { runAsync } from '../integrations/github/run';
 import { createJira } from '../integrations/jira';
 import { credentialFile } from '../integrations/jira/auth';
+import { createLedger } from '../ledger';
 import {
   createNotificationHub,
   createNotifier,
@@ -146,9 +151,9 @@ import {
 import { registerPtyHost } from '../pty-host';
 import { createSessions, type Sessions } from '../sessions';
 import {
-  createSessionLedger,
-  type SessionLedger,
-} from '../sessions/ledger';
+  createSessionHistory,
+  type SessionHistory,
+} from '../sessions/history';
 import { onShutdown } from '../shutdown';
 import { createSkillsRuntime, type SkillsRuntime } from '../skills';
 import { parseSaveThemeRequest, pickTheme, saveTheme } from '../theme';
@@ -228,18 +233,18 @@ let systemNotificationRefusal: string | null = null;
 
 let sessions: Sessions | null = null;
 /**
- * The session ledger (HIVE-87), or `null` before registration.
+ * The session history (HIVE-87), or `null` before registration.
  *
  * Held here rather than reached through `sessions` because two unrelated things
  * need it: the session layer writes to it, and `session:history` reads from it.
  * Routing the read through the session layer would mean widening that layer's
  * surface with a verb it does not otherwise need.
  */
-let ledger: SessionLedger | null = null;
+let history: SessionHistory | null = null;
 /**
  * The custom-skills runtime (HIVE-96), or `null` before registration.
  *
- * Held here for the reason `ledger` is: two unrelated callers need it. The
+ * Held here for the reason `history` is: two unrelated callers need it. The
  * session layer syncs it before every spawn and reads its path, and the four
  * `skills:*` handlers below read and write the tree it manages.
  */
@@ -743,14 +748,70 @@ export function registerIpcHandlers(): void {
    * touches `~/.claude`.
    */
   /**
-   * The ledger, beside `window-state.json` in the app's own directory (HIVE-87).
+   * The session history, beside `window-state.json` in the app's own directory
+   * (HIVE-87).
    *
    * Constructed before the session layer because that layer takes it as an
    * option. Nothing about it touches `~/.claude` — it records what The Hive
    * knows about its own rows, not anything Claude wrote.
    */
-  ledger = createSessionLedger(
+  history = createSessionHistory(
     join(app.getPath('userData'), SESSION_HISTORY_FILE),
+  );
+
+  /**
+   * The ledger lives beside the config, not in `userData` (HIVE-111).
+   *
+   * `~/.hive/` is the user's own directory — the one they can open, read and
+   * back up. A correspondence log between their agents belongs there for the
+   * same reason the config does, and `userData` belongs to the app.
+   *
+   * `knowsParty` closes over `sessions`, which is `null` at this point in
+   * startup and assigned below — safe because the closure runs on every read
+   * and write, always after registration, never at construction.
+   *
+   * The `history.resumable` arm is **not** what lets an ended session keep
+   * writing, and today nothing reaches it. Every out-of-process caller arrives
+   * through the receiver, whose `reject()` answers `404` off the *live* pty
+   * registry before `knowsParty` is ever consulted — so an ended session's
+   * writes are already refused a layer earlier, and the only caller that gets
+   * this far is the overmind over IPC. What the arm does is state the rule
+   * this predicate is meant to hold: a party is an *identity*, not a process,
+   * so if the gate in front of it is ever widened (a background agent posting
+   * for a session that has closed, HIVE-112 onward), the ledger will not be
+   * the layer that refuses.
+   */
+  const ledger = createLedger({
+    dir: join(dirname(configPath()), LEDGER_DIR),
+    knowsParty: (id) =>
+      id === OVERMIND ||
+      (sessions?.entities().includes(id) ?? false) ||
+      history?.resumable(id) !== undefined,
+  });
+
+  /**
+   * One entry landed, from any party — pushed the way `notifications:new` is
+   * (HIVE-75): straight to every window rather than through `send`, because
+   * there is nothing here for a tap to loop back into.
+   */
+  ledger.onChange((entry) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.isDestroyed()) continue;
+      window.webContents.send(CH.ledgerChanged, entry);
+    }
+  });
+
+  handle(CH.ledgerList, (_event, payload) => ledger.read(parseLedgerReadQuery(payload)));
+  handle(CH.ledgerPost, (_event, payload) =>
+    /*
+      `from` is supplied here, never taken from the renderer — the same rule
+      the receiver enforces with the session header. The renderer is the
+      overmind's only mouth.
+    */
+    ledger.append({ ...parseLedgerPostBody(payload), from: OVERMIND }),
+  );
+  handle(CH.ledgerAnswer, (_event, payload) =>
+    ledger.answer(parseLedgerAnswerRequest(payload), OVERMIND),
   );
 
   /*
@@ -769,6 +830,7 @@ export function registerIpcHandlers(): void {
     userDataPath: app.getPath('userData'),
     // Read per call, so a config reload is picked up (HIVE-79).
     sessionMetrics: () => getConfig().sessionMetrics,
+    ledger,
   });
 
   skills = createSkillsRuntime({
@@ -788,7 +850,7 @@ export function registerIpcHandlers(): void {
     send,
     skills,
     hooks,
-    ledger,
+    history,
   });
 
   /**
@@ -854,15 +916,15 @@ export function registerIpcHandlers(): void {
      * worth keeping was already written at the moment it was known — this only
      * saves the last few hundred milliseconds of a quiet quit.
      */
-    ledger?.flush();
+    history?.flush();
   });
 
   /**
    * The fleet as it was when the app last closed (HIVE-87).
    *
-   * Answers from memory rather than re-reading the file: the ledger loaded it at
-   * construction and is the only thing that writes to it, so a second read could
-   * only ever return something staler than what is already held.
+   * Answers from memory rather than re-reading the file: the history loaded it
+   * at construction and is the only thing that writes to it, so a second read
+   * could only ever return something staler than what is already held.
    *
    * `?? []` is not a fallback so much as the browser-shaped case in main's
    * clothing — a renderer that asks before registration completed gets "no
@@ -875,17 +937,18 @@ export function registerIpcHandlers(): void {
      *
      * The renderer asking may not be the first of this run: on macOS the
      * window closes and the app lives on, and a reload or a renderer crash
-     * gives the same fresh store in front of the same running ptys. The ledger
-     * holds those sessions as `working` — true, and exactly the problem — so
-     * the renderer would restore them as last run's fleet and their own hooks
-     * would then prove otherwise. The registry is the one authority on "has a
-     * process now": a session this run began and already lost is history too.
+     * gives the same fresh store in front of the same running ptys. The
+     * history holds those sessions as `working` — true, and exactly the
+     * problem — so the renderer would restore them as last run's fleet and
+     * their own hooks would then prove otherwise. The registry is the one
+     * authority on "has a process now": a session this run began and already
+     * lost is history too.
      */
     const live = new Set(sessions?.entities() ?? []);
-    return (ledger?.all() ?? []).map((record) => {
+    return (history?.all() ?? []).map((record) => {
       /*
         Both marks are computed here rather than stored, because both are only
-        true of this moment (HIVE-93). `resumable` asks the ledger rather than
+        true of this moment (HIVE-93). `resumable` asks the history rather than
         reading `sessionUuid` off the record: a session *this run* started holds
         a uuid naming a conversation that is already open, and offering Resume
         for it would start a second `claude` against one transcript.
@@ -893,7 +956,7 @@ export function registerIpcHandlers(): void {
       const marked = live.has(record.id)
         ? { ...record, live: true as const }
         : record;
-      return ledger?.resumable(record.id) === undefined
+      return history?.resumable(record.id) === undefined
         ? marked
         : { ...marked, resumable: true as const };
     });
@@ -917,8 +980,8 @@ export function registerIpcHandlers(): void {
    */
   handle(CH.sessionNote, (_event, raw: unknown): void => {
     const request = parseSessionNoteRequest(raw);
-    if (!ledger?.all().some((record) => record.id === request.entityId)) return;
-    ledger.record(request.entityId, {
+    if (!history?.all().some((record) => record.id === request.entityId)) return;
+    history.record(request.entityId, {
       ticket: request.ticket,
       ...(request.name === undefined
         ? {}
@@ -937,8 +1000,8 @@ export function registerIpcHandlers(): void {
    */
   handle(CH.sessionPr, (_event, raw: unknown): void => {
     const request = parseSessionPrRequest(raw);
-    if (!ledger?.all().some((record) => record.id === request.entityId)) return;
-    ledger.record(request.entityId, { pr: request.pr });
+    if (!history?.all().some((record) => record.id === request.entityId)) return;
+    history.record(request.entityId, { pr: request.pr });
   });
 
   handle(CH.appInfo, (): AppInfo => {
@@ -1695,16 +1758,16 @@ export function resetIpcHandlers(): void {
   fsWatch?.dispose();
   fsWatch = null;
   /*
-    HIVE-87. Dropped without flushing: a test's ledger points at whatever
+    HIVE-87. Dropped without flushing: a test's history points at whatever
     `app.getPath` was stubbed to return, and writing there on teardown is how a
     unit test comes to leave a file behind.
 
     `dispose()` rather than just dropping the reference — the debounce timer
-    closes over the write directly, so an unreferenced ledger still fires one
+    closes over the write directly, so an unreferenced history still fires one
     last `writeFileSync` at that stubbed path.
   */
-  ledger?.dispose();
-  ledger = null;
+  history?.dispose();
+  history = null;
   // HIVE-81. Test-only: a fresh registration starts with nothing on stage and
   // no listeners left over from a previous test — including the app-level
   // focus wiring and any tick it has already scheduled, which would otherwise

@@ -44,6 +44,13 @@ import type { PrRecord } from '@shared/github-contract';
 import type { IdleDetail } from '@shared/hook-contract';
 import type { SessionNameReport } from '@shared/ipc-contract';
 import type { JiraIssue } from '@shared/jira-contract';
+import {
+  LEDGER_MEMORY_CAP,
+  type LedgerEntry,
+  type LedgerReadQuery,
+  type OpenAsk,
+} from '@shared/ledger-contract';
+import { matches, openAsks, thread } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
 import { NOTIFICATION_CAP } from '@shared/notification-contract';
 import {
@@ -235,6 +242,14 @@ interface HiveState {
   /** Where {@link HiveState.prs} came from. */
   prSource: PrSource;
   notifs: HiveNotification[];
+  /**
+   * The ledger's tail (HIVE-111).
+   *
+   * A mirror, not the source — main owns the log and this holds the newest
+   * {@link LEDGER_MEMORY_CAP} entries so the console and the inbox can render
+   * without a round trip. Older entries are still there; they are asked for.
+   */
+  ledger: LedgerEntry[];
   orchLines: TermLine[];
 
   /**
@@ -360,6 +375,16 @@ interface HiveState {
    * what main answered with, and replacing would drop it.
    */
   hydrateNotifs: (notifs: HiveNotification[]) => void;
+  /**
+   * Merge a fresh snapshot into the ledger's tail by `id` (HIVE-111).
+   *
+   * A union rather than a replacement, for the reason `hydrateNotifs` above
+   * gives — and see the note at the implementation for why a dropped entry
+   * here would never come back.
+   */
+  hydrateLedger: (entries: LedgerEntry[]) => void;
+  /** One entry landed — append it to the tail. */
+  ledgerAppend: (entry: LedgerEntry) => void;
   /**
    * Put last run's fleet back on the table (HIVE-87).
    *
@@ -748,7 +773,7 @@ let spawnCounter = 0;
  * The closed lists, checked rather than assumed (HIVE-87).
  *
  * `session-history-contract.ts` types `model` and `effort` as the unions but the
- * file they come from is not typed at all, and `ledger.ts` deliberately does not
+ * file they come from is not typed at all, and `history.ts` deliberately does not
  * re-check them — it points here instead. These are what make that pointer
  * true.
  */
@@ -896,8 +921,8 @@ function byRecency(
  * but only by skipping: with the counter at zero and `sess-05` restored, the
  * next four spawns take `sess-01`…`sess-04` and the fifth silently jumps the
  * gap. That is a fleet whose ids no longer say anything about order, and it is
- * the kind of thing that reads as a bug in the ledger long after the ledger has
- * stopped being involved.
+ * the kind of thing that reads as a bug in the session history long after the
+ * session history has stopped being involved.
  *
  * Parsed base 36 because that is what `nextSessionId` formats with. An id that
  * does not match the pattern — a fixture, a hand-edited file — is ignored
@@ -994,8 +1019,8 @@ const line = (text: string, color: TermLine['color'] = 'ink'): TermLine => ({
  * {@link HiveActions.hydrateSessions} puts last run's sessions back shortly
  * after the first paint. That reads like a reversal of everything above, so the
  * difference is worth stating — **the seeds are still empty, and the rows still
- * arrive from a real producer.** The producer is main's ledger rather than a
- * pty, and every row it supplies is one that has already ended.
+ * arrive from a real producer.** The producer is main's session history rather
+ * than a pty, and every row it supplies is one that has already ended.
  *
  * The failure this comment is about is untouched. A seeded fleet claimed
  * sessions were *running* that were not, and a real read replaced them a frame
@@ -1082,6 +1107,7 @@ function sameTickets(
 export const useHiveStore = create<HiveState>()((set, get) => ({
   ...emptySeeds(),
   notifs: [],
+  ledger: [],
   metrics: {},
   /**
    * Loading until the first read answers.
@@ -1291,7 +1317,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           The name rides along with it (HIVE-108), which it did not have to
           before: main used to learn this row's name from the `--name` on its
           own command line, and there is no longer one. A note carrying a name
-          is what sets `namePinned` in the ledger, so without it the file would
+          is what sets `namePinned` in the session history, so without it the file would
           take the agent's first title unpinned — and the next launch would
           restore `back-key-interception` for a row the app is showing as
           `HIVE-73-back-key-interception`.
@@ -1898,6 +1924,34 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       return { notifs: merged.slice(0, NOTIF_CAP) };
     }),
 
+  hydrateLedger: (entries) =>
+    set((state) => {
+      /**
+       * Union, not replacement — `hydrateNotifs`' reason, with one difference
+       * that makes it sharper.
+       *
+       * `useLedgerSync` arms the push channel while `list()` is still in
+       * flight, so an entry appended after main took its snapshot lands here
+       * first and is absent from the snapshot that follows. A replace would
+       * discard it *permanently*: that hook mounts once at the composition
+       * root and never remounts, so there is no second hydrate to recover it.
+       *
+       * Ordered by `id` rather than by `ts`, because ids are fixed-width and
+       * sort as strings in write order — which is the same comparison
+       * `since` and the store's own load-time sort already rely on.
+       */
+      const seen = new Set(state.ledger.map((entry) => entry.id));
+      const merged = [
+        ...state.ledger,
+        ...entries.filter((entry) => !seen.has(entry.id)),
+      ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+      return { ledger: merged.slice(-LEDGER_MEMORY_CAP) };
+    }),
+
+  ledgerAppend: (entry) =>
+    set((state) => ({ ledger: [...state.ledger, entry].slice(-LEDGER_MEMORY_CAP) })),
+
   hydrateSessions: (records) =>
     set((state) => {
       const entities = { ...state.entities };
@@ -1910,7 +1964,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
          *
          * The counter has to learn about an id whether or not the row is kept.
          * A spawn that lands in the window between boot and this unawaited
-         * hydrate takes `sess-01`; the ledger's own `sess-01` is then skipped
+         * hydrate takes `sess-01`; the session history's own `sess-01` is then skipped
          * below as a collision, and if the counter never heard of it the next
          * spawn is handed `sess-02` — the id of another record still waiting to
          * be restored, which then vanishes the same way. Once past the skip,
@@ -1920,15 +1974,16 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
         /*
           A live row always wins. Not a conflict to resolve so much as the
-          ordinary case: entity ids are reused across a restart, so the ledger's
-          `sess-01` and this run's `sess-01` are different sessions wearing the
-          same name, and only one of them has a process behind it.
+          ordinary case: entity ids are reused across a restart, so the
+          session history's `sess-01` and this run's `sess-01` are different
+          sessions wearing the same name, and only one of them has a process
+          behind it.
 
           This is also the whole of restore's deduplication (HIVE-88), and the
           id is the right key for it. It is the one identity that survives a
           restart: a restored row reopened spawns under its own id, the
-          ledger is keyed by it, and `rememberSpawnId` above keeps this run's
-          counter from minting it a second time. Claude's own `sessionUuid`
+          session history is keyed by it, and `rememberSpawnId` above keeps
+          this run's counter from minting it a second time. Claude's own `sessionUuid`
           never reaches the renderer, and `cwd` or `ticket` would collapse two
           genuinely different sessions on one issue into one row.
         */
@@ -1954,8 +2009,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         /*
           A status this build does not know is a record written by one that did.
           Dropped rather than guessed at — an unrenderable row in the fleet
-          table is worse than a row missing from it, and the ledger is a
-          convenience, not a source of truth about anything.
+          table is worse than a row missing from it, and the session history is
+          a convenience, not a source of truth about anything.
         */
         if (stored === undefined) continue;
 
@@ -2016,7 +2071,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
             The times the row really had, not the moment it was restored.
             `createdAt` is required on a record so it always lands; `endedAt` is
             not, and a record without one has already been stamped at load by
-            `ledger.ts` — a row that claims to be live in a file main is reading
+            `history.ts` — a row that claims to be live in a file main is reading
             back plainly is not. A live row promoted below keeps `createdAt` and
             has its `endedAt` removed by `stampLifecycle`, so a session the app
             outlived and then found still running does not sort as though it had
@@ -2032,7 +2087,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           ...(item.pr === undefined ? {} : { lastPr: item.pr }),
           /*
             Checked against the closed lists rather than trusted (HIVE-87).
-            `ledger.ts` casts these on the way in and says the store validates
+            `history.ts` casts these on the way in and says the store validates
             them — which was not true until now, so a hand-edited file or one
             from an older build could put an arbitrary string into a field typed
             as a union. An unknown value drops the field and keeps the row: the
@@ -2466,14 +2521,14 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
      *   nowhere else — `ticketSessionName` de-duplicates against the whole
      *   fleet — so a caller can only send the key, and main had no other way
      *   to learn what the row is now called: this rename never reaches Claude,
-     *   so it never comes back on the title stream. The ledger kept the id, and
-     *   the next launch restored it over a name the user had been reading all
-     *   afternoon.
+     *   so it never comes back on the title stream. The session history kept
+     *   the id, and the next launch restored it over a name the user had been
+     *   reading all afternoon.
      * - **It only speaks when it acted.** The three refusals below are silent
      *   from outside, so an unconditional note beside the call wrote a ticket
-     *   into the ledger that the store had just declined — and keyed it on the
-     *   raw id rather than `currentSessionIn`, which after a `/clear` is a
-     *   different row.
+     *   into the session history that the store had just declined — and keyed
+     *   it on the raw id rather than `currentSessionIn`, which after a
+     *   `/clear` is a different row.
      *
      * `get()` before `set()` is the shape `resumeSession` uses a few actions
      * down, and for the same reason: the decision needs the state, and the
@@ -3496,6 +3551,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     set({
       ...emptySeeds(),
       notifs: [],
+      ledger: [],
       metrics: {},
       ticketSource: { kind: 'loading' },
       prSource: { kind: 'loading' },
@@ -3767,7 +3823,7 @@ export const useNavOrder = () =>
  * **Both are newest-first** (`byRecency`). The table used to paint `order`
  * straight through, which is insertion order — so the newest session was at the
  * bottom of the live group, and the ended half read oldest-first from the top,
- * with last run's rows arriving in the ledger's own oldest-ending-first
+ * with last run's rows arriving in the session history's own oldest-ending-first
  * sequence. The one row a fleet table exists to show first was reliably the one
  * furthest from the header.
  */
@@ -4694,6 +4750,52 @@ export const useMarkAllRead = () => useHiveStore((state) => state.markAllRead);
 
 /** The inbox, newest first (story 051). */
 export const useNotifs = () => useHiveStore((state) => state.notifs);
+
+/** Hydration and the push subscription — see `use-ledger-sync.ts`. */
+export const useHydrateLedger = () => useHiveStore((state) => state.hydrateLedger);
+export const useLedgerAppend = () => useHiveStore((state) => state.ledgerAppend);
+
+/**
+ * The ledger tail, optionally filtered.
+ *
+ * Memoised over the raw slice rather than wrapped in `useShallow`, for the
+ * reason spelled out on {@link usePrs}: this builds a new array, and shallow-
+ * comparing a freshly-built one never matches. Callers passing a `filter` must
+ * hand over a stable object — an inline literal defeats the memo.
+ */
+export const useLedgerEntries = (filter?: LedgerReadQuery): LedgerEntry[] => {
+  const entries = useHiveStore((state) => state.ledger);
+
+  return useMemo(
+    () => (filter === undefined ? entries : entries.filter((entry) => matches(entry, filter))),
+    [entries, filter],
+  );
+};
+
+/**
+ * Asks nobody has answered.
+ *
+ * `Date.now()` is read inside the memo, so `ageMs` is as fresh as the last
+ * entry rather than as fresh as the last render. That is the right trade here:
+ * the TTL is a day, and re-deriving on every tick to keep a minutes-old age
+ * exact would re-render the inbox for nothing.
+ */
+export const useOpenAsks = (): OpenAsk[] => {
+  const entries = useHiveStore((state) => state.ledger);
+
+  return useMemo(() => openAsks(entries, Date.now()), [entries]);
+};
+
+/** The badge. A number, so it needs no memo and no shallow compare. */
+export const useOpenAskCount = (): number =>
+  useHiveStore((state) => openAsks(state.ledger, Date.now()).length);
+
+/** One conversation: the ask, and everything that named it. */
+export const useThread = (id: string): LedgerEntry[] => {
+  const entries = useHiveStore((state) => state.ledger);
+
+  return useMemo(() => thread(entries, id), [entries, id]);
+};
 
 /**
  * Every PR the panel shows, with its owning session resolved (story 052).
