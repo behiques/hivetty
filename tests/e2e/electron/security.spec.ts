@@ -69,6 +69,8 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     integrations: Object.keys(window.hive!.integrations).sort(),
     fs: Object.keys(window.hive!.fs).sort(),
     skills: Object.keys(window.hive!.skills).sort(),
+    agents: Object.keys(window.hive!.agents).sort(),
+    ledger: Object.keys(window.hive!.ledger).sort(),
     github: Object.keys(window.hive!.github).sort(),
     notifications: Object.keys(window.hive!.notifications).sort(),
     jira: Object.keys(window.hive!.jira).sort(),
@@ -186,8 +188,26 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * it can name no directory `remove` could not already name, and it refuses a
    * destination that exists rather than replacing it. The argument for the
    * fifth verb is recorded on `BRIDGE_SKILLS_KEYS`.
+   *
+   * ## `agents` (HIVE-114)
+   *
+   * The third namespace that writes to the user's disk, and the first with six
+   * keys. What keeps it inside story 082's posture:
+   *
+   * - **No verb takes a path.** Each names an *agent*, and `assertAgentName`
+   *   makes a path unrepresentable rather than filtering one — the same bound
+   *   `skills` has. The reserved names are refused at the boundary too, and
+   *   `overmind` matters most: it is the ledger's coordinator identity, so an
+   *   agent holding it could sign entries as the overmind.
+   * - **The sixth key is a listener, not a capability.** `onChanged` is main →
+   *   renderer only and carries no payload at all: the renderer is poked and
+   *   re-`list`s, so it cannot surface anything `agents:list` would not
+   *   already return.
+   * - **A refusal is a value, not a write.** `write` validates before touching
+   *   the disk, so a page that spams malformed definitions creates nothing.
    */
   expect(surface.top).toEqual([
+    'agents',
     'appInfo',
     'config',
     'fs',
@@ -211,6 +231,15 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'ui',
     'updates',
   ]);
+  expect(surface.agents).toEqual([
+    'list',
+    'onChanged',
+    'read',
+    'remove',
+    'rename',
+    'write',
+  ]);
+  expect(surface.ledger).toEqual(['answer', 'list', 'onChanged', 'post']);
   expect(surface.skills).toEqual([
     'list',
     'read',
