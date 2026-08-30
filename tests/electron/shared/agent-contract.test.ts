@@ -10,6 +10,8 @@ import {
   RESERVED_AGENT_NAMES,
   WAKE_EVERY_FLOOR_MS,
   WAKE_ON_EVENTS,
+  formatRunCost,
+  isReservedAgentName,
   isWakeOn,
 } from '../../../electron/shared/agent-contract';
 import { OVERMIND } from '../../../electron/shared/ledger-contract';
@@ -20,6 +22,35 @@ describe('agent-contract', () => {
     // Spelling 'overmind'/'done' here would leave two copies to keep in step.
     expect(RESERVED_AGENT_NAMES).toContain(OVERMIND);
     expect(RESERVED_AGENT_NAMES).toContain(RESERVED_SKILL_NAME);
+  });
+
+  /**
+   * The one register `RESERVED_AGENT_NAMES` cannot hold (HIVE-115).
+   *
+   * There is no list of session ids to enumerate — `nextSessionId` mints them
+   * on demand — so the reservation is a shape, and `isReservedAgentName` is what
+   * puts the two questions back together for the four places that validate a
+   * name: the IPC guard, the definition parser, the registry's listing filter
+   * and the Settings form.
+   */
+  it('reserves the session-id shape as well as the named identities', () => {
+    expect(isReservedAgentName(OVERMIND)).toBe(true);
+    expect(isReservedAgentName(RESERVED_SKILL_NAME)).toBe(true);
+    expect(isReservedAgentName('sess-01')).toBe(true);
+    expect(isReservedAgentName('sess-zz')).toBe(true);
+
+    expect(isReservedAgentName('slack-watcher')).toBe(false);
+    // The prefix is reserved at the start, not wherever it appears.
+    expect(isReservedAgentName('assess-risk')).toBe(false);
+  });
+
+  it('reserves exactly what hive-store mints', () => {
+    // `nextSessionId` formats base 36, padded to two: sess-01 … sess-zz and on.
+    for (let n = 1; n <= 100; n += 1) {
+      expect(
+        isReservedAgentName(`sess-${n.toString(36).padStart(2, '0')}`),
+      ).toBe(true);
+    }
   });
 
   it('accepts kebab names and rejects anything else', () => {
@@ -123,5 +154,26 @@ describe('agent-contract', () => {
 
   it('derives the nesting parents from the table', () => {
     expect(AGENT_PARENT_KEYS).toEqual(['wake', 'limits']);
+  });
+});
+
+/** HIVE-115. One formatter, so the list and the live push cannot disagree. */
+describe('formatRunCost', () => {
+  it('gives an ordinary run two decimals', () => {
+    expect(formatRunCost(1.5)).toBe('$1.50');
+    expect(formatRunCost(0.42)).toBe('$0.42');
+  });
+
+  it('gives a sub-cent run four, rather than reporting $0.00', () => {
+    expect(formatRunCost(0.0023)).toBe('$0.0023');
+    expect(formatRunCost(0.00001)).toBe('$0.0000');
+  });
+
+  it('says nothing when there is no number to say it about', () => {
+    // A run killed before its `result` records no cost, and a row that showed
+    // `$0.00` for it would be claiming the run was free rather than unmeasured.
+    expect(formatRunCost(undefined)).toBeUndefined();
+    expect(formatRunCost(Number.NaN)).toBeUndefined();
+    expect(formatRunCost(Number.POSITIVE_INFINITY)).toBeUndefined();
   });
 });

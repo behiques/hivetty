@@ -6,6 +6,7 @@ import {
   IpcValidationError,
   parseAgentNameRequest,
   parseAgentRenameRequest,
+  parseAgentRunRequest,
   parseAgentWriteRequest,
 } from '../../../electron/shared/guards';
 
@@ -30,6 +31,29 @@ describe('assertAgentName', () => {
     // in — the same argument assertSkillName makes.
     expect(() => assertAgentName('overmind', 'x')).toThrow(IpcValidationError);
     expect(() => assertAgentName('done', 'x')).toThrow(IpcValidationError);
+  });
+
+  /**
+   * The session-id shape is reserved too (HIVE-115).
+   *
+   * `hive-store.ts` mints `sess-01`, `sess-02`, … and every one of those passes
+   * `AGENT_NAME_PATTERN`. An agent wearing a live terminal's id is not a
+   * cosmetic clash: the hook receiver routes on which register a name is in and
+   * lets the *session* win a collision, so that agent's headless hooks would
+   * move a real terminal's status dot and write its history — and its `/done`
+   * would arm `/exit` on it.
+   */
+  it('refuses the session-id shape', () => {
+    expect(() => assertAgentName('sess-01', 'x')).toThrow(IpcValidationError);
+    expect(() => assertAgentName('sess-1', 'x')).toThrow(IpcValidationError);
+    // The prefix is what the fleet reads as "this is a terminal", so the whole
+    // of it is reserved rather than only the two-digit base-36 form.
+    expect(() => assertAgentName('sess-watcher', 'x')).toThrow(IpcValidationError);
+  });
+
+  it('still accepts a name that merely contains the prefix', () => {
+    // Reserved at the start, not anywhere: `assess-risk` is an ordinary name.
+    expect(assertAgentName('assess-risk', 'x')).toBe('assess-risk');
   });
 
   it('refuses a non-string', () => {
@@ -105,5 +129,46 @@ describe('parseAgentNameRequest and parseAgentRenameRequest', () => {
     expect(() => parseAgentRenameRequest({ from: 'a' })).toThrow(
       IpcValidationError,
     );
+  });
+});
+
+/**
+ * HIVE-115. The one guard in this file that stands in front of a **process**,
+ * so what it refuses matters more than what it accepts.
+ */
+describe('parseAgentRunRequest', () => {
+  it('accepts a name', () => {
+    expect(parseAgentRunRequest({ name: 'slack-watcher' })).toEqual({
+      name: 'slack-watcher',
+    });
+  });
+
+  it('is bounded by the same grammar as the five verbs before it', () => {
+    expect(() => parseAgentRunRequest({ name: '../../claude' })).toThrow(
+      IpcValidationError,
+    );
+    expect(() => parseAgentRunRequest({ name: 'Slack Watcher' })).toThrow(
+      IpcValidationError,
+    );
+    expect(() => parseAgentRunRequest({ name: 'overmind' })).toThrow(
+      IpcValidationError,
+    );
+  });
+
+  it('refuses a payload trying to say anything about the command line', () => {
+    // The closed key set is the assertion: an extra field is *refused*, not
+    // ignored, so a renderer that starts sending one fails at the boundary
+    // rather than developing a belief that main is reading it.
+    expect(() =>
+      parseAgentRunRequest({ name: 'a', trigger: 'ledger' }),
+    ).toThrow(IpcValidationError);
+    expect(() =>
+      parseAgentRunRequest({ name: 'a', env: { PATH: '/tmp' } }),
+    ).toThrow(IpcValidationError);
+  });
+
+  it('refuses a request with no name at all', () => {
+    expect(() => parseAgentRunRequest({})).toThrow(IpcValidationError);
+    expect(() => parseAgentRunRequest(null)).toThrow(IpcValidationError);
   });
 });

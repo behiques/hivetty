@@ -1,10 +1,11 @@
 import {
   AGENT_NAME_PATTERN,
-  RESERVED_AGENT_NAMES,
+  isReservedAgentName,
 } from './agent-contract';
 import type {
   AgentNameRequest,
   AgentRenameRequest,
+  AgentRunRequest,
   AgentWriteRequest,
 } from './agent-contract';
 import type {
@@ -1578,12 +1579,14 @@ export function parseSkillWriteRequest(input: unknown): SkillWriteRequest {
  * unrepresentable rather than sanitising one. Nothing downstream re-checks
  * containment.
  *
- * {@link RESERVED_AGENT_NAMES} is refused here as well as in the reader,
- * following the argument `assertSkillName` makes about `done`: a reservation
- * is part of the contract rather than a detail of the filesystem layer.
- * `overmind` matters more than `done` does here — it is the ledger's
+ * A reserved name — {@link isReservedAgentName} — is refused here as well as in
+ * the reader, following the argument `assertSkillName` makes about `done`: a
+ * reservation is part of the contract rather than a detail of the filesystem
+ * layer. `overmind` matters more than `done` does here — it is the ledger's
  * coordinator identity, and an agent that could take that name could sign its
- * entries as the overmind.
+ * entries as the overmind. Since HIVE-115 the session-id shape is reserved on
+ * the same footing, and for a sharper reason: an agent called `sess-01` would
+ * have a live *terminal*'s identity, not just a confusing one.
  */
 export function assertAgentName(value: unknown, label: string): string {
   const name = assertString(value, label);
@@ -1591,7 +1594,7 @@ export function assertAgentName(value: unknown, label: string): string {
   if (!AGENT_NAME_PATTERN.test(name)) {
     return fail(`${label}: must be lowercase letters, digits and dashes`);
   }
-  if ((RESERVED_AGENT_NAMES as readonly string[]).includes(name)) {
+  if (isReservedAgentName(name)) {
     return fail(`${label}: "${name}" is reserved`);
   }
   return name;
@@ -1600,6 +1603,33 @@ export function assertAgentName(value: unknown, label: string): string {
 export function parseAgentNameRequest(input: unknown): AgentNameRequest {
   const raw = assertShape(input, ['name'], 'agentName');
   return { name: assertAgentName(raw.name, 'agentName.name') };
+}
+
+/**
+ * `agents:run` — wake one agent, and say nothing else about how (HIVE-115).
+ *
+ * Shape-identical to {@link parseAgentNameRequest} and deliberately not an
+ * alias of it. The two guards label their failures for the channel that
+ * actually rejected the payload — the reason {@link parseDiagnoseEnvRequest}
+ * gives for the same duplication next door — and this is the channel where a
+ * rejection matters most, because it is the one that starts a process.
+ *
+ * It runs {@link assertAgentName}, so `run` is bounded by exactly the grammar
+ * the five verbs before it are bounded by: a name that cannot be a path and
+ * cannot be a reserved identity. Everything the command line is built from —
+ * the binary, the flags, the environment, the working directory — is read by
+ * main from its own config and the definition on disk. **Nothing on this
+ * payload reaches the argv**, which is why one field is the whole guard.
+ *
+ * `assertShape`'s closed key set is load-bearing here rather than tidy: a
+ * payload carrying an extra `trigger`, `args` or `env` is refused outright
+ * instead of being silently ignored, so a renderer that starts sending one
+ * fails loudly at the boundary rather than developing a belief that main is
+ * reading it.
+ */
+export function parseAgentRunRequest(input: unknown): AgentRunRequest {
+  const raw = assertShape(input, ['name'], 'agentRun');
+  return { name: assertAgentName(raw.name, 'agentRun.name') };
 }
 
 /**

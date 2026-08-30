@@ -50,6 +50,49 @@ export const AGENT_NAME_PATTERN = SKILL_NAME_PATTERN;
 export const RESERVED_AGENT_NAMES = [OVERMIND, RESERVED_SKILL_NAME] as const;
 
 /**
+ * The shape of a **session** id, which an agent may not take (HIVE-115).
+ *
+ * `hive-store.ts`'s `nextSessionId` mints `sess-01`, `sess-02`, … — base 36,
+ * two digits, and `rememberSpawnId` reads them back with `/^sess-([0-9a-z]+)$/`.
+ * Every one of those is a legal agent name under
+ * {@link AGENT_NAME_PATTERN}, so without this an agent could be *called* a live
+ * session's id.
+ *
+ * That is not a cosmetic clash. Sessions and agents are disjoint id spaces
+ * everywhere the app reasons about them — the hook receiver routes on which
+ * register a name is in, `entities` in the store is one map keyed by both, and
+ * the ledger authenticates a party by name. An agent wearing `sess-01` puts a
+ * collision into all three at once: its headless hooks take the session branch
+ * in `receiver.ts` (the session wins, deliberately, because it is the one with
+ * a pty to keep truthful), so they would move a real terminal's status dot and
+ * write its history — and its `/done` would arm `/exit` on that terminal.
+ *
+ * Reserved as a **prefix** rather than as the exact minted shape. `sess-foo` is
+ * no more nameable than `sess-01` is: the prefix is what the fleet reads as
+ * "this is a terminal", and a rule a person can predict is worth more than the
+ * three extra names a tighter one would allow.
+ *
+ * A pattern rather than an entry in {@link RESERVED_AGENT_NAMES}, because the
+ * set is unbounded — there is no list of session ids to enumerate, only a shape.
+ * {@link isReservedAgentName} is what puts the two questions back together so
+ * every caller asks one.
+ */
+export const SESSION_ID_PREFIX_PATTERN = /^sess-/;
+
+/**
+ * Is this name spoken for — by the ledger, by a skill, or by the fleet?
+ *
+ * One function rather than the same two checks written at each of the four
+ * places that validate a name (the IPC guard, the definition parser, the
+ * registry's listing filter, and the Settings form). Those four must agree, and
+ * a reservation added to only three of them is a name the user can create in
+ * one place and see refused in another.
+ */
+export const isReservedAgentName = (name: string): boolean =>
+  (RESERVED_AGENT_NAMES as readonly string[]).includes(name) ||
+  SESSION_ID_PREFIX_PATTERN.test(name);
+
+/**
  * Integrations an agent's `mcp:` list may name.
  *
  * One entry, because one integration is planned. Whether Slack is *connected*
@@ -210,6 +253,11 @@ export interface AgentSummary {
   wake: WakeSpec;
   lastRunAt?: number;
   nextRunAt?: number;
+  /** Present once the agent has run at least once (HIVE-115). */
+  sessionUuid?: string;
+  runsSinceRotate?: number;
+  /** The most recent run's cost, pre-formatted for display. */
+  cost?: string;
   /** Why this definition could not be parsed. Listed, never hidden. */
   invalid?: string;
 }
@@ -574,4 +622,167 @@ export function patchFrontmatter(
   lines.splice(after, 0, `  ${leaf}: ${value}`);
 
   return lines.join('\n');
+}
+
+/**
+ * How long a run that has been **asked to stop** gets, before SIGKILL
+ * (HIVE-115).
+ *
+ * The gap between SIGTERM and SIGKILL, and nothing else. The user pressed stop,
+ * or the app is quitting; either way somebody is waiting, and three seconds is
+ * already longer than a headless child needs to unwind.
+ *
+ * SIGTERM, not the pty path's SIGHUP: `KILL_GRACE_MS` exists because an
+ * interactive shell ignores SIGTERM. A headless child is not one.
+ */
+export const AGENT_KILL_GRACE_MS = 3_000;
+
+/**
+ * How long a run gets **after its turn has ended** before it is called stalled
+ * and killed (HIVE-115).
+ *
+ * Deliberately longer than {@link AGENT_KILL_GRACE_MS}, and the two are
+ * separate constants because they answer different questions. That one is "how
+ * long does a process that was told to die get?" — nobody wants it back. This
+ * one is "how long does a *healthy* run get to finish saying what it did?", and
+ * the answer has real work in it: after `Stop` fires, `claude` still has to emit
+ * the `result` event — the only carrier of the cost, the turn count and the
+ * session uuid — and tear down its MCP stdio child, which is a second process
+ * with its own exit to wait on.
+ *
+ * Firing early is not a harmless timeout: the watchdog kills the run, so the
+ * `result` never lands, and the run is recorded `failed (stalled)` with no cost,
+ * no turns and no uuid persisted — which is exactly the loss that made `'close'`
+ * rather than `'exit'` the finalizer. Three seconds was measurably tight for
+ * that; fifteen is not, and a genuinely wedged run is still bounded.
+ */
+export const AGENT_STALL_GRACE_MS = 15_000;
+
+/**
+ * The colours a run-log line may carry.
+ *
+ * A strict subset of the renderer's `TermColor` (`src/types/terminal.ts`).
+ * Main may not import that file — it is renderer code — so the relationship is
+ * held by this union being narrower, which makes `RunLine[]` assignable to
+ * `TermLine[]` with no mapping step. A test asserts the assignability.
+ */
+export type RunLineColor = 'ink' | 'dim' | 'amber' | 'cyan';
+
+export interface RunLine {
+  text: string;
+  color: RunLineColor;
+}
+
+/**
+ * How a run ended.
+ *
+ * `turns` is not in the story's original list: it exists because `--max-turns`
+ * ends a run with `subtype: 'error_max_turns'` and **no `result` text at all**,
+ * which is neither a failure nor a completion and should not be reported as
+ * either.
+ */
+export type RunOutcome = 'done' | 'asking' | 'budget' | 'turns' | 'failed';
+
+export interface RunSummary {
+  run: string;
+  trigger: string;
+  startedAt: number;
+  endedAt: number;
+  outcome: RunOutcome;
+  costUsd?: number;
+  turns?: number;
+  /** Why it ended that way, when the outcome alone does not say. */
+  reason?: string;
+}
+
+/** What `~/.hive/ledger/agents.json` holds per agent. */
+export interface AgentRunState {
+  sessionUuid?: string;
+  status: AgentStatus;
+  lastRunAt?: number;
+  /** Stored and pushed here; computed by HIVE-121's scheduler. */
+  nextRunAt?: number;
+  runsSinceRotate: number;
+  /** Most recent last, capped at {@link AGENT_RUN_HISTORY}. */
+  runs: RunSummary[];
+}
+
+/** How many run summaries an agent keeps. */
+export const AGENT_RUN_HISTORY = 20;
+
+/**
+ * `agents:run` — wake this agent now (HIVE-115).
+ *
+ * One name and nothing else, and the omission is the point: the only trigger
+ * this channel could honestly report is that a person pressed a button, so
+ * main writes `manual` itself rather than accepting a word the page chose.
+ * Every other trigger — a timer, a ledger entry, a Slack mention — originates
+ * in main and never crosses this boundary at all.
+ *
+ * It lives here beside {@link AgentNameRequest} rather than in
+ * `ipc-contract.ts` because every other `agents:*` payload does; the channel
+ * *names* are the contract's, the shapes are this file's.
+ */
+export interface AgentRunRequest {
+  name: string;
+}
+
+/**
+ * What a wake answered.
+ *
+ * A refusal is a **value**, not a throw, for the reason `LedgerResult` is one:
+ * the renderer draws the reason beside the agent, and a rejected promise would
+ * reach it as an IPC error string with the refusal buried inside it.
+ *
+ * Wider than `RunStart` in `main/agents/runs.ts` by exactly one case, and
+ * deliberately: `unknown` is what the channel answers when the runtime is not
+ * up at all, which the tracker cannot say because there is no tracker to say
+ * it. Every value the tracker *can* return is one of these, and the
+ * `agents:run` handler's declared return type is what keeps that true.
+ */
+export type AgentRunResult =
+  | { started: true; run: string }
+  | {
+      started: false;
+      refused: 'working' | 'unknown' | 'invalid';
+      reason?: string;
+    };
+
+/**
+ * A run started, ended, or otherwise changed what an agent's row should say.
+ *
+ * Carries the fields of {@link AgentRunState} the row renders and no others —
+ * never the run history, and never `sessionUuid`. That uuid is Claude's own
+ * conversation id, and `BRIDGE_SESSION_KEYS` records that the equivalent fact
+ * for a *session* deliberately stays in main; an agent's has no better claim
+ * to travel.
+ */
+export interface AgentStatusPush {
+  name: string;
+  status: AgentStatus;
+  lastRunAt?: number;
+  nextRunAt?: number;
+  /** The last run's cost, already formatted — see {@link formatRunCost}. */
+  cost?: string;
+}
+
+/** A batch of run-log lines, in the order the process wrote them. */
+export interface AgentLinesPush {
+  name: string;
+  lines: RunLine[];
+}
+
+/**
+ * A run's cost as a row shows it, or `undefined` when there is none.
+ *
+ * Formatted **once**, in main, rather than in the renderer: `agents:list` and
+ * `agents:status` both carry this number and are read by the same row, so two
+ * formatters would be two chances for the list and the live push to disagree
+ * about one run. Four decimals under a cent, because an agent wake routinely
+ * costs less than that and `$0.00` for a real run reads as a bug.
+ */
+export function formatRunCost(usd: number | undefined): string | undefined {
+  if (usd === undefined || !Number.isFinite(usd)) return undefined;
+
+  return `$${usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2)}`;
 }

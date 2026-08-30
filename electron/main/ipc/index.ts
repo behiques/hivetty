@@ -1,3 +1,5 @@
+import { spawn, type SpawnOptions } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -13,6 +15,12 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 
+import {
+  formatRunCost,
+  type AgentLinesPush,
+  type AgentRunResult,
+  type AgentStatusPush,
+} from '@shared/agent-contract';
 import { AUTH_ENV_KEYS } from '@shared/config-contract';
 import type {
   CloneStartResult,
@@ -35,6 +43,7 @@ import {
   parseAckRequest,
   parseAgentNameRequest,
   parseAgentRenameRequest,
+  parseAgentRunRequest,
   parseAgentWriteRequest,
   parseAddProjectRequest,
   parseCloneRequest,
@@ -108,6 +117,21 @@ import {
 import type { UpdateStatus } from '@shared/update-contract';
 
 import { createAgentsRuntime, type AgentRegistry } from '../agents';
+import {
+  agentPromptFile,
+  agentStateFile,
+  agentWorkdir,
+  agentsRoot,
+} from '../agents/paths';
+import { createAgentRunFiles } from '../agents/run-files';
+import {
+  createRunTracker,
+  type ChildLike,
+  type RunTracker,
+} from '../agents/runs';
+import { createAgentState, type AgentState } from '../agents/state';
+import { mergeRunState } from '../agents/summary';
+import { createWakeCommand } from '../agents/wake-command';
 import { createCloneFlow, type CloneFlow } from '../clone';
 import {
   addProject,
@@ -162,6 +186,7 @@ import {
 } from '../sessions/history';
 import { onShutdown } from '../shutdown';
 import { createSkillsRuntime, type SkillsRuntime } from '../skills';
+import { PLUGIN_DIR } from '../skills/paths';
 import { parseSaveThemeRequest, pickTheme, saveTheme } from '../theme';
 import {
   checkForUpdatesInteractively,
@@ -256,6 +281,76 @@ let history: SessionHistory | null = null;
  */
 let skills: SkillsRuntime | null = null;
 let agents: AgentRegistry | null = null;
+/**
+ * `~/.hive/ledger/agents.json`, or `null` before registration (HIVE-115).
+ *
+ * Held beside `agents` rather than inside it because they are two different
+ * kinds of fact about the same names — the registry owns what the user wrote,
+ * this owns what the app has since done — and three unrelated callers need
+ * this one: `agents:list` merges it, the run tracker writes it, and the
+ * shutdown hook flushes it.
+ */
+let agentState: AgentState | null = null;
+/**
+ * Live agent runs, or `null` before registration (HIVE-115).
+ *
+ * Module scope, like `sessions`, and for the same reason: it is reached from
+ * two places that never see each other. The `agents:run` / `agents:kill`
+ * handlers below drive it, and the hook receiver's agent route calls
+ * `noteTurnEnded` on it when a turn ends (HIVE-115, task 8).
+ */
+let runs: RunTracker | null = null;
+/**
+ * The agent names the ledger will accept as a party.
+ *
+ * A `Set` rather than an `await agents.list()` because `knowsParty` is
+ * synchronous — it is consulted inside `Ledger.append`, which the receiver
+ * calls on a request it must answer. It is refreshed from the registry at boot
+ * and on every folder change, and a name is also added the moment a wake
+ * command is successfully built for it: building one means main read that
+ * agent's definition off its own disk, which is a stronger proof of existence
+ * than a listing that may be a few hundred milliseconds old.
+ */
+const knownAgents = new Set<string>();
+
+/**
+ * Re-read the folder into {@link knownAgents}.
+ *
+ * Fire-and-forget, and a failure is swallowed on purpose: this is the *cache*
+ * of a fact, and the authoritative path — `command()` adding the name it just
+ * read a definition for — does not depend on it. A rejected `list()` here means
+ * an unrun agent cannot post to the ledger until the next folder change, which
+ * is a far smaller failure than an unhandled rejection at startup.
+ *
+ * A folder listed as `invalid` is left out. It cannot be woken, so nothing can
+ * legitimately write to the ledger as that name.
+ *
+ * A **live run** is the exception, and it is the epic's own premise rather than
+ * a defensive edge case: an agent is meant to be edited in a text editor while
+ * it works, and a save mid-edit routinely lands a file that does not parse. The
+ * watcher fires, the rebuild drops the name, and everything the running child
+ * does next is refused as an unknown party — its hooks 404, its `ledger_*` tool
+ * calls come back refused, and at close the tracker's own `run.ended` append is
+ * rejected, leaving a `run.started` with no end in the log that is supposed to
+ * be the record of what happened. A run that is already going was authorised
+ * when it started, so it keeps its name until it ends.
+ */
+function refreshKnownAgents(): void {
+  void agents
+    ?.list()
+    .then((snapshot) => {
+      knownAgents.clear();
+
+      for (const agent of snapshot.agents) {
+        if (agent.invalid === undefined) knownAgents.add(agent.name);
+      }
+
+      for (const name of runs?.live() ?? []) knownAgents.add(name);
+    })
+    .catch(() => {
+      // Keep whatever we already knew.
+    });
+}
 /** The clone flow (story 102), or `null` before registration. */
 let cloneFlow: CloneFlow | null = null;
 /** The single project watcher, or `null` before registration. */
@@ -793,6 +888,22 @@ export function registerIpcHandlers(): void {
     knowsParty: (id) =>
       id === OVERMIND ||
       (sessions?.entities().includes(id) ?? false) ||
+      /*
+        The widening the comment above anticipated (HIVE-115).
+
+        `PartyKind` has named `'agent'` since HIVE-111 and nothing could be one:
+        an agent is not a pty session and never will be, so the two arms above
+        refused every ledger write a run makes — including the `run.started`
+        and `run.ended` entries that are the *only* durable record that a wake
+        happened. A party is an identity, not a process, and this is the arm
+        that finally says so.
+
+        It is a set of names read off `~/.hive/agents`, not a pattern: a name
+        that is not a folder on this machine is still refused, so the rule is
+        no looser than the two above it — it is the same rule applied to a
+        second register of identities.
+      */
+      knownAgents.has(id) ||
       history?.resumable(id) !== undefined,
   });
 
@@ -894,7 +1005,18 @@ export function registerIpcHandlers(): void {
     doneUrl: () => hooks.doneUrl(),
   });
 
-  agents = createAgentsRuntime();
+  /*
+    HIVE-115. `agents.json` is opened a few dozen lines below, which is why the
+    state is reached through a closure rather than handed over as a value: a
+    delete or a rename can only happen once the app is up, by which time
+    `agentState` is set.
+  */
+  agents = createAgentsRuntime({
+    runFiles: createAgentRunFiles({
+      state: () => agentState,
+      workdir: agentWorkdir,
+    }),
+  });
 
   /*
     The folder changed — on disk, or through the pane. Broadcast to every live
@@ -903,11 +1025,15 @@ export function registerIpcHandlers(): void {
     `agents:list` would not already return.
   */
   agents.onChange(() => {
+    refreshKnownAgents();
+
     for (const window of BrowserWindow.getAllWindows()) {
       if (window.isDestroyed()) continue;
       window.webContents.send(CH.agentsChanged);
     }
   });
+
+  refreshKnownAgents();
 
   /*
     The MCP config runtime (HIVE-112). Written once, its content depends only
@@ -931,6 +1057,170 @@ export function registerIpcHandlers(): void {
   });
   void mcp.start();
 
+  /**
+   * The agent runtime (HIVE-115) — where the six modules under
+   * `main/agents/` finally meet something real.
+   *
+   * It is composed here rather than inside `createAgentsRuntime()` because
+   * every dependency it needs belongs to a *different* layer of this file:
+   * the hook settings path and the hook environment come from `hooks`, the
+   * `--mcp-config` path from `mcp`, the ledger from `ledger`, the binary from
+   * `getConfig()`, and the pushes from `send`. A composition root is exactly
+   * the place that is allowed to know all of them at once; `agents/index.ts`
+   * is not, and would have had to grow five constructor arguments to become
+   * one.
+   *
+   * The ordering is load-bearing in one place only: `mcp` is constructed a few
+   * lines above, and this reads its path through a getter rather than a value,
+   * because the config is written asynchronously and `configPathFor()` answers
+   * `null` until it lands. The `agents:run` handler closes that window the same
+   * way `ptySpawn` does — by `await`-ing the memoised `mcp.start()`.
+   */
+  agentState = createAgentState({ path: agentStateFile() });
+
+  const buildWakeCommand = createWakeCommand({
+    agentsRoot,
+    workdir: agentWorkdir,
+    promptFile: (name) => agentPromptFile(app.getPath('userData'), name),
+    pluginDir: () => join(app.getPath('userData'), PLUGIN_DIR),
+    settingsPath: () => hooks.settingsPathFor(),
+    mcpConfig: () => mcp.configPathFor(),
+    hookEnv: (name) => hooks.envFor(name),
+    // Read per wake, not captured: a `claudeCommand` edited in Settings must
+    // reach the next run without a restart. There is no per-project override
+    // to resolve — an agent belongs to no project.
+    claudeCommand: () => getConfig().claudeCommand,
+    subscriptionAuth: () => getConfig().subscriptionAuth,
+    state: agentState,
+    env: () => process.env,
+    newUuid: () => randomUUID(),
+  });
+
+  /**
+   * Did this run leave a question nobody has answered?
+   *
+   * Read from the **ledger**, which is the design's own instruction: an ask
+   * posted through any path counts, and one already answered does not. The run
+   * is identified by its own `run.started` entry — appended by the tracker with
+   * `meta.run`, and always the first entry carrying that id — so "during this
+   * run" becomes an id comparison rather than a clock comparison. Ledger ids
+   * sort in write order by construction.
+   *
+   * Falling back to *any* open ask from this agent when no start entry is found
+   * is the safer error: it can only ever mark a run `asking` that was in fact
+   * `done`, which parks an agent that would otherwise be woken again — where
+   * the opposite mistake would report a question as finished business and
+   * silently drop it.
+   */
+  const openAsksFor = (name: string, run: string): boolean => {
+    const { entries, openAsks } = ledger.read({ from: name });
+    const started = entries.find(
+      (entry) => entry.kind === 'event' && entry.meta?.['run'] === run,
+    );
+
+    return openAsks.some(
+      (ask) =>
+        ask.from === name && (started === undefined || ask.id >= started.id),
+    );
+  };
+
+  /**
+   * One agent's row changed. Pushed through `send`, so the notifier tap and the
+   * destroyed-window guard apply here exactly as they do to a `pty:data`.
+   *
+   * Built from `agents.json` rather than from arguments: the tracker calls this
+   * *after* it has written the state, so reading the file back is what keeps
+   * the push and the next `agents:list` from being able to disagree.
+   */
+  const pushAgentStatus = (name: string): void => {
+    const state = agentState?.read(name);
+
+    if (state === undefined) return;
+
+    const last = state.runs[state.runs.length - 1];
+    const cost = formatRunCost(last?.costUsd);
+
+    send(CH.agentsStatus, {
+      name,
+      status: state.status,
+      ...(state.lastRunAt === undefined ? {} : { lastRunAt: state.lastRunAt }),
+      ...(state.nextRunAt === undefined ? {} : { nextRunAt: state.nextRunAt }),
+      ...(cost === undefined ? {} : { cost }),
+    } satisfies AgentStatusPush);
+  };
+
+  runs = createRunTracker({
+    /*
+      `spawn` is injected rather than imported by `runs.ts`, which is what lets
+      that module's tests drive a recording fake without a real process. The
+      cast is the one place the real signature meets the structural one:
+      `ChildProcess.stdout` is `Readable | null`, and it is `null` only for a
+      stdio mode this call does not use — `runs.ts` passes
+      `['ignore', 'pipe', 'pipe']`, which is what makes both pipes non-null.
+    */
+    spawn: (file, args, options) =>
+      spawn(file, [...args], options as SpawnOptions) as unknown as ChildLike,
+    /*
+      Handed straight through. The tracker passes the trigger it was called
+      with, so the wake prompt and the `run.started` ledger entry are spelled
+      from one value rather than from two that could disagree.
+    */
+    command: (name, trigger, extra) => {
+      const built = buildWakeCommand(name, trigger, extra);
+
+      /*
+        Proof of existence, taken at the strongest moment there is. Building a
+        command meant reading this agent's definition off main's own disk, so
+        the ledger may accept it as a party — which it must, or the
+        `run.started` entry on the very next line is refused 404 and the log
+        has no record that this run ever happened.
+      */
+      if (!('problem' in built)) knownAgents.add(name);
+
+      return built;
+    },
+    state: agentState,
+    /*
+      The tracker's ledger writes are `from` the **agent**, never the overmind:
+      a run is the agent's own activity and the log is read back by name. That
+      is the same rule `ledger:post` enforces from the other direction, where
+      the renderer may only ever speak as the coordinator.
+    */
+    appendLedger: (entry) => {
+      const result = ledger.append(entry);
+
+      /*
+        Logged, never discarded. The only way this refuses is a party rule —
+        an agent whose name is no longer in `knownAgents` — and the entry it
+        drops is a `run.started` or a `run.ended`, so the symptom is a log with
+        a beginning and no end and no visible cause. Loud here is cheap;
+        silence here costs whoever reads that log an afternoon.
+      */
+      if (!result.ok) {
+        console.warn(
+          `[hive] ledger refused ${entry.body} for ${entry.from} (${result.status}):`,
+          result.reason,
+        );
+      }
+    },
+    openAsksFor,
+    pushStatus: pushAgentStatus,
+    pushLines: (name, lines) => {
+      /*
+        Sent as they are folded, with no second layer of batching.
+
+        `pty:data` batches because a pty emits bytes at keystroke granularity
+        and thirteen of them can be live at once. This is one headless process
+        writing whole `stream-json` events, and `foldRunLog` has already
+        collapsed each one into at most a few lines — so a batching timer here
+        would add latency and a shutdown-flush obligation to buy nothing.
+      */
+      send(CH.agentsLines, { name, lines } satisfies AgentLinesPush);
+    },
+    now: () => Date.now(),
+    newRunId: () => randomUUID(),
+  });
+
   sessions = createSessions({
     supervisor,
     config: getConfig,
@@ -945,6 +1235,22 @@ export function registerIpcHandlers(): void {
     */
     onIdle: (entityId) => deliver.onIdle(entityId),
     onReady: (entityId) => deliver.onReady(entityId),
+    /*
+      The same register the ledger authenticates a party against (HIVE-115),
+      and deliberately not a second one: an agent that may write to the log is
+      exactly an agent whose hooks the receiver should answer, and two lists
+      that could disagree about that would be a bug nobody sees until one of
+      them is stale. Passed as the live set rather than a copy, so a name
+      `refreshKnownAgents` or `command()` adds is visible on the next hook
+      without anything re-registering.
+    */
+    agentNames: () => knownAgents,
+    /*
+      The uuid is forwarded, not dropped: `noteTurnEnded` ignores a `Stop`
+      whose uuid does not match the run it is holding, which is what keeps a
+      late Stop from arming the watchdog on the next run under the same name.
+    */
+    onAgentTurnEnded: (name, sessionUuid) => runs?.noteTurnEnded(name, sessionUuid),
   });
 
   /**
@@ -1011,6 +1317,28 @@ export function registerIpcHandlers(): void {
      * saves the last few hundred milliseconds of a quiet quit.
      */
     history?.flush();
+    /**
+     * Agent runs, which — unlike the ptys above — nothing else signals.
+     *
+     * `pty-host/index.ts` owns the teardown of every *session's* process group,
+     * which is why this hook deliberately does not touch those. A headless
+     * agent is not in that registry: it was spawned from this process with
+     * `child_process.spawn`, and if nobody kills it here it outlives the app
+     * that started it, still writing to a ledger nobody is reading.
+     *
+     * `closeAll` rather than `killAll`, because this hook is synchronous and
+     * the run's own finalizer is not reachable from it. A run closes on the
+     * child's `'close'` event, which cannot arrive before this process is
+     * gone — so signalling alone would leave `agents.json` saying `working`
+     * about a process that no longer exists, a `run.started` with no matching
+     * `run.ended` in the log forever, no summary in `runs[]`, and a
+     * `runsSinceRotate` that under-counts until session rotation drifts.
+     * `closeAll` records each live run `failed (app-closed)` on the spot, which
+     * is what `flush()` on the next line then writes. Their `sessionUuid` is
+     * untouched, so the next wake resumes the conversation.
+     */
+    runs?.closeAll('app-closed');
+    agentState?.flush();
   });
 
   /**
@@ -1659,7 +1987,24 @@ export function registerIpcHandlers(): void {
    * problems, each naming its field — and the editor renders them beside the
    * controls they name; the change push is what refreshes the list.
    */
-  handle(CH.agentsList, () => agents?.list());
+  /*
+    The definitions the registry read, joined to what has since happened to
+    them (HIVE-115).
+
+    `AgentSummary` gained `sessionUuid`, `runsSinceRotate` and `cost` with the
+    run tracker, and the registry cannot fill any of them in — it reads
+    `AGENT.md` files and has never seen a process. Merging here rather than in
+    the registry keeps that module ignorant of runs, and keeps `agents.json`
+    read in exactly one place. Without this the three fields would be part of
+    the contract and permanently `undefined`.
+  */
+  handle(CH.agentsList, async () => {
+    const snapshot = await agents?.list();
+
+    if (snapshot === undefined) return undefined;
+
+    return mergeRunState(snapshot, agentState?.all() ?? {});
+  });
 
   handle(CH.agentsRead, (_event, payload) =>
     agents?.read(parseAgentNameRequest(payload).name),
@@ -1678,6 +2023,60 @@ export function registerIpcHandlers(): void {
     const request = parseAgentRenameRequest(payload);
     return agents?.rename(request.from, request.to, request.source);
   });
+
+  /**
+   * Wake an agent now (HIVE-115).
+   *
+   * The trigger is `'manual'` and is written **here**, not taken from the
+   * payload — see `parseAgentRunRequest` and `BRIDGE_AGENTS_KEYS`. It is the
+   * only trigger this channel could report honestly, and it goes into the
+   * ledger entry and the wake prompt, so accepting a renderer's word for it
+   * would let the page write history.
+   *
+   * Two awaits before the spawn, and each closes a window this file already
+   * knows about from the pty path:
+   *
+   * - `loginEnvStatus()` — `claude` is resolved by walking `PATH`, and HIVE-84
+   *   replaces this process's `PATH` shortly after launch. Resolving against
+   *   the pre-repair value would fail on exactly the machines that import fixed
+   *   it for, and the refusal would read as "claude is not installed".
+   * - `mcp.start()` — the memoised write of `hive.mcp.json`. Without it, a run
+   *   launched in the first moments of the app would be refused for want of a
+   *   config path that was about to exist.
+   */
+  handle(CH.agentsRun, async (_event, payload): Promise<AgentRunResult> => {
+    const request = parseAgentRunRequest(payload);
+
+    await loginEnvStatus();
+    await mcp.start();
+
+    return (
+      runs?.run(request.name, 'manual') ?? {
+        started: false,
+        refused: 'unknown',
+        reason: 'The agent runtime is not running.',
+      }
+    );
+  });
+
+  /**
+   * Stop the run in progress, if there is one.
+   *
+   * Takes the same name guard as `read` and `remove`, and can only ever reach a
+   * child this app spawned and still holds: the tracker looks the name up in
+   * its own map and answers `false` for anything it does not find. There is no
+   * pid on this channel and no way to reach a process The Hive did not start.
+   *
+   * `false` is not an error. A run can end between the row rendering its stop
+   * button and the click arriving, and reporting that as a failure would teach
+   * the user to distrust a button that did exactly what they wanted.
+   */
+  handle(CH.agentsKill, (_event, payload): boolean =>
+    // `?? false`, because the channel's declared answer is a boolean and "the
+    // runtime is not running" is the same news to the renderer as "there was
+    // nothing to stop" — an `undefined` on a `Promise<boolean>` is neither.
+    runs?.kill(parseAgentNameRequest(payload).name) ?? false,
+  );
 
   /**
    * Getting a theme file on and off disk (HIVE-80).
@@ -1910,6 +2309,37 @@ export function resetIpcHandlers(): void {
   */
   history?.dispose();
   history = null;
+  /*
+    HIVE-115. Killed rather than dropped: a spec that let a real run leak would
+    leave a `claude -p` process running after the test that started it, and the
+    registry holds an `fs.watch` handle and a debounce timer that would
+    otherwise fire into the next test's handlers.
+
+    `closeAll`, not `killAll`, and the ordering with `dispose()` on the next
+    line is the whole reason. `killAll` only signals: the `'close'` events land
+    afterwards, run `finalizeRun` → `recordRun` → `schedule()`, and arm a *new*
+    400 ms timer against a state that has already been disposed — writing
+    `agents.json` at whatever `configPath()` was stubbed to, which is precisely
+    the leak `dispose()` exists to cancel, and pushing status into a torn-down
+    IPC layer on the way. `closeAll` finalizes each run synchronously, so
+    everything it schedules is scheduled *before* the dispose that cancels it.
+
+    `agentState` is **disposed**, exactly as `history` is and for the same
+    reason — a test's state file points at whatever `configPath` was stubbed to
+    return, and writing there on teardown is how a unit test comes to leave a
+    file behind. `dispose()` rather than dropping the reference, and rather
+    than `flush()`: the debounce timer closes over the write directly, so an
+    unreferenced state still fires one last `writeFileSync` at that stubbed
+    path 400 ms later, into a directory the test that owned it has finished
+    with.
+  */
+  runs?.closeAll('reset');
+  runs = null;
+  agentState?.dispose();
+  agentState = null;
+  agents?.close();
+  agents = null;
+  knownAgents.clear();
   // HIVE-81. Test-only: a fresh registration starts with nothing on stage and
   // no listeners left over from a previous test — including the app-level
   // focus wiring and any tick it has already scheduled, which would otherwise
