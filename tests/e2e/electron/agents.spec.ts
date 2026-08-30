@@ -220,3 +220,182 @@ test('lays the run log and the ledger side by side, and stacks them when the sta
     await app.close();
   }
 });
+
+/**
+ * The fleet table's AGENTS group (HIVE-117).
+ *
+ * Here rather than in `session-table.test.tsx` for the reason
+ * `table-alignment.spec.ts` states about its own column: happy-dom performs no
+ * layout, so a component test can prove a cell **exists** and never that it
+ * sits under the heading that names it. The whole design of this group is that
+ * its columns are the *same* columns — an agent spends `PROJECT` and `BRANCH`
+ * on its wake, and every column after that has to stay put — which is a claim
+ * about geometry that only a real browser can answer.
+ *
+ * Still no run is started: waking an agent spawns a real `claude`, which is
+ * `pnpm test:agent`'s job and costs money.
+ */
+test('lists agents in the fleet table, under a heading, in the same columns', async ({}, testInfo) => {
+  const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
+
+  try {
+    await authorAgent(page);
+
+    const table = page.getByTestId('session-table');
+
+    await expect(table.getByText(/AGENTS · 1/)).toBeVisible();
+
+    const row = page.getByTestId('agent-row');
+
+    await expect(row).toBeVisible();
+    // The wake, in the two cells a session spends on its checkout.
+    await expect(row.locator('[data-col="wake"]')).toHaveText('every 5m');
+    // The status is a word on screen, never colour alone.
+    await expect(row.locator('[data-col="status"]')).toHaveText('sleeping');
+    // Never run, so the age cell says so rather than guessing.
+    await expect(row.locator('[data-col="last-used"]')).toContainText('—');
+
+    /*
+      The columns line up with the header's, which is the claim the group's
+      whole layout rests on. Rounded before comparing for
+      `table-alignment.spec.ts`'s reason: these are fractional CSS pixels in a
+      flex line whose free space is divided three ways, and an exact match would
+      fail on a rounding difference rather than on a regression.
+    */
+    for (const col of ['status', 'last-used', 'pr']) {
+      const xs = await page
+        .locator(`[data-col="${col}"]`)
+        .evaluateAll((cells) =>
+          cells.map((cell) => Math.round(cell.getBoundingClientRect().x)),
+        );
+
+      // The header's cell and the agent's, at minimum.
+      expect(xs.length).toBeGreaterThanOrEqual(2);
+      expect(new Set(xs).size).toBe(1);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test('opens the agent view from the fleet table row', async ({}, testInfo) => {
+  const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
+
+  try {
+    await authorAgent(page);
+
+    await page.getByTestId('agent-row').getByRole('button').click();
+
+    await expect(page.locator('[data-view="agent"]')).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * The console's `agents` verb, against the real registry and the real IPC.
+ *
+ * The store suite proves the row's text from a hand-seeded entity. What it
+ * cannot prove is that a definition on **disk** reaches the console at all —
+ * that is the registry, the `agents:list` channel and the store sync, and this
+ * is the only place all three are real.
+ */
+test('prints the agents table in the console', async ({}, testInfo) => {
+  const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
+
+  try {
+    await authorAgent(page);
+
+    const input = page.getByRole('textbox', { name: 'Overmind command' });
+
+    await input.click();
+    await input.fill('agents');
+    await input.press('Enter');
+
+    // The transcript is an xterm, read through its DOM renderer.
+    const transcript = page.getByRole('main').locator('.xterm');
+
+    await expect(transcript).toContainText('slack-watcher');
+    await expect(transcript).toContainText('every 5m');
+    await expect(transcript).toContainText('0 runs');
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * Pause and resume, round-tripped through the real channels (HIVE-117).
+ *
+ * The unit suites drive a mocked bridge. This is the only place the click,
+ * `agents:pause`, the write to `agents.json`, the `agents:status` push and
+ * every surface that redraws from it are all the real ones. The ticket's
+ * criterion is that the status round-trips "in the rail, the table and
+ * `agents.json`" — the table is asserted here, and it is drawn from the file.
+ */
+test('pauses and resumes from the console, and the table agrees', async ({}, testInfo) => {
+  const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
+
+  try {
+    await authorAgent(page);
+
+    const status = page.getByTestId('agent-row').locator('[data-col="status"]');
+    const input = page.getByRole('textbox', { name: 'Overmind command' });
+    const transcript = page.getByRole('main').locator('.xterm');
+
+    await expect(status).toHaveText('sleeping');
+
+    await input.click();
+    await input.fill('pause slack-watcher');
+    await input.press('Enter');
+
+    // The table redraws from main's `agents:status` push, not a local guess.
+    await expect(status).toHaveText('paused');
+
+    /*
+      And a wake is refused — the consequence the status exists to have. The
+      refusal comes from `RunTracker.run`, so it proves the pause reached
+      `agents.json` rather than only the renderer's copy of it.
+    */
+    await input.fill('run slack-watcher');
+    await input.press('Enter');
+    await expect(transcript).toContainText('is paused');
+
+    await input.fill('resume slack-watcher');
+    await input.press('Enter');
+    await expect(status).toHaveText('sleeping');
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * The agent view's own Pause control, wired in this story.
+ *
+ * Asserted against the **rail**, which is always on screen: the agent view has
+ * no "Back to overmind" button — that control lives on a session's meta bar,
+ * and HIVE-116 deliberately mounts no meta bar for an agent — so there is no
+ * navigation back to the table from here, and none is needed. What matters is
+ * that the click reached main and a second surface redrew from the push.
+ */
+test('pauses from the agent view, and the rail agrees', async ({}, testInfo) => {
+  const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
+
+  try {
+    await authorAgent(page);
+    await page.getByRole('tab', { name: /Agents/ }).click();
+
+    const panel = page.locator('[data-panel="agents"]');
+
+    await expect(panel.getByText('sleeping', { exact: true })).toBeVisible();
+
+    await panel.getByRole('button', { name: /slack-watcher/ }).click();
+    await expect(page.locator('[data-view="agent"]')).toBeVisible();
+    await page.getByRole('button', { name: /Pause/ }).click();
+
+    await expect(panel.getByText('paused', { exact: true })).toBeVisible();
+    // The control names the move, not the state — one button, not two.
+    await expect(page.getByRole('button', { name: /Resume/ })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});

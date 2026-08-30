@@ -29,7 +29,7 @@ import type { TermLine } from '@/types/terminal';
 import type { Ticket } from '@/types/ticket';
 
 import { isDesktop } from '@config/runtime';
-import { describeNextRun, describeWake } from '@lib/agents';
+import { describeNextRun, describeWake, runsToday } from '@lib/agents';
 import { reset as resetClock } from '@lib/fake-clock';
 import { readPullRequests, searchPullRequests } from '@lib/github';
 import { readJiraStatus, searchJiraIssues } from '@lib/jira';
@@ -44,8 +44,8 @@ import { pickPhrase } from '@lib/swarm/phrases';
 import { reopenChannel, requestSpawn } from '@lib/terminal/pty-transport';
 import { sendToSession } from '@lib/terminal/session-input';
 import {
-  formatRunCost,
   type AgentLinesPush,
+  type AgentRunResult,
   type AgentStatus,
   type AgentStatusPush,
   type AgentSummary,
@@ -714,6 +714,16 @@ const capAgentLines = (lines: TermLine[]) =>
 const LEDGER_REQUIRES_DESKTOP =
   'the ledger needs the desktop app — this is the browser preview';
 
+/**
+ * The same refusal for the agent verbs (HIVE-117).
+ *
+ * A second string rather than a reuse of the one above, because it is a
+ * different subject and the sentence names it: a browser has no `~/.hive/agents`
+ * to read and no process to wake, which is a fuller absence than the ledger's.
+ */
+const AGENTS_REQUIRE_DESKTOP =
+  'agents need the desktop app — this is the browser preview';
+
 /** The `help` output — one row per command in the grammar. */
 const HELP_LINES = [
   '  help                       show this list',
@@ -724,6 +734,11 @@ const HELP_LINES = [
   '  ask <session> <message>    ask a session a question',
   '  answer <id> <text>         answer an open ask',
   '  spawn <project> <task>     start a new session on a project',
+  '  agents                     one line per agent',
+  '  run <agent>                wake an agent now',
+  '  pause <agent>              stop an agent waking',
+  '  resume <agent>             let it wake again',
+  '  kill <agent>               stop the run in progress',
   '  clear                      empty this transcript',
   /*
     One trailing line rather than a fourth column, because it is a footnote and
@@ -810,6 +825,102 @@ function statusColor(
 ): TermLine['color'] {
   if (status === 'idle' && detail !== undefined) return STATUS_COLOR.working;
   return STATUS_COLOR[status];
+}
+
+/**
+ * The same two mappings for an agent (HIVE-117).
+ *
+ * A third and fourth hand-written table, for the reason the two above are
+ * hand-written: `stores/` may not import `components/`, so `STATUS_FILL` and
+ * `STATUS_TEXT` in `status-dot.tsx` are unreachable from here — and they are
+ * Tailwind classes in any case, where these are `TermColor` names the ANSI
+ * colorizer resolves. `tests/stores/hive-store.test.ts` asserts the words
+ * against `STATUS_LABEL` the way it already does for sessions, which is the
+ * only thing that keeps two tables in step once a comment has failed to.
+ *
+ * The colours mirror the session state each agent state mirrors in
+ * `STATUS_FILL`, so one word means one colour on both surfaces:
+ *
+ * | agent | mirrors | `STATUS_FILL` | here |
+ * | `asking` | `waiting` | `bg-amber` | `amber` |
+ * | `working` | `working` | `bg-green` | `green` |
+ * | `sleeping` | `idle` | `bg-subtle` | `dim` |
+ * | `paused` | `terminated` | `bg-muted` | `dim` |
+ * | `failed` | — | `bg-red` | `red` |
+ *
+ * `sleeping` and `paused` land on the same `dim`, and that is not a
+ * compromise forced by a narrow palette: `STATUS_COLOR` already paints `idle`
+ * and `terminated` both `dim` for exactly the reason it records there — dim is
+ * this palette's "nothing is happening here", and the *word* beside it carries
+ * which kind of nothing. `TermColor` has no `subtle`/`muted` distinction to
+ * spend, and inventing one would ripple through `ansi.ts` and every transcript
+ * consumer to restate what the row already says in letters.
+ */
+const AGENT_STATUS_WORD: Record<AgentStatus, string> = {
+  sleeping: 'sleeping',
+  working: 'working',
+  asking: 'asking',
+  paused: 'paused',
+  failed: 'failed',
+};
+
+const AGENT_STATUS_COLOR: Record<AgentStatus, TermLine['color']> = {
+  sleeping: 'dim',
+  working: 'green',
+  asking: 'amber',
+  paused: 'dim',
+  failed: 'red',
+};
+
+export function agentStatusWord(status: AgentStatus): string {
+  return AGENT_STATUS_WORD[status];
+}
+
+export function agentStatusColor(status: AgentStatus): TermLine['color'] {
+  return AGENT_STATUS_COLOR[status];
+}
+
+/**
+ * Why a wake did not happen, in the user's terms (HIVE-117).
+ *
+ * Main's `reason` is printed verbatim where it has one — an `invalid` refusal
+ * names the field of the definition that is wrong, and no wording here could
+ * reproduce that. What this adds is the cases main has no words for, because
+ * they are not faults: the agent is busy, or the user themselves stopped it.
+ * Each line ends in the thing to do next.
+ *
+ * `working` says "try again when it sleeps" rather than promising a queue.
+ * HIVE-120 is what makes a run wait for the next wake; until it lands, saying
+ * "your run is queued" would describe a feature that does not exist.
+ *
+ * **Exported, and read by the agent view as well as the console.** Both surfaces
+ * draw the refusal from one `AgentRunResult`, and the view had its own ternary
+ * chain ending in a bare `else` — so when this story widened `refused` with
+ * `paused`, the view began telling users that the runtime was not up about an
+ * agent they had paused thirty seconds earlier. An exhaustive `switch` over the
+ * union in one place is what makes the next member a compile error there
+ * instead of a plausible sentence.
+ *
+ * In `hive-store.ts` rather than a lib module because it is the console's
+ * wording first; `features/` may import `stores/`, and the reverse is the
+ * direction the fence forbids.
+ */
+export function agentRunRefusal(
+  name: string,
+  outcome: Extract<AgentRunResult, { started: false }>,
+): string {
+  if (outcome.reason !== undefined) return outcome.reason;
+
+  switch (outcome.refused) {
+    case 'working':
+      return `${name} is working — try again when it sleeps`;
+    case 'paused':
+      return `${name} is paused — resume it first`;
+    case 'invalid':
+      return `${name}'s definition could not be read — edit it to fix that`;
+    case 'unknown':
+      return 'the agent runtime is not running';
+  }
 }
 
 let spawnCounter = 0;
@@ -1795,6 +1906,29 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         if (match === null) return;
 
         /**
+         * An agent is **asked**, never sent to (HIVE-117).
+         *
+         * This arm is a deletion as much as an addition. `sendToEntity` branches
+         * on `isDesktop() && isSession(entity)`, so an agent target fell through
+         * to the demo branch: it echoed `❯ [overmind] <message>` into the
+         * agent's own transcript and scheduled a fake ack on a timer. Nothing
+         * was delivered and nothing was written down, but the console said it
+         * had been — which is the one failure mode a router must not have.
+         *
+         * The refusal names the verb that works rather than only the one that
+         * does not: `ask` is a real channel to an agent, it takes the same two
+         * arguments, and a user who typed `send` wanted exactly that.
+         */
+        const target = get().entities[match.id];
+        if (target !== undefined && isAgent(target)) {
+          pushOrch(
+            `  agents are asked, not sent: try ask ${match.label} ${command.message}`,
+            'red',
+          );
+          return;
+        }
+
+        /**
          * An ended session is refused **before** `sendToEntity`, and this is a
          * correctness gate rather than a nicety (HIVE-93).
          *
@@ -2006,6 +2140,212 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         // No confirmation line here: `spawnSession` writes it, so both this
         // command and the picker log exactly once.
         get().spawnSession(target, command.task);
+        return;
+      }
+
+      /**
+       * The fleet's tenants, one row each (HIVE-117).
+       *
+       * Read from the store's own mirror rather than over IPC, for `ledger`'s
+       * reason: `runOrchCommand` is synchronous and `use-agents-sync.ts`
+       * already keeps this slice hydrated and pushed.
+       *
+       * Desktop-gated even though it only reads: in a browser `agentOrder` is
+       * empty forever, so the honest answer is "not here", and printing
+       * `no agents` would read as "you have none" — a different and wrong
+       * claim.
+       */
+      case 'agents': {
+        if (!isDesktop()) {
+          pushOrch(`  ${AGENTS_REQUIRE_DESKTOP}`, 'red');
+          return;
+        }
+
+        const state = get();
+        const now = Date.now();
+        const open = openAsks(state.ledger, now);
+        const rows = state.agentOrder.flatMap((id) => {
+          const entity = state.entities[id];
+
+          // `entities` holds both kinds and an agent name is a legal session
+          // id — the same narrowing every other agent reader does.
+          return entity !== undefined && isAgent(entity) ? [entity] : [];
+        });
+
+        if (rows.length === 0) {
+          pushOrch('  no agents — add one in Settings › Agents', 'dim');
+          return;
+        }
+
+        for (const agent of rows) {
+          const ref = open.find((ask) => ask.from === agent.id)?.ref;
+          const word =
+            ref === undefined
+              ? agentStatusWord(agent.status)
+              : `${agentStatusWord(agent.status)} (${ref})`;
+          const today = runsToday(agent.runs, now);
+
+          /*
+            One colour per line, not per column — `status`'s rule, and for its
+            reason: `TermLine` carries a single colour, and a wall of amber is
+            still "these need you" at a glance.
+
+            The widths are `status`'s too, widened where this table's values are
+            longer: 16 for the name, then 14 for a status word carrying a ref
+            (`sleeping` is 8 and `asking (a71)` is 12), then 26 for the wake
+            description — which is the one column with no upper bound, since
+            `describeWake` will happily print five weekday names. A `padEnd`
+            that is short does not truncate, it stops aligning, so the columns
+            after a long wake give way rather than the wake being cut.
+          */
+          pushOrch(
+            `  ${agent.id.padEnd(16)}${word.padEnd(14)}${describeWake(agent.wake).padEnd(26)}${String(today.count)} ${today.count === 1 ? 'run' : 'runs'} · ${today.cost}`,
+            agentStatusColor(agent.status),
+          );
+        }
+        return;
+      }
+
+      case 'run':
+      case 'pause':
+      case 'resume':
+      case 'kill': {
+        if (!isDesktop()) {
+          pushOrch(`  ${AGENTS_REQUIRE_DESKTOP}`, 'red');
+          return;
+        }
+
+        /**
+         * Resolved through `resolveEntityRef` but worded here (HIVE-117).
+         *
+         * Not through `resolve()`, whose sentences are a session's — "no such
+         * session", "use a session id" — and whose ended-gate is a session's
+         * too. But the *resolution* has to be the shared one: `open`, `send`
+         * and `ask` all match case-insensitively and by label, and a `pause`
+         * that alone demanded the exact key would refuse `SLACK-WATCHER` on the
+         * same screen where `open SLACK-WATCHER` works.
+         *
+         * A hit that turns out to be a session is refused here rather than sent
+         * to main. `entities` holds both kinds under one map, so `run sess-01`
+         * resolves perfectly well and would come back rejected by main's name
+         * guard — with a message about legal agent names rather than about what
+         * the user actually did.
+         */
+        const match = resolveEntityRef(command.target, get().entities);
+
+        if (match.kind === 'none') {
+          pushOrch(`  no such agent: ${command.target}`, 'red');
+          return;
+        }
+        if (match.kind === 'ambiguous') {
+          pushOrch(
+            `  ${command.target} matches ${match.labels.join(', ')} — use an agent name`,
+            'red',
+          );
+          return;
+        }
+
+        const entity = get().entities[match.id];
+        if (entity === undefined || !isAgent(entity)) {
+          pushOrch(
+            `  ${command.target} is a session, not an agent — try open or send`,
+            'red',
+          );
+          return;
+        }
+
+        const name = entity.id;
+        const agents = window.hive?.agents;
+
+        /*
+          Desktop with no bridge is not a state the app reaches, but a silent
+          return would be indistinguishable from a verb that ran and said
+          nothing — the failure the ledger verbs' desktop guard exists to
+          prevent. Say it instead.
+        */
+        if (agents === undefined) {
+          pushOrch(`  ${AGENTS_REQUIRE_DESKTOP}`, 'red');
+          return;
+        }
+
+        /**
+         * Every one of these rejects, and a dropped rejection is a silent verb.
+         *
+         * `agents:pause` and `agents:resume` throw by design when the runtime is
+         * not up — answering a status they never wrote is the one outcome their
+         * contract calls worth a rejected promise — and `assertSender` and the
+         * payload guards reject on every channel. Without this the console
+         * would print the echoed command and nothing else, and the renderer
+         * would log an unhandled rejection where the user was owed a sentence.
+         */
+        const said = (work: Promise<void>) => {
+          void work.catch((cause: unknown) => {
+            pushOrch(
+              `  ${cause instanceof Error ? cause.message : String(cause)}`,
+              'red',
+            );
+          });
+        };
+
+        if (command.kind === 'run') {
+          said(
+            agents.run({ name }).then((outcome) => {
+              if (outcome.started) {
+                pushOrch(`  woke ${name} (${outcome.run})`, 'dim');
+                return;
+              }
+              /*
+                Main's reason wins where it has one — an `invalid` refusal names
+                the field of the definition that is wrong, which no wording here
+                could reproduce. The refusals the console says better than main
+                are the ones that name the user's next move.
+              */
+              pushOrch(`  ${agentRunRefusal(name, outcome)}`, 'red');
+            }),
+          );
+          return;
+        }
+
+        if (command.kind === 'kill') {
+          said(
+            agents.kill({ name }).then((stopped) => {
+              /*
+                `false` is not an error: a run can end between the table being
+                read and the command being typed, and colouring that red would
+                teach the user to distrust a verb that did exactly what they
+                wanted.
+              */
+              pushOrch(
+                stopped ? `  killed ${name}'s run` : `  nothing running`,
+                'dim',
+              );
+            }),
+          );
+          return;
+        }
+
+        if (command.kind === 'pause') {
+          said(
+            agents.pause({ name }).then(() => {
+              pushOrch(`  paused ${name}`, 'dim');
+            }),
+          );
+          return;
+        }
+
+        /*
+          Resume prints the status main computed, not the word "resumed".
+
+          The two differ in the case that matters most: an agent that asked
+          something while it was paused comes back `asking`, not `sleeping`, and
+          a line saying only "resumed" would bury the question it came back
+          holding.
+        */
+        said(
+          agents.resume({ name }).then((status) => {
+            pushOrch(`  resumed ${name} — ${agentStatusWord(status)}`, 'dim');
+          }),
+        );
         return;
       }
 
@@ -4121,6 +4461,15 @@ export const useNavOrder = () =>
        * about where "here" is, so the partition *and* the sort have to match
        * `session-table.tsx` exactly. A flattening in a different order from the
        * one on screen makes the down arrow skip a row and come back to it.
+       *
+       * **Three** buckets since HIVE-117, because the table draws three. The
+       * agents sit between the two session groups, ranked by `rankedAgents` —
+       * the same function the table's own group is drawn from, not a second
+       * copy of its rule. Without them here an agent row was still *selectable*
+       * (it renders the caret and sets `selId` on click) while being absent
+       * from the order every arrow key consults: `↓` from one teleported to the
+       * first session, `↑` to the last ended row, and `→` opened nothing at all
+       * because `console-input.tsx` gates on membership of this list.
        */
       const active: string[] = [];
       const ended: string[] = [];
@@ -4132,6 +4481,7 @@ export const useNavOrder = () =>
       }
       return [
         ...byRecency(active, state.entities),
+        ...rankedAgents(state.agentOrder, state.entities),
         ...byRecency(ended, state.entities),
       ];
     }),
@@ -4415,10 +4765,9 @@ export interface AgentFacts {
 /**
  * The agent view's five fact tiles, derived on read (HIVE-116).
  *
- * "Today" is the **user's** calendar day, compared with `toDateString()` rather
- * than against a UTC boundary — the same reason the ledger files itself by
- * local day: it is the person's day, and there is no server to have another
- * one. Storing the pair instead would make it wrong every midnight.
+ * The `Today` pair comes from {@link runsToday} rather than being computed here
+ * (HIVE-117): the console's `agents` table prints the same two numbers, and the
+ * two surfaces can share a screen. One spelling, one source.
  */
 export const useAgentFacts = (name: string): AgentFacts | null => {
   const entity = useHiveStore((state) => state.entities[name]);
@@ -4427,12 +4776,7 @@ export const useAgentFacts = (name: string): AgentFacts | null => {
   return useMemo(() => {
     if (entity === undefined || !isAgent(entity)) return null;
 
-    const today = new Date().toDateString();
-    const todays = entity.runs.filter(
-      (run) => new Date(run.startedAt).toDateString() === today,
-    );
-    const spend = todays.reduce((sum, run) => sum + (run.costUsd ?? 0), 0);
-    const spent = formatRunCost(spend);
+    const today = runsToday(entity.runs);
     const open = openAsks(ledger, Date.now()).find((ask) => ask.from === name);
 
     return {
@@ -4440,34 +4784,8 @@ export const useAgentFacts = (name: string): AgentFacts | null => {
       ...(open?.ref === undefined ? {} : { askRef: open.ref }),
       wake: describeWake(entity.wake),
       next: describeNextRun(entity),
-      todayRuns: todays.length,
-      /*
-        `$0.00` rather than a blank for a quiet day: the tile is a fact about
-        spend, and an empty cell reads as "not measured" instead of "nothing".
-
-        The no-runs case is spelled here rather than left to `formatRunCost`,
-        which answers `$0.0000` for zero. Four decimals is right for a *run* —
-        a wake routinely costs less than a cent, and `$0.00` for real work
-        reads as a bug — but it is false precision about a day on which
-        nothing happened. A day that did run, and cost less than a cent, still
-        gets the four decimals for the original reason.
-      */
-      /*
-        `$0.00` rather than a blank for a quiet day: the tile is a fact about
-        spend, and an empty cell reads as "not measured" instead of "nothing".
-
-        The no-runs case is spelled here rather than left to `formatRunCost`,
-        which answers `$0.0000` for zero. Four decimals is right for a *run* —
-        a wake routinely costs less than a cent, and `$0.00` for real work
-        reads as a bug — but it is false precision about a day on which
-        nothing happened. A day that did run, and cost less than a cent, still
-        gets the four decimals for the original reason.
-
-        Both conditions in one branch on purpose: `spent` is only `undefined`
-        for a non-finite input, which a sum of numbers is not, so a separate
-        `?? '$0.00'` would be a branch no test could ever reach.
-      */
-      todayCost: todays.length === 0 || spent === undefined ? '$0.00' : spent,
+      todayRuns: today.count,
+      todayCost: today.cost,
       ...(entity.sessionUuid === undefined
         ? {}
         : { sessionUuid: entity.sessionUuid }),
@@ -4531,6 +4849,203 @@ export const useAgentAskRef = (name: string): string | undefined => {
     () => openAsks(ledger, Date.now()).find((ask) => ask.from === name)?.ref,
     [ledger, name],
   );
+};
+
+/**
+ * The agents, ordered for the fleet table's AGENTS group (HIVE-117).
+ *
+ * A second ordering rather than a reuse of {@link useAgentsByGroup}, because
+ * the two surfaces are answering different questions. The rail *groups* —
+ * Awake, Sleeping, Paused, three headings the eye scans between. The fleet
+ * table has one heading and one list, so the order has to carry the whole
+ * priority by itself: `asking` (someone is waiting on you), then `working`,
+ * then `sleeping` by the wake that comes soonest, then `paused` last because
+ * nothing will move it until you say so.
+ *
+ * Encoded as strings for `useShallow`'s reason, which `useAgentsByGroup`
+ * records at length: an array of freshly built tuples is never equal to the
+ * last one, so every read looks like a change and React stops it with
+ * "maximum update depth exceeded".
+ */
+const AGENT_RANK: Record<AgentStatus, number> = {
+  asking: 0,
+  working: 1,
+  failed: 2,
+  sleeping: 3,
+  paused: 4,
+};
+
+/** The three fields the AGENTS group's order is a function of. */
+interface AgentRank {
+  id: string;
+  status: AgentStatus;
+  /** `0` for an agent nothing is scheduled to wake. */
+  nextRunAt: number;
+}
+
+/**
+ * The AGENTS group's comparator.
+ *
+ * Extracted rather than left inside {@link useFleetAgents} because
+ * {@link useNavOrder} has to produce the identical sequence: its docblock says
+ * the partition and the sort "have to match `session-table.tsx` exactly", and
+ * the table now draws a third group. Two spellings of one order is the defect
+ * that docblock is warning about — a caret that skips a row and comes back to
+ * it.
+ */
+function byFleetRank(a: AgentRank, b: AgentRank): number {
+  const rank = AGENT_RANK[a.status] - AGENT_RANK[b.status];
+  if (rank !== 0) return rank;
+
+  /*
+    Soonest wake first within a rank, and an agent with no scheduled wake last:
+    absence arrives here as `0`, and treating it as a time would sort the one
+    agent that will never wake on its own ahead of the one about to.
+  */
+  if (a.nextRunAt === b.nextRunAt) return a.id.localeCompare(b.id);
+  if (a.nextRunAt === 0) return 1;
+  if (b.nextRunAt === 0) return -1;
+
+  return a.nextRunAt - b.nextRunAt;
+}
+
+/** The agents of `agentOrder`, ranked — shared by the table and the caret. */
+function rankedAgents(
+  order: readonly string[],
+  entities: Record<string, Entity>,
+): string[] {
+  const rows: AgentRank[] = [];
+
+  for (const id of order) {
+    const entity = entities[id];
+
+    // `entities` holds both kinds and an agent name is a legal session id.
+    if (entity === undefined || !isAgent(entity)) continue;
+
+    rows.push({ id, status: entity.status, nextRunAt: entity.nextRunAt ?? 0 });
+  }
+
+  return rows.sort(byFleetRank).map((row) => row.id);
+}
+
+export const useFleetAgents = (): string[] => {
+  /*
+    Encoded as strings for `useShallow`'s reason, which `useAgentsByGroup`
+    records at length: an array of freshly built objects is never equal to the
+    last one, so every read looks like a change and React stops it with
+    "maximum update depth exceeded". `|` is safe as a separator because
+    `AGENT_NAME_PATTERN` admits lowercase letters, digits and dashes only.
+  */
+  const rows = useHiveStore(
+    useShallow((state) =>
+      state.agentOrder.flatMap((id) => {
+        const entity = state.entities[id];
+
+        if (entity === undefined || !isAgent(entity)) return [];
+
+        return [`${id}|${entity.status}|${entity.nextRunAt ?? 0}`];
+      }),
+    ),
+  );
+
+  return useMemo(
+    () =>
+      rows
+        .map((row) => {
+          const [id = '', status = 'sleeping', next = '0'] = row.split('|');
+
+          return { id, status: status as AgentStatus, nextRunAt: Number(next) };
+        })
+        .sort(byFleetRank)
+        .map((row) => row.id),
+    [rows],
+  );
+};
+
+/**
+ * How many agents are waiting on you (HIVE-117).
+ *
+ * The *count* of agents is deliberately not here: every caller of this already
+ * holds {@link useFleetAgents}' array, whose length is the same number by
+ * construction — both walk `agentOrder` applying the same narrowing. A second
+ * subscription over the same data to recompute `.length` is the kind of derived
+ * value `CLAUDE.md` means by "one truth per number on screen".
+ *
+ * `asking` earns its own walk because nothing else derives it, and it is the
+ * only number in that heading worth a glance.
+ */
+export const useAskingAgentCount = (): number =>
+  useHiveStore((state) => {
+    let asking = 0;
+    for (const id of state.agentOrder) {
+      const entity = state.entities[id];
+      if (entity !== undefined && isAgent(entity) && entity.status === 'asking') {
+        asking += 1;
+      }
+    }
+
+    return asking;
+  });
+
+/** An agent's pull request: always a number, linkable only when the sweep knows it. */
+export interface AgentPr {
+  n: number;
+  url?: string;
+}
+
+/**
+ * The pull request this agent last finished, if it named one (HIVE-117).
+ *
+ * Read from the **ledger**, not from `runs`: a `RunSummary` records what a wake
+ * cost and how it ended, and deliberately nothing about what it did. What an
+ * agent *produced* is what it wrote down — a `done` entry whose `meta` carries
+ * a `pr`, which `LedgerEntry.meta` names as one of its riders. That is also the
+ * only version of this fact a session could have written for itself.
+ *
+ * The last one wins: an agent that opens a PR a day accumulates `done` entries,
+ * and the row has space for the current one.
+ */
+export const useAgentPr = (name: string): AgentPr | null => {
+  const ledger = useHiveStore((state) => state.ledger);
+  const prs = useHiveStore((state) => state.prs);
+
+  return useMemo(() => {
+    for (let i = ledger.length - 1; i >= 0; i -= 1) {
+      const entry = ledger[i];
+      if (entry === undefined || entry.from !== name || entry.kind !== 'done') {
+        continue;
+      }
+      const written = entry.meta?.['pr'];
+      /*
+        A number, or a string that is one. Main writes `meta` from whatever the
+        agent handed `ledger_post`, so this is model-authored input in every
+        sense that matters — `#12` and `"12"` are both things it will write, and
+        neither should put `NaN` in the table.
+      */
+      const n =
+        typeof written === 'number'
+          ? written
+          : Number(String(written).replace(/^#/, ''));
+
+      if (!Number.isInteger(n) || n <= 0) continue;
+
+      /*
+        The URL comes from the **sweep**, not from the number.
+
+        A `done` entry records that an agent opened a pull request; it does not
+        say which repository, and there is no honest URL to build from an
+        integer alone. A GitHub-wide search for "42" is a worse answer than no
+        link — it looks like a destination and lands on thousands of unrelated
+        results. So the number renders as plain text until the PR list happens
+        to hold it, which is the same standing a session's *remembered* PR has.
+      */
+      const known = prs.find((pr) => pr.number === n);
+
+      return { n, ...(known === undefined ? {} : { url: known.url }) };
+    }
+
+    return null;
+  }, [ledger, prs, name]);
 };
 
 /** Create a session on a project (stories 041, 044). */
