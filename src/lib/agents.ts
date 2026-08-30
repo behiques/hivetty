@@ -1,7 +1,9 @@
 import {
   readFrontmatter,
+  type AgentStatus,
   type AgentsSnapshot,
   type AgentWriteResult,
+  type WakeSpec,
 } from '@shared/agent-contract';
 
 /**
@@ -35,6 +37,61 @@ function emit(): void {
   // Copied before iterating: a listener unsubscribing during the emit is the
   // ordinary React teardown case, not an edge case.
   for (const listener of [...listeners]) listener();
+}
+
+/**
+ * What happens next without you — `08:30`, `on answer`, or `manual`.
+ *
+ * Here rather than in either caller because two surfaces say it: the rail
+ * row's meta and the agent view's `Next` tile. A row reading `next 08:30`
+ * beside a tile reading `manual` would be one fact spelled two ways, and this
+ * is the smaller half of that fact — `useAgentFacts` composes the rest.
+ *
+ * An `asking` agent has no scheduled wake worth naming even when it has a
+ * `nextRunAt`: the thing that will actually move it is a reply, and saying
+ * `08:30` would promise a wake the answer is going to pre-empt.
+ */
+export function describeNextRun(agent: {
+  status: AgentStatus;
+  nextRunAt?: number;
+}): string {
+  if (agent.status === 'asking') return 'on answer';
+  if (agent.nextRunAt === undefined) return 'manual';
+
+  return new Date(agent.nextRunAt).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * How it wakes — `every 5m · slack`, `at 09:00, 17:00 · Mon–Fri`, or `manual`.
+ *
+ * Beside {@link describeNextRun} for the same reason: the `Wake` tile and any
+ * future row that summarises a schedule must not word it differently.
+ *
+ * `at` is a **list** of `HH:MM`, so it is joined explicitly rather than
+ * interpolated — `${wake.at}` renders an array as `09:00,17:00`, comma-jammed
+ * and inconsistent with the `·` this string separates its parts with. `days`
+ * is rendered too: without it a Mon/Wed-only agent reads exactly like a daily
+ * one, which is the schedule question a reader most wants answered.
+ */
+export function describeWake(wake: WakeSpec): string {
+  const parts: string[] = [];
+
+  if (wake.everyMs !== undefined) {
+    parts.push(`every ${Math.round(wake.everyMs / 60_000)}m`);
+  }
+  if (wake.at !== undefined && wake.at.length > 0) {
+    parts.push(`at ${wake.at.join(', ')}`);
+  }
+  // Absent `days` alongside `at` means every day, which needs no words.
+  if (wake.days !== undefined && wake.days.length > 0) {
+    parts.push(wake.days.join(', '));
+  }
+  if (wake.on.length > 0) parts.push(wake.on.join(' · '));
+
+  return parts.length === 0 ? 'manual' : parts.join(' · ');
 }
 
 /** `useSyncExternalStore`'s subscribe. Returns its own disposer. */

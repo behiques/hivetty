@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef } from 'react';
 
 import { useDeclinedBack } from '@/hooks/use-declined-back';
-import { isEntityView, resolveView } from '@/lib/resolve-view';
+import { isTerminalView, resolveView } from '@/lib/resolve-view';
 import { cn } from '@/lib/utils';
-import { isTerminated } from '@/types/entity';
+import { isAgent, isSession, isTerminated } from '@/types/entity';
 
 import { SessionMetaBar } from '@components/layout/session-meta-bar';
 import { TerminalHost } from '@components/terminal/terminal-host';
 import { SplitHandle } from '@components/ui/split-handle';
 import { TerminalHint } from '@components/ui/terminal-hint';
+import { AgentView } from '@features/agents/components/agent-view';
 import { EditorPane } from '@features/editor/components/editor-pane';
 import { EditorTabStrip } from '@features/editor/components/editor-tab-strip';
 import { ConsoleInput } from '@features/orchestrator/components/console-input';
@@ -36,7 +37,6 @@ import { useActiveFileKey, useHasOpenFiles } from '@stores/editor-store';
 import {
   terminalIdFor,
   useActiveEntity,
-  useAgentOrder,
   useNavOrder,
 } from '@stores/hive-store';
 import {
@@ -77,7 +77,6 @@ export function CenterStage() {
   const activeTab = useActiveTab();
   const entity = useActiveEntity();
   const navOrder = useNavOrder();
-  const agentOrder = useAgentOrder();
   const { picker } = usePickerState();
   const settings = useSettingsOpen();
 
@@ -108,7 +107,7 @@ export function CenterStage() {
    */
   const terminalRegion = useRef<HTMLDivElement>(null);
   const booting = useSessionBoot(
-    isEntityView(view) ? activeTab : null,
+    isTerminalView(view) ? activeTab : null,
     terminalRegion,
   );
   const showingPicker = view === 'picker';
@@ -120,11 +119,30 @@ export function CenterStage() {
    * top of thirteen live terminals.
    */
   const showingOverlay = showingPicker || view === 'settings';
+  /**
+   * The agent view owns the whole column, so the terminal region stands down.
+   *
+   * Both are `flex-1` children of one column, so leaving the region mounted
+   * and visible split the stage in half and left the bottom of it blank —
+   * agents build no transport, so there was nothing down there to draw. The
+   * orchestrator does not have this problem because `SessionTable` is
+   * content-sized rather than `flex-1`.
+   *
+   * Hidden rather than unmounted, exactly as `showingOverlay` does it:
+   * `TerminalHost` holds every session's live instance, and unmounting it to
+   * look at an agent would cost each of them its scrollback.
+   */
+  const showingAgent = view === 'agent';
 
-  const ids = useMemo(
-    () => [ORCHESTRATOR_ID, ...navOrder, ...agentOrder],
-    [navOrder, agentOrder],
-  );
+  /*
+    Agents are not in this list any more (HIVE-116).
+
+    They used to be, which gave every definition on disk a cached transport and
+    a read-only xterm replaying its lines. An agent now has a view of its own —
+    a run log is a transcript, not a terminal — so nothing here should ever
+    build one a `TerminalHost` will not mount.
+  */
+  const ids = useMemo(() => [ORCHESTRATOR_ID, ...navOrder], [navOrder]);
 
   /**
    * Transports are created once per entity and cached for the life of the app.
@@ -307,7 +325,16 @@ export function CenterStage() {
             */
             style={splitting ? { flex: `0 0 ${splitRatio * 100}%` } : undefined}
           >
-        {isEntityView(view) && entity ? <SessionMetaBar entity={entity} /> : null}
+        {/*
+          `isSession` as well as `isTerminalView`, and not merely to satisfy the
+          narrowed prop: the two answer different questions — one about the
+          view, one about the entity behind it — and an agent that reached
+          here would be a routing bug worth rendering nothing for rather than
+          crashing on a missing `project`.
+        */}
+        {isTerminalView(view) && entity && isSession(entity) ? (
+          <SessionMetaBar entity={entity} />
+        ) : null}
 
         {/*
           The fleet table sits above the transcript rather than inside it. The
@@ -316,6 +343,15 @@ export function CenterStage() {
           keeps its own scroll and the terminal fills what is left.
         */}
         {view === 'orchestrator' ? <SessionTable /> : null}
+
+        {/*
+          The agent's own surface, mounted the way the console's table is:
+          beside the terminal region rather than inside it, because it is not a
+          terminal and must not inherit one's chrome (HIVE-116).
+        */}
+        {view === 'agent' && entity !== null && isAgent(entity) ? (
+          <AgentView entity={entity} />
+        ) : null}
 
         {/*
           Clicking the terminal focuses the message row, as the concept does —
@@ -355,6 +391,7 @@ export function CenterStage() {
           className={cn(
             'relative flex flex-1 flex-col',
             view === 'orchestrator' && !splitting ? 'min-h-40' : 'min-h-0',
+            showingAgent && 'hidden',
           )}
           onClick={focusMessageInput}
         >
@@ -365,7 +402,9 @@ export function CenterStage() {
              * invisible, so closing it re-reveals the previous one and
              * triggers its refit through the machinery story 042 already has.
              */
-            activeId={showingOverlay || editorFull ? null : activeTab}
+            activeId={
+              showingOverlay || editorFull || showingAgent ? null : activeTab
+            }
             endedId={endedId}
             palette={terminalAppearance.palette}
             fontFamily={terminalAppearance.fontFamily}
@@ -429,7 +468,7 @@ export function CenterStage() {
           own: the browser demo and the agent tabs are replays, and the row is
           the only way to speak to them.
         */}
-        {isEntityView(view) && entity && !activeIsLive ? (
+        {isTerminalView(view) && entity && !activeIsLive ? (
           /*
            * Keyed by entity: switching sessions remounts the row, which clears
            * a half-typed message meant for somebody else and re-runs its

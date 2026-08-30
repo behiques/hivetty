@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PHRASES } from '@lib/swarm/phrases';
@@ -6,7 +6,7 @@ import { isAgent, isSession } from '@/types/entity';
 import type { SessionStatus } from '@/types/entity';
 import { statusLabel } from '@components/ui/status-dot';
 import type { IdleDetail } from '@shared/hook-contract';
-import type { AgentSummary } from '@shared/agent-contract';
+import type { AgentSummary, RunSummary } from '@shared/agent-contract';
 import { LEDGER_MEMORY_CAP, type LedgerEntry } from '@shared/ledger-contract';
 import { isDesktop } from '@config/runtime';
 import { peek, stamp } from '@lib/fake-clock';
@@ -26,6 +26,11 @@ import {
   openOrResume,
   statusWord,
   useActiveSessions,
+  useAgentAskCount,
+  useAgentFacts,
+  useAgentRuns,
+  useAgentsByGroup,
+  useAgentThread,
   useDisplayName,
   useEndedSessions,
   currentRowFor,
@@ -1943,6 +1948,8 @@ describe('hive-store', () => {
       icon: 'Ghost',
       status: 'sleeping',
       wake: { on: [] },
+      rotateAfter: 50,
+      runs: [],
       ...over,
     });
 
@@ -2041,6 +2048,8 @@ describe('hive-store', () => {
           icon: 'ph-robot',
           status: 'sleeping',
           wake: { on: ['ledger'] },
+          rotateAfter: 50,
+          runs: [],
         },
       ]);
 
@@ -2051,6 +2060,8 @@ describe('hive-store', () => {
         status: 'working',
         lastRunAt: 42,
         cost: '$0.02',
+        runs: [],
+        runsSinceRotate: 0,
       });
 
       const agent = useHiveStore.getState().entities['slack-watcher'];
@@ -2065,7 +2076,12 @@ describe('hive-store', () => {
 
     it('ignores a status for an agent it does not have', () => {
       expect(() =>
-        useHiveStore.getState().setAgentStatus({ name: 'ghost', status: 'working' }),
+        useHiveStore.getState().setAgentStatus({
+          name: 'ghost',
+          status: 'working',
+          runs: [],
+          runsSinceRotate: 0,
+        }),
       ).not.toThrow();
       expect(useHiveStore.getState().entities['ghost']).toBeUndefined();
     });
@@ -2074,7 +2090,12 @@ describe('hive-store', () => {
       // A definition may legally share a name with a live session id.
       const before = useHiveStore.getState().entities['sess-01'];
 
-      useHiveStore.getState().setAgentStatus({ name: 'sess-01', status: 'working' });
+      useHiveStore.getState().setAgentStatus({
+        name: 'sess-01',
+        status: 'working',
+        runs: [],
+        runsSinceRotate: 0,
+      });
 
       expect(useHiveStore.getState().entities['sess-01']).toBe(before);
     });
@@ -2097,7 +2118,13 @@ describe('hive-store', () => {
       seedAgent();
       useHiveStore
         .getState()
-        .setAgentStatus({ name: 'slack-watcher', status: 'sleeping', cost: '$0.02' });
+        .setAgentStatus({
+          name: 'slack-watcher',
+          status: 'sleeping',
+          cost: '$0.02',
+          runs: [],
+          runsSinceRotate: 0,
+        });
 
       // `agents:list` reads the cost back out of `agents.json`, so a folder
       // change — any saved `AGENT.md`, for any agent — must not blank the row.
@@ -2108,6 +2135,8 @@ describe('hive-store', () => {
           icon: 'ph-robot',
           status: 'sleeping',
           wake: { on: ['ledger'] },
+          rotateAfter: 50,
+          runs: [],
           cost: '$0.02',
         },
       ]);
@@ -3537,5 +3566,322 @@ describe('the ledger slice', () => {
 
     const { result } = renderHook(() => useThread('1'));
     expect(result.current.map((found) => found.id)).toEqual(['1', '3']);
+  });
+});
+
+/**
+ * HIVE-116. The rail groups by what an agent is doing, the view's facts are
+ * derived from the run history the bridge now carries, and the tab's badge
+ * counts only the asks an *agent* is waiting on.
+ */
+describe('the agent view selectors', () => {
+  const summary = (
+    name: string,
+    over: Partial<AgentSummary> = {},
+  ): AgentSummary => ({
+    name,
+    description: `${name} watches things`,
+    icon: 'Ghost',
+    status: 'sleeping',
+    wake: { on: [] },
+    rotateAfter: 50,
+    runs: [],
+    ...over,
+  });
+
+  const run = (over: Partial<RunSummary> = {}): RunSummary => ({
+    run: 'r1',
+    trigger: 'timer',
+    startedAt: Date.now(),
+    endedAt: Date.now(),
+    outcome: 'done',
+    ...over,
+  });
+
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+  });
+
+  describe('useAgentsByGroup', () => {
+    it('groups by state, with asking first inside Awake', () => {
+      useHiveStore
+        .getState()
+        .hydrateAgents([
+          summary('zzz-working', { status: 'working', lastRunAt: 500 }),
+          summary('aaa-asking', { status: 'asking' }),
+          summary('sleeper', { status: 'sleeping' }),
+          summary('held', { status: 'paused' }),
+        ]);
+
+      const { result } = renderHook(() => useAgentsByGroup());
+
+      expect(result.current.map((group) => [group.key, group.ids])).toEqual([
+        ['awake', ['aaa-asking', 'zzz-working']],
+        ['sleeping', ['sleeper']],
+        ['paused', ['held']],
+      ]);
+    });
+
+    it('breaks an Awake tie on the most recent run', () => {
+      useHiveStore
+        .getState()
+        .hydrateAgents([
+          summary('older', { status: 'working', lastRunAt: 100 }),
+          summary('newer', { status: 'working', lastRunAt: 900 }),
+        ]);
+
+      const { result } = renderHook(() => useAgentsByGroup());
+
+      expect(result.current[0]?.ids).toEqual(['newer', 'older']);
+    });
+
+    it('omits a group with no members, rather than a header reading zero', () => {
+      useHiveStore.getState().hydrateAgents([summary('sleeper')]);
+
+      const { result } = renderHook(() => useAgentsByGroup());
+
+      expect(result.current.map((group) => group.key)).toEqual(['sleeping']);
+    });
+
+    /**
+     * The rail must not rebuild on every unrelated store write.
+     *
+     * Subscribing to `state.entities` did exactly that: the map's identity
+     * changes on any write, so a line batch from a running agent re-derived the
+     * groups and handed every row a fresh object. This is the rule CLAUDE.md
+     * states as keeping a picker keystroke from re-rendering thirteen live
+     * terminals.
+     */
+    it('returns the same groups when an unrelated write lands', () => {
+      useHiveStore.getState().hydrateAgents([summary('watcher')]);
+
+      const { result } = renderHook(() => useAgentsByGroup());
+      const before = result.current;
+
+      act(() => {
+        useHiveStore.getState().appendAgentLines({
+          name: 'watcher',
+          lines: [{ text: 'a line', color: 'ink' }],
+        });
+      });
+
+      expect(result.current).toBe(before);
+    });
+
+    it('does rebuild when a status actually changes', () => {
+      useHiveStore.getState().hydrateAgents([summary('watcher')]);
+
+      const { result } = renderHook(() => useAgentsByGroup());
+      const before = result.current;
+
+      act(() => {
+        useHiveStore.getState().setAgentStatus({
+          name: 'watcher',
+          status: 'asking',
+          runs: [],
+          runsSinceRotate: 0,
+        });
+      });
+
+      expect(result.current).not.toBe(before);
+      expect(result.current[0]?.key).toBe('awake');
+    });
+
+    it('files a failed agent under Awake, because it is the loudest yes', () => {
+      // The grouping answers "should I look at this?" — a broken agent is not
+      // resting, and burying it under Sleeping would hide the one row that
+      // needs a person.
+      useHiveStore
+        .getState()
+        .hydrateAgents([summary('broke', { status: 'failed' })]);
+
+      const { result } = renderHook(() => useAgentsByGroup());
+
+      expect(result.current[0]?.key).toBe('awake');
+    });
+  });
+
+  describe('useAgentFacts', () => {
+    it("counts and sums only today's runs", () => {
+      const now = Date.now();
+      const yesterday = now - 36 * 60 * 60 * 1000;
+
+      useHiveStore.getState().hydrateAgents([
+        summary('a', {
+          runsSinceRotate: 17,
+          sessionUuid: '9f3c1e2a',
+          runs: [
+            run({
+              run: 'old',
+              startedAt: yesterday,
+              endedAt: yesterday,
+              costUsd: 9,
+            }),
+            run({ run: 'r1', costUsd: 0.5 }),
+            run({ run: 'r2', costUsd: 1.64 }),
+          ],
+        }),
+      ]);
+
+      const { result } = renderHook(() => useAgentFacts('a'));
+
+      expect(result.current?.todayRuns).toBe(2);
+      expect(result.current?.todayCost).toBe('$2.14');
+      expect(result.current?.runsSinceRotate).toBe(17);
+      expect(result.current?.rotateAfter).toBe(50);
+      expect(result.current?.sessionUuid).toBe('9f3c1e2a');
+    });
+
+    it('reads $0.00 for a day with no runs, not a blank', () => {
+      useHiveStore.getState().hydrateAgents([summary('a')]);
+
+      const { result } = renderHook(() => useAgentFacts('a'));
+
+      expect(result.current?.todayRuns).toBe(0);
+      expect(result.current?.todayCost).toBe('$0.00');
+    });
+
+    it('keeps four decimals for a day that ran but cost less than a cent', () => {
+      // The reason `formatRunCost` has the rule at all: a wake routinely costs
+      // less than a cent, and `$0.00` for real work reads as a bug. Only a day
+      // with *no* runs gets the short form.
+      useHiveStore
+        .getState()
+        .hydrateAgents([summary('a', { runs: [run({ costUsd: 0.0031 })] })]);
+
+      const { result } = renderHook(() => useAgentFacts('a'));
+
+      expect(result.current?.todayCost).toBe('$0.0031');
+    });
+
+    it('names the open ask it is waiting on', () => {
+      useHiveStore.getState().hydrateAgents([summary('a', { status: 'asking' })]);
+      useHiveStore.getState().hydrateLedger([
+        {
+          id: '20260830-140000-0001',
+          ts: Date.now(),
+          from: 'a',
+          to: 'overmind',
+          kind: 'ask',
+          ref: 'a71',
+          body: 'Retry?',
+        },
+      ]);
+
+      const { result } = renderHook(() => useAgentFacts('a'));
+
+      expect(result.current?.askRef).toBe('a71');
+      expect(result.current?.next).toBe('on answer');
+    });
+
+    it('returns null for a name that is not an agent', () => {
+      const { result } = renderHook(() => useAgentFacts('nobody'));
+
+      expect(result.current).toBeNull();
+    });
+  });
+
+  describe('useAgentAskCount', () => {
+    it('counts open asks from agents and ignores a session’s', () => {
+      useHiveStore
+        .getState()
+        .hydrateAgents([summary('watcher', { status: 'asking' })]);
+      useHiveStore.getState().hydrateLedger([
+        {
+          id: '20260830-140000-0001',
+          ts: Date.now(),
+          from: 'watcher',
+          to: 'overmind',
+          kind: 'ask',
+          ref: 'a71',
+          body: 'Retry?',
+        },
+        {
+          id: '20260830-140000-0002',
+          ts: Date.now(),
+          from: 'sess-01',
+          to: 'overmind',
+          kind: 'ask',
+          ref: 'a72',
+          body: 'Other',
+        },
+      ]);
+
+      const { result } = renderHook(() => useAgentAskCount());
+
+      expect(result.current).toBe(1);
+    });
+
+    it('is zero with an empty ledger', () => {
+      const { result } = renderHook(() => useAgentAskCount());
+
+      expect(result.current).toBe(0);
+    });
+  });
+
+  describe('useAgentThread', () => {
+    const entry = (over: Partial<LedgerEntry>): LedgerEntry => ({
+      id: '20260830-140000-0001',
+      ts: Date.now(),
+      from: 'overmind',
+      kind: 'post',
+      body: 'something',
+      ...over,
+    });
+
+    it('keeps what the agent said and what it was told', () => {
+      useHiveStore
+        .getState()
+        .hydrateLedger([
+          entry({ id: '1', from: 'watcher', to: 'overmind', body: 'mine' }),
+          entry({ id: '2', from: 'overmind', to: 'watcher', body: 'yours' }),
+          entry({ id: '3', from: 'sess-01', to: 'overmind', body: 'neither' }),
+        ]);
+
+      const { result } = renderHook(() => useAgentThread('watcher'));
+
+      expect(result.current.map((found) => found.body)).toEqual([
+        'mine',
+        'yours',
+      ]);
+    });
+
+    it('leaves out a broadcast from somebody else', () => {
+      // `matches` counts an undirected entry as addressed to everyone, which
+      // is right for an inbox and wrong for a thread: this column answers
+      // "what passed between us", and an announcement to the hive did not.
+      useHiveStore
+        .getState()
+        .hydrateLedger([entry({ id: '1', from: 'sess-01', body: 'all hands' })]);
+
+      const { result } = renderHook(() => useAgentThread('watcher'));
+
+      expect(result.current).toEqual([]);
+    });
+
+    it('keeps the agent’s own broadcast, which it did say', () => {
+      useHiveStore
+        .getState()
+        .hydrateLedger([entry({ id: '1', from: 'watcher', body: 'all hands' })]);
+
+      const { result } = renderHook(() => useAgentThread('watcher'));
+
+      expect(result.current).toHaveLength(1);
+    });
+  });
+
+  describe('useAgentRuns', () => {
+    it('hands back the history, and a stable empty array for a stranger', () => {
+      useHiveStore.getState().hydrateAgents([summary('a', { runs: [run()] })]);
+
+      const { result } = renderHook(() => useAgentRuns('a'));
+      const { result: none } = renderHook(() => useAgentRuns('nobody'));
+      const { result: again } = renderHook(() => useAgentRuns('nobody'));
+
+      expect(result.current).toHaveLength(1);
+      // Identity matters: a fresh [] each call re-renders every consumer on
+      // any unrelated store write.
+      expect(none.current).toBe(again.current);
+    });
   });
 });
