@@ -38,6 +38,12 @@ You are the Slack watcher for Yunid. On every wake, read your ledger inbox first
 const BASE = {
   folder: 'slack-watcher',
   skillNames: ['jira-writer', 'release-notes'],
+  /*
+    The Hive-owned subset, which only the *name* clash consults. Same list here
+    because these fixtures predate the split; the specs that care about the
+    difference set them apart deliberately.
+  */
+  hiveSkillNames: ['jira-writer', 'release-notes'],
   integrations: ['slack'],
 };
 
@@ -174,17 +180,81 @@ describe('parseAgent — refusals', () => {
     });
   });
 
-  it('refuses a name that is also a skill', () => {
+  /*
+    `hiveSkillNames`, not `skillNames`. The rule is about the namespace The Hive
+    manages — see the pair of specs at the end of this file for why the wider
+    set must not stand in for it.
+  */
+  it('refuses a name that is also a hive skill', () => {
     expect(
-      problems(GOOD, { skillNames: ['slack-watcher', 'jira-writer', 'release-notes'] }),
+      problems(GOOD, {
+        skillNames: ['slack-watcher', 'jira-writer', 'release-notes'],
+        hiveSkillNames: ['slack-watcher', 'jira-writer', 'release-notes'],
+      }),
     ).toContainEqual({ field: 'name', reason: 'A skill already uses this name.' });
   });
 
   it('refuses a skill that does not exist, naming it', () => {
     expect(problems(GOOD, { skillNames: ['jira-writer'] })).toContainEqual({
       field: 'skills',
-      reason: 'release-notes is not in ~/.hive/skills.',
+      reason:
+        'No skill called release-notes — looked in ~/.hive/skills, ~/.claude/skills and your installed plugins.',
     });
+  });
+
+  /*
+    The field is a declaration, not a sandbox. An agent runs as a `claude -p`
+    process on this machine, which loads `~/.claude/skills` and the user's
+    installed plugins whether or not the definition names them — so a validator
+    that only knew `~/.hive/skills` refused names the agent could reach anyway,
+    and on the fresh install where that folder is empty it refused every name
+    there is.
+  */
+  /*
+    The name clash consults the Hive-owned set alone, and must keep doing so.
+    Widening `skillNames` to the whole machine silently widened this refusal
+    with it: a user with a personal `~/.claude/skills/graphify` could no longer
+    have an agent called `graphify`, refused on account of a folder The Hive
+    neither manages nor mentions.
+  */
+  it('lets an agent take the name of a skill the hive does not own', () => {
+    const source = GOOD.replace('name: slack-watcher', 'name: graphify')
+      .replace('Must match', 'x');
+
+    expect(
+      definition(source, {
+        folder: 'graphify',
+        skillNames: ['graphify', 'jira-writer', 'release-notes'],
+        hiveSkillNames: ['jira-writer', 'release-notes'],
+      }).name,
+    ).toBe('graphify');
+  });
+
+  it('still refuses the name of a skill the hive does own', () => {
+    const source = GOOD.replace('name: slack-watcher', 'name: release-notes');
+
+    expect(
+      problems(source, {
+        folder: 'release-notes',
+        hiveSkillNames: ['release-notes'],
+      }),
+    ).toContainEqual({
+      field: 'name',
+      reason: 'A skill already uses this name.',
+    });
+  });
+
+  it('accepts a name from outside the hive, including a plugin skill', () => {
+    const source = GOOD.replace(
+      'skills: [jira-writer, release-notes]',
+      'skills: [graphify, superpowers:brainstorming]',
+    );
+
+    expect(
+      definition(source, {
+        skillNames: ['graphify', 'superpowers:brainstorming'],
+      }).skills,
+    ).toEqual(['graphify', 'superpowers:brainstorming']);
   });
 
   it('refuses an unknown integration, naming it', () => {
@@ -256,7 +326,7 @@ icon: Ghost
 Wait to be asked.
 `;
 
-  const alone = { folder: 'quiet-one', skillNames: [] };
+  const alone = { folder: 'quiet-one', skillNames: [], hiveSkillNames: [] };
 
   it('saves with no every and no on, as manual-only', () => {
     const def = definition(MINIMAL, alone);
@@ -269,9 +339,28 @@ Wait to be asked.
     const def = definition(MINIMAL, alone);
 
     expect(def.autonomy).toBe('ask');
-    expect(def.limits).toEqual({ turns: 40, budgetUsd: 0.5, rotateAfter: 50 });
+    expect(def.limits).toEqual({ turns: 40, rotateAfter: 50 });
     expect(def.skills).toEqual([]);
     expect(def.tools).toEqual([]);
+  });
+
+  /*
+    Unlimited is *absence*, not a number. The waker reads `undefined` as "no
+    --max-budget-usd on the command line", and any default small enough to feel
+    safe is small enough to cut off ordinary wakes: the binary prices a run at
+    list rates whether or not a subscription is billed for it.
+  */
+  it('leaves the budget unset when the file names none', () => {
+    expect(definition(MINIMAL, alone).limits.budgetUsd).toBeUndefined();
+  });
+
+  it('reads a budget the file does name', () => {
+    const source = MINIMAL.replace(
+      'icon: Ghost',
+      'icon: Ghost\nlimits:\n  budget_usd: 2.5',
+    );
+
+    expect(definition(source, alone).limits.budgetUsd).toBe(2.5);
   });
 
   it('reads daily as a full day', () => {
@@ -397,6 +486,48 @@ describe('parseAgent — the calendar wake mode', () => {
         (problem) => problem.field,
       ),
     ).toContain('wake.days');
+  });
+
+  /*
+    `wake.on` was the one list here with no check at all — the strings were cast
+    straight to `WakeOn[]`, so a typo saved cleanly and then silently never
+    woke anything. That is a worse failure than a refusal: nothing is wrong on
+    screen and nothing ever happens.
+  */
+  describe('wake.on', () => {
+    it('refuses an event that is not one, naming what it accepts', () => {
+      const [problem] = problems(
+        GOOD.replace('on: [ledger, slack.mention, slack.channel:#incorp-dev]', 'on: [bananna]'),
+      ).filter((each) => each.field === 'wake.on');
+
+      expect(problem?.reason).toContain('bananna is not a wake event');
+      expect(problem?.reason).toContain('ledger, slack.mention');
+      expect(problem?.reason).toContain('slack.channel:#name');
+    });
+
+    it('takes the three legal shapes, the ticket example included', () => {
+      expect(definition(GOOD).wake.on).toEqual([
+        'ledger',
+        'slack.mention',
+        'slack.channel:#incorp-dev',
+      ]);
+    });
+
+    it('takes a channel written without its hash', () => {
+      expect(
+        definition(
+          GOOD.replace('slack.channel:#incorp-dev', 'slack.channel:incorp-dev'),
+        ).wake.on,
+      ).toContain('slack.channel:incorp-dev');
+    });
+
+    it('refuses a channel with no name after the colon', () => {
+      expect(
+        problems(GOOD.replace('slack.channel:#incorp-dev', 'slack.channel:')).map(
+          (problem) => problem.field,
+        ),
+      ).toContain('wake.on');
+    });
   });
 
   it('still reads an interval-only definition', () => {
