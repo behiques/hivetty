@@ -357,4 +357,97 @@ describe('createLedgerNotifier', () => {
 
     expect(dismiss).not.toHaveBeenCalled();
   });
+
+  describe('the daily cap card (HIVE-121)', () => {
+    const cap = (over: Partial<LedgerEntry> = {}) =>
+      entry({
+        from: OVERMIND,
+        kind: 'event',
+        body: 'drone reached its daily budget — $0.50',
+        meta: { dailyCap: 0.5, agent: 'drone' },
+        ...over,
+      });
+
+    it('raises a failed-toned card naming the capped agent', () => {
+      const { raise, onEntry } = harness();
+
+      onEntry(cap());
+
+      expect(raise).toHaveBeenCalledWith({
+        kind: 'agent.failed',
+        id: '20260830-101500-0001',
+        title: 'Hit its daily cap',
+        subject: 'drone',
+        body: 'drone reached its daily budget — $0.50',
+        action: { type: 'agent', name: 'drone' },
+        createdAt: 1_756_500_000_000,
+      });
+    });
+
+    /*
+      Gated on the **overmind**, as the `expired` branch is, and for its
+      reason: `meta` is a free-form rider the tool layer passes through
+      verbatim. Keyed off an agent's own `from`, this card would be one any
+      agent could mint for itself — with a body it also writes — simply by
+      posting an event.
+    */
+    it('ignores the same meta posted by an agent about itself', () => {
+      const { raise, onEntry } = harness();
+
+      onEntry(cap({ from: 'drone' }));
+
+      expect(raise).not.toHaveBeenCalled();
+    });
+
+    it('ignores it from a session', () => {
+      const { raise, onEntry } = harness();
+
+      onEntry(cap({ from: 'sess-01' }));
+
+      expect(raise).not.toHaveBeenCalled();
+    });
+
+    it('ignores a cap that is not a number', () => {
+      const { raise, onEntry } = harness();
+
+      onEntry(cap({ meta: { dailyCap: 'lots', agent: 'drone' } }));
+
+      expect(raise).not.toHaveBeenCalled();
+    });
+
+    it('ignores one naming a party that is not an agent', () => {
+      const { raise, onEntry } = harness();
+
+      onEntry(cap({ meta: { dailyCap: 0.5, agent: 'sess-01' } }));
+
+      expect(raise).not.toHaveBeenCalled();
+    });
+
+    /*
+      Its own branch, above the run-receipt path, because that path calls
+      `spokenFor.delete(entry.from)` on any outcome — and a cap event is not a
+      run receipt: no run ended, the scheduler simply declined to start one.
+      Falling through would eat the dedup token and swallow the agent's next
+      real report.
+    */
+    it('leaves a pending run receipt intact', () => {
+      const { raise, onEntry } = harness();
+
+      onEntry(entry({ kind: 'failed', body: 'Run failed' }));
+      raise.mockClear();
+
+      onEntry(cap({ id: 'cap-1' }));
+
+      expect(raise).toHaveBeenCalledTimes(1);
+      expect(raise.mock.calls[0][0].title).toBe('Hit its daily cap');
+
+      raise.mockClear();
+      onEntry(
+        entry({ id: 'end-1', kind: 'event', meta: { outcome: 'failed' } }),
+      );
+
+      // Still suppressed by the agent's own `failed` report, as it was before.
+      expect(raise).not.toHaveBeenCalled();
+    });
+  });
 });

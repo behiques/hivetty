@@ -29,7 +29,12 @@ import type { TermLine } from '@/types/terminal';
 import type { Ticket } from '@/types/ticket';
 
 import { isDesktop } from '@config/runtime';
-import { describeNextRun, describeWake, runsToday } from '@lib/agents';
+import {
+  describeNextRun,
+  describeSkips,
+  describeWake,
+  runsToday,
+} from '@lib/agents';
 import { reset as resetClock } from '@lib/fake-clock';
 import { readPullRequests, searchPullRequests } from '@lib/github';
 import { readJiraStatus, searchJiraIssues } from '@lib/jira';
@@ -2214,7 +2219,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
             ref === undefined
               ? agentStatusWord(agent.status)
               : `${agentStatusWord(agent.status)} (${ref})`;
-          const today = runsToday(agent.runs, now);
+          const today = runsToday(agent.today, now);
 
           /*
             One colour per line, not per column — `status`'s rule, and for its
@@ -2557,6 +2562,15 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
             reading of "nothing has run yet".
           */
           runsSinceRotate: summary.runsSinceRotate ?? 0,
+          /*
+            Run state too (HIVE-121). `today` stays absent when main has none —
+            a fresh agent has spent nothing, and an empty accumulator would be
+            indistinguishable from one belonging to a day that has ended. Zero
+            skips is the honest reading of "nothing has skipped yet", as with
+            `runsSinceRotate` above.
+          */
+          ...(summary.today === undefined ? {} : { today: summary.today }),
+          skipsSinceRun: summary.skipsSinceRun ?? 0,
           rotateAfter: summary.rotateAfter,
           runs: summary.runs,
           ...(summary.sessionUuid === undefined
@@ -2592,7 +2606,17 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
             ...previous,
             status: push.status,
             ...(push.lastRunAt === undefined ? {} : { lastRunAt: push.lastRunAt }),
-            ...(push.nextRunAt === undefined ? {} : { nextRunAt: push.nextRunAt }),
+            /*
+              Assigned, not spread-guarded — unlike `lastRunAt` and `cost`
+              above, which only ever gain a value.
+
+              `nextRunAt` genuinely goes away: the scheduler clears it when a
+              definition stops scheduling, or stops parsing mid-edit. Guarded,
+              that clear could never cross, and the rail would go on reading
+              `next 09:00` for an agent that will never wake again until an
+              unrelated re-list happened past.
+            */
+            nextRunAt: push.nextRunAt,
             ...(push.cost === undefined ? {} : { cost: push.cost }),
             /*
               Assigned, not spread-guarded: both are required on the push, and
@@ -2601,6 +2625,13 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
             */
             runs: push.runs,
             runsSinceRotate: push.runsSinceRotate,
+            /*
+              The scheduler pushes on a skip and on a new next-run time, with
+              no run attached — so these two move on rows that are not running,
+              which is exactly when a reader is looking at them (HIVE-121).
+            */
+            ...(push.today === undefined ? {} : { today: push.today }),
+            skipsSinceRun: push.skipsSinceRun ?? 0,
           },
         },
       };
@@ -4820,6 +4851,8 @@ export interface AgentFacts {
   askRef?: string;
   wake: string;
   next: string;
+  /** `skipped 3`, when there have been any. Absent is the common case. */
+  skips?: string;
   todayRuns: number;
   todayCost: string;
   sessionUuid?: string;
@@ -4841,7 +4874,7 @@ export const useAgentFacts = (name: string): AgentFacts | null => {
   return useMemo(() => {
     if (entity === undefined || !isAgent(entity)) return null;
 
-    const today = runsToday(entity.runs);
+    const today = runsToday(entity.today);
     const open = openAsks(ledger, Date.now()).find((ask) => ask.from === name);
 
     return {
@@ -4849,6 +4882,14 @@ export const useAgentFacts = (name: string): AgentFacts | null => {
       ...(open?.ref === undefined ? {} : { askRef: open.ref }),
       wake: describeWake(entity.wake),
       next: describeNextRun(entity),
+      /*
+        Separate from `next` rather than joined onto it, so the tile can draw
+        the hour in ink and the count beneath it in `text-subtle` — the rail
+        row joins the same two parts into one plain string.
+      */
+      ...(describeSkips(entity) === undefined
+        ? {}
+        : { skips: describeSkips(entity) as string }),
       todayRuns: today.count,
       todayCost: today.cost,
       ...(entity.sessionUuid === undefined

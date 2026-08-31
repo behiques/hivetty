@@ -125,6 +125,22 @@ export const WAKE_EVERY_FLOOR_MS = 60_000;
 export const WAKE_EVERY_DEFAULT_MS = 300_000;
 
 /**
+ * Whether a scheduled tick has to justify itself (HIVE-121).
+ *
+ * `onchange` is the default because the interval a person actually writes is
+ * five minutes, and five minutes of nothing is 288 turns a day spent proving
+ * an empty inbox is still empty. `always` is for an agent whose work arrives
+ * somewhere this process cannot see — a Slack search, a PR sweep — where "has
+ * anything changed?" has no local answer and the wake *is* the check.
+ *
+ * Interval mode only. A fixed time is a promise to run then, so `parseAgent`
+ * refuses `check:` alongside `at:` rather than letting a 09:00 standup agent
+ * silently skip the one morning its ledger happened to be quiet.
+ */
+export const WAKE_CHECKS = ['onchange', 'always'] as const;
+export type WakeCheck = (typeof WAKE_CHECKS)[number];
+
+/**
  * Limits that have a default. **`budgetUsd` is deliberately not among them.**
  *
  * A cap is unlimited unless the author sets one, which is absence — the same
@@ -224,6 +240,15 @@ export interface WakeSpec {
   at?: string[];
   /** Which days `at` fires on. Absent alongside `at` means every day. */
   days?: WakeDay[];
+  /**
+   * Materialised at parse in interval mode, and absent in the other two.
+   *
+   * Filled in by the parser rather than defaulted at the point of use, the way
+   * `limits` is: a scheduler reading a value cannot disagree with a form
+   * reading the same value, and a default applied in two places is a default
+   * that eventually drifts.
+   */
+  check?: WakeCheck;
   on: WakeOn[];
   /** Local `HH:MM`. No scheduled wakes inside the window; events still wake. */
   quiet?: { from: string; to: string };
@@ -240,8 +265,18 @@ export interface AgentDefinition {
   mcp: string[];
   tools: string[];
   autonomy: Autonomy;
-  /** `budgetUsd` absent means unlimited — no `--max-budget-usd` on the wake. */
-  limits: { turns: number; budgetUsd?: number; rotateAfter: number };
+  /**
+   * `budgetUsd` absent means unlimited — no `--max-budget-usd` on the wake.
+   *
+   * `dailyUsd` absent means no daily ceiling, and it is a **scheduler** limit
+   * rather than a flag: the binary caps one run and knows nothing about days.
+   */
+  limits: {
+    turns: number;
+    budgetUsd?: number;
+    dailyUsd?: number;
+    rotateAfter: number;
+  };
   body: string;
 }
 
@@ -271,6 +306,23 @@ export interface AgentSummary {
    */
   runs: RunSummary[];
   /**
+   * What today cost, accumulated in main (HIVE-121).
+   *
+   * This is the departure from the paragraph above, and it is deliberate.
+   * `runs` is the last {@link AGENT_RUN_HISTORY} and a five-minute agent takes
+   * 288 wakes a day, so a `Today` tile derived from that array under-reports
+   * the moment an agent is busy. The same number is what the scheduler's daily
+   * ceiling is compared against — and a ceiling and a tile that disagree are
+   * worse than either alone.
+   *
+   * So "today" is still derived on read, from {@link dayKey}, which both
+   * processes share: what is stored is the day it belongs to, not the claim
+   * that it is today.
+   */
+  today?: { day: string; runs: number; usd: number; capped?: boolean };
+  /** Scheduled ticks skipped since the last run — the `· skipped 3` on `Next`. */
+  skipsSinceRun?: number;
+  /**
    * `limits.rotateAfter` from the definition — the `/50` in `run 17/50`.
    *
    * Carried on the summary rather than looked up separately because the
@@ -280,6 +332,19 @@ export interface AgentSummary {
    * {@link mergeRunState} never touches it.
    */
   rotateAfter: number;
+  /**
+   * `limits.dailyUsd` from the definition — the scheduler's day ceiling.
+   *
+   * A *definition* fact like {@link AgentSummary.rotateAfter} beside it: the
+   * registry fills it and `mergeRunState` never touches it. It rides here
+   * because the scheduler's tick reads its schedules out of the same cached
+   * listing that answers `agents:list`, rather than re-parsing every
+   * `AGENT.md` once a minute.
+   *
+   * Absent means no ceiling — and absent is also the honest answer for a
+   * definition that would not parse.
+   */
+  dailyUsd?: number;
   /** The most recent run's cost, pre-formatted for display. */
   cost?: string;
   /** Why this definition could not be parsed. Listed, never hidden. */
@@ -360,12 +425,14 @@ export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'wake.days', kind: 'day-list', required: false },
   { path: 'wake.on', kind: 'list', required: false },
   { path: 'wake.quiet', kind: 'time-range', required: false },
+  { path: 'wake.check', kind: 'enum', required: false, values: WAKE_CHECKS },
   { path: 'skills', kind: 'list', required: false },
   { path: 'mcp', kind: 'list', required: false },
   { path: 'tools', kind: 'list', required: false },
   { path: 'autonomy', kind: 'enum', required: false, values: AUTONOMIES },
   { path: 'limits.turns', kind: 'number', required: false },
   { path: 'limits.budget_usd', kind: 'number', required: false },
+  { path: 'limits.daily_usd', kind: 'number', required: false },
   { path: 'limits.rotate_after', kind: 'number', required: false },
 ];
 
@@ -730,6 +797,33 @@ export interface AgentRunState {
   /** Most recent last, capped at {@link AGENT_RUN_HISTORY}. */
   runs: RunSummary[];
   /**
+   * What this agent has done today, accumulated rather than derived (HIVE-121).
+   *
+   * {@link AgentRunState.runs} cannot answer it. That array is capped at
+   * {@link AGENT_RUN_HISTORY} and a five-minute agent takes 288 wakes a day,
+   * so a sum over it silently stops growing at twenty — under-reporting
+   * exactly the agents a daily ceiling exists for. A ceiling cannot be derived
+   * from a truncated array.
+   *
+   * That is a departure from the rule stated on {@link AgentSummary.runs},
+   * which argues "today" belongs in a selector. The rule holds for *display*
+   * and cannot hold for *enforcement*. Main's day and the renderer's day are
+   * the same machine's local day, so there is no second timezone for the two
+   * to disagree about — and {@link dayKey} is the one boundary both read.
+   *
+   * Replaced wholesale when the day changes, which is what resets `capped` and
+   * why nothing anywhere needs a midnight timer.
+   */
+  today?: { day: string; runs: number; usd: number; capped?: boolean };
+  /**
+   * Scheduled ticks skipped since the last run that actually started.
+   *
+   * The number that makes a *quiet* agent distinguishable from a *broken* one.
+   * A skip is not a run — it produces no {@link RunSummary} and so cannot move
+   * `Today`'s count — which is precisely why it needs a counter of its own.
+   */
+  skipsSinceRun?: number;
+  /**
    * Entries that arrived while this agent could not take them (HIVE-120).
    *
    * Persisted rather than held in the scheduler's memory because the failure it
@@ -837,6 +931,10 @@ export interface AgentStatusPush {
   /** As {@link AgentSummary.runs} — the last {@link AGENT_RUN_HISTORY}. */
   runs: RunSummary[];
   runsSinceRotate: number;
+  /** As {@link AgentSummary.today} — the accumulator, not a sum over `runs`. */
+  today?: { day: string; runs: number; usd: number; capped?: boolean };
+  /** As {@link AgentSummary.skipsSinceRun}. */
+  skipsSinceRun?: number;
   /** The last run's cost, already formatted — see {@link formatRunCost}. */
   cost?: string;
 }
@@ -845,6 +943,25 @@ export interface AgentStatusPush {
 export interface AgentLinesPush {
   name: string;
   lines: RunLine[];
+}
+
+/**
+ * The local calendar day, as `YYYY-MM-DD` (HIVE-121).
+ *
+ * Here rather than in either process, because both read it: main decides
+ * whether an agent's daily ceiling has reset, and the renderer decides whether
+ * the `Today` tile is showing today. Two spellings of one boundary would put
+ * the tile and the ceiling a day apart at exactly the hour that matters.
+ *
+ * Local parts rather than `toISOString().slice(0, 10)`, which answers the
+ * *previous* day for any evening east of UTC. Not `toDateString()` either:
+ * that is locale-shaped, and this string is persisted to `agents.json`.
+ */
+export function dayKey(at: number): string {
+  const date = new Date(at);
+  const pad = (value: number): string => String(value).padStart(2, '0');
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 /**

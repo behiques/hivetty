@@ -285,6 +285,126 @@ synchronously and so re-enters `onRunClosed` — where a flush would spawn a fre
 `claude` after `closeAll` had finished iterating, leaving an orphan with nobody
 left to signal it.
 
+### Time passed (HIVE-121)
+
+The other half of the same module, on the same timer. `onEntry` answers
+*something happened*; `tickSchedules` answers *the clock moved*, and it runs
+inside the sweep's existing sixty-second interval — one timer, two jobs, in the
+module that already owned it.
+
+**It polls `nextRunAt` rather than arming a timer per agent, and that is the
+load-bearing decision.** `nextRunAt` is already persisted in `agents.json` as a
+wall-clock timestamp. A per-agent `setTimeout` keeps that same truth a second
+time, in memory, where a quit or a lid-shut sleep makes the two disagree — and
+the persisted one is the one that survives. Polling leaves exactly one
+representation of when a wake is due, so four requirements stop being code:
+
+- a missed window wakes **once**, however long the app was closed, because one
+  overdue timestamp is one wake rather than a backlog to replay;
+- pause and resume are a status the tick already declines to act on;
+- `stop()` clears one interval, which it already did.
+
+Two things it does **not** make free, and both were found by review rather than
+by reasoning:
+
+**A definition change still needs reconciling.** Re-reading the schedule each
+tick is not the same as re-arming: a persisted `nextRunAt` outlives the interval
+that produced it, so shortening `every: 6h` to `every: 5m` would otherwise sit
+out the original six hours. The tick therefore clamps `nextRunAt` **down** to
+one interval of the current schedule — downward only, because a *lengthened*
+interval still owes the wake it already armed. The clamp sits below the quiet
+and cap branches, which both `continue`, so it can never fight a deliberate
+deferral.
+
+**The tick has to know the difference between "no schedule" and "not listed
+yet".** The schedule map is filled from an unawaited `agents.list()` — a folder
+walk parsing every `AGENT.md` — while `scheduler.start()` ticks synchronously,
+and the walk routinely loses. Read as "nothing is scheduled", an empty map would
+have the clearing branch destroy every agent's overdue `nextRunAt` on the launch
+right after a missed window, which is precisely the one it exists to spend. So
+`schedules()` answers `undefined` until the registry has answered once, and the
+tick does nothing at all until it has.
+
+**And the roster is the schedule map, not `agents.json`.** That file gains an
+entry when an agent *runs*, is paused, or is queued against — never when a
+definition is merely saved. A tick walking run state alone would never see an
+agent authored in Settings and left alone, which is this feature's main path, so
+the tick walks the union of both.
+
+The cost is that a wake can be up to `LEDGER_SWEEP_MS` late. The grammar's floor
+is one minute, so no precision a definition is able to *express* is lost.
+
+**Who takes a scheduled wake.** `sleeping` and `failed` do — a failed run is not
+a paused agent. `working` skips rather than queues: one run at a time, and the
+next tick is a minute away. `paused` is the user's decision. `asking` ended its
+turn waiting on a reply, and the reply is its wake, which is why
+`describeNextRun` draws `on answer` for it. An `asking` agent keeps its stale
+`nextRunAt` deliberately: when the answer moves it, the next tick finds one
+overdue time and spends it as a single catch-up wake.
+
+**Quiet hours defer to the window's end**, not to the next interval, so a
+five-minute agent does not spend the night re-deciding to stay asleep. A
+deferral is **not** a skip — a silence the author asked for is not the fact
+"nothing changed", and counting it would have a nightly agent reading
+`skipped 96` every morning for working perfectly. Only interval mode can reach
+that branch: `parseAgent` refuses a `wake.at` time inside the window, so a
+calendar agent's times are outside it by construction.
+
+**`check: onchange` looks for an addressed entry newer than `lastRunAt`, or a
+standing `pendingWake`.** It is deliberately not gated on `wake.on: [ledger]`.
+That gate decides whether an entry *wakes* the agent; it does not decide whether
+the entry is a change worth waking for on a schedule the author did set — the
+field's own help promises a question "waits unread until the next scheduled
+wake", and this is that wake arriving to read it. HIVE-124's pending-event
+counter is a third source when it lands; Slack search-on-schedule agents set
+`check: always` because their change lives outside the log entirely.
+
+**A refused wake arms the next time and leaves the skip count alone**, because a
+refusal is a wake deferred rather than a quiet tick. That refusal is also what
+keeps this tick from racing HIVE-119's deferred permission wake: both doors are
+`RunTracker.run`, so whichever arrives first leaves the agent `working` and the
+other is turned away.
+
+**Every tick that changes a row pushes it.** `RunTracker` pushes when a run
+starts and ends, which covered everything the ledger half caused — but the tick
+changes rows with no run attached, and those are exactly the changes somebody
+watching an idle agent is waiting to see. A tick that finds nothing due writes
+nothing and pushes nothing.
+
+### The day's ceiling
+
+`limits.daily_usd` is enforced by the tick, not on the command line:
+`--max-budget-usd` caps one wake, and the binary knows nothing about days.
+
+The number it is compared against is **accumulated** in `agents.json`
+(`AgentRunState.today`), not summed from `runs[]`. That array is capped at
+`AGENT_RUN_HISTORY` — twenty — and a five-minute agent takes 288 wakes between
+midnights, so a ceiling derived from it would stop biting exactly where it
+matters. This is a departure from the rule stated on `AgentSummary.runs`, that
+main never precomputes "today": the rule holds for *display* and cannot hold for
+*enforcement*, because a ceiling cannot be derived from a truncated array. What
+is stored is the day the totals belong to, never the claim that it is today, so
+`runsToday` still decides that on read from the shared `dayKey`.
+
+The accumulator is replaced wholesale when the day turns over, which is the
+entire reset mechanism — nothing anywhere arms a midnight timer, and `capped`
+rides along only as long as the day does. A capped agent's `nextRunAt` is the
+next local midnight, and the card is posted once rather than every minute for
+the rest of the day.
+
+**Scheduled wakes only.** A ledger entry and a manual run still reach a capped
+agent, because this is a budget for unattended work rather than a lock. The card
+is an `agent.failed` titled "Hit its daily cap" — its own branch in `notify.ts`,
+above the run-receipt path, because that path consumes `spokenFor` on any
+outcome and this event is not a run receipt.
+
+The event is posted by the **overmind**, not by the agent, and `notify.ts` gates
+on that. `meta` is a free-form rider any party can write, so a card keyed off an
+agent's own `from` would be one any agent could mint for itself — with a body it
+also writes — by posting a single event. It is the same reason the expiry event
+is the overmind's: main is what took the decision, so main is what reports it,
+and the agent it concerns rides in `meta.agent`.
+
 ### Expiry
 
 An ask nobody answers dies on a timer. `LEDGER_ASK_TTL_MS` is a day, and an ask
@@ -637,11 +757,11 @@ run-log lines by `run-log.ts`, the run closed on the child's `'close'` event,
 and the session uuid, cost, turn count and outcome persisted to
 `~/.hive/ledger/agents.json` by `state.ts`.
 
-There is still no *view* of a run. The row carries a status and the last run's
-cost; nothing draws the log the fold produces, and nothing schedules a wake —
-`wake.every` and `wake.at` are still declaration only. So the sections below
-record what the command line actually enforces, what is merely declared, and
-what is still waiting.
+HIVE-116 drew the run, and HIVE-121 made the schedule real: `wake.every`,
+`wake.at`, `wake.days` and `wake.quiet` are no longer declaration only — the
+scheduler's tick reads all four, and `wake.check` and `limits.daily_usd` joined
+the grammar to bound what that costs. The sections below record what the command
+line enforces, what the scheduler enforces, and the few things still waiting.
 
 ### One table, three requirements
 
@@ -699,6 +819,31 @@ was, until then, the one list `parseAgent` never checked: the strings were cast
 straight to `WakeOn[]`, so `on: [bananna]` saved cleanly and then silently never
 fired — a worse failure than a refusal, since nothing looks wrong and nothing
 ever happens.
+
+### The four things the wake grammar refuses
+
+Every one of them is a contradiction the file can express and the scheduler
+cannot resolve. The rule throughout is that `parseAgent` names the field and
+says what to do, rather than picking a winner — a scheduler that chose would be
+inventing intent the file failed to state, and would do it silently.
+
+| Refused | Why |
+| --- | --- |
+| `every:` **and** `at:` | An interval measures from the last wake; a time fires on the clock. "Every 3 hours, and also at 09:00" has no honest reading. |
+| `days:` with no `at:` | A day with no time names no wake. (`at:` without `days:` is fine — it means every day, the commonest calendar there is.) |
+| `check:` beside `at:` | `check` modifies an interval. A fixed time is a promise to run then, and a 09:00 standup agent that skipped the one morning its ledger was quiet is the failure the fixed time exists to prevent. |
+| an `at:` time inside `wake.quiet` | The author has asked for a wake inside hours they also called quiet. Suppressing it drops a schedule they explicitly set; honouring it makes quiet hours a lie. |
+
+The last one is why the scheduler's quiet-hours branch never has to consider
+calendar mode: a calendar agent's times are outside its own window by
+construction. The window is **half-open** — `from` is inside it, `to` is not —
+so `at: [07:00]` with `quiet: 23:00-07:00` is accepted, which matters because
+first thing in the morning is exactly when people schedule things.
+
+`every: 30s` is refused too, but by `parseDuration`'s shape check rather than by
+`WAKE_EVERY_FLOOR_MS`: the grammar accepts only whole minutes, hours, or
+`daily`. The floor catches `0m`, and `nextRunFrom` clamps to it again for a
+`WakeSpec` that reached the scheduler without passing the parser.
 
 ### `skills`, `mcp` and `tools` are three layers, not three spellings of one
 
@@ -919,7 +1064,7 @@ reaches the permission-fence inbox card under either setting, because that ask
 belongs to `mcp__hive__approve`, not to the agent's judgement, and `act` has
 no way to pre-answer a card it never sees coming.
 
-### The two limits, and the flags that enforce them
+### The two per-wake limits, and the flags that enforce them
 
 Verified against `claude` 2.1.251 by running it, not by reading `--help`:
 **both** flags are hidden from the help output, so the help output is evidence
@@ -1050,11 +1195,23 @@ derivable from one cost, so `runs: RunSummary[]` and `rotateAfter` now cross —
 on `agents:list`, and on the status push.
 
 The array rather than a precomputed `todayRuns` / `todayCost` pair, because
-"today" is a question only the renderer can answer: the user's calendar day, in
-the user's zone. A stored pair would be wrong by morning. `useAgentFacts`
-compares with `toDateString()`, the same local-day rule the ledger files itself
-by, and for the same reason — it is the person's day, and there is no server to
-have another one.
+"today" is the user's calendar day and a stored pair would be wrong by morning.
+
+**HIVE-121 revised half of that.** The reasoning held for the day boundary and
+failed on the arithmetic: `runs` is capped at `AGENT_RUN_HISTORY` — twenty — and
+a five-minute agent takes 288 wakes between midnights, so the sum stopped
+growing part-way through any day the agent actually worked. Main now accumulates
+`today` as it records each run, and the same number is what the scheduler's
+daily ceiling is compared against; a tile deriving its own would be a second
+opinion about one fact.
+
+The day boundary is still decided on read. What is stored is the day the totals
+belong to, never the claim that it is today — so a tile rendered after midnight
+and before the day's first run reads `0 runs · $0.00` rather than yesterday's
+number. `dayKey` in the contract is the one spelling of that boundary, read by
+both processes for the reason everything else in that file is: two spellings
+would put the tile and the ceiling a day apart at exactly the hour that
+matters.
 
 **`AgentStatusPush` carrying the history is a deliberate widening**, and its doc
 comment used to say it never would. The alternative was emitting

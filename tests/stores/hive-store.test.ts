@@ -10,7 +10,7 @@ import {
   statusLabel,
 } from '@components/ui/status-dot';
 import type { IdleDetail } from '@shared/hook-contract';
-import { AGENT_STATUSES } from '@shared/agent-contract';
+import { AGENT_STATUSES, dayKey } from '@shared/agent-contract';
 import type {
   AgentRunResult,
   AgentStatus,
@@ -1580,6 +1580,7 @@ describe('hive-store', () => {
         status: 'sleeping',
         wake: { on: ['slack.mention'], everyMs: 300_000 },
         rotateAfter: 50,
+        skipsSinceRun: 0,
         runs: [],
         ...over,
       });
@@ -1615,16 +1616,9 @@ describe('hive-store', () => {
           useHiveStore.getState().hydrateAgents([
             summary({
               status: 'asking',
-              runs: [
-                {
-                  run: 'r1',
-                  trigger: 'manual',
-                  startedAt: Date.now(),
-                  endedAt: Date.now(),
-                  outcome: 'asking',
-                  costUsd: 0.0031,
-                },
-              ],
+              // The same accumulator the `Today` tile reads — one source, so
+              // the table and the tile cannot word one number two ways.
+              today: { day: dayKey(Date.now()), runs: 1, usd: 0.0031 },
             }),
           ]);
 
@@ -2337,6 +2331,7 @@ describe('hive-store', () => {
       status: 'sleeping',
       wake: { on: [] },
       rotateAfter: 50,
+      skipsSinceRun: 0,
       runs: [],
       ...over,
     });
@@ -2437,6 +2432,7 @@ describe('hive-store', () => {
           status: 'sleeping',
           wake: { on: ['ledger'] },
           rotateAfter: 50,
+          skipsSinceRun: 0,
           runs: [],
         },
       ]);
@@ -2460,6 +2456,77 @@ describe('hive-store', () => {
         cost: '$0.02',
         sub: 'Watches #incorp-dev.',
       });
+    });
+
+    /*
+      The two the scheduler's tick moves with no run attached (HIVE-121). It
+      pushes on a skip and on a new next-run time precisely because nothing
+      else would — which is what keeps `next 18:20 · skipped 3` live on an
+      agent that is deliberately not running.
+    */
+    it("takes today's totals and the skip count from a push", () => {
+      seedAgent();
+      useHiveStore.getState().setAgentStatus({
+        name: 'slack-watcher',
+        status: 'sleeping',
+        runs: [],
+        runsSinceRotate: 0,
+        today: { day: '2026-08-31', runs: 12, usd: 0.84 },
+        skipsSinceRun: 3,
+      });
+
+      expect(useHiveStore.getState().entities['slack-watcher']).toMatchObject({
+        today: { day: '2026-08-31', runs: 12, usd: 0.84 },
+        skipsSinceRun: 3,
+      });
+    });
+
+    it('reads an absent skip count as none, not as last render’s', () => {
+      seedAgent();
+      useHiveStore.getState().setAgentStatus({
+        name: 'slack-watcher',
+        status: 'sleeping',
+        runs: [],
+        runsSinceRotate: 0,
+        skipsSinceRun: 3,
+      });
+      useHiveStore.getState().setAgentStatus({
+        name: 'slack-watcher',
+        status: 'sleeping',
+        runs: [],
+        runsSinceRotate: 0,
+      });
+
+      expect(useHiveStore.getState().entities['slack-watcher']).toMatchObject({
+        skipsSinceRun: 0,
+      });
+    });
+
+    /*
+      `nextRunAt` genuinely goes away — the scheduler clears it when a
+      definition stops scheduling or stops parsing mid-edit. Spread-guarded,
+      that clear could never cross the wire, and the rail would go on promising
+      `next 09:00` for an agent that will never wake.
+    */
+    it('lets a push clear the next run time', () => {
+      seedAgent();
+      useHiveStore.getState().setAgentStatus({
+        name: 'slack-watcher',
+        status: 'sleeping',
+        runs: [],
+        runsSinceRotate: 0,
+        nextRunAt: 1_756_500_000_000,
+      });
+      useHiveStore.getState().setAgentStatus({
+        name: 'slack-watcher',
+        status: 'sleeping',
+        runs: [],
+        runsSinceRotate: 0,
+      });
+
+      const agent = useHiveStore.getState().entities['slack-watcher'];
+
+      expect(agent !== undefined && isAgent(agent) && agent.nextRunAt).toBeUndefined();
     });
 
     it('ignores a status for an agent it does not have', () => {
@@ -2524,6 +2591,7 @@ describe('hive-store', () => {
           status: 'sleeping',
           wake: { on: ['ledger'] },
           rotateAfter: 50,
+          skipsSinceRun: 0,
           runs: [],
           cost: '$0.02',
         },
@@ -4020,6 +4088,7 @@ describe('the ledger slice', () => {
             wake: { on: [] },
             runsSinceRotate: 0,
             rotateAfter: 50,
+            skipsSinceRun: 0,
             runs: [],
             lines: [],
           },
@@ -4119,6 +4188,7 @@ describe('the agent view selectors', () => {
     status: 'sleeping',
     wake: { on: [] },
     rotateAfter: 50,
+    skipsSinceRun: 0,
     runs: [],
     ...over,
   });
@@ -4236,34 +4306,59 @@ describe('the agent view selectors', () => {
   });
 
   describe('useAgentFacts', () => {
-    it("counts and sums only today's runs", () => {
-      const now = Date.now();
-      const yesterday = now - 36 * 60 * 60 * 1000;
-
+    /*
+      Read from the accumulator main keeps, not summed from `runs` (HIVE-121).
+      That array holds the last twenty runs and a five-minute agent takes 288 a
+      day, so the sum this used to compute stopped growing part-way through any
+      day the agent actually worked.
+    */
+    it("reads today's totals from the accumulator", () => {
       useHiveStore.getState().hydrateAgents([
         summary('a', {
           runsSinceRotate: 17,
           sessionUuid: '9f3c1e2a',
-          runs: [
-            run({
-              run: 'old',
-              startedAt: yesterday,
-              endedAt: yesterday,
-              costUsd: 9,
-            }),
-            run({ run: 'r1', costUsd: 0.5 }),
-            run({ run: 'r2', costUsd: 1.64 }),
-          ],
+          today: { day: dayKey(Date.now()), runs: 31, usd: 2.14 },
         }),
       ]);
 
       const { result } = renderHook(() => useAgentFacts('a'));
 
-      expect(result.current?.todayRuns).toBe(2);
+      expect(result.current?.todayRuns).toBe(31);
       expect(result.current?.todayCost).toBe('$2.14');
       expect(result.current?.runsSinceRotate).toBe(17);
       expect(result.current?.rotateAfter).toBe(50);
       expect(result.current?.sessionUuid).toBe('9f3c1e2a');
+    });
+
+    /*
+      Main replaces the accumulator on the day's first run, so between local
+      midnight and that run the stored key names a day that is over. Showing
+      its number would make the tile wrong every morning.
+    */
+    it("ignores a total belonging to a day that has ended", () => {
+      useHiveStore
+        .getState()
+        .hydrateAgents([
+          summary('a', { today: { day: '2020-01-01', runs: 9, usd: 9 } }),
+        ]);
+
+      const { result } = renderHook(() => useAgentFacts('a'));
+
+      expect(result.current?.todayRuns).toBe(0);
+      expect(result.current?.todayCost).toBe('$0.00');
+    });
+
+    it('surfaces the skip count, and only when there is one', () => {
+      useHiveStore
+        .getState()
+        .hydrateAgents([summary('a', { skipsSinceRun: 3 }), summary('b')]);
+
+      expect(renderHook(() => useAgentFacts('a')).result.current?.skips).toBe(
+        'skipped 3',
+      );
+      expect(
+        renderHook(() => useAgentFacts('b')).result.current?.skips,
+      ).toBeUndefined();
     });
 
     it('reads $0.00 for a day with no runs, not a blank', () => {
@@ -4279,9 +4374,11 @@ describe('the agent view selectors', () => {
       // The reason `formatRunCost` has the rule at all: a wake routinely costs
       // less than a cent, and `$0.00` for real work reads as a bug. Only a day
       // with *no* runs gets the short form.
-      useHiveStore
-        .getState()
-        .hydrateAgents([summary('a', { runs: [run({ costUsd: 0.0031 })] })]);
+      useHiveStore.getState().hydrateAgents([
+        summary('a', {
+          today: { day: dayKey(Date.now()), runs: 1, usd: 0.0031 },
+        }),
+      ]);
 
       const { result } = renderHook(() => useAgentFacts('a'));
 

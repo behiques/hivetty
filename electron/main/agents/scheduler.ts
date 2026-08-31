@@ -1,6 +1,9 @@
 import {
   AGENT_PENDING_WAKE_MAX,
+  dayKey,
+  type AgentRunState,
   type PendingWakeEntry,
+  type WakeSpec,
 } from '@shared/agent-contract';
 import {
   OVERMIND,
@@ -11,6 +14,7 @@ import { expiredAsks } from '@shared/ledger-derive';
 
 import { decide, decideForStatus, type WakeDecision } from './scheduler-rules';
 import type { AgentState } from './state';
+import { inQuiet, nextRunFrom, quietEndAfter } from './wake-schedule';
 
 /**
  * The trigger word every wake in this module reports.
@@ -20,6 +24,35 @@ import type { AgentState } from './state';
  * log.
  */
 const LEDGER_TRIGGER = 'ledger';
+
+/**
+ * The two words a *scheduled* wake reports, and why there are two.
+ *
+ * They reach the model's prompt like {@link LEDGER_TRIGGER} does, and the
+ * distinction is one the agent can act on: `interval` says "some time has
+ * passed since you last ran", `schedule` says "it is the hour you asked for".
+ * A single word would make a 09:00 standup indistinguishable from a five-
+ * minute poll in its own transcript.
+ */
+const INTERVAL_TRIGGER = 'interval';
+const CALENDAR_TRIGGER = 'schedule';
+
+/** Minutes past local midnight, for the quiet-hours comparison. */
+const minuteOfDay = (at: number): number => {
+  const date = new Date(at);
+
+  return date.getHours() * 60 + date.getMinutes();
+};
+
+/** The next local midnight — when a capped agent's day starts over. */
+const nextMidnightAfter = (at: number): number => {
+  const midnight = new Date(at);
+
+  midnight.setHours(0, 0, 0, 0);
+  midnight.setDate(midnight.getDate() + 1);
+
+  return midnight.getTime();
+};
 
 /**
  * How often main looks for asks that time has retired.
@@ -53,6 +86,43 @@ export interface SchedulerDeps {
    * must not spend turns and budget on entries they opted out of.
    */
   wakesOnLedger: (name: string) => boolean;
+  /**
+   * Every agent with a usable schedule — or `undefined` before the registry
+   * has answered its first listing.
+   *
+   * **The map, not a per-agent lookup, because it is also the roster.**
+   * `agents.json` gains an entry when an agent *runs*, is paused, or is queued
+   * against; nothing writes one when a definition is merely saved. A tick
+   * driven off run state alone would therefore never see a newly created
+   * agent — the feature's primary path — so the tick walks the union of this
+   * map and `state.all()`.
+   *
+   * **`undefined` is not an empty map.** The listing is a folder walk that
+   * parses every `AGENT.md`, and it routinely loses the race with the boot
+   * tick. Read as "nothing is scheduled", that would clear every agent's
+   * overdue `nextRunAt` on the launch after a missed window — destroying
+   * exactly what the catch-up exists to spend. So the tick does nothing at all
+   * until the registry has answered once.
+   *
+   * A definition that will not parse is absent from the map once it *has*
+   * answered, which is what keeps a broken file off the timer while it stays
+   * listed for the user to fix.
+   *
+   * Read every tick rather than cached here: that is what makes "a definition
+   * change re-arms the schedule" need no timer to re-arm.
+   */
+  schedules: () => ReadonlyMap<string, { wake: WakeSpec; dailyUsd?: number }> | undefined;
+  /**
+   * Tell the renderer this agent's row changed.
+   *
+   * `RunTracker` pushes when a run starts and when it ends, which covers every
+   * change the ledger half of this module causes. The tick causes changes with
+   * *no* run attached — a new `nextRunAt`, an incremented skip count, a day
+   * that hit its ceiling — and those are exactly the ones a person is looking
+   * at the row to see. Without this, `next 18:20 · skipped 3` would go stale
+   * on precisely the agent being diagnosed: one that is not running.
+   */
+  pushStatus: (name: string) => void;
   /**
    * The log, narrowed to the two things the sweep does with it.
    *
@@ -200,6 +270,249 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
           from: OVERMIND,
         });
       }
+    }
+  };
+
+  /**
+   * Has anything reached this agent since it last ran?
+   *
+   * What `check: onchange` consults. An addressed entry newer than the last
+   * run, or a queue standing from a wake it could not take.
+   *
+   * `entries` is passed in rather than read here: the tick asks this of every
+   * agent about one instant, and reading the unfiltered log per agent would
+   * scan it N times a minute for an N-agent fleet, forever.
+   *
+   * Deliberately **not** gated on `wake.on: [ledger]`. That gate decides
+   * whether an entry *wakes* the agent; it does not decide whether the entry
+   * is a change worth waking for on a schedule the author did set — the
+   * field's own help promises a question "waits unread until the next
+   * scheduled wake", and this is that wake arriving to read it.
+   *
+   * An agent that has never run treats every entry as new, which is right: it
+   * has read none of them.
+   */
+  const hasChanged = (
+    name: string,
+    agent: AgentRunState,
+    entries: readonly LedgerEntry[],
+  ): boolean => {
+    if ((agent.pendingWake ?? []).length > 0) return true;
+
+    const since = agent.lastRunAt ?? 0;
+
+    return entries.some((item) => item.to === name && item.ts > since);
+  };
+
+  /**
+   * Time passed (HIVE-121).
+   *
+   * The other half of this module. `onEntry` answers *something happened*;
+   * this answers *the clock moved* — and it does so by polling `nextRunAt` out
+   * of `agents.json` rather than by arming a timer per agent.
+   *
+   * That is the load-bearing choice, and it is not about simplicity.
+   * `nextRunAt` is already persisted as a wall-clock timestamp; a per-agent
+   * `setTimeout` would keep that same truth a second time, in memory, where a
+   * quit or a lid-shut sleep makes the two disagree — and the persisted one is
+   * the one that survives. Polling leaves exactly one representation of when a
+   * wake is due, so four things stop being code: boot catch-up (one overdue
+   * timestamp is one wake, however long the app was closed), re-arming on a
+   * definition change (the definition is re-read every tick), pause, and
+   * resume.
+   *
+   * The cost is that a wake can be up to {@link LEDGER_SWEEP_MS} late. The
+   * grammar's floor is one minute, so no precision a definition is able to
+   * *express* is lost.
+   */
+  const tickSchedules = (): void => {
+    if (stopped) return;
+
+    const listed = deps.schedules();
+
+    /*
+      The registry has not answered yet — do nothing at all.
+
+      Not "nothing is scheduled". That listing parses every `AGENT.md` on disk
+      and routinely loses its race with the boot tick, and the clearing branch
+      below would spend that race destroying every agent's overdue
+      `nextRunAt` — the one thing the boot tick exists to spend.
+    */
+    if (listed === undefined) return;
+
+    const now = deps.now();
+    // One read for the whole tick, not one per agent: `hasChanged` scans the
+    // unfiltered log, and every agent here is asked about the same instant.
+    const entries = deps.ledger.read().entries;
+    /*
+      Every write the tick makes is one a row is showing, so it is pushed —
+      but only when something actually moves. A quiet-hours deferral recomputes
+      the same window end every minute all night, and pushing that would be one
+      status update per agent per minute saying nothing changed.
+    */
+    const arm = (
+      name: string,
+      from: number | undefined,
+      to: number | undefined,
+      change: Partial<AgentRunState> = {},
+    ): void => {
+      if (from === to && Object.keys(change).length === 0) return;
+
+      deps.state.patch(name, { nextRunAt: to, ...change });
+      deps.pushStatus(name);
+    };
+
+    /*
+      The union of what has run and what is merely defined.
+
+      `agents.json` gains an entry when an agent runs, is paused, or is queued
+      against — never when a definition is saved. Walking run state alone would
+      mean an agent authored in Settings and left alone was never scheduled at
+      all, which is this feature's main path.
+    */
+    for (const name of new Set([
+      ...Object.keys(deps.state.all()),
+      ...listed.keys(),
+    ])) {
+      const agent = deps.state.read(name);
+
+      /*
+        `working` is the one-run-at-a-time rule, and the tick is *skipped*
+        rather than queued — the next one is a minute away. `paused` is the
+        user's decision. `asking` ended its turn waiting on a reply, and the
+        reply is its wake; `describeNextRun` already draws `on answer` for it,
+        so a tile promising a time would promise a wake the answer pre-empts.
+
+        An `asking` agent's `nextRunAt` is left stale on purpose: when the
+        answer lands and the status moves, the next tick finds one overdue time
+        and spends it as a single catch-up wake.
+      */
+      if (agent.status !== 'sleeping' && agent.status !== 'failed') continue;
+
+      const schedule = listed.get(name);
+      const next =
+        schedule === undefined ? undefined : nextRunFrom(schedule.wake, now);
+
+      // No schedule — and clear a time left behind by one there used to be.
+      if (schedule === undefined || next === undefined) {
+        arm(name, agent.nextRunAt, undefined);
+        continue;
+      }
+
+      const { wake } = schedule;
+
+      /*
+        Inside quiet hours: defer to the window's end rather than to the next
+        interval, so a five-minute agent does not spend the night re-deciding
+        to stay asleep — and so `Next` reads as the promise it is.
+
+        Not a skip. A silence the author asked for is not the same fact as
+        "nothing changed", and counting it would have a nightly agent reading
+        `skipped 96` every morning for working perfectly.
+
+        Ahead of the due check, so the deferral holds whether or not the old
+        time has elapsed — and so the re-arm further down can never clamp
+        against it.
+
+        Only interval mode can reach this: `parseAgent` refuses a `wake.at`
+        time that falls inside the window, so a calendar agent's times are
+        outside it by construction.
+      */
+      if (wake.quiet !== undefined && inQuiet(minuteOfDay(now), wake.quiet)) {
+        arm(name, agent.nextRunAt, quietEndAfter(now, wake.quiet));
+        continue;
+      }
+
+      /*
+        The day's ceiling, enforced here rather than on the command line.
+
+        `--max-budget-usd` caps one wake; the binary knows nothing about days.
+        And the number it is compared against is the accumulator in
+        `agents.json` rather than a sum over `runs[]`, because that array holds
+        the last twenty runs and a five-minute agent takes 288 — a ceiling
+        derived from it would stop biting exactly where it matters.
+
+        Scheduled wakes only. A ledger entry and a manual run both still reach
+        `RunTracker.run`, which is the point: this is a budget for unattended
+        work, not a lock on the agent.
+      */
+      const today = agent.today?.day === dayKey(now) ? agent.today : undefined;
+
+      if (schedule.dailyUsd !== undefined && (today?.usd ?? 0) >= schedule.dailyUsd) {
+        // Once a day, not once a minute for the rest of it.
+        if (today?.capped === true) {
+          arm(name, agent.nextRunAt, nextMidnightAfter(now));
+          continue;
+        }
+
+        arm(name, agent.nextRunAt, nextMidnightAfter(now), {
+          today: {
+            ...(today ?? { day: dayKey(now), runs: 0, usd: 0 }),
+            capped: true,
+          },
+        });
+        /*
+          Posted as the **overmind**, not as the agent, and gated on that at
+          the other end. `meta` is a free-form rider any party can write, so a
+          card minted from an agent's own `from` is one any agent could mint
+          for itself — which is exactly why the expiry event is the overmind's
+          too. Main declined to start this run; main says so.
+        */
+        deps.ledger.append({
+          from: OVERMIND,
+          kind: 'event',
+          body: `${name} reached its daily budget — $${schedule.dailyUsd.toFixed(2)}`,
+          meta: { dailyCap: schedule.dailyUsd, agent: name },
+        });
+        continue;
+      }
+
+      /*
+        Never scheduled: arm it, do not fire it. Saving a definition starts a
+        schedule now; it does not owe a wake dated from the epoch.
+      */
+      if (agent.nextRunAt === undefined) {
+        arm(name, undefined, next);
+        continue;
+      }
+
+      /*
+        A schedule that got *shorter* must not wait out the old, longer time.
+
+        `every: 6h` armed at 10:00 and edited to `every: 5m` at 10:05 would
+        otherwise sit until 16:00, and a calendar agent switched to an interval
+        would sit for nearly a day — while the docs promise that a definition
+        change re-arms the schedule. Downward only: a *lengthened* interval
+        still owes the wake it already armed, and pushing that out would be the
+        same bug facing the other way.
+
+        This is safe against the two deliberate deferrals above only because
+        both of them `continue` before reaching here — otherwise it would fight
+        the quiet-hours branch once a minute all night.
+      */
+      const due = Math.min(agent.nextRunAt, next);
+
+      if (due !== agent.nextRunAt) arm(name, agent.nextRunAt, due);
+      if (now < due) continue;
+
+      if (wake.check === 'onchange' && !hasChanged(name, agent, entries)) {
+        arm(name, due, next, {
+          skipsSinceRun: (agent.skipsSinceRun ?? 0) + 1,
+        });
+        continue;
+      }
+
+      /*
+        Armed before the run, and armed whatever the run answers.
+
+        A refusal is a wake deferred rather than a wake lost — and it is what
+        keeps this tick from racing HIVE-119's deferred permission wake: both
+        go through `RunTracker.run`, so whichever arrives first leaves the
+        agent `working` and the other is refused. A refused tick is not a quiet
+        one either, so it leaves the skip count where it is.
+      */
+      arm(name, due, next);
+      deps.run(name, wake.everyMs === undefined ? CALENDAR_TRIGGER : INTERVAL_TRIGGER);
     }
   };
 
@@ -369,7 +682,23 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         flush(name);
       }
 
-      sweeping = setIntervalFn(sweep, LEDGER_SWEEP_MS);
+      /*
+        One tick now, so a restart does not wait a full period to notice an
+        agent whose time passed while the app was closed. After the flush
+        above, because a queue standing from the last launch is older news than
+        a schedule that has merely come round.
+      */
+      tickSchedules();
+
+      /*
+        One timer, two jobs (HIVE-121). The sweep retires asks a day old and
+        the tick starts scheduled wakes; both want the same minute, and a
+        second interval would be a second thing for `stop()` to get right.
+      */
+      sweeping = setIntervalFn(() => {
+        sweep();
+        tickSchedules();
+      }, LEDGER_SWEEP_MS);
       // Never a reason to hold the process open — the app's windows do that.
       // Optional because a test's injected timer is a plain handle.
       sweeping.unref?.();
