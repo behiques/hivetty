@@ -59,6 +59,7 @@ import {
   LEDGER_MEMORY_CAP,
   type LedgerEntry,
   type LedgerReadQuery,
+  type LedgerResult,
   type OpenAsk,
 } from '@shared/ledger-contract';
 import { matches, openAsks, thread } from '@shared/ledger-derive';
@@ -350,6 +351,36 @@ interface HiveState {
   markAllRead: () => void;
   /** Mark one notification read, by id (HIVE-75). */
   markRead: (id: string) => void;
+  /**
+   * Answer an open ask (HIVE-118).
+   *
+   * Writes **nothing** locally. The answer comes back through
+   * `ledger:changed` like any other entry, and the card re-derives from
+   * `useThread` — so an answer typed here, one posted from the agent view and
+   * one written by another session all collapse the card the same way. An
+   * optimistic local append would be a second copy of the entry that main is
+   * about to send anyway.
+   *
+   * ## The result is handed back, not discarded (whole-branch review, finding 3)
+   *
+   * `Ledger.answer` refuses as a **value**, not a throw, once a thread is no
+   * longer an open ask — which `LEDGER_ASK_TTL_MS` makes routine on an app
+   * meant to stay open for days: an ask raised Monday and answered Tuesday is
+   * refused, silently, if nothing reads what came back. This action still
+   * stores nothing — that part was always correct — but the caller needs the
+   * `LedgerResult` to tell a refusal from a success, which discarding it made
+   * impossible.
+   *
+   * `undefined` rather than a `LedgerResult` is what a caller gets in the
+   * browser target, where `window.hive` does not exist at all: there was no
+   * write attempted and therefore nothing to have been refused, which is a
+   * different fact from `{ ok: false }` and must not be rendered as one.
+   */
+  answerAsk: (
+    thread: string,
+    body: string,
+    meta?: Record<string, unknown>,
+  ) => Promise<LedgerResult | undefined>;
   /**
    * Remove a notification the user has acted on (HIVE-93).
    *
@@ -2621,6 +2652,13 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   ledgerAppend: (entry) =>
     set((state) => ({ ledger: [...state.ledger, entry].slice(-LEDGER_MEMORY_CAP) })),
 
+  answerAsk: async (thread, body, meta) =>
+    window.hive?.ledger.answer({
+      thread,
+      body,
+      ...(meta === undefined ? {} : { meta }),
+    }),
+
   hydrateSessions: (records) =>
     set((state) => {
       const entities = { ...state.entities };
@@ -4301,6 +4339,33 @@ export const useSessionNameReports = (): SessionNameReport[] => {
 };
 
 /**
+ * The subscribing form of {@link isAgentId}, for a component (HIVE-118).
+ *
+ * `isAgentId` reads `getState()`, which is exactly right in an event handler —
+ * the `currentRowFor` precedent — and exactly wrong in a render path, for two
+ * separate reasons this codebase already states as rules.
+ *
+ * It is **not reactive**. `entities` gains its agents from `hydrateAgents`,
+ * and the `ledger:changed` push that puts an ask on screen can beat that
+ * hydration home. A card that asked during the gap would read `false` and keep
+ * reading `false` for ever, because nothing re-renders it when the correction
+ * lands — and in the very name collision the caller's guard exists to close,
+ * `false` means "resolve this through session lookup", which is the bug.
+ *
+ * And it is a `getState()` call from a component, which the project rule
+ * forbids outright: every consumer goes through a named selector hook, because
+ * that is what keeps a store write from re-rendering things it did not change.
+ *
+ * Returns a **boolean**, so a subscriber re-renders when the answer flips and
+ * not when anything else about the fleet moves.
+ */
+export const useIsAgentId = (id: string): boolean =>
+  useHiveStore((state) => {
+    const entity = state.entities[id];
+    return entity !== undefined && isAgent(entity);
+  });
+
+/**
  * What to call the session a **terminal** id names, right now (HIVE-110).
  *
  * The inbox's answer to a notification that outlives the name it was raised
@@ -5157,6 +5222,28 @@ export const useSessionBooting = (id: string): boolean =>
  */
 export function currentRowFor(id: string): string {
   return currentSessionIn(useHiveStore.getState(), id);
+}
+
+/**
+ * True when `id` currently names an agent, not a terminal (HIVE-118).
+ *
+ * `currentRowFor`'s callers all speak terminal ids **except** one: an OS
+ * notification about an agent carries the agent's own name, and an agent's
+ * entity id *is* its name — but `hydrateAgents`'s own guard above concedes
+ * "an agent name is a legal session id", so on a live machine an agent can
+ * end up sharing a name with some session's `terminalId`. `currentSessionIn`
+ * would then walk right past the direct `entities[id]` miss — an agent is
+ * never `isSession` — into the search loop that exists to follow a `/clear`,
+ * find that session, and hand back its row instead of the agent.
+ *
+ * A sibling to `currentRowFor` rather than a branch inside it: the two ids
+ * are never confusable in the other direction (a session id never means
+ * "check whether this is secretly an agent first"), so folding this in would
+ * have made the common case pay for a check only one caller needs.
+ */
+export function isAgentId(id: string): boolean {
+  const entity = useHiveStore.getState().entities[id];
+  return entity !== undefined && isAgent(entity);
 }
 
 export function terminalIdFor(id: string): string {
@@ -6046,6 +6133,9 @@ export const useClearPrSearchResults = () =>
 
 /** Mark one notification read, by its id (story 051, HIVE-75). */
 export const useMarkRead = () => useHiveStore((state) => state.markRead);
+
+/** {@link HiveState.answerAsk}, for a component that must not touch the store. */
+export const useAnswerAsk = () => useHiveStore((state) => state.answerAsk);
 
 /** Remove a notification the user has acted on (HIVE-93). */
 export const useDismissNotif = () =>

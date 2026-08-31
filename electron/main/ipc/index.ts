@@ -173,6 +173,7 @@ import { createJira } from '../integrations/jira';
 import { credentialFile } from '../integrations/jira/auth';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
+import { createLedgerNotifier } from '../ledger/notify';
 import { createMcpRuntime } from '../mcp';
 import {
   createNotificationHub,
@@ -747,9 +748,61 @@ export function registerIpcHandlers(): void {
         return;
       }
 
+      /**
+       * An `ask` answers nothing from here (HIVE-118) — it *reveals* the card.
+       *
+       * A desktop toast is a title, a body and one click; there is no room on
+       * it for the options an ask card offers, so the only honest thing a
+       * click on one can do is bring the user to where the card lives. That is
+       * the whole reason an ask toast, alone among the kinds, does **not**
+       * dismiss its row on click.
+       *
+       * The focus loop above is not enough to keep that promise. It restores
+       * and focuses the window and stops there, and the card lives on one of
+       * three right-rail tabs on a rail the user can collapse. A user sitting
+       * on `explorer` clicked a question and got a file tree — the window
+       * forward, and no card and no signal anywhere on it.
+       *
+       * Main cannot fix that itself: only the renderer may touch the rail. So
+       * this says *what happened* and lets the other side decide where that
+       * goes, the same split `session` and `agent` already use.
+       */
+      if (action.type === 'ask') {
+        send(CH.notificationsActivate, {
+          type: 'ask',
+        } satisfies NotificationActivateEvent);
+        return;
+      }
+
+      /**
+       * An `agent` reaches the renderer exactly the way `session` does
+       * (HIVE-118): same channel, same event shape, because only the renderer
+       * knows what "open" means for either kind of row.
+       *
+       * `entityId` still means *terminal id* for a session — the reason
+       * `useNotificationActivate` on the other end resolves it through
+       * `currentRowFor`. An agent has no terminal, so there is no resolution
+       * to apply here — but sending its name through unchanged is **not**
+       * always the identity function on the other side: `hydrateAgents`
+       * documents that an agent's name is a legal session id, so an agent can
+       * come to share a name with some session's `terminalId`, and
+       * `currentRowFor`'s search loop would then resolve straight past the
+       * agent to that session. The renderer is what closes this — it checks
+       * `isAgentId` before ever calling `currentRowFor`, so what this sends is
+       * still what gets opened even on a colliding name.
+       */
+      if (action.type === 'agent') {
+        send(CH.notificationsActivate, {
+          type: 'entity',
+          entityId: action.name,
+        } satisfies NotificationActivateEvent);
+        return;
+      }
+
       if (action.type !== 'session') return;
 
       send(CH.notificationsActivate, {
+        type: 'entity',
         entityId: action.entityId,
       } satisfies NotificationActivateEvent);
     },
@@ -760,6 +813,26 @@ export function registerIpcHandlers(): void {
   });
 
   const notifier = createNotifier({ hub, isForeground });
+
+  /**
+   * Ledger entries into inbox cards (HIVE-118).
+   *
+   * Constructed here, alongside the hub, rather than down at `ledger.onChange`
+   * — the ledger itself does not exist yet at this point in registration, but
+   * the notifier needs none of it: it is pure policy over an entry, called
+   * from inside the one listener below.
+   *
+   * `isAgent` reads `knownAgents`, the same cache `agents:list` fills and
+   * `knowsParty` already consults a few lines below — a party id names an
+   * agent if that cache has it, and nothing here keeps a second opinion about
+   * who is an agent.
+   */
+  const notifyLedgerEntry = createLedgerNotifier({
+    raise: (input) => hub.raise(input),
+    markRead: (id) => hub.markRead(id),
+    dismiss: (id) => hub.dismiss(id),
+    isAgent: (id) => knownAgents.has(id),
+  });
 
   // The re-arm (HIVE-81): whatever is still blocked when the user looks away
   // gets its row promoted back to unread. Through the exported subscriber
@@ -936,10 +1009,11 @@ export function registerIpcHandlers(): void {
    * (HIVE-75): straight to every window rather than through `send`, because
    * there is nothing here for a tap to loop back into.
    *
-   * One subscription, both jobs (HIVE-113). The renderer's mirror and the
-   * terminal nudge read the same entry in the same order; two subscribers could
-   * not be made to disagree today, but they are two places to remember when a
-   * third consumer arrives.
+   * One subscription, three jobs (HIVE-113, HIVE-118). The renderer's mirror,
+   * the terminal nudge and the inbox notifier read the same entry in the same
+   * order; separate subscribers could not be made to disagree about that order
+   * today, but registration order is an accident and this states it in code
+   * instead — the broadcast lands first, then delivery, then the notifier.
    */
   ledger.onChange((entry) => {
     for (const window of BrowserWindow.getAllWindows()) {
@@ -947,7 +1021,7 @@ export function registerIpcHandlers(): void {
       window.webContents.send(CH.ledgerChanged, entry);
     }
     /**
-     * Delivery cannot fail the write that triggered it.
+     * Neither delivery nor the notifier may fail the write that triggered them.
      *
      * This listener runs *inside* `Ledger.append`'s own try/catch, so a throw
      * from the pty on the way to a terminal would be reported to the party who
@@ -960,6 +1034,11 @@ export function registerIpcHandlers(): void {
       deliver.onEntry(entry);
     } catch (cause) {
       console.warn(`[ledger] could not deliver ${entry.id}:`, cause);
+    }
+    try {
+      notifyLedgerEntry(entry);
+    } catch (cause) {
+      console.warn(`[ledger] could not notify on ${entry.id}:`, cause);
     }
   });
 

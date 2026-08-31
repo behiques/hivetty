@@ -27,6 +27,15 @@ let resumableIds: string[] = [];
 interface FakeWindow {
   isDestroyed: () => boolean;
   webContents: { send: ReturnType<typeof vi.fn> };
+  /**
+   * Only `notifications:act` (HIVE-118) needs these three — the focus
+   * sequence `hub.activate` runs before it looks at the action at all.
+   * Optional so every window built for the `ledger:changed` cases above
+   * keeps compiling unchanged.
+   */
+  isMinimized?: () => boolean;
+  restore?: () => void;
+  focus?: () => void;
 }
 const windows: FakeWindow[] = [];
 
@@ -182,6 +191,8 @@ const post = (payload: unknown) =>
   Promise.resolve().then(() => handlers.get(CH.ledgerPost)!(trustedEvent, payload));
 const answer = (payload: unknown) =>
   Promise.resolve().then(() => handlers.get(CH.ledgerAnswer)!(trustedEvent, payload));
+/** `notifications:act` (HIVE-118) — a clicked inbox row, or a clicked toast. */
+const act = (payload: unknown) => handlers.get(CH.notificationsAct)!(trustedEvent, payload);
 
 beforeEach(() => {
   handlers.clear();
@@ -306,5 +317,115 @@ describe('ledger:changed — the push channel (HIVE-111)', () => {
 
     expect(liveSend).toHaveBeenCalledWith(CH.ledgerChanged, entry);
     expect(destroyedSend).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * `notifications:act` routing an `ask` (HIVE-118) — the main-process half of
+ * dispatch. Main answers nothing on an ask's behalf (a desktop toast has no
+ * option buttons), so its whole contract is "focus the window, tell the
+ * renderer where the card is, touch nothing else". `agent` is covered on the
+ * renderer side instead — `performAction` in `notification-card.test.tsx`
+ * never reaches this handler for it at all, and this file's fake `electron`
+ * module has no `shell` or `Notification` to assert *against*, which is
+ * exactly the point: those must stay untouched.
+ *
+ * The focus cases are characterization tests. The `notifications:activate`
+ * case is not: it is the regression for the review finding that main returned
+ * early on an `ask` and sent nothing, so a user whose rail sat on the explorer
+ * — or was collapsed — got the window forward and no card anywhere on it.
+ */
+describe('notifications:act — an ask focuses the window and reveals the card (HIVE-118)', () => {
+  /**
+   * The fix itself: main names the cause, the renderer picks the destination.
+   *
+   * Asserted as the exact event rather than "something was sent", because the
+   * discriminant is the whole contract — `use-notification-activate.ts`
+   * branches on it, and an `entity`-shaped payload here would send the user to
+   * a tab instead of the inbox.
+   */
+  it('tells the renderer an ask was activated, on the same channel a session uses', () => {
+    const send = vi.fn();
+    windows.push({
+      isDestroyed: () => false,
+      webContents: { send },
+      isMinimized: () => false,
+      restore: vi.fn(),
+      focus: vi.fn(),
+    });
+
+    act({ type: 'ask', thread: 'a41' });
+
+    expect(send).toHaveBeenCalledWith(CH.notificationsActivate, { type: 'ask' });
+  });
+
+  /** The session path still says which entity, and still says it the same way. */
+  it('keeps the session path on the entity shape', () => {
+    const send = vi.fn();
+    windows.push({
+      isDestroyed: () => false,
+      webContents: { send },
+      isMinimized: () => false,
+      restore: vi.fn(),
+      focus: vi.fn(),
+    });
+
+    act({ type: 'session', entityId: 'sess-01' });
+
+    expect(send).toHaveBeenCalledWith(CH.notificationsActivate, {
+      type: 'entity',
+      entityId: 'sess-01',
+    });
+  });
+
+  it('characterizes the contract: focuses every live window, throws nothing, opens nothing external', () => {
+    const focus = vi.fn();
+    const restore = vi.fn();
+    windows.push({
+      isDestroyed: () => false,
+      webContents: { send: vi.fn() },
+      isMinimized: () => false,
+      restore,
+      focus,
+    });
+
+    expect(() => act({ type: 'ask', thread: 'a41' })).not.toThrow();
+
+    expect(focus).toHaveBeenCalledTimes(1);
+    // Nothing minimized, so nothing should have been asked to restore.
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it('characterizes the contract: restores a minimized window before focusing it, exactly as any other action does', () => {
+    const focus = vi.fn();
+    const restore = vi.fn();
+    windows.push({
+      isDestroyed: () => false,
+      webContents: { send: vi.fn() },
+      isMinimized: () => true,
+      restore,
+      focus,
+    });
+
+    act({ type: 'ask', thread: 'a41' });
+
+    expect(restore).toHaveBeenCalledTimes(1);
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
+  it('characterizes the contract: skips a destroyed window rather than touching it', () => {
+    const isMinimized = vi.fn(() => false);
+    const focus = vi.fn();
+    windows.push({
+      isDestroyed: () => true,
+      webContents: { send: vi.fn() },
+      isMinimized,
+      focus,
+    });
+
+    expect(() => act({ type: 'ask', thread: 'a41' })).not.toThrow();
+
+    expect(isMinimized).not.toHaveBeenCalled();
+    expect(focus).not.toHaveBeenCalled();
   });
 });

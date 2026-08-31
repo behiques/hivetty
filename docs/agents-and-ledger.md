@@ -215,6 +215,56 @@ An entry addressed to the overmind is an inbox card (HIVE-118), not a terminal
 line; one addressed to an agent is a wake (HIVE-120); a broadcast wakes nobody,
 because parties read those on their own schedule.
 
+### Notifications
+
+`electron/main/ledger/notify.ts` is `deliver.ts`'s counterpart for the
+overmind's own copy: one function, `entry => void`, wired to the same
+`ledger.onChange`, deciding what — if anything — becomes an inbox card. The
+notification's id **is** the ask's entry id, which is what makes answering
+cheap: an `answer` names its thread, the thread *is* the notification, and
+there is no lookup table to keep in sync.
+
+| Entry | Effect |
+| --- | --- |
+| `to === 'overmind'` and `kind === 'ask'` | raise `agent.ask`, or `agent.permission` when `meta.kind === 'permission'`; the notification's id is the entry's id, and its `subject` is the asker |
+| `kind === 'answer'` with a thread | the ask's card is marked read |
+| `kind === 'done'` or `kind === 'failed'` with a thread | the ask's card is dismissed — and `openAsks` closes the ask itself, so the two agree |
+| `kind === 'done'` from an agent | raise `agent.done` |
+| `kind === 'failed'` from an agent | raise `agent.failed`, and that agent is recorded as having spoken |
+| `kind === 'event'` from an agent whose `meta.outcome` is `failed`, `budget` or `turns` | raise `agent.failed`, unless that agent already spoke |
+
+`run.ended — done` and `run.ended — asking` mint nothing. `done` is covered by
+the agent's own report rather than the run's receipt — an agent's report is
+news because it chose to make it, and the receipt only speaks when the agent
+could not (a turn cap, a budget cap, a kill, a stall) — and `asking` is already
+the ask card raised above; a second notification for the same fact would be
+noise, not news.
+
+`ledger_ask` takes two optional arguments that together turn a bare question
+into a draft awaiting approval: `options`, the closed set of answers offered
+as buttons, and `quote` (HIVE-118), the draft itself — the exact text the
+agent wants to send. Both fold into `meta` in the tool handler, guarded the
+same way (`Array.isArray` for `options`, `typeof === 'string'` for `quote`) so
+a malformed argument is dropped rather than written through. The inbox card
+(`ask-card.tsx`) reads `meta.quote` to decide whether to render a plain
+question or a quoted block above the buttons, and titles the card "Send this
+reply?" instead of the asker's own title (`notify.ts`). Approving the draft
+unedited answers with the clicked option's own text; clicking the option
+named exactly `edit` (case-insensitive — not merely one that starts with
+those letters, which would hijack a model's own more descriptive copy)
+instead opens the quote in a text field seeded from it. Sending that answers
+with the asker's **own** affirmative — the first option that is neither the
+edit affordance nor a refusal, falling back to `approve` only when the ask
+offered nothing usable — and carries `meta.edited` with what the overmind
+changed it to, so the agent that reads its answer back can tell a rubber stamp
+from a rewrite and can still match the body against the closed set it offered.
+
+A click on an ask's **toast** does not answer it and does not dismiss its row:
+it reveals the card. Main sends `{ type: 'ask' }` on `notifications:activate`
+— the same channel a session's click uses, widened into a union — and the
+renderer answers it with `revealRailTab('inbox')`, because main may not touch
+the rail and the rail can be sitting on another tab or collapsed outright.
+
 ## The console verbs
 
 The overmind's own mouth is three verbs in the orchestrator console —
@@ -247,12 +297,23 @@ Two questions get asked constantly and answered nowhere on disk: *is this ask
 still open*, and *who holds this task*. Both are computed, not stored, by pure
 functions in `electron/shared/ledger-derive.ts`:
 
-- **`openAsks`** — an ask is open until it is answered *or* until
+- **`openAsks`** — an ask is open until something *closes* it, or until
   `LEDGER_ASK_TTL_MS` (24h) has passed since it was made, whichever comes
-  first. Both halves matter on their own: without the TTL, an ask whose asker
-  died (a session that crashed, a terminal that was closed) stays open
-  forever and the inbox never empties; without the answer check, a thread
-  would close on a timer while someone is still owed a reply.
+  first. Three kinds close a thread they name: an `answer` (the question got
+  its reply), a `done` ("the ask this completes") and a `failed` ("the ask
+  this abandons") — the asker taking its own question back. Both halves matter
+  on their own: without the TTL, an ask whose asker died (a session that
+  crashed, a terminal that was closed) stays open forever and the inbox never
+  empties; without the closing check, a thread would close on a timer while
+  someone is still owed a reply.
+
+  `done` and `failed` are the same rule as `answer` on purpose, and
+  `ledger/notify.ts` dismisses the card for all three symmetrically. Left
+  apart, the two halves disagreed on screen: a `done` dismissed the card while
+  the ask stayed open, so the left rail's Agents badge — counted off the
+  ledger, immune to notification state — stayed lit with nothing behind it;
+  and a `failed` closed nothing at all, so the user kept a live card whose
+  buttons `append` would refuse.
 - **`claims`** — a task is held by whichever party's `claim` entry (naming
   the task in `meta.task`) is the most recent one with no later `release` for
   that same task. **The ledger records claims; it does not arbitrate them.**
@@ -858,8 +919,13 @@ word already carries.
 The Agents tab's badge is `useAgentAskCount` — open asks whose `from` is an
 agent. It is neither of the other two on that screen: not `useOpenAskCount`,
 which counts a session's asks as well, and not the Inbox's `useUnreadCount`,
-which counts notifications. They converge only once HIVE-118 turns an ask into
-an inbox card.
+which counts notifications. The three stay three different numbers — an agent
+ask, a session ask and a raw notification count are never the same count — but
+they converge on one *event* now that HIVE-118 turns an ask into an inbox
+card: the moment an agent's ask lands, it is simultaneously counted by
+`useAgentAskCount` and, as a card, by `useUnreadCount` — one write, read by
+both badges, rather than a badge with nothing behind it until the user opens
+the Inbox and finds the ask some other way.
 
 The agent filter lives in the renderer rather than in `openAsks`, which main
 also calls and which has no notion of which parties are agents. `OpenAsk`

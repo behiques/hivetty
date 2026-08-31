@@ -47,6 +47,7 @@ import {
   useEndedSessions,
   currentRowFor,
   useHiveStore,
+  useIsAgentId,
   useLedgerEntries,
   useNavOrder,
   useOpenAskCount,
@@ -3987,6 +3988,118 @@ describe('the ledger slice', () => {
 
     const { result } = renderHook(() => useThread('1'));
     expect(result.current.map((found) => found.id)).toEqual(['1', '3']);
+  });
+
+  /**
+   * HIVE-118 self-review, finding 8. `AskCard` called the bare `isAgentId` —
+   * a `getState()` read — in its render path, which the project rule forbids
+   * and which cannot correct itself: `entities` gains its agents from
+   * `hydrateAgents`, and the `ledger:changed` push that puts an ask on screen
+   * can beat that home. The card would have answered `false` for ever, and
+   * `false` is precisely "resolve this asker through session lookup" — the
+   * collision the guard exists to close.
+   *
+   * The `rerender` is the whole point: it is what proves the subscription,
+   * because a non-reactive read passes the "after" assertion too.
+   */
+  it('answers whether an id names an agent, and re-answers when the fleet arrives', () => {
+    const { result, rerender } = renderHook(() => useIsAgentId('drone'));
+    expect(result.current).toBe(false);
+
+    act(() => {
+      useHiveStore.setState((state) => ({
+        entities: {
+          ...state.entities,
+          drone: {
+            kind: 'agent',
+            id: 'drone',
+            icon: 'ph-robot',
+            sub: '',
+            task: '',
+            status: 'sleeping',
+            wake: { on: [] },
+            runsSinceRotate: 0,
+            rotateAfter: 50,
+            runs: [],
+            lines: [],
+          },
+        },
+      }));
+    });
+    rerender();
+
+    expect(result.current).toBe(true);
+  });
+});
+
+describe('answerAsk (HIVE-118)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'hive');
+  });
+
+  it('posts the answer through the bridge and stores nothing', async () => {
+    const answer = vi.fn().mockResolvedValue({ ok: true, id: 'a41' });
+    Object.defineProperty(window, 'hive', {
+      configurable: true,
+      value: { ledger: { answer } },
+    });
+
+    const before = useHiveStore.getState().ledger;
+    const result = await useHiveStore.getState().answerAsk('a41', 'yes');
+
+    expect(answer).toHaveBeenCalledWith({ thread: 'a41', body: 'yes' });
+    expect(useHiveStore.getState().ledger).toBe(before);
+    expect(result).toEqual({ ok: true, id: 'a41' });
+  });
+
+  /**
+   * Whole-branch review, finding 3: the refusal used to be discarded here,
+   * which is what let it fail silently all the way up to the card. It is a
+   * value from `Ledger.answer`, not a throw, so the fix is to hand it back
+   * rather than to catch anything.
+   */
+  it('hands back a refusal instead of swallowing it', async () => {
+    const answer = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      reason: 'already answered',
+    });
+    Object.defineProperty(window, 'hive', {
+      configurable: true,
+      value: { ledger: { answer } },
+    });
+
+    const result = await useHiveStore.getState().answerAsk('a41', 'yes');
+
+    expect(result).toEqual({ ok: false, status: 409, reason: 'already answered' });
+  });
+
+  it('passes meta through when the card edited a draft', async () => {
+    const answer = vi.fn().mockResolvedValue({ ok: true });
+    Object.defineProperty(window, 'hive', {
+      configurable: true,
+      value: { ledger: { answer } },
+    });
+
+    await useHiveStore
+      .getState()
+      .answerAsk('a44', 'approve', { edited: 'the new text' });
+
+    expect(answer).toHaveBeenCalledWith({
+      thread: 'a44',
+      body: 'approve',
+      meta: { edited: 'the new text' },
+    });
+  });
+
+  it('is a no-op in the browser, where there is no bridge', async () => {
+    await expect(
+      useHiveStore.getState().answerAsk('a41', 'yes'),
+    ).resolves.toBeUndefined();
   });
 });
 
