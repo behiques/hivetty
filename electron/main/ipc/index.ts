@@ -130,6 +130,7 @@ import {
   type ChildLike,
   type RunTracker,
 } from '../agents/runs';
+import { createScheduler, type Scheduler } from '../agents/scheduler';
 import { createAgentState, type AgentState } from '../agents/state';
 import { mergeRunState } from '../agents/summary';
 import { createWakeCommand } from '../agents/wake-command';
@@ -303,6 +304,16 @@ let agentState: AgentState | null = null;
  */
 let runs: RunTracker | null = null;
 /**
+ * Ledger-addressed wakes, or `null` before registration (HIVE-120).
+ *
+ * Module scope for the same reason as `runs`, and reached lazily by the tracker
+ * that it in turn drives: `onRunClosed` is a dependency of `createRunTracker`,
+ * and the scheduler cannot be built until the tracker it calls exists. One of
+ * the two has to reach the other through a binding rather than an argument, and
+ * this is the one whose consumers already tolerate `null`.
+ */
+let scheduler: Scheduler | null = null;
+/**
  * The agent names the ledger will accept as a party.
  *
  * A `Set` rather than an `await agents.list()` because `knowsParty` is
@@ -314,6 +325,21 @@ let runs: RunTracker | null = null;
  * than a listing that may be a few hundred milliseconds old.
  */
 const knownAgents = new Set<string>();
+/**
+ * The subset of {@link knownAgents} whose definitions take ledger wakes.
+ *
+ * A second set rather than a lookup through the registry, for the reason
+ * `knownAgents` is a set at all: the scheduler is consulted synchronously from
+ * inside `Ledger.append`, and `agents.list()` is a promise that re-reads and
+ * re-parses every definition on disk.
+ *
+ * Deliberately **not** widened by a live run the way `knownAgents` is. That
+ * exception exists so a run already going keeps its right to write to the log
+ * when its file stops parsing mid-edit; it says nothing about whether its author
+ * asked for ledger wakes, and inferring one from the other would wake an agent
+ * on a setting nobody chose.
+ */
+const ledgerAgents = new Set<string>();
 
 /**
  * Re-read the folder into {@link knownAgents}.
@@ -342,9 +368,15 @@ function refreshKnownAgents(): void {
     ?.list()
     .then((snapshot) => {
       knownAgents.clear();
+      ledgerAgents.clear();
 
       for (const agent of snapshot.agents) {
-        if (agent.invalid === undefined) knownAgents.add(agent.name);
+        if (agent.invalid !== undefined) continue;
+
+        knownAgents.add(agent.name);
+        // The definition's own gate, cached beside the party register because
+        // the scheduler is asked synchronously, from inside `Ledger.append`.
+        if (agent.wake.on.includes('ledger')) ledgerAgents.add(agent.name);
       }
 
       for (const name of runs?.live() ?? []) knownAgents.add(name);
@@ -1035,6 +1067,18 @@ export function registerIpcHandlers(): void {
     } catch (cause) {
       console.warn(`[ledger] could not deliver ${entry.id}:`, cause);
     }
+    /*
+      The third consumer the comment above anticipated (HIVE-120): an entry
+      addressed to an agent is a wake, and an agent has no terminal to nudge.
+      Its own try/catch for the same reason as the other two — a throw here runs
+      inside `Ledger.append` and would tell the asker their question was not
+      recorded, for an entry already safely on disk.
+    */
+    try {
+      scheduler?.onEntry(entry);
+    } catch (cause) {
+      console.warn(`[ledger] could not schedule ${entry.id}:`, cause);
+    }
     try {
       notifyLedgerEntry(entry);
     } catch (cause) {
@@ -1157,6 +1201,14 @@ export function registerIpcHandlers(): void {
    * way `ptySpawn` does — by `await`-ing the memoised `mcp.start()`.
    */
   agentState = createAgentState({ path: agentStateFile() });
+  /*
+    The same object under a non-nullable name, for the two composition sites
+    below that need it as a value rather than as a maybe. The module binding
+    stays because handlers registered here run long after this function has
+    returned; a `const` is what lets the scheduler take it without a guard that
+    could only ever be false.
+  */
+  const agentRunState = agentState;
 
   const buildWakeCommand = createWakeCommand({
     agentsRoot,
@@ -1306,9 +1358,65 @@ export function registerIpcHandlers(): void {
       */
       send(CH.agentsLines, { name, lines } satisfies AgentLinesPush);
     },
+    /*
+      The queue's other end (HIVE-120). Reached through the binding because the
+      scheduler is built from `runs`, three lines below — and it must be told
+      *after* the status is written, which is where `finalizeRun` calls this.
+    */
+    onRunClosed: (name) => scheduler?.onRunClosed(name),
     now: () => Date.now(),
     newRunId: () => randomUUID(),
   });
+
+  /**
+   * Ledger-addressed wakes (HIVE-120).
+   *
+   * Built after the tracker because it drives it, and handed `knownAgents` —
+   * the same register the ledger authenticates a party against and the notifier
+   * asks about — rather than a second opinion on who is an agent.
+   *
+   * `run` goes to the tracker rather than the waker deliberately: that method
+   * is the one door every trigger passes through, and it is where a paused
+   * agent is refused. A wake reaching the command builder directly would let a
+   * ledger entry start an agent the user had just stopped.
+   */
+  scheduler = createScheduler({
+    run: (name, trigger, extra) =>
+      runs?.run(name, trigger, extra) ?? { started: false },
+    state: agentRunState,
+    isAgent: (id) => knownAgents.has(id),
+    wakesOnLedger: (id) => ledgerAgents.has(id),
+    ledger: {
+      // The whole log, unfiltered: `expiredAsks` needs the closing entries and
+      // the expiry events as well as the asks to decide which asks are new.
+      read: () => ledger.read({}),
+      append: (request) => ledger.append(request),
+    },
+    now: () => Date.now(),
+  });
+
+  /*
+    Started behind `mcp.start()`, not beside it.
+
+    `start()` flushes whatever a crash left queued, and a wake needs an argv —
+    which `buildWakeCommand` refuses to build until the MCP config file is on
+    disk, because an agent reads its inbox before anything else. That write is
+    in flight from the `void mcp.start()` above, so arming this synchronously
+    would put every restored queue through a refusal at the one moment it is
+    guaranteed to happen. The call is memoised, so this awaits the same write
+    rather than starting a second one.
+
+    A failure still arms the sweep: expiry does not spawn anything, and a queue
+    that cannot flush yet is safer standing than dropped.
+  */
+  void mcp
+    .start()
+    .catch(() => {
+      // Reported where it happens; a wake that cannot be built refuses itself.
+    })
+    .finally(() => {
+      scheduler?.start();
+    });
 
   sessions = createSessions({
     supervisor,
@@ -1426,6 +1534,16 @@ export function registerIpcHandlers(): void {
      * is what `flush()` on the next line then writes. Their `sessionUuid` is
      * untouched, so the next wake resumes the conversation.
      */
+    /*
+      Before `closeAll`, and that order is the whole point (HIVE-120).
+
+      `closeAll` finalizes each live run synchronously, and `finalizeRun` ends by
+      telling the scheduler the run closed — which would flush that agent's queue
+      into a brand-new `claude`, spawned after `closeAll` had finished iterating
+      the runs it knew about. Nothing would be left to signal it: the exact
+      orphan this hook exists to prevent.
+    */
+    scheduler?.stop();
     runs?.closeAll('app-closed');
     agentState?.flush();
   });
@@ -2274,12 +2392,40 @@ export function registerIpcHandlers(): void {
     if (current !== 'paused') return current;
 
     if (runs?.live().includes(name) === true) {
+      /*
+        No flush on this arm, deliberately (HIVE-120).
+
+        A run is still in flight, so the agent cannot take a wake — and the
+        queue is about to be flushed by the `onRunClosed` that run is going to
+        fire, which will find the agent no longer paused and deliver it then.
+        Flushing here would reach `refused: 'working'` and, having already
+        cleared the queue, lose it.
+      */
       return setAgentStatus(name, 'working');
     }
 
     const asking = ledger.read({}).openAsks.some((ask) => ask.from === name);
 
-    return setAgentStatus(name, asking ? 'asking' : 'sleeping');
+    setAgentStatus(name, asking ? 'asking' : 'sleeping');
+
+    /*
+      What the pause was holding (HIVE-120): entries that arrived while this
+      agent was stopped, delivered as one wake now that it is not. After the
+      status is written, because the scheduler wakes through `RunTracker.run`
+      and a `paused` still on disk would refuse it.
+    */
+    scheduler?.onResume(name);
+
+    /*
+      Read back **after** the flush, not captured before it.
+
+      A queue standing at this moment starts a run inside `onResume`, which
+      patches the status to `working` and pushes it. Answering with the value
+      from before that would hand the renderer a `sleeping` the push it is about
+      to receive already contradicts — the same disagreement `pushAgentStatus`
+      re-reads the file to avoid.
+    */
+    return agentState.read(name).status;
   });
 
   /**
@@ -2537,6 +2683,19 @@ export function resetIpcHandlers(): void {
     path 400 ms later, into a directory the test that owned it has finished
     with.
   */
+  /*
+    Disarmed for the same reason `agentState` is disposed (HIVE-120): the sweep
+    is a live interval closing over this registration's ledger, and one left
+    running would fire into a torn-down composition — and, in a test, at a path
+    the case that owned it has finished with.
+
+    **Before `closeAll`**, which finalizes every live run synchronously and so
+    reaches `onRunClosed` from inside this teardown. A flush there would spawn a
+    real `claude` out of a unit test, and its finalizer would then write through
+    an `agentState` disposed a few lines below.
+  */
+  scheduler?.stop();
+  scheduler = null;
   runs?.closeAll('reset');
   runs = null;
   agentState?.dispose();
@@ -2544,6 +2703,7 @@ export function resetIpcHandlers(): void {
   agents?.close();
   agents = null;
   knownAgents.clear();
+  ledgerAgents.clear();
   // HIVE-81. Test-only: a fresh registration starts with nothing on stage and
   // no listeners left over from a previous test — including the app-level
   // focus wiring and any tick it has already scheduled, which would otherwise
