@@ -151,6 +151,166 @@ describe('AskCard', () => {
     expect(screen.getAllByRole('button')).toHaveLength(3);
   });
 
+  /** HIVE-119: the scope ladder replaces the button row once `meta.rungs` is present. */
+  it('renders permission controls for a permission ask', () => {
+    seedLedger([
+      {
+        ...ask,
+        body: 'Allow Bash?\nnpm test',
+        meta: {
+          kind: 'permission',
+          tool: 'Bash',
+          input: { command: 'npm test' },
+          rungs: [
+            { id: 'allow-once', label: 'once', caption: 'runs this once. asks again next time.' },
+            {
+              id: 'allow-family',
+              label: 'npm *',
+              caption: 'never asks again for npm commands.',
+              rule: 'Bash(npm *)',
+            },
+            {
+              id: 'allow-tool',
+              label: 'all Bash',
+              caption: 'never asks again for Bash.',
+              rule: 'Bash',
+            },
+          ],
+          options: ['allow-once', 'allow-family', 'allow-tool', 'deny'],
+          default: 'allow-family',
+        },
+      },
+    ]);
+    render(<AskCard notif={{ ...notif, kind: 'agent.permission' }} thread="a41" />);
+
+    expect(screen.getByRole('button', { name: 'Allow' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Deny' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'allow-once' })).toBeNull();
+    expect(screen.getByRole('radio', { name: 'npm *' }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+  });
+
+  /** A normal ask must not be affected by the permission-controls branch above it. */
+  it('leaves an ordinary ask rendering its options as buttons', () => {
+    seedLedger([ask]);
+    render(<AskCard notif={notif} thread="a41" />);
+
+    expect(screen.getByRole('button', { name: 'yes' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'no' })).toBeTruthy();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+  });
+
+  /**
+   * Fix round 1, finding 2: the only fixture covering the fall-through had
+   * `meta.rungs` **absent**, which trivially satisfies `!Array.isArray`.
+   * That proves nothing about a `meta.rungs` that is actually present but
+   * the wrong shape — a non-array value, here.
+   */
+  it('falls through to the generic options branch when meta.rungs is not an array', () => {
+    seedLedger([
+      {
+        ...ask,
+        meta: { kind: 'permission', tool: 'Bash', rungs: 'x', options: ['yes', 'no'] },
+      },
+    ]);
+    render(<AskCard notif={notif} thread="a41" />);
+
+    expect(screen.getByRole('button', { name: 'yes' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'no' })).toBeTruthy();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+  });
+
+  /**
+   * Fix round 1, finding 2, second half: an array whose members do not have
+   * the `Rung` shape (missing `label`/`caption`) must be dropped entry by
+   * entry rather than crash the rail or render a broken segment.
+   */
+  it('falls through to the generic options branch when meta.rungs holds wrong-shaped entries', () => {
+    seedLedger([
+      {
+        ...ask,
+        meta: {
+          kind: 'permission',
+          tool: 'Bash',
+          rungs: [{ id: 'bogus' }],
+          options: ['yes', 'no'],
+        },
+      },
+    ]);
+    render(<AskCard notif={notif} thread="a41" />);
+
+    expect(screen.getByRole('button', { name: 'yes' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'no' })).toBeTruthy();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+  });
+
+  /**
+   * Whole-branch review, finding 3: three consumers, one discriminator.
+   *
+   * `meta.kind === 'permission'` is what `notify.ts` and
+   * `agents/permissions.ts` both key on. This card used to key on "at least
+   * one entry parses as a `Rung`" instead, so a well-formed `rungs` array
+   * with no `meta.kind` drew the Allow/Deny ladder and suppressed
+   * `meta.options`, while main's `isPermissionAnswer` said `false` — the
+   * click recorded an answer, granted nothing, and appended no event.
+   */
+  it('does not draw the ladder for well-formed rungs without meta.kind', () => {
+    seedLedger([
+      {
+        ...ask,
+        meta: {
+          tool: 'Bash',
+          input: { command: 'npm test' },
+          rungs: [
+            { id: 'allow-tool', label: 'all Bash', caption: 'never asks again.', rule: 'Bash' },
+          ],
+          options: ['yes', 'no'],
+        },
+      },
+    ]);
+    render(<AskCard notif={notif} thread="a41" />);
+
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+    expect(screen.getByRole('button', { name: 'yes' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'no' })).toBeTruthy();
+  });
+
+  /**
+   * Spec §3.6: the command is the actual risk surface, so it gets a mono
+   * block. In the prose `<span>` this used to be, a multi-line command
+   * collapsed onto one line — the second line of a heredoc read as part of
+   * the sentence above it.
+   */
+  it('renders a permission ask\'s command as a mono block that keeps its lines', () => {
+    seedLedger([
+      {
+        ...ask,
+        body: 'Allow Bash?\ncat <<EOF > /tmp/x\nrm -rf /\nEOF',
+        meta: {
+          kind: 'permission',
+          tool: 'Bash',
+          input: { command: 'cat <<EOF > /tmp/x\nrm -rf /\nEOF' },
+          rungs: [{ id: 'allow-once', label: 'once', caption: 'runs this once.' }],
+          options: ['allow-once', 'deny'],
+        },
+      },
+    ]);
+    render(<AskCard notif={{ ...notif, kind: 'agent.permission' }} thread="a41" />);
+
+    const block = screen.getByText(/rm -rf \//);
+    expect(block.tagName).toBe('PRE');
+    expect(block.className).toContain('font-mono');
+    expect(block.textContent).toBe('cat <<EOF > /tmp/x\nrm -rf /\nEOF');
+  });
+
+  it('leaves an ordinary ask\'s detail as prose', () => {
+    seedLedger([{ ...ask, body: 'ship it?\nthe branch is green' }]);
+    render(<AskCard notif={notif} thread="a41" />);
+
+    expect(screen.getByText('the branch is green').tagName).toBe('SPAN');
+  });
+
   /**
    * Whole-branch review, finding 5: `EDIT` used to be a prefix match
    * (`/^edit/i`), so an option that merely *starts* with those letters — a

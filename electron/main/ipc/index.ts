@@ -124,6 +124,7 @@ import {
   agentWorkdir,
   agentsRoot,
 } from '../agents/paths';
+import { createPermissions, type Permissions } from '../agents/permissions';
 import { createAgentRunFiles } from '../agents/run-files';
 import {
   createRunTracker,
@@ -313,6 +314,17 @@ let runs: RunTracker | null = null;
  * this is the one whose consumers already tolerate `null`.
  */
 let scheduler: Scheduler | null = null;
+/**
+ * Answers become grants, or `null` before registration (HIVE-119).
+ *
+ * Module scope for the same reason as `scheduler`, and armed at the same
+ * point in the composition: it neither spawns nor needs `mcp.start()`
+ * itself, but `ledger.onChange` is wired far above where `agents` and
+ * `ledger` exist, so the dispatch there reaches this the same way it reaches
+ * `scheduler` — through a binding read at call time, not a value closed over
+ * at registration.
+ */
+let permissions: Permissions | null = null;
 /**
  * The agent names the ledger will accept as a party.
  *
@@ -1068,16 +1080,53 @@ export function registerIpcHandlers(): void {
       console.warn(`[ledger] could not deliver ${entry.id}:`, cause);
     }
     /*
-      The third consumer the comment above anticipated (HIVE-120): an entry
-      addressed to an agent is a wake, and an agent has no terminal to nudge.
-      Its own try/catch for the same reason as the other two — a throw here runs
-      inside `Ledger.append` and would tell the asker their question was not
-      recorded, for an entry already safely on disk.
+      The third and fourth consumers, sequenced against each other (HIVE-120,
+      HIVE-119): an entry addressed to an agent is a wake, and an answer to a
+      permission ask is also a grant that has to reach `AGENT.md` before that
+      same wake reads the file.
+
+      Every other entry — including an ordinary answer — schedules
+      synchronously, exactly as `deliver` above did: there is nothing to write
+      first, because an ordinary answer is only ever news arriving. A
+      *permission* answer is the one exception, and the exception is
+      load-bearing: `onAnswer` may still be writing the granted rule into
+      `AGENT.md` when the wake it triggers would otherwise read that same
+      file — race it, and a user's "allow for this agent" click retries into
+      a second denial. It does not fail every time, because the write is
+      fast; that is exactly what makes it easy to ship and hard to notice.
+      `permissions.isPermissionAnswer` is what tells the two cases apart, so
+      only the answer with a dependency waits for it. Reversing the order
+      here — scheduling before the grant is written — silently breaks
+      Allow-for-this-agent, and nothing in the types stops it; the live
+      conformance suite's fence scenario (HIVE-119) is what would catch it.
+
+      Both keep their own try/catch, for the same reason `deliver` above is
+      guarded: a throw here runs inside `Ledger.append`'s own call stack and
+      must not be reported to the party who appended, for an entry already
+      safely on disk. `.finally`, not `.then`, on the permission path: a
+      grant that failed to write must still wake the agent, so it can retry,
+      be denied again, and report — not be stranded with no wake at all.
+      `permissions` is read through the module binding rather than closed
+      over, exactly as `scheduler` is: both are armed later, once `agents`
+      and `ledger` exist, not at the point this listener is wired.
     */
-    try {
-      scheduler?.onEntry(entry);
-    } catch (cause) {
-      console.warn(`[ledger] could not schedule ${entry.id}:`, cause);
+    const schedule = () => {
+      try {
+        scheduler?.onEntry(entry);
+      } catch (cause) {
+        console.warn(`[ledger] could not schedule ${entry.id}:`, cause);
+      }
+    };
+
+    if (entry.kind === 'answer' && permissions?.isPermissionAnswer(entry) === true) {
+      permissions
+        .onAnswer(entry)
+        .catch((cause: unknown) => {
+          console.warn(`[ledger] could not grant on ${entry.id}:`, cause);
+        })
+        .finally(schedule);
+    } else {
+      schedule();
     }
     try {
       notifyLedgerEntry(entry);
@@ -1141,6 +1190,14 @@ export function registerIpcHandlers(): void {
       workdir: agentWorkdir,
     }),
   });
+  /*
+    The same non-nullable alias `agentRunState` is, and for the same reason:
+    `permissions` is composed well below this line and reads it from inside a
+    closure, where TypeScript widens a captured `let` back to its declared
+    type regardless of what was just assigned. `agents` is unconditionally set
+    the line above, so the value this captures can never actually be `null`.
+  */
+  const agentRegistry = agents;
 
   /*
     The folder changed — on disk, or through the pane. Broadcast to every live
@@ -1215,7 +1272,10 @@ export function registerIpcHandlers(): void {
     workdir: agentWorkdir,
     promptFile: (name) => agentPromptFile(app.getPath('userData'), name),
     pluginDir: () => join(app.getPath('userData'), PLUGIN_DIR),
-    settingsPath: () => hooks.settingsPathFor(),
+    // The agent-space file, never `hooks.settingsPathFor()`: that one carries
+    // no `permissions.ask` rule, and a wake started against it would run with
+    // no fence at all (HIVE-119).
+    agentSettingsPath: () => hooks.agentSettingsPathFor(),
     mcpConfig: () => mcp.configPathFor(),
     hookEnv: (name) => hooks.envFor(name),
     // Read per wake, not captured: a `claudeCommand` edited in Settings must
@@ -1226,6 +1286,10 @@ export function registerIpcHandlers(): void {
     state: agentState,
     env: () => process.env,
     newUuid: () => randomUUID(),
+    // `permissions` is armed later, alongside `scheduler` — read through the
+    // module binding for the same reason `hooks`/`mcp` are read through
+    // getters here rather than closed over as values.
+    pendingGrants: (name) => permissions?.grantsFor(name) ?? [],
   });
 
   /**
@@ -1393,6 +1457,30 @@ export function registerIpcHandlers(): void {
       append: (request) => ledger.append(request),
     },
     now: () => Date.now(),
+  });
+
+  /**
+   * Answers become grants (HIVE-119).
+   *
+   * Composed here, next to `scheduler`, not up where `ledger` and `agents`
+   * first came into scope. Both are ready well before this point — the
+   * ordering constraint isn't about *availability*, it's about matching the
+   * one other place in this file that arms something off `ledger.onChange`:
+   * `scheduler` is armed here too, so a reader looking for "what fires on a
+   * ledger entry" finds both in one place, rather than one at construction
+   * and one fifty lines earlier.
+   *
+   * `entries`/`append` mirror the shape handed to the scheduler's own ledger
+   * dep just above; `read`/`write` are the registry's, unmodified — its
+   * `AgentRegistry.read`/`write` already match `PermissionDeps` exactly.
+   */
+  permissions = createPermissions({
+    entries: () => ledger.read({}).entries,
+    append: (request) => {
+      ledger.append(request);
+    },
+    read: (name) => agentRegistry.read(name),
+    write: (name, source) => agentRegistry.write(name, source),
   });
 
   /*
@@ -2696,6 +2784,10 @@ export function resetIpcHandlers(): void {
   */
   scheduler?.stop();
   scheduler = null;
+  // Holds no resources of its own — no `.stop()` — but a stale reference
+  // here would let a next test's `ledger.onChange` reach a `permissions`
+  // built against this test's disposed `agents`/`ledger`.
+  permissions = null;
   runs?.closeAll('reset');
   runs = null;
   agentState?.dispose();

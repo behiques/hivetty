@@ -1,10 +1,18 @@
 import type { LedgerKind, LedgerReadQuery } from '@shared/ledger-contract';
-import { LEDGER_TOOLS } from '@shared/ledger-tools';
+import { APPROVE_TOOL, LEDGER_TOOLS } from '@shared/ledger-tools';
 import {
   LEDGER_READ_DEFAULT_LIMIT,
   type CallToolResult,
   type McpToolDefinition,
 } from '@shared/mcp-contract';
+import {
+  defaultRungFor,
+  matches,
+  PERMISSION_DENY_MESSAGE,
+  rungsFor,
+  summarise,
+  type PermissionDecision,
+} from '@shared/permission-rules';
 
 import { ReceiverError, type ReceiverClient } from './client';
 import type { RpcHandlers } from './rpc';
@@ -48,7 +56,10 @@ const metaArg = (args: Record<string, unknown>): Record<string, unknown> | undef
     : undefined;
 };
 
-export function createToolHandlers(client: ReceiverClient): RpcHandlers {
+export function createToolHandlers(
+  client: ReceiverClient,
+  grants: readonly string[] = [],
+): RpcHandlers {
   /**
    * The read cursor: the id of the last entry this process was given.
    *
@@ -237,10 +248,128 @@ export function createToolHandlers(client: ReceiverClient): RpcHandlers {
     );
   };
 
+  /**
+   * The permission fence (HIVE-119).
+   *
+   * Three rules this cannot break, all of them measured against the real CLI:
+   * the decision travels as JSON **text only** — a `structuredContent` twin
+   * makes the CLI reject the result; the answer is always a decision, never an
+   * `isError`, because the CLI cannot act on an error; and anything not
+   * matched is asked, so an empty grant list fences everything rather than
+   * nothing.
+   */
+  const decision = (result: PermissionDecision): CallToolResult => ({
+    content: [{ type: 'text', text: JSON.stringify(result) }],
+    // Never `true`: a `deny` here is a business decision the model reads out
+    // of the JSON text, not a protocol failure — see `CallToolResult`'s
+    // `isError` doc. `structuredContent` is never set either, deliberately
+    // absent rather than merely unset: the real CLI was observed rejecting a
+    // permission-prompt-tool result that carried one alongside the text.
+    isError: false,
+  });
+
+  /**
+   * `meta.input` as it goes into the log, which is not the same thing as the
+   * input the call runs with.
+   *
+   * The ledger is append-only JSONL that never rotates, and `store.all()`
+   * holds every entry in memory; only `body` is capped. So a single denied
+   * `Write` used to park the whole file — up to 64 KiB — in the log
+   * permanently, and a busy agent parks one per denial.
+   *
+   * Nothing needs those fields. The card does not render them, `summarise`
+   * does not read them, and both the ladder and the one-shot rule are
+   * computed from the tool name and the specifier text alone
+   * (`@shared/permission-rules`). The `updatedInput` on an *allow* is a
+   * different value and is never trimmed — that one is what the model
+   * actually runs.
+   *
+   * Replaced by a marker rather than deleted, so a reader of the log sees
+   * that something was there and how big it was, instead of an input that
+   * looks like it never had a body.
+   */
+  const BULK_FIELDS = ['content', 'new_string', 'old_string'];
+
+  const forTheLedger = (input: Record<string, unknown>): Record<string, unknown> => {
+    const trimmed: Record<string, unknown> = { ...input };
+
+    for (const field of BULK_FIELDS) {
+      const value = trimmed[field];
+      if (typeof value === 'string') {
+        trimmed[field] = `[omitted from the ledger: ${value.length} chars]`;
+      }
+    }
+
+    return trimmed;
+  };
+
+  const approve = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const tool = stringArg(args, 'tool_name');
+    if (tool === undefined) {
+      return decision({ behavior: 'deny', message: 'approve needs a tool_name.' });
+    }
+
+    const raw = args['input'];
+    const input =
+      typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : {};
+
+    if (grants.some((rule) => matches(rule, tool, input))) {
+      return decision({ behavior: 'allow', updatedInput: input });
+    }
+
+    const rungs = rungsFor(tool, input);
+
+    try {
+      await client.post({
+        to: 'overmind',
+        kind: 'ask',
+        body: `Allow ${tool}?\n${summarise(tool, input)}`,
+        meta: {
+          kind: 'permission',
+          tool,
+          input: forTheLedger(input),
+          rungs,
+          options: [...rungs.map((rung) => rung.id), 'deny'],
+          default: defaultRungFor(rungs),
+        },
+      });
+    } catch (cause) {
+      /*
+        The ask could not be written, so nobody will ever answer it. Deny
+        anyway and say why: allowing here would turn an unreachable app into
+        an open fence, which is the one failure this design does not accept.
+      */
+      return decision({
+        behavior: 'deny',
+        message: `Could not ask for permission: ${
+          cause instanceof ReceiverError ? cause.message : String(cause)
+        }. Nothing was written. End your turn.`,
+      });
+    }
+
+    return decision({ behavior: 'deny', message: PERMISSION_DENY_MESSAGE });
+  };
+
   return {
-    listTools: (): readonly McpToolDefinition[] => LEDGER_TOOLS,
+    listTools: (): readonly McpToolDefinition[] => [...LEDGER_TOOLS, APPROVE_TOOL],
 
     async callTool(name, args): Promise<CallToolResult> {
+      // `approve` must never surface as `isError` or throw — the CLI can only
+      // act on a decision, so its own try/catch stays out of the shared one
+      // below, which produces `isError` results that are not decisions.
+      if (name === 'approve') {
+        try {
+          return await approve(args);
+        } catch (cause) {
+          return decision({
+            behavior: 'deny',
+            message: `approve failed: ${String(cause)}. Nothing was written. End your turn.`,
+          });
+        }
+      }
+
       try {
         switch (name) {
           case 'ledger_read':

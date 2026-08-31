@@ -262,9 +262,9 @@ export const FIELD_HELP: Record<string, string> = {
     'Skills it may invoke, from ~/.hive/skills, your own ~/.claude/skills, or an installed plugin as plugin:skill. A declaration rather than a sandbox — it catches a name that does not exist; it cannot stop a skill this machine has.',
   mcp: 'Outside systems it may reach. Naming one does not connect it — signing in happens in Settings › Integrations, and the agent then acts as you, not as a bot.',
   tools:
-    'Tools it may call without stopping to ask, as [a, b]. The hive ledger tools are always granted. A wake has nobody to prompt, so a tool its body needs but this list omits is simply refused.',
+    'Tools it may call without stopping to ask, as [a, b]. Narrow one with a glob — Bash(git *), Read(/repo/src/**), WebFetch(domain:github.com) — not with Claude Code’s own Bash(git status:*) syntax, which this fence reads literally and matches nothing. The hive ledger tools are always granted. A tool this list omits is not refused outright — the agent’s turn ends and the attempt reaches your inbox, where you can allow it once or add it here for good.',
   autonomy:
-    'ask first — it posts a question to the ledger and waits for an answer. act — it proceeds and reports afterwards.',
+    'ask first — it posts a question to the ledger and waits for an answer. act — it proceeds and reports afterwards. Neither changes the tool fence: act does not pre-allow permission prompts, so a tool outside "what it can do" still reaches your inbox.',
   model:
     'Which model each wake runs on. Default follows the model Claude Code would pick on its own.',
   'limits.turns': `Most turns in one wake before it is cut off — one turn is one reply from the model, tool call included. Default ${AGENT_LIMIT_DEFAULTS.turns}.`,
@@ -1003,7 +1003,7 @@ export function AgentForm({
 
       <SettingsGroup
         title="What it can do"
-        description="Everything it may reach while awake. Anything not listed is refused."
+        description="Everything it may reach while awake. Anything not listed reaches your inbox before it runs."
       >
         <div className="flex flex-col gap-2.5">
           {row(

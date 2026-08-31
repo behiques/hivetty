@@ -1,5 +1,6 @@
 import type { AgentDefinition } from '@shared/agent-contract';
 import { AUTH_ENV_KEYS, isSessionEnvDenied } from '@shared/config-contract';
+import { HOOK_ENV_GRANTS } from '@shared/hook-contract';
 
 /**
  * The command line one wake runs (HIVE-115).
@@ -52,6 +53,15 @@ export interface WakeInput {
   extra?: string;
   paths: WakePaths;
   env: WakeEnv;
+  /**
+   * Grants that apply to **this wake only** — an answered `allow-once`.
+   *
+   * Not merged into `def.tools`, because the definition is the durable record
+   * and this is deliberately not durable. A permanent grant takes the other
+   * road: it is written into `AGENT.md` when the answer arrives, and reaches
+   * the next wake as an ordinary `def.tools` entry.
+   */
+  grants?: readonly string[];
 }
 
 export interface WakeCommand {
@@ -101,6 +111,16 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     '--strict-mcp-config',
     '--allowedTools',
     ['mcp__hive__*', ...def.tools].join(','),
+    /*
+      The fence (HIVE-119). `--allowedTools` above is a grant and cannot deny;
+      what actually stops an ungranted call is the `permissions.ask: ["*"]` rule
+      in the agent settings file, which routes every call here. Measured: the
+      flag is hidden from `--help` but real, and does nothing without that rule.
+
+      Never add `--permission-mode`: `dontAsk` skips this tool and auto-denies.
+    */
+    '--permission-prompt-tool',
+    'mcp__hive__approve',
     '--max-turns',
     String(def.limits.turns),
     ...(def.limits.budgetUsd === undefined
@@ -149,6 +169,32 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   if (env.subscriptionAuth) {
     for (const key of AUTH_ENV_KEYS) delete merged[key];
   }
+
+  /*
+    `mcp__hive__*` is first and unconditional: an agent that cannot call
+    `ledger_read` cannot read the inbox that would tell it why it was woken,
+    and would deadlock on its own fence. `input.grants` is a one-shot
+    `allow-once` for this wake only — never merged into `def.tools`.
+
+    `ToolSearch` sits beside it, unconditional for the same reason and found
+    the same way — a live run, not a unit test. MCP tool schemas are
+    deferred: the model sees `mcp__hive__ledger_read` by name in its tool
+    list, but must call the *built-in* `ToolSearch` to fetch that schema
+    before it can invoke it. `ToolSearch` never appears in any `def.tools` —
+    nobody would think to grant a built-in — so without this the fence denies
+    the very first thing an agent's preamble tells it to do: read its ledger
+    inbox. Granting `mcp__hive__*` is worthless if nothing can load the
+    schema to call it. This grants no *capability*: `ToolSearch` only reveals
+    tool schemas, and every tool it surfaces is still checked by the fence
+    the moment it is actually called — so widening this list widens nothing
+    an agent can do, only what it can find out it could ask to do.
+  */
+  merged[HOOK_ENV_GRANTS] = JSON.stringify([
+    'mcp__hive__*',
+    'ToolSearch',
+    ...def.tools,
+    ...(input.grants ?? []),
+  ]);
 
   return {
     file: input.claudePath,
