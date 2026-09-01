@@ -219,9 +219,35 @@ export function ConsoleInput() {
         </span>
       </div>
 
-      <div className="flex shrink-0 items-center justify-center gap-5 border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-subtle">
-        <span>↑↓ select</span>
-        <span>→ or ↵ open session</span>
+      {/*
+        The verbs, and only the verbs.
+
+        This bar used to open with `↑↓ select` and `→ or ↵ open session`, and
+        `KEY_HINT` prints `↑↓ select · → open` in the input row's right corner a
+        few pixels above — the same fact twice, which at a narrow stage was what
+        wrapped this row onto two lines.
+
+        One thing did go with them, and it is worth naming rather than glossing:
+        `KEY_HINT` says `↵ run`, not that `↵` on an *empty* row opens the
+        selected session. That branch is real (see `onKeyDown`) and is now
+        undocumented on screen. It is the cheaper half of the trade — the keys
+        it shares with `→`, which is documented — but it is a trade, not a free
+        removal.
+
+        The verb list stays because nothing else says it. It is the only place
+        the grammar is visible without already knowing that `help` exists.
+      */}
+      <div
+        /*
+          The last thing on the stage, and `fleet-scroll.spec.ts` reads it as
+          exactly that: it proves the fleet table never grows until the console
+          is pushed past the foot of the window. It used to find this bar by
+          its `↑↓ select` span, which no longer exists — a text locator for a
+          string that has moved is a spec that silently stops testing anything.
+        */
+        data-testid="console-hints"
+        className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-subtle"
+      >
         <span>{CONSOLE_VERBS.join(' · ')}</span>
       </div>
     </>

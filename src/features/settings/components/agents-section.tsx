@@ -23,6 +23,7 @@ import {
   type AgentProblem,
 } from '@shared/agent-contract';
 import type { SlackStatus } from '@shared/slack-contract';
+import { agentRunRefusal } from '@stores/hive-store';
 
 /**
  * The Agents section of settings (HIVE-114).
@@ -167,6 +168,14 @@ export function AgentsSection() {
   } | null>(null);
   /** What main refused, field by field. Cleared on every fresh attempt. */
   const [problems, setProblems] = useState<AgentProblem[]>([]);
+  /**
+   * What the last Run now answered — a refusal, or that it woke.
+   *
+   * Separate from {@link problems} because it must not latch: see {@link run}.
+   * Cleared whenever the pane changes what it is looking at, so a message about
+   * one agent cannot be read as being about the next.
+   */
+  const [runNotice, setRunNotice] = useState<string | null>(null);
   /** Gates the Slack-watcher example below. `null` until the read resolves. */
   const [slackStatus, setSlackStatus] = useState<SlackStatus | null>(null);
 
@@ -248,6 +257,7 @@ export function AgentsSection() {
         setBuffer(null);
         setSaved(null);
         setProblems([]);
+        setRunNotice(null);
 
         void readAgent(name).then((source) => {
           if (source === null) {
@@ -304,6 +314,7 @@ export function AgentsSection() {
         // which it is: nothing has been written.
         setSaved(null);
         setProblems([]);
+        setRunNotice(null);
       },
       discardQuestion,
       discardDetail,
@@ -329,6 +340,7 @@ export function AgentsSection() {
         setBuffer(slackWatcherTemplate());
         setSaved(null);
         setProblems([]);
+        setRunNotice(null);
       },
       discardQuestion,
       discardDetail,
@@ -340,6 +352,7 @@ export function AgentsSection() {
     if (buffer === null || localProblem !== null) return;
 
     setProblems([]);
+    setRunNotice(null);
 
     void (async () => {
       /*
@@ -364,12 +377,50 @@ export function AgentsSection() {
     })();
   };
 
+  /**
+   * Wake the open agent once, from the pane that configures it.
+   *
+   * The editor gates on what it can see — unsaved, never saved, or refused by
+   * main — so by the time this runs there is a file on disk that parsed. What
+   * is left are the refusals only the runtime knows: it is already working, the
+   * user paused it, or the runtime is not up.
+   *
+   * Reported through `runNotice`, **not** through `problems`. `problems` is
+   * simultaneously the reason Save refuses and the third gate in the editor's
+   * `cannotRun`, so answering "it is already working" through it disabled the
+   * button that had just produced the message and relabelled it "this
+   * definition cannot be read" — which is false, since the definition parsed.
+   * Every refusal on this path is transient, so none of them may be reported
+   * on a channel that latches.
+   */
+  const run = (): void => {
+    if (open === null) return;
+
+    setRunNotice(null);
+
+    void window.hive?.agents
+      .run({ name: open })
+      .then((result) => {
+        if (result.started) {
+          setRunNotice(`woke ${open}`);
+
+          return;
+        }
+
+        setRunNotice(agentRunRefusal(open, result));
+      })
+      .catch((cause: unknown) => {
+        setRunNotice(cause instanceof Error ? cause.message : String(cause));
+      });
+  };
+
   const remove = (): void => {
     if (open === null) {
       // Never written, so there is nothing to delete — just close it.
       setBuffer(null);
       setSaved(null);
       setProblems([]);
+      setRunNotice(null);
       return;
     }
 
@@ -545,6 +596,8 @@ export function AgentsSection() {
               onChange={setBuffer}
               onSave={save}
               onDelete={remove}
+              onRun={run}
+              notice={runNotice}
             />
 
             {pending === null ? null : (

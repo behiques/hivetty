@@ -1,3 +1,4 @@
+import { ArrowLeft } from '@phosphor-icons/react';
 import { useState, type KeyboardEvent } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -9,7 +10,7 @@ import { AgentLedger } from '@features/agents/components/agent-ledger';
 import { AgentRunLog } from '@features/agents/components/agent-run-log';
 import { parseAgentInput } from '@lib/ledger/agent-input';
 import { agentRunRefusal, useAgentFacts } from '@stores/hive-store';
-import { useSettingsActions } from '@stores/ui-store';
+import { useBackToOrch, useSettingsActions } from '@stores/ui-store';
 
 interface AgentViewProps {
   entity: Agent;
@@ -24,6 +25,22 @@ interface AgentViewProps {
  * at the bottom — so the eye knows where to look, and that is the whole of the
  * resemblance. Until this story an agent tab mounted a read-only xterm and a
  * message row, which looked like somewhere to type and was not.
+ *
+ * ## The frame: chrome full-bleed, content inset
+ *
+ * Three bands, and the session view's exactly — a header bar that spans the
+ * stage, a padded body, and a prompt row that spans it again. This view used to
+ * have none of that: it mounted straight into the stage with `gap-2` and no
+ * padding at all, so the header, the fact tiles and the ledger all sat flush
+ * against both edges and the prompt floated as a rounded box in the middle of
+ * nothing.
+ *
+ * The rule the three bands express is that *chrome* touches the edges and
+ * *content* never does. The body carries the only inset, and it is `px-4`
+ * because `SessionMetaBar` is — the two views are a tab apart and a gutter that
+ * changed as you switched between them would read as the stage moving. The
+ * prompt keeps the console's own `px-[18px]` for the same reason, from the
+ * other direction: it is the same control, so it is the same row.
  *
  * ## The split
  *
@@ -48,6 +65,7 @@ interface AgentViewProps {
 export function AgentView({ entity }: AgentViewProps) {
   const facts = useAgentFacts(entity.id);
   const { openSettings } = useSettingsActions();
+  const backToOrch = useBackToOrch();
   const [draft, setDraft] = useState('');
   /**
    * The last refusal from a control on this surface, or `null`.
@@ -160,11 +178,42 @@ export function AgentView({ entity }: AgentViewProps) {
 
   return (
     <div
-      className="@container flex min-h-0 flex-1 flex-col gap-2"
+      className="@container flex min-h-0 flex-1 flex-col"
       data-view="agent"
     >
-      <header className="flex items-center gap-2.5 px-0.5">
-        <span className="relative flex size-7 shrink-0 items-center justify-center rounded-lg bg-chip">
+      <header className="flex shrink-0 items-center gap-2.5 border-b border-border-soft bg-panel px-4 py-2.5">
+        {/*
+          The way back, and until this story there was none: an agent tab could
+          be entered from three places and left from none, because the meta bar
+          that carries this button everywhere else is a session's and an agent
+          stopped mounting it in HIVE-116.
+
+          Same control, same wording, same native `title` as
+          `session-meta-bar.tsx` — the app mounts no `TooltipProvider`, and the
+          keyboard hint in the label is the point. It sits *before* the avatar
+          with a gap after it, so the row reads back → this agent rather than
+          back-from-this-agent: the button leaves the view, and the identity
+          beside it is what you are leaving.
+        */}
+        <button
+          type="button"
+          onClick={backToOrch}
+          /*
+            No `(←)` in the title, unlike `session-meta-bar.tsx`'s otherwise
+            identical button. That hint is true there because bare `←` reaches
+            `backToOrch` through `TERMINAL_CHORD_EVENT`, which only
+            `terminal-surface.tsx` emits — and this view mounts no terminal
+            surface. Copying the string across would have promised a key that
+            does nothing here.
+          */
+          title="Back to overmind"
+          aria-label="Back to overmind"
+          className="flex shrink-0 items-center gap-1 rounded-full bg-chip px-2.5 py-1 text-muted hover:text-ink"
+        >
+          <ArrowLeft size={12} weight="bold" aria-hidden="true" />
+        </button>
+
+        <span className="relative ml-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-chip">
           <Icon name={entity.icon} size={15} className="text-brand" />
         </span>
 
@@ -209,91 +258,131 @@ export function AgentView({ entity }: AgentViewProps) {
         </span>
       </header>
 
-      {facts === null ? null : (
-        <div
-          /*
-            A container query, not `sm:`. The tiles live on the stage, and the
-            stage is not the viewport: with both rails dragged wide a 1100px
-            window leaves ~560px here, where `sm:` (a 640px *viewport*) still
-            fires and truncates `Session` and `Today` into five ~105px columns.
-            The same box this grid sits in is what knows.
-          */
-          className="grid grid-cols-2 gap-1.5 @min-[720px]:grid-cols-5"
-        >
-          <Fact label="Status" tone={STATUS_TEXT[facts.status]}>
-            {STATUS_LABEL[facts.status]}
-            {facts.askRef === undefined ? '' : ` ${facts.askRef}`}
-          </Fact>
-          <Fact label="Wake">{facts.wake}</Fact>
-          {/*
-            The skip count dimmed, and drawn only when it is not zero
-            (HIVE-121). Zero draws nothing, so the tile keeps the width it has
-            at five columns and the suffix *arriving* is the signal — which is
-            what distinguishes a quiet agent from a broken one.
+      {/*
+        The body — the only band with a gutter. The header above and the
+        prompt below are chrome and span the stage; everything between them
+        is content and does not.
+      */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 px-4 py-3">
+        {facts === null ? null : (
+          <div
+            /*
+              A container query, not `sm:`. The tiles live on the stage, and the
+              stage is not the viewport: with both rails dragged wide a 1100px
+              window leaves ~560px here, where `sm:` (a 640px *viewport*) still
+              fires and truncates `Session` and `Today` into five ~105px columns.
+              The same box this grid sits in is what knows.
+            */
+            className="grid grid-cols-2 gap-1.5 @min-[720px]:grid-cols-5"
+          >
+            <Fact label="Status" tone={STATUS_TEXT[facts.status]}>
+              {STATUS_LABEL[facts.status]}
+              {facts.askRef === undefined ? '' : ` ${facts.askRef}`}
+            </Fact>
+            <Fact label="Wake">{facts.wake}</Fact>
+            {/*
+              The skip count dimmed, and drawn only when it is not zero
+              (HIVE-121). Zero draws nothing, so the tile keeps the width it has
+              at five columns and the suffix *arriving* is the signal — which is
+              what distinguishes a quiet agent from a broken one.
 
-            `Session`'s `· run 7/50` below is the same idiom: a value, then a
-            `·`-joined qualifier that is quieter than it.
-          */}
-          <Fact label="Next">
-            {facts.next}
-            {facts.skips === undefined ? null : (
-              <span className="text-subtle"> · {facts.skips}</span>
-            )}
-          </Fact>
-          <Fact label="Today">{`${facts.todayRuns} runs · ${facts.todayCost}`}</Fact>
-          {/*
-            The rotation made visible *before* it happens: an agent resumes one
-            conversation until this fraction fills, and HIVE-122 starts a fresh
-            one. Without the denominator a reader has no way to know how close
-            that is.
-          */}
-          <Fact label="Session">
-            {facts.sessionUuid === undefined
-              ? '—'
-              : `${facts.sessionUuid.slice(0, 8)} · run ${facts.runsSinceRotate}/${facts.rotateAfter}`}
-          </Fact>
-        </div>
-      )}
-
-      <div className="min-h-0 flex-1">
-        <div className="grid h-full min-h-0 gap-2 [grid-template-columns:minmax(0,1fr)_clamp(280px,22%,380px)] @max-[800px]:[grid-template-columns:minmax(0,1fr)]">
-          <AgentRunLog name={entity.id} status={entity.status} />
-          <AgentLedger name={entity.id} />
-        </div>
-      </div>
-
-      <div>
-        <div className="flex items-center gap-2 rounded-lg bg-term-input px-2.5 py-2">
-          <span className="shrink-0 text-brand">›</span>
-          <label htmlFor="agent-input" className="sr-only">
-            {`Post to ${entity.id}'s ledger`}
-          </label>
-          <input
-            id="agent-input"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={entity.id}
-            className="min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-subtle"
-          />
-        </div>
-        {/*
-          "as the overmind", not "as you": main supplies `from` itself on both
-          `ledger.post` and `ledger.answer`, so the renderer cannot speak as
-          anyone else — and saying "as you" would describe an identity that
-          does not exist in the log.
-        */}
-        {notice === null ? (
-          <p className="px-1 pt-1 text-[10px] text-subtle">
-            Enter posts to the ledger as the overmind. This is not a terminal —
-            nothing here reaches a process.
-          </p>
-        ) : (
-          <p role="status" className="px-1 pt-1 text-[10px] text-amber">
-            {notice}
-          </p>
+              `Session`'s `· run 7/50` below is the same idiom: a value, then a
+              `·`-joined qualifier that is quieter than it.
+            */}
+            <Fact label="Next">
+              {facts.next}
+              {facts.skips === undefined ? null : (
+                <span className="text-subtle"> · {facts.skips}</span>
+              )}
+            </Fact>
+            <Fact label="Today">{`${facts.todayRuns} runs · ${facts.todayCost}`}</Fact>
+            {/*
+              The rotation made visible *before* it happens: an agent resumes one
+              conversation until this fraction fills, and HIVE-122 starts a fresh
+              one. Without the denominator a reader has no way to know how close
+              that is.
+            */}
+            <Fact label="Session">
+              {facts.sessionUuid === undefined
+                ? '—'
+                : `${facts.sessionUuid.slice(0, 8)} · run ${facts.runsSinceRotate}/${facts.rotateAfter}`}
+            </Fact>
+          </div>
         )}
+
+        <div className="min-h-0 flex-1">
+          <div className="grid h-full min-h-0 gap-2 [grid-template-columns:minmax(0,1fr)_clamp(280px,22%,380px)] @max-[800px]:[grid-template-columns:minmax(0,1fr)]">
+            <AgentRunLog name={entity.id} status={entity.status} />
+            <AgentLedger name={entity.id} />
+          </div>
+        </div>
       </div>
+
+      {/*
+        The prompt, and it is the console's row rather than a box of its own.
+
+        It used to be a rounded `bg-term-input` card floating inside the body's
+        (then nonexistent) padding, which read as a widget sitting *on* the view
+        instead of the surface the view is typed into. `console-input.tsx` had
+        already settled what this control looks like — full-bleed, square, a
+        rule above it, `px-[18px] py-2.5`, the name in green followed by `❯` —
+        and there is no argument for the agent's version of the same control
+        looking different. Every class here is that row's, verbatim.
+
+        The agent's own name is the prompt glyph for the same reason the console
+        says `overmind ❯`: the row is addressed to somebody, and which somebody
+        is the one thing a prompt should say.
+      */}
+      <div className="flex shrink-0 items-center gap-2.5 border-t border-border-soft bg-term-input px-[18px] py-2.5">
+        <span className="shrink-0 font-mono text-[13px] text-green">
+          {`${entity.id} ❯`}
+        </span>
+        <label htmlFor="agent-input" className="sr-only">
+          {`Post to ${entity.id}'s ledger`}
+        </label>
+        <input
+          id="agent-input"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={onKeyDown}
+          /*
+            The grammar `parseAgentInput` actually accepts, and the literal
+            `answer ` is load-bearing. Anything that does not start with it
+            falls through to `{ kind: 'ask' }` — so a placeholder promising a
+            bare `a1 yes` would have posted "a1 yes" as a *new ask addressed to
+            the agent*, cleared the box on success, left `a1` open, and left
+            the agent blocked. A write that succeeds at the wrong thing is the
+            one failure this surface's `notice` channel cannot report.
+          */
+          placeholder="a message, or answer a1 <text>"
+          className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-ink caret-green outline-none placeholder:text-subtle"
+        />
+      </div>
+
+      {/*
+        The console's hint bar, in the one place it differs: the notice takes
+        its slot rather than adding a row beneath it. A refusal and the standing
+        explanation answer the same question — what will Enter do — and the
+        answer that is true right now is the one worth the height.
+
+        "as the overmind", not "as you": main supplies `from` itself on both
+        `ledger.post` and `ledger.answer`, so the renderer cannot speak as
+        anyone else — and saying "as you" would describe an identity that does
+        not exist in the log.
+      */}
+      {notice === null ? (
+        <p className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-subtle">
+          ↵ posts to the ledger as the overmind · not a terminal — nothing here
+          reaches a process
+        </p>
+      ) : (
+        <p
+          role="status"
+          className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-amber"
+        >
+          {notice}
+        </p>
+      )}
     </div>
   );
 }

@@ -291,6 +291,41 @@ describe('AgentView', () => {
     });
   });
 
+  describe('the frame', () => {
+    /*
+      There was no way out of an agent tab. It can be entered from the rail,
+      the fleet table and the console, and the button that leaves every other
+      centre-stage view belongs to `SessionMetaBar` — which an agent stopped
+      mounting when HIVE-116 gave it a view of its own.
+    */
+    it('goes back to the overmind', async () => {
+      useUiStore.getState().openTab('watcher');
+      render(<AgentView entity={seed()} />);
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Back to overmind' }),
+      );
+
+      expect(useUiStore.getState().activeTab).toBe('orch');
+    });
+
+    /*
+      The button leads, the identity follows. The row reads "back → this
+      agent", not "back from this agent": what the control does is leave, and
+      the name beside it says what is being left.
+    */
+    it('puts the way back before the agent it belongs to', () => {
+      render(<AgentView entity={seed()} />);
+
+      const back = screen.getByRole('button', { name: 'Back to overmind' });
+      const name = screen.getByText('watcher');
+
+      expect(
+        back.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+  });
+
   describe('the run log', () => {
     it('draws older runs as receipts, with no control promising an expansion', () => {
       render(<AgentView entity={seed({ status: 'sleeping' })} />);
@@ -347,6 +382,47 @@ describe('AgentView', () => {
 
       expect(screen.getByText(/Nothing yet/)).toBeInTheDocument();
     });
+
+    /*
+      The receipts and the output are two documents that happened to be stacked
+      in one scroll box, and one scrollbar made both unreadable: scrolling back
+      through the receipts pushed the output off the bottom, and reading the
+      output pushed every receipt out of reach.
+
+      Asserted structurally rather than by scrolling, because happy-dom lays
+      nothing out — there is no overflow to observe. What a test *can* pin is
+      that the two live in separate scroll containers and that the output's own
+      is the one the autoscroll foot sits in.
+    */
+    it('scrolls the receipts and the output separately', () => {
+      const entity = seed({ status: 'working' });
+      useHiveStore.getState().appendAgentLines({
+        name: 'watcher',
+        lines: [{ text: 'still going', color: 'ink' }],
+      });
+
+      const { container } = render(<AgentView entity={entity} />);
+
+      const receipts = container.querySelector('[data-region="run-receipts"]');
+      const output = container.querySelector('[data-region="run-output"]');
+
+      expect(receipts).not.toBeNull();
+      expect(output).not.toBeNull();
+      expect(receipts).not.toContainElement(output as HTMLElement);
+      expect(within(receipts as HTMLElement).getByText(/Run #r17/)).toBeInTheDocument();
+      expect(within(output as HTMLElement).getByText('still going')).toBeInTheDocument();
+    });
+
+    /*
+      No receipts means no box for them — an empty scroll container would still
+      claim its border and its share of the height for nothing.
+    */
+    it('draws no receipts region for an agent that has never run', () => {
+      const { container } = render(<AgentView entity={seed({ runs: [] })} />);
+
+      expect(container.querySelector('[data-region="run-receipts"]')).toBeNull();
+      expect(container.querySelector('[data-region="run-output"]')).not.toBeNull();
+    });
   });
 
   describe('the ledger column', () => {
@@ -380,6 +456,13 @@ describe('AgentView', () => {
         within(ledger).queryByText('Somebody else entirely.'),
       ).not.toBeInTheDocument();
     });
+
+    /*
+      Ordering and the render cap live in `agent-ledger.test.tsx`, the mirror
+      file for the component that owns them. What belongs *here* is only that
+      the view mounts the column against the right agent — which the test above
+      covers.
+    */
 
     it('renders an ask without option buttons, which HIVE-118 owns', () => {
       const entity = seed();
@@ -483,6 +566,72 @@ describe('AgentView', () => {
 
       expect(screen.getByText(/as the overmind/i)).toBeInTheDocument();
       expect(screen.getByText(/not a terminal/i)).toBeInTheDocument();
+    });
+
+    /*
+      A refusal and the standing explanation answer the same question — what
+      will Enter do — so the true-right-now answer takes the slot rather than
+      adding a row beneath it and pushing the log up.
+    */
+    it('puts a refusal in the hint bar’s place, not beneath it', async () => {
+      const { post } = bridge();
+      post.mockResolvedValue({ ok: false, reason: 'the ledger is not up' });
+
+      render(<AgentView entity={seed()} />);
+      await userEvent.type(screen.getByRole('textbox'), 'hello{Enter}');
+
+      expect(
+        await screen.findByText('the ledger is not up'),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/as the overmind/i)).not.toBeInTheDocument();
+    });
+
+    /*
+      The console's row, verbatim — same rule above it, same `bg-term-input`,
+      same 18px gutters, and the party being addressed as the prompt glyph.
+      It used to be a rounded card floating inside the body, which read as a
+      widget sitting on the view rather than the surface it is typed into.
+    */
+    it('names the agent in the prompt, the way the console names the overmind', () => {
+      render(<AgentView entity={seed()} />);
+
+      expect(screen.getByText('watcher ❯')).toBeInTheDocument();
+    });
+
+    /**
+     * The placeholder must describe a grammar `parseAgentInput` accepts.
+     *
+     * It read `a1 <answer> to answer an open ask` first, and there is no bare-ref
+     * form — anything not starting with the literal `answer ` falls through to
+     * `{ kind: 'ask' }`. So a user following the hint typed `a1 yes`, the write
+     * *succeeded* as a new ask addressed to the agent, the box cleared on
+     * success, `a1` stayed open, and the agent stayed blocked. Nothing failed,
+     * so `notice` had nothing to report.
+     *
+     * Driven through the real parser rather than string-matched: the property
+     * that matters is that the example works, not that it is spelled a
+     * particular way.
+     */
+    it('demonstrates a grammar the parser actually accepts', async () => {
+      const { answer, post } = bridge();
+      render(<AgentView entity={seed()} />);
+
+      const box = screen.getByRole('textbox');
+      const shown = box.getAttribute('placeholder') ?? '';
+      const example = shown.slice(shown.indexOf('answer '));
+
+      // The placeholder names an example at all.
+      expect(example).toMatch(/^answer \S+/);
+
+      await userEvent.type(
+        box,
+        `${example.replace(/<text>/, 'go ahead')}{Enter}`,
+      );
+
+      expect(answer).toHaveBeenCalledWith(
+        expect.objectContaining({ thread: 'a1' }),
+      );
+      expect(post).not.toHaveBeenCalled();
     });
   });
 });
