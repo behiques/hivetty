@@ -1217,9 +1217,78 @@ Its corollary: `defaultRungFor` preselecting the family rung is an ordinary
 product decision again rather than a security one — both the caption and the
 preselection are now main's.
 
+### The body is standing work, not a self-description
+
+**The markdown body below the frontmatter is the agent's job, and it is carried
+out on every wake.** It reaches the run as the second half of
+`--append-system-prompt-file` — `systemPromptFor()` joins the app-owned
+`AGENT_PREAMBLE`, the `autonomy` clause and the body with a `---` — while the
+per-wake *user* prompt comes from `wakePrompt()`. Two different strings, and
+the split is what made this worth writing down.
+
+It was originally the wrong split. `wakePrompt` said "Read your ledger inbox
+first, then do your job", naming nothing, and the preamble said "a wake where
+you found no work to do should end silently". Neither string referred to the
+body at all, so on a wake with an empty inbox there was nothing in front of the
+model that named its own job. Measured, not theorised: an agent defined as
+*"You will open a example.com page in the browser"* with `every: 1m`,
+`check: always` and `tools: [Bash(open *)]` logged sixteen consecutive
+`run.started — interval` / `run.ended — done` pairs, each about four seconds,
+opening nothing — while holding the grant it needed.
+
+**It is the *resumed* wake that fails, not the first one**, and that distinction
+cost an experiment to find. Run against the old strings, an agent on a fresh
+session carries out its body perfectly well; a one-wake test passes on the
+broken build. What breaks is every wake after: `wake-command.ts` `--resume`s the
+conversation, the transcript now says the work is done, the inbox is empty, and
+nothing in either string says to do it again. Both arms are in
+`tests/live/agent-conformance.test.ts` — the probe there does the work, has its
+marker deleted underneath it, and is woken again; reverting either string turns
+the second assertion red while the first still passes.
+
+Both strings now name the body. `wakePrompt` says to carry out "the
+instructions you were given" and says outright that an empty inbox is not an
+empty turn; the preamble opens by calling the text below the line standing work
+for every wake. The silence rule survives, narrowed to what it was always
+about: **post** nothing when there is nothing to report — a `ledger_done` every
+minute saying "nothing happened" is noise, but a quiet log is not a licence to
+skip the work.
+
+The corollary for anyone writing one: the body is read as an instruction, so
+write it as one. "Watch X, and when you find Y, do Z" behaves; a paragraph
+describing what sort of agent this is has nothing in it to carry out. The New
+agent template in `agents-section.tsx` seeds that shape as a stub for the same
+reason — it previously seeded "You are … . On every wake, read your ledger inbox
+first, then do your job", which is the defect above written into the starting
+point.
+
+All three wake prompts name the work, the rotation one included. That branch is
+easy to miss — it takes one wake in `rotate_after`, so roughly one in fifty —
+and leaving it inbox-conditional would have kept the original bug alive on
+exactly the wake that also has to write a handoff.
+
 ### `autonomy` does not touch the fence
 
-`autonomy` is a fourth layer next to `skills`, `mcp` and `tools`, and it is
+`autonomy` reaches the run as one sentence in the system prompt, chosen by
+`AUTONOMY_CLAUSE` in `waker.ts` — `ask` tells the agent to post a `ledger_ask`
+and wait before anything consequential, `act` tells it to proceed and report
+with `ledger_done`. Before that it was parsed into `AgentDefinition` and read
+by nothing at all: no reader in `electron/` or `src/`, so the field documented
+in the form's help text had no effect on any run. It matters more now that the
+body is standing work — an `ask` agent doing its own job unprompted is exactly
+where the distinction bites.
+
+**`ask` is the parsed default, so it is the clause a file with no `autonomy:`
+line gets** — which, since nothing read the field before, is every definition
+written up to this change. That makes its wording load-bearing in a way `act`'s
+is not, and it is why the sentence says outright that carrying out its
+instructions is not something to ask about. The cost of getting that wrong is
+not chatter: `scheduler.ts` skips any agent whose status is not `sleeping` or
+`failed`, and leaves an `asking` agent's `nextRunAt` deliberately stale, so an
+agent that asks needlessly loses every scheduled wake until someone answers or
+the ask expires — a day, per `LEDGER_ASK_TTL_MS`.
+
+It is a fourth layer next to `skills`, `mcp` and `tools`, and it is
 easy to mistake for a looser version of the same thing. It is not: `tools:`
 decides what proceeds without a prompt to `mcp__hive__approve`, and `autonomy`
 never changes that decision either way. What it decides instead is a
@@ -1287,8 +1356,9 @@ is a participant in its own rotation, across two wakes.
 `rotate_after`, `wake-command.ts` builds the same `--resume <uuid>` it always
 did — a handoff written by an agent that has been made to forget everything
 first would be worthless. What changes is the prompt: `wakePrompt` swaps the
-usual "read your inbox, then do your job" for a last turn that asks the agent to
-do that work and then call **`ledger_handoff`** with what a fresh copy of itself
+usual "read your inbox, then carry out your instructions" for a last turn that
+asks the agent to do that work and then call **`ledger_handoff`** with what a
+fresh copy of itself
 must know — what it watches, which threads are open and their ids, what it has
 learned about how this user wants things done. Swaps rather than appends,
 because an agent handed two instructions reliably does the first one. That wake

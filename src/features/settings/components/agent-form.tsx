@@ -501,10 +501,59 @@ export function AgentForm({
     null,
   );
 
+  /**
+   * The one keystroke the buffer cannot hold: a trailing space.
+   *
+   * Every text control here is driven off `source`, so what it shows is what
+   * `readFrontmatter` reads back — and that trims (`agent-contract.ts`). A
+   * space was therefore stripped between the keystroke and the re-render, and
+   * the next character landed against the previous word: the description field
+   * "did not allow spaces", and neither did quiet hours or any list field,
+   * where the space after the comma in `[a, b]` was equally unreachable.
+   *
+   * Fixing it at the parser is not an option — a frontmatter value with a
+   * trailing space is not a value anyone would type by hand, and the Source tab
+   * shows this buffer verbatim. So the *file* keeps the trimmed value and the
+   * in-progress whitespace is held here until the character that follows it
+   * arrives.
+   *
+   * One draft, not one per field: only the focused control can be mid-word, and
+   * a map would be a second thing to expire.
+   *
+   * Its lifetime is the focus, and `onBlur` is what ends it. The equality guard
+   * in {@link shown} is a second line rather than the first: it catches a value
+   * replaced underneath a still-focused field, but it cannot catch a *switch of
+   * agent* — `AgentForm` is not remounted for that, and two agents whose value
+   * for the same key is equal (both absent, most often) make the guard
+   * trivially true. Blur fires on that switch, which is why it is the one that
+   * has to be load-bearing.
+   */
+  const [draft, setDraft] = useState<{ path: string; text: string } | null>(
+    null,
+  );
+
   const read = readFrontmatter(source);
   const fields = read?.fields;
   const at = (path: string) => fields?.get(path)?.value ?? '';
   const has = (path: string) => fields?.has(path) === true;
+
+  /**
+   * What a text input displays: the buffer's value, or the draft that trims to
+   * it.
+   *
+   * A draft only ever differs from the value by whitespace at its ends, so one
+   * that no longer trims to what the buffer holds is describing a value that has
+   * since been replaced — by the Source tab, or by a patch from anywhere else —
+   * and the buffer wins. That is a guard against a *stale* draft, not the thing
+   * that retires a finished one; blur does that.
+   */
+  const shown = (path: string): string => {
+    const value = at(path);
+
+    return draft?.path === path && draft.text.trim() === value
+      ? draft.text
+      : value;
+  };
 
   /**
    * Delete the key's line entirely.
@@ -528,13 +577,31 @@ export function AgentForm({
     return lines.join('\n');
   };
 
+  /**
+   * Remember the in-progress whitespace, or forget it.
+   *
+   * Unconditional, because the draft's lifetime is the focus and only one
+   * control holds that: by the time a keystroke reaches a second field, the
+   * first has blurred and cleared. An earlier version cleared only its own
+   * `path` so a keystroke here could not discard a draft over there — a branch
+   * nothing could reach once blur existed, and an unreachable branch is a shape
+   * problem rather than something to cover.
+   */
+  const stash = (path: string, value: string) => {
+    setDraft(value.trim() === value ? null : { path, text: value });
+  };
+
   const set = (path: string, value: string) => {
-    if (value.trim() === '') {
+    const trimmed = value.trim();
+
+    stash(path, value);
+
+    if (trimmed === '') {
       onChange(clear(path));
       return;
     }
 
-    onChange(patchFrontmatter(source, path, value));
+    onChange(patchFrontmatter(source, path, trimmed));
   };
 
   /*
@@ -545,8 +612,11 @@ export function AgentForm({
     bottom of the frontmatter, below the block it was declared above.
   */
   const setName = (value: string) => {
+    const trimmed = value.trim();
+
     setRenamed(null);
-    onChange(patchFrontmatter(source, 'name', value));
+    stash('name', value);
+    onChange(patchFrontmatter(source, 'name', trimmed));
   };
 
   // ---- the wake mode ----------------------------------------------------
@@ -771,9 +841,16 @@ export function AgentForm({
       type="text"
       spellCheck={false}
       aria-label={label}
-      value={at(path)}
+      value={shown(path)}
       placeholder={placeholder}
       onChange={(event) => set(path, event.target.value)}
+      /*
+        The draft's lifetime is the focus. Without this a leading space — held
+        by `stash` exactly like a trailing one, but never consumed by a
+        following character — would sit in the box for the life of the mount,
+        showing text the buffer does not hold.
+      */
+      onBlur={() => setDraft(null)}
       className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-[11.5px] text-ink outline-none focus:border-border"
     />
   );
@@ -896,7 +973,7 @@ export function AgentForm({
               type="text"
               spellCheck={false}
               aria-label="name"
-              value={at('name')}
+              value={shown('name')}
               onChange={(event) => setName(event.target.value)}
               /*
                 Renumber on the way out rather than refuse on the way in. Doing
@@ -907,6 +984,8 @@ export function AgentForm({
               */
               onBlur={(event) => {
                 const typed = event.target.value.trim();
+
+                setDraft(null);
 
                 if (typed === '' || !taken.includes(typed)) return;
 
