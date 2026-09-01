@@ -37,7 +37,7 @@ describe('createScheduler', () => {
   let state: ReturnType<typeof createAgentState>;
   let scheduler: ReturnType<typeof createScheduler>;
   /** What `scheduleFor` answers. Empty means "no usable definition". */
-  let schedules: Map<string, { wake: WakeSpec; dailyUsd?: number }>;
+  let schedules: Map<string, { wake: WakeSpec; dailyUsd?: number; mcp?: string[] }>;
   /** Makes `run` answer a refusal, as `RunTracker` does for a working agent. */
   let refuse: boolean;
   /** Whether the registry has answered its first listing yet. */
@@ -1054,6 +1054,199 @@ describe('createScheduler', () => {
 
     it('never skips under check: always', () => {
       schedules.set(AGENT, { wake: { everyMs: 300_000, check: 'always', on: [] } });
+
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'interval' }]);
+    });
+  });
+
+  describe('slack signed out (HIVE-123)', () => {
+    const NOON = new Date(2026, 7, 31, 12).getTime();
+    const every5m: WakeSpec = { everyMs: 300_000, check: 'always', on: [] };
+
+    beforeEach(() => {
+      clock = NOON;
+      // Armed before anything is arranged — see the interval tick's beforeEach.
+      scheduler.start();
+      // The default for this block is an agent that currently names slack;
+      // the stale-definition case below overrides it to `[]`.
+      schedules.set(AGENT, { wake: every5m, mcp: ['slack'] });
+    });
+
+    it('skips a scheduled wake whose last run found slack signed out', () => {
+      state.patch(AGENT, {
+        nextRunAt: NOON,
+        lastRunAt: NOON - 600_000,
+        runs: [
+          {
+            run: 'r1',
+            trigger: 'interval',
+            startedAt: NOON - 600_000,
+            endedAt: NOON - 599_000,
+            outcome: 'done',
+            slack: 'needs-auth',
+          },
+        ],
+      });
+
+      tick();
+
+      expect(woke).toEqual([]);
+      expect(state.read(AGENT).skipsSinceRun).toBe(1);
+    });
+
+    /**
+     * The livelock, and the only thing that breaks it (HIVE-123 self-review).
+     *
+     * The skip gates on what the agent's **last run** found — and only a run
+     * can rewrite that field, which the skip is precisely what prevents. For
+     * the shipped `slack-watcher` (`every: 5m`, rare ledger traffic) that is
+     * not a delay but a permanent stall, while the pane's caption promises
+     * signing in fixes it.
+     *
+     * `clearSlackNeedsAuth` is what the `slack:sign-in` handler calls on a
+     * successful sign-in, and this drives the whole cycle rather than the call
+     * alone: a run that found Slack signed out, a tick that skips, the
+     * sign-in, and then a tick that actually wakes.
+     */
+    it('wakes on the next tick once a sign-in has cleared the stale marker', () => {
+      state.patch(AGENT, {
+        nextRunAt: NOON,
+        lastRunAt: NOON - 600_000,
+        runs: [
+          {
+            run: 'r1',
+            trigger: 'interval',
+            startedAt: NOON - 600_000,
+            endedAt: NOON - 599_000,
+            outcome: 'done',
+            slack: 'needs-auth',
+          },
+        ],
+      });
+
+      tick();
+
+      expect(woke).toEqual([]);
+
+      expect(state.clearSlackNeedsAuth()).toEqual([AGENT]);
+
+      // The skipped tick re-armed for five minutes out; that is when the wake
+      // it was owed comes back round.
+      clock = NOON + 300_000;
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'interval' }]);
+    });
+
+    it('does not skip once the last run found slack connected', () => {
+      state.patch(AGENT, {
+        nextRunAt: NOON,
+        lastRunAt: NOON - 600_000,
+        runs: [
+          {
+            run: 'r1',
+            trigger: 'interval',
+            startedAt: NOON - 600_000,
+            endedAt: NOON - 599_000,
+            outcome: 'done',
+            slack: 'connected',
+          },
+        ],
+      });
+
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'interval' }]);
+    });
+
+    /*
+      An agent that has never run has no `runs[]` entry at all — and it must
+      not be skipped on that account. It has to be allowed to discover its own
+      status once, or a signed-out-at-boot Slack would wedge it permanently.
+    */
+    it('does not skip an agent that has never run', () => {
+      state.patch(AGENT, { nextRunAt: NOON });
+
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'interval' }]);
+    });
+
+    /*
+      A run that never named slack at all — no `mcp: [slack]`, or a spawn
+      failure before any `init` event arrived — leaves `slack` unset, and
+      unset is not "signed out".
+    */
+    it('does not skip a run that never named slack', () => {
+      state.patch(AGENT, {
+        nextRunAt: NOON,
+        lastRunAt: NOON - 600_000,
+        runs: [
+          {
+            run: 'r1',
+            trigger: 'interval',
+            startedAt: NOON - 600_000,
+            endedAt: NOON - 599_000,
+            outcome: 'done',
+          },
+        ],
+      });
+
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'interval' }]);
+    });
+
+    /*
+      The re-review's finding: `state.ts`'s `saveAgent`/`renameAgent`/
+      `deleteAgent` never clear or invalidate `AgentRunState.runs` when a
+      definition is saved. An agent that removed `slack` from `mcp:` after a
+      `needs-auth` run must not keep skipping on a fact that stopped being
+      true — the gate is the schedule's *current* `mcp`, read off the same
+      map `wake` already comes from, not an inference from run history alone.
+    */
+    it('does not skip once the definition no longer names slack, even with a stale needs-auth run', () => {
+      schedules.set(AGENT, { wake: every5m, mcp: [] });
+      state.patch(AGENT, {
+        nextRunAt: NOON,
+        lastRunAt: NOON - 600_000,
+        runs: [
+          {
+            run: 'r1',
+            trigger: 'interval',
+            startedAt: NOON - 600_000,
+            endedAt: NOON - 599_000,
+            outcome: 'done',
+            slack: 'needs-auth',
+          },
+        ],
+      });
+
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'interval' }]);
+    });
+
+    // A schedule from before HIVE-123 (no `mcp` at all) must not crash or
+    // silently start skipping — absent reads as `[]`, same as an empty list.
+    it('does not skip when the schedule carries no mcp field at all', () => {
+      schedules.set(AGENT, { wake: every5m });
+      state.patch(AGENT, {
+        nextRunAt: NOON,
+        lastRunAt: NOON - 600_000,
+        runs: [
+          {
+            run: 'r1',
+            trigger: 'interval',
+            startedAt: NOON - 600_000,
+            endedAt: NOON - 599_000,
+            outcome: 'done',
+            slack: 'needs-auth',
+          },
+        ],
+      });
 
       tick();
 

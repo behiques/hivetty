@@ -463,6 +463,15 @@ A stack of notification cards, newest first, from `useNotifs()`.
   count that fill implies is the whole point of the red tab badge, and colour
   alone puts it out of reach of a screen reader.
 - The store caps the list at 8 (`NOTIF_CAP`); the panel renders what it is given.
+- **A card carrying a `link` grows a wrapper, and the exit moves with it**
+  (HIVE-123). `notif.link` renders as a real `<a>`, and an anchor inside a
+  `<button>` is interactive content inside interactive content — so the link is
+  the button's *sibling* under a wrapping `<div>`, the way `session-table.tsx`
+  draws its row action. The card's dismissal — `overflow-hidden`, the measured
+  `--cc-card-h`, `animate-ccslideout` and the list's own `mb-*` — then belongs
+  to that wrapper rather than to the button: left on the button, the link and
+  the margin below it held full height while the button collapsed, and the list
+  jumped when the remainder unmounted.
 
 ### `<PrsPanel />` and `<PrCard />`
 
@@ -587,3 +596,32 @@ nothing a title does not. The label names the shortcut story 060 will bind.
 vendored `DialogContent`, which always portals to `document.body`; the picker
 fills the center stage instead. Radix's focus trap, Escape, scroll lock, and
 `aria-modal` are all retained.
+
+### `<SlackGroup />`
+
+`src/features/settings/components/slack-group.tsx` — Settings › Integrations,
+HIVE-123. Design record:
+https://claude.ai/code/artifact/efe48323-a347-4744-8c00-026f8ff086b8
+
+One `SettingsGroup` — a status row (state pill · identity · actions), a
+hairline, then one caption line and an `Advanced` disclosure closed by
+default. Chosen over the two alternatives considered (mirroring Jira's three
+nested groups, and a connection card), both of which cost roughly three times
+the height to say one sentence.
+
+- **The state pill** (`off` / `ok` / `wait` / `err`) collapses `SlackStatus`'s
+  five `kind`s down to four — `not-added` and `needs-auth` read identically,
+  both "sign in again" (`pillKindOf`).
+- **The caption is one slot with a strict precedence** — an error message,
+  else the approval sentence, else the Used-by summary — never two at once.
+  That is what lets `pending-approval` and a failed sign-in fit without a
+  fourth block; `Caption` is the one place the decision gets made.
+- **Only two fields off `AgentSummary` are read**: `name` and `tools` — the
+  Used-by line and the `grantsSlackTools` hint. `SlackGroupAgent` is typed
+  narrower than the full summary on purpose; `AgentSummary` is structurally a
+  superset, so `integrations-section.tsx` passes it straight through.
+- **A broken bridge is reported, not swallowed.** `readSlackStatus` / `signIn`
+  / `signOut` / `testSlack` (`src/lib/slack.ts`) all return `null` when the
+  IPC call cannot reach main; the group turns that into an `error`-kind status
+  rather than rendering nothing, the same choice `JiraCredentialGroup` makes
+  for a failed Jira verb.

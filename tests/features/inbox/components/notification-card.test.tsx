@@ -459,4 +459,139 @@ describe('naming the session a row is about', () => {
 
     expect(screen.getByText('Clone finished')).toBeInTheDocument();
   });
+
+  /**
+   * HIVE-123: a `done` card can carry a validated Slack permalink. Main
+   * builds `link` — `notify.ts`'s producer tests cover the validation itself
+   * — so the card's own job is only to draw what it was handed, and to keep
+   * a click on it from also dismissing the row.
+   */
+  describe('a card carrying a link', () => {
+    it('renders the fixed label as a real link to the given href', () => {
+      render(
+        <NotificationCard
+          notif={notif({
+            kind: 'agent.done',
+            action: { type: 'agent', name: 'slack-watcher' },
+            link: {
+              href: 'https://behiques.slack.com/archives/C1/p123',
+              label: 'Open in Slack',
+            },
+          })}
+        />,
+      );
+
+      const link = screen.getByRole('link', { name: 'Open in Slack' });
+      expect(link).toHaveAttribute(
+        'href',
+        'https://behiques.slack.com/archives/C1/p123',
+      );
+    });
+
+    it('renders no link at all when the notification carries none', () => {
+      render(<NotificationCard notif={notif({ kind: 'agent.done' })} />);
+
+      expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    });
+
+    /**
+     * The card is a `<button>` that dismisses itself on click. The link sits
+     * beside it, not inside it — an anchor nested in a button is invalid
+     * HTML — so a click on the link must not also fire the button's own
+     * `onClick` and slide the card away underneath it.
+     */
+    it('does not dismiss the card when the link itself is clicked', async () => {
+      const user = userEvent.setup();
+      useHiveStore.getState().hydrateNotifs([
+        notif({
+          id: 'a',
+          kind: 'agent.done',
+          action: { type: 'agent', name: 'slack-watcher' },
+          link: {
+            href: 'https://behiques.slack.com/archives/C1/p123',
+            label: 'Open in Slack',
+          },
+        }),
+      ]);
+
+      render(
+        <NotificationCard
+          notif={notif({
+            id: 'a',
+            kind: 'agent.done',
+            action: { type: 'agent', name: 'slack-watcher' },
+            link: {
+              href: 'https://behiques.slack.com/archives/C1/p123',
+              label: 'Open in Slack',
+            },
+          })}
+        />,
+      );
+
+      await user.click(screen.getByRole('link', { name: 'Open in Slack' }));
+
+      // The button row is still here, unanimated — the click on the link
+      // never reached it.
+      expect(screen.getByRole('button')).not.toHaveClass('animate-ccslideout');
+    });
+
+    /**
+     * The exit belongs to the **root**, and with a link the root is the wrapper
+     * (HIVE-123 self-review).
+     *
+     * It shipped on the button: the anchor below it and the wrapper's own list
+     * margin stayed at full height while the button collapsed, so the card came
+     * apart on its way out and the list jumped when what was left unmounted.
+     * The measured `--cc-card-h` has to come off the same element, or the
+     * keyframes collapse from a height the row never had.
+     */
+    it('collapses the wrapper, link and margin included, rather than the button alone', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const linked = notif({
+        id: 'a',
+        kind: 'agent.done',
+        action: { type: 'agent', name: 'slack-watcher' },
+        link: {
+          href: 'https://behiques.slack.com/archives/C1/p123',
+          label: 'Open in Slack',
+        },
+      });
+      useHiveStore.getState().hydrateNotifs([linked]);
+
+      render(<NotificationCard notif={linked} />);
+
+      const button = screen.getByRole('button');
+      const wrapper = button.parentElement;
+
+      expect(wrapper).not.toBeNull();
+      // The margin is the wrapper's, so the gap goes with the row.
+      expect(wrapper).toHaveClass('mb-[var(--cc-list-gap-sm)]');
+      expect(button).not.toHaveClass('mb-[var(--cc-list-gap-sm)]');
+
+      await user.click(button);
+
+      expect(wrapper).toHaveClass('animate-ccslideout');
+      expect(wrapper).toHaveClass('overflow-hidden');
+      expect(wrapper).toHaveClass('pointer-events-none');
+      expect(button).not.toHaveClass('animate-ccslideout');
+      expect(wrapper?.style.getPropertyValue('--cc-card-h')).toMatch(/^\d+px$/);
+    });
+
+    /** …while a card with no link is still its own root, exactly as before. */
+    it('keeps the exit on the button when there is no link', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      useHiveStore.getState().hydrateNotifs([notif({ id: 'a' })]);
+
+      render(<NotificationCard notif={notif({ id: 'a' })} />);
+
+      const button = screen.getByRole('button');
+      await user.click(button);
+
+      expect(button).toHaveClass('animate-ccslideout');
+      expect(button).toHaveClass('mb-[var(--cc-list-gap-sm)]');
+      expect(button.style.getPropertyValue('--cc-card-h')).toMatch(/^\d+px$/);
+    });
+  });
 });

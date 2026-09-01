@@ -116,9 +116,11 @@ import {
   SESSION_HISTORY_FILE,
   type SessionHistoryEntry,
 } from '@shared/session-history-contract';
+import type { SlackStatus } from '@shared/slack-contract';
 import type { UpdateStatus } from '@shared/update-contract';
 
 import { createAgentsRuntime, type AgentRegistry } from '../agents';
+import { resolveClaude } from '../agents/claude-path';
 import {
   agentPromptFile,
   agentStateFile,
@@ -171,13 +173,16 @@ import {
 import { createHookRuntime } from '../hooks';
 import { readGhStatus, runCommand } from '../integrations/gh';
 import { createGithub } from '../integrations/github';
-import { runAsync } from '../integrations/github/run';
+import { runAsync, type RunAsync } from '../integrations/github/run';
 import { createJira } from '../integrations/jira';
 import { credentialFile } from '../integrations/jira/auth';
+import { signInToSlack, signOutOfSlack } from '../integrations/slack/login';
+import { probeSlack } from '../integrations/slack/probe';
+import { readSlackStatus } from '../integrations/slack/status';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier } from '../ledger/notify';
-import { createMcpRuntime } from '../mcp';
+import { agentMcpConfigFile, createMcpRuntime } from '../mcp';
 import {
   createNotificationHub,
   createNotifier,
@@ -297,6 +302,30 @@ let agents: AgentRegistry | null = null;
  */
 let agentState: AgentState | null = null;
 /**
+ * Every `claude` this layer spawned for Slack, as one thing to hang up on
+ * (HIVE-123).
+ *
+ * `before-quit` already kills the agent runs, and `pty-host` already kills the
+ * sessions; the Slack children were in neither registry, so a quit during a
+ * sign-in left a `claude mcp login` alive for the rest of its ten-minute
+ * budget — holding Slack's single registered callback port 3118, so the
+ * relaunched app's sign-in failed on a port conflict with nothing on screen to
+ * explain it. One controller rather than a set of pids: `runAsync` takes an
+ * `AbortSignal` and Node does the signalling, which is both fewer moving parts
+ * and correct from a synchronous shutdown hook.
+ */
+let slackChildren: AbortController | null = null;
+/**
+ * The Slack verbs currently running, keyed by channel (HIVE-123).
+ *
+ * The pane guards its own buttons, but that guarantee lasts exactly as long as
+ * the component stays mounted: closing Settings and reopening it re-enables
+ * both. Two `mcp login` children then contend for port 3118 and two probes
+ * spend two model turns for one answer. Deduping in main makes it a property
+ * of the verb instead of a property of a component, which is where it belongs.
+ */
+const slackInFlight = new Map<string, Promise<SlackStatus>>();
+/**
  * Live agent runs, or `null` before registration (HIVE-115).
  *
  * Module scope, like `sessions`, and for the same reason: it is reached from
@@ -366,7 +395,10 @@ const ledgerAgents = new Set<string>();
  * a map the next tick reads again. An `invalid` definition is left out, which
  * is what keeps a broken file off the timer while it stays listed to be fixed.
  */
-const agentSchedules = new Map<string, { wake: WakeSpec; dailyUsd?: number }>();
+const agentSchedules = new Map<
+  string,
+  { wake: WakeSpec; dailyUsd?: number; mcp: string[] }
+>();
 /**
  * Whether {@link agentSchedules} has been filled at least once.
  *
@@ -417,10 +449,13 @@ function refreshKnownAgents(): void {
         // the scheduler is asked synchronously, from inside `Ledger.append`.
         if (agent.wake.on.includes('ledger')) ledgerAgents.add(agent.name);
         // And the schedule, for the tick — which is asked just as
-        // synchronously, sixty seconds at a time.
+        // synchronously, sixty seconds at a time. `mcp` rides along so the
+        // tick's Slack skip (HIVE-123) can gate on the agent's *current*
+        // definition rather than on stale run history.
         agentSchedules.set(agent.name, {
           wake: agent.wake,
           ...(agent.dailyUsd === undefined ? {} : { dailyUsd: agent.dailyUsd }),
+          mcp: agent.mcp,
         });
       }
 
@@ -642,6 +677,13 @@ export function sessionsLayer(): Sessions | null {
 
 export function registerIpcHandlers(): void {
   const supervisor = registerPtyHost();
+
+  /*
+    Fresh per registration, because an `AbortController` aborts once: the one a
+    previous registration hung up on would kill every child of the next before
+    it had started.
+  */
+  slackChildren = new AbortController();
 
   /**
    * One window by design (story 000), so a broadcast reaches exactly the
@@ -1313,6 +1355,15 @@ export function registerIpcHandlers(): void {
   */
   const newUuid = (): string => randomUUID();
 
+  /**
+   * Read per call, not captured: a `claudeCommand` edited in Settings must
+   * reach the next run without a restart. There is no per-project override to
+   * resolve — an agent belongs to no project, and neither does Slack's status
+   * read (HIVE-123), which reuses this exact resolver rather than resolving
+   * the binary a second time or hard-coding `'claude'`.
+   */
+  const claudeCommand = (): string => getConfig().claudeCommand;
+
   const buildWakeCommand = createWakeCommand({
     agentsRoot,
     workdir: agentWorkdir,
@@ -1323,11 +1374,10 @@ export function registerIpcHandlers(): void {
     // no fence at all (HIVE-119).
     agentSettingsPath: () => hooks.agentSettingsPathFor(),
     mcpConfig: () => mcp.configPathFor(),
+    hiveServer: () => mcp.hiveServerSpec(),
+    agentMcpFile: (name) => agentMcpConfigFile(app.getPath('userData'), name),
     hookEnv: (name) => hooks.envFor(name),
-    // Read per wake, not captured: a `claudeCommand` edited in Settings must
-    // reach the next run without a restart. There is no per-project override
-    // to resolve — an agent belongs to no project.
-    claudeCommand: () => getConfig().claudeCommand,
+    claudeCommand,
     subscriptionAuth: () => getConfig().subscriptionAuth,
     state: agentState,
     env: () => process.env,
@@ -1753,6 +1803,19 @@ export function registerIpcHandlers(): void {
     scheduler?.stop();
     runs?.closeAll('app-closed');
     agentState?.flush();
+    /**
+     * The Slack children, which are in neither registry above (HIVE-123).
+     *
+     * `pty-host` owns the sessions and `closeAll` owns the agent runs; a
+     * `claude mcp login` spawned from the settings pane belongs to neither, and
+     * it survives for the rest of its ten-minute budget **holding Slack's
+     * single registered callback port 3118**. The next launch's sign-in then
+     * fails on a port conflict, with nothing on screen that could explain it.
+     *
+     * Nothing is recorded on the way out, unlike a run: the only consumer of a
+     * Slack verb's answer is a settings pane inside the window that is closing.
+     */
+    slackChildren?.abort();
   });
 
   /**
@@ -2267,6 +2330,117 @@ export function registerIpcHandlers(): void {
   );
   handle(CH.configSetJira, (_event, payload): ConfigSnapshot =>
     setJira(parseSetJiraRequest(payload)),
+  );
+
+  /**
+   * Slack's MCP server (HIVE-123) — four verbs, none taking a payload.
+   *
+   * The same no-payload design `integrations:status` and `jira:status` use:
+   * with nothing arriving from the renderer, there is no argv to guard and
+   * nothing for a compromised renderer to widen. Each handler's own signature
+   * takes no `payload` parameter at all, so a caller that tries to smuggle one
+   * in has it silently ignored rather than acted on — the same shape every
+   * other no-payload verb in this file already has.
+   *
+   * `claudeCommand` is the same resolver `buildWakeCommand` above reads —
+   * `getConfig().claudeCommand`, read fresh on every call so a binary edited
+   * in Settings reaches the next status read without a restart — and it goes
+   * through the same {@link resolveClaude} every agent wake does. `gh.ts` wrote
+   * the rule these four had been the only callers to skip: "the resolved
+   * absolute path is what runs, never the bare name". A `claudeCommand` that is
+   * a shell function, or that carries arguments, is unreachable from a child
+   * spawned with no shell — and the resolver's refusal *says which*, where the
+   * bare name gave the pane a raw `spawn ENOENT`.
+   *
+   * ## Two runners, and which verb gets which
+   *
+   * `runCommand` is `gh.ts`'s **synchronous** five-second one, and exactly one
+   * verb still wants it: `claude mcp remove` edits a local JSON file with no
+   * network and no model in it, and answers in a millisecond.
+   *
+   * `runSlack` wraps the shared async runner the PR poller and
+   * `sessions/git.ts` already use, and takes the other three. `mcp login`
+   * blocks on a browser OAuth round-trip, the probe blocks on model turns, and
+   * `mcp get` — despite being a "read" — **health-checks the server over
+   * HTTP**, measured at about 1.7 s. On the sync runner the first two could
+   * never succeed and all three froze IPC, PTY routing and the agent scheduler
+   * for the duration. The per-verb timeouts live with the verbs, in
+   * `slack/status.ts`, `slack/login.ts` and `slack/probe.ts`.
+   *
+   * The wrapper's one addition is {@link slackChildren}'s signal, so a quit
+   * hangs up on whatever is still running.
+   */
+  const runSlack: RunAsync = (file, args, options) =>
+    runAsync(file, args, { ...options, signal: slackChildren?.signal });
+
+  /**
+   * One Slack verb, resolved and deduped.
+   *
+   * The resolution happens **before** the in-flight check is stored rather than
+   * inside the verb, so a misconfigured `claudeCommand` is a refusal with a
+   * sentence in it rather than a promise nothing can join. A refusal is not
+   * cached: it costs nothing to re-derive, and caching it would outlive the
+   * Settings edit that fixed it.
+   */
+  const slackVerb = (
+    channel: string,
+    start: (claude: string) => Promise<SlackStatus>,
+  ): Promise<SlackStatus> => {
+    const running = slackInFlight.get(channel);
+
+    if (running !== undefined) return running;
+
+    const claude = resolveClaude(claudeCommand(), process.env['PATH']);
+
+    if ('problem' in claude) {
+      return Promise.resolve({ kind: 'error', message: claude.problem });
+    }
+
+    const started = start(claude.path).finally(() => {
+      slackInFlight.delete(channel);
+    });
+
+    slackInFlight.set(channel, started);
+
+    return started;
+  };
+
+  handle(CH.slackStatus, (): Promise<SlackStatus> =>
+    slackVerb(CH.slackStatus, (claude) => readSlackStatus(claude, runSlack)),
+  );
+  handle(CH.slackSignIn, (): Promise<SlackStatus> =>
+    slackVerb(CH.slackSignIn, async (claude) => {
+      const result = await signInToSlack(claude, runSlack);
+
+      /*
+        A sign-in that worked retires every stale `needs-auth` marker
+        (HIVE-123).
+
+        The scheduler skips a clock wake while the agent's *last run* reported
+        Slack signed out — and only a new run can rewrite that field, which the
+        skip is what prevents. For the shipped `slack-watcher` (`every: 5m`,
+        rare ledger traffic) that is not a delay, it is a permanent stall, and
+        the pane's own caption promises the opposite. Nothing else can break the
+        livelock: this is the one moment the app learns the fact changed.
+      */
+      if (result.kind === 'connected' || result.kind === 'pending-approval') {
+        for (const name of agentState?.clearSlackNeedsAuth() ?? []) {
+          pushAgentStatus(name);
+        }
+      }
+
+      return result;
+    }),
+  );
+  handle(CH.slackSignOut, (): SlackStatus => {
+    const claude = resolveClaude(claudeCommand(), process.env['PATH']);
+
+    if ('problem' in claude) return { kind: 'error', message: claude.problem };
+
+    return signOutOfSlack(claude.path, runCommand);
+  });
+  handle(CH.slackTest, (): Promise<SlackStatus> =>
+    slackVerb(CH.slackTest, (claude) => probeSlack(claude, runSlack)),
   );
 
   /**
@@ -2959,6 +3133,15 @@ export function resetIpcHandlers(): void {
   runs = null;
   agentState?.dispose();
   agentState = null;
+  /*
+    HIVE-123. Same reason the runs are killed above: a Slack child left running
+    outlives the test that spawned it, and a resolved-but-forgotten in-flight
+    entry would let the next registration join a promise built against this
+    one's composition.
+  */
+  slackChildren?.abort();
+  slackChildren = null;
+  slackInFlight.clear();
   agents?.close();
   agents = null;
   knownAgents.clear();

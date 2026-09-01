@@ -95,10 +95,13 @@ export const isReservedAgentName = (name: string): boolean =>
 /**
  * Integrations an agent's `mcp:` list may name.
  *
- * One entry, because one integration is planned. Whether Slack is *connected*
+ * One entry, because one integration exists. Whether Slack is *connected*
  * is a wake-time question, not a validation one — a definition naming a
- * signed-out Slack is well-formed, it just will not run. HIVE-123 replaces
- * this with the real registry.
+ * signed-out Slack is well-formed, it just will not run. This list is the
+ * set of integrations with a server spec in `electron/main/mcp/agent-config.ts`
+ * (its `SPECS` map) — the two must be changed together, or a name accepted
+ * here yields no server there, or a spec there is unreachable from a
+ * definition.
  */
 export const KNOWN_AGENT_MCP = ['slack'] as const;
 
@@ -286,6 +289,21 @@ export interface AgentSummary {
   icon: string;
   status: AgentStatus;
   wake: WakeSpec;
+  /**
+   * `mcp:` and `tools:` from the definition, verbatim (HIVE-123).
+   *
+   * Neither reached the renderer before this: the settings pane has to know
+   * which agents name a given MCP server — the Slack group's "Used by" line —
+   * and whether a `tools:` grant actually reaches it, via
+   * {@link grantsSlackTools}. Both are already parsed in main by the time a
+   * summary is built, so they ride here rather than costing the renderer a
+   * second IPC round trip for two arrays it would otherwise have to re-parse
+   * from a raw `AGENT.md` it does not have. A definition that never parsed —
+   * or a folder the guard refuses to address — has neither, so both default
+   * to `[]` rather than being left absent.
+   */
+  mcp: string[];
+  tools: string[];
   lastRunAt?: number;
   nextRunAt?: number;
   /** Present once the agent has run at least once (HIVE-115). */
@@ -793,6 +811,23 @@ export interface RunSummary {
    * conversation run 14 belonged to. Twenty of these is under a kilobyte.
    */
   sessionUuid?: string;
+  /**
+   * What this run's own `init` event said about the Slack server (HIVE-123).
+   *
+   * Absent when the run's `mcp:` list did not name `slack` at all, or the
+   * `init` event never arrived (a spawn failure). Read by the scheduler on the
+   * *next* tick to decide whether a scheduled wake is worth spending — an
+   * agent that has never run has no entry here and is never skipped on that
+   * account.
+   *
+   * This field **is** the skip's reason, not a fact beside it: a scheduled
+   * skip is only ever caused by `needs-auth` here (`scheduler.ts`'s
+   * `slackSignedOut`) or by `check: 'onchange'` finding nothing new, and the
+   * two are told apart by re-reading this rather than by a second, parallel
+   * "why did that skip happen" field. The renderer's chip tooltip
+   * (`src/lib/agents.ts`'s `slackSignedOut`) reads the exact same value.
+   */
+  slack?: 'connected' | 'needs-auth';
 }
 
 /** What `~/.hive/ledger/agents.json` holds per agent. */

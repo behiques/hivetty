@@ -131,7 +131,19 @@ function NotificationButtonRow({ notif }: NotificationCardProps) {
     notif.subject === undefined ? notif.title : `${subjectName} ${notif.title}`;
 
   const [leaving, setLeaving] = useState(false);
-  const ref = useRef<HTMLButtonElement>(null);
+  /**
+   * The card's **root**, which is the button on its own or the wrapper that
+   * holds the button and the link (HIVE-123).
+   *
+   * Typed as `HTMLElement` and set through a ref callback because it is one or
+   * the other, and the exit has to own whichever it is. Measuring the button
+   * while collapsing the wrapper — or the reverse — clips the link away
+   * instantly and then animates a height the row never had.
+   */
+  const ref = useRef<HTMLElement | null>(null);
+  const holdRoot = (el: HTMLElement | null): void => {
+    ref.current = el;
+  };
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
@@ -239,9 +251,39 @@ function NotificationButtonRow({ notif }: NotificationCardProps) {
     exitTimer.current = setTimeout(() => dismissNotif(notif.id), CARD_EXIT_MS);
   };
 
-  return (
+  /*
+    The clickable row itself. When the card carries no `link` this is the
+    whole return value, exactly as before HIVE-123.
+
+    When it does, this button cannot also be the card's root: `notif.link`
+    renders as a real `<a>`, and an anchor nested inside a `<button>` is
+    interactive content nested inside interactive content — invalid HTML, and
+    the two targets no mouse or keyboard could tell apart, which is the same
+    reason `AskCard` forks away from this button entirely (see its own doc
+    comment) and `session-table.tsx` draws its row action as "a sibling of
+    the row, not a child of it". So the list spacing (`mb-*`/`last:mb-0`)
+    moves to a wrapper in that case, and the link is the wrapper's other
+    child — a sibling of the button, never its descendant.
+  */
+  /**
+   * The exit, applied to whichever element is the row's outermost.
+   *
+   * `overflow-hidden` so the contents clip as `max-height` closes instead of
+   * spilling past the shrinking border; the list's own spacing, so the gap
+   * collapses with the row rather than outliving it by 220ms; and
+   * `animate-ccslideout` itself. All three belong to the root — on the button
+   * of a card that also has a link, the anchor and the margin below it stayed
+   * at full height while the button collapsed, and the list jumped when the
+   * remains finally unmounted.
+   */
+  const exit = cn(
+    'overflow-hidden mb-[var(--cc-list-gap-sm)] last:mb-0',
+    leaving && 'pointer-events-none animate-ccslideout',
+  );
+
+  const card = (
     <button
-      ref={ref}
+      ref={notif.link === undefined ? holdRoot : null}
       type="button"
       /*
         The card's identity in the DOM, the way `data-panel` and
@@ -253,17 +295,11 @@ function NotificationButtonRow({ notif }: NotificationCardProps) {
       data-notification={notif.id}
       onClick={onClick}
       className={cn(
-        'flex items-start gap-2.5 rounded-xl border px-3 py-[var(--cc-card-py)] text-left hover:bg-hover',
+        'flex w-full items-start gap-2.5 rounded-xl border px-3 py-[var(--cc-card-py)] text-left hover:bg-hover',
         notif.unread ? 'border-border bg-chip' : 'border-border-soft',
-        /*
-          The list's spacing lives here rather than as a parent `gap`, so it can
-          collapse with the rest of the card on the way out. See `inbox-panel`.
-
-          `overflow-hidden` so the contents clip as `max-height` closes instead of
-          spilling past the shrinking border.
-        */
-        'mb-[var(--cc-list-gap-sm)] overflow-hidden last:mb-0',
-        leaving && 'pointer-events-none animate-ccslideout',
+        // The exit belongs to the root, which this is only when there is no
+        // link below to share a wrapper with — see {@link exit}.
+        notif.link === undefined && exit,
       )}
     >
       <Icon
@@ -284,5 +320,31 @@ function NotificationButtonRow({ notif }: NotificationCardProps) {
 
       <span className="shrink-0 font-mono text-[10px] text-subtle">{time}</span>
     </button>
+  );
+
+  if (notif.link === undefined) return card;
+
+  return (
+    <div ref={holdRoot} className={exit}>
+      {card}
+      <a
+        href={notif.link.href}
+        target="_blank"
+        rel="noreferrer"
+        /*
+          Stops here, not because the click would otherwise misfire — the link
+          is a sibling of the button, never its descendant, so nothing would
+          route to `onClick` regardless. It stops the *bubble*: without this
+          the click still reaches whatever this row's ancestors are listening
+          for (the panel, eventually the document), and a link that also
+          fires those handlers is a click doing two things the user asked for
+          only one of.
+        */
+        onClick={(event) => event.stopPropagation()}
+        className="mt-1 block px-3 text-[11px] font-medium text-brand hover:underline"
+      >
+        {notif.link.label}
+      </a>
+    </div>
   );
 }

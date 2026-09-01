@@ -1,5 +1,7 @@
 import { join } from 'node:path';
 
+import { AGENTS_DIR } from '@shared/agent-contract';
+
 /**
  * Where the generated MCP config lives inside userData (HIVE-112).
  *
@@ -16,3 +18,21 @@ import { join } from 'node:path';
  * preamble and HIVE-119's permission tool both depend on.
  */
 export const MCP_CONFIG_FILE = join('hive', 'hive.mcp.json');
+
+/**
+ * `<userData>/hive/agents/<name>.mcp.json` — an agent's own server set.
+ *
+ * Beside `<name>.system.md` rather than under `~/.hive/agents/`, and for the
+ * same two reasons that file is: it is app-generated and rewritten every wake,
+ * and `~/.hive/agents/` is watched recursively, so writing here would re-parse
+ * every definition on every wake.
+ *
+ * Built from the same `AGENTS_DIR` `agents/paths.ts` builds `AGENT_PROMPT_DIR`
+ * from. It is one directory holding both files, so it is one literal: a second
+ * `'agents'` spelled here is a rename waiting to split them, and the pair would
+ * still resolve — one to a folder nothing else writes to.
+ */
+export const AGENT_MCP_DIR = join('hive', AGENTS_DIR);
+
+export const agentMcpConfigFile = (userDataPath: string, name: string): string =>
+  join(userDataPath, AGENT_MCP_DIR, `${name}.mcp.json`);

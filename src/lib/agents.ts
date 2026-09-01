@@ -5,8 +5,10 @@ import {
   type AgentStatus,
   type AgentsSnapshot,
   type AgentWriteResult,
+  type RunSummary,
   type WakeSpec,
 } from '@shared/agent-contract';
+import { SLACK_SERVER_KEY } from '@shared/slack-contract';
 
 /**
  * The agent definitions, as the renderer sees them (HIVE-114).
@@ -140,6 +142,38 @@ export function describeSkips(agent: {
   skipsSinceRun: number;
 }): string | undefined {
   return agent.skipsSinceRun > 0 ? `skipped ${agent.skipsSinceRun}` : undefined;
+}
+
+/**
+ * `slack: not signed in`, or nothing — the reason a scheduled wake is being
+ * skipped, when it is Slack (HIVE-123).
+ *
+ * No new field to hang this on: `RunSummary.slack`, already persisted at
+ * close (`runs.ts`) and already read by the scheduler's own `slackSignedOut`
+ * to decide the skip, is the one true record of "why". This reads the exact
+ * same value rather than a second, parallel copy of it — main's decision and
+ * the row's tooltip cannot disagree about what caused a skip because both
+ * derive it from the same run.
+ *
+ * **Two conditions, not one — `runs` alone is not enough.** A first version
+ * of this read only `runs.at(-1)?.slack`, reasoning that the field is never
+ * set unless the definition named `slack`. That direction holds, but nothing
+ * clears `AgentRunState.runs` when a definition is *edited* — `saveAgent`
+ * removing `slack` from `mcp:` after a `needs-auth` run leaves the stale
+ * reading in place — so a tooltip gated on run history alone would keep
+ * naming Slack for an agent that no longer mentions it. `mcp` is the
+ * agent's **current** definition (`AgentSummary.mcp`, carried onto the
+ * store's `Agent` entity by `hydrateAgents`), so both must agree: the last
+ * run found it signed out, *and* the agent still names it today.
+ */
+export function slackSignedOut(agent: {
+  mcp: string[];
+  runs: RunSummary[];
+}): boolean {
+  return (
+    agent.mcp.includes(SLACK_SERVER_KEY) &&
+    agent.runs.at(-1)?.slack === 'needs-auth'
+  );
 }
 
 /**

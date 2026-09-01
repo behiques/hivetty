@@ -5,10 +5,51 @@ import {
   type RunOutcome,
 } from '@shared/agent-contract';
 import { OVERMIND } from '@shared/ledger-contract';
+import { SLACK_SERVER_KEY } from '@shared/slack-contract';
 
-import { NO_LOG, foldRunLog, type LogFold, type RunResult } from './run-log';
+import {
+  NO_LOG,
+  foldRunLog,
+  type LogFold,
+  type McpServerStatus,
+  type RunResult,
+} from './run-log';
 import type { AgentState } from './state';
 import type { WakeCommand } from './waker';
+
+/**
+ * What this run's `init` event said about Slack, in `RunSummary`'s two words
+ * (HIVE-123).
+ *
+ * `undefined` covers three cases the scheduler treats alike: the agent's `mcp:`
+ * never named `slack`, the run never reached an `init` event at all (a spawn
+ * failure), and the server reported a status this app does not recognise.
+ *
+ * That third case is why both words are matched exactly rather than reading
+ * "anything that is not `needs-auth`" as connected. A server answering
+ * `failed` is not a working connection, and the earlier form claimed it was —
+ * while `integrations/slack/status.ts`, reading the very same server through
+ * `claude mcp get`, calls an unrecognised status an **error**. The two halves
+ * of the same story disagreeing about the same server is the bug; this is the
+ * side that was wrong, because it was the side claiming health it had not
+ * observed.
+ *
+ * `undefined` rather than a third word: nothing here consumes `'connected'` —
+ * the scheduler and the chip tooltip both only ask whether this says
+ * `needs-auth` — so an unrecognised status has no skip to justify and no claim
+ * to make. The wake runs, and the run log shows what actually happened, which
+ * is strictly more information than a skip would have given.
+ */
+const slackStatus = (
+  servers: McpServerStatus[] | null,
+): 'connected' | 'needs-auth' | undefined => {
+  const slack = servers?.find((server) => server.name === SLACK_SERVER_KEY);
+
+  if (slack?.status === 'needs-auth') return 'needs-auth';
+  if (slack?.status === 'connected') return 'connected';
+
+  return undefined;
+};
 
 /**
  * One headless turn per wake, tracked as a run (HIVE-115).
@@ -258,6 +299,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     reason: string | null,
     reachedModel: boolean,
     asking: boolean,
+    mcpServers: McpServerStatus[] | null,
   ) => {
     const endedAt = deps.now();
     /*
@@ -279,6 +321,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     */
     const sessionUuid =
       result?.sessionUuid ?? (reachedModel ? info.sessionUuid : undefined);
+    const slack = slackStatus(mcpServers);
 
     deps.state.recordRun(name, {
       run: info.run,
@@ -292,6 +335,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       // Recorded on every run, not only the ones that rotate: "which
       // conversation did run 14 belong to" is the audit trail HIVE-122 needs.
       ...(sessionUuid === undefined ? {} : { sessionUuid }),
+      ...(slack === undefined ? {} : { slack }),
     },
     /*
       The run counts against the day it *ended*, not the one it started.
@@ -472,6 +516,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       live.reason,
       live.reachedModel,
       asking,
+      live.fold.mcpServers,
     );
   };
 
@@ -545,6 +590,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
           message,
           false,
           false,
+          null,
         );
 
         return { started: false, refused: 'invalid', reason: message };
