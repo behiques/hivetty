@@ -775,11 +775,11 @@ const HELP_LINES = [
   '  ledger [--open] [-n 20]    print the ledger tail',
   '  open <session>             open a session in the center stage',
   '  send <session> <message>   route a message to a session',
-  '  ask <session> <message>    ask a session a question',
+  '  ask <agent> <message>      ask an agent a question',
   '  answer <id> <text>         answer an open ask',
   '  spawn <project> <task>     start a new session on a project',
   '  agents                     one line per agent',
-  '  run <agent>                wake an agent now',
+  '  run <agent> [prompt]       wake an agent now, optionally saying why',
   '  pause <agent>              stop an agent waking',
   '  resume <agent>             let it wake again',
   '  kill <agent>               stop the run in progress',
@@ -934,9 +934,11 @@ export function agentStatusColor(status: AgentStatus): TermLine['color'] {
  * they are not faults: the agent is busy, or the user themselves stopped it.
  * Each line ends in the thing to do next.
  *
- * `working` says "try again when it sleeps" rather than promising a queue.
- * HIVE-120 is what makes a run wait for the next wake; until it lands, saying
- * "your run is queued" would describe a feature that does not exist.
+ * `working` and `paused` still say "try again" rather than promising a queue,
+ * and since HIVE-126 that is a statement about `rotate`. A `run` refused for
+ * either reason is queued by the scheduler and never reaches this function —
+ * see {@link agentRunQueued}. A rotation still can, and is not queued:
+ * `forceRotate` stays armed through the refusal and carries it instead.
  *
  * **Exported, and read by the agent view as well as the console.** Both surfaces
  * draw the refusal from one `AgentRunResult`, and the view had its own ternary
@@ -952,7 +954,7 @@ export function agentStatusColor(status: AgentStatus): TermLine['color'] {
  */
 export function agentRunRefusal(
   name: string,
-  outcome: Extract<AgentRunResult, { started: false }>,
+  outcome: Extract<AgentRunResult, { refused: string }>,
 ): string {
   if (outcome.reason !== undefined) return outcome.reason;
 
@@ -967,6 +969,44 @@ export function agentRunRefusal(
       return 'the agent runtime is not running';
   }
 }
+
+/**
+ * Why a wake has not happened *yet*, in the user's terms (HIVE-126).
+ *
+ * Beside {@link agentRunRefusal} rather than folded into it, because the two
+ * answer different questions — that one names a fault, this one names a wait —
+ * and a `queued` branch inside a function whose whole job is the refusal's
+ * exhaustive switch would blunt exactly the thing that switch is for.
+ *
+ * Each line still ends in the thing to do next. For a run queued behind a
+ * working agent that is *nothing*, and saying so is the point: before this, the
+ * console said "try again when it sleeps" and the user had to.
+ */
+export function agentRunQueued(
+  name: string,
+  outcome: Extract<AgentRunResult, { queued: true }>,
+): string {
+  switch (outcome.behind) {
+    case 'working':
+      return `queued for ${name} — it will run when its current turn ends`;
+    case 'paused':
+      return `queued for ${name} — resume it to run`;
+  }
+}
+
+/**
+ * A message quoted back inside a one-line suggestion (HIVE-126).
+ *
+ * `pushOrch` writes its whole argument as a **single** `TermLine`, and the
+ * surface renders with `convertEol: true` — so a quoted message carrying
+ * newlines draws as many rows while counting once against `ORCH_LINE_CAP`.
+ * That is the same cap-evasion the command echo splits per line to avoid, and
+ * `send` and `ask` both keep line breaks in a message on purpose.
+ *
+ * A cross-verb suggestion is one line by construction — it is a command to
+ * retype — so the message it quotes is flattened into it.
+ */
+const oneLine = (text: string): string => text.replace(/\s*\n\s*/gu, ' ');
 
 let spawnCounter = 0;
 
@@ -1967,7 +2007,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         const target = get().entities[match.id];
         if (target !== undefined && isAgent(target)) {
           pushOrch(
-            `  agents are asked, not sent: try ask ${match.label} ${command.message}`,
+            `  agents are asked, not sent: try ask ${match.label} ${oneLine(command.message)}`,
             'red',
           );
           return;
@@ -2019,42 +2059,66 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           pushOrch(`  ${LEDGER_REQUIRES_DESKTOP}`, 'red');
           return;
         }
-        const match = resolve(command.target);
-        if (match === null) return;
+        /*
+          Resolved through `resolveEntityRef` and worded here, as the agent
+          verbs are — not through `resolve()`, whose sentences are a session's
+          (HIVE-126).
+
+          `ask` used to belong to `resolve()`'s group, and correctly: it took a
+          session. Now that it takes an agent, a miss reported as "no such
+          session" would name the target type this very story just changed its
+          usage line away from. The *resolution* stays the shared one for the
+          reason the agent verbs give: every verb matches case-insensitively and
+          by label, and one that alone demanded the exact key would refuse
+          `SLACK-WATCHER` on a screen where `open SLACK-WATCHER` works.
+        */
+        const match = resolveEntityRef(command.target, get().entities);
+
+        if (match.kind === 'none') {
+          pushOrch(`  no such agent: ${command.target}`, 'red');
+          return;
+        }
+        if (match.kind === 'ambiguous') {
+          pushOrch(
+            `  ${command.target} matches ${match.labels.join(', ')} — use an agent name`,
+            'red',
+          );
+          return;
+        }
 
         /**
-         * Addressed by **terminal**, not by row id.
+         * Agents only, and the mirror of `send`'s refusal (HIVE-126).
          *
-         * Main's party space is the one its registry is keyed by, and that is
-         * `terminalOf(session)` — the same id `sendToEntity` routes on, and the
-         * same one `knowsParty` checks. The two agree for every session that
-         * has never been cleared, and diverge exactly where it matters: a
-         * cleared row's successor carries a fresh `id` with the *predecessor's*
-         * `terminalId`. Posting the row id there addresses a party main has
-         * never heard of, and the ask is silently never delivered — while
-         * posting the *cleared* row's id names a terminal whose live pty now
-         * belongs to the successor, writing the nudge into a different agent's
-         * prompt. `send` has a documented guard against precisely that
-         * crossing; this is the same hazard reached through the log.
+         * `send` writes into a pty *now*; `ask` writes a durable, answerable
+         * entry. A session has a terminal you can open and read, so a question
+         * to one is a keystroke. An agent has no terminal — which is precisely
+         * why the agent is the party that keeps `ask`. While this verb took
+         * either, the pair read as redundant and neither had a clean domain.
+         *
+         * Two things went with the narrowing, and both were load-bearing while
+         * a session could be asked. The party mapping — `terminalOf(session)`
+         * rather than the row id, because a cleared row's successor carries a
+         * fresh id over the predecessor's terminal — is unreachable now that no
+         * session resolves here. So is the `held` line: `resolve` documents
+         * that agents are never ended and always answer `null`, so an ask from
+         * this verb is never held for a party that has gone away.
+         *
+         * `deliver.ts` still holds and flushes an ask addressed to a session —
+         * that path is main's, it serves entries agents write, and nothing here
+         * touches it.
          */
         const entity = get().entities[match.id];
-        const party =
-          entity !== undefined && isSession(entity) ? terminalOf(entity) : match.id;
-
-        /**
-         * Deliberately **not** gated on `match.ended`, unlike `send`.
-         *
-         * `send` must refuse a finished session because it writes *now*, into
-         * whatever pty holds that terminal at this instant. An ask is written
-         * down and delivered later: `deliver.ts` holds it and flushes it when
-         * the party comes back, and it re-checks liveness at that moment rather
-         * than trusting this one. Refusing here would throw away the one case
-         * the hold-and-flush rule exists for.
-         */
-        const held = match.ended !== null;
+        if (entity === undefined || !isAgent(entity)) {
+          const label = entity === undefined ? command.target : entityLabel(entity);
+          pushOrch(
+            `  sessions are sent to, not asked: try send ${label} ${oneLine(command.message)}`,
+            'red',
+          );
+          return;
+        }
 
         void window.hive?.ledger
-          .post({ to: party, kind: 'ask', body: command.message })
+          .post({ to: match.id, kind: 'ask', body: command.message })
           .then((outcome) => {
             if (!outcome.ok) {
               // Verbatim, the way `send` prints a refusal: the reason names
@@ -2063,12 +2127,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
               return;
             }
             const handle = outcome.ref ?? outcome.id;
-            pushOrch(
-              held
-                ? `  asked ${match.label} (${handle}) — held until it resumes`
-                : `  asked ${match.label} (${handle})`,
-              'dim',
-            );
+            pushOrch(`  asked ${entityLabel(entity)} (${handle})`, 'dim');
           });
         return;
       }
@@ -2335,19 +2394,42 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
         if (command.kind === 'run') {
           said(
-            agents.run({ name }).then((outcome) => {
-              if (outcome.started) {
-                pushOrch(`  woke ${name} (${outcome.run})`, 'dim');
-                return;
-              }
-              /*
-                Main's reason wins where it has one — an `invalid` refusal names
-                the field of the definition that is wrong, which no wording here
-                could reproduce. The refusals the console says better than main
-                are the ones that name the user's next move.
-              */
-              pushOrch(`  ${agentRunRefusal(name, outcome)}`, 'red');
-            }),
+            agents
+              .run(
+                /*
+                  An absent key rather than `extra: undefined`: the guard's
+                  closed key set counts keys, not values, and a payload naming
+                  a field it has nothing to put in it is a payload disagreeing
+                  with the contract.
+                */
+                command.prompt === undefined
+                  ? { name }
+                  : { name, extra: command.prompt },
+              )
+              .then((outcome) => {
+                if (outcome.started) {
+                  pushOrch(`  woke ${name} (${outcome.run})`, 'dim');
+                  return;
+                }
+                /*
+                  Woken, or queued — never a bare refusal for a wait (HIVE-126).
+
+                  `dim`, like the line above and unlike the one below: a run
+                  waiting its turn is a deferral, not a fault, and red would
+                  report that something went wrong when nothing did.
+                */
+                if ('queued' in outcome) {
+                  pushOrch(`  ${agentRunQueued(name, outcome)}`, 'dim');
+                  return;
+                }
+                /*
+                  Main's reason wins where it has one — an `invalid` refusal
+                  names the field of the definition that is wrong, which no
+                  wording here could reproduce. The refusals the console says
+                  better than main are the ones that name the user's next move.
+                */
+                pushOrch(`  ${agentRunRefusal(name, outcome)}`, 'red');
+              }),
           );
           return;
         }

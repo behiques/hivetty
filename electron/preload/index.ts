@@ -5,6 +5,7 @@ import type {
   AgentLinesPush,
   AgentNameRequest,
   AgentRenameRequest,
+  AgentRotateResult,
   AgentRunRequest,
   AgentRunResult,
   AgentsSnapshot,
@@ -343,10 +344,14 @@ const bridge: HiveBridge = {
       }),
     /*
       HIVE-115's two verbs, and the first in this namespace that start and stop
-      a process rather than move bytes. Both take a name and nothing else — no
-      argv, no flags, no environment — so the whole of what the page can
-      express here is *which* agent. `BRIDGE_AGENTS_KEYS` carries the argument;
-      `parseAgentRunRequest` is what refuses a payload that tries to say more.
+      a process rather than move bytes. `kill` takes a name and nothing else;
+      `run` takes a name and, since HIVE-126, optional prose saying *why* a
+      person pressed it. Still no flags, no environment and no argv the page
+      composed: `extra` is interpolated into the single positional prompt
+      argument, so the whole of what the page can express here is which agent
+      and what to tell it. `BRIDGE_AGENTS_KEYS` carries the argument;
+      `parseAgentRunRequest` is what refuses a payload that tries to say more —
+      a `trigger` above all.
     */
     run: (request: AgentRunRequest): Promise<AgentRunResult> =>
       ipcRenderer.invoke(CH.agentsRun, request),
@@ -369,7 +374,7 @@ const bridge: HiveBridge = {
       `AgentRunRequest`, so the closed key set that refuses a renderer-chosen
       trigger stays closed. `BRIDGE_AGENTS_KEYS` carries the argument.
     */
-    rotate: (request: AgentNameRequest): Promise<AgentRunResult> =>
+    rotate: (request: AgentNameRequest): Promise<AgentRotateResult> =>
       ipcRenderer.invoke(CH.agentsRotate, request),
     onStatus: (callback: (push: AgentStatusPush) => void) =>
       subscribe<AgentStatusPush>(CH.agentsStatus, callback),

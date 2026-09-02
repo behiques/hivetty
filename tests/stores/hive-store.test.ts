@@ -569,8 +569,10 @@ describe('hive-store', () => {
         const text = transcript();
 
         expect(text).toContain('ledger [--open]');
-        expect(text).toContain('ask <session> <message>');
+        expect(text).toContain('ask <agent> <message>');
         expect(text).toContain('answer <id> <text>');
+        // Each verb documented against the target type it accepts (HIVE-126).
+        expect(text).toContain('run <agent> [prompt]');
       });
     });
 
@@ -1451,32 +1453,66 @@ describe('hive-store', () => {
         expect(lastLine()).toMatchObject({ text: '  no entries', color: 'dim' });
       });
 
-      it('asks a live session and prints the ref it got back', async () => {
+      /*
+        HIVE-126. The mirror of `send`'s `agents are asked, not sent`.
+
+        A session has a terminal you can open and read, so a question to one is
+        a keystroke — `send`. An agent has no terminal, which is exactly why the
+        agent is the party that keeps `ask`. Before this, `send` had a target
+        type and `ask` took either, so the pair read as redundant.
+      */
+      it('refuses a session and names the verb that would have worked', async () => {
         seedDemoFleet();
         const id = Object.keys(useHiveStore.getState().entities)[0];
 
         run(`ask ${id} post a summary`);
+        await Promise.resolve();
+
+        expect(transcript()).toContain('sessions are sent to, not asked: try send');
+        expect(post).not.toHaveBeenCalled();
+      });
+
+      it('asks an agent and prints the ref it got back', async () => {
+        useHiveStore.getState().hydrateAgents([
+          {
+            name: 'slack-watcher',
+            description: 'Watches the channel.',
+            icon: 'Robot',
+            status: 'sleeping',
+            wake: { on: ['slack.mention'], everyMs: 300_000 },
+            mcp: [],
+            tools: [],
+            rotateAfter: 50,
+            skipsSinceRun: 0,
+            runs: [],
+          },
+        ]);
+
+        run('ask slack-watcher post a summary');
 
         await vi.waitFor(() => expect(post).toHaveBeenCalled());
         expect(post).toHaveBeenCalledWith({
-          to: id,
+          to: 'slack-watcher',
           kind: 'ask',
           body: 'post a summary',
         });
         await vi.waitFor(() => expect(transcript()).toContain('(a14)'));
-        expect(transcript()).toContain('asked');
+        expect(transcript()).toContain('asked slack-watcher');
       });
 
       /**
-       * Addressed by terminal, not by row id.
+       * The terminal-vs-row-id hazard is now unreachable through this verb.
        *
-       * Main's registry — and therefore `deliver`'s notion of who is live — is
-       * keyed by `terminalOf(session)`. The two ids agree until a row is
-       * cleared, and the successor is exactly where posting the wrong one
-       * either addresses a party main has never heard of or names a terminal
-       * that now belongs to somebody else.
+       * Main's registry — and `deliver`'s notion of who is live — is keyed by
+       * `terminalOf(session)`, and a cleared row's successor carries a fresh id
+       * over the predecessor's terminal. Posting the wrong one addressed a
+       * party main had never heard of, or wrote into a terminal that now
+       * belonged to somebody else. `ask` used to map around that; since
+       * HIVE-126 it refuses every session, so there is no mapping left to get
+       * wrong. This is the test that used to prove the mapping, kept as the one
+       * that proves the mapping is gone.
        */
-      it('addresses the terminal, so a cleared row’s successor is reachable', async () => {
+      it('refuses a cleared row’s successor along with every other session', async () => {
         seedDemoFleet();
         const state = useHiveStore.getState();
         const id = Object.keys(state.entities)[0];
@@ -1493,29 +1529,83 @@ describe('hive-store', () => {
         });
 
         run('ask sess-successor hello');
+        await Promise.resolve();
 
-        await vi.waitFor(() => expect(post).toHaveBeenCalled());
-        expect(post).toHaveBeenCalledWith({ to: id, kind: 'ask', body: 'hello' });
+        expect(post).not.toHaveBeenCalled();
+        expect(transcript()).toContain('sessions are sent to, not asked');
       });
 
-      it('refuses a name that matches no session, the way open does', () => {
+      it('reports a miss in agent language, not session language', () => {
+        // The verb's usage line and help line both say `<agent>` now, so its
+        // runtime refusals must too — it resolves through `resolveEntityRef`
+        // with the agent verbs rather than through `resolve()`.
+        run('ask pr-reviewr hello');
+
+        expect(transcript()).toContain('no such agent: pr-reviewr');
+      });
+
+      it('flattens a multi-line message quoted into the refusal', () => {
+        /*
+          `pushOrch` writes one `TermLine` and the surface renders with
+          `convertEol: true`, so a quoted message carrying newlines would draw
+          many rows while counting once against `ORCH_LINE_CAP` — the
+          cap-evasion the command echo splits per line to avoid.
+        */
+        seedDemoFleet();
+        const id = Object.keys(useHiveStore.getState().entities)[0];
+
+        run(`ask ${id} first\nsecond`);
+
+        const refusal = useHiveStore
+          .getState()
+          .orchLines.map((l) => l.text)
+          .find((t) => t.includes('sessions are sent to, not asked'));
+
+        expect(refusal).toBeDefined();
+        expect(refusal).not.toContain('\n');
+        expect(refusal).toContain('first second');
+      });
+
+      it('refuses a name that matches nothing, the way the agent verbs do', () => {
+        // `no such session` until HIVE-126 — `ask` moved into the agent verbs'
+        // resolution when it stopped accepting sessions.
         run('ask nosuch hello');
 
         expect(lastLine()).toMatchObject({
-          text: '  no such session: nosuch',
+          text: '  no such agent: nosuch',
           color: 'red',
         });
         expect(post).not.toHaveBeenCalled();
       });
 
       it('prints main’s reason when a post is refused', async () => {
-        seedDemoFleet();
-        const id = Object.keys(useHiveStore.getState().entities)[0];
-        post.mockResolvedValue({ ok: false, status: 404, reason: 'unknown party: sess-z' });
+        // Addressed to an agent: since HIVE-126 a session never reaches the
+        // ledger through this verb, so main gets no chance to refuse one.
+        useHiveStore.getState().hydrateAgents([
+          {
+            name: 'slack-watcher',
+            description: 'Watches the channel.',
+            icon: 'Robot',
+            status: 'sleeping',
+            wake: { on: ['slack.mention'], everyMs: 300_000 },
+            mcp: [],
+            tools: [],
+            rotateAfter: 50,
+            skipsSinceRun: 0,
+            runs: [],
+          },
+        ]);
+        post.mockResolvedValue({
+          ok: false,
+          status: 404,
+          reason: 'unknown party: slack-watcher',
+        });
 
-        run(`ask ${id} hello`);
+        run('ask slack-watcher hello');
 
-        await vi.waitFor(() => expect(transcript()).toContain('unknown party: sess-z'));
+        await vi.waitFor(() =>
+          expect(transcript()).toContain('unknown party: slack-watcher'),
+        );
       });
 
       it('answers an open ask', async () => {
@@ -1723,6 +1813,25 @@ describe('hive-store', () => {
           expect(lastLine()?.text).toContain('woke slack-watcher (run-7)');
         });
 
+        it('sends the prompt a user typed after the name (HIVE-126)', async () => {
+          run('run slack-watcher review PR 1234');
+          await Promise.resolve();
+
+          expect(bridge.run).toHaveBeenCalledWith({
+            name: 'slack-watcher',
+            extra: 'review PR 1234',
+          });
+        });
+
+        it('omits extra entirely for a bare run', async () => {
+          // An absent key, not `extra: undefined` — the guard's closed key set
+          // counts keys, and `toHaveBeenCalledWith` tells the two apart.
+          run('run slack-watcher');
+          await Promise.resolve();
+
+          expect(bridge.run).toHaveBeenCalledWith({ name: 'slack-watcher' });
+        });
+
         /*
           The refusal wordings are this story's whole contract with the user:
           each one names the thing they have to do next.
@@ -1738,6 +1847,45 @@ describe('hive-store', () => {
 
           expect(lastLine()).toMatchObject({
             text: expect.stringContaining(text),
+            color: 'red',
+          });
+        });
+
+        /*
+          HIVE-126. Before this, a run refused because the agent was busy was
+          printed and forgotten, while the same intent arriving through the
+          ledger was queued — so the console had to say "try again" and mean it.
+        */
+        it.each([
+          [
+            'working',
+            'queued for slack-watcher — it will run when its current turn ends',
+          ],
+          ['paused', 'queued for slack-watcher — resume it to run'],
+        ] as const)('says a run queued behind %s was queued', async (behind, text) => {
+          bridge.run.mockResolvedValue({ started: false, queued: true, behind });
+
+          run('run slack-watcher review PR 1234');
+          await Promise.resolve();
+
+          // `dim`, not `red`: a run waiting its turn is a deferral, not a fault.
+          expect(lastLine()).toMatchObject({
+            text: expect.stringContaining(text),
+            color: 'dim',
+          });
+        });
+
+        it('still refuses a rotate rather than promising it a queue', async () => {
+          // `rotate` answers `AgentRotateResult`, which has no queued arm:
+          // `forceRotate` stays armed through a refusal, so a rotation survives
+          // by a different route and must not claim a queue it has no place in.
+          bridge.rotate.mockResolvedValue({ started: false, refused: 'working' });
+
+          run('rotate slack-watcher');
+          await Promise.resolve();
+
+          expect(lastLine()).toMatchObject({
+            text: expect.stringContaining('slack-watcher is working'),
             color: 'red',
           });
         });

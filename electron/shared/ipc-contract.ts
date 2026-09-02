@@ -22,6 +22,7 @@ import type {
   AgentNameRequest,
   AgentRenameRequest,
   AgentRunRequest,
+  AgentRotateResult,
   AgentRunResult,
   AgentsSnapshot,
   AgentStatus,
@@ -689,8 +690,10 @@ export const CH = {
    * rather than read or write a file, which is why `BRIDGE_AGENTS_KEYS` argues
    * for each one. `run` is bounded the same way the five before it are: it
    * names an agent, never a command line, and main builds the argv from a
-   * definition it read itself. Nothing the renderer sends reaches a shell —
-   * there is no shell.
+   * definition it read itself. HIVE-126 lets it carry a prompt as well, and the
+   * bound holds — that prose lands *inside* the single positional argument, so
+   * it cannot become a flag or a path. Nothing the renderer sends reaches a
+   * shell — there is no shell.
    *
    * `kill` exists because a run that has stopped making progress is otherwise
    * unstoppable short of quitting the app: one run per agent at a time means a
@@ -1655,12 +1658,16 @@ export interface HiveBridge {
     /**
      * Force a handoff wake now (HIVE-122).
      *
-     * Answers an {@link AgentRunResult} because it *is* a run — the flag is
+     * Answers an {@link AgentRotateResult} because it *is* a run — the flag is
      * armed and the ordinary path taken — so a busy or paused agent refuses
-     * here exactly as it refuses `run`. The flag survives a refusal, so the
-     * wake that does land is still the handoff wake.
+     * here. The flag survives a refusal, so the wake that does land is still
+     * the handoff wake.
+     *
+     * Narrower than `run`'s answer by the `queued` arm (HIVE-126), and for that
+     * same reason: a refused rotation is already durable, so it takes the
+     * tracker directly rather than the scheduler's queue.
      */
-    rotate(request: AgentNameRequest): Promise<AgentRunResult>;
+    rotate(request: AgentNameRequest): Promise<AgentRotateResult>;
     /** A run started, ended, or changed this agent's status. */
     onStatus(callback: (push: AgentStatusPush) => void): () => void;
     /** Run-log lines, as the process writes them. */
@@ -1935,7 +1942,9 @@ export const BRIDGE_SKILLS_KEYS = [
  *
  * HIVE-115 appends `run`, HIVE-117 `pause`/`resume`. Each of those is a change
  * to what the renderer may make the machine *do*, rather than to what it may
- * read or write, and should be argued for here before it is written.
+ * read or write, and should be argued for here before it is written. HIVE-126
+ * widens no key but changes what one of them may *carry*, which the same rule
+ * covers and which is argued for below.
  *
  * ## The argument for `run` (HIVE-115)
  *
@@ -1960,6 +1969,30 @@ export const BRIDGE_SKILLS_KEYS = [
  * approved gets its turn. A page that could write an agent and not run it
  * would be a page that has to wait for HIVE-121's timer to fire — the same
  * process, a few minutes later.
+ *
+ * ## The argument for `extra` on `run` (HIVE-126)
+ *
+ * `run` shipped with one name and nothing else, and that omission was doing two
+ * jobs at once: keeping the renderer from naming a **trigger**, and keeping it
+ * from naming a **command line**. Only the first was ever load-bearing, and it
+ * is untouched — `trigger` is still refused outright, and main still writes
+ * `manual` itself.
+ *
+ * The paragraph above says "no argv", and `extra` is now the exception, so it
+ * has to be stated exactly. `wakeCommand` interpolates it into the single
+ * positional `-p` prompt — the last element of an array handed straight to
+ * `spawn`. It becomes prose *inside* one argument, never an argument of its
+ * own: it cannot introduce a flag, a path, or a variable, and there is still no
+ * shell on the path to quote it wrong. `assertText` bounds what that prose may
+ * be, the same way it bounds `spawn.task`, which is the closest thing already
+ * in this contract — free text from the console that ends up in a process.
+ *
+ * So the reach is unchanged and the *expressiveness* is not: a page can now say
+ * why a person pressed the button. The cost of it not being able to was a verb
+ * that lied. `run pr-reviewer review PR 1234` parsed, reported success, and
+ * woke an agent that had never heard of the PR. The alternative considered and
+ * rejected was routing a task through the ledger instead — which works, and is
+ * what `ask` is for, but makes `run` and `ask` two spellings of one act.
  *
  * ## The argument for `kill`
  *
@@ -2014,10 +2047,15 @@ export const BRIDGE_SKILLS_KEYS = [
  * A renderer that called it in a loop would cost the user turns — the same
  * reach `run` has, and bounded by the same one-run-per-agent rule.
  *
- * Why not a second field on `AgentRunRequest`: that guard's closed key set is
- * the whole reason a renderer cannot name its own trigger, and it is only
- * closed while nothing has needed to open it. A separate channel keeps that
- * argument intact and costs one constant.
+ * Why not a second field on `AgentRunRequest`: because a rotation is a *kind*
+ * of run rather than a reason for one, and a field naming the kind is exactly
+ * what that guard's closed key set exists to refuse. A separate channel keeps
+ * that argument intact and costs one constant.
+ *
+ * This sentence used to read that the key set "is only closed while nothing has
+ * needed to open it", and HIVE-126 is what needed to: `extra` carries a
+ * *reason*, which is prose, and it went on the payload. The line the two sit on
+ * opposite sides of is kind versus reason — not one more field.
  *
  * ## `onStatus` and `onLines` widen nothing
  *

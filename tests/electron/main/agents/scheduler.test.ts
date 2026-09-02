@@ -38,8 +38,14 @@ describe('createScheduler', () => {
   let scheduler: ReturnType<typeof createScheduler>;
   /** What `scheduleFor` answers. Empty means "no usable definition". */
   let schedules: Map<string, { wake: WakeSpec; dailyUsd?: number; mcp?: string[] }>;
-  /** Makes `run` answer a refusal, as `RunTracker` does for a working agent. */
-  let refuse: boolean;
+  /**
+   * Makes `run` answer a refusal, as `RunTracker` does for a working agent.
+   *
+   * A reason rather than a bare boolean since HIVE-126: `manualWake` waits for
+   * `working` and `paused` and reports the rest, so a fake that could not say
+   * which it was could not drive that difference.
+   */
+  let refuse: 'working' | 'paused' | 'invalid' | false;
   /** Whether the registry has answered its first listing yet. */
   let listed: boolean;
   /** Names pushed to the renderer, in order. */
@@ -53,10 +59,10 @@ describe('createScheduler', () => {
   const build = (): ReturnType<typeof createScheduler> =>
     createScheduler({
       run: (name, trigger, extra) => {
-        if (refuse) return { started: false };
+        if (refuse !== false) return { started: false, refused: refuse };
 
         woke.push({ name, trigger, ...(extra === undefined ? {} : { extra }) });
-        return { started: true };
+        return { started: true, run: 'run-1' };
       },
       state,
       isAgent: (id) => id === AGENT,
@@ -143,6 +149,218 @@ describe('createScheduler', () => {
     expect(state.read(AGENT).pendingWake).toEqual([]);
   });
 
+  /*
+    HIVE-126. A ledger entry's body stays out of the queue because the log
+    holds it and the agent re-reads it on the wake it caused. A manual run has
+    no log line behind it, so the queue is the only place its words exist.
+  */
+  describe('a queued entry that carries its own words', () => {
+    it('says them on the wake it causes', () => {
+      state.patch(AGENT, {
+        status: 'sleeping',
+        pendingWake: [
+          { kind: 'manual', id: 'run', from: 'overmind', text: 'review PR 1234' },
+        ],
+      });
+
+      scheduler.onRunClosed(AGENT);
+
+      expect(woke).toEqual([
+        {
+          name: AGENT,
+          trigger: 'manual',
+          extra: 'manual run from overmind — review PR 1234',
+        },
+      ]);
+    });
+
+    it('reports the manual trigger when a manual entry sits among ledger ones', () => {
+      // A person's request is the reason with someone behind it, and `ledger`
+      // would name a route the manual entry never took.
+      state.patch(AGENT, {
+        status: 'sleeping',
+        pendingWake: [
+          { kind: 'ask', id: 'a12', from: 'overmind' },
+          { kind: 'manual', id: 'run', from: 'overmind', text: 'review PR 1234' },
+        ],
+      });
+
+      scheduler.onRunClosed(AGENT);
+
+      expect(woke).toEqual([
+        {
+          name: AGENT,
+          trigger: 'manual',
+          extra:
+            'ask a12 from overmind, manual run from overmind — review PR 1234',
+        },
+      ]);
+    });
+
+    it('still reports the ledger trigger for a queue of ledger entries', () => {
+      state.patch(AGENT, {
+        status: 'sleeping',
+        pendingWake: [{ kind: 'ask', id: 'a12', from: 'overmind' }],
+      });
+
+      scheduler.onRunClosed(AGENT);
+
+      expect(woke[0]).toMatchObject({ trigger: 'ledger' });
+    });
+
+    it('keeps the words when a refused flush puts the queue back', () => {
+      const queued = {
+        kind: 'manual',
+        id: 'run',
+        from: 'overmind',
+        text: 'review PR 1234',
+      };
+      state.patch(AGENT, { status: 'sleeping', pendingWake: [queued] });
+      refuse = 'working';
+
+      scheduler.onRunClosed(AGENT);
+
+      expect(state.read(AGENT).pendingWake).toEqual([queued]);
+    });
+  });
+
+  /*
+    HIVE-126. The manual path used to call `RunTracker.run` directly, so a
+    refusal was printed and the intent was gone — while the identical intent
+    arriving through the ledger was queued and delivered later.
+  */
+  describe('manualWake', () => {
+    it('wakes now, saying the words as the reason', () => {
+      const outcome = scheduler.manualWake(AGENT, 'review PR 1234');
+
+      expect(outcome).toEqual({ started: true, run: 'run-1' });
+      expect(woke).toEqual([
+        { name: AGENT, trigger: 'manual', extra: 'review PR 1234' },
+      ]);
+    });
+
+    it('wakes a bare run with no reason at all', () => {
+      const outcome = scheduler.manualWake(AGENT);
+
+      expect(outcome).toEqual({ started: true, run: 'run-1' });
+      expect(woke).toEqual([{ name: AGENT, trigger: 'manual' }]);
+    });
+
+    it.each(['working', 'paused'] as const)(
+      'queues a run refused because the agent is %s',
+      (refused) => {
+        refuse = refused;
+
+        const outcome = scheduler.manualWake(AGENT, 'review PR 1234');
+
+        expect(outcome).toEqual({
+          started: false,
+          queued: true,
+          behind: refused,
+        });
+        expect(state.read(AGENT).pendingWake).toEqual([
+          {
+            kind: 'manual',
+            id: 'run',
+            from: 'overmind',
+            text: 'review PR 1234',
+          },
+        ]);
+      },
+    );
+
+    it('queues a bare run without inventing words for it', () => {
+      refuse = 'working';
+
+      scheduler.manualWake(AGENT);
+
+      expect(state.read(AGENT).pendingWake).toEqual([
+        { kind: 'manual', id: 'run', from: 'overmind' },
+      ]);
+    });
+
+    it('reports the refusal when the queue is full rather than claiming a queue', () => {
+      /*
+        `enqueue` drops the newcomer at `AGENT_PENDING_WAKE_MAX`. For a ledger
+        entry that is harmless — the log still holds it. Here it would print
+        "queued" in dim about a run that went nowhere, and a paused agent never
+        flushes, so every later run would repeat the lie.
+      */
+      state.patch(AGENT, {
+        pendingWake: Array.from({ length: AGENT_PENDING_WAKE_MAX }, (_, i) => ({
+          kind: 'ask',
+          id: `a${i}`,
+          from: 'overmind',
+        })),
+      });
+      refuse = 'paused';
+
+      const outcome = scheduler.manualWake(AGENT, 'review PR 1234');
+
+      expect(outcome).toEqual({ started: false, refused: 'paused' });
+      expect(state.read(AGENT).pendingWake).toHaveLength(AGENT_PENDING_WAKE_MAX);
+    });
+
+    it('refuses once the scheduler has stopped, rather than spawning', () => {
+      /*
+        `agents:run` awaits `mcp.start()` before reaching here, so a quit can
+        land on that await. `scheduler.stop()` runs before `runs.closeAll()`
+        precisely so nothing spawns after the tracker has finished iterating —
+        and the tracker has no shutdown flag of its own to refuse on.
+      */
+      scheduler.stop();
+
+      const outcome = scheduler.manualWake(AGENT, 'review PR 1234');
+
+      expect(outcome).toMatchObject({ started: false, refused: 'unknown' });
+      expect(woke).toEqual([]);
+      expect(state.read(AGENT).pendingWake ?? []).toEqual([]);
+    });
+
+    it('does not queue a definition that cannot be read', () => {
+      /*
+        `route()` queues `invalid` because at boot it means `mcp.start()` is
+        still in flight. The `agents:run` handler awaits `mcp.start()` before
+        reaching here, so on this path it means a definition the user has to go
+        and fix — and "queued" would be a promise nothing is going to keep.
+      */
+      refuse = 'invalid';
+
+      const outcome = scheduler.manualWake(AGENT, 'review PR 1234');
+
+      expect(outcome).toEqual({ started: false, refused: 'invalid' });
+      expect(state.read(AGENT).pendingWake ?? []).toEqual([]);
+    });
+
+    it('delivers a queued manual run when the current one closes', () => {
+      refuse = 'working';
+      scheduler.manualWake(AGENT, 'review PR 1234');
+
+      refuse = false;
+      scheduler.onRunClosed(AGENT);
+
+      expect(woke).toEqual([
+        {
+          name: AGENT,
+          trigger: 'manual',
+          extra: 'manual run from overmind — review PR 1234',
+        },
+      ]);
+      expect(state.read(AGENT).pendingWake).toEqual([]);
+    });
+
+    it('delivers a queued manual run when a paused agent resumes', () => {
+      refuse = 'paused';
+      scheduler.manualWake(AGENT, 'review PR 1234');
+
+      refuse = false;
+      scheduler.onResume(AGENT);
+
+      expect(woke).toHaveLength(1);
+      expect(state.read(AGENT).pendingWake).toEqual([]);
+    });
+  });
+
   it('holds for a paused agent and wakes once on resume', () => {
     state.patch(AGENT, { status: 'paused' });
     scheduler.onEntry(entry());
@@ -219,7 +437,7 @@ describe('createScheduler', () => {
       run: (name) => {
         reentered += 1;
         if (reentered < 5) scheduler.onRunClosed(name);
-        return { started: false };
+        return { started: false, refused: 'working' };
       },
       state,
       isAgent: (id) => id === AGENT,
@@ -292,7 +510,7 @@ describe('createScheduler', () => {
       scheduler = createScheduler({
         run: (name, trigger, extra) => {
           woke.push({ name, trigger, ...(extra === undefined ? {} : { extra }) });
-          return { started: false };
+          return { started: false, refused: 'working' };
         },
         state,
         isAgent: (id) => id === AGENT,
@@ -350,7 +568,7 @@ describe('createScheduler', () => {
               { kind: 'post', id: 'a10', from: 'sess-2' },
             ],
           });
-          return { started: false };
+          return { started: false, refused: 'working' };
         },
         state,
         isAgent: (id) => id === AGENT,
@@ -1386,7 +1604,7 @@ describe('createScheduler', () => {
         skipsSinceRun: 1,
       });
       schedules.set(AGENT, { wake: { everyMs: 300_000, check: 'always', on: [] } });
-      refuse = true;
+      refuse = 'working';
 
       tick();
 

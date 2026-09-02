@@ -919,18 +919,29 @@ export interface AgentRunState {
 export const AGENT_RUN_HISTORY = 20;
 
 /**
- * One entry an agent has not been woken for yet (HIVE-120).
+ * One entry an agent has not been woken for yet (HIVE-120, widened HIVE-126).
  *
  * The three fields the wake prompt needs to name it — `<kind> <id> from <from>`
- * — and nothing more. The body is deliberately absent: `extra` is a *hint*, and
- * the preamble already tells an agent to `ledger_read` its inbox first, so the
- * entry itself is read on the wake it caused. Carrying bodies here would put a
- * copy of the log inside `agents.json`, ageing separately from the log.
+ * — and, for the one kind that needs it, the words themselves.
+ *
+ * A ledger entry's body stays out, and that reasoning is unchanged: `extra` is
+ * a *hint*, the preamble already tells an agent to `ledger_read` its inbox
+ * first, so the entry itself is read on the wake it caused. Carrying bodies
+ * here would put a copy of the log inside `agents.json`, ageing separately from
+ * the log.
+ *
+ * `text` is the case that argument does not reach. A manual run — a person
+ * typing `run pr-reviewer review PR 1234` while the agent is busy — has no log
+ * line behind it and nothing to re-read. This is not a second copy of those
+ * words; it is the only one, and dropping it would lose the whole point of the
+ * run rather than a hint about it.
  */
 export interface PendingWakeEntry {
   kind: string;
   id: string;
   from: string;
+  /** A manual run's own words. Absent on every ledger-routed entry. */
+  text?: string;
 }
 
 /**
@@ -944,13 +955,20 @@ export interface PendingWakeEntry {
 export const AGENT_PENDING_WAKE_MAX = 20;
 
 /**
- * `agents:run` — wake this agent now (HIVE-115).
+ * `agents:run` — wake this agent now (HIVE-115, widened HIVE-126).
  *
- * One name and nothing else, and the omission is the point: the only trigger
- * this channel could honestly report is that a person pressed a button, so
- * main writes `manual` itself rather than accepting a word the page chose.
- * Every other trigger — a timer, a ledger entry, a Slack mention — originates
- * in main and never crosses this boundary at all.
+ * A name, and optionally the words a person typed after it. The omission that
+ * mattered is the one still here: the only trigger this channel could honestly
+ * report is that a person pressed a button, so main writes `manual` itself
+ * rather than accepting a word the page chose. Every other trigger — a timer, a
+ * ledger entry, a Slack mention — originates in main and never crosses this
+ * boundary at all.
+ *
+ * `extra` is display-and-prompt only. It reaches `wakePrompt` as the tail of
+ * `You woke because: manual — <extra>.` and the run's ledger `meta`, and
+ * nothing else reads it. The page says **why** someone pressed run; it still
+ * cannot say what *kind* of thing woke the agent, which is the sentence the
+ * original closure was defending.
  *
  * It lives here beside {@link AgentNameRequest} rather than in
  * `ipc-contract.ts` because every other `agents:*` payload does; the channel
@@ -958,6 +976,7 @@ export const AGENT_PENDING_WAKE_MAX = 20;
  */
 export interface AgentRunRequest {
   name: string;
+  extra?: string;
 }
 
 /**
@@ -977,14 +996,38 @@ export interface AgentRunRequest {
  * the whole union is values rather than throws: the console prints the reason
  * beside the agent, and "nothing happened" is the one answer that teaches the
  * user to press the button again.
+ *
+ * `queued` is a **third arm** and not a flag on the refusal (HIVE-126). The
+ * exhaustive `switch` in `agentRunRefusal` is what stops a reader printing a
+ * plausible wrong sentence — the bug that function was extracted to fix — and a
+ * flag nothing forces you to read would let "try again when it sleeps" describe
+ * a run that is already waiting its turn.
+ *
+ * `working` and `paused` stay on the refusal arm as well, because `rotate`
+ * answers with this type too and a rotation is *not* queued: main leaves
+ * `forceRotate` armed through a refusal, so it survives by a different route
+ * and must not claim a queue it has no place in.
  */
 export type AgentRunResult =
   | { started: true; run: string }
+  | { started: false; queued: true; behind: 'working' | 'paused' }
   | {
       started: false;
       refused: 'working' | 'unknown' | 'invalid' | 'paused';
       reason?: string;
     };
+
+/**
+ * What a rotation answered (HIVE-122, narrowed HIVE-126).
+ *
+ * {@link AgentRunResult} without the `queued` arm, and the subtraction is the
+ * documentation: `agents:rotate` calls the tracker directly rather than routing
+ * through the scheduler, because a refused rotation is not lost — main leaves
+ * `forceRotate` armed, so the next wake of any kind is the handoff wake. There
+ * is nothing for a queue to add, and a type that admitted one would make every
+ * reader handle a case that cannot arrive.
+ */
+export type AgentRotateResult = Exclude<AgentRunResult, { queued: true }>;
 
 /**
  * A run started, ended, or otherwise changed what an agent's row should say.
