@@ -1679,7 +1679,7 @@ describe('hive-store', () => {
 
       const bridge = {
         run: vi.fn<() => Promise<AgentRunResult>>(() =>
-          Promise.resolve({ started: true, run: 'run-7' }),
+          Promise.resolve({ started: true, run: 'run-7', kind: 'standing' }),
         ),
         kill: vi.fn(() => Promise.resolve(true)),
         pause: vi.fn<() => Promise<AgentStatus>>(() =>
@@ -1689,17 +1689,17 @@ describe('hive-store', () => {
           Promise.resolve('sleeping'),
         ),
         rotate: vi.fn<() => Promise<AgentRunResult>>(() =>
-          Promise.resolve({ started: true, run: 'run-7' }),
+          Promise.resolve({ started: true, run: 'run-7', kind: 'standing' }),
         ),
       };
 
       beforeEach(() => {
         vi.mocked(isDesktop).mockReturnValue(true);
-        bridge.run.mockResolvedValue({ started: true, run: 'run-7' });
+        bridge.run.mockResolvedValue({ started: true, run: 'run-7', kind: 'standing' });
         bridge.kill.mockResolvedValue(true);
         bridge.pause.mockResolvedValue('paused');
         bridge.resume.mockResolvedValue('sleeping');
-        bridge.rotate.mockResolvedValue({ started: true, run: 'run-7' });
+        bridge.rotate.mockResolvedValue({ started: true, run: 'run-7', kind: 'standing' });
         window.hive = { agents: bridge } as unknown as Window['hive'];
       });
 
@@ -1800,6 +1800,33 @@ describe('hive-store', () => {
         });
       });
 
+      describe('what is live (HIVE-128)', () => {
+        const live = [
+          { run: 'r-standing', kind: 'standing' as const, trigger: 'interval', startedAt: 1 },
+          { run: 'r-task', kind: 'task' as const, trigger: 'manual', extra: 'review', startedAt: 2 },
+        ];
+
+        it('hydrates the live runs, and reads an absent list as none', () => {
+          useHiveStore.getState().hydrateAgents([summary({ live }), summary({ name: 'other' })]);
+
+          expect(useHiveStore.getState().entities['slack-watcher']).toMatchObject({ live });
+          expect(useHiveStore.getState().entities['other']).toMatchObject({ live: [] });
+        });
+
+        it('replaces the list on every status push', () => {
+          useHiveStore.getState().hydrateAgents([summary({ live })]);
+          useHiveStore.getState().setAgentStatus({
+            name: 'slack-watcher',
+            status: 'sleeping',
+            runs: [],
+            runsSinceRotate: 0,
+            live: [],
+          });
+
+          expect(useHiveStore.getState().entities['slack-watcher']).toMatchObject({ live: [] });
+        });
+      });
+
       describe('run', () => {
         beforeEach(() => {
           useHiveStore.getState().hydrateAgents([summary()]);
@@ -1811,6 +1838,15 @@ describe('hive-store', () => {
 
           expect(bridge.run).toHaveBeenCalledWith({ name: 'slack-watcher' });
           expect(lastLine()?.text).toContain('woke slack-watcher (run-7)');
+        });
+
+        it('announces a task run by its kind (HIVE-128)', async () => {
+          bridge.run.mockResolvedValue({ started: true, run: 'run-7', kind: 'task' });
+
+          run('run slack-watcher review PR 166');
+          await Promise.resolve();
+
+          expect(lastLine()?.text).toContain('started a task run for slack-watcher (run-7)');
         });
 
         it('sends the prompt a user typed after the name (HIVE-126)', async () => {
@@ -1873,6 +1909,29 @@ describe('hive-store', () => {
             text: expect.stringContaining(text),
             color: 'dim',
           });
+        });
+
+        it('says an agent is saturated in words that name the wait (HIVE-128)', async () => {
+          bridge.run.mockResolvedValue({ started: false, refused: 'saturated' });
+
+          run('run slack-watcher review PR 1');
+          await Promise.resolve();
+
+          expect(lastLine()?.text).toContain('slack-watcher is saturated');
+        });
+
+        it('says a saturated agent queued the run', async () => {
+          bridge.run.mockResolvedValue({
+            started: false,
+            queued: true,
+            behind: 'saturated',
+          });
+
+          run('run slack-watcher review PR 1');
+          await Promise.resolve();
+
+          expect(lastLine()?.text).toContain('queued for slack-watcher');
+          expect(lastLine()?.text).toContain('one of its runs ends');
         });
 
         it('still refuses a rotate rather than promising it a queue', async () => {
@@ -2014,6 +2073,24 @@ describe('hive-store', () => {
             text: expect.stringContaining('nothing running'),
             color: 'dim',
           });
+        });
+
+        it('counts the runs it killed when there were several (HIVE-128)', async () => {
+          useHiveStore.getState().hydrateAgents([
+            summary({
+              status: 'working',
+              live: [
+                { run: 'a', kind: 'standing', trigger: 'interval', startedAt: 1 },
+                { run: 'b', kind: 'task', trigger: 'manual', startedAt: 2 },
+                { run: 'c', kind: 'task', trigger: 'manual', startedAt: 3 },
+              ],
+            }),
+          ]);
+
+          run('kill slack-watcher');
+          await Promise.resolve();
+
+          expect(lastLine()?.text).toContain('killed 3 runs of slack-watcher');
         });
       });
 
@@ -2676,6 +2753,7 @@ describe('hive-store', () => {
       useHiveStore.getState().setAgentStatus({
         name: 'slack-watcher',
         status: 'working',
+        live: [],
         lastRunAt: 42,
         cost: '$0.02',
         runs: [],
@@ -2703,6 +2781,7 @@ describe('hive-store', () => {
       useHiveStore.getState().setAgentStatus({
         name: 'slack-watcher',
         status: 'sleeping',
+        live: [],
         runs: [],
         runsSinceRotate: 0,
         today: { day: '2026-08-31', runs: 12, usd: 0.84 },
@@ -2720,6 +2799,7 @@ describe('hive-store', () => {
       useHiveStore.getState().setAgentStatus({
         name: 'slack-watcher',
         status: 'sleeping',
+        live: [],
         runs: [],
         runsSinceRotate: 0,
         skipsSinceRun: 3,
@@ -2727,6 +2807,7 @@ describe('hive-store', () => {
       useHiveStore.getState().setAgentStatus({
         name: 'slack-watcher',
         status: 'sleeping',
+        live: [],
         runs: [],
         runsSinceRotate: 0,
       });
@@ -2747,6 +2828,7 @@ describe('hive-store', () => {
       useHiveStore.getState().setAgentStatus({
         name: 'slack-watcher',
         status: 'sleeping',
+        live: [],
         runs: [],
         runsSinceRotate: 0,
         nextRunAt: 1_756_500_000_000,
@@ -2754,6 +2836,7 @@ describe('hive-store', () => {
       useHiveStore.getState().setAgentStatus({
         name: 'slack-watcher',
         status: 'sleeping',
+        live: [],
         runs: [],
         runsSinceRotate: 0,
       });
@@ -2768,6 +2851,7 @@ describe('hive-store', () => {
         useHiveStore.getState().setAgentStatus({
           name: 'ghost',
           status: 'working',
+          live: [],
           runs: [],
           runsSinceRotate: 0,
         }),
@@ -2782,6 +2866,7 @@ describe('hive-store', () => {
       useHiveStore.getState().setAgentStatus({
         name: 'sess-01',
         status: 'working',
+        live: [],
         runs: [],
         runsSinceRotate: 0,
       });
@@ -2810,6 +2895,7 @@ describe('hive-store', () => {
         .setAgentStatus({
           name: 'slack-watcher',
           status: 'sleeping',
+          live: [],
           cost: '$0.02',
           runs: [],
           runsSinceRotate: 0,
@@ -2864,6 +2950,7 @@ describe('hive-store', () => {
       useHiveStore.getState().setAgentStatus({
         name: 'drone',
         status: 'sleeping',
+        live: [],
         runs: [],
         runsSinceRotate: 1,
         sessionUuid: 'b2e1c4d5',
@@ -2900,6 +2987,7 @@ describe('hive-store', () => {
       useHiveStore.getState().setAgentStatus({
         name: 'drone',
         status: 'working',
+        live: [],
         runs: [],
         runsSinceRotate: 0,
       });
@@ -4546,6 +4634,7 @@ describe('the ledger slice', () => {
             rotateAfter: 50,
             skipsSinceRun: 0,
             runs: [],
+            live: [],
             lines: [],
           },
         },
@@ -4740,6 +4829,7 @@ describe('the agent view selectors', () => {
         useHiveStore.getState().setAgentStatus({
           name: 'watcher',
           status: 'asking',
+          live: [],
           runs: [],
           runsSinceRotate: 0,
         });

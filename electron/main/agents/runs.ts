@@ -1,9 +1,13 @@
 import {
   AGENT_KILL_GRACE_MS,
   AGENT_STALL_GRACE_MS,
+  type LiveRunSummary,
+  type QueueableRefusal,
+  type RunKind,
   type RunLine,
   type RunOutcome,
 } from '@shared/agent-contract';
+import { HOOK_ENV_RUN, HOOK_ENV_RUN_KIND } from '@shared/hook-contract';
 import { OVERMIND } from '@shared/ledger-contract';
 import { SLACK_SERVER_KEY } from '@shared/slack-contract';
 
@@ -95,10 +99,10 @@ const slackStatus = (
 const FLUSH_WINDOW_MS = 500;
 
 export type RunStart =
-  | { started: true; run: string }
+  | { started: true; run: string; kind: RunKind }
   | {
       started: false;
-      refused: 'working' | 'invalid' | 'paused';
+      refused: QueueableRefusal | 'invalid';
       reason?: string;
     };
 
@@ -130,9 +134,21 @@ export interface RunTrackerDeps {
     name: string,
     trigger: string,
     extra?: string,
+    options?: { kind?: RunKind },
   ) =>
-    | (WakeCommand & { sessionUuid: string; lastTurn: boolean })
+    | (WakeCommand & { sessionUuid: string; lastTurn: boolean; kind: RunKind })
     | { problem: string };
+  /**
+   * `limits.parallel` for this agent, read from the folder watcher's cache
+   * (HIVE-128). `1` for an agent the cache has not seen, which is the default
+   * and so the safe answer.
+   *
+   * A dep rather than a field on the built command, because the kind has to be
+   * known *before* the command is built: building a standing command consumes
+   * a pending rotation, and the working and paused refusals must keep landing
+   * before any build does — their docblocks say why.
+   */
+  parallelFor: (name: string) => number;
   state: AgentState;
   appendLedger: (entry: {
     from: string;
@@ -143,12 +159,18 @@ export interface RunTrackerDeps {
   /** Did this run leave an ask nobody has answered? */
   openAsksFor: (name: string, run: string) => boolean;
   /**
+   * Does this agent have any ask nobody has answered, from any run? Consulted
+   * on the last close only — a resting status must not hide a question a
+   * neighbour left.
+   */
+  hasOpenAsk: (name: string) => boolean;
+  /**
    * The handoff this run posted, if it posted one (HIVE-122).
    *
-   * Answered the way `openAsksFor` answers its question — by finding this run's
-   * own `run.started` event and taking the entries at or after it — because the
-   * ledger has no other notion of which run an entry belongs to. The last
-   * handoff wins if the agent wrote several.
+   * Answered by matching `meta.run`, which the MCP host writes on every entry a
+   * run posts (HIVE-128) — the ledger's only notion of which run an entry
+   * belongs to, and the only one that can tell two concurrent runs apart. The
+   * last match wins if the agent wrote several.
    */
   handoffFor: (name: string, run: string) => string | undefined;
   /** Mints the uuid a rotation's next session will start under. */
@@ -183,12 +205,26 @@ export interface ChildLike {
 }
 
 export interface RunTracker {
-  run(name: string, trigger: string, extra?: string): RunStart;
+  /**
+   * Wake this agent, if the gates let it.
+   *
+   * A `job` is a wake carrying its own work — the console's
+   * `run <agent> <prompt>`. It becomes a task run when the cap allows, and an
+   * ordinary standing wake otherwise.
+   */
+  run(
+    name: string,
+    trigger: string,
+    extra?: string,
+    options?: { job?: true },
+  ): RunStart;
+  /** Every run under this name, signalled together. */
   kill(name: string): boolean;
   /**
-   * The Stop hook fired for this agent. Arms the stall watchdog, unless
-   * `sessionUuid` is given and does not match the live run's — a stale Stop
-   * for a run that has already ended must not touch whatever runs next.
+   * The Stop hook fired for this agent. Arms the stall watchdog on the run
+   * whose conversation `sessionUuid` names — a stale Stop for a run that has
+   * already ended must not touch whatever runs next, and with several runs
+   * live the uuid is the only handle that picks one of them.
    */
   noteTurnEnded(name: string, sessionUuid?: string): void;
   /**
@@ -219,12 +255,19 @@ export interface RunTracker {
    * already going away.
    */
   closeAll(reason: string): void;
+  /** The names with at least one run in flight. */
   live(): string[];
+  /** What this agent has in flight, in the order it started (HIVE-128). */
+  liveRuns(name: string): LiveRunSummary[];
 }
 
 interface LiveRun {
   run: string;
+  /** Which conversation this is: the agent's own, or a one-off job (HIVE-128). */
+  kind: RunKind;
   trigger: string;
+  /** The console prompt a task run carries, when it carries one. */
+  extra?: string;
   startedAt: number;
   sessionUuid: string;
   child: ChildLike;
@@ -241,9 +284,12 @@ interface LiveRun {
    * Whether the last line this run put in the log closed a turn.
    *
    * The run log is one buffer that spans runs — nothing clears it between them
-   * — so the renderer can only tell one run's output from the next by the folds
-   * in it. Every run must therefore leave the buffer terminated, and this is
-   * how {@link finalizeRun} knows whether it already is.
+   * — so within a run's own lines the renderer can only tell one turn from the
+   * next by the folds in it. (Since HIVE-128 every line also carries the run
+   * that wrote it, which is what separates *concurrent* runs; the fold is still
+   * what separates the turns inside one.) Every run must therefore leave its
+   * lines terminated, and this is how {@link finalizeRun} knows whether they
+   * already are.
    *
    * Starts `true`: a run that pushes nothing has nothing of its own to close,
    * and terminating there would seal the *previous* run's tail into a run that
@@ -254,6 +300,14 @@ interface LiveRun {
 
 interface FinalizeInfo {
   run: string;
+  /**
+   * Which conversation ended (HIVE-128).
+   *
+   * The close reads it to decide whether it may touch the agent's *standing*
+   * state at all: rotation, the rotation counter and `sessionUuid` belong to
+   * the one conversation, and a task run's uuid died with its turn.
+   */
+  kind: RunKind;
   trigger: string;
   startedAt: number;
   /**
@@ -277,7 +331,30 @@ interface FinalizeInfo {
 export function createRunTracker(deps: RunTrackerDeps): RunTracker {
   const grace = deps.killGraceMs ?? AGENT_KILL_GRACE_MS;
   const stallGrace = deps.stallGraceMs ?? AGENT_STALL_GRACE_MS;
-  const running = new Map<string, LiveRun>();
+  /**
+   * Several runs per name since HIVE-128 — one standing, plus task runs up to
+   * the definition's cap. A name with nothing in flight is deleted rather than
+   * left holding an empty list, because {@link RunTracker.live} is the set of
+   * keys and an empty entry would report an agent as working.
+   */
+  const running = new Map<string, LiveRun[]>();
+
+  const liveOf = (name: string): LiveRun[] => running.get(name) ?? [];
+
+  const forget = (name: string, live: LiveRun): void => {
+    const rest = liveOf(name).filter((other) => other !== live);
+
+    if (rest.length === 0) running.delete(name);
+    else running.set(name, rest);
+  };
+
+  const describe = (live: LiveRun): LiveRunSummary => ({
+    run: live.run,
+    kind: live.kind,
+    trigger: live.trigger,
+    ...(live.extra === undefined ? {} : { extra: live.extra }),
+    startedAt: live.startedAt,
+  });
 
   const clearTimers = (live: LiveRun) => {
     if (live.escalation !== null) clearTimeout(live.escalation);
@@ -307,19 +384,36 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
   /**
    * Every line this module puts in the run log goes through here.
    *
-   * The recording is the point: `pushLines` is called from four places — the
-   * stdout fold, the exit flush, stderr, and {@link finalizeRun} itself — and a
-   * site that forgot to update {@link LiveRun.endedTurn} would leave the
-   * terminator decision reading a stale answer.
+   * Tagging is the point: `pushLines` is called from four places — the stdout
+   * fold, the exit flush, stderr, and {@link finalizeRun}'s terminator — and
+   * several runs write into one buffer, so the renderer can only partition it
+   * by the `run` each line carries. One door means no site can forget.
+   *
+   * The run id rather than the {@link LiveRun}, because `finalizeRun` has only
+   * the id by the time it writes its terminator: `close` has already forgotten
+   * the run. Callers that still hold the live run update
+   * {@link LiveRun.endedTurn} through {@link pushRunLines}.
    */
-  const pushLines = (name: string, live: LiveRun | null, lines: RunLine[]): void => {
+  const pushLines = (name: string, run: string, lines: RunLine[]): void => {
     if (lines.length === 0) return;
 
-    deps.pushLines(name, lines);
+    deps.pushLines(
+      name,
+      lines.map((line) => ({ ...line, run })),
+    );
+  };
 
-    if (live !== null) {
-      live.endedTurn = lines[lines.length - 1]?.endsTurn === true;
-    }
+  /**
+   * The same door, for a run that is still live: tags the lines and records
+   * whether the last of them closed the run's turn. A site that pushed without
+   * updating {@link LiveRun.endedTurn} would leave the terminator decision in
+   * {@link finalizeRun} reading a stale answer.
+   */
+  const pushRunLines = (name: string, live: LiveRun, lines: RunLine[]): void => {
+    if (lines.length === 0) return;
+
+    pushLines(name, live.run, lines);
+    live.endedTurn = lines[lines.length - 1]?.endsTurn === true;
   };
 
   const finalizeRun = (
@@ -390,7 +484,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       reporting one, and the two should not look alike.
     */
     if (!endedTurn) {
-      deps.pushLines(name, [
+      pushLines(name, info.run, [
         {
           text: `● run ended — ${reason ?? outcome}`,
           color: 'dim',
@@ -401,6 +495,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
     deps.state.recordRun(name, {
       run: info.run,
+      kind: info.kind,
       trigger: info.trigger,
       startedAt: info.startedAt,
       endedAt,
@@ -426,12 +521,25 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     const current = deps.state.read(name);
 
     /*
+      A task run is a job, not the conversation (HIVE-128). Only a standing
+      close may rotate, count towards rotation, or record the conversation's
+      uuid — a task run's uuid is a session that died with its turn, and
+      writing it over `sessionUuid` would orphan the standing conversation.
+    */
+    const standing = info.kind === 'standing';
+    // `close` has already forgotten this run, so what is left is its neighbours.
+    const stillLive = liveOf(name).length > 0;
+
+    /*
       The rotation gate (HIVE-122). Only a handoff wake can rotate, and only if
       the agent actually left a handoff: a run that was cut off by its turn cap,
       or that simply ignored the instruction, must keep the conversation rather
       than throw it away silently.
     */
-    const handoff = info.lastTurn && reachedModel ? deps.handoffFor(name, info.run) : undefined;
+    const handoff =
+      standing && info.lastTurn && reachedModel
+        ? deps.handoffFor(name, info.run)
+        : undefined;
     /*
       A strike is the *agent's* failure to hand over, and only that.
 
@@ -444,7 +552,11 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       `reachedModel`: main's failures are not the agent's.
     */
     const strike =
-      info.lastTurn && handoff === undefined && reachedModel && reason === null;
+      standing &&
+      info.lastTurn &&
+      handoff === undefined &&
+      reachedModel &&
+      reason === null;
     /*
       Sized inside the strike, not beside it: `rotateFailures + 1` is only ever
       a meaningful number when this close is a strike, and computing it
@@ -476,10 +588,23 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       status:
         current.status === 'paused'
           ? 'paused'
-          : outcome === 'asking' || asking
-            ? 'asking'
-            : 'sleeping',
-      lastRunAt: endedAt,
+          : // Neighbours still running keep the row working. The last close
+            // computes the resting status from this run *and* from any ask the
+            // agent still has open, because a sibling that closed while this
+            // one was live left its question behind (HIVE-128).
+            stillLive
+            ? 'working'
+            : outcome === 'asking' || asking || deps.hasOpenAsk(name)
+              ? 'asking'
+              : 'sleeping',
+      /*
+        `lastRunAt` is the **standing** conversation's last run — the `onchange`
+        watermark the scheduler compares a ledger entry's timestamp against, and
+        the reference the Next tile reads. A task run reads no inbox, so moving
+        it on a task close would hide an ask that arrived before that close:
+        the entry would sit behind a watermark no wake ever looked past.
+      */
+      ...(standing ? { lastRunAt: endedAt } : {}),
       /*
         A rotation zeroes the counter instead of advancing it — the run that
         just closed belongs to the session being left behind. A run that never
@@ -489,17 +614,19 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         TypeScript narrows the former and not the latter, and
         `pendingSession.handoff` is a `string`.
       */
-      ...(handoff !== undefined
-        ? {
-            runsSinceRotate: 0,
-            rotateFailures: 0,
-            pendingSession: { uuid: deps.newUuid(), handoff },
-          }
-        : reachedModel
-          ? { runsSinceRotate: current.runsSinceRotate + 1 }
-          : {}),
+      ...(standing
+        ? handoff !== undefined
+          ? {
+              runsSinceRotate: 0,
+              rotateFailures: 0,
+              pendingSession: { uuid: deps.newUuid(), handoff },
+            }
+          : reachedModel
+            ? { runsSinceRotate: current.runsSinceRotate + 1 }
+            : {}
+        : {}),
       ...(failures === null ? {} : { rotateFailures: failures }),
-      ...(sessionUuid === undefined ? {} : { sessionUuid }),
+      ...(sessionUuid === undefined || !standing ? {} : { sessionUuid }),
     });
 
     deps.appendLedger({
@@ -537,7 +664,9 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
     live.closed = true;
     clearTimers(live);
-    running.delete(name);
+    // This run only — a neighbour under the same name is still in flight, and
+    // `finalizeRun` reads what is left to decide the agent's status (HIVE-128).
+    forget(name, live);
 
     /*
       Fold whatever is left in `partial` before reading the result.
@@ -557,7 +686,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       const step = foldRunLog(live.fold, '\n');
 
       live.fold = step.state;
-      pushLines(name, live, step.lines);
+      pushRunLines(name, live, step.lines);
     }
 
     const result = live.fold.result;
@@ -598,8 +727,24 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
   };
 
   return {
-    run(name, trigger, extra) {
-      if (running.has(name)) return { started: false, refused: 'working' };
+    run(name, trigger, extra, options) {
+      const live = liveOf(name);
+      const parallel = deps.parallelFor(name);
+      /*
+        A job fans out only when the definition allows it (HIVE-128). At the
+        default cap of one every wake is standing, and the gate below is the
+        gate it always was.
+      */
+      const kind: RunKind = options?.job === true && parallel > 1 ? 'task' : 'standing';
+
+      /*
+        One conversation at a time, whatever the cap says. Two `--resume`s of
+        the same session would interleave two turns into one transcript, which
+        is the memory corruption task runs exist to avoid by being sessionless.
+      */
+      if (kind === 'standing' && live.some((other) => other.kind === 'standing')) {
+        return { started: false, refused: 'working' };
+      }
 
       /*
         A paused agent does not wake, for any trigger (HIVE-117).
@@ -618,7 +763,20 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         return { started: false, refused: 'paused' };
       }
 
-      const command = deps.command(name, trigger, extra);
+      /*
+        The cap counts runs of both kinds, and lands before the build for the
+        reason the paused refusal does: a wake that is not going to happen must
+        not consume anything.
+      */
+      if (live.length >= parallel) {
+        return {
+          started: false,
+          refused: 'saturated',
+          reason: `${name} is saturated: ${String(live.length)} of ${String(parallel)} runs live.`,
+        };
+      }
+
+      const command = deps.command(name, trigger, extra, { kind });
 
       if ('problem' in command) {
         return { started: false, refused: 'invalid', reason: command.problem };
@@ -631,7 +789,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         from: name,
         kind: 'event',
         body: `run.started — ${trigger}`,
-        meta: { run, trigger, ...(extra === undefined ? {} : { extra }) },
+        meta: { run, trigger, kind, ...(extra === undefined ? {} : { extra }) },
       });
 
       let child: ChildLike;
@@ -639,7 +797,13 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       try {
         child = deps.spawn(command.file, command.args, {
           cwd: command.cwd,
-          env: command.env,
+          /*
+            The run's own identity, for the MCP host `claude` starts from this
+            environment (HIVE-128). The host stamps `meta.run` on every entry
+            the run writes, which is the only way main can later tell one
+            run's asks and handoff from a concurrent neighbour's.
+          */
+          env: { ...command.env, [HOOK_ENV_RUN]: run, [HOOK_ENV_RUN_KIND]: kind },
           stdio: ['ignore', 'pipe', 'pipe'],
         });
       } catch (error) {
@@ -661,7 +825,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
         finalizeRun(
           name,
-          { run, trigger, startedAt, lastTurn: command.lastTurn },
+          { run, kind, trigger, startedAt, lastTurn: command.lastTurn },
           'failed',
           null,
           message,
@@ -679,9 +843,11 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         return { started: false, refused: 'invalid', reason: message };
       }
 
-      const live: LiveRun = {
+      const started: LiveRun = {
         run,
+        kind,
         trigger,
+        ...(extra === undefined ? {} : { extra }),
         startedAt,
         sessionUuid: command.sessionUuid,
         child,
@@ -697,87 +863,111 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         endedTurn: true,
       };
 
-      running.set(name, live);
+      // Re-read rather than reusing the snapshot the gates were decided from:
+      // `deps.command` runs arbitrary composition code in between.
+      running.set(name, [...liveOf(name), started]);
       /*
-        The skip count is cleared here — at the one door every trigger passes
-        through — rather than in the scheduler's tick (HIVE-121). A manual run
-        or a ledger wake is just as good a proof that the agent is alive as a
-        scheduled one, and `skipped 3` beside a `Next` tile whose agent has
-        since run twice is a number contradicting the tile it sits in.
+        The skip count is cleared here — at the one door every *standing*
+        trigger passes through — rather than in the scheduler's tick (HIVE-121).
+        A manual run or a ledger wake is just as good a proof that the agent is
+        alive as a scheduled one, and `skipped 3` beside a `Next` tile whose
+        agent has since run twice is a number contradicting the tile it sits in.
+
+        A **task** run is not a scheduled wake at all (HIVE-128): it is one job,
+        started by hand, that never looks at the conversation. Clearing the count
+        from there would erase the very signal HIVE-121 exists to show — an agent
+        whose scheduled wakes keep being skipped, while its owner keeps handing
+        it tasks.
 
         Below the `paused` and unbuildable-command refusals above, so a wake
         that never happened does not clear a count that is still true.
       */
-      deps.state.patch(name, { status: 'working', skipsSinceRun: 0 });
+      deps.state.patch(name, {
+        status: 'working',
+        ...(kind === 'standing' ? { skipsSinceRun: 0 } : {}),
+      });
       deps.pushStatus(name);
 
       /*
         Both handlers are inert once the run has closed, and that guard is not
         belt-and-braces.
 
-        `close()` deletes the run from `running` but cannot remove these
+        `close()` drops the run from the name's list but cannot remove these
         listeners — the child object outlives them, and a grandchild holding the
         pipe (the case `FLUSH_WINDOW_MS` exists for) goes on writing. Without
         the guard that output folds into a run that is already finalized, and
-        then reaches the renderer interleaved with the NEXT run's lines, because
-        `appendAgentLines` keys on the agent name alone and cannot tell them
-        apart.
+        then reaches the renderer interleaved with the NEXT run's lines: the
+        `run` tag would still be this run's, but the fold state it is folded
+        against belongs to a run that has already had its result read.
       */
       child.stdout.on('data', (chunk: Buffer) => {
-        if (live.closed) return;
+        if (started.closed) return;
 
-        const step = foldRunLog(live.fold, chunk.toString('utf8'));
+        const step = foldRunLog(started.fold, chunk.toString('utf8'));
 
-        live.fold = step.state;
-        pushLines(name, live, step.lines);
+        started.fold = step.state;
+        pushRunLines(name, started, step.lines);
       });
 
       child.stderr.on('data', (chunk: Buffer) => {
-        if (live.closed) return;
+        if (started.closed) return;
 
         const text = chunk.toString('utf8').trim();
 
-        if (text !== '') pushLines(name, live, [{ text, color: 'dim' }]);
+        if (text !== '') pushRunLines(name, started, [{ text, color: 'dim' }]);
       });
 
       child.on('error', ((error: Error) => {
         // The process itself never launched — never reached the model.
-        live.reachedModel = false;
-        live.reason = live.reason ?? error.message;
-        close(name, live, null);
+        started.reachedModel = false;
+        started.reason = started.reason ?? error.message;
+        close(name, started, null);
       }) as never);
 
       child.on('exit', ((code: number | null) => {
-        if (live.closed || live.flush !== null) return;
+        if (started.closed || started.flush !== null) return;
 
-        const timer = setTimeout(() => close(name, live, code), FLUSH_WINDOW_MS);
+        const timer = setTimeout(() => close(name, started, code), FLUSH_WINDOW_MS);
 
         timer.unref?.();
-        live.flush = timer;
+        started.flush = timer;
       }) as never);
 
       child.on('close', ((code: number | null) => {
-        close(name, live, code);
+        close(name, started, code);
       }) as never);
 
-      return { started: true, run };
+      return { started: true, run, kind };
     },
 
     kill(name) {
-      const live = running.get(name);
+      const live = liveOf(name);
 
-      if (live === undefined) return false;
+      if (live.length === 0) return false;
 
-      escalate(live, 'killed');
+      // Every run under the name (HIVE-128). A kill is "stop this agent", and
+      // a stop button that left a task run writing would be lying.
+      for (const run of live) escalate(run, 'killed');
 
       return true;
     },
 
     noteTurnEnded(name, sessionUuid) {
-      const live = running.get(name);
+      const runs = liveOf(name);
+      /*
+        Matched by session (HIVE-128): a Stop hook names the conversation it
+        ended, and with several live that is the only handle that picks one.
+        A hook that names none arms the watchdog only when there is exactly one
+        run it could mean.
+      */
+      const live =
+        sessionUuid === undefined
+          ? runs.length === 1
+            ? runs[0]
+            : undefined
+          : runs.find((run) => run.sessionUuid === sessionUuid);
 
       if (live === undefined || live.closed || live.watchdog !== null) return;
-      if (sessionUuid !== undefined && sessionUuid !== live.sessionUuid) return;
 
       const timer = setTimeout(() => {
         if (!live.closed) escalate(live, 'stalled');
@@ -788,17 +978,24 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     },
 
     killAll(reason) {
-      for (const live of running.values()) escalate(live, reason);
+      for (const runs of running.values()) {
+        for (const live of runs) escalate(live, reason);
+      }
     },
 
     closeAll(reason) {
-      // A copy, because `close` deletes from the map it is iterating.
-      for (const [name, live] of [...running]) {
-        escalate(live, reason);
-        close(name, live, null);
+      // A copy at both levels, because `close` edits the map and the list it
+      // would otherwise be iterating.
+      for (const [name, runs] of [...running]) {
+        for (const live of [...runs]) {
+          escalate(live, reason);
+          close(name, live, null);
+        }
       }
     },
 
     live: () => [...running.keys()],
+
+    liveRuns: (name) => liveOf(name).map(describe),
   };
 }

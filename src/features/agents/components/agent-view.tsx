@@ -71,7 +71,8 @@ export function AgentView({ entity }: AgentViewProps) {
    * The last refusal from a control on this surface, or `null`.
    *
    * Both verbs answer with a **value** rather than throwing — `AgentRunResult`
-   * carries `refused: 'working' | 'unknown' | 'invalid'` and `LedgerResult` a
+   * carries a `refused` word (`QueueableRefusal | 'unknown' | 'invalid'`: one
+   * of working, paused, saturated, unknown, invalid) and `LedgerResult` a
    * status and a reason — and both contracts say in as many words that they
    * are values so the renderer can draw the reason. Discarding them made a
    * refused Run now look like a dead button, and a rejected post silently eat
@@ -318,7 +319,7 @@ export function AgentView({ entity }: AgentViewProps) {
 
         <div className="min-h-0 flex-1">
           <div className="grid h-full min-h-0 gap-2 [grid-template-columns:minmax(0,1fr)_clamp(280px,22%,380px)] @max-[800px]:[grid-template-columns:minmax(0,1fr)]">
-            <AgentRunLog name={entity.id} status={entity.status} />
+            <AgentRunLog name={entity.id} />
             <AgentLedger name={entity.id} />
           </div>
         </div>

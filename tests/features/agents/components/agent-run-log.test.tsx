@@ -1,8 +1,12 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentRunLog } from '@features/agents/components/agent-run-log';
-import { type AgentSummary, type RunSummary } from '@shared/agent-contract';
+import {
+  type AgentSummary,
+  type LiveRunSummary,
+  type RunSummary,
+} from '@shared/agent-contract';
 import { useHiveStore } from '@stores/hive-store';
 
 /**
@@ -30,6 +34,28 @@ const run = (n: number, over: Partial<RunSummary> = {}): RunSummary => ({
   ...over,
 });
 
+/*
+  A run in flight, as main reports it (HIVE-128). Liveness is this list now, not
+  `status: 'working'` — an agent can be running two things at once, and the
+  status word cannot say which or how many.
+*/
+const standing = (over: Partial<LiveRunSummary> = {}): LiveRunSummary => ({
+  run: 'live-standing',
+  kind: 'standing',
+  trigger: 'interval',
+  startedAt: Date.UTC(2026, 8, 1, 14, 2, 0),
+  ...over,
+});
+
+/** A task run, started `n` minutes after the standing one — so `n` orders them. */
+const task = (n: number, extra: string): LiveRunSummary => ({
+  run: `live-task-${String(n)}`,
+  kind: 'task',
+  trigger: 'manual',
+  extra,
+  startedAt: Date.UTC(2026, 8, 1, 14, 2 + n, 0),
+});
+
 const summary = (over: Partial<AgentSummary> = {}): AgentSummary => ({
   name: 'watcher',
   description: 'Watches things.',
@@ -52,14 +78,15 @@ const seed = (over: Partial<AgentSummary> = {}): void => {
   writes with `endsTurn: true`. Spelled in the fixture rather than sniffed from
   the colour, which is the whole point of the field.
 */
-const lines = (texts: string[]): void => {
+const lines = (texts: string[], run?: string): void => {
   useHiveStore.getState().appendAgentLines({
     name: 'watcher',
-    lines: texts.map((text) =>
-      text.endsWith('|')
+    lines: texts.map((text) => ({
+      ...(run === undefined ? {} : { run }),
+      ...(text.endsWith('|')
         ? { text: text.slice(0, -1), color: 'cyan' as const, endsTurn: true as const }
-        : { text, color: 'ink' as const },
-    ),
+        : { text, color: 'ink' as const }),
+    })),
   });
 };
 
@@ -71,7 +98,7 @@ describe('AgentRunLog', () => {
   it('says so plainly when there is nothing yet', () => {
     seed();
 
-    render(<AgentRunLog name="watcher" status="sleeping" />);
+    render(<AgentRunLog name="watcher" />);
 
     expect(screen.getByText(/Nothing yet/)).toBeInTheDocument();
   });
@@ -81,9 +108,7 @@ describe('AgentRunLog', () => {
       seed({ runs: [run(1), run(2)] });
       lines(['still going']);
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="sleeping" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const receipts = container.querySelector('[data-region="run-receipts"]');
       const output = container.querySelector('[data-region="run-output"]');
@@ -106,9 +131,7 @@ describe('AgentRunLog', () => {
     it('draws no receipts region for an agent that has never run', () => {
       seed({ runs: [] });
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="sleeping" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       expect(container.querySelector('[data-region="run-receipts"]')).toBeNull();
       expect(container.querySelector('[data-region="run-output"]')).not.toBeNull();
@@ -130,9 +153,7 @@ describe('AgentRunLog', () => {
     it('lists the newest run first', () => {
       seed({ runs: Array.from({ length: 20 }, (_, index) => run(index + 1)) });
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="sleeping" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const receipts = container.querySelector(
         '[data-region="run-receipts"]',
@@ -157,7 +178,7 @@ describe('AgentRunLog', () => {
     it('leaves the store’s run history in the order main wrote it', () => {
       seed({ runs: [run(1), run(2), run(3)] });
 
-      render(<AgentRunLog name="watcher" status="sleeping" />);
+      render(<AgentRunLog name="watcher" />);
 
       const entity = useHiveStore.getState().entities['watcher'];
       const order =
@@ -188,9 +209,7 @@ describe('AgentRunLog', () => {
     it('keeps the header with its columns, pinned rather than separated', () => {
       seed({ runs: [run(1)] });
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="sleeping" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const header = container.querySelector('[data-region="run-columns"]');
       const receipts = container.querySelector('[data-region="run-receipts"]');
@@ -222,9 +241,7 @@ describe('AgentRunLog', () => {
     it('lets neither the header nor the rows set their own font size', () => {
       seed({ runs: [run(1)] });
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="sleeping" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const scroller = container.querySelector(
         '[data-region="run-receipts"]',
@@ -248,9 +265,7 @@ describe('AgentRunLog', () => {
     it('lays the header and the rows on the same track', () => {
       seed({ runs: [run(1)] });
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="sleeping" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const header = container.querySelector('[data-region="run-columns"]');
       /*
@@ -284,9 +299,7 @@ describe('AgentRunLog', () => {
       ],
     });
 
-    const { container } = render(
-      <AgentRunLog name="watcher" status="sleeping" />,
-    );
+    const { container } = render(<AgentRunLog name="watcher" />);
 
     const receipts = container.querySelector(
       '[data-region="run-receipts"]',
@@ -312,9 +325,7 @@ describe('AgentRunLog', () => {
   it('marks a missing turn count and cost rather than leaving them blank', () => {
     seed({ runs: [run(1, { turns: undefined, costUsd: undefined })] });
 
-    const { container } = render(
-      <AgentRunLog name="watcher" status="sleeping" />,
-    );
+    const { container } = render(<AgentRunLog name="watcher" />);
 
     const receipts = container.querySelector(
       '[data-region="run-receipts"]',
@@ -342,9 +353,7 @@ describe('AgentRunLog', () => {
         '● turn ended — success|',
       ]);
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="sleeping" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const output = container.querySelector(
         '[data-region="run-output"]',
@@ -368,16 +377,14 @@ describe('AgentRunLog', () => {
       reader is looking.
     */
     it('floats an unfinished turn above the finished ones', () => {
-      seed({ status: 'working', runs: [run(1)] });
+      seed({ status: 'working', runs: [run(1)], live: [standing()] });
       lines([
         'older: done',
         '● turn ended — success|',
         'newer: still working',
       ]);
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="working" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const output = container.querySelector(
         '[data-region="run-output"]',
@@ -397,12 +404,10 @@ describe('AgentRunLog', () => {
      * re-yanked the reader there on every push — the opposite of following.
      */
     it('anchors the live autoscroll to the end of the newest turn', () => {
-      seed({ status: 'working', runs: [run(1)] });
+      seed({ status: 'working', runs: [run(1)], live: [standing()] });
       lines(['older: done', '● turn ended — success|', 'newest line']);
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="working" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const output = container.querySelector(
         '[data-region="run-output"]',
@@ -438,12 +443,10 @@ describe('AgentRunLog', () => {
       ).mockImplementation(scrollIntoView);
 
       try {
-        seed({ status: 'working', runs: [run(1)] });
+        seed({ status: 'working', runs: [run(1)], live: [standing()] });
         lines(['first line']);
 
-        const { container } = render(
-          <AgentRunLog name="watcher" status="working" />,
-        );
+        const { container } = render(<AgentRunLog name="watcher" />);
 
         expect(scrollIntoView).toHaveBeenCalled();
 
@@ -484,7 +487,7 @@ describe('AgentRunLog', () => {
         seed({ runs: [run(1)] });
         lines(['done', '● turn ended — success|']);
 
-        render(<AgentRunLog name="watcher" status="sleeping" />);
+        render(<AgentRunLog name="watcher" />);
 
         expect(scrollIntoView).not.toHaveBeenCalled();
       } finally {
@@ -501,9 +504,7 @@ describe('AgentRunLog', () => {
       seed({ runs: [run(1)] });
       lines(['done', '● turn ended — success|']);
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="sleeping" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const output = container.querySelector(
         '[data-region="run-output"]',
@@ -532,17 +533,21 @@ describe('AgentRunLog', () => {
         'the next run speaks',
       ]);
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="working" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const output = container.querySelector(
         '[data-region="run-output"]',
       ) as HTMLElement;
 
-      const blocks = [...output.querySelectorAll('div[class]')].map((b) =>
-        [...b.querySelectorAll('p')].map((n) => n.textContent),
-      );
+      /*
+        The turn blocks, which are a level down now: the output is partitioned
+        by run first, so each group is a div of its own and only its children
+        are turns. Filtering by parent rather than by class keeps the assertion
+        about structure rather than about the classes that happen to draw it.
+      */
+      const blocks = [...output.querySelectorAll('div[class]')]
+        .filter((b) => b.parentElement !== output)
+        .map((b) => [...b.querySelectorAll('p')].map((n) => n.textContent));
 
       expect(blocks).toEqual([
         ['the next run speaks'],
@@ -560,9 +565,7 @@ describe('AgentRunLog', () => {
       seed({ runs: [run(1)] });
       lines(['one', 'two', 'three']);
 
-      const { container } = render(
-        <AgentRunLog name="watcher" status="sleeping" />,
-      );
+      const { container } = render(<AgentRunLog name="watcher" />);
 
       const output = container.querySelector(
         '[data-region="run-output"]',
@@ -578,29 +581,14 @@ describe('AgentRunLog', () => {
 
   describe('what a live run may claim', () => {
     /*
-      `runs` is appended when a run finalizes, while `status: 'working'` is
-      patched at spawn — so `runs[last]` is the run *before* this one, and
-      drawing it as the live header showed the wrong id and start time.
-    */
-    it('announces a live run without borrowing the previous run’s identity', () => {
-      seed({ status: 'working', runs: [run(1)] });
-
-      render(<AgentRunLog name="watcher" status="working" />);
-
-      expect(screen.getByText(/Running now/)).toBeInTheDocument();
-      // The finished receipt survives beside it rather than being replaced.
-      expect(screen.getByText(/#r1/)).toBeInTheDocument();
-    });
-
-    /*
       The heading names the output below it, so it must not appear while a run
       is live — that output is this run's, not the last one's.
     */
     it('withholds the Latest output heading while a run is live', () => {
-      seed({ status: 'working', runs: [run(1)] });
+      seed({ status: 'working', runs: [run(1)], live: [standing()] });
       lines(['mid-flight']);
 
-      render(<AgentRunLog name="watcher" status="working" />);
+      render(<AgentRunLog name="watcher" />);
 
       expect(screen.queryByText('Latest output')).toBeNull();
     });
@@ -609,9 +597,195 @@ describe('AgentRunLog', () => {
       seed({ status: 'sleeping', runs: [run(1)] });
       lines(['it finished']);
 
-      render(<AgentRunLog name="watcher" status="sleeping" />);
+      render(<AgentRunLog name="watcher" />);
 
       expect(screen.getByText('Latest output')).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * Several runs at once, each with a name (HIVE-128).
+   *
+   * The banner these replace could claim nothing but "something is running",
+   * because a live run had no descriptor to draw from. Main sends one now, so
+   * every run in flight is a row of the same table its receipt will join —
+   * which is the claim worth pinning: a reader must be able to tell two live
+   * runs apart, and tell each one's output from the other's.
+   */
+  describe('several runs live (HIVE-128)', () => {
+    it('draws one running row per live run, the standing one first', () => {
+      seed({
+        status: 'working',
+        runs: [run(1)],
+        live: [task(1, 'review PR 166'), standing(), task(2, 'review PR 167')],
+      });
+
+      render(<AgentRunLog name="watcher" />);
+
+      const receipts = screen.getByTestId('run-receipts');
+      const ids = within(receipts)
+        .getAllByTitle(/standing run|task run/)
+        .map((el) => el.textContent);
+
+      expect(ids).toEqual(['●#live-sta', '○#live-tas', '○#live-tas']);
+      expect(within(receipts).getAllByText('running')).toHaveLength(3);
+      expect(within(receipts).getAllByTitle('standing run')).toHaveLength(1);
+      // The finished receipt survives beside them rather than being replaced.
+      expect(within(receipts).getByText('#r1')).toBeInTheDocument();
+      expect(screen.queryByText(/Running now/)).toBeNull();
+    });
+
+    /*
+      `Turns` is not knowable while a run is open, so the row must not claim a
+      number for it.
+
+      `endsTurn` is written once per run — by the fold at the CLI's `result`
+      event — so a count of this run's folds is zero for the whole life of the
+      run, and a cell reading `0` says "nothing has happened" in a row whose
+      only job is to say something is. The same em dash `Cost` uses.
+    */
+    it('reads — for a live run’s turns, not a number it cannot know', () => {
+      seed({ status: 'working', live: [standing()] });
+
+      const { container } = render(<AgentRunLog name="watcher" />);
+
+      const row = container.querySelector(
+        '[data-live-run="standing"]',
+      ) as HTMLElement;
+      const cells = [...(row.firstElementChild?.children ?? [])].map(
+        (cell) => cell.textContent,
+      );
+
+      // Seven cells: id, trigger, started, outcome, turns, took, cost.
+      expect(cells).toHaveLength(7);
+      // Turns and cost both unknown; only `Took` carries a number.
+      expect(cells[4]).toBe('—');
+      expect(cells[6]).toBe('—');
+      expect(cells[5]).toMatch(/^\d+s$/);
+    });
+
+    it('puts the task’s prompt under its row, where a failure reason goes', () => {
+      seed({ status: 'working', live: [task(1, 'review PR 166 for correctness')] });
+
+      render(<AgentRunLog name="watcher" />);
+
+      expect(
+        screen.getByText('review PR 166 for correctness'),
+      ).toBeInTheDocument();
+    });
+
+    /*
+      `Took` is the one cell that changes without a push from main, so the clock
+      is this component's own — and a clock that renders once is a start time
+      wearing a stopwatch's label.
+    */
+    it('counts the seconds a live run has taken, and keeps counting', () => {
+      vi.useFakeTimers();
+
+      // Restored on the way out however this ends: a failed expectation here
+      // would otherwise leave every later spec in the file on a frozen clock.
+      try {
+        vi.setSystemTime(Date.UTC(2026, 8, 1, 14, 2, 41));
+        seed({ status: 'working', live: [standing()] });
+
+        render(<AgentRunLog name="watcher" />);
+
+        expect(screen.getByText('41s')).toBeInTheDocument();
+
+        act(() => {
+          vi.advanceTimersByTime(2_000);
+        });
+
+        expect(screen.getByText('43s')).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('groups the output by run, standing first, and labels each group', () => {
+      seed({ status: 'working', live: [task(1, 'review PR 166'), standing()] });
+      lines(['task line'], 'live-task-1');
+      lines(['standing line'], 'live-standing');
+
+      render(<AgentRunLog name="watcher" />);
+
+      const output = screen.getByTestId('run-output');
+      const text = output.textContent ?? '';
+
+      expect(text.indexOf('standing line')).toBeLessThan(
+        text.indexOf('task line'),
+      );
+      expect(
+        within(output).getByText(/standing · #live-sta/),
+      ).toBeInTheDocument();
+
+      /*
+        A label that carries data is not a heading, and `uppercase` is the
+        difference. `text-transform` would print `#LIVE-TAS` over a receipts row
+        reading `#live-tas` — two spellings of one id on screen at once — and
+        shout a task's prompt back at whoever typed it.
+      */
+      const label = within(output).getByText(
+        /task · #live-tas · review PR 166/,
+      );
+
+      expect(label).toBeInTheDocument();
+      expect(label).not.toHaveClass('uppercase');
+    });
+
+    it('keeps lines with no run tag together at the end', () => {
+      seed({ status: 'working', live: [standing()] });
+      lines(['old untagged line|']);
+      lines(['fresh line'], 'live-standing');
+
+      render(<AgentRunLog name="watcher" />);
+
+      const text = screen.getByTestId('run-output').textContent ?? '';
+
+      expect(text.indexOf('fresh line')).toBeLessThan(
+        text.indexOf('old untagged line'),
+      );
+    });
+
+    /*
+      The autoscroll follows whoever is talking, and with several runs live
+      that is not whoever sorts first.
+
+      The anchor used to sit in group 0, which is the standing run because
+      `inFlight` puts it there — so a chatty task run scrolled nothing at all,
+      and the reader watching the job they just started watched an anchor
+      pinned to an idle conversation. The buffer's own tail names the run
+      currently writing, and that is the group the anchor belongs to.
+    */
+    it('anchors the autoscroll in the group that wrote the newest line', () => {
+      seed({ status: 'working', live: [standing(), task(1, 'review PR 166')] });
+      lines(['standing line'], 'live-standing');
+      lines(['task line'], 'live-task-1');
+
+      render(<AgentRunLog name="watcher" />);
+
+      const group = screen.getByTestId('run-foot').parentElement
+        ?.parentElement as HTMLElement;
+
+      expect(group.textContent).toContain('task line');
+      expect(group.textContent).not.toContain('standing line');
+    });
+
+    /*
+      An agent whose first ever run is still going has no receipts at all — and
+      the row it does have still needs the columns that name its cells.
+    */
+    it('draws the columns for a first run that has not finished', () => {
+      seed({ status: 'working', runs: [], live: [standing()] });
+
+      const { container } = render(<AgentRunLog name="watcher" />);
+
+      const receipts = screen.getByTestId('run-receipts');
+
+      expect(
+        container.querySelector('[data-region="run-columns"]'),
+      ).not.toBeNull();
+      expect(within(receipts).getByTitle('standing run')).toBeInTheDocument();
     });
   });
 });
