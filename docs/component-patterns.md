@@ -30,7 +30,7 @@ it and nothing else.
 └── AppShell                flex column, h-full
     ├── Header              <header>  56px fixed, --cc-panel, border-bottom soft
     └── Row                 flex-1, min-h-0, flex
-        ├── LeftRail        <nav>     268px fixed, --cc-panel, border-right soft,
+        ├── LeftRail        <nav>     320px fixed, --cc-panel, border-right soft,
         │                             own vertical scroll
         ├── CenterStage     <main>    flex-1, min-w-0, --cc-panel-2, flex column
         └── ActivityRail    <aside>   316px fixed, --cc-panel, border-left soft,
@@ -48,9 +48,15 @@ Each region is a landmark element, so tests address them by role
   inside itself; without `min-w-0` a long terminal line widens the center column,
   which xterm's fit addon then measures and grows into. Both are load-bearing,
   not defensive.
-- **The rails never flex** (`w-[268px]` / `w-[316px]` + `shrink-0`), so the
-  center column absorbs every width change and the document never gains a
-  horizontal scrollbar.
+- **The rails never flex** (`w-[var(--cc-rail-w-left)]` /
+  `w-[var(--cc-rail-w-right)]` + `shrink-0` — 320px and 316px by default, set
+  by drag or density through the token), so the center column absorbs every
+  width change and the document never gains a horizontal scrollbar.
+- **The overmind splits its column.** On the orchestrator view the fleet table
+  sits in a pane with `flex: 0 1 <ratio>%` of the box it shares with the
+  transcript, behind a horizontal `SplitHandle` (`FleetPane`, in
+  `features/orchestrator`). Half by default, capped at the table's content,
+  persisted as `consoleSplitRatio`.
 - **The page never scrolls.** `body { overflow: hidden }` plus `overflow-y-auto`
   on each rail — three independent scrollbars, and the terminal keeps a stable
   size regardless of what lands in the rails.

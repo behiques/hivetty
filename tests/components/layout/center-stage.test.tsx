@@ -107,6 +107,65 @@ describe('CenterStage', () => {
     expect(metaBarFor('feat/hero-refresh')).not.toBeInTheDocument();
   });
 
+  /**
+   * The overmind divides its column between the fleet table and the
+   * transcript, and the user decides where.
+   *
+   * The table used to size itself to its content, which with a long fleet
+   * meant the whole column minus the transcript's floor. It gets a share now
+   * — half by default — behind a divider of the same kind the editor split
+   * has. happy-dom performs no layout, so what is pinned here is the
+   * mechanism: the pane's basis follows the store, the divider is mounted for
+   * the overmind and nothing else, and a double-click puts the half back.
+   */
+  describe('the fleet table’s share of the column', () => {
+    const divider = () => screen.queryByRole('slider', { name: 'Resize the fleet table' });
+
+    it('gives the table half the column by default, behind a divider', () => {
+      render(<CenterStage />);
+
+      const pane = screen.getByTestId('fleet-pane');
+      expect(pane).toHaveStyle({ flex: '0 1 50%' });
+      expect(divider()).toBeInTheDocument();
+      /*
+        The share is a cap, not a size: `max-h-max` keeps a short fleet
+        content-sized, so a fresh launch does not paint half a column of
+        table ground over one empty-state line. `min-h-0` is what lets a long
+        fleet shrink to the share and scroll — without it the flex item's
+        automatic minimum is the whole fleet.
+      */
+      expect(pane).toHaveClass('max-h-max', 'min-h-0');
+    });
+
+    it('follows the stored ratio', () => {
+      render(<CenterStage />);
+
+      act(() => useAppearanceStore.getState().setConsoleSplitRatio(0.3));
+
+      expect(screen.getByTestId('fleet-pane')).toHaveStyle({ flex: '0 1 30%' });
+      expect(divider()).toHaveAttribute('aria-valuenow', '30');
+    });
+
+    it('puts the half back on double-click', async () => {
+      const user = userEvent.setup();
+      render(<CenterStage />);
+      act(() => useAppearanceStore.getState().setConsoleSplitRatio(0.7));
+
+      await user.dblClick(divider()!);
+
+      expect(useAppearanceStore.getState().consoleSplitRatio).toBe(0.5);
+    });
+
+    it('is the overmind’s alone — a session has no table to divide', () => {
+      render(<CenterStage />);
+
+      act(() => useUiStore.getState().openTab('hero-refresh'));
+
+      expect(divider()).toBeNull();
+      expect(screen.queryByTestId('fleet-pane')).toBeNull();
+    });
+  });
+
   describe('the settings overlay (story 101)', () => {
     const settingsTitle = () => screen.queryByRole('heading', { name: 'Settings' });
 

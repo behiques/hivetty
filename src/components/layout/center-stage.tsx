@@ -13,7 +13,7 @@ import { AgentView } from '@features/agents/components/agent-view';
 import { EditorPane } from '@features/editor/components/editor-pane';
 import { EditorTabStrip } from '@features/editor/components/editor-tab-strip';
 import { ConsoleInput } from '@features/orchestrator/components/console-input';
-import { SessionTable } from '@features/orchestrator/components/session-table';
+import { FleetPane, TRANSCRIPT_FLOOR } from '@features/orchestrator/components/fleet-pane';
 import { MessageInput } from '@features/sessions/components/message-input';
 import { NewSessionPicker } from '@features/sessions/components/new-session-picker';
 import { SessionBootCover } from '@features/sessions/components/session-boot-cover';
@@ -156,6 +156,22 @@ export function CenterStage() {
 
   /** The flex container the split handle measures its ratio against. */
   const splitRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * The box the fleet table and the transcript divide between them.
+   *
+   * Not the terminal column: the column also holds the meta bar above and the
+   * console rows below, all fixed height, and a share of *that* is not a share
+   * of anything a reader can see. This wrapper holds exactly the two panes (and
+   * the agent view, which stands in for both), so the table's `flex-basis`
+   * percentage and the divider's reading name the same thing — the table's
+   * share of the space that is actually being split.
+   *
+   * The ratio itself is **not read here**. `FleetPane` subscribes to it, so a
+   * drag re-renders one table and one hairline rather than this component and,
+   * through `TerminalHost`, every mounted terminal — see its docblock.
+   */
+  const paneSplitRef = useRef<HTMLDivElement>(null);
 
   const entries = useMemo(
     () =>
@@ -341,8 +357,23 @@ export function CenterStage() {
           concept scrolls them as one region, but the transcript is a real xterm
           with its own viewport, and a DOM table cannot share it — so the table
           keeps its own scroll and the terminal fills what is left.
+
+          "What is left" is now a *choice*, not a remainder. The table used to
+          size itself to its content, which with a long fleet meant the whole
+          column minus the transcript's 10rem floor — the overmind's own
+          conversation reduced to a few lines under a wall of ended sessions.
+          `FleetPane` gives it a share of this box instead, half by default,
+          dragged through the divider beneath it and capped at the table's own
+          content so a short fleet stays short. The transcript's `min-h-40`
+          below is its floor, and the pane's bounds are computed from that
+          same number so the divider cannot be driven into it. Both are lifted
+          while the editor splits the stage: in a 20% column a floor would
+          overflow it rather than yield.
         */}
-        {view === 'orchestrator' ? <SessionTable /> : null}
+        <div ref={paneSplitRef} className="flex min-h-0 flex-1 flex-col">
+        {view === 'orchestrator' ? (
+          <FleetPane containerRef={paneSplitRef} floored={!splitting} />
+        ) : null}
 
         {/*
           The agent's own surface, mounted the way the console's table is:
@@ -390,7 +421,7 @@ export function CenterStage() {
           */
           className={cn(
             'relative flex flex-1 flex-col',
-            view === 'orchestrator' && !splitting ? 'min-h-40' : 'min-h-0',
+            view === 'orchestrator' && !splitting ? TRANSCRIPT_FLOOR.className : 'min-h-0',
             showingAgent && 'hidden',
           )}
           onClick={focusMessageInput}
@@ -448,6 +479,7 @@ export function CenterStage() {
               does="returns to the overmind"
             />
           ) : null}
+        </div>
         </div>
 
         {view === 'orchestrator' ? <ConsoleInput /> : null}

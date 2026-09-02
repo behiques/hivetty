@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PHRASES } from '@lib/swarm/phrases';
+import { ADVERTISED_VERBS, CONSOLE_VERBS } from '@/types/command';
 import { isAgent, isSession } from '@/types/entity';
 import type { SessionStatus } from '@/types/entity';
 import {
@@ -543,7 +544,7 @@ describe('hive-store', () => {
     });
 
     describe('help', () => {
-      it('lists every command in the grammar', () => {
+      it('lists every advertised command in the grammar', () => {
         run('help');
         const text = transcript();
 
@@ -554,12 +555,42 @@ describe('hive-store', () => {
           'open',
           'send',
           'ask',
-          'answer',
           'spawn',
           'clear',
         ]) {
           expect(text).toContain(command);
         }
+      });
+
+      /**
+       * `answer` still runs — the parser and the executor keep it — but the
+       * inbox's ask card is the route `help` teaches to an open ask, so the
+       * verb is absent from the list. Pinned both ways: the row is gone, and
+       * the command still does something other than `command not found`.
+       */
+      it('keeps `answer` out of the list without dropping it from the grammar', () => {
+        run('help');
+        expect(transcript()).not.toMatch(/\banswer\b/);
+
+        run('answer a12 yes');
+        expect(transcript()).not.toContain('command not found');
+      });
+
+      /**
+       * `help` and the hint bar are two views of one decision. The rows are
+       * keyed by verb and filtered through `QUIET_VERBS`, so this pins that
+       * the verbs `help` prints are exactly `ADVERTISED_VERBS` — quieting a
+       * verb in one place cannot leave it taught in the other.
+       */
+      it('teaches exactly the advertised verbs, in their order', () => {
+        run('help');
+        const taught = useHiveStore
+          .getState()
+          .orchLines.map((l) => /^ {2}(\S+)/.exec(l.text)?.[1])
+          .filter((verb): verb is string => verb !== undefined)
+          .filter((verb) => (CONSOLE_VERBS as readonly string[]).includes(verb));
+
+        expect(taught).toEqual([...ADVERTISED_VERBS]);
       });
 
       it('spells out the ledger verbs’ arguments (HIVE-113)', () => {
@@ -570,7 +601,6 @@ describe('hive-store', () => {
 
         expect(text).toContain('ledger [--open]');
         expect(text).toContain('ask <agent> <message>');
-        expect(text).toContain('answer <id> <text>');
         // Each verb documented against the target type it accepts (HIVE-126).
         expect(text).toContain('run <agent> [prompt]');
       });

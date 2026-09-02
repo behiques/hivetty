@@ -34,39 +34,72 @@ const RECEIPTS_MAX = '40%';
  * character — so these columns hold the same number of glyphs at every size the
  * user can choose.
  *
- * The run id is **fixed**, not flexible, because it renders at a fixed width:
+ * The run id's floor is eleven, not nine, because it renders at a fixed width:
  * a full `randomUUID` is 36 characters — wider than every other column put
  * together — and the first eight already tell two runs apart, which is the
  * judgement `Fact label="Session"` in `agent-view.tsx` reached for the
  * conversation uuid. `#` plus eight is nine, and {@link LiveRow} prepends a kind
  * glyph — `●` or `○`, which most faces render wider than the `1ch` a digit
- * measures — so the track is eleven: nine, the glyph, and room.
+ * measures — so the floor is eleven: nine, the glyph, and room.
  *
- * There is **no flexible track**, and the reason is not a column at all — it
- * gets its own line under the row it belongs to, drawn only when there is one.
+ * ## Every track is `minmax(Nch, Nfr)`: a floor, and a proportional share
  *
- * It was a `minmax(0,1fr)` column first, and that could not be made to work.
- * Given a flexible track it collapses to zero the moment the fixed columns
- * overflow the pane — so the field documented as "the one thing a reader needs
- * in full" was the first to vanish. Given `min-w-max` so the sticky header's
- * background could span the scroll width, it resolved to *max-content* instead
- * and made every row wider than the header, which is the same bug from the
- * other side. Off the track entirely, all eight columns are fixed, every row
- * and the header share one intrinsic width, and a failure reason can never be
- * clipped by a layout it does not participate in.
+ * The `ch` widths are **floors**, not sizes. Seven fixed tracks summed to about
+ * 54 characters, which on the stage this log gets — the whole centre column,
+ * often 1,500px and more — left two thirds of every row blank to the right of
+ * `Cost`. The `fr` on each track shares whatever the pane has beyond the
+ * floors, so the same seven columns read across the width they were given
+ * rather than huddled at its left edge; on a narrow stage the floors bind and
+ * the row is exactly what it was before.
+ *
+ * **The flex factor equals the floor, and that equality is the mechanism.**
+ * The table wrapper carries `min-w-max`, so when the pane is narrower than the
+ * columns the table is sized to its max-content — and under that constraint
+ * CSS Grid resolves one `fr` to the largest `floor ÷ factor` across the
+ * flexible tracks. With every ratio at `1ch`, each track lands on exactly its
+ * floor: the overflowing table is the sum of the floors, which is precisely
+ * the width the fixed grid had. `1fr` everywhere would instead have made every
+ * column as wide as the *widest* floor — seven eleven-character tracks — and
+ * pushed the pane into a sideways scroll it did not need. Wider than the
+ * floors, the surplus is then split in the same proportions, so `Run` stays
+ * the widest column and `Turns` the narrowest at every size instead of all
+ * seven going equal.
+ *
+ * **One `min-w-max`, on a wrapper around the header and every row — never on
+ * each of them.** Under the max-content constraint a grid also takes each
+ * cell's own width into account, and the header's cells are wider than the
+ * rows' for the same text: `tracking-[0.1em] uppercase` makes `TURNS` about
+ * 5.8ch in a 5ch track. Given its own `min-w-max`, the header grid resolved a
+ * larger `fr` than the row grids and drifted right of them by up to 70px at
+ * `Cost` — measured in Chromium at a 360px scroller and 16px type. Sizing the
+ * wrapper once, from the widest of them, hands header and rows the same
+ * *definite* width, and against a definite width every grid here resolves the
+ * same tracks, because only the floors and the factors take part.
+ *
+ * The reason and prompt lines under a row are `contain: inline-size` for the
+ * same reason: a wrapping paragraph's max-content is its unwrapped length,
+ * and one long failure reason would otherwise have widened the whole table
+ * to fit it on a single line.
+ *
+ * That is also not the `minmax(0,1fr)` this grid once had, and the difference
+ * is the zero. A track allowed to reach nothing does reach it the moment the
+ * other tracks overflow the pane — which is how the failure reason vanished
+ * first. A floor in `ch` closes that hole: no track can fall below its
+ * shortest honest value.
+ *
+ * The failure reason is still **not a column** — it gets its own line under
+ * the row it belongs to, drawn only when there is one — for the reason the
+ * old fixed grid recorded: the one field a reader needs in full must not be
+ * clipped by a layout it participates in.
  *
  * `Turns`, `Took` and `Cost` are right-aligned with `tabular-nums`, so `9s` and
  * `10s` line up on their units and `$0.04` under `$0.16`. Left-aligned digits
  * were half the reason the old row looked ragged; the other half was that
  * `justify-between` gave `manual` (6 chars) and `interval` (8) different
  * starting points for everything after them.
- *
- * Measured in Chromium at 640/900/1200px and 10/12.5/18px: every cell's left
- * edge is identical across the header and all rows, and nothing clips except a
- * 37-character failure reason at the smallest pairing — which has its `title`.
  */
 const RECEIPT_GRID =
-  'grid items-baseline gap-x-3 [grid-template-columns:11ch_9ch_9ch_8ch_5ch_5ch_7ch]';
+  'grid items-baseline gap-x-3 [grid-template-columns:minmax(11ch,11fr)_minmax(9ch,9fr)_minmax(9ch,9fr)_minmax(8ch,8fr)_minmax(5ch,5fr)_minmax(5ch,5fr)_minmax(7ch,7fr)]';
 
 interface AgentRunLogProps {
   name: string;
@@ -314,22 +347,26 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
           data-testid="run-receipts"
         >
           {/*
+            `min-w-max` on this wrapper, and on nothing inside it.
+
+            A block box is as wide as its container's client width, so once
+            the receipts overflow sideways and the reader scrolls right, the
+            header's opaque fill simply stopped — and rows showed through the
+            header, which is the one thing the fill was added to prevent. The
+            wrapper is sized to the widest of its children, and header and rows
+            are then blocks of that one definite width — which is also what
+            keeps their tracks identical; see `RECEIPT_GRID` on why giving each
+            of them its own `min-w-max` did not.
+          */}
+          <div className="min-w-max" data-region="run-table">
+          {/*
             `sticky`, not a sibling: it scrolls with the rows sideways and stays
             put as they pass underneath. It needs an opaque background for that
             second half — `bg-term-bg` is the log's own ground, so rows disappear
             *under* the header rather than through it.
           */}
           <div
-            /*
-              `min-w-max` so the background spans the *scroll* width.
-
-              A block box is as wide as its container's client width, so once
-              the receipts overflow sideways and the reader scrolls right, the
-              header's opaque fill simply stopped — and rows showed through the
-              header, which is the one thing the fill was added to prevent. The
-              rows carry it too, or they would not extend under it.
-            */
-            className={`${RECEIPT_GRID} sticky top-0 z-10 min-w-max border-b border-border-soft bg-term-bg pb-1 tracking-[0.1em] uppercase`}
+            className={`${RECEIPT_GRID} sticky top-0 z-10 border-b border-border-soft bg-term-bg pb-1 tracking-[0.1em] uppercase`}
             style={{ color: palette.dim }}
             data-region="run-columns"
           >
@@ -375,6 +412,7 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
               first={index === 0 && inFlight.length === 0}
             />
           ))}
+          </div>
         </div>
       )}
 
@@ -659,7 +697,7 @@ function LiveRow({
 
   return (
     <div
-      className={cn('min-w-max pb-0.5', first ? 'pt-1' : 'border-t border-border-soft pt-1')}
+      className={cn('pb-0.5', first ? 'pt-1' : 'border-t border-border-soft pt-1')}
       style={{ color: dim }}
       data-live-run={run.kind}
     >
@@ -693,7 +731,10 @@ function LiveRow({
         The standing run has none — it was not asked anything, it simply woke.
       */}
       {run.extra === undefined ? null : (
-        <p className="pl-[11ch] break-words whitespace-pre-wrap" title={run.extra}>
+        <p
+          className="pl-[11ch] break-words whitespace-pre-wrap [contain:inline-size]"
+          title={run.extra}
+        >
           {run.extra}
         </p>
       )}
@@ -726,7 +767,7 @@ interface RunHeaderProps {
  * and a run that took `10s` pushed its cost a character right of one that took
  * `9s`. Columns cannot do that.
  *
- * `reason` has the last column and the only flexible track — see
+ * `reason` is not a column at all — it gets its own line under the row, see
  * {@link RECEIPT_GRID}. It rode in the outcome cell first, which clipped it at
  * every window size and font size the app can render.
  */
@@ -740,10 +781,7 @@ function RunHeader({ run, dim, brand, first }: RunHeaderProps) {
 
   return (
     <div
-      className={cn(
-        'min-w-max pb-0.5',
-        first ? 'pt-1' : 'border-t border-border-soft pt-1',
-      )}
+      className={cn('pb-0.5', first ? 'pt-1' : 'border-t border-border-soft pt-1')}
       style={{ color: dim }}
     >
       <div className={RECEIPT_GRID}>
@@ -781,7 +819,9 @@ function RunHeader({ run, dim, brand, first }: RunHeaderProps) {
         row no height and the table no width.
       */}
       {run.reason === undefined ? null : (
-        <p className="pl-[11ch] break-words whitespace-pre-wrap">{run.reason}</p>
+        <p className="pl-[11ch] break-words whitespace-pre-wrap [contain:inline-size]">
+          {run.reason}
+        </p>
       )}
     </div>
   );
