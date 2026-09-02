@@ -13,6 +13,7 @@ import { useAgentsSync } from '@features/shared/hooks/use-agents-sync';
 import { useLedgerSync } from '@features/shared/hooks/use-ledger-sync';
 import { useForegroundSession } from '@hooks/use-foreground-session';
 import { useNotificationStream } from '@hooks/use-notification-stream';
+import { useRailChord } from '@hooks/use-rail-chord';
 import { useSessionNames } from '@hooks/use-session-names';
 import { watchSystemTheme } from '@stores/appearance-store';
 import { useShowActivityRail } from '@stores/ui-store';
@@ -124,6 +125,15 @@ export function AppShell() {
    * composition root.
    */
   useProjectWatcher();
+
+  /**
+   * The rail-collapse chords (this story).
+   *
+   * At the composition root for the same reason as the four above: one fact
+   * about the whole shell, one listener. Per-rail would mean two listeners
+   * racing to ignore each other's chord.
+   */
+  useRailChord();
 
   /**
    * Follow the OS while the app is open (story 105).

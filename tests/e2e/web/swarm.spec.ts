@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { PHRASES } from '../../../src/lib/swarm/phrases';
+import { selectRailTab } from '../fixtures/rail-tabs';
 
 /**
  * The swarm layer, in a real browser against production output.
@@ -101,7 +102,7 @@ for (const { tab, rail, pool, cast, keeps } of RAILS) {
       { name: rail },
     );
 
-    await region.getByRole('tab', { name: tab }).click();
+    await selectRailTab(region.getByRole('tab', { name: tab }));
 
     await expect(region).toContainText(keeps);
 
@@ -126,7 +127,7 @@ for (const { tab, rail, pool, cast, keeps } of RAILS) {
       { name: rail },
     );
 
-    await region.getByRole('tab', { name: tab }).click();
+    await selectRailTab(region.getByRole('tab', { name: tab }));
 
     /**
      * Exactly one sprite in the rail, and it is the cast one. The count is

@@ -1,3 +1,4 @@
+import { selectRailTab } from '../fixtures/rail-tabs';
 import { expect, test } from './fixtures/hive-app';
 
 /**
@@ -92,7 +93,7 @@ test('the work tab shows no ticket it did not get from Jira', async ({ page }) =
   const rail = page.getByRole('navigation', {
     name: 'Projects, work, and agents',
   });
-  await rail.getByRole('tab', { name: /^Work/ }).click();
+  await selectRailTab(rail.getByRole('tab', { name: /^Work/ }));
 
   const work = page.locator('[data-panel="work"]');
   await expect(work).toBeVisible();
@@ -120,7 +121,7 @@ test('the work tab opens on a skeleton, not on data', async ({ page }) => {
   const rail = page.getByRole('navigation', {
     name: 'Projects, work, and agents',
   });
-  await rail.getByRole('tab', { name: /^Work/ }).click();
+  await selectRailTab(rail.getByRole('tab', { name: /^Work/ }));
 
   const skeleton = page.getByRole('status', { name: 'Loading tickets' });
 
@@ -182,7 +183,7 @@ test('the agents tab is empty and says why', async ({ page }) => {
   const rail = page.getByRole('navigation', {
     name: 'Projects, work, and agents',
   });
-  await rail.getByRole('tab', { name: /^Agents/ }).click();
+  await selectRailTab(rail.getByRole('tab', { name: /^Agents/ }));
 
   // Since HIVE-114 there is somewhere to point: the copy names the pane that
   // creates one, rather than reporting that the feature does not exist.

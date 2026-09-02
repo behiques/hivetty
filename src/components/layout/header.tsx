@@ -9,7 +9,12 @@ import { ModelChip } from '@components/layout/model-chip';
 import { StatusCounts } from '@components/layout/status-counts';
 import { Badge } from '@components/ui/badge';
 import { isDesktop } from '@config/runtime';
-import { useTheme, useThemeActions } from '@stores/appearance-store';
+import {
+  useRailWidthState,
+  useSetRailCollapsed,
+  useTheme,
+  useThemeActions,
+} from '@stores/appearance-store';
 import { useUnreadCount } from '@stores/hive-store';
 import {
   usePickerActions,
@@ -67,8 +72,18 @@ export function Header() {
   const { toggleTheme } = useThemeActions();
   const unread = useUnreadCount();
   const revealRailTab = useRevealRailTab();
-  // Named rather than inlined, so the bell's JSX reads as what it does.
-  const showInbox = () => revealRailTab('inbox');
+  const setRailCollapsed = useSetRailCollapsed();
+  /*
+    Named rather than inlined, so the bell's JSX reads as what it does — and
+    because it is now two actions, not one. `revealRailTab` lives in `ui-store`
+    and collapse in `appearance-store`; no store may read another, so a caller
+    that wants both says both. Without the second call the bell would select the
+    Inbox tab on a rail showing three icons: visibly nothing happening.
+  */
+  const showInbox = () => {
+    revealRailTab('inbox');
+    setRailCollapsed('right', false);
+  };
   const { openPicker } = usePickerActions();
   const { openSettings } = useSettingsActions();
 
@@ -81,6 +96,14 @@ export function Header() {
     HIVE-79.
   */
   const showActivityRail = useShowActivityRail();
+  /*
+    Collapse also removes the line the cluster is meant to claim, and it lives
+    in the other store from `showActivityRail` — mount and collapse are
+    independent facts, so both are read here rather than one standing in for
+    the other. See the cluster's own comment for why a collapsed rail cannot
+    take the same branch as a mounted, expanded one.
+  */
+  const { railCollapsedRight } = useRailWidthState();
 
   return (
     <header
@@ -204,10 +227,23 @@ export function Header() {
 
           With the rail hidden there is no column to claim, so the width drops
           away and the cluster is simply flush right.
+
+          A **collapsed** rail needs that same fallback, not the claimed
+          column. Collapse paints `--cc-rail-w-right` at `RAIL_STRIP` — 44px,
+          room for one icon — because that property is also what the rail
+          itself is sized with; this cluster reusing it was only ever valid
+          while the value meant "the panel's own width". Claim a 44px column
+          here and the ~262px of `shrink-0` children above do not shrink to
+          fit it — they overflow it and land on the counts to their left. So
+          the column is claimed only when the rail is both mounted **and**
+          expanded; either `showActivityRail` or `railCollapsedRight` failing
+          drops the width exactly like the hidden case above.
         */
         className={cn(
           'flex shrink-0 items-center justify-end gap-[14px]',
-          showActivityRail && 'w-[calc(var(--cc-rail-w-right)-1rem)]',
+          showActivityRail &&
+            !railCollapsedRight &&
+            'w-[calc(var(--cc-rail-w-right)-1rem)]',
         )}
       >
         <button

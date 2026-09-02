@@ -116,6 +116,17 @@ interface AppearanceState {
   railWidthRight: number | null;
 
   /**
+   * Whether each rail is showing its icon strip instead of its panel.
+   *
+   * Persisted like everything else here, which is exactly right for this one:
+   * a rail the user collapsed should still be collapsed at the next launch, and
+   * because it is persisted the strip paints on the *first* frame rather than
+   * after a hydration flash. See {@link applyStoredRailWidths}.
+   */
+  railCollapsedLeft: boolean;
+  railCollapsedRight: boolean;
+
+  /**
    * The line under the wordmark, top-left — whose hive this is.
    *
    * Appearance rather than config, on this store's own test: it is a fact about
@@ -214,6 +225,9 @@ interface AppearanceState {
   setRailWidth: (side: RailSide, width: number) => void;
   /** Hand the rail back to the stylesheet: `null`, not today's default number. */
   resetRailWidth: (side: RailSide) => void;
+  setRailCollapsed: (side: RailSide, collapsed: boolean) => void;
+  /** The click-the-active-tab gesture, and both keyboard chords. */
+  toggleRailCollapsed: (side: RailSide) => void;
   setTeamName: (name: string) => void;
   setSystemDark: (dark: boolean) => void;
 
@@ -397,6 +411,12 @@ export function activeThemeOf(
  * switching to compact leaves it at 268px forever. So a rail sitting at its
  * default has its property *removed*, and the stylesheet — density rules
  * included — takes back over.
+ *
+ * A **collapsed** rail always takes the write branch, and that is correct: 44px
+ * is never equal to a minimum, so `isRailDefault` is false, and the stylesheet
+ * has no notion of a strip — the inline property is the only thing that can
+ * paint one. The `widths.right === 0` guard still catches the unmounted case
+ * and is untouched.
  */
 export function applyRailWidths(widths: RailWidths, min: { left: number; right: number }) {
   if (typeof document === 'undefined') return;
@@ -444,12 +464,12 @@ export function syncRailWidths(input: RailWidthInput): RailWidths {
  * The rail widths implied by the store alone, for the paths that have no
  * `showActivityRail` to hand — rehydration and reset.
  *
- * Passes `showActivityRail: true`, which is **exact rather than optimistic on
- * the path that matters**. `ui-store` has no persist middleware — nothing there
- * is persisted, by a structural rule that store states outright — so
- * `showActivityRail` is its initial `true` on every launch. At rehydration,
- * which runs during module evaluation before React mounts, there is therefore
- * no other answer it could have.
+ * Collapse **is** persisted, unlike `showActivityRail`, so this path has the
+ * real answer and the strip paints on the first frame rather than after a
+ * hydration flash. The right rail is still assumed mounted: `showActivityRail`
+ * lives in `ui-store`, which this store may not read and which persists
+ * nothing, so at rehydration — during module evaluation, before React mounts —
+ * it is its initial `true` and there is no other answer it could have.
  *
  * `setDensity` is the one caller that can run later, with the rail genuinely
  * hidden. What it writes then is a `--cc-rail-w-right` for a rail nobody is
@@ -458,14 +478,18 @@ export function syncRailWidths(input: RailWidthInput): RailWidths {
  * corrected by `use-rail-widths` in the same commit phase regardless.
  */
 function applyStoredRailWidths(
-  state: Pick<AppearanceState, 'railWidthLeft' | 'railWidthRight' | 'density'>,
+  state: Pick<
+    AppearanceState,
+    'railWidthLeft' | 'railWidthRight' | 'railCollapsedLeft' | 'railCollapsedRight' | 'density'
+  >,
 ) {
   syncRailWidths({
     storedLeft: state.railWidthLeft,
     storedRight: state.railWidthRight,
     min: RAIL_MIN[state.density],
     windowWidth: typeof window === 'undefined' ? 0 : window.innerWidth,
-    showActivityRail: true,
+    left: state.railCollapsedLeft ? 'collapsed' : 'expanded',
+    right: state.railCollapsedRight ? 'collapsed' : 'expanded',
   });
 }
 
@@ -480,6 +504,8 @@ function applyAll(
     | 'activeThemeId'
     | 'railWidthLeft'
     | 'railWidthRight'
+    | 'railCollapsedLeft'
+    | 'railCollapsedRight'
   >,
 ) {
   applyTheme(resolveTheme(state.theme, state.systemDark));
@@ -513,6 +539,8 @@ const initialAppearanceState = {
   /** `null` — follow the stylesheet — until somebody drags a rail. */
   railWidthLeft: null as number | null,
   railWidthRight: null as number | null,
+  railCollapsedLeft: false,
+  railCollapsedRight: false,
   teamName: DEFAULT_TEAM_NAME,
 
   /** Full stage: the editor is a place you go, not a permanent tax on the terminal. */
@@ -550,6 +578,8 @@ interface PersistedAppearanceState {
   density: Density;
   railWidthLeft: number | null;
   railWidthRight: number | null;
+  railCollapsedLeft: boolean;
+  railCollapsedRight: boolean;
   teamName: string;
   editorPlacement: EditorPlacement;
   editorSplitAxis: EditorSplitAxis;
@@ -745,11 +775,34 @@ export const useAppearanceStore = create<AppearanceState>()(
         const min = RAIL_MIN[get().density][side];
         const next = Math.round(Math.min(RAIL_MAX_PX, Math.max(min, width)));
 
-        set(side === 'left' ? { railWidthLeft: next } : { railWidthRight: next });
+        /*
+          Writing a width is an unambiguous statement that the rail should be
+          visible at that width, and it is the only thing drag-to-expand calls.
+          Clearing here is what lets that gesture need no second action.
+        */
+        set(
+          side === 'left'
+            ? { railWidthLeft: next, railCollapsedLeft: false }
+            : { railWidthRight: next, railCollapsedRight: false },
+        );
       },
 
       resetRailWidth: (side) =>
         set(side === 'left' ? { railWidthLeft: null } : { railWidthRight: null }),
+
+      setRailCollapsed: (side, collapsed) =>
+        set(
+          side === 'left'
+            ? { railCollapsedLeft: collapsed }
+            : { railCollapsedRight: collapsed },
+        ),
+
+      toggleRailCollapsed: (side) =>
+        set((state) =>
+          side === 'left'
+            ? { railCollapsedLeft: !state.railCollapsedLeft }
+            : { railCollapsedRight: !state.railCollapsedRight },
+        ),
 
       /**
        * Stored exactly as typed.
@@ -869,6 +922,8 @@ export const useAppearanceStore = create<AppearanceState>()(
         density: state.density,
         railWidthLeft: state.railWidthLeft,
         railWidthRight: state.railWidthRight,
+        railCollapsedLeft: state.railCollapsedLeft,
+        railCollapsedRight: state.railCollapsedRight,
         teamName: state.teamName,
         editorPlacement: state.editorPlacement,
         editorSplitAxis: state.editorSplitAxis,
@@ -1137,16 +1192,21 @@ export const useSetEditorSplitRatio = () =>
   useAppearanceStore((state) => state.setEditorSplitRatio);
 
 /**
- * The stored rail widths and the density they are bounded by (HIVE-105).
+ * The stored rail widths, their collapse flags, and the density they are
+ * bounded by (HIVE-105).
  *
- * Deliberately three fields and no more. `use-rail-widths` is the only
+ * Deliberately these fields and no more. `use-rail-widths` is the only
  * consumer, it runs at the composition root, and widening this selector would
  * re-run the clamp — and touch `<body>` — every time an unrelated appearance
- * field changed.
+ * field changed. The collapse flags belong here rather than behind a second
+ * hook because every consumer of the widths also needs to know whether a rail
+ * is currently a strip.
  */
 const railWidthSelector = (state: AppearanceState) => ({
   railWidthLeft: state.railWidthLeft,
   railWidthRight: state.railWidthRight,
+  railCollapsedLeft: state.railCollapsedLeft,
+  railCollapsedRight: state.railCollapsedRight,
   density: state.density,
 });
 
@@ -1157,6 +1217,13 @@ export const useSetRailWidth = () => useAppearanceStore((state) => state.setRail
 
 /** Double-click on a handle — back to following the stylesheet. */
 export const useResetRailWidth = () => useAppearanceStore((state) => state.resetRailWidth);
+
+/** The strip gesture and both chords. */
+export const useToggleRailCollapsed = () =>
+  useAppearanceStore((state) => state.toggleRailCollapsed);
+
+/** Drag-past-the-edge, and the header bell un-collapsing the activity rail. */
+export const useSetRailCollapsed = () => useAppearanceStore((state) => state.setRailCollapsed);
 
 /** The editor section's current values and its setters. */
 export const useEditorSettings = () =>

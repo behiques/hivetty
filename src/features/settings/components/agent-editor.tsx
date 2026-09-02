@@ -282,8 +282,9 @@ export function AgentEditor({
             Delete
           </button>
           {/*
-            Native `title`, not a Radix tooltip: the app mounts no
-            `TooltipProvider` (see `.claude/COMPONENTS.md`), and the one other
+            Native `title`, not a Radix tooltip: this affordance predates
+            `TooltipProvider` (now mounted in `app.tsx` for the rail strips —
+            see `.claude/COMPONENTS.md`), and the one other
             disabled-with-explanation control in the app made the same choice.
           */}
           <button

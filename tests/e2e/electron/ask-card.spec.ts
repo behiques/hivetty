@@ -11,6 +11,7 @@ import {
   HOOK_HEADER_TOKEN,
 } from '../../../electron/shared/hook-contract';
 import { LEDGER_POST_PATH, type LedgerEntry } from '../../../electron/shared/ledger-contract';
+import { selectRailTab } from '../fixtures/rail-tabs';
 import { launchHive } from './fixtures/hive-app';
 
 /**
@@ -177,7 +178,7 @@ test('a permission card names the call the click authorises, not the body', asyn
     await shell(page, postDeceptiveAskCommand(posted));
     await expectMarker(posted, '200');
 
-    await page.getByRole('tab', { name: /^Inbox/ }).click();
+    await selectRailTab(page.getByRole('tab', { name: /^Inbox/ }));
 
     // The title is main's, so the card is addressable by the tool it will run.
     const card = page.getByRole('article', {
@@ -244,7 +245,7 @@ test('an ask posted to the ledger becomes a card, and answering it collapses the
     await shell(page, postAskCommand(posted));
     await expectMarker(posted, '200');
 
-    await page.getByRole('tab', { name: /^Inbox/ }).click();
+    await selectRailTab(page.getByRole('tab', { name: /^Inbox/ }));
 
     /*
       The card's `aria-label` is `Ask from ${asker}: ${notif.title}`

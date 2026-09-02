@@ -56,10 +56,11 @@ export function SessionMetaBar({ entity }: SessionMetaBarProps) {
       className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border-soft bg-panel px-4 py-2.5"
     >
       {/*
-        A native `title` rather than the Radix tooltip: the app mounts no
-        TooltipProvider yet, and adding one to the root for a single affordance
-        buys nothing a title does not. The keyboard hint in the label is the
-        point — story 060 binds ArrowLeft to this same action.
+        A native `title` rather than the Radix tooltip: this affordance
+        predates `TooltipProvider` (now mounted in `app.tsx` for the rail
+        strips) and a title does everything it needs here. The keyboard hint
+        in the label is the point — story 060 binds ArrowLeft to this same
+        action.
       */}
       <button
         type="button"

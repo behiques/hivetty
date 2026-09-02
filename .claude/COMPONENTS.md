@@ -576,9 +576,10 @@ the session's branch against the live `prs` list, the same resolution
 `useTicketPrs()` and `usePrs()` perform; `Session.pr` is gone, along with the
 `PrState` type that existed only to type it.
 
-The back pill uses a native `title` rather than the Radix tooltip: the app mounts
-no `TooltipProvider`, and adding one to the root for a single affordance buys
-nothing a title does not. The label names the shortcut story 060 will bind.
+The back pill uses a native `title` rather than the Radix tooltip: this predates
+`TooltipProvider`, now mounted in `app.tsx` for the rail strips' hover labels,
+and a title still does everything this one affordance needs. The label names
+the shortcut story 060 will bind.
 
 ### Feature components (epic HIVE-4)
 

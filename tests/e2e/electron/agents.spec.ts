@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
+import { selectRailTab } from '../fixtures/rail-tabs';
 import { launchHive } from './fixtures/hive-app';
 
 /**
@@ -162,7 +163,7 @@ test('lists an authored agent in the rail, grouped by state', async ({}, testInf
   try {
     await authorAgent(page);
 
-    await page.getByRole('tab', { name: /Agents/ }).click();
+    await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
 
     const panel = page.locator('[data-panel="agents"]');
 
@@ -188,7 +189,7 @@ test('opens the agent view — and no terminal — when the row is clicked', asy
 
   try {
     await authorAgent(page);
-    await page.getByRole('tab', { name: /Agents/ }).click();
+    await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
     await page
       .locator('[data-panel="agents"]')
       .getByRole('button', { name: /slack-watcher/ })
@@ -251,7 +252,7 @@ test('lays the run log and the ledger side by side, and stacks them when the sta
 
   try {
     await authorAgent(page);
-    await page.getByRole('tab', { name: /Agents/ }).click();
+    await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
     await page
       .locator('[data-panel="agents"]')
       .getByRole('button', { name: /slack-watcher/ })
@@ -486,7 +487,7 @@ test('pauses from the agent view, and the rail agrees', async ({}, testInfo) => 
 
   try {
     await authorAgent(page);
-    await page.getByRole('tab', { name: /Agents/ }).click();
+    await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
 
     const panel = page.locator('[data-panel="agents"]');
 

@@ -288,7 +288,8 @@ describe('appearance-store — rail widths', () => {
       storedRight: useAppearanceStore.getState().railWidthRight,
       min: RAIL_MIN[useAppearanceStore.getState().density],
       windowWidth,
-      showActivityRail,
+      left: 'expanded',
+      right: showActivityRail ? 'expanded' : 'hidden',
     });
 
   const inlineLeft = () => document.body.style.getPropertyValue('--cc-rail-w-left');
@@ -461,6 +462,8 @@ describe('appearance-store — persistence', () => {
       density: 'compact',
       railWidthLeft: null,
       railWidthRight: null,
+      railCollapsedLeft: false,
+      railCollapsedRight: false,
       teamName: 'Swarm Command',
       editorPlacement: 'full',
       editorSplitAxis: 'vertical',
@@ -989,5 +992,99 @@ describe('sanitizeThemeState', () => {
   it('keeps a shipped id active when nothing in the library claims it', () => {
     const result = sanitizeThemeState({ themes: {}, activeThemeId: 'graphite' });
     expect(result).toEqual({ themes: {}, activeThemeId: 'graphite' });
+  });
+});
+
+describe('rail collapse', () => {
+  it('starts expanded on both sides', () => {
+    const state = useAppearanceStore.getState();
+    expect(state.railCollapsedLeft).toBe(false);
+    expect(state.railCollapsedRight).toBe(false);
+  });
+
+  it('toggles one side and leaves the other alone', () => {
+    useAppearanceStore.getState().toggleRailCollapsed('left');
+
+    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(true);
+    expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
+  });
+
+  it('sets a side explicitly', () => {
+    useAppearanceStore.getState().setRailCollapsed('right', true);
+    expect(useAppearanceStore.getState().railCollapsedRight).toBe(true);
+
+    useAppearanceStore.getState().setRailCollapsed('right', false);
+    expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
+  });
+
+  it('clears the flag when a width is written to the same side', () => {
+    // Drag-to-expand calls only `setRailWidth`. Clearing here is what
+    // makes that one call enough, and what stops the width and the flag
+    // from ever disagreeing.
+    useAppearanceStore.getState().setRailCollapsed('left', true);
+    useAppearanceStore.getState().setRailWidth('left', 300);
+
+    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(false);
+    expect(useAppearanceStore.getState().railWidthLeft).toBe(300);
+  });
+
+  it('does not clear the flag on the other side', () => {
+    useAppearanceStore.getState().setRailCollapsed('right', true);
+    useAppearanceStore.getState().setRailWidth('left', 300);
+
+    expect(useAppearanceStore.getState().railCollapsedRight).toBe(true);
+  });
+
+  it('leaves the flag alone when the width is reset', () => {
+    // "Go back to the default width" is a statement about width. A
+    // collapsed rail has no width opinion to reset.
+    useAppearanceStore.getState().setRailCollapsed('left', true);
+    useAppearanceStore.getState().resetRailWidth('left');
+
+    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(true);
+  });
+
+  it('restores both to expanded on reset', () => {
+    useAppearanceStore.getState().toggleRailCollapsed('left');
+    useAppearanceStore.getState().toggleRailCollapsed('right');
+    useAppearanceStore.getState().reset();
+
+    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(false);
+    expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
+  });
+});
+
+describe('rail collapse migration', () => {
+  it('migrateAppearance passes unknown-key-absence through untouched', () => {
+    // Documents the input to the real pipeline exercised below: a v3 payload
+    // written before collapse existed simply has no opinion on the flag.
+    const migrated = migrateAppearance({ density: 'comfortable' }, 3);
+    expect(migrated.railCollapsedLeft).toBeUndefined();
+  });
+
+  it('reads a v3 payload written before collapse existed as expanded', async () => {
+    // The regression this guards: the persist `merge` option spreads
+    // `currentState` before the persisted payload, so a payload that lacks
+    // `railCollapsedLeft`/`railCollapsedRight` (as every payload written
+    // before this feature existed does) must fall back to `initialAppearanceState`'s
+    // `false` — not to `undefined`, which would render a strip on first
+    // launch for every existing user. This goes through the actual `persist`
+    // rehydration path (matching the store's current `version: 3`, so no
+    // `migrate` branch runs — only `merge`) rather than reimplementing it.
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        state: {
+          density: 'compact',
+        },
+      }),
+    );
+
+    vi.resetModules();
+    const { useAppearanceStore: store } = await import('@stores/appearance-store');
+
+    expect(store.getState().railCollapsedLeft).toBe(false);
+    expect(store.getState().railCollapsedRight).toBe(false);
   });
 });

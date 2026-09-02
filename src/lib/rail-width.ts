@@ -42,6 +42,26 @@ export const RAIL_MIN = {
   compact: { left: 232, right: 276 },
 } as const;
 
+/**
+ * A collapsed rail: wide enough for a 20px icon in a 34px hit target.
+ *
+ * Density-invariant, unlike {@link RAIL_MIN}. That pair varies with density
+ * because a *panel's* content needs room; a strip's content is one icon, which
+ * is the same size in both densities. A second pair here would be two constants
+ * expressing one fact.
+ */
+export const RAIL_STRIP = 44;
+
+/**
+ * What a rail is doing right now.
+ *
+ * `hidden` is the pre-existing `showActivityRail: false` case, kept so
+ * `clampRailWidths` keeps reporting `0` for an unmounted rail. Nothing produces
+ * it today except `ui-store`'s `showActivityRail`, which no UI sets to false —
+ * see the spec's "The showActivityRail question".
+ */
+export type RailDisplay = 'expanded' | 'collapsed' | 'hidden';
+
 /** One density's pair of minimums — what {@link clampRailWidths} is handed. */
 export interface RailMinimums {
   left: number;
@@ -81,8 +101,17 @@ export const STAGE_MIN_FRACTION = 0.2;
  * narrowing the window minimum or widening a rail minimum fails the build
  * rather than silently breaching the stage floor.
  */
-export function railFloorWindowWidth(min: RailMinimums, showActivityRail = true): number {
-  return (min.left + (showActivityRail ? min.right : 0)) / (1 - STAGE_MIN_FRACTION);
+export function railFloorWindowWidth(
+  min: RailMinimums,
+  left: RailDisplay = 'expanded',
+  right: RailDisplay = 'expanded',
+): number {
+  const claim = (display: RailDisplay, expanded: number): number => {
+    if (display === 'hidden') return 0;
+    return display === 'collapsed' ? RAIL_STRIP : expanded;
+  };
+
+  return (claim(left, min.left) + claim(right, min.right)) / (1 - STAGE_MIN_FRACTION);
 }
 
 export interface RailWidthInput {
@@ -102,22 +131,21 @@ export interface RailWidthInput {
   /** The width the two rails and the stage are dividing up. */
   windowWidth: number;
   /**
-   * Whether the activity rail is mounted. When it is not it claims no width and
-   * drops out of the budget below.
+   * What each rail is doing. `collapsed` claims {@link RAIL_STRIP} and
+   * `hidden` claims nothing; only `expanded` consults the stored width.
    *
-   * Note what this does *not* do: {@link railMaxWidth} is a per-rail ceiling and
-   * never consults this, so hiding the activity rail does not let the left rail
-   * grow any wider. What it frees is budget, which only matters in the reducing
-   * branch — at a window too narrow for both defaults, the left rail keeps its
-   * full width once the right one is gone. Two rails cannot exhaust the budget
-   * on their own, so there is nothing else for the freed room to do.
+   * Note what this does *not* do: {@link railMaxWidth} is a per-rail ceiling
+   * and never consults these, so collapsing one rail does not let the other
+   * grow wider. What it frees is budget, which only matters in the reducing
+   * branch below.
    */
-  showActivityRail: boolean;
+  left: RailDisplay;
+  right: RailDisplay;
 }
 
 export interface RailWidths {
   left: number;
-  /** `0` exactly when the activity rail is unmounted. */
+  /** `0` exactly when the activity rail is `hidden`; {@link RAIL_STRIP} when it is `collapsed`. */
   right: number;
 }
 
@@ -168,9 +196,28 @@ export function clampRailWidths({
   storedRight,
   min,
   windowWidth,
-  showActivityRail,
+  left: leftDisplay,
+  right: rightDisplay,
 }: RailWidthInput): RailWidths {
-  const minRight = showActivityRail ? min.right : 0;
+  /*
+    Rule 0, and it outranks everything below.
+
+    A collapsed rail is not expressing a width preference that could be
+    overruled — it is expressing the absence of one. Running it through the
+    `Math.max(min.left, …)` below would floor a 44px strip back up to 268px,
+    which is precisely the bug this ordering prevents. The stored width is left
+    untouched throughout, exactly as a window resize leaves it untouched:
+    expanding must return the rail to the width the user actually chose.
+  */
+  const fixed = (display: RailDisplay): number | null => {
+    if (display === 'collapsed') return RAIL_STRIP;
+    return display === 'hidden' ? 0 : null;
+  };
+
+  const fixedLeft = fixed(leftDisplay);
+  const fixedRight = fixed(rightDisplay);
+  const minLeft = fixedLeft ?? min.left;
+  const minRight = fixedRight ?? min.right;
 
   /*
     No usable window to measure against — SSR, a unit test, the first frame
@@ -178,7 +225,7 @@ export function clampRailWidths({
     the stylesheet is already painting.
   */
   if (!Number.isFinite(windowWidth) || windowWidth <= 0) {
-    return { left: min.left, right: minRight };
+    return { left: minLeft, right: minRight };
   }
 
   const max = railMaxWidth(windowWidth);
@@ -188,10 +235,10 @@ export function clampRailWidths({
     still yields the minimum here. Rule 2 below is what resolves that case; it
     must not be pre-empted by a per-rail clamp quietly returning `max`.
   */
-  const left = Math.max(min.left, clamp(storedLeft ?? min.left, min.left, max));
-  const right = showActivityRail
-    ? Math.max(min.right, clamp(storedRight ?? min.right, min.right, max))
-    : 0;
+  const left =
+    fixedLeft ?? Math.max(min.left, clamp(storedLeft ?? min.left, min.left, max));
+  const right =
+    fixedRight ?? Math.max(min.right, clamp(storedRight ?? min.right, min.right, max));
 
   const budget = windowWidth * (1 - STAGE_MIN_FRACTION);
   const total = left + right;
@@ -201,9 +248,10 @@ export function clampRailWidths({
   }
 
   /*
-    Rule 3. Reached only when the two *minimums* do not fit, which is a narrower
-    window than the app can normally be — see below — and never because a drag
-    went too far.
+    Rule 3 — the reducing branch, reached only when the two *minimums* do not
+    fit. A fixed rail is exempt: a strip is not a minimum and scaling it would
+    paint a 30px sliver with a clipped icon in it. Only what is negotiable
+    gives, which is what was already true before collapse existed.
 
     That is worth proving rather than asserting, because it is why this is one
     branch and not two. A rail is already capped at `RAIL_MAX_FRACTION` of the
@@ -217,11 +265,13 @@ export function clampRailWidths({
     the test suite asserts it — raise `RAIL_MAX_FRACTION` past that point and
     the proof fails loudly instead of this quietly becoming the wrong shape.
   */
-  const scale = budget / total;
+  const negotiable = (fixedLeft === null ? left : 0) + (fixedRight === null ? right : 0);
+  const room = budget - (fixedLeft ?? 0) - (fixedRight ?? 0);
+  const scale = negotiable > 0 ? Math.max(0, room) / negotiable : 1;
 
   return {
-    left: Math.floor(left * scale),
-    right: Math.floor(right * scale),
+    left: fixedLeft ?? Math.floor(left * scale),
+    right: fixedRight ?? Math.floor(right * scale),
   };
 }
 
