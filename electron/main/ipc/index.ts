@@ -122,6 +122,7 @@ import type { UpdateStatus } from '@shared/update-contract';
 
 import { createAgentsRuntime, type AgentRegistry } from '../agents';
 import { resolveClaude } from '../agents/claude-path';
+import { agentsDirectoryFor } from '../agents/directory';
 import {
   agentPromptFile,
   agentStateFile,
@@ -1710,6 +1711,42 @@ export function registerIpcHandlers(): void {
       without anything re-registering.
     */
     agentNames: () => knownAgents,
+    /*
+      The peer directory (HIVE-127). Read through `agents.list()` rather than
+      from `knownAgents` above, and the difference is the point: that set is
+      the party register and deliberately **drops invalid definitions**,
+      because a folder that does not parse cannot be woken and must not be able
+      to write to the ledger as that name. A directory that dropped them too
+      would make a broken peer indistinguishable from an absent one — which is
+      the case where being told is most useful, since the fix is usually a
+      one-line edit to a file the reader will only go and open if something
+      says it is broken.
+
+      Composed here because this is the only place both halves are in scope:
+      `agents` reads the definitions and knows nothing about runs, `agentState`
+      holds the runs and knows nothing about definitions.
+    */
+    onAgentsList: async (caller) => {
+      /*
+        Thrown rather than answered empty, and the distinction is the same one
+        the route's 500 exists for: `{ agents: [] }` renders to the model as
+        "you are the only agent on this machine — do the work yourself", which
+        is a load-bearing instruction. A registry that is missing because the
+        app is tearing down has not established that. The narrow window is
+        real — a wake racing shutdown — and narrow is not the same as absent.
+
+        Distinct from `SessionsOptions.onAgentsList`'s default, which *is* an
+        empty directory: there, no runtime was ever composed, so "this build
+        has no agents" is the truth rather than a failure to find out.
+      */
+      const snapshot = await agents?.list();
+
+      if (snapshot === undefined) {
+        throw new Error('the agent registry is not available');
+      }
+
+      return agentsDirectoryFor(caller, snapshot, agentState?.all() ?? {});
+    },
     /*
       The uuid is forwarded, not dropped: `noteTurnEnded` ignores a `Stop`
       whose uuid does not match the run it is holding, which is what keeps a
