@@ -253,6 +253,21 @@ export interface Receiver {
    * sessions come and go.
    */
   tokenFor(entityId: string): string;
+  /**
+   * The grants a live agent run may exercise over `POST /mcp` (HIVE-137).
+   *
+   * The stdio host reads `HIVE_GRANTS` from its own environment; there is no
+   * environment on this side of an HTTP call, so `runs.ts` registers the same
+   * list here under the run id every request already carries in `x-hive-run`,
+   * and clears it when the run closes. A caller with no registered run — a
+   * pty session, a stale run — keeps the empty list, so `approve` fails closed
+   * for it exactly as before.
+   */
+  readonly grants: {
+    /** `owner` is the agent the run belongs to; a caller that is not it gets `[]`. */
+    set(run: string, owner: string, grants: readonly string[]): void;
+    delete(run: string): void;
+  };
   /** The URL hooks should POST to, or `null` before a successful start. */
   readonly url: string | null;
   /**
@@ -550,6 +565,16 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * a leak.
    */
   const MCP_CURSOR_MAX = 256;
+  /**
+   * Per-run grants for `approve` over HTTP (HIVE-137) — see
+   * {@link Receiver.grants}. Keyed by run rather than by session because two
+   * task runs of one agent can be live at once with different one-shot
+   * grants. Bounded like `mcpCursors`, for the same reason: the key space is
+   * every run id ever minted, and a run that crashed before `close()` cleared
+   * it must not hold a slot forever.
+   */
+  const runGrants = new Map<string, { owner: string; grants: readonly string[] }>();
+  const RUN_GRANTS_MAX = 256;
 
   /**
    * Pull the event name out of a body too large to have been kept whole.
@@ -979,12 +1004,11 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * first one's identity. Rebuilding from the headers actually presented is what
    * makes that impossible.
    *
-   * `grants` is `[]` deliberately, and it is not a stub: the stdio host reads
-   * `HIVE_GRANTS` from its environment, and `envFor` never sets that for a pty
-   * session either — so an empty list is exactly what an interactive session
-   * gets today on both transports, and `approve` fails closed for both. Handing
-   * an agent run its grants over HTTP needs a channel that does not exist yet
-   * and belongs to HIVE-133.
+   * `grants` come from {@link Receiver.grants} by the run id in `x-hive-run`
+   * (HIVE-137), and are `[]` for everyone else — which is not a stub: the stdio
+   * host reads `HIVE_GRANTS` from its environment, and `envFor` never sets that
+   * for a pty session either, so an empty list is exactly what an interactive
+   * session gets on both transports, and `approve` fails closed for both.
    */
   function handlersFor(
     headers: Record<string, string | string[] | undefined>,
@@ -1007,7 +1031,19 @@ export function createReceiver(options: ReceiverOptions): Receiver {
       mcpCursors.set(caller, store);
     }
 
-    return createToolHandlers(clientFor(headers), [], store);
+    /*
+      By run id **and** owner. A run id is not a secret — it is on every hook
+      payload and every ledger entry the run writes — so a lookup by id alone
+      would let any authenticated caller present a sibling run's id and
+      inherit its one-shot grants. The caller's identity is what `reject`
+      already authenticated; the registration says which agent it was minted
+      for; the two must agree.
+    */
+    const run = headers[HOOK_HEADER_RUN];
+    const registered = typeof run === 'string' && run !== '' ? runGrants.get(run) : undefined;
+    const grants = registered !== undefined && registered.owner === caller ? registered.grants : [];
+
+    return createToolHandlers(clientFor(headers), grants, store);
   }
 
   /**
@@ -1412,6 +1448,20 @@ export function createReceiver(options: ReceiverOptions): Receiver {
   return {
     tokenFor,
 
+    grants: {
+      set(run, owner, grants) {
+        if (runGrants.size >= RUN_GRANTS_MAX && !runGrants.has(run)) {
+          const oldest = runGrants.keys().next();
+
+          if (!oldest.done) runGrants.delete(oldest.value);
+        }
+        runGrants.set(run, { owner, grants: [...grants] });
+      },
+      delete(run) {
+        runGrants.delete(run);
+      },
+    },
+
     get url() {
       return url;
     },
@@ -1620,6 +1670,9 @@ export function createReceiver(options: ReceiverOptions): Receiver {
         // The stdio host's cursor dies with its process; this one dies with the
         // socket that served it, so a restart starts every caller fresh.
         mcpCursors.clear();
+        // A run's grants outlive nothing either: the run that registered them
+        // is being torn down with the socket, and a restart re-registers.
+        runGrants.clear();
         running.close(() => resolve());
         /**
          * Keep-alive sockets would otherwise hold the close open past app quit.

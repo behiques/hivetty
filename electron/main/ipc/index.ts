@@ -1419,6 +1419,12 @@ export function registerIpcHandlers(): void {
     // module binding for the same reason `hooks`/`mcp` are read through
     // getters here rather than closed over as values.
     pendingGrants: (name) => permissions?.grantsFor(name) ?? [],
+    // HIVE-137. The container agent's settings file lives in the container
+    // set `hooks` writes at start, and the alias is the receiver's global one,
+    // read live so a config reload is honoured on the next wake.
+    userDataPath: () => app.getPath('userData'),
+    hostAlias: () => getConfig().receiver.hostAlias,
+    agentContainerSettingsPath: (config) => hooks.agentContainerSettingsPathFor(config),
   });
 
   /**
@@ -1535,6 +1541,16 @@ export function registerIpcHandlers(): void {
     // The watcher's cache, filled in the same pass as `agentSchedules` (HIVE-128).
     parallelFor: (name) => agentParallel.get(name) ?? AGENT_LIMIT_DEFAULTS.parallel,
     state: agentState,
+    /*
+      The receiver's per-run grants registry, for `approve` over HTTP
+      (HIVE-137). Read through `hooks` on each call rather than captured,
+      because the receiver binds after this composition runs — a value taken
+      here would be `null` for the life of the app.
+    */
+    grants: {
+      set: (run, owner, grants) => hooks.receiverGrants()?.set(run, owner, grants),
+      delete: (run) => hooks.receiverGrants()?.delete(run),
+    },
     /*
       A run's own entries are `from` the **agent**: a run is the agent's
       activity and the log is read back by name. That is the same rule
