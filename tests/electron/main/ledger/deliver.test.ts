@@ -251,6 +251,128 @@ describe('createDeliver', () => {
     expect(lastWrite()).toContain('second question');
   });
 
+  /**
+   * The input box is a precondition beside idleness (HIVE-135). `isIdle` is
+   * about the agent; a user who typed half a sentence and stopped has an idle
+   * agent and a full box, and a nudge written then is submitted together with
+   * their draft. The visible surface reports what it sees; main refuses to
+   * write into a draft and picks the nudge up when the box clears.
+   */
+  describe('the focused session', () => {
+    it('holds a nudge while the focused session reports a draft', () => {
+      deliver.onPrompt('sess-a', 'draft');
+      ask('sess-a');
+
+      expect(write).not.toHaveBeenCalled();
+      expect(receipts()).toHaveLength(0);
+    });
+
+    it('delivers the held nudge the moment the box is reported empty', () => {
+      deliver.onPrompt('sess-a', 'draft');
+      ask('sess-a');
+      deliver.onPrompt('sess-a', 'empty');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(receipts()).toHaveLength(1);
+    });
+
+    it('holds at idle too — idle is about the agent, not the box', () => {
+      idle.delete('sess-a');
+      ask('sess-a');
+      deliver.onPrompt('sess-a', 'draft');
+      idle.add('sess-a');
+      deliver.onIdle('sess-a');
+
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('delivers to a session that is not the focused one, as before', () => {
+      live.add('sess-b');
+      idle.add('sess-b');
+      deliver.onPrompt('sess-a', 'draft');
+      ask('sess-b');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(write.mock.calls[0][0]).toBe('sess-b');
+    });
+
+    it('treats an unfocused report as "no session is focused"', () => {
+      deliver.onPrompt('sess-a', 'draft');
+      deliver.onPrompt('sess-a', 'unfocused');
+      ask('sess-a');
+
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores an unfocused report from a surface that already lost focus', () => {
+      // sess-a was focused with a draft; focus moved to sess-b, also a draft.
+      live.add('sess-b');
+      idle.add('sess-b');
+      deliver.onPrompt('sess-a', 'draft');
+      deliver.onPrompt('sess-b', 'draft');
+      // A late `unfocused` from sess-a must not clear sess-b's record.
+      deliver.onPrompt('sess-a', 'unfocused');
+      ask('sess-b');
+
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('does not flush on an empty report that is not a transition', () => {
+      /*
+        After a nudge is submitted the renderer's next screen read says
+        `empty` again, and main's idle answer can lag the busy-state hook.
+        A repeat report must not flush the backlog behind the turn the last
+        nudge started. Staged so the session *is* idle when the repeat
+        arrives: with the transition guard removed this writes twice.
+      */
+      deliver.onPrompt('sess-a', 'empty');
+      ask('sess-a', 'first');
+      expect(write).toHaveBeenCalledTimes(1);
+
+      idle.delete('sess-a');
+      ask('sess-a', 'second');
+      idle.add('sess-a');
+      deliver.onPrompt('sess-a', 'empty');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      // The second is not lost: the next idle transition takes it.
+      deliver.onIdle('sess-a');
+      expect(write).toHaveBeenCalledTimes(2);
+    });
+
+    it('clears the record when the renderer goes away', () => {
+      deliver.onPrompt('sess-a', 'draft');
+      deliver.onRendererReset();
+      ask('sess-a');
+
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('flushes a held nudge on the first empty report after a renderer reset', () => {
+      deliver.onPrompt('sess-a', 'draft');
+      ask('sess-a');
+      deliver.onRendererReset();
+      expect(write).not.toHaveBeenCalled();
+
+      // The surface remounts and reads an empty box: this is the transition.
+      deliver.onPrompt('sess-a', 'empty');
+
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('flushes a held nudge after a draft, away, and back to an empty box', () => {
+      deliver.onPrompt('sess-a', 'draft');
+      ask('sess-a');
+      deliver.onPrompt('sess-a', 'unfocused');
+      // Delivered as an unfocused session? No entry arrived and no idle fired.
+      expect(write).not.toHaveBeenCalled();
+
+      deliver.onPrompt('sess-a', 'empty');
+
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+  });
+
   /*
     The two halves of the reason delivery is recorded in the log rather than
     held in memory. A second `createLedger` over the same directory is what a
@@ -288,5 +410,78 @@ describe('createDeliver', () => {
     deliver2.onReady('sess-a');
 
     expect(write2).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * An answer lands an hour later in a session that may have compacted past
+   * its own question (HIVE-135). A headless agent re-reads its ask; a terminal
+   * session gets one line, so the line says what the question was for.
+   */
+  describe('the intent on an answer nudge', () => {
+    const askWithIntent = (intent?: string) =>
+      ledger.append({
+        from: 'sess-a',
+        to: OVERMIND,
+        kind: 'ask',
+        body: 'which branch?',
+        ...(intent === undefined ? {} : { meta: { intent } }),
+      });
+
+    it('appends the asking session’s intent after the answer', () => {
+      const asked = askWithIntent('rebase onto it and push');
+      write.mockClear();
+
+      ledger.answer({ thread: asked.ok ? asked.id : '', body: 'main' }, OVERMIND);
+
+      expect(lastWrite()).toContain('answered');
+      expect(lastWrite()).toContain('main');
+      expect(lastWrite()).toContain('you asked so you could: rebase onto it and push');
+      expect(lastWrite().endsWith('\r')).toBe(true);
+    });
+
+    it('leaves the line as it was when the ask carries no intent', () => {
+      const asked = askWithIntent();
+      write.mockClear();
+
+      ledger.answer({ thread: asked.ok ? asked.id : '', body: 'main' }, OVERMIND);
+
+      expect(lastWrite()).not.toContain('you asked so you could');
+    });
+
+    it('cuts the intent at its first line break, before stripping', () => {
+      // Cut first, then strip — the same order as the body: stripping first
+      // would delete the break and splice `second` onto the end of `first`.
+      const asked = askWithIntent('first line\nsecond line');
+      write.mockClear();
+
+      ledger.answer({ thread: asked.ok ? asked.id : '', body: 'main' }, OVERMIND);
+
+      expect(lastWrite()).toContain('you asked so you could: first line');
+      expect(lastWrite()).not.toContain('second');
+    });
+
+    it('strips control characters from the intent', () => {
+      const asked = askWithIntent('see [2J now');
+      write.mockClear();
+
+      ledger.answer({ thread: asked.ok ? asked.id : '', body: 'main' }, OVERMIND);
+
+      expect(lastWrite()).not.toContain('');
+      expect(lastWrite()).toContain('see [2J now');
+      expect(lastWrite().split('\r')).toHaveLength(2);
+    });
+
+    it('caps the intent at NUDGE_INTENT_MAX characters', () => {
+      // 100 printable characters, then a marker only the cap can remove.
+      const asked = askWithIntent(`${'a'.repeat(100)} DROPPED`);
+      write.mockClear();
+
+      ledger.answer({ thread: asked.ok ? asked.id : '', body: 'main' }, OVERMIND);
+
+      const data = lastWrite();
+      const tail = data.slice(data.indexOf('you asked so you could: ') + 'you asked so you could: '.length, -1);
+      expect(tail).toBe('a'.repeat(80));
+      expect(data).not.toContain('DROPPED');
+    });
   });
 });

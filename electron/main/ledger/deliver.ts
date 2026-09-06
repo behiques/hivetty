@@ -1,3 +1,4 @@
+import type { PromptInput } from '../../shared/ipc-contract';
 import { OVERMIND, type LedgerEntry, type LedgerKind } from '../../shared/ledger-contract';
 
 import type { Ledger } from './index';
@@ -17,6 +18,9 @@ import type { Ledger } from './index';
 
 /** How much of a body a nudge carries. One line, and not a long one. */
 const NUDGE_BODY_MAX = 120;
+
+/** How much of an ask's `meta.intent` rides on the answer's nudge (HIVE-135). */
+const NUDGE_INTENT_MAX = 80;
 
 /**
  * Strip every control character from a body before it reaches a pty.
@@ -79,9 +83,42 @@ export interface Deliver {
   onIdle(entityId: string): void;
   /** A session's agent came up, including after a resume. */
   onReady(entityId: string): void;
+  /**
+   * The visible terminal surface reported what its input box holds
+   * (HIVE-135). `empty` and `draft` make that session the focused one;
+   * `unfocused` releases it, if it still holds the record.
+   */
+  onPrompt(entityId: string, input: PromptInput): void;
+  /** The renderer reloaded or died: no surface is visible until one reports again. */
+  onRendererReset(): void;
 }
 
 export function createDeliver({ ledger, isLive, isIdle, write }: DeliverOptions): Deliver {
+  /**
+   * The one session a user can type into, and what its box holds (HIVE-135).
+   *
+   * One record, not a map, because the stage shows one terminal at a time and
+   * a user can only type into the terminal they can see. Everything else
+   * delivers on idleness alone, as it did before this existed — the check is
+   * expensive on the renderer side and the race it guards is only possible on
+   * the visible surface.
+   *
+   * `null` until a surface reports. That is the conservative default in
+   * disguise: no surface has reported means no surface is visible, and a
+   * surface reports in the same effect that reveals it.
+   */
+  let focus: { entityId: string; input: 'empty' | 'draft' } | null = null;
+
+  /**
+   * May a line be written into this session's box right now?
+   *
+   * Refusing is always safe — a held nudge writes no receipt and the next
+   * transition retries it. Writing into a draft never is.
+   */
+  function clear(entityId: string): boolean {
+    return focus === null || focus.entityId !== entityId || focus.input === 'empty';
+  }
+
   /**
    * The short handle a person would use for this entry's conversation.
    *
@@ -90,14 +127,17 @@ export function createDeliver({ ledger, isLive, isIdle, write }: DeliverOptions)
    * console printed. Falling back to the id is correct rather than merely safe:
    * an id always identifies the thread, it is just longer than a person wants.
    */
+  /** The ask an answer closes, if the log still has it. */
+  function askFor(entry: LedgerEntry): LedgerEntry | undefined {
+    if (entry.kind === 'ask') return entry;
+    const threadId = entry.thread;
+    if (threadId === undefined) return undefined;
+    return ledger.read({ thread: threadId }).entries.find((e) => e.kind === 'ask');
+  }
+
   function handleFor(entry: LedgerEntry): string {
     if (entry.kind === 'ask') return entry.ref ?? entry.id;
-
-    const threadId = entry.thread;
-    if (threadId === undefined) return entry.id;
-
-    const ask = ledger.read({ thread: threadId }).entries.find((e) => e.kind === 'ask');
-    return ask?.ref ?? threadId;
+    return askFor(entry)?.ref ?? entry.thread ?? entry.id;
   }
 
   function nudgeLine(entry: LedgerEntry, handle: string): string {
@@ -117,9 +157,21 @@ export function createDeliver({ ledger, isLive, isIdle, write }: DeliverOptions)
     const body = stripControls(firstLine).slice(0, NUDGE_BODY_MAX);
     const from = stripControls(entry.from);
 
-    return entry.kind === 'ask'
-      ? `📒 ${from} asks (${handle}): ${body} — reply with ledger_answer ${handle}`
-      : `📒 ${from} answered ${handle}: ${body}`;
+    if (entry.kind === 'ask') {
+      return `📒 ${from} asks (${handle}): ${body} — reply with ledger_answer ${handle}`;
+    }
+
+    /*
+      The asker's own words about why it asked (HIVE-135), cut and stripped
+      exactly as the body is — it is authored by a party, and this is the same
+      pty. Absent, the line is what it was before.
+    */
+    const intent = askFor(entry)?.meta?.intent;
+    const tail =
+      typeof intent === 'string' && intent.trim() !== ''
+        ? ` — you asked so you could: ${stripControls(intent.split(/\r\n|\r|\n/u)[0] ?? '').slice(0, NUDGE_INTENT_MAX)}`
+        : '';
+    return `📒 ${from} answered ${handle}: ${body}${tail}`;
   }
 
   /**
@@ -195,15 +247,15 @@ export function createDeliver({ ledger, isLive, isIdle, write }: DeliverOptions)
   /**
    * Write everything this session is owed, one nudge per idle window.
    *
-   * **`isIdle` is re-checked on every iteration, and the loop stops at the
-   * first delivery.** Each nudge ends in `\r`, which submits it — so the
-   * instant one lands the session is mid-turn, and writing the rest of the
-   * backlog behind it would break the single invariant this module exists to
-   * hold. The remainder is not lost: it has no receipt, so the next idle
-   * transition picks up exactly where this one stopped.
+   * **The preconditions are checked once, before the loop, and the loop stops
+   * at the first delivery.** Each nudge ends in `\r`, which submits it — so
+   * the instant one lands the session is mid-turn, and writing the rest of
+   * the backlog behind it would break the single invariant this module
+   * exists to hold. The remainder is not lost: it has no receipt, so the
+   * next idle transition picks up exactly where this one stopped.
    */
   function flush(entityId: string): void {
-    if (!isLive(entityId) || !isIdle(entityId)) return;
+    if (!isLive(entityId) || !isIdle(entityId) || !clear(entityId)) return;
 
     for (const entry of undelivered(entityId)) {
       if (deliverOne(entityId, entry)) return;
@@ -222,7 +274,9 @@ export function createDeliver({ ledger, isLive, isIdle, write }: DeliverOptions)
       // An agent is woken by the scheduler (HIVE-120), not written to — it has
       // no terminal to nudge. An unknown party has nowhere to write to either.
       // A live session mid-turn is caught here too, and flushed by `onIdle`.
-      if (!isLive(to) || !isIdle(to)) return;
+      // A focused session whose box holds a draft is held here too, and
+      // flushed by onPrompt when the box clears (HIVE-135).
+      if (!isLive(to) || !isIdle(to) || !clear(to)) return;
 
       deliverOne(to, entry);
     },
@@ -233,6 +287,34 @@ export function createDeliver({ ledger, isLive, isIdle, write }: DeliverOptions)
 
     onReady(entityId) {
       flush(entityId);
+    },
+
+    onPrompt(entityId, input) {
+      if (input === 'unfocused') {
+        // Only the holder releases the record: a late report from a surface
+        // that already lost focus must not clear a newer one.
+        if (focus?.entityId === entityId) focus = null;
+        return;
+      }
+
+      const before = focus;
+      focus = { entityId, input };
+
+      /*
+        The third flush trigger, beside idle and ready. Not on a report that
+        changes nothing: after a nudge is submitted the next screen read says
+        `empty` again while main's idle answer can lag the busy-state hook,
+        and re-running the flush then would find the backlog behind the turn
+        the last nudge started. Every other arrival at `empty` — first report,
+        after a reset, after a draft, after a focus round-trip — is a
+        transition, and the held nudge is what the user is waiting on.
+      */
+      const unchanged = before?.entityId === entityId && before.input === 'empty';
+      if (input === 'empty' && !unchanged) flush(entityId);
+    },
+
+    onRendererReset() {
+      focus = null;
     },
   };
 }
