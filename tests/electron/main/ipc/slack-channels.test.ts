@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { emptySnapshot } from '../../../../electron/shared/config-contract';
 import type { SlackStatus } from '../../../../electron/shared/slack-contract';
 
 /**
@@ -35,7 +36,9 @@ vi.mock('electron', () => ({
     getVersion: () => '0.0.0',
     on: vi.fn(),
     removeListener: vi.fn(),
-    getPath: () => '/tmp/hive-test',
+    // Per-spec, never shared: these specs really write a container set here,
+    // and vitest runs spec files in parallel worker processes (HIVE-139).
+    getPath: () => '/tmp/hive-test-slack-channels',
   },
   BrowserWindow: { fromWebContents: () => null, getAllWindows: () => [] },
   dialog: { showOpenDialog: vi.fn() },
@@ -94,14 +97,14 @@ vi.mock('../../../../electron/main/shutdown', () => ({
  * makes "the resolver ran" observable.
  *
  * Mutable, so the refusal test can point it somewhere that is not there.
+ *
+ * Built on the whole snapshot, so no getter reading a field this fixture forgot
+ * can throw into a swallowing catch (HIVE-139); `claudeCommand` stays this
+ * file's own for the reason above.
  */
 const snapshot = {
-  configPath: '/tmp/config.json',
-  templateWritten: false,
-  shell: '/bin/zsh',
+  ...emptySnapshot('/tmp/config.json', '/bin/zsh'),
   claudeCommand: process.execPath,
-  projects: [],
-  errors: [],
 };
 
 vi.mock('../../../../electron/main/config/index', () => ({
