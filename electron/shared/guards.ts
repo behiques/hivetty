@@ -42,6 +42,8 @@ import type {
   SetProjectRuntimeRequest,
   SetReceiverRequest,
   SetRuntimeRequest,
+  SetSlackRequest,
+  SetSlackTokensRequest,
 } from './config-contract';
 import type {
   ReadDirRequest,
@@ -1223,10 +1225,98 @@ export function parseSetReceiverRequest(input: unknown): SetReceiverRequest {
   return request;
 }
 
-/** The token, on its way to `safeStorage`. The only payload carrying a secret. */
+/**
+ * A Slack user id allowed to command an agent with `@hive` (HIVE-124).
+ *
+ * Non-empty and free of whitespace: a pasted id with trailing whitespace, or
+ * two ids pasted as one string separated by a space, are both malformed
+ * inputs this guard should refuse rather than quietly repair.
+ */
+function assertCommanderId(value: unknown, label: string): string {
+  const id = assertString(value, label);
+  if (id.length === 0) return fail(`${label}: must not be empty`);
+  if (/\s/.test(id)) return fail(`${label}: must not contain whitespace`);
+  return id;
+}
+
+/**
+ * Payload of `config:set-slack` (HIVE-124).
+ *
+ * `commanders` replaces the stored list wholesale — see
+ * {@link SetSlackRequest.commanders} — so the array itself is rejected
+ * outright when it is not one, and every entry is validated individually, the
+ * same two-step shape {@link parseReorderProjectsRequest} uses for its own
+ * array.
+ */
+export function parseSetSlackRequest(input: unknown): SetSlackRequest {
+  const raw = assertShape(input, [], 'setSlack', ['socketMode', 'commanders']);
+
+  let commanders: string[] | undefined;
+  if (raw.commanders !== undefined) {
+    if (!Array.isArray(raw.commanders)) {
+      return fail(
+        `setSlack.commanders: expected an array, got ${describe(raw.commanders)}`,
+      );
+    }
+    commanders = Array.from(raw.commanders as unknown[]).map((id, index) =>
+      assertCommanderId(id, `setSlack.commanders[${index}]`),
+    );
+  }
+
+  const request: SetSlackRequest = {
+    ...(raw.socketMode !== undefined
+      ? { socketMode: assertBoolean(raw.socketMode, 'setSlack.socketMode') }
+      : {}),
+    ...(commanders !== undefined ? { commanders } : {}),
+  };
+
+  if (Object.keys(request).length === 0) {
+    return fail('setSlack: nothing to change');
+  }
+  return request;
+}
+
+/** The token, on its way to `safeStorage`. The first payload carrying a secret. */
 export function parseSetJiraTokenRequest(input: unknown): SetJiraTokenRequest {
   const raw = assertShape(input, ['token'], 'setJiraToken');
   return { token: assertJiraToken(raw.token, 'setJiraToken.token') };
+}
+
+/**
+ * The two socket-mode tokens, on their way to `safeStorage` (HIVE-124).
+ *
+ * {@link parseSetJiraTokenRequest} is the model, and {@link assertJiraToken} is
+ * reused rather than copied: "printable ASCII, no spaces, bounded" is a
+ * statement about *credentials in a payload*, not about Jira, and both `xapp-`
+ * and `xoxb-` are exactly that shape.
+ *
+ * Neither field is required and at least one must be present — the merge shape
+ * {@link SetSlackTokensRequest} describes. An empty payload is refused rather
+ * than treated as a clear: clearing has its own channel, and a write that
+ * silently erased both would be the one mistake this guard can prevent.
+ *
+ * The `xapp-` / `xoxb-` prefixes are deliberately **not** enforced. Slack has
+ * renamed token prefixes before, and a guard that refused a valid token would
+ * be a bug the user could not work around; a wrong one fails at `auth.test`
+ * with Slack's own message, which is the better report.
+ */
+export function parseSetSlackTokensRequest(input: unknown): SetSlackTokensRequest {
+  const raw = assertShape(input, [], 'setSlackTokens', ['appToken', 'botToken']);
+
+  const request: SetSlackTokensRequest = {
+    ...(raw.appToken === undefined
+      ? {}
+      : { appToken: assertJiraToken(raw.appToken, 'setSlackTokens.appToken') }),
+    ...(raw.botToken === undefined
+      ? {}
+      : { botToken: assertJiraToken(raw.botToken, 'setSlackTokens.botToken') }),
+  };
+
+  if (Object.keys(request).length === 0) {
+    return fail('setSlackTokens: nothing to change');
+  }
+
+  return request;
 }
 
 /**
