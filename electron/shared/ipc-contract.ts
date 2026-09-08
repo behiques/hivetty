@@ -243,11 +243,39 @@ export const CH = {
    */
   configSetSlack: 'config:set-slack',
   /**
-   * The container host alias (HIVE-131).
+   * The container host alias, and where the receiver listens (HIVE-131, HIVE-134).
    *
    * A `config:` channel because it writes the config file and returns the fresh
-   * snapshot, like every other settings verb. What it sets is a *name*, never an
-   * address with a port — the port is the receiver's, assigned at bind time.
+   * snapshot, like every other settings verb. Two fields, and they are not
+   * equally mild — read both, because an earlier draft of this comment claimed
+   * the whole verb was inert and that was simply false.
+   *
+   * `hostAlias` **names a network destination**, and was the first verb on this
+   * bridge to do so. It stores the hostname a containerised session uses to
+   * address this app; from HIVE-132 it is the host in `HIVE_RECEIVER_URL`, and
+   * `agents/waker.ts` hands a session `HIVE_HOOK_TOKEN` alongside that URL. So a
+   * renderer able to call this verb with `evil.com` redirects authenticated hook
+   * traffic. A well-formed hostname is enough; no delimiter trick is needed.
+   * What bounds it is `assertHostAlias`, sharing one per-label allowlist
+   * (`isHostAlias`) with the file reader, so no scheme, port, path, credentials
+   * or authority-terminating delimiter survives.
+   *
+   * `bind` **changes the listening surface**, which nothing on this bridge could
+   * do before HIVE-134. A renderer that sets `bind.host` to a routable address
+   * moves the receiver off loopback at the app's next launch — not immediately,
+   * because a socket already listening cannot be moved. Three things bound it:
+   * the same `isHostAlias` predicate, so the value is a host and never a URL; the
+   * next-launch delay, so the change is not silent to a user who is looking; and
+   * the header's exposure chip, which reads `receiverBoundHost` off `AppInfo` — the
+   * receiver's *running* bind, not this config's snapshot of it — and so says the
+   * receiver is exposed for exactly as long as it is, including the session
+   * between toggling this switch off and the next launch that would actually
+   * close the wider socket (HIVE-134). The guards `reject` applies — a
+   * timing-safe token compare and an Origin and Host allowlist on every route —
+   * do not depend on this value and hold at every bind.
+   *
+   * Neither field names a *file*: the one file this bridge can write is still
+   * chosen by main, as for every verb on this list.
    */
   configSetReceiver: 'config:set-receiver',
   /**
@@ -1230,6 +1258,55 @@ export interface AppInfo {
    * answering it, so no such button ships and this stays text.
    */
   logPath: string;
+  /**
+   * The host the hook receiver's socket is actually bound to right now, or
+   * `null` when nothing is listening (HIVE-134).
+   *
+   * It lives here rather than behind a verb of its own for the reason
+   * {@link AppInfo.logPath} does: `AppInfo` already exists "for the About box
+   * and bug reports", and this is the same kind of fact — something true of the
+   * running process, read once. What makes a one-shot read sufficient, rather
+   * than something the renderer would need to subscribe to and keep live, is
+   * the same fact that makes `receiver.bind` say "takes effect at next
+   * launch" in Settings: a listening socket cannot be moved, so **once the
+   * bind has resolved** — succeeded or failed, during main's own boot — this
+   * value cannot change again before a relaunch. That is deliberately narrower
+   * than "fixed for the life of the session": before that resolution the value
+   * genuinely is `null`, because genuinely nothing is listening yet, so a read
+   * that lands there is correct, not stale. What a one-shot reader must never
+   * see is a *wrong* answer at the moment it reads — this value transiently
+   * doing exactly that, for the length of a settings-file write that had
+   * nothing to do with the socket, was a real review finding on this field's
+   * first pass; see `createHookRuntime`'s own doc comment on `boundHost` for
+   * how main now captures it the instant its bind resolves, rather than behind
+   * anything else still in flight.
+   *
+   * **That guarantee is about this value inside main, not about when a
+   * reader on the other side of the bridge asks for it.** `hooks.start()` is
+   * fire-and-forget, so nothing here promises a renderer's read lands *after*
+   * the bind has resolved — for a hostname bind (`isHostAlias` accepts one,
+   * and Settings lets a user configure one) `listen()` waits on a DNS lookup
+   * first, and a slow resolver or an mDNS `.local` name can outlast window
+   * creation, renderer boot and the read itself. A read that lands before
+   * resolution is not wrong, exactly as the paragraph above says — it is
+   * genuinely `null` at that instant — but a **one-shot** reader that never
+   * asks again has no way to learn the bind then finished, and would report
+   * "not exposed" for a socket that plainly is. `useReceiverExposure` is the
+   * one consumer and copes with this itself, with a single bounded retry
+   * when its first read comes back `null`; see its own doc comment for why
+   * once is enough.
+   *
+   * Deliberately **not** `receiver.bind.host` off the config snapshot, which
+   * says what will be bound at the *next* launch, not what is bound *now* —
+   * the two can disagree for an entire running session (toggle the settings
+   * switch off; the snapshot updates instantly, the open socket does not) and
+   * a false "safe" reading from the gap is worse than a stale one. The header's
+   * exposure chip (`useReceiverExposure`) reads this field for exactly that
+   * reason; `container-alias-group.tsx`'s settings switch is the one place
+   * that correctly stays config-derived, because it is a control over the file,
+   * not a status readout.
+   */
+  receiverBoundHost: string | null;
   /**
    * Per-session flow-control counters (story 093).
    *
@@ -2617,8 +2694,22 @@ export const BRIDGE_CONFIG_KEYS = [
    * it, so the alias decides where authenticated hook traffic is addressed.
    * `assertHostAlias` bounds it to a hostname — per-label allowlist, shared with
    * the file reader, no scheme, port, path, credentials or delimiter — and it
-   * names no *file*, opens no socket and changes no bind. See the fuller
-   * justification beside `'setReceiver'` in `tests/e2e/electron/security.spec.ts`.
+   * names no *file*, the one file the bridge can write still chosen by main.
+   *
+   * HIVE-134 added `bind` to this same payload, and it is a larger claim than
+   * the alias: it **does** change the listening surface, which nothing on this
+   * bridge could do before, taking effect at next launch because a listening
+   * socket cannot be moved. What bounds it: the same `isHostAlias` predicate,
+   * the next-launch delay that keeps the change from being silent, and the
+   * header chip, which is sourced from the receiver's *running* bind
+   * (`AppInfo.receiverBoundHost`) rather than this config's snapshot of it — so it
+   * still says the receiver is exposed for exactly as long as it is, even
+   * across the gap between toggling this switch off and the relaunch that
+   * would actually close the wider socket (HIVE-134). `reject`'s
+   * `timingSafeEqual` token compare and the `Origin`/`Host` checks on all
+   * eight routes hold at every bind, which is why widening it is not a cliff.
+   * See the fuller justification beside `'setReceiver'` in
+   * `tests/e2e/electron/security.spec.ts`.
    */
   'setReceiver',
 ] as const;

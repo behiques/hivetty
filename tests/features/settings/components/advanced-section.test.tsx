@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { emptySnapshot, type ConfigSnapshot } from '@shared/config-contract';
+import { DEFAULT_BIND, emptySnapshot, type ConfigSnapshot } from '@shared/config-contract';
 import type { AppInfo } from '@shared/ipc-contract';
 
 import { AdvancedSection } from '@features/settings/components/advanced-section';
@@ -43,6 +43,7 @@ const info = (over: Partial<AppInfo> = {}): AppInfo => ({
   node: '22.0.0',
   platform: 'darwin',
   logPath: '/Users/me/Library/Logs/The Hive',
+  receiverBoundHost: null,
   ...over,
 });
 
@@ -332,7 +333,7 @@ describe('AdvancedSection — the Containers group (HIVE-131)', () => {
   });
 
   it('shows a configured alias over the default', () => {
-    install({ receiver: { hostAlias: 'host.containers.internal' } });
+    install({ receiver: { hostAlias: 'host.containers.internal', bind: DEFAULT_BIND } });
     render(<AdvancedSection />);
 
     expect(screen.getByLabelText('Host alias')).toHaveValue(

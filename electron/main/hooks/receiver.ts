@@ -1,8 +1,9 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { StringDecoder } from 'node:string_decoder';
 
 import { AGENTS_PATH, type AgentsDirectory } from '@shared/agent-contract';
+import { DEFAULT_RECEIVER, isLoopbackHost } from '@shared/config-contract';
 import { parseLedgerPostBody, parseLedgerReadQuery } from '@shared/guards';
 import {
   CLEAR_REASON,
@@ -70,7 +71,10 @@ import { ticketKeyFromPrompt } from './ticket-intent';
  * A listening socket inside a desktop app deserves suspicion, so three things
  * are true of this one and are enforced below rather than documented:
  *
- * 1. It binds **`127.0.0.1`**, never `0.0.0.0` — unreachable from the network.
+ * 1. It binds **`127.0.0.1`** unless a user opts out in the config
+ *    (`receiver.bind`, HIVE-134) — and when they do, the header says so for as
+ *    long as it is true, and the guards in {@link reject} stop being belt and
+ *    braces and start being the only thing between this socket and the network.
  * 2. It requires a **per-session token**, keyed off a per-launch secret that
  *    is generated at start and never leaves this file — not on the
  *    {@link Receiver} interface, not in an environment variable, not in the
@@ -79,12 +83,11 @@ import { ticketKeyFromPrompt } from './ticket-intent';
  *    {@link tokenFor} applied to that one session's own id (HIVE-112) — so a
  *    session that leaks its token hands over only its own identity, not
  *    every other session's.
- * 3. It answers a **closed set of six paths** — the hook event, the status
- *    line's metrics (HIVE-79), `/done`, the boot-ready signal, and, since
- *    HIVE-111, a ledger post and a ledger read — and reads a **capped body**
- *    on each, so nothing about it is a general-purpose server. Every path
- *    checks the token against the session header it was issued for; several
- *    carry a smaller cap than the hook path.
+ * 3. It answers a **closed set of eight paths** — the hook event, the status
+ *    line's metrics (HIVE-79), `/done`, the boot-ready signal, a ledger post and
+ *    a ledger read (HIVE-111), the agents directory (HIVE-127) and `POST /mcp`
+ *    (HIVE-130) — and reads a **capped body** on each, so nothing about it is a
+ *    general-purpose server.
  *
  * Its authority is correspondingly wider than it once was: a valid POST can
  * still move a status dot or record usage percentages, but the ledger paths
@@ -235,6 +238,39 @@ export interface ReceiverOptions {
   onAgentEvent: (event: HookAgentEvent) => void;
   /** Overridable for tests; `0` asks the OS for any free port. */
   port?: number;
+  /**
+   * The address to listen on. Defaults to `127.0.0.1` (HIVE-134).
+   *
+   * A plain value, not a getter: a socket that is already listening cannot be
+   * moved, so re-reading this would promise a rebind that never happens.
+   * Changing it takes effect at the app's next launch, which is what Settings
+   * tells the user.
+   */
+  host?: string;
+  /**
+   * Origins the guard admits. Empty refuses every request that carries one.
+   *
+   * Also a plain value: it is read on the same config pass as {@link host} and
+   * the two describe one decision.
+   */
+  allowedOrigins?: readonly string[];
+  /**
+   * Every hostname a container may reach this machine by (HIVE-134; widened
+   * from a single alias in the follow-up review).
+   *
+   * A getter, because this can change under a config reload or a folder
+   * change — it is the same set `ipc/index.ts` already keeps live for
+   * `knownAgents`. **A single alias is not enough.** This app has supported
+   * a project's `container.hostAlias` and an agent's `container.host_alias`
+   * diverging from the global one since HIVE-133/137, and each one that does
+   * writes its own generated hook/status/MCP files addressing this receiver
+   * by *that* alias — so the `Host` header a session actually sends can be
+   * any of them, not only the global setting. A guard that checked one alias
+   * 403'd every session running under a diverged one, silently, because the
+   * generated hooks are `curl -s -o /dev/null 2>/dev/null`. `guard()` tests
+   * membership in the whole set for exactly that reason.
+   */
+  hostAliases?: () => ReadonlySet<string>;
 }
 
 export interface Receiver {
@@ -318,6 +354,34 @@ export interface Receiver {
    * trimmed off by a caller.
    */
   readonly origin: string | null;
+  /**
+   * The host `listen()` actually succeeded with, or `null` when nothing is
+   * listening — before a successful start, after a failed one, or after
+   * {@link Receiver.stop} (HIVE-134).
+   *
+   * The configured bind (`receiver.bind.host`) says what *will* be bound at
+   * the next launch; this says what *is* bound right now, and the two can
+   * disagree for the rest of a running session — toggling the settings
+   * switch rewrites the config file and its snapshot instantly, but the
+   * listening socket this receiver already opened cannot be moved, only
+   * closed. A security indicator that cares whether the process is currently
+   * reachable off-loopback has to read this field, not the config.
+   *
+   * Set in the same `listen` success callback that sets {@link Receiver.origin}
+   * and {@link Receiver.url} — but, deliberately, from `address.address`
+   * (Node's own report of what got bound), not from the `host` local those two
+   * fields use. `origin` and `url` are what this app *announces*, and have to
+   * stay the literal string the socket was told to bind, or every dependent
+   * URL points somewhere nothing dials. This field answers a different
+   * question — what did the kernel actually hand back — and `host` can lie
+   * about it: `localhost`, or a `/etc/hosts` entry pointing a hostname at a
+   * loopback address, both read as non-loopback to a string check like
+   * `isLoopbackHost` while the socket that bound is loopback-only. See the
+   * fuller comment at the `listen` call site. Cleared everywhere `origin` and
+   * `url` are cleared, for the same reason: a bind failure or a `stop()` means
+   * nothing is listening, and this field exists to say exactly that.
+   */
+  readonly boundHost: string | null;
   stop(): Promise<void>;
 }
 
@@ -470,6 +534,9 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     knowsAgent,
     onAgentEvent,
     port = 0,
+    host = '127.0.0.1',
+    allowedOrigins = [],
+    hostAliases = () => new Set([DEFAULT_RECEIVER.hostAlias]),
   } = options;
 
   /**
@@ -550,6 +617,8 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * second path without re-deriving a port from a string it just built.
    */
   let origin: string | null = null;
+  /** The host `listen()` succeeded with, or `null` — see {@link Receiver.boundHost}. */
+  let boundHost: string | null = null;
 
   /**
    * One MCP read cursor per caller, for the lifetime of this receiver.
@@ -650,6 +719,90 @@ export function createReceiver(options: ReceiverOptions): Receiver {
   const SESSION_ID_IN_PREFIX = /"session_id"\s*:\s*"([0-9a-fA-F-]+)"/;
 
   /**
+   * Where the request claims it was going, checked before who it claims to be.
+   *
+   * ## Why this is not conditioned on the bind
+   *
+   * The obvious shape is to run this only when `receiver.bind` is widened, since
+   * that is the exposure it answers. That shape was rejected: this app ships
+   * macOS only, where no user sets that config, so the guard would be code that
+   * never runs on the platform that ships — correct in a test and inert in the
+   * world. It also answers something real at the loopback bind. DNS rebinding
+   * points a hostile page's own hostname at `127.0.0.1`, and the browser then
+   * treats this socket as same-origin and will read the responses. The token
+   * still stops the page doing anything, so this is depth rather than a hole
+   * being closed — but Origin and Host are the standard, one-line-each defence,
+   * and there is no argument for owning the socket and skipping them.
+   *
+   * ## Why in `reject`, and before identity
+   *
+   * `reject` is the one function every handler already calls, which is what
+   * makes "every route" true by construction rather than by eight people
+   * remembering. Running before the token and session checks means a hostile
+   * page cannot read which sessions exist out of the difference between 403 and
+   * 404.
+   *
+   * `handleMcp` keeps a stricter Origin rule of its own on top of this one; see
+   * the comment there.
+   */
+  function guard(
+    headers: Record<string, string | string[] | undefined>,
+  ): number | null {
+    /*
+      Absent is the ordinary case and the only one a legitimate caller produces:
+      `claude`, the status line's `curl`, and the MCP host all send no `Origin`.
+      Present-and-listed exists for a local dev server someone points at this
+      app on purpose; with the default empty list, present is always a refusal —
+      which is exactly the rule `POST /mcp` has enforced alone since HIVE-130.
+    */
+    const origin = headers['origin'];
+    if (origin !== undefined) {
+      if (typeof origin !== 'string' || !allowedOrigins.includes(origin)) return 403;
+    }
+
+    /*
+      `Host` is `host[:port]`. Only the host part is compared: the port is this
+      receiver's own and is already settled by the connection having arrived, so
+      checking it would add nothing and would break the moment an ephemeral port
+      changed. An IPv6 literal keeps its brackets, which is how it arrives and
+      what `isLoopbackHost` strips.
+    */
+    const raw = headers['host'];
+    // HTTP/1.1 requires it. A request without one is hand-rolled, and no caller
+    // here is.
+    if (typeof raw !== 'string' || raw === '') return 403;
+    const claimed = raw.startsWith('[')
+      ? raw.slice(0, raw.indexOf(']') + 1)
+      : (raw.split(':')[0] ?? '');
+    const bare = claimed.toLowerCase();
+    if (bare === '') return 403;
+
+    /*
+      Loopback names are admitted whatever the bind, because a caller on this
+      machine legitimately addresses loopback and always has. That is wider than
+      the configured address deliberately: what a client may *claim* to have
+      reached is not the same set as what a user may *configure* as a listen
+      address, which is why `::1` is here and `isHostAlias` refuses it there.
+    */
+    if (isLoopbackHost(bare)) return null;
+    if (bare === host.toLowerCase()) return null;
+    /*
+      And every alias, or a diverged session 403s: a containerised session
+      addresses this app by whichever alias *it* was generated with — the
+      global one, its project's, or its agent's — so the guard has to admit
+      all three, not just the global setting (see `hostAliases`'s own doc
+      comment above for why one was never enough). Read through the getter
+      rather than captured, because the set can change under a config reload
+      or a folder change while this socket stays up.
+    */
+    for (const alias of hostAliases()) {
+      if (bare === alias.toLowerCase()) return null;
+    }
+
+    return 403;
+  }
+
+  /**
    * Token, entity id, and "is this an identity this app still has".
    *
    * Shared by every path because they all need exactly this and in this order —
@@ -669,6 +822,10 @@ export function createReceiver(options: ReceiverOptions): Receiver {
   function reject(
     headers: Record<string, string | string[] | undefined>,
   ): number | null {
+    // Before identity, so a status code leaks nothing about who exists.
+    const misrouted = guard(headers);
+    if (misrouted !== null) return misrouted;
+
     const entityId = headers[HOOK_HEADER_SESSION];
     if (typeof entityId !== 'string' || entityId === '') return 400;
 
@@ -676,14 +833,31 @@ export function createReceiver(options: ReceiverOptions): Receiver {
      * The presented token must be the one derived for *this* session id, not
      * merely a token this receiver minted for someone else (HIVE-112).
      *
-     * Not a timing-safe comparison, and deliberately not: this is a derived
-     * secret on a loopback socket, where an attacker able to time the
-     * comparison is already running as this user and has no need to — the
-     * thing being protected is one session's isolation from another's ledger
-     * entries, not the socket as a whole, and timing leaks nothing an
-     * on-machine attacker does not already have.
+     * **Timing-safe since HIVE-134.** It was not, and the justification was
+     * written down: "a derived secret on a loopback socket, where an attacker
+     * able to time the comparison is already running as this user". That premise
+     * died with `receiver.bind` — the socket is no longer loopback by
+     * construction, so the compare has to hold on its own without a claim about
+     * who can reach it. It is applied unconditionally rather than only on a
+     * widened bind, because a guard that engages on a config no user has set is
+     * a guard nothing exercises.
+     *
+     * Length is checked first, and separately: `timingSafeEqual` **throws** on
+     * buffers of unequal length, and the presented value is attacker-controlled.
+     * A throw here is not a crash — the per-request `try`/`catch` around every
+     * handler answers `500` for that one request and the receiver, and every
+     * other session, carries on — but a wrong-length token would then answer
+     * `500` instead of `403`, which tells a caller the app is broken when it
+     * was merely refused, and loses the refusal this route owes it. The leak
+     * that check admits is the length of a 64-character constant, which is
+     * already public.
      */
-    if (headers[HOOK_HEADER_TOKEN] !== tokenFor(entityId)) return 403;
+    const presented = headers[HOOK_HEADER_TOKEN];
+    if (typeof presented !== 'string') return 403;
+    const expected = Buffer.from(tokenFor(entityId), 'utf8');
+    const offered = Buffer.from(presented, 'utf8');
+    if (offered.length !== expected.length) return 403;
+    if (!timingSafeEqual(offered, expected)) return 403;
 
     /**
      * An unknown identity is refused rather than remembered.
@@ -1003,12 +1177,13 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * - `GET` is `405`, handled in the dispatcher. A bare `404` there would tell
    *   a client there is no endpoint at all and send it off to the deprecated
    *   HTTP+SSE transport.
-   * - A **present** `Origin` is refused. This socket is loopback today, so no
-   *   browser can reach it; the check is here anyway because the spec makes it
-   *   a MUST and because HIVE-131 is about to make the bind configurable —
-   *   at which point a page in the user's browser could resolve a hostile name
-   *   to this address. A configurable allowlist is that story's; refusing every
-   *   browser-supplied origin is this one's.
+   * - A **present** `Origin` is refused, and still is here even though `reject`
+   *   now runs an allowlist for every route (HIVE-134). The two are not redundant:
+   *   the spec makes refusing a browser-supplied origin a MUST for this transport,
+   *   and this route's legitimate callers are `claude` processes, none of which
+   *   sends one. So a value a user allowlisted for their own dev server is
+   *   admitted on `/ready` and refused here, which is the stricter reading and the
+   *   right one for the route that can call tools.
    */
   async function handleMcp(
     headers: Record<string, string | string[] | undefined>,
@@ -1024,10 +1199,11 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     if (refusal !== null) return refusal;
 
     /*
-      Any `Origin` at all is a refusal, not merely an unrecognised one. The
-      legitimate callers here are `claude` processes, and none of them sends
-      one; a request that does came from something with a browser's request
-      model attached, which is exactly what the DNS-rebinding warning is about.
+      Stricter than `reject`'s allowlist, deliberately: any `Origin` at all is a
+      refusal here, listed or not. A request that carries one came from something
+      with a browser's request model attached, which is what the DNS-rebinding
+      warning is about, and nothing that legitimately calls a tool on this route
+      has one.
     */
     if (headers['origin'] !== undefined) return 403;
 
@@ -1572,6 +1748,10 @@ export function createReceiver(options: ReceiverOptions): Receiver {
       return origin;
     },
 
+    get boundHost() {
+      return boundHost;
+    },
+
     get metricsUrl() {
       return origin === null ? null : `${origin}${METRICS_PATH}`;
     },
@@ -1587,10 +1767,14 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     start() {
       return new Promise<string | null>((resolve) => {
         /*
-          Seven paths now, and still nothing resembling a general-purpose
-          server: the set is closed, every one of them is POST-only, and each
-          has its own body cap sized to the document it expects. A request that
-          is none of them is 404 without reading a byte.
+          Eight paths now, and still nothing resembling a general-purpose
+          server: the set is closed, every one of them is POST-only, each has
+          its own body cap sized to the document it expects, and each
+          authenticates on POST through the one `reject` that also decides
+          whether the request was addressed to this app at all — a `GET` never
+          reaches it, or any handler: `/mcp`'s is 405 straight out of the
+          dispatcher, below, before `reject` is ever called. A request that is
+          none of these paths at all is 404 without reading a byte.
         */
         const routes: readonly Route[] = [
           { path: HOOK_PATH, cap: HOOK_MAX_BODY_BYTES, handle },
@@ -1741,19 +1925,45 @@ export function createReceiver(options: ReceiverOptions): Receiver {
           if (server === null) {
             url = null;
             origin = null;
+            boundHost = null;
             resolve(null);
           }
         });
 
-        created.listen(port, '127.0.0.1', () => {
+        created.listen(port, host, () => {
           const address = created.address();
           if (address === null || typeof address === 'string') {
             resolve(null);
             return;
           }
           server = created;
-          origin = `http://127.0.0.1:${address.port}`;
+          /*
+            The same `host` the socket was given, never a re-spelling of it. The
+            literal used to appear twice — here and in `listen` above — and the
+            pair had to move together or this would announce an address nothing
+            was listening on, taking `metricsUrl`, `doneUrl` and `readyUrl` with
+            it.
+          */
+          origin = `http://${host}:${address.port}`;
           url = `${origin}${HOOK_PATH}`;
+          /*
+            `address.address`, not `host` — this is `boundHost`'s one deliberate
+            departure from the "never a re-spelling" rule just above, and for a
+            different reason than that rule guards against. `origin` and `url`
+            are what this app *announces*: a session's hooks, `/done`, the MCP
+            host all have to dial the literal string this process was told to
+            bind, so re-deriving that half from anything else is how those break.
+            `boundHost` answers a different question — what did the kernel
+            actually hand back — and `host` can lie about it: `localhost`
+            resolves to a loopback address nothing outside this machine can
+            reach, and a `/etc/hosts` entry can point a hostname at a loopback
+            IP while `isLoopbackHost` (a string check, not a DNS lookup) has no
+            way to know. `address.address` is Node's own answer to what got
+            bound — already destructured on the line above for `address.port` —
+            so the exposure chip built on it is telling the truth about the
+            socket, not about the config that requested it.
+          */
+          boundHost = address.address;
           resolve(url);
         });
       });
@@ -1769,6 +1979,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
         server = null;
         url = null;
         origin = null;
+        boundHost = null;
         // The stdio host's cursor dies with its process; this one dies with the
         // socket that served it, so a restart starts every caller fresh.
         mcpCursors.clear();
