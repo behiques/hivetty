@@ -3,11 +3,24 @@ import { join } from 'node:path';
 import { app } from 'electron';
 
 import { applyDevDockIcon } from './app-icon';
+import { primaryWindow } from './aux-windows';
+import { parseInvocation } from './cli';
 import { getConfig } from './config';
 import { startLoginEnvImport } from './config/login-env';
 import { installContentSecurityPolicy } from './csp';
+import { remoteListenerBindError, remoteListenerBoundAddress, startRemoteListener } from './ipc';
 import { registerIpc } from './ipc/router';
 import { registerLifecycle } from './lifecycle';
+import {
+  pairDevice,
+  pairOutcomeMessage,
+  revokeDevice,
+  revokeOutcomeMessage,
+} from './server/devices';
+import { fileBackedIo, serverDeviceStore } from './server/file-backed-io';
+import { runOneShot } from './server/one-shot';
+import { onShutdown } from './shutdown';
+import { createServerTray } from './tray';
 import { startUpdateChecks } from './updates';
 import { createWindow } from './window';
 
@@ -65,8 +78,27 @@ if (!app.isPackaged && !app.commandLine.hasSwitch('user-data-dir')) {
   app.setPath('userData', join(app.getPath('appData'), 'the-hive'));
 }
 
+/*
+  Before the single-instance lock, and before `whenReady`, deliberately.
+
+  On a served machine the app is always running, so a one-shot that requested
+  the lock would lose it and quit before printing anything — and Electron's
+  `second-instance` event hands argv to the first instance with no channel to
+  answer on. Before `whenReady` because it can be: minting is `randomBytes`, a
+  digest and a config write. Measured 2026-09-08 — `safeStorage` is unavailable
+  before `whenReady` even in a GUI session, which is the other half of why the
+  server stores a digest rather than a secret.
+*/
+const invocation = parseInvocation(process.argv, app.isPackaged);
+if (invocation.kind !== 'app') {
+  process.exit(runOneShot(invocation, fileBackedIo()));
+}
+
 /**
- * The single-instance lock, first, before anything else is wired.
+ * The single-instance lock, before anything else is wired — everything below
+ * this point, that is. The one-shot dispatch above it runs earlier still,
+ * deliberately: see that block's own comment for why a one-shot must not
+ * wait on this lock at all.
  *
  * `requestSingleInstanceLock()` returns false in the *second* process, which
  * must exit immediately — the first process gets a `second-instance` event and
@@ -119,6 +151,26 @@ if (!app.requestSingleInstanceLock()) {
   registerIpc('local');
 
   /**
+   * Server mode is `server.enabled` in the config file — set for good on the
+   * unattended Mac mini this ships to run on — **or** the one-off `--server`
+   * flag, which enables it for this run only and never writes the file
+   * (HIVE-142, spec §5.1, §3.4). Computed once, here, rather than inside
+   * `whenReady`'s callback below: `registerLifecycle` needs the same answer
+   * to decide whether its own `whenReady` handler may open a window, and
+   * racing two separate reads of `getConfig()` against two separate
+   * `whenReady` callbacks would risk the file changing under it between them.
+   */
+  const serverMode = invocation.server || getConfig().server.enabled;
+
+  /**
+   * The tray's own handle (HIVE-142 review, I2) — see the comment at its
+   * assignment below for why dropping it is not an option. Declared here,
+   * outside `whenReady`'s callback, so `onShutdown` can close over it and
+   * still see the value that callback assigns.
+   */
+  let serverTray: ReturnType<typeof createServerTray> | undefined;
+
+  /**
    * The CSP has to be installed before any renderer loads, and
    * `session.defaultSession` is only available once the app is ready.
    */
@@ -139,7 +191,104 @@ if (!app.requestSingleInstanceLock()) {
      * able to stop a window from opening.
      */
     startUpdateChecks();
+
+    if (serverMode) {
+      /**
+       * No renderer runs in server mode: the console is the tray, not a
+       * window (HIVE-142). Hiding the dock icon is what tells a served
+       * machine's own screen — reached only by screen-sharing into the mini —
+       * that this is a background service, not an app someone forgot to quit.
+       * `app.dock` is `undefined` off macOS, which is the only platform this
+       * app ships on today; the optional chain is defensive rather than load-
+       * bearing.
+       */
+      app.dock?.hide();
+      /*
+        Fire-and-forget: a bind failure is not fatal to boot (the tray still
+        shows, still lets a human retry after fixing the config), and there is
+        nobody at this machine to hand a rejected promise to anyway. The
+        result is not needed here — `remoteListenerBoundAddress()` below reads
+        it back once it lands, exactly as `AppInfo` reads the receiver's own
+        `boundHost` rather than the promise `hooks.start()` returned.
+      */
+      void startRemoteListener();
+      /*
+        Held in a module-level binding, not discarded (HIVE-142 review, I2).
+        Inside `createServerTray`, the only remaining references form a
+        closed cycle — `tray` → its own `click`/`right-click` handler map →
+        `showMenu` → `tray` again — reachable from nothing outside the
+        function once its return value is dropped. A collected `Tray` takes
+        its status item down with it: the classic Electron footgun, and in
+        server mode the tray is the *only* way a human reaches Pair, Open or
+        Quit — the exact failure `createServerTray`'s own `setTitle('Hive')`
+        fallback exists to keep from being invisible, defeated a different
+        way if the whole item can vanish. `serverTray.destroy()` is also
+        registered with `onShutdown` below, so the status item is removed
+        cleanly rather than left for the OS to notice the process exited.
+      */
+      /*
+        One `DeviceStore`, shared by every call below (HIVE-142 review, N1/N2):
+        reads go through `readServerDevicesFromDisk()` (no shared-cache
+        write — see that function's own doc comment), writes through
+        `setServer`. The same collaborator backs both `devices` (display) and
+        `onPair`/`onRevoke` (mutation) below, and it is the exact shape
+        `pairDevice`/`revokeDevice` in `server/devices.ts` expect — the same
+        functions `one-shot.ts`'s `--pair`/`--revoke` call, so the duplicate-
+        name refusal, the collision retry and "persist against the roster
+        you just read" are each proven once, not reimplemented here worse.
+      */
+      const deviceStore = serverDeviceStore();
+      serverTray = createServerTray({
+        devices: deviceStore.readDevices,
+        onPair: (name) => {
+          const outcome = pairDevice(name, deviceStore);
+          if (outcome.ok) return { token: outcome.token, deviceId: outcome.device.id };
+          return { error: pairOutcomeMessage(outcome, name) };
+        },
+        onRevoke: (name) => {
+          const outcome = revokeDevice(name, deviceStore);
+          if (outcome.revoked) return { revoked: true };
+          return { error: revokeOutcomeMessage(outcome, name) };
+        },
+        /*
+          The `primaryWindow()`-first shape `second-instance` already uses in
+          `lifecycle.ts` (HIVE-142 review, I2) — this click used to call
+          `createWindow({ withSplash: true })` unconditionally, so with the
+          dock icon hidden and no Cmd-Tab entry, clicking the tray while the
+          console was merely hidden behind another window stacked a second
+          renderer, splash and all, rather than surfacing the one already
+          open. No splash on a re-open, for the same reason `second-instance`
+          has none either: the app is already running, so there is no boot
+          to cover.
+        */
+        onOpenConsole: () => {
+          const existing = primaryWindow();
+          if (existing) {
+            if (existing.isMinimized()) existing.restore();
+            existing.focus();
+            return;
+          }
+          createWindow();
+        },
+        // Both pieces sourced from what the listener actually bound, not
+        // composed from a separate config read — see that function's own
+        // doc comment (HIVE-142 review, N3).
+        boundAddress: remoteListenerBoundAddress,
+        // The cause of a bind failure, for the same reason (HIVE-142
+        // review, I3).
+        bindError: remoteListenerBindError,
+      });
+    }
   });
 
-  registerLifecycle({ createWindow });
+  /*
+    `serverTray?.` rather than a plain call: this hook is registered
+    unconditionally (every launch, not only server mode), and it runs
+    whether or not the tray was ever created — the same `?.` shape every
+    other optional-composition teardown in this codebase uses (see
+    `ipc/index.ts`'s `hooks?.`, `runs?.`, `scheduler?.`).
+  */
+  onShutdown(() => serverTray?.destroy());
+
+  registerLifecycle({ createWindow, serverMode });
 }

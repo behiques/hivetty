@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import {
@@ -15,6 +15,7 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 
+import { createRemoteListener } from '@remote-host/listener';
 import {
   AGENT_LIMIT_DEFAULTS,
   formatRunCost,
@@ -80,11 +81,14 @@ import {
   parseSetJiraRequest,
   parseSetJiraTokenRequest,
   parseSetReceiverRequest,
+  parseSetServerRequest,
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
   parseDismissRequest,
   parseMarkReadRequest,
   parseNotificationAction,
+  parsePairDeviceRequest,
+  parseRevokeDeviceRequest,
   parseSetNotificationsRequest,
   parseSetProjectRuntimeRequest,
   parseSetRuntimeRequest,
@@ -169,6 +173,7 @@ import {
   setProjectRuntime,
   setReceiver,
   setRuntime,
+  setServer,
   setSlack,
 } from '../config';
 import { diagnoseEnv } from '../config/env-diagnostic';
@@ -212,6 +217,13 @@ import {
   createSessionNames,
 } from '../notifications';
 import { registerPtyHost } from '../pty-host';
+import {
+  pairDevice,
+  pairOutcomeMessage,
+  revokeDevice,
+  revokeOutcomeMessage,
+} from '../server/devices';
+import { readServerDevicesFromDisk, serverDeviceStore } from '../server/file-backed-io';
 import { createSessions, type Sessions } from '../sessions';
 import {
   createSessionHistory,
@@ -295,6 +307,21 @@ function handle<T>(
  * two accounts of the same system.
  */
 let systemNotificationRefusal: string | null = null;
+
+/**
+ * The server-mode socket (HIVE-142), constructed unconditionally below but
+ * only ever `start()`-ed by `index.ts`, and only in server mode. `null` here
+ * means "not yet composed" (before `registerIpcHandlers` runs, or in a test
+ * that never calls it) — `startRemoteListener` and `remoteListenerBoundAddress`
+ * both treat that the same as "not listening" rather than throwing.
+ */
+let remoteListener: ReturnType<typeof createRemoteListener> | null = null;
+/**
+ * The port `remoteListener` was actually constructed with (HIVE-142 review,
+ * N3) — captured once, beside `remoteListener` itself, rather than read
+ * again later through `getConfig()`. See the assignment site's own comment.
+ */
+let remoteListenerPort: number | null = null;
 
 let sessions: Sessions | null = null;
 /**
@@ -796,6 +823,45 @@ let envDiagnosticInFlight = false;
 /** The live sessions layer, or `null` before registration. Test-only reach-in. */
 export function sessionsLayer(): Sessions | null {
   return sessions;
+}
+
+/**
+ * Starts the server-mode socket (HIVE-142). Resolves the bound `ws://` URL,
+ * or `null` on bind failure — see {@link createRemoteListener}'s own `start`.
+ *
+ * Called from `index.ts`, and only when this run is server mode; every other
+ * launch leaves {@link remoteListener} constructed but never started, so no
+ * port is ever bound on a machine that never asked for one.
+ */
+export function startRemoteListener(): Promise<string | null> {
+  return remoteListener ? remoteListener.start() : Promise.resolve(null);
+}
+
+/**
+ * `host:port`, for the tray's informational item — both pieces sourced from
+ * what the listener actually bound, not composed from a separate config read
+ * (HIVE-142 review, N3). An earlier revision built the displayed address
+ * from a host-only accessor plus a fresh `getConfig().server.bind.port`
+ * read; that agreed with the socket only by coincidence, because nothing
+ * else here reads `server.bind` a second time after construction — a
+ * hand-edited port would show in the tray while the already-listening
+ * socket, which cannot rebind without a restart, kept answering on the old
+ * one. `remoteListenerPort` is the exact number `createRemoteListener` was
+ * given, captured once beside it.
+ */
+export function remoteListenerBoundAddress(): string | null {
+  const host = remoteListener?.boundHost ?? null;
+  return host === null || remoteListenerPort === null ? null : `${host}:${String(remoteListenerPort)}`;
+}
+
+/**
+ * Why nothing is bound yet, for the tray's own informational item (HIVE-142
+ * review, I3) — `null` on every launch that is not server mode, exactly like
+ * {@link remoteListenerBoundAddress} above, since `remoteListener` is
+ * constructed unconditionally but only ever started in server mode.
+ */
+export function remoteListenerBindError(): string | null {
+  return remoteListener?.lastBindError ?? null;
 }
 
 /**
@@ -1419,6 +1485,71 @@ export function registerIpcHandlers(
       ).container,
     ledger,
   });
+
+  /**
+   * The server-mode socket (HIVE-142), constructed beside the receiver
+   * above: same file, same composition pass, same reason for existing —
+   * paired devices reach this Hive over the network the way Claude Code's
+   * hooks reach the receiver.
+   *
+   * Built unconditionally, on every launch, but only `start()`-ed from
+   * `index.ts` when this run is server mode — see {@link startRemoteListener}.
+   * `bind` is read once, not through a getter, for the same reason `hooks`'s
+   * `bind` above is: an already-listening socket cannot be moved, and
+   * Settings says as much (HIVE-134's rule, restated for HIVE-142).
+   */
+  /*
+    Captured once, not read again later through `getConfig()` — this is the
+    exact `port` `createRemoteListener` below binds to, and it is what
+    `remoteListenerBoundAddress()` (below `registerIpcHandlers`) composes the
+    tray's displayed address from (HIVE-142 review, N3). Before that fix, the
+    tray built its address from a *separate*, later `getConfig().server.bind.port`
+    read — harmless while the config cache was frozen for the process's whole
+    life, but no longer once reads elsewhere started calling `reloadConfig()`:
+    a hand-edited port would then show in the tray while the socket, which
+    cannot rebind without a restart, kept listening on the old one.
+  */
+  const serverBind = getConfig().server.bind;
+  remoteListenerPort = serverBind.port;
+  remoteListener = createRemoteListener({
+    bind: serverBind,
+    /*
+      `readServerDevicesFromDisk()`, not `getConfig()`/`reloadConfig()`
+      (HIVE-142 review, N1). `getConfig()` answers this process's cached
+      `ConfigSnapshot`, permanently frozen at boot; `reloadConfig()` re-reads
+      the file but also **installs the result as that same shared cache** —
+      and this getter is called from `listener.ts`'s connection handler
+      *before* `verifyDevice`, i.e. from an unauthenticated peer that has
+      merely reached the socket. Swapping `projects`, `env`, `shell`, `jira`,
+      `slack` and `receiver` for every subsystem in this process from a path
+      nothing has vouched for yet is not a contract this story gets to
+      change — and `reloadConfig()` skips the invalidations a real reload
+      performs (`forgetProbedRoots()`, `slackBridge?.sync()`, below), so its
+      result could visibly disagree with the rest of the process besides.
+      `readServerDevicesFromDisk()` (`server/file-backed-io.ts`) reads the
+      file itself and returns only `server.devices`, installing nothing.
+    */
+    devices: readServerDevicesFromDisk,
+    // What a client's header indicator renders: "attached · <serverName>".
+    // The machine's own hostname identifies *which* served Mac a client is
+    // looking at, which matters once more than one exists.
+    serverName: hostname(),
+  });
+  /*
+    Registered here, immediately, rather than folded into the large combined
+    teardown hook below that finalizes every live run and calls `closeAll` —
+    the ordering this file documents throughout (HIVE-120, HIVE-124):
+    `runShutdown` invokes every hook body, in registration order, before
+    awaiting any of them. Registering the socket's teardown first means its
+    synchronous work — terminating every attached client — runs before that
+    later hook's synchronous steps do, so nothing can arrive on this socket
+    asking for something `closeAll` is already tearing down. This story's
+    listener answers only a handshake (no call routing yet), so nothing here
+    can actually spawn a run today — but the ordering is the same discipline
+    the next story that adds call routing over this socket will need, stated
+    up front rather than discovered by review.
+  */
+  onShutdown(() => remoteListener?.stop());
 
   skills = createSkillsRuntime({
     userDataPath: app.getPath('userData'),
@@ -2231,6 +2362,11 @@ export function registerIpcHandlers(
       // bind" — both mean the same thing to a caller asking whether the
       // process is reachable off loopback right now.
       receiverBoundHost: hooks?.boundHost() ?? null,
+      // Same shape, same reason: `remoteListener` exists on every launch
+      // (constructed unconditionally), but only ever bound in server mode —
+      // `?.boundHost` is `null` on every other launch, which is the correct
+      // answer for "is anything reachable off this socket right now."
+      serverBoundHost: remoteListener?.boundHost ?? null,
       // Omitted rather than empty when nothing has run, so the field's presence
       // means something.
       ...(diagnostics.length > 0 ? { pty: diagnostics } : {}),
@@ -2692,6 +2828,61 @@ export function registerIpcHandlers(
   // HIVE-131. The container host alias — an ordinary settings write.
   handle(CH.configSetReceiver, (_event, payload): ConfigSnapshot =>
     setReceiver(parseSetReceiverRequest(payload)),
+  );
+  /**
+   * HIVE-142. Whether server mode is on, and where it listens — an ordinary
+   * settings write, exactly like `config:set-receiver` above. There is no
+   * credential in this payload: `parseSetServerRequest` refuses one, and
+   * pairing is `server:pair`'s job below.
+   */
+  handle(CH.configSetServer, (_event, payload): ConfigSnapshot =>
+    setServer(parseSetServerRequest(payload)),
+  );
+  /**
+   * Mint a device credential, and answer its plaintext once (HIVE-142).
+   *
+   * Goes through `pairDevice` — the same implementation `--pair` and the
+   * server-mode tray's "Pair a device…" call (`server/devices.ts`) — so the
+   * duplicate-name refusal, the collision-safe retry and "persist against
+   * the roster just read" are proven once, not reimplemented a third time
+   * here. The plaintext is the return value and nothing else: it is never
+   * written into the config, a store, or a log line — the server keeps only
+   * the digest `pairDevice` computed.
+   *
+   * `deviceId` rides alongside the token (HIVE-142 review, I5): `AttachRequest`
+   * needs both, and until now the id was readable only inside `config.json`.
+   * A write failure (C1) is reported through the same `{ error }` shape a
+   * duplicate name or a minting collision already uses — the pane shows the
+   * reason instead of the token panel either way.
+   */
+  handle(
+    CH.serverPair,
+    (_event, payload): { token: string; deviceId: string } | { error: string } => {
+      const { name } = parsePairDeviceRequest(payload);
+      const outcome = pairDevice(name, serverDeviceStore());
+      if (outcome.ok) return { token: outcome.token, deviceId: outcome.device.id };
+      return { error: pairOutcomeMessage(outcome, name) };
+    },
+  );
+  /**
+   * Revoke a paired device by name (HIVE-142). A no-op, not a refusal, if no
+   * device holds that name — the same `revokeDevice` implementation `--revoke`
+   * and the tray's "Revoke" both call.
+   *
+   * Reports the outcome rather than answering `void` (HIVE-142 review, I7,
+   * same family as C1): a hand-edit or a rename since boot can mean this
+   * name matches nothing, or the write itself can fail, and either way the
+   * renderer's `revokeDevice` (`project-config.ts`) must not tell the pane
+   * "done" for a revoke that changed nothing on disk.
+   */
+  handle(
+    CH.serverRevoke,
+    (_event, payload): { revoked: true } | { error: string } => {
+      const { name } = parseRevokeDeviceRequest(payload);
+      const outcome = revokeDevice(name, serverDeviceStore());
+      if (outcome.revoked) return { revoked: true };
+      return { error: revokeOutcomeMessage(outcome, name) };
+    },
   );
 
   /**
@@ -3599,6 +3790,14 @@ export function registerIpcHandlers(
 
 /** Test-only: drop the sessions layer and its timers. */
 export function resetIpcHandlers(): void {
+  /*
+    HIVE-142. Most tests never call `startRemoteListener`, so this is usually
+    stopping a socket that was never bound — cheap, per `listener.ts`'s own
+    `stop()`. The ones that do start it (a live suite, or a future test of
+    this composition) must not leak a bound port into the next test.
+  */
+  void remoteListener?.stop();
+  remoteListener = null;
   sessions?.dispose();
   sessions = null;
   cloneFlow?.dispose();

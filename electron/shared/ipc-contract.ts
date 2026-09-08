@@ -37,6 +37,7 @@ import type {
   CloneStartResult,
   CommandDiagnostic,
   ConfigSnapshot,
+  DeviceNameRequest,
   DiagnoseCommandRequest,
   DiagnoseEnvRequest,
   EnvDiagnostic,
@@ -58,6 +59,7 @@ import type {
   SetProjectRuntimeRequest,
   SetReceiverRequest,
   SetRuntimeRequest,
+  SetServerRequest,
   SetSlackRequest,
   SetSlackTokensRequest,
 } from './config-contract';
@@ -278,6 +280,41 @@ export const CH = {
    * chosen by main, as for every verb on this list.
    */
   configSetReceiver: 'config:set-receiver',
+  /**
+   * Whether the server is on and where it listens (HIVE-142).
+   *
+   * A `config:` channel for the same reason every other settings verb is one:
+   * it writes the config file and returns the fresh snapshot. There is
+   * deliberately no credential field here — pairing mints one, and this verb
+   * only ever writes what {@link ConfigSnapshot.server} already resolves to.
+   *
+   * `bind` **changes the listening surface**, exactly as {@link
+   * CH.configSetReceiver}'s does, and for the identical reason takes effect
+   * only at the next launch — a socket already listening cannot be moved.
+   */
+  configSetServer: 'config:set-server',
+  /**
+   * Mint a device credential, and hand back its plaintext once (HIVE-142).
+   *
+   * Its own namespace rather than `config:`, because it does not merely write
+   * the config file — it returns a secret. The server stores only the
+   * digest; this is the one moment the plaintext exists on this side of the
+   * bridge, and it is never written into the config, a store, or a log.
+   *
+   * This is the same register as `agents:run`: whoever holds this device's
+   * token can reach the entire IPC surface as though sitting at this
+   * console. Read the doc on `CHANNEL_AUTHORIZATION` before touching its
+   * grade.
+   */
+  serverPair: 'server:pair',
+  /**
+   * Revoke a paired device by name (HIVE-142).
+   *
+   * The mirror of {@link CH.serverPair} — destroying a credential is the same
+   * register as minting one, because both decide whether a device can reach
+   * every session on this machine.
+   */
+  serverRevoke: 'server:revoke',
   /**
    * The Jira credential and the connection test (HIVE-67).
    *
@@ -1308,6 +1345,34 @@ export interface AppInfo {
    */
   receiverBoundHost: string | null;
   /**
+   * The host the server-mode socket is actually bound to right now, or
+   * `null` when nothing is listening (HIVE-142).
+   *
+   * The same "running, not configured" shape as {@link AppInfo.receiverBoundHost},
+   * for the same reason: a listening socket cannot be moved, so this is what
+   * `remoteListener.start()` actually bound, not `server.bind.host` off the
+   * config snapshot. The two can disagree for an entire running session —
+   * flip `server.enabled` off in the config file and the snapshot updates on
+   * the next read, but the socket bound at this launch's boot stays open
+   * until relaunch — and a status readout has to report the one that is
+   * actually true right now.
+   *
+   * `startRemoteListener()` is fire-and-forget from `index.ts`'s boot
+   * sequence, exactly as `hooks.start()` is for the receiver, so a reader on
+   * this side of the bridge has no guarantee its read lands after the bind
+   * resolves — `server.bind.host` accepts a hostname as well as an IPv4
+   * literal, and `listen()` resolving one can outlast window creation and
+   * this value's first read. `useServerExposure` copes with that itself,
+   * the same single bounded retry `useReceiverExposure` uses; see its own
+   * doc comment for why once is enough.
+   *
+   * The one consumer is the header's serving chip (`useServerExposure`,
+   * `ServingChip`) — see that component's own doc comment for why it reads
+   * **brand**, not the amber `receiverBoundHost`'s chip spends, even though
+   * both chips are sourced the same way.
+   */
+  serverBoundHost: string | null;
+  /**
    * Per-session flow-control counters (story 093).
    *
    * Flow-control bugs are otherwise diagnosed by staring at a slow terminal
@@ -1472,6 +1537,15 @@ export interface HiveBridge {
      */
     setReceiver(request: SetReceiverRequest): Promise<ConfigSnapshot>;
     /**
+     * Turn server mode on or off, and change where it listens (HIVE-142).
+     *
+     * The one verb that touches {@link ConfigSnapshot.server} without
+     * pairing or revoking a device — see {@link HiveBridge.server} for those.
+     * `bind` takes effect at next launch, for the reason
+     * {@link HiveBridge.config.setReceiver} states for its own bind.
+     */
+    setServer(request: SetServerRequest): Promise<ConfigSnapshot>;
+    /**
      * Show the config file in the OS file manager (story 107).
      *
      * Takes no argument: main reveals its own `configPath()`. *Reveal* rather
@@ -1501,6 +1575,44 @@ export interface HiveBridge {
     cancelClone(): Promise<void>;
     /** Returns its own unsubscribe. Callers MUST invoke it on unmount. */
     onCloneDone(callback: (event: CloneDoneEvent) => void): () => void;
+  };
+  /**
+   * Pairing and revoking a device for server mode (HIVE-142).
+   *
+   * Its own namespace, not `config`, because neither verb is an ordinary
+   * settings write: `pair` mints a secret and hands back its plaintext once,
+   * and `revoke` destroys one. Both persist to the same
+   * {@link ConfigSnapshot.server.devices} list `config.setServer` can read,
+   * through the one `pairDevice`/`revokeDevice` implementation the CLI's
+   * `--pair`/`--revoke` and the server-mode tray also call.
+   */
+  server: {
+    /**
+     * Mint a device named `request.name`, and answer its plaintext token —
+     * once, and never again. The renderer must not store it, log it, or hand
+     * it to anything other than the person copying it onto the other device.
+     *
+     * `deviceId` rides alongside the token (HIVE-142 review, I5): the attach
+     * handshake needs both, and this was the only place the id was not also
+     * handed to whoever is holding the token.
+     *
+     * Refuses with `error` rather than rejecting the promise, on a duplicate
+     * name, a credential that could not be minted uniquely, or a config write
+     * that did not land (HIVE-142 review, C1) — all are things the person
+     * pairing can act on, not a broken channel.
+     */
+    pair(
+      request: DeviceNameRequest,
+    ): Promise<{ token: string; deviceId: string } | { error: string }>;
+    /**
+     * Revoke the device named `request.name`.
+     *
+     * `{ error }` on a name that matches nothing, or on a write that did not
+     * land (HIVE-142 review, I7 — same family as C1), rather than an
+     * unconditional success: the most urgent control on the Settings pane
+     * must not report "done" for a revoke that changed nothing on disk.
+     */
+    revoke(request: DeviceNameRequest): Promise<{ revoked: true } | { error: string }>;
   };
   pty: {
     spawn(request: SpawnRequest): Promise<void>;
@@ -2118,6 +2230,13 @@ export const BRIDGE_KEYS = [
   'ledger',
   'notifications',
   'pty',
+  /**
+   * HIVE-142 adds `server`. What a web page can now do that it could not
+   * before: mint a device credential, hand back its plaintext once, and
+   * revoke one by name. Neither verb is an ordinary settings write — see the
+   * comment above {@link BRIDGE_SERVER_KEYS}.
+   */
+  'server',
   'session',
   'skills',
   'slack',
@@ -2712,7 +2831,24 @@ export const BRIDGE_CONFIG_KEYS = [
    * `tests/e2e/electron/security.spec.ts`.
    */
   'setReceiver',
+  /**
+   * HIVE-142. Whether server mode is on, and where it listens — an ordinary
+   * settings write, exactly like `setReceiver` above, and with no credential
+   * in the payload: `parseSetServerRequest` refuses one. Minting and
+   * revoking a device credential is the `server` namespace's job, below.
+   */
+  'setServer',
 ] as const;
+
+/**
+ * The exact key set of `window.hive.server` (HIVE-142).
+ *
+ * Two verbs, and neither is an ordinary settings write: `pair` mints a
+ * credential and answers its plaintext once; `revoke` destroys one. Both go
+ * through `pairDevice`/`revokeDevice` in `server/devices.ts`, the same
+ * implementation the CLI's `--pair`/`--revoke` and the server-mode tray call.
+ */
+export const BRIDGE_SERVER_KEYS = ['pair', 'revoke'] as const;
 
 /** The exact key set of `window.hive.pty`. */
 export const BRIDGE_PTY_KEYS = [

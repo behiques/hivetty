@@ -699,3 +699,112 @@ describe('parseConfig — per-project container block (HIVE-133)', () => {
     expect(parsed.fatal).toBe(false);
   });
 });
+
+describe('the server block (HIVE-142)', () => {
+  it('defaults to disabled on a file that names no server', () => {
+    const parsed = parseConfig(JSON.stringify({ version: 2 }), 'config');
+    expect(parsed.server?.enabled ?? false).toBe(false);
+  });
+
+  it('reads a well-formed block', () => {
+    const parsed = parseConfig(
+      JSON.stringify({
+        version: 2,
+        server: { enabled: true, bind: { host: '100.101.102.103', port: 7433 } },
+      }),
+      'config',
+    );
+    expect(parsed.server?.enabled).toBe(true);
+    expect(parsed.server?.bind?.host).toBe('100.101.102.103');
+    expect(parsed.server?.bind?.port).toBe(7433);
+  });
+
+  it('refuses 0.0.0.0 with a message naming why, and keeps the rest', () => {
+    const parsed = parseConfig(
+      JSON.stringify({ version: 2, server: { enabled: true, bind: { host: '0.0.0.0' } } }),
+      'config',
+    );
+    expect(parsed.server?.bind?.host).toBeUndefined();
+    expect(parsed.errors.join(' ')).toMatch(/0\.0\.0\.0/);
+    expect(parsed.server?.enabled).toBe(true);
+    expect(parsed.fatal).toBe(false);
+  });
+
+  /**
+   * HIVE-142 review, I1: every other spelling `dns.lookup`/`net.Server.listen`
+   * still resolve to the same `0.0.0.0` — `isHostAlias`'s per-label regex
+   * admits all four as hostname shapes, so the literal-string check above is
+   * not the whole rule.
+   */
+  it.each(['0', '00', '0x0', '0X0', '000.000.000.000'])(
+    'refuses %s, another spelling of the wildcard, and keeps the rest',
+    (host) => {
+      const parsed = parseConfig(
+        JSON.stringify({ version: 2, server: { enabled: true, bind: { host } } }),
+        'config',
+      );
+      expect(parsed.server?.bind?.host).toBeUndefined();
+      expect(parsed.server?.enabled).toBe(true);
+      expect(parsed.fatal).toBe(false);
+    },
+  );
+
+  it('allows loopback, for single-machine testing', () => {
+    const parsed = parseConfig(
+      JSON.stringify({ version: 2, server: { bind: { host: '127.0.0.1' } } }),
+      'config',
+    );
+    expect(parsed.server?.bind?.host).toBe('127.0.0.1');
+  });
+
+  it('drops a malformed device and keeps the good ones', () => {
+    const good = {
+      id: 'd_9f2c',
+      name: 'MacBook',
+      paired: '2026-09-07',
+      revoked: false,
+      credential: { kind: 'sha256', digest: 'a'.repeat(64) },
+    };
+    const parsed = parseConfig(
+      JSON.stringify({ version: 2, server: { devices: [good, { id: 'd_bad' }] } }),
+      'config',
+    );
+    expect(parsed.server?.devices).toHaveLength(1);
+    expect(parsed.server?.devices?.[0]?.id).toBe('d_9f2c');
+    expect(parsed.errors.join(' ')).toMatch(/device/i);
+    expect(parsed.fatal).toBe(false);
+  });
+
+  /**
+   * HIVE-142 review, I6: `pairDevice`/`revokeDevice` read the already-
+   * filtered roster and write it back wholesale, so a dropped entry is not
+   * merely ignored for this load — it is erased from the file for good the
+   * next time anyone pairs or revokes anything. The message has to say that,
+   * not just "dropped".
+   */
+  it('says a dropped device is lost for good on the next write, not merely ignored', () => {
+    const parsed = parseConfig(
+      JSON.stringify({ version: 2, server: { devices: [{ id: 'd_bad' }] } }),
+      'config',
+    );
+    expect(parsed.errors.join(' ')).toMatch(/erased for good/i);
+  });
+
+  it('is advisory about a bad port and falls back to the default', () => {
+    const parsed = parseConfig(
+      JSON.stringify({ version: 2, server: { bind: { port: 70000 } } }),
+      'config',
+    );
+    expect(parsed.server?.bind?.port).toBeUndefined();
+    expect(parsed.fatal).toBe(false);
+  });
+
+  it('loads a v2 file written before this story with no error', () => {
+    const parsed = parseConfig(
+      JSON.stringify({ version: 2, shell: '/bin/zsh', projects: [] }),
+      'config',
+    );
+    expect(parsed.fatal).toBe(false);
+    expect(parsed.errors).toEqual([]);
+  });
+});

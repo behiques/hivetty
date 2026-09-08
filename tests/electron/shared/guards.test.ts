@@ -15,12 +15,15 @@ import {
   parseRemoveProjectRequest,
   parseRenameProjectRequest,
   parseReorderProjectsRequest,
+  parsePairDeviceRequest,
   parseRepointProjectRequest,
   parseResizeRequest,
+  parseRevokeDeviceRequest,
   parseSessionPrRequest,
   parseSetProjectKeyRequest,
   parseSetProjectRuntimeRequest,
   parseSetReceiverRequest,
+  parseSetServerRequest,
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
   parseSpawnRequest,
@@ -1136,6 +1139,187 @@ describe('parseSetReceiverRequest and the bind (HIVE-134)', () => {
 
   it('refuses a bind that is not an object', () => {
     expect(() => parseSetReceiverRequest({ bind: '172.17.0.1' })).toThrow(/setReceiver\.bind/);
+  });
+});
+
+/**
+ * Server mode: on/off and its bind (HIVE-142).
+ *
+ * Shaped exactly like `parseSetReceiverRequest`'s own two `describe` blocks,
+ * because `parseSetServerRequest` is that guard's sibling field for field —
+ * see its own doc comment for why.
+ */
+describe('parseSetServerRequest (HIVE-142)', () => {
+  it('accepts enabled alone', () => {
+    expect(parseSetServerRequest({ enabled: true })).toEqual({ enabled: true });
+    expect(parseSetServerRequest({ enabled: false })).toEqual({ enabled: false });
+  });
+
+  it('refuses a non-boolean enabled', () => {
+    for (const enabled of ['true', 1, null]) {
+      expect(() => parseSetServerRequest({ enabled })).toThrow(/setServer\.enabled/);
+    }
+  });
+
+  it('accepts a full bind', () => {
+    expect(
+      parseSetServerRequest({
+        bind: { host: '100.64.1.2', port: 7433, allowedOrigins: [] },
+      }),
+    ).toEqual({
+      bind: { host: '100.64.1.2', port: 7433, allowedOrigins: [] },
+    });
+  });
+
+  it('accepts one field of it, so Settings can write a field at a time', () => {
+    expect(parseSetServerRequest({ bind: { host: '100.64.1.2' } })).toEqual({
+      bind: { host: '100.64.1.2' },
+    });
+  });
+
+  it('accepts enabled and bind together', () => {
+    expect(
+      parseSetServerRequest({ enabled: true, bind: { port: 7433 } }),
+    ).toEqual({ enabled: true, bind: { port: 7433 } });
+  });
+
+  /**
+   * The one field `setReceiver`'s bind does not refuse and this one must:
+   * `0.0.0.0` is a legal hostname by `isHostAlias`'s own rule, and
+   * `isServerBindHost` is the predicate that carves it back out — see its
+   * doc comment for why a served machine has nothing to gain from it.
+   */
+  it('refuses the wildcard bind', () => {
+    expect(() => parseSetServerRequest({ bind: { host: '0.0.0.0' } })).toThrow(
+      /setServer\.bind\.host/,
+    );
+  });
+
+  /**
+   * HIVE-142 review, I1: `0`, `00`, `0x0` and `000.000.000.000` are all
+   * legal hostname shapes by `isHostAlias`'s rule, and all four are spellings
+   * of the same wildcard `dns.lookup`/`net.Server.listen` resolve `0.0.0.0`
+   * to — not just the one literal string this guard used to refuse.
+   */
+  it('refuses every numeral spelling of the wildcard bind, not just the literal string', () => {
+    for (const host of ['0', '00', '0x0', '0X0', '000.000.000.000']) {
+      expect(() => parseSetServerRequest({ bind: { host } })).toThrow(
+        /setServer\.bind\.host/,
+      );
+    }
+  });
+
+  it('refuses a bind host that is not a hostname', () => {
+    for (const host of ['10.0.0.5?', 'evil.com/x', '10.0.0.5:80', 'a b', '']) {
+      expect(() => parseSetServerRequest({ bind: { host } })).toThrow(
+        /setServer\.bind\.host/,
+      );
+    }
+  });
+
+  it('refuses a port that is not one', () => {
+    for (const port of [-1, 70_000, 1.5, '8080', null]) {
+      expect(() => parseSetServerRequest({ bind: { port } })).toThrow(
+        /setServer\.bind\.port/,
+      );
+    }
+  });
+
+  /**
+   * The one port `setReceiver`'s bind accepts and this one must not
+   * (HIVE-142 review, I3): `0` asks the OS for any free port, but a client's
+   * config and a LaunchAgent both have to be told `server.bind.port` ahead
+   * of time — neither can be handed a number the kernel only picks at boot.
+   */
+  it('refuses 0, unlike the receiver bind', () => {
+    expect(() => parseSetServerRequest({ bind: { port: 0 } })).toThrow(
+      /setServer\.bind\.port/,
+    );
+  });
+
+  it('refuses an origin that is not one, naming the entry', () => {
+    expect(() =>
+      parseSetServerRequest({ bind: { allowedOrigins: ['http://ok.test', 'nope'] } }),
+    ).toThrow(/setServer\.bind\.allowedOrigins\[1\]/);
+  });
+
+  it('refuses a devices key — replacing the roster is pairDevice/revokeDevice’s job', () => {
+    expect(() => parseSetServerRequest({ devices: [] })).toThrow(/unexpected key/);
+  });
+
+  it('refuses an unexpected key at either level', () => {
+    expect(() => parseSetServerRequest({ nope: 1 })).toThrow(/unexpected key/);
+    expect(() => parseSetServerRequest({ bind: { enabled: true } })).toThrow(
+      /unexpected key/,
+    );
+  });
+
+  it('refuses a forbidden key inside bind', () => {
+    expect(() =>
+      parseSetServerRequest(JSON.parse('{"bind":{"__proto__":{"host":"evil"}}}')),
+    ).toThrow(/forbidden key/);
+  });
+
+  it('treats an empty bind block as nothing to change', () => {
+    expect(() => parseSetServerRequest({ bind: {} })).toThrow(/nothing to change/);
+  });
+
+  it('rejects a request that changes nothing', () => {
+    expect(() => parseSetServerRequest({})).toThrow(/nothing to change/);
+  });
+});
+
+/**
+ * Pairing and revoking a device (HIVE-142).
+ *
+ * A device name is free text, run through the same `assertText` bound every
+ * other pasted string on this bridge takes — not `assertAgentName`'s closed
+ * grammar, because "Yunid's MacBook" is a legitimate name and is not lowercase
+ * letters, digits and dashes.
+ */
+describe('parsePairDeviceRequest and parseRevokeDeviceRequest (HIVE-142)', () => {
+  it.each([
+    ['pair', parsePairDeviceRequest],
+    ['revoke', parseRevokeDeviceRequest],
+  ] as const)('%s accepts a free-text name', (_label, parse) => {
+    expect(parse({ name: "Yunid's MacBook" })).toEqual({
+      name: "Yunid's MacBook",
+    });
+  });
+
+  it.each([
+    ['pair', parsePairDeviceRequest],
+    ['revoke', parseRevokeDeviceRequest],
+  ] as const)('%s refuses an empty name', (_label, parse) => {
+    expect(() => parse({ name: '' })).toThrow(/must not be empty/);
+  });
+
+  it.each([
+    ['pair', parsePairDeviceRequest],
+    ['revoke', parseRevokeDeviceRequest],
+  ] as const)('%s refuses a non-string name', (_label, parse) => {
+    expect(() => parse({ name: 7 })).toThrow();
+  });
+
+  it.each([
+    ['pair', parsePairDeviceRequest],
+    ['revoke', parseRevokeDeviceRequest],
+  ] as const)('%s refuses a control character', (_label, parse) => {
+    expect(() => parse({ name: 'ab' })).toThrow(/control characters/);
+  });
+
+  it.each([
+    ['pair', parsePairDeviceRequest],
+    ['revoke', parseRevokeDeviceRequest],
+  ] as const)('%s refuses an unexpected key', (_label, parse) => {
+    expect(() => parse({ name: 'a', extra: 1 })).toThrow(/unexpected key/);
+  });
+
+  it.each([
+    ['pair', parsePairDeviceRequest],
+    ['revoke', parseRevokeDeviceRequest],
+  ] as const)('%s refuses a missing name', (_label, parse) => {
+    expect(() => parse({})).toThrow(/missing key/);
   });
 });
 

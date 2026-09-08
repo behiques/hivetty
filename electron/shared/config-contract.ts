@@ -641,6 +641,167 @@ export const BIND_KEYS: readonly (keyof ReceiverBindConfig)[] = [
 ];
 
 /**
+ * The wildcard bind, refused for a served machine — see {@link isServerBindHost}.
+ *
+ * Exported so a renderer that wants to name this value in a hint — the
+ * settings pane refuses it before ever sending the request, and says why —
+ * reads the same literal `isServerBindHost` refuses, rather than a second
+ * `'0.0.0.0'` typed by hand that could drift from it.
+ */
+export const WILDCARD_BIND = '0.0.0.0';
+
+/**
+ * One `inet_aton`-style numeral, split on `.` — decimal (`0`, `00`), hex
+ * (`0x0`, `0X00`), or a dotted-quad label (`000`) — checked for whether it can
+ * only ever mean zero.
+ *
+ * `HOST_ALIAS_LABEL` already restricts each label to letters, digits and
+ * inner hyphens, so this only has to ask "if the kernel reads this label as a
+ * legacy numeric host part, is the value zero" — it never has to reject a
+ * shape `isHostAlias` would not have admitted in the first place.
+ */
+function isZeroIPv4Label(label: string): boolean {
+  const hex = /^0[xX]([0-9a-fA-F]+)$/.exec(label);
+  if (hex) return /^0+$/.test(hex[1] ?? '');
+  return /^[0-9]+$/.test(label) && /^0+$/.test(label);
+}
+
+/**
+ * Whether `value` is *any* legacy numeral spelling of the IPv4 wildcard —
+ * `0`, `00`, `0x0`, `000.000.000.000`, and every other combination of decimal,
+ * octal and hex zeroes `inet_aton` folds to `0.0.0.0` (HIVE-142 review, I1).
+ *
+ * `dns.lookup` and `net.Server.listen` both resolve every one of these to
+ * `0.0.0.0` on this machine (verified against this host, HIVE-142 review) —
+ * the literal string `'0.0.0.0'` is only the one spelling a person is likely
+ * to type by hand, not the complete set the kernel treats the same way. A
+ * legacy numeral address has at most four dot-separated fields (`inet_aton`
+ * has no fifth-field form), so anything longer is left to the ordinary
+ * hostname/IPv4 rules below rather than treated as numeric at all. Every
+ * field has to fold to zero — the weighted sum of several fields is zero only
+ * if every term is, since none of the per-field weights can be negative.
+ */
+function isNumericWildcard(value: string): boolean {
+  const labels = value.split('.');
+  return labels.length <= 4 && labels.every(isZeroIPv4Label);
+}
+
+/**
+ * Whether a value may be `server.bind.host`.
+ *
+ * `isHostAlias` for shape — one predicate, not two — and one rejection beside
+ * it. `ReceiverBindConfig.host` accepts `0.0.0.0` deliberately, because a user
+ * whose container runtime names no bridge has nothing else to write. That
+ * reasoning does not transfer: a served machine is reached at a Tailscale
+ * address, which is always nameable, so the wildcard here is a wider surface
+ * with nothing to buy for it.
+ *
+ * The rejection is every numeral spelling of that wildcard
+ * ({@link isNumericWildcard}), not only the literal `'0.0.0.0'` — see that
+ * function's own doc comment for why `0`, `00`, `0x0` and
+ * `000.000.000.000` all have to be refused here too, in the one predicate
+ * every validation surface (the file reader, the IPC guard, and the Settings
+ * pane) calls, rather than in each of them separately.
+ */
+export function isServerBindHost(value: unknown): value is string {
+  if (!isHostAlias(value)) return false;
+  return !isNumericWildcard(value);
+}
+
+/**
+ * Where the server listens (HIVE-142).
+ *
+ * A sibling of {@link ReceiverBindConfig}, not a reuse of it: the two differ in
+ * exactly the ways `isServerBindHost`'s doc comment explains, and in the
+ * default port, which has to be fixed rather than OS-assigned — see
+ * {@link ServerBindConfig.port}.
+ */
+export interface ServerBindConfig {
+  /**
+   * A hostname or an IPv4 literal, validated by {@link isServerBindHost}.
+   *
+   * **A client must address this machine by this exact value.** The Host
+   * guard (`createOriginGuard`, `remote-host/listener.ts`) admits loopback and
+   * this string, and nothing else — not a MagicDNS name or any other alias
+   * that merely *resolves* to the same address. A Tailscale node typically
+   * has both a `100.x` address and a name; if a client reaches this socket
+   * through the name, it is refused with a bare 403 (logged here, but not on
+   * the wire, so an unauthenticated peer learns nothing about what this app
+   * would have admitted). Naming a wider admissible set is HIVE-144's
+   * decision, not this story's.
+   */
+  host: string;
+  /**
+   * Fixed, not ephemeral — unlike {@link ReceiverBindConfig.port}, whose `0`
+   * asks the OS for any free port. A client's config and a LaunchAgent both
+   * have to name this port ahead of time, and neither can be told a number the
+   * kernel picks at boot.
+   */
+  port: number;
+  /** Full origins, as {@link isOrigin} defines one. Empty refuses every Origin. */
+  allowedOrigins: readonly string[];
+}
+
+/**
+ * How a device proves itself.
+ *
+ * A tagged union rather than a bare digest, so device public keys (Ed25519,
+ * verified with `crypto.verify`, no dependency) are an additive variant later
+ * rather than a migration. `sha256` is the only variant this build mints.
+ */
+export type ServerCredential = { kind: 'sha256'; digest: string };
+
+export interface ServerDevice {
+  id: string;
+  name: string;
+  /** ISO date, the day it was paired. */
+  paired: string;
+  revoked: boolean;
+  /**
+   * The digest, and deliberately not the token.
+   *
+   * A server verifying a credential never needs to hold one. The token is 80
+   * uniform bits (`randomBytes(10)`, rendered as 16 Crockford-base32
+   * characters — see `devices.ts`'s `mintDevice`), so a SHA-256 digest of it
+   * is not brute-forceable and no KDF is warranted — that is why there is no
+   * salt here, rather than an omission. The plaintext exists in exactly two
+   * places: stdout at mint time, and the client's own `safeStorage`.
+   */
+  credential: ServerCredential;
+}
+
+export interface ServerConfig {
+  enabled: boolean;
+  bind: ServerBindConfig;
+  devices: readonly ServerDevice[];
+}
+
+export const DEFAULT_SERVER: ServerConfig = {
+  enabled: false,
+  bind: { host: '127.0.0.1', port: 7433, allowedOrigins: [] },
+  devices: [],
+};
+
+/** The block's keys, for the parser's exact-key check. */
+export const SERVER_KEYS: readonly (keyof ServerConfig)[] = ['enabled', 'bind', 'devices'];
+
+/** The nested bind block's keys, for the same check one level down. */
+export const SERVER_BIND_KEYS: readonly (keyof ServerBindConfig)[] = [
+  'host',
+  'port',
+  'allowedOrigins',
+];
+
+/** One device's keys, for the same check on each entry in `devices`. */
+export const SERVER_DEVICE_KEYS: readonly (keyof ServerDevice)[] = [
+  'id',
+  'name',
+  'paired',
+  'revoked',
+  'credential',
+];
+
+/**
  * How a containerised session's `${VAR}` references get their values (HIVE-132).
  *
  * `exec-env` — `docker exec -e …` and friends. Env is per-exec, so every launch
@@ -922,6 +1083,14 @@ export interface ConfigSnapshot {
    * on one branch.
    */
   receiver: ReceiverConfig;
+  /**
+   * Server mode, always fully resolved (HIVE-142).
+   *
+   * Defaulted here for the same reason `receiver` and `jira` are: main reads it
+   * at boot to decide whether to listen at all, and a consumer that had to
+   * remember to apply defaults is one that will eventually forget on one branch.
+   */
+  server: ServerConfig;
   /**
    * Real-time Slack events, always fully resolved (HIVE-124).
    *
@@ -1399,6 +1568,11 @@ export function emptySnapshot(
     notifications: { ...DEFAULT_NOTIFICATIONS },
     jira: { ...DEFAULT_JIRA },
     receiver: { ...DEFAULT_RECEIVER },
+    // `devices` gets its own fresh array rather than `DEFAULT_SERVER.devices`
+    // itself — the same reason `loadConfig` and `writeConfig` give it one:
+    // one shared array instance handed to every empty snapshot is exactly
+    // what `readServerDevicesFromDisk`'s own doc comment warns against.
+    server: { ...DEFAULT_SERVER, devices: [] },
     slack: { ...DEFAULT_SLACK },
     errors: [],
   };
@@ -1567,6 +1741,66 @@ export interface SetReceiverRequest {
    * reason.
    */
   bind?: Partial<ReceiverBindConfig>;
+}
+
+/**
+ * Payload of `config:set-server` (HIVE-142).
+ *
+ * There is deliberately no credential here. A device's digest is not a secret
+ * — see {@link ServerDevice.credential} — but minting one is a different verb
+ * with a different payload (the plaintext token), and this one only ever
+ * writes what {@link ServerConfig} already resolves to.
+ *
+ * `bind` takes effect at next launch, for the reason
+ * {@link ReceiverBindConfig} states for the receiver: a socket that is already
+ * listening cannot be moved. `setServer` spreads the current block and spreads
+ * `bind` one level down rather than rebuilding either, for the same reason
+ * `setReceiver` does — a key this build has not heard of must survive a save
+ * made by this one.
+ */
+export interface SetServerRequest {
+  /**
+   * Whether the server is on. Absent leaves it untouched.
+   *
+   * A plain boolean, not nullable: there is no lower level to fall back to, so
+   * "off" is a value rather than an absence, the same reasoning
+   * {@link SetSlackRequest.socketMode} states.
+   */
+  enabled?: boolean;
+
+  /**
+   * Where the server listens. Absent leaves it untouched.
+   *
+   * `Partial`, and every field independently optional, for the reason
+   * {@link SetReceiverRequest.bind} states: Settings commits one field at a
+   * time, and a payload that had to carry all three would make committing the
+   * host reset the port.
+   */
+  bind?: Partial<ServerBindConfig>;
+
+  /**
+   * The full paired-device roster. Absent leaves it untouched.
+   *
+   * Replaced wholesale rather than merged, the same rule
+   * {@link SetSlackRequest.commanders} states: a roster is one list the caller
+   * already has in full — from pairing, revoking, or renaming a device — not a
+   * single field committed on blur.
+   */
+  devices?: readonly ServerDevice[];
+}
+
+/**
+ * Payload of `server:pair` and `server:revoke` (HIVE-142).
+ *
+ * Both verbs take just a device name. Pairing mints the credential and stores
+ * only its digest; revoking needs nothing else to find the record. `name` is
+ * freeform text a person typed — "Yunid's MacBook" — not
+ * {@link isProjectKey}'s or an agent's closed alphabet, so it is bounded the
+ * way any other pasted text on this bridge is (`assertText`) rather than
+ * pattern-matched.
+ */
+export interface DeviceNameRequest {
+  name: string;
 }
 
 /**

@@ -18,12 +18,14 @@ import {
   isHostAlias,
   isOrigin,
   isProjectKey,
+  isServerBindHost,
   unsafeEnvReason,
 } from './config-contract';
 import type {
   AddProjectRequest,
   CloneRequest,
   ContainerConfig,
+  DeviceNameRequest,
   DiagnoseCommandRequest,
   DiagnoseEnvRequest,
   ReceiverBindConfig,
@@ -37,6 +39,7 @@ import type {
   JiraSearchRequest,
   JiraTransitionsRequest,
   RepointProjectRequest,
+  ServerBindConfig,
   SetJiraRequest,
   SetJiraTokenRequest,
   SetNotificationsRequest,
@@ -44,6 +47,7 @@ import type {
   SetProjectRuntimeRequest,
   SetReceiverRequest,
   SetRuntimeRequest,
+  SetServerRequest,
   SetSlackRequest,
   SetSlackTokensRequest,
 } from './config-contract';
@@ -250,7 +254,15 @@ const MAX_TEXT = 4096;
  */
 const MAX_PROJECT_IDS = 1000;
 
-function assertText(value: unknown, label: string): string {
+/**
+ * Exported (HIVE-142 review, M1) so `cli.ts`'s `--pair`/`--revoke` argv
+ * parsing can hold a device name to the exact same bound this file's own
+ * IPC guards do (`parsePairDeviceRequest`, `parseRevokeDeviceRequest`) —
+ * non-empty, capped, no control characters — rather than accepting anything
+ * argv hands it and minting a device the config reader silently drops on
+ * the next load because its name is empty or unprintable.
+ */
+export function assertText(value: unknown, label: string): string {
   const text = assertString(value, label);
   if (text.length === 0) return fail(`${label}: must not be empty`);
   if (text.length > MAX_TEXT) return fail(`${label}: too long`);
@@ -1306,6 +1318,128 @@ export function parseSetReceiverRequest(input: unknown): SetReceiverRequest {
     return fail('setReceiver: nothing to change');
   }
   return request;
+}
+
+/**
+ * `server.bind.host` (HIVE-142).
+ *
+ * Shares {@link isHostAlias}'s per-label allowlist with `assertHostAlias`, via
+ * {@link isServerBindHost}, and refuses exactly one value neither `assertHostAlias`
+ * nor the receiver's own bind refuse: `0.0.0.0`. A served machine is always
+ * reachable at a Tailscale address, so binding every interface is a wider
+ * surface with nothing to buy for it — see {@link isServerBindHost}'s own
+ * doc comment.
+ */
+function assertServerBindHost(value: unknown, label: string): string {
+  const raw = assertString(value, label).trim();
+  if (raw.length === 0) return fail(`${label}: must not be empty`);
+  if (!isServerBindHost(raw)) {
+    return fail(
+      `${label}: expected a hostname or IPv4 address — not 0.0.0.0, which exposes every interface`,
+    );
+  }
+  return raw;
+}
+
+/**
+ * `server.bind.port` (HIVE-142 review, I3).
+ *
+ * Restates {@link assertPort}'s bound and then refuses the one value the
+ * receiver's own bind accepts and this one cannot: `0`. Unlike
+ * {@link ReceiverBindConfig.port}, `server.bind.port` cannot be OS-assigned —
+ * a client's config and a LaunchAgent both have to be told the number ahead
+ * of time, and neither can be handed one the kernel only picks at boot (see
+ * {@link ServerBindConfig.port}'s own doc comment).
+ */
+function assertServerBindPort(value: unknown, label: string): number {
+  const port = assertPort(value, label);
+  if (port === 0) {
+    return fail(`${label}: must be fixed, not 0 — a client and any LaunchAgent need to be told the port ahead of time`);
+  }
+  return port;
+}
+
+/**
+ * Payload of `config:set-server` (HIVE-142).
+ *
+ * Shaped exactly like {@link parseSetReceiverRequest}, field for field, and for
+ * the same reasons: `bind` validates one field at a time against
+ * {@link SERVER_BIND_KEYS}, salvages nothing on a bad field (this arrives from a
+ * live form, not a hand-edited file), and an empty `bind: {}` is dropped so a
+ * request that touches nothing still falls into the "nothing to change" check.
+ *
+ * The one difference from `setReceiver` is `enabled`, a plain boolean with
+ * nothing else to validate — `off` is a value, not a nullable field, the same
+ * reasoning {@link SetSlackRequest.socketMode} states. There is deliberately no
+ * `devices` here: replacing the roster is `pairDevice`/`revokeDevice`'s job in
+ * main, reached through `server:pair`/`server:revoke`, never through a payload
+ * arriving on this channel.
+ */
+export function parseSetServerRequest(input: unknown): SetServerRequest {
+  const raw = assertShape(input, [], 'setServer', ['enabled', 'bind']);
+
+  let bind: Partial<ServerBindConfig> | undefined;
+  if (raw.bind !== undefined) {
+    const rawBind = assertShape(raw.bind, [], 'setServer.bind', [
+      'host',
+      'port',
+      'allowedOrigins',
+    ]);
+
+    let allowedOrigins: string[] | undefined;
+    if (rawBind.allowedOrigins !== undefined) {
+      if (!Array.isArray(rawBind.allowedOrigins)) {
+        return fail(
+          `setServer.bind.allowedOrigins: expected an array, got ${describe(rawBind.allowedOrigins)}`,
+        );
+      }
+      allowedOrigins = rawBind.allowedOrigins.map((entry, index) =>
+        assertOrigin(entry, `setServer.bind.allowedOrigins[${index}]`),
+      );
+    }
+
+    bind = {
+      ...(rawBind.host !== undefined
+        ? { host: assertServerBindHost(rawBind.host, 'setServer.bind.host') }
+        : {}),
+      ...(rawBind.port !== undefined
+        ? { port: assertServerBindPort(rawBind.port, 'setServer.bind.port') }
+        : {}),
+      ...(allowedOrigins !== undefined ? { allowedOrigins } : {}),
+    };
+  }
+
+  if (raw.enabled !== undefined && typeof raw.enabled !== 'boolean') {
+    return fail(`setServer.enabled: expected a boolean, got ${describe(raw.enabled)}`);
+  }
+
+  const request: SetServerRequest = {
+    ...(raw.enabled !== undefined ? { enabled: raw.enabled as boolean } : {}),
+    ...(bind !== undefined && Object.keys(bind).length > 0 ? { bind } : {}),
+  };
+
+  if (Object.keys(request).length === 0) {
+    return fail('setServer: nothing to change');
+  }
+  return request;
+}
+
+/**
+ * Payload of `server:pair` and `server:revoke` (HIVE-142).
+ *
+ * A device name is free text a person typed — "Yunid's MacBook" — so it runs
+ * through {@link assertText}, the same bound every other pasted string on this
+ * bridge takes, rather than a closed grammar like {@link assertAgentName}'s.
+ */
+export function parsePairDeviceRequest(input: unknown): DeviceNameRequest {
+  const raw = assertShape(input, ['name'], 'serverPair');
+  return { name: assertText(raw.name, 'serverPair.name') };
+}
+
+/** Shape-identical to {@link parsePairDeviceRequest}; see its own doc comment. */
+export function parseRevokeDeviceRequest(input: unknown): DeviceNameRequest {
+  const raw = assertShape(input, ['name'], 'serverRevoke');
+  return { name: assertText(raw.name, 'serverRevoke.name') };
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   DEFAULT_IMPORT_LOGIN_ENV,
   DEFAULT_JIRA,
   DEFAULT_RECEIVER,
+  DEFAULT_SERVER,
   DEFAULT_SESSION_METRICS,
   DEFAULT_SLACK,
   DEFAULT_SUBSCRIPTION_AUTH,
@@ -28,6 +29,7 @@ import {
   type SetProjectRuntimeRequest,
   type SetReceiverRequest,
   type SetRuntimeRequest,
+  type SetServerRequest,
   type SetSlackRequest,
 } from '@shared/config-contract';
 import { resolveNotificationPrefs } from '@shared/notification-contract';
@@ -42,6 +44,7 @@ import {
   WriteRefused,
   writeConfig,
   type ConfigDocument,
+  type Mutation,
   type WriteResult,
 } from './write';
 
@@ -153,6 +156,20 @@ export function loadConfig(): ConfigSnapshot {
         `jira` and `notifications` are flat and need only one.
       */
       bind: { ...DEFAULT_BIND, ...parsed.receiver?.bind },
+    },
+    // Defaults *under* whatever the file named, exactly as `receiver` does
+    // above (HIVE-142) and for the same reason: `bind` is a nested block, so a
+    // one-level spread would let a file naming only `bind.host` erase the
+    // default port and origin list. `devices` gets the same explicit
+    // fallback for a different reason: `DEFAULT_SERVER.devices` is one array
+    // instance, and a bare `...DEFAULT_SERVER` spread would hand that same
+    // instance to every snapshot that names no roster — exactly what
+    // `readServerDevicesFromDisk`'s own doc comment says to avoid.
+    server: {
+      ...DEFAULT_SERVER,
+      ...parsed.server,
+      bind: { ...DEFAULT_SERVER.bind, ...parsed.server?.bind },
+      devices: parsed.server?.devices ?? [],
     },
     // Defaults *under* whatever the file named, exactly as `jira` and
     // `receiver` do above (HIVE-124). A plain spread suffices here too.
@@ -882,6 +899,97 @@ export function setReceiver(request: SetReceiverRequest): ConfigSnapshot {
       return { ...draft, receiver: current };
     }),
   );
+}
+
+/**
+ * {@link setServer}'s mutation, factored out (HIVE-142 review, C1) so
+ * {@link setServerReportingWrite} can run the identical merge and still see
+ * `writeConfig`'s own `WriteResult.ok` — the boolean `commit` computes from
+ * it and `setServer` itself has always discarded.
+ *
+ * The block is spread, never rebuilt, for the same reason every other verb
+ * spreads its target: a key this build has not heard of — hand-written in the
+ * meantime — must survive a save made by this one. `bind` gets the same
+ * treatment one level down: see the comment at its merge below.
+ *
+ * `devices` replaces the stored roster wholesale rather than merging into it —
+ * the same rule `setSlack` applies to `commanders`, because a roster is one
+ * list the caller already has in full.
+ */
+function serverMutation(request: SetServerRequest): Mutation {
+  return (draft) => {
+    // A non-object block is replaced rather than merged into. The reader has
+    // already reported it, and merging onto a string would produce something
+    // neither the user nor the parser meant.
+    const current =
+      typeof draft.server === 'object' &&
+      draft.server !== null &&
+      !Array.isArray(draft.server)
+        ? { ...(draft.server as Record<string, unknown>) }
+        : {};
+
+    if (request.enabled !== undefined) current.enabled = request.enabled;
+
+    /*
+      Merged into, not replaced. The same promise the block-level spread
+      above makes and for the same reason: a key this build has not heard of
+      — hand-written inside `bind` — must survive a save made by this one.
+      Settings writes one field at a time, so replacing the block would
+      silently drop the other two.
+    */
+    if (request.bind !== undefined) {
+      const currentBind =
+        typeof current.bind === 'object' &&
+        current.bind !== null &&
+        !Array.isArray(current.bind)
+          ? { ...(current.bind as Record<string, unknown>) }
+          : {};
+      current.bind = { ...currentBind, ...request.bind };
+    }
+
+    if (request.devices !== undefined) current.devices = request.devices;
+
+    return { ...draft, server: current };
+  };
+}
+
+/**
+ * Change whether the server is on, where it listens, and/or the paired-device
+ * roster (HIVE-142).
+ *
+ * There is no credential here and never will be. A device's digest is not a
+ * secret, but minting one is pairing's job, not Settings', and this verb only
+ * ever writes what is already resolved.
+ *
+ * Every other `config:set-*` caller is a fire-and-forget settings save the
+ * renderer re-reads afterward regardless of whether it landed — this is that
+ * shape. A caller that must fail closed on a silent write failure — pairing
+ * and revoking a device, HIVE-142 review C1 — wants
+ * {@link setServerReportingWrite} instead.
+ */
+export function setServer(request: SetServerRequest): ConfigSnapshot {
+  return commit(writeConfig(serverMutation(request)));
+}
+
+/**
+ * The same write as {@link setServer}, but with the boolean `commit` already
+ * computes and `setServer` discards (HIVE-142 review, C1).
+ *
+ * `pairDevice`/`revokeDevice` (`server/devices.ts`) go through this via
+ * `server/file-backed-io.ts`'s `DeviceStore.writeDevices`, and both fail
+ * closed when `ok` comes back `false`: a config write never throws at a
+ * caller (`writeConfig` reports failure instead, see its own doc comment),
+ * so `setServer` alone gives every caller a `ConfigSnapshot` whether or not
+ * anything was actually written — fine for an ordinary settings save the
+ * renderer re-reads regardless, wrong for a security control (revoking a
+ * device) or a credential mint that must not be handed out for something
+ * that was never persisted.
+ */
+export function setServerReportingWrite(
+  request: SetServerRequest,
+): { ok: boolean; snapshot: ConfigSnapshot } {
+  const result = writeConfig(serverMutation(request));
+  return { ok: result.ok, snapshot: commit(result) };
 }
 
 /**
