@@ -47,7 +47,7 @@ import type { HookRuntime } from '../hooks';
 import { withHostAlias } from '../hooks/container-origin';
 import { ticketKeysFromBranch } from '../hooks/ticket-intent';
 import { createStatusTracker } from '../hooks/tracker';
-import { createPtyIpc, type PtyIpc } from '../ipc/pty';
+import { createPtyIpc, type PtyIpc, type ResumeResult } from '../ipc/pty';
 import type { McpRuntime } from '../mcp';
 import type { PtyHostSupervisor } from '../pty-host/supervisor';
 import type { SkillsRuntime } from '../skills';
@@ -323,6 +323,21 @@ export interface Sessions {
   write(entityId: string, data: string): boolean;
   resize(entityId: string, cols: number, rows: number): void;
   ack(entityId: string, seq: number): void;
+  /**
+   * What a reconnecting remote client missed since `lastSeq` (HIVE-143).
+   *
+   * Exposed here rather than by handing `PtyIpc` out, because the id is the
+   * whole reason this method exists. `PtyIpc` is keyed by the **pty session**
+   * id, which is per generation and changes on every restart; every `pty:data`
+   * that leaves this module has had that id rewritten to the **entity** id by
+   * `forward`. A client's `resumeFrom` therefore holds entity ids, and the
+   * events it gets back must carry them too — so the translation happens in the
+   * one place that already owns it.
+   *
+   * `null` for an id with no live session, which the caller reads as "skip this
+   * one" rather than as an error. See {@link ResumeResult} for the rest.
+   */
+  resume(entityId: string, lastSeq: number): ResumeResult | null;
   kill(entityId: string): void;
   /** Kill, wait for the exit, then spawn a fresh process and bootstrap it. */
   restart(request: OpenRequest): Promise<void>;
@@ -2442,6 +2457,70 @@ export function createSessions(options: SessionsOptions): Sessions {
       const sessionId = registry.sessionFor(entityId);
       if (sessionId === undefined) return;
       ptyIpc.ack(sessionId, seq);
+    },
+
+    /**
+     * **Known hazard, deliberately parked: a restart across a disconnect
+     * (HIVE-143 review, ruled out of scope; HIVE-144 must close it).**
+     *
+     * `lastSeq` is a number and nothing else. `sessionFor` always answers the
+     * **current** generation's pty session id, and `emptyChannel()` starts that
+     * generation's `seq` at 0 — so the two halves of the lookup can be talking
+     * about different processes without either of them being able to tell.
+     *
+     * Concretely: a client watches `hero-refresh` to seq 40 and its socket
+     * drops. While it is away the session restarts. It reconnects with
+     * `resumeFrom: { 'hero-refresh': 40 }`, generation 2 has produced 60
+     * batches, and the ring still reaches back past 40 — so this answers
+     * `replay` with generation 2's seq 41…60, **contiguous**. The client's
+     * sequence assertion is satisfied, no gap notice fires, and the restart is
+     * swallowed: the terminal shows a new process's output stitched onto the
+     * old one's transcript as though nothing happened.
+     *
+     * It cannot bite today. No client sends a real `resumeFrom` until HIVE-144
+     * builds the client half; `listener.ts` merely shape-checks the map and
+     * `ipc/index.ts` is its only consumer. That is the whole reason this ships
+     * unfixed.
+     *
+     * The honest fix needs the **generation** to cross the wire, which is a
+     * change to `AttachRequest.resumeFrom` and a `REMOTE_PROTOCOL_VERSION` bump
+     * that HIVE-143's spec rules out. So HIVE-144 owns it, and must close it
+     * before its client sends its first real `resumeFrom`, by one of:
+     *
+     * - keying `resumeFrom` with something that carries the generation — the
+     *   pty session id alongside the seq, or an `{ sessionId, seq }` pair — and
+     *   answering `gap` here when it does not match `sessionFor(entityId)`; or
+     * - having this function answer `gap` whenever the entity's pty session id
+     *   has changed since the client last saw output, which needs main to
+     *   remember what it last told each socket and is the weaker of the two.
+     *
+     * Either way the correct answer for a restarted session is `gap`, never
+     * `replay`: the client must see the discontinuity, because the process
+     * behind the id is genuinely not the one it was reading.
+     */
+    resume(entityId, lastSeq) {
+      const sessionId = registry.sessionFor(entityId);
+      if (sessionId === undefined) return null;
+
+      const result = ptyIpc.resume(sessionId, lastSeq);
+      /*
+        A gap carries no events, so there is no id in it to translate — only a
+        seq, and a seq is a property of the stream rather than of the id it is
+        published under. It passes through unchanged and the caller stamps its
+        marker frame with the entity id it already holds.
+      */
+      if (result === null || result.kind === 'gap') return result;
+
+      /*
+        The same rewrite `forward` performs on every live `pty:data`, applied
+        to the replayed ones so a client cannot tell a replayed frame from a
+        live one. Anything else would hand it events for an id it has never
+        seen, on a session it is watching under another name.
+      */
+      return {
+        kind: 'replay',
+        events: result.events.map((event) => ({ ...event, sessionId: entityId })),
+      };
     },
 
     kill(entityId) {

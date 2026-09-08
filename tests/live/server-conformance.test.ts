@@ -1,7 +1,7 @@
 // @vitest-environment node
 import assert from 'node:assert/strict';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { get as httpGet } from 'node:http';
 import { createRequire } from 'node:module';
 import { connect as netConnect, createServer as createNetServer } from 'node:net';
@@ -15,7 +15,16 @@ import { WebSocket } from 'ws';
 import { parseConfig } from '../../electron/main/config/parse';
 import { mintDevice, type MintedDevice } from '../../electron/main/server/devices';
 import { CONFIG_PATH_ENV, CONFIG_VERSION } from '../../electron/shared/config-contract';
-import { REMOTE_PROTOCOL_VERSION } from '../../electron/shared/remote-contract';
+import { CH, REPLAY_BYTES, type Channel, type DataEvent } from '../../electron/shared/ipc-contract';
+import {
+  REMOTE_PROTOCOL_VERSION,
+  type AttachRequest,
+  type ClientFrame,
+  type ErrorFrame,
+  type EventFrame,
+  type ResultFrame,
+  type ServerFrame,
+} from '../../electron/shared/remote-contract';
 
 /**
  * Server-mode conformance (HIVE-142): the eight acceptance criteria plus the
@@ -82,12 +91,32 @@ import { REMOTE_PROTOCOL_VERSION } from '../../electron/shared/remote-contract';
  * one-shot check to *after* `requestSingleInstanceLock()` would not turn this
  * suite red (HIVE-142 review, important 2).
  *
- * ## What is not proved here
+ * ## Past the handshake: the eight HIVE-143 cases
  *
- * Nothing past the handshake: HIVE-143 adds call routing over this socket, and
- * today an attached client is handed nothing further (`listener.ts`'s own
- * words: "the socket now sits attached with nothing further wired to it").
- * There is nothing to route yet, so there is nothing to test yet.
+ * The paragraph that used to stand here said "nothing past the handshake",
+ * because an attached socket was handed nothing further. HIVE-143 wired the
+ * frame loop, the dispatch registry, the socket fan-out and the replay ring, so
+ * the second `describe` below drives all four over the same real socket:
+ *
+ * 10. `config:get` — a `read` channel answers with the real config snapshot.
+ * 11. `github:prs` — an `execute`-graded channel is reached and answers.
+ * 12. `fs:read-file` through a symlink out of the project carries `EOUTSIDE`
+ *     **as a `result`**, not as an `error` frame.
+ * 13. The same for `ENOENT`, which is the code the editor branches on.
+ * 14. `config:choose-directory` is refused `window-bound`, naming HIVE-146.
+ * 15. `ledger:changed` and `agents:changed` reach the attached client.
+ * 16. A socket killed mid-output resumes contiguously, transcript whole.
+ * 17. A gap forced past `REPLAY_BYTES` is marked on attach by one empty
+ *     `pty:data` at the head seq — the discontinuity the renderer's existing
+ *     gap notice keys on (`src/lib/terminal/pty-transport.ts`, asserted at
+ *     `tests/lib/terminal/pty-transport.test.ts:463` and not duplicated here),
+ *     delivered without waiting for output that an idle session never sends.
+ *
+ * Those cases spawn **real PTYs** through the socket: `pty:spawn` is graded
+ * `execute` and a paired device holds `execute`, which is the whole premise the
+ * authorization table is written from. The session runs `/bin/sh` with a
+ * stubbed `claudeCommand`, the same discipline every Playwright spec in
+ * `tests/e2e/electron` uses, so no real agent is ever started.
  *
  * ## `HIVE_CONFIG_PATH` is mandatory, and never inherited
  *
@@ -536,6 +565,316 @@ function attach(
   });
 }
 
+/**
+ * Polls `predicate` until it holds, or throws naming what never happened.
+ *
+ * The same shape as {@link waitForListener} above, and for the same reason a
+ * fixed sleep is refused everywhere in this repo's live suites: a sleep long
+ * enough to be reliable on a loaded machine is dead time on every run, and one
+ * short enough to be quick fails as a timeout with nothing saying what was
+ * being waited for. `what` is what turns that timeout into a readable failure.
+ */
+async function waitFor(predicate: () => boolean, what: string, timeoutMs = 30_000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (predicate()) return;
+    await delay(25);
+  }
+  throw new Error(`timed out after ${String(timeoutMs)}ms waiting for ${what}`);
+}
+
+/**
+ * Waits until `count` has stopped moving for `quietMs`, or throws naming what
+ * never settled.
+ *
+ * Not a sleep dressed up: it is the only way to say "nothing is armed" about a
+ * debounced watcher from outside the process holding the timer. The agents
+ * registry announces 120ms after the last filesystem event it saw
+ * (`electron/main/agents/registry.ts`), so a counter that has not moved for
+ * several times that has no announce pending behind it — which is exactly what
+ * makes a baseline taken afterwards mean something.
+ */
+async function settled(
+  count: () => number,
+  what: string,
+  quietMs = 600,
+  timeoutMs = 30_000,
+): Promise<void> {
+  const start = Date.now();
+  let last = count();
+  let lastChangedAt = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await delay(50);
+    const now = count();
+    if (now !== last) {
+      last = now;
+      lastChangedAt = Date.now();
+      continue;
+    }
+    if (Date.now() - lastChangedAt >= quietMs) return;
+  }
+  throw new Error(`timed out after ${String(timeoutMs)}ms waiting for ${what} to go quiet`);
+}
+
+/**
+ * Bytes on the wire against bytes of `chunk` — the story's framing measurement.
+ *
+ * Accounted **per session**, not per socket, because the measurement is a claim
+ * about one flood and a socket sees every session the server is running. Case
+ * 16's shell is still alive when case 17's flood client attaches, so a
+ * socket-wide counter folds that session's trickle into a total the comment
+ * above the PTY cases attributes entirely to the flood (review, item 2).
+ */
+interface PtyTraffic {
+  frames: number;
+  /** The whole JSON text of every `pty:data` frame, as `ws` delivered it. */
+  wireBytes: number;
+  /** Only the `chunk` inside those frames — the payload a binary frame would carry. */
+  chunkBytes: number;
+}
+
+/** Anything a case wants recorded in `finding.json` beyond argv and frames. */
+const measurements: Record<string, unknown>[] = [];
+
+/**
+ * One attached client: a real socket that has completed a real handshake, with
+ * the post-attach frame loop driven from outside the app entirely (HIVE-143).
+ *
+ * Built on {@link attach}'s own conventions rather than beside them — the
+ * handshake frame is the same shape, the outcome is written to the same
+ * {@link attachLog} — but it keeps the socket **open** afterwards, which
+ * `attach` deliberately does not: that helper exists to read exactly one frame
+ * off an unattached socket and close it.
+ */
+interface LiveClient {
+  /** Send a `call` frame with a fresh id; resolve its `result` or `error`. */
+  call(channel: Channel, payload: unknown): Promise<ResultFrame | ErrorFrame>;
+  /**
+   * Send a `notify` frame. There is no answer to wait for, by contract —
+   * `FRAME_KIND` grades `pty:write`, `pty:resize` and `pty:ack` as `notify`, and
+   * a `call` naming one of them is refused `wrong-frame-kind`.
+   */
+  notify(channel: Channel, payload: unknown): void;
+  /** Every `event` frame seen since this socket attached. */
+  collectEvents(): () => EventFrame[];
+  /** The `pty:data` events for `sessionId`, once their joined chunks match. */
+  collectPtyUntil(sessionId: string, pattern: RegExp, timeoutMs?: number): Promise<DataEvent[]>;
+  /** The `pty:data` events for `sessionId`, once there are at least `count` of them. */
+  collectPtyCount(sessionId: string, count: number, timeoutMs?: number): Promise<DataEvent[]>;
+  /** Waits until at least `bytes` of `chunk` have arrived for `sessionId`. */
+  collectPtyBytes(sessionId: string, bytes: number, timeoutMs?: number): Promise<void>;
+  /** `pty:spawn` a real session on `projectId`, answering the entity id used. */
+  spawnSession(projectId: string, sessionId: string): Promise<string>;
+  /** Drop the socket with no close frame — the reconnect case. */
+  kill(): void;
+  /** Close it politely. The suite's own teardown, never a case's assertion. */
+  close(): void;
+  /** What this socket carried for `sessionId` alone. */
+  ptyTraffic(sessionId: string): PtyTraffic;
+}
+
+/** Every client this run opened, so teardown can close one a failing case left behind. */
+const liveClients: LiveClient[] = [];
+
+/**
+ * Completes a real handshake and hands back a client that stays attached.
+ *
+ * `resumeFrom` is passed through verbatim, **including its absence**: the
+ * contract is explicit that an absent key and an empty map are different
+ * questions, so this spreads rather than always writing the field.
+ */
+async function openClient(
+  url: string,
+  device: { id: string; token: string },
+  options: { resumeFrom?: Record<string, number> } = {},
+): Promise<LiveClient> {
+  const socket = new WebSocket(url);
+  const events: EventFrame[] = [];
+  const ptyEvents: DataEvent[] = [];
+  const pending = new Map<string, (frame: ResultFrame | ErrorFrame) => void>();
+  const traffic = new Map<string, PtyTraffic>();
+  let nextCallId = 0;
+
+  const frame: AttachRequest = {
+    kind: 'attach',
+    protocol: REMOTE_PROTOCOL_VERSION,
+    deviceId: device.id,
+    token: device.token,
+    ...(options.resumeFrom === undefined ? {} : { resumeFrom: options.resumeFrom }),
+  };
+
+  const send = (outgoing: ClientFrame): void => {
+    socket.send(JSON.stringify(outgoing));
+  };
+
+  let settled = false;
+  let onAttached: () => void = () => {};
+  let onFailed: (cause: Error) => void = () => {};
+  const attached = new Promise<void>((resolve, reject) => {
+    onAttached = resolve;
+    onFailed = reject;
+  });
+  const timer = setTimeout(() => {
+    onFailed(new Error(`attach to ${url} produced no answer in 15s`));
+  }, 15_000);
+  const settle = (outcome: AttachOutcome, cause: Error | null): void => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    attachLog.push({ at: new Date().toISOString(), url, frame, outcome });
+    if (cause === null) onAttached();
+    else onFailed(cause);
+  };
+
+  socket.on('open', () => {
+    send(frame);
+  });
+  // Present for the reason `listener.ts` installs one on its own sockets: an
+  // `'error'` event with no listener throws synchronously out of the emitter,
+  // which here would take the whole Vitest worker down rather than fail a case.
+  socket.on('error', (cause) => {
+    settle({ error: cause.message }, cause);
+  });
+  socket.on('close', () => {
+    settle({}, new Error(`socket to ${url} closed before it attached`));
+  });
+
+  /*
+    One listener for the whole life of the socket, registered before the attach
+    frame is even sent. That ordering is load-bearing for the resume cases: the
+    server writes the replayed `pty:data` frames immediately after
+    `attach-accepted`, in the same turn, so a handler installed only once the
+    attach promise resolved would miss exactly the frames those cases are about.
+  */
+  socket.on('message', (data) => {
+    const text = String(data);
+    const incoming = JSON.parse(text) as ServerFrame;
+
+    if (incoming.kind === 'attach-accepted') {
+      settle({ frame: incoming as unknown as Record<string, unknown> }, null);
+      return;
+    }
+    if (incoming.kind === 'attach-refused') {
+      settle(
+        { frame: incoming as unknown as Record<string, unknown> },
+        new Error(`attach refused: ${incoming.code} — ${incoming.message}`),
+      );
+      return;
+    }
+    if (incoming.kind === 'result' || incoming.kind === 'error') {
+      const waiting = pending.get(incoming.id);
+      pending.delete(incoming.id);
+      waiting?.(incoming);
+      return;
+    }
+
+    events.push(incoming);
+    if (incoming.channel !== CH.ptyData) return;
+
+    const event = incoming.payload as DataEvent;
+    ptyEvents.push(event);
+
+    const counted = traffic.get(event.sessionId) ?? { frames: 0, wireBytes: 0, chunkBytes: 0 };
+    counted.frames += 1;
+    counted.wireBytes += Buffer.byteLength(text);
+    counted.chunkBytes += Buffer.byteLength(event.chunk);
+    traffic.set(event.sessionId, counted);
+    /*
+      Acked exactly as the renderer acks (`pty-transport.ts`), and not as a
+      courtesy: `HIGH_WATER_BYTES` is 512 KiB of unacked output, past which main
+      pauses the pty at the fd. A client that never acked would stall its own
+      flood halfway through and the case waiting on the tail would time out
+      against a session that is not broken, only paused.
+    */
+    send({ kind: 'notify', channel: CH.ptyAck, payload: { sessionId: event.sessionId, seq: event.seq } });
+  });
+
+  await attached;
+
+  const forSession = (sessionId: string): DataEvent[] =>
+    ptyEvents.filter((event) => event.sessionId === sessionId);
+  const bytesFor = (sessionId: string): number =>
+    forSession(sessionId).reduce((total, event) => total + Buffer.byteLength(event.chunk), 0);
+
+  const client: LiveClient = {
+    call(channel, payload) {
+      nextCallId += 1;
+      const id = `live-${String(nextCallId)}`;
+      return new Promise((resolve, reject) => {
+        const callTimer = setTimeout(() => {
+          pending.delete(id);
+          reject(new Error(`call ${channel} (${id}) was never answered`));
+        }, 60_000);
+        pending.set(id, (answer) => {
+          clearTimeout(callTimer);
+          resolve(answer);
+        });
+        send({ kind: 'call', id, channel, payload });
+      });
+    },
+
+    notify(channel, payload) {
+      send({ kind: 'notify', channel, payload });
+    },
+
+    collectEvents: () => () => [...events],
+
+    async collectPtyUntil(sessionId, pattern, timeoutMs = 60_000) {
+      await waitFor(
+        () => pattern.test(forSession(sessionId).map((event) => event.chunk).join('')),
+        `pty:data for ${sessionId} matching ${String(pattern)}`,
+        timeoutMs,
+      );
+      return forSession(sessionId);
+    },
+
+    async collectPtyCount(sessionId, count, timeoutMs = 60_000) {
+      await waitFor(
+        () => forSession(sessionId).length >= count,
+        `${String(count)} pty:data frames for ${sessionId}`,
+        timeoutMs,
+      );
+      return forSession(sessionId);
+    },
+
+    async collectPtyBytes(sessionId, bytes, timeoutMs = 60_000) {
+      await waitFor(
+        () => bytesFor(sessionId) >= bytes,
+        `${String(bytes)} bytes of pty:data for ${sessionId}`,
+        timeoutMs,
+      );
+    },
+
+    async spawnSession(projectId, sessionId) {
+      const answer = await client.call(CH.ptySpawn, { sessionId, projectId, cols: 200, rows: 24 });
+      assert(
+        answer.kind === 'result',
+        `pty:spawn was refused: ${JSON.stringify(answer)}`,
+      );
+      return sessionId;
+    },
+
+    kill() {
+      socket.terminate();
+    },
+
+    close() {
+      if (socket.readyState === WebSocket.OPEN) socket.close();
+      else socket.terminate();
+    },
+
+    ptyTraffic: (sessionId) => ({
+      frames: 0,
+      wireBytes: 0,
+      chunkBytes: 0,
+      ...traffic.get(sessionId),
+    }),
+  };
+
+  liveClients.push(client);
+  return client;
+}
+
 describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => {
   let evidenceDir: string;
 
@@ -554,6 +893,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         {
           ranAt: new Date().toISOString(),
           scratchConfigPaths,
+          measurements,
           processes: processLog,
           attaches: attachLog,
         },
@@ -936,5 +1276,448 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         await new Promise<void>((resolve) => probe.close(() => resolve()));
       }
     });
+  });
+
+  describe('calls, events and PTY resume over an attached socket (HIVE-143)', () => {
+    /** The project this suite's `fs:read-file` and `pty:spawn` cases address. */
+    const seededProjectId = 'live-remote';
+    /**
+     * A no-op bootstrap, and the `; false` is not decoration.
+     *
+     * `sessionCommand` bootstraps a session as `<claudeCommand> && exit`
+     * (`electron/main/sessions/bootstrap.ts`), so a stub that ends cleanly takes
+     * the login shell with it and leaves no shell for these cases to type into.
+     * Ending badly short-circuits the `&&`. Copied from
+     * `tests/e2e/electron/fixtures/hive-app.ts`'s `STUB_CLAUDE_COMMAND`, which
+     * carries the same reasoning at length — and, as there, this exists so that
+     * a machine with a real `claude` on its PATH does not have one started, in
+     * a directory this suite made up, by a socket.
+     */
+    const stubClaudeCommand = 'true; false';
+
+    let dir: string;
+    let configPath: string;
+    let userDataDir: string;
+    let projectDir: string;
+    let outsideDir: string;
+    let url: string;
+    let app: ChildProcess | undefined;
+    let appRecord: ProcessRecord | undefined;
+    let device: MintedDevice;
+
+    /** A client that has completed a real handshake, optionally resuming. */
+    const attached = async (options: { resumeFrom?: Record<string, number> } = {}): Promise<LiveClient> =>
+      openClient(url, { id: device.device.id, token: device.token }, options);
+
+    beforeAll(async () => {
+      dir = mkdtempSync(join(tmpdir(), 'hive-live-server-link-'));
+      configPath = join(dir, 'config.json');
+      userDataDir = join(dir, 'user-data');
+      assertScratchPath(configPath);
+      scratchConfigPaths.push(configPath);
+
+      /*
+        A scratch project, and a scratch directory beside it that is **not**
+        inside it. `EOUTSIDE` is unreachable through a `..` path — `assertRelPath`
+        refuses a `..` segment at the IPC guard, long before the fs layer — so
+        the only way to actually resolve out of a project root is a symlink,
+        which `resolveExisting` follows with `realpath` *before* it tests
+        containment (`electron/main/fs/paths.ts`). That is what case 12 sends.
+      */
+      projectDir = mkdtempSync(join(tmpdir(), 'hive-live-server-project-'));
+      outsideDir = mkdtempSync(join(tmpdir(), 'hive-live-server-outside-'));
+      writeFileSync(join(projectDir, 'README.md'), 'live proof\n', 'utf8');
+      writeFileSync(join(outsideDir, 'secret.txt'), 'not yours\n', 'utf8');
+      symlinkSync(outsideDir, join(projectDir, 'escape'));
+
+      device = mintDevice('Link-Device');
+
+      const booted = await bootServerApp(configPath, userDataDir, (bootPort) => ({
+        version: CONFIG_VERSION,
+        // `sh` rather than the developer's own `$SHELL`, for the reason the e2e
+        // fixture pins it: zsh and bash differ in prompt behaviour and a suite
+        // that passes only on the author's machine is worthless.
+        shell: '/bin/sh',
+        claudeCommand: stubClaudeCommand,
+        projects: [{ id: seededProjectId, name: 'Live Remote', path: projectDir, icon: 'ph-cube' }],
+        server: {
+          bind: { host: '127.0.0.1', port: bootPort, allowedOrigins: [] },
+          devices: [device.device],
+        },
+      }));
+      app = booted.child;
+      appRecord = booted.record;
+      url = `ws://127.0.0.1:${String(booted.port)}`;
+    }, 90_000);
+
+    afterAll(async () => {
+      for (const client of liveClients) client.close();
+      await stopApp(app);
+    }, 20_000);
+
+    it('10. answers config:get over an attached socket', async () => {
+      const client = await attached();
+      const result = await client.call(CH.configGet, undefined);
+
+      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
+        kind: 'result',
+      });
+      expect(result).toHaveProperty('payload.projects');
+      // Not merely "a projects key": the project this suite seeded, so a
+      // snapshot that answered from some other config would fail here.
+      const payload = (result as ResultFrame).payload as { projects: { id: string }[] };
+      expect(payload.projects.map((project) => project.id)).toContain(seededProjectId);
+    }, 30_000);
+
+    it('11. answers github:prs over an attached socket', async () => {
+      const client = await attached();
+      const result = await client.call(CH.githubPrs, undefined);
+
+      // `gh` may be absent or unauthenticated on the machine running this; what
+      // is proved here is that an `execute`-graded channel is reached and
+      // answers, not what it answers. `GhResult` is a result either way — the
+      // handler reports a missing `gh` as a value, never as a throw.
+      expect(result.kind).toBe('result');
+    }, 60_000);
+
+    it('12. carries the EOUTSIDE code itself, not a flattened message', async () => {
+      const client = await attached();
+      const result = await client.call(CH.fsReadFile, {
+        projectId: seededProjectId,
+        relPath: 'escape/secret.txt',
+      });
+
+      /*
+        A `result`, not an `error`. `FsResult` refusals are return values — the
+        explorer and the editor branch on `error.code`, and a transport that
+        turned this into an `error` frame would delete that behaviour while
+        still looking like it worked. This assertion is the whole reason
+        `ErrorFrame` carries a `code` at all (`remote-contract.ts`).
+      */
+      expect(result).toMatchObject({
+        kind: 'result',
+        payload: { ok: false, error: { code: 'EOUTSIDE' } },
+      });
+
+      /*
+        The other half of the same distinction, on the same channel: a `..`
+        path is refused by `assertRelPath` at the IPC guard, which *throws*
+        `IpcValidationError` — so it comes back as an `error` frame carrying
+        that name, while the containment refusal above comes back as a
+        `result`. A transport that collapsed the two would still satisfy one of
+        these assertions and never both, which is why both are here rather than
+        the first alone.
+      */
+      const rejected = await client.call(CH.fsReadFile, {
+        projectId: seededProjectId,
+        relPath: '../../../etc/passwd',
+      });
+      expect(rejected).toMatchObject({ kind: 'error', code: 'IpcValidationError' });
+    }, 30_000);
+
+    it('13. carries ENOENT, the code the editor actually branches on', async () => {
+      const client = await attached();
+      const result = await client.call(CH.fsReadFile, {
+        projectId: seededProjectId,
+        relPath: 'no-such-file.txt',
+      });
+
+      expect(result).toMatchObject({
+        kind: 'result',
+        payload: { ok: false, error: { code: 'ENOENT' } },
+      });
+    }, 30_000);
+
+    it('14. refuses a window-bound channel by name', async () => {
+      const client = await attached();
+      const result = await client.call(CH.configChooseDirectory, undefined);
+
+      expect(result).toMatchObject({ kind: 'error', code: 'window-bound' });
+      expect((result as ErrorFrame).message).toMatch(/HIVE-146/);
+    }, 30_000);
+
+    it('15. delivers ledger:changed and agents:changed to the attached client', async () => {
+      const client = await attached();
+      const seen = client.collectEvents();
+
+      const posted = await client.call(CH.ledgerPost, {
+        kind: 'post',
+        to: 'overmind',
+        body: 'live proof',
+      });
+      expect(posted.kind).toBe('result');
+
+      await waitFor(
+        () => seen().some((frame) => frame.channel === CH.ledgerChanged),
+        'a ledger:changed event',
+      );
+      expect(seen().find((frame) => frame.channel === CH.ledgerChanged)).toMatchObject({
+        kind: 'event',
+        payload: { body: 'live proof' },
+      });
+
+      /*
+        The second half of this case's name, and a different mechanism from the
+        first: `ledger:changed` is emitted straight from `Ledger.append`'s own
+        listener, while `agents:changed` comes from a real `fs.watch` on the
+        agents root. `agents:list` first, because that verb is what creates the
+        root and binds (or rebinds) that watcher — without it, a fresh profile
+        has nothing to watch and the event would never fire.
+      */
+      const agentSource = (name: string): string =>
+        `---\nname: ${name}\ndescription: Proves the fan-out.\nicon: ChatCircleDots\n---\nDo nothing.\n`;
+      const changedCount = (): number =>
+        seen().filter((frame) => frame.channel === CH.agentsChanged).length;
+
+      const listed = await client.call(CH.agentsList, undefined);
+      expect(listed.kind).toBe('result');
+
+      /*
+        **Two writes, and the second is the one this case rests on** (review
+        round 1, item 1).
+
+        Waiting for "any `agents:changed` since attach" is satisfiable without
+        the write emitting anything: `agents:list` above creates the root, and
+        creating a watched folder is itself a filesystem event. A pass would
+        then be evidence for the watcher having been bound, not for the story's
+        claim that `agents:changed` reaches a remote client.
+
+        So the first write drains whatever the root's creation armed, `settled`
+        waits for the watcher to go quiet — nothing pending, because an
+        announce fires within 120ms of the last event and nothing else touches
+        this folder — and only then is the baseline taken. The count moving
+        past it can only be the second write, which is the assertion the
+        acceptance criterion actually wants.
+      */
+      const first = await client.call(CH.agentsWrite, {
+        name: 'live-proof',
+        source: agentSource('live-proof'),
+      });
+      expect(first).toMatchObject({ kind: 'result', payload: { ok: true } });
+      await waitFor(() => changedCount() >= 1, 'a first agents:changed');
+      await settled(changedCount, 'the agents watcher');
+
+      const baseline = changedCount();
+      const second = await client.call(CH.agentsWrite, {
+        name: 'live-proof-two',
+        source: agentSource('live-proof-two'),
+      });
+      expect(second).toMatchObject({ kind: 'result', payload: { ok: true } });
+      await waitFor(
+        () => changedCount() > baseline,
+        `an agents:changed past the baseline of ${String(baseline)}, caused by the second write`,
+      );
+
+      /*
+        There is nothing in the frame to identify *which* write it announces —
+        `agents:changed` is emitted with no payload at all (`ipc/index.ts`'s
+        `fanOut.emit(CH.agentsChanged, undefined)`), and `JSON.stringify` drops
+        an `undefined` value's key rather than writing `null`. That absence is
+        itself worth pinning: it is the absent-versus-empty distinction
+        `socket-broadcaster.ts` argues for, and a broadcaster that started
+        substituting `null` would invent a value the local push never had.
+      */
+      measurements.push({
+        case: '15. agents:changed past a baseline',
+        baselineAfterFirstWrite: baseline,
+        countAfterSecondWrite: changedCount(),
+      });
+
+      const announced = seen().find((frame) => frame.channel === CH.agentsChanged);
+      expect(announced).toMatchObject({ kind: 'event', channel: CH.agentsChanged });
+      expect(announced).not.toHaveProperty('payload');
+    }, 90_000);
+
+    /*
+      JSON framing overhead, measured 2026-09-08 on this repo's dev machine
+      (macOS 25.6.0, arm64, the built app from `pnpm desktop:build`): **4.9%**
+      over raw chunk bytes, at `BATCH_FLUSH_BYTES`-sized batches. Taken from
+      case 17's own flood, and from **that session alone** — 13 `pty:data`
+      frames, 881,320 bytes of JSON text off the socket against 840,127 bytes of
+      `chunk` inside them — and re-recorded into `finding.json` on every run
+      rather than trusted from this comment.
+
+      The per-session filter is why this is a claim about the flood rather than
+      about a socket: a socket sees every session the server is running, and
+      case 16's shell lives on the same server. It happens to be idle by the
+      time case 17 runs, so the filter did not move this figure — the point is
+      that the number no longer depends on that being true.
+
+      Where it goes, because the split is the whole argument: the frame envelope
+      (`{"kind":"event","channel":"pty:data","payload":{"sessionId":…,"chunk":…,"seq":…}}`)
+      is ~120 bytes per frame counted directly against that JSON with a
+      realistic (UUID) session id, so at 64 KiB batches it is still under 0.2%
+      and is *not* what this number is made of. Essentially all of it is JSON
+      string escaping — this flood is 20,000 CRLF-terminated lines, and `\r`
+      and `\n` each cost two bytes instead of one, which is 40,000 of the
+      41,193-byte difference on its own, and the remaining ~1,200 is the 13
+      envelopes this flood actually sent. Those land nearer 90 bytes each,
+      not 120: `live-gap`, this case's own session id, is eight characters,
+      well short of the UUID a real session gets.
+
+      The design left a binary frame for `pty:data` open "only if measurement
+      says so". This measurement does not say so: 4.9% on a 64 KiB batch is
+      cheaper than the second wire format, the second decode path and the
+      `REMOTE_PROTOCOL_VERSION` bump that a binary frame would cost.
+
+      What it honestly does not settle is the content it did not measure. The
+      overhead is a property of the *bytes*, not of the transport: a TUI
+      redrawing itself emits ESC (0x1b), which JSON escapes to a six-character
+      backslash-u-0-0-1-b sequence — six bytes for one — so an escape-dense
+      stream costs more than this one by an amount this flood cannot tell you.
+      If a later story measures that and finds it material, a binary `pty:data`
+      is its own story with its own protocol bump, not a late addition to this
+      one.
+    */
+
+    it('16. resumes a killed socket mid-output with the transcript whole', async () => {
+      const client = await attached();
+      const sessionId = await client.spawnSession(seededProjectId, 'live-resume');
+      /*
+        A line every ~10ms rather than the tightest loop that would print 400
+        lines, because the tightest loop is not a test of resume at all: 400
+        `echo`s finish inside one 8ms batch window (`BATCH_INTERVAL_MS`) and
+        arrive as one or two `pty:data` frames, so there is no output still in
+        flight for the reconnect to be in the middle of. This is a delay inside
+        the *shell*, to make a stream long enough to interrupt; every wait in
+        this file is still a polled condition with a loud timeout.
+
+        Written without waiting for the bootstrap: main holds input for a
+        session whose bootstrap is still pending and releases it, in order, once
+        the bootstrap completes (`sessions/index.ts`'s `heldInput`).
+      */
+      client.notify(CH.ptyWrite, {
+        sessionId,
+        data: 'i=1; while [ $i -le 400 ]; do echo line-$i; i=$((i+1)); sleep 0.01; done\r',
+      });
+
+      const before = await client.collectPtyUntil(sessionId, /line-50\b/);
+      const lastSeq = before.at(-1)!.seq;
+      client.kill();
+
+      /*
+        A witness socket, attached with no `resumeFrom`, which exists only to
+        prove the stream really moved on while the resuming client was away.
+
+        Without it this case has a hole: a reconnect fast enough to have missed
+        nothing satisfies `after[0].seq === lastSeq + 1` with the replay ring
+        never consulted, and the assertion below would be about the reconnect's
+        latency rather than about resume. Five live frames after the break puts
+        the stream at `lastSeq + 5` or beyond, so the frame the resuming client
+        is handed at `lastSeq + 1` can only have come out of the ring — it was
+        flushed before that socket existed.
+      */
+      const witness = await attached();
+      const witnessLastSeq = (await witness.collectPtyCount(sessionId, 5)).at(-1)!.seq;
+      witness.kill();
+      expect(witnessLastSeq).toBeGreaterThan(lastSeq + 1);
+
+      const resumed = await attached({ resumeFrom: { [sessionId]: lastSeq } });
+      const after = await resumed.collectPtyUntil(sessionId, /line-400\b/);
+      measurements.push({
+        case: '16. resume across a killed socket',
+        lastSeqBeforeKill: lastSeq,
+        seqReachedWhileAway: witnessLastSeq,
+        firstSeqAfterResume: after[0]?.seq,
+        framesAfterResume: after.length,
+      });
+
+      // Contiguous across the break: the first frame after resume is the next
+      // seq, and no seq is missing or repeated.
+      expect(after[0]!.seq).toBe(lastSeq + 1);
+      const seqs = after.map((event) => event.seq);
+      expect(seqs).toEqual(seqs.map((_, index) => seqs[0]! + index));
+
+      const transcript = [...before, ...after].map((event) => event.chunk).join('');
+      for (const n of [1, 200, 400]) expect(transcript).toContain(`line-${String(n)}`);
+    }, 120_000);
+
+    it('17. leaves a seq discontinuity when the gap is forced past the ring', async () => {
+      const client = await attached();
+      const sessionId = await client.spawnSession(seededProjectId, 'live-gap');
+      // `%s` so the marker exists only in the *output*: the pty echoes what is
+      // typed, so a literal `READY-MARK` in the command line would match this
+      // pattern against the echo rather than against anything the shell ran.
+      client.notify(CH.ptyWrite, { sessionId, data: "printf 'READY-%s\\n' MARK\r" });
+      const lastSeq = (await client.collectPtyUntil(sessionId, /READY-MARK/)).at(-1)!.seq;
+      client.kill();
+
+      /*
+        More than `REPLAY_BYTES` of output past `lastSeq`, while the socket that
+        holds `lastSeq` is gone.
+
+        Driven and observed over a **second** socket, which is not a hedge: a
+        `pty:write` has to reach the app over some socket, and the only way to
+        know the ring has actually overrun — rather than to sleep and hope — is
+        for something to count the bytes that crossed it. The ring is per
+        session, not per socket (`ipc/pty.ts`'s `Channel.replay`), so what the
+        flood client saw changes nothing about what the resuming client is owed:
+        it is a different connection, holding a seq from before the flood began.
+      */
+      const flood = await attached();
+      flood.notify(CH.ptyWrite, {
+        sessionId,
+        data: "yes 0123456789012345678901234567890123456789 | head -n 20000\r",
+      });
+      await flood.collectPtyBytes(sessionId, REPLAY_BYTES * 2, 120_000);
+      // This session alone: case 16's shell is still alive on the same server,
+      // and its trickle is not part of a claim about this flood.
+      const traffic = flood.ptyTraffic(sessionId);
+      measurements.push({
+        case: '17. gap forced past the ring',
+        sessionId,
+        ptyDataFrames: traffic.frames,
+        wireBytes: traffic.wireBytes,
+        chunkBytes: traffic.chunkBytes,
+        overheadPercent: Number(
+          (((traffic.wireBytes - traffic.chunkBytes) / traffic.chunkBytes) * 100).toFixed(2),
+        ),
+        replayBytes: REPLAY_BYTES,
+      });
+      flood.kill();
+
+      const resumed = await attached({ resumeFrom: { [sessionId]: lastSeq } });
+      /*
+        The resuming client is sent no *transcript* for a gap — that is still by
+        design (`ipc/pty.ts`'s `ResumeResult`) — but it is sent one **empty**
+        `pty:data` stamped at the head seq, on attach, and that marker is what
+        this case now waits for.
+
+        It used to force the discontinuity into view with a `printf`, because
+        nothing arrived until the next live batch did. That crutch was hiding
+        the bug it worked around (HIVE-143 review): a client reattaching to a
+        session that has gone *idle* — the ordinary case, a build that finished
+        while it was away — got no frames at all and redrew its cached
+        transcript with an unmarked hole. Waiting for the marker instead is both
+        the stronger assertion and the honest one: the shell here is idle after
+        the flood, so nothing but the marker can arrive.
+      */
+      const after = await resumed.collectPtyCount(sessionId, 1);
+      const marker = after[0]!;
+      measurements.push({
+        case: '17. seqs across the forced gap',
+        lastSeqBeforeKill: lastSeq,
+        markerSeq: marker.seq,
+        markerChunkLength: marker.chunk.length,
+      });
+
+      // A discontinuity is what the renderer's existing gap notice keys on
+      // (`src/lib/terminal/pty-transport.ts`), and an empty chunk is what makes
+      // the marker free — the write that follows the check puts nothing on
+      // screen.
+      expect(marker.chunk).toBe('');
+      expect(marker.seq).not.toBe(lastSeq + 1);
+      expect(marker.seq).toBeGreaterThan(lastSeq + 1);
+
+      /*
+        And live output still follows it contiguously: the marker is stamped at
+        the head, so the next real batch is `marker.seq + 1` and the client's
+        assertion is satisfied from here on. A marker that raised a *second*
+        false gap would be worse than the silence it replaced.
+      */
+      resumed.notify(CH.ptyWrite, { sessionId, data: "printf 'DONE-%s\\n' MARK\r" });
+      const live = await resumed.collectPtyUntil(sessionId, /DONE-MARK/);
+      expect(live[1]!.seq).toBe(marker.seq + 1);
+    }, 180_000);
   });
 });

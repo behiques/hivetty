@@ -103,6 +103,7 @@ import {
 import {
   CH,
   type AppInfo,
+  type Channel,
   type IntegrationsStatus,
   type LoginEnvStatus,
   type NotificationActivateEvent,
@@ -242,7 +243,14 @@ import {
 } from '../updates';
 
 import { createWindowBroadcaster, type Broadcaster } from './broadcaster';
+import { createIpcRegistry } from './registry';
+import { createRemoteDispatch } from './remote-dispatch';
 import { assertSender } from './sender';
+import {
+  createFanOutBroadcaster,
+  createSocketBroadcaster,
+  type AttachedSocket,
+} from './socket-broadcaster';
 
 /**
  * Channel handlers (story 082).
@@ -254,6 +262,47 @@ import { assertSender } from './sender';
  * `app:info` proved the path in story 082; `config:*` landed in 090; the PTY
  * channels and their flow control are story 093's.
  */
+
+/**
+ * Which handler answers which channel, for the remote path (HIVE-143).
+ *
+ * Module scope beside {@link remoteListener} and for the same reason: both are
+ * process-wide, both are built by `registerIpcHandlers`, and both must be torn
+ * down by `resetIpcHandlers` or a suite leaks them into the next one.
+ *
+ * Declared here rather than beside `remoteListener` itself only because `on`
+ * and `handle` below are what fill it, and a reader of those two lines should
+ * not have to go looking.
+ */
+const remoteRegistry = createIpcRegistry();
+
+/**
+ * Sockets currently attached. Mutated by the listener's attach callbacks, read
+ * per emit by the socket half of the fan-out in `registerIpcHandlers`.
+ */
+const attachedSockets = new Set<AttachedSocket>();
+
+/**
+ * The event object handed to a call handler reached over a socket.
+ *
+ * There is no `IpcMainInvokeEvent` to give it, because there is no renderer and
+ * no window. That is safe rather than lucky: exactly three call channels
+ * dereference this, all three for a parent `BrowserWindow`, and all three are
+ * in `WINDOW_BOUND` and refused before `remote-dispatch` ever reaches a
+ * handler. If a fourth ever grows the dependency, it must be added to that
+ * table in the same commit — this cast is the reason that is a rule and not a
+ * preference.
+ *
+ * **And the rule is checked, not merely stated (HIVE-143 review).**
+ * `remote-composition.test.ts` reads this file as source text, finds every
+ * `handle`/`on` site that binds an `event` parameter it actually uses, and
+ * fails if that set is anything other than `WINDOW_BOUND`'s three channels plus
+ * `pty:prompt` — the one that dereferences the event deliberately, for a
+ * *surface lifetime* rather than a window, which a socket satisfies. That test
+ * is what makes the paragraph above enforceable; the `_event` naming
+ * convention every other handler follows is what makes it readable.
+ */
+const REMOTE_INVOKE_EVENT = {} as IpcMainInvokeEvent;
 
 /**
  * Fire-and-forget channels (story 093).
@@ -278,6 +327,16 @@ function on(
       console.error(`[hive] rejected ${channel}:`, cause);
     }
   });
+  /*
+    Recorded once at registration, never inside the `ipcMain` callback above —
+    a record per invocation would rewrite the same entry on every keystroke.
+    `remote-dispatch.ts` owns the refusals; this stores and nothing else.
+  */
+  remoteRegistry.recordNotify(channel as Channel, (payload, reporter) => {
+    // The reporter stands in for `event.sender`. Only `pty:prompt` reads it,
+    // through `watchReporter`, which already accepts anything with an `.on`.
+    handler({ sender: reporter } as unknown as IpcMainEvent, payload);
+  });
 }
 
 /** Wrap a handler so sender validation cannot be forgotten on a new channel. */
@@ -289,6 +348,12 @@ function handle<T>(
     assertSender(event);
     return handler(event, payload);
   });
+  // Registration-time, as in `on` above. `assertSender` is deliberately absent:
+  // there is no sender to assert, and the socket's own gate is the handshake
+  // plus `remote-dispatch.ts` — the one remote gate, kept out of the local path.
+  remoteRegistry.recordCall(channel as Channel, (payload) =>
+    handler(REMOTE_INVOKE_EVENT, payload),
+  );
 }
 
 /**
@@ -636,6 +701,24 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * about this process's window, not about notifications, and the hub is
  * deliberately ignorant of what the user is looking at. The hub asks a
  * predicate; it never holds this.
+ *
+ * **Known hazard, deliberately parked: one value, many surfaces (HIVE-143
+ * review; HIVE-145 "Two attached clients" must close it).** Every attached
+ * socket sends `ui:foreground` down the same notify channel a renderer does, so
+ * this holds whatever the last surface to change stage said. With two devices
+ * attached, one of them switching tabs rewrites the other's answer: a
+ * notification for the session device A is watching is suppressed because
+ * device B happens to be looking at it, or — worse, because it is the case the
+ * suppression exists for — is *raised* while device A is watching it, because
+ * device B moved on. `windowFocused()` compounds it: it is a fact about this
+ * machine's windows, and a served Mac usually has none, so the suppression it
+ * gates is already the wrong question for a remote surface.
+ *
+ * Unreachable today: no client half exists until HIVE-144, so exactly one
+ * surface ever reports. The fix is to key this by surface — a map from the
+ * socket (or the window) to what *it* is showing — and to suppress only when
+ * every live surface that could see the session is both focused and on it,
+ * which is the question `isForeground` was always really asking.
  */
 let foregroundTerminalId: string | null = null;
 
@@ -873,6 +956,22 @@ export function remoteListenerBindError(): string | null {
 export function registerIpcHandlers(
   broadcaster: Broadcaster = createWindowBroadcaster(),
 ): void {
+  /*
+    Both surfaces, always (HIVE-143). In local mode the socket half iterates an
+    empty set and costs a function call per push; in server mode it is how an
+    attached client gets its 22 events. One composition shape rather than a
+    mode branch here, because the mode already has exactly one home —
+    `registerIpc` in `./router.ts` — and a second one would be the thing that
+    drifts.
+
+    The set is resolved per emit rather than captured, which is the whole point:
+    a client attaches long after this line has run.
+  */
+  const fanOut = createFanOutBroadcaster([
+    broadcaster,
+    createSocketBroadcaster(() => attachedSockets),
+  ]);
+
   const supervisor = registerPtyHost();
 
   /*
@@ -888,9 +987,13 @@ export function registerIpcHandlers(
    * captured: the window is created after this runs, and on macOS it can be
    * closed and re-created while the app keeps running.
    *
-   * HIVE-141 moved the loop itself into `broadcaster.emit`. What stayed here is
+   * HIVE-141 moved the loop itself into `Broadcaster.emit`. What stayed here is
    * the *tap*, because it is the tap that must not reach every push — see the
    * hub's `broadcast` below.
+   *
+   * HIVE-143 made the delivery `fanOut` rather than the injected `broadcaster`
+   * alone, so the same push reaches attached sockets. The tap is untouched by
+   * that: it still runs exactly once, here, before either surface.
    */
   const send = (channel: string, payload: unknown): void => {
     // Story 106 taps the broadcast here rather than at each source, so an event
@@ -898,7 +1001,7 @@ export function registerIpcHandlers(
     // failed notification must not cost a `pty:data`.
     notifier.observe(channel, payload);
 
-    broadcaster.emit(channel, payload);
+    fanOut.emit(channel, payload);
   };
 
   /**
@@ -986,22 +1089,22 @@ export function registerIpcHandlers(
      * actually loop today, but the cycle would be one `if` away from existing
      * and nobody would see it coming.
      *
-     * `broadcaster.emit` rather than a hand-rolled window loop (HIVE-141): the
+     * `fanOut.emit` rather than a hand-rolled window loop (HIVE-141): the
      * bypass is of the *tap*, not of the fan-out. A remote client that never
      * received these three would show an empty inbox on a busy server, which is
      * exactly the bug a second copy of the loop invites.
      */
     broadcast: (notification) => {
-      broadcaster.emit(CH.notificationsNew, notification);
+      fanOut.emit(CH.notificationsNew, notification);
     },
     announceRead: (id, unread) => {
-      broadcaster.emit(CH.notificationsRead, {
+      fanOut.emit(CH.notificationsRead, {
         id,
         unread,
       } satisfies NotificationReadEvent);
     },
     announceDismissed: (id) => {
-      broadcaster.emit(CH.notificationsDismissed, {
+      fanOut.emit(CH.notificationsDismissed, {
         id,
       } satisfies NotificationDismissedEvent);
     },
@@ -1356,7 +1459,7 @@ export function registerIpcHandlers(
     // Not `send`: the notifier reads the ledger through its own subscription
     // below, and tapping here would show it every entry twice. HIVE-141 routes
     // the fan-out through the broadcaster all the same.
-    broadcaster.emit(CH.ledgerChanged, entry);
+    fanOut.emit(CH.ledgerChanged, entry);
     /**
      * Neither delivery nor the notifier may fail the write that triggered them.
      *
@@ -1534,6 +1637,96 @@ export function registerIpcHandlers(
     // The machine's own hostname identifies *which* served Mac a client is
     // looking at, which matters once more than one exists.
     serverName: hostname(),
+    /*
+      The module-scope registry (HIVE-143) — the same one `handle` and `on`
+      above record into, which is what makes a socket's `call` reach the
+      handler a renderer's `invoke` would have reached. It is fully populated
+      by the time any socket can attach: `registerIpcHandlers` fills it as it
+      registers, and `startRemoteListener` is called later, from
+      `electron/main/index.ts`. A registry built here instead would be empty
+      forever and every call would answer `not-ready`.
+    */
+    dispatch: createRemoteDispatch(remoteRegistry),
+    onAttach: (socket, resumeFrom) => {
+      /*
+        Added to the set **before** anything is replayed. A `pty:data` landing
+        during the loop below is then delivered after the frames it follows —
+        out of order would be worse than a gap, because the client's seq
+        assertion would fire on a discontinuity that never happened.
+      */
+      attachedSockets.add(socket);
+      if (resumeFrom === undefined) return;
+
+      for (const [sessionId, lastSeq] of Object.entries(resumeFrom)) {
+        /*
+          Keyed by **entity** id, which is what a client's `pty:data` frames
+          carry: `sessions/index.ts`'s `forward` rewrites the pty session id to
+          the entity id on the way out, so the ids a client holds are the ones
+          `Sessions.resume` maps back.
+        */
+        const result = sessions?.resume(sessionId, lastSeq) ?? null;
+        /*
+          `null` — no such live session on this server. The client is holding a
+          session id from a previous run, or from one that has since exited;
+          nothing to send, and its own exit handling already covers a session
+          that never reappears.
+        */
+        if (result === null) continue;
+
+        if (result.kind === 'replay') {
+          for (const event of result.events) {
+            socket.send({ kind: 'event', channel: CH.ptyData, payload: event });
+          }
+          continue;
+        }
+
+        /*
+          `gap` — the ring no longer reaches back to `lastSeq`, so what this
+          client missed cannot be handed to it. One **empty** `pty:data`,
+          stamped at the session's current head seq, is what it gets instead
+          (HIVE-143 review).
+
+          That single frame does two things and nothing else. Its seq is not
+          `lastSeq + 1`, so the client's existing discontinuity check fires the
+          moment the frame lands and writes the gap notice into the transcript
+          in the place the hole actually is (`src/lib/terminal/pty-transport.ts`);
+          and its chunk is empty, so the write that follows the check puts
+          nothing on screen. No new frame type, no protocol change — the client
+          already handles exactly this shape.
+
+          The alternative this replaces was to send nothing and let the next
+          live batch raise the notice, which is right only while there *is* a
+          next batch. Reattaching to a session that has gone idle — a build that
+          finished while the client was away is the ordinary case — produced no
+          frames at all, so the client redrew its cached transcript with an
+          unmarked hole in it, and the notice arrived much later, if ever,
+          reading as a new gap rather than as this reconnect's.
+
+          The design sketched a different fallback — resend the whole
+          transcript, stamped with the ring's head seq — and that is still
+          deliberately **not** implemented, for two reasons that point the same
+          way. Mechanically, there is no transcript in main to send:
+          `PtyHostSupervisor` has no `replay`, the only `replay()` in the tree is
+          `SessionManager`'s inside the pty-host **child process** with no
+          protocol message to reach it, and the design is equally explicit that
+          `pty-host-protocol.ts` does not change here. Adding one would also make
+          this callback asynchronous and cost the ordering guarantee above.
+          Behaviourally, it would be wrong even if it were free: this is a
+          *reconnecting* client that already rendered everything up to `lastSeq`
+          into its own terminal, so a whole transcript would duplicate hundreds
+          of lines rather than fill a hole. A client with nothing on screen sends
+          no `resumeFrom` at all.
+        */
+        socket.send({
+          kind: 'event',
+          channel: CH.ptyData,
+          payload: { sessionId, chunk: '', seq: result.seq },
+        });
+      }
+    },
+    onDetach: (socket) => {
+      attachedSockets.delete(socket);
+    },
   });
   /*
     Registered here, immediately, rather than folded into the large combined
@@ -1543,11 +1736,18 @@ export function registerIpcHandlers(
     awaiting any of them. Registering the socket's teardown first means its
     synchronous work — terminating every attached client — runs before that
     later hook's synchronous steps do, so nothing can arrive on this socket
-    asking for something `closeAll` is already tearing down. This story's
-    listener answers only a handshake (no call routing yet), so nothing here
-    can actually spawn a run today — but the ordering is the same discipline
-    the next story that adds call routing over this socket will need, stated
-    up front rather than discovered by review.
+    asking for something `closeAll` is already tearing down.
+
+    That stopped being a precaution with HIVE-143 and became the thing keeping
+    this safe. `dispatch` above is a real router now, and `DEVICE_GRANT` in
+    `remote-dispatch.ts` is `'execute'` — so a paired device reaches `pty:spawn`
+    and `agents:run` over this socket, and either can start a process. What
+    makes the ordering sufficient rather than merely first: `listener.stop()`
+    terminates every attached client synchronously, inside its own promise
+    executor, so by the time `runShutdown` reaches the combined hook there is no
+    socket left to deliver a frame; and `agents:run` awaits the memoised
+    `mcp.start()`, so even a call already in flight cannot reach a spawn ahead
+    of a teardown that has begun.
   */
   onShutdown(() => remoteListener?.stop());
 
@@ -1592,7 +1792,7 @@ export function registerIpcHandlers(
   agents.onChange(() => {
     refreshKnownAgents();
 
-    broadcaster.emit(CH.agentsChanged, undefined);
+    fanOut.emit(CH.agentsChanged, undefined);
   });
 
   refreshKnownAgents();
@@ -3768,6 +3968,28 @@ export function registerIpcHandlers(
     sessions?.resize(request.sessionId, request.cols, request.rows);
   });
 
+  /**
+   * The renderer — or an attached socket — says xterm has parsed up to `seq`,
+   * which is what releases those bytes from the flow-control window
+   * (`ipc/pty.ts`).
+   *
+   * **Known hazard, deliberately parked: one window, many consumers (HIVE-143
+   * review; HIVE-145 "Two attached clients" must close it).** The unacked
+   * window is per *session*, and an ack releases it for everyone: with two
+   * surfaces watching one terminal, the first to finish parsing a batch
+   * unpauses the producer for both. A fast client on a fast link therefore lets
+   * the pty outrun a slow one, whose frames queue in `ws`'s own send buffer —
+   * which nothing here bounds — until it is arbitrarily far behind or the
+   * process is holding megabytes for it. `pty-transport.ts` records the same
+   * shape for split panes ("backpressure follows the fastest pane") and reaches
+   * the same conclusion: harmless while there is only ever one.
+   *
+   * Unreachable today: no client half exists until HIVE-144. The fix is for the
+   * window to follow the **slowest** consumer — track acks per attached surface
+   * and release a batch only once every surface watching that session has
+   * acknowledged it — with a surface that goes away releasing whatever it was
+   * holding, or a slow client would pause a session forever by disconnecting.
+   */
   on(CH.ptyAck, (_event, payload) => {
     const request = parseAckRequest(payload);
     sessions?.ack(request.sessionId, request.seq);
@@ -3798,6 +4020,15 @@ export function resetIpcHandlers(): void {
   */
   void remoteListener?.stop();
   remoteListener = null;
+  /*
+    HIVE-143. Both are module scope and both are filled by
+    `registerIpcHandlers`, so both leak into the next suite if they are not
+    dropped here. An emptied registry is also the honest state for a socket
+    that somehow outlives this teardown: `remote-dispatch.ts` answers
+    `not-ready` rather than reaching a handler wired to a disposed layer.
+  */
+  remoteRegistry.clear();
+  attachedSockets.clear();
   sessions?.dispose();
   sessions = null;
   cloneFlow?.dispose();
@@ -3905,4 +4136,29 @@ export function resetIpcHandlers(): void {
   }
 }
 
+/**
+ * Test-only: how many handlers the remote registry holds (HIVE-143).
+ *
+ * In the same register as {@link resetIpcHandlers} above — exported for the
+ * composition suite and for nothing else. It is the one assertion that can
+ * catch a channel added without a handler, a handler recorded twice, or a
+ * registry that is populated in the wrong order relative to `startRemoteListener`.
+ */
+export function remoteRegistrySize(): number {
+  return remoteRegistry.size();
+}
+
+/*
+  There is deliberately no `attachForTest` here (HIVE-143 review).
+
+  It existed so the composition suite could reach `attachedSockets` without a
+  real `ws` server, and it was documented test-only — but a documented
+  convention is not a fence. As an ordinary export it let any caller add an
+  arbitrary object to the fan-out set, which is push access to every attached
+  client's stream, from a module the whole main process already imports. The
+  suite reaches the same set through the production door instead: it stands in
+  for the listener, captures the real `onAttach` this file hands
+  `createRemoteListener`, and calls that — which is also a stronger test, since
+  it now covers the callback rather than bypassing it.
+*/
 export { assertSender, isTrustedSender, IpcSenderError } from './sender';

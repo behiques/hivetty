@@ -7,26 +7,33 @@ import {
   REMOTE_PROTOCOL_VERSION,
   type AttachRefused,
   type AttachRequest,
+  type CallFrame,
+  type NotifyFrame,
   type ServerFrame,
 } from '@shared/remote-contract';
 
 import { describe } from '../main/config/paths';
 import { createOriginGuard } from '../main/hooks/http-guard';
+import type { RemoteReporter } from '../main/ipc/registry';
+import type { RemoteDispatch } from '../main/ipc/remote-dispatch';
+import type { AttachedSocket } from '../main/ipc/socket-broadcaster';
 import { verifyDevice } from '../main/server/devices';
 
 import { refuseProtocol } from './index';
 
 /**
- * The listener half of server mode (HIVE-142): a second `node:http` server,
- * bound to `server.bind`, that accepts a `ws` upgrade and completes the attach
- * handshake. Nothing else.
+ * The listener half of server mode: a second `node:http` server, bound to
+ * `server.bind`, that accepts a `ws` upgrade, completes the attach handshake
+ * (HIVE-142), and — once attached — routes every `call` and `notify` frame
+ * to the `dispatch` it was given and reports the socket's lifetime through
+ * `onAttach`/`onDetach` (HIVE-143).
  *
  * **Scope, stated so the next story does not creep backward into this one.**
- * A socket that attaches successfully is handed nothing further — no call
- * routing, no event delivery, no PTY bytes. That is HIVE-143's `router.ts`,
- * wired in from `electron/main/**`, which this module may import but does not
- * yet need to. Building any of that here would be answering a question this
- * story was not asked.
+ * `dispatch`, `onAttach` and `onDetach` are injected, not imported — this
+ * file still does not import `electron/main/ipc/index.ts`, which is what
+ * constructs all three and wires this listener up. What crosses a channel and
+ * what a device is authorized to do live in `electron/main/ipc/remote-dispatch.ts`;
+ * this file only gets frames to and from the socket that carries them.
  *
  * **Everything below the guard is untrusted input, and stays untrusted until
  * `verifyDevice` says otherwise (HIVE-142 review).** The Origin/Host guard
@@ -38,6 +45,20 @@ import { refuseProtocol } from './index';
  * has proven nothing else about itself. Every branch in the `'connection'`
  * handler below exists because the first review of this file treated
  * "reached `handleUpgrade`" as if it meant "trusted", which it does not.
+ *
+ * **The residual aggregate exposure, stated rather than implied (HIVE-143
+ * review).** An unauthenticated peer that clears the Origin/Host guard — which
+ * is header-based, so a non-browser client satisfies it trivially, and
+ * `server.bind.host` may be a LAN or tailnet address rather than loopback —
+ * can make this process buffer up to
+ * {@link MAX_UNATTACHED_SOCKETS} × {@link POST_ATTACH_FRAME_MAX_BYTES}, because
+ * `ws` builds each connection's `Receiver` at connection time and the
+ * post-attach ceiling therefore governs from the first byte, before
+ * {@link ATTACH_FRAME_MAX_BYTES} is ever checked. That is 64 MiB, transient:
+ * each of those sockets is dropped by {@link ATTACH_HANDSHAKE_TIMEOUT_MS} if it
+ * has not attached, and no further one is accepted while the cap is full. It is
+ * bounded in aggregate and not merely per socket, which is the part the
+ * previous version of this comment got wrong.
  */
 
 /**
@@ -54,19 +75,116 @@ import { refuseProtocol } from './index';
 const ATTACH_HANDSHAKE_TIMEOUT_MS = 5_000;
 
 /**
- * The most a first frame may weigh, enforced by `ws` itself via
- * `WebSocketServer`'s `maxPayload`.
+ * How many sockets may be mid-handshake — upgraded, but not yet attached — at
+ * once (HIVE-143 review).
+ *
+ * {@link ATTACH_HANDSHAKE_TIMEOUT_MS} bounds what *one* unauthenticated socket
+ * costs; nothing bounded how many of them there could be, so the aggregate was
+ * unbounded and the timeout's docblock claiming otherwise was reading a
+ * per-socket number as a total. A peer that can reach the port opens sockets in
+ * a loop and each one arms a `Receiver` willing to buffer
+ * {@link POST_ATTACH_FRAME_MAX_BYTES} before anything in this file gets to look
+ * at a byte of it.
+ *
+ * Eight, because it is an order of magnitude above the real peak and still a
+ * small number of megabytes. Server mode serves *this user's* paired devices —
+ * a laptop and a phone is the shape of it — and a device holds exactly one
+ * socket, unattached only for the milliseconds between the upgrade and its
+ * attach frame. Even a tailnet coming back up after a flap reconnects one
+ * socket per device, not eight; a ninth concurrent *unattached* socket is
+ * already a client bug or an attacker, and either is better refused than
+ * buffered for.
+ *
+ * Counted before attach only. An attached socket has proven a device
+ * credential, is tracked by `onAttach`/`onDetach`, and is subject to whatever
+ * `CHANNEL_AUTHORIZATION` allows it — this cap exists for the phase where none
+ * of that is true yet, and counting attached sockets against it would cap how
+ * many devices may be *paired and connected*, which is a different question
+ * with a different right answer.
+ */
+const MAX_UNATTACHED_SOCKETS = 8;
+
+/**
+ * The most a **first** frame may weigh, checked against the raw bytes below
+ * before anything parses them.
  *
  * An attach frame — `kind`, `protocol`, `deviceId`, `token`, and an optional
  * `resumeFrom` map — is a few hundred bytes even with a realistic session
- * count in `resumeFrom`. `ws` defaults `maxPayload` to 100 MiB, which is a
- * limit sized for a data channel, not a handshake; an unauthenticated peer
- * should not get to make this process buffer that much before the frame is
- * even inspected. The same discipline the hook receiver applies per route
+ * count in `resumeFrom`. Nothing an unauthenticated peer sends needs more than
+ * this, and the same discipline the hook receiver applies per route
  * (`HOOK_MAX_BODY_BYTES` and its siblings in `electron/shared/hook-contract.ts`)
  * applies here, sized for what this one frame actually needs.
+ *
+ * **Enforced explicitly, not by `maxPayload` (HIVE-143 review).** This used to
+ * be handed to `WebSocketServer` as its `maxPayload`, which was a bug rather
+ * than a shortcut: `ws` builds each connection's `Receiver` **once**, with that
+ * value, and enforces it on every message for the life of the socket. A
+ * handshake-shaped bound was therefore silently bounding every post-attach
+ * frame too — a `fs:write-file`, `skills:write`, `agents:write`, `theme:save`,
+ * `ledger:post`, `jira:add-comment` or pasted `pty:write` over 8 KiB never
+ * reached `dispatch.call` at all, answered neither `result` nor `error`, left
+ * the client's correlation id unresolved forever, and closed the connection
+ * with 1009. Checking the first frame here, where "first" is a fact this file
+ * knows and `ws` does not, is also simply more honest than delegating a
+ * handshake-specific limit to a connection-wide option.
  */
-const ATTACH_MAX_PAYLOAD_BYTES = 8 * 1024;
+const ATTACH_FRAME_MAX_BYTES = 8 * 1024;
+
+/**
+ * The most **any** frame on this socket may weigh — `ws`'s `maxPayload`, and
+ * therefore the ceiling an attached device's `call` and `notify` frames live
+ * under (HIVE-143 review).
+ *
+ * A bound, not an absence of one: `ws` defaults `maxPayload` to 100 MiB, and
+ * even an authorized device must not be able to make this process buffer that
+ * much per socket on demand. An attached client is trusted to *execute*
+ * (`DEVICE_GRANT` in `remote-dispatch.ts`), which is not the same as being
+ * trusted with this process's heap — a paired laptop with a bug in its send
+ * path is the ordinary case here, not an attacker.
+ *
+ * 8 MiB, derived from the worst-case **encoded** payload rather than picked
+ * (HIVE-143 review). The largest body any channel legitimately carries is a
+ * file, and `MAX_FILE_BYTES` (`electron/shared/fs-contract.ts`) caps that at
+ * 1,000,000 bytes — but what crosses this socket is not the file, it is the
+ * file *inside a JSON string*, and JSON spends six characters — a \uXXXX escape — on
+ * a single unprintable byte such as ESC. So the worst honest `fs:write-file` is
+ * 1,000,000 × 6 = 6,000,000 bytes of escaped text plus the envelope, and the
+ * previous constant cited that six and then multiplied by four: an escape-dense
+ * file the editor is willing to open encoded to ~6 MB, exceeded the 4 MiB
+ * ceiling, and was refused by `ws` at 1009 — which does not refuse the *frame*,
+ * it drops the socket and every in-flight correlation id on it. 8 MiB
+ * (8,388,608) is the next power of two above 6,000,000 and leaves ~2.4 MB for
+ * `path`, `channel`, `id` and the JSON structure around them. Everything else on
+ * the wire is far smaller: `pty:write` carries a paste, `ledger:post` and
+ * `jira:add-comment` carry prose, and `pty:data` only ever travels the other way
+ * in `BATCH_FLUSH_BYTES`-sized batches.
+ *
+ * The trade this makes, stated because it is the cost of fixing the bug above:
+ * an unauthenticated peer that clears the Origin/Host guard can make `ws` buffer
+ * up to this before {@link ATTACH_FRAME_MAX_BYTES} refuses it, where before the
+ * `maxPayload` bug it could buffer only 8 KiB. Per socket that is bounded by
+ * {@link ATTACH_HANDSHAKE_TIMEOUT_MS} and by the socket being closed the instant
+ * the oversized frame is inspected; in *aggregate* it is bounded by
+ * {@link MAX_UNATTACHED_SOCKETS}, which is the half the first version of this
+ * comment left unbounded while claiming otherwise. The alternative — a
+ * per-connection limit that tightens after attach — is not something `ws`
+ * exposes without reaching into a `Receiver`'s private state.
+ */
+const POST_ATTACH_FRAME_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * How many bytes a `ws` message actually is, across the three shapes `ws` can
+ * hand a `'message'` listener.
+ *
+ * Measured on the raw data rather than on `String(data).length`, because those
+ * are different numbers: the wire carries UTF-8 and a JS string is counted in
+ * UTF-16 code units, so a frame of multi-byte text would be under-counted by
+ * the very check meant to bound it.
+ */
+function frameByteLength(data: Buffer | ArrayBuffer | Buffer[]): number {
+  if (Array.isArray(data)) return data.reduce((total, part) => total + part.byteLength, 0);
+  return data.byteLength;
+}
 
 export interface RemoteListener {
   /** Starts listening. Resolves the bound address, or `null` on bind failure. */
@@ -104,10 +222,11 @@ function wsUrl(host: string, port: number): string {
 /**
  * Whether every value in `value` is a `number` — {@link AttachRequest.resumeFrom}'s
  * shape, checked so {@link isAttachShaped} does not claim a field it never
- * inspected. This story never reads `resumeFrom`, but the predicate's return
- * type says the whole `AttachRequest` is safe to use, and HIVE-143 is the
- * story that will actually consume this field — a predicate that skipped it
- * would be handing that story a lie it has no reason to suspect.
+ * inspected. `resumeFrom` is handed to `onAttach` unread by this file (HIVE-143)
+ * — replay is `electron/main/ipc/index.ts`'s decision to make, not this
+ * listener's — but the predicate's return type says the whole `AttachRequest`
+ * is safe to use, and a predicate that skipped this field would be handing
+ * that caller a lie it has no reason to suspect.
  */
 function isResumeFromShaped(value: unknown): value is Readonly<Record<string, number>> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -149,8 +268,27 @@ export function createRemoteListener(options: {
   devices: () => readonly ServerDevice[];
   /** What the client renders in its header indicator: "attached · <name>". */
   serverName: string;
+  /**
+   * Where a `call` or `notify` frame goes once a socket has attached
+   * (HIVE-143). The same `createRemoteDispatch(registry)` a renderer's own
+   * IPC would have reached, injected rather than imported — `listener.ts`
+   * importing `electron/main/ipc/index.ts` to build one itself would be the
+   * cycle `electron/main/ipc/index.ts` avoids by constructing this listener
+   * in the first place.
+   */
+  dispatch: RemoteDispatch;
+  /**
+   * Told about a socket the instant its handshake completes, with whatever
+   * `resumeFrom` it sent — `undefined` when it sent none, never `{}` (see
+   * {@link AttachRequest.resumeFrom}). This is how `electron/main/ipc/index.ts`
+   * learns a socket exists at all: nothing above this option tracks attached
+   * sockets for it.
+   */
+  onAttach: (socket: AttachedSocket, resumeFrom: Readonly<Record<string, number>> | undefined) => void;
+  /** Told when an attached socket is gone — closed, errored, or terminated. */
+  onDetach: (socket: AttachedSocket) => void;
 }): RemoteListener {
-  const { bind, devices, serverName } = options;
+  const { bind, devices, serverName, dispatch, onAttach, onDetach } = options;
 
   /*
     No host-alias concept here, unlike the hook receiver. `ServerBindConfig`
@@ -199,6 +337,17 @@ export function createRemoteListener(options: {
    */
   const pendingTimers = new Set<NodeJS.Timeout>();
 
+  /**
+   * Every socket that has been upgraded but has not yet attached — the set
+   * {@link MAX_UNATTACHED_SOCKETS} caps (HIVE-143 review).
+   *
+   * A set rather than a counter so add and remove are idempotent: a socket
+   * leaves it on `'close'` *and* on a successful attach, and either may happen
+   * first without the number drifting. Membership is what "unattached" means
+   * here, so there is nothing to keep in step.
+   */
+  const unattached = new Set<WebSocket>();
+
   function send(socket: WebSocket, frame: ServerFrame): void {
     socket.send(JSON.stringify(frame));
   }
@@ -241,12 +390,33 @@ export function createRemoteListener(options: {
           res.writeHead(426, { 'content-type': 'text/plain' }).end('Upgrade required');
         });
 
-        const sockets = new WebSocketServer({ noServer: true, maxPayload: ATTACH_MAX_PAYLOAD_BYTES });
+        /*
+          `maxPayload` is the **post-attach** ceiling, deliberately — see both
+          constants. `ws` builds a connection's `Receiver` once and enforces
+          this for the socket's whole life, so it cannot be the handshake's own
+          bound; that one is checked by hand, on the first frame, below.
+        */
+        const sockets = new WebSocketServer({
+          noServer: true,
+          maxPayload: POST_ATTACH_FRAME_MAX_BYTES,
+        });
         sockets.on('connection', (socket: WebSocket) => {
+          unattached.add(socket);
+
           /*
-            Armed the instant the socket exists, cleared the instant a first
-            frame arrives (or the socket closes or errors on its own) — see
+            Armed the instant the socket exists, cleared when the socket
+            *attaches* (or closes or errors on its own) — see
             `ATTACH_HANDSHAKE_TIMEOUT_MS` (I5, HIVE-142 review).
+
+            Not cleared merely because a first frame arrived (HIVE-143 review).
+            The deadline means "become an attached socket within five seconds",
+            not "send a byte within five seconds": a peer whose first frame is
+            refused is sent a close frame and then, by `ws`'s own rules, has
+            thirty seconds to answer it before `ws` destroys the socket. Left to
+            that, eight peers sending eight bad attach frames would hold every
+            slot {@link MAX_UNATTACHED_SOCKETS} has for half a minute and lock a
+            real device out — the cap turned into the denial it exists to
+            prevent. Keeping the timer armed until attach closes that.
           */
           const timer = setTimeout(() => {
             pendingTimers.delete(timer);
@@ -257,7 +427,10 @@ export function createRemoteListener(options: {
             clearTimeout(timer);
             pendingTimers.delete(timer);
           };
-          socket.once('close', clearHandshakeTimer);
+          socket.once('close', () => {
+            clearHandshakeTimer();
+            unattached.delete(socket);
+          });
 
           /*
             An unauthenticated socket is untrusted input, and `ws` treats a
@@ -283,9 +456,35 @@ export function createRemoteListener(options: {
             this handler decides.
           */
           socket.once('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
-            clearHandshakeTimer();
+            /**
+             * Whether `attach-accepted` has already gone out on this socket
+             * (HIVE-143 review).
+             *
+             * The outer `catch` below used to answer `attach-refused`
+             * unconditionally, including after the accept had been sent — and
+             * `onAttach` can throw, so that sequence was reachable rather than
+             * theoretical. The wire contract describes no accept-then-refuse
+             * ordering and a client is entitled to be confused by one; past the
+             * accept the honest thing is to log on this side and drop the
+             * socket, which the client already has a branch for.
+             */
+            let accepted = false;
 
             try {
+              /*
+                The handshake's own size bound, before `JSON.parse` is asked to
+                build an object graph out of the bytes — the point of a limit is
+                that the work it refuses never happens. Refused with a frame
+                rather than by dropping the socket, which is what `maxPayload`
+                used to do here: an oversized attach is a client bug worth
+                naming, and every other malformed first frame on this socket is
+                already answered rather than silently closed.
+              */
+              if (frameByteLength(data) > ATTACH_FRAME_MAX_BYTES) {
+                refuse(socket, unauthorized('The first frame on a connection is too large.'));
+                return;
+              }
+
               let frame: unknown;
               try {
                 frame = JSON.parse(String(data));
@@ -341,20 +540,212 @@ export function createRemoteListener(options: {
                 kind: 'attach-accepted',
                 protocol: REMOTE_PROTOCOL_VERSION,
                 serverName,
-                // No IPC surface exists on this socket yet (HIVE-143) — an
-                // empty snapshot is the honest answer, not a placeholder.
+                /*
+                  Empty, and that is this story's answer rather than a
+                  placeholder for a missing one. The IPC surface does exist now
+                  — everything below this line routes a client's `call` frames
+                  into the same handlers a renderer reaches — so a client that
+                  attaches can simply ask for what it needs, one channel at a
+                  time, and nothing it wants is unreachable for the want of a
+                  snapshot. What the field is *for* is saving that first flurry
+                  of round trips: HIVE-144 builds the client half, and fills
+                  this so a busy server renders in one round trip instead of a
+                  dozen. Populating it here, with no client to consume it,
+                  would be choosing the payload's shape a story early.
+                */
                 snapshot: {},
               });
-              // The socket now sits attached with nothing further wired to
-              // it. That is the whole surface this story owns.
-            } catch {
+              accepted = true;
+              /*
+                Attached: the handshake deadline has been met and this socket
+                stops counting against {@link MAX_UNATTACHED_SOCKETS}, which
+                caps the *unauthenticated* phase and not how many paired
+                devices may be connected at once.
+              */
+              clearHandshakeTimer();
+              unattached.delete(socket);
+
+              const socketHandle: AttachedSocket = {
+                send(outgoing) {
+                  send(socket, outgoing);
+                },
+              };
+
+              /*
+                One reporter per socket, created at attach and reused for
+                every notify from it (HIVE-143).
+
+                `watchReporter` in `electron/main/ipc/index.ts` dedupes by
+                identity through a `WeakSet`, so handing it a fresh object per
+                frame would register a new set of listeners on every
+                keystroke report. It is the socket that has a lifetime, not
+                the frame, and this object is that lifetime given the shape
+                `watchReporter` already accepts.
+
+                Only `destroyed` is wired. A socket has no analogue of
+                `did-start-loading` or `render-process-gone` — it is either
+                open or it is gone — and firing a reset for events that
+                cannot happen would be inventing a lifecycle.
+              */
+              const closeListeners: (() => void)[] = [];
+              const reporter: RemoteReporter = {
+                on(event, listener) {
+                  if (event === 'destroyed') closeListeners.push(listener);
+                  return undefined;
+                },
+              };
+
+              /*
+                The close listener is registered **before** `onAttach`, not
+                after (HIVE-143 review).
+
+                `onAttach` is what puts this handle into the fan-out's set of
+                attached sockets, and it can throw — it iterates `resumeFrom`
+                and calls into the session layer to do it. A throw there is
+                caught by this handler's outer `catch`, which refuses and closes
+                the socket; but with the registration the other way round there
+                would be no `'close'` listener yet to hear that, so `onDetach`
+                would never run and a handle for a dead socket would sit in the
+                set forever, serialising a frame per push for the life of the
+                process. Registering first costs nothing — the listener cannot
+                fire before this synchronous block finishes — and makes the
+                add and the remove genuinely paired.
+              */
+              socket.once('close', () => {
+                for (const listener of closeListeners) listener();
+                onDetach(socketHandle);
+              });
+
+              onAttach(socketHandle, request.resumeFrom);
+
+              /*
+                Everything past the handshake arrives here, one socket-level
+                `'message'` listener for the life of the connection — distinct
+                from the `once('message', ...)` above, which is the
+                handshake's own one-shot read and never fires again.
+              */
+              socket.on('message', (postAttachData: Buffer | ArrayBuffer | Buffer[]) => {
+                let postAttachFrame: unknown;
+                try {
+                  postAttachFrame = JSON.parse(String(postAttachData));
+                } catch {
+                  console.error('[hive] server mode dropped an unparsable frame from an attached client');
+                  return;
+                }
+
+                if (postAttachFrame === null || typeof postAttachFrame !== 'object') {
+                  console.error('[hive] server mode dropped a malformed frame from an attached client');
+                  return;
+                }
+                const kind = (postAttachFrame as Record<string, unknown>).kind;
+
+                if (kind === 'call') {
+                  /*
+                    Answered without awaiting the socket's readiness and
+                    without ordering against other calls: `id` is what
+                    correlates a result, which is exactly so that a slow
+                    channel cannot head-of-line block a fast one. Ordering
+                    matters for `notify` and is preserved there by handling
+                    those synchronously.
+
+                    **Known hazard, deliberately parked: there is no
+                    server-side timeout on a call (HIVE-143 review; HIVE-144
+                    owns it).** `dispatch.call` never *rejects* — every refusal
+                    and every thrown handler comes back as an `error` frame —
+                    but it can fail to settle at all, because some handlers
+                    genuinely wait on the world: `agents:run` awaits the
+                    memoised `mcp.start()`, and `slack:sign-in` spawns a real
+                    `claude` turn and waits for it. Until one of those settles,
+                    this closure holds `socketHandle` — and therefore the
+                    socket — past a detach that has already happened, and the
+                    client's own correlation id is outstanding with nothing on
+                    the wire to say so.
+
+                    It is bounded rather than unbounded: a client can only have
+                    as many of these as it has calls in flight, and every one
+                    of them settles or the app is quitting. It ships unfixed
+                    because the fix belongs with the client half — a deadline
+                    here without a matching one there would answer a `timeout`
+                    error frame to a client that has no branch for it, and the
+                    two numbers have to agree or the client gives up on a call
+                    the server is still going to answer. HIVE-144 should give
+                    `dispatch.call` a deadline, answer an `error` frame when it
+                    expires, and drop the handle it is holding.
+                  */
+                  void dispatch
+                    .call(postAttachFrame as CallFrame)
+                    .then((answer) => {
+                      socketHandle.send(answer);
+                    })
+                    .catch((cause: unknown) => {
+                      /*
+                        `dispatch.call` does not reject, so what lands here is
+                        the *send* failing — and `send` stringifies first, so a
+                        handler that answered a cyclic object or a `BigInt`
+                        throws from `JSON.stringify` rather than from anything
+                        the socket did. Without this the rejection is unhandled
+                        in the main process; with it the client is told, which
+                        is the difference between a call that failed and a call
+                        that never comes back. Sent only while the socket can
+                        still carry it, and inside its own try: the frame that
+                        replaces an unserialisable one must not itself be the
+                        thing that throws.
+                      */
+                      console.error('[hive] server mode could not answer a call frame:', cause);
+                      if (socket.readyState !== socket.OPEN) return;
+                      try {
+                        send(socket, {
+                          kind: 'error',
+                          id: (postAttachFrame as CallFrame).id,
+                          code: 'send-failed',
+                          message: 'The result could not be sent.',
+                        });
+                      } catch {
+                        // The socket is going down under us. Nothing left to
+                        // tell anyone, and a throw here would be the unhandled
+                        // rejection this catch exists to prevent.
+                      }
+                    });
+                  return;
+                }
+                if (kind === 'notify') {
+                  dispatch.notify(postAttachFrame as NotifyFrame, reporter);
+                  return;
+                }
+                // A second `attach`, a `result`/`error`/`event` this server
+                // never expects a client to send, or anything else outside
+                // the two channel kinds a client may use — dropped, not
+                // refused. `AttachRefusalCode` names four reasons and none of
+                // them is "you already attached"; adding a fifth would
+                // change the wire and force a protocol bump for a case only
+                // a buggy client can reach. Silence costs that client
+                // nothing it did not already have.
+                console.error(`[hive] server mode dropped a ${String(kind)} frame from a client`);
+              });
+            } catch (cause) {
               /*
                 Belt and suspenders under `isAttachShaped`'s own validation:
                 anything this handler did not anticipate refuses the socket
                 rather than throwing past it (C2, HIVE-142 review). If even
                 the refusal cannot be sent — the socket is already going down
                 — terminate rather than let a second exception through.
+
+                Only while the refusal is still a truthful thing to say
+                (HIVE-143 review). Past `attach-accepted` the throw came from
+                `onAttach` — the replay loop, which iterates `resumeFrom` and
+                calls into the session layer — and answering `attach-refused`
+                there would tell a client its credential was rejected on a
+                connection this server has already accepted and, worse, already
+                added to the fan-out. There is no wire code for "accepted, then
+                something broke", so the socket is logged here and dropped;
+                `onDetach` runs off the `'close'` this causes, exactly as it
+                would for any other lost connection.
               */
+              if (accepted) {
+                console.error('[hive] server mode dropped a socket that failed after attach-accepted:', cause);
+                socket.terminate();
+                return;
+              }
               try {
                 refuse(socket, unauthorized('The attach could not be processed.'));
               } catch {
@@ -392,6 +783,34 @@ export function createRemoteListener(options: {
             // rather than hanging. `createOriginGuard` only ever returns 403
             // (or `null`), so there is exactly one reason phrase to spell.
             socket.write(`HTTP/1.1 ${String(status)} Forbidden\r\nConnection: close\r\n\r\n`);
+            socket.destroy();
+            return;
+          }
+
+          /*
+            The concurrency half of the size bound, refused **before**
+            `handleUpgrade` (HIVE-143 review).
+
+            Enforced here rather than in the `'connection'` handler because
+            here is the last point at which nothing has been allocated: past
+            `handleUpgrade`, `ws` has built this connection's `Receiver` and it
+            is willing to buffer `POST_ATTACH_FRAME_MAX_BYTES` for a peer that
+            has proven nothing. Refusing in `'connection'` would mean refusing
+            a socket that can already be filling that buffer, and `close()`
+            does not stop it — `ws` keeps receiving through the closing
+            handshake. Answering an HTTP status line instead of a WebSocket
+            frame is the same shape the Origin/Host refusal above uses, and
+            `ws`'s client surfaces it as a connection error rather than
+            hanging. 503 rather than 403: the peer is not forbidden, this
+            server is momentarily out of handshake slots, and retrying after
+            `ATTACH_HANDSHAKE_TIMEOUT_MS` is the right response.
+          */
+          if (unattached.size >= MAX_UNATTACHED_SOCKETS) {
+            socket.on('error', () => {});
+            console.error(
+              `[hive] server mode refused an upgrade: ${String(MAX_UNATTACHED_SOCKETS)} sockets are already mid-handshake`,
+            );
+            socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
             socket.destroy();
             return;
           }
@@ -460,6 +879,11 @@ export function createRemoteListener(options: {
         // survive the listener it belongs to.
         for (const timer of pendingTimers) clearTimeout(timer);
         pendingTimers.clear();
+        // The cap belongs to a running listener. Leaving members here would
+        // let a stopped listener's mid-handshake sockets count against a
+        // later `start()`'s slots — which in a test process is one case
+        // silently shrinking the next one's cap.
+        unattached.clear();
 
         if (running === null) {
           resolve();

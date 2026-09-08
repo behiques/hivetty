@@ -5,10 +5,14 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createRemoteListener } from '@remote-host/listener';
-import { REMOTE_PROTOCOL_VERSION } from '@shared/remote-contract';
 import type { ServerDevice } from '@shared/config-contract';
+import { MAX_FILE_BYTES } from '@shared/fs-contract';
+import { CH } from '@shared/ipc-contract';
+import { REMOTE_PROTOCOL_VERSION, type AttachRequest, type CallFrame } from '@shared/remote-contract';
 
 import { mintDevice } from '../../../electron/main/server/devices';
+import type { RemoteDispatch } from '../../../electron/main/ipc/remote-dispatch';
+import type { AttachedSocket } from '../../../electron/main/ipc/socket-broadcaster';
 
 let listener: ReturnType<typeof createRemoteListener> | null = null;
 afterEach(async () => {
@@ -16,11 +20,24 @@ afterEach(async () => {
   listener = null;
 });
 
+/**
+ * `dispatch`/`onAttach`/`onDetach` a test does not care about — every
+ * pre-existing HIVE-142 case in this file only exercises the handshake, so
+ * these stand in wherever `createRemoteListener` is built without the
+ * post-attach frame loop (HIVE-143) itself under test.
+ */
+const noopDispatch: RemoteDispatch = { call: vi.fn(), notify: vi.fn() };
+const noopOnAttach = vi.fn();
+const noopOnDetach = vi.fn();
+
 const start = async (devices: readonly ServerDevice[], allowedOrigins: string[] = []) => {
   listener = createRemoteListener({
     bind: { host: '127.0.0.1', port: 0, allowedOrigins },
     devices: () => devices,
     serverName: 'test-mini',
+    dispatch: noopDispatch,
+    onAttach: noopOnAttach,
+    onDetach: noopOnDetach,
   });
   const address = await listener.start();
   expect(address).not.toBeNull();
@@ -159,6 +176,9 @@ describe('the attach handshake', () => {
       bind: { host: '127.0.0.1', port: 0, allowedOrigins: [] },
       devices: () => devices,
       serverName: 'test-mini',
+      dispatch: noopDispatch,
+      onAttach: noopOnAttach,
+      onDetach: noopOnDetach,
     });
     const url = (await listener.start()) as string;
     const { device, token } = mintDevice('LateBook');
@@ -292,10 +312,17 @@ describe('an unauthenticated socket is untrusted input (HIVE-142 review)', () =>
     expect(reply.kind).toBe('attach-accepted');
   });
 
-  it('drops an oversized first frame rather than buffering it', async () => {
+  it('refuses an oversized first frame rather than parsing it', async () => {
     const { device, token } = mintDevice('MacBook');
     const url = await start([device]);
-    // Well past `ATTACH_MAX_PAYLOAD_BYTES` (8 KiB) once serialised.
+    /*
+      Well past `ATTACH_FRAME_MAX_BYTES` (8 KiB) once serialised, and well
+      *under* `POST_ATTACH_FRAME_MAX_BYTES` — so `ws` delivers it and
+      `listener.ts`'s own explicit check is the thing that refuses it. That
+      split is the whole of the HIVE-143 review fix: the 8 KiB bound is the
+      handshake's, and it has to be enforced somewhere that knows which frame
+      is the first one.
+    */
     const { code, message } = await attachTolerant(url, {
       kind: 'attach',
       protocol: REMOTE_PROTOCOL_VERSION,
@@ -303,11 +330,39 @@ describe('an unauthenticated socket is untrusted input (HIVE-142 review)', () =>
       token,
       padding: 'x'.repeat(20_000),
     });
-    expect(message).toBeNull();
-    // 1009 is `ws`'s own "Message Too Big" close code — the direct signature
-    // of `maxPayload`, not just "something went wrong".
-    expect(code).toBe(1009);
+    // Refused with a frame, where `maxPayload` used to drop the socket
+    // wordlessly. An oversized attach is a client bug worth naming, and the
+    // credentials inside it were never read.
+    expect(code).toBeNull();
+    expect(message).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
   });
+
+  it('still lets ws drop a first frame past the connection-wide ceiling', async () => {
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+    // Past `POST_ATTACH_FRAME_MAX_BYTES` (8 MiB), so `ws` never delivers it and
+    // the explicit check above never runs — which proves the ceiling is a real
+    // bound and not an absent one.
+    const { code, message } = await attachTolerant(url, {
+      kind: 'attach',
+      protocol: REMOTE_PROTOCOL_VERSION,
+      deviceId: device.id,
+      token,
+      padding: 'x'.repeat(9 * 1024 * 1024),
+    });
+    expect(message).toBeNull();
+    /*
+      1009 is `ws`'s own "Message Too Big"; 1006 is that same refusal seen by a
+      client that was still writing five megabytes when the server dropped the
+      connection under it, so no close frame ever reached it. Which one arrives
+      is loopback timing rather than behaviour — `listener.ts`'s `'error'`
+      handler terminates the socket, and whether `ws`'s close frame flushes
+      first depends on how much of the frame is still in the send buffer. Both
+      mean refused-and-dropped, and pinning one of them would be pinning the
+      kernel's buffering.
+    */
+    expect([1006, 1009]).toContain(code);
+  }, 20_000);
 
   it('drops a socket that never sends an attach frame, after the handshake deadline', async () => {
     // Fake timers, not a real wait — the deadline itself is the behaviour
@@ -338,6 +393,148 @@ describe('an unauthenticated socket is untrusted input (HIVE-142 review)', () =>
   });
 });
 
+/**
+ * The concurrency half of the frame-size bound (HIVE-143 review).
+ *
+ * `ATTACH_HANDSHAKE_TIMEOUT_MS` bounds what one unauthenticated socket costs;
+ * nothing bounded how many there could be, so a peer that clears the header
+ * guard could open sockets in a loop and make `ws` arm a `Receiver` willing to
+ * buffer `POST_ATTACH_FRAME_MAX_BYTES` for each of them. `MAX_UNATTACHED_SOCKETS`
+ * is that bound.
+ *
+ * The cases below never name the number. It is deliberately not exported, and
+ * what has to hold is "there is a cap, it frees on attach, it frees on close" —
+ * pinning eight would pin a choice, not the behaviour.
+ */
+describe('the concurrent unattached-socket cap (HIVE-143 review)', () => {
+  /** Opens a socket and leaves it silent — the shape the cap counts. */
+  const openSilent = (url: string) =>
+    new Promise<WebSocket>((resolve, reject) => {
+      const socket = new WebSocket(url);
+      socket.on('open', () => resolve(socket));
+      socket.on('error', reject);
+    });
+
+  /**
+   * Opens silent sockets until one is refused, and hands back both halves.
+   *
+   * Sequential rather than parallel: the cap is read on the upgrade request, so
+   * a batch fired at once would race the increments and make "the (N+1)th" a
+   * statement about scheduling rather than about the guard.
+   */
+  const fillHandshakeSlots = async (url: string): Promise<{ opened: WebSocket[]; refusal: Error }> => {
+    const opened: WebSocket[] = [];
+    for (let attempt = 0; attempt < 64; attempt += 1) {
+      try {
+        opened.push(await openSilent(url));
+      } catch (cause) {
+        return { opened, refusal: cause as Error };
+      }
+    }
+    for (const socket of opened) socket.terminate();
+    throw new Error('the listener accepted 64 silent sockets without ever refusing one');
+  };
+
+  /**
+   * Opens a socket, retrying while the cap is full — with a deadline **under**
+   * `ATTACH_HANDSHAKE_TIMEOUT_MS` (5s).
+   *
+   * That is what makes the two cases below mean anything: the handshake
+   * deadline frees every silent slot on its own, so a generous retry window
+   * would pass whether or not attaching and closing free a slot. Two seconds
+   * cannot be the timeout doing the work.
+   */
+  const openWhenAdmitted = async (url: string): Promise<WebSocket> => {
+    const deadline = Date.now() + 2_000;
+    for (;;) {
+      try {
+        return await openSilent(url);
+      } catch (cause) {
+        if (Date.now() > deadline) throw cause as Error;
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+      }
+    }
+  };
+
+  /** Sends a real attach on an already-open socket, and waits for the accept. */
+  const attachOn = (socket: WebSocket, deviceId: string, token: string) =>
+    new Promise<void>((resolve, reject) => {
+      socket.once('message', (data) => {
+        const reply = JSON.parse(String(data)) as { kind: string };
+        if (reply.kind === 'attach-accepted') resolve();
+        else reject(new Error(`attach was refused: ${String(data)}`));
+      });
+      socket.send(
+        JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId, token }),
+      );
+    });
+
+  let logged: ReturnType<typeof vi.spyOn> | null = null;
+  afterEach(() => {
+    logged?.mockRestore();
+    logged = null;
+  });
+
+  it('refuses the socket past the cap with a status line, rather than buffering for it', async () => {
+    logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { device } = mintDevice('MacBook');
+    const url = await start([device]);
+
+    const { opened, refusal } = await fillHandshakeSlots(url);
+
+    /*
+      A real cap, not a degenerate one: more than a single socket may be
+      mid-handshake at a time, and the refusal is an HTTP status line rather
+      than a silent drop — `ws`'s client surfaces 503 as a connection error
+      instead of hanging, which is the same courtesy the Origin/Host refusal
+      pays. 503 and not 403: the peer is not forbidden, the server is out of
+      handshake slots for a moment.
+    */
+    expect(opened.length).toBeGreaterThan(1);
+    expect(refusal.message).toContain('503');
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('mid-handshake'));
+
+    for (const socket of opened) socket.terminate();
+  }, 20_000);
+
+  it('admits another socket once a mid-handshake one closes', async () => {
+    logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { device } = mintDevice('MacBook');
+    const url = await start([device]);
+    const { opened } = await fillHandshakeSlots(url);
+
+    opened[0]?.terminate();
+    const admitted = await openWhenAdmitted(url);
+
+    expect(admitted.readyState).toBe(WebSocket.OPEN);
+    admitted.terminate();
+    for (const socket of opened) socket.terminate();
+  }, 20_000);
+
+  it('admits another socket once a mid-handshake one attaches, because attached sockets do not count', async () => {
+    logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+    const { opened } = await fillHandshakeSlots(url);
+
+    const first = opened[0];
+    if (first === undefined) throw new Error('expected at least one open socket');
+    await attachOn(first, device.id, token);
+    const admitted = await openWhenAdmitted(url);
+
+    /*
+      The cap governs the *unauthenticated* phase. An attached socket has proven
+      a device credential and is tracked by `onAttach`/`onDetach`; counting it
+      here would cap how many paired devices may be connected at once, which is
+      a different question with a different right answer.
+    */
+    expect(admitted.readyState).toBe(WebSocket.OPEN);
+    expect(first.readyState).toBe(WebSocket.OPEN);
+    admitted.terminate();
+    for (const socket of opened) socket.terminate();
+  }, 20_000);
+});
+
 describe('start()/stop() lifecycle', () => {
   it('resolves start() with null and leaves boundHost null on a bind failure', async () => {
     const blocker = createNetServer();
@@ -350,6 +547,9 @@ describe('start()/stop() lifecycle', () => {
       bind: { host: '127.0.0.1', port, allowedOrigins: [] },
       devices: () => [],
       serverName: 'test-mini',
+      dispatch: noopDispatch,
+      onAttach: noopOnAttach,
+      onDetach: noopOnDetach,
     });
     const result = await listener.start();
     expect(result).toBeNull();
@@ -375,6 +575,9 @@ describe('start()/stop() lifecycle', () => {
       bind: { host: '127.0.0.1', port, allowedOrigins: [] },
       devices: () => [],
       serverName: 'test-mini',
+      dispatch: noopDispatch,
+      onAttach: noopOnAttach,
+      onDetach: noopOnDetach,
     });
     await listener.start();
 
@@ -403,6 +606,9 @@ describe('start()/stop() lifecycle', () => {
       bind: { host: '127.0.0.1', port, allowedOrigins: [] },
       devices: () => [],
       serverName: 'test-mini',
+      dispatch: noopDispatch,
+      onAttach: noopOnAttach,
+      onDetach: noopOnDetach,
     });
     await listener.start();
 
@@ -423,6 +629,9 @@ describe('start()/stop() lifecycle', () => {
       bind: { host: '127.0.0.1', port, allowedOrigins: [] },
       devices: () => [],
       serverName: 'test-mini',
+      dispatch: noopDispatch,
+      onAttach: noopOnAttach,
+      onDetach: noopOnDetach,
     });
     await failing.start();
     expect(failing.lastBindError).not.toBeNull();
@@ -434,6 +643,9 @@ describe('start()/stop() lifecycle', () => {
       bind: { host: '127.0.0.1', port: 0, allowedOrigins: [] },
       devices: () => [],
       serverName: 'test-mini',
+      dispatch: noopDispatch,
+      onAttach: noopOnAttach,
+      onDetach: noopOnDetach,
     });
     await listener.start();
     expect(listener.lastBindError).toBeNull();
@@ -444,6 +656,9 @@ describe('start()/stop() lifecycle', () => {
       bind: { host: '127.0.0.1', port: 0, allowedOrigins: [] },
       devices: () => [],
       serverName: 'test-mini',
+      dispatch: noopDispatch,
+      onAttach: noopOnAttach,
+      onDetach: noopOnDetach,
     });
     await expect(listener.stop()).resolves.toBeUndefined();
   });
@@ -477,4 +692,495 @@ describe('start()/stop() lifecycle', () => {
 
     await listener?.stop();
   }, 3_000);
+});
+
+/**
+ * Flushes every pending microtask — the `.then()` a `dispatch.call` answer
+ * travels through before it reaches `socketHandle.send()`. `setImmediate`
+ * runs after Node fully drains the microtask queue, regardless of how many
+ * `.then()`s are chained, which is what makes this reliable where a fixed
+ * number of `await Promise.resolve()`s would not be.
+ */
+const flushMicrotasks = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/**
+ * Drives a real attach handshake against a `createRemoteListener` built with
+ * one stub device, then hands back the **server-side** connection object —
+ * not the client's — plus every frame the listener has sent on it since.
+ *
+ * The server-side object is captured off `WebSocketServer.prototype.emit`,
+ * which `listener.ts`'s own `'upgrade'` handler calls directly
+ * (`sockets.emit('connection', ws, req)`) — nothing else exposes it, since
+ * `onAttach` is handed a wrapper (`AttachedSocket`), not the socket itself.
+ * A real `ws.WebSocket` is an `EventEmitter` underneath, so calling
+ * `.emit('message', ...)` on this captured object invokes `listener.ts`'s own
+ * `.on('message', ...)` handler synchronously, in-process — the same handler
+ * a real frame would reach — without a second real round trip's
+ * non-deterministic tick count.
+ *
+ * `sent` is filled by a spy on this same socket's own `.send`, not by
+ * reading the real client's `'message'` event: a spy records the instant
+ * `listener.ts` calls it, while the real client only learns of a write after
+ * genuine loopback I/O completes, which is not bounded by a microtask flush.
+ *
+ * `.emit('close')` on the returned socket is real-`terminate()`d immediately
+ * after: firing only the synthetic event would run `listener.ts`'s `'close'`
+ * handler (what the test wants) while also running `ws`'s own internal
+ * `'close'` listener, which drops the socket from `WebSocketServer#clients`
+ * — the exact set `stop()` walks to tear down what is, underneath the fake
+ * event, still a genuinely open connection. Terminating for real keeps that
+ * bookkeeping honest so `afterEach`'s `listener.stop()` does not hang.
+ */
+const attachedSocket = async (
+  overrides: {
+    dispatch?: RemoteDispatch;
+    onAttach?: (socket: AttachedSocket, resumeFrom: Readonly<Record<string, number>> | undefined) => void;
+    onDetach?: (socket: AttachedSocket) => void;
+    attach?: Partial<AttachRequest>;
+  } = {},
+): Promise<{ socket: WebSocket; sent: unknown[] }> => {
+  const dispatch: RemoteDispatch = overrides.dispatch ?? { call: vi.fn(), notify: vi.fn() };
+  const onAttach = overrides.onAttach ?? vi.fn();
+  const onDetach = overrides.onDetach ?? vi.fn();
+  const { device, token } = mintDevice('MacBook');
+
+  const emitSpy = vi.spyOn(WebSocketServer.prototype, 'emit');
+
+  listener = createRemoteListener({
+    bind: { host: '127.0.0.1', port: 0, allowedOrigins: [] },
+    devices: () => [device],
+    serverName: 'test-mini',
+    dispatch,
+    onAttach,
+    onDetach,
+  });
+  const url = await listener.start();
+  expect(url).not.toBeNull();
+
+  const client = new WebSocket(url as string);
+  await new Promise<void>((resolve, reject) => {
+    client.on('open', () => resolve());
+    client.on('error', reject);
+  });
+
+  const accepted = new Promise<void>((resolve, reject) => {
+    client.once('message', (data) => {
+      const reply = JSON.parse(String(data)) as { kind: string };
+      if (reply.kind === 'attach-accepted') resolve();
+      else reject(new Error(`attach was refused: ${String(data)}`));
+    });
+  });
+  client.send(
+    JSON.stringify({
+      kind: 'attach',
+      protocol: REMOTE_PROTOCOL_VERSION,
+      deviceId: device.id,
+      token,
+      ...overrides.attach,
+    }),
+  );
+  await accepted;
+
+  const connectionCall = emitSpy.mock.calls.find((call) => call[0] === 'connection');
+  emitSpy.mockRestore();
+  const socket = connectionCall?.[1] as WebSocket;
+
+  const sent: unknown[] = [];
+  vi.spyOn(socket, 'send').mockImplementation((data: unknown) => {
+    sent.push(JSON.parse(String(data)));
+  });
+
+  const rawEmit = socket.emit.bind(socket);
+  socket.emit = ((event: string | symbol, ...args: unknown[]): boolean => {
+    const result = rawEmit(event, ...args);
+    if (event === 'close') socket.terminate();
+    return result;
+  }) as typeof socket.emit;
+
+  return { socket, sent };
+};
+
+describe('post-attach frames', () => {
+  it('answers a call frame with whatever dispatch returns', async () => {
+    const dispatch: RemoteDispatch = {
+      call: vi.fn(async () => ({ kind: 'result' as const, id: 'c1', payload: { ok: true } })),
+      notify: vi.fn(),
+    };
+    const { socket, sent } = await attachedSocket({ dispatch });
+
+    socket.emit('message', JSON.stringify({ kind: 'call', id: 'c1', channel: CH.configGet, payload: null }));
+    await flushMicrotasks();
+
+    expect(dispatch.call).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'call', id: 'c1', channel: CH.configGet }),
+    );
+    expect(sent).toContainEqual({ kind: 'result', id: 'c1', payload: { ok: true } });
+  });
+
+  it('routes a notify frame to dispatch and sends nothing back', async () => {
+    const dispatch = { call: vi.fn(), notify: vi.fn() };
+    const { socket, sent } = await attachedSocket({ dispatch });
+    const before = sent.length;
+
+    socket.emit('message', JSON.stringify({ kind: 'notify', channel: CH.ptyAck, payload: { seq: 1 } }));
+    await flushMicrotasks();
+
+    expect(dispatch.notify).toHaveBeenCalled();
+    expect(sent.length).toBe(before);
+  });
+
+  it('hands the socket a reporter whose destroyed listener fires on close', async () => {
+    const dispatch = { call: vi.fn(), notify: vi.fn() };
+    const { socket } = await attachedSocket({ dispatch });
+    socket.emit('message', JSON.stringify({ kind: 'notify', channel: CH.ptyPrompt, payload: { sessionId: 's1', input: 'empty' } }));
+    await flushMicrotasks();
+
+    const reporter = dispatch.notify.mock.calls[0][1] as { on: (e: string, l: () => void) => unknown };
+    const onDestroyed = vi.fn();
+    reporter.on('destroyed', onDestroyed);
+    socket.emit('close');
+
+    expect(onDestroyed).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports the socket attached, with resumeFrom, and detached on close', async () => {
+    const onAttach = vi.fn();
+    const onDetach = vi.fn();
+    const { socket } = await attachedSocket({
+      onAttach,
+      onDetach,
+      attach: { resumeFrom: { s1: 7 } },
+    });
+
+    expect(onAttach).toHaveBeenCalledWith(expect.anything(), { s1: 7 });
+
+    socket.emit('close');
+    expect(onDetach).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes resumeFrom as undefined when the client omitted it', async () => {
+    const onAttach = vi.fn();
+    await attachedSocket({ onAttach });
+
+    expect(onAttach).toHaveBeenCalledWith(expect.anything(), undefined);
+  });
+
+  it('drops a second attach frame rather than re-running the handshake', async () => {
+    const dispatch = { call: vi.fn(), notify: vi.fn() };
+    const { socket, sent } = await attachedSocket({ dispatch });
+    const before = sent.length;
+
+    socket.emit('message', JSON.stringify({ kind: 'attach', protocol: 1, deviceId: 'd', token: 't' }));
+    await flushMicrotasks();
+
+    /*
+      Dropped, not refused. `AttachRefusalCode` names four reasons and none of
+      them is "you already attached"; adding a fifth would change the wire and
+      force a protocol bump for a case only a buggy client can reach. Silence
+      costs that client nothing it did not already have.
+    */
+    expect(dispatch.call).not.toHaveBeenCalled();
+    expect(dispatch.notify).not.toHaveBeenCalled();
+    expect(sent.length).toBe(before);
+  });
+
+  it('drops a frame that is not JSON without killing the socket', async () => {
+    const dispatch = { call: vi.fn(), notify: vi.fn() };
+    const { socket } = await attachedSocket({ dispatch });
+
+    expect(() => socket.emit('message', 'not json')).not.toThrow();
+    expect(dispatch.call).not.toHaveBeenCalled();
+  });
+
+  it('drops a frame whose kind is not call or notify', async () => {
+    const dispatch = { call: vi.fn(), notify: vi.fn() };
+    const { socket } = await attachedSocket({ dispatch });
+
+    socket.emit('message', JSON.stringify({ kind: 'result', id: 'x', payload: null }));
+    await flushMicrotasks();
+
+    expect(dispatch.call).not.toHaveBeenCalled();
+    expect(dispatch.notify).not.toHaveBeenCalled();
+  });
+
+  /**
+   * HIVE-143 review: `onAttach` can throw — it iterates `resumeFrom` and calls
+   * into the session layer to do it — and the outer `catch` used to answer
+   * `attach-refused` on a socket that had already been sent `attach-accepted`.
+   * The wire contract describes no such sequence and a client is entitled to be
+   * confused by one.
+   */
+  it('does not refuse an attach it has already accepted', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const onDetach = vi.fn();
+    const { device, token } = mintDevice('MacBook');
+    listener = createRemoteListener({
+      bind: { host: '127.0.0.1', port: 0, allowedOrigins: [] },
+      devices: () => [device],
+      serverName: 'test-mini',
+      dispatch: noopDispatch,
+      onAttach: () => {
+        throw new Error('the replay loop blew up');
+      },
+      onDetach,
+    });
+    const url = (await listener.start()) as string;
+
+    const client = new WebSocket(url);
+    const kinds: string[] = [];
+    client.on('message', (data) => kinds.push((JSON.parse(String(data)) as { kind: string }).kind));
+    const closed = new Promise<void>((resolve) => client.once('close', () => resolve()));
+    await new Promise<void>((resolve, reject) => {
+      client.on('open', () => resolve());
+      client.on('error', reject);
+    });
+    client.send(
+      JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId: device.id, token }),
+    );
+    await closed;
+
+    /*
+      The accept, and nothing after it. The socket is dropped — which a client
+      already has a branch for — the failure is logged on this side, and
+      `onDetach` still runs, because the `'close'` listener is registered before
+      `onAttach` precisely so a throw there cannot strand a handle in the
+      fan-out set.
+    */
+    expect(kinds).toEqual(['attach-accepted']);
+    expect(onDetach).toHaveBeenCalledTimes(1);
+    expect(logged).toHaveBeenCalledWith(
+      expect.stringContaining('after attach-accepted'),
+      expect.anything(),
+    );
+    logged.mockRestore();
+  });
+
+  it('reuses one reporter across every notify frame from a socket', async () => {
+    const dispatch = { call: vi.fn(), notify: vi.fn() };
+    const { socket } = await attachedSocket({ dispatch });
+
+    const report = (input: string): void => {
+      socket.emit(
+        'message',
+        JSON.stringify({ kind: 'notify', channel: CH.ptyPrompt, payload: { sessionId: 's1', input } }),
+      );
+    };
+    report('draft');
+    report('empty');
+    await flushMicrotasks();
+
+    /*
+      The **same object**, not merely one of the same shape. `watchReporter` in
+      `ipc/index.ts` dedupes by identity through a `WeakSet`, so a fresh
+      reporter per frame would register a new `destroyed` listener on every
+      keystroke report — pushing into this socket's `closeListeners` array
+      without bound, and firing `deliver.onRendererReset()` once per keystroke
+      on close. Nothing else in this file would notice: every other assertion
+      here is about what a reporter *does*, and a fresh one does the same thing.
+    */
+    expect(dispatch.notify).toHaveBeenCalledTimes(2);
+    const first = dispatch.notify.mock.calls[0]![1];
+    const second = dispatch.notify.mock.calls[1]![1];
+    expect(second).toBe(first);
+  });
+});
+
+/**
+ * A real client on a real socket, kept open — the only way to test a *size*
+ * bound.
+ *
+ * {@link attachedSocket} above drives the server's `'message'` handler by
+ * emitting on the captured connection object, which is exactly right for the
+ * routing cases and useless here: `maxPayload` is enforced by `ws`'s
+ * `Receiver`, on the way in from the wire, so a frame that never crossed a
+ * wire is never measured. Everything below therefore pays for genuine loopback
+ * I/O and waits on real frames.
+ */
+const realClient = async (
+  dispatch: RemoteDispatch,
+): Promise<{
+  url: string;
+  device: { id: string; token: string };
+  socket: WebSocket;
+  frames: Record<string, unknown>[];
+  closeCode: Promise<number>;
+}> => {
+  const { device, token } = mintDevice('MacBook');
+  listener = createRemoteListener({
+    bind: { host: '127.0.0.1', port: 0, allowedOrigins: [] },
+    devices: () => [device],
+    serverName: 'test-mini',
+    dispatch,
+    onAttach: vi.fn(),
+    onDetach: vi.fn(),
+  });
+  const url = await listener.start();
+  expect(url).not.toBeNull();
+
+  const socket = new WebSocket(url as string);
+  const frames: Record<string, unknown>[] = [];
+  let announceClose: (code: number) => void = () => {};
+  const closeCode = new Promise<number>((resolve) => {
+    announceClose = resolve;
+  });
+  socket.on('close', (code) => announceClose(code));
+
+  const accepted = new Promise<void>((resolve, reject) => {
+    socket.on('message', (data) => {
+      const frame = JSON.parse(String(data)) as Record<string, unknown>;
+      frames.push(frame);
+      if (frame.kind === 'attach-accepted') resolve();
+      if (frame.kind === 'attach-refused') reject(new Error(`attach was refused: ${String(data)}`));
+    });
+    socket.on('error', reject);
+  });
+  await new Promise<void>((resolve, reject) => {
+    socket.on('open', () => resolve());
+    socket.on('error', reject);
+  });
+  socket.send(
+    JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId: device.id, token }),
+  );
+  await accepted;
+
+  return { url: url as string, device: { id: device.id, token }, socket, frames, closeCode };
+};
+
+/** Resolves once `predicate` holds, polling — real I/O, so no tick count is safe. */
+const until = async (predicate: () => boolean, what: string): Promise<void> => {
+  const deadline = Date.now() + 10_000;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  }
+};
+
+/**
+ * The two frame-size bounds, which are two different numbers for two different
+ * reasons (HIVE-143 review).
+ *
+ * The bug these cover: 8 KiB was handed to `WebSocketServer` as its
+ * `maxPayload`, documented as what a *first* frame may weigh — but `ws` builds
+ * a connection's `Receiver` once and enforces that for the socket's whole life.
+ * Every post-attach frame was silently bounded by a handshake-shaped limit, so
+ * a `fs:write-file` or a pasted `pty:write` over 8 KiB never reached
+ * `dispatch.call`, answered nothing at all, and closed the connection.
+ */
+describe('frame size bounds', () => {
+  it('answers a call frame far larger than the handshake bound', async () => {
+    const dispatch: RemoteDispatch = {
+      call: vi.fn(async (frame: CallFrame) => ({
+        kind: 'result' as const,
+        id: frame.id,
+        payload: { ok: true },
+      })),
+      notify: vi.fn(),
+    };
+    const { socket, frames } = await realClient(dispatch);
+
+    // 64 KiB of payload — eight times the handshake bound, and the ordinary
+    // weight of a file the editor saves over this socket.
+    socket.send(
+      JSON.stringify({
+        kind: 'call',
+        id: 'big',
+        channel: CH.fsWriteFile,
+        payload: { path: '/tmp/x.ts', text: 'x'.repeat(64 * 1024) },
+      }),
+    );
+
+    await until(() => frames.some((frame) => frame.id === 'big'), 'the result frame');
+    expect(dispatch.call).toHaveBeenCalledWith(expect.objectContaining({ id: 'big' }));
+    expect(frames).toContainEqual({ kind: 'result', id: 'big', payload: { ok: true } });
+    socket.close();
+  }, 20_000);
+
+  /**
+   * The ceiling is derived from the worst-case *encoded* payload, not from the
+   * file size (HIVE-143 review).
+   *
+   * `MAX_FILE_BYTES` caps a file body at 1,000,000 bytes, but what crosses this
+   * socket is that body inside a JSON string, and JSON spends six characters on
+   * a single unprintable byte. The old 4 MiB ceiling cited that six and then
+   * multiplied by four, so a file the editor is willing to open encoded to ~6 MB
+   * and was refused by `ws` at 1009 — which does not refuse the frame, it drops
+   * the socket and every in-flight correlation id on it.
+   */
+  it('answers an fs:write-file whose escaped encoding is six times MAX_FILE_BYTES', async () => {
+    const dispatch: RemoteDispatch = {
+      call: vi.fn(async (frame: CallFrame) => ({
+        kind: 'result' as const,
+        id: frame.id,
+        payload: { ok: true },
+      })),
+      notify: vi.fn(),
+    };
+    const { socket, frames } = await realClient(dispatch);
+
+    // A legal file, entirely of a byte JSON has to escape — the worst case the
+    // ceiling is derived from, asserted here so the derivation is checked
+    // rather than asserted.
+    const body = String.fromCharCode(1).repeat(MAX_FILE_BYTES);
+    const encoded = JSON.stringify({
+      kind: 'call',
+      id: 'escaped',
+      channel: CH.fsWriteFile,
+      payload: { path: '/tmp/x.ts', text: body },
+    });
+    expect(Buffer.byteLength(encoded)).toBeGreaterThan(6 * MAX_FILE_BYTES);
+    socket.send(encoded);
+
+    await until(() => frames.some((frame) => frame.id === 'escaped'), 'the result frame');
+    expect(dispatch.call).toHaveBeenCalledWith(expect.objectContaining({ id: 'escaped' }));
+    expect(frames).toContainEqual({ kind: 'result', id: 'escaped', payload: { ok: true } });
+    socket.close();
+  }, 30_000);
+
+  it('refuses a frame past the post-attach ceiling and keeps serving', async () => {
+    const dispatch: RemoteDispatch = { call: vi.fn(), notify: vi.fn() };
+    const { url, device, socket, closeCode } = await realClient(dispatch);
+
+    // Past `POST_ATTACH_FRAME_MAX_BYTES` (8 MiB). `ws` refuses it at the
+    // receiver, so it never reaches `dispatch` — the bound is still a bound.
+    socket.send(
+      JSON.stringify({
+        kind: 'call',
+        id: 'huge',
+        channel: CH.fsWriteFile,
+        payload: { path: '/tmp/x.ts', text: 'x'.repeat(9 * 1024 * 1024) },
+      }),
+    );
+
+    // 1009 ("Message Too Big") or 1006 (the server dropped the connection
+    // while this client was still writing) — see the handshake-side case above
+    // for why the exact code is loopback timing rather than behaviour. What is
+    // not timing: the frame never reached `dispatch`.
+    expect([1006, 1009]).toContain(await closeCode);
+    expect(dispatch.call).not.toHaveBeenCalled();
+
+    /*
+      And the listener is still alive: an oversized frame costs the socket that
+      sent it and nothing else. A `maxPayload` violation surfaces as an `Error`
+      on the socket, and `EventEmitter` throws synchronously for an `'error'`
+      with no listener — which on the main process is an uncaught exception
+      (C1, HIVE-142 review), not a closed connection.
+    */
+    const second = new WebSocket(url);
+    const reply = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      second.on('open', () => {
+        second.send(
+          JSON.stringify({
+            kind: 'attach',
+            protocol: REMOTE_PROTOCOL_VERSION,
+            deviceId: device.id,
+            token: device.token,
+          }),
+        );
+      });
+      second.on('message', (data) => resolve(JSON.parse(String(data)) as Record<string, unknown>));
+      second.on('error', reject);
+    });
+    expect(reply.kind).toBe('attach-accepted');
+    second.close();
+  }, 30_000);
 });

@@ -502,3 +502,138 @@ describe('dispose', () => {
     expect(ipc.diagnostics()).toEqual([]);
   });
 });
+
+describe('resume', () => {
+  /** Flush one batch. Only a payload past the size cap flushes on its own. */
+  const beat = (chunk: string): void => {
+    emitData({ sessionId: 'a', chunk });
+    vi.advanceTimersByTime(8);
+  };
+
+  it('replays only what the client has not seen, in order', () => {
+    beat('one');
+    beat('two');
+    beat('three');
+
+    expect(ipc.resume('a', 1)).toEqual({
+      kind: 'replay',
+      events: [
+        { sessionId: 'a', chunk: 'two', seq: 2 },
+        { sessionId: 'a', chunk: 'three', seq: 3 },
+      ],
+    });
+  });
+
+  it('replays nothing when the client is already current', () => {
+    beat('one');
+
+    expect(ipc.resume('a', 1)).toEqual({ kind: 'replay', events: [] });
+  });
+
+  it('reports a gap when the ring cannot reach back', () => {
+    ipc.dispose();
+    sent = [];
+    ipc = build({ replayBytes: 8 });
+    ipc.spawn(SPAWN);
+    for (const chunk of ['aaaa', 'bbbb', 'cccc', 'dddd']) beat(chunk);
+
+    // An 8-byte ring holds the last two batches; seq 1 and 2 are gone. A gap
+    // rather than the replay of seq 3 and 4 the ring *could* still produce:
+    // handing back a discontiguous run is what the client cannot recover from.
+    // `toEqual` on the whole shape, and the `seq` is the head — 4 batches in —
+    // because that is the number the caller stamps its marker frame with.
+    expect(ipc.resume('a', 1)).toEqual({ kind: 'gap', seq: 4 });
+  });
+
+  it('still replays from the oldest seq the ring does hold', () => {
+    ipc.dispose();
+    sent = [];
+    ipc = build({ replayBytes: 8 });
+    ipc.spawn(SPAWN);
+    for (const chunk of ['aaaa', 'bbbb', 'cccc']) beat(chunk);
+
+    expect(ipc.resume('a', 2)).toEqual({
+      kind: 'replay',
+      events: [{ sessionId: 'a', chunk: 'cccc', seq: 3 }],
+    });
+  });
+
+  it('returns null for a session it has never heard of', () => {
+    expect(ipc.resume('nope', 0)).toBeNull();
+  });
+
+  it('reports a gap when the client claims a seq beyond what was ever sent', () => {
+    beat('one');
+
+    // A server restart resets seq to 0, so a client can honestly hold a higher
+    // number than this process ever issued. Treated as a gap, not a crash — and
+    // specifically not a `replay` of everything the ring holds, which would look
+    // to the client like output arriving with seq numbers it has already passed.
+    // The `seq` is this process's head, 1 — not the 99 the client claimed. The
+    // marker frame has to be stamped with a number that means something here.
+    expect(ipc.resume('a', 99)).toEqual({ kind: 'gap', seq: 1 });
+  });
+
+  it('frees the ring when the session exits', () => {
+    beat('one');
+    emitExit({ sessionId: 'a', exitCode: 0 });
+    vi.advanceTimersByTime(8);
+
+    // The channel is never deleted — it stays for `diagnostics()` — so nothing
+    // frees the ring for free. `resume` returning `null` here is proof of the
+    // explicit reset at the exit site: `channel.exited = true` is set right
+    // alongside `channel.replay = []` and `replayBytes = 0`.
+    expect(ipc.resume('a', 0)).toBeNull();
+  });
+
+  /**
+   * HIVE-143 review: the ring accrued `pendingBytes` — the sum of
+   * `Buffer.byteLength` over the individual `onData` pieces — and trimmed by
+   * `Buffer.byteLength` of those same pieces *joined*. A surrogate pair split
+   * across two pty reads makes those two different numbers, so `replayBytes`
+   * drifted permanently upward and the ring trimmed early. Reachable whenever a
+   * PTY emits an emoji at a read boundary, which is every day.
+   */
+  it('accounts a batch by the bytes it measured, not by the bytes of its joined text', () => {
+    // The discrimination, stated rather than implied: a lone surrogate is
+    // encoded as U+FFFD at 3 bytes each, and the pair joined is one 4-byte
+    // character. Six going in, four coming out, under the old code.
+    expect(Buffer.byteLength('\uD83D') + Buffer.byteLength('\uDE80')).toBe(6);
+    expect(Buffer.byteLength('🚀')).toBe(4);
+
+    ipc.dispose();
+    sent = [];
+    ipc = build({ replayBytes: 8 });
+    ipc.spawn(SPAWN);
+
+    // One batch of 6 measured bytes, then one of 8 — 14 in an 8-byte ring, so
+    // exactly one batch has to go. Subtracting the joined 4 instead of the
+    // measured 6 leaves the ring believing it still holds 10 and dropping the
+    // second batch as well, which turns this `replay` into a `gap`.
+    emitData({ sessionId: 'a', chunk: '\uD83D' });
+    emitData({ sessionId: 'a', chunk: '\uDE80' });
+    vi.advanceTimersByTime(8);
+    beat('cccccccc');
+
+    expect(ipc.resume('a', 1)).toEqual({
+      kind: 'replay',
+      events: [{ sessionId: 'a', chunk: 'cccccccc', seq: 2 }],
+    });
+  });
+
+  it('does not let the ring grow without bound under a flood', () => {
+    ipc.dispose();
+    sent = [];
+    ipc = build({ replayBytes: 1024 });
+    ipc.spawn(SPAWN);
+    for (let i = 0; i < 50; i += 1) beat('y'.repeat(512));
+
+    /*
+      A gap is the proof the ring was bounded: 50 × 512 bytes went in, so a ring
+      that had grown without bound would still hold seq 1 and answer `replay`.
+      `toEqual` rather than `toMatchObject`, so the shape is pinned whole — the
+      `seq` is the 50th batch, which is where the stream actually is.
+    */
+    expect(ipc.resume('a', 0)).toEqual({ kind: 'gap', seq: 50 });
+  });
+});
