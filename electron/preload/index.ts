@@ -85,6 +85,7 @@ import {
   type SessionLostEvent,
   type SessionNameReport,
   type SpawnRequest,
+  type SpawnTerminalRequest,
   type WriteRequest,
 } from '@shared/ipc-contract';
 import type {
@@ -114,9 +115,11 @@ import type {
   SessionBranchEvent,
   SessionClearedEvent,
   SessionFinishedEvent,
+  SessionForegroundEvent,
   SessionReadyEvent,
   SessionNameEvent,
   SessionStatusEvent,
+  SessionTerminalEndedEvent,
   SessionTicketIntentEvent,
 } from '@shared/session-contract';
 import type {
@@ -347,6 +350,8 @@ const bridge: HiveBridge = {
   pty: {
     spawn: (request: SpawnRequest): Promise<void> =>
       ipcRenderer.invoke(CH.ptySpawn, request),
+    spawnTerminal: (request: SpawnTerminalRequest): Promise<void> =>
+      ipcRenderer.invoke(CH.ptySpawnTerminal, request),
     // `send`, not `invoke`: keystrokes and resizes are fire-and-forget, and
     // awaiting a round-trip per keypress would put the main process in the
     // typing latency path.
@@ -714,6 +719,10 @@ const bridge: HiveBridge = {
       subscribe<SessionTicketIntentEvent>(CH.sessionTicketIntent, callback),
     onMetrics: (callback: (event: SessionMetricsEvent) => void) =>
       subscribe<SessionMetricsEvent>(CH.sessionMetrics, callback),
+    onForeground: (callback: (event: SessionForegroundEvent) => void) =>
+      subscribe<SessionForegroundEvent>(CH.sessionForeground, callback),
+    onTerminalEnded: (callback: (event: SessionTerminalEndedEvent) => void) =>
+      subscribe<SessionTerminalEndedEvent>(CH.sessionTerminalEnded, callback),
     // HIVE-87. The namespace's first invoking verbs — everything above is a
     // subscription. `history` is read once at boot; `note` and `pr` carry the
     // two facts about a session that main cannot establish for itself.

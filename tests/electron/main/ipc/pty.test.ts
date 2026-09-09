@@ -25,7 +25,7 @@ import {
 
 interface Sent {
   channel: string;
-  payload: DataEvent | ExitEvent;
+  payload: DataEvent | ExitEvent | Record<string, unknown>;
 }
 
 let sent: Sent[];
@@ -35,6 +35,7 @@ let emitData: (event: { sessionId: string; chunk: string }) => void;
 let emitExit: (event: ExitEvent) => void;
 let emitError: (event: { sessionId?: string; message: string }) => void;
 let emitLost: (event: { sessionId: string; reason: string }) => void;
+let emitForeground: (event: { sessionId: string; name: string | null }) => void;
 
 const SPAWN = {
   sessionId: 'a',
@@ -70,6 +71,10 @@ function fakeSupervisor(): PtyHostSupervisor {
     }),
     onSessionLost: vi.fn((listener) => {
       emitLost = listener;
+      return () => {};
+    }),
+    onForeground: vi.fn((listener) => {
+      emitForeground = listener;
       return () => {};
     }),
     shutdown: vi.fn(async () => {}),
@@ -642,6 +647,22 @@ describe('resume', () => {
       `seq` is the 50th batch, which is where the stream actually is.
     */
     expect(ipc.resume('a', 0)).toEqual({ kind: 'gap', seq: 50 });
+  });
+});
+
+describe('foreground (terminals)', () => {
+  it('forwards a foreground report on the session channel, keyed by session id', () => {
+    emitForeground({ sessionId: 'term-01.g1', name: 'vitest' });
+
+    expect(sent.at(-1)).toEqual({
+      channel: CH.sessionForeground,
+      payload: { sessionId: 'term-01.g1', name: 'vitest' },
+    });
+  });
+
+  it('passes the foreground flag through to the supervisor', () => {
+    ipc.spawn({ ...SPAWN, foreground: true });
+    expect(supervisor.spawn).toHaveBeenCalledWith(expect.objectContaining({ foreground: true }));
   });
 });
 

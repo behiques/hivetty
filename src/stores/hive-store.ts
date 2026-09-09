@@ -11,6 +11,7 @@ import type {
   ProjectRow,
   Session,
   SessionStatus,
+  Terminal,
 } from '@/types/entity';
 import {
   branchLabel,
@@ -19,6 +20,7 @@ import {
   isAgent,
   isEnded,
   isSession,
+  isTerminal,
   recencyOf,
   resolveEntityRef,
   terminalOf,
@@ -42,12 +44,18 @@ import { buildTicketSearchJql } from '@lib/jira-search';
 import { ledgerRows } from '@lib/ledger/console-rows';
 import {
   projectConfigSnapshot,
+  projectPath,
   resolveProjectRef,
   subscribeProjectConfig,
 } from '@lib/project-config';
 import { noteSessionPr, noteSessionTicket } from '@lib/session-history';
 import { pickPhrase } from '@lib/swarm/phrases';
-import { reopenChannel, requestSpawn } from '@lib/terminal/pty-transport';
+import {
+  closeChannel,
+  reopenChannel,
+  requestSpawn,
+  requestSpawnTerminal,
+} from '@lib/terminal/pty-transport';
 import { sendToSession } from '@lib/terminal/session-input';
 import {
   SESSION_ID_PREFIX_PATTERN,
@@ -425,6 +433,26 @@ interface HiveState {
     /** The Jira issue this session is being started for (HIVE-73). */
     ticket?: string,
   ) => string;
+  /**
+   * Open a terminal in a project: a login shell with no Claude typed into it
+   * (terminals). The entity is created at once; on desktop the spawn is asked
+   * for and a refusal is written to the console, as `spawnSession` does.
+   */
+  spawnTerminal: (projectId: string) => string;
+  /**
+   * The host reported what holds the tty. `null` is the prompt. Status is
+   * derived here, in the same write — the only writer of either field.
+   *
+   * The one place this store derives rather than selects, and it is deliberate:
+   * `status` and `foreground` are two readings of one observation, and a
+   * selector computing the first from the second would leave a window in which
+   * a row says `running` with nothing running in it.
+   */
+  setTerminalForeground: (id: string, name: string | null) => void;
+  /** The shell died unasked. The row stays, with the reason on it. */
+  markTerminalLost: (id: string, reason: string) => void;
+  /** The `exit` ending, and the close control on a lost one. Nothing is kept. */
+  removeTerminal: (id: string) => void;
   sendToEntity: (
     id: string,
     msg: string,
@@ -1182,6 +1210,16 @@ const oneLine = (text: string): string => text.replace(/\s*\n\s*/gu, ' ');
 let spawnCounter = 0;
 
 /**
+ * The same counter for terminals, and a separate one on purpose (terminals).
+ *
+ * Sharing `spawnCounter` would number the two sequences through each other —
+ * `sess-01`, `term-02`, `sess-03` — so neither prefix would say how many of its
+ * own kind had been opened, which is the only thing these ids are for. Reset
+ * beside it in `reset()`.
+ */
+let terminalCounter = 0;
+
+/**
  * Deterministic-enough id for a prototype: `sess-01`, `sess-02`, …
  *
  * **The counter alone is not enough, and the fleet is consulted for a reason.**
@@ -1387,6 +1425,28 @@ function nextSessionId(taken: Readonly<Record<string, Entity>>): string {
   do {
     spawnCounter += 1;
     id = `sess-${spawnCounter.toString(36).padStart(2, '0')}`;
+  } while (id in taken);
+  return id;
+}
+
+/**
+ * `term-01`, `term-02`, … — the same shape, and the fleet consulted for the same
+ * reason (terminals).
+ *
+ * The `while (id in taken)` guard is not belt-and-braces here either: HMR puts
+ * {@link terminalCounter} back to zero while the rows it named are still on
+ * screen, and `entities` is keyed by id, so a collision would file two terminals
+ * under one key and leave `order` carrying the id twice.
+ *
+ * No `rememberTerminalId` counterpart to `rememberSpawnId`: a terminal is never
+ * restored, so nothing can arrive from outside this process wearing an id this
+ * counter has not minted.
+ */
+function nextTerminalId(taken: Readonly<Record<string, Entity>>): string {
+  let id: string;
+  do {
+    terminalCounter += 1;
+    id = `term-${terminalCounter.toString(36).padStart(2, '0')}`;
   } while (id in taken);
   return id;
 }
@@ -1866,6 +1926,181 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   },
 
   /**
+   * Open a terminal on a project, and show it (terminals).
+   *
+   * `spawnSession` with everything an agent needs taken away: no task, no model,
+   * no effort, no seeded transcript to quote them back, and no ticket note —
+   * a shell has none of those, and inventing any of them would put a claim on
+   * the row that nothing behind it could honour.
+   *
+   * The refusal path is kept, and it is the reason the eager `requestSpawnTerminal`
+   * is here rather than left to the surface: main's message names the config
+   * file to edit, and the console is the only place with room to say so.
+   */
+  spawnTerminal: (projectId) => {
+    const id = nextTerminalId(get().entities);
+
+    const terminal: Terminal = {
+      kind: 'terminal',
+      id,
+      project: projectId,
+      /**
+       * The project's path, or empty when the config cannot answer.
+       *
+       * Empty rather than a guess: the row shows a `cwd` tail and an invented
+       * one would name a directory the shell is not in. Main resolves the real
+       * working directory for the spawn regardless — this field is what the row
+       * *displays*, not what the pty is started with.
+       */
+      cwd: projectPath(projectId) ?? '',
+      status: 'prompt',
+      createdAt: Date.now(),
+      /**
+       * Empty, and it stays empty. A session's seed transcript quotes the
+       * command it was started with; a shell prints its own prompt within the
+       * frame, so anything written here would be a line the terminal then
+       * scrolls past for no reason.
+       */
+      lines: [],
+    };
+
+    set((state) => ({
+      entities: { ...state.entities, [id]: terminal },
+      order: [...state.order, id],
+    }));
+
+    if (isDesktop()) {
+      void requestSpawnTerminal(id, projectId).then((outcome) => {
+        if (outcome.ok) return;
+        set((state) => ({
+          orchLines: capLines([
+            ...state.orchLines,
+            line(`  ${outcome.reason}`, 'red'),
+          ]),
+        }));
+        /*
+          A refusal is an ending. `withSpawnChannel` has already closed the
+          channel, so without this the tab would keep a blinking caret over a
+          shell that never started and offer no way to close it. Lost, with
+          the refusal as the reason, gives it the cover and the control.
+        */
+        get().markTerminalLost(id, outcome.reason);
+      });
+    }
+
+    useUiStore.getState().openTab(id);
+
+    return id;
+  },
+
+  /**
+   * What holds the tty, as the host's poll reports it (terminals).
+   *
+   * **Both fields in one write**, which is the one place this store derives a
+   * value instead of selecting it. They are two readings of a single
+   * observation: a selector deriving `status` from `foreground` would be a
+   * second opinion about the same fact, and two writes would leave a frame in
+   * which the row says `running` beside `at prompt`.
+   *
+   * An unchanged name returns before the `set`, so a poll that finds the same
+   * process every second does not re-render every subscriber of the entities
+   * map for a fact that did not move.
+   *
+   * **A lost terminal is not updated.** The poll runs on an interval and its
+   * answer arrives asynchronously, so a reading taken before the shell died can
+   * land after {@link HiveState.markTerminalLost} — which would flip a dead row
+   * back to `running` beside the cover explaining that it is over.
+   */
+  setTerminalForeground: (id, name) => {
+    const current = get().entities[id];
+    if (!current || !isTerminal(current)) return;
+    if (current.ended !== undefined) return;
+    if ((current.foreground ?? null) === name) return;
+
+    set((state) => {
+      const next: Terminal = {
+        ...current,
+        status: name === null ? 'prompt' : 'running',
+      };
+      /*
+        Absent at the prompt rather than `undefined`, the way every optional key
+        on an entity in this store is: `terminalLabel` reads the absence as
+        `at prompt`, and the snapshots these rows appear in are compared.
+      */
+      if (name === null) delete next.foreground;
+      else next.foreground = name;
+      return { entities: { ...state.entities, [id]: next } };
+    });
+  },
+
+  /**
+   * The shell went away and nobody asked it to (terminals).
+   *
+   * The row survives, which is the whole difference from {@link removeTerminal}:
+   * a shell the user exited has nothing left to read, and one that was killed
+   * from underneath them has a transcript that says what happened. The reason is
+   * recorded rather than derived, because only the caller knows it — a signal, a
+   * spawn that never started, the pty host going away.
+   *
+   * **First reason wins.** A lost host is followed by whatever notices next, and
+   * the later message describes the consequence rather than the cause.
+   */
+  markTerminalLost: (id, reason) => {
+    const current = get().entities[id];
+    if (!current || !isTerminal(current) || current.ended !== undefined) return;
+
+    set((state) => ({
+      entities: {
+        ...state.entities,
+        [id]: { ...current, ended: { reason, at: Date.now() } },
+      },
+    }));
+  },
+
+  /**
+   * Forget a terminal entirely (terminals).
+   *
+   * Nothing is kept, and nothing should be: a terminal has no transcript worth
+   * a tombstone, no cost to account for and no conversation to resume, so an
+   * ended-terminal row would be a permanent entry in every list for a window
+   * somebody closed.
+   *
+   * Guarded on the kind rather than trusted, because this is the one action here
+   * that destroys state and its id arrives from a surface that also draws
+   * sessions.
+   */
+  removeTerminal: (id) => {
+    const current = get().entities[id];
+    if (!current || !isTerminal(current)) return;
+
+    set((state) => {
+      const entities = { ...state.entities };
+      delete entities[id];
+      return {
+        entities,
+        order: state.order.filter((entityId) => entityId !== id),
+      };
+    });
+
+    /*
+      The renderer's channel goes with the row (terminals). Nothing will ever
+      switch back to this id, so its replay buffer and its three bridge
+      subscriptions have no reader left — and this map is never otherwise swept,
+      so a day of opening and closing shells would grow it without bound.
+    */
+    closeChannel(id);
+
+    /*
+      Cross-store, so the other store's action is called explicitly — no store
+      subscribes to another. Only when the stage was showing the row that just
+      stopped existing: leaving it would strand the centre on an id nothing can
+      resolve.
+    */
+    const ui = useUiStore.getState();
+    if (ui.activeTab === id) ui.backToOrch();
+  },
+
+  /**
    * Route a message to an entity.
    *
    * **The one branch point in the coordination layer** (story 097). A real
@@ -1885,6 +2120,20 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
      * bridge to ask. One predicate covers both, which is what keeps a surface
      * from becoming typable while its transport stays a recording.
      */
+    /*
+      `send` is a session verb. A terminal is a shell the user types into
+      directly — there is no agent at the other end to route a message to —
+      so it is refused the way an agent is, naming the verb that does work.
+      Without this a terminal would fall into the demo echo below and the
+      console would report `routed` for bytes that reached nothing.
+    */
+    if (isTerminal(entity)) {
+      return {
+        kind: 'refused',
+        reason: `terminals are typed into, not sent: open ${id}`,
+      };
+    }
+
     if (isDesktop() && isSession(entity)) {
       /**
        * Addressed to the **terminal**, because that is what owns the channel.
@@ -4951,6 +5200,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
   reset: () => {
     spawnCounter = 0;
+    terminalCounter = 0;
     staleTitles.clear();
     // A sweep from the previous state must not install its answer into the new
     // one — dropping the handle makes the next caller start fresh.
@@ -5222,47 +5472,78 @@ export const useIdleDetailCounts = () =>
     }),
   );
 
+/**
+ * The fleet table's flattened order — the computation, without the subscription.
+ *
+ * Extracted from {@link useNavOrder} so {@link useTerminalHostIds} can build on
+ * it rather than hold a second copy of the partition. Two selectors spelling one
+ * rule is exactly how the caret and the rows come to disagree about where "here"
+ * is, which is the failure this function exists to prevent.
+ *
+ * **Two** buckets, each newest-first, and both facts are the table's rather than
+ * this function's.
+ *
+ * There were three until the fleet table stopped drawing a PREVIOUS RUN
+ * divider: restored rows are ended rows, and once every group sorts by
+ * recency they interleave with this run's endings correctly on their own.
+ * The `restored` flag is still on the entity — Resume and `endedReason`
+ * both read it — it simply no longer partitions anything.
+ *
+ * This exists precisely to keep the caret and the rows agreeing about where
+ * "here" is, so the partition *and* the sort have to match `session-table.tsx`
+ * exactly. A flattening in a different order from the one on screen makes the
+ * down arrow skip a row and come back to it.
+ *
+ * **Three** buckets since HIVE-117, because the table draws three. The
+ * agents sit between the two session groups, ranked by `rankedAgents` —
+ * the same function the table's own group is drawn from, not a second
+ * copy of its rule. Without them here an agent row was still *selectable*
+ * (it renders the caret and sets `selId` on click) while being absent
+ * from the order every arrow key consults: `↓` from one teleported to the
+ * first session, `↑` to the last ended row, and `→` opened nothing at all
+ * because `console-input.tsx` gates on membership of this list.
+ *
+ * **Still three, and terminals are deliberately not a fourth** (terminals). The
+ * table draws no terminal row — a shell lives in the projects tree — so a
+ * terminal here would put the caret on a row nobody can see and `→` on a target
+ * the user never selected. The stage's list is {@link useTerminalHostIds},
+ * which is a different question with a different answer.
+ */
+function navOrderOf(state: HiveState): string[] {
+  const active: string[] = [];
+  const ended: string[] = [];
+  for (const id of state.order) {
+    const entity = state.entities[id];
+    if (!entity || !isSession(entity)) continue;
+    if (isEnded(entity.status)) ended.push(id);
+    else active.push(id);
+  }
+  return [
+    ...byRecency(active, state.entities),
+    ...rankedAgents(state.agentOrder, state.entities),
+    ...byRecency(ended, state.entities),
+  ];
+}
+
 /** Active sessions first, then ended ones — the keyboard nav order (041, 060). */
-export const useNavOrder = () =>
+export const useNavOrder = () => useHiveStore(useShallow(navOrderOf));
+
+/**
+ * Every id the centre stage mounts a terminal surface for (terminals).
+ *
+ * `useNavOrder` is the fleet table's order, and the table draws no terminal
+ * row — so a terminal in that list would put the console's caret on a row
+ * nobody can see. The stage needs the union: everything the table can reach,
+ * then every terminal in the order it started.
+ */
+export const useTerminalHostIds = () =>
   useHiveStore(
     useShallow((state) => {
-      /**
-       * **Two** buckets, each newest-first, and both facts are the table's
-       * rather than this selector's.
-       *
-       * There were three until the fleet table stopped drawing a PREVIOUS RUN
-       * divider: restored rows are ended rows, and once every group sorts by
-       * recency they interleave with this run's endings correctly on their own.
-       * The `restored` flag is still on the entity — Resume and `endedReason`
-       * both read it — it simply no longer partitions anything.
-       *
-       * This selector exists precisely to keep the caret and the rows agreeing
-       * about where "here" is, so the partition *and* the sort have to match
-       * `session-table.tsx` exactly. A flattening in a different order from the
-       * one on screen makes the down arrow skip a row and come back to it.
-       *
-       * **Three** buckets since HIVE-117, because the table draws three. The
-       * agents sit between the two session groups, ranked by `rankedAgents` —
-       * the same function the table's own group is drawn from, not a second
-       * copy of its rule. Without them here an agent row was still *selectable*
-       * (it renders the caret and sets `selId` on click) while being absent
-       * from the order every arrow key consults: `↓` from one teleported to the
-       * first session, `↑` to the last ended row, and `→` opened nothing at all
-       * because `console-input.tsx` gates on membership of this list.
-       */
-      const active: string[] = [];
-      const ended: string[] = [];
-      for (const id of state.order) {
+      const terminals = state.order.filter((id) => {
         const entity = state.entities[id];
-        if (!entity || !isSession(entity)) continue;
-        if (isEnded(entity.status)) ended.push(id);
-        else active.push(id);
-      }
-      return [
-        ...byRecency(active, state.entities),
-        ...rankedAgents(state.agentOrder, state.entities),
-        ...byRecency(ended, state.entities),
-      ];
+        return entity !== undefined && isTerminal(entity);
+      });
+      return [...navOrderOf(state), ...terminals];
     }),
   );
 
@@ -5926,6 +6207,22 @@ export const useAgentPr = (name: string): AgentPr | null => {
 /** Create a session on a project (stories 041, 044). */
 export const useSpawnSession = () => useHiveStore((state) => state.spawnSession);
 
+/** Open a plain shell on a project (terminals). */
+export const useSpawnTerminal = () =>
+  useHiveStore((state) => state.spawnTerminal);
+
+/** The host's poll reported what holds a terminal's tty (terminals). */
+export const useSetTerminalForeground = () =>
+  useHiveStore((state) => state.setTerminalForeground);
+
+/** A terminal's shell died unasked (terminals). */
+export const useMarkTerminalLost = () =>
+  useHiveStore((state) => state.markTerminalLost);
+
+/** Forget a terminal — it exited, or its lost row was closed (terminals). */
+export const useRemoveTerminal = () =>
+  useHiveStore((state) => state.removeTerminal);
+
 /** HIVE-61: main pushes the name the agent gave itself through this. */
 export const useRenameSession = () =>
   useHiveStore((state) => state.renameSession);
@@ -6172,20 +6469,45 @@ export const useProjects = (): ProjectRow[] => {
   );
 };
 
-/** Sessions for a project that have not ended (story 031). */
+/**
+ * Sessions that have not ended, and terminals, for a project (story 031;
+ * terminals).
+ *
+ * A terminal is included unconditionally, because there is no ended terminal to
+ * exclude: a shell that exited is removed, and a lost one is still a row the
+ * user has to see in order to close it.
+ */
 export const useProjectSessions = (projectId: string) =>
   useHiveStore(
     useShallow((state) =>
       state.order.filter((id) => {
         const entity = state.entities[id];
-        return (
-          entity !== undefined &&
-          isSession(entity) &&
-          entity.project === projectId &&
-          !isEnded(entity.status)
-        );
+        // Narrowed before `project` is read: an agent has no project, and it is
+        // the one entity kind this list never contains.
+        if (entity === undefined || isAgent(entity)) return false;
+        if (entity.project !== projectId) return false;
+        if (isTerminal(entity)) return true;
+        return !isEnded(entity.status);
       }),
     ),
+  );
+
+/**
+ * How many of a project's entries are alive (terminals).
+ *
+ * `useProjectSessions` keeps a lost terminal in the list, because its tab is
+ * still on screen saying why; but a count that names it "running" or "active"
+ * is a lie. The tree's pill and the picker's row both read this instead.
+ */
+export const useProjectLiveCount = (projectId: string): number =>
+  useHiveStore((state) =>
+    state.order.reduce((count, id) => {
+      const entity = state.entities[id];
+      if (entity === undefined || isAgent(entity)) return count;
+      if (entity.project !== projectId) return count;
+      if (isTerminal(entity)) return entity.ended === undefined ? count + 1 : count;
+      return isEnded(entity.status) ? count : count + 1;
+    }, 0),
   );
 
 /** Every work item, in fixture order (story 032). */

@@ -57,7 +57,7 @@ const entries = Object.entries(CH) as ReadonlyArray<[string, Channel]>;
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(127);
+    expect(entries).toHaveLength(130);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -88,17 +88,17 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 99 call, 6 notify and 22 event', () => {
+  it('splits 100 call, 6 notify and 24 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 99, notify: 6, event: 22 });
+    expect(tally).toEqual({ call: 100, notify: 6, event: 24 });
   });
 
   /**
    * The correction that reading the bridge forced.
    *
-   * `EVENT_CHANNELS` is not the set of pushed channels — it is 18 of the 22.
+   * `EVENT_CHANNELS` is not the set of pushed channels — it is 20 of the 24.
    * `slack:socket-status` and the three `notifications:*` pushes are subscribed
    * without being listed there. A remote client that forwarded only
    * `EVENT_CHANNELS` would show an empty inbox on a busy server, so the
@@ -133,11 +133,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 127 as 52 read, 44 mutate and 31 execute', () => {
+  it('grades the 130 as 54 read, 44 mutate and 32 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 52, mutate: 44, execute: 31 });
+    expect(tally).toEqual({ read: 54, mutate: 44, execute: 32 });
   });
 
   /**
@@ -288,7 +288,7 @@ describe('remote contract: the authorization ladder', () => {
 /**
  * The gap review found in the privilege check: it says nothing about direction.
  *
- * All 22 pushes are graded `read` and `read` is the grant every attached device
+ * All 24 pushes are graded `read` and `read` is the grant every attached device
  * holds, so `isAuthorized` alone would let a client send a `call` naming
  * `pty:data`. `FRAME_KIND` always held what was needed to refuse that; nothing
  * consulted it.
@@ -305,7 +305,7 @@ describe('remote contract: direction', () => {
     expect(isClientFrameAllowed('notify', CH.ptyData, 'execute')).toBe(false);
   });
 
-  it('refuses every one of the 22 pushes as a client frame', () => {
+  it('refuses every one of the 24 pushes as a client frame', () => {
     for (const [channel, kind] of Object.entries(FRAME_KIND)) {
       if (kind !== 'event') continue;
       expect(isClientFrameAllowed('call', channel, 'execute')).toBe(false);

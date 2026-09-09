@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
 import type { AgentsDirectory } from '@shared/agent-contract';
-import { AUTH_ENV_KEYS, ENV_PLACEHOLDER, type ConfigSnapshot } from '@shared/config-contract';
+import {
+  AUTH_ENV_KEYS,
+  ENV_PLACEHOLDER,
+  type ConfigSnapshot,
+  type ProjectConfig,
+} from '@shared/config-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   type HookNotificationType,
@@ -28,11 +33,14 @@ import {
   type SessionBranchEvent,
   type SessionClearedEvent,
   type SessionFinishedEvent,
+  type SessionForegroundEvent,
   type SessionReadyEvent,
   type SessionNameEvent,
   type SessionNameOrigin,
   type SessionStatusEvent,
+  type SessionTerminalEndedEvent,
   type SessionTicketIntentEvent,
+  type TerminalEnding,
 } from '@shared/session-contract';
 
 import { effectiveRuntime } from '../config/runtime';
@@ -303,6 +311,21 @@ export interface CommandExit {
   message?: string;
 }
 
+/**
+ * A terminal: the session spawn with the bootstrap omitted (terminals).
+ *
+ * Same shell, same directory, same per-project environment as a session in
+ * this project — and then nothing is typed into it. Everything a session has
+ * on top (hooks, title, status, metrics, history) is a registration this
+ * request never makes.
+ */
+export interface OpenTerminalRequest {
+  entityId: string;
+  projectId: string;
+  cols: number;
+  rows: number;
+}
+
 export interface Sessions {
   /** Spawn, bootstrap and attach — or attach to what is already running. */
   open(request: OpenRequest): void;
@@ -312,6 +335,12 @@ export interface Sessions {
    * loss, or a failure to start arrives first.
    */
   openCommand(request: OpenCommandRequest): void;
+  /**
+   * Spawn a terminal: the login shell in a mapped project, with nothing typed
+   * into it (terminals). Attach, never respawn — the same invariant `open`
+   * keeps for a session.
+   */
+  openTerminal(request: OpenTerminalRequest): void;
   /**
    * Type into a session's pty.
    *
@@ -551,6 +580,16 @@ export function createSessions(options: SessionsOptions): Sessions {
    */
   const commandEntities = new Set<string>();
 
+  /**
+   * Entities that are terminals (terminals).
+   *
+   * Like `commandEntities`, membership is what keeps the activity tracker, the
+   * bootstrap, the title scanner and history away from output that is not a
+   * Claude's. Unlike a command, a terminal has an ending the renderer needs
+   * to hear about — see `publishTerminalEnded`.
+   */
+  const terminalEntities = new Set<string>();
+
   function settleCommand(entityId: string, result: CommandExit): void {
     const onExit = commandExit.get(entityId);
     if (!onExit) return;
@@ -585,7 +624,7 @@ export function createSessions(options: SessionsOptions): Sessions {
          * tracker would publish `session:status` for an entity the store does
          * not have, and feeding the bootstrap would type `claude` into it.
          */
-        if (!commandEntities.has(entityId)) {
+        if (!commandEntities.has(entityId) && !terminalEntities.has(entityId)) {
           activity.sawOutput(entityId);
           bootstrap.sawOutput(entityId);
           // A command has no agent, so it has no name to report either.
@@ -609,6 +648,14 @@ export function createSessions(options: SessionsOptions): Sessions {
       case CH.ptyExit: {
         const data = payload as ExitEvent;
         send(channel, { ...data, sessionId: entityId } satisfies ExitEvent);
+        if (terminalEntities.has(entityId)) {
+          publishTerminalEnded(
+            entityId,
+            data.signal !== undefined && data.signal !== 0
+              ? { kind: 'lost', reason: `the shell was killed by signal ${data.signal}` }
+              : { kind: 'finished' },
+          );
+        }
         settleCommand(entityId, {
           exitCode: data.exitCode,
           // `0` means no signal, which is also the right reading of an absent
@@ -622,10 +669,21 @@ export function createSessions(options: SessionsOptions): Sessions {
       case CH.ptyLost: {
         const data = payload as SessionLostEvent;
         send(channel, { ...data, sessionId: entityId } satisfies SessionLostEvent);
+        if (terminalEntities.has(entityId)) {
+          publishTerminalEnded(entityId, { kind: 'lost', reason: 'the pty host crashed' });
+        }
         // No code: nothing concluded. `-1` is the sentinel a command caller
         // reads as "did not finish", never as an exit status.
         settleCommand(entityId, { exitCode: -1, signal: 0, lost: true });
         settleExit(entityId);
+        return;
+      }
+      case CH.sessionForeground: {
+        // Only a terminal asked. Anything else on this channel is a host bug
+        // and is dropped rather than painted onto a session row.
+        if (!terminalEntities.has(entityId)) return;
+        const data = payload as { sessionId: string; name: string | null };
+        send(CH.sessionForeground, { entityId, name: data.name } satisfies SessionForegroundEvent);
         return;
       }
       default:
@@ -1111,6 +1169,11 @@ export function createSessions(options: SessionsOptions): Sessions {
     if (event.sessionId === undefined) return;
     const entityId = registry.entityFor(event.sessionId);
     if (entityId === undefined) return;
+    if (terminalEntities.has(entityId)) {
+      publishTerminalEnded(entityId, { kind: 'lost', reason: event.message });
+      settleExit(entityId);
+      return;
+    }
     if (!commandExit.has(entityId)) return;
 
     settleCommand(entityId, {
@@ -1265,6 +1328,19 @@ export function createSessions(options: SessionsOptions): Sessions {
       entityId,
       resumable: history?.resumable(entityId) !== undefined,
     } satisfies SessionFinishedEvent);
+  }
+
+  /**
+   * A terminal's shell ended (terminals).
+   *
+   * The one thing a terminal reports that a command never does — see
+   * {@link OpenTerminalRequest}. Carries `ending` rather than an exit code
+   * because the renderer never had a code to interpret in the first place;
+   * `forward` and `supervisor.onError` translate whatever the host actually
+   * said into one of the two kinds this function forwards untouched.
+   */
+  function publishTerminalEnded(entityId: string, ending: TerminalEnding): void {
+    send(CH.sessionTerminalEnded, { entityId, ending } satisfies SessionTerminalEndedEvent);
   }
 
   /**
@@ -1670,8 +1746,9 @@ export function createSessions(options: SessionsOptions): Sessions {
     const seenBranch = lastBranch.get(entityId);
     if (seenBranch !== undefined) branches.forget(seenBranch.cwd);
     lastBranch.delete(entityId);
-    // Same reason as the data path: a command's ending is not a session's.
-    if (commandEntities.delete(entityId)) {
+    // Same reason as the data path: a command's or a terminal's ending is not
+    // a session's — see `publishTerminalEnded`.
+    if (commandEntities.delete(entityId) || terminalEntities.delete(entityId)) {
       // Nothing to tell the store about.
     } else {
       /**
@@ -1876,6 +1953,8 @@ export function createSessions(options: SessionsOptions): Sessions {
     env?: Record<string, string>;
     /** Names the host must drop from the inherited environment (HIVE-79). */
     stripEnv?: readonly string[];
+    /** Poll the foreground process group (terminals). See `PtySpawn`. */
+    foreground?: true;
   }): void {
     if (registry.size() >= maxSessions) {
       throw new Error(spawnRefusal({ reason: 'at-capacity', limit: maxSessions }));
@@ -1919,25 +1998,37 @@ export function createSessions(options: SessionsOptions): Sessions {
       ...(request.stripEnv === undefined ? {} : { stripEnv: request.stripEnv }),
       cols: request.cols,
       rows: request.rows,
+      ...(request.foreground === true ? { foreground: true } : {}),
     });
+  }
+
+  /**
+   * The project a spawn may open, or the refusal that names the file to edit.
+   *
+   * Shared by `spawn` and `openTerminal` — both resolve a project from the
+   * same snapshot the same way, and a session and a terminal give the user the
+   * identical message to act on when the id does not resolve to a usable
+   * directory. Narrows `path` to `string`, which is what every caller does
+   * with it immediately afterwards (`cwd: project.path`).
+   */
+  function requireMappedProject(
+    snapshot: ConfigSnapshot,
+    projectId: string,
+  ): ProjectConfig & { path: string } {
+    const project = snapshot.projects.find((entry) => entry.id === projectId);
+    if (!project || project.status !== 'ok' || project.path === null) {
+      throw new Error(
+        spawnRefusal({ reason: 'unmapped', projectId, configPath: snapshot.configPath }),
+      );
+    }
+    return project as ProjectConfig & { path: string };
   }
 
   /** Refuse with a message the user can act on, never a generic failure. */
   function spawn(request: OpenRequest): void {
     const snapshot = config();
 
-    const project = snapshot.projects.find(
-      (entry) => entry.id === request.projectId,
-    );
-    if (!project || project.status !== 'ok' || project.path === null) {
-      throw new Error(
-        spawnRefusal({
-          reason: 'unmapped',
-          projectId: request.projectId,
-          configPath: snapshot.configPath,
-        }),
-      );
-    }
+    const project = requireMappedProject(snapshot, request.projectId);
 
     /**
      * A new generation starts with no status history.
@@ -2433,6 +2524,34 @@ export function createSessions(options: SessionsOptions): Sessions {
          */
         commandExit.delete(request.entityId);
         commandEntities.delete(request.entityId);
+        throw cause;
+      }
+    },
+
+    openTerminal(request) {
+      // Attach, never respawn — the same invariant `open` keeps.
+      if (registry.sessionFor(request.entityId) !== undefined) return;
+
+      const snapshot = config();
+      const project = requireMappedProject(snapshot, request.projectId);
+      const runtime = effectiveRuntime(snapshot, project);
+
+      terminalEntities.add(request.entityId);
+      try {
+        startProcess({
+          entityId: request.entityId,
+          cwd: project.path,
+          file: runtime.shell,
+          args: LOGIN_SHELL_ARGS,
+          cols: request.cols,
+          rows: request.rows,
+          // The project's own variables, and nothing of the hook receiver's:
+          // there is no Claude here to call it.
+          env: runtime.env,
+          foreground: true,
+        });
+      } catch (cause) {
+        terminalEntities.delete(request.entityId);
         throw cause;
       }
     },

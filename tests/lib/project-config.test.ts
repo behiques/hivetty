@@ -13,6 +13,7 @@ import {
   loadProjectConfig,
   pairDevice,
   projectAccess,
+  projectContainerised,
   readAppInfo,
   projectConfigSnapshot,
   reloadProjectConfig,
@@ -856,5 +857,44 @@ describe('resolveProjectRef', () => {
     expect(resolveProjectRef('go', missing)).toMatchObject({
       project: { id: 'gone' },
     });
+  });
+});
+
+/**
+ * Whether a project's sessions run in a container (terminals).
+ *
+ * Read by the tree's terminal link, which says `terminal · host` for one — so
+ * the cases it has to tell apart are "the entry carries a container block" and
+ * everything else, an unknown project and an absent snapshot included.
+ */
+describe('projectContainerised', () => {
+  it('is true only for a project whose entry carries a container block', () => {
+    const base = snapshot([
+      { id: 'nova-web', status: 'ok' },
+      { id: 'boxed', status: 'ok' },
+    ]);
+    setProjectConfigForTest({
+      ...base,
+      projects: base.projects.map((project) =>
+        project.id === 'boxed'
+          ? {
+              ...project,
+              // The two fields `ContainerConfig` requires, and nothing else:
+              // presence is the switch, so the values are irrelevant here.
+              container: { workspace: '/workspace', hiveDir: '/hive' },
+            }
+          : project,
+      ),
+    });
+
+    expect(projectContainerised('boxed')).toBe(true);
+    expect(projectContainerised('nova-web')).toBe(false);
+    expect(projectContainerised('nope')).toBe(false);
+  });
+
+  it('is false with no snapshot', () => {
+    resetProjectConfig();
+
+    expect(projectContainerised('nova-web')).toBe(false);
   });
 });

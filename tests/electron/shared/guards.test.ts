@@ -29,6 +29,7 @@ import {
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
   parseSpawnRequest,
+  parseSpawnTerminalRequest,
   parseWriteRequest,
 } from '../../../electron/shared/guards';
 
@@ -1702,5 +1703,42 @@ describe('parseSetProjectRuntimeRequest container', () => {
     expect(() =>
       parseSetProjectRuntimeRequest({ id: 'p', container: { ...container, envArg } }),
     ).toThrow(IpcValidationError);
+  });
+});
+
+const validTerminal = { sessionId: 'term-01', projectId: 'proj-1', cols: 80, rows: 24 };
+
+describe('parseSpawnTerminalRequest', () => {
+  it('accepts a well-formed request and returns exactly its four fields', () => {
+    expect(parseSpawnTerminalRequest({ ...validTerminal })).toEqual(validTerminal);
+    expect(Object.keys(parseSpawnTerminalRequest({ ...validTerminal })).sort()).toEqual([
+      'cols',
+      'projectId',
+      'rows',
+      'sessionId',
+    ]);
+  });
+
+  it('rejects a missing field', () => {
+    const { rows: _rows, ...missing } = validTerminal;
+    expect(() => parseSpawnTerminalRequest(missing)).toThrow(/missing key "rows"/);
+  });
+
+  it('rejects an extra field — a terminal takes no task, model or effort', () => {
+    expect(() => parseSpawnTerminalRequest({ ...validTerminal, task: 'x' })).toThrow(
+      /unexpected key "task"/,
+    );
+  });
+
+  it('rejects a prototype-polluting key', () => {
+    expect(() =>
+      parseSpawnTerminalRequest(JSON.parse('{"sessionId":"t","projectId":"p","cols":1,"rows":1,"__proto__":{}}')),
+    ).toThrow(IpcValidationError);
+  });
+
+  it('rejects a non-string sessionId', () => {
+    expect(() => parseSpawnTerminalRequest({ ...validTerminal, sessionId: 7 })).toThrow(
+      /spawn-terminal\.sessionId/,
+    );
   });
 });

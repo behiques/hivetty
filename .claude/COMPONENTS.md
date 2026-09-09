@@ -74,12 +74,24 @@ rebuild.
 
 ```ts
 function TerminalHost(props: {
-  entries: { id: string; transport: TerminalTransport; readOnly?: boolean }[];
+  entries: {
+    id: string;
+    terminalKey: string;
+    transport: TerminalTransport;
+    readOnly?: boolean;
+  }[];
   activeId: string | null;
-  theme: 'dark' | 'light';
+  endedId?: string | null;
+  palette: TermPalette;
+  fontFamily?: string;
   fontSize?: number;
+  scrollback?: number;
 }): JSX.Element
 ```
+
+`terminalKey` is the React key, so a `/clear` can retire one row and open
+another on the pty that is still running. `palette` is resolved colour, not a
+theme name — xterm reads colour from JS, never from a custom property.
 
 The kept-alive registry: **one xterm instance per entity, shown and hidden with
 CSS**, never one shared instance re-fed on tab switch. Re-feeding would lose
@@ -338,12 +350,12 @@ the rails and the center stage exist to mount feature panels. `components/ui/` a
 
 `src/features/projects/components/projects-panel.tsx` — story 031, built.
 
-A collapsible tree: `ProjectsPanel` → `ProjectRow` (per fixture project) →
-`SessionRow` (per non-done session). The panel itself holds no state and reads no
+A collapsible tree: `ProjectsPanel` → `ProjectRow` → `SessionRow | TerminalRow`
+(per live entity, by kind). The panel itself holds no state and reads no
 session data — **each row owns its own subscription**, so one session changing
 status repaints that row rather than the whole tree.
 
-Three things here are easy to get wrong:
+Four things here are easy to get wrong:
 
 - **The count pill is a plain span, not `Badge`.** `Badge` renders nothing at
   zero, and a project with no live sessions must still show its `0` — that is the
@@ -354,6 +366,10 @@ Three things here are easy to get wrong:
 - **`SessionRow` renders `null` for an id the store does not know.** The
   simulation (061) and the spawn flow (044) both mutate entities underneath open
   panels, so a row that assumes its entity exists is a race waiting to throw.
+  `TerminalRow` does the same, and also for a row of the wrong kind.
+- **The last child is a split row.** `NewSessionLink` on the left,
+  `NewTerminalLink` on the right; the terminal link is named `Terminal in
+  <project>` on purpose, so no locator that begins `New session` matches it.
 
 `collapsed` lives in the ui-store rather than in `ProjectRow` because the panel
 unmounts on every left-rail tab switch; component state would forget the tree.
@@ -545,6 +561,13 @@ Still bare panels, owned by the story that fills each in.
 entity, cached for the life of the app — transport identity matters, because a
 surface resubscribes whenever its transport changes. Which of the four states it
 renders comes from `resolveView()` in `src/lib/resolve-view.ts`.
+
+Two covers are drawn *over* the live surface rather than instead of it, so the
+terminal underneath stays mounted and keeps its scrollback: `SessionBootCover`
+while a session's agent is starting, and `TerminalEndedCover` — a strip along
+the foot, because the transcript above it is the evidence — when a terminal's
+shell died unasked. A terminal the user exited is removed outright and has
+nothing to cover.
 
 ### `<SessionMetaBar />`
 

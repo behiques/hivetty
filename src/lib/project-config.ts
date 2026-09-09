@@ -986,3 +986,19 @@ export function projectAccess(projectId: string): ProjectAccess {
     reason: `${STATUS_REASON[entry.status]} (${entry.status}) — check ${current.configPath}`,
   };
 }
+
+/**
+ * Whether a project's sessions run in a container (terminals).
+ *
+ * The tree's terminal link reads `terminal · host` for one, because a terminal
+ * is host-only in this phase and an unlabelled "terminal in it" beside
+ * containerised sessions would read as the container.
+ *
+ * Presence of the block is the switch — there is no `enabled` flag — so this
+ * asks only whether the entry declared one, and answers `false` for an unknown
+ * project and for no snapshot at all.
+ */
+export function projectContainerised(projectId: string): boolean {
+  const entry = snapshot?.projects.find((project) => project.id === projectId);
+  return entry?.container !== undefined;
+}

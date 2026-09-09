@@ -68,6 +68,7 @@ import type {
   PromptReport,
   ResizeRequest,
   SpawnRequest,
+  SpawnTerminalRequest,
   WriteRequest,
 } from './ipc-contract';
 import { ISSUE_KEY_PATTERN } from './jira-contract';
@@ -385,6 +386,20 @@ export function parseSpawnRequest(input: unknown): SpawnRequest {
     ...(raw.resume === undefined
       ? {}
       : { resume: assertBoolean(raw.resume, 'spawn.resume') }),
+  };
+}
+
+export function parseSpawnTerminalRequest(input: unknown): SpawnTerminalRequest {
+  const raw = assertShape(
+    input,
+    ['sessionId', 'projectId', 'cols', 'rows'],
+    'spawn-terminal',
+  );
+  return {
+    sessionId: assertId(raw.sessionId, 'spawn-terminal.sessionId'),
+    projectId: assertId(raw.projectId, 'spawn-terminal.projectId'),
+    cols: assertDimension(raw.cols, 'spawn-terminal.cols'),
+    rows: assertDimension(raw.rows, 'spawn-terminal.rows'),
   };
 }
 

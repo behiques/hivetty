@@ -123,6 +123,32 @@ The two are deliberately separate functions. Collapsing them would make a
 surface typable whose transport was a recording, or make a send succeed into a
 session that had already exited.
 
+### A terminal is the same spawn without the bootstrap (terminals)
+
+A **terminal** is the same spawn with the bootstrap omitted. The host polls
+node-pty's `process` getter once a second for a spawn flagged `foreground` and
+emits on change; main forwards it as `session:foreground` for a terminal entity
+and drops it for anything else. Its endings are `session:terminal-ended`:
+`finished` for a plain exit, `lost` for a signal, a spawn error or a lost host —
+the exit code is never inspected, because a shell's `exit` returns the last
+command's.
+
+`send` is a session verb and refuses a terminal — a shell is typed into
+directly, and there is no agent at the other end to route a message to — with
+a line that names `open`, the verb that brings the terminal to the stage.
+
+`at prompt` is tier 1's honest floor, not a proof: a shell built-in, a
+function, a loop or a `read` runs in the shell's own process, so the row reads
+`at prompt` while `read -p Password:` waits. Only shell integration (OSC 133,
+tier 2) can say the prompt is actually up; until then the label is right in
+the common case and wrong in that one.
+
+The getter answers with the kernel's **executable** name, so the poll recognises
+the shell by that rather than by its path: the basename of the configured shell,
+except a configured `sh`, which is matched against every program that ships as
+one — `sh`, `bash`, `dash`, `ash` — because `/bin/sh` is a bash build on
+macOS and dash on Debian.
+
 ## Colour
 
 Terminal colour lives in JS, never CSS. xterm resolves colours from its own

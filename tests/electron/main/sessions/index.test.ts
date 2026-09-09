@@ -75,8 +75,11 @@ let spawned: {
   shell: string;
   args: string[];
   cwd: string;
+  env: Record<string, string>;
   /** Absent for a command session, which has no authentication to decide. */
   stripEnv?: readonly string[];
+  /** Set only for a terminal (terminals). */
+  foreground?: true;
 }[];
 let killed: string[];
 let sessions: Sessions;
@@ -90,6 +93,8 @@ let emitExit: (event: {
 /** Story 102: a host-level failure, which is how a bad binary reports. */
 let emitError: (event: { sessionId?: string; message: string }) => void;
 let emitLost: (event: { sessionId: string }) => void;
+/** A terminal's foreground process changed (terminals). */
+let emitForeground: (event: { sessionId: string; name: string | null }) => void;
 let blocked: boolean;
 
 const CONFIG: ConfigSnapshot = {
@@ -126,7 +131,9 @@ function fakeSupervisor(): PtyHostSupervisor {
         shell: string;
         args: string[];
         cwd: string;
+        env: Record<string, string>;
         stripEnv?: readonly string[];
+        foreground?: true;
       }) => {
         spawned.push(request);
       },
@@ -151,6 +158,10 @@ function fakeSupervisor(): PtyHostSupervisor {
     }),
     onSessionLost: vi.fn((listener) => {
       emitLost = listener;
+      return () => {};
+    }),
+    onForeground: vi.fn((listener) => {
+      emitForeground = listener;
       return () => {};
     }),
     shutdown: vi.fn(async () => {}),
@@ -3213,5 +3224,103 @@ describe('container spawn (HIVE-133)', () => {
     resolveRemoval();
     for (let i = 0; i < 10; i += 1) await Promise.resolve();
     expect(settled).toBe(true);
+  });
+});
+
+const TERMINAL = { entityId: 'term-01', projectId: 'nova-web', cols: 80, rows: 24 };
+
+describe('terminals', () => {
+  it('spawns the login shell in the project directory with the foreground flag, and types nothing', () => {
+    sessions.openTerminal(TERMINAL);
+    const sessionId = mintedFor('term-01');
+
+    expect(spawned[0]).toMatchObject({
+      shell: '/bin/zsh',
+      args: ['-l'],
+      cwd: '/repos/nova-web',
+      env: {},
+      foreground: true,
+    });
+    // A terminal has no authentication to decide, so nothing is stripped.
+    expect(spawned[0]).not.toHaveProperty('stripEnv');
+
+    emitData({ sessionId, chunk: '$ ' });
+    vi.advanceTimersByTime(8 + 150 + 300);
+    expect(supervisor.write).not.toHaveBeenCalled();
+    // And no status is derived from its output: hooks are the only source.
+    expect(on(CH.sessionStatus)).toHaveLength(0);
+  });
+
+  it('shares the session refusals', () => {
+    expect(() => sessions.openTerminal({ ...TERMINAL, projectId: 'referral-api' })).toThrow(
+      'referral-api is not mapped — add it to /home/dev/.hive/config.json',
+    );
+    blocked = true;
+    expect(() => sessions.openTerminal(TERMINAL)).toThrow('pty host unavailable');
+  });
+
+  it('attaches rather than respawning an entity that already has a process', () => {
+    sessions.openTerminal(TERMINAL);
+    sessions.openTerminal(TERMINAL);
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('forwards a foreground report as an entity event', () => {
+    sessions.openTerminal(TERMINAL);
+    const sessionId = mintedFor('term-01');
+
+    emitForeground({ sessionId, name: 'vitest' });
+
+    expect(on(CH.sessionForeground).at(-1)!.payload).toEqual({ entityId: 'term-01', name: 'vitest' });
+  });
+
+  it('drops a foreground report for a session, which never asked for one', () => {
+    sessions.open(OPEN);
+    emitForeground({ sessionId: mintedFor('hero-refresh'), name: 'vitest' });
+    expect(on(CH.sessionForeground)).toHaveLength(0);
+  });
+
+  it('reports finished when the shell exits on its own, whatever the code', () => {
+    sessions.openTerminal(TERMINAL);
+    emitExit({ sessionId: mintedFor('term-01'), exitCode: 1 });
+
+    expect(on(CH.sessionTerminalEnded).at(-1)!.payload).toEqual({
+      entityId: 'term-01',
+      ending: { kind: 'finished' },
+    });
+    // No history row, no terminated status.
+    expect(on(CH.sessionStatus)).toHaveLength(0);
+    expect(sessions.entities()).not.toContain('term-01');
+  });
+
+  it('reports lost when the shell died by signal', () => {
+    sessions.openTerminal(TERMINAL);
+    emitExit({ sessionId: mintedFor('term-01'), exitCode: 129, signal: 9 });
+
+    expect(on(CH.sessionTerminalEnded).at(-1)!.payload).toEqual({
+      entityId: 'term-01',
+      ending: { kind: 'lost', reason: 'the shell was killed by signal 9' },
+    });
+  });
+
+  it('reports lost with the host message when the spawn failed', () => {
+    sessions.openTerminal(TERMINAL);
+    emitError({ sessionId: mintedFor('term-01'), message: 'could not start /bin/zsh in /repos/nova-web: ENOENT' });
+
+    expect(on(CH.sessionTerminalEnded).at(-1)!.payload).toEqual({
+      entityId: 'term-01',
+      ending: { kind: 'lost', reason: 'could not start /bin/zsh in /repos/nova-web: ENOENT' },
+    });
+    expect(sessions.entities()).not.toContain('term-01');
+  });
+
+  it('reports lost when the host went away', () => {
+    sessions.openTerminal(TERMINAL);
+    emitLost({ sessionId: mintedFor('term-01') });
+
+    expect(on(CH.sessionTerminalEnded).at(-1)!.payload).toEqual({
+      entityId: 'term-01',
+      ending: { kind: 'lost', reason: 'the pty host crashed' },
+    });
   });
 });

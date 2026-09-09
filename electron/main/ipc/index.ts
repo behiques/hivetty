@@ -63,6 +63,7 @@ import {
   parseWriteFileRequest,
   parseDiagnoseEnvRequest,
   parseSpawnRequest,
+  parseSpawnTerminalRequest,
   parseKillRequest,
   parseLedgerAnswerRequest,
   parseLedgerPostBody,
@@ -4434,6 +4435,19 @@ export function registerIpcHandlers(
       name: request.name,
       // HIVE-88. Forwarded only here — a restart is never a resume.
       resume: request.resume,
+    });
+  });
+
+  handle(CH.ptySpawnTerminal, async (_event, payload) => {
+    const request = parseSpawnTerminalRequest(payload);
+    // The login-shell import is the only precondition a plain shell shares
+    // with a session: no skills sync, no MCP config, no container files.
+    await loginEnvStatus();
+    sessions?.openTerminal({
+      entityId: request.sessionId,
+      projectId: request.projectId,
+      cols: request.cols,
+      rows: request.rows,
     });
   });
 

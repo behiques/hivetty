@@ -69,6 +69,7 @@ vi.mock('../../../../electron/main/pty-host', () => ({
     onSpawned: () => () => {},
     onError: () => () => {},
     onSessionLost: () => () => {},
+    onForeground: () => () => {},
     shutdown: async () => {},
     isRunning: () => true,
     isBlocked: () => false,

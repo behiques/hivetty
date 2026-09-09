@@ -422,3 +422,10 @@ visible now instead of hidden inside a plausible-looking field.
 one returning `{ active, done }`: `useShallow` compares the returned value's own
 properties, so an object of two freshly-built arrays never compares equal and the
 component re-renders forever.
+
+### The other kind in `entities` (terminals)
+
+`Terminal` — a login shell with no Claude in it. `status` is `prompt | running`,
+derived from `foreground` by the one action that sets both. No cost, no history,
+no resume, never counted as needing the user. Removed outright on `exit`; kept
+with `ended` when the shell died unasked.

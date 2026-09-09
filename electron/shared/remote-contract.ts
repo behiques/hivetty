@@ -53,11 +53,11 @@ export const REMOTE_PROTOCOL_VERSION = 2;
  * promote a `notify` to a `call` and the typing path acquires a round trip.
  *
  * - `call` — request/response. The client asks, the server answers with
- *   `result` or `error`. 99 channels.
+ *   `result` or `error`. 100 channels.
  * - `notify` — fire and forget, client to server, ordered per session. 6
  *   channels. Ordering between a `pty:write` and a `pty:resize` is observable,
  *   so a transport may not reorder them.
- * - `event` — server to client push. 22 channels, including `pty:data`, the
+ * - `event` — server to client push. 24 channels, including `pty:data`, the
  *   only hot path.
  * - `attach` — the handshake, and the only frame that may precede a version
  *   check. Exactly one per connection.
@@ -182,6 +182,7 @@ export const FRAME_KIND = {
   [CH.ptyExit]: 'event',
   [CH.ptyLost]: 'event',
   [CH.ptyRestart]: 'call',
+  [CH.ptySpawnTerminal]: 'call',
   [CH.sessionStatus]: 'event',
   [CH.sessionName]: 'event',
   [CH.sessionCleared]: 'event',
@@ -190,6 +191,8 @@ export const FRAME_KIND = {
   [CH.sessionReady]: 'event',
   [CH.sessionTicketIntent]: 'event',
   [CH.sessionMetrics]: 'event',
+  [CH.sessionForeground]: 'event',
+  [CH.sessionTerminalEnded]: 'event',
   [CH.sessionHistory]: 'call',
   [CH.sessionNote]: 'call',
   [CH.sessionPr]: 'call',
@@ -416,6 +419,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.ptyExit]: 'read',
   [CH.ptyLost]: 'read',
   [CH.ptyRestart]: 'execute',
+  [CH.ptySpawnTerminal]: 'execute',
   [CH.sessionStatus]: 'read',
   [CH.sessionName]: 'read',
   [CH.sessionCleared]: 'read',
@@ -424,6 +428,8 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.sessionReady]: 'read',
   [CH.sessionTicketIntent]: 'read',
   [CH.sessionMetrics]: 'read',
+  [CH.sessionForeground]: 'read',
+  [CH.sessionTerminalEnded]: 'read',
   [CH.sessionHistory]: 'read',
   [CH.sessionNote]: 'mutate',
   [CH.sessionPr]: 'mutate',
@@ -1068,8 +1074,8 @@ export function remoteRefusedReason(channel: string): string | null {
  * 1. The channel is not a channel — {@link frameKindOf} returns `null`.
  * 2. The frame kind does not match the channel's direction. A `call` may only
  *    name a `call` channel and a `notify` only a `notify` channel; a client may
- *    never send a frame naming one of the 22 server-to-client `event` channels.
- *    Privilege alone cannot catch this, because those 22 are graded `read` and
+ *    never send a frame naming one of the 24 server-to-client `event` channels.
+ *    Privilege alone cannot catch this, because those 24 are graded `read` and
  *    `read` is the grant every attached device has.
  * 3. The channel is in {@link REMOTE_REFUSED_CHANNELS} — refused for every
  *    remote caller regardless of grant, because its local safety argument does
