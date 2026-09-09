@@ -50,6 +50,14 @@ const ipcRendererMock = {
   setMaxListeners: vi.fn(),
 };
 
+/**
+ * `webUtils.getPathForFile` (HIVE-148). Real Electron answers a real path only
+ * for a `File` a browser drop produced and `''` for one a page constructed —
+ * the default here matches the constructed case, and a test that wants a real
+ * drop overrides it per call with `mockReturnValueOnce`.
+ */
+const getPathForFileMock = vi.fn((_file: File): string => '');
+
 vi.mock('electron', () => ({
   contextBridge: {
     exposeInMainWorld: vi.fn((_key: string, value: Record<string, unknown>) => {
@@ -57,6 +65,7 @@ vi.mock('electron', () => ({
     }),
   },
   ipcRenderer: ipcRendererMock,
+  webUtils: { getPathForFile: getPathForFileMock },
 }));
 
 beforeEach(async () => {
@@ -699,6 +708,76 @@ describe('the skills rename verb routes to its channel (HIVE-99)', () => {
       CH.skillsWrite,
       expect.anything(),
     );
+  });
+});
+
+describe('the skills bundle verbs (HIVE-148)', () => {
+  it('mints a token for a real dropped file and nothing for a constructed one', () => {
+    // A `File` the page built itself. `webUtils.getPathForFile` answers '' for
+    // one, which is what makes the renderer unable to name a path it was not
+    // handed.
+    expect(skills().pathToken(new File(['x'], 'x.txt'))).toBeNull();
+  });
+
+  it('mints a real token for a real drop, and resolves it exactly once', async () => {
+    getPathForFileMock.mockReturnValueOnce('/Users/yunid/Downloads/run.sh');
+
+    const token = skills().pathToken(new File(['x'], 'run.sh'));
+    expect(token).not.toBeNull();
+
+    await skills().fileDrop({ name: 'graphify', dir: '', tokens: [token as string] });
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.skillsFileDrop, {
+      name: 'graphify',
+      dir: '',
+      sources: ['/Users/yunid/Downloads/run.sh'],
+    });
+
+    /*
+      Consumed on first use — a token is a one-shot ticket, not a durable
+      handle. A second drop naming the same token resolves to nothing at all,
+      which is refused locally rather than invoked with an empty `sources` —
+      see the next test.
+    */
+    await expect(
+      skills().fileDrop({ name: 'graphify', dir: '', tokens: [token as string] }),
+    ).rejects.toThrow();
+  });
+
+  it('refuses locally when every token names nothing, rather than invoking a no-op', async () => {
+    /*
+      Invoking with `sources: []` would answer with a fresh snapshot
+      indistinguishable from a drop that copied something. This is the case
+      that must not reach main silently: every token here was never minted.
+    */
+    await expect(
+      skills().fileDrop({
+        name: 'graphify',
+        dir: '',
+        tokens: ['a-token-nobody-minted'],
+      }),
+    ).rejects.toThrow();
+
+    expect(ipcRendererMock.invoke).not.toHaveBeenCalledWith(
+      CH.skillsFileDrop,
+      expect.anything(),
+    );
+  });
+
+  it('still proceeds when only some tokens resolve, dropping just the unknown ones', async () => {
+    getPathForFileMock.mockReturnValueOnce('/Users/yunid/Downloads/run.sh');
+    const token = skills().pathToken(new File(['x'], 'run.sh'));
+
+    await skills().fileDrop({
+      name: 'graphify',
+      dir: '',
+      tokens: [token as string, 'a-token-nobody-minted'],
+    });
+
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.skillsFileDrop, {
+      name: 'graphify',
+      dir: '',
+      sources: ['/Users/yunid/Downloads/run.sh'],
+    });
   });
 });
 

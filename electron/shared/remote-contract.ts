@@ -39,7 +39,7 @@ export const REMOTE_PROTOCOL_VERSION = 1;
  * promote a `notify` to a `call` and the typing path acquires a round trip.
  *
  * - `call` — request/response. The client asks, the server answers with
- *   `result` or `error`. 89 channels.
+ *   `result` or `error`. 96 channels.
  * - `notify` — fire and forget, client to server, ordered per session. 6
  *   channels. Ordering between a `pty:write` and a `pty:resize` is observable,
  *   so a transport may not reorder them.
@@ -189,6 +189,13 @@ export const FRAME_KIND = {
   [CH.skillsWrite]: 'call',
   [CH.skillsRemove]: 'call',
   [CH.skillsRename]: 'call',
+  [CH.skillsFileRead]: 'call',
+  [CH.skillsFileWrite]: 'call',
+  [CH.skillsFileMkdir]: 'call',
+  [CH.skillsFileRemove]: 'call',
+  [CH.skillsFileMove]: 'call',
+  [CH.skillsFileImport]: 'call',
+  [CH.skillsFileDrop]: 'call',
   [CH.agentsList]: 'call',
   [CH.agentsRead]: 'call',
   [CH.agentsWrite]: 'call',
@@ -217,7 +224,7 @@ export const FRAME_KIND = {
  * should be reviewed as a table, in one diff, before it is the thing standing
  * between a socket and `pty:spawn`.
  *
- * `event` channels carry a class too, because the ticket asks for all 117
+ * `event` channels carry a class too, because the ticket asks for all 124
  * classified exactly once and a hole in a default-deny table is worse than an
  * over-classification. For a push the class is the privilege needed to *receive*
  * it, which is `read` for all 22: a client cannot cause an event, only observe
@@ -228,7 +235,7 @@ export const FRAME_KIND = {
  * `pty:ack` and `pty:prompt` above. Grading a channel by the tone of its name is
  * how both of those came out wrong on the first pass.
  *
- * The twenty-eight `execute` entries, each with its reason. The list is long
+ * The thirty-one `execute` entries, each with its reason. The list is long
  * because the rule was applied by reading each handler rather than by trusting
  * the channel's name, and a surprising number of innocuously-named reads spawn a
  * process:
@@ -243,9 +250,14 @@ export const FRAME_KIND = {
  *   (`ledger/deliver.ts:242`), writing held ledger nudges into the running PTY.
  *   A forged report therefore delivers text into a session of the caller's
  *   choosing, which is the same capability `ledger:post` is graded for.
- * - `fs:write-file`, `skills:write`, `agents:write` — write content the host
- *   later executes. A skill file and an `AGENT.md` are instructions a model
- *   follows with tools in hand; they are code with a friendlier extension.
+ * - `fs:write-file`, `skills:write`, `agents:write`, `skills:file:write`,
+ *   `skills:file:import`, `skills:file:drop` (HIVE-148) — write content the
+ *   host later executes. A skill file and an `AGENT.md` are instructions a
+ *   model follows with tools in hand; they are code with a friendlier
+ *   extension, and that holds for any file inside a skill's bundle, not only
+ *   `SKILL.md` — `import` and `drop` just source their bytes from outside the
+ *   app rather than from the pane's own editor. `skills:file:mkdir` stays
+ *   `mutate`: an empty directory is structure, not content.
  * - `config:set-runtime`, `config:set-project-runtime` — name the command a
  *   session spawns. Whoever writes this writes what `pty:spawn` runs.
  * - `config:clone-start` — runs `git clone` against a caller-supplied URL.
@@ -394,6 +406,13 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.skillsWrite]: 'execute',
   [CH.skillsRemove]: 'mutate',
   [CH.skillsRename]: 'mutate',
+  [CH.skillsFileRead]: 'read',
+  [CH.skillsFileWrite]: 'execute',
+  [CH.skillsFileMkdir]: 'mutate',
+  [CH.skillsFileRemove]: 'mutate',
+  [CH.skillsFileMove]: 'mutate',
+  [CH.skillsFileImport]: 'execute',
+  [CH.skillsFileDrop]: 'execute',
   [CH.agentsList]: 'read',
   [CH.agentsRead]: 'read',
   [CH.agentsWrite]: 'execute',
@@ -418,19 +437,26 @@ export const CHANNEL_AUTHORIZATION = {
  * Channels that cannot be answered for a socket, and the ticket that fixes each
  * (HIVE-143).
  *
- * Exactly four channels in the whole surface dereference the Electron event
- * they are handed. Three of them do it for the same reason — resolving a parent
+ * Exactly five channels in the whole surface dereference the Electron event
+ * they are handed. Four of them do it for the same reason — resolving a parent
  * `BrowserWindow` for a native dialog — and server mode opens no window at all,
  * so `BrowserWindow.fromWebContents` has nothing to return. Proxied as-is they
  * would not throw: `config:choose-directory` returns `null` and reads to the
  * user as a cancelled dialog, which is a silent failure rather than a loud one.
  *
  * Refused by name instead, so a remote client gets a code it can act on and a
- * message naming the work. HIVE-146 deletes an entry as it lands each
+ * message naming the work. HIVE-146 deletes three of these as it lands each
  * replacement — a server-side browser for the first, a client-side import and
- * export for the other two — and this table goes away with the last of them.
+ * export for the two theme ones.
  *
- * The fourth, `pty:prompt`, is deliberately absent. It uses the event for a
+ * `skills:file:import` is the fourth and is **not** HIVE-146's, so this table
+ * does not go away with it (HIVE-148). There is nothing to move to a
+ * client-side picker: choosing files for a skill on the server would copy the
+ * *server's* files rather than the user's, which is not a worse version of the
+ * feature but a different and wrong one. `skills:file:drop` already carries
+ * files from the machine the user is sitting at, so the refusal names it.
+ *
+ * The fifth, `pty:prompt`, is deliberately absent. It uses the event for a
  * surface *lifetime* rather than a window, and `watchReporter` already accepts
  * anything with an `.on`, so a socket satisfies it. Refusing it would silently
  * revert HIVE-135's nudge holding for every remote session.
@@ -438,6 +464,8 @@ export const CHANNEL_AUTHORIZATION = {
 export const WINDOW_BOUND = {
   [CH.configChooseDirectory]:
     'Choosing a directory opens a dialog on the server, which has no window. HIVE-146 replaces it with a server-side browser.',
+  [CH.skillsFileImport]:
+    'Adding files to a skill opens a dialog on the server, which has no window — and would copy the server’s files, not yours. Drag them onto the skill instead.',
   [CH.themePick]:
     'Importing a theme reads a file on the machine the user is sitting at. HIVE-146 keeps it on the client.',
   [CH.themeSave]:
@@ -631,10 +659,80 @@ export function isAuthorized(channel: string, granted: Authorization): boolean {
 }
 
 /**
+ * Channels no remote caller may ever reach, whatever grade its device holds
+ * (HIVE-148).
+ *
+ * `Authorization` grades what a call can do to host state **assuming the call
+ * is genuine**. `skills:file:drop` breaks that assumption over a wire:
+ * `parseSkillDropRequest` (`electron/shared/guards.ts`) accepts any string
+ * that starts with `/`, and the only reason that is not a read-anywhere
+ * primitive — copy `/etc/passwd` into a bundle, then read it back with
+ * `skills:file:read` — is `electron/preload/index.ts`'s `pathToken`: a
+ * guarantee that `sources` came from `webUtils.getPathForFile` on a `File` a
+ * real browser drop produced. That guarantee is a property of *this
+ * process's own preload*. A remote client speaks the frame format directly,
+ * with nothing on the wire proving a `sources` entry ever passed through a
+ * preload at all — an attacker-controlled client can simply put
+ * `/etc/passwd` in the field, and this channel is already graded `execute`,
+ * its ceiling, so no stricter grade closes the gap. No `Authorization` value
+ * can express "this channel's safety proof does not survive the wire", so the
+ * channel itself is refused for every remote caller instead, independent of
+ * grant.
+ *
+ * Empty of anything else today, and additions to it should stay rare: this is
+ * not where "a channel feels risky" gets recorded — `CHANNEL_AUTHORIZATION`'s
+ * `execute` grade is. It is only for a channel whose *local* safety argument
+ * relies on a fact the wire cannot carry, the way `skills:file:drop`'s does.
+ * `remote-dispatch.ts`'s `refuse()` is what consults this before dispatching a
+ * frame — recording the constraint here first, before that code existed, is
+ * what makes it impossible to wire the remote path through this channel
+ * without whoever does it reading why it is here.
+ *
+ * Keyed with a message beside each channel, the same shape {@link WINDOW_BOUND}
+ * uses and for the same reason (HIVE-148 review): this used to be a bare
+ * `Set`, folded into {@link isClientFrameAllowed} with nothing else to say
+ * about *why* — so a client sending `skills:file:drop` correctly, as a `call`,
+ * with every privilege it holds, was refused `wrong-frame-kind` and told
+ * "skills:file:drop is not a call channel", which is false. That code means a
+ * malformed frame and invites a client to retry with a different shape; no
+ * shape fixes a policy refusal. {@link remoteRefusedReason} is what
+ * `remote-dispatch.ts` now checks first, the same way it already checks
+ * {@link windowBoundReason}, so this gets its own code and its own true
+ * sentence instead of borrowing the direction check's.
+ */
+export const REMOTE_REFUSED = {
+  [CH.skillsFileDrop]:
+    'Dropping files onto a skill trusts that preload minted every source path from a real browser drop on this device — a guarantee a socket cannot carry, so this channel is refused for every remote caller rather than trusted on its word. Drag the files onto the skill from the machine you are sitting at instead.',
+} as const satisfies Partial<Record<Channel, string>>;
+
+/**
+ * The channels {@link REMOTE_REFUSED} names, as a set — kept for
+ * {@link isClientFrameAllowed}'s own membership check and for the tests that
+ * assert a channel is, or is not, in it. Derived from the same object rather
+ * than listed a second time, so the two cannot name a different set of
+ * channels from each other.
+ */
+export const REMOTE_REFUSED_CHANNELS: ReadonlySet<Channel> = new Set(
+  Object.keys(REMOTE_REFUSED) as Channel[],
+);
+
+/**
+ * Why `channel` is refused for every remote caller, or `null` if it is not.
+ *
+ * The {@link windowBoundReason} of this constant: same shape, same job, same
+ * reason a caller wants the sentence and not just the boolean.
+ */
+export function remoteRefusedReason(channel: string): string | null {
+  return Object.hasOwn(REMOTE_REFUSED, channel)
+    ? REMOTE_REFUSED[channel as keyof typeof REMOTE_REFUSED]
+    : null;
+}
+
+/**
  * The gate a server's receive path actually wants: may a client send this frame,
  * naming this channel, holding this grant?
  *
- * Three ways to fail, and the middle one is the reason this function exists
+ * Four ways to fail, and the middle two are the reason this function exists
  * rather than being left to each caller to remember:
  *
  * 1. The channel is not a channel — {@link frameKindOf} returns `null`.
@@ -643,7 +741,10 @@ export function isAuthorized(channel: string, granted: Authorization): boolean {
  *    never send a frame naming one of the 22 server-to-client `event` channels.
  *    Privilege alone cannot catch this, because those 22 are graded `read` and
  *    `read` is the grant every attached device has.
- * 3. The grant does not reach what the channel costs.
+ * 3. The channel is in {@link REMOTE_REFUSED_CHANNELS} — refused for every
+ *    remote caller regardless of grant, because its local safety argument does
+ *    not survive the wire.
+ * 4. The grant does not reach what the channel costs.
  *
  * `FRAME_KIND` held the information needed for (2) from the first commit; the
  * gap was that nothing consulted it.
@@ -653,5 +754,9 @@ export function isClientFrameAllowed(
   channel: string,
   granted: Authorization,
 ): boolean {
-  return frameKindOf(channel) === frame && isAuthorized(channel, granted);
+  return (
+    frameKindOf(channel) === frame &&
+    !REMOTE_REFUSED_CHANNELS.has(channel as Channel) &&
+    isAuthorized(channel, granted)
+  );
 }
