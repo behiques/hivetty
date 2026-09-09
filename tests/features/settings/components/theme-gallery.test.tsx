@@ -1,12 +1,19 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { ThemeGallery } from '@features/settings/components/theme-gallery';
 import { BUILT_IN_THEME } from '@lib/theme/built-in';
 import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
 import { PickThemeFailure, pickThemeFile, saveThemeFile } from '@lib/theme/files';
+import {
+  resetProjectConfig,
+  setAttachedServerForTest,
+  setProjectConfigForTest,
+} from '@lib/project-config';
 import { themeToJson } from '@lib/theme/template';
+import { emptySnapshot } from '@shared/config-contract';
 import { useAppearanceStore } from '@stores/appearance-store';
 
 // `importOriginal` keeps the real `PickThemeFailure` (and `sanitizeFileName`,
@@ -31,6 +38,10 @@ describe('ThemeGallery', () => {
     useAppearanceStore.getState().reset();
     vi.mocked(pickThemeFile).mockReset();
     vi.mocked(saveThemeFile).mockReset();
+  });
+
+  afterEach(() => {
+    resetProjectConfig();
   });
 
   it('shows every theme that ships in the bundle', () => {
@@ -312,5 +323,67 @@ describe('ThemeGallery', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /dismiss/i }));
     expect(screen.queryByText('Nord imported and activated')).toBeNull();
+  });
+});
+
+/**
+ * `theme:pick` and `theme:save` while attached to someone else's Hive
+ * (HIVE-144) — see `WINDOW_BOUND` (`electron/shared/remote-contract.ts`).
+ * Every button that reaches either channel disables with that table's own
+ * reason and never calls the bridge function.
+ */
+describe('ThemeGallery — attached to a remote server', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useAppearanceStore.getState().reset();
+    vi.mocked(pickThemeFile).mockReset();
+    vi.mocked(saveThemeFile).mockReset();
+    setProjectConfigForTest({
+      ...emptySnapshot('/tmp/hive/config.json'),
+    });
+    // Attached is a runtime fact, never a config one: while attached
+    // `config:get` is answered by the server, whose own `remote.mode`
+    // reads 'local' (HIVE-144 review, C1).
+    setAttachedServerForTest('mini.tail1234.ts.net');
+  });
+
+  afterEach(() => {
+    resetProjectConfig();
+  });
+
+  it('disables Import theme… and never opens the picker', async () => {
+    render(<ThemeGallery />);
+
+    const button = screen.getByRole('button', { name: 'Import theme…' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('title', REMOTE_DISABLED_REASON.pickTheme);
+
+    await userEvent.click(button);
+    expect(pickThemeFile).not.toHaveBeenCalled();
+  });
+
+  it('disables Download template and never writes a file', async () => {
+    render(<ThemeGallery />);
+
+    const button = screen.getByRole('button', { name: 'Download template' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('title', REMOTE_DISABLED_REASON.saveTheme);
+
+    await userEvent.click(button);
+    expect(saveThemeFile).not.toHaveBeenCalled();
+  });
+
+  it('disables Export… on every card and never writes a file', async () => {
+    render(<ThemeGallery />);
+
+    await userEvent.click(
+      screen.getAllByRole('button', { name: /actions$/ })[0],
+    );
+    const item = screen.getByRole('menuitem', { name: 'Export…' });
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAttribute('title', REMOTE_DISABLED_REASON.saveTheme);
+
+    await userEvent.click(item);
+    expect(saveThemeFile).not.toHaveBeenCalled();
   });
 });

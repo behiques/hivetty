@@ -9,7 +9,7 @@ import { getConfig } from './config';
 import { startLoginEnvImport } from './config/login-env';
 import { installContentSecurityPolicy } from './csp';
 import { remoteListenerBindError, remoteListenerBoundAddress, startRemoteListener } from './ipc';
-import { registerIpc } from './ipc/router';
+import { registerIpc, switchIpcMode } from './ipc/router';
 import { registerLifecycle } from './lifecycle';
 import {
   pairDevice,
@@ -19,6 +19,7 @@ import {
 } from './server/devices';
 import { fileBackedIo, serverDeviceStore } from './server/file-backed-io';
 import { runOneShot } from './server/one-shot';
+import { setServerMode } from './server-mode';
 import { onShutdown } from './shutdown';
 import { createServerTray } from './tray';
 import { startUpdateChecks } from './updates';
@@ -143,13 +144,24 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   /*
-    Through the router rather than straight to `registerIpcHandlers` (HIVE-141).
-    `'local'` is the only mode that resolves today; the constant is here so the
-    boot path already has the shape server mode needs, and so the day it takes a
-    mode from config is a one-line change rather than a rewrite of this function.
-  */
-  registerIpc('local');
+    Through the router rather than straight to `registerIpcHandlers` (HIVE-141),
+    and local **first**, unconditionally (HIVE-144).
 
+    A window opens from `whenReady` below, and a window whose channels are not
+    bound is an app that looks alive and answers nothing — so the surface a
+    renderer can reach exists before anything is awaited. `remote` mode is
+    reached from here by the same `switchIpcMode` the settings pane calls,
+    rather than by a boot-only attach path: two paths would be two descriptions
+    of what "remote mode is bound to" means, and the difference between them
+    would first show up after a switch, which is the worst possible time to
+    find it.
+
+    Not awaited, and its failure is not fatal. `switchIpcMode` rebinds local
+    when the dial fails — a laptop that has left the tailnet, a mini that is
+    asleep — so the app boots usable either way, and Settings is where the user
+    retries. The config file is left saying `remote`, deliberately: that is
+    what they asked for, and the next launch should try again.
+  */
   /**
    * Server mode is `server.enabled` in the config file — set for good on the
    * unattended Mac mini this ships to run on — **or** the one-off `--server`
@@ -159,8 +171,53 @@ if (!app.requestSingleInstanceLock()) {
    * to decide whether its own `whenReady` handler may open a window, and
    * racing two separate reads of `getConfig()` against two separate
    * `whenReady` callbacks would risk the file changing under it between them.
+   *
+   * **Above the boot attach, not below it (HIVE-144 review, I3.)** It used to
+   * be computed after, which was fine while nothing read it before — and stopped
+   * being fine the moment attaching had to be refused on a serving machine.
+   * `setServerMode` is what `switchIpcMode` and `AppInfo.serving` read, and
+   * the attach two statements down is the first thing that can ask.
    */
   const serverMode = invocation.server || getConfig().server.enabled;
+  setServerMode(serverMode);
+
+  registerIpc('local');
+  /*
+    An install is the server or a client, never both — `RemoteConfig`'s own
+    doc comment, now enforced (HIVE-144 review, I3). Skipped rather than
+    attempted-and-refused so the log line names the real reason: a serving
+    machine that also asked to attach is a config to fix, not a dial that
+    failed.
+
+    `switchIpcMode` refuses this same combination itself, which is what makes
+    the guard here a nicety rather than the enforcement — see
+    `electron/main/server-mode.ts` for what the combination actually costs.
+  */
+  if (getConfig().remote.mode === 'remote' && serverMode) {
+    console.error(
+      '[hive] not attaching at boot: this Hive is serving. An install is the ' +
+        'server or a client, never both — turn one of the two off in Settings, ' +
+        'or in config.json.',
+    );
+  } else if (getConfig().remote.mode === 'remote') {
+    void switchIpcMode('remote')
+      .then((outcome) => {
+        if (!outcome.ok) console.error('[hive] could not attach at boot:', outcome);
+      })
+      /*
+        `switchIpcMode` answers a refusal as a value, but it can still *reject*:
+        nothing wraps its unbind, and its own rebind-local arm can throw if
+        `ipcMain` refuses a channel. Unhandled, that becomes an unhandled
+        rejection at boot over precisely the state this whole story exists to
+        prevent — a window with no IPC — which is the one failure that must
+        not be silent. Logged and swallowed: there is nothing better to do
+        here, and crashing the app over a failed attach would be worse than
+        the local surface the switch has already tried to restore.
+      */
+      .catch((cause: unknown) => {
+        console.error('[hive] the boot attach threw:', cause);
+      });
+  }
 
   /**
    * The tray's own handle (HIVE-142 review, I2) — see the comment at its

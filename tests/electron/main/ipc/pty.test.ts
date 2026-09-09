@@ -510,6 +510,13 @@ describe('resume', () => {
     vi.advanceTimersByTime(8);
   };
 
+  // `gen: 0` on every replayed event below is `PLACEHOLDER_GEN` (HIVE-144):
+  // this module is keyed by pty session id and has no entity or generation
+  // concept, so it cannot supply a real one. `sessions/index.ts`'s `resume`
+  // always overwrites it with the entity's live generation before anything
+  // reaches a client — asserted in `tests/electron/main/sessions/index.test.ts`,
+  // not here, since that translation happens one layer up.
+
   it('replays only what the client has not seen, in order', () => {
     beat('one');
     beat('two');
@@ -518,8 +525,8 @@ describe('resume', () => {
     expect(ipc.resume('a', 1)).toEqual({
       kind: 'replay',
       events: [
-        { sessionId: 'a', chunk: 'two', seq: 2 },
-        { sessionId: 'a', chunk: 'three', seq: 3 },
+        { sessionId: 'a', chunk: 'two', seq: 2, gen: 0 },
+        { sessionId: 'a', chunk: 'three', seq: 3, gen: 0 },
       ],
     });
   });
@@ -554,7 +561,7 @@ describe('resume', () => {
 
     expect(ipc.resume('a', 2)).toEqual({
       kind: 'replay',
-      events: [{ sessionId: 'a', chunk: 'cccc', seq: 3 }],
+      events: [{ sessionId: 'a', chunk: 'cccc', seq: 3, gen: 0 }],
     });
   });
 
@@ -617,7 +624,7 @@ describe('resume', () => {
 
     expect(ipc.resume('a', 1)).toEqual({
       kind: 'replay',
-      events: [{ sessionId: 'a', chunk: 'cccccccc', seq: 2 }],
+      events: [{ sessionId: 'a', chunk: 'cccccccc', seq: 2, gen: 0 }],
     });
   });
 
@@ -635,5 +642,41 @@ describe('resume', () => {
       `seq` is the 50th batch, which is where the stream actually is.
     */
     expect(ipc.resume('a', 0)).toEqual({ kind: 'gap', seq: 50 });
+  });
+});
+
+/**
+ * `headSeq` must answer "gone" the same way `resume` does (HIVE-144 review):
+ * a caller with generation-aware callers of its own — `sessions/index.ts`'s
+ * `resume`, on a mismatch — reads this instead of asking `resume` to do
+ * replay arithmetic, and a disagreement here would only surface once such a
+ * caller actually exercised the exited-channel case, which nothing does
+ * today.
+ */
+describe('headSeq', () => {
+  const beat = (chunk: string): void => {
+    emitData({ sessionId: 'a', chunk });
+    vi.advanceTimersByTime(8);
+  };
+
+  it('is undefined for a session it has never heard of', () => {
+    expect(ipc.headSeq('nope')).toBeUndefined();
+  });
+
+  it('answers the channel\'s current seq, with no ring lookup', () => {
+    beat('one');
+    beat('two');
+
+    expect(ipc.headSeq('a')).toBe(2);
+  });
+
+  it('is undefined once the session has exited, same as resume', () => {
+    beat('one');
+    emitExit({ sessionId: 'a', exitCode: 0 });
+    vi.advanceTimersByTime(8);
+
+    expect(ipc.headSeq('a')).toBeUndefined();
+    // Same "gone" answer both ways — the asymmetry this closed.
+    expect(ipc.resume('a', 0)).toBeNull();
   });
 });

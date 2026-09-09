@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
+import { can, type RemoteCapabilities } from '@config/runtime';
 import {
   projectAccess,
   projectConfigSnapshot,
@@ -59,6 +60,40 @@ export function useProjectAccess(projectId: string): ProjectAccess {
     projectConfigSnapshot,
   );
   return projectAccess(projectId);
+}
+
+/**
+ * The five `can.*` remote-attach predicates (HIVE-144), reactive to the
+ * `@lib/project-config` subscription.
+ *
+ * Same subscribe-then-derive shape as {@link useProjectAccess}: `can.*` are
+ * plain functions so an event handler can call them without a hook (a
+ * `spawnSessionIn` check before a click already does this), but a *rendered*
+ * disabled state has to re-paint the instant a live mode switch lands, which
+ * a bare function call inside a component that reads no other config state
+ * would not do on its own. Subscribing here for the re-render, then reading
+ * `can.*` fresh, is what keeps the two from disagreeing about which state
+ * either was computed from.
+ *
+ * The subscription is the same one either way, which is why one
+ * `useSyncExternalStore` still covers all five: these answer off the runtime
+ * attachment (`can`'s own `currentRemote`), and that module emits on its
+ * subscribers when the attachment moves exactly as it does when the snapshot
+ * does.
+ */
+export function useRemoteCapabilities(): RemoteCapabilities {
+  useSyncExternalStore(
+    subscribeProjectConfig,
+    projectConfigSnapshot,
+    projectConfigSnapshot,
+  );
+  return {
+    chooseDirectory: can.chooseDirectory(),
+    pickTheme: can.pickTheme(),
+    saveTheme: can.saveTheme(),
+    importSkillFiles: can.importSkillFiles(),
+    revealConfig: can.revealConfig(),
+  };
 }
 
 /**
@@ -223,4 +258,156 @@ export function useServerExposure(): string | null {
   }, [hasSnapshot]);
 
   return boundHost;
+}
+
+/**
+ * How many devices are paired to this Hive's server mode, right now, or `0`
+ * before the first read lands (HIVE-142, HIVE-144 Task 13).
+ *
+ * A separate hook from {@link useServerExposure} rather than a second field on
+ * its return, because the two answer genuinely different questions that
+ * happen to share a source object: `useServerExposure` gates whether
+ * `ServingChip` renders at all (is a socket bound?), and this hook answers how
+ * many devices are paired **independent of that** — `AppInfo.servingDeviceCount`
+ * reads `server.devices` off disk, which exists whether or not anything is
+ * currently listening. Folding them into one return would force every caller
+ * of the gate to also destructure a count it may not want, and would make "is
+ * this hook's `null` the gate or the count" a question the type alone cannot
+ * answer.
+ *
+ * No late-bind retry, unlike `useServerExposure`: pairing a device
+ * (`pairDevice`, `@lib/project-config`) writes `server.devices` synchronously,
+ * not over a DNS lookup that can outlast this hook's first round trip, so a
+ * `0` here is never ambiguous between "really zero" and "not read yet" the
+ * way a fresh bind's `null` is for {@link useServerExposure}.
+ *
+ * Gated on `useProjectConfig` having resolved, the same proxy for "the bridge
+ * is actually up" every hook in this file uses, so the browser demo (no
+ * bridge, snapshot stays `null`) correctly never calls `readAppInfo` at all.
+ *
+ * **Keyed on the snapshot, not on `hasSnapshot` (HIVE-144 review, M7).** It
+ * used to depend on the boolean, which is a `false → true` edge and therefore
+ * fires exactly once — right for a bind that cannot move for the life of the
+ * process, wrong for a roster the user edits from the pane this number is
+ * rendered on. `pairDevice` and `revokeDevice` both install a fresh snapshot
+ * when they land, so keying on the snapshot itself is what makes the count
+ * follow a pairing or a revocation instead of describing the roster as it was
+ * when Settings first opened. It is the identical correction Ruling 29 made to
+ * {@link useAttachedServer} below, for the identical reason, and it costs one
+ * `app:info` per config write to a `PROCESS_LOCAL` channel.
+ */
+export function useServingDeviceCount(): number {
+  const snapshot = useProjectConfig();
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (snapshot === null) return;
+
+    let cancelled = false;
+    void readAppInfo().then((info) => {
+      if (!cancelled) setCount(info?.servingDeviceCount ?? 0);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [snapshot]);
+
+  return count;
+}
+
+/**
+ * The name of the server this window is attached to over a socket, or `null`
+ * in `'local'` mode (HIVE-144, Task 13).
+ *
+ * Sourced from `AppInfo.attachedServerName`, never from
+ * `ConfigSnapshot.attachedServer` — see that field's own doc comment, and
+ * `AppInfo.attachedServerName`'s, for the full config-versus-runtime split.
+ * This hook reads the runtime half exactly as `useServerExposure` and
+ * `useReceiverExposure` read theirs.
+ *
+ * One-shot, not the two-read late-bind retry those hooks carry: that retry
+ * exists because a *hostname* bind resolves via DNS on a timeline a first
+ * `readAppInfo` round trip can outrun, so a bare `null` is ambiguous between
+ * "off" and "not yet resolved." Attaching has no equivalent race from here —
+ * `readAppInfo()` itself does not resolve until whichever process is
+ * answering it has already finished computing the answer, so a `null` this
+ * hook sees is always the real one, not a read that landed early.
+ *
+ * Gated on `useProjectConfig` having resolved, the same proxy for "the bridge
+ * is actually up" every hook in this file uses.
+ *
+ * **Re-read on every snapshot, not only on the first one (HIVE-144, Ruling
+ * 29).** Its two siblings above key their effect on `hasSnapshot`, which is a
+ * `false → true` edge and therefore fires once — right for a bind that cannot
+ * move for the life of the process, wrong for this one. Attachment changes
+ * *during* a session, and the moment it changes is a `config:set-remote` that
+ * also replaces the snapshot: attaching swaps in the far end's, detaching swaps
+ * back to this machine's. Keying on the snapshot itself is what makes this
+ * value follow the socket rather than describe whatever was true at boot — and
+ * it is load-bearing now that Settings reads it, because a stale `null` there
+ * hides the detach control and a stale name offers one that has nothing to
+ * detach. The header chip gets the same correction for free; it was quietly
+ * stale after any switch before this.
+ *
+ * The extra reads this costs are one `app:info` per config write, to a channel
+ * that is `PROCESS_LOCAL` and answered without touching a socket at all.
+ */
+/**
+ * Whether this process was launched to serve (HIVE-144 review, I3).
+ *
+ * `AppInfo.serving` — intent, not a bound socket, and emphatically not
+ * `ConfigSnapshot.server.enabled`, which while attached describes the
+ * **server's** file and reads `true` on a client attached to a real server.
+ * See that field's own doc comment for both halves.
+ *
+ * One-shot, keyed on `hasSnapshot`, and that is the right dependency here
+ * where it is the wrong one two hooks up: this value is fixed for the life of
+ * the process. A serving machine cannot stop serving without a relaunch (the
+ * socket cannot be moved, which is what "takes effect at next launch" means),
+ * and a client cannot start.
+ *
+ * Settings uses it for the interlock: the attach half is disabled on a
+ * serving machine, with the reason on the control, rather than offering a
+ * switch `switchIpcMode` would refuse.
+ */
+export function useServing(): boolean {
+  const snapshot = useProjectConfig();
+  const hasSnapshot = snapshot !== null;
+  const [serving, setServing] = useState(false);
+
+  useEffect(() => {
+    if (!hasSnapshot) return;
+
+    let cancelled = false;
+    void readAppInfo().then((info) => {
+      if (!cancelled) setServing(info?.serving ?? false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasSnapshot]);
+
+  return serving;
+}
+
+export function useAttachedServer(): string | null {
+  const snapshot = useProjectConfig();
+  const [serverName, setServerName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (snapshot === null) return;
+
+    let cancelled = false;
+    void readAppInfo().then((info) => {
+      if (!cancelled) setServerName(info?.attachedServerName ?? null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [snapshot]);
+
+  return serverName;
 }

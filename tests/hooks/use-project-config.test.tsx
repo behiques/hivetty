@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   LATE_BIND_RETRY_MS,
+  useAttachedServer,
   useReceiverExposure,
   useServerExposure,
+  useServing,
+  useServingDeviceCount,
 } from '@hooks/use-project-config';
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 import {
@@ -56,6 +59,9 @@ const info = (receiverBoundHost: string | null): AppInfo => ({
   logPath: '/Users/dev/Library/Logs/The Hive',
   receiverBoundHost,
   serverBoundHost: null,
+  servingDeviceCount: 0,
+  attachedServerName: null,
+  serving: false,
 });
 
 /** Same shape as {@link info}, but for `useServerExposure`'s field instead. */
@@ -68,6 +74,39 @@ const serverInfo = (serverBoundHost: string | null): AppInfo => ({
   logPath: '/Users/dev/Library/Logs/The Hive',
   receiverBoundHost: null,
   serverBoundHost,
+  servingDeviceCount: 0,
+  attachedServerName: null,
+  serving: false,
+});
+
+/** Same shape as {@link info}, but for `useServingDeviceCount`'s field. */
+const deviceCountInfo = (servingDeviceCount: number): AppInfo => ({
+  version: '0.1.0',
+  electron: '38.0.0',
+  chrome: '140.0.0',
+  node: '22.0.0',
+  platform: 'darwin',
+  logPath: '/Users/dev/Library/Logs/The Hive',
+  receiverBoundHost: null,
+  serverBoundHost: null,
+  servingDeviceCount,
+  attachedServerName: null,
+  serving: false,
+});
+
+/** Same shape as {@link info}, but for `useAttachedServer`'s field. */
+const attachedInfo = (attachedServerName: string | null): AppInfo => ({
+  version: '0.1.0',
+  electron: '38.0.0',
+  chrome: '140.0.0',
+  node: '22.0.0',
+  platform: 'darwin',
+  logPath: '/Users/dev/Library/Logs/The Hive',
+  receiverBoundHost: null,
+  serverBoundHost: null,
+  servingDeviceCount: 0,
+  attachedServerName,
+  serving: false,
 });
 
 /**
@@ -346,5 +385,213 @@ describe('useServerExposure', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+/** Same shape as {@link renderValue}, but for `useServingDeviceCount`. */
+async function renderDeviceCount(expected: number): Promise<number> {
+  const { result } = renderHook(() => useServingDeviceCount());
+  await waitFor(() => {
+    expect(readAppInfo).toHaveBeenCalled();
+    expect(result.current).toBe(expected);
+  });
+  return result.current;
+}
+
+/**
+ * `useServingDeviceCount` (HIVE-144, Task 13).
+ *
+ * Sourced from `AppInfo.servingDeviceCount`, a paired-device count off disk —
+ * independent of `useServerExposure`'s own bind gate, which is why it is its
+ * own hook rather than a second field folded into that one's return; see its
+ * own doc comment.
+ */
+describe('useServingDeviceCount', () => {
+  it('is 0 before the first read lands', () => {
+    setProjectConfigForTest(snapshot({}));
+    readAppInfo.mockResolvedValue(deviceCountInfo(2));
+
+    const { result } = renderHook(() => useServingDeviceCount());
+
+    expect(result.current).toBe(0);
+  });
+
+  it('is the count once the read resolves', async () => {
+    setProjectConfigForTest(snapshot({}));
+    readAppInfo.mockResolvedValue(deviceCountInfo(2));
+    expect(await renderDeviceCount(2)).toBe(2);
+  });
+
+  /*
+   * A count of exactly 1, proven separately from 2 above: a hook that always
+   * read `info.servingDeviceCount` off some hard-coded fixture, or that
+   * mangled the number in transit, could still pass the `2` case above by
+   * coincidence.
+   */
+  it('is 1 for a single paired device', async () => {
+    setProjectConfigForTest(snapshot({}));
+    readAppInfo.mockResolvedValue(deviceCountInfo(1));
+    expect(await renderDeviceCount(1)).toBe(1);
+  });
+
+  /* The browser demo has no config and no bridge at all. */
+  it('is 0 with no snapshot, and never asks the bridge', () => {
+    setProjectConfigForTest(null);
+    readAppInfo.mockResolvedValue(deviceCountInfo(2));
+
+    const { result } = renderHook(() => useServingDeviceCount());
+
+    // Gated on the snapshot resolving first — the browser demo target never
+    // crosses that gate, so `readAppInfo` is never even asked.
+    expect(readAppInfo).not.toHaveBeenCalled();
+    expect(result.current).toBe(0);
+  });
+
+  /**
+   * The roster changes from the pane this number is rendered on (HIVE-144
+   * review, M7).
+   *
+   * The effect used to depend on `hasSnapshot`, a boolean — a `false → true`
+   * edge that fires once. Right for a bind that cannot move for the life of
+   * the process, wrong for a count a user edits: `pairDevice` and
+   * `revokeDevice` both install a fresh snapshot when they land, and this had
+   * to be keyed on that to follow them.
+   */
+  it('re-reads when a pairing installs a new snapshot', async () => {
+    setProjectConfigForTest(snapshot({}));
+    readAppInfo.mockResolvedValue(deviceCountInfo(1));
+
+    const { result } = renderHook(() => useServingDeviceCount());
+    await waitFor(() => {
+      expect(result.current).toBe(1);
+    });
+
+    readAppInfo.mockResolvedValue(deviceCountInfo(2));
+    // A *different* snapshot object, which is what every mutating verb in
+    // `@lib/project-config` installs — the effect must re-run on the identity
+    // change, not only on the null-to-value edge.
+    act(() => {
+      setProjectConfigForTest(snapshot({ host: '127.0.0.1' }));
+    });
+
+    await waitFor(() => {
+      expect(result.current).toBe(2);
+    });
+  });
+});
+
+/** Same shape as {@link renderValue}, but for `useAttachedServer`. */
+async function renderAttachedServer(expected: string | null): Promise<string | null> {
+  const { result } = renderHook(() => useAttachedServer());
+  await waitFor(() => {
+    expect(readAppInfo).toHaveBeenCalled();
+    expect(result.current).toBe(expected);
+  });
+  return result.current;
+}
+
+/**
+ * `useAttachedServer` (HIVE-144, Task 13).
+ *
+ * Sourced from `AppInfo.attachedServerName`, never from
+ * `ConfigSnapshot.attachedServer` — see that field's own doc comment for the
+ * full config-versus-runtime split this hook reads the runtime half of.
+ *
+ * No late-bind retry, unlike `useReceiverExposure` and `useServerExposure`:
+ * those exist because a hostname bind resolves via DNS on a timeline a first
+ * `readAppInfo` round trip can outrun, so a bare `null` there is ambiguous.
+ * `readAppInfo()` itself does not resolve until whichever side is answering
+ * it has already finished, so a `null` this hook sees is never a read that
+ * merely landed early.
+ */
+describe('useAttachedServer', () => {
+  it('is null when not attached', async () => {
+    setProjectConfigForTest(snapshot({}));
+    readAppInfo.mockResolvedValue(attachedInfo(null));
+    expect(await renderAttachedServer(null)).toBeNull();
+  });
+
+  it('is the server name once attached', async () => {
+    setProjectConfigForTest(snapshot({}));
+    readAppInfo.mockResolvedValue(attachedInfo('mini'));
+    expect(await renderAttachedServer('mini')).toBe('mini');
+  });
+
+  /* The browser demo has no config and no bridge at all. */
+  it('is null with no snapshot, and never asks the bridge', () => {
+    setProjectConfigForTest(null);
+    readAppInfo.mockResolvedValue(attachedInfo('mini'));
+
+    const { result } = renderHook(() => useAttachedServer());
+
+    expect(readAppInfo).not.toHaveBeenCalled();
+    expect(result.current).toBeNull();
+  });
+});
+
+/**
+ * `useServing` (HIVE-144 review, I3) — the interlock's UI signal.
+ *
+ * `AppInfo.serving` and never `ConfigSnapshot.server.enabled`, which is the
+ * whole point: while attached, `config:get` is answered by the far end, so
+ * that field describes the **server's** file and reads `true` on a client
+ * attached to a real server. Keyed on it, Settings would disable the attach
+ * half on the one window that needs it, with a reason that is false.
+ */
+describe('useServing', () => {
+  /** A server's own snapshot, as an attached client actually holds it. */
+  const serversSnapshot = (): ConfigSnapshot => ({
+    ...emptySnapshot(CONFIG_PATH, '/bin/zsh'),
+    server: { ...emptySnapshot(CONFIG_PATH, '/bin/zsh').server, enabled: true },
+  });
+
+  it('is false on an ordinary local window', async () => {
+    setProjectConfigForTest(snapshot({}));
+    readAppInfo.mockResolvedValue({ ...attachedInfo(null), serving: false });
+
+    const { result } = renderHook(() => useServing());
+
+    await waitFor(() => {
+      expect(result.current).toBe(false);
+    });
+  });
+
+  it('is true on a machine launched to serve', async () => {
+    setProjectConfigForTest(snapshot({}));
+    readAppInfo.mockResolvedValue({ ...attachedInfo(null), serving: true });
+
+    const { result } = renderHook(() => useServing());
+
+    await waitFor(() => {
+      expect(result.current).toBe(true);
+    });
+  });
+
+  /**
+   * The state a config-derived answer gets wrong: an attached client, holding
+   * the server's snapshot with `server.enabled: true`, is itself serving
+   * nothing.
+   */
+  it('is false on a client whose proxied snapshot says the far end serves', async () => {
+    setProjectConfigForTest(serversSnapshot());
+    readAppInfo.mockResolvedValue({ ...attachedInfo('mini'), serving: false });
+
+    const { result } = renderHook(() => useServing());
+
+    await waitFor(() => {
+      expect(readAppInfo).toHaveBeenCalled();
+    });
+    expect(result.current).toBe(false);
+  });
+
+  /* The browser demo has no config and no bridge at all. */
+  it('is false with no snapshot, and never asks the bridge', () => {
+    setProjectConfigForTest(null);
+    readAppInfo.mockResolvedValue({ ...attachedInfo(null), serving: true });
+
+    const { result } = renderHook(() => useServing());
+
+    expect(readAppInfo).not.toHaveBeenCalled();
+    expect(result.current).toBe(false);
   });
 });

@@ -29,6 +29,8 @@ import type {
   DiagnoseCommandRequest,
   DiagnoseEnvRequest,
   ReceiverBindConfig,
+  RemoteMode,
+  RemotePairRequest,
   RemoveProjectRequest,
   RenameProjectRequest,
   ReorderProjectsRequest,
@@ -46,6 +48,7 @@ import type {
   SetProjectKeyRequest,
   SetProjectRuntimeRequest,
   SetReceiverRequest,
+  SetRemoteRequest,
   SetRuntimeRequest,
   SetServerRequest,
   SetSlackRequest,
@@ -1450,6 +1453,92 @@ export function parsePairDeviceRequest(input: unknown): DeviceNameRequest {
 export function parseRevokeDeviceRequest(input: unknown): DeviceNameRequest {
   const raw = assertShape(input, ['name'], 'serverRevoke');
   return { name: assertText(raw.name, 'serverRevoke.name') };
+}
+
+/**
+ * Payload of `config:set-remote` (HIVE-144).
+ *
+ * This guard validates **shape only** — `mode` is `'local'` or `'remote'`,
+ * `host` is a string, `port` is in range — and, as of fix-round 2, no longer
+ * enforces Ruling 3's "`host` must satisfy `isRemoteTarget` once mode is
+ * remote" rule at all. Two review rounds each closed one payload shape that
+ * broke that rule when it lived here: checking `request.mode` against
+ * `request.host` in isolation missed `{ host }` alone against a config
+ * already remote, and then missed `{ mode: 'remote' }` alone after an earlier
+ * call had legitimately stored an unvalidated host under `'local'`. Both are
+ * the same defect through a different door — a guard that sees one
+ * incremental patch can never resolve "effective mode" from that patch alone,
+ * because the config it merges onto is state this function does not have and
+ * must not be given (threading config reads into a shared, stateless guard
+ * module would be a bigger change than the bug warrants).
+ *
+ * The invariant now lives in exactly one place: `setRemote`
+ * (`electron/main/config/index.ts`), checked once against the merged result
+ * `writeConfig` is about to write — the only place that actually holds both
+ * the payload and the config it lands on. See that function's own doc
+ * comment for the property statement and why a single merged-state check
+ * closes every sequence of calls, not just the one shape a review happened
+ * to try.
+ *
+ * That is also why `host` takes no "must not be empty" check of its own:
+ * {@link DEFAULT_REMOTE} carries `''`, and a payload restating `mode: 'local'`
+ * alongside that empty default is the normal, never-attached state, not a
+ * malformed request — and it is also why a bare `{ host }` payload, with no
+ * `mode`, is accepted here again: a host-only save while the stored config is
+ * genuinely local is harmless (Ruling 3), and one that would leave the
+ * effective state remote-with-a-bad-host is caught by `setRemote`,
+ * regardless of which field this call happened to carry.
+ *
+ * Unlike `optionalRemote`, this guard salvages nothing on a bad field: the
+ * payload arrives from a live form, not a file a human hand-edited, so one
+ * bad field fails the whole request — the same rule {@link
+ * parseSetServerRequest} applies to its own three fields.
+ *
+ * There is no token field, and there never will be: `remote:pair` is the only
+ * verb that ever writes one, and it writes to `safeStorage`, never here.
+ */
+export function parseSetRemoteRequest(input: unknown): SetRemoteRequest {
+  const raw = assertShape(input, [], 'setRemote', ['mode', 'host', 'port']);
+
+  let mode: RemoteMode | undefined;
+  if (raw.mode !== undefined) {
+    if (raw.mode !== 'local' && raw.mode !== 'remote') {
+      return fail(`setRemote.mode: expected "local" or "remote"`);
+    }
+    mode = raw.mode;
+  }
+
+  const request: SetRemoteRequest = {
+    ...(mode !== undefined ? { mode } : {}),
+    ...(raw.host !== undefined
+      ? { host: assertString(raw.host, 'setRemote.host') }
+      : {}),
+    ...(raw.port !== undefined ? { port: assertPort(raw.port, 'setRemote.port') } : {}),
+  };
+
+  if (Object.keys(request).length === 0) {
+    return fail('setRemote: nothing to change');
+  }
+  return request;
+}
+
+/**
+ * Payload of `remote:pair` (HIVE-144).
+ *
+ * The opposite direction from {@link parsePairDeviceRequest}: that one takes a
+ * free-text name typed by a person; this one takes the two values a
+ * `server:pair` mint on some *other* machine handed back — a `deviceId` this
+ * app already recognises as an id (`assertId`, the same guard every session
+ * and project id on this bridge takes), and a `token`, which is exactly the
+ * "credential in a payload" shape {@link assertJiraToken} was generalised to
+ * describe, not anything specific to Jira.
+ */
+export function parseRemotePairRequest(input: unknown): RemotePairRequest {
+  const raw = assertShape(input, ['deviceId', 'token'], 'remotePair');
+  return {
+    deviceId: assertId(raw.deviceId, 'remotePair.deviceId'),
+    token: assertJiraToken(raw.token, 'remotePair.token'),
+  };
 }
 
 /**

@@ -1,11 +1,18 @@
 // @vitest-environment node
 import assert from 'node:assert/strict';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { get as httpGet } from 'node:http';
 import { createRequire } from 'node:module';
 import { connect as netConnect, createServer as createNetServer } from 'node:net';
-import { homedir, tmpdir } from 'node:os';
+import { homedir, hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -14,15 +21,30 @@ import { WebSocket } from 'ws';
 
 import { parseConfig } from '../../electron/main/config/parse';
 import { mintDevice, type MintedDevice } from '../../electron/main/server/devices';
-import { CONFIG_PATH_ENV, CONFIG_VERSION } from '../../electron/shared/config-contract';
-import { CH, REPLAY_BYTES, type Channel, type DataEvent } from '../../electron/shared/ipc-contract';
 import {
+  CONFIG_PATH_ENV,
+  CONFIG_VERSION,
+  type ConfigSnapshot,
+  type SetRemoteResult,
+} from '../../electron/shared/config-contract';
+import {
+  CH,
+  REPLAY_BYTES,
+  type AppInfo,
+  type Channel,
+  type DataEvent,
+} from '../../electron/shared/ipc-contract';
+import {
+  CALL_DEADLINE_MS,
+  CALL_TIMEOUT_CODE,
   REMOTE_PROTOCOL_VERSION,
+  SNAPSHOT_CHANNELS,
   type AttachRequest,
   type ClientFrame,
   type ErrorFrame,
   type EventFrame,
   type ResultFrame,
+  type ResumePoint,
   type ServerFrame,
 } from '../../electron/shared/remote-contract';
 
@@ -111,6 +133,43 @@ import {
  *     gap notice keys on (`src/lib/terminal/pty-transport.ts`, asserted at
  *     `tests/lib/terminal/pty-transport.test.ts:463` and not duplicated here),
  *     delivered without waiting for output that an idle session never sends.
+ *
+ * ## The full flip: HIVE-144's five live cases
+ *
+ * HIVE-144 turns the link into a **second app**. Tasks 1-14 unit-tested every
+ * piece of that; these five are the acceptance criteria no unit test can
+ * reach, because each is a property of two real OS processes rather than of a
+ * module:
+ *
+ * 18. A session **restarted while a client was away** answers `gap`, not a
+ *     contiguous replay. This is the blocking bug the ticket was written
+ *     around: `registry.open()` mints pty session ids from a *global*
+ *     counter while seq numbers restart at 0 per session, so a `resumeFrom`
+ *     carrying a bare seq handed a reattaching client the **new**
+ *     generation's batches numbered contiguously and its gap detector raised
+ *     nothing — silent data loss that looked like success. The fixture makes
+ *     the two generations' heads deliberately **far apart** (a slow 30-line
+ *     loop on gen 1, a single line on gen 2), because a fixture where both
+ *     rings happen to sit at the same head cannot tell the fix from the bug.
+ * 19. An `attach-accepted` carries a **populated** snapshot — the six
+ *     `SNAPSHOT_CHANNELS` read against a server that has a project, a
+ *     ledger and live sessions, not an empty object that would satisfy
+ *     "has a `snapshot` key".
+ * 20. A **v1** client — a genuinely older build, not `VERSION + 1` — is
+ *     refused `protocol-mismatch` and gets no frame afterwards.
+ * 21. **Two real built apps.** One serves; the other boots with a window,
+ *     is handed a credential minted by the first, and flips itself into
+ *     remote mode through the very IPC channel that switch unbinds. Driven
+ *     through the client's own renderer over the Chrome DevTools Protocol —
+ *     see {@link openRenderer} for why that, and not a second `ws` client,
+ *     is the only surface that can observe Rulings 24 and 28 at all. Then it
+ *     flips back: 21g asserts the detach lands on *this* window and leaves
+ *     the server's config byte-for-byte alone — the direct inverse of the
+ *     defect this task found, where a detach was proxied to the server and a
+ *     client could enter remote mode and never leave it.
+ * 22. A call that never settles is answered `call-timeout` at
+ *     `CALL_DEADLINE_MS`. See {@link deadlineCall} for how that two-minute
+ *     wait is paid for by the rest of the file rather than added to it.
  *
  * Those cases spawn **real PTYs** through the socket: `pty:spawn` is graded
  * `execute` and a paired device holds `execute`, which is the whole premise the
@@ -617,6 +676,254 @@ async function settled(
 }
 
 /**
+ * `work`, or a failure naming `what` if it has not settled in `timeoutMs`.
+ *
+ * The bound is part of the assertion wherever this is used, not a convenience
+ * (HIVE-144, Task 10's review): `config:set-remote` unbinds the channel it is
+ * answering on, and the failure that leaves is a **hang** — which is
+ * indistinguishable from a slow dial without a bound to tell them apart. The
+ * timer is cleared on the winning path rather than left to run out, so a
+ * settled case does not hold the event loop open for the length of its own
+ * unused patience.
+ */
+async function bounded<T>(work: Promise<T>, timeoutMs: number, what: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${what} did not settle within ${String(timeoutMs)}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/** A plain `GET` whose body is parsed as JSON — the DevTools target list, and nothing else. */
+function getJson(url: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    httpGet(url, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => (body += chunk));
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch (cause) {
+          reject(cause instanceof Error ? cause : new Error(String(cause)));
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+/**
+ * `expression`, run inside a real window of a real app, answering the value
+ * it resolves to (HIVE-144, case 21).
+ *
+ * `close()` drops the DevTools socket. It does not stop the app — the caller
+ * owns that, through {@link stopApp}, exactly as it does for every other
+ * process this file spawns.
+ */
+interface RendererDriver {
+  evaluate<T>(expression: string): Promise<T>;
+  close(): void;
+}
+
+/**
+ * Attaches to a spawned app's **renderer** over the Chrome DevTools Protocol,
+ * so a case can call `window.hive.*` the way the app's own UI does (HIVE-144).
+ *
+ * ## Why this, and not a second `ws` client
+ *
+ * Every other case in this file reaches the app through its *server* socket,
+ * which `remote-host/listener.ts` dispatches into `remoteRegistry` — the
+ * registry `registerIpcHandlers` fills. That surface is deliberately **not**
+ * `ipcMain`, and the whole of HIVE-144 lives on `ipcMain`: `config:set-remote`
+ * unbinds the channel it is answering on there, `registerRemoteProxy` rebinds
+ * those same channel names against a socket there, and Ruling 24's three
+ * `PROCESS_LOCAL` channels are the ones that keep answering locally *there*
+ * while everything beside them is proxied. A `ws` client cannot see any of it.
+ * The renderer is the only caller that can, because it is the only caller
+ * `ipcMain` has — which is precisely why "a second app attaches" was left as a
+ * live case rather than folded into `remote-composition.test.ts`.
+ *
+ * ## Why the app is safe to drive this way
+ *
+ * `--remote-debugging-port` is a Chromium switch; `parseInvocation`
+ * (`electron/main/cli.ts`) walks argv looking for exactly four of its own
+ * flags and ignores everything else, which its own doc comment states as a
+ * property rather than an accident. Nothing about the app's behaviour changes
+ * — this opens a viewer onto the window it was already going to open.
+ *
+ * Polls the target list rather than sleeping, for {@link waitForListener}'s
+ * reason: the window appears when the renderer has loaded, which is a
+ * different amount of time on a cold filesystem than on a warm one.
+ */
+async function openRenderer(debugPort: number, what: string): Promise<RendererDriver> {
+  interface DevToolsTarget {
+    type?: string;
+    url?: string;
+    webSocketDebuggerUrl?: string;
+  }
+
+  let target: DevToolsTarget | undefined;
+  const start = Date.now();
+  while (Date.now() - start < 60_000) {
+    try {
+      const listed = (await getJson(`http://127.0.0.1:${String(debugPort)}/json/list`)) as DevToolsTarget[];
+      target = listed.find(
+        (candidate) =>
+          candidate.type === 'page' &&
+          typeof candidate.webSocketDebuggerUrl === 'string' &&
+          (candidate.url ?? '').includes('index.html'),
+      );
+      if (target !== undefined) break;
+    } catch {
+      // The debugging port is not up yet, or the app has not created a window.
+    }
+    await delay(200);
+  }
+  if (target?.webSocketDebuggerUrl === undefined) {
+    throw new Error(`timed out waiting for ${what} to expose a renderer on CDP port ${String(debugPort)}`);
+  }
+
+  const socket = new WebSocket(target.webSocketDebuggerUrl, { maxPayload: 64 * 1024 * 1024 });
+  await new Promise<void>((resolve, reject) => {
+    socket.once('open', () => resolve());
+    socket.once('error', reject);
+  });
+
+  interface CdpAnswer {
+    id?: number;
+    result?: {
+      result?: { value?: unknown };
+      exceptionDetails?: { text?: string; exception?: { description?: string } };
+    };
+    error?: { message?: string };
+  }
+
+  let nextId = 0;
+  const pending = new Map<number, (answer: CdpAnswer) => void>();
+  socket.on('message', (data) => {
+    const answer = JSON.parse(String(data)) as CdpAnswer;
+    if (answer.id === undefined) return;
+    const waiting = pending.get(answer.id);
+    pending.delete(answer.id);
+    waiting?.(answer);
+  });
+  // Registered for the reason `openClient` registers one: an `'error'` with no
+  // listener throws out of the emitter and takes the Vitest worker with it.
+  socket.on('error', (cause) => {
+    console.error(`[live] ${what} CDP socket error:`, cause.message);
+  });
+
+  const driver: RendererDriver = {
+    async evaluate<T>(expression: string): Promise<T> {
+      nextId += 1;
+      const id = nextId;
+      const answer = await new Promise<CdpAnswer>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pending.delete(id);
+          reject(new Error(`${what} never answered CDP evaluate: ${expression}`));
+        }, 60_000);
+        pending.set(id, (settled) => {
+          clearTimeout(timer);
+          resolve(settled);
+        });
+        socket.send(
+          JSON.stringify({
+            id,
+            method: 'Runtime.evaluate',
+            params: { expression, awaitPromise: true, returnByValue: true },
+          }),
+        );
+      });
+
+      if (answer.error !== undefined) {
+        throw new Error(`${what} refused CDP evaluate (${answer.error.message ?? '?'}): ${expression}`);
+      }
+      const thrown = answer.result?.exceptionDetails;
+      if (thrown !== undefined) {
+        throw new Error(
+          `${what} threw evaluating \`${expression}\`: ` +
+            `${thrown.exception?.description ?? thrown.text ?? 'unknown'}`,
+        );
+      }
+      return answer.result?.result?.value as T;
+    },
+    close() {
+      if (socket.readyState === WebSocket.OPEN) socket.close();
+      else socket.terminate();
+    },
+  };
+
+  /*
+    The page target exists before `contextBridge` has run, so the first
+    `evaluate` can land on a window with no `window.hive` on it at all —
+    measured, as `TypeError: Cannot read properties of undefined (reading
+    'config')`, on the very first run of case 21a. Polled rather than slept
+    on for {@link waitForListener}'s reason, and waited for **here** rather
+    than in each case, so no case has to remember: a driver handed back by
+    this function has a bridge behind it.
+  */
+  const bridgeStart = Date.now();
+  while (Date.now() - bridgeStart < 60_000) {
+    if ((await driver.evaluate<string>('typeof window.hive')) === 'object') return driver;
+    await delay(100);
+  }
+  throw new Error(`${what} loaded a window, but window.hive never appeared on it`);
+}
+
+/**
+ * A stand-in for `claude` that **hangs** on a `-p` headless run and on nothing
+ * else, written to `dir` and answered as an absolute path (HIVE-144, case 22).
+ *
+ * Two behaviours, both load-bearing:
+ *
+ * - `-p …` sleeps past `CALL_DEADLINE_MS`. That argv belongs to `slack:test`,
+ *   whose `probeSlack` runs `claude -p …` under a **three-minute** timeout
+ *   (`SLACK_PROBE_TIMEOUT_MS`) and, unlike `slack:sign-in`, without a
+ *   controlling terminal. `slack:sign-in` was the obvious candidate — it is
+ *   one of the two channels `CALL_DEADLINE_MS`'s own doc comment names — and
+ *   it does not work here: it goes through `/usr/bin/script`, which needs a
+ *   tty this suite's spawned app does not have (`script: tcgetattr/ioctl:
+ *   Operation not supported on socket`, measured). `slack:test` reaches the
+ *   same runner with the same 'a handler can simply not settle' shape and no
+ *   tty in the way. The `sleep` is bounded, and deliberately shorter than that
+ *   three-minute timeout: a stray child of a killed app reaps itself, and
+ *   nothing here depends on which of the two bounds would have won.
+ * - Anything else exits **non-zero**, which is what lets the same script stand
+ *   in as `claudeCommand` for a pty bootstrap. `sessionCommand` builds
+ *   `<claudeCommand> && exit` (`electron/main/sessions/bootstrap.ts`), so a
+ *   stub that ended cleanly would take the login shell with it — the identical
+ *   reasoning behind `stubClaudeCommand`'s `; false` below.
+ *
+ * As with that stub, this exists so that a machine with a real `claude` on its
+ * PATH never has one started by this suite.
+ */
+function writeStubClaude(dir: string): string {
+  const path = join(dir, 'stub-claude');
+  writeFileSync(
+    path,
+    [
+      '#!/bin/sh',
+      '# Live-suite stand-in for `claude`. See writeStubClaude in',
+      '# tests/live/server-conformance.test.ts.',
+      'if [ "$1" = "-p" ]; then exec sleep 170; fi',
+      'exit 1',
+      '',
+    ].join('\n'),
+    { encoding: 'utf8', mode: 0o755 },
+  );
+  return path;
+}
+
+/**
  * Bytes on the wire against bytes of `chunk` — the story's framing measurement.
  *
  * Accounted **per session**, not per socket, because the measurement is a claim
@@ -647,8 +954,17 @@ const measurements: Record<string, unknown>[] = [];
  * off an unattached socket and close it.
  */
 interface LiveClient {
-  /** Send a `call` frame with a fresh id; resolve its `result` or `error`. */
-  call(channel: Channel, payload: unknown): Promise<ResultFrame | ErrorFrame>;
+  /**
+   * Send a `call` frame with a fresh id; resolve its `result` or `error`.
+   *
+   * `timeoutMs` is this *client's* patience and has nothing to do with
+   * `CALL_GIVE_UP_MS` — a raw `ws` client is not `RemoteClient`. It is a
+   * parameter only because case 22 waits on the server's own
+   * `CALL_DEADLINE_MS`, which is longer than any other call here should ever
+   * take; every other caller takes the default and a call that outruns it is
+   * a failure, not a wait.
+   */
+  call(channel: Channel, payload: unknown, timeoutMs?: number): Promise<ResultFrame | ErrorFrame>;
   /**
    * Send a `notify` frame. There is no answer to wait for, by contract —
    * `FRAME_KIND` grades `pty:write`, `pty:resize` and `pty:ack` as `notify`, and
@@ -686,7 +1002,20 @@ const liveClients: LiveClient[] = [];
 async function openClient(
   url: string,
   device: { id: string; token: string },
-  options: { resumeFrom?: Record<string, number> } = {},
+  options: {
+    resumeFrom?: Record<string, ResumePoint>;
+    /**
+     * Keep this socket out of {@link liveClients}, so the HIVE-143 block's own
+     * `afterAll` — which closes every client in that array — cannot close it
+     * (HIVE-144, case 22). Case 22's call has to still be outstanding on an
+     * **open** socket when its deadline fires two minutes later: the server
+     * checks `readyState` before sending the timeout frame, so a socket closed
+     * by an unrelated block's teardown would make that case wait its full
+     * patience for an answer that is never sent. The one caller that passes
+     * this closes the socket itself.
+     */
+    unmanaged?: boolean;
+  } = {},
 ): Promise<LiveClient> {
   const socket = new WebSocket(url);
   const events: EventFrame[] = [];
@@ -797,14 +1126,14 @@ async function openClient(
     forSession(sessionId).reduce((total, event) => total + Buffer.byteLength(event.chunk), 0);
 
   const client: LiveClient = {
-    call(channel, payload) {
+    call(channel, payload, timeoutMs = 60_000) {
       nextCallId += 1;
       const id = `live-${String(nextCallId)}`;
       return new Promise((resolve, reject) => {
         const callTimer = setTimeout(() => {
           pending.delete(id);
           reject(new Error(`call ${channel} (${id}) was never answered`));
-        }, 60_000);
+        }, timeoutMs);
         pending.set(id, (answer) => {
           clearTimeout(callTimer);
           resolve(answer);
@@ -871,21 +1200,98 @@ async function openClient(
     }),
   };
 
-  liveClients.push(client);
+  if (options.unmanaged !== true) liveClients.push(client);
   return client;
 }
+
+/**
+ * Case 22's call, fired at the very top of the run and collected at the very
+ * bottom (HIVE-144).
+ *
+ * ## Why the deadline is not a two-minute wait
+ *
+ * `CALL_DEADLINE_MS` is 120s and is a hard-coded constant with no seam — no
+ * env override, no injectable clock, and the process that owns the timer is a
+ * separate OS process, so neither Vitest's fake timers nor anything else this
+ * file can reach makes it fire sooner. A case that issued the call and then
+ * waited would add two minutes of dead time to every run.
+ *
+ * It does not have to. The deadline is wall-clock, and this file already
+ * spends far more than two minutes of wall clock booting four Electron apps,
+ * flooding a pty past `REPLAY_BYTES` and restarting a session. So the call is
+ * issued from the outermost `beforeAll`, against an app of its own, and
+ * awaited by the last case in the file: the timer runs *underneath* every
+ * other case rather than after them. `startedAt` is recorded so the case can
+ * assert the answer really took `CALL_DEADLINE_MS` — an answer that arrived
+ * early would be some other error wearing the same code, and the elapsed
+ * assertion is what tells those apart.
+ */
+interface DeadlineRun {
+  app: ChildProcess | undefined;
+  client: LiveClient;
+  startedAt: number;
+  answer: Promise<ResultFrame | ErrorFrame>;
+}
+
+let deadlineRun: DeadlineRun | null = null;
 
 describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => {
   let evidenceDir: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     if (!existsSync(MAIN_ENTRY)) {
       throw new Error(`${MAIN_ENTRY} is missing. Run \`pnpm desktop:build\` before \`pnpm test:server\`.`);
     }
     evidenceDir = mkdtempSync(join(tmpdir(), 'hive-live-server-evidence-'));
-  });
 
-  afterAll(() => {
+    /*
+      Case 22's clock starts here — see {@link DeadlineRun} for why it is
+      started at the top of the file and collected at the bottom rather than
+      inside the case that asserts on it. Its own app, its own config and its
+      own device: `slack:test` needs a `claudeCommand` that resolves to a
+      single executable (`resolveClaude`), and the HIVE-143 block's
+      `stubClaudeCommand` is a shell fragment that deliberately does not.
+    */
+    const dir = mkdtempSync(join(tmpdir(), 'hive-live-server-deadline-'));
+    const configPath = join(dir, 'config.json');
+    const userDataDir = join(dir, 'user-data');
+    assertScratchPath(configPath);
+    scratchConfigPaths.push(configPath);
+    const device = mintDevice('Deadline-Device');
+
+    const booted = await bootServerApp(configPath, userDataDir, (bootPort) => ({
+      version: CONFIG_VERSION,
+      shell: '/bin/sh',
+      claudeCommand: writeStubClaude(dir),
+      projects: [],
+      server: {
+        bind: { host: '127.0.0.1', port: bootPort, allowedOrigins: [] },
+        devices: [device.device],
+      },
+    }));
+
+    const client = await openClient(
+      `ws://127.0.0.1:${String(booted.port)}`,
+      { id: device.device.id, token: device.token },
+      { unmanaged: true },
+    );
+    deadlineRun = {
+      app: booted.child,
+      client,
+      startedAt: Date.now(),
+      /*
+        Patience well past the server's own deadline, so the failure this case
+        can report is "the server never answered" rather than "this client
+        stopped listening" — two very different findings that a patience at or
+        near `CALL_DEADLINE_MS` would make indistinguishable.
+      */
+      answer: client.call(CH.slackTest, undefined, CALL_DEADLINE_MS + 60_000),
+    };
+  }, 120_000);
+
+  afterAll(async () => {
+    deadlineRun?.client.close();
+    await stopApp(deadlineRun?.app);
     const findingPath = join(evidenceDir, 'finding.json');
     writeFileSync(
       findingPath,
@@ -903,7 +1309,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       'utf8',
     );
     console.info('EVIDENCE ', findingPath);
-  });
+  }, 30_000);
 
   describe('the handshake, the CLI in a second process, and the token never on disk', () => {
     let dir: string;
@@ -1034,6 +1440,58 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       expect(message).toContain(String(REMOTE_PROTOCOL_VERSION));
       expect(message).toContain(String(clientProtocol));
     });
+
+    it('20. refuses a v1 client with protocol-mismatch, and sends no frame afterward (HIVE-144)', async () => {
+      /*
+        The same mechanism case 4 drives, from the direction that will actually
+        happen. Case 4 sends `REMOTE_PROTOCOL_VERSION + 1` — a client from the
+        future, which exists only in that test — and proves the *refusal path*
+        works at all. This one sends `1`: the protocol HIVE-143 shipped, and
+        therefore a real build someone can still be running, which is the
+        version this server has to keep refusing rather than half-speaking.
+        The two are one assertion only for as long as `REMOTE_PROTOCOL_VERSION`
+        stays 2; a future bump makes case 4 test 4-against-3 and leaves this
+        one still testing the oldest client in the wild.
+      */
+      expect(REMOTE_PROTOCOL_VERSION).toBeGreaterThan(1);
+
+      const messages: Record<string, unknown>[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const socket = new WebSocket(url);
+        socket.on('open', () =>
+          socket.send(
+            JSON.stringify({
+              kind: 'attach',
+              protocol: 1,
+              deviceId: active.device.id,
+              token: active.token,
+            }),
+          ),
+        );
+        socket.on('message', (data) => messages.push(JSON.parse(String(data)) as Record<string, unknown>));
+        socket.on('close', () => resolve());
+        socket.on('error', reject);
+      });
+
+      // One frame, and only one, after the socket has fully closed — a v1
+      // client is refused, not downgraded to.
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({ kind: 'attach-refused', code: 'protocol-mismatch' });
+      const message = String(messages[0]?.['message']);
+      expect(message).toContain(String(REMOTE_PROTOCOL_VERSION));
+      // `\b1\b`, not `toContain('1')`: the server's own version is in this
+      // same sentence, and a bare substring check would pass on the `1` inside
+      // a two-digit version long after this case stopped meaning anything.
+      expect(message).toMatch(/\b1\b/u);
+      /*
+        An explicit bound rather than Vitest's 5s default. This case waits on
+        the socket **closing**, and the failure mode when a version stops being
+        refused is that it never does — proved by pointing this case at the
+        server's own version, which produced `Test timed out in 5000ms` rather
+        than an assertion. That is the right failure, and 5s of it is too tight
+        a margin to hang a real refusal on.
+      */
+    }, 20_000);
 
     it('5. refuses a call frame that arrives on an unattached socket', async () => {
       const outcome = await attach(url, {
@@ -1306,7 +1764,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
     let device: MintedDevice;
 
     /** A client that has completed a real handshake, optionally resuming. */
-    const attached = async (options: { resumeFrom?: Record<string, number> } = {}): Promise<LiveClient> =>
+    const attached = async (options: { resumeFrom?: Record<string, ResumePoint> } = {}): Promise<LiveClient> =>
       openClient(url, { id: device.device.id, token: device.token }, options);
 
     beforeAll(async () => {
@@ -1593,6 +2051,20 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
 
       const before = await client.collectPtyUntil(sessionId, /line-50\b/);
       const lastSeq = before.at(-1)!.seq;
+      /*
+        Read off the wire, never written as a literal (HIVE-144).
+
+        `registry.open()`'s counter is **global**, not per entity
+        (`electron/main/sessions/registry.ts`): this app's second session gets
+        generation 2 whether or not anything was ever restarted. A literal
+        `gen: 1` here is therefore only correct for whichever case happens to
+        spawn first, and a case further down the file that wrote one would be
+        asking for a generation mismatch while claiming to test something else
+        — which is exactly what case 17 below was doing until this run. A
+        client learns its generation the only way a real one can, from
+        `DataEvent.gen` on the frames it has already been sent.
+      */
+      const lastGen = before.at(-1)!.gen;
       client.kill();
 
       /*
@@ -1612,10 +2084,15 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       witness.kill();
       expect(witnessLastSeq).toBeGreaterThan(lastSeq + 1);
 
-      const resumed = await attached({ resumeFrom: { [sessionId]: lastSeq } });
+      // The same generation throughout: nothing here restarts the session,
+      // only the socket watching it — so `lastGen`, read off the frames this
+      // client was already sent, is still the live one and the replay arm is
+      // the one taken. Case 18 is the other side of that branch.
+      const resumed = await attached({ resumeFrom: { [sessionId]: { gen: lastGen, seq: lastSeq } } });
       const after = await resumed.collectPtyUntil(sessionId, /line-400\b/);
       measurements.push({
         case: '16. resume across a killed socket',
+        generation: lastGen,
         lastSeqBeforeKill: lastSeq,
         seqReachedWhileAway: witnessLastSeq,
         firstSeqAfterResume: after[0]?.seq,
@@ -1639,7 +2116,23 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       // typed, so a literal `READY-MARK` in the command line would match this
       // pattern against the echo rather than against anything the shell ran.
       client.notify(CH.ptyWrite, { sessionId, data: "printf 'READY-%s\\n' MARK\r" });
-      const lastSeq = (await client.collectPtyUntil(sessionId, /READY-MARK/)).at(-1)!.seq;
+      const ready = (await client.collectPtyUntil(sessionId, /READY-MARK/)).at(-1)!;
+      const lastSeq = ready.seq;
+      /*
+        **This case used to write `gen: 1` here, and that made it vacuous**
+        (found while writing case 18, HIVE-144).
+
+        `registry.open()`'s generation counter is global across entities, so
+        `live-gap` — this app's *second* session — is generation 2, not 1. A
+        literal 1 therefore took `Sessions.resume`'s **generation-mismatch**
+        arm, which returns a gap without ever consulting the ring; the case
+        asserted a gap, got one, and proved nothing at all about
+        `REPLAY_BYTES`. It passed for a reason its own comment denied. Reading
+        the generation off the frames the client was actually sent puts it back
+        on the arm it names — same generation, ring overrun — and leaves the
+        mismatch arm to case 18, where it is the claim rather than an accident.
+      */
+      const lastGen = ready.gen;
       client.kill();
 
       /*
@@ -1676,7 +2169,9 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       });
       flood.kill();
 
-      const resumed = await attached({ resumeFrom: { [sessionId]: lastSeq } });
+      // One generation throughout — the flood is on the same generation, so
+      // the gap below is the ring, not a restart. Case 18 is the restart.
+      const resumed = await attached({ resumeFrom: { [sessionId]: { gen: lastGen, seq: lastSeq } } });
       /*
         The resuming client is sent no *transcript* for a gap — that is still by
         design (`ipc/pty.ts`'s `ResumeResult`) — but it is sent one **empty**
@@ -1696,10 +2191,20 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       const marker = after[0]!;
       measurements.push({
         case: '17. seqs across the forced gap',
+        generation: lastGen,
+        markerGeneration: marker.gen,
         lastSeqBeforeKill: lastSeq,
         markerSeq: marker.seq,
         markerChunkLength: marker.chunk.length,
       });
+
+      /*
+        The generation is unchanged across this gap, which is what separates
+        this case from case 18. Asserted rather than assumed: without it the
+        `gen: 1` bug above could come back as any other wrong generation and
+        this case would go on passing on the mismatch arm.
+      */
+      expect(marker.gen).toBe(lastGen);
 
       // A discontinuity is what the renderer's existing gap notice keys on
       // (`src/lib/terminal/pty-transport.ts`), and an empty chunk is what makes
@@ -1719,5 +2224,995 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       const live = await resumed.collectPtyUntil(sessionId, /DONE-MARK/);
       expect(live[1]!.seq).toBe(marker.seq + 1);
     }, 180_000);
+
+    it('18. a restarted session answers gap to a reattaching client (HIVE-144)', async () => {
+      /*
+        **The blocking bug this ticket was written around, end to end.**
+
+        `registry.open()` mints pty session ids as `${entityId}.g${N}` from a
+        counter that is global to the process, while `ipc/pty.ts`'s seq numbers
+        restart at 0 for each new session id. Before this branch `resumeFrom`
+        was `Record<entityId, number>` — a bare seq, with no generation beside
+        it — so a client that reattached after a restart was handed the **new**
+        generation's batches, numbered from wherever that generation's ring
+        happened to be, and its own contiguity check raised nothing. Data loss
+        that rendered as success.
+
+        The fixture is built so that a `gap` and a contiguous replay cannot
+        look the same: generation A runs a slow 30-line loop so its head climbs
+        well past anything a one-line generation can reach, and generation B
+        prints once. `expect(headB).toBeLessThan(lastSeqA)` below is not a
+        sanity check on the shell — it is the precondition the case's whole
+        claim rests on, asserted rather than assumed, because a fixture where
+        both rings sat at the same head would have passed identically with the
+        bug present. (That exact mistake was made once already on this branch.)
+      */
+      const client = await attached();
+      const sessionId = await client.spawnSession(seededProjectId, 'live-restart');
+
+      /*
+        A line every ~10ms, for case 16's reason: 30 `echo`s in the tightest
+        loop land in one or two 8ms batches, and the point here is a *high*
+        head seq, which needs many batches rather than many bytes.
+      */
+      client.notify(CH.ptyWrite, {
+        sessionId,
+        data: 'i=1; while [ $i -le 30 ]; do echo gen-a-$i; i=$((i+1)); sleep 0.01; done\r',
+      });
+      const beforeRestart = (await client.collectPtyUntil(sessionId, /gen-a-30\b/)).at(-1)!;
+      const lastSeqA = beforeRestart.seq;
+      const genA = beforeRestart.gen;
+      client.kill();
+
+      /*
+        The restart itself, over a socket of its own — the reconnecting client
+        is gone by design, and something still has to reach the app. `pty:restart`
+        is graded `execute` (`remote-contract.ts`'s `DEVICE_GRANT`) and a paired
+        device holds `execute`, so this is the same verb a client's own restart
+        button sends.
+      */
+      const driver = await attached();
+      const restarted = await driver.call(CH.ptyRestart, {
+        sessionId,
+        projectId: seededProjectId,
+        cols: 200,
+        rows: 24,
+      });
+      expect(restarted, `pty:restart was refused: ${JSON.stringify(restarted)}`).toMatchObject({
+        kind: 'result',
+      });
+
+      // One line, and only one, on the new generation.
+      driver.notify(CH.ptyWrite, { sessionId, data: "printf 'GEN-B-%s\\n' MARK\r" });
+      await driver.collectPtyUntil(sessionId, /GEN-B-MARK/);
+      const genBFrames = (await driver.collectPtyCount(sessionId, 1)).filter(
+        (event) => event.gen !== genA,
+      );
+      expect(
+        genBFrames.length,
+        'the restart produced no frames on a new generation — nothing was restarted',
+      ).toBeGreaterThan(0);
+      const genB = genBFrames.at(-1)!.gen;
+      const headB = genBFrames.at(-1)!.seq;
+      driver.kill();
+
+      measurements.push({
+        case: '18. gap across a restart',
+        sessionId,
+        generationA: genA,
+        lastSeqOnA: lastSeqA,
+        generationB: genB,
+        headSeqOnB: headB,
+      });
+
+      // The precondition, not a formality — see this case's own comment.
+      expect(genB).not.toBe(genA);
+      expect(headB).toBeLessThan(lastSeqA);
+
+      /*
+        The reattach: the client knows only what it was told before it went
+        away — generation A, and the last seq it rendered. This is the exact
+        frame the old `Record<entityId, number>` could not express.
+      */
+      const resumed = await attached({ resumeFrom: { [sessionId]: { gen: genA, seq: lastSeqA } } });
+      const after = await resumed.collectPtyCount(sessionId, 1);
+      const marker = after[0]!;
+
+      // A gap marker, not a replay: empty chunk, stamped at the *new*
+      // generation's head, carrying the new generation rather than the stale
+      // one the client sent.
+      expect(marker.chunk).toBe('');
+      expect(marker.seq).toBe(headB);
+      expect(marker.gen).toBe(genB);
+
+      /*
+        And the shape the bug produced, named directly: a client resuming at
+        `lastSeqA` that is handed `lastSeqA + 1` sees no discontinuity and
+        writes the new generation's output into the old one's transcript. That
+        is the assertion this whole ticket exists for.
+      */
+      expect(marker.seq).not.toBe(lastSeqA + 1);
+      for (const event of after) expect(event.seq).not.toBe(lastSeqA + 1);
+
+      /*
+        Live output still follows the marker contiguously, for case 17's
+        reason: a marker that raised a second, false gap would be worse than
+        the silence it replaced.
+      */
+      resumed.notify(CH.ptyWrite, { sessionId, data: "printf 'GEN-B-%s\\n' AFTER\r" });
+      const live = await resumed.collectPtyUntil(sessionId, /GEN-B-AFTER/);
+      expect(live[1]!.seq).toBe(marker.seq + 1);
+      expect(live[1]!.gen).toBe(genB);
+    }, 180_000);
+
+    it('19. an attach accept carries a populated snapshot (HIVE-144)', async () => {
+      /*
+        Read through `attach`, not `openClient`: this case wants the accept
+        frame itself, and `attach` is the helper that reads exactly one frame
+        and closes. Run late in this block on purpose — by now the server has a
+        project, agents written by case 15, a ledger entry, and three live pty
+        sessions, so an empty snapshot here would be a real failure rather than
+        an honest answer about an idle server.
+      */
+      const outcome = await attach(url, {
+        kind: 'attach',
+        protocol: REMOTE_PROTOCOL_VERSION,
+        deviceId: device.device.id,
+        token: device.token,
+      });
+      expect(outcome.frame).toMatchObject({ kind: 'attach-accepted', serverName: hostname() });
+
+      const snapshot = (outcome.frame?.['snapshot'] ?? {}) as Partial<Record<Channel, unknown>>;
+      const keys = Object.keys(snapshot);
+      measurements.push({ case: '19. attach snapshot', keys });
+
+      /*
+        Every key is one this contract names — a snapshot that grew a key the
+        client does not know how to read is as wrong as one that lost one.
+      */
+      for (const key of keys) expect(SNAPSHOT_CHANNELS).toContain(key);
+
+      /*
+        Five of the six asserted individually rather than by count, so a
+        failure names which one went missing. `github:prs` is deliberately not
+        among them: it shells out to a real `gh` and races
+        `SNAPSHOT_READ_BUDGET_MS`, and Ruling 15 says a read that misses that
+        budget is dropped — so requiring it here would make this case fail on a
+        slow network rather than on a regression.
+      */
+      for (const channel of [
+        CH.configGet,
+        CH.sessionHistory,
+        CH.agentsList,
+        CH.ledgerList,
+        CH.notificationsList,
+      ]) {
+        expect(keys, `snapshot was missing ${channel}`).toContain(channel);
+      }
+
+      /*
+        Populated, not merely present. `config:get` is checked against the
+        project *this* server was seeded with — a snapshot answered from some
+        other config, or from a default one, fails here — and `ledger:list`
+        against the entry case 15 posted through this same socket.
+      */
+      const config = snapshot[CH.configGet] as { projects: { id: string }[] };
+      expect(config.projects.map((project) => project.id)).toContain(seededProjectId);
+      expect(JSON.stringify(snapshot[CH.ledgerList])).toContain('live proof');
+    }, 30_000);
+  });
+
+  describe('two real built apps, one serving and one attaching (HIVE-144)', () => {
+    /**
+     * The server's project, and the client's own. Deliberately different ids
+     * on deliberately different paths: `config:get` answered by the far end has
+     * to be distinguishable from `config:get` answered locally by *something
+     * only the far process could produce*, and a scratch directory this run
+     * made on the server side is exactly that. "It resolved" would not be.
+     */
+    const servedProjectId = 'served-fleet';
+    const clientProjectId = 'client-only';
+    /**
+     * A **second** project on the client, and only on the client (Ruling 29).
+     *
+     * The two configs have to differ in project *count*, not only in ids,
+     * because case 21h needs a signal that the Advanced pane's Reload button
+     * was answered by one machine rather than the other — and the only thing
+     * that button renders is "Reloaded — N projects." One each would print the
+     * same sentence for both, which is a wait that cannot tell the two apart
+     * and therefore a wait that proves nothing.
+     */
+    const clientProjectId2 = 'client-only-two';
+
+    let serverDir: string;
+    let serverConfigPath: string;
+    let serverUserDataDir: string;
+    let serverPort: number;
+    let serverProjectDir: string;
+    let serverApp: ChildProcess | undefined;
+    let serverRecord: ProcessRecord | undefined;
+
+    let clientDir: string;
+    let clientConfigPath: string;
+    let clientUserDataDir: string;
+    let clientProjectDir: string;
+    let clientProjectDir2: string;
+    let clientApp: ChildProcess | undefined;
+    let clientRecord: ProcessRecord | undefined;
+    let renderer: RendererDriver | undefined;
+
+    /** The device the server minted for the client, through the real `--pair` CLI. */
+    let credential: { id: string; token: string } | null = null;
+    /** A raw `ws` client on the *server*, so this case can see the server's own answers. */
+    let onServer: LiveClient | undefined;
+    /** The live session the client is supposed to be able to watch. */
+    const watchedSessionId = 'live-fleet';
+
+    beforeAll(async () => {
+      serverDir = mkdtempSync(join(tmpdir(), 'hive-live-two-app-server-'));
+      serverConfigPath = join(serverDir, 'config.json');
+      serverUserDataDir = join(serverDir, 'user-data');
+      serverProjectDir = mkdtempSync(join(tmpdir(), 'hive-live-two-app-served-project-'));
+      assertScratchPath(serverConfigPath);
+      scratchConfigPaths.push(serverConfigPath);
+
+      const booted = await bootServerApp(serverConfigPath, serverUserDataDir, (bootPort) => ({
+        version: CONFIG_VERSION,
+        shell: '/bin/sh',
+        // The same no-op bootstrap the HIVE-143 block uses, for the same
+        // reason: a machine with a real `claude` on its PATH must not have one
+        // started by this suite.
+        claudeCommand: 'true; false',
+        projects: [
+          { id: servedProjectId, name: 'Served Fleet', path: serverProjectDir, icon: 'ph-cube' },
+        ],
+        server: { bind: { host: '127.0.0.1', port: bootPort, allowedOrigins: [] }, devices: [] },
+      }));
+      serverApp = booted.child;
+      serverRecord = booted.record;
+      serverPort = booted.port;
+
+      /*
+        The client is an ordinary app: no `--server`, a real window, its own
+        profile and its own config. `--remote-debugging-port` is the one
+        addition, and it changes nothing the app does — see {@link openRenderer}.
+      */
+      clientDir = mkdtempSync(join(tmpdir(), 'hive-live-two-app-client-'));
+      clientConfigPath = join(clientDir, 'config.json');
+      clientUserDataDir = join(clientDir, 'user-data');
+      clientProjectDir = mkdtempSync(join(tmpdir(), 'hive-live-two-app-client-project-'));
+      clientProjectDir2 = mkdtempSync(join(tmpdir(), 'hive-live-two-app-client-project-two-'));
+      assertScratchPath(clientConfigPath);
+      scratchConfigPaths.push(clientConfigPath);
+      writeFileSync(
+        clientConfigPath,
+        JSON.stringify(
+          {
+            version: CONFIG_VERSION,
+            shell: '/bin/sh',
+            claudeCommand: 'true; false',
+            projects: [
+              { id: clientProjectId, name: 'Client Only', path: clientProjectDir, icon: 'ph-cube' },
+              { id: clientProjectId2, name: 'Client Two', path: clientProjectDir2, icon: 'ph-cube' },
+            ],
+          },
+          null,
+          2,
+        ),
+        'utf8',
+      );
+
+      const debugPort = await freePort();
+      const spawned = spawnApp(
+        [`--remote-debugging-port=${String(debugPort)}`],
+        clientConfigPath,
+        clientUserDataDir,
+      );
+      clientApp = spawned.child;
+      clientRecord = spawned.record;
+      renderer = await openRenderer(debugPort, 'the attaching app');
+    }, 150_000);
+
+    afterAll(async () => {
+      renderer?.close();
+      onServer?.close();
+      await stopApp(clientApp);
+      await stopApp(serverApp);
+    }, 30_000);
+
+    it('21a. the client boots local, answering from its own config and its own process', async () => {
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const config = await renderer.evaluate<ConfigSnapshot>('window.hive.config.get()');
+      expect(
+        config.projects.map((project) => project.id),
+        `the attaching app's stderr so far:\n${clientRecord?.stderr || '(empty)'}`,
+      ).toEqual([clientProjectId, clientProjectId2]);
+      expect(config.remote.mode).toBe('local');
+
+      const info = await renderer.evaluate<AppInfo>('window.hive.appInfo()');
+      // Nothing is attached and nothing is served — the baseline the two
+      // Ruling-24 assertions below move away from.
+      expect(info.attachedServerName).toBeNull();
+      expect(info.serverBoundHost).toBeNull();
+      expect(info.servingDeviceCount).toBe(0);
+    }, 60_000);
+
+    it('21b. --pair on the server hands the client a credential it never writes to config.json', async () => {
+      // The real CLI, in its own process, against the already-running server —
+      // case 6's mechanism, now used the way production uses it.
+      const paired = await runOneShot(['--pair', 'The-Client'], serverConfigPath, serverUserDataDir);
+      expect(paired.code).toBe(0);
+      const lines = paired.stdout.trim().split('\n');
+      const token = lines[0] ?? '';
+      const deviceId = (lines[1] ?? '').replace(/^Device id: /, '');
+      expect(token).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$/u);
+      expect(deviceId).not.toBe('');
+      credential = { id: deviceId, token };
+
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const stored = await renderer.evaluate<{ paired: true } | { error: string }>(
+        `window.hive.remote.pair({ deviceId: ${JSON.stringify(deviceId)}, token: ${JSON.stringify(token)} })`,
+      );
+      expect(stored).toEqual({ paired: true });
+
+      /*
+        The client half of case 7's claim. `devices.ts` states the two places a
+        token's plaintext may exist — stdout at mint time, and the client's own
+        `safeStorage` — and this file already asserts the server never writes
+        one. The receiving end deserves the same assertion, against the exact
+        string that was printed rather than a shape.
+      */
+      expect(readFileSync(clientConfigPath, 'utf8')).not.toContain(token);
+      const credentialFile = join(clientUserDataDir, 'remote-credential.bin');
+      expect(existsSync(credentialFile)).toBe(true);
+      // Encrypted, not merely elsewhere: the bytes on disk are not the token.
+      expect(readFileSync(credentialFile).toString('binary')).not.toContain(token);
+    }, 60_000);
+
+    it('21c. a set-remote to a dead port resolves, refuses, and leaves the local snapshot alone', async () => {
+      /*
+        Reviewer assertion (d), and it runs **before** the successful switch on
+        purpose: the property is that the reply survives a full unbind → dial
+        fail → rebind-local cycle *inside one invocation*, and that is only
+        observable from a window that was local to begin with and is local
+        afterwards.
+
+        It runs **after** pairing for a reason the first run of this suite
+        supplied: with no credential stored, `requireCredential` throws before
+        `connectRemote` is ever called, so the `connect-failed` this case
+        asserts arrived without a socket having been attempted at all — the
+        case passed while exercising none of the cycle it names. The message is
+        checked below precisely so that cannot come back silently.
+
+        A port nothing is listening on, not an unroutable host: the address has
+        to pass `isRemoteTarget` (loopback does) so the refusal comes from the
+        dial rather than from the plaintext fence, which is a different arm
+        with a different remedy.
+      */
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const deadPort = await freePort();
+
+      const started = Date.now();
+      const result = await bounded(
+        renderer.evaluate<SetRemoteResult>(
+          `window.hive.config.setRemote({ mode: 'remote', host: '127.0.0.1', port: ${String(deadPort)} })`,
+        ),
+        60_000,
+        'setRemote to a dead loopback port (a hang here is the failure, not a refusal)',
+      );
+      const elapsed = Date.now() - started;
+      measurements.push({ case: '21c. set-remote to a dead port', elapsed, result: result.switched });
+
+      expect(result.switched).toMatchObject({ ok: false, reason: 'connect-failed' });
+      // The dial is what failed, and the message says so — see this case's own
+      // comment for the refusal that used to stand in for it.
+      const message = String((result.switched as { message?: string }).message);
+      expect(message).toContain(String(deadPort));
+      expect(message).not.toContain('device credential');
+      // Ruling 19: a target this app could never reach is never written.
+      expect(result.config.remote.mode).toBe('local');
+
+      /*
+        And the surface is alive again. `config:get` answering at all is the
+        half that proves the rebind happened — the failure this guards is a
+        window with no IPC — and the projects being the *client's* is the half
+        that proves it rebound to the local handlers rather than to anything
+        else.
+      */
+      const after = await renderer.evaluate<ConfigSnapshot>('window.hive.config.get()');
+      expect(after.projects.map((project) => project.id)).toEqual([clientProjectId, clientProjectId2]);
+      expect(readFileSync(clientConfigPath, 'utf8')).not.toContain(String(deadPort));
+    }, 90_000);
+
+    it('21d. set-remote resolves on the channel it unbound, and the server answers afterwards', async () => {
+      /*
+        Reviewer assertions (a), (b) and (c). `config:set-remote`'s handler
+        unbinds the very channel it is answering on — `switchIpcMode` calls
+        `resetIpcHandlers` mid-invocation — and only a real Electron process
+        can show the reply still lands. The failure mode is a **hang**, not an
+        error, which is indistinguishable from a slow dial without a bound, so
+        the bound is part of the assertion rather than a convenience.
+      */
+      assert(renderer !== undefined, 'the client app must have a renderer');
+
+      // Installed before the switch: after it, `pty:data` for the server's
+      // session has to arrive through the socket, the remote proxy and the
+      // broadcaster to reach this window at all.
+      await renderer.evaluate(
+        'window.__liveFleet = []; window.hive.pty.onData((event) => window.__liveFleet.push(event)); true',
+      );
+
+      const started = Date.now();
+      const result = await bounded(
+        renderer.evaluate<SetRemoteResult>(
+          `window.hive.config.setRemote({ mode: 'remote', host: '127.0.0.1', port: ${String(serverPort)} })`,
+        ),
+        60_000,
+        'setRemote to the live server (its reply has to survive unbinding its own channel)',
+      );
+      const elapsed = Date.now() - started;
+      measurements.push({ case: '21d. set-remote to the live server', elapsed, switched: result.switched });
+
+      // (a) and (b): it resolved, inside the bound, and the value it resolved
+      // with was built by code that ran *after* the await — on a channel that
+      // no longer existed by then.
+      expect(result.switched).toEqual({ ok: true });
+      expect(result.config.remote.mode).toBe('remote');
+      expect(result.config.remote.port).toBe(serverPort);
+
+      /*
+        (c) A *subsequent* call is answered by the far process. Asserted on the
+        server's own seeded project and its scratch path — something only that
+        process can produce — and, in the negative, on the client's own project
+        being gone. "It resolved" would have been satisfied by the local
+        handlers answering, which is the failure this is looking for.
+      */
+      const config = await renderer.evaluate<ConfigSnapshot>('window.hive.config.get()');
+      expect(config.projects.map((project) => project.id)).toEqual([servedProjectId]);
+      // `realpathSync`, because `resolveProjects` stores the resolved path and
+      // `mkdtempSync` under macOS's `/var` symlink hands back the unresolved
+      // one — a difference that is entirely about this machine's filesystem
+      // and nothing about which process answered.
+      expect(config.projects[0]?.path).toBe(realpathSync(serverProjectDir));
+      expect(config.projects.map((project) => project.id)).not.toContain(clientProjectId);
+    }, 120_000);
+
+    it('21e. appInfo stays this process’s own while attached (Ruling 24)', async () => {
+      /*
+        `CH.appInfo`, `CH.updatesStatus` and `CH.updatesCheck` are
+        `PROCESS_LOCAL`: answered by the window's own process even while
+        attached, never proxied. Before that fix an attached client read the
+        **server's** app info, so the attached chip could never appear, the
+        About box showed the server's Electron version and a log path that does
+        not exist on this machine, and the amber exposure chip reported the
+        server's exposure as this one's.
+
+        The fields compared here are chosen because they *provably* differ
+        between these two processes rather than because they might: one app is
+        serving on a real port with a paired device and is attached to nothing,
+        the other is attached and serving nothing. Both halves are read live —
+        the server's over a raw socket, the client's through its own renderer —
+        so neither side is a value this file made up.
+      */
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      assert(credential !== null, 'case 21b must have run and paired a device');
+
+      onServer = await openClient(`ws://127.0.0.1:${String(serverPort)}`, credential, {
+        unmanaged: true,
+      });
+      const answer = await onServer.call(CH.appInfo, undefined);
+      assert(answer.kind === 'result', `the server refused app:info: ${JSON.stringify(answer)}`);
+      const serverInfo = answer.payload as AppInfo;
+      const clientInfo = await renderer.evaluate<AppInfo>('window.hive.appInfo()');
+      measurements.push({
+        case: '21e. Ruling 24',
+        server: {
+          serverBoundHost: serverInfo.serverBoundHost,
+          servingDeviceCount: serverInfo.servingDeviceCount,
+          attachedServerName: serverInfo.attachedServerName,
+        },
+        client: {
+          serverBoundHost: clientInfo.serverBoundHost,
+          servingDeviceCount: clientInfo.servingDeviceCount,
+          attachedServerName: clientInfo.attachedServerName,
+        },
+      });
+
+      // The server's own answer, so the comparison below is against a measured
+      // value rather than an assumed one.
+      expect(
+        serverInfo.serverBoundHost,
+        `the served app's stderr so far:\n${serverRecord?.stderr || '(empty)'}`,
+      ).toBe('127.0.0.1');
+      expect(serverInfo.servingDeviceCount).toBeGreaterThanOrEqual(1);
+      expect(serverInfo.attachedServerName).toBeNull();
+
+      // And the client's, which is the assertion: three fields, each the
+      // opposite of the server's, read from a window whose every other channel
+      // is being answered by that server right now.
+      expect(clientInfo.serverBoundHost).toBeNull();
+      expect(clientInfo.servingDeviceCount).toBe(0);
+      expect(clientInfo.attachedServerName).toBe(hostname());
+      expect(clientInfo.serverBoundHost).not.toBe(serverInfo.serverBoundHost);
+      expect(clientInfo.servingDeviceCount).not.toBe(serverInfo.servingDeviceCount);
+    }, 90_000);
+
+    it('21f. the attached client sees the server’s live session', async () => {
+      /*
+        The fleet half. A pty is spawned on the server over the raw socket —
+        the server's own process, the server's own project — and the *client's
+        renderer* is where its output is asserted. That path is socket →
+        `RemoteClient.onEvent` → `registerRemoteProxy` → the broadcaster → this
+        window, none of which a unit test can stand up together.
+      */
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      assert(onServer !== undefined, 'case 21e must have opened a socket on the server');
+
+      await onServer.spawnSession(servedProjectId, watchedSessionId);
+      onServer.notify(CH.ptyWrite, {
+        sessionId: watchedSessionId,
+        data: "printf 'FLEET-%s\\n' MARK\r",
+      });
+      // Confirmed on the server's own socket first, so a failure below is
+      // about the client's path rather than about the session.
+      await onServer.collectPtyUntil(watchedSessionId, /FLEET-MARK/);
+
+      // Captured into a local so it stays narrowed inside the loop below —
+      // `renderer` is a mutable `let` on the enclosing block, which TypeScript
+      // will not carry an assertion across an `await`.
+      const view = renderer;
+      const seen = (): Promise<string> =>
+        view.evaluate<string>(
+          `(window.__liveFleet || []).filter((e) => e.sessionId === ${JSON.stringify(watchedSessionId)}).map((e) => e.chunk).join('')`,
+        );
+
+      const start = Date.now();
+      let transcript = '';
+      while (Date.now() - start < 60_000) {
+        transcript = await seen();
+        if (/FLEET-MARK/u.test(transcript)) break;
+        await delay(250);
+      }
+      measurements.push({
+        case: '21f. the server’s session in the client’s window',
+        transcriptBytes: transcript.length,
+      });
+      expect(transcript, 'the server’s pty output never reached the client’s window').toMatch(
+        /FLEET-MARK/u,
+      );
+    }, 120_000);
+
+    it('21g. flips back to local, and the detach never touches the server (HIVE-144, Ruling 28)', async () => {
+      /*
+        ## The criterion, and the defect it used to hide
+
+        This case was, for one commit, written the other way round: it pinned
+        what an attached client *actually did*, because it did not do this.
+        `CH.configSetRemote` was graded `mutate`, absent from `WINDOW_BOUND`
+        and absent from `PROCESS_LOCAL`, so `registerRemoteProxy` forwarded a
+        detach down the socket like any other write. The server parsed it, ran
+        its *own* `switchIpcMode('local')` (already local, so `{ ok: true }`),
+        wrote its *own* `config.json`, and handed back its *own* snapshot. The
+        pane read `switched.ok` and `config.remote.mode === 'local'`, both
+        true, and rendered success over a window that never detached — and
+        because the client's file still said `remote`, the next launch
+        reattached. A client could enter remote mode and never leave it.
+
+        Ruling 28 put the channel on `PROCESS_LOCAL` and widened that list's
+        membership test from "every field of its payload describes this
+        process" to "reads or changes this process's own identity or
+        attachment", because the old wording could not classify a *command*
+        at all. `applySetRemote` (`electron/main/ipc/set-remote.ts`) is the one
+        body both surfaces call.
+
+        ## What is asserted, and why the server's file is read
+
+        Three things, and the third is the one no in-process test can reach:
+        the window is answered locally again; its runtime attachment readout
+        agrees; and the **server's `config.json` is byte-for-byte what it was**.
+        That last assertion is the direct inverse of the defect's own evidence
+        — the file used to grow a `"remote": { "mode": "local" }` block it
+        never had — so a regression that re-proxied this channel fails here
+        rather than merely somewhere.
+      */
+      assert(renderer !== undefined, 'the client app must have a renderer');
+
+      const beforeServerConfig = readFileSync(serverConfigPath, 'utf8');
+      // The fixture in `beforeAll` writes no `remote` block at all, which is
+      // what makes the byte comparison below a sharp instrument rather than a
+      // comparison of two things that were always going to match.
+      expect(beforeServerConfig).not.toContain('"remote"');
+
+      const result = await bounded(
+        renderer.evaluate<SetRemoteResult>("window.hive.config.setRemote({ mode: 'local' })"),
+        60_000,
+        'setRemote back to local',
+      );
+      /*
+        Bounded, for case 21d's reason and one more: this call is answered by
+        `registerRemoteProxy`'s own `ipcMain.handle`, and what it awaits
+        (`switchIpcMode`) unbinds that handler mid-flight. The failure mode is
+        a hang, and only a real Electron process can show the reply landing
+        anyway — the local surface's version of this is 21d, and this is the
+        proxy's.
+      */
+      expect(result.switched).toEqual({ ok: true });
+      expect(result.config.remote.mode).toBe('local');
+
+      // Answering locally again: this window's own project is back, and the
+      // server's is gone from it.
+      const config = await renderer.evaluate<ConfigSnapshot>('window.hive.config.get()');
+      expect(config.projects.map((project) => project.id)).toEqual([clientProjectId, clientProjectId2]);
+
+      // And the runtime readout agrees with the file, which is the pair
+      // `AppInfo.attachedServerName`'s doc comment says can disagree.
+      const info = await renderer.evaluate<AppInfo>('window.hive.appInfo()');
+      expect(info.attachedServerName).toBeNull();
+
+      // The client's own file is what the next launch reads, so this is the
+      // half that makes the detach survive a relaunch rather than only this
+      // session.
+      const clientOnDisk = JSON.parse(readFileSync(clientConfigPath, 'utf8')) as {
+        remote?: { mode?: string };
+      };
+      expect(clientOnDisk.remote?.mode).toBe('local');
+
+      // The inverse of the defect's own evidence — see this case's comment.
+      const afterServerConfig = readFileSync(serverConfigPath, 'utf8');
+      expect(afterServerConfig).toBe(beforeServerConfig);
+
+      measurements.push({
+        case: '21g. detach applied locally, server untouched',
+        switched: result.switched,
+        clientRemoteBlockAfter: clientOnDisk.remote,
+        serverConfigUnchanged: afterServerConfig === beforeServerConfig,
+        attachedServerNameAfter: info.attachedServerName,
+      });
+    }, 120_000);
+
+    it('21h. the Settings switch attaches and detaches, clicked for real (Ruling 29)', async () => {
+      /*
+        ## The control, not the channel
+
+        21g proves `config:set-remote` detaches this window. It says nothing
+        about whether a **user** can reach it — and for one commit they could
+        not. Everything in the attach half keyed on `remote.mode`, which while
+        attached is read off the *server's* snapshot and says `'local'`, so the
+        switch rendered unchecked on an attached window, the panel stayed
+        collapsed, and `handleDetach`'s guard was unreachable by any click.
+        Ruling 28 fixed the channel and left the only caller of it dead.
+
+        So this case clicks. Nothing here goes through `window.hive` except to
+        *read back* what happened: the attach and the detach are both real
+        pointer events on the real Settings pane, driven over CDP, which is the
+        only way to exercise `setRemoteConfig` — the app's own wrapper, the one
+        that installs the returned snapshot into the store the pane renders
+        from. A bridge call would have skipped exactly the state the defect
+        lived in.
+
+        The `Reload` click at the top is not decoration. Every earlier case in
+        this block drove the bridge directly, so the renderer's store still
+        holds the snapshot it booted with; `Reload` is the one control that
+        re-reads this machine's own file, and it is what puts the real host and
+        port into the address fields for the Attach below.
+      */
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const ui = renderer;
+
+      /**
+       * Poll a renderer-side predicate — `waitFor`, across the bridge.
+       *
+       * A throw counts as "not yet", and that is not laziness: **while a
+       * switch is dialling, this window has no IPC at all.** `switchIpcMode`
+       * unbinds both surfaces and *then* `await`s `connectRemote`, so for the
+       * length of the dial every `invoke` rejects with Electron's raw
+       * `No handler registered for 'app:info'` — measured here, on a loopback
+       * dial, by a poll that happened to land in that gap. A predicate that
+       * reads the bridge therefore cannot assume the bridge answers.
+       *
+       * The last failure is kept and reported on timeout, so a *persistent*
+       * error still fails loudly and readably rather than as a bare "timed
+       * out" — the difference between absorbing a known transient and
+       * swallowing a real break.
+       */
+      const untilUi = async (expression: string, what: string, timeoutMs = 30_000): Promise<void> => {
+        const start = Date.now();
+        let lastError: unknown;
+        while (Date.now() - start < timeoutMs) {
+          try {
+            if (await ui.evaluate<boolean>(expression)) return;
+            lastError = undefined;
+          } catch (cause) {
+            lastError = cause;
+          }
+          await delay(100);
+        }
+        throw new Error(
+          `timed out after ${String(timeoutMs)}ms waiting for ${what}` +
+            (lastError === undefined
+              ? ''
+              : `; last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`),
+        );
+      };
+
+      /*
+        The switch is found the way its own markup allows: `Switch` renders a
+        `<label htmlFor>` beside a Radix root carrying that id, so the label
+        text leads to the control. Chosen over an index into
+        `querySelectorAll('[role="switch"]')` because this pane has three, and
+        an index would silently follow whichever one moved.
+      */
+      const SWITCH = `(() => {
+        const label = [...document.querySelectorAll('label')]
+          .find((el) => el.textContent.trim() === 'Attach to a server');
+        return label ? document.getElementById(label.htmlFor) : null;
+      })()`;
+      /*
+        `TextField` labels the same way `Switch` does — a sibling `<label
+        htmlFor>`, deliberately not a wrapper, so that its hint text stays out
+        of the accessible name. So the input is reached through the label's
+        `htmlFor`, and `input.closest('label')` (the obvious first guess, and
+        the one this case was written with) is always `null`.
+      */
+      const FIELD = (label: string): string => `(() => {
+        const el = [...document.querySelectorAll('label')]
+          .find((l) => ${JSON.stringify(label)} === l.textContent.trim());
+        return el ? document.getElementById(el.htmlFor) : null;
+      })()`;
+      const addressField = `${FIELD('Server address')} !== null`;
+
+      await ui.evaluate(`document.querySelector('button[aria-label="Settings"]').click()`);
+      await untilUi(
+        `[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Advanced')`,
+        'the Settings overlay to offer an Advanced section',
+      );
+      await ui.evaluate(
+        `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Advanced').click()`,
+      );
+      await untilUi(`${SWITCH} !== null`, 'the Attach to a server switch to render');
+
+      await ui.evaluate(
+        `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Reload').click()`,
+      );
+      await untilUi(
+        `/Reloaded —/.test(document.body.innerText)`,
+        'the Reload to land, so the store holds this machine’s own file',
+      );
+
+      /*
+        Detached to begin with, which 21g left it as — and the panel is
+        *closed*, because this machine's own `remote.mode` is now `'local'`
+        and nothing is attached. The switch reveals; it does not dial
+        (Ruling 27), which is why the address only becomes readable after the
+        click below.
+      */
+      expect(await ui.evaluate<string | null>(`${SWITCH}.getAttribute('aria-checked')`)).toBe('false');
+      expect(await ui.evaluate<boolean>(addressField)).toBe(false);
+
+      await ui.evaluate(`${SWITCH}.click()`);
+      await untilUi(
+        `${FIELD('Server address')}?.value === '127.0.0.1'`,
+        "the address field to show this machine's own stored host",
+      );
+      expect(await ui.evaluate<string>(`${FIELD('Port')}.value`)).toBe(String(serverPort));
+
+      // Attach: the button is what dials.
+      await ui.evaluate(
+        `[...document.querySelectorAll('button')].find((b) => /^Attach$/.test(b.textContent.trim())).click()`,
+      );
+      /*
+        Waited on the **socket**, not on the switch.
+
+        `aria-checked` is the wrong signal here and this case was written with
+        it once: the reveal click above already set it to `'true'`, so the wait
+        resolved instantly, every assertion below ran against a pane
+        mid-dial, and the case failed reading a window that had moved on. A
+        wait that is already satisfied when it is set up is the live-suite
+        version of a test that cannot fail — see the block comment on this
+        file's evidence for why that shape is the one this task hunts.
+        `attachedServerName` is `PROCESS_LOCAL` and answers `null` until a
+        socket is genuinely open, so it can only become non-null here by the
+        attach having landed.
+      */
+      await untilUi(
+        `window.hive.appInfo().then((i) => i.attachedServerName !== null)`,
+        'the Attach button to open a real socket',
+        60_000,
+      );
+      await untilUi(
+        `/Attached to/.test(document.body.innerText)`,
+        'the pane to redraw as attached',
+        30_000,
+      );
+
+      /*
+        **Then Reload, and this is the step that makes the case discriminating.**
+
+        Attaching from this pane does not by itself put the window in the state
+        the defect lives in. `setRemoteConfig` installs whatever
+        `config:set-remote` returned, and since Ruling 28 that verb is answered
+        *locally* — so the snapshot the store holds right after a successful
+        attach is this machine's own, with `mode: 'remote'` freshly written,
+        and a pane keyed on `remote.mode` looks perfectly correct. Written
+        without this step, and run against a deliberately reverted pane, this
+        case passed with the bug present (measured — the whole reason the step
+        is here).
+
+        The broken state is the *next* `config:get`: a Reload, a reopened
+        Settings, or the ordinary case of a client that attached at **boot**,
+        where the store is hydrated from the proxied read and gets the
+        server's block — `mode: 'local'`, because a server is not attached to
+        anything. Clicking Reload reproduces exactly that, in one click.
+
+        "Reloaded — 1 project." is the far end answering: this client has two
+        projects and the server has one, which is what
+        {@link clientProjectId2} exists for.
+      */
+      await ui.evaluate(
+        `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Reload').click()`,
+      );
+      await untilUi(
+        `/Reloaded — 1 project\\./.test(document.body.innerText)`,
+        "a Reload answered by the server, which is what puts this window in a boot-attached client's state",
+      );
+
+      /*
+        What an attached client now shows, which is the whole of Ruling 29:
+        the panel is open, it names the machine the **socket** is open to
+        (`attachedServerName`, not a config field the far end answered), and
+        the address and pairing controls are gone rather than displaying the
+        server's values under a control that writes locally.
+      */
+      const attachedText = await ui.evaluate<string>('document.body.innerText');
+      expect(attachedText).toContain('Attached to');
+      expect(attachedText).toContain(hostname());
+      expect(attachedText).toMatch(/hidden while attached/i);
+      expect(await ui.evaluate<boolean>(addressField)).toBe(false);
+      expect(
+        await ui.evaluate<boolean>(
+          `[...document.querySelectorAll('button')].some((b) => /^Forget$/.test(b.textContent.trim()))`,
+        ),
+      ).toBe(false);
+      // Confirmed against the runtime, not only the pixels: the pane is
+      // describing a socket that is genuinely open.
+      expect((await ui.evaluate<AppInfo>('window.hive.appInfo()')).attachedServerName).toBe(hostname());
+
+      // And the detach — the click that was unreachable.
+      await ui.evaluate(`${SWITCH}.click()`);
+      // On the socket again, for the reason the attach wait is: the switch's
+      // own state is not evidence that anything happened to it.
+      await untilUi(
+        `window.hive.appInfo().then((i) => i.attachedServerName === null)`,
+        'the switch click to close the socket',
+        60_000,
+      );
+      expect(await ui.evaluate<string | null>(`${SWITCH}.getAttribute('aria-checked')`)).toBe('false');
+
+      const info = await ui.evaluate<AppInfo>('window.hive.appInfo()');
+      expect(info.attachedServerName).toBeNull();
+      const config = await ui.evaluate<ConfigSnapshot>('window.hive.config.get()');
+      expect(config.projects.map((project) => project.id)).toEqual([clientProjectId, clientProjectId2]);
+
+      // The file, because that is what the next launch reads — a detach that
+      // lasted only this session would be the defect in a slower form.
+      const clientOnDisk = JSON.parse(readFileSync(clientConfigPath, 'utf8')) as {
+        remote?: { mode?: string };
+      };
+      expect(clientOnDisk.remote?.mode).toBe('local');
+
+      // And the far machine is untouched by any of it.
+      const serverOnDisk = JSON.parse(readFileSync(serverConfigPath, 'utf8')) as {
+        remote?: unknown;
+      };
+      expect(serverOnDisk.remote).toBeUndefined();
+
+      measurements.push({
+        case: '21h. the Settings switch, clicked',
+        attachedServerNameAfterDetach: info.attachedServerName,
+        clientRemoteBlockAfter: clientOnDisk.remote,
+        serverHasNoRemoteBlock: serverOnDisk.remote === undefined,
+      });
+
+      // Leave the overlay closed, so 21i reads a window in its ordinary state.
+      await ui.evaluate(
+        `(() => { const b = [...document.querySelectorAll('button')].find((x) => /close/i.test(x.getAttribute('aria-label') || '')); if (b) b.click(); return true; })()`,
+      );
+    }, 180_000);
+
+    it('21i. a detached client is answered by its own process again, end to end', async () => {
+      /*
+        21g and 21h prove the detach; this proves the surface it left behind is a
+        whole one rather than the one channel that was asked about. The
+        rebind-local arm of `switchIpcMode` re-registers *every* channel, and
+        a partial rebind — the failure `remote-composition.test.ts` asserts by
+        count in-process — looks exactly like a working app until the user
+        touches whichever channel is missing.
+
+        Three different layers, deliberately: a `read` off the config module, a
+        `PROCESS_LOCAL` channel that was answered locally even while attached
+        (so it must not have been *doubly* bound by the rebind), and an
+        `execute`-graded channel that reaches the pty layer this process
+        re-created. `pty:spawn` on the client's own project is the strongest of
+        the three: it can only be answered by a local sessions layer, which
+        `resetIpcHandlers` had disposed of.
+      */
+      assert(renderer !== undefined, 'the client app must have a renderer');
+
+      const info = await renderer.evaluate<AppInfo>('window.hive.appInfo()');
+      expect(info.attachedServerName).toBeNull();
+      expect(info.receiverBoundHost).not.toBeNull();
+
+      const status = await renderer.evaluate<{ state?: string }>('window.hive.updates.status()');
+      expect(status).toBeDefined();
+
+      const spawned = await bounded(
+        renderer.evaluate<{ ok: boolean; error?: string }>(
+          `window.hive.pty.spawn({ sessionId: 'after-detach', projectId: ${JSON.stringify(clientProjectId)}, cols: 80, rows: 24 })` +
+            `.then(() => ({ ok: true })).catch((e) => ({ ok: false, error: String(e && e.message ? e.message : e) }))`,
+        ),
+        60_000,
+        'pty:spawn on the detached client',
+      );
+      expect(spawned).toEqual({ ok: true });
+      measurements.push({ case: '21i. the local surface after a detach', spawned });
+
+      await renderer.evaluate("window.hive.pty.kill('after-detach')");
+    }, 120_000);
+
+    it('21j. the server’s sessions keep running whatever the client does', async () => {
+      /*
+        The last half of the "flips back" criterion: the sessions a client
+        watched belong to the other machine, so a detach must not touch them.
+        `switchIpcMode`'s doc comment says `remote → local` is never refused
+        for exactly this reason — there is nothing to strand, so nothing to
+        refuse over. This is that claim against the real thing, driven over the
+        raw socket, which never detached, after the window on the other connection
+        has detached twice — once through the channel, once through the switch — and re-spawned a pty of its own.
+      */
+      assert(onServer !== undefined, 'case 21e must have opened a socket on the server');
+      onServer.notify(CH.ptyWrite, {
+        sessionId: watchedSessionId,
+        data: "printf 'STILL-%s\\n' ALIVE\r",
+      });
+      await onServer.collectPtyUntil(watchedSessionId, /STILL-ALIVE/);
+    }, 120_000);
+  });
+
+  describe('a call that never settles (HIVE-144)', () => {
+    it('22. is answered call-timeout at the deadline, not left hanging', async () => {
+      /*
+        See {@link DeadlineRun}: this call was issued from the outermost
+        `beforeAll`, so the two minutes it takes have been running underneath
+        every other case in this file rather than being added to the end of it.
+        `CALL_DEADLINE_MS` is a hard constant in `remote-contract.ts` with no
+        env override and no injectable clock, and the timer belongs to a
+        separate OS process — overlapping the wait is the only way to pay for
+        it that does not either weaken the assertion or add two dead minutes to
+        every run.
+      */
+      assert(deadlineRun !== null, 'the outermost beforeAll must have fired the deadline call');
+      const answer = await deadlineRun.answer;
+      const elapsed = Date.now() - deadlineRun.startedAt;
+      measurements.push({
+        case: '22. call-timeout at the deadline',
+        elapsedMs: elapsed,
+        deadlineMs: CALL_DEADLINE_MS,
+        answer,
+      });
+
+      expect(answer).toMatchObject({ kind: 'error', code: CALL_TIMEOUT_CODE });
+      expect((answer as ErrorFrame).message).toContain(String(CALL_DEADLINE_MS));
+
+      /*
+        And it really was the deadline that answered. Without this, any error
+        frame arriving in the first second — a refusal, a handler that threw —
+        satisfies the code assertion above and the case says nothing about the
+        timer at all. `slack:test` is a channel that genuinely fails to
+        settle here (its stub `claude` sleeps past the deadline on a `-p` run,
+        see {@link writeStubClaude}), so anything faster than the deadline is
+        by definition a different failure wearing the same code.
+      */
+      expect(elapsed).toBeGreaterThanOrEqual(CALL_DEADLINE_MS);
+    }, 200_000);
   });
 });

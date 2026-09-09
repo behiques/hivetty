@@ -90,9 +90,19 @@ function installBridge(): Bridge {
   return stub;
 }
 
-/** Push a live chunk as main would, with an explicit sequence number. */
-function pushData(sessionId: string, chunk: string, seq: number): void {
-  for (const cb of [...bridge.data]) cb({ sessionId, chunk, seq });
+/**
+ * Push a live chunk as main would, with an explicit sequence number.
+ *
+ * `gen` defaults to `1` rather than being required at every call site: most of
+ * this file is about `PtyTransport`'s own `seq` sequencing and reopen
+ * behaviour, not about a generation change, so a constant default keeps every
+ * such call honest about the wire shape without making it specify a value it
+ * does not care about. The generation tests below pass `gen` explicitly at
+ * every call — leaning on this default there would silently stop exercising a
+ * generation change at all (HIVE-144).
+ */
+function pushData(sessionId: string, chunk: string, seq: number, gen = 1): void {
+  for (const cb of [...bridge.data]) cb({ sessionId, chunk, seq, gen });
 }
 
 const dim = toSgrIndexed('dim');
@@ -472,6 +482,25 @@ describe('PtyTransport — lifecycle lines', () => {
     expect(text).toContain('three');
   });
 
+  it('reports a gap when the generation changes, without reopenChannel (HIVE-144)', () => {
+    const text = transcriptAfter(() => {
+      pushData('sess-a', 'one', 1, 1);
+      // A restart the renderer was never told about: seq is contiguous, gen is not.
+      pushData('sess-a', 'two', 2, 2);
+    });
+
+    expect(text).toContain('── output gap detected ──');
+  });
+
+  it('reports no gap when the generation holds and seq is contiguous', () => {
+    const text = transcriptAfter(() => {
+      pushData('sess-a', 'one', 1, 1);
+      pushData('sess-a', 'two', 2, 1);
+    });
+
+    expect(text).not.toContain('output gap');
+  });
+
   it('stays silent while sequence numbers are contiguous', () => {
     const text = transcriptAfter(() => {
       pushData('sess-a', 'one', 1);
@@ -581,6 +610,22 @@ describe('reopenChannel', () => {
     // Main's sequence counter restarts at 0 for each new session id, so a
     // retained lastSeq would make this look like a lost batch.
     pushData('sess-a', 'fresh', 1);
+
+    expect(seen.join('')).not.toContain('output gap detected');
+  });
+
+  it('does not report a gap on the new generation’s first chunk when gen also changes (HIVE-144)', () => {
+    const seen: string[] = [];
+    createPtyTransport('sess-a', 'nova-web').onData((chunk) => seen.push(chunk));
+    pushData('sess-a', 'first', 1, 1);
+    for (const cb of [...bridge.exit]) cb({ sessionId: 'sess-a', exitCode: 0 });
+
+    reopenChannel('sess-a');
+    // The restart that legitimately reopens a channel is exactly the case
+    // that bumps gen as well as resetting seq — main hands the new process a
+    // fresh generation. reopenChannel clears both, so neither one reads the
+    // new process's first chunk as a discontinuity.
+    pushData('sess-a', 'fresh', 1, 2);
 
     expect(seen.join('')).not.toContain('output gap detected');
   });

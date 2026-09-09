@@ -3,12 +3,18 @@ import { createServer, type Server } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import type { ServerBindConfig, ServerDevice } from '@shared/config-contract';
+import type { Channel } from '@shared/ipc-contract';
 import {
+  ATTACH_FRAME_MAX_BYTES,
+  CALL_DEADLINE_MS,
+  CALL_TIMEOUT_CODE,
+  POST_ATTACH_FRAME_MAX_BYTES,
   REMOTE_PROTOCOL_VERSION,
   type AttachRefused,
   type AttachRequest,
   type CallFrame,
   type NotifyFrame,
+  type ResumePoint,
   type ServerFrame,
 } from '@shared/remote-contract';
 
@@ -71,8 +77,60 @@ import { refuseProtocol } from './index';
  * then sends nothing holds the socket — and the fd and memory behind it —
  * open forever, which on a Tailscale-reachable listener is a standing
  * exhaustion path rather than a hypothetical one.
+ *
+ * **Exported so `tests/electron/remote-host/listener.test.ts` can assert
+ * {@link SNAPSHOT_READ_BUDGET_MS} stays comfortably under it (HIVE-144
+ * review)**, reading both real values directly rather than trusting the two
+ * comments to stay in agreement on their own.
  */
-const ATTACH_HANDSHAKE_TIMEOUT_MS = 5_000;
+export const ATTACH_HANDSHAKE_TIMEOUT_MS = 5_000;
+
+/**
+ * How long a single `SNAPSHOT_CHANNELS` read may take before its key is
+ * dropped from the attach snapshot — exactly as a throwing read already is
+ * (Ruling 15, extended by HIVE-144 review: a slow read is dropped the same
+ * way a broken one is, because a client waiting on it cannot tell the two
+ * apart).
+ *
+ * **Beside `ATTACH_HANDSHAKE_TIMEOUT_MS` rather than in
+ * `electron/shared/remote-contract.ts` (HIVE-144 review, second correction).**
+ * `electron/shared/**` is for what *both halves of the link* have to agree
+ * on; this number governs only how long the server spends building a
+ * snapshot before the client ever sees a frame, exactly the same server-only
+ * shape `ATTACH_HANDSHAKE_TIMEOUT_MS` and `MAX_UNATTACHED_SOCKETS` already
+ * are (see `POST_ATTACH_FRAME_MAX_BYTES`'s own comment in `remote-contract.ts`
+ * for why *that* one, unlike these, had to move the other way). Having to
+ * export `ATTACH_HANDSHAKE_TIMEOUT_MS` out of this file for a constant that
+ * belonged next to it was the signal this one was living in the wrong file.
+ *
+ * **A sibling of `ATTACH_HANDSHAKE_TIMEOUT_MS`**, in the sense `CALL_DEADLINE_MS`
+ * and `CALL_GIVE_UP_MS` (`electron/shared/remote-contract.ts`) are siblings:
+ * the two numbers have to agree, or the server can time out a socket while a
+ * read it has not yet given up on is still running. `buildAttachSnapshot`
+ * (`electron/main/ipc/index.ts`) races every channel **concurrently** against
+ * this one budget rather than sequentially against six of them, so the whole
+ * snapshot's wall-clock cost is bounded by this single number regardless of
+ * how many of the six are slow at once — a sequential sum could exceed the
+ * handshake window on its own even with a "safe" per-channel value. 2 000 ms
+ * leaves 3 000 ms of margin inside the 5 000 ms deadline above for everything
+ * else the handshake still has to do before and after this read
+ * (`verifyDevice`, `fitSnapshot`, the `send` itself) — comfortable rather than
+ * exact, and the margin is asserted directly by
+ * `tests/electron/remote-host/listener.test.ts` rather than left to this
+ * comment staying true.
+ *
+ * **Why a per-channel try/catch alone was not enough (HIVE-144 review).**
+ * `CH.githubPrs`'s handler awaits `loginEnvStatus()` and shells out to `gh`,
+ * whose own runner timeout (`electron/main/integrations/github/run.ts`) is
+ * 20 000 ms — four times the whole handshake window on its own — and it
+ * *resolves* with an error result rather than rejecting, so nothing throws
+ * for a catch to see. Unbounded, that read alone holds the whole snapshot
+ * open past `ATTACH_HANDSHAKE_TIMEOUT_MS`, and the socket is closed with zero
+ * frames sent: no accept, no refusal, just the generic "closed before it
+ * attached" a version mismatch produces — the exact failure Ruling 15 exists
+ * to prevent, reached through latency instead of size.
+ */
+export const SNAPSHOT_READ_BUDGET_MS = 2_000;
 
 /**
  * How many sockets may be mid-handshake — upgraded, but not yet attached — at
@@ -103,74 +161,6 @@ const ATTACH_HANDSHAKE_TIMEOUT_MS = 5_000;
  * with a different right answer.
  */
 const MAX_UNATTACHED_SOCKETS = 8;
-
-/**
- * The most a **first** frame may weigh, checked against the raw bytes below
- * before anything parses them.
- *
- * An attach frame — `kind`, `protocol`, `deviceId`, `token`, and an optional
- * `resumeFrom` map — is a few hundred bytes even with a realistic session
- * count in `resumeFrom`. Nothing an unauthenticated peer sends needs more than
- * this, and the same discipline the hook receiver applies per route
- * (`HOOK_MAX_BODY_BYTES` and its siblings in `electron/shared/hook-contract.ts`)
- * applies here, sized for what this one frame actually needs.
- *
- * **Enforced explicitly, not by `maxPayload` (HIVE-143 review).** This used to
- * be handed to `WebSocketServer` as its `maxPayload`, which was a bug rather
- * than a shortcut: `ws` builds each connection's `Receiver` **once**, with that
- * value, and enforces it on every message for the life of the socket. A
- * handshake-shaped bound was therefore silently bounding every post-attach
- * frame too — a `fs:write-file`, `skills:write`, `agents:write`, `theme:save`,
- * `ledger:post`, `jira:add-comment` or pasted `pty:write` over 8 KiB never
- * reached `dispatch.call` at all, answered neither `result` nor `error`, left
- * the client's correlation id unresolved forever, and closed the connection
- * with 1009. Checking the first frame here, where "first" is a fact this file
- * knows and `ws` does not, is also simply more honest than delegating a
- * handshake-specific limit to a connection-wide option.
- */
-const ATTACH_FRAME_MAX_BYTES = 8 * 1024;
-
-/**
- * The most **any** frame on this socket may weigh — `ws`'s `maxPayload`, and
- * therefore the ceiling an attached device's `call` and `notify` frames live
- * under (HIVE-143 review).
- *
- * A bound, not an absence of one: `ws` defaults `maxPayload` to 100 MiB, and
- * even an authorized device must not be able to make this process buffer that
- * much per socket on demand. An attached client is trusted to *execute*
- * (`DEVICE_GRANT` in `remote-dispatch.ts`), which is not the same as being
- * trusted with this process's heap — a paired laptop with a bug in its send
- * path is the ordinary case here, not an attacker.
- *
- * 8 MiB, derived from the worst-case **encoded** payload rather than picked
- * (HIVE-143 review). The largest body any channel legitimately carries is a
- * file, and `MAX_FILE_BYTES` (`electron/shared/fs-contract.ts`) caps that at
- * 1,000,000 bytes — but what crosses this socket is not the file, it is the
- * file *inside a JSON string*, and JSON spends six characters — a \uXXXX escape — on
- * a single unprintable byte such as ESC. So the worst honest `fs:write-file` is
- * 1,000,000 × 6 = 6,000,000 bytes of escaped text plus the envelope, and the
- * previous constant cited that six and then multiplied by four: an escape-dense
- * file the editor is willing to open encoded to ~6 MB, exceeded the 4 MiB
- * ceiling, and was refused by `ws` at 1009 — which does not refuse the *frame*,
- * it drops the socket and every in-flight correlation id on it. 8 MiB
- * (8,388,608) is the next power of two above 6,000,000 and leaves ~2.4 MB for
- * `path`, `channel`, `id` and the JSON structure around them. Everything else on
- * the wire is far smaller: `pty:write` carries a paste, `ledger:post` and
- * `jira:add-comment` carry prose, and `pty:data` only ever travels the other way
- * in `BATCH_FLUSH_BYTES`-sized batches.
- *
- * The trade this makes, stated because it is the cost of fixing the bug above:
- * an unauthenticated peer that clears the Origin/Host guard can make `ws` buffer
- * up to this before {@link ATTACH_FRAME_MAX_BYTES} refuses it, where before the
- * `maxPayload` bug it could buffer only 8 KiB. Per socket that is bounded by
- * {@link ATTACH_HANDSHAKE_TIMEOUT_MS} and by the socket being closed the instant
- * the oversized frame is inspected; in *aggregate* it is bounded by
- * {@link MAX_UNATTACHED_SOCKETS}, which is the half the first version of this
- * comment left unbounded while claiming otherwise. The alternative — a
- * per-connection limit that tightens after attach — is not something `ws`
- * exposes without reaching into a `Receiver`'s private state.
- */
-const POST_ATTACH_FRAME_MAX_BYTES = 8 * 1024 * 1024;
 
 /**
  * How many bytes a `ws` message actually is, across the three shapes `ws` can
@@ -220,17 +210,44 @@ function wsUrl(host: string, port: number): string {
 }
 
 /**
- * Whether every value in `value` is a `number` — {@link AttachRequest.resumeFrom}'s
- * shape, checked so {@link isAttachShaped} does not claim a field it never
- * inspected. `resumeFrom` is handed to `onAttach` unread by this file (HIVE-143)
- * — replay is `electron/main/ipc/index.ts`'s decision to make, not this
- * listener's — but the predicate's return type says the whole `AttachRequest`
- * is safe to use, and a predicate that skipped this field would be handing
- * that caller a lie it has no reason to suspect.
+ * Whether `value` is a {@link ResumePoint} — `{ gen, seq }`, both finite
+ * non-negative integers.
+ *
+ * Neither may be negative or fractional: both are counters this file's peers
+ * only ever increment, and a negative or fractional one could only mean a
+ * malformed or hostile client, not an honest one that ran out of range.
+ *
+ * A bare number — the whole shape of a v1 client's `resumeFrom` value — is
+ * rejected here rather than coerced into `{ gen: <that number>, seq: 0 }` or
+ * similar: `REMOTE_PROTOCOL_VERSION` moved to 2 precisely so a version
+ * mismatch is caught at the handshake, as a readable refusal, instead of a v1
+ * peer's request being silently reinterpreted into whatever this function
+ * guessed it meant.
  */
-function isResumeFromShaped(value: unknown): value is Readonly<Record<string, number>> {
+function isResumePointShaped(value: unknown): value is ResumePoint {
+  if (value === null || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    Number.isInteger(candidate.gen) &&
+    (candidate.gen as number) >= 0 &&
+    Number.isInteger(candidate.seq) &&
+    (candidate.seq as number) >= 0
+  );
+}
+
+/**
+ * Whether every value in `value` is a {@link ResumePoint} —
+ * {@link AttachRequest.resumeFrom}'s shape, checked so {@link isAttachShaped}
+ * does not claim a field it never inspected. `resumeFrom` is handed to
+ * `onAttach` unread by this file (HIVE-143) — replay is
+ * `electron/main/ipc/index.ts`'s decision to make, not this listener's — but
+ * the predicate's return type says the whole `AttachRequest` is safe to use,
+ * and a predicate that skipped this field would be handing that caller a lie
+ * it has no reason to suspect.
+ */
+function isResumeFromShaped(value: unknown): value is Readonly<Record<string, ResumePoint>> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-  return Object.values(value).every((entry) => typeof entry === 'number');
+  return Object.values(value).every(isResumePointShaped);
 }
 
 /** Whether `value` has the shape `verifyDevice` and the protocol check can safely use. */
@@ -278,17 +295,30 @@ export function createRemoteListener(options: {
    */
   dispatch: RemoteDispatch;
   /**
+   * What `AttachAccepted.snapshot` carries (HIVE-144) — built by calling
+   * `remoteRegistry`'s own recorded call handlers for `SNAPSHOT_CHANNELS`, and
+   * injected rather than imported for the same reason `dispatch` is:
+   * `electron/main/ipc/index.ts` is what constructs it, and this file does not
+   * import that one.
+   *
+   * A snapshot is a convenience, not a precondition. This function already
+   * omits any channel whose read threw rather than rejecting, so this
+   * listener never refuses an attach over a broken read — it sends whatever
+   * calling this produced, bounded by {@link fitSnapshot} below.
+   */
+  buildSnapshot: () => Promise<Partial<Record<Channel, unknown>>>;
+  /**
    * Told about a socket the instant its handshake completes, with whatever
    * `resumeFrom` it sent — `undefined` when it sent none, never `{}` (see
    * {@link AttachRequest.resumeFrom}). This is how `electron/main/ipc/index.ts`
    * learns a socket exists at all: nothing above this option tracks attached
    * sockets for it.
    */
-  onAttach: (socket: AttachedSocket, resumeFrom: Readonly<Record<string, number>> | undefined) => void;
+  onAttach: (socket: AttachedSocket, resumeFrom: Readonly<Record<string, ResumePoint>> | undefined) => void;
   /** Told when an attached socket is gone — closed, errored, or terminated. */
   onDetach: (socket: AttachedSocket) => void;
 }): RemoteListener {
-  const { bind, devices, serverName, dispatch, onAttach, onDetach } = options;
+  const { bind, devices, serverName, dispatch, buildSnapshot, onAttach, onDetach } = options;
 
   /*
     No host-alias concept here, unlike the hook receiver. `ServerBindConfig`
@@ -329,11 +359,14 @@ export function createRemoteListener(options: {
   let bindError: string | null = null;
 
   /**
-   * Every armed handshake-deadline timer that has not yet fired or been
-   * cleared. `stop()` clears whatever is left so a timer belonging to a
-   * listener that no longer exists cannot fire against it later — load-
-   * bearing for a test process, where a leaked `setTimeout` is a handle that
-   * outlives the test it was created in.
+   * Every timer armed on behalf of a socket that has not yet fired or been
+   * cleared — the handshake deadline (`ATTACH_HANDSHAKE_TIMEOUT_MS`) and,
+   * since HIVE-144, the per-call deadline (`CALL_DEADLINE_MS`) below. `stop()`
+   * clears whatever is left so a timer belonging to a listener that no
+   * longer exists cannot fire against it later — load-bearing for a test
+   * process, where a leaked `setTimeout` is a handle that outlives the test
+   * it was created in, and true in production too: a timer armed for a
+   * socket must not survive the listener that armed it.
    */
   const pendingTimers = new Set<NodeJS.Timeout>();
 
@@ -360,6 +393,90 @@ export function createRemoteListener(options: {
 
   function unauthorized(message: string): AttachRefused {
     return { kind: 'attach-refused', code: 'unauthorized', protocol: REMOTE_PROTOCOL_VERSION, message };
+  }
+
+  /** How many bytes the accept frame carrying `snapshot` would weigh on the wire. */
+  function acceptFrameBytes(snapshot: Partial<Record<Channel, unknown>>): number {
+    return Buffer.byteLength(
+      JSON.stringify({ kind: 'attach-accepted', protocol: REMOTE_PROTOCOL_VERSION, serverName, snapshot }),
+      'utf8',
+    );
+  }
+
+  /**
+   * Drops keys from `snapshot`, largest first, until the accept frame carrying
+   * it fits under {@link POST_ATTACH_FRAME_MAX_BYTES} (Ruling 15, HIVE-144).
+   *
+   * **That ceiling, deliberately, not {@link ATTACH_FRAME_MAX_BYTES}.** The
+   * two bound opposite directions — the client's own `ws` instance sets its
+   * receive-side `maxPayload` to `POST_ATTACH_FRAME_MAX_BYTES` for the whole
+   * connection at connect time (`electron/remote-client/socket.ts`), and that
+   * governs from the very first frame it receives, this accept included.
+   * `ATTACH_FRAME_MAX_BYTES` bounds the *client's* attach frame, on its way
+   * in — reusing it here would refuse a snapshot at 8 KiB instead of the 8 MiB
+   * a client's socket can actually take.
+   *
+   * A snapshot is a convenience, not a precondition: an oversized accept frame
+   * is not refused with a wire code — there is none for "too big to send" —
+   * it is silently dropped by the client's own `ws` at 1009, which at the
+   * handshake reads as the same "closed before it attached" a version
+   * mismatch produces. So this never lets that frame leave: it drops the
+   * heaviest keys first, which gets back under budget in the fewest drops,
+   * and logs which ones so a busy server's fleet is at least diagnosable
+   * rather than merely smaller.
+   *
+   * No separate "does it already fit" fast path in front of the loop below,
+   * deliberately: a snapshot that already fits just costs one `break` on the
+   * loop's first iteration, and a second copy of the same comparison ahead of
+   * it would be a check nothing distinguishes from the one inside the loop —
+   * exactly the shape of redundant, unfalsifiable line this branch keeps
+   * producing (HIVE-144 review). The loop's own check is the only place this
+   * ceiling is compared against, so a test that swaps it for
+   * {@link ATTACH_FRAME_MAX_BYTES} has nowhere else to hide.
+   */
+  function fitSnapshot(
+    snapshot: Partial<Record<Channel, unknown>>,
+  ): Partial<Record<Channel, unknown>> {
+    const remaining: Partial<Record<Channel, unknown>> = { ...snapshot };
+    const byteLengthOfValue = (value: unknown): number =>
+      Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8');
+    // Computed once, over the original snapshot, before anything is deleted —
+    // an order recomputed mid-drop would keep re-measuring keys already gone.
+    const largestFirst = (Object.keys(remaining) as Channel[]).sort(
+      (a, b) => byteLengthOfValue(remaining[b]) - byteLengthOfValue(remaining[a]),
+    );
+
+    const dropped: Channel[] = [];
+    for (const channel of largestFirst) {
+      if (acceptFrameBytes(remaining) <= POST_ATTACH_FRAME_MAX_BYTES) break;
+      delete remaining[channel];
+      dropped.push(channel);
+    }
+
+    if (dropped.length > 0) {
+      console.error(
+        `[hive] attach snapshot exceeded ${String(POST_ATTACH_FRAME_MAX_BYTES)} bytes; dropped: ${dropped.join(', ')}`,
+      );
+    }
+
+    /*
+      Reachable only through a pathological `serverName` (HIVE-144 review):
+      once `largestFirst` is exhausted, `remaining` is `{}` and everything
+      left in the frame is `kind`, `protocol` and `serverName` — none of which
+      this function has anything left to drop. `serverName` is `hostname()` in
+      production (`electron/main/ipc/index.ts`), nowhere near this ceiling, so
+      this is not expected to fire; it is not silent if it somehow does,
+      because "the accept frame is being sent oversized anyway" is worse
+      unstated than stated. There is no drop left to make it true, so this
+      logs rather than pretends `fitSnapshot` can still fix it.
+    */
+    if (acceptFrameBytes(remaining) > POST_ATTACH_FRAME_MAX_BYTES) {
+      console.error(
+        `[hive] attach accept frame still exceeds ${String(POST_ATTACH_FRAME_MAX_BYTES)} bytes with an empty snapshot — serverName is unexpectedly large`,
+      );
+    }
+
+    return remaining;
   }
 
   return {
@@ -455,7 +572,7 @@ export function createRemoteListener(options: {
             story does not own, and the connection is closed either way once
             this handler decides.
           */
-          socket.once('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
+          socket.once('message', async (data: Buffer | ArrayBuffer | Buffer[]) => {
             /**
              * Whether `attach-accepted` has already gone out on this socket
              * (HIVE-143 review).
@@ -536,35 +653,6 @@ export function createRemoteListener(options: {
                 return;
               }
 
-              send(socket, {
-                kind: 'attach-accepted',
-                protocol: REMOTE_PROTOCOL_VERSION,
-                serverName,
-                /*
-                  Empty, and that is this story's answer rather than a
-                  placeholder for a missing one. The IPC surface does exist now
-                  — everything below this line routes a client's `call` frames
-                  into the same handlers a renderer reaches — so a client that
-                  attaches can simply ask for what it needs, one channel at a
-                  time, and nothing it wants is unreachable for the want of a
-                  snapshot. What the field is *for* is saving that first flurry
-                  of round trips: HIVE-144 builds the client half, and fills
-                  this so a busy server renders in one round trip instead of a
-                  dozen. Populating it here, with no client to consume it,
-                  would be choosing the payload's shape a story early.
-                */
-                snapshot: {},
-              });
-              accepted = true;
-              /*
-                Attached: the handshake deadline has been met and this socket
-                stops counting against {@link MAX_UNATTACHED_SOCKETS}, which
-                caps the *unauthenticated* phase and not how many paired
-                devices may be connected at once.
-              */
-              clearHandshakeTimer();
-              unattached.delete(socket);
-
               const socketHandle: AttachedSocket = {
                 send(outgoing) {
                   send(socket, outgoing);
@@ -595,26 +683,83 @@ export function createRemoteListener(options: {
                 },
               };
 
-              /*
-                The close listener is registered **before** `onAttach`, not
-                after (HIVE-143 review).
+              /** Set by the close listener below — the only writer. */
+              let gone = false;
 
-                `onAttach` is what puts this handle into the fan-out's set of
-                attached sockets, and it can throw — it iterates `resumeFrom`
-                and calls into the session layer to do it. A throw there is
-                caught by this handler's outer `catch`, which refuses and closes
-                the socket; but with the registration the other way round there
-                would be no `'close'` listener yet to hear that, so `onDetach`
-                would never run and a handle for a dead socket would sit in the
-                set forever, serialising a frame per push for the life of the
-                process. Registering first costs nothing — the listener cannot
-                fire before this synchronous block finishes — and makes the
-                add and the remove genuinely paired.
+              /*
+                The close listener is registered **before the snapshot await**,
+                not merely before `onAttach` (HIVE-144 review, I4).
+
+                The original ordering comment justified itself with "the
+                listener cannot fire before this **synchronous** block
+                finishes." That was true when it was written, and HIVE-144
+                stopped it being true by inserting an up-to-`SNAPSHOT_READ_BUDGET_MS`
+                `await buildSnapshot()` earlier in the same block. A peer whose
+                socket closed during that window fired the connection-level
+                `'close'` with no listener of ours registered; this handler then
+                resumed, sent the accept into a dead socket, registered a
+                `'close'` that could never fire again, and handed the dead
+                handle to `onAttach` — into `attachedSockets`, for the life of
+                the process, with `send` having no `readyState` check to notice.
+                Every later broadcast then serialised a frame and threw.
+
+                What makes the ordering safe now is not synchrony, which this
+                block no longer has, but that **nothing between registration and
+                `onAttach` can leave the pair unbalanced**: `onDetach` is a
+                `Set.delete`, so running it for a handle `onAttach` never added
+                is a no-op, and the `gone` guard below stops the accept and the
+                add from happening at all once the socket is closed.
+
+                It still also covers the case the HIVE-143 review added it for:
+                `onAttach` itself can throw — it iterates `resumeFrom` and calls
+                into the session layer — and the outer `catch` closes the
+                socket, which needs this listener already in place to unwind.
               */
               socket.once('close', () => {
+                gone = true;
                 for (const listener of closeListeners) listener();
                 onDetach(socketHandle);
               });
+
+              /*
+                Built and bounded before the accept frame goes out — never
+                after (HIVE-144). `buildSnapshot` already omits any channel
+                whose read threw, so this can only ever come back with as
+                many of `SNAPSHOT_CHANNELS` as could actually be answered;
+                `fitSnapshot` then weighs the frame this produces and drops
+                the heaviest keys first if a busy server's fleet would not
+                otherwise fit. Awaiting this holds the handshake open a beat
+                longer than a synchronous send would — every read behind it
+                is this same process answering itself, not a network call —
+                and it is still well inside `ATTACH_HANDSHAKE_TIMEOUT_MS`.
+              */
+              const snapshot = fitSnapshot(await buildSnapshot());
+
+              /*
+                The peer hung up while the snapshot was being built. There is
+                nothing left to accept *to*: sending would write into a dead
+                socket, and `onAttach`ing would put a handle nothing can ever
+                remove into the fan-out — its `'close'` has already fired.
+                `onDetach` has run for this handle, which is a no-op it never
+                joined, so leaving here balances rather than leaks.
+              */
+              if (gone) return;
+
+              send(socket, {
+                kind: 'attach-accepted',
+                protocol: REMOTE_PROTOCOL_VERSION,
+                serverName,
+                snapshot,
+              });
+              accepted = true;
+              /*
+                Attached: the handshake deadline has been met and this socket
+                stops counting against {@link MAX_UNATTACHED_SOCKETS}, which
+                caps the *unauthenticated* phase and not how many paired
+                devices may be connected at once.
+              */
+              clearHandshakeTimer();
+              unattached.delete(socket);
 
               onAttach(socketHandle, request.resumeFrom);
 
@@ -648,33 +793,74 @@ export function createRemoteListener(options: {
                     matters for `notify` and is preserved there by handling
                     those synchronously.
 
-                    **Known hazard, deliberately parked: there is no
-                    server-side timeout on a call (HIVE-143 review; HIVE-144
-                    owns it).** `dispatch.call` never *rejects* — every refusal
-                    and every thrown handler comes back as an `error` frame —
-                    but it can fail to settle at all, because some handlers
-                    genuinely wait on the world: `agents:run` awaits the
-                    memoised `mcp.start()`, and `slack:sign-in` spawns a real
-                    `claude` turn and waits for it. Until one of those settles,
-                    this closure holds `socketHandle` — and therefore the
-                    socket — past a detach that has already happened, and the
-                    client's own correlation id is outstanding with nothing on
-                    the wire to say so.
+                    **A deadline on the call itself (HIVE-144).** `dispatch.call`
+                    never *rejects* — every refusal and every thrown handler
+                    comes back as an `error` frame — but it can fail to settle
+                    at all, because some handlers genuinely wait on the world:
+                    `agents:run` awaits the memoised `mcp.start()`, and
+                    `slack:sign-in` spawns a real `claude` turn and waits for
+                    it. Left unbounded, that holds `socketHandle` — and
+                    therefore the socket — past a detach that has already
+                    happened, with the client's own correlation id outstanding
+                    and nothing on the wire to say so. This deadline does not
+                    change that retention: the `.then`/`.catch` reaction below
+                    is still a live closure over `socketHandle` for as long as
+                    `dispatch.call` takes to actually settle, however late.
+                    What it fixes is the client's wait, not the handle's
+                    lifetime.
 
-                    It is bounded rather than unbounded: a client can only have
-                    as many of these as it has calls in flight, and every one
-                    of them settles or the app is quitting. It ships unfixed
-                    because the fix belongs with the client half — a deadline
-                    here without a matching one there would answer a `timeout`
-                    error frame to a client that has no branch for it, and the
-                    two numbers have to agree or the client gives up on a call
-                    the server is still going to answer. HIVE-144 should give
-                    `dispatch.call` a deadline, answer an `error` frame when it
-                    expires, and drop the handle it is holding.
+                    `CALL_DEADLINE_MS` is the fix: if the call has not settled
+                    by then, `deadline` fires, answers `CALL_TIMEOUT_CODE`, and
+                    is the *only* thing that sets `settled` — a fired timeout
+                    cannot itself run twice, so it needs no guard of its own.
+                    `settled` exists for the other direction: a `dispatch.call`
+                    that answers late, after the timeout already has, must not
+                    send a second frame for the same `id` — two answers to one
+                    correlation id is worse than the timeout alone, because the
+                    client already resolved. `clearTimeout(deadline)` on the
+                    settle path is what stops that stale timer from firing at
+                    all once a real answer is in hand; without it, an
+                    already-answered call would still get a spurious
+                    `CALL_TIMEOUT_CODE` error minutes later. `CALL_GIVE_UP_MS`
+                    (`electron/shared/remote-contract.ts`) is the client's own
+                    number — `CALL_DEADLINE_MS` plus flight time, not the same
+                    value — so it never gives up on a call this server is
+                    still going to answer.
                   */
+                  let settled = false;
+                  const deadline = setTimeout(() => {
+                    settled = true;
+                    pendingTimers.delete(deadline);
+                    if (socket.readyState !== socket.OPEN) return;
+                    send(socket, {
+                      kind: 'error',
+                      id: (postAttachFrame as CallFrame).id,
+                      code: CALL_TIMEOUT_CODE,
+                      message: `no answer within ${String(CALL_DEADLINE_MS)}ms`,
+                    });
+                  }, CALL_DEADLINE_MS);
+                  pendingTimers.add(deadline);
+
                   void dispatch
                     .call(postAttachFrame as CallFrame)
                     .then((answer) => {
+                      // A late answer, after the deadline above already sent
+                      // its own error frame for this `id` — nothing left to
+                      // tell the client that would not be a second frame for
+                      // one correlation id.
+                      if (settled) return;
+                      clearTimeout(deadline);
+                      pendingTimers.delete(deadline);
+                      /*
+                        No `readyState` check here, unlike the two sites above
+                        and below — this is HIVE-143's original answer path,
+                        unchanged by this task. A send to a closed socket
+                        routes through `ws`'s `sendAfterClose`, which emits an
+                        `'error'` rather than throwing, and the `'error'`
+                        listener registered on this socket at connection time
+                        already swallows it. Adding a check here is scope this
+                        task does not own.
+                      */
                       socketHandle.send(answer);
                     })
                     .catch((cause: unknown) => {
@@ -691,6 +877,9 @@ export function createRemoteListener(options: {
                         replaces an unserialisable one must not itself be the
                         thing that throws.
                       */
+                      if (settled) return;
+                      clearTimeout(deadline);
+                      pendingTimers.delete(deadline);
                       console.error('[hive] server mode could not answer a call frame:', cause);
                       if (socket.readyState !== socket.OPEN) return;
                       try {
@@ -875,8 +1064,9 @@ export function createRemoteListener(options: {
         boundHost = null;
 
         // Nothing left to wait for once a timer has fired or been cleared,
-        // but one armed against a socket that never sent anything must not
-        // survive the listener it belongs to.
+        // but one still armed on behalf of a socket — mid-handshake, or a
+        // call still short of its deadline — must not survive the listener
+        // it belongs to.
         for (const timer of pendingTimers) clearTimeout(timer);
         pendingTimers.clear();
         // The cap belongs to a running listener. Leaving members here would

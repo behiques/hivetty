@@ -802,6 +802,54 @@ export const SERVER_DEVICE_KEYS: readonly (keyof ServerDevice)[] = [
 ];
 
 /**
+ * `'local'` is every existing install: PTYs spawn in this process and no
+ * socket exists. `'remote'` means this window is a client attaching to a
+ * Hive running as a server elsewhere on the tailnet — see {@link ServerConfig}
+ * for the side that listens. There is no third mode: a PTY's owner has to be
+ * a single process for its lifecycle to be well-defined, so an install is
+ * either the server or a client, never a hybrid.
+ */
+export type RemoteMode = 'local' | 'remote';
+
+/**
+ * Where a client attaches when {@link RemoteMode} is `'remote'` (HIVE-144).
+ *
+ * **The token is not in this block, and never will be.** `host` and `port`
+ * name a socket; the credential that authenticates against it lives in
+ * `safeStorage`, mirroring why {@link ServerDevice.credential} holds a digest
+ * and not the token it was derived from — what authenticates a session must
+ * not sit inside a file this product invites the user to hand-edit.
+ *
+ * A new key in an existing file is advisory to a reader built before it
+ * existed, so `CONFIG_VERSION` stays 2 for this block exactly as it did for
+ * `server` (HIVE-134's precedent): a build that predates this key simply does
+ * not recognise `remote` and ignores it, rather than refusing to launch.
+ */
+export interface RemoteConfig {
+  mode: RemoteMode;
+  /**
+   * A hostname or an IPv4 literal.
+   *
+   * Validated by {@link isRemoteTarget} **only when {@link mode} is
+   * `'remote'`** — see that function's doc comment for the reasoning, and
+   * {@link DEFAULT_REMOTE} for why an empty value in `'local'` mode is the
+   * normal state, not a mistake.
+   */
+  host: string;
+  port: number;
+}
+
+/**
+ * Every install that has never attached carries exactly this. `host` is
+ * empty because there is nothing to validate in `'local'` mode — see
+ * {@link isRemoteTarget}.
+ */
+export const DEFAULT_REMOTE: RemoteConfig = { mode: 'local', host: '', port: 7433 };
+
+/** The block's keys, for the parser's exact-key check. */
+export const REMOTE_KEYS: readonly (keyof RemoteConfig)[] = ['mode', 'host', 'port'];
+
+/**
  * How a containerised session's `${VAR}` references get their values (HIVE-132).
  *
  * `exec-env` — `docker exec -e …` and friends. Env is per-exec, so every launch
@@ -970,8 +1018,30 @@ export function isHostAlias(value: unknown): value is string {
   return value.split('.').every((label) => HOST_ALIAS_LABEL.test(label));
 }
 
-/** `127.0.0.0/8`, in the dotted-quad spelling `isHostAlias` admits. */
-const LOOPBACK_V4 = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+/**
+ * `127.0.0.0/8`, in the dotted-quad spelling {@link isHostAlias} admits.
+ *
+ * Every octet after the fixed `127` is bounded `(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)`
+ * — 0 through 255 and nothing past it — exactly as {@link TAILNET_V4} bounds
+ * its own, and for the same reason spelled out there. The looser `\d{1,3}` this
+ * regex used through HIVE-134 admits `256` through `999`, and `127.999.999.999`
+ * is not an IPv4 address at all: `net.isIPv4` says `false`, so `net.connect`
+ * hands the whole string to the **DNS resolver as a hostname**.
+ *
+ * That was inert while this predicate only classified a *bind* address — a
+ * nonsense host was refused by the OS at bind time either way. HIVE-144 gave it
+ * a second job through {@link isRemoteTarget}, where it decides what this app
+ * will **dial with a device credential over a plaintext socket**, and a loose
+ * octet there is the exfiltration path `TAILNET_V4` documents: a typo plus a
+ * `search` suffix plus a resolver that hijacks NXDOMAIN sends the credential to
+ * an arbitrary public address, with this predicate having called it loopback.
+ *
+ * Tightening cuts nothing real loose. The strings it stops matching were never
+ * IPv4 literals, so no bind, dial or `Host` header they appear in could have
+ * reached this machine; every one of them now classifies as *not* loopback,
+ * which is the failing-closed direction at all four call sites.
+ */
+const LOOPBACK_V4 = /^127\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
 
 /**
  * Whether a bind address reaches only this machine (HIVE-134).
@@ -993,6 +1063,85 @@ export function isLoopbackHost(host: string): boolean {
   const bare = host.trim().toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
   if (bare === 'localhost' || bare === '::1' || bare === '::ffff:127.0.0.1') return true;
   return LOOPBACK_V4.test(bare);
+}
+
+/**
+ * `100.64.0.0/10`, the CGNAT range Tailscale hands every node in a tailnet, in
+ * the dotted-quad spelling {@link isHostAlias} admits.
+ *
+ * Get the arithmetic exactly right: a `/10` is the top two bits of the second
+ * octet fixed at `01`, i.e. `100.64.0.0` through `100.127.255.255` — **not**
+ * "every `100.x`". `100.63.255.255` and `100.128.0.0` are one address either
+ * side of the range and were never Tailscale's to hand out; a predicate that
+ * loosens this to the whole second octet admits half the internet's `100.x`
+ * space as if it were the tailnet.
+ *
+ * The third and fourth octets are bounded exactly as the first two are —
+ * `(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)`, 0 through 255 and nothing past it —
+ * rather than the looser `\d{1,3}` a first draft of this regex used. `\d{1,3}`
+ * admits `256` through `999`, and a string like `100.64.0.257` is not an IPv4
+ * address at all: `net.isIPv4('100.64.0.257')` is `false`, so `net.connect`
+ * hands the whole string to the DNS **resolver as a hostname**. A user who
+ * typos `100.64.0.25` as `100.64.0.257` on a machine with a `search` suffix
+ * gets a query for `100.64.0.257.<suffix>`; a resolver that hijacks NXDOMAIN
+ * can answer with an arbitrary public address, and the device credential this
+ * predicate is supposed to keep on the tailnet goes there instead — with this
+ * function having said the address was in range. Bounding every octet is what
+ * makes "in the CGNAT range" a claim that can only be true of a real IPv4
+ * literal.
+ */
+const TAILNET_V4 =
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/**
+ * Whether a value is a Tailscale address for this node's tailnet (HIVE-144).
+ *
+ * `isHostAlias` for shape first, exactly as {@link isServerBindHost} does —
+ * one shape predicate, not two, per that function's own doc comment. What
+ * remains is the two spellings Tailscale actually assigns: a MagicDNS name
+ * (`mini.tail1234.ts.net`) and a CGNAT literal ({@link TAILNET_V4}). A bare
+ * hostname like `mini.local` is neither — mDNS resolves it to whatever
+ * answers on the local LAN right now, off the tailnet entirely — and must be
+ * refused.
+ */
+export function isTailnetHost(value: string): boolean {
+  if (!isHostAlias(value)) return false;
+  if (value.toLowerCase().endsWith('.ts.net')) return true;
+  return TAILNET_V4.test(value);
+}
+
+/**
+ * Whether a plaintext socket may be opened to `value` (HIVE-144).
+ *
+ * **This is a security boundary, not a convenience check.** The socket
+ * {@link RemoteConfig} describes carries a device credential in the clear —
+ * there is no TLS in this story, so the socket's confidentiality is entirely
+ * whatever network it crosses. Loopback never leaves this machine. A tailnet
+ * address never leaves Tailscale's own WireGuard mesh, which is encrypted and
+ * authenticated below this layer. Anything else is a route across the open
+ * internet, and a host that wrongly satisfies this predicate is that
+ * credential handed to whoever controls the address it names.
+ *
+ * `isHostAlias` for shape first — exactly as {@link isServerBindHost} does —
+ * *before* either branch below, not merely inside {@link isTailnetHost}.
+ * `isLoopbackHost`'s own rule trims, lowercases and strips brackets, so
+ * `' 127.0.0.1 '` and `'[127.0.0.1]'` satisfy it; without this gate a value
+ * shaped that way would pass validation and be stored verbatim, then fail at
+ * `net.connect` with `ENOTFOUND` — failing closed, so not a hole, but not the
+ * value that was actually validated either. Gating here means the string this
+ * predicate approves is the string that gets dialled.
+ *
+ * `unknown`, and a type guard, matching {@link isServerBindHost} at `:707` —
+ * Task 5's `setRemote` IPC verb validates a payload of unknown shape through
+ * this same predicate, so the signature has to widen for that caller anyway.
+ *
+ * `isLoopbackHost(value) || isTailnetHost(value)` — deliberately an "or" of
+ * two independently-reasoned predicates rather than one merged rule, so each
+ * keeps its own doc comment and its own tests.
+ */
+export function isRemoteTarget(value: unknown): value is string {
+  if (!isHostAlias(value)) return false;
+  return isLoopbackHost(value) || isTailnetHost(value);
 }
 
 /**
@@ -1091,6 +1240,61 @@ export interface ConfigSnapshot {
    * remember to apply defaults is one that will eventually forget on one branch.
    */
   server: ServerConfig;
+  /**
+   * How this window reaches its own PTYs, always fully resolved (HIVE-144).
+   *
+   * Defaulted here for the same reason `server` is: main reads
+   * `remote.mode` at boot to decide whether to spawn PTYs locally or attach
+   * as a client, and a consumer that had to remember to apply defaults is one
+   * that will eventually forget on one branch. There is no separate `mode`
+   * field on this snapshot — `remote.mode` is the one stored value, so a
+   * reader that wants a flatter shape gets a derived getter, never a second
+   * place for the same fact to drift from this one.
+   */
+  remote: RemoteConfig;
+  /**
+   * What this window is attached to over a socket, or `null` in `'local'`
+   * mode (HIVE-144).
+   *
+   * **A control's readout, not a status readout — see `AppInfo.attachedServerName`
+   * (Task 13, `ipc-contract.ts`) for the other half of this line, and read
+   * both doc comments together before touching either.** This repo already
+   * draws that line and HIVE-134 wrote down why (`:276-278` above,
+   * `ipc-contract.ts:1382-1405`): a *control* over the file reads from
+   * config, a *status readout* reads from what is actually running. Settings
+   * names the machine whose config file this window is editing — while
+   * attached, `config:get` itself is answered by the far end, exactly as
+   * {@link RemoteConfig}'s own doc comment says — so that question is
+   * config-derived and belongs here. The header chip claims a **live**
+   * attachment, which is a different question this field would answer
+   * wrongly in both directions: Ruling 19 deliberately leaves `remote.mode`
+   * saying `'remote'` in `config.json` after an already-remote re-switch
+   * fails and rebinds local, so a config-derived chip would keep claiming an
+   * attachment that is no longer there — and, symmetrically, would deny one
+   * on the next launch before the boot attach has even been attempted. The
+   * chip reads `AppInfo.attachedServerName` instead, sourced from the running
+   * socket, for exactly that reason.
+   *
+   * `name` is `remote.host` today — the file carries no friendlier label for
+   * the far end, only the address it dials. The runtime side genuinely does
+   * have a name — `RemoteClient.serverName()` (Task 7), what the header chip
+   * reads — which is the config-versus-runtime split demonstrated rather than
+   * merely asserted: config knows the host, runtime knows the name.
+   *
+   * **Required, not optional.** A snapshot is documented above as "always
+   * returned, even for a malformed file", and every other resolved field on
+   * this interface (`jira`, `receiver`, `server`, `remote` itself) keeps that
+   * promise the same way — fully computed, never left for a caller to
+   * default. An optional field here would let a hand-rolled fixture declare
+   * `remote.mode: 'remote'` while naming no attached server at all, which
+   * describes a state the app cannot be in, with `tsc` saying nothing about
+   * it. That is the exact shape of a real defect this repo already paid for
+   * once (HIVE-139's vitest teardown flake, traced back to a fixture missing
+   * a required field on a partial `ConfigSnapshot`) — the fix recorded from
+   * it was to never hand-roll a partial snapshot, and a required field is
+   * what makes the compiler enforce that rather than a comment.
+   */
+  attachedServer: { name: string; host: string } | null;
   /**
    * Real-time Slack events, always fully resolved (HIVE-124).
    *
@@ -1573,6 +1777,13 @@ export function emptySnapshot(
     // one shared array instance handed to every empty snapshot is exactly
     // what `readServerDevicesFromDisk`'s own doc comment warns against.
     server: { ...DEFAULT_SERVER, devices: [] },
+    // No array field to worry about the way `server.devices` is — a plain
+    // spread is the whole story.
+    remote: { ...DEFAULT_REMOTE },
+    // `DEFAULT_REMOTE.mode` is `'local'` — nothing to name. See
+    // `ConfigSnapshot.attachedServer`'s own doc comment for what this answers
+    // and what it deliberately does not.
+    attachedServer: null,
     slack: { ...DEFAULT_SLACK },
     errors: [],
   };
@@ -1801,6 +2012,147 @@ export interface SetServerRequest {
  */
 export interface DeviceNameRequest {
   name: string;
+}
+
+/**
+ * Payload of `config:set-remote` (HIVE-144).
+ *
+ * The client-side mirror of {@link SetServerRequest}, and deliberately as thin:
+ * this verb writes exactly what {@link RemoteConfig} resolves to and nothing
+ * else — there is no credential field here, for the identical reason
+ * `SetServerRequest` carries no credential. Pairing this device is
+ * `remote:pair`'s job; this one only ever writes `mode`, `host` and `port`.
+ *
+ * All three optional and merged into the stored block, one field at a time,
+ * the same shape {@link SetReceiverRequest} and {@link SetServerRequest} take —
+ * Settings commits a field on blur or on a toggle, and a payload that had to
+ * restate all three every time would make committing one reset the others.
+ */
+export interface SetRemoteRequest {
+  mode?: RemoteMode;
+  host?: string;
+  port?: number;
+}
+
+/**
+ * What a live mode switch did (HIVE-144).
+ *
+ * Produced by `switchIpcMode` in `electron/main/ipc/router.ts` and declared
+ * here rather than there for the reason Ruling 1 moved `SNAPSHOT_CHANNELS`:
+ * the settings pane renders this outcome, `src/**` may not import
+ * `electron/main/**`, and `electron/shared/**` is the only module both sides
+ * may reach. A discriminated union of four plain fields drags in no runtime,
+ * no Node and no DOM, which is that fence's actual rule.
+ *
+ * Four arms, because a pane has four different things to say:
+ *
+ * - `live-sessions` — the one refusal the *user* can clear, by closing the
+ *   sessions this window is running. {@link sessions} names them so the pane
+ *   can list them rather than saying "some are live"; the order is the order
+ *   they were opened.
+ * - `plaintext-refused` — the address is neither loopback nor a tailnet
+ *   address, or a `.ts.net` name resolved to something that is not. One arm
+ *   for both fences, matching `PlaintextRefusedError`'s own "one class, two
+ *   messages" reasoning: the remedy is the same sentence either way, and it
+ *   belongs in the pane's hint beside the address field rather than in a code
+ *   this union asks a caller to branch on.
+ * - `connect-failed` — a socket was attempted and did not become a session:
+ *   the server refused the handshake, the attach frame was too large to send,
+ *   the machine is not answering. Carries {@link message} because, unlike the
+ *   other three, the remedy differs per failure and only the sentence knows it.
+ * - `ok` — bound, and answering from the other machine.
+ */
+export type SwitchOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'live-sessions'; sessions: readonly string[] }
+  | { ok: false; reason: 'plaintext-refused' }
+  | { ok: false; reason: 'connect-failed'; message: string };
+
+/**
+ * What `config:set-remote` answers with (HIVE-144, Ruling 19).
+ *
+ * Both halves, because the verb does two things that can disagree and the
+ * pane needs to know which happened. `config` is the snapshot as it now
+ * stands — **the old one, untouched, whenever {@link switched} is not `ok`**.
+ * The handler validates, switches, and writes only on success, so there is no
+ * revert path: a refused switch leaves `config.json` exactly as it was, and
+ * the next launch does not attach to a server the user was just told it could
+ * not attach to.
+ *
+ * **This is not "the file always matches the running mode".** It cannot be,
+ * and should not be. An app already attached that re-dials and fails is
+ * rebound *local* while `config.json` still says `remote` — correctly, because
+ * that is still what the user asked for and the next launch should retry it.
+ * The same is true of a boot attach that fails. What the ruling actually
+ * guarantees is narrower and is the half that matters: **a target the app was
+ * never able to reach is never written**, so the file can say "attach to the
+ * mini" while this run could not, and can never say "attach to a machine you
+ * were just told is unreachable".
+ */
+export interface SetRemoteResult {
+  switched: SwitchOutcome;
+  config: ConfigSnapshot;
+  /**
+   * The mode change this call actually performed, or `null` for none
+   * (HIVE-144 review, I1).
+   *
+   * The one moment the renderer can know its fleet just changed machines, and
+   * the reason it is carried here rather than pushed on an event: `config:set-remote`
+   * is `PROCESS_LOCAL` (Ruling 28), so it is answered by the process holding
+   * the client, and it is the only call that knows a switch happened. An
+   * event would arrive over whichever surface is bound *after* the switch,
+   * which is the wrong one for a detach.
+   *
+   * **Derived from the runtime, never from `mode`.** A payload asking for
+   * `'local'` while this window is already local switches nothing, and Ruling
+   * 19 leaves the *file* saying `'remote'` after a failed boot attach — so a
+   * config-derived answer would report a change on a window whose own local
+   * sessions are on screen, and clearing those is the opposite of the fix.
+   * The handler compares the attached socket before and after.
+   *
+   * `null` also on every refusal: a refused switch changes nothing, so there
+   * is nothing for the renderer to re-seed.
+   */
+  changed: ModeChange | null;
+}
+
+/**
+ * What a completed mode switch leaves the renderer to do (HIVE-144 review, I1).
+ *
+ * Both arms mean "clear what is on screen, it belongs to the machine you just
+ * left" — `nextSpawnId` mints `sess-01` identically on both machines and
+ * `useSessionMetrics(id)` is a bare id lookup, so the departed mode's metrics
+ * would render against the newly attached session wearing the same id. That
+ * is the collision Ruling 22 exists to prevent. The `'remote'` arm carries the
+ * fleet to put back in its place, which is what makes the attach snapshot the
+ * server builds on every accept something other than six reads thrown away.
+ *
+ * `snapshot` is keyed by `SNAPSHOT_CHANNELS` (`electron/shared/remote-contract.ts`)
+ * and typed with a bare `string` key rather than `Channel`: `Channel` lives in
+ * `ipc-contract.ts`, which imports *this* module, so naming it here would
+ * close a cycle. It can arrive with fewer keys than the server tried to send —
+ * `fitSnapshot` drops the heaviest first when a busy fleet would not fit the
+ * frame — which is why the store walks the payload's own keys.
+ */
+export type ModeChange =
+  | { to: 'remote'; snapshot: Readonly<Record<string, unknown>> }
+  | { to: 'local' };
+
+/**
+ * Payload of `remote:pair` (HIVE-144).
+ *
+ * The opposite direction from {@link DeviceNameRequest}: `server:pair` mints a
+ * credential *on* this machine *for* some other device; `remote:pair` stores a
+ * credential *given to* this machine so it can attach to someone else's
+ * server. Both halves — the id and the token — arrive together because a
+ * `server:pair` mint on the far end hands them back together, and a
+ * credential that stored one without the other could never authenticate a
+ * socket attach ({@link ResumePoint} and `AttachRequest` both need `deviceId`
+ * and `token` at once).
+ */
+export interface RemotePairRequest {
+  deviceId: string;
+  token: string;
 }
 
 /**

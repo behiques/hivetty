@@ -5,8 +5,10 @@ import type {
   DiagnoseCommandRequest,
   DiagnoseEnvRequest,
   EnvDiagnostic,
+  ModeChange,
   ProjectConfig,
   ProjectStatus,
+  RemotePairRequest,
   RemoveProjectRequest,
   RenameProjectRequest,
   ReorderProjectsRequest,
@@ -16,8 +18,10 @@ import type {
   SetProjectKeyRequest,
   SetProjectRuntimeRequest,
   SetReceiverRequest,
+  SetRemoteRequest,
   SetRuntimeRequest,
   SetServerRequest,
+  SwitchOutcome,
 } from '@shared/config-contract';
 import type {
   AppInfo,
@@ -45,10 +49,76 @@ import type {
 let snapshot: ConfigSnapshot | null = null;
 const listeners = new Set<() => void>();
 
+/**
+ * The server a socket is open to right now, or `null` — `AppInfo.attachedServerName`,
+ * cached here so a synchronous predicate can read it (HIVE-144 review, C1).
+ *
+ * **Runtime, never config.** `config:get` is proxied while attached, so
+ * `snapshot.remote.mode` above is the *server's* answer, and a server is not
+ * attached to anyone: it reads `'local'` on exactly the window that is
+ * attached. Every gate that asked the snapshot that question got the wrong
+ * answer in the one state it existed for — the defect Ruling 29 closed in the
+ * settings pane, closed here too. `AppInfo` is `PROCESS_LOCAL`, so this value
+ * is answered by *this* process in both modes.
+ *
+ * Kept beside the snapshot rather than in a store because its one consumer is
+ * `src/config/runtime.ts`, which may not import a store, and because it moves
+ * for exactly one reason: a mode switch, which also replaces the snapshot. See
+ * {@link install}.
+ */
+let attachment: string | null = null;
+
 function emit(): void {
   // Copied before iterating: a listener that unsubscribes during the emit is
   // the ordinary React teardown case, not an edge case.
   for (const listener of [...listeners]) listener();
+}
+
+/**
+ * Re-ask *this* process whether a socket is open, and emit if the answer moved.
+ *
+ * Guarded on a change rather than emitting unconditionally: this runs after
+ * every config write, and the answer moves only on a mode switch, so an
+ * unguarded emit would re-render every subscriber on each save for a value
+ * that did not change.
+ */
+async function refreshAttachment(): Promise<void> {
+  const info = await readAppInfo();
+  const next = info?.attachedServerName ?? null;
+  if (next === attachment) return;
+  attachment = next;
+  emit();
+}
+
+/**
+ * Install a snapshot and re-derive the attachment alongside it.
+ *
+ * Used by the two paths that can change which process answers this window:
+ * {@link read}, which is boot and reload, and {@link setRemoteConfig}, which
+ * is the switch itself. Nothing else here can move it — see {@link mutate}.
+ *
+ * Awaited rather than fired and forgotten: every caller already returns a
+ * promise the app treats as "the config read is done", and a gate that
+ * answered from a stale attachment for one more round trip after that is the
+ * same silent failure this whole fix is about.
+ */
+async function install(next: ConfigSnapshot | null): Promise<void> {
+  snapshot = next;
+  emit();
+  await refreshAttachment();
+}
+
+/**
+ * The name of the server this window is attached to, or `null` (HIVE-144).
+ *
+ * Synchronous, because its consumer is: `can.*` in `src/config/runtime.ts` are
+ * plain predicates an event handler calls without a hook. Components that
+ * *render* a disabled state go through `useRemoteCapabilities`, which
+ * subscribes to this module for the re-render {@link refreshAttachment}
+ * triggers.
+ */
+export function attachedServerNow(): string | null {
+  return attachment;
 }
 
 /** `useSyncExternalStore`'s subscribe. Returns its own disposer. */
@@ -78,17 +148,18 @@ async function read(
   // detect the bridge, never the user agent.
   if (!bridge) return;
 
+  let next: ConfigSnapshot | null;
   try {
-    snapshot = await fetch(bridge);
+    next = await fetch(bridge);
   } catch (cause) {
     // Main never rejects a *read* — it returns a snapshot even for a malformed
     // file. A rejection here means the channel itself failed, which is not
     // something the user can fix by editing their config, so the surfaces stay
     // permissive rather than locking the app over a broken IPC hop.
     console.error('[hive] could not read the workspace config:', cause);
-    snapshot = null;
+    next = null;
   }
-  emit();
+  await install(next);
 }
 
 /**
@@ -118,12 +189,62 @@ async function mutate(
   } catch (cause) {
     console.error('[hive] the workspace config was not written:', cause);
   }
+  // Not {@link install}: no mutating verb in this module can change which
+  // process answers this window's IPC — only `config:set-remote` can, and it
+  // does not come through here — so re-deriving the attachment on every save
+  // would be an `app:info` round trip per write for a value that cannot have
+  // moved.
   emit();
 }
 
-/** Ask main for the config. Called once at startup. */
-export const loadProjectConfig = (): Promise<void> =>
-  read((bridge) => bridge.config.get());
+/**
+ * How the boot read backs off when it lands on an unbound channel (HIVE-144
+ * review, M8) — 250 ms, doubling, seven attempts, so the last one is about
+ * 16 s after the first.
+ *
+ * Sized against what it is waiting out. A boot attach unbinds the local
+ * surface *before* it dials, and `CLIENT_ATTACH_TIMEOUT_MS` bounds that dial
+ * at 10 s — after which `switchIpcMode` rebinds local and `config:get` starts
+ * answering again. A window shorter than that would give up while the app is
+ * still on its way to being usable; a fixed short interval would spend seven
+ * reads inside the first two seconds and miss the same moment.
+ *
+ * Exported so the test asserts against the real schedule rather than a
+ * duplicated magic number, exactly as `LATE_BIND_RETRY_MS` is.
+ */
+export const BOOT_READ_BACKOFF_MS = [250, 500, 1_000, 2_000, 4_000, 8_000] as const;
+
+/**
+ * Ask main for the config, retrying while the answer has not landed
+ * (HIVE-144 review, M8).
+ *
+ * A single unretried read raced the boot dial. `switchIpcMode('remote')`
+ * unbinds every local channel synchronously and only rebinds when the dial
+ * settles, so a `config:get` issued in that window rejects — and {@link read}
+ * correctly treats a broken channel as "stay permissive", which leaves the
+ * snapshot `null` **permanently**, until someone finds the Reload button in a
+ * pane the snapshot being `null` renders as an empty state. It compounds with
+ * the dial having had no deadline at all before this review round.
+ *
+ * Retries only while the snapshot is still `null`, so a read that succeeded
+ * costs nothing extra, and never in the browser demo, where the absence of a
+ * bridge is the answer rather than a failure to get one.
+ *
+ * Not shared with {@link reloadProjectConfig}: that one is a user pressing a
+ * button and watching for a result, so a failure should be visible at once
+ * rather than retried behind a UI that looks like it is doing nothing.
+ */
+export async function loadProjectConfig(): Promise<void> {
+  await read((bridge) => bridge.config.get());
+
+  for (const delay of BOOT_READ_BACKOFF_MS) {
+    // `window.hive` rather than a captured flag: the browser demo has no
+    // bridge and never will, and there is nothing here to wait for.
+    if (snapshot !== null || window.hive === undefined) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    await read((bridge) => bridge.config.get());
+  }
+}
 
 /** Re-read the file the user just edited, without restarting the app. */
 export const reloadProjectConfig = (): Promise<void> =>
@@ -310,6 +431,121 @@ export async function revokeDevice(
   }
   emit();
   return { ok: true };
+}
+
+/**
+ * Turn client mode on or off, and change where it attaches (HIVE-144).
+ *
+ * Not routed through {@link mutate}: `config:set-remote` answers a
+ * {@link SetRemoteResult}, not a bare `ConfigSnapshot`, because the verb also
+ * *performs* the switch and the switch can be refused (Ruling 19). The
+ * snapshot half is installed unconditionally — it is the old one, untouched,
+ * whenever the switch is not `ok`, so installing it always is exactly as safe
+ * as installing it only on success, and simpler than branching to skip a copy
+ * that would be identical anyway.
+ *
+ * The caller renders {@link SwitchOutcome} — the returned half this function
+ * does not swallow — because Ruling 19 is a promise about the *file*, not
+ * about what the pane may claim: a refused switch must not present the
+ * address that was just tried as saved, and the only way the pane can avoid
+ * that is by reading what actually happened rather than assuming success.
+ *
+ * `{ ok: false, reason: 'connect-failed', message }` on no bridge or a broken
+ * channel, matching the shape a real dial failure already takes, so the pane
+ * has exactly one failure branch to render instead of a second one for "the
+ * IPC itself did not work."
+ *
+ * ## `changed` is passed through, not acted on here (HIVE-144 review, I1)
+ *
+ * The fleet on screen belongs to the machine that was just left, and clearing
+ * it is a **store** operation — `clearModeEntities` then `applyAttachSnapshot`.
+ * This module cannot perform it: `hive-store` reaches `@config/runtime`, which
+ * reaches this file, so importing the store from here would close a cycle
+ * `import/no-cycle` fails the build over. So the answer is handed up, and the
+ * caller applies it through `useApplyModeChange` — one named store action, so
+ * the ordering of the two steps lives in one place rather than at each call.
+ */
+export async function setRemoteConfig(
+  request: SetRemoteRequest,
+): Promise<RemoteSwitch> {
+  const bridge = window.hive;
+  if (!bridge) {
+    return {
+      switched: { ok: false, reason: 'connect-failed', message: 'No bridge available.' },
+      changed: null,
+    };
+  }
+
+  try {
+    const result = await bridge.config.setRemote(request);
+    await install(result.config);
+    return { switched: result.switched, changed: result.changed };
+  } catch (cause) {
+    console.error('[hive] the attach switch did not complete:', cause);
+    return {
+      switched: {
+        ok: false,
+        reason: 'connect-failed',
+        message: 'The request could not be sent.',
+      },
+      changed: null,
+    };
+  }
+}
+
+/**
+ * What {@link setRemoteConfig} hands back — {@link SetRemoteResult} minus the
+ * snapshot, which this module installs rather than returning.
+ *
+ * Two fields because they answer different questions and can disagree: a
+ * write-only commit succeeds (`switched.ok`) while changing no mode at all
+ * (`changed === null`), and that is the case finding 6 exists about.
+ */
+export interface RemoteSwitch {
+  switched: SwitchOutcome;
+  changed: ModeChange | null;
+}
+
+/**
+ * Store the device credential a `server:pair` mint on some *other* Hive
+ * handed back (HIVE-144).
+ *
+ * Not routed through {@link mutate}: `remote:pair` writes no config, so there
+ * is no snapshot to install — the credential lives in `safeStorage`, never in
+ * `config.json`. `{ error }` on a refusal (most likely a locked keychain) is
+ * passed straight through so the pane can show it beside the pairing fields,
+ * matching {@link pairDevice}'s own shape for the opposite direction.
+ */
+export async function pairRemoteDevice(
+  request: RemotePairRequest,
+): Promise<{ paired: true } | { error: string }> {
+  const bridge = window.hive;
+  if (!bridge) return { error: 'No bridge available.' };
+
+  try {
+    return await bridge.remote.pair(request);
+  } catch (cause) {
+    console.error('[hive] could not store the device credential:', cause);
+    return { error: 'Pairing failed.' };
+  }
+}
+
+/**
+ * Discard the credential {@link pairRemoteDevice} stored (HIVE-144).
+ *
+ * Idempotent and writes no config, so there is nothing to install — a no-op
+ * with no bridge, matching every other verb in this module that touches
+ * nothing on disk.
+ */
+export async function forgetRemoteDevice(): Promise<void> {
+  const bridge = window.hive;
+  if (!bridge) return;
+
+  try {
+    await bridge.remote.forget();
+  } catch (cause) {
+    console.error('[hive] could not forget the device credential:', cause);
+  }
 }
 
 /**
@@ -554,15 +790,32 @@ export function installProjectConfig(next: ConfigSnapshot): void {
   emit();
 }
 
-/** Test-only: drop the snapshot and every subscriber. */
+/** Test-only: drop the snapshot, the attachment and every subscriber. */
 export function resetProjectConfig(): void {
   snapshot = null;
+  attachment = null;
   listeners.clear();
 }
 
 /** Test-only: install a snapshot without going through the bridge. */
 export function setProjectConfigForTest(next: ConfigSnapshot | null): void {
   snapshot = next;
+  emit();
+}
+
+/**
+ * Test-only: put this window in the attached state without a bridge or a
+ * socket (HIVE-144 review, C1).
+ *
+ * Separate from {@link setProjectConfigForTest} because the two are separate
+ * facts, and conflating them is the defect that fix closes: a *real* attached
+ * client holds the **server's** snapshot, whose `remote.mode` reads `'local'`.
+ * A suite that proves an attached-state behaviour by installing a snapshot
+ * saying `'remote'` is describing a state no window can be in — so it sets
+ * this instead, and leaves the snapshot as the server's.
+ */
+export function setAttachedServerForTest(next: string | null): void {
+  attachment = next;
   emit();
 }
 

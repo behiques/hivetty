@@ -4,11 +4,27 @@ import { createServer as createNetServer, connect, type Socket } from 'node:net'
 import { WebSocket, WebSocketServer } from 'ws';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createRemoteListener } from '@remote-host/listener';
+import {
+  ATTACH_HANDSHAKE_TIMEOUT_MS,
+  SNAPSHOT_READ_BUDGET_MS,
+  createRemoteListener,
+} from '@remote-host/listener';
 import type { ServerDevice } from '@shared/config-contract';
 import { MAX_FILE_BYTES } from '@shared/fs-contract';
-import { CH } from '@shared/ipc-contract';
-import { REMOTE_PROTOCOL_VERSION, type AttachRequest, type CallFrame } from '@shared/remote-contract';
+import { CH, type Channel } from '@shared/ipc-contract';
+import {
+  ATTACH_FRAME_MAX_BYTES,
+  CALL_DEADLINE_MS,
+  CALL_TIMEOUT_CODE,
+  POST_ATTACH_FRAME_MAX_BYTES,
+  REMOTE_PROTOCOL_VERSION,
+  SNAPSHOT_CHANNELS,
+  type AttachRequest,
+  type CallFrame,
+  type ErrorFrame,
+  type ResultFrame,
+  type ResumePoint,
+} from '@shared/remote-contract';
 
 import { mintDevice } from '../../../electron/main/server/devices';
 import type { RemoteDispatch } from '../../../electron/main/ipc/remote-dispatch';
@@ -29,6 +45,9 @@ afterEach(async () => {
 const noopDispatch: RemoteDispatch = { call: vi.fn(), notify: vi.fn() };
 const noopOnAttach = vi.fn();
 const noopOnDetach = vi.fn();
+/** An empty snapshot — every pre-existing case in this file is silent on HIVE-144. */
+const noopBuildSnapshot = (): Promise<Partial<Record<Channel, unknown>>> =>
+  Promise.resolve({});
 
 const start = async (devices: readonly ServerDevice[], allowedOrigins: string[] = []) => {
   listener = createRemoteListener({
@@ -36,6 +55,7 @@ const start = async (devices: readonly ServerDevice[], allowedOrigins: string[] 
     devices: () => devices,
     serverName: 'test-mini',
     dispatch: noopDispatch,
+    buildSnapshot: noopBuildSnapshot,
     onAttach: noopOnAttach,
     onDetach: noopOnDetach,
   });
@@ -177,6 +197,7 @@ describe('the attach handshake', () => {
       devices: () => devices,
       serverName: 'test-mini',
       dispatch: noopDispatch,
+      buildSnapshot: noopBuildSnapshot,
       onAttach: noopOnAttach,
       onDetach: noopOnDetach,
     });
@@ -286,7 +307,7 @@ describe('an unauthenticated socket is untrusted input (HIVE-142 review)', () =>
     expect(reply).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
   });
 
-  it('refuses an attach whose resumeFrom is not a map of numbers, rather than throwing', async () => {
+  it('refuses an attach whose resumeFrom is not a map of {gen, seq} points, rather than throwing', async () => {
     const { device, token } = mintDevice('MacBook');
     const url = await start([device]);
     const reply = await attach(url, {
@@ -294,12 +315,19 @@ describe('an unauthenticated socket is untrusted input (HIVE-142 review)', () =>
       protocol: REMOTE_PROTOCOL_VERSION,
       deviceId: device.id,
       token,
-      resumeFrom: { 'session-1': 'not-a-number' },
+      resumeFrom: { 'session-1': 'not-a-point' },
     });
     expect(reply).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
   });
 
-  it('accepts an attach with a well-formed resumeFrom', async () => {
+  it("refuses a v1 client's bare-number resumeFrom rather than reinterpreting it (HIVE-144)", async () => {
+    /**
+     * `{ 'session-1': 42 }` was the whole shape of a well-formed `resumeFrom`
+     * under protocol 1. A server that coerced it into `{ gen: 42, seq: 0 }` or
+     * similar would silently misread an old client instead of refusing the
+     * handshake — exactly what `REMOTE_PROTOCOL_VERSION` moving to 2 exists to
+     * prevent.
+     */
     const { device, token } = mintDevice('MacBook');
     const url = await start([device]);
     const reply = await attach(url, {
@@ -308,6 +336,68 @@ describe('an unauthenticated socket is untrusted input (HIVE-142 review)', () =>
       deviceId: device.id,
       token,
       resumeFrom: { 'session-1': 42 },
+    });
+    expect(reply).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
+  });
+
+  it('refuses a resumeFrom point with a negative gen (HIVE-144)', async () => {
+    /**
+     * `Number.isInteger` alone would accept `-1`. Both `gen` and `seq` are
+     * counters this file's peers only ever increment, so a negative one is
+     * never an honest client's — refusing it here, before authentication,
+     * is cheaper than discovering downstream that `sessions.resume` was
+     * never meant to see one.
+     */
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+    const reply = await attach(url, {
+      kind: 'attach',
+      protocol: REMOTE_PROTOCOL_VERSION,
+      deviceId: device.id,
+      token,
+      resumeFrom: { 'session-1': { gen: -1, seq: 0 } },
+    });
+    expect(reply).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
+  });
+
+  it('refuses a resumeFrom point with a fractional gen (HIVE-144)', async () => {
+    // `typeof 1.5 === 'number'` — only `Number.isInteger` catches this.
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+    const reply = await attach(url, {
+      kind: 'attach',
+      protocol: REMOTE_PROTOCOL_VERSION,
+      deviceId: device.id,
+      token,
+      resumeFrom: { 'session-1': { gen: 1.5, seq: 0 } },
+    });
+    expect(reply).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
+  });
+
+  it('refuses a resumeFrom point with a missing seq (HIVE-144)', async () => {
+    // `{ gen: 1 }` alone is an object, and would pass a check that only
+    // confirmed the value is an object with a numeric `gen`.
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+    const reply = await attach(url, {
+      kind: 'attach',
+      protocol: REMOTE_PROTOCOL_VERSION,
+      deviceId: device.id,
+      token,
+      resumeFrom: { 'session-1': { gen: 1 } },
+    });
+    expect(reply).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
+  });
+
+  it('accepts an attach with a well-formed {gen, seq} resumeFrom', async () => {
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+    const reply = await attach(url, {
+      kind: 'attach',
+      protocol: REMOTE_PROTOCOL_VERSION,
+      deviceId: device.id,
+      token,
+      resumeFrom: { 'session-1': { gen: 1, seq: 42 } },
     });
     expect(reply.kind).toBe('attach-accepted');
   });
@@ -548,6 +638,7 @@ describe('start()/stop() lifecycle', () => {
       devices: () => [],
       serverName: 'test-mini',
       dispatch: noopDispatch,
+      buildSnapshot: noopBuildSnapshot,
       onAttach: noopOnAttach,
       onDetach: noopOnDetach,
     });
@@ -576,6 +667,7 @@ describe('start()/stop() lifecycle', () => {
       devices: () => [],
       serverName: 'test-mini',
       dispatch: noopDispatch,
+      buildSnapshot: noopBuildSnapshot,
       onAttach: noopOnAttach,
       onDetach: noopOnDetach,
     });
@@ -607,6 +699,7 @@ describe('start()/stop() lifecycle', () => {
       devices: () => [],
       serverName: 'test-mini',
       dispatch: noopDispatch,
+      buildSnapshot: noopBuildSnapshot,
       onAttach: noopOnAttach,
       onDetach: noopOnDetach,
     });
@@ -630,6 +723,7 @@ describe('start()/stop() lifecycle', () => {
       devices: () => [],
       serverName: 'test-mini',
       dispatch: noopDispatch,
+      buildSnapshot: noopBuildSnapshot,
       onAttach: noopOnAttach,
       onDetach: noopOnDetach,
     });
@@ -644,6 +738,7 @@ describe('start()/stop() lifecycle', () => {
       devices: () => [],
       serverName: 'test-mini',
       dispatch: noopDispatch,
+      buildSnapshot: noopBuildSnapshot,
       onAttach: noopOnAttach,
       onDetach: noopOnDetach,
     });
@@ -657,6 +752,7 @@ describe('start()/stop() lifecycle', () => {
       devices: () => [],
       serverName: 'test-mini',
       dispatch: noopDispatch,
+      buildSnapshot: noopBuildSnapshot,
       onAttach: noopOnAttach,
       onDetach: noopOnDetach,
     });
@@ -734,7 +830,7 @@ const flushMicrotasks = () => new Promise<void>((resolve) => setImmediate(resolv
 const attachedSocket = async (
   overrides: {
     dispatch?: RemoteDispatch;
-    onAttach?: (socket: AttachedSocket, resumeFrom: Readonly<Record<string, number>> | undefined) => void;
+    onAttach?: (socket: AttachedSocket, resumeFrom: Readonly<Record<string, ResumePoint>> | undefined) => void;
     onDetach?: (socket: AttachedSocket) => void;
     attach?: Partial<AttachRequest>;
   } = {},
@@ -751,6 +847,7 @@ const attachedSocket = async (
     devices: () => [device],
     serverName: 'test-mini',
     dispatch,
+    buildSnapshot: noopBuildSnapshot,
     onAttach,
     onDetach,
   });
@@ -849,10 +946,10 @@ describe('post-attach frames', () => {
     const { socket } = await attachedSocket({
       onAttach,
       onDetach,
-      attach: { resumeFrom: { s1: 7 } },
+      attach: { resumeFrom: { s1: { gen: 1, seq: 7 } } },
     });
 
-    expect(onAttach).toHaveBeenCalledWith(expect.anything(), { s1: 7 });
+    expect(onAttach).toHaveBeenCalledWith(expect.anything(), { s1: { gen: 1, seq: 7 } });
 
     socket.emit('close');
     expect(onDetach).toHaveBeenCalledTimes(1);
@@ -919,6 +1016,7 @@ describe('post-attach frames', () => {
       devices: () => [device],
       serverName: 'test-mini',
       dispatch: noopDispatch,
+      buildSnapshot: noopBuildSnapshot,
       onAttach: () => {
         throw new Error('the replay loop blew up');
       },
@@ -986,6 +1084,133 @@ describe('post-attach frames', () => {
 });
 
 /**
+ * The call deadline (HIVE-144): `dispatch.call` never rejects, but a handler
+ * can fail to settle at all — `agents:run` genuinely can, per
+ * `listener.ts`'s own comment at the `dispatch.call` site. Fake timers
+ * throughout, armed *after* {@link attachedSocket}'s real handshake has
+ * already completed, so the production `setTimeout` under test is the only
+ * timer these cases control.
+ */
+describe('the call deadline (HIVE-144)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('answers an error frame when a call outruns the deadline', async () => {
+    // A handler that never settles, which is what agents:run genuinely can do.
+    const dispatch: RemoteDispatch = {
+      call: vi.fn(() => new Promise<ResultFrame | ErrorFrame>(() => {})),
+      notify: vi.fn(),
+    };
+    const { socket, sent } = await attachedSocket({ dispatch });
+
+    vi.useFakeTimers();
+    socket.emit('message', JSON.stringify({ kind: 'call', id: 'c1', channel: CH.agentsRun, payload: {} }));
+    await vi.advanceTimersByTimeAsync(CALL_DEADLINE_MS + 1);
+
+    expect(sent).toContainEqual(
+      expect.objectContaining({ kind: 'error', id: 'c1', code: CALL_TIMEOUT_CODE }),
+    );
+  });
+
+  it('does not answer twice when the call settles after the deadline', async () => {
+    let resolveLate: (answer: ResultFrame | ErrorFrame) => void = () => {
+      throw new Error('resolveLate called before the promise executor ran');
+    };
+    const late = new Promise<ResultFrame | ErrorFrame>((resolve) => {
+      resolveLate = resolve;
+    });
+    const dispatch: RemoteDispatch = { call: vi.fn(() => late), notify: vi.fn() };
+    const { socket, sent } = await attachedSocket({ dispatch });
+
+    vi.useFakeTimers();
+    socket.emit('message', JSON.stringify({ kind: 'call', id: 'c1', channel: CH.agentsRun, payload: {} }));
+    await vi.advanceTimersByTimeAsync(CALL_DEADLINE_MS + 1);
+
+    resolveLate({ kind: 'result', id: 'c1', payload: 'late' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Two frames for one correlation id is worse than none: the client
+    // already resolved off the timeout's error frame.
+    expect(sent.filter((frame) => (frame as { id?: string }).id === 'c1')).toHaveLength(1);
+  });
+
+  it('clears the deadline when the call settles in time', async () => {
+    const dispatch: RemoteDispatch = {
+      call: vi.fn(async () => ({ kind: 'result' as const, id: 'c1', payload: 'ok' })),
+      notify: vi.fn(),
+    };
+    const { socket, sent } = await attachedSocket({ dispatch });
+
+    vi.useFakeTimers();
+    socket.emit('message', JSON.stringify({ kind: 'call', id: 'c1', channel: CH.configGet, payload: {} }));
+    await vi.advanceTimersByTimeAsync(0);
+    // Comfortably past the deadline, to prove the timer was actually
+    // cancelled rather than merely not yet due.
+    await vi.advanceTimersByTimeAsync(CALL_DEADLINE_MS + 1);
+
+    const framesForId = sent.filter((frame) => (frame as { id?: string }).id === 'c1');
+    expect(framesForId).toHaveLength(1);
+    expect(framesForId[0]).toMatchObject({ kind: 'result' });
+  });
+
+  /**
+   * The `.catch()` branch's own pair, mirroring the two `.then()` cases
+   * above: `dispatch.call` rejects — the *send* failing, per its own comment
+   * — rather than resolving, and the `settled`/`clearTimeout` guard has to
+   * hold on this path too, not only the success one.
+   */
+  it('sends a send-failed error and clears the deadline when dispatch.call rejects before it', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const dispatch: RemoteDispatch = {
+      call: vi.fn(async () => {
+        throw new Error('boom');
+      }),
+      notify: vi.fn(),
+    };
+    const { socket, sent } = await attachedSocket({ dispatch });
+
+    vi.useFakeTimers();
+    socket.emit('message', JSON.stringify({ kind: 'call', id: 'c1', channel: CH.configGet, payload: {} }));
+    await vi.advanceTimersByTimeAsync(0);
+    // Comfortably past the deadline, to prove clearTimeout on the catch path
+    // actually cancelled the timer rather than merely not yet being due.
+    await vi.advanceTimersByTimeAsync(CALL_DEADLINE_MS + 1);
+
+    const framesForId = sent.filter((frame) => (frame as { id?: string }).id === 'c1');
+    expect(framesForId).toHaveLength(1);
+    expect(framesForId[0]).toMatchObject({ kind: 'error', code: 'send-failed' });
+    logged.mockRestore();
+  });
+
+  it('sends no second frame when dispatch.call rejects after the deadline', async () => {
+    let rejectLate: (cause: unknown) => void = () => {
+      throw new Error('rejectLate called before the promise executor ran');
+    };
+    const late = new Promise<ResultFrame | ErrorFrame>((_resolve, reject) => {
+      rejectLate = reject;
+    });
+    const dispatch: RemoteDispatch = { call: vi.fn(() => late), notify: vi.fn() };
+    const { socket, sent } = await attachedSocket({ dispatch });
+
+    vi.useFakeTimers();
+    socket.emit('message', JSON.stringify({ kind: 'call', id: 'c1', channel: CH.agentsRun, payload: {} }));
+    await vi.advanceTimersByTimeAsync(CALL_DEADLINE_MS + 1);
+
+    rejectLate(new Error('late failure'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The timeout's own error frame, and nothing the late rejection adds —
+    // the same "two answers is worse than one" property as the `.then()`
+    // side, proven on the branch that answers a rejection instead of a
+    // result.
+    const framesForId = sent.filter((frame) => (frame as { id?: string }).id === 'c1');
+    expect(framesForId).toHaveLength(1);
+    expect(framesForId[0]).toMatchObject({ kind: 'error', code: CALL_TIMEOUT_CODE });
+  });
+});
+
+/**
  * A real client on a real socket, kept open — the only way to test a *size*
  * bound.
  *
@@ -1011,6 +1236,7 @@ const realClient = async (
     devices: () => [device],
     serverName: 'test-mini',
     dispatch,
+    buildSnapshot: noopBuildSnapshot,
     onAttach: vi.fn(),
     onDetach: vi.fn(),
   });
@@ -1183,4 +1409,340 @@ describe('frame size bounds', () => {
     expect(reply.kind).toBe('attach-accepted');
     second.close();
   }, 30_000);
+});
+
+describe('the attach snapshot (HIVE-144)', () => {
+  /**
+   * Attaches a real socket with a given `buildSnapshot`, and resolves with
+   * `sent()` — every frame the server sent this socket, so a test can find
+   * `attach-accepted` and read its `snapshot`.
+   */
+  const attaching = async (
+    buildSnapshot: () => Promise<Partial<Record<Channel, unknown>>>,
+  ): Promise<{ sent: () => Record<string, unknown>[] }> => {
+    const { device, token } = mintDevice('MacBook');
+    listener = createRemoteListener({
+      bind: { host: '127.0.0.1', port: 0, allowedOrigins: [] },
+      devices: () => [device],
+      serverName: 'test-mini',
+      dispatch: noopDispatch,
+      buildSnapshot,
+      onAttach: noopOnAttach,
+      onDetach: noopOnDetach,
+    });
+    const url = (await listener.start()) as string;
+
+    const socket = new WebSocket(url);
+    await new Promise<void>((resolve, reject) => {
+      socket.on('open', () => resolve());
+      socket.on('error', reject);
+    });
+
+    const sent: Record<string, unknown>[] = [];
+    const firstFrame = new Promise<void>((resolve) => {
+      socket.once('message', (data) => {
+        sent.push(JSON.parse(String(data)) as Record<string, unknown>);
+        resolve();
+      });
+    });
+    socket.send(JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId: device.id, token }));
+    await firstFrame;
+    socket.close();
+
+    return { sent: () => sent };
+  };
+
+  /** A snapshot with a small, distinct value for every {@link SNAPSHOT_CHANNELS} entry. */
+  const smallSnapshot = async (): Promise<Partial<Record<Channel, unknown>>> => {
+    const snapshot: Partial<Record<Channel, unknown>> = {};
+    for (const channel of SNAPSHOT_CHANNELS) snapshot[channel] = { from: channel };
+    return snapshot;
+  };
+
+  it('accepts with a snapshot carrying every snapshot channel (HIVE-144)', async () => {
+    const { sent } = await attaching(smallSnapshot);
+    const accepted = sent().find((f) => f.kind === 'attach-accepted');
+    const carried = accepted?.snapshot as Record<string, unknown>;
+
+    for (const channel of SNAPSHOT_CHANNELS) {
+      expect(carried).toHaveProperty(channel);
+    }
+  });
+
+  it('sends the accept whole even when the snapshot is large', async () => {
+    /*
+      ATTACH_FRAME_MAX_BYTES (8 KiB) bounds the CLIENT's first frame, not this
+      one. Asserted so nobody later "optimises" the snapshot under the wrong
+      cap: 100 KiB is more than twelve times over that ceiling and still two
+      orders of magnitude under POST_ATTACH_FRAME_MAX_BYTES (8 MiB) — the one
+      that actually governs what a client's own socket will accept, because
+      `electron/remote-client/socket.ts` sets its receive-side `maxPayload` to
+      that same constant for the whole connection, this frame included.
+
+      A mutation swapping `fitSnapshot`'s ceiling for `ATTACH_FRAME_MAX_BYTES`
+      fails exactly this test: every key below would be dropped instead of
+      none of them.
+    */
+    const oneHundredKiB = 'x'.repeat(100 * 1024);
+    // The payload this test actually depends on: past the wrong ceiling,
+    // nowhere near the right one.
+    expect(Buffer.byteLength(oneHundredKiB, 'utf8')).toBeGreaterThan(ATTACH_FRAME_MAX_BYTES * 10);
+    expect(Buffer.byteLength(oneHundredKiB, 'utf8')).toBeLessThan(POST_ATTACH_FRAME_MAX_BYTES / 10);
+
+    const { sent } = await attaching(async () => ({ [CH.configGet]: oneHundredKiB }));
+
+    const accepted = sent().find((f) => f.kind === 'attach-accepted');
+    expect(accepted?.snapshot).toEqual({ [CH.configGet]: oneHundredKiB });
+  });
+
+  it('drops the heaviest keys first when the snapshot genuinely exceeds POST_ATTACH_FRAME_MAX_BYTES', async () => {
+    // Genuinely too big — 9 MiB of one channel's own value, past the 8 MiB
+    // ceiling on its own, before the envelope around it is even counted.
+    const huge = 'x'.repeat(9 * 1024 * 1024);
+    /*
+      Sized between the two ceilings on purpose (100 KiB: over
+      ATTACH_FRAME_MAX_BYTES's 8 KiB, comfortably under
+      POST_ATTACH_FRAME_MAX_BYTES's 8 MiB once `huge` above is dropped) —
+      not a `{ small: true }` a handful of bytes, which would survive under
+      *either* constant and prove nothing about which one `fitSnapshot`'s
+      loop actually compares against. A mutation swapping that comparison for
+      `ATTACH_FRAME_MAX_BYTES` fails exactly here: it would keep dropping
+      past `huge` and take this key too, because 100 KiB does not fit under
+      8 KiB either.
+    */
+    const survivor = 'y'.repeat(100 * 1024);
+    const { sent } = await attaching(async () => ({
+      [CH.configGet]: huge,
+      [CH.sessionHistory]: survivor,
+    }));
+
+    const accepted = sent().find((f) => f.kind === 'attach-accepted');
+    expect(accepted).toBeDefined();
+    const carried = accepted?.snapshot as Record<string, unknown>;
+
+    // The huge key is gone; the 100 KiB one survives it.
+    expect(carried).not.toHaveProperty(CH.configGet);
+    expect(carried).toHaveProperty(CH.sessionHistory);
+    expect(carried[CH.sessionHistory]).toBe(survivor);
+
+    // And the frame that actually crossed the wire really does fit — the
+    // property `fitSnapshot` exists to guarantee, not merely "fewer keys".
+    expect(Buffer.byteLength(JSON.stringify(accepted), 'utf8')).toBeLessThanOrEqual(
+      POST_ATTACH_FRAME_MAX_BYTES,
+    );
+  });
+
+  it('drops nothing at exactly POST_ATTACH_FRAME_MAX_BYTES, and drops at one byte over it (HIVE-144 review)', async () => {
+    /*
+      The boundary itself, pinned rather than merely "somewhere near it"
+      (HIVE-144 review): `fitSnapshot`'s loop uses `<=`, so a frame at exactly
+      the ceiling must survive whole and one byte past it must lose a key. A
+      test that only ever tries values far from the edge — as the two tests
+      above do — cannot tell `<=` from `<`, and `ws` itself is unforgiving in
+      the conservative direction (it refuses only `> maxPayload`), which is
+      exactly the direction a boundary bug here would drift without anyone
+      noticing on the tests already written.
+    */
+    const serverName = 'test-mini';
+    const envelopeBytes = (snapshot: Partial<Record<Channel, unknown>>): number =>
+      Buffer.byteLength(
+        JSON.stringify({ kind: 'attach-accepted', protocol: REMOTE_PROTOCOL_VERSION, serverName, snapshot }),
+        'utf8',
+      );
+
+    // What one key of an empty string costs, so the exact string length that
+    // lands the whole frame on the ceiling can be solved for rather than
+    // guessed at.
+    const withEmptyValue = envelopeBytes({ [CH.configGet]: '' });
+    const exactValueLength = POST_ATTACH_FRAME_MAX_BYTES - withEmptyValue;
+
+    const exact = 'z'.repeat(exactValueLength);
+    expect(envelopeBytes({ [CH.configGet]: exact })).toBe(POST_ATTACH_FRAME_MAX_BYTES);
+    const over = 'z'.repeat(exactValueLength + 1);
+    expect(envelopeBytes({ [CH.configGet]: over })).toBe(POST_ATTACH_FRAME_MAX_BYTES + 1);
+
+    const { sent: sentExact } = await attaching(async () => ({ [CH.configGet]: exact }));
+    const acceptedExact = sentExact().find((f) => f.kind === 'attach-accepted');
+    expect(acceptedExact?.snapshot).toEqual({ [CH.configGet]: exact });
+
+    const { sent: sentOver } = await attaching(async () => ({ [CH.configGet]: over }));
+    const acceptedOver = sentOver().find((f) => f.kind === 'attach-accepted');
+    expect(acceptedOver?.snapshot).toEqual({});
+  });
+
+  it('logs rather than stays silent if the frame is still oversized with an empty snapshot (HIVE-144 review)', async () => {
+    /*
+      Only reachable through a pathological `serverName` — `fitSnapshot` has
+      nothing left to drop once the snapshot itself is empty, so this proves
+      the failure is at least loud, not that it is fixed (there is nothing
+      left in this function's power to fix it with).
+    */
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { device, token } = mintDevice('MacBook');
+    listener = createRemoteListener({
+      bind: { host: '127.0.0.1', port: 0, allowedOrigins: [] },
+      devices: () => [device],
+      serverName: 'x'.repeat(9 * 1024 * 1024),
+      dispatch: noopDispatch,
+      buildSnapshot: async () => ({}),
+      onAttach: noopOnAttach,
+      onDetach: noopOnDetach,
+    });
+    const url = (await listener.start()) as string;
+    const socket = new WebSocket(url);
+    await new Promise<void>((resolve, reject) => {
+      socket.on('open', () => resolve());
+      socket.on('error', reject);
+    });
+    const firstFrame = new Promise<void>((resolve) => {
+      socket.once('message', () => resolve());
+    });
+    socket.send(JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId: device.id, token }));
+    await firstFrame;
+
+    expect(logged.mock.calls.some((call) => String(call[0]).includes('still exceeds'))).toBe(true);
+    logged.mockRestore();
+    socket.close();
+  });
+});
+
+/**
+ * The snapshot window is a window (HIVE-144 review, I4).
+ *
+ * The close-listener ordering comment justified itself with "the listener
+ * cannot fire before this **synchronous** block finishes", and HIVE-144 made
+ * that false by inserting an up-to-`SNAPSHOT_READ_BUDGET_MS` await earlier in
+ * the same block. A peer that closed inside it fired the connection-level
+ * `'close'` with no listener registered; the handler then resumed, sent the
+ * accept into a dead socket, registered a `'close'` that could never fire, and
+ * `onAttach`ed the dead handle into `attachedSockets` for the life of the
+ * process — where `send` has no `readyState` check, so every later broadcast
+ * serialised a frame and threw.
+ *
+ * These drive a real socket against a real listener and hold the snapshot open
+ * until the peer is gone, which is the only way to be inside that window on
+ * purpose.
+ */
+describe('a peer that closes during the snapshot window (HIVE-144 review)', () => {
+  /**
+   * Yield the loop `count` times, letting queued I/O callbacks run.
+   *
+   * Not a wait on a duration — nothing here is timer-driven — but a socket
+   * close is delivered by libuv on a poll turn, and there is no promise on
+   * this side of the fixture to await it on.
+   */
+  const turns = async (count: number): Promise<void> => {
+    for (let i = 0; i < count; i += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+  };
+
+  /**
+   * Attaches, waits until `buildSnapshot` has actually been entered, kills the
+   * client socket, and only then lets the snapshot resolve.
+   *
+   * `terminate()` rather than `close()`: a graceful close is a frame the
+   * server answers on its own schedule, and this needs the connection gone
+   * before the handler resumes, not politely closing.
+   */
+  const closeDuringSnapshot = async () => {
+    const { device, token } = mintDevice('MacBook');
+    const onAttach = vi.fn();
+    const onDetach = vi.fn();
+
+    let entered!: () => void;
+    const inSnapshot = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    listener = createRemoteListener({
+      bind: { host: '127.0.0.1', port: 0, allowedOrigins: [] },
+      devices: () => [device],
+      serverName: 'test-mini',
+      dispatch: noopDispatch,
+      buildSnapshot: async () => {
+        entered();
+        await held;
+        return {};
+      },
+      onAttach,
+      onDetach,
+    });
+    const url = (await listener.start()) as string;
+
+    const socket = new WebSocket(url);
+    await new Promise<void>((resolve, reject) => {
+      socket.on('open', () => resolve());
+      socket.on('error', reject);
+    });
+    const closed = new Promise<void>((resolve) => socket.on('close', () => resolve()));
+
+    socket.send(
+      JSON.stringify({
+        kind: 'attach',
+        protocol: REMOTE_PROTOCOL_VERSION,
+        deviceId: device.id,
+        token,
+      }),
+    );
+    await inSnapshot;
+    socket.terminate();
+    await closed;
+    /*
+      The client's own `'close'` is not the server's. The RST reaches the
+      listener's socket on a later poll turn, so the snapshot is released only
+      once that has had room to land — otherwise this drives the handler back
+      to life *before* the connection is observably gone, which is a different
+      race from the one under test and one the fix is not about.
+    */
+    await turns(5);
+
+    release();
+    await turns(3);
+
+    return { onAttach, onDetach };
+  };
+
+  it('never puts the dead handle into the fan-out', async () => {
+    const { onAttach } = await closeDuringSnapshot();
+
+    // The whole finding. `attachedSockets` is a `Set` nothing can ever remove
+    // this handle from — its `'close'` fired before the listener that would
+    // have run `onDetach` was ever registered.
+    expect(onAttach).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The close listener is registered before the await now, so it *does* fire
+   * — and `onDetach` for a handle `onAttach` never added is a `Set.delete`
+   * that removes nothing. That is what makes registering early safe rather
+   * than merely earlier.
+   */
+  it('runs its detach anyway, which is a no-op for a handle never added', async () => {
+    const { onDetach } = await closeDuringSnapshot();
+
+    expect(onDetach).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the snapshot read budget (HIVE-144)', () => {
+  /**
+   * `SNAPSHOT_READ_BUDGET_MS`'s own doc comment (beside
+   * `ATTACH_HANDSHAKE_TIMEOUT_MS` in `listener.ts`, HIVE-144 review) claims
+   * 3 000 ms of margin — asserted here directly, against both real values,
+   * rather than trusted to stay true because the two constants merely sit
+   * next to each other in the source. A budget raised to or past the
+   * handshake deadline is the same defect the deadline exists to prevent,
+   * with a different constant at fault: `buildAttachSnapshot` would still be
+   * waiting on a slow read when `ATTACH_HANDSHAKE_TIMEOUT_MS` fires and
+   * terminates the socket with no frame sent at all.
+   */
+  it('leaves comfortable margin inside the handshake deadline', () => {
+    expect(SNAPSHOT_READ_BUDGET_MS).toBeLessThan(ATTACH_HANDSHAKE_TIMEOUT_MS);
+    expect(ATTACH_HANDSHAKE_TIMEOUT_MS - SNAPSHOT_READ_BUDGET_MS).toBeGreaterThanOrEqual(1_000);
+  });
 });

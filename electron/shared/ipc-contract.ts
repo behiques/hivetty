@@ -42,6 +42,7 @@ import type {
   DiagnoseEnvRequest,
   EnvDiagnostic,
   PathProbe,
+  RemotePairRequest,
   RemoveProjectRequest,
   RenameProjectRequest,
   ReorderProjectsRequest,
@@ -58,6 +59,8 @@ import type {
   SetProjectKeyRequest,
   SetProjectRuntimeRequest,
   SetReceiverRequest,
+  SetRemoteRequest,
+  SetRemoteResult,
   SetRuntimeRequest,
   SetServerRequest,
   SetSlackRequest,
@@ -320,6 +323,46 @@ export const CH = {
    * every session on this machine.
    */
   serverRevoke: 'server:revoke',
+  /**
+   * Whether this window is a client and where it attaches (HIVE-144).
+   *
+   * `config:` for the same reason {@link CH.configSetServer} is one: it writes
+   * the config file and returns the fresh snapshot, and only ever writes what
+   * {@link ConfigSnapshot.remote} already resolves to. There is deliberately
+   * no credential field here, for the identical reason `config:set-server`
+   * carries none — the token this verb's host block would need is
+   * `remote:pair`'s job, stored in `safeStorage`, never in this file.
+   */
+  configSetRemote: 'config:set-remote',
+  /**
+   * Store the device credential this machine was handed by someone else's
+   * server (HIVE-144).
+   *
+   * **Not** the other direction from {@link CH.serverPair}, which mints a
+   * credential *on* this machine *for* a device it is admitting — this one
+   * takes a credential *given to* this machine so it can attach *outward*,
+   * as a client, to a server elsewhere. Two verbs named "pair" pointing
+   * opposite ways would read as one feature; they are two, hence the
+   * separate `remote:` namespace rather than reusing `server:pair`'s name or
+   * folding this into `config:set-remote` above.
+   *
+   * The plaintext token this payload carries goes to `electron/remote-client/
+   * token-store.ts`'s `safeStorage`-encrypted file and nowhere else — not the
+   * config, not a log line. See that module's own doc comment, which quotes
+   * `server/devices.ts:17-19` on where a token's plaintext is ever allowed to
+   * exist.
+   */
+  remotePair: 'remote:pair',
+  /**
+   * Forget the credential {@link CH.remotePair} stored (HIVE-144).
+   *
+   * The mirror of {@link CH.remotePair} on this machine's own side, and
+   * **not** {@link CH.serverRevoke} — revoking is the *far* server's decision
+   * about *this* device; forgetting is this device discarding what it was
+   * given, which it can do unilaterally and which does not, by itself, revoke
+   * anything on the server that issued the credential.
+   */
+  remoteForget: 'remote:forget',
   /**
    * The Jira credential and the connection test (HIVE-67).
    *
@@ -1092,6 +1135,22 @@ export interface DataEvent {
    * this file was quietly the one exception to.
    */
   seq: number;
+  /**
+   * Which live process `seq` counts within, for this entity (HIVE-144).
+   *
+   * `seq` alone cannot answer that: a restart mints a fresh pty session and
+   * `emptyChannel()` resets its `seq` to 0, so generation 2's batch 41 and
+   * generation 1's batch 41 are indistinguishable by `seq` and `sessionId`
+   * (the entity id survives the restart unchanged) alone. `gen` is the field
+   * that lets a client reattaching after a disconnect tell "the process I was
+   * reading is still running" from "the process I was reading is gone and a
+   * new one has taken its id" — see `electron/main/sessions/registry.ts`'s
+   * `generationFor` and `electron/main/sessions/index.ts`'s `resume` for where
+   * that check happens. Monotonic per entity, and it changes on every
+   * restart; it does not change within a generation, including across a
+   * reconnect that only misses `seq`s.
+   */
+  gen: number;
 }
 
 /**
@@ -1404,6 +1463,82 @@ export interface AppInfo {
    */
   serverBoundHost: string | null;
   /**
+   * How many devices are paired to this Hive's server mode, right now
+   * (HIVE-142, HIVE-144 Task 13).
+   *
+   * Read from `server.devices` on disk — `readServerDevicesFromDisk()`, the
+   * same source `createRemoteListener`'s own `devices` getter uses so a
+   * `--pair` run in another process is visible without a restart — rather
+   * than the config snapshot's cached copy, for a much smaller version of
+   * {@link AppInfo.serverBoundHost}'s own reason: a snapshot taken at launch
+   * cannot see a device paired since. The header's serving chip
+   * (`ServingChip`) is the one consumer, and trades the address
+   * `serverBoundHost` used to carry for this count — see that component's
+   * own doc comment for why the address stopped being the interesting fact.
+   */
+  servingDeviceCount: number;
+  /**
+   * The name of the server this window is attached to over a socket, or
+   * `null` in `'local'` mode (HIVE-144 Task 13).
+   *
+   * **Runtime-derived, and deliberately not `ConfigSnapshot.attachedServer`
+   * (Task 12) — read that field's own doc comment together with this one
+   * before touching either.** That field is a *control's* readout: it names
+   * the machine whose config file `config:get` is answering right now, which
+   * while attached is genuinely the far end, exactly as `RemoteConfig`'s own
+   * doc comment says. This field is a *status* readout: it names whether a
+   * socket is actually open. The two can disagree in **both** directions —
+   * Ruling 19 deliberately leaves `config.json` saying `remote` in
+   * `config.json` after an already-remote re-switch fails and rebinds local,
+   * so a config-derived chip would keep claiming an attachment that is no
+   * longer there; and, symmetrically, would deny one on the next launch
+   * before the boot attach has even been attempted. A chip sourced from this
+   * field instead is wrong in neither direction, because it says what
+   * `electron/main/ipc/router.ts`'s own `attached` variable — the socket
+   * `switchIpcMode` actually opened — is holding right now, not what the
+   * file says should be true.
+   *
+   * The name itself comes from `RemoteClient.serverName()` (Task 7), built
+   * "for the header chip": the far end's `hostname()`, handed over in the
+   * attach handshake (`AttachAccepted.serverName`), not derived from
+   * `remote.host` the way `ConfigSnapshot.attachedServer.name` has to be —
+   * config only knows the address it dials, the live socket knows the name
+   * the machine actually gave itself.
+   *
+   * The header's attached chip (`AttachedChip`, `useAttachedServer`) is the
+   * one consumer.
+   */
+  attachedServerName: string | null;
+  /**
+   * Whether this process was launched to serve (HIVE-144 review, I3).
+   *
+   * **Intent, not a bound socket** — which is exactly what separates it from
+   * {@link serverBoundHost} beside it. That field says a socket is listening
+   * *now*; this one says this run is a server, whether the bind has happened
+   * yet, succeeded, or failed. `--server` **or** `server.enabled`, resolved
+   * once at boot, and it never changes for the life of the process (a
+   * listening socket cannot be moved, which is why Settings says "takes
+   * effect at next launch").
+   *
+   * It exists because `RemoteConfig`'s own doc comment says an install is
+   * either the server or a client and never a hybrid, and nothing enforced
+   * it: `unbindEverything` stops and drops `remoteListener`, which is built
+   * inside `registerIpcHandlers` and started from exactly one place in
+   * `whenReady` — so a boot attach on a serving machine tore the listener
+   * down before it was ever started, and that machine stopped serving
+   * permanently, including across relaunches. The interlock is enforced in
+   * `switchIpcMode` and made visible from this field: Settings disables the
+   * attach half on a serving machine, and the serve switch on an attached
+   * one.
+   *
+   * Not sourced from `ConfigSnapshot.server.enabled`, which is the trap this
+   * whole review round is about: `config:get` is proxied while attached, so
+   * that field describes the **server's** file and reads `true` on a client
+   * attached to a real server. `AppInfo` is `PROCESS_LOCAL`, so this is
+   * answered by this process in either mode.
+   */
+  serving: boolean;
+  /**
    * Per-session flow-control counters (story 093).
    *
    * Flow-control bugs are otherwise diagnosed by staring at a slow terminal
@@ -1577,6 +1712,24 @@ export interface HiveBridge {
      */
     setServer(request: SetServerRequest): Promise<ConfigSnapshot>;
     /**
+     * Turn client mode on or off, and change where it attaches (HIVE-144).
+     *
+     * {@link HiveBridge.config.setServer}'s mirror: the one verb that touches
+     * {@link ConfigSnapshot.remote} without storing or forgetting a
+     * credential — see {@link HiveBridge.remote} for those. No credential
+     * field here either, for the same reason `setServer` carries none.
+     *
+     * The one asymmetry with `setServer`, and the reason this answers a
+     * {@link SetRemoteResult} rather than a bare snapshot (HIVE-144): a
+     * listening socket cannot be moved without a relaunch, but *attaching*
+     * applies immediately. So this verb also performs the switch, and the
+     * switch can be refused — while local sessions are live, over a plaintext
+     * target, or because the far machine did not answer. `switched` is what
+     * happened; `config` is the file as it now stands, which is the old one
+     * untouched whenever `switched` is not `ok` (Ruling 19).
+     */
+    setRemote(request: SetRemoteRequest): Promise<SetRemoteResult>;
+    /**
      * Show the config file in the OS file manager (story 107).
      *
      * Takes no argument: main reveals its own `configPath()`. *Reveal* rather
@@ -1644,6 +1797,32 @@ export interface HiveBridge {
      * must not report "done" for a revoke that changed nothing on disk.
      */
     revoke(request: DeviceNameRequest): Promise<{ revoked: true } | { error: string }>;
+  };
+  /**
+   * Storing and forgetting the credential this machine was handed to attach
+   * outward, as a client, to someone else's server (HIVE-144).
+   *
+   * **Not** {@link HiveBridge.server}, and deliberately its own namespace
+   * rather than a rename of it: `server.pair`/`.revoke` mint or destroy a
+   * credential this machine hands out to devices *it* admits; `remote.pair`/
+   * `.forget` hold a credential *this* device was given, for the opposite
+   * direction. Two verbs named "pair" pointing opposite ways would read as
+   * one feature and confuse whoever has to reason about which side of a
+   * connection they are looking at.
+   */
+  remote: {
+    /**
+     * Store the `deviceId`/`token` pair a `server.pair` call on the *other*
+     * Hive handed back. There is no plaintext to hand back — unlike
+     * `server.pair`, it arrived *in* this call rather than being minted by
+     * it — but `{ error }` on a locked keychain that could not persist it
+     * (fix-round review, Important-2): the store's `read()` is main-internal,
+     * so a bare `void` return would leave the pane unable to tell "stored"
+     * from "silently discarded."
+     */
+    pair(request: RemotePairRequest): Promise<{ paired: true } | { error: string }>;
+    /** Discard the credential {@link HiveBridge.remote.pair} stored. Idempotent. */
+    forget(): Promise<void>;
   };
   pty: {
     spawn(request: SpawnRequest): Promise<void>;
@@ -2333,6 +2512,14 @@ export const BRIDGE_KEYS = [
   'notifications',
   'pty',
   /**
+   * HIVE-144 adds `remote`. What a web page can now do that it could not
+   * before: store the device credential a `server.pair` mint on some *other*
+   * Hive handed back, and forget it. **Not** the same capability `server`
+   * adds below — see the comment above {@link BRIDGE_REMOTE_KEYS} for why the
+   * two are kept apart rather than sharing a namespace.
+   */
+  'remote',
+  /**
    * HIVE-142 adds `server`. What a web page can now do that it could not
    * before: mint a device credential, hand back its plaintext once, and
    * revoke one by name. Neither verb is an ordinary settings write — see the
@@ -2961,6 +3148,15 @@ export const BRIDGE_CONFIG_KEYS = [
    * revoking a device credential is the `server` namespace's job, below.
    */
   'setServer',
+  /**
+   * HIVE-144. Whether this window is a client and where it attaches —
+   * `setServer`'s mirror, and with the identical no-credential rule:
+   * `parseSetRemoteRequest` refuses one. Storing and forgetting the
+   * credential this device was handed is the `remote` namespace's job below,
+   * a distinct namespace from `server` — see the comment above
+   * {@link BRIDGE_REMOTE_KEYS}.
+   */
+  'setRemote',
 ] as const;
 
 /**
@@ -2972,6 +3168,20 @@ export const BRIDGE_CONFIG_KEYS = [
  * implementation the CLI's `--pair`/`--revoke` and the server-mode tray call.
  */
 export const BRIDGE_SERVER_KEYS = ['pair', 'revoke'] as const;
+
+/**
+ * The exact key set of `window.hive.remote` (HIVE-144).
+ *
+ * **Not** {@link BRIDGE_SERVER_KEYS} renamed, despite sharing a verb name:
+ * `server.pair`/`.revoke` mint or destroy a credential this machine hands out
+ * to a device *it* admits; `remote.pair`/`.forget` store or discard a
+ * credential *this* machine was handed, for attaching outward as a client to
+ * someone else's server. A device holding this credential can reach the
+ * entire IPC surface of the server it attaches to — the same register
+ * `server.pair`'s own doc comment states — which is exactly why the two
+ * verbs must not be confused for one feature pointing one direction.
+ */
+export const BRIDGE_REMOTE_KEYS = ['pair', 'forget'] as const;
 
 /** The exact key set of `window.hive.pty`. */
 export const BRIDGE_PTY_KEYS = [

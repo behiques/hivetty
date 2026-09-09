@@ -15,7 +15,7 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 
-import { createRemoteListener } from '@remote-host/listener';
+import { SNAPSHOT_READ_BUDGET_MS, createRemoteListener } from '@remote-host/listener';
 import {
   AGENT_LIMIT_DEFAULTS,
   formatRunCost,
@@ -32,6 +32,7 @@ import type {
   CommandDiagnostic,
   ConfigSnapshot,
   EnvDiagnostic,
+  SetRemoteResult,
 } from '@shared/config-contract';
 import type {
   DirEntry,
@@ -80,6 +81,7 @@ import {
   parseJiraTransitionsRequest,
   parseSetJiraRequest,
   parseSetJiraTokenRequest,
+  parseRemotePairRequest,
   parseSetReceiverRequest,
   parseSetServerRequest,
   parseSetSlackRequest,
@@ -127,6 +129,7 @@ import type {
   JiraTransition,
 } from '@shared/jira-contract';
 import { LEDGER_DIR, OVERMIND } from '@shared/ledger-contract';
+import { SNAPSHOT_CHANNELS } from '@shared/remote-contract';
 import { SESSION_NAME_DISPLAY_MAX } from '@shared/session-contract';
 import {
   SESSION_HISTORY_FILE,
@@ -142,6 +145,12 @@ import {
 } from '@shared/slack-contract';
 import type { UpdateStatus } from '@shared/update-contract';
 
+import {
+  NO_ENCRYPTION_REASON,
+  createTokenStore,
+  type StoredDeviceCredential,
+  type TokenStore,
+} from '../../remote-client/token-store';
 import { createAgentsRuntime, type AgentRegistry } from '../agents';
 import { resolveClaude } from '../agents/claude-path';
 import { agentsDirectoryFor } from '../agents/directory';
@@ -230,6 +239,7 @@ import {
   revokeOutcomeMessage,
 } from '../server/devices';
 import { readServerDevicesFromDisk, serverDeviceStore } from '../server/file-backed-io';
+import { isServerMode } from '../server-mode';
 import { createSessions, type Sessions } from '../sessions';
 import {
   createSessionHistory,
@@ -247,10 +257,12 @@ import {
   updateStatus,
 } from '../updates';
 
+import { createBindings } from './bindings';
 import { createWindowBroadcaster, type Broadcaster } from './broadcaster';
-import { createIpcRegistry } from './registry';
+import { createIpcRegistry, type CallHandler } from './registry';
 import { createRemoteDispatch } from './remote-dispatch';
 import { assertSender } from './sender';
+import { applySetRemote, type AttachedSnapshot, type ModeSwitcher } from './set-remote';
 import {
   createFanOutBroadcaster,
   createSocketBroadcaster,
@@ -286,6 +298,91 @@ const remoteRegistry = createIpcRegistry();
  * per emit by the socket half of the fan-out in `registerIpcHandlers`.
  */
 const attachedSockets = new Set<AttachedSocket>();
+
+/**
+ * Every channel this process has bound (HIVE-144). Module scope for the same
+ * reason `remoteRegistry` is: `registerIpcHandlers` fills it, and a live mode
+ * switch must be able to empty it from outside that function.
+ */
+const bindings = createBindings(ipcMain);
+
+/**
+ * How many channels this process has bound locally (HIVE-144).
+ *
+ * Test-only, in the same register as {@link remoteRegistrySize} below and
+ * `remoteProxyBindingsSize` in `remote-proxy.ts` — and it is what makes a
+ * refused mode switch *provably* free. Invoking one channel and finding it
+ * alive is necessary and not sufficient: half an unbound surface answers that
+ * one channel too. A count is what distinguishes "still works" from "still
+ * entirely intact".
+ */
+export function ipcBindingsSize(): number {
+  return bindings.size();
+}
+
+/**
+ * The device credential this machine was handed when it attached to someone
+ * else's Hive (HIVE-144) — composed exactly as Jira's is: `safeStorage` and a
+ * file under `userData`, both injected, so `token-store.ts` can be answered by
+ * a unit test without a keyring.
+ *
+ * A function rather than a module-scope constant because `app.getPath` is only
+ * answerable after the app exists, and this module is imported long before
+ * that. One function rather than two construction sites because
+ * `remote:pair`'s handler writes through it and {@link readRemoteCredential}
+ * reads through it, and a second spelling of that filename is a credential
+ * written to one path and looked for at another.
+ */
+function remoteCredentialStore(): TokenStore {
+  return createTokenStore({
+    safeStorage,
+    filePath: join(app.getPath('userData'), 'remote-credential.bin'),
+  });
+}
+
+/**
+ * The stored device credential, or `null` when there is none this machine can
+ * use (HIVE-144).
+ *
+ * Exported for exactly one caller: `ipc/router.ts`'s `switchIpcMode`, which
+ * needs it to dial and has no business composing the store itself — Ruling 2
+ * put the read on the switch rather than inside `connectRemote`, precisely so
+ * the socket module stays free of Electron's `safeStorage`.
+ *
+ * Still not reachable from the renderer: no IPC verb returns this, and none
+ * may. `remote:pair` writes the credential and `remote:forget` clears it;
+ * neither hands it back.
+ */
+export function readRemoteCredential(): StoredDeviceCredential | null {
+  return remoteCredentialStore().read();
+}
+
+/**
+ * How `config:set-remote` asks this process to change mode (HIVE-144).
+ *
+ * Re-exported rather than declared here since Ruling 28: the verb's body moved
+ * to `./set-remote` so `registerRemoteProxy` can answer it too, and the type
+ * moved with it. Both callers name the same one, which is the point — a second
+ * structural declaration would be free to drift from the switcher it describes.
+ */
+export type { ModeSwitcher };
+
+/**
+ * The default {@link ModeSwitcher}: a loud failure, never a quiet success.
+ *
+ * Reached only by a suite that calls `registerIpcHandlers` directly —
+ * `registerIpc` always passes the real one, so production cannot land here.
+ * It throws rather than answering `{ ok: true }` because a silent success
+ * would let `config:set-remote` write `mode: "remote"` to disk over a switch
+ * that never happened, which is the exact state Ruling 19 exists to make
+ * impossible.
+ */
+const noModeSwitcher: ModeSwitcher = () => {
+  throw new Error(
+    'config:set-remote reached a registration with no mode switcher. ' +
+      'registerIpcHandlers was called directly rather than through registerIpc.',
+  );
+};
 
 /**
  * The event object handed to a call handler reached over a socket.
@@ -343,6 +440,9 @@ function on(
     // through `watchReporter`, which already accepts anything with an `.on`.
     handler({ sender: reporter } as unknown as IpcMainEvent, payload);
   });
+  // HIVE-144: so a later mode switch can unbind this channel from `ipcMain`
+  // and register it again against a different set of layers.
+  bindings.record(channel);
 }
 
 /** Wrap a handler so sender validation cannot be forgotten on a new channel. */
@@ -360,6 +460,161 @@ function handle<T>(
   remoteRegistry.recordCall(channel as Channel, (payload) =>
     handler(REMOTE_INVOKE_EVENT, payload),
   );
+  // HIVE-144: so a later mode switch can unbind this channel from `ipcMain`
+  // and register it again against a different set of layers.
+  bindings.record(channel);
+}
+
+/**
+ * The payload each {@link SNAPSHOT_CHANNELS} entry is read with — the same one
+ * `electron/preload/index.ts` sends for it, defaulting to `undefined` (HIVE-144).
+ *
+ * Every one of the six is called with no argument from the renderer at boot
+ * *except* `ledger:list`: its bridge method is `(query?) =>
+ * ipcRenderer.invoke(CH.ledgerList, query ?? {})`, so `undefined` never
+ * actually crosses that wire, and `parseLedgerReadQuery` — correctly — refuses
+ * it with `TypeError: ledger query must be an object` when it does. Read that
+ * refusal here (`{}`, not the whole map's default) rather than silently
+ * matching what `guards.ts` will accept: this is one bridge's own choice of
+ * default, not a rule every channel happens to share.
+ */
+const SNAPSHOT_PAYLOAD: Partial<Record<Channel, unknown>> = {
+  [CH.ledgerList]: {},
+};
+
+/**
+ * Races one {@link SNAPSHOT_CHANNELS} read against
+ * {@link SNAPSHOT_READ_BUDGET_MS}, resolving `[channel, value]` on a timely
+ * answer and `null` on anything else — a throw, a rejection, or simply
+ * running out of time (HIVE-144 review; Ruling 15 extended: a slow read is
+ * dropped exactly like a broken one, because a client waiting on either
+ * cannot tell them apart).
+ *
+ * **Never rejects.** Every path resolves, which is what lets
+ * {@link buildAttachSnapshot} run all six of these concurrently with a plain
+ * `Promise.all` — one slow or broken read cannot take the others down with
+ * it, and cannot make them wait for it either.
+ *
+ * `handler` may be `null` — a channel `handle()` has not registered yet — and
+ * that is deliberately not special-cased with its own branch. Calling `null`
+ * as a function throws a `TypeError` that reaches the same `.catch` below a
+ * broken *registered* handler's error would, and the observable outcome —
+ * the key is omitted, the reason is logged — is identical either way. A
+ * dedicated `if (handler === null)` here would be the same unfalsifiable
+ * shape `electron/remote-host/listener.ts`'s deleted `fitSnapshot` fast path
+ * was (HIVE-144 review): nothing distinguishes its own correctness from the
+ * shared catch path that already covers it.
+ */
+function raceSnapshotRead(
+  channel: Channel,
+  handler: CallHandler | null,
+): Promise<readonly [Channel, unknown] | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      /*
+        Unreachable by contract, not merely unlikely (HIVE-144 review — three
+        guards examined for the shape Task 6's deleted `.catch()` check was:
+        argued as covered, actually exercised by nothing).
+
+        The only way `settled` could already be `true` here is the read
+        having settled first — and both branches below call `clearTimeout(timer)`
+        in the same synchronous turn they set `settled`, before this callback
+        could ever be dispatched. `clearTimeout` guarantees a cleared timer's
+        callback never runs at all, not merely that it early-returns if it
+        does — so by the time either branch below finishes, this callback has
+        already been prevented from firing, on this event loop or any other.
+        Kept rather than deleted: it is the one line standing between "provably
+        unreachable today" and "silently double-resolves if a future edit ever
+        reorders `clearTimeout` after `resolve`" — a correctness note a reader
+        can verify against the two branches below, not a test that can ever
+        exercise it.
+      */
+      if (settled) return;
+      settled = true;
+      console.error(
+        `[hive] attach snapshot read for ${channel} exceeded ${String(SNAPSHOT_READ_BUDGET_MS)}ms; omitted`,
+      );
+      resolve(null);
+    }, SNAPSHOT_READ_BUDGET_MS);
+
+    Promise.resolve()
+      // The cast is the point, not a workaround for one: see the null branch
+      // above. `await` on a non-promise is a no-op, so this one `.then` covers
+      // both `github:prs` (genuinely asynchronous) and the five that are not.
+      .then(() => (handler as CallHandler)(SNAPSHOT_PAYLOAD[channel]))
+      .then((value) => {
+        /*
+          Reachable — the timeout can fire first on a genuinely slow read —
+          but with no observable effect once it does (HIVE-144 review): a
+          `Promise` settles at most once by spec, so the `resolve` three lines
+          down is silently ignored either way, and `clearTimeout` on a timer
+          that already fired is a documented no-op. Nothing this branch does
+          past this line can be told apart, by any test, from this branch not
+          running at all. Contrast the `.catch` branch below, which is the one
+          of these three where skipping it is actually visible.
+        */
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve([channel, value]);
+      })
+      .catch((cause: unknown) => {
+        /*
+          The one of these three guards with a real, tested effect (HIVE-144
+          review): without it, a read that times out and *later* rejects logs
+          twice for the same channel — the timeout's own "exceeded ...ms;
+          omitted" line, and this catch's "could not read" line for a failure
+          nobody is still waiting to hear about. `tests/electron/main/ipc/remote-composition.test.ts`
+          drives this exact ordering (a hung read that times out, then rejects
+          well after) and asserts the second log never happens.
+        */
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        console.error(`[hive] attach snapshot could not read ${channel}:`, cause);
+        resolve(null);
+      });
+  });
+}
+
+/**
+ * Builds `AttachAccepted.snapshot` — the six {@link SNAPSHOT_CHANNELS} reads a
+ * joining client needs to render the fleet without six round trips (HIVE-144).
+ *
+ * Calls each channel's handler through `remoteRegistry.call`, the exact
+ * function a socket's own `call` frame would reach — the same one `handle`
+ * above records — so there is no second source of truth for what a channel
+ * answers. Read with {@link SNAPSHOT_PAYLOAD}'s entry for the channel, or
+ * `undefined` when it has none — the payload every one of these six takes at
+ * boot in the renderer.
+ *
+ * A snapshot is a convenience, not a precondition (Ruling 15, HIVE-144
+ * review, and extended in review): a channel whose handler is not yet
+ * registered is omitted, one whose handler throws or rejects is omitted, and
+ * one that simply takes longer than {@link SNAPSHOT_READ_BUDGET_MS} is
+ * omitted too — a slow read costs the same key a broken one would, never the
+ * whole snapshot, and never the handshake itself. All six race that budget
+ * **concurrently** (`raceSnapshotRead`, via `Promise.all`), not one after
+ * another: a sequential sum of six "safe" per-channel waits could still blow
+ * past the handshake's own deadline on its own, which a single shared budget
+ * bounding the whole call cannot.
+ *
+ * Sizing the resulting frame against the wire's ceiling is deliberately not
+ * this function's job — it returns whatever it could read, and
+ * `electron/remote-host/listener.ts`'s `fitSnapshot` is what weighs the
+ * accept frame this becomes and drops keys if a busy server's answer would
+ * not otherwise fit.
+ */
+async function buildAttachSnapshot(): Promise<Partial<Record<Channel, unknown>>> {
+  const results = await Promise.all(
+    SNAPSHOT_CHANNELS.map((channel) => raceSnapshotRead(channel, remoteRegistry.call(channel))),
+  );
+  const snapshot: Partial<Record<Channel, unknown>> = {};
+  for (const result of results) {
+    if (result !== null) snapshot[result[0]] = result[1];
+  }
+  return snapshot;
 }
 
 /**
@@ -958,10 +1213,43 @@ export function remoteListenerBindError(): string | null {
  * the windows of this process, which is every caller today; server mode passes
  * one that also writes to attached sockets. Optional rather than required so the
  * boot path and eight existing suites call this exactly as they did.
+ *
+ * @param switchMode How `config:set-remote` changes this process's IPC mode
+ * (HIVE-144). See {@link ModeSwitcher} for why it arrives as an argument
+ * rather than as an import, and {@link noModeSwitcher} for why its default
+ * throws instead of quietly succeeding.
+ *
+ * @param attachedServerName What `AppInfo.attachedServerName` answers
+ * (HIVE-144 Task 13) — `router.ts`'s own `attachedServerName()`, handed down
+ * for the identical reason `switchMode` is: `router.ts` already imports this
+ * module, so importing it back would close a cycle. Defaults to a function
+ * that always answers `null`, matching what a process with no `router.ts`
+ * wrapping it (every existing test that calls this directly) actually is —
+ * never attached to anything.
+ *
+ * @param attachedSnapshot What the attached socket's accept frame carried, or
+ * `null` when this process is not attached (HIVE-144 review, I1) —
+ * `router.ts`'s own `attachedSnapshot()`, handed down for the same reason
+ * `attachedServerName` is. `applySetRemote` calls it either side of the
+ * switch, which is how a mode change becomes something the renderer can act
+ * on rather than a snapshot the server built and nobody read.
+ *
+ * @returns `buildAppInfo`, the exact closure this call bound to `CH.appInfo` —
+ * over *this* call's own `hooks`, `remoteListener`, `sessions` and
+ * `attachedServerName` (HIVE-144, Ruling 24). `router.ts`'s `registerIpc('local',
+ * ...)` captures it and later hands it to `registerRemoteProxy` as
+ * `localAppInfo`, so `CH.appInfo` answers locally rather than being proxied
+ * once this process attaches — see `isProcessLocal`'s own doc comment
+ * (`@shared/remote-contract`) for why that channel may never cross the
+ * socket. Ignored by every test that calls this function directly for its
+ * side effects alone, which is every test on this branch until this one.
  */
 export function registerIpcHandlers(
   broadcaster: Broadcaster = createWindowBroadcaster(),
-): void {
+  switchMode: ModeSwitcher = noModeSwitcher,
+  attachedServerName: () => string | null = () => null,
+  attachedSnapshot: AttachedSnapshot = () => null,
+): () => AppInfo {
   /*
     Both surfaces, always (HIVE-143). In local mode the socket half iterates an
     empty set and costs a function call per push; in server mode it is how an
@@ -1653,6 +1941,9 @@ export function registerIpcHandlers(
       forever and every call would answer `not-ready`.
     */
     dispatch: createRemoteDispatch(remoteRegistry),
+    // What `AttachAccepted.snapshot` carries (HIVE-144) — built fresh per
+    // attach, over the same `remoteRegistry` `dispatch` reads.
+    buildSnapshot: buildAttachSnapshot,
     onAttach: (socket, resumeFrom) => {
       /*
         Added to the set **before** anything is replayed. A `pty:data` landing
@@ -1663,14 +1954,29 @@ export function registerIpcHandlers(
       attachedSockets.add(socket);
       if (resumeFrom === undefined) return;
 
-      for (const [sessionId, lastSeq] of Object.entries(resumeFrom)) {
+      /*
+        Captured into a local so it narrows to non-null across the whole loop
+        below (HIVE-144 review). `sessions` is a mutable module-scope `let`;
+        TypeScript will not carry a null check on it across the `.resume` call
+        two lines down, so without this every later read would still be
+        `Sessions | null` and need its own `?.` — which is exactly what
+        produced the `?? point.gen` fallback this review flagged as
+        disagreeing with its own comment. A server with no `sessions` at all
+        has nothing to replay, which is the same outcome the old per-entity
+        `?? null` produced, just decided once instead of on every entity.
+      */
+      const activeSessions = sessions;
+      if (activeSessions === null) return;
+
+      for (const [sessionId, point] of Object.entries(resumeFrom)) {
         /*
           Keyed by **entity** id, which is what a client's `pty:data` frames
           carry: `sessions/index.ts`'s `forward` rewrites the pty session id to
           the entity id on the way out, so the ids a client holds are the ones
-          `Sessions.resume` maps back.
+          `Sessions.resume` maps back. `point` is `{ gen, seq }` (HIVE-144) —
+          see `AttachRequest.resumeFrom` for why a bare seq was insufficient.
         */
-        const result = sessions?.resume(sessionId, lastSeq) ?? null;
+        const result = activeSessions.resume(sessionId, point);
         /*
           `null` — no such live session on this server. The client is holding a
           session id from a previous run, or from one that has since exited;
@@ -1722,11 +2028,32 @@ export function registerIpcHandlers(
           into its own terminal, so a whole transcript would duplicate hundreds
           of lines rather than fill a hole. A client with nothing on screen sends
           no `resumeFrom` at all.
+
+          `gen` on this frame is the entity's **live** generation
+          (`activeSessions.generationFor`), never `point.gen` — the client's
+          own value is exactly the stale one a restart invalidated, whether
+          the gap here came from a generation mismatch or from the ring simply
+          not reaching back far enough within the same generation. Stamping
+          anything else would hand a discontinuity check keyed on `gen` a
+          value it will never see again: the very next live batch already
+          carries the true live generation, and a mismatch between *that* and
+          a wrong marker would read as a second, spurious gap on top of the
+          real one (HIVE-144).
+
+          The `!` is not a shortcut past a real "no generation" case: `result`
+          is non-null here, which `activeSessions.resume` only answers once
+          `registry.sessionFor(sessionId)` has already resolved — the same
+          lookup `generationFor` reads its answer from (`registry.ts` keeps
+          the two in step) — so this entity is provably live one line above.
+          `generationFor`'s return type stays `number | undefined` because
+          most of its callers *do* need to ask about an entity that might not
+          be, and narrowing it to `number` just for this call site would only
+          move the lie into the type instead of removing it.
         */
         socket.send({
           kind: 'event',
           channel: CH.ptyData,
-          payload: { sessionId, chunk: '', seq: result.seq },
+          payload: { sessionId, chunk: '', seq: result.seq, gen: activeSessions.generationFor(sessionId)! },
         });
       }
     },
@@ -2550,7 +2877,17 @@ export function registerIpcHandlers(
     history.record(request.entityId, { pr: request.pr });
   });
 
-  handle(CH.appInfo, (): AppInfo => {
+  /*
+    A named function rather than an inline `handle(CH.appInfo, () => {...})`
+    (HIVE-144, Ruling 24): `registerIpcHandlers` returns it, below, so
+    `router.ts` can hand the *exact same* closure to `registerRemoteProxy` as
+    `localAppInfo` — the answer `CH.appInfo` gets while attached, computed
+    locally rather than proxied to the far end. See `isProcessLocal`'s own doc
+    comment (`@shared/remote-contract`) for why this channel, alone among the
+    ones this file answers, must never be forwarded: every field below
+    describes *this* process, not the fleet it may be attached to.
+  */
+  function buildAppInfo(): AppInfo {
     const { electron, chrome, node } = process.versions;
     const diagnostics = sessions?.diagnostics() ?? [];
     return {
@@ -2573,11 +2910,32 @@ export function registerIpcHandlers(
       // `?.boundHost` is `null` on every other launch, which is the correct
       // answer for "is anything reachable off this socket right now."
       serverBoundHost: remoteListener?.boundHost ?? null,
+      // Read fresh on every call, from disk, not from `getConfig()` — the
+      // same `readServerDevicesFromDisk()` `remoteListener`'s own `devices`
+      // getter uses, so a `--pair` run in another process is reflected
+      // without a restart. Not gated on `remoteListener?.boundHost`: paired
+      // devices exist whether or not the socket happens to be listening this
+      // instant, and the header's serving chip already gates its own
+      // rendering on `serverBoundHost`, so nothing here needs to duplicate
+      // that check.
+      servingDeviceCount: readServerDevicesFromDisk().length,
+      // `router.ts`'s own runtime fact, handed down rather than imported —
+      // see `registerIpcHandlers`'s own doc comment on this parameter, and
+      // `AppInfo.attachedServerName`'s for the config-versus-runtime split
+      // this answers the runtime half of.
+      attachedServerName: attachedServerName(),
+      // Intent, not a bound socket — see `AppInfo.serving`. Imported rather
+      // than handed down like the two above, because `server-mode.ts` is a
+      // leaf that imports nothing and closes no cycle, and because the fact
+      // it holds is the *process's*, not any one registration's.
+      serving: isServerMode(),
       // Omitted rather than empty when nothing has run, so the field's presence
       // means something.
       ...(diagnostics.length > 0 ? { pty: diagnostics } : {}),
     };
-  });
+  }
+
+  handle(CH.appInfo, buildAppInfo);
 
   /**
    * The workspace config (story 090).
@@ -2930,6 +3288,23 @@ export function registerIpcHandlers(
   });
 
   /**
+   * The device credential this machine was handed when it attached to
+   * someone else's Hive (HIVE-144).
+   *
+   * {@link remoteCredentialStore} rather than a `createTokenStore` call here,
+   * so the filename exists in one place: the mode switch reads this same
+   * credential through `readRemoteCredential`, and a second spelling of that
+   * path would be a credential written by `remote:pair` and looked for
+   * somewhere else at attach time.
+   *
+   * `read()` is main-internal — see `electron/remote-client/token-store.ts`'s
+   * own doc comment for why this is a distinct module from `jira/auth.ts`
+   * rather than a shared helper. No IPC verb returns the token; `remote:pair`
+   * below only ever writes it, and `remote:forget` only ever clears it.
+   */
+  const remoteTokenStore = remoteCredentialStore();
+
+  /**
    * The PR poller's read — the app's second handler that executes a binary,
    * and the first that does so on a timer.
    *
@@ -3090,6 +3465,96 @@ export function registerIpcHandlers(
       return { error: revokeOutcomeMessage(outcome, name) };
     },
   );
+  /**
+   * HIVE-144. Whether this window is a client and where it attaches — and,
+   * unlike `config:set-server` above, a verb that *acts* as well as writes:
+   * attaching applies immediately, where a listening socket cannot be moved
+   * without a relaunch.
+   *
+   * ## Validate, then switch, then write only on success (Ruling 19)
+   *
+   * `parseSetRemoteRequest` checks the payload's shape. `switchMode` checks
+   * the target — a plaintext socket carries this machine's device credential,
+   * so an unvalidated host is a credential handed to whoever answers — and
+   * only then dials. `setRemote` runs last, and only when the switch
+   * succeeded.
+   *
+   * The order is the whole point. Writing first and being refused would leave
+   * `config.json` saying `remote` while this process is bound local, and the
+   * *next launch* would attach to a server the user was just told it could not
+   * attach to. There is no revert path here because there is nothing to
+   * revert: a refused or failed switch never reaches `setRemote`, so the file
+   * is untouched and disk and runtime never disagree.
+   *
+   * ## The merge, and why the switch is told a target
+   *
+   * All three fields are optional and merged into the stored block, so the
+   * *effective* mode and address are what this handler acts on — not whatever
+   * subset this one call carried. The merged target is passed to the switch
+   * explicitly rather than left to its own default, precisely because the
+   * config file must not yet contain it.
+   *
+   * A request that changes nothing about the effective mode or target still
+   * reaches the switch, and `switchIpcMode` answers it without touching a
+   * binding — see its own local-when-already-local guard. That is what keeps
+   * a user typing in the address field while in local mode from tearing down
+   * and rebuilding every session layer on each committed keystroke.
+   *
+   * ## Answering after tearing down the surface this handler is bound to
+   *
+   * A successful switch unbinds this very channel before this function
+   * returns. That is safe rather than lucky: `ipcMain` has already captured
+   * the reply for the invocation in flight, and everything after the `await`
+   * is a module import rather than a closure over the registration that has
+   * gone — so the renderer gets its answer even though nothing would answer a
+   * *second* call on this channel.
+   *
+   * `parseSetRemoteRequest` never lets a token through this payload, so this
+   * handler never touches `remoteTokenStore` — writing the credential is
+   * `remote:pair`'s job below, not this one's.
+   */
+  /*
+    The body lives in `./set-remote` since Ruling 28, not here, because
+    `registerRemoteProxy` has to answer this same channel from a process whose
+    local handlers have already been torn down — see {@link applySetRemote}
+    for why that is the one verb with two answering surfaces, and why copying
+    it into the proxy instead would have been a client that detaches
+    differently depending on the mode it asked from.
+  */
+  handle(CH.configSetRemote, (_event, payload): Promise<SetRemoteResult> =>
+    applySetRemote(payload, switchMode, attachedSnapshot),
+  );
+  /**
+   * Store the device credential a `server:pair` mint on some *other* Hive
+   * handed back (HIVE-144) — the opposite direction from `server:pair` above,
+   * see `CH.remotePair`'s own doc comment for why the two are not one verb.
+   *
+   * Answers `{ paired: true } | { error }` rather than a bare `void`
+   * (fix-round review, Important-2): unlike `server:pair` there is no
+   * plaintext to hand back — it arrived *in* this payload rather than being
+   * minted by this call — but `remoteTokenStore.write` can still no-op on a
+   * locked keychain, and `read()` is main-internal, so this handler is the
+   * renderer's only way to learn that. A bare `void` return let a pairing
+   * dialog report success over a credential that was never written.
+   */
+  handle(
+    CH.remotePair,
+    (_event, payload): { paired: true } | { error: string } => {
+      const { deviceId, token } = parseRemotePairRequest(payload);
+      const stored = remoteTokenStore.write(deviceId, token);
+      if (stored) return { paired: true };
+      return { error: NO_ENCRYPTION_REASON };
+    },
+  );
+  /**
+   * Discard the credential `remote:pair` stored (HIVE-144). Idempotent, and
+   * takes no payload — there is exactly one credential on this machine to
+   * forget, never a name to disambiguate by, which is what separates this
+   * from `server:revoke` above.
+   */
+  handle(CH.remoteForget, (): void => {
+    remoteTokenStore.clear();
+  });
 
   /**
    * Slack's MCP server (HIVE-123) — four verbs, none taking a payload.
@@ -4077,10 +4542,58 @@ export function registerIpcHandlers(
     const report = parsePromptReport(payload);
     deliver.onPrompt(report.sessionId, report.input);
   });
+
+  /*
+    Returned rather than left as a private closure (HIVE-144, Ruling 24):
+    `router.ts`'s own `registerIpc('local', ...)` captures this and hands it
+    to `registerRemoteProxy` as `localAppInfo` the next time this process
+    attaches, so `CH.appInfo` keeps answering from *this* process's `hooks`,
+    `remoteListener` and `sessions` — the exact instances this call just
+    built — rather than from whatever the far end's own instances say.
+  */
+  return buildAppInfo;
 }
 
-/** Test-only: drop the sessions layer and its timers. */
-export function resetIpcHandlers(): void {
+/**
+ * Drop the sessions layer, its timers, and every `ipcMain` binding this
+ * process made.
+ *
+ * Was test-only until HIVE-144: the production mode switch calls this too,
+ * to leave `ipcMain` clean before `registerIpcHandlers` runs again against a
+ * different set of layers. See the `bindings.unbindAll()` comment below for
+ * why the switch can trust this path.
+ *
+ * ## `flush`, and why a live switch is not a test teardown (HIVE-144, fix round 1)
+ *
+ * `history` and `agentState` both write on a 400 ms debounce, and this function
+ * has always **cancelled** that timer rather than letting it fire —
+ * deliberately, because a test's paths point at whatever `configPath()` and
+ * `app.getPath` were stubbed to return, and writing there on teardown is how a
+ * unit test comes to leave a file behind.
+ *
+ * That was correct while the only caller was a teardown. It stopped being
+ * correct the moment a live mode switch called it: `runs?.closeAll('reset')`
+ * below finalises every headless run in flight and schedules an `agents.json`
+ * write carrying that run's summary, its `runsSinceRotate`, its `nextRunAt` —
+ * and its `sessionUuid`, which is what the next wake `--resume`s from
+ * (`agents/runs.ts`). The very next statement then cancelled it. A user who
+ * attached, detached, or simply suffered a failed attach while an agent was
+ * mid-run lost that conversation's continuity with no error anywhere: the next
+ * wake would start a fresh conversation instead of resuming.
+ *
+ * The tell was that the shutdown hook (`onShutdown`, above) already performs
+ * this exact sequence with `flush()` — one path flushed and the other dropped,
+ * for the same data. So the choice is now the caller's, and the two production
+ * callers make the same one.
+ *
+ * The default is **drop**, which keeps every existing suite writing nothing,
+ * and `unbindEverything` in `ipc/router.ts` is the one caller that opts in.
+ * The flush sits exactly where the shutdown hook's does — *after*
+ * `runs.closeAll`, never before, or it would write the state as it was before
+ * the run was finalised, which is the same loss with an extra file.
+ */
+export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
+  const { flush = false } = options;
   /*
     HIVE-142. Most tests never call `startRemoteListener`, so this is usually
     stopping a socket that was never bound — cheap, per `listener.ts`'s own
@@ -4098,6 +4611,14 @@ export function resetIpcHandlers(): void {
   */
   remoteRegistry.clear();
   attachedSockets.clear();
+  /*
+    HIVE-144. This makes the test-only reset and the production mode switch
+    the same path: a live switch calls this to leave `ipcMain` clean before
+    `registerIpcHandlers` runs again against a different set of layers, and it
+    can trust that path precisely because every test in this suite already
+    exercises it on every teardown.
+  */
+  bindings.unbindAll();
   sessions?.dispose();
   sessions = null;
   cloneFlow?.dispose();
@@ -4112,7 +4633,12 @@ export function resetIpcHandlers(): void {
     `dispose()` rather than just dropping the reference — the debounce timer
     closes over the write directly, so an unreferenced history still fires one
     last `writeFileSync` at that stubbed path.
+
+    Unless the caller asked for a flush (HIVE-144) — a live mode switch is not
+    a teardown, and the fleet as it stood a moment before the switch is the
+    fleet the next launch should show.
   */
+  if (flush) history?.flush();
   history?.dispose();
   history = null;
   /*
@@ -4172,6 +4698,19 @@ export function resetIpcHandlers(): void {
   permissions = null;
   runs?.closeAll('reset');
   runs = null;
+  /*
+    **After `closeAll`, never before** (HIVE-144, fix round 1). `closeAll`
+    finalises every live run synchronously, and `finalizeRun` writes that run's
+    summary and its `sessionUuid` into this state on the way — so a flush that
+    ran first would write the state as it was *before* the run was finalised,
+    which loses exactly what this flush exists to keep and leaves a file behind
+    to prove it did something.
+
+    This is the same statement, in the same position, as the shutdown hook's
+    own `runs?.closeAll('app-closed'); agentState?.flush();`. The two paths
+    finally agree.
+  */
+  if (flush) agentState?.flush();
   agentState?.dispose();
   agentState = null;
   /*

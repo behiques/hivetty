@@ -5,15 +5,20 @@ import { describe, expect, it } from 'vitest';
 
 import { CH, EVENT_CHANNELS, type Channel } from '@shared/ipc-contract';
 import {
+  CALL_DEADLINE_MS,
+  CALL_GIVE_UP_MS,
   CHANNEL_AUTHORIZATION,
   FRAME_KIND,
+  PROCESS_LOCAL,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_REFUSED_CHANNELS,
+  SNAPSHOT_CHANNELS,
   WINDOW_BOUND,
   authorizationOf,
   frameKindOf,
   isAuthorized,
   isClientFrameAllowed,
+  isProcessLocal,
   remoteRefusedReason,
   windowBoundReason,
 } from '@shared/remote-contract';
@@ -52,7 +57,7 @@ const entries = Object.entries(CH) as ReadonlyArray<[string, Channel]>;
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(124);
+    expect(entries).toHaveLength(127);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -83,11 +88,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 96 call, 6 notify and 22 event', () => {
+  it('splits 99 call, 6 notify and 22 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 96, notify: 6, event: 22 });
+    expect(tally).toEqual({ call: 99, notify: 6, event: 22 });
   });
 
   /**
@@ -128,11 +133,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 124 as 52 read, 41 mutate and 31 execute', () => {
+  it('grades the 127 as 52 read, 44 mutate and 31 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 52, mutate: 41, execute: 31 });
+    expect(tally).toEqual({ read: 52, mutate: 44, execute: 31 });
   });
 
   /**
@@ -378,6 +383,51 @@ describe('remote contract: the version handshake', () => {
     expect(Number.isInteger(REMOTE_PROTOCOL_VERSION)).toBe(true);
     expect(REMOTE_PROTOCOL_VERSION).toBeGreaterThan(0);
   });
+
+  it('is protocol 2, because a bare seq could not carry a generation (HIVE-144)', () => {
+    expect(REMOTE_PROTOCOL_VERSION).toBe(2);
+  });
+});
+
+describe('remote contract: the call deadline (HIVE-144)', () => {
+  /**
+   * `electron/remote-host/listener.ts`'s `dispatch.call` site names the
+   * reason directly: the two numbers have to agree or the client gives up on
+   * a call the server is still going to answer. A client whose own timeout
+   * fires at or before the server's would abandon a call mid-flight instead
+   * of waiting for the `CALL_TIMEOUT_CODE` error frame the server is already
+   * about to send — the give-up point has to be strictly the later of the
+   * two, not merely a different number.
+   */
+  it('gives the client strictly longer than the server\'s own deadline', () => {
+    expect(CALL_GIVE_UP_MS).toBeGreaterThan(CALL_DEADLINE_MS);
+  });
+});
+
+/**
+ * `SNAPSHOT_CHANNELS` named literally, not read back off itself (HIVE-144
+ * review). Every assertion in `tests/electron/remote-host/listener.test.ts`
+ * and `tests/electron/main/ipc/remote-composition.test.ts` iterates this
+ * array to build its own expectations, which makes membership self-certifying
+ * there: commenting out `CH.githubPrs` at the source left `pnpm exec vitest
+ * run tests/electron` fully green, because every one of those tests would
+ * simply have iterated five channels instead of six and never noticed a sixth
+ * was missing. This is the one test in the suite that names the six by hand,
+ * so a channel silently dropped from the array — accidentally, or in a merge
+ * conflict — has somewhere to be caught.
+ */
+describe('remote contract: the attach snapshot (HIVE-144)', () => {
+  it('is exactly these six channels, in this order', () => {
+    expect(SNAPSHOT_CHANNELS).toHaveLength(6);
+    expect(SNAPSHOT_CHANNELS).toEqual([
+      CH.sessionHistory,
+      CH.agentsList,
+      CH.ledgerList,
+      CH.notificationsList,
+      CH.githubPrs,
+      CH.configGet,
+    ]);
+  });
 });
 
 describe('remote contract: an unclassified channel is a compile error', () => {
@@ -393,15 +443,30 @@ describe('remote contract: an unclassified channel is a compile error', () => {
 });
 
 describe('WINDOW_BOUND', () => {
-  it('names exactly the four dialog channels', () => {
+  it('names exactly the five refused channels', () => {
     expect(Object.keys(WINDOW_BOUND).sort()).toEqual(
       [
         CH.configChooseDirectory,
         CH.skillsFileImport,
         CH.themePick,
         CH.themeSave,
+        CH.configReveal,
       ].sort(),
     );
+  });
+
+  /**
+   * `configReveal` (HIVE-144, Ruling 25) is the one entry that does not
+   * dereference the Electron event — `shell.showItemInFolder` needs none —
+   * which is exactly why it slipped past this table under its old, narrower
+   * test. Proven here rather than merely asserted: `frameKindOf` still says
+   * `'call'` for it (below, in `'only ever names a call channel'`), and
+   * `remote-composition.test.ts`'s own event-dereference scan excludes it
+   * explicitly, with the same reason stated on that side.
+   */
+  it('does not require configReveal to dereference the event, unlike its four siblings', () => {
+    expect(WINDOW_BOUND[CH.configReveal]).toMatch(/Finder/);
+    expect(WINDOW_BOUND[CH.configReveal]).toMatch(/server/);
   });
 
   it('names the ticket that removes an entry, where one exists', () => {
@@ -440,5 +505,57 @@ describe('WINDOW_BOUND', () => {
 
   it('returns the reason for one that is', () => {
     expect(windowBoundReason(CH.themePick)).toMatch(/HIVE-146/);
+  });
+});
+
+/**
+ * `PROCESS_LOCAL` (HIVE-144, Ruling 24) — the opposite remedy from
+ * `WINDOW_BOUND`, for the same underlying problem: a channel whose payload
+ * is entirely about the running process, not the fleet, must not be
+ * forwarded to whatever the far end happens to be. See `PROCESS_LOCAL`'s own
+ * doc comment for the full test ("does every field describe the running
+ * process?") and the sweep across every `'call'` channel that settled on
+ * exactly these three.
+ */
+describe('PROCESS_LOCAL', () => {
+  it('names exactly four channels', () => {
+    expect([...PROCESS_LOCAL].sort()).toEqual(
+      [CH.appInfo, CH.updatesStatus, CH.updatesCheck, CH.configSetRemote].sort(),
+    );
+  });
+
+  /*
+    Named on its own, not merely counted (Ruling 28). `config:set-remote` is
+    the one entry that is a *command* rather than a read, and it is the one a
+    later sweep could most plausibly take back off this list on the grounds
+    that a `mutate` channel "obviously" belongs on the wire. It does not: a
+    client's detach forwarded to the server switches the server, writes the
+    server's config, answers `{ ok: true }`, and leaves the client attached
+    with its own file still saying `remote` — so it reattaches on the next
+    launch and can never get out. Proved against two real apps in
+    `tests/live/server-conformance.test.ts` (21g/21h).
+  */
+  it('answers config:set-remote locally, because attachment cannot live on the far end', () => {
+    expect(isProcessLocal(CH.configSetRemote)).toBe(true);
+  });
+
+  it('only ever names a call channel', () => {
+    for (const channel of PROCESS_LOCAL) expect(frameKindOf(channel)).toBe('call');
+  });
+
+  /*
+    Disjoint from `WINDOW_BOUND` by construction — the two lists answer a
+    channel two different ways (a local answer vs. a local refusal), and a
+    channel on both would leave `registerRemoteProxy` to pick one arbitrarily.
+  */
+  it('shares no channel with WINDOW_BOUND', () => {
+    const windowBound = new Set(Object.keys(WINDOW_BOUND));
+    for (const channel of PROCESS_LOCAL) expect(windowBound.has(channel)).toBe(false);
+  });
+
+  it('is true for each named channel and false for an ordinary fleet channel', () => {
+    for (const channel of PROCESS_LOCAL) expect(isProcessLocal(channel)).toBe(true);
+    expect(isProcessLocal(CH.configGet)).toBe(false);
+    expect(isProcessLocal('not:a:channel')).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { SkillsSection } from '@features/settings/components/skills-section';
 import {
   appendSurfaceText,
@@ -9,7 +10,13 @@ import {
   surfaceText,
 } from '@tests/support/editor-surface';
 import { resetSkills, setSkillsForTest } from '@lib/skills';
+import {
+  resetProjectConfig,
+  setAttachedServerForTest,
+  setProjectConfigForTest,
+} from '@lib/project-config';
 
+import { emptySnapshot } from '@shared/config-contract';
 import type { SkillsSnapshot } from '@shared/skills-contract';
 
 const loadSkills = vi.fn();
@@ -1251,5 +1258,44 @@ describe('SkillsSection renaming', () => {
     expect(
       screen.getByRole('alertdialog', { name: /Discard changes/ }),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * `skills:file:import` while attached to someone else's Hive (HIVE-144) —
+ * see `WINDOW_BOUND` (`electron/shared/remote-contract.ts`). Wired through
+ * `SkillsSection`'s own `useRemoteCapabilities()` call, distinct from the
+ * `SkillBundle` unit test, which only proves the button obeys a prop it is
+ * handed directly.
+ */
+describe('SkillsSection — attached to a remote server', () => {
+  afterEach(() => {
+    resetProjectConfig();
+    resetSkills();
+    vi.clearAllMocks();
+  });
+
+  it('disables Add from your computer and never opens the picker', async () => {
+    setProjectConfigForTest({
+      ...emptySnapshot('/tmp/hive/config.json'),
+    });
+    // Attached is a runtime fact, never a config one: while attached
+    // `config:get` is answered by the server, whose own `remote.mode`
+    // reads 'local' (HIVE-144 review, C1).
+    setAttachedServerForTest('mini.tail1234.ts.net');
+    setSkillsForTest(withSkills('standup'));
+
+    render(<SkillsSection />);
+    await userEvent.click(screen.getByRole('button', { name: '/standup' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ Add' }));
+
+    const button = screen.getByRole('button', {
+      name: 'Add from your computer',
+    });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('title', REMOTE_DISABLED_REASON.importSkillFiles);
+
+    await userEvent.click(button);
+    expect(importIntoSkill).not.toHaveBeenCalled();
   });
 });

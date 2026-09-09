@@ -6,7 +6,11 @@ import { DEFAULT_BIND, emptySnapshot, type ConfigSnapshot } from '@shared/config
 import type { AppInfo } from '@shared/ipc-contract';
 
 import { AdvancedSection } from '@features/settings/components/advanced-section';
-import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
+import {
+  resetProjectConfig,
+  setAttachedServerForTest,
+  setProjectConfigForTest,
+} from '@lib/project-config';
 
 import { testProjectKey } from '@tests/support/project-key';
 
@@ -45,6 +49,9 @@ const info = (over: Partial<AppInfo> = {}): AppInfo => ({
   logPath: '/Users/me/Library/Logs/The Hive',
   receiverBoundHost: null,
   serverBoundHost: null,
+  servingDeviceCount: 0,
+  attachedServerName: null,
+  serving: false,
   ...over,
 });
 
@@ -230,11 +237,23 @@ describe('AdvancedSection', () => {
     // Raw, not humanised — the ratios are what diagnose a flow-control bug.
     expect(screen.getByText('2048')).toBeInTheDocument();
     expect(screen.getByText('paused')).toBeInTheDocument();
-    expect(readAppInfo).toHaveBeenCalledTimes(1);
+
+    /*
+      A baseline, not a literal (HIVE-144, Ruling 29). This section is no
+      longer the only `readAppInfo` caller under this render:
+      `useAttachedServer` reads the same channel for the attach half's
+      `attachedServerName`, so the count at rest is now two rather than one.
+      What this case is actually about is that **Refresh causes exactly one
+      more read** — asserting that against a baseline keeps it true the next
+      time another consumer of the same channel appears, instead of failing
+      for a reason that has nothing to do with the button.
+    */
+    const atRest = readAppInfo.mock.calls.length;
+    expect(atRest).toBeGreaterThan(0);
 
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => {
-      expect(readAppInfo).toHaveBeenCalledTimes(2);
+      expect(readAppInfo).toHaveBeenCalledTimes(atRest + 1);
     });
   });
 
@@ -288,6 +307,48 @@ describe('AdvancedSection', () => {
       screen.getByText(/only available in the desktop app/i),
     ).toBeInTheDocument();
     expect(readAppInfo).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Revealing the config file while attached (HIVE-144, Ruling 25).
+ *
+ * `configReveal` joined `WINDOW_BOUND` rather than being answered locally:
+ * while attached, Settings already shows the *server's* config, so even a
+ * correct local answer here would open Finder onto a file that is not the
+ * one on screen — see `WINDOW_BOUND`'s own doc comment. The control is gated
+ * the same way the other four `WINDOW_BOUND` controls already are, proven
+ * the same way Task 12 proved theirs: disabled, titled with the table's own
+ * reason, and — the property that actually matters — never reaching the
+ * bridge at all, not merely rendering as disabled.
+ */
+describe('AdvancedSection — revealing the config file while attached (HIVE-144, Ruling 25)', () => {
+  beforeEach(() => {
+    // The snapshot stays the plain one, because that is what an attached
+    // client actually holds: `config:get` is answered by the server, whose
+    // own `remote.mode` reads `'local'` (HIVE-144 review, C1). Attachment is
+    // the runtime fact beside it, and `app:info` is where it is answered.
+    install();
+    setAttachedServerForTest('mini.tail1234.ts.net');
+    readAppInfo.mockResolvedValue(info({ attachedServerName: 'mini.tail1234.ts.net' }));
+  });
+
+  it('disables the reveal button with WINDOW_BOUND’s own reason', async () => {
+    render(<AdvancedSection />);
+
+    const button = await screen.findByRole('button', { name: /reveal in finder/i });
+    expect(button).toBeDisabled();
+    expect(button.getAttribute('title')).toMatch(/Finder/);
+    expect(button.getAttribute('title')).toMatch(/server/);
+  });
+
+  it('never reaches the bridge when the disabled button is clicked', async () => {
+    render(<AdvancedSection />);
+
+    const button = await screen.findByRole('button', { name: /reveal in finder/i });
+    await userEvent.click(button);
+
+    expect(revealConfigFile).not.toHaveBeenCalled();
   });
 });
 

@@ -16,6 +16,7 @@ import {
   parseRenameProjectRequest,
   parseReorderProjectsRequest,
   parsePairDeviceRequest,
+  parseRemotePairRequest,
   parseRepointProjectRequest,
   parseResizeRequest,
   parseRevokeDeviceRequest,
@@ -23,6 +24,7 @@ import {
   parseSetProjectKeyRequest,
   parseSetProjectRuntimeRequest,
   parseSetReceiverRequest,
+  parseSetRemoteRequest,
   parseSetServerRequest,
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
@@ -1320,6 +1322,144 @@ describe('parsePairDeviceRequest and parseRevokeDeviceRequest (HIVE-142)', () =>
     ['revoke', parseRevokeDeviceRequest],
   ] as const)('%s refuses a missing name', (_label, parse) => {
     expect(() => parse({})).toThrow(/missing key/);
+  });
+});
+
+/**
+ * `config:set-remote` (HIVE-144) — `setServer`'s mirror, and Ruling 3's rule
+ * applied to a live payload rather than a hand-edited file: `host` is
+ * checked against `isRemoteTarget` only when *this same request's* `mode`
+ * names `'remote'`.
+ */
+/**
+ * Fix-round 2: this guard validates shape only — `mode` is an enum, `host` is
+ * a string, `port` is in range. The Ruling 3 / `isRemoteTarget` invariant no
+ * longer lives here at all; it moved to `setRemote`
+ * (`electron/main/config/index.ts`), checked once against the merged result,
+ * because a guard that sees one payload can never resolve "effective mode"
+ * from that payload alone — see `parseSetRemoteRequest`'s own doc comment and
+ * `tests/electron/main/config/remote.test.ts`'s sequence-table coverage of
+ * the invariant itself.
+ */
+describe('parseSetRemoteRequest (HIVE-144)', () => {
+  it('accepts mode alone', () => {
+    expect(parseSetRemoteRequest({ mode: 'local' })).toEqual({ mode: 'local' });
+    expect(parseSetRemoteRequest({ mode: 'remote' })).toEqual({ mode: 'remote' });
+  });
+
+  it('refuses a mode that is neither local nor remote', () => {
+    expect(() => parseSetRemoteRequest({ mode: 'both' })).toThrow(/setRemote\.mode/);
+  });
+
+  /**
+   * Ruling 3, the case the ticket calls out by name: every install that has
+   * never attached carries `mode: 'local'` alongside `DEFAULT_REMOTE`'s empty
+   * `host`, and a payload restating that pair is the ordinary state, not a
+   * malformed request.
+   */
+  it('accepts an empty host when mode is local', () => {
+    expect(parseSetRemoteRequest({ mode: 'local', host: '' })).toEqual({
+      mode: 'local',
+      host: '',
+    });
+  });
+
+  /**
+   * The fix-round-1 refusal (host requires mode in the same payload) is gone
+   * as of fix-round 2: it bought nothing once `setRemote` checks the merged
+   * result, and a bare `{ host }` while the config is genuinely local is
+   * Ruling 3's ordinary case. This guard accepts any well-formed string here,
+   * host validity included — `setRemote`'s sequence-table tests are what
+   * prove a bad value can never reach disk paired with `mode: 'remote'`.
+   */
+  it('accepts host without mode — shape only; the invariant is setRemote’s job now', () => {
+    expect(parseSetRemoteRequest({ host: '' })).toEqual({ host: '' });
+    expect(parseSetRemoteRequest({ host: 'evil.example.com' })).toEqual({
+      host: 'evil.example.com',
+    });
+  });
+
+  it('accepts any well-formed host string alongside mode: remote — value validity is setRemote’s job', () => {
+    expect(parseSetRemoteRequest({ mode: 'remote', host: '127.0.0.1' })).toEqual({
+      mode: 'remote',
+      host: '127.0.0.1',
+    });
+    expect(
+      parseSetRemoteRequest({ mode: 'remote', host: 'evil.example.com' }),
+    ).toEqual({ mode: 'remote', host: 'evil.example.com' });
+  });
+
+  it('refuses a non-string host', () => {
+    expect(() => parseSetRemoteRequest({ host: 7 })).toThrow(/setRemote\.host/);
+  });
+
+  it('accepts a port alone', () => {
+    expect(parseSetRemoteRequest({ port: 7433 })).toEqual({ port: 7433 });
+  });
+
+  it('refuses a port out of range', () => {
+    expect(() => parseSetRemoteRequest({ port: 70_000 })).toThrow(/setRemote\.port/);
+  });
+
+  it('does not salvage the good fields when one is bad — the whole request fails', () => {
+    expect(() =>
+      parseSetRemoteRequest({ mode: 'both', host: '127.0.0.1', port: 7433 }),
+    ).toThrow(/setRemote\.mode/);
+  });
+
+  it('refuses a token key — there is no route for a credential on this channel', () => {
+    expect(() => parseSetRemoteRequest({ token: 'secret' })).toThrow(/unexpected key/);
+  });
+
+  it('refuses an unexpected key', () => {
+    expect(() => parseSetRemoteRequest({ nope: 1 })).toThrow(/unexpected key/);
+  });
+
+  it('rejects a request that changes nothing', () => {
+    expect(() => parseSetRemoteRequest({})).toThrow(/nothing to change/);
+  });
+});
+
+/**
+ * `remote:pair` (HIVE-144) — the opposite direction from
+ * `parsePairDeviceRequest`: this one takes the `deviceId`/`token` pair a
+ * `server:pair` mint on some *other* machine handed back, not a free-text
+ * name typed by a person.
+ */
+describe('parseRemotePairRequest (HIVE-144)', () => {
+  it('accepts a well-formed pair', () => {
+    expect(
+      parseRemotePairRequest({ deviceId: 'dev-1', token: 'K7QM-3XTV-9WHZ-2BNP' }),
+    ).toEqual({ deviceId: 'dev-1', token: 'K7QM-3XTV-9WHZ-2BNP' });
+  });
+
+  it('refuses a malformed deviceId', () => {
+    expect(() =>
+      parseRemotePairRequest({ deviceId: '../etc', token: 'tok' }),
+    ).toThrow(/remotePair\.deviceId/);
+  });
+
+  it('refuses an empty token', () => {
+    expect(() => parseRemotePairRequest({ deviceId: 'dev-1', token: '' })).toThrow(
+      /remotePair\.token/,
+    );
+  });
+
+  it('refuses a token with non-printable-ASCII content', () => {
+    expect(() =>
+      parseRemotePairRequest({ deviceId: 'dev-1', token: 'has space' }),
+    ).toThrow(/remotePair\.token/);
+  });
+
+  it('refuses a missing key', () => {
+    expect(() => parseRemotePairRequest({ deviceId: 'dev-1' })).toThrow(/missing key/);
+    expect(() => parseRemotePairRequest({ token: 'tok' })).toThrow(/missing key/);
+  });
+
+  it('refuses an unexpected key', () => {
+    expect(() =>
+      parseRemotePairRequest({ deviceId: 'dev-1', token: 'tok', extra: 1 }),
+    ).toThrow(/unexpected key/);
   });
 });
 

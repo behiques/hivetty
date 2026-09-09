@@ -1,7 +1,14 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { useAddProject } from '@hooks/use-add-project';
+import {
+  resetProjectConfig,
+  setAttachedServerForTest,
+  setProjectConfigForTest,
+} from '@lib/project-config';
+import { emptySnapshot } from '@shared/config-contract';
 
 const chooseProjectDirectory = vi.fn();
 const addProjectToConfig = vi.fn();
@@ -14,6 +21,20 @@ vi.mock('@lib/project-config', async (importOriginal) => {
     addProjectToConfig: (request: unknown) => addProjectToConfig(request),
   };
 });
+
+/**
+ * Put this window in the attached state, or out of it (HIVE-144 review, C1).
+ *
+ * The snapshot stays the plain one in **both** cases, deliberately. An
+ * attached client's `config:get` is answered by the server, so the snapshot it
+ * holds is the server's — and a server is attached to nobody, so its
+ * `remote.mode` reads `'local'`. Attachment is a runtime fact, and
+ * `setAttachedServerForTest` is the only place it lives.
+ */
+function attachedTo(server: string | null): void {
+  setProjectConfigForTest(emptySnapshot('/home/dev/.hive/config.json', '/bin/zsh'));
+  setAttachedServerForTest(server);
+}
 
 /**
  * Mapping a directory, from wherever the app offers it (Settings, the rail).
@@ -29,6 +50,10 @@ describe('useAddProject', () => {
     addProjectToConfig.mockReset();
     chooseProjectDirectory.mockResolvedValue(null);
     addProjectToConfig.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    resetProjectConfig();
   });
 
   it('writes the path the dialog returned, and no other', async () => {
@@ -110,5 +135,55 @@ describe('useAddProject', () => {
     expect(result.current.choosing).toBe(false);
     expect(logged).toHaveBeenCalled();
     logged.mockRestore();
+  });
+});
+
+/**
+ * While attached to someone else's Hive (HIVE-144).
+ *
+ * `config:choose-directory` opens a dialog on the server, which has no
+ * window — `WINDOW_BOUND` (`electron/shared/remote-contract.ts`) refuses it
+ * by name. `disabledReason` is what both buttons (`projects-section.tsx`,
+ * `new-project-link.tsx`) render as the control's `title`; `addProject`
+ * itself must never reach the bridge, since a disabled control that still
+ * fired its handler would be exactly the "button that fails silently" this
+ * task exists to prevent.
+ */
+describe('useAddProject — attached to a remote server', () => {
+  beforeEach(() => {
+    chooseProjectDirectory.mockReset();
+    addProjectToConfig.mockReset();
+  });
+
+  afterEach(() => {
+    resetProjectConfig();
+  });
+
+  it('reports no reason in local mode', () => {
+    attachedTo(null);
+
+    const { result } = renderHook(() => useAddProject());
+
+    expect(result.current.disabledReason).toBeNull();
+  });
+
+  it("carries WINDOW_BOUND's own reason once attached", () => {
+    attachedTo('mini.tail1234.ts.net');
+
+    const { result } = renderHook(() => useAddProject());
+
+    expect(result.current.disabledReason).toBe(REMOTE_DISABLED_REASON.chooseDirectory);
+  });
+
+  it('never opens the dialog while attached', async () => {
+    attachedTo('mini.tail1234.ts.net');
+
+    const { result } = renderHook(() => useAddProject());
+    await act(async () => {
+      result.current.addProject();
+    });
+
+    expect(chooseProjectDirectory).not.toHaveBeenCalled();
+    expect(addProjectToConfig).not.toHaveBeenCalled();
   });
 });

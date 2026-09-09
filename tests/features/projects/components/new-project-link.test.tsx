@@ -1,8 +1,15 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { NewProjectLink } from '@features/projects/components/new-project-link';
+import {
+  resetProjectConfig,
+  setAttachedServerForTest,
+  setProjectConfigForTest,
+} from '@lib/project-config';
+import { emptySnapshot } from '@shared/config-contract';
 
 const chooseProjectDirectory = vi.fn();
 const addProjectToConfig = vi.fn();
@@ -15,6 +22,19 @@ vi.mock('@lib/project-config', async (importOriginal) => {
     addProjectToConfig: (request: unknown) => addProjectToConfig(request),
   };
 });
+
+/**
+ * Put this window in the attached state (HIVE-144 review, C1).
+ *
+ * The snapshot is the plain one on purpose: while attached, `config:get` is
+ * answered by the server, whose own `remote.mode` reads `'local'`. Attachment
+ * is the runtime fact beside it, and `setAttachedServerForTest` is the only
+ * place it lives.
+ */
+function attach(): void {
+  setProjectConfigForTest(emptySnapshot('/home/dev/.hive/config.json', '/bin/zsh'));
+  setAttachedServerForTest('mini.tail1234.ts.net');
+}
 
 /**
  * Mapping a project from the rail, without a detour through Settings.
@@ -107,5 +127,36 @@ describe('NewProjectLink', () => {
 
     await waitFor(() => expect(button).toBeDisabled());
     expect(chooseProjectDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * While attached to someone else's Hive (HIVE-144): `config:choose-directory`
+   * opens on the server, which has no window. Disabled with the same reason
+   * `WINDOW_BOUND` gives, and the click never reaches the bridge.
+   */
+  describe('attached to a remote server', () => {
+    afterEach(() => {
+      resetProjectConfig();
+    });
+
+    it('disables the control and carries the refusal as its title', () => {
+      attach();
+
+      render(<NewProjectLink />);
+
+      const button = screen.getByRole('button', { name: /new project/i });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('title', REMOTE_DISABLED_REASON.chooseDirectory);
+    });
+
+    it('never opens the dialog', async () => {
+      attach();
+      const user = userEvent.setup();
+
+      render(<NewProjectLink />);
+      await user.click(screen.getByRole('button', { name: /new project/i }));
+
+      expect(chooseProjectDirectory).not.toHaveBeenCalled();
+    });
   });
 });

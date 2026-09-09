@@ -52,6 +52,11 @@ const appInfo = (over: Partial<AppInfo> = {}): AppInfo =>
     node: '20.18.1',
     platform: 'darwin',
     logPath: '/tmp/logs',
+    receiverBoundHost: null,
+    serverBoundHost: null,
+    servingDeviceCount: 0,
+    attachedServerName: null,
+  serving: false,
     ...over,
   }) as AppInfo;
 
