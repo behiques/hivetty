@@ -86,6 +86,7 @@ const state = (): AgentState => ({
     stored[name] = { ...agent, lanes: { ...agent.lanes, [key]: next } };
     return next;
   },
+  forgetLane: vi.fn(),
   forget: (name) => {
     delete stored[name];
   },
@@ -104,7 +105,8 @@ const state = (): AgentState => ({
 const build = (over: Partial<WakeCommandDeps> = {}) =>
   createWakeCommand({
     agentsRoot: () => '/home/u/.hive/agents',
-    workdir: (name) => `/home/u/.hive/work/${name}`,
+    workdir: (name, lane) =>
+      lane === 'standing' ? `/home/u/.hive/work/${name}` : `/home/u/.hive/work/${name}/lanes/${lane}`,
     promptFile: (name) => `/data/hive/agents/${name}.system.md`,
     pluginDir: () => '/data/hive/plugin',
     agentSettingsPath: () => '/data/hive/claude-agent.settings.json',
@@ -663,6 +665,7 @@ Read the channel and report.
         clearSlackNeedsAuth: vi.fn(() => []),
         lane: vi.fn(() => ({ runsSinceRotate: 0 })),
         patchLane: vi.fn(() => ({ runsSinceRotate: 0 })),
+        forgetLane: vi.fn(),
         forget: (name) => {
           delete localState[name];
         },
@@ -897,5 +900,47 @@ describe('lanes (HIVE-185)', () => {
     if ('problem' in built) throw new Error(built.problem);
     expect(built.lastTurn).toBe(false);
     expect(stored['slack-watcher'].forceRotate).toBe(true);
+  });
+});
+
+describe('a lane\'s working directory (HIVE-188)', () => {
+  it('creates and runs a lane in its own directory, and a standing wake in the agent\'s own', () => {
+    const lane = build()('slack-watcher', 'ledger', undefined, { lane: 'thread:A' });
+
+    if ('problem' in lane) throw new Error(lane.problem);
+    expect(lane.cwd).toBe('/home/u/.hive/work/slack-watcher/lanes/thread:A');
+    expect(made).toContain('/home/u/.hive/work/slack-watcher/lanes/thread:A');
+
+    const standing = build()('slack-watcher', 'ledger');
+
+    if ('problem' in standing) throw new Error(standing.problem);
+    expect(standing.cwd).toBe('/home/u/.hive/work/slack-watcher');
+  });
+
+  it('runs a task run in the agent\'s own directory, whatever lane it names', () => {
+    const task = build()('slack-watcher', 'manual', 'review', { kind: 'task', lane: 'thread:A' });
+
+    if ('problem' in task) throw new Error(task.problem);
+    expect(task.cwd).toBe('/home/u/.hive/work/slack-watcher');
+  });
+});
+
+describe('the lane in the wake prompt (HIVE-188)', () => {
+  it('tells a lane run which lane it is', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = AGENT_MD.replace('model: sonnet\n', 'model: sonnet\nlane: thread\n');
+
+    const built = build()('slack-watcher', 'ledger', 'ask A from overmind', { lane: 'thread:A' });
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(built.args.at(-1)).toContain("You are slack-watcher's lane for ask A.");
+  });
+
+  it('tells the standing lane of a laning agent how to hand work over', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = AGENT_MD.replace('model: sonnet\n', 'model: sonnet\nlane: thread\n');
+
+    const built = build()('slack-watcher', 'ledger');
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(built.args.at(-1)).toContain('slack-watcher lanes by thread.');
   });
 });
