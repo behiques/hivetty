@@ -26,7 +26,7 @@ const entry = (over: Partial<LedgerEntry> = {}): LedgerEntry => ({
 });
 
 describe('createScheduler', () => {
-  let woke: { name: string; trigger: string; extra?: string; job?: true }[];
+  let woke: { name: string; trigger: string; extra?: string; job?: true; lane?: string }[];
   let entries: LedgerEntry[];
   let appended: LedgerPostRequest[];
   let clock: number;
@@ -62,6 +62,12 @@ describe('createScheduler', () => {
   let listed: boolean;
   /** Names pushed to the renderer, in order. */
   let pushed: string[];
+  /** What `laneOf` answers (HIVE-186). Undefined: a pre-lane agent. */
+  let laneMode: 'thread' | 'repo' | undefined;
+  /** Lanes the fake tracker reports live. Null: omit `laneLive`, the pre-lane harness. */
+  let liveLanes: Set<string> | null;
+  /** Re-enter `onRunClosed` from inside `run`, as a synchronous spawn failure does (HIVE-186). */
+  let reenter: boolean;
 
   /** Fire every armed interval once — the sweep and the schedule tick. */
   const tick = (): void => {
@@ -75,14 +81,17 @@ describe('createScheduler', () => {
 
         runCalls += 1;
 
+        if (reenter) scheduler.onRunClosed(name);
         if (refuseAfter === call) return { started: false, refused: 'saturated' };
         if (refuse !== false) return { started: false, refused: refuse };
+        if (liveLanes?.has(options?.lane ?? 'standing') === true) return { started: false, refused: 'working' };
 
         woke.push({
           name,
           trigger,
           ...(extra === undefined ? {} : { extra }),
           ...(options?.job === true ? { job: true } : {}),
+          ...(options?.lane === undefined ? {} : { lane: options.lane }),
         });
         return { started: true, run: 'run-1', kind: 'standing' };
       },
@@ -90,6 +99,8 @@ describe('createScheduler', () => {
       isAgent: (id) => id === AGENT,
       wakesOnLedger: () => wakesOnLedger,
       parallelFor: () => parallel,
+      laneOf: () => laneMode,
+      ...(liveLanes === null ? {} : { laneLive: (_name: string, lane: string) => liveLanes?.has(lane) === true }),
       schedules: () => (listed ? schedules : undefined),
       pushStatus: (name) => pushed.push(name),
       ledger: {
@@ -127,6 +138,9 @@ describe('createScheduler', () => {
     parallel = 1;
     listed = true;
     pushed = [];
+    laneMode = undefined;
+    liveLanes = null;
+    reenter = false;
     state = createAgentState({ path: '/dev/null/agents.json', debounceMs: 1 });
     state.patch(AGENT, { status: 'sleeping' });
 
@@ -1984,6 +1998,283 @@ describe('createScheduler', () => {
 
       expect(started.started).toBe(true);
       expect(woke).toEqual([{ name: AGENT, trigger: 'manual', extra: 'go', job: true }]);
+    });
+  });
+
+  describe('per-lane queues (HIVE-186)', () => {
+    it('queues on the busy lane only, and flushes each lane into its own run', () => {
+      liveLanes = new Set(['thread:A']);
+      scheduler = build();
+      state.patchLane(AGENT, 'thread:A', { pendingWake: [{ kind: 'answer', id: 'x1', from: 'overmind' }] });
+      state.patchLane(AGENT, 'thread:B', { pendingWake: [{ kind: 'ask', id: 'B', from: 'overmind' }] });
+
+      liveLanes.clear();
+      scheduler.onRunClosed(AGENT);
+
+      expect(woke).toEqual([
+        { name: AGENT, trigger: 'ledger', extra: 'answer x1 from overmind', lane: 'thread:A' },
+        { name: AGENT, trigger: 'ledger', extra: 'ask B from overmind', lane: 'thread:B' },
+      ]);
+      expect(state.lane(AGENT, 'thread:A').pendingWake).toEqual([]);
+      expect(state.lane(AGENT, 'thread:B').pendingWake).toEqual([]);
+    });
+
+    it('stops draining at the first saturated refusal and keeps the rest queued', () => {
+      state.patchLane(AGENT, 'thread:A', { pendingWake: [{ kind: 'ask', id: 'A', from: 'overmind' }] });
+      state.patchLane(AGENT, 'thread:B', { pendingWake: [{ kind: 'ask', id: 'B', from: 'overmind' }] });
+      refuseAfter = 0;
+
+      scheduler.onRunClosed(AGENT);
+
+      expect(runCalls).toBe(1);
+      expect(state.lane(AGENT, 'thread:A').pendingWake).toHaveLength(1);
+      expect(state.lane(AGENT, 'thread:B').pendingWake).toHaveLength(1);
+    });
+
+    it('re-homes a closed thread lane\'s queue onto standing', () => {
+      state.patchLane(AGENT, 'thread:A', { closedAt: 5, pendingWake: [{ kind: 'post', id: 'p', from: 'overmind' }] });
+
+      scheduler.onRunClosed(AGENT);
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'ledger', extra: 'post p from overmind' }]);
+      expect(state.lane(AGENT, 'thread:A').pendingWake).toEqual([]);
+    });
+  });
+
+  describe('draining lanes safely (HIVE-186)', () => {
+    it('does not re-drain the lanes when a failed spawn re-enters the flush', () => {
+      state.patch(AGENT, { pendingWake: [{ kind: 'ask', id: 's', from: 'overmind' }] });
+      state.patchLane(AGENT, 'thread:A', { pendingWake: [{ kind: 'ask', id: 'A', from: 'overmind' }] });
+      refuse = 'invalid';
+      reenter = true;
+
+      scheduler.onRunClosed(AGENT);
+
+      expect(runCalls).toBe(2);
+      expect(state.read(AGENT).pendingWake).toHaveLength(1);
+      expect(state.lane(AGENT, 'thread:A').pendingWake).toHaveLength(1);
+    });
+
+    it('moves only what fits from a closed lane, and keeps the rest on it', () => {
+      const full = Array.from({ length: AGENT_PENDING_WAKE_MAX - 1 }, (_, i) => ({ kind: 'ask', id: `s${String(i)}`, from: 'overmind' }));
+      state.patch(AGENT, { pendingWake: full });
+      state.patchLane(AGENT, 'thread:A', {
+        closedAt: 5,
+        pendingWake: [{ kind: 'manual', id: 'run', from: 'overmind', text: 'one' }, { kind: 'manual', id: 'run', from: 'overmind', text: 'two' }],
+      });
+      refuse = 'working';
+
+      scheduler.onRunClosed(AGENT);
+
+      expect(state.read(AGENT).pendingWake).toHaveLength(AGENT_PENDING_WAKE_MAX);
+      expect(state.lane(AGENT, 'thread:A').pendingWake).toEqual([{ kind: 'manual', id: 'run', from: 'overmind', text: 'two' }]);
+    });
+  });
+
+  describe('routing by lane (HIVE-186)', () => {
+    const begun = (run: string, lane: string): LedgerEntry =>
+      entry({ id: `s-${run}`, from: AGENT, to: undefined, kind: 'event', body: 'run.started — ledger', meta: { run, lane } });
+
+    beforeEach(() => {
+      laneMode = 'thread';
+      liveLanes = new Set();
+      scheduler = build();
+    });
+
+    it('starts lane B at once while lane A is busy', () => {
+      liveLanes?.add('thread:A');
+      const ask = entry({ id: 'B' });
+      entries.push(entry({ id: 'A' }), ask);
+
+      scheduler.onEntry(ask);
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'ledger', extra: 'ask B from overmind', lane: 'thread:B' }]);
+    });
+
+    it('queues the answer to lane A\'s question behind A, not B, then resumes A', () => {
+      liveLanes?.add('thread:A').add('thread:B');
+      const answer = entry({ id: 'ans', kind: 'answer', thread: 'Q' });
+      entries.push(
+        entry({ id: 'A' }), entry({ id: 'B' }), begun('r1', 'thread:A'),
+        entry({ id: 'Q', from: AGENT, to: 'overmind', meta: { run: 'r1' } }), answer,
+      );
+
+      scheduler.onEntry(answer);
+      expect(woke).toEqual([]);
+      expect(state.lane(AGENT, 'thread:A').pendingWake).toEqual([
+        { kind: 'answer', id: 'ans', from: 'overmind', thread: 'Q' },
+      ]);
+
+      liveLanes?.delete('thread:B');
+      scheduler.onRunClosed(AGENT);
+      expect(woke).toEqual([]); // B closing does not resume A: A is still live
+
+      liveLanes?.delete('thread:A');
+      scheduler.onRunClosed(AGENT);
+      expect(woke).toEqual([{ name: AGENT, trigger: 'ledger', extra: 'answer ans from overmind', lane: 'thread:A' }]);
+    });
+
+    it('wakes a different lane with a self-entry, never its own', () => {
+      laneMode = 'repo';
+      scheduler = build();
+      entries.push(begun('r0', 'standing'));
+      const handover = entry({ id: 'H', from: AGENT, meta: { run: 'r0', repo: 'a/x' } });
+      entries.push(handover);
+
+      scheduler.onEntry(handover);
+      expect(woke).toEqual([{ name: AGENT, trigger: 'ledger', extra: `ask H from ${AGENT}`, lane: 'repo:a/x' }]);
+
+      woke = [];
+      entries.push(begun('r1', 'repo:a/x'));
+      const own = entry({ id: 'H2', from: AGENT, meta: { run: 'r1', repo: 'a/x' } });
+      entries.push(own);
+      scheduler.onEntry(own);
+      expect(woke).toEqual([]);
+    });
+
+    it('answers a repo-laned ask with no meta.repo at once, as the overmind, and wakes nothing', () => {
+      laneMode = 'repo';
+      scheduler = build();
+      const ask = entry({ id: 'N', from: 'sess-1' });
+      entries.push(ask);
+
+      scheduler.onEntry(ask);
+
+      expect(woke).toEqual([]);
+      expect(appended).toEqual([
+        { from: 'overmind', to: 'sess-1', kind: 'answer', thread: 'N',
+          body: `${AGENT} lanes by repository; send meta.repo as owner/name.` },
+      ]);
+    });
+
+    it('routes a released held ask into the lane it opens', () => {
+      const held = entry({ id: 'h1', meta: { after: 'a/b#3' } });
+      const closed = entry({ id: 'c3', from: 'shipper', to: 'sess-4l', kind: 'post', body: 'merged', meta: { pr: 3, repo: 'a/b', stage: 'closed' } });
+      entries.push(held, closed);
+
+      scheduler.onEntry(closed);
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'ledger', extra: 'ask h1 from overmind', lane: 'thread:h1' }]);
+    });
+
+    it('routes an expired ask\'s news to the lane that asked it', () => {
+      entries.push(
+        begun('r1', 'thread:A'),
+        { id: 'a1', ts: 0, from: AGENT, to: 'overmind', kind: 'ask', ref: 'a7', body: 'which branch?', meta: { run: 'r1' } },
+      );
+      clock = LEDGER_ASK_TTL_MS;
+
+      scheduler.start();
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'ledger', extra: 'expired a1 from overmind', lane: 'thread:A' }]);
+    });
+
+    it('sends an expiry to standing when the asking lane has closed', () => {
+      entries.push(
+        entry({ id: 'A' }),
+        entry({ id: 'd', kind: 'done', from: AGENT, to: 'overmind', thread: 'A' }),
+        begun('r1', 'thread:A'),
+        { id: 'a1', ts: 0, from: AGENT, to: 'overmind', kind: 'ask', ref: 'a7', body: 'which branch?', meta: { run: 'r1' } },
+      );
+      clock = LEDGER_ASK_TTL_MS;
+
+      scheduler.start();
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'ledger', extra: 'expired a1 from overmind' }]);
+    });
+  });
+
+  describe('a thread lane closes with its ask (HIVE-186)', () => {
+    beforeEach(() => {
+      laneMode = 'thread';
+      liveLanes = new Set();
+      scheduler = build();
+    });
+
+    it('closes the thread lane when its opening ask is answered, and keeps its record', () => {
+      state.patchLane(AGENT, 'thread:A', { sessionUuid: 'u-A', runsSinceRotate: 2 });
+      const reply = entry({ id: 'r', from: AGENT, to: 'overmind', kind: 'answer', thread: 'A' });
+      entries.push(entry({ id: 'A' }), reply);
+      clock = 42;
+
+      scheduler.onEntry(reply);
+
+      expect(state.lane(AGENT, 'thread:A')).toEqual({ sessionUuid: 'u-A', runsSinceRotate: 2, closedAt: 42 });
+    });
+
+    it('does not open a record for a lane that never ran', () => {
+      const reply = entry({ id: 'r', from: AGENT, to: 'overmind', kind: 'answer', thread: 'A' });
+      entries.push(entry({ id: 'A' }), reply);
+
+      scheduler.onEntry(reply);
+
+      expect(state.read(AGENT).lanes).toBeUndefined();
+    });
+
+    it('closes the thread lane when its opening ask expires', () => {
+      state.patchLane(AGENT, 'thread:a1', { sessionUuid: 'u-1', runsSinceRotate: 0 });
+      entries.push(entry({ id: 'a1', ts: 0 }));
+      clock = LEDGER_ASK_TTL_MS;
+
+      scheduler.start();
+      tick();
+
+      expect(state.lane(AGENT, 'thread:a1').closedAt).toBe(LEDGER_ASK_TTL_MS);
+    });
+  });
+
+  describe('repo lane clocks (HIVE-186)', () => {
+    const holding = (): void => {
+      state.patchLane(AGENT, 'repo:a/x', { runsSinceRotate: 0 });
+      state.patchLane(AGENT, 'repo:b/y', { runsSinceRotate: 0, nextRunAt: 1 });
+      entries.push(
+        entry({ id: 's1', from: AGENT, to: undefined, kind: 'event', body: 'run.started — ledger', meta: { run: 'r1', lane: 'repo:a/x' } }),
+        entry({ id: 'c1', from: AGENT, to: undefined, kind: 'claim', body: 'claimed a/x#1', meta: { task: 'a/x#1', run: 'r1' } }),
+      );
+    };
+
+    beforeEach(() => {
+      laneMode = 'repo';
+      liveLanes = new Set();
+      scheduler = build();
+      schedules.set(AGENT, { wake: { everyMs: 600_000, on: ['ledger'], check: 'onchange' } as WakeSpec });
+      scheduler.start();
+    });
+
+    it('ticks a repo lane that holds a claim, and leaves an idle one without a clock', () => {
+      holding();
+
+      tick(); // arms repo:a/x
+      clock = 600_000;
+      tick(); // fires it
+
+      expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
+      expect(woke.some((w) => w.lane === 'repo:b/y')).toBe(false);
+      expect(state.lane(AGENT, 'repo:b/y').nextRunAt).toBeUndefined();
+    });
+
+    it('does not tick a lane that is running', () => {
+      holding();
+
+      tick();
+      clock = 600_000;
+      liveLanes?.add('repo:a/x');
+      tick();
+
+      expect(woke.some((w) => w.lane === 'repo:a/x')).toBe(false);
+    });
+
+    it('does not tick a paused agent\'s repo lanes', () => {
+      holding();
+
+      tick();
+      state.patch(AGENT, { status: 'paused' });
+      clock = 600_000;
+      tick();
+
+      expect(woke).toEqual([]);
     });
   });
 });

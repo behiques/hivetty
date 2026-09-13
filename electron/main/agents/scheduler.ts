@@ -2,8 +2,12 @@ import {
   AGENT_PENDING_WAKE_MAX,
   dayKey,
   isQueueableRefusal,
+  STANDING_LANE,
+  threadLane,
+  type AgentLane,
   type AgentRunResult,
   type AgentRunState,
+  type AgentStatus,
   type PendingWakeEntry,
   type WakeSpec,
 } from '@shared/agent-contract';
@@ -13,6 +17,7 @@ import {
   type LedgerPostRequest,
 } from '@shared/ledger-contract';
 import {
+  CLOSING_KINDS,
   afterTarget,
   expiredAsks,
   isHeld,
@@ -22,7 +27,16 @@ import {
 import { SLACK_COMMAND_KIND, SLACK_SERVER_KEY, SLACK_TRIGGER } from '@shared/slack-contract';
 
 import type { RunStart } from './runs';
-import { decide, decideForEvent, decideForStatus, type WakeDecision } from './scheduler-rules';
+import {
+  decide,
+  decideForEvent,
+  decideForStatus,
+  isClosedLane,
+  laneClaims,
+  laneFor,
+  laneOfRun,
+  type WakeDecision,
+} from './scheduler-rules';
 import type { AgentState } from './state';
 import { inQuiet, nextRunFrom, quietEndAfter } from './wake-schedule';
 
@@ -109,9 +123,9 @@ export interface SchedulerDeps {
     name: string,
     trigger: string,
     extra?: string,
-    options?: { job?: true },
+    options?: { job?: true; lane?: string },
   ) => RunStart;
-  state: Pick<AgentState, 'read' | 'patch' | 'all'>;
+  state: Pick<AgentState, 'read' | 'patch' | 'all' | 'lane' | 'patchLane'>;
   /** Whether a party id names a registered agent rather than a session. */
   isAgent: (id: string) => boolean;
   /**
@@ -132,6 +146,17 @@ export interface SchedulerDeps {
    * second `working` wake.
    */
   parallelFor: (name: string) => number;
+  /**
+   * `lane:` from the definition (HIVE-186), from the same cache as
+   * `parallelFor`. Absent in a spec that predates lanes, which is every agent
+   * at one lane.
+   */
+  laneOf?: (name: string) => AgentLane | undefined;
+  /**
+   * Whether a conversation run holds this lane right now (HIVE-186). Absent in
+   * a spec that predates lanes, which is every agent at one lane.
+   */
+  laneLive?: (name: string, lane: string) => boolean;
   /**
    * Every agent with a usable schedule — or `undefined` before the registry
    * has answered its first listing.
@@ -346,7 +371,9 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
 
     const now = deps.now();
 
-    for (const ask of expiredAsks(deps.ledger.read().entries, now)) {
+    const entries = deps.ledger.read().entries;
+
+    for (const ask of expiredAsks(entries, now)) {
       const written = deps.ledger.append({
         from: OVERMIND,
         to: ask.from,
@@ -370,6 +397,9 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         continue;
       }
 
+      // An expired ask ends the thread lane it opened (HIVE-186).
+      closeLaneOf(ask.id, entries);
+
       /*
         Woken here rather than by routing the event above back through
         `onEntry`.
@@ -384,11 +414,17 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         is on disk by now and this sweep will never look at that ask again.
       */
       if (deps.isAgent(ask.from) && deps.wakesOnLedger(ask.from)) {
-        route(ask.from, decideForStatus(deps.state.read(ask.from).status), {
-          kind: 'expired',
-          id: ask.id,
-          from: OVERMIND,
-        });
+        // The lane that asked hears it (HIVE-186). A closed thread lane hands over to standing.
+        const asked = laneOfRun(ask.from, ask.meta?.['run'], entries);
+        const lane = isClosedLane(asked, entries) ? STANDING_LANE : asked;
+
+        route(
+          ask.from,
+          decideForStatus(laneStatus(ask.from, lane)),
+          { kind: 'expired', id: ask.id, from: OVERMIND },
+          LEDGER_TRIGGER,
+          lane,
+        );
       }
     }
   };
@@ -667,45 +703,129 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       arm(name, due, next);
       deps.run(name, wake.everyMs === undefined ? CALENDAR_TRIGGER : INTERVAL_TRIGGER);
     }
+
+    /*
+      Repo lanes keep their own clock while they hold work (HIVE-186, spec §4).
+      The standing lane's loop above is unchanged; a thread lane never ticks.
+      A lane with no open claim has no clock, and a stale one is cleared.
+    */
+    for (const [name, schedule] of listed) {
+      if (deps.laneOf?.(name) !== 'repo' || schedule.wake.everyMs === undefined) continue;
+
+      const agent = deps.state.read(name);
+      const today = agent.today?.day === dayKey(now) ? agent.today : undefined;
+
+      if (agent.status === 'paused' || today?.capped === true) continue;
+      if (schedule.wake.quiet !== undefined && inQuiet(minuteOfDay(now), schedule.wake.quiet)) continue;
+
+      const holding = laneClaims(name, entries);
+
+      for (const [key, lane] of Object.entries(agent.lanes ?? {})) {
+        if (!key.startsWith('repo:')) continue;
+
+        if (!holding.has(key)) {
+          if (lane.nextRunAt !== undefined) deps.state.patchLane(name, key, { nextRunAt: undefined });
+          continue;
+        }
+
+        if (deps.laneLive?.(name, key) === true) continue;
+
+        const next = nextRunFrom(schedule.wake, now);
+
+        if (next === undefined) continue;
+
+        if (lane.nextRunAt === undefined) {
+          deps.state.patchLane(name, key, { nextRunAt: next });
+          continue;
+        }
+
+        if (now < lane.nextRunAt) continue;
+
+        deps.state.patchLane(name, key, { nextRunAt: next });
+        deps.run(name, INTERVAL_TRIGGER, undefined, { lane: key });
+      }
+    }
   };
 
   /**
-   * Take the queue and wake once for all of it.
+   * A lane's status, computed rather than stored (HIVE-186, spec §2):
+   * paused with the agent, working while a conversation run holds it, else
+   * sleeping. With no `laneLive` (a spec from before lanes) the standing lane
+   * reads the agent's own status, which is what it always was.
+   *
+   * With it, the standing lane is working only while a conversation run holds
+   * it. A task run is no lane's (HIVE-128), so an entry for an agent busy only
+   * with a task run wakes the conversation when the cap has room, and queues
+   * on a `saturated` refusal, where it used to queue behind the task run.
+   */
+  const laneStatus = (name: string, lane: string): AgentStatus => {
+    const status = deps.state.read(name).status;
+    if (status === 'paused') return 'paused';
+    if (deps.laneLive === undefined) return lane === STANDING_LANE ? status : 'sleeping';
+    return deps.laneLive(name, lane) ? 'working' : 'sleeping';
+  };
+
+  /** One lane's queue: the top-level `pendingWake` for standing (HIVE-186). */
+  const queueOf = (name: string, lane: string): PendingWakeEntry[] =>
+    deps.state.lane(name, lane).pendingWake ?? [];
+  const setQueue = (name: string, lane: string, queue: PendingWakeEntry[]): void => {
+    deps.state.patchLane(name, lane, { pendingWake: queue });
+  };
+  /** A standing wake keeps its three-argument shape; another lane names itself. */
+  const runOnLane = (
+    name: string,
+    trigger: string,
+    extra: string | undefined,
+    lane: string,
+  ): RunStart =>
+    lane === STANDING_LANE
+      ? deps.run(name, trigger, extra)
+      : deps.run(name, trigger, extra, { lane });
+
+  /**
+   * Take one lane's queue and wake once for all of it.
    *
    * **Cleared before the wake, never after.** The wake re-enters
    * `RunTracker.run`, and a spawn that fails synchronously finalizes the run
    * from inside that very call — arriving back at `onRunClosed` with this
    * function's caller still on the stack. A queue still standing at that moment
    * is an unbounded loop; clearing first makes the second pass find nothing.
+   *
+   * Answers whether the drain may go on to the next lane (HIVE-186): `false`
+   * only when a wake was refused `saturated`, since every lane behind it would
+   * be too. An empty queue answers `true`.
    */
-  const flush = (name: string): void => {
-    if (stopped) return;
+  const flushLane = (name: string, lane: string): boolean => {
+    const queued = queueOf(name, lane);
 
-    const queued = deps.state.read(name).pendingWake ?? [];
+    if (queued.length === 0) return true;
 
-    if (queued.length === 0) return;
-
-    deps.state.patch(name, { pendingWake: [] });
+    setQueue(name, lane, []);
 
     /*
       An agent that fans out gets its queued jobs one run each (HIVE-128); the
       rest — ledger entries and bare runs — flush as the one standing wake
       they always did, and go first, because that wake is the one the queue
       existed for. At the default cap nothing is split and this is the flush
-      it was.
+      it was. Only the standing lane splits jobs out (HIVE-186): a job is a
+      task run, and a task run is no lane's.
     */
-    const fanOut = deps.parallelFor(name) > 1;
+    const fanOut = lane === STANDING_LANE && deps.parallelFor(name) > 1;
     const isJob = (entry: PendingWakeEntry): boolean =>
       (entry.kind === MANUAL_KIND || entry.kind === SLACK_COMMAND_KIND) &&
       entry.text !== undefined;
     const jobs = fanOut ? queued.filter(isJob) : [];
     const rest = queued.filter((entry) => !jobs.includes(entry));
     const back: PendingWakeEntry[] = [];
+    let saturated = false;
 
     if (rest.length > 0) {
-      const started = deps.run(name, triggerFor(rest), describeEntries(rest));
+      const started = runOnLane(name, triggerFor(rest), describeEntries(rest), lane);
 
-      if (!started.started) back.push(...rest);
+      if (!started.started) {
+        back.push(...rest);
+        if (started.refused === 'saturated') saturated = true;
+      }
     }
 
     let refused = false;
@@ -716,12 +836,13 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
 
         if (started.started) continue;
         refused = true;
+        if (started.refused === 'saturated') saturated = true;
       }
 
       back.push(job);
     }
 
-    if (back.length === 0) return;
+    if (back.length === 0) return true;
 
     /*
       Put it back. A refusal is not a delivery.
@@ -741,11 +862,65 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       restored entries go in front of it, oldest first, and the cap is applied
       to the result so a refusal cannot grow the queue past it.
     */
-    const since = deps.state.read(name).pendingWake ?? [];
+    const since = queueOf(name, lane);
 
-    deps.state.patch(name, {
-      pendingWake: [...back, ...since].slice(0, AGENT_PENDING_WAKE_MAX),
-    });
+    setQueue(name, lane, [...back, ...since].slice(0, AGENT_PENDING_WAKE_MAX));
+
+    return !saturated;
+  };
+
+  /**
+   * The agents whose queues are being drained right now (HIVE-186).
+   *
+   * A synchronous spawn failure re-enters `onRunClosed`, and so `flush`,
+   * from inside a wake. With one queue that found nothing to do, since the
+   * queue is cleared before the wake. With several lanes it would drain the
+   * lanes the outer pass has not reached yet, and the outer pass would then
+   * try them again. The outer pass reaches every lane anyway, so a nested
+   * flush of the same agent has nothing to add.
+   */
+  const draining = new Set<string>();
+
+  /**
+   * Drain every queue the agent has (HIVE-186): standing first, then each
+   * other lane, and stop at the first `saturated` refusal. A closed thread
+   * lane has nobody to wake, so its entries move to standing first, as many
+   * as the cap leaves room for. The rest wait on the closed lane for a later
+   * flush, so nothing is dropped.
+   */
+  const flush = (name: string): void => {
+    if (stopped || draining.has(name)) return;
+
+    draining.add(name);
+
+    try {
+      const keys = Object.keys(deps.state.read(name).lanes ?? {}).filter(
+        (key) => key !== STANDING_LANE,
+      );
+
+      for (const key of keys) {
+        const lane = deps.state.lane(name, key);
+        const moving = lane.pendingWake ?? [];
+
+        if (lane.closedAt === undefined || moving.length === 0) continue;
+
+        const standing = queueOf(name, STANDING_LANE);
+        const room = Math.max(0, AGENT_PENDING_WAKE_MAX - standing.length);
+
+        setQueue(name, STANDING_LANE, [...standing, ...moving.slice(0, room)]);
+        setQueue(name, key, moving.slice(room));
+      }
+
+      if (!flushLane(name, STANDING_LANE)) return;
+
+      for (const key of keys) {
+        // Read now, not from a snapshot: the wakes above may have moved things.
+        if (deps.state.lane(name, key).closedAt !== undefined) continue;
+        if (!flushLane(name, key)) return;
+      }
+    } finally {
+      draining.delete(name);
+    }
   };
 
   /** The queue's fields of a ledger entry, and no others (HIVE-184). */
@@ -761,8 +936,12 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   };
 
   /** Whether the entry was taken. `false` means the queue was full. */
-  const enqueue = (name: string, entry: PendingWakeEntry): boolean => {
-    const queued = deps.state.read(name).pendingWake ?? [];
+  const enqueue = (
+    name: string,
+    entry: PendingWakeEntry,
+    lane: string = STANDING_LANE,
+  ): boolean => {
+    const queued = queueOf(name, lane);
 
     /*
       A full queue refuses the newcomer rather than evicting the entry that has
@@ -778,7 +957,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     */
     if (queued.length >= AGENT_PENDING_WAKE_MAX) return false;
 
-    deps.state.patch(name, {
+    deps.state.patchLane(name, lane, {
       pendingWake: [
         ...queued,
         {
@@ -816,18 +995,55 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
    * `trigger` defaults to {@link LEDGER_TRIGGER} for `onEntry` and the sweep;
    * `onEvent` (HIVE-124) passes {@link SLACK_TRIGGER} so an immediate wake off
    * a socket event reports the route it actually took.
+   *
+   * `lane` is the lane the entry was routed to (HIVE-186): the wake runs on
+   * it and a refusal queues on it. Standing by default.
    */
   const route = (
     name: string,
     decision: WakeDecision,
     item: PendingWakeEntry,
     trigger: string = LEDGER_TRIGGER,
+    lane: string = STANDING_LANE,
   ): void => {
-    if (decision === 'wake' && deps.run(name, trigger, describeEntry(item)).started) {
+    if (decision === 'wake' && runOnLane(name, trigger, describeEntry(item), lane).started) {
       return;
     }
 
-    enqueue(name, item);
+    enqueue(name, item, lane);
+  };
+
+  /**
+   * Find the lane, decide on that lane's status, and route (HIVE-186). A
+   * repo-laned ask with no usable `meta.repo` is answered at once by the
+   * overmind with the reason, so the asker's thread closes instead of waiting
+   * for a wake that cannot happen.
+   *
+   * `sameLane` only matters for an agent's own entry: it is ignored on the
+   * lane that wrote it and wakes any other.
+   */
+  const deliver = (to: string, item: LedgerEntry, entries: readonly LedgerEntry[]): void => {
+    const routed = laneFor(deps.laneOf?.(to), item, entries);
+
+    if ('refuse' in routed) {
+      const written = deps.ledger.append({
+        from: OVERMIND,
+        to: item.from,
+        kind: 'answer',
+        thread: item.id,
+        body: routed.refuse,
+      });
+
+      if (!written.ok) console.warn(`[hive] could not refuse ${item.id}; it stays open`);
+      return;
+    }
+
+    const sameLane = item.from !== to || laneOfRun(to, item.meta?.['run'], entries) === routed.lane;
+    const decision = decide(laneStatus(to, routed.lane), item, { sameLane });
+
+    if (decision === 'ignore') return;
+
+    route(to, decision, pendingOf(item), LEDGER_TRIGGER, routed.lane);
   };
 
   /**
@@ -876,15 +1092,42 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         continue;
       }
 
-      const decision = decide(deps.state.read(to).status, ask);
-      if (decision === 'ignore') continue;
-      route(to, decision, pendingOf(ask));
+      deliver(to, ask, entries);
     }
+  };
+
+  /**
+   * The ask that opened a thread lane has closed: the lane is done (HIVE-186).
+   * Its record stays, with `closedAt`, so a later entry in the thread goes to
+   * standing and the lane is pruned a day later (HIVE-188). A lane that never
+   * ran has no record, and none is made.
+   */
+  const closeLaneOf = (askId: string, entries: readonly LedgerEntry[]): void => {
+    const ask = entries.find((item) => item.id === askId && item.kind === 'ask');
+    const agent = ask?.to;
+
+    if (agent === undefined || !deps.isAgent(agent)) return;
+
+    const key = threadLane(askId);
+    const lane = deps.state.read(agent).lanes?.[key];
+
+    if (lane === undefined || lane.closedAt !== undefined) return;
+
+    deps.state.patchLane(agent, key, { closedAt: deps.now() });
   };
 
   return {
     onEntry(entry) {
       if (stopped) return;
+
+      /*
+        An entry that closes an ask ends the thread lane that ask opened
+        (HIVE-186). Before the `to` check below, because the closing entry is
+        usually addressed to the asker, not to the agent whose lane it ends.
+      */
+      if (entry.thread !== undefined && CLOSING_KINDS.has(entry.kind)) {
+        closeLaneOf(entry.thread, deps.ledger.read().entries);
+      }
 
       // A `closed` entry may release held asks, whoever it is addressed to.
       if (entry.meta?.['stage'] === 'closed') releaseHeld(deps.ledger.read().entries);
@@ -907,11 +1150,9 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         return;
       }
 
-      const decision = decide(deps.state.read(to).status, entry);
-
-      if (decision === 'ignore') return;
-
-      route(to, decision, pendingOf(entry));
+      // Read once per addressed entry. ponytail: index the log if its size
+      // ever shows up in a profile.
+      deliver(to, entry, deps.ledger.read().entries);
     },
 
     onEvent(name, entry, opts) {
