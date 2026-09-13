@@ -2,6 +2,8 @@ import {
   AGENT_KILL_GRACE_MS,
   AGENT_STALL_GRACE_MS,
   STANDING_LANE,
+  dayKey,
+  runReservation,
   type LiveRunSummary,
   type QueueableRefusal,
   type RunKind,
@@ -157,6 +159,12 @@ export interface RunTrackerDeps {
    * before any build does — their docblocks say why.
    */
   parallelFor: (name: string) => number;
+  /**
+   * `daily_usd` and `budget_usd` for this agent (HIVE-187), from the same
+   * cache as `parallelFor`. Optional so a spec without a budget needs none;
+   * absent means no ceiling.
+   */
+  limitsFor?: (name: string) => { dailyUsd?: number; budgetUsd?: number };
   state: AgentState;
   appendLedger: (entry: {
     from: string;
@@ -297,6 +305,8 @@ interface LiveRun {
    * for every task run.
    */
   lane: string;
+  /** What this run holds against the day while live (HIVE-187). */
+  reserved: number;
   trigger: string;
   /** The console prompt a task run carries, when it carries one. */
   extra?: string;
@@ -401,6 +411,12 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
    * keys and an empty entry would report an agent as working.
    */
   const running = new Map<string, LiveRun[]>();
+  /**
+   * The day each agent's "held back" budget card last went out (HIVE-187).
+   * In memory: a held refusal is not a spent day, so it must not set the
+   * persisted `today.capped` the scheduler reads.
+   */
+  const heldCardDay = new Map<string, string>();
 
   const liveOf = (name: string): LiveRun[] => running.get(name) ?? [];
 
@@ -876,6 +892,85 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         };
       }
 
+      /*
+        The day's ceiling, on every wake (HIVE-187). The scheduler used to check
+        it on its own ticks only, and spend landed at close, so a ledger wake
+        past the ceiling ran and N parallel runs could each start under it.
+        Each live run now holds a reservation against `today.usd` until its
+        real cost replaces it at close. Before the build, like the other gates.
+      */
+      const limits = deps.limitsFor?.(name) ?? {};
+      const reservation = runReservation(limits, parallel);
+
+      if (limits.dailyUsd !== undefined) {
+        const now = deps.now();
+        const agent = deps.state.read(name);
+        const today = agent.today?.day === dayKey(now) ? agent.today : undefined;
+        const reserved = live.reduce((sum, other) => sum + other.reserved, 0);
+
+        // A day already spent refuses even a run that reserves nothing.
+        const spentOut = (today?.usd ?? 0) >= limits.dailyUsd;
+
+        if (spentOut || (today?.usd ?? 0) + reserved + reservation > limits.dailyUsd + 1e-9) {
+          const day = dayKey(now);
+          const spentText = `$${(today?.usd ?? 0).toFixed(2)}`;
+          const dailyText = `$${limits.dailyUsd.toFixed(2)}`;
+
+          if (spentOut) {
+            /*
+              The day is spent. Flagged and carded once a day through
+              `today.capped`, the flag the scheduler's tick reads, so the two
+              never post the card twice.
+            */
+            if (today?.capped !== true) {
+              deps.state.patch(name, {
+                today: { ...(today ?? { day, runs: 0, usd: 0 }), capped: true },
+              });
+              deps.appendLedger({
+                from: OVERMIND,
+                kind: 'event',
+                body: `${name} reached its daily budget — ${dailyText}`,
+                meta: { dailyCap: limits.dailyUsd, agent: name },
+              });
+            }
+
+            return {
+              started: false,
+              refused: 'budget',
+              reason: `${name} has spent today's budget: ${spentText} of ${dailyText}.`,
+            };
+          }
+
+          /*
+            The day has room, but not for this run beside what the live runs
+            hold. Not a spent day, so `today.capped` stays clear and the
+            scheduler's card still fires if the money runs out later. Carded
+            once a day from memory, and named as held rather than reached.
+          */
+          if (heldCardDay.get(name) !== day) {
+            heldCardDay.set(name, day);
+
+            const why =
+              limits.budgetUsd === undefined
+                ? ` (reserving $${reservation.toFixed(2)} per run: daily_usd ÷ parallel, since no budget_usd is set)`
+                : ` (reserving budget_usd $${reservation.toFixed(2)} per run)`;
+
+            deps.appendLedger({
+              from: OVERMIND,
+              kind: 'event',
+              body: `${name} held back a run: ${spentText} spent and $${reserved.toFixed(2)} held by live runs leave too little of today's ${dailyText}${why}`,
+              meta: { dailyCap: limits.dailyUsd, agent: name, held: true },
+            });
+          }
+
+          return {
+            started: false,
+            refused: 'budget',
+            reason: `${name} is out of today's budget for now: ${spentText} spent and $${reserved.toFixed(2)} held by live runs, of ${dailyText}.`,
+          };
+        }
+      }
+
       const command = deps.command(name, trigger, extra, { kind, ...(onLane ? { lane } : {}) });
 
       if ('problem' in command) {
@@ -1001,6 +1096,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         run,
         kind,
         lane,
+        reserved: reservation,
         trigger,
         ...(extra === undefined ? {} : { extra }),
         startedAt,
