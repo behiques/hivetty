@@ -1,6 +1,7 @@
 import {
   AGENT_KILL_GRACE_MS,
   AGENT_STALL_GRACE_MS,
+  STANDING_LANE,
   type LiveRunSummary,
   type QueueableRefusal,
   type RunKind,
@@ -141,7 +142,7 @@ export interface RunTrackerDeps {
     name: string,
     trigger: string,
     extra?: string,
-    options?: { kind?: RunKind },
+    options?: { kind?: RunKind; lane?: string },
   ) =>
     | (WakeCommand & { sessionUuid: string; lastTurn: boolean; kind: RunKind })
     | { problem: string };
@@ -234,15 +235,18 @@ export interface RunTracker {
    * A `job` is a wake carrying its own work — the console's
    * `run <agent> <prompt>`. It becomes a task run when the cap allows, and an
    * ordinary standing wake otherwise.
+   *
+   * `lane` is the conversation a standing wake continues (HIVE-185). Absent
+   * means the standing lane. A task run ignores it.
    */
   run(
     name: string,
     trigger: string,
     extra?: string,
-    options?: { job?: true },
+    options?: { job?: true; lane?: string },
   ): RunStart;
-  /** Every run under this name, signalled together. */
-  kill(name: string): boolean;
+  /** Every run under this name, or only `run` (HIVE-185). */
+  kill(name: string, run?: string): boolean;
   /**
    * The Stop hook fired for this agent. Arms the stall watchdog on the run
    * whose conversation `sessionUuid` names — a stale Stop for a run that has
@@ -288,6 +292,11 @@ interface LiveRun {
   run: string;
   /** Which conversation this is: the agent's own, or a one-off job (HIVE-128). */
   kind: RunKind;
+  /**
+   * The lane this run holds (HIVE-185); `standing` for the standing lane and
+   * for every task run.
+   */
+  lane: string;
   trigger: string;
   /** The console prompt a task run carries, when it carries one. */
   extra?: string;
@@ -341,6 +350,8 @@ interface FinalizeInfo {
    * the one conversation, and a task run's uuid died with its turn.
    */
   kind: RunKind;
+  /** The lane the run held (HIVE-185). A close writes this lane's fields only. */
+  lane: string;
   trigger: string;
   startedAt: number;
   /**
@@ -406,6 +417,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     trigger: live.trigger,
     ...(live.extra === undefined ? {} : { extra: live.extra }),
     startedAt: live.startedAt,
+    ...(live.kind === 'standing' && live.lane !== STANDING_LANE ? { lane: live.lane } : {}),
   });
 
   const clearTimers = (live: LiveRun) => {
@@ -564,6 +576,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       // conversation did run 14 belong to" is the audit trail HIVE-122 needs.
       ...(sessionUuid === undefined ? {} : { sessionUuid }),
       ...(slack === undefined ? {} : { slack }),
+      ...(info.kind === 'standing' && info.lane !== STANDING_LANE ? { lane: info.lane } : {}),
     },
     /*
       The run counts against the day it *ended*, not the one it started.
@@ -576,6 +589,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     endedAt);
 
     const current = deps.state.read(name);
+    // The closing run's lane: its counters are the ones this close reads (HIVE-185).
+    const laneNow = deps.state.lane(name, info.lane);
 
     /*
       A task run is a job, not the conversation (HIVE-128). Only a standing
@@ -622,8 +637,49 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       rotation. `null` is what makes both readers below safe by construction
       rather than by remembering to re-check `strike`.
     */
-    const failures = strike ? (current.rotateFailures ?? 0) + 1 : null;
+    const failures = strike ? (laneNow.rotateFailures ?? 0) + 1 : null;
 
+    /*
+      The closing run's own lane, and only it (HIVE-185). A conversation run
+      writes its lane's session fields, and a task run writes none.
+    */
+    if (standing) {
+      deps.state.patchLane(name, info.lane, {
+        /*
+          `lastRunAt` is the **standing** conversation's last run — the `onchange`
+          watermark the scheduler compares a ledger entry's timestamp against, and
+          the reference the Next tile reads. A task run reads no inbox, so moving
+          it on a task close would hide an ask that arrived before that close:
+          the entry would sit behind a watermark no wake ever looked past.
+
+          Per lane since HIVE-185: the standing lane's is the top-level field it
+          always was.
+        */
+        lastRunAt: endedAt,
+        /*
+          A rotation zeroes the counter instead of advancing it — the run that
+          just closed belongs to the session being left behind. A run that never
+          reached the model cost nothing and should not pull rotation forward.
+
+          Keyed off `handoff !== undefined` rather than a `rotated` boolean:
+          TypeScript narrows the former and not the latter, and
+          `pendingSession.handoff` is a `string`.
+        */
+        ...(handoff !== undefined
+          ? {
+              runsSinceRotate: 0,
+              rotateFailures: 0,
+              pendingSession: { uuid: deps.newUuid(), handoff },
+            }
+          : reachedModel
+            ? { runsSinceRotate: laneNow.runsSinceRotate + 1 }
+            : {}),
+        ...(failures === null ? {} : { rotateFailures: failures }),
+        ...(sessionUuid === undefined ? {} : { sessionUuid }),
+      });
+    }
+
+    // The agent-wide rollup, written at the top level exactly as before lanes.
     deps.state.patch(name, {
       /*
         An unanswered ask outranks the outcome for the *status*.
@@ -654,36 +710,6 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             : outcome === 'asking' || asking || deps.hasOpenAsk(name)
               ? 'asking'
               : 'sleeping',
-      /*
-        `lastRunAt` is the **standing** conversation's last run — the `onchange`
-        watermark the scheduler compares a ledger entry's timestamp against, and
-        the reference the Next tile reads. A task run reads no inbox, so moving
-        it on a task close would hide an ask that arrived before that close:
-        the entry would sit behind a watermark no wake ever looked past.
-      */
-      ...(standing ? { lastRunAt: endedAt } : {}),
-      /*
-        A rotation zeroes the counter instead of advancing it — the run that
-        just closed belongs to the session being left behind. A run that never
-        reached the model cost nothing and should not pull rotation forward.
-
-        Keyed off `handoff !== undefined` rather than a `rotated` boolean:
-        TypeScript narrows the former and not the latter, and
-        `pendingSession.handoff` is a `string`.
-      */
-      ...(standing
-        ? handoff !== undefined
-          ? {
-              runsSinceRotate: 0,
-              rotateFailures: 0,
-              pendingSession: { uuid: deps.newUuid(), handoff },
-            }
-          : reachedModel
-            ? { runsSinceRotate: current.runsSinceRotate + 1 }
-            : {}
-        : {}),
-      ...(failures === null ? {} : { rotateFailures: failures }),
-      ...(sessionUuid === undefined || !standing ? {} : { sessionUuid }),
     });
 
     deps.appendLedger({
@@ -707,8 +733,15 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       deps.appendLedger({
         from: OVERMIND,
         kind: 'event',
-        body: `${name} could not rotate — three handoff wakes ended without a handoff.`,
-        meta: { rotateFailed: 3, agent: name },
+        body:
+          info.lane === STANDING_LANE
+            ? `${name} could not rotate — three handoff wakes ended without a handoff.`
+            : `${name} could not rotate its ${info.lane} lane: three handoff wakes ended without a handoff.`,
+        meta: {
+          rotateFailed: 3,
+          agent: name,
+          ...(info.lane === STANDING_LANE ? {} : { lane: info.lane }),
+        },
       });
     }
 
@@ -795,13 +828,21 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         gate it always was.
       */
       const kind: RunKind = options?.job === true && parallel > 1 ? 'task' : 'standing';
+      /*
+        The lane this conversation is (HIVE-185). A task run is no lane's: it
+        is sessionless and never resumed, so it neither holds a lane's slot
+        nor reads one's state.
+      */
+      const lane = kind === 'task' ? STANDING_LANE : (options?.lane ?? STANDING_LANE);
+      const onLane = kind === 'standing' && lane !== STANDING_LANE;
 
       /*
-        One conversation at a time, whatever the cap says. Two `--resume`s of
-        the same session would interleave two turns into one transcript, which
-        is the memory corruption task runs exist to avoid by being sessionless.
+        One live run per lane, whatever the cap says. Two `--resume`s of one
+        session would interleave two turns into one transcript, which is the
+        memory corruption task runs exist to avoid by being sessionless. Keyed
+        by lane since HIVE-185: another lane is another conversation.
       */
-      if (kind === 'standing' && live.some((other) => other.kind === 'standing')) {
+      if (kind === 'standing' && live.some((other) => other.kind === 'standing' && other.lane === lane)) {
         return { started: false, refused: 'working' };
       }
 
@@ -835,7 +876,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         };
       }
 
-      const command = deps.command(name, trigger, extra, { kind });
+      const command = deps.command(name, trigger, extra, { kind, ...(onLane ? { lane } : {}) });
 
       if ('problem' in command) {
         return { started: false, refused: 'invalid', reason: command.problem };
@@ -848,7 +889,13 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         from: name,
         kind: 'event',
         body: `run.started — ${trigger}`,
-        meta: { run, trigger, kind, ...(extra === undefined ? {} : { extra }) },
+        meta: {
+          run,
+          trigger,
+          kind,
+          ...(extra === undefined ? {} : { extra }),
+          ...(onLane ? { lane } : {}),
+        },
       });
 
       /*
@@ -932,7 +979,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
         finalizeRun(
           name,
-          { run, kind, trigger, startedAt, lastTurn: command.lastTurn },
+          { run, kind, lane, trigger, startedAt, lastTurn: command.lastTurn },
           'failed',
           null,
           message,
@@ -953,6 +1000,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       const started: LiveRun = {
         run,
         kind,
+        lane,
         trigger,
         ...(extra === undefined ? {} : { extra }),
         startedAt,
@@ -1071,14 +1119,15 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       return { started: true, run, kind };
     },
 
-    kill(name) {
-      const live = liveOf(name);
+    kill(name, run) {
+      const live = liveOf(name).filter((candidate) => run === undefined || candidate.run === run);
 
       if (live.length === 0) return false;
 
-      // Every run under the name (HIVE-128). A kill is "stop this agent", and
-      // a stop button that left a task run writing would be lying.
-      for (const run of live) escalate(run, 'killed');
+      // Every run under the name when none is named (HIVE-128). A kill is "stop
+      // this agent", and a stop button that left a task run writing would be
+      // lying. One run when it is named (HIVE-185).
+      for (const each of live) escalate(each, 'killed');
 
       return true;
     },
