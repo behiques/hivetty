@@ -36,6 +36,7 @@ that the machine looks after itself.
 [5. Check it survives a reboot](#5-check-it-survives-a-reboot) ·
 [Updates](#updates) ·
 [What an attached device can do](#what-an-attached-device-can-do) ·
+[Reaching it from anywhere](#reaching-it-from-anywhere) ·
 [Exposure](#exposure) · [Troubleshooting](#troubleshooting)
 
 ## Before you start
@@ -343,6 +344,47 @@ the error frame, never a silent change on the server:
   its credential, change its attachment or run its updater is refused.
 - **`notifications:act` carrying `url`, `update.download` or `update.install`.**
   The fleet actions (`ask`, `session`, `agent`, `none`) still cross.
+
+## Reaching it from anywhere
+
+**Tailscale is the tunnel.** Nothing else is needed to attach from outside the
+server's local network: no port forward on the router, no public server, no
+ngrok. Tailscale connects the two machines peer to peer over WireGuard and
+punches through NAT on both ends. When no direct path exists (a strict hotel
+or carrier network), it relays the traffic through its DERP servers. The relay
+sees only WireGuard ciphertext. Either way the client dials the same `100.x`
+address, from home, from a hotspot, or from four time zones away.
+
+A relayed link works but adds latency. `tailscale ping <server>` on the client
+says whether the path is direct or `via DERP`.
+
+**The app will not reach the server any other way.** The client dials plain
+`ws://`, with no TLS of its own, because WireGuard carries the encryption. So
+before it dials, it refuses any host that is not loopback, a `100.64.0.0/10`
+literal or a `*.ts.net` name, and it checks the resolved address too
+(`isTailnetHost`, `electron/shared/config-contract.ts`). An ngrok hostname, a
+public DNS name or a forwarded public IP is refused before a byte leaves the
+laptop. [Exposure](#exposure) says why that stays so.
+
+### Headscale instead of Tailscale's coordination server
+
+[Headscale](https://github.com/juanfont/headscale) is a self-hosted
+replacement for Tailscale's control plane. Run it on a small VPS with a public
+HTTPS address, then point the Tailscale client on the server and on every
+laptop at it (`tailscale up --login-server https://<your-headscale>`). The
+WireGuard mesh and the app work as above, with two limits:
+
+- **Dial the `100.x` literal, never a MagicDNS name.** The client admits names
+  ending in `.ts.net` only. Headscale's MagicDNS uses the `base_domain` you
+  configure, so a name like `mini.hive.example` is refused. Set `bind.host` on
+  the server and *Server address* on the client to the same `100.x` address.
+- **Keep the IPv4 prefix inside `100.64.0.0/10`.** That is Headscale's default.
+  A custom prefix outside it, or an IPv6 tailnet address, is refused by the
+  same guard.
+
+Headscale's default config still uses Tailscale's public DERP relays. To keep
+relayed traffic off Tailscale's servers as well, enable Headscale's embedded
+DERP server and drop the default map.
 
 ## Exposure
 
