@@ -105,7 +105,7 @@ implementation hours inside the review chain. These rules follow from both:
 | The main process, IPC, native modules | [`docs/desktop-architecture.md`](docs/desktop-architecture.md) |
 | Installers, releases, auto-update, the app name | [`docs/packaging-and-updates.md`](docs/packaging-and-updates.md) |
 | Server mode: the Mac mini deployment, pairing, the LaunchAgent, what a socket may call | [`docs/server-mode.md`](docs/server-mode.md) |
-| Store shape, actions, selectors, fixture data, the fake clock | [`docs/state-and-data.md`](docs/state-and-data.md) |
+| Store shape, actions, selectors, fixture data, the caps | [`docs/state-and-data.md`](docs/state-and-data.md) |
 | Panels, atoms, rails, the view-state machine | [`docs/component-patterns.md`](docs/component-patterns.md) |
 | The map: processes, fences, which deep dive owns what | [`docs/architecture.md`](docs/architecture.md) |
 | What a feature does for the user (the guides, indexed) | [`docs/README.md`](docs/README.md) |
@@ -126,12 +126,11 @@ one still fires.
 | --- | --- |
 | `src/features/<slice>/**` | any other slice (except `src/features/shared/**`) |
 | `src/components/**` (except `layout/`) | `src/features/**` |
-| **`src/components/terminal/**`** | `src/features/**`, `src/data/**`, `src/stores/**` |
-| **`src/components/editor/**`** | `src/features/**`, `src/data/**`, `src/stores/**` |
+| **`src/components/terminal/**`** | `src/features/**`, `src/stores/**` |
+| **`src/components/editor/**`** | `src/features/**`, `src/stores/**` |
 | `src/lib/**` | `src/features/**`, `src/components/**` |
 | `src/hooks/**` | `src/features/**` |
 | `src/stores/**` | `src/features/**`, `src/components/**` |
-| everything except `src/stores/**` | `src/data/**` |
 | `src/**`, `electron/**` | `tests/**` (test scaffolding never ships) |
 | `electron/main/**` | `src/**` |
 | `electron/preload/**` | `src/**`, `electron/main/**` |
@@ -172,7 +171,7 @@ silently becomes importable from everywhere.
 **The single most important invariant in the codebase.**
 
 `src/components/terminal/` speaks only `TerminalTransport`. It may not import from
-`features/`, `data/`, or `stores/` — and cannot, because the lint zone fails the build.
+`features/` or `stores/` — and cannot, because the lint zone fails the build.
 
 In this phase the transport is a static/scripted fake; later it becomes IPC to a
 local PTY daemon **with no changes to the component tree**. That is the whole
@@ -212,8 +211,7 @@ status change from re-rendering the whole shell.
 Derived values are computed **in selectors, never stored** — one truth per number
 on screen. Cross-store effects call the other store's action; none subscribes.
 
-Fixtures (`src/data/`) are **store-only**, seed only `notifs`, and never gain a
-slice back; boot data is last run's ended sessions. Tests: `tests/support/`.
+Fixtures live in `tests/support/`; nothing under `src/` seeds the stores.
 
 ## Styling
 

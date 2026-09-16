@@ -37,7 +37,6 @@ import {
   describeWake,
   runsToday,
 } from '@lib/agents';
-import { reset as resetClock } from '@lib/fake-clock';
 import { readPullRequests, searchPullRequests } from '@lib/github';
 import { readJiraStatus, searchJiraIssues } from '@lib/jira';
 import { buildTicketSearchJql } from '@lib/jira-search';
@@ -5585,14 +5584,6 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     // answer cannot install itself into the fresh state.
     prSearchTicket += 1;
     ticketSearchTicket += 1;
-    /**
-     * Nothing in this store stamps through the clock any more — the activity
-     * feed was its only caller and the project explorer replaced it. The rewind
-     * stays because the clock itself stays: it is documented infrastructure for
-     * the simulation story, which will be its first consumer, and a store that
-     * quietly stopped resetting a global would be a trap for whoever writes it.
-     */
-    resetClock();
     set({
       ...emptySeeds(),
       notifs: [],
@@ -6034,17 +6025,6 @@ export const useHasResumable = (): boolean =>
       );
     }),
   );
-
-/**
- * The background agents, alphabetically (HIVE-114).
- *
- * Was "in fixture order (story 033)" — there are no agent fixtures any more.
- * The order comes from `hydrateAgents`, and it is alphabetical because a
- * folder listing has no meaningful order of its own and the user names these
- * themselves.
- */
-export const useAgentOrder = () =>
-  useHiveStore(useShallow((state) => state.agentOrder));
 
 /**
  * One agent's run log.
@@ -7549,10 +7529,6 @@ export const useBuildProgress = (ticketKey: string): BuildProgress | undefined =
   return useMemo(() => buildProgressFor(entries, ticketKey), [entries, ticketKey]);
 };
 
-/** The badge. A number, so it needs no memo and no shallow compare. */
-export const useOpenAskCount = (): number =>
-  useHiveStore((state) => openAsks(state.ledger, Date.now()).length);
-
 /** One conversation: the ask, and everything that named it. */
 export const useThread = (id: string): LedgerEntry[] => {
   const entries = useHiveStore((state) => state.ledger);
@@ -7680,9 +7656,6 @@ export const useSearchTickets = () =>
 export const useClearTicketSearchResults = () =>
   useHiveStore((state) => state.clearTicketSearch);
 
-
-/** Mark one notification read, by its id (story 051, HIVE-75). */
-export const useMarkRead = () => useHiveStore((state) => state.markRead);
 
 /** {@link HiveState.answerAsk}, for a component that must not touch the store. */
 export const useAnswerAsk = () => useHiveStore((state) => state.answerAsk);
