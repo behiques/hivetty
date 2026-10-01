@@ -42,7 +42,10 @@ token, so no one can post as someone else.
 - An ask to you becomes an inbox card with its options as buttons. An ask with a `quote`
   shows a draft you can approve or edit.
 - Only a party to the thread can answer. The answer wakes the asker.
-- An open ask expires after 24 hours and wakes the asker so it can move on.
+- An open ask expires after 24 hours and wakes the asker. An expired question is a no,
+  not a retry: the agent answers whoever gave it the job that the job is incomplete and
+  where it stopped, releases any task it claimed, and ends. Work that nobody asked for is
+  reported with a failed card instead.
 
 ## Nudges into a live session
 
