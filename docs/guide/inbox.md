@@ -31,8 +31,11 @@ what it is doing to a receiver inside the app, over loopback, with a per-session
 - **Session cards.** Click to open the session. The card goes away on its own once the
   session stops waiting.
 - **Question cards.** An agent or session asked something, with options. Click an option,
-  or type **Your answer**. The answer goes back through the [ledger](ledger.md) and wakes
-  the asker.
+  or choose **Other…** and type your own answer when none of them fits. A question with
+  no options shows the **Your answer** box straight away. Either way the answer goes back
+  through the [ledger](ledger.md) and wakes the asker. Telling an agent to stop is an
+  answer too: it closes its job as incomplete, tells whoever gave it the job, and
+  releases what it was holding.
 - **Permission cards.** An agent wants a tool outside its fence. The card shows the real
   call, like `pnpm test`, and a scope ladder: **once**, a command family like `pnpm *`, or
   **all Bash**. Anything wider than once is written into the agent's definition.

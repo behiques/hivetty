@@ -758,6 +758,27 @@ paused would lose the news permanently.
 `Ledger.append` reports failure as a value; ignoring it would re-expire the same
 ask every sixty seconds for as long as the disk stayed unwritable.
 
+**What the woken agent does with it is a contract in the preamble, and the
+wake's reason line is written for it.** The queued entry carries the ask's
+short `ref` (`PendingWakeEntry.ref`, set by the sweep only), so `describeEntry`
+reads `expired <id> from overmind — your ask a7 expired unanswered`; the ref
+rather than `text`, because a queued entry with `text` is a job. The preamble
+says an expired or withdrawn ask is a no, not a retry, and gives the ending in
+order: `ledger_answer` on the ask that gave it the job, saying incomplete and
+where it stopped, or `ledger_failed` when nobody asked; then `ledger_release`
+for every task it claimed, named with the same `task`; then end. The order and
+the naming are load-bearing — a real model, told to "release every task you
+hold", answered its caller and left the claim standing three wakes out of
+three. `tests/live/agent-conformance.test.ts` proves the whole path against a
+real `claude`: a probe with a one-second `ttlMs`, the sweep fired on the
+captured tick, and the answer, the absence of a re-ask, and the release read
+back off the log. The case it closes: team-developer asked a two-option
+question neither of which was the answer, the decision was relayed into the
+thread as a `post`, which closes nothing, and the agent reported done without
+withdrawing its question — it read `asking` for a day and its caller was never
+told. The card's **Other…** (`ask-card.tsx`) is the other half: an answer in
+the person's own words, as a real `answer`, so the relay never has to happen.
+
 The event does not close the ask; `expiredAsks` dedupes on the event's own
 presence, which is what makes the sweep idempotent across restarts while keeping
 no state of its own. Only an expiry **from the overmind** counts, in the derive
