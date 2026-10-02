@@ -111,6 +111,19 @@ projects panel beside the overmind.
 
 **new project** sits at the foot of the panel.
 
+### The session header
+
+In round two a header sits over a session's terminal instead of the meta bar:
+
+- **‹ Overmind** goes back to the overmind, as `⌘[` does, with the selection on this
+  session.
+- The session's name, with its task as the tooltip, over `project · branch`.
+- Its status, then a space reserved for the model.
+- **⋯** holds **Terminal here** and, when the session has one, **Open PR #N**.
+
+A terminal gets the same header: its name over `project · folder`, and its state. It has
+no model and no menu.
+
 ## Terminals
 
 A terminal is a login shell in a project with no Claude in it: no hooks, no cost, no

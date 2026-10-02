@@ -43,6 +43,9 @@ the picker from re-rendering thirteen live terminals.
   `expanded`, round two's fold map, **folded by default** and separate from
   Classic's `collapsed`. `setSessionsProject(id)` also unfolds that project;
   `backToOrch` and the Sessions icon put `selId` on the session being left.
+  `consoleShown` (`false`) is the overmind's transcript in round two's dock,
+  flipped by `toggleConsole`; folded, the stage hides the transcript and the
+  table takes the page.
 - `src/stores/appearance-store.ts` — durable preferences: `theme`, the terminal
   and editor typography, `editorPlacement`, `editorNav`, `editorEditable`,
   `density`, `layout` (`'classic' | 'round-two'`, HIVE-195), the rail widths,
