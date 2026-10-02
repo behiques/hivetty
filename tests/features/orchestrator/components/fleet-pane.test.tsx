@@ -178,4 +178,19 @@ describe('FleetPane', () => {
     expect(divider).toHaveAttribute('aria-valuemin', String(MIN_SPLIT_RATIO * 100));
     expect(divider).toHaveAttribute('aria-valuemax', String(MAX_SPLIT_RATIO * 100));
   });
+
+  it('draws no divider when the console is folded (HIVE-197)', () => {
+    const container = createRef<HTMLDivElement>();
+    render(
+      <div ref={container}>
+        <FleetPane containerRef={container} floored split={false} />
+      </div>,
+    );
+
+    expect(screen.queryByRole('slider', { name: 'Resize the fleet table' })).not.toBeInTheDocument();
+    const pane = screen.getByTestId('fleet-pane');
+    expect(pane).toHaveClass('flex-1');
+    expect(pane).not.toHaveClass('max-h-max');
+    expect(pane.getAttribute('style')).toBeNull();
+  });
 });

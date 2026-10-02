@@ -178,6 +178,15 @@ Two precedence rules carry the weight:
 `components/terminal/` never has to, builds one cached `StaticTransport` per
 entity, and renders `SessionMetaBar` only for the two entity views.
 
+Round two composes two of the views differently (HIVE-197):
+
+- **orchestrator** is `OvermindHead`, the fleet table (`FleetPane`), the
+  transcript, and the dock (`ConsolePeek` over `ConsoleInput`). The transcript
+  is folded by default: its row is hidden and `activeId` is `null`, exactly as
+  behind the picker, and `FleetPane` drops its divider and fills the page.
+- **session** and **terminal** are headed by `SessionHeader`, which also covers
+  terminals. Classic keeps `SessionMetaBar`, sessions only.
+
 **The picker hides the terminal region; it never unmounts it.** Unmounting would
 dispose every live xterm instance and throw away its scrollback. The region is hidden with a class, and `activeId` is passed as
 `null` so each surface marks itself invisible — which also means closing the

@@ -238,3 +238,78 @@ test('a fleet taller than the stage scrolls, and the console stays on screen', a
     await app.close();
   }
 });
+
+/**
+ * Round two docks the console (HIVE-197): the transcript folds away and the
+ * table takes the page, so the claims above change shape. The table still
+ * scrolls and the prompt still sits inside the window; the transcript is at
+ * zero height while folded, which here is the point, and comes back when the
+ * dock is opened.
+ */
+test('round two: the docked console folds the transcript and keeps the prompt on screen', async ({}, testInfo) => {
+  const userDataDir = testInfo.outputPath('user-data');
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
+  writeSessionHistory(userDataDir, ROWS);
+
+  const app = await launchHive({ userDataDir, configPath });
+  const page = await app.firstWindow();
+  await page.waitForLoadState('domcontentloaded');
+
+  try {
+    await page.evaluate(() =>
+      localStorage.setItem(
+        'hive.appearance',
+        JSON.stringify({ version: 3, state: { layout: 'round-two' } }),
+      ),
+    );
+    await page.reload();
+    await page.waitForSelector('nav[aria-label="Places"]');
+    await page
+      .getByRole('navigation', { name: 'Places' })
+      .getByRole('button', { name: 'Sessions', exact: true })
+      .click();
+
+    const table = page.getByTestId('session-table');
+    await expect(page.getByText(/^ENDED · \d+/)).toBeVisible();
+    const more = page.getByRole('button', { name: /more ›$/ });
+    if ((await more.count()) > 0) await more.click();
+    await expect(table).toContainText(`hist-${ROWS - 1}`);
+
+    await resizeTo(app, page, MIN_HEIGHT);
+
+    expect(await table.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0);
+    const moved = await table.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+      return element.scrollTop;
+    });
+    expect(moved).toBeGreaterThan(0);
+
+    const legend = page.getByTestId('console-hints');
+    await expect(legend).toBeVisible();
+    expect(
+      await legend.evaluate((element) => element.getBoundingClientRect().bottom - window.innerHeight),
+    ).toBeLessThanOrEqual(0);
+
+    /*
+      Folded: no height. `TerminalHost` builds a surface on its first visit, so
+      before the first unfold there may be no surface at all; both are zero.
+    */
+    const transcriptHeight = () =>
+      page.evaluate(
+        () => document.querySelector('[data-terminal-id="orch"]')?.getBoundingClientRect().height ?? 0,
+      );
+    expect(await transcriptHeight()).toBe(0);
+
+    await page.getByRole('button', { name: /Show the console/ }).click();
+    await expect.poll(transcriptHeight).toBeGreaterThan(0);
+    expect(
+      await legend.evaluate((element) => element.getBoundingClientRect().bottom - window.innerHeight),
+    ).toBeLessThanOrEqual(0);
+
+    await page.getByRole('button', { name: /Hide the console/ }).click();
+    await expect.poll(transcriptHeight).toBe(0);
+  } finally {
+    await app.close();
+  }
+});

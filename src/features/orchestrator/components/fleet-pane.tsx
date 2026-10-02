@@ -110,6 +110,8 @@ interface FleetPaneProps {
   containerRef: RefObject<HTMLDivElement | null>;
   /** Whether the two pixel floors are in force — false while the editor splits the stage. */
   floored: boolean;
+  /** False while round two's console is folded: the table takes the page (HIVE-197). */
+  split?: boolean;
 }
 
 /**
@@ -150,7 +152,7 @@ interface FleetPaneProps {
  * so the slider never announces a value past its own maximum and the basis
  * never asks for a share the floors would refuse.
  */
-export function FleetPane({ containerRef, floored }: FleetPaneProps) {
+export function FleetPane({ containerRef, floored, split = true }: FleetPaneProps) {
   const ratio = useConsoleSplitRatio();
   const setRatio = useSetConsoleSplitRatio();
 
@@ -184,6 +186,14 @@ export function FleetPane({ containerRef, floored }: FleetPaneProps) {
 
   const { min, max } = consoleSplitBounds(height, floored);
   const painted = Math.min(max, Math.max(min, ratio));
+
+  if (!split) {
+    return (
+      <div data-testid="fleet-pane" className="flex min-h-0 flex-1 flex-col bg-term-bg">
+        <SessionTable />
+      </div>
+    );
+  }
 
   return (
     <>

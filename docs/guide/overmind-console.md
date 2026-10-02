@@ -47,6 +47,18 @@ checkout whose folder is named differently from its repository never matches.
 
 `↑` `↓` walk only the rows on screen, in the order the table draws them.
 
+### Round two: the console dock
+
+In round two the transcript starts folded, and the table takes the page. The prompt stays
+at the foot, with one line above it:
+
+- Folded, the line shows the console's last line, and **Show the console ⌃** opens the
+  transcript between the table and the prompt. The drag handle comes back with it.
+- Shown, **Hide the console ⌄** folds it again.
+
+Folding hides the transcript; it does not close it. Its scrollback is still there when you
+open it again.
+
 | Key | Does |
 | --- | --- |
 | `↑` `↓` | move the selection |
