@@ -1,11 +1,12 @@
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session } from '@/types/entity';
 import { TheComb } from '@features/home/components/the-comb';
-import { COMB_W } from '@lib/swarm/comb';
+import { COMB_W, layoutComb } from '@lib/swarm/comb';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
+import { useUiStore } from '@stores/ui-store';
 import { recordingContext } from '@tests/support/canvas-2d';
 
 const motion = vi.hoisted(() => ({ reduced: false }));
@@ -123,5 +124,66 @@ describe('TheComb — the loop', () => {
     const before = fills();
     act(() => useAppearanceStore.getState().setTheme('light'));
     expect(fills()).toBeGreaterThan(before);
+  });
+});
+
+describe('TheComb — hover, click and the hidden list', () => {
+  const seed = (n: number) => {
+    const entities = Object.fromEntries(Array.from({ length: n }, (_, i) => [`s${i}`, sess(`s${i}`, i === 0 ? 'waiting' : 'idle')]));
+    useHiveStore.setState({ entities, order: Object.keys(entities), agentOrder: [] });
+    return layoutComb(Object.keys(entities).map((id, i) => ({ id, name: id, project: 'p1', state: i === 0 ? 'summons' : 'burrowed' })), []);
+  };
+  const canvas = () => screen.getByRole('img') as HTMLCanvasElement;
+
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      { left: 0, top: 0, width: COMB_W, height: 520, right: COMB_W, bottom: 520, x: 0, y: 0, toJSON: () => ({}) } as DOMRect,
+    );
+  });
+
+  it('shows a tooltip over a cell, and hides it on leave', () => {
+    const layout = seed(2);
+    render(<TheComb label="x" />);
+    const cell = layout.cells.find((c) => c.id === 's0')!;
+    fireEvent.mouseMove(canvas(), { clientX: cell.x + 5, clientY: cell.y });
+    const tip = screen.getByRole('tooltip');
+    expect(tip).toHaveTextContent('s0');
+    expect(tip).toHaveTextContent('Summons · p1');
+    expect(tip).toHaveTextContent('needs input');
+    fireEvent.mouseLeave(canvas());
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('opens a session cell on click', () => {
+    const layout = seed(2);
+    const openEntity = vi.fn(() => true);
+    useHiveStore.setState({ openEntity });
+    render(<TheComb label="x" />);
+    const cell = layout.cells.find((c) => c.id === 's1')!;
+    fireEvent.click(canvas(), { clientX: cell.x, clientY: cell.y });
+    expect(openEntity).toHaveBeenCalledWith('s1');
+  });
+
+  it('opens Sessions on its project from a rest cell', () => {
+    const layout = seed(9); // nine in one normal patch: six shown and "+3"
+    render(<TheComb label="x" />);
+    const rest = layout.cells.find((c) => c.kind === 'rest')!;
+    fireEvent.mouseMove(canvas(), { clientX: rest.x, clientY: rest.y });
+    expect(screen.getByRole('tooltip')).toHaveTextContent('3 more in p1');
+    fireEvent.click(canvas(), { clientX: rest.x, clientY: rest.y });
+    expect(useUiStore.getState()).toMatchObject({ place: 'sessions', sessionsProject: 'p1' });
+  });
+
+  it('mirrors every cell, in order, as a hidden button', () => {
+    const layout = seed(2);
+    const openEntity = vi.fn(() => true);
+    useHiveStore.setState({ openEntity });
+    render(<TheComb label="x" />);
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(layout.cells.length);
+    expect(buttons[0]).toHaveAccessibleName('s0, Summons · p1, needs input');
+    fireEvent.click(buttons[1]!);
+    expect(openEntity).toHaveBeenCalledWith('s1');
   });
 });
