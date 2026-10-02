@@ -189,8 +189,10 @@ export function CenterStage() {
    * This gate drives two things — the `hidden` class and `TerminalHost`'s
    * `activeId` — and a settings overlay that did not extend it would render on
    * top of thirteen live terminals.
+   *
+   * Round two's Home (HIVE-195) joins them: it covers the stage the same way.
    */
-  const showingOverlay = showingPicker || view === 'settings';
+  const showingOverlay = showingPicker || view === 'settings' || view === 'home';
   /**
    * The agent view owns the whole column, so the terminal region stands down.
    *
@@ -394,6 +396,14 @@ export function CenterStage() {
     <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-panel-2">
       {showingPicker ? <NewSessionPicker /> : null}
       {view === 'settings' ? <SettingsOverlay /> : null}
+      {/* Placeholder until HIVE-199's comb: the page head and nothing else. */}
+      {view === 'home' ? (
+        <section aria-label="Home" className="flex min-h-0 flex-1 flex-col">
+          <h1 className="px-7 pt-[18px] pb-2.5 text-[22px] font-semibold tracking-tight text-ink">
+            Home
+          </h1>
+        </section>
+      ) : null}
 
       {/*
         Hidden, never unmounted. Tearing the terminal region down for the
