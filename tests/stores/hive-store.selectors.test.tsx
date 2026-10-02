@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Agent, Entity, Session } from '@/types/entity';
+import type { Agent, Entity, Session, Terminal } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
 import type { PlanTaskStatus, SessionPlan } from '@shared/plan-contract';
 
@@ -31,6 +31,10 @@ import {
   useEndedMore,
   useFleetGroup,
   useFleetNavOrder,
+  useAgentsWorkingIn,
+  useOvermindHeadCounts,
+  useProjectCounts,
+  useSessionsHeadCounts,
   useEntity,
   useHasResumable,
   useHiveStore,
@@ -2003,5 +2007,57 @@ describe('fleet hooks (HIVE-197)', () => {
     useUiStore.setState({ sessionsFilter: 'ended' });
     expect(renderHook(() => useFleetGroup('live')).result.current).toEqual([]);
     expect(renderHook(() => useEndedMore()).result.current).toBe(0);
+  });
+});
+
+describe('count hooks (HIVE-197)', () => {
+  const NOW = new Date(2026, 9, 2, 15, 0).getTime();
+  const sess = (id: string, project: string, status: Session['status'], over: Partial<Session> = {}): Session => ({
+    kind: 'session', id, project, branch: `b/${id}`, status, task: `task ${id}`, cost: '$0', lines: [], ...over,
+  });
+  const term = (id: string, project: string, over: Partial<Terminal> = {}): Terminal => ({
+    kind: 'terminal', id, project, cwd: `/repos/${project}`, status: 'prompt', createdAt: 1, lines: [], ...over,
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    useHiveStore.getState().reset();
+    useHiveStore.setState({
+      entities: {
+        a: sess('a', 'p1', 'working'),
+        b: sess('b', 'p1', 'waiting'),
+        c: sess('c', 'p2', 'idle'),
+        d: sess('d', 'p1', 'done', { endedAt: NOW - 1000 }),
+        e: sess('e', 'p2', 'done', { endedAt: NOW - 3 * 86_400_000 }),
+        t1: term('t1', 'p1'),
+        t2: term('t2', 'p1', { ended: { reason: 'lost', at: 1 } }),
+      },
+      order: ['a', 'b', 'c', 'd', 'e', 't1', 't2'],
+      agentOrder: [],
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('useProjectCounts splits needs you from the other live entries', () => {
+    expect(renderHook(() => useProjectCounts('p1')).result.current).toEqual({ needs: 1, other: 2 });
+    expect(renderHook(() => useProjectCounts('p3')).result.current).toEqual({ needs: 0, other: 0 });
+  });
+
+  it('useSessionsHeadCounts sums entries', () => {
+    expect(renderHook(() => useSessionsHeadCounts()).result.current).toEqual({ live: 4, needs: 1 });
+  });
+
+  it('useOvermindHeadCounts counts sessions, unfiltered and filtered', () => {
+    expect(renderHook(() => useOvermindHeadCounts(null)).result.current).toEqual({
+      live: 3, projects: 2, needs: 1, ended: 2, endedToday: 1,
+    });
+    expect(renderHook(() => useOvermindHeadCounts('p1')).result.current).toEqual({
+      live: 2, projects: 1, needs: 1, ended: 1, endedToday: 1,
+    });
+  });
+
+  it('useAgentsWorkingIn names agents with a run in the project', () => {
+    expect(renderHook(() => useAgentsWorkingIn(null)).result.current).toEqual([]);
   });
 });

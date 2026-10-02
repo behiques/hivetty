@@ -7008,6 +7008,84 @@ export const useProjectLiveCount = (projectId: string): number =>
     }, 0),
   );
 
+/** A project's live entries, split as the panel colours them (HIVE-197). */
+export const useProjectCounts = (projectId: string): { needs: number; other: number } =>
+  useHiveStore(
+    useShallow((state) => {
+      let needs = 0;
+      let other = 0;
+      for (const id of state.order) {
+        const entity = state.entities[id];
+        if (entity === undefined || isAgent(entity) || entity.project !== projectId) continue;
+        if (isTerminal(entity)) other += entity.ended === undefined ? 1 : 0;
+        else if (entity.status === 'waiting') needs += 1;
+        else if (!isEnded(entity.status)) other += 1;
+      }
+      return { needs, other };
+    }),
+  );
+
+/** The panel head: every live entry, and how many need you (HIVE-197). */
+export const useSessionsHeadCounts = (): { live: number; needs: number } =>
+  useHiveStore(
+    useShallow((state) => {
+      let live = 0;
+      let needs = 0;
+      for (const id of state.order) {
+        const entity = state.entities[id];
+        if (entity === undefined || isAgent(entity)) continue;
+        if (isTerminal(entity)) live += entity.ended === undefined ? 1 : 0;
+        else if (!isEnded(entity.status)) {
+          live += 1;
+          if (entity.status === 'waiting') needs += 1;
+        }
+      }
+      return { live, needs };
+    }),
+  );
+
+/** The Overmind's head line: sessions the table can draw (HIVE-197). */
+export const useOvermindHeadCounts = (project: string | null) =>
+  useHiveStore(
+    useShallow((state) => {
+      const now = Date.now();
+      const projects = new Set<string>();
+      let live = 0;
+      let needs = 0;
+      let ended = 0;
+      let endedToday = 0;
+      for (const id of state.order) {
+        const entity = state.entities[id];
+        if (entity === undefined || !isSession(entity)) continue;
+        if (project !== null && entity.project !== project) continue;
+        if (isEnded(entity.status)) {
+          ended += 1;
+          if (sameDay(recencyOf(entity), now)) endedToday += 1;
+        } else {
+          live += 1;
+          projects.add(entity.project);
+          if (entity.status === 'waiting') needs += 1;
+        }
+      }
+      return { live, projects: projects.size, needs, ended, endedToday };
+    }),
+  );
+
+/** Agents with a live run in a project, ranked (HIVE-197). */
+export const useAgentsWorkingIn = (project: string | null): string[] => {
+  const repo = useProjectRepo(project);
+  return useHiveStore(
+    useShallow((state) =>
+      repo === null
+        ? []
+        : rankedAgents(state.agentOrder, state.entities).filter((id) => {
+            const entity = state.entities[id];
+            return entity !== undefined && isAgent(entity) && agentWorksIn(entity, repo);
+          }),
+    ),
+  );
+};
+
 /** Every work item, in fixture order (story 032). */
 export const useTickets = () =>
   useHiveStore(useShallow((state) => state.tickets));
