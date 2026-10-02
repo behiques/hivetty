@@ -169,7 +169,56 @@ export function layoutComb(entities: CombInput[], projects: CombProject[]): Comb
   return normal(entities, projects) ?? scale(entities, projects);
 }
 
-/** Placeholder until Task 8: the heavy day still lays out, as one patch row. */
-function scale(_entities: CombInput[], _projects: CombProject[]): CombLayout {
-  return { mode: 'scale', R: 21, cells: [], patches: [], grid: gridFor(21) };
+const SCALE_SWARM_CAP = 14;
+const SCALE_PATCH_CAP = 4;
+const SCALE_PATCHES = 12;
+
+/** A project's most urgent cell, for ordering when they no longer all fit. */
+const urgencyOf = (entities: CombInput[], project: string): number =>
+  Math.min(...entities.filter((e) => e.project === project).map((e) => rank(e.state)));
+
+/**
+ * The heavy day: cells nest like real comb. The swarm is two staggered rows of
+ * seven; each project a 2×2 patch of at most four with a "+N" rest cell, the
+ * rule the rail combs already follow; names only as tags (drawn later).
+ */
+function scale(entities: CombInput[], projects: CombProject[]): CombLayout {
+  const R = 21;
+  const agents = entities.filter((e) => e.project === SWARM);
+  const patches: Patch[] = [];
+  if (agents.length > 0) {
+    const slots: Slot[] = [
+      ...Array.from({ length: 7 }, (_, i): Slot => [12 + 2 * i, 4]),
+      ...Array.from({ length: 7 }, (_, i): Slot => [13 + 2 * i, 6]),
+    ];
+    patches.push({ project: SWARM, label: 'THE SWARM', list: agents, slots, cap: SCALE_SWARM_CAP });
+  }
+
+  let live = liveProjects(entities, projects);
+  const folded = live.length > SCALE_PATCHES;
+  if (folded) {
+    // Decision D10: the most urgent projects keep their patches.
+    live = live
+      .map((p, i) => ({ p, i, u: urgencyOf(entities, p.id) }))
+      .sort((a, b) => a.u - b.u || a.i - b.i)
+      .map(({ p }) => p);
+  }
+  const shown = folded ? live.slice(0, SCALE_PATCHES - 1) : live;
+  const origin = (i: number): Slot => [2 + (i % 6) * 6, i < 6 ? 9 : 13];
+  shown.forEach((p, i) => {
+    const [c0, r0] = origin(i);
+    patches.push({
+      project: p.id, label: truncate(p.name, 18).toUpperCase(),
+      list: entities.filter((e) => e.project === p.id),
+      slots: [[c0, r0], [c0 + 1, r0], [c0, r0 + 1], [c0 + 1, r0 + 1]], cap: SCALE_PATCH_CAP,
+    });
+  });
+
+  const placed = place(R, patches);
+  if (folded) {
+    const more = live.length - shown.length;
+    const { x, y } = placer(R)(origin(SCALE_PATCHES - 1));
+    placed.cells.push({ id: `rest:${ALL_PROJECTS}`, kind: 'rest', name: `+${more}`, project: ALL_PROJECTS, state: 'rest', more, x, y, phase: 0 });
+  }
+  return { mode: 'scale', R, ...placed, grid: gridFor(R) };
 }

@@ -85,3 +85,78 @@ describe('layoutComb — normal', () => {
     for (const c of layout.cells) expect(c.x + R).toBeLessThanOrEqual(COMB_W);
   });
 });
+
+/** The design's heavy day: 12 projects, 14 agents. */
+const HEAVY_COUNTS: [string, number][] = [
+  ['the-hive', 5], ['incorpx-server', 6], ['incorpx', 4], ['ai-sdk', 2], ['apfm-provider-scraper', 3], ['aps', 3],
+  ['incorpx-customer-onboarding-portal', 2], ['legacy-api', 1], ['billing-svc', 3], ['docs-site', 1], ['infra', 2], ['mobile-app', 4],
+];
+const HEAVY_STATES: CellState[] = ['morphing', 'burrowed', 'summons', 'morphing', 'terminal', 'burrowed'];
+const heavy = (counts: [string, number][], agents = 14): { entities: CombInput[]; projects: { id: string; name: string }[] } => ({
+  entities: [
+    ...Array.from({ length: agents }, (_, i) => agent(`agent-${i}`, i % 4 === 0 ? 'summons' : i % 4 === 1 ? 'failed' : 'morphing')),
+    ...counts.flatMap(([p, n]) => Array.from({ length: n }, (_, k) => cell(`${p}-${k}`, p, HEAVY_STATES[k % HEAVY_STATES.length]!))),
+  ],
+  projects: counts.map(([id]) => ({ id, name: id })),
+});
+
+describe('layoutComb — at scale', () => {
+  const { entities, projects } = heavy(HEAVY_COUNTS);
+  const layout = layoutComb(entities, projects);
+  const r = 21;
+  const ws = Math.sqrt(3) * r;
+  const at = (c: number, row: number) => ({ x: c * ws + (row & 1 ? ws / 2 : 0), y: row * 1.5 * r + 14 });
+
+  it('switches to scale for the heavy fixture, at R 21', () => {
+    expect(layout.mode).toBe('scale');
+    expect(layout.R).toBe(21);
+  });
+
+  it('switches when there are more than seven agents, even with room', () => {
+    expect(layoutComb([...Array.from({ length: 8 }, (_, i) => agent(`a${i}`, 'morphing'))], []).mode).toBe('scale');
+  });
+
+  it('switches when the normal layout does not fit the canvas', () => {
+    const wide = heavy([['p1', 7], ['p2', 7], ['p3', 7]], 0);
+    expect(layoutComb(wide.entities, wide.projects).mode).toBe('scale');
+  });
+
+  it('stacks the swarm as two staggered rows of seven', () => {
+    const swarm = layout.cells.filter((c) => c.project === SWARM);
+    expect(swarm).toHaveLength(14);
+    expect(swarm[0]).toMatchObject(at(12, 4));
+    expect(swarm[6]).toMatchObject(at(24, 4));
+    expect(swarm[7]).toMatchObject(at(13, 6));
+  });
+
+  it('nests each project as a 2×2 patch, six per row', () => {
+    const first = layout.cells.filter((c) => c.project === 'the-hive');
+    expect(first.map(({ x, y }) => ({ x, y }))).toEqual([at(2, 9), at(3, 9), at(2, 10), at(3, 10)]);
+    expect(layout.cells.find((c) => c.project === 'incorpx-customer-onboarding-portal')).toMatchObject(at(2, 13));
+  });
+
+  it('caps a patch at four, the fourth "+N" (N = count − 3), the most urgent first', () => {
+    const cells = layout.cells.filter((c) => c.project === 'incorpx-server');
+    expect(cells).toHaveLength(4);
+    expect(cells[3]).toMatchObject({ kind: 'rest', name: '+3', more: 3 });
+    expect(cells.slice(0, 3).map((c) => c.state)).toEqual(['summons', 'morphing', 'morphing']);
+  });
+
+  it('truncates patch names to 18 characters', () => {
+    expect(layout.patches.find((p) => p.project === 'incorpx-customer-onboarding-portal')!.label).toBe('INCORPX-CUSTOMER-…');
+  });
+
+  it('folds projects past twelve into one "+N projects" cell, keeping the urgent ones', () => {
+    const counts: [string, number][] = [...HEAVY_COUNTS, ['zz-urgent', 1]];
+    const many = heavy(counts);
+    many.entities = many.entities.map((e) => (e.project === 'zz-urgent' ? { ...e, state: 'summons' } : e));
+    const l = layoutComb(many.entities, many.projects);
+    expect(l.cells.find((c) => c.id === 'rest:*')).toMatchObject({ project: '*', name: '+2', more: 2, ...at(32, 13) });
+    expect(l.cells.some((c) => c.project === 'zz-urgent')).toBe(true);
+  });
+
+  it('turns a fifteenth agent into a "+N" swarm cell', () => {
+    const l = layoutComb(heavy([['p', 1]], 16).entities, [{ id: 'p', name: 'p' }]);
+    expect(l.cells.find((c) => c.id === 'rest:swarm')).toMatchObject({ name: '+3', more: 3 });
+  });
+});
