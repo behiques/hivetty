@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   type CellState,
   type CombInput,
+  type CombLayout,
   COMB_W,
+  drawComb,
   type Flyer,
   flyerCount,
   hitTest,
@@ -16,6 +18,8 @@ import {
   SWARM,
   syncFlyers,
 } from '@lib/swarm/comb';
+import type { SwarmPalette } from '@lib/swarm/palette';
+import { coloursUsed, recordingContext } from '@tests/support/canvas-2d';
 
 const agent = (id: string, state: CellState): CombInput => ({ id, name: id, project: SWARM, state });
 const cell = (id: string, project: string, state: CellState): CombInput => ({ id, name: id, project, state });
@@ -244,5 +248,53 @@ describe('flyers', () => {
   it('hit-tests within 24 logical px of a cell centre', () => {
     expect(hitTest(busy, swarmTarget.x + 20, swarmTarget.y)?.id).toBe('acr');
     expect(hitTest(busy, swarmTarget.x + 30, swarmTarget.y)).toBeNull();
+  });
+});
+
+const PALETTE: SwarmPalette = {
+  bg: 'c-bg', panel2: 'c-panel2', ink: 'c-ink', muted: 'c-muted', subtle: 'c-subtle',
+  brand: 'c-brand', green: 'c-green', amber: 'c-amber', red: 'c-red', creep: 'c-creep',
+  creepClear: 'c-creep-clear', chitin: 'c-chitin', carapace: 'c-carapace',
+};
+
+describe('drawComb', () => {
+  const draw = (layout: CombLayout, flyers: Flyer[] = []) => {
+    const { ctx, calls } = recordingContext();
+    drawComb(ctx, layout, flyers, 2.5, PALETTE);
+    return { ctx, calls, texts: calls.filter((c) => c.op === 'fillText').map((c) => c.args[0]) };
+  };
+
+  it('clears to bg first and leaves alpha at 1', () => {
+    const { calls, ctx } = draw(layoutComb(BUSY, PROJECTS));
+    expect(calls.find((c) => c.op === 'fillRect')?.args).toEqual([0, 0, COMB_W, 520]);
+    expect(calls.find((c) => c.op === 'set:fillStyle')?.args).toEqual(['c-bg']);
+    expect(ctx.globalAlpha).toBe(1);
+  });
+
+  it('paints only with palette colours', () => {
+    const allowed = new Set(Object.values(PALETTE));
+    const { calls } = draw(layoutComb(BUSY, PROJECTS), stillFlyers(layoutComb(BUSY, PROJECTS), 5));
+    for (const colour of coloursUsed(calls)) expect(allowed.has(colour as string), String(colour)).toBe(true);
+  });
+
+  it('names every cell under it, truncated to 14, in the normal layout', () => {
+    const { texts } = draw(layoutComb(BUSY, PROJECTS));
+    expect(texts).toContain('hive-193-hist…');
+    expect(texts).toContain('THE SWARM');
+  });
+
+  it('tags only Summons and Failed cells at scale', () => {
+    const l = layoutComb(heavy(HEAVY_COUNTS).entities, heavy(HEAVY_COUNTS).projects);
+    const { texts } = draw(l);
+    expect(texts).toContain('agent-0'); // summons
+    expect(texts).toContain('agent-1'); // failed
+    expect(texts).not.toContain('agent-2'); // morphing
+  });
+
+  it('draws one creature per flyer', () => {
+    const l = layoutComb(BUSY, PROJECTS);
+    const { calls } = draw(l, stillFlyers(l, 5));
+    // drawMutalisk opens with save → translate; the comb itself never translates.
+    expect(calls.filter((c) => c.op === 'translate')).toHaveLength(9);
   });
 });

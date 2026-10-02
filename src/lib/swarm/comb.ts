@@ -1,3 +1,6 @@
+import { drawMutalisk, REAL, withAlpha } from '@lib/swarm/mutalisk';
+import type { SwarmPalette } from '@lib/swarm/palette';
+
 /**
  * The Comb (HIVE-199; design §2): one hex cell per live session, terminal and
  * agent. Agents sit together as the swarm; every project is its own patch.
@@ -332,3 +335,187 @@ export function stillFlyers(layout: CombLayout, needs: number): Flyer[] {
 /** The cell under a logical point, within 24 units of its centre. */
 export const hitTest = (layout: CombLayout, x: number, y: number): CombCell | null =>
   layout.cells.find((c) => Math.hypot(c.x - x, c.y - y) < 24) ?? null;
+
+const MONO = 'ui-monospace,Menlo,monospace';
+const SANS = '-apple-system,system-ui,sans-serif';
+const FULL = Math.PI * 2;
+
+export function hexPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  ctx.beginPath();
+  for (let k = 0; k < 6; k++) {
+    const a = (Math.PI / 180) * (60 * k - 30);
+    if (k === 0) ctx.moveTo(x + r * Math.cos(a), y + r * Math.sin(a));
+    else ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a));
+  }
+  ctx.closePath();
+}
+
+const colourOf = (p: SwarmPalette, state: CombCell['state']): string =>
+  ({ morphing: p.green, summons: p.amber, failed: p.red, burrowed: p.subtle, terminal: p.muted, rest: p.muted })[state];
+
+const isLive = (c: CombCell): boolean => c.state === 'morphing' || c.state === 'summons';
+
+/** Creep: the ground under each patch; it spreads with how much of the patch is live. */
+function drawCreep(ctx: CanvasRenderingContext2D, layout: CombLayout, t: number, p: SwarmPalette): void {
+  const groups = new Map<string, CombCell[]>();
+  for (const c of layout.cells) groups.set(c.project, [...(groups.get(c.project) ?? []), c]);
+  for (const group of groups.values()) {
+    const live = group.filter(isLive).length / group.length;
+    for (const c of group) {
+      const rr = layout.R * (1.5 + live * 0.9) * (1 + 0.04 * Math.sin(t * 0.8 + c.phase));
+      const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, rr);
+      g.addColorStop(0, p.creep);
+      g.addColorStop(1, p.creepClear);
+      ctx.fillStyle = g;
+      withAlpha(ctx, 0.28 * (0.4 + live), () => {
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, rr, 0, FULL);
+        ctx.fill();
+      });
+    }
+  }
+}
+
+/** The faint comb behind everything: a sweep line brightens it, flyers leave a creep trace. */
+function drawGrid(ctx: CanvasRenderingContext2D, layout: CombLayout, flyers: Flyer[], t: number, p: SwarmPalette): void {
+  const sweep = (((t * 0.12) % 1.6) - 0.3) * COMB_W;
+  ctx.lineWidth = 1;
+  for (const cell of layout.grid) {
+    const d = Math.abs(cell.x - sweep);
+    let near = 0;
+    for (const f of flyers) {
+      const q = Math.abs(f.x - cell.x) + Math.abs(f.y - cell.y);
+      if (q < 80) near = Math.max(near, 1 - q / 80);
+    }
+    hexPath(ctx, cell.x, cell.y, layout.R - 2);
+    if (near) {
+      ctx.fillStyle = p.creep;
+      withAlpha(ctx, 0.16 * near, () => ctx.fill());
+    }
+    ctx.strokeStyle = p.brand;
+    withAlpha(ctx, 0.05 + 0.12 * Math.max(0, 1 - d / 260) + near * 0.1, () => ctx.stroke());
+  }
+}
+
+function drawCell(ctx: CanvasRenderingContext2D, c: CombCell, layout: CombLayout, t: number, p: SwarmPalette): void {
+  const { R } = layout;
+  const sc = layout.mode === 'scale';
+  const r1 = R - 2;
+  const col = colourOf(p, c.state);
+
+  hexPath(ctx, c.x, c.y, r1);
+  ctx.fillStyle = p.panel2;
+  ctx.fill();
+
+  if (c.state === 'rest') {
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = p.muted;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = p.ink;
+    ctx.font = `600 ${sc ? 10 : 12}px ${MONO}`;
+    ctx.fillText(c.name, c.x, c.y + 4);
+    return;
+  }
+
+  if (c.state === 'morphing') {
+    // A green wave fills the cell to its plan's progress.
+    ctx.save();
+    hexPath(ctx, c.x, c.y, r1 - 1);
+    ctx.clip();
+    const level = c.y + R - 2 * R * (c.progress ?? 0.5);
+    ctx.beginPath();
+    ctx.moveTo(c.x - R, c.y + R);
+    for (let x = -R; x <= R; x += 3) ctx.lineTo(c.x + x, level + Math.sin(x / 7 + t * 3 + c.phase) * (sc ? 1.4 : 2.2));
+    ctx.lineTo(c.x + R, c.y + R);
+    ctx.closePath();
+    ctx.fillStyle = col;
+    withAlpha(ctx, 0.55, () => ctx.fill());
+    ctx.restore();
+  }
+  if (c.state === 'summons') {
+    // A hex ripple, and a pulsing amber fill.
+    const k = (t * 0.7 + c.phase) % 1;
+    hexPath(ctx, c.x, c.y, R + k * (sc ? 14 : 26));
+    ctx.strokeStyle = p.amber;
+    ctx.lineWidth = 2;
+    withAlpha(ctx, 0.6 * (1 - k), () => ctx.stroke());
+    hexPath(ctx, c.x, c.y, r1 - 1);
+    ctx.fillStyle = p.amber;
+    withAlpha(ctx, 0.35 + 0.25 * Math.sin(t * 5 + c.phase), () => ctx.fill());
+  }
+  if (c.state === 'failed') {
+    hexPath(ctx, c.x, c.y, r1 - 1);
+    ctx.fillStyle = p.red;
+    withAlpha(ctx, 0.25 + 0.15 * Math.sin(t * 2), () => ctx.fill());
+  }
+
+  hexPath(ctx, c.x, c.y, r1);
+  ctx.strokeStyle = c.state === 'terminal' ? p.muted : col;
+  ctx.lineWidth = c.state === 'burrowed' ? 1.2 : 1.8;
+  if (c.state === 'terminal') ctx.setLineDash([3, 3]);
+  withAlpha(ctx, c.state === 'burrowed' ? 0.7 : 1, () => ctx.stroke());
+  ctx.setLineDash([]);
+
+  if (c.state === 'morphing') {
+    ctx.shadowColor = p.green;
+    ctx.shadowBlur = (sc ? 8 : 14) + 5 * Math.sin(t * 2 + c.phase);
+    hexPath(ctx, c.x, c.y, r1);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  if (!sc) {
+    ctx.font = `500 11px ${SANS}`;
+    ctx.fillStyle = c.state === 'burrowed' ? p.subtle : p.ink;
+    ctx.fillText(truncate(c.name, 14), c.x, c.y + R + 16);
+  }
+}
+
+/** At scale a name shows only where it needs you or failed, as a tag drawn over the comb. */
+function drawTag(ctx: CanvasRenderingContext2D, c: CombCell, R: number, p: SwarmPalette): void {
+  const col = colourOf(p, c.state);
+  ctx.font = `600 10px ${SANS}`;
+  const tw = ctx.measureText(c.name).width + 10;
+  const x0 = c.x + R * 0.55;
+  const y0 = c.y - R - 4;
+  ctx.beginPath();
+  ctx.roundRect(x0, y0, tw, 16, 4);
+  ctx.fillStyle = p.bg;
+  withAlpha(ctx, 0.92, () => ctx.fill());
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 1;
+  withAlpha(ctx, 0.7, () => ctx.stroke());
+  ctx.fillStyle = col;
+  ctx.textAlign = 'left';
+  ctx.fillText(c.name, x0 + 5, y0 + 11.5);
+  ctx.textAlign = 'center';
+}
+
+/** One frame of the comb, in logical units. */
+export function drawComb(
+  ctx: CanvasRenderingContext2D, layout: CombLayout, flyers: Flyer[], t: number, palette: SwarmPalette,
+): void {
+  const sc = layout.mode === 'scale';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = palette.bg;
+  ctx.fillRect(0, 0, COMB_W, COMB_H);
+
+  drawCreep(ctx, layout, t, palette);
+  drawGrid(ctx, layout, flyers, t, palette);
+
+  ctx.font = `600 ${sc ? 9 : 10}px ${MONO}`;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = palette.muted;
+  for (const patch of layout.patches) ctx.fillText(patch.label, patch.x, patch.y);
+
+  for (const cell of layout.cells) drawCell(ctx, cell, layout, t, palette);
+
+  // The mutalisks, small and dim: atmosphere, not information.
+  const scale = sc ? 0.14 : REAL;
+  withAlpha(ctx, 0.55, () => {
+    for (const f of flyers) drawMutalisk(ctx, f.x, f.y, Math.cos(f.a), Math.sin(f.a), t, scale, { k: f.k, turn: f.turn }, palette);
+  });
+
+  if (sc) for (const cell of layout.cells) if (cell.state === 'summons' || cell.state === 'failed') drawTag(ctx, cell, layout.R, palette);
+}
