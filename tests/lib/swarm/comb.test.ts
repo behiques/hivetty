@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
-import { type CellState, type CombInput, COMB_W, layoutComb, SWARM } from '@lib/swarm/comb';
+import {
+  type CellState,
+  type CombInput,
+  COMB_W,
+  type Flyer,
+  flyerCount,
+  hitTest,
+  isCalm,
+  layoutComb,
+  newFlyer,
+  seededRng,
+  stepFlyers,
+  stillFlyers,
+  SWARM,
+  syncFlyers,
+} from '@lib/swarm/comb';
 
 const agent = (id: string, state: CellState): CombInput => ({ id, name: id, project: SWARM, state });
 const cell = (id: string, project: string, state: CellState): CombInput => ({ id, name: id, project, state });
@@ -158,5 +173,76 @@ describe('layoutComb — at scale', () => {
   it('turns a fifteenth agent into a "+N" swarm cell', () => {
     const l = layoutComb(heavy([['p', 1]], 16).entities, [{ id: 'p', name: 'p' }]);
     expect(l.cells.find((c) => c.id === 'rest:swarm')).toMatchObject({ name: '+3', more: 3 });
+  });
+});
+
+const fixed = (...values: number[]) => { let i = 0; return () => values[i++ % values.length]!; };
+const flyer = (over: Partial<Flyer> = {}): Flyer => ({ x: 100, y: 100, a: 0, k: 0, leg: 1, target: null, turn: 0, ...over });
+
+describe('flyers', () => {
+  const busy = layoutComb(BUSY, PROJECTS);
+  const swarmTarget = busy.cells.find((c) => c.id === 'acr')!; // morphing, in the swarm
+  const projectTargets = busy.cells.filter((c) => c.project !== SWARM && (c.state === 'morphing' || c.state === 'summons'));
+
+  it('counts 9 normally, 14 at scale, 5 when nothing needs you', () => {
+    expect(flyerCount(busy, 5)).toBe(9);
+    expect(flyerCount(busy, 0)).toBe(5);
+    expect(flyerCount({ ...busy, mode: 'scale' }, 5)).toBe(14);
+  });
+
+  it('alternates legs: arriving at a swarm cell sends it to a project', () => {
+    const f = flyer({ x: swarmTarget.x, y: swarmTarget.y - 18, leg: 1, target: swarmTarget.id });
+    const [next] = stepFlyers([f], busy, 1 / 60, fixed(0), false);
+    expect(next!.leg).toBe(0);
+    expect(projectTargets.map((c) => c.id)).toContain(next!.target);
+  });
+
+  it('retargets when its target cell is gone', () => {
+    const [next] = stepFlyers([flyer({ target: 'gone', leg: 0 })], busy, 1 / 60, fixed(0), false);
+    expect(next).toMatchObject({ leg: 1, target: 'shipper' }); // the first summoning agent
+  });
+
+  it('wanders to random points when no cell is working or summoning (D9)', () => {
+    const resting = layoutComb([cell('a', 'the-hive', 'burrowed')], PROJECTS);
+    expect(isCalm(resting, 3)).toBe(true);
+    expect(flyerCount(resting, 3)).toBe(5);
+    const [next] = stepFlyers([flyer()], resting, 1 / 60, fixed(0.5), true);
+    expect(next!.target).toEqual({ x: COMB_W * 0.5, y: 60 + 0.5 * (520 - 120) });
+  });
+
+  it('flies at 108 px/s, 66 when calm, and clamps a long frame', () => {
+    // One target cell straight ahead (18 px above it is the flyer's own height).
+    const straight = { ...busy, cells: [{ ...swarmTarget, x: 10_000, y: 118 }] };
+    const go = (dt: number, calm: boolean) =>
+      stepFlyers([flyer({ target: swarmTarget.id, leg: 1 })], straight, dt, fixed(0), calm)[0]!;
+    expect(go(1 / 60, false).x - 100).toBeCloseTo(1.8);
+    expect(go(1 / 60, true).x - 100).toBeCloseTo(1.1);
+    expect(go(1, false).x - 100).toBeCloseTo(108 / 15);
+  });
+
+  it('is frame-rate independent: one 1/30 step steers like two 1/60 steps would at a fixed bearing', () => {
+    const target = { ...swarmTarget, x: 100, y: 10_000 + 18 }; // straight down: bearing π/2
+    const l = { ...busy, cells: [target] };
+    const [once] = stepFlyers([flyer({ target: target.id, leg: 1 })], l, 1 / 30, fixed(0), false);
+    expect(once!.a).toBeCloseTo((Math.PI / 2) * (1 - 0.965 ** 2), 5);
+    expect(once!.turn).toBeCloseTo(once!.a / (1 / 30), 5);
+  });
+
+  it('syncs the flock to a new count, keeping the flyers it has', () => {
+    const rng = seededRng(1);
+    const three = syncFlyers([], 3, rng);
+    expect(syncFlyers(three, 5, rng).slice(0, 3)).toEqual(three);
+    expect(syncFlyers(three, 2, rng)).toEqual(three.slice(0, 2));
+    expect(newFlyer(2, fixed(0)).k).toBeCloseTo(3.4);
+  });
+
+  it('places a still frame deterministically', () => {
+    expect(stillFlyers(busy, 5)).toEqual(stillFlyers(busy, 5));
+    expect(stillFlyers(busy, 5)).toHaveLength(9);
+  });
+
+  it('hit-tests within 24 logical px of a cell centre', () => {
+    expect(hitTest(busy, swarmTarget.x + 20, swarmTarget.y)?.id).toBe('acr');
+    expect(hitTest(busy, swarmTarget.x + 30, swarmTarget.y)).toBeNull();
   });
 });

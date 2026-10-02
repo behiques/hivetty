@@ -222,3 +222,113 @@ function scale(entities: CombInput[], projects: CombProject[]): CombLayout {
   }
   return { mode: 'scale', R, ...placed, grid: gridFor(R) };
 }
+
+export type Rng = () => number;
+
+/** mulberry32: a small seeded generator, so a still frame is the same frame every time. */
+export function seededRng(seed: number): Rng {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export interface Flyer {
+  x: number;
+  y: number;
+  /** Heading, radians. */
+  a: number;
+  /** Wing-beat phase. */
+  k: number;
+  /** 1: bound for the swarm; 0: bound for a project. */
+  leg: 0 | 1;
+  /** A cell id on a handoff, a point while wandering, null before the first pick. */
+  target: string | { x: number; y: number } | null;
+  /** Angular rate, rad/s: the tail lags it. */
+  turn: number;
+}
+
+export const newFlyer = (index: number, rng: Rng): Flyer => ({
+  x: rng() * COMB_W, y: 60 + rng() * (COMB_H - 120), a: rng() * 6, k: index * 1.7,
+  leg: (index % 2) as 0 | 1, target: null, turn: 0,
+});
+
+export function syncFlyers(flyers: Flyer[], count: number, rng: Rng): Flyer[] {
+  if (flyers.length === count) return flyers;
+  if (flyers.length > count) return flyers.slice(0, count);
+  return [...flyers, ...Array.from({ length: count - flyers.length }, (_, i) => newFlyer(flyers.length + i, rng))];
+}
+
+const targetsOf = (layout: CombLayout): CombCell[] =>
+  layout.cells.filter((c) => c.kind === 'entity' && (c.state === 'morphing' || c.state === 'summons'));
+
+/** Nothing needs you, or nothing to carry: fewer, slower flyers. */
+export const isCalm = (layout: CombLayout, needs: number): boolean => needs === 0 || targetsOf(layout).length === 0;
+
+export const flyerCount = (layout: CombLayout, needs: number): number =>
+  isCalm(layout, needs) ? 5 : layout.mode === 'scale' ? 14 : 9;
+
+const MAX_DT = 1 / 15;
+const ARRIVED = 26;
+/** The flyer steers to a point this far above its target cell. */
+const ABOVE = 18;
+
+/**
+ * One step of flight. Each flyer alternates legs — a working or summoning cell
+ * in the swarm, then one in a project, and back: the picture is a handoff.
+ * With nothing to carry it wanders between random points (decision D9).
+ */
+export function stepFlyers(flyers: Flyer[], layout: CombLayout, rawDt: number, rng: Rng, calm: boolean): Flyer[] {
+  const dt = Math.min(Math.max(rawDt, 0), MAX_DT);
+  const targets = targetsOf(layout);
+  const byId = new Map(targets.map((c) => [c.id, c]));
+  const speed = (calm ? 1.1 : 1.8) * 60;
+  const steer = 1 - (1 - 0.035) ** (60 * dt);
+
+  return flyers.map((f) => {
+    let { leg, target } = f;
+    let aim: { x: number; y: number } | undefined =
+      typeof target === 'string' ? byId.get(target) : targets.length === 0 ? (target ?? undefined) : undefined;
+
+    if (aim === undefined || Math.hypot(aim.x - f.x, aim.y - ABOVE - f.y) < ARRIVED) {
+      if (targets.length === 0) {
+        aim = { x: rng() * COMB_W, y: 60 + rng() * (COMB_H - 120) };
+        target = aim;
+      } else {
+        leg = leg ? 0 : 1;
+        const pool = targets.filter((c) => (leg ? c.project === SWARM : c.project !== SWARM));
+        const pick = pool.length > 0 ? pool[Math.floor(rng() * pool.length)]! : targets[0]!;
+        aim = pick;
+        target = pick.id;
+      }
+    }
+
+    let da = Math.atan2(aim.y - ABOVE - f.y, aim.x - f.x) - f.a;
+    da = Math.atan2(Math.sin(da), Math.cos(da));
+    const turned = da * steer;
+    const a = f.a + turned;
+    return {
+      ...f, leg, target, a,
+      x: f.x + Math.cos(a) * speed * dt,
+      y: f.y + Math.sin(a) * speed * dt,
+      turn: dt > 0 ? turned / dt : 0,
+    };
+  });
+}
+
+/** Where the flock would be after about four seconds of flight: the reduced-motion frame. */
+export function stillFlyers(layout: CombLayout, needs: number): Flyer[] {
+  const rng = seededRng(7);
+  const calm = isCalm(layout, needs);
+  let flyers = syncFlyers([], flyerCount(layout, needs), rng);
+  for (let i = 0; i < 240; i++) flyers = stepFlyers(flyers, layout, 1 / 60, rng, calm);
+  return flyers;
+}
+
+/** The cell under a logical point, within 24 units of its centre. */
+export const hitTest = (layout: CombLayout, x: number, y: number): CombCell | null =>
+  layout.cells.find((c) => Math.hypot(c.x - x, c.y - y) < 24) ?? null;
