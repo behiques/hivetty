@@ -28,6 +28,9 @@ import {
   useAgentPr,
   useCounts,
   useFleetAgents,
+  useEndedMore,
+  useFleetGroup,
+  useFleetNavOrder,
   useEntity,
   useHasResumable,
   useHiveStore,
@@ -1971,5 +1974,34 @@ describe('fleetGroupsOf (HIVE-197)', () => {
     expect(ended.live).toEqual([]);
     expect(ended.agents).toEqual([]);
     expect(ended.ended).toEqual(['c', 'd', 'e']);
+  });
+});
+
+describe('fleet hooks (HIVE-197)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    seedDemoFleet();
+  });
+
+  it('useFleetNavOrder is the whole fleet under All with Ended unfolded', () => {
+    useUiStore.setState({ endedExpanded: true });
+    const nav = renderHook(() => useNavOrder()).result.current;
+    expect(renderHook(() => useFleetNavOrder()).result.current).toEqual(nav);
+  });
+
+  it('a project filter narrows the order to that project’s rows', () => {
+    useUiStore.setState({ sessionsProject: 'nova-web' });
+    const order = renderHook(() => useFleetNavOrder()).result.current;
+    const live = renderHook(() => useFleetGroup('live')).result.current;
+    expect(live.length).toBeGreaterThan(0);
+    for (const id of live) expect((useHiveStore.getState().entities[id] as Session).project).toBe('nova-web');
+    expect(order.slice(0, live.length)).toEqual(live);
+  });
+
+  it('the Ended filter leaves only ended rows', () => {
+    useUiStore.setState({ sessionsFilter: 'ended' });
+    expect(renderHook(() => useFleetGroup('live')).result.current).toEqual([]);
+    expect(renderHook(() => useEndedMore()).result.current).toBe(0);
   });
 });

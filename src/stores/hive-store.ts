@@ -111,7 +111,7 @@ import type {
   SessionHistoryEntry,
   SessionPrRequest,
 } from '@shared/session-history-contract';
-import { type TableFilter, useUiStore } from '@stores/ui-store';
+import { type TableFilter, useFleetView, useUiStore } from '@stores/ui-store';
 
 /**
  * Domain state — what the system knows, as opposed to what the user is looking
@@ -5964,6 +5964,29 @@ export function fleetGroupsOf(
     endedMore: view.filter === 'live' ? 0 : endedSorted.length - shown.length,
   };
 }
+
+/** The folder name of a configured project, or `null` (HIVE-197). */
+export const useProjectRepo = (projectId: string | null): string | null => {
+  const snapshot = useSyncExternalStore(subscribeProjectConfig, projectConfigSnapshot, projectConfigSnapshot);
+  if (projectId === null) return null;
+  return repoDirName(snapshot?.projects.find((project) => project.id === projectId)?.path ?? null);
+};
+
+const useFleetGroups = <T,>(pick: (groups: FleetGroups) => T): T => {
+  const view = useFleetView();
+  const repo = useProjectRepo(view.project);
+  // ponytail: `now` is read per store change, so "today" rolls over at the next update after midnight.
+  return useHiveStore(useShallow((state) => pick(fleetGroupsOf(state, view, repo, Date.now()))));
+};
+
+/** One group of the Overmind table, under the current filters (HIVE-197). */
+export const useFleetGroup = (group: 'live' | 'agents' | 'ended'): string[] =>
+  useFleetGroups((groups) => groups[group]);
+/** How many endings the unfiltered table folds away behind "N more ›". */
+export const useEndedMore = (): number => useFleetGroups((groups) => groups.endedMore);
+/** The rows on screen, flattened in the table's order — what ↑↓ walks (HIVE-197). */
+export const useFleetNavOrder = (): string[] =>
+  useFleetGroups((groups) => [...groups.live, ...groups.agents, ...groups.ended]);
 
 /**
  * Every id the centre stage mounts a terminal surface for (terminals).
