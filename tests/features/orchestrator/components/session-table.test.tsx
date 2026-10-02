@@ -1111,9 +1111,9 @@ describe('SessionTable', () => {
 });
 
 /**
- * Plan progress in the fleet table (HIVE-182): the same green `done/total` as
- * the projects-tree row, inside the row's status cell after its label — the
- * one cell that must never truncate, so the column is sized for both.
+ * Plan progress in the fleet table (HIVE-182): `done/total`, in its own Plan
+ * column beside a progress bar since HIVE-197 (it used to ride in the status
+ * cell after the label).
  */
 describe('SessionTable — plan progress', () => {
   const plan = (entityId: string, statuses: PlanTaskStatus[]): SessionPlan => ({
@@ -1135,21 +1135,19 @@ describe('SessionTable — plan progress', () => {
     useUiStore.getState().reset();
   });
 
-  it('shows done/total inside the status cell, after the label', () => {
+  it('draws plan progress as a bar and done/total in its own column (HIVE-197)', () => {
     act(() =>
       useHiveStore
         .getState()
-        .setPlan('hero-refresh', plan('hero-refresh', ['completed', 'completed', 'in_progress', 'pending', 'pending'])),
+        .setPlan('hero-refresh', plan('hero-refresh', ['completed', 'completed', 'pending'])),
     );
     render(<SessionTable />);
 
-    const row = rowFor('hero-refresh');
-    const count = within(row).getByText('2/5');
-    const cell = count.closest('[data-col="status"]');
-    expect(cell).not.toBeNull();
-    const label = within(cell as HTMLElement).getByText('working');
-    expect(label.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(row).getByText('2/5 tasks done')).toHaveClass('sr-only');
+    const shell = shellOf(rowFor('hero-refresh'));
+    const cell = shell.querySelector('[data-col="plan"]') as HTMLElement;
+    expect(cell).toHaveTextContent('2/3');
+    expect(within(cell).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2');
+    expect(shell.querySelector('[data-col="status"]')).not.toHaveTextContent('2/3');
   });
 
   it('shows nothing on a row without a plan', () => {
@@ -1167,5 +1165,39 @@ describe('SessionTable — plan progress', () => {
     act(() => useHiveStore.getState().setPlan('hero-refresh', plan('hero-refresh', ['completed', 'pending'])));
 
     expect(within(rowFor('hero-refresh')).getByText('1/2')).toBeInTheDocument();
+  });
+});
+
+describe('SessionTable — columns (HIVE-197)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+  });
+
+  it('orders the header Session, Status after Branch, Plan, Last used, PR', () => {
+    render(<SessionTable />);
+    const header = screen.getByText('SESSION').parentElement as HTMLElement;
+    expect(within(header).getAllByText(/^[A-Z ]+$/).map((cell) => cell.textContent)).toEqual([
+      'SESSION',
+      'PROJECT',
+      'BRANCH',
+      'STATUS',
+      'PLAN',
+      'LAST USED',
+    ]);
+  });
+
+  it('agent rows hold the Plan column open, empty', () => {
+    useHiveStore.getState().hydrateAgents([
+      {
+        name: 'builder', description: 'Builds.', icon: 'Robot', status: 'sleeping', wake: { on: [] },
+        mcp: [], tools: [], rotateAfter: 50, runs: [], live: [],
+      } as unknown as AgentSummary,
+    ]);
+    render(<SessionTable />);
+    const cell = screen.getByTestId('agent-row').querySelector('[data-col="plan"]');
+    expect(cell).not.toBeNull();
+    expect(cell).toBeEmptyDOMElement();
   });
 });

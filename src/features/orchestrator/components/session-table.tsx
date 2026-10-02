@@ -14,7 +14,6 @@ import {
   recencyOf,
 } from '@/types/entity';
 
-import { Badge } from '@components/ui/badge';
 import { statusLabel, statusText } from '@components/ui/status-dot';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { effectiveSelId } from '@features/orchestrator/utils/selection';
@@ -106,12 +105,21 @@ import { useActiveTab, useSelId, useSetSelId } from '@stores/ui-store';
  *
  * Not "at no width at all" — that would be the same over-claim the budget made,
  * one threshold lower. Once the flexible three are at zero, what is left is the
- * `shrink-0` cells, and **they** overflow: 12 caret + 176 `STATUS` + 80
- * `LAST USED` + 34 `PR` + 52 Resume + 56 gaps (seven of `gap-2`) + 16 `px-2` =
- * **426px**. Below a 426px flex line the fixed cells overflow their wrapper —
+ * `shrink-0` cells, and **they** overflow: 12 caret + 132 `STATUS` + 96 `PLAN`
+ * + 80 `LAST USED` + 34 `PR` + 52 Resume + 64 gaps (eight of `gap-2`) + 16
+ * `px-2` = **486px**. Below a 486px flex line the fixed cells overflow their wrapper —
  * the header's and a row's alike, since the header mirrors the row's box — and
  * `LAST USED` paints under `PR`. `PR` and Resume still share an x with the
  * header; before the mirror they did not, and diverged by the overflow.
+ *
+ * **The Plan column raised it by 60px**, from 426 (HIVE-197). The count left
+ * `STATUS` for a column of its own (a 44px bar and `done/total`, 96px plus its
+ * gap), and `STATUS` went back to the 132px its label needs, which returned 44
+ * of the 104. That puts the threshold 58px past the 428px line of the 1100px
+ * window with a Resume column: there the fixed cells overflow and `LAST USED`
+ * paints under `PR`, while `PR` and Resume keep the header's x. Without a
+ * Resume column the sum is 426px (no slot, one gap fewer) and the table still
+ * fits that window, by 2px.
  *
  * **The plan count raised it by 44px**, from 396 (HIVE-182): `STATUS` carries a
  * session's `done/total` beside its label now, and that cell may not truncate.
@@ -130,10 +138,9 @@ import { useActiveTab, useSelId, useSetSelId } from '@stores/ui-store';
  * the threshold, instead of to every row at every width.
  *
  * The basis moved that threshold from ~518px to 396px (426px since HIVE-182
- * and retro D), which puts every default layout inside it — including the
- * 1100px window with a Resume column, the case this file was rewritten for,
- * though that one is now a 428px line and **2px** inside, not comfortably. A
- * fixed column added here spends that margin first. What remains outside is
+ * and retro D, 486px since HIVE-197). Until HIVE-197 that put every default
+ * layout inside it, the 1100px window with a Resume column by 2px; the Plan
+ * column spent that margin and 58px more (above). What remains outside is
  * a user's own doing: HIVE-105 made the rails draggable, and
  * `STAGE_MIN_FRACTION` (`lib/rail-width.ts`) promises the stage only 20% of the
  * window, so 1100px can be squeezed to a 220px stage and a ~168px line. No
@@ -155,12 +162,11 @@ import { useActiveTab, useSelId, useSetSelId } from '@stores/ui-store';
  * ends in a generic `monospace` whose metrics are the operating system's
  * business.
  *
- * Since HIVE-182 it is `w-[176px]`: the same cell carries a session's plan
- * progress after its label, a green `Badge` reading `done/total`. Sized for
- * the longest label plus the longest plausible count — 127.9px + a 6px gap +
- * a 38px `10/12` badge (five 10px bold characters and the badge's `px-1`) —
- * with the same four pixels of margin, because the count may not truncate for
- * the label's reason: `2/…` has stopped saying anything.
+ * HIVE-182 widened it to `w-[176px]` so the cell could carry a session's plan
+ * progress after its label, a green `Badge` reading `done/total`. HIVE-197
+ * moved the count to its own `PLAN` column, so the cell is back to the label's
+ * 132px. The count still may not truncate, for the label's reason — `2/…` has
+ * stopped saying anything — which is why `PLAN` is fixed and `whitespace-nowrap`.
  *
  * It and the two other fixed columns are what the flexible three shrink
  * *against*. `table-alignment.spec.ts` measures the result at 1100px, both with
@@ -221,10 +227,12 @@ const COL = {
     `whitespace-nowrap` keeps the one declaration that matters. A value too wide
     for the column overflows it — visibly, on one line, without disturbing the
     row — which is the honest failure and the one an e2e can measure. That
-    matters because the 176px is measured against *one* machine's font stack and
+    matters because the 132px is measured against *one* machine's font stack and
     the fallback chain ends in a generic `monospace`.
   */
-  status: 'w-[176px] shrink-0 whitespace-nowrap',
+  status: 'w-[132px] shrink-0 whitespace-nowrap',
+  /** Plan progress (HIVE-197): a 44px bar and `done/total` — `17/17` is the widest. */
+  plan: 'w-[96px] shrink-0 whitespace-nowrap',
   project: 'flex-[1_1_64px] truncate',
   branch: 'flex-[2_1_76px] truncate',
   /*
@@ -380,6 +388,12 @@ export function SessionTable() {
         <span className={COL.session} title="SESSION">
           SESSION
         </span>
+        <span className={COL.project} title="PROJECT">
+          PROJECT
+        </span>
+        <span className={COL.branch} title="BRANCH">
+          BRANCH
+        </span>
         {/*
           A second measurement handle, for `COL`'s width note. The status column
           is the only one that must never truncate — a branch cut to a prefix is
@@ -391,15 +405,13 @@ export function SessionTable() {
         <span className={COL.status} data-col="status">
           STATUS
         </span>
-        <span className={COL.project} title="PROJECT">
-          PROJECT
-        </span>
-        <span className={COL.branch} title="BRANCH">
-          BRANCH
+        {/* Plan progress, its own column since HIVE-197; a handle like the rest. */}
+        <span className={COL.plan} data-col="plan">
+          PLAN
         </span>
         {/*
           A third measurement handle. `LAST USED` is a `shrink-0` cell, so it is
-          a term in the 426px threshold above rather than something that gives
+          a term in the 486px threshold above rather than something that gives
           way — which makes it exactly the kind of column that takes the ones to
           its right with it when it is re-sized by someone who has not read the
           arithmetic.
@@ -704,26 +716,6 @@ function SessionTableRow({
       <span className={cn(COL.session, 'text-ink')} title={entityLabel(entity)}>
         {entityLabel(entity)}
       </span>
-      <span
-        className={cn(
-          COL.status,
-          'flex items-center gap-1.5',
-          statusText(entity.status, entity.idleDetail),
-        )}
-        data-col="status"
-      >
-        {statusLabel(entity.status, entity.idleDetail)}
-        {/* Plan progress after the label, which keeps priority (HIVE-182). */}
-        {progress === undefined ? null : (
-          <Badge
-            count={progress.total}
-            text={`${String(progress.done)}/${String(progress.total)}`}
-            tone="green"
-            label="tasks done"
-            className="shrink-0"
-          />
-        )}
-      </span>
       <span className={cn(COL.project, 'text-subtle')} title={entity.project}>
         {entity.project}
       </span>
@@ -732,6 +724,36 @@ function SessionTableRow({
         title={branchLabel(entity)}
       >
         {branchLabel(entity)}
+      </span>
+      <span
+        className={cn(COL.status, statusText(entity.status, entity.idleDetail))}
+        data-col="status"
+      >
+        {statusLabel(entity.status, entity.idleDetail)}
+      </span>
+      {/*
+        The session's plan progress (HIVE-182), a bar and `done/total` in its own
+        column since HIVE-197 — it used to ride in the status cell after the label.
+      */}
+      <span className={cn(COL.plan, 'flex items-center gap-2 text-subtle')} data-col="plan">
+        {progress === undefined ? null : (
+          <>
+            <span
+              role="progressbar"
+              aria-label="tasks done"
+              aria-valuemin={0}
+              aria-valuemax={progress.total}
+              aria-valuenow={progress.done}
+              className="h-1 w-11 shrink-0 overflow-hidden rounded-full bg-chip"
+            >
+              <span
+                className="block h-full rounded-full bg-green"
+                style={{ width: `${String((progress.done / progress.total) * 100)}%` }}
+              />
+            </span>
+            {`${String(progress.done)}/${String(progress.total)}`}
+          </>
+        )}
       </span>
       {/*
         Inside the button, unlike `PR` and Resume: it is text and not a control,
@@ -984,12 +1006,6 @@ function AgentTableRow({
           dot is filled from, so the two surfaces still agree about what the
           state *means*; only the glyph is spent differently.
         */}
-        <span
-          className={cn(COL.status, statusText(entity.status))}
-          data-col="status"
-        >
-          {word}
-        </span>
         {/*
           `PROJECT` and `BRANCH`, spent on the wake — see `COL.wake`. `title`
           for the reason every truncating cell carries one: `describeWake` has
@@ -1002,6 +1018,14 @@ function AgentTableRow({
         >
           {describeWake(entity.wake)}
         </span>
+        <span
+          className={cn(COL.status, statusText(entity.status))}
+          data-col="status"
+        >
+          {word}
+        </span>
+        {/* An agent has no plan; the cell holds the column's width. */}
+        <span className={COL.plan} data-col="plan" />
         <span
           className={cn(COL.lastUsed, 'text-subtle')}
           data-col="last-used"
