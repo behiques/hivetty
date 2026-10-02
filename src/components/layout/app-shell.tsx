@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
 
+import { ActivityBar } from '@components/layout/activity-bar';
 import { ActivityRail } from '@components/layout/activity-rail';
 import { CenterStage } from '@components/layout/center-stage';
 import { Header } from '@components/layout/header';
 import { LeftRail } from '@components/layout/left-rail';
+import { ListPanel } from '@components/layout/list-panel';
 import { RailHandles } from '@components/layout/rail-handles';
 import { TitleBar } from '@components/layout/title-bar';
 import { useProjectWatcher } from '@features/explorer/hooks/use-project-watcher';
@@ -17,7 +19,7 @@ import { useForegroundSession } from '@hooks/use-foreground-session';
 import { useNotificationStream } from '@hooks/use-notification-stream';
 import { useRemoteLinkStream } from '@hooks/use-remote-link';
 import { useSessionNames } from '@hooks/use-session-names';
-import { watchSystemTheme } from '@stores/appearance-store';
+import { useLayout, watchSystemTheme } from '@stores/appearance-store';
 import { useShowActivityRail } from '@stores/ui-store';
 
 /**
@@ -44,9 +46,14 @@ import { useShowActivityRail } from '@stores/ui-store';
  * guarantee the stage a fifth of the window, so the sentence above still holds:
  * whatever the rails do, the stage takes the remainder and there is always a
  * remainder. See `@lib/rail-width`.
+ *
+ * Round two (HIVE-195), behind Settings › Appearance › Layout, replaces the
+ * left rail with the activity bar and one list panel. Every subscription above
+ * stays mounted once, above the branch.
  */
 export function AppShell() {
   const showActivityRail = useShowActivityRail();
+  const roundTwo = useLayout() === 'round-two';
 
   /*
     The ruler the rail handles measure against (HIVE-105).
@@ -178,11 +185,25 @@ export function AppShell() {
         below position themselves against.
       */}
       <div ref={railRef} className="relative flex min-h-0 flex-1">
-        <LeftRail />
+        {/*
+          Round two (HIVE-195) swaps the left of the row and nothing else.
+          `CenterStage` keeps child index 1 in both layouts, so React keeps the
+          same instance across the switch and no live terminal is torn down —
+          the fragment and `LeftRail` share slot 0.
+        */}
+        {roundTwo ? (
+          <>
+            <ActivityBar />
+            <ListPanel />
+          </>
+        ) : (
+          <LeftRail />
+        )}
         <CenterStage />
         {showActivityRail ? <ActivityRail /> : null}
 
-        <RailHandles containerRef={railRef} />
+        {/* HIVE-105's drag handles are Classic's; round two's panel is fixed. */}
+        {roundTwo ? null : <RailHandles containerRef={railRef} />}
       </div>
     </div>
   );
