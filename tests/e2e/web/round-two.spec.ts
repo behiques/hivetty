@@ -82,3 +82,13 @@ test('Settings opens from the bar, and Classic comes back from it', async ({ pag
   ).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Activity' })).toBeVisible();
 });
+
+test('Sessions shows the projects panel and the Overmind, and the filter narrows it', async ({ page }) => {
+  await place(page, 'Sessions').click();
+  await expect(page.getByRole('region', { name: 'Sessions list' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Overmind' })).toBeVisible();
+  await page.getByRole('radio', { name: 'Ended' }).click();
+  await expect(page.getByRole('radio', { name: 'Ended' })).toBeChecked();
+  await page.getByRole('radio', { name: 'All' }).click();
+  await expect(page.getByRole('radio', { name: 'All' })).toBeChecked();
+});

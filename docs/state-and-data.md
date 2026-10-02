@@ -37,6 +37,12 @@ the picker from re-rendering thirteen live terminals.
   `explorerExpanded`, `explorerProjectId`, and round two's place machine —
   `place` (`'home'` on every launch) and `panelOpen` (`true`), HIVE-195.
   Neither persists: a launch always opens on Home with its panel open.
+  The Sessions place adds (HIVE-197), none persisted: `sessionsProject`
+  (the overmind's project filter, `null` for all), `sessionsFilter`
+  (`'all' | 'live' | 'ended'`), `endedExpanded` ("N more ›" pressed) and
+  `expanded`, round two's fold map, **folded by default** and separate from
+  Classic's `collapsed`. `setSessionsProject(id)` also unfolds that project;
+  `backToOrch` and the Sessions icon put `selId` on the session being left.
 - `src/stores/appearance-store.ts` — durable preferences: `theme`, the terminal
   and editor typography, `editorPlacement`, `editorNav`, `editorEditable`,
   `density`, `layout` (`'classic' | 'round-two'`, HIVE-195), the rail widths,
@@ -251,6 +257,13 @@ Components never read a store object directly and never call `getState()`.
 | `useCounts()` | `{ working, waiting, idle, done, terminated }` |
 | `useNavOrder()` | active session ids, then ended ones |
 | `useActiveSessions()` / `useEndedSessions()` | the two sides of the table's divider |
+| `useFleetGroup(group)` | one of the overmind table's groups (`'live'`, `'agents'`, `'ended'`) under the current filters |
+| `useEndedMore()` | how many endings the unfiltered table folds behind "N more ›" |
+| `useFleetNavOrder()` | the rows on screen, in the table's order — what `↑↓` walks |
+| `useProjectCounts(id)` | a project's live entries: `{ needs, other }` |
+| `useSessionsHeadCounts()` | the Sessions panel head: `{ live, needs }` over every entry |
+| `useOvermindHeadCounts(project)` | the overmind head: `{ live, projects, needs, ended, endedToday }` over sessions |
+| `useAgentsWorkingIn(project)` | agents with a live `repo:` run in that project's folder |
 | `useProjectSessions(projectId)` | a project's sessions that have not ended |
 | `useOpenEntity()` | open an entity's tab, refusing a `terminated` one |
 | `useTicketPrs(ticketKey)` | PRs reachable from a ticket's sessions |
@@ -268,6 +281,13 @@ Components never read a store object directly and never call `getState()`.
 
 Derived values are computed in selectors and **never stored** — one source of
 truth for every number on screen.
+
+**`fleetGroupsOf` is the one source of the overmind table's row order**
+(HIVE-197). It takes the store, the filters (`useFleetView()`), the filtered
+project's folder name and the time, and returns the three groups plus
+`endedMore`. The table draws `useFleetGroup`'s groups and the caret walks
+`useFleetNavOrder`, both from it, so the rows and `↑↓` cannot disagree.
+`useNavOrder` stays the whole fleet, for the terminal host.
 
 ## Caps
 
