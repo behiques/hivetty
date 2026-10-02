@@ -56,6 +56,11 @@ Mode, [themes](themes.md), terminal font and scrollback, the
 [plan panel](plan-panel.md) beside the terminal (**Show plan panel**; off keeps
 the count on the session row), team name, density.
 
+**Layout** — Classic (the default) or Round two. Round two puts the places on a
+bar at the left, with one list beside the stage. It switches live, without
+restarting a terminal, and is kept per device and per window. Round two opens
+on Home on every launch.
+
 ## Editor
 
 Placement (Full stage or Split), split direction, Tabs or One at a time, **Allow editing**,

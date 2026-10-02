@@ -210,6 +210,9 @@
    */
   --cc-rail-w-left-open: 320px;
   --cc-rail-w-right-open: 316px;
+  /* Round two's frame (HIVE-195): fixed, not density-dependent. */
+  --cc-bar-w: 64px;
+  --cc-list-w: 300px;
   --cc-rail-gap: 18px;
   --cc-list-gap: 10px;
   --cc-list-gap-sm: 8px;

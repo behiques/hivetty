@@ -350,6 +350,28 @@ panel that mounts exactly one of `InboxPanel` (051), `PrsPanel` (052), or
   complexity — a stale offset into a list the simulation just prepended to is
   worse than starting at the top.
 
+### `<ActivityBar />`
+
+`src/components/layout/activity-bar.tsx` — HIVE-195, built. No props.
+
+Round two's left edge: a `<nav aria-label="Places">` at `--cc-bar-w`. The brand
+glyph on top (Phosphor `Hexagon`, `weight="fill"`, `text-amber`, 22px) carries
+the team name as its accessible name and its tooltip, "The Hive" when the name
+is empty. Below it the five places — Home, Sessions, Work, Agents, PRs — each a
+52px button calling `selectPlace`; the active one has `aria-current="page"`.
+Settings sits at the foot and calls `openSettings()`. No Search and no
+connection item yet.
+
+### `<ListPanel />`
+
+`src/components/layout/list-panel.tsx` — HIVE-195, built. No props.
+
+Today's panel for the current place, at `--cc-list-w`, in a
+`<section aria-label="<Place> list">`: `ProjectsPanel` for Sessions,
+`WorkPanel`, `AgentsPanel`, `PrsPanel`. Home has none, and nothing renders when
+`panelOpen` is false. Not resizable and no collapsed strip. Each place's own
+story replaces its entry.
+
 ### `components/layout/` is the composition root
 
 It is the one place under `src/components/` allowed to import `src/features/**` —

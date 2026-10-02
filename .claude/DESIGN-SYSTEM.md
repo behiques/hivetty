@@ -315,6 +315,10 @@ information the label already carries.
 ## Chrome
 
 - Header height **56px**; left rail **320px**; activity rail **316px**.
+- Round two (HIVE-195): activity bar `--cc-bar-w: 64px`, list panel
+  `--cc-list-w: 300px` — fixed, not density-dependent. A bar item is 52px wide,
+  a 19px icon over a 9.5px/500 label; active is `text-ink` on `bg-panel-2`,
+  the rest `text-muted`.
 - Scrollbars are thin (10px), thumb `--cc-border`, transparent track, rounded.
 - Interactive controls show a pointer cursor — a base rule in `global.css`, since
   Tailwind v4 dropped the one that used to provide this. Do not add

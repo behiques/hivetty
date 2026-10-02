@@ -14,6 +14,8 @@ import {
   sanitizeThemeState,
   useAppearanceStore,
   syncRailWidths,
+  useLayout,
+  useSetLayout,
   useTerminalAppearance,
   watchSystemTheme,
 } from '@stores/appearance-store';
@@ -491,6 +493,7 @@ describe('appearance-store — persistence', () => {
       terminalFontSize: 12.5,
       terminalScrollback: 5000,
       density: 'compact',
+      layout: 'classic',
       railWidthLeft: null,
       railWidthRight: null,
       railCollapsedLeft: false,
@@ -1201,5 +1204,57 @@ describe('appearance-store — showPlanPanel', () => {
     await useAppearanceStore.persist.rehydrate();
 
     expect(useAppearanceStore.getState().showPlanPanel).toBe(true);
+  });
+});
+
+describe('appearance-store — layout (HIVE-195)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useAppearanceStore.getState().reset();
+  });
+
+  it('defaults to classic', () => {
+    expect(useAppearanceStore.getState().layout).toBe('classic');
+  });
+
+  it('setLayout persists it', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+
+    expect(useAppearanceStore.getState().layout).toBe('round-two');
+    const { state } = JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) as string) as {
+      state: Record<string, unknown>;
+    };
+    expect(state.layout).toBe('round-two');
+  });
+
+  it('rehydrates a stored state without the key to classic', async () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ version: 3, state: { theme: 'light' } }),
+    );
+
+    await useAppearanceStore.persist.rehydrate();
+
+    expect(useAppearanceStore.getState().layout).toBe('classic');
+  });
+
+  it('rehydrates an unknown stored layout to classic', async () => {
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ version: 3, state: { layout: 'sideways' } }),
+    );
+
+    await useAppearanceStore.persist.rehydrate();
+
+    expect(useAppearanceStore.getState().layout).toBe('classic');
+  });
+
+  it('useLayout and useSetLayout read and write it', () => {
+    const { result } = renderHook(() => ({ layout: useLayout(), setLayout: useSetLayout() }));
+
+    act(() => result.current.setLayout('round-two'));
+
+    expect(result.current.layout).toBe('round-two');
   });
 });

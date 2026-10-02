@@ -58,6 +58,46 @@ it and nothing else.
 Each region is a landmark element, so tests address them by role
 (`banner` / `navigation` / `main` / `complementary`) rather than by class.
 
+## The round-two shell (HIVE-195)
+
+Settings › Appearance › **Layout** picks the frame. Classic, the default, is the
+tree above: `LeftRail` plus HIVE-105's `RailHandles`. Round two swaps the left of
+the row for `ActivityBar` (a 64px `<nav aria-label="Places">`) and `ListPanel`
+(one 300px list for the current place), and drops the handles — the panel is
+fixed. `Header` and `TitleBar` render in both.
+
+```
+Row (Classic)       LeftRail                 │ CenterStage │ ActivityRail │ RailHandles
+Row (round two)     <>ActivityBar ListPanel</> │ CenterStage │ ActivityRail
+```
+
+**`CenterStage` holds child index 1 in both layouts**, because the fragment and
+`LeftRail` share slot 0. React therefore keeps the same instance across the
+switch and no live terminal is torn down; wrapping the stage into each branch
+would remount all of them on a settings click. The `ActivityRail` stays at the
+right edge in both layouts until HIVE-201, so PRs shows twice in round two —
+accepted while the frame is opt-in.
+
+### The place machine
+
+Two `ui-store` fields drive the bar: `place` (`'home' | 'sessions' | 'work' |
+'agents' | 'prs'`, Home on every launch) and `panelOpen`. `selectPlace(p)` is
+the bar's whole interaction:
+
+- **A new place** opens its panel and dismisses the picker and settings, as
+  `openTab` does.
+- **The active place** toggles its panel — except **Sessions with a session on
+  stage**, which goes back to the Overmind first and leaves the panel alone.
+
+Openers move the bar with what they open: `hive-store` calls
+`openTab(id, place)` from `spawnSession`, `spawnTerminal`, `resumeSession` and
+`openEntity` (an agent lands on Agents, anything else on Sessions), and
+`backToOrch` lands on Sessions because the Overmind is that place's page.
+Cleanup does not: when the tab on stage is removed or its session ends,
+`removeTerminal` and `finishSession` call `openTab('orch')`, so a session
+ending behind Home does not yank the user to Sessions. `clearSession` passes no
+place either — it replaces the tab already on stage rather than opening one.
+
 ### The rules the layout depends on
 
 - **`min-h-0` on the row and `min-w-0` on the center stage.** A flex item
@@ -107,9 +147,12 @@ The stage shows **exactly one thing at a time**, and which one is decided by a
 pure function rather than by nested JSX conditionals:
 
 ```ts
-resolveView({ activeTab, picker, settings, entity, editorFull })
-  : 'settings' | 'picker' | 'editor' | 'orchestrator' | 'session' | 'agent'
+resolveView({ activeTab, picker, settings, home, entity, editorFull })
+  : 'settings' | 'picker' | 'home' | 'editor' | 'orchestrator' | 'session'
+  | 'agent' | 'terminal'
 ```
+
+Precedence runs settings → picker → home → editor → orchestrator → entity.
 
 It lives in `src/lib/resolve-view.ts` and is tested exhaustively. A machine
 embedded in JSX is one that grows a seventh state by accident; this one cannot.
@@ -122,6 +165,12 @@ Two precedence rules carry the weight:
 - **The orchestrator is the floor.** An `activeTab` naming no entity resolves
   there rather than to a blank stage, because a session can be removed while its
   tab is open.
+- **Home sits below both overlays and above everything else** (HIVE-195).
+  `home` is true when the layout is round two **and** the place is Home. Like
+  the overlays it never touches `activeTab`, and it is neither an entity view
+  nor a terminal view, so the foreground gate (HIVE-81) reports no session
+  while Home covers the stage. `CenterStage` hides the terminal region behind it
+  exactly as it does behind the picker.
 
 ### What the component does with it
 

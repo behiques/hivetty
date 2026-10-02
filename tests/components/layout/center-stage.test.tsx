@@ -1054,3 +1054,48 @@ describe('CenterStage — Show plan panel (HIVE-182)', () => {
   });
 
 });
+
+describe('CenterStage — Home in round two (HIVE-195)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
+    useAppearanceStore.getState().setLayout('round-two');
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+  });
+
+  afterEach(() => {
+    useAppearanceStore.getState().reset();
+  });
+
+  it('shows the Home page and hides the terminal region without unmounting it', () => {
+    render(<CenterStage />);
+    // Terminals mount on first activation, so one has to be watched first.
+    act(() => useUiStore.getState().openTab('hero-refresh', 'sessions'));
+    expect(visibleSurfaces()).toHaveLength(1);
+    const before = terminalInstances.length;
+
+    act(() => useUiStore.getState().selectPlace('home'));
+
+    expect(screen.getByRole('heading', { name: 'Home', level: 1 })).toBeInTheDocument();
+    expect(visibleSurfaces()).toHaveLength(0);
+    expect(terminalInstances).toHaveLength(before);
+    expect(terminalInstances.some((instance) => instance.disposed)).toBe(false);
+
+    act(() => useUiStore.getState().selectPlace('sessions'));
+
+    expect(screen.queryByRole('heading', { name: 'Home', level: 1 })).not.toBeInTheDocument();
+    expect(visibleSurfaces()).toHaveLength(1);
+    expect(terminalInstances).toHaveLength(before);
+  });
+
+  it('draws no Home page in Classic', () => {
+    useAppearanceStore.getState().setLayout('classic');
+    render(<CenterStage />);
+
+    expect(screen.queryByRole('heading', { name: 'Home', level: 1 })).not.toBeInTheDocument();
+  });
+});

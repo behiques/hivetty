@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -30,6 +30,7 @@ describe('AppearanceSection', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('radiogroup', { name: 'Mode' })).toBeInTheDocument();
     expect(screen.getByRole('radiogroup', { name: 'Density' })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: 'Layout' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Font' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Size' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Scrollback' })).toBeInTheDocument();
@@ -163,5 +164,16 @@ describe('AppearanceSection', () => {
     expect(headings[0]).toBe('Themes');
     expect(headings).toContain('Mode');
     expect(headings).not.toContain('Theme');
+  });
+
+  it('switches the layout (HIVE-195)', async () => {
+    render(<AppearanceSection />);
+    const group = screen.getByRole('radiogroup', { name: 'Layout' });
+    expect(within(group).getByRole('radio', { name: 'Classic' })).toBeChecked();
+
+    await userEvent.click(within(group).getByRole('radio', { name: 'Round two' }));
+
+    expect(useAppearanceStore.getState().layout).toBe('round-two');
+    expect(within(group).getByRole('radio', { name: 'Round two' })).toBeChecked();
   });
 });

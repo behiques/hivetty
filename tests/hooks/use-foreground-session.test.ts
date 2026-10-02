@@ -155,6 +155,27 @@ describe('useForegroundSession', () => {
     expect(calls).toEqual([expected]);
   });
 
+  it('reports nothing while Home covers the stage in round two (HIVE-195)', () => {
+    withBridge();
+    seed({ activeTab: 'sess-03' });
+    useAppearanceStore.setState({ layout: 'round-two' });
+    useUiStore.setState({ place: 'home' });
+
+    renderHook(() => useForegroundSession());
+
+    expect(calls).toEqual([null]);
+  });
+
+  it('ignores the place in Classic', () => {
+    withBridge();
+    seed({ activeTab: 'sess-03' });
+    useUiStore.setState({ place: 'home' });
+
+    renderHook(() => useForegroundSession());
+
+    expect(calls).toEqual(['term-3']);
+  });
+
   it('does nothing without a bridge', () => {
     // window.hive undefined — the browser demo, where nothing is listening.
     seed({ activeTab: 'sess-03' });

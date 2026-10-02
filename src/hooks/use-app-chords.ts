@@ -8,9 +8,9 @@ import {
   type KeyEventLike,
   type TerminalChordDetail,
 } from '@lib/terminal/keymap';
-import { useToggleRailCollapsed } from '@stores/appearance-store';
+import { useLayout, useToggleRailCollapsed } from '@stores/appearance-store';
 import { useSpawnTerminalBeside } from '@stores/hive-store';
-import { useActiveTab } from '@stores/ui-store';
+import { useActiveTab, useTogglePanel } from '@stores/ui-store';
 
 /**
  * One chord, both ways it can arrive.
@@ -50,6 +50,14 @@ export function useAppChords(): void {
     activeTabRef.current = activeTab;
   }, [activeTab]);
 
+  // Read through a ref for the same reason: a layout switch must not re-bind the chords.
+  const togglePanel = useTogglePanel();
+  const layout = useLayout();
+  const layoutRef = useRef(layout);
+  useEffect(() => {
+    layoutRef.current = layout;
+  }, [layout]);
+
   useEffect(() => {
     const isMac = isMacPlatform();
 
@@ -57,7 +65,9 @@ export function useAppChords(): void {
       {
         matches: (event, mac) => isRailChord(event, mac) === 'left',
         name: 'rail-left',
-        run: () => toggleRailCollapsed('left'),
+        // Round two has no left rail to collapse; the chord closes its list panel (HIVE-195).
+        run: () =>
+          layoutRef.current === 'round-two' ? togglePanel() : toggleRailCollapsed('left'),
       },
       {
         matches: (event, mac) => isRailChord(event, mac) === 'right',
@@ -102,5 +112,5 @@ export function useAppChords(): void {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener(TERMINAL_CHORD_EVENT, onChord);
     };
-  }, [toggleRailCollapsed, spawnTerminalBeside]);
+  }, [toggleRailCollapsed, spawnTerminalBeside, togglePanel]);
 }

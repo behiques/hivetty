@@ -46,6 +46,29 @@ describe('useAppChords', () => {
     expect(useAppearanceStore.getState().railCollapsedLeft).toBe(true);
   });
 
+  it('toggles the list panel instead in round two (HIVE-195)', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    renderHook(() => useAppChords());
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', metaKey: true, bubbles: true }));
+    });
+
+    expect(useUiStore.getState().panelOpen).toBe(false);
+    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(false);
+  });
+
+  it('follows a layout switch made after mount', () => {
+    renderHook(() => useAppChords());
+    act(() => useAppearanceStore.getState().setLayout('round-two'));
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', metaKey: true, bubbles: true }));
+    });
+
+    expect(useUiStore.getState().panelOpen).toBe(false);
+  });
+
   it('toggles the right rail on the alt variant', () => {
     renderHook(() => useAppChords());
 

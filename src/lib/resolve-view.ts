@@ -7,6 +7,7 @@ import type { Entity } from '@/types/entity';
 export type ViewState =
   | 'settings'
   | 'picker'
+  | 'home'
   | 'editor'
   | 'orchestrator'
   | 'session'
@@ -23,6 +24,12 @@ export interface ViewInput {
   picker: boolean;
   /** Whether the settings overlay is open (story 101). */
   settings: boolean;
+  /**
+   * Round two's Home is on stage (HIVE-195): the layout is round two **and**
+   * the place is Home. One boolean for the reason `editorFull` is one: this
+   * function decides precedence, not what a layout means.
+   */
+  home: boolean;
   /** The entity behind `activeTab`, or null for the orchestrator. */
   entity: Entity | null;
   /**
@@ -55,6 +62,9 @@ export interface ViewInput {
  *    it deliberately does not change `activeTab` — closing it has to return the
  *    user to whatever they were looking at, which only works if the underlying
  *    tab is untouched. Settings follows the same rule for the same reason.
+ * 2a. **Home sits below both overlays and above everything else** (HIVE-195).
+ *    Like the overlays it never touches `activeTab`, so leaving Home finds the
+ *    stage as it was.
  * 3. **The editor sits below both overlays and above the entity views.** It is
  *    not an overlay — it has no scrim, no focus trap and no dismissal — but it
  *    does fill the stage, so a settings pane opened from behind it must win.
@@ -69,11 +79,13 @@ export function resolveView({
   activeTab,
   picker,
   settings,
+  home,
   entity,
   editorFull,
 }: ViewInput): ViewState {
   if (settings) return 'settings';
   if (picker) return 'picker';
+  if (home) return 'home';
   if (editorFull) return 'editor';
   if (activeTab === ORCH_TAB) return 'orchestrator';
   if (!entity) return 'orchestrator';
