@@ -193,3 +193,11 @@ describe('NewSessionLink', () => {
     expect(screen.getByRole('button')).toBeEnabled();
   });
 });
+
+describe('NewSessionLink — label (HIVE-197)', () => {
+  it('reads "Session" beside its plus (HIVE-197)', () => {
+    setProjectConfigForTest(snapshot([{ id: PROJECT, status: 'ok' }]));
+    render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
+    expect(screen.getByRole('button', { name: `New session in ${PROJECT_NAME}` })).toHaveTextContent(/^Session$/);
+  });
+});
