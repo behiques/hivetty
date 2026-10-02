@@ -27,7 +27,7 @@ import {
   useEntity,
   useFleetGroup,
   useHasResumable,
-  useNavOrder,
+  useFleetNavOrder,
   useOpenEntity,
   useOvermindHeadCounts,
   usePlanProgress,
@@ -589,7 +589,7 @@ function SessionTableRow({
   reserveAction: boolean;
 }) {
   const entity = useEntity(id);
-  const navOrder = useNavOrder();
+  const navOrder = useFleetNavOrder();
   const selId = useSelId();
   const setSelId = useSetSelId();
   const openEntity = useOpenEntity();
@@ -619,7 +619,7 @@ function SessionTableRow({
   const progress = usePlanProgress(id);
 
   /*
-    Compared by id, not by position. `useNavOrder` is sorted by recency, so a
+    Compared by id, not by position. `useFleetNavOrder` is sorted by recency, so a
     row's index changes whenever any session spawns or ends — the caret used to
     stay on the *slot* while the rows moved underneath it, which meant a
     background spawn could leave Enter pointed at a session the user had never
@@ -943,7 +943,7 @@ function AgentTableRow({
   reserveAction: boolean;
 }) {
   const entity = useEntity(id);
-  const navOrder = useNavOrder();
+  const navOrder = useFleetNavOrder();
   const selId = useSelId();
   const setSelId = useSetSelId();
   const openEntity = useOpenEntity();
