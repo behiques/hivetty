@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { clearColour, mixColour, parseColour } from '@lib/theme/colour';
+import { BUILT_IN_THEME } from '@lib/theme/built-in';
+import { clearColour, mixColour, parseColour, swarmPaletteOf } from '@lib/theme/colour';
 
 describe('parseColour', () => {
   it.each([
@@ -46,5 +47,40 @@ describe('mixColour', () => {
 describe('clearColour', () => {
   it('keeps the channels and drops the alpha to zero', () => {
     expect(clearColour('#5b3d8f')).toBe('rgb(91 61 143 / 0)');
+  });
+});
+
+describe('swarmPaletteOf', () => {
+  const { creep: _c, chitin: _h, ...bare } = BUILT_IN_THEME.modes.dark.ui;
+  const plain = { ...bare, bg: '#10152a', brand: '#8fa7f2', ink: '#e4e8fb' };
+
+  it('uses the theme creature colours when present', () => {
+    const p = swarmPaletteOf(BUILT_IN_THEME.modes.dark.ui);
+    expect(p.creep).toBe('#5b3d8f');
+    expect(p.chitin).toBe('#b9a7f0');
+    expect(p.carapace).toBe(mixColour(BUILT_IN_THEME.modes.dark.ui.bg, '#b9a7f0', 0.18));
+  });
+
+  it('derives them from bg, brand and ink when absent (formulas pinned)', () => {
+    const p = swarmPaletteOf(plain);
+    expect(p.creep).toBe('rgb(67 79 122)'); // mix(bg, brand, 0.4)
+    expect(p.chitin).toBe('rgb(173 190 245)'); // mix(brand, ink, 0.35)
+    expect(p.carapace).toBe(mixColour('#10152a', 'rgb(173 190 245)', 0.18));
+    expect(p.creepClear).toBe('rgb(67 79 122 / 0)');
+  });
+
+  it('passes the nine chrome colours through untouched', () => {
+    const ui = BUILT_IN_THEME.modes.light.ui;
+    expect(swarmPaletteOf(ui)).toMatchObject({
+      bg: ui.bg,
+      panel2: ui.panel2,
+      ink: ui.ink,
+      muted: ui.muted,
+      subtle: ui.subtle,
+      brand: ui.brand,
+      green: ui.green,
+      amber: ui.amber,
+      red: ui.red,
+    });
   });
 });

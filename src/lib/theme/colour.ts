@@ -6,6 +6,9 @@
  * hand the canvas any of them, and the canvas needs channels to mix. Mixing is
  * in sRGB; the output is modern `rgb()`, which both CSS and a 2D context read.
  */
+import type { SwarmPalette } from '@lib/swarm/palette';
+import type { UiColors } from '@lib/theme/contract';
+
 export type Rgba = [number, number, number, number];
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -107,4 +110,31 @@ export function mixColour(base: string, toward: string, amount: number): string 
 export function clearColour(value: string): string {
   const parsed = parseColour(value);
   return parsed ? rgb(parsed, 0) : value;
+}
+
+/**
+ * The swarm canvas's palette for one theme mode.
+ *
+ * `creep` and `chitin` are the theme's when it carries them (the built-in
+ * does) and derived from its own colours when it does not, so an imported
+ * theme's creatures match it. `carapace` is always derived.
+ */
+export function swarmPaletteOf(ui: UiColors): SwarmPalette {
+  const creep = ui.creep ?? mixColour(ui.bg, ui.brand, 0.4);
+  const chitin = ui.chitin ?? mixColour(ui.brand, ui.ink, 0.35);
+  return {
+    bg: ui.bg,
+    panel2: ui.panel2,
+    ink: ui.ink,
+    muted: ui.muted,
+    subtle: ui.subtle,
+    brand: ui.brand,
+    green: ui.green,
+    amber: ui.amber,
+    red: ui.red,
+    creep,
+    creepClear: clearColour(creep),
+    chitin,
+    carapace: mixColour(ui.bg, chitin, 0.18),
+  };
 }

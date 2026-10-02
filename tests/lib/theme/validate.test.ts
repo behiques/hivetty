@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BUILT_IN_THEME } from '@lib/theme/built-in';
-import { MAX_THEME_BYTES } from '@lib/theme/contract';
+import { MAX_THEME_BYTES, THEME_MODES } from '@lib/theme/contract';
 import { importTheme, isHiveTheme, utf8ByteLength } from '@lib/theme/validate';
 
 /** A complete, valid theme built by recolouring the built-in. */
@@ -246,6 +246,27 @@ describe('unknown keys', () => {
     if (!result.ok) return;
     expect(result.notes.join(' ')).toContain('accentHover');
     expect(result.theme.modes.light.ui).not.toHaveProperty('accentHover');
+  });
+});
+
+describe('the creature colours (HIVE-199)', () => {
+  it('imports a theme without creep and chitin with no warning about them', () => {
+    const theme = structuredClone(BUILT_IN_THEME);
+    for (const mode of THEME_MODES) {
+      delete theme.modes[mode].ui.creep;
+      delete theme.modes[mode].ui.chitin;
+    }
+    const result = importTheme(JSON.stringify(theme), 'old.json');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.theme.modes.dark.ui.creep).toBeUndefined();
+    expect(result.inherited).toBe(0);
+    expect(result.notes.join('\n')).not.toMatch(/creep|chitin/);
+  });
+
+  it('round-trips a theme that carries them', () => {
+    const result = importTheme(JSON.stringify(BUILT_IN_THEME), 'hive.json');
+    expect(result.ok && result.theme.modes.light.ui.chitin).toBe('#6a54b0');
   });
 });
 
