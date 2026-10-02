@@ -9,6 +9,8 @@ import type { FsSearchMode } from '@shared/fs-contract';
 
 export type LeftTab = 'projects' | 'work' | 'agents';
 export type RailTab = 'inbox' | 'prs' | 'explorer';
+/** The round-two activity bar's places (HIVE-195). Classic ignores them. */
+export type Place = 'home' | 'sessions' | 'work' | 'agents' | 'prs';
 
 /**
  * View state — what the user is looking at, as opposed to what the system knows
@@ -126,6 +128,10 @@ interface UiState {
   newModel: Model;
   newEffort: Effort;
   showActivityRail: boolean;
+  /** Which place the round-two bar has open (HIVE-195). Every launch starts on Home. */
+  place: Place;
+  /** Whether that place's list panel shows beside the stage. */
+  panelOpen: boolean;
 
   /**
    * Which directories the explorer has open, keyed `projectId:relPath`.
@@ -151,8 +157,16 @@ interface UiState {
    */
   fsRevision: number;
 
-  openTab: (id: 'orch' | string) => void;
+  /** Open a tab; `place`, when the caller knows the entity's owner, moves the bar with it. */
+  openTab: (id: 'orch' | string, place?: Place) => void;
   backToOrch: () => void;
+  /**
+   * Pick a place on the bar. A new place opens its panel and dismisses the
+   * overlays, as `openTab` does; the active one toggles its panel — except
+   * Sessions with a session on stage, which goes back to the Overmind first.
+   */
+  selectPlace: (place: Place) => void;
+  togglePanel: () => void;
   /** Put the caret on a row, or clear it with `null`. */
   setSelId: (id: string | null) => void;
   setLeftTab: (tab: LeftTab) => void;
@@ -232,6 +246,8 @@ const initialUiState = {
   newModel: 'opus' as Model,
   newEffort: 'high' as Effort,
   showActivityRail: true,
+  place: 'home' as Place,
+  panelOpen: true,
   explorerExpanded: {} as Record<string, boolean>,
   fsRevision: 0,
 };
@@ -242,7 +258,8 @@ export const useUiStore = create<UiState>()((set) => ({
   // Opening a tab always dismisses the picker: the user has made their choice.
   // Settings goes with it (story 101) — the rails stay visible behind the
   // overlay, so a rail click that left settings up would look broken.
-  openTab: (id) => set({ activeTab: id, picker: false, settings: false }),
+  openTab: (id, place) =>
+    set({ activeTab: id, picker: false, settings: false, ...(place ? { place } : {}) }),
 
   /**
    * Return to the orchestrator — the ← pill on the session meta bar, and the
@@ -251,8 +268,21 @@ export const useUiStore = create<UiState>()((set) => ({
    * A named action rather than `openTab('orch')` at each call site: "go home"
    * is a distinct intent from "open this thing", and 060 needs something to
    * bind that reads as the former.
+   *
+   * Lands on Sessions in round two: the Overmind is that place's page (HIVE-195).
    */
-  backToOrch: () => set({ activeTab: 'orch', picker: false, settings: false }),
+  backToOrch: () => set({ activeTab: 'orch', picker: false, settings: false, place: 'sessions' }),
+
+  selectPlace: (place) =>
+    set((state) => {
+      if (place !== state.place) return { place, panelOpen: true, picker: false, settings: false };
+      if (place === 'sessions' && state.activeTab !== 'orch') {
+        return { activeTab: 'orch', picker: false, settings: false };
+      }
+      return { panelOpen: !state.panelOpen };
+    }),
+
+  togglePanel: () => set((state) => ({ panelOpen: !state.panelOpen })),
 
   setSelId: (id) => set({ selId: id }),
   setLeftTab: (tab) => set({ leftTab: tab }),
