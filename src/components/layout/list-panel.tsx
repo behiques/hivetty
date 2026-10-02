@@ -1,20 +1,20 @@
 import type { ComponentType } from 'react';
 
 import { AgentsPanel } from '@features/agents/components/agents-panel';
-import { ProjectsPanel } from '@features/projects/components/projects-panel';
+import { SessionsPanel } from '@features/projects/components/sessions-panel';
 import { PrsPanel } from '@features/pull-requests/components/prs-panel';
 import { WorkPanel } from '@features/work/components/work-panel';
 import { usePanelOpen, usePlace, type Place } from '@stores/ui-store';
 
 /**
- * Today's panel per place (HIVE-195), the map `left-rail.tsx` keeps. Home has
- * none. Each place's own panel replaces its entry in its own story
- * (HIVE-197, 203, 204, 205). PRs also still shows in the ActivityRail until
+ * Each place's panel (HIVE-195). Home has none. Sessions has its own since
+ * HIVE-197; the rest are still `left-rail.tsx`'s and are replaced in their own
+ * stories (HIVE-203, 204, 205). PRs also still shows in the ActivityRail until
  * HIVE-201 retires it — accepted while round two is opt-in.
  */
 const PANELS: Record<Place, ComponentType | null> = {
   home: null,
-  sessions: ProjectsPanel,
+  sessions: SessionsPanel,
   work: WorkPanel,
   agents: AgentsPanel,
   prs: PrsPanel,

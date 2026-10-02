@@ -11,6 +11,8 @@ export type LeftTab = 'projects' | 'work' | 'agents';
 export type RailTab = 'inbox' | 'prs' | 'explorer';
 /** The round-two activity bar's places (HIVE-195). Classic ignores them. */
 export type Place = 'home' | 'sessions' | 'work' | 'agents' | 'prs';
+/** The Overmind table's segmented filter (HIVE-197). */
+export type TableFilter = 'all' | 'live' | 'ended';
 
 /**
  * View state — what the user is looking at, as opposed to what the system knows
@@ -132,6 +134,17 @@ interface UiState {
   place: Place;
   /** Whether that place's list panel shows beside the stage. */
   panelOpen: boolean;
+  /** The Overmind's project filter (HIVE-197). `null` is All projects. */
+  sessionsProject: string | null;
+  sessionsFilter: TableFilter;
+  /** "N more ›" pressed under an unfiltered Ended group. */
+  endedExpanded: boolean;
+  /**
+   * Round two's fold map, **folded by default** (HIVE-197). Separate from
+   * Classic's `collapsed`, which defaults to unfolded, so neither layout's
+   * default leaks into the other.
+   */
+  expanded: Record<string, boolean>;
 
   /**
    * Which directories the explorer has open, keyed `projectId:relPath`.
@@ -167,6 +180,11 @@ interface UiState {
    */
   selectPlace: (place: Place) => void;
   togglePanel: () => void;
+  setSessionsProject: (id: string | null) => void;
+  setSessionsFilter: (filter: TableFilter) => void;
+  expandEnded: () => void;
+  toggleProjectFold: (id: string) => void;
+  expandProject: (id: string) => void;
   /** Put the caret on a row, or clear it with `null`. */
   setSelId: (id: string | null) => void;
   setLeftTab: (tab: LeftTab) => void;
@@ -248,9 +266,21 @@ const initialUiState = {
   showActivityRail: true,
   place: 'home' as Place,
   panelOpen: true,
+  sessionsProject: null as string | null,
+  sessionsFilter: 'all' as TableFilter,
+  endedExpanded: false,
+  expanded: {} as Record<string, boolean>,
   explorerExpanded: {} as Record<string, boolean>,
   fsRevision: 0,
 };
+
+/** Back to the Overmind with the row left behind under the caret (HIVE-197). */
+const returnToOrch = (state: UiState) => ({
+  activeTab: 'orch' as const,
+  picker: false,
+  settings: false,
+  ...(state.activeTab === 'orch' ? {} : { selId: state.activeTab }),
+});
 
 export const useUiStore = create<UiState>()((set) => ({
   ...initialUiState,
@@ -270,19 +300,32 @@ export const useUiStore = create<UiState>()((set) => ({
    * bind that reads as the former.
    *
    * Lands on Sessions in round two: the Overmind is that place's page (HIVE-195).
+   * The caret lands on the session being left, and the Overmind's filters and
+   * folds are kept, so the user comes back to the row they went in from (HIVE-197).
    */
-  backToOrch: () => set({ activeTab: 'orch', picker: false, settings: false, place: 'sessions' }),
+  backToOrch: () => set((state) => ({ ...returnToOrch(state), place: 'sessions' })),
 
   selectPlace: (place) =>
     set((state) => {
       if (place !== state.place) return { place, panelOpen: true, picker: false, settings: false };
-      if (place === 'sessions' && state.activeTab !== 'orch') {
-        return { activeTab: 'orch', picker: false, settings: false };
-      }
+      if (place === 'sessions' && state.activeTab !== 'orch') return returnToOrch(state);
       return { panelOpen: !state.panelOpen };
     }),
 
   togglePanel: () => set((state) => ({ panelOpen: !state.panelOpen })),
+
+  setSessionsProject: (id) =>
+    set((state) =>
+      id === null
+        ? { sessionsProject: null }
+        : { sessionsProject: id, expanded: { ...state.expanded, [id]: true } },
+    ),
+  setSessionsFilter: (filter) => set({ sessionsFilter: filter }),
+  expandEnded: () => set({ endedExpanded: true }),
+  toggleProjectFold: (id) =>
+    set((state) => ({ expanded: { ...state.expanded, [id]: !state.expanded[id] } })),
+  expandProject: (id) =>
+    set((state) => (state.expanded[id] ? state : { expanded: { ...state.expanded, [id]: true } })),
 
   setSelId: (id) => set({ selId: id }),
   setLeftTab: (tab) => set({ leftTab: tab }),
@@ -480,6 +523,23 @@ export const usePlace = () => useUiStore((state) => state.place);
 export const usePanelOpen = () => useUiStore((state) => state.panelOpen);
 export const useSelectPlace = () => useUiStore((state) => state.selectPlace);
 export const useTogglePanel = () => useUiStore((state) => state.togglePanel);
+
+const fleetViewSelector = (state: UiState) => ({
+  project: state.sessionsProject,
+  filter: state.sessionsFilter,
+  endedAll: state.endedExpanded,
+});
+/** What the Overmind table shows: one shallow object, read by the table and the caret alike. */
+export const useFleetView = () => useUiStore(useShallow(fleetViewSelector));
+/** The Sessions place's filter and folds (HIVE-197). */
+export const useSessionsProject = () => useUiStore((state) => state.sessionsProject);
+export const useSetSessionsProject = () => useUiStore((state) => state.setSessionsProject);
+export const useSessionsFilter = () => useUiStore((state) => state.sessionsFilter);
+export const useSetSessionsFilter = () => useUiStore((state) => state.setSessionsFilter);
+export const useExpandEnded = () => useUiStore((state) => state.expandEnded);
+/** Per row, like `useProjectCollapsed`. */
+export const useProjectExpanded = (id: string) => useUiStore((state) => Boolean(state.expanded[id]));
+export const useToggleProjectFold = () => useUiStore((state) => state.toggleProjectFold);
 
 /** Left rail tab + setter. */
 export const useLeftTab = () => useUiStore((state) => state.leftTab);

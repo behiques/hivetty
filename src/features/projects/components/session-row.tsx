@@ -8,6 +8,8 @@ import { useActiveTab } from '@stores/ui-store';
 
 interface SessionRowProps {
   id: string;
+  /** One line, round two's panel (HIVE-197): the branch line is dropped. */
+  compact?: boolean;
 }
 
 /**
@@ -21,7 +23,7 @@ interface SessionRowProps {
  * the spawn flow (044) both add and remove entities underneath open panels, so
  * a row that insists its entity exists is a crash waiting for a race.
  */
-export function SessionRow({ id }: SessionRowProps) {
+export function SessionRow({ id, compact = false }: SessionRowProps) {
   const entity = useEntity(id);
   const activeTab = useActiveTab();
   const openEntity = useOpenEntity();
@@ -71,9 +73,11 @@ export function SessionRow({ id }: SessionRowProps) {
         )}
       </span>
 
-      <span className="w-full truncate pl-[15px] text-left font-mono text-[10.5px] text-subtle">
-        {branchLabel(entity)}
-      </span>
+      {compact ? null : (
+        <span className="w-full truncate pl-[15px] text-left font-mono text-[10.5px] text-subtle">
+          {branchLabel(entity)}
+        </span>
+      )}
     </button>
   );
 }

@@ -76,7 +76,7 @@ export function NewSessionLink({
       className="flex items-center gap-1.5 rounded-lg py-[3px] pr-2.5 pl-[26px] text-left font-mono text-[11.5px] text-subtle hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-subtle"
     >
       <Plus size={10} weight="bold" aria-hidden="true" className="shrink-0" />
-      new session
+      Session
     </button>
   );
 }

@@ -106,6 +106,20 @@ async function resizeTo(
  * and demanding an exact match would fail on a rounding difference rather than
  * on a layout regression.
  */
+/**
+ * Unfold ENDED when the table folds it (HIVE-197): unfiltered, only today's
+ * endings are drawn and the rest wait behind "N more ›". A restored row usually
+ * ended today, so the button is usually absent; when it is there, the rows
+ * being measured may be behind it.
+ */
+async function revealEnded(page: Page): Promise<void> {
+  const more = page.getByRole('button', { name: /more ›$/ });
+  if ((await more.count()) > 0) await more.click();
+}
+
+/** The ENDED group's head, `ENDED · N` since HIVE-197. */
+const endedHead = (page: Page) => page.getByText(/^ENDED · \d+$/);
+
 function alignedAt(xs: number[]): number {
   const distinct = new Set(xs.map((x) => Math.round(x)));
   expect(distinct.size).toBe(1);
@@ -130,6 +144,36 @@ test('the PR header sits over the PR cells', async ({}, testInfo) => {
     await page.getByRole('button', { name: 'Back to overmind' }).click();
 
     const xs = await prColumnXs(page);
+
+    // The header plus the one row that exists.
+    expect(xs).toHaveLength(2);
+    alignedAt(xs);
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * The Plan column (HIVE-197): the header sits over every row's plan cell, by
+ * the same `data-col` handle and for the same reason as `PR`.
+ */
+test('the PLAN header sits over the plan cells', async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
+
+  const app = await launchHive({
+    userDataDir: testInfo.outputPath('user-data'),
+    configPath,
+  });
+  const page = await app.firstWindow();
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForSelector('header');
+
+  try {
+    await startSession(page, PROJECT);
+    await page.getByRole('button', { name: 'Back to overmind' }).click();
+
+    const xs = await columnXs(page, 'plan');
 
     // The header plus the one row that exists.
     expect(xs).toHaveLength(2);
@@ -169,7 +213,8 @@ test('the PR header still sits over the PR cells beside a resume control', async
   await page.waitForSelector('header');
 
   try {
-    await expect(page.getByText('ENDED', { exact: true })).toBeVisible();
+    await expect(endedHead(page)).toBeVisible();
+    await revealEnded(page);
 
     /*
       Only meaningful if a resume control is actually on screen: the restored
@@ -348,7 +393,8 @@ test('the columns hold together at the minimum window with a resumable row', asy
       all. `session-history.spec.ts` waits on the same divider for the same
       reason.
     */
-    await expect(page.getByText('ENDED', { exact: true })).toBeVisible();
+    await expect(endedHead(page)).toBeVisible();
+    await revealEnded(page);
 
     /*
       Same skip as the test above, and the same reason: whether the quit
@@ -368,6 +414,7 @@ test('the columns hold together at the minimum window with a resumable row', asy
     alignedAt(await columnXs(page, 'last-used'));
     alignedAt(await columnXs(page, 'action'));
     alignedAt(await columnXs(page, 'status'));
+    alignedAt(await columnXs(page, 'plan'));
 
     const table = page.getByTestId('session-table');
     const overflow = await table.evaluate((node) => ({
@@ -405,7 +452,7 @@ test('the columns hold together at the minimum window with a resumable row', asy
  *
  * The **alignment** half of this column's claim is not here — it is in the test
  * above, which drives the case that actually breaks it: the minimum window with
- * a Resume column, where `LAST USED` is one more `shrink-0` term in the 426px
+ * a Resume column, where `LAST USED` is one more `shrink-0` term in the 486px
  * threshold. Asserting alignment on a fresh profile would be asserting the
  * first test again under a different name.
  */

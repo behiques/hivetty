@@ -1,0 +1,76 @@
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import type { ProjectRow } from '@/types/entity';
+
+import { SessionsProjectRow } from '@features/projects/components/sessions-project-row';
+import { resetProjectConfig } from '@lib/project-config';
+import { useHiveStore } from '@stores/hive-store';
+import { useUiStore } from '@stores/ui-store';
+import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
+import { testProjectKey } from '@tests/support/project-key';
+
+// nova-web: hero-refresh working, lead-form waiting, e2e-quote idle — 1 needs you, 2 other.
+const nova: ProjectRow = {
+  id: 'nova-web',
+  key: testProjectKey('nova-web'),
+  name: 'nova-web',
+  icon: 'ph-globe-hemisphere-west',
+};
+// infra-terraform: ecs-scaling is done — nothing live.
+const empty: ProjectRow = {
+  id: 'infra-terraform',
+  key: testProjectKey('infra-terraform'),
+  name: 'infra-terraform',
+  icon: 'ph-stack',
+};
+
+describe('SessionsProjectRow (HIVE-197)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    seedDemoFleet();
+    seedDemoProjectConfig();
+  });
+  afterEach(() => resetProjectConfig());
+
+  it('starts folded, with amber needs-you and green other counts', () => {
+    render(<SessionsProjectRow project={nova} />);
+    expect(screen.getByRole('button', { name: 'Unfold nova-web' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'New session in nova-web' })).not.toBeInTheDocument();
+    expect(screen.getByTitle('need you')).toHaveClass('text-amber');
+    expect(screen.getByTitle('other live')).toHaveClass('text-green');
+  });
+
+  it('clicking the name filters the Overmind and unfolds the project', async () => {
+    render(<SessionsProjectRow project={nova} />);
+    await userEvent.click(screen.getByRole('button', { name: /^nova-web/ }));
+    expect(useUiStore.getState().sessionsProject).toBe('nova-web');
+    expect(screen.getByRole('button', { name: /^nova-web/ })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: 'New session in nova-web' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Terminal in nova-web' })).toBeInTheDocument();
+  });
+
+  it('the caret folds without touching the filter', async () => {
+    useUiStore.getState().setSessionsProject('nova-web');
+    render(<SessionsProjectRow project={nova} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Fold nova-web' }));
+    expect(useUiStore.getState().expanded['nova-web']).toBe(false);
+    expect(useUiStore.getState().sessionsProject).toBe('nova-web');
+  });
+
+  it('unfolded rows are one line each', () => {
+    useUiStore.getState().expandProject('nova-web');
+    render(<SessionsProjectRow project={nova} />);
+    expect(screen.getByText('hero-refresh')).toBeInTheDocument();
+    expect(screen.queryByText('feat/hero-refresh')).not.toBeInTheDocument();
+  });
+
+  it('says "no sessions" when nothing is live', () => {
+    render(<SessionsProjectRow project={empty} />);
+    expect(
+      within(screen.getByRole('button', { name: /^infra-terraform/ })).getByText('no sessions'),
+    ).toBeInTheDocument();
+  });
+});
