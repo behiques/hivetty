@@ -567,3 +567,37 @@ describe('Sessions place view state (HIVE-197)', () => {
     expect(useUiStore.getState().endedExpanded).toBe(true);
   });
 });
+
+describe('back to the Overmind (HIVE-197)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('backToOrch selects the session left and keeps filters and folds', () => {
+    useUiStore.setState({
+      activeTab: 'hero-refresh',
+      sessionsProject: 'nova-web',
+      sessionsFilter: 'live',
+      expanded: { 'nova-web': true },
+    });
+    useUiStore.getState().backToOrch();
+    const s = useUiStore.getState();
+    expect(s.activeTab).toBe('orch');
+    expect(s.selId).toBe('hero-refresh');
+    expect(s.sessionsProject).toBe('nova-web');
+    expect(s.sessionsFilter).toBe('live');
+    expect(s.expanded).toEqual({ 'nova-web': true });
+  });
+
+  it('backToOrch from the Overmind leaves selId alone', () => {
+    useUiStore.setState({ activeTab: 'orch', selId: 'x' });
+    useUiStore.getState().backToOrch();
+    expect(useUiStore.getState().selId).toBe('x');
+  });
+
+  it('the Sessions icon with a session on stage does the same', () => {
+    useUiStore.setState({ place: 'sessions', activeTab: 'lead-form', selId: null });
+    useUiStore.getState().selectPlace('sessions');
+    expect(useUiStore.getState().activeTab).toBe('orch');
+    expect(useUiStore.getState().selId).toBe('lead-form');
+    expect(useUiStore.getState().panelOpen).toBe(true);
+  });
+});

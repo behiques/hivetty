@@ -274,6 +274,14 @@ const initialUiState = {
   fsRevision: 0,
 };
 
+/** Back to the Overmind with the row left behind under the caret (HIVE-197). */
+const returnToOrch = (state: UiState) => ({
+  activeTab: 'orch' as const,
+  picker: false,
+  settings: false,
+  ...(state.activeTab === 'orch' ? {} : { selId: state.activeTab }),
+});
+
 export const useUiStore = create<UiState>()((set) => ({
   ...initialUiState,
 
@@ -292,15 +300,15 @@ export const useUiStore = create<UiState>()((set) => ({
    * bind that reads as the former.
    *
    * Lands on Sessions in round two: the Overmind is that place's page (HIVE-195).
+   * The caret lands on the session being left, and the Overmind's filters and
+   * folds are kept, so the user comes back to the row they went in from (HIVE-197).
    */
-  backToOrch: () => set({ activeTab: 'orch', picker: false, settings: false, place: 'sessions' }),
+  backToOrch: () => set((state) => ({ ...returnToOrch(state), place: 'sessions' })),
 
   selectPlace: (place) =>
     set((state) => {
       if (place !== state.place) return { place, panelOpen: true, picker: false, settings: false };
-      if (place === 'sessions' && state.activeTab !== 'orch') {
-        return { activeTab: 'orch', picker: false, settings: false };
-      }
+      if (place === 'sessions' && state.activeTab !== 'orch') return returnToOrch(state);
       return { panelOpen: !state.panelOpen };
     }),
 
