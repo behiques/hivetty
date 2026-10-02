@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session, Terminal } from '@/types/entity';
 
 import { SessionHeader } from '@components/layout/session-header';
+import * as platform from '@lib/platform';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
@@ -25,6 +26,21 @@ describe('SessionHeader (HIVE-197)', () => {
     expect(screen.getByText('nova-web · feat/hero-refresh')).toBeInTheDocument();
     expect(screen.getByText('working')).toBeInTheDocument();
     expect(screen.getByTestId('session-header').querySelector('[data-slot="model"]')).toBeEmptyDOMElement();
+  });
+
+  it('names the back chord for the platform in the button title', () => {
+    const spy = vi.spyOn(platform, 'isMacPlatform');
+    spy.mockReturnValue(false);
+    const { unmount } = render(<SessionHeader entity={hero()} />);
+    expect(screen.getByRole('button', { name: 'Back to overmind' })).toHaveAttribute(
+      'title',
+      'Back to overmind (Ctrl+Shift+←)',
+    );
+    unmount();
+    spy.mockReturnValue(true);
+    render(<SessionHeader entity={hero()} />);
+    expect(screen.getByRole('button', { name: 'Back to overmind' })).toHaveAttribute('title', 'Back to overmind (⌘[)');
+    spy.mockRestore();
   });
 
   it('‹ Overmind goes back and selects the session', async () => {

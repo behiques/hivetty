@@ -19,6 +19,8 @@ import {
 } from '@components/ui/dropdown-menu';
 import { StatusDot, statusLabel, statusText } from '@components/ui/status-dot';
 import { useProjectContainerised } from '@hooks/use-project-config';
+import { isMacPlatform } from '@lib/platform';
+import { backChordLabel } from '@lib/terminal/keymap';
 import { useSessionPr, useSpawnTerminalBeside } from '@stores/hive-store';
 import { useBackToOrch } from '@stores/ui-store';
 
@@ -40,7 +42,7 @@ export function SessionHeader({ entity }: { entity: Session | Terminal }) {
         type="button"
         onClick={backToOrch}
         aria-label="Back to overmind"
-        title="Back to overmind (⌘[)"
+        title={`Back to overmind (${backChordLabel(isMacPlatform())})`}
         className="flex shrink-0 items-center gap-1 rounded-md py-1 pr-2 pl-0.5 text-[12.5px] text-brand hover:bg-hover"
       >
         <CaretLeft size={14} weight="bold" aria-hidden="true" />
