@@ -26,8 +26,8 @@ describe('ConsoleInput', () => {
     useHiveStore.getState().reset();
     seedDemoFleet();
     useUiStore.getState().reset();
-    // Every ending on screen, so the caret's order is the whole fleet's
-    // `useNavOrder` these tests compare against (HIVE-197 folds Ended).
+    // Every ending on screen, so the caret's order (`useFleetNavOrder`) is the
+    // whole fleet's `useNavOrder` these tests compare against (HIVE-197 folds Ended).
     useUiStore.setState({ endedExpanded: true });
   });
 

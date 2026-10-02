@@ -467,6 +467,8 @@ export function CenterStage() {
           <SessionMetaBar entity={entity} />
         ) : null}
 
+        {/* Round two's page head over the fleet (HIVE-197); Classic has none. */}
+        {roundTwo && view === 'orchestrator' ? <OvermindHead /> : null}
         {/*
           The fleet table sits above the transcript rather than inside it. The
           concept scrolls them as one region, but the transcript is a real xterm
@@ -485,8 +487,6 @@ export function CenterStage() {
           while the editor splits the stage: in a 20% column a floor would
           overflow it rather than yield.
         */}
-        {/* Round two's page head over the fleet (HIVE-197); Classic has none. */}
-        {roundTwo && view === 'orchestrator' ? <OvermindHead /> : null}
         <div ref={paneSplitRef} className="flex min-h-0 flex-1 flex-col">
         {view === 'orchestrator' ? (
           <FleetPane containerRef={paneSplitRef} floored={!splitting} />
