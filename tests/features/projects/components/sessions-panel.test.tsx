@@ -52,5 +52,7 @@ describe('SessionsPanel (HIVE-197)', () => {
     resetProjectConfig();
     render(<SessionsPanel />);
     expect(screen.queryByRole('button', { name: /^All projects/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /new project/i })).toBeInTheDocument();
+    expect(screen.getByText('Settings → Projects')).toBeInTheDocument();
   });
 });
