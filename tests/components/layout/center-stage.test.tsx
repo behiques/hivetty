@@ -1205,3 +1205,66 @@ describe('CenterStage — the console dock (HIVE-197)', () => {
     expect(orchSurface()?.closest('.hidden')).toBeNull();
   });
 });
+
+describe('CenterStage — the session header (HIVE-197)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+  });
+
+  afterEach(() => {
+    useAppearanceStore.getState().reset();
+  });
+
+  it('replaces the meta bar over a session in round two', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    useUiStore.setState({ activeTab: 'hero-refresh', place: 'sessions' });
+    render(<CenterStage />);
+    expect(screen.getByTestId('session-header')).toBeInTheDocument();
+    expect(screen.queryByTestId('session-meta-bar')).not.toBeInTheDocument();
+  });
+
+  it('shows over a terminal in round two', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    act(() => {
+      useHiveStore.setState((state) => ({
+        entities: {
+          ...state.entities,
+          'term-5': {
+            kind: 'terminal',
+            id: 'term-5',
+            project: 'nova-web',
+            cwd: '/repos/nova-web',
+            status: 'prompt',
+            createdAt: 1,
+            lines: [],
+          },
+        },
+        order: [...state.order, 'term-5'],
+      }));
+    });
+    useUiStore.setState({ activeTab: 'term-5', place: 'sessions' });
+    render(<CenterStage />);
+    expect(screen.getByTestId('session-header')).toHaveTextContent('term-5');
+  });
+
+  it('is absent over the Overmind in round two', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    useUiStore.setState({ activeTab: 'orch', place: 'sessions' });
+    render(<CenterStage />);
+    expect(screen.queryByTestId('session-header')).not.toBeInTheDocument();
+  });
+
+  it('Classic keeps the meta bar', () => {
+    useAppearanceStore.getState().setLayout('classic');
+    useUiStore.setState({ activeTab: 'hero-refresh' });
+    render(<CenterStage />);
+    expect(screen.getByTestId('session-meta-bar')).toBeInTheDocument();
+    expect(screen.queryByTestId('session-header')).not.toBeInTheDocument();
+  });
+});

@@ -11,6 +11,7 @@ import {
   isTerminated,
 } from '@/types/entity';
 
+import { SessionHeader } from '@components/layout/session-header';
 import { SessionMetaBar } from '@components/layout/session-meta-bar';
 import { TerminalHost } from '@components/terminal/terminal-host';
 import { SplitHandle } from '@components/ui/split-handle';
@@ -472,7 +473,11 @@ export function CenterStage() {
           here would be a routing bug worth rendering nothing for rather than
           crashing on a missing `project`.
         */}
-        {isTerminalView(view) && entity && isSession(entity) ? (
+        {/* Round two heads a terminal too (HIVE-197); Classic's bar is sessions only. */}
+        {isTerminalView(view) && entity && roundTwo && (isSession(entity) || isTerminal(entity)) ? (
+          <SessionHeader entity={entity} />
+        ) : null}
+        {isTerminalView(view) && entity && !roundTwo && isSession(entity) ? (
           <SessionMetaBar entity={entity} />
         ) : null}
 
