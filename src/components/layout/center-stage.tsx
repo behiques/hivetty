@@ -40,6 +40,7 @@ import { ORCHESTRATOR_ID } from '@lib/terminal/static-transport';
 import type { TerminalTransport } from '@lib/terminal/terminal-transport';
 import {
   useEditorLayout,
+  useLayout,
   usePlanPinned,
   useSetEditorSplitRatio,
   useSetPlanPinned,
@@ -61,6 +62,7 @@ import {
   useActiveTab,
   useBackToOrch,
   usePickerState,
+  usePlace,
   useRevealStage,
   useSettingsOpen,
 } from '@stores/ui-store';
@@ -110,6 +112,8 @@ export function CenterStage() {
   const activeFileKey = useActiveFileKey();
   const hasOpenFiles = useHasOpenFiles();
   const { placement, splitAxis, splitRatio, nav } = useEditorLayout();
+  const layout = useLayout();
+  const place = usePlace();
   const setSplitRatio = useSetEditorSplitRatio();
 
   /**
@@ -163,8 +167,9 @@ export function CenterStage() {
   const editorOpen = activeFileKey !== null;
   const editorFull = editorOpen && placement === 'full';
   const splitting = editorOpen && placement === 'split';
+  const home = layout === 'round-two' && place === 'home';
 
-  const view = resolveView({ activeTab, picker, settings, entity, editorFull });
+  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home });
   /**
    * Whether the session on screen is still starting (HIVE-101).
    *
