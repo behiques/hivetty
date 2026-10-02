@@ -475,6 +475,11 @@ export const useOpenTab = () => useUiStore((state) => state.openTab);
 
 /** Return to the orchestrator view (story 040's ← pill, story 060's ArrowLeft). */
 export const useBackToOrch = () => useUiStore((state) => state.backToOrch);
+/** The round-two place, and whether its panel shows (HIVE-195). */
+export const usePlace = () => useUiStore((state) => state.place);
+export const usePanelOpen = () => useUiStore((state) => state.panelOpen);
+export const useSelectPlace = () => useUiStore((state) => state.selectPlace);
+export const useTogglePanel = () => useUiStore((state) => state.togglePanel);
 
 /** Left rail tab + setter. */
 export const useLeftTab = () => useUiStore((state) => state.leftTab);
