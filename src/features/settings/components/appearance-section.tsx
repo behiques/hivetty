@@ -16,7 +16,10 @@ import {
   DEFAULT_TEAM_NAME,
   useAppearanceActions,
   useAppearanceSettings,
+  useLayout,
+  useSetLayout,
   type Density,
+  type Layout,
   type ThemePreference,
 } from '@stores/appearance-store';
 
@@ -41,6 +44,11 @@ const DENSITY_OPTIONS: readonly SegmentedOption<Density>[] = [
   { value: 'compact', label: 'Compact' },
 ];
 
+const LAYOUT_OPTIONS: readonly SegmentedOption<Layout>[] = [
+  { value: 'classic', label: 'Classic' },
+  { value: 'round-two', label: 'Round two' },
+];
+
 const FONT_OPTIONS: readonly SelectFieldOption[] = TERMINAL_FONTS.map((font) => ({
   value: font.id,
   label: font.label,
@@ -56,6 +64,8 @@ const SCROLLBACK_OPTIONS: readonly SelectFieldOption[] = TERMINAL_SCROLLBACKS.ma
 
 export function AppearanceSection() {
   const settings = useAppearanceSettings();
+  const layout = useLayout();
+  const setLayout = useSetLayout();
   const {
     setTheme,
     setTerminalFont,
@@ -160,6 +170,18 @@ export function AppearanceSection() {
           options={DENSITY_OPTIONS}
           value={settings.density}
           onChange={setDensity}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup
+        title="Layout"
+        description="Round two puts the places on a bar at the left, with one list beside the stage."
+      >
+        <SegmentedControl
+          label="Layout"
+          options={LAYOUT_OPTIONS}
+          value={layout}
+          onChange={setLayout}
         />
       </SettingsGroup>
     </div>

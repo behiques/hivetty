@@ -1,7 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppShell } from '@components/layout/app-shell';
+import { TooltipProvider } from '@components/ui/tooltip';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { useUiStore } from '@stores/ui-store';
 
 vi.mock('@xterm/xterm');
@@ -10,6 +12,7 @@ vi.mock('@xterm/addon-fit');
 describe('AppShell', () => {
   beforeEach(() => {
     useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
   });
 
   it('renders all four regions', () => {
@@ -121,5 +124,54 @@ describe('AppShell', () => {
     for (const name of ['Resize the navigation rail', 'Resize the activity rail']) {
       expect(screen.getByRole('slider', { name })).toHaveClass('absolute');
     }
+  });
+});
+
+describe('AppShell — Layout (HIVE-195)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
+  });
+
+  const renderShell = () =>
+    render(
+      <TooltipProvider>
+        <AppShell />
+      </TooltipProvider>,
+    );
+
+  it('draws Classic by default', () => {
+    renderShell();
+
+    expect(screen.getByRole('navigation', { name: 'Projects, work, and agents' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Places' })).not.toBeInTheDocument();
+  });
+
+  it('draws the bar, the panel and the activity rail in round two', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    useUiStore.setState({ place: 'work' });
+
+    renderShell();
+
+    expect(screen.getByRole('banner')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Places' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Work list' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Activity' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('navigation', { name: 'Projects, work, and agents' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('switches live without remounting the stage', () => {
+    renderShell();
+    const stage = screen.getByRole('main');
+
+    act(() => useAppearanceStore.getState().setLayout('round-two'));
+    expect(screen.getByRole('navigation', { name: 'Places' })).toBeInTheDocument();
+    expect(screen.getByRole('main')).toBe(stage);
+
+    act(() => useAppearanceStore.getState().setLayout('classic'));
+    expect(screen.getByRole('navigation', { name: 'Projects, work, and agents' })).toBeInTheDocument();
+    expect(screen.getByRole('main')).toBe(stage);
   });
 });

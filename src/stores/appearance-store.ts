@@ -55,6 +55,9 @@ type ResolvedTheme = 'dark' | 'light';
 
 export type Density = 'comfortable' | 'compact';
 
+/** Which frame the app draws (HIVE-195). Classic is deleted by HIVE-213. */
+export type Layout = 'classic' | 'round-two';
+
 /** Which rail a width belongs to. */
 type RailSide = 'left' | 'right';
 
@@ -88,6 +91,7 @@ interface AppearanceState {
   terminalFontSize: number;
   terminalScrollback: number;
   density: Density;
+  layout: Layout;
 
   /**
    * How wide the user dragged each rail, or `null` for "follow density"
@@ -254,6 +258,7 @@ interface AppearanceState {
   setTerminalFontSize: (size: number) => void;
   setTerminalScrollback: (lines: number) => void;
   setDensity: (density: Density) => void;
+  setLayout: (layout: Layout) => void;
   /**
    * Record a dragged rail width. Bounded by the per-rail minimum and the
    * absolute cap only — see {@link AppearanceState.railWidthLeft}.
@@ -620,6 +625,7 @@ const initialAppearanceState = {
   terminalFontSize: DEFAULT_TERMINAL_FONT_SIZE,
   terminalScrollback: DEFAULT_TERMINAL_SCROLLBACK,
   density: 'comfortable' as Density,
+  layout: 'classic' as Layout,
   /** `null` — follow the stylesheet — until somebody drags a rail. */
   railWidthLeft: null as number | null,
   railWidthRight: null as number | null,
@@ -664,6 +670,7 @@ interface PersistedAppearanceState {
   terminalFontSize: number;
   terminalScrollback: number;
   density: Density;
+  layout: Layout;
   railWidthLeft: number | null;
   railWidthRight: number | null;
   railCollapsedLeft: boolean;
@@ -851,6 +858,8 @@ export const useAppearanceStore = create<AppearanceState>()(
         applyStoredRailWidths({ ...get(), density });
       },
 
+      setLayout: (layout) => set({ layout }),
+
       /**
        * Clamped to `[min, RAIL_MAX_PX]` and no further.
        *
@@ -1008,6 +1017,8 @@ export const useAppearanceStore = create<AppearanceState>()(
           ...currentState,
           ...persisted,
           ...sanitizeThemeState(persisted),
+          // Anything but the one other value reads as the default, absent key included.
+          layout: persisted.layout === 'round-two' ? 'round-two' : 'classic',
         } as AppearanceState;
       },
       storage: createJSONStorage(() => localStorage),
@@ -1021,6 +1032,7 @@ export const useAppearanceStore = create<AppearanceState>()(
         terminalFontSize: state.terminalFontSize,
         terminalScrollback: state.terminalScrollback,
         density: state.density,
+        layout: state.layout,
         railWidthLeft: state.railWidthLeft,
         railWidthRight: state.railWidthRight,
         railCollapsedLeft: state.railCollapsedLeft,
@@ -1204,6 +1216,10 @@ export const usePlanPinned = () => useAppearanceStore((state) => state.planPinne
 export const useSetPlanPinned = () => useAppearanceStore((state) => state.setPlanPinned);
 /** Whether the plan panel shows beside the terminal (HIVE-182). */
 export const useShowPlanPanel = () => useAppearanceStore((state) => state.showPlanPanel);
+/** Which frame the app draws (HIVE-195). */
+export const useLayout = () => useAppearanceStore((state) => state.layout);
+/** Switch the frame, live (HIVE-195). */
+export const useSetLayout = () => useAppearanceStore((state) => state.setLayout);
 
 /**
  * Everything the CodeMirror surface needs, resolved.

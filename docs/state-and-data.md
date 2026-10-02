@@ -34,10 +34,13 @@ the picker from re-rendering thirteen live terminals.
   **ledger** and **plans** slices — see below.
 - `src/stores/ui-store.ts` — view state: `activeTab`, `selId`, `leftTab`,
   `railTab`, `collapsed`, picker fields, `showActivityRail`,
-  `explorerExpanded`, `explorerProjectId`.
+  `explorerExpanded`, `explorerProjectId`, and round two's place machine —
+  `place` (`'home'` on every launch) and `panelOpen` (`true`), HIVE-195.
+  Neither persists: a launch always opens on Home with its panel open.
 - `src/stores/appearance-store.ts` — durable preferences: `theme`, the terminal
   and editor typography, `editorPlacement`, `editorNav`, `editorEditable`,
-  `density`, the rail widths, and the three draggable splits — `editorSplitRatio`
+  `density`, `layout` (`'classic' | 'round-two'`, HIVE-195), the rail widths,
+  and the three draggable splits — `editorSplitRatio`
   (terminal against editor), `consoleSplitRatio` (fleet table against
   transcript, on the overmind) and `runLogSplitRatio` (receipts against output,
   in an agent's run log).
@@ -173,6 +176,11 @@ structural rather than a matter of taste:
   store rather than a field list is the point: otherwise every new `ui-store`
   field becomes a question somebody has to remember to answer, and answering it
   wrong is silent.
+
+`layout` persists with no version bump. `merge` guards it on every rehydrate:
+anything but `'round-two'` — an absent key included — reads as `'classic'`, so
+a stored value from a later build cannot strand the app in a frame it does not
+know.
 
 `systemDark` is the one exception inside `appearance-store` — it is an
 observation of the OS, not a preference, so it is excluded from `partialize`.

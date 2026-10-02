@@ -456,3 +456,75 @@ describe('ui-store — the work search', () => {
     expect(useUiStore.getState().workSearchMineOnly).toBe(false);
   });
 });
+
+describe('ui-store — the place machine (HIVE-195)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  const ui = () => useUiStore.getState();
+
+  it('opens on Home with the panel open', () => {
+    expect(ui().place).toBe('home');
+    expect(ui().panelOpen).toBe(true);
+  });
+
+  it('a new place opens its panel and dismisses the picker and settings', () => {
+    useUiStore.setState({ panelOpen: false, picker: true, settings: true });
+
+    ui().selectPlace('work');
+
+    expect(ui()).toMatchObject({ place: 'work', panelOpen: true, picker: false, settings: false });
+  });
+
+  it('the active place toggles its panel', () => {
+    ui().selectPlace('work');
+
+    ui().selectPlace('work');
+    expect(ui().panelOpen).toBe(false);
+
+    ui().selectPlace('work');
+    expect(ui().panelOpen).toBe(true);
+  });
+
+  it('Sessions with a session on stage goes back to the Overmind, panel untouched, then toggles', () => {
+    ui().selectPlace('sessions');
+    ui().openTab('hero-refresh');
+    useUiStore.setState({ panelOpen: false });
+
+    ui().selectPlace('sessions');
+    expect(ui()).toMatchObject({ activeTab: 'orch', panelOpen: false, place: 'sessions' });
+
+    ui().selectPlace('sessions');
+    expect(ui().panelOpen).toBe(true);
+  });
+
+  it('togglePanel flips panelOpen', () => {
+    ui().togglePanel();
+    expect(ui().panelOpen).toBe(false);
+    ui().togglePanel();
+    expect(ui().panelOpen).toBe(true);
+  });
+
+  it('openTab with a place moves it; without one it stays', () => {
+    ui().openTab('slack-agent', 'agents');
+    expect(ui().place).toBe('agents');
+
+    ui().openTab('hero-refresh');
+    expect(ui()).toMatchObject({ place: 'agents', activeTab: 'hero-refresh' });
+  });
+
+  it('backToOrch lands on Sessions', () => {
+    ui().backToOrch();
+    expect(ui()).toMatchObject({ activeTab: 'orch', place: 'sessions' });
+  });
+
+  it('reset restores Home with the panel open', () => {
+    ui().selectPlace('prs');
+    ui().togglePanel();
+
+    ui().reset();
+
+    expect(ui()).toMatchObject({ place: 'home', panelOpen: true });
+  });
+});

@@ -5,14 +5,18 @@ import {
   useActiveTab,
   useLeftTab,
   useOpenTab,
+  usePanelOpen,
   usePickerActions,
   usePickerState,
+  usePlace,
   useProjectCollapsed,
   useRailState,
   useSelId,
+  useSelectPlace,
   useSetLeftTab,
   useSetSelId,
   useShowActivityRail,
+  useTogglePanel,
   useToggleProject,
   useUiStore,
 } from '@stores/ui-store';
@@ -154,5 +158,28 @@ describe('ui-store selectors', () => {
     });
 
     expect(result.current.selId).toBe('webhooks');
+  });
+
+  it('usePlace and usePanelOpen re-render only their own consumer (HIVE-195)', () => {
+    let placeRenders = 0;
+    let panelRenders = 0;
+    const place = renderHook(() => {
+      placeRenders += 1;
+      return { place: usePlace(), selectPlace: useSelectPlace() };
+    });
+    const panel = renderHook(() => {
+      panelRenders += 1;
+      return { panelOpen: usePanelOpen(), togglePanel: useTogglePanel() };
+    });
+    expect(place.result.current.place).toBe('home');
+
+    act(() => panel.result.current.togglePanel());
+    expect(panel.result.current.panelOpen).toBe(false);
+    expect(placeRenders).toBe(1);
+
+    const before = panelRenders;
+    act(() => useUiStore.setState({ place: 'work' }));
+    expect(place.result.current.place).toBe('work');
+    expect(panelRenders).toBe(before);
   });
 });

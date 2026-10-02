@@ -4317,6 +4317,47 @@ describe('hive-store', () => {
       expect(hosts.current.slice(nav.current.length)).toEqual([id]);
     });
   });
+
+  describe('the place follows what opens (HIVE-195)', () => {
+    beforeEach(() => {
+      useUiStore.getState().reset();
+    });
+
+    it('openEntity puts an agent under Agents and a session under Sessions', () => {
+      useHiveStore.getState().openEntity('slack-agent');
+      expect(useUiStore.getState().place).toBe('agents');
+
+      useHiveStore.getState().openEntity('hero-refresh');
+      expect(useUiStore.getState().place).toBe('sessions');
+    });
+
+    it('spawning a session or a terminal puts Sessions on the bar', () => {
+      useHiveStore.getState().spawnSession('nova-web');
+      expect(useUiStore.getState().place).toBe('sessions');
+
+      useUiStore.getState().reset();
+      useHiveStore.getState().spawnTerminal('nova-web');
+      expect(useUiStore.getState().place).toBe('sessions');
+    });
+
+    it('removing the terminal on stage leaves the user on Home (D6)', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      useUiStore.setState({ place: 'home' });
+
+      useHiveStore.getState().removeTerminal(id);
+
+      expect(useUiStore.getState()).toMatchObject({ activeTab: 'orch', place: 'home' });
+    });
+
+    it('a session finishing on stage leaves the user on Home (D6)', () => {
+      const id = useHiveStore.getState().spawnSession('the-hive');
+      useUiStore.setState({ place: 'home' });
+
+      useHiveStore.getState().finishSession(id, true);
+
+      expect(useUiStore.getState()).toMatchObject({ activeTab: 'orch', place: 'home' });
+    });
+  });
 });
 
 /**
