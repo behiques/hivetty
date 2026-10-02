@@ -1135,3 +1135,73 @@ describe('CenterStage — the Overmind head (HIVE-197)', () => {
     expect(screen.queryByRole('heading', { level: 1, name: 'Overmind' })).not.toBeInTheDocument();
   });
 });
+
+describe('CenterStage — the console dock (HIVE-197)', () => {
+  const orchSurface = () => document.querySelector<HTMLElement>('[data-terminal-id="orch"]');
+
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+    useAppearanceStore.getState().setLayout('round-two');
+    useUiStore.setState({ place: 'sessions', activeTab: 'orch' });
+  });
+
+  afterEach(() => {
+    useAppearanceStore.getState().reset();
+  });
+
+  it('folded by default: no transcript on screen, the peek and the prompt show', () => {
+    render(<CenterStage />);
+    // `activeId` is null while folded, and `TerminalHost` mounts a surface on its
+    // first visit, so the transcript is not built until it is first shown.
+    expect(visibleSurfaces()).toHaveLength(0);
+    expect(screen.getByRole('button', { name: /Show the console/ })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Overmind command' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Resize the fleet table' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the same transcript surface across a fold and an unfold', async () => {
+    render(<CenterStage />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Show the console/ }));
+    const shown = orchSurface();
+    expect(shown).not.toBeNull();
+    expect(shown?.closest('.hidden')).toBeNull();
+    expect(shown?.style.display).not.toBe('none');
+    expect(screen.getByRole('slider', { name: 'Resize the fleet table' })).toBeInTheDocument();
+    const instances = terminalInstances.length;
+
+    await userEvent.click(screen.getByRole('button', { name: /Hide the console/ }));
+    const folded = orchSurface();
+    expect(folded).toBe(shown);
+    expect(folded?.closest('.hidden')).not.toBeNull();
+    expect(folded?.style.display).toBe('none');
+
+    await userEvent.click(screen.getByRole('button', { name: /Show the console/ }));
+    expect(orchSurface()).toBe(shown);
+    expect(orchSurface()?.style.display).not.toBe('none');
+    expect(terminalInstances).toHaveLength(instances);
+    expect(terminalInstances.some((instance) => instance.disposed)).toBe(false);
+  });
+
+  it('does not hide a session’s terminal while the console is folded', () => {
+    useUiStore.setState({ activeTab: 'hero-refresh' });
+    render(<CenterStage />);
+    const surface = document.querySelector<HTMLElement>('[data-terminal-id="hero-refresh"]');
+    expect(surface?.closest('.hidden')).toBeNull();
+    expect(surface?.style.display).not.toBe('none');
+  });
+
+  it('Classic keeps the split and no peek', () => {
+    useAppearanceStore.getState().setLayout('classic');
+    render(<CenterStage />);
+    expect(screen.queryByRole('button', { name: /Show the console/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Resize the fleet table' })).toBeInTheDocument();
+    expect(orchSurface()?.closest('.hidden')).toBeNull();
+  });
+});
