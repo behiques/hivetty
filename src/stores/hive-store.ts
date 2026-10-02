@@ -2057,7 +2057,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       });
     }
 
-    useUiStore.getState().openTab(id);
+    useUiStore.getState().openTab(id, 'sessions');
 
     return id;
   },
@@ -2125,7 +2125,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       });
     }
 
-    useUiStore.getState().openTab(id);
+    useUiStore.getState().openTab(id, 'sessions');
 
     return id;
   },
@@ -2268,7 +2268,9 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       resolve.
     */
     const ui = useUiStore.getState();
-    if (ui.activeTab === id) ui.backToOrch();
+    // `openTab('orch')`, not `backToOrch()`: the stage lost its tab, the user
+    // did not ask to go anywhere, so the place stays (HIVE-195).
+    if (ui.activeTab === id) ui.openTab('orch');
   },
 
   /**
@@ -2434,7 +2436,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         isEnded(entity.status)
       )
     ) {
-      useUiStore.getState().openTab(id);
+      useUiStore.getState().openTab(id, entity?.kind === 'agent' ? 'agents' : 'sessions');
       return true;
     }
 
@@ -4479,7 +4481,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       resume: true,
     });
 
-    useUiStore.getState().openTab(id);
+    useUiStore.getState().openTab(id, 'sessions');
   },
 
   /**
@@ -4568,7 +4570,9 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       attention theft the fleet view exists to prevent.
     */
     const ui = useUiStore.getState();
-    if (ui.activeTab === target) ui.backToOrch();
+    // `openTab('orch')`, not `backToOrch()`: the stage lost its tab, the user
+    // did not ask to go anywhere, so the place stays (HIVE-195).
+    if (ui.activeTab === target) ui.openTab('orch');
   },
 
   clearSession: (id) => {
