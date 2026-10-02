@@ -780,7 +780,9 @@ function SessionTableRow({
             >
               <span
                 className="block h-full rounded-full bg-green"
-                style={{ width: `${String((progress.done / progress.total) * 100)}%` }}
+                style={{
+                  width: `${String(progress.total > 0 ? (progress.done / progress.total) * 100 : 0)}%`,
+                }}
               />
             </span>
             {`${String(progress.done)}/${String(progress.total)}`}

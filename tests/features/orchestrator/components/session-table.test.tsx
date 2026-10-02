@@ -1152,6 +1152,15 @@ describe('SessionTable — plan progress', () => {
     expect(shell.querySelector('[data-col="status"]')).not.toHaveTextContent('2/3');
   });
 
+  it('draws an empty bar, not NaN, for a plan with no tasks yet', () => {
+    act(() => useHiveStore.getState().setPlan('hero-refresh', plan('hero-refresh', [])));
+    render(<SessionTable />);
+
+    const cell = shellOf(rowFor('hero-refresh')).querySelector('[data-col="plan"]') as HTMLElement;
+    const fill = within(cell).getByRole('progressbar').firstElementChild as HTMLElement;
+    expect(fill.style.width).toBe('0%');
+  });
+
   it('shows nothing on a row without a plan', () => {
     act(() => useHiveStore.getState().setPlan('hero-refresh', plan('hero-refresh', ['pending'])));
     render(<SessionTable />);
