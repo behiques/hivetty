@@ -139,6 +139,8 @@ interface UiState {
   sessionsFilter: TableFilter;
   /** "N more ›" pressed under an unfiltered Ended group. */
   endedExpanded: boolean;
+  /** The Overmind's transcript, folded by default in round two (HIVE-197). */
+  consoleShown: boolean;
   /**
    * Round two's fold map, **folded by default** (HIVE-197). Separate from
    * Classic's `collapsed`, which defaults to unfolded, so neither layout's
@@ -183,6 +185,7 @@ interface UiState {
   setSessionsProject: (id: string | null) => void;
   setSessionsFilter: (filter: TableFilter) => void;
   expandEnded: () => void;
+  toggleConsole: () => void;
   toggleProjectFold: (id: string) => void;
   expandProject: (id: string) => void;
   /** Put the caret on a row, or clear it with `null`. */
@@ -269,6 +272,7 @@ const initialUiState = {
   sessionsProject: null as string | null,
   sessionsFilter: 'all' as TableFilter,
   endedExpanded: false,
+  consoleShown: false,
   expanded: {} as Record<string, boolean>,
   explorerExpanded: {} as Record<string, boolean>,
   fsRevision: 0,
@@ -322,6 +326,7 @@ export const useUiStore = create<UiState>()((set) => ({
     ),
   setSessionsFilter: (filter) => set({ sessionsFilter: filter }),
   expandEnded: () => set({ endedExpanded: true }),
+  toggleConsole: () => set((state) => ({ consoleShown: !state.consoleShown })),
   toggleProjectFold: (id) =>
     set((state) => ({ expanded: { ...state.expanded, [id]: !state.expanded[id] } })),
   expandProject: (id) =>
@@ -537,6 +542,9 @@ export const useSetSessionsProject = () => useUiStore((state) => state.setSessio
 export const useSessionsFilter = () => useUiStore((state) => state.sessionsFilter);
 export const useSetSessionsFilter = () => useUiStore((state) => state.setSessionsFilter);
 export const useExpandEnded = () => useUiStore((state) => state.expandEnded);
+/** The dock's transcript, shown or folded (HIVE-197). */
+export const useConsoleShown = () => useUiStore((state) => state.consoleShown);
+export const useToggleConsole = () => useUiStore((state) => state.toggleConsole);
 /** Per row, like `useProjectCollapsed`. */
 export const useProjectExpanded = (id: string) => useUiStore((state) => Boolean(state.expanded[id]));
 export const useToggleProjectFold = () => useUiStore((state) => state.toggleProjectFold);

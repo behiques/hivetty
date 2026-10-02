@@ -11,6 +11,7 @@ import {
   isTerminated,
 } from '@/types/entity';
 
+import { SessionHeader } from '@components/layout/session-header';
 import { SessionMetaBar } from '@components/layout/session-meta-bar';
 import { TerminalHost } from '@components/terminal/terminal-host';
 import { SplitHandle } from '@components/ui/split-handle';
@@ -19,6 +20,7 @@ import { AgentView } from '@features/agents/components/agent-view';
 import { EditorPane } from '@features/editor/components/editor-pane';
 import { EditorTabStrip } from '@features/editor/components/editor-tab-strip';
 import { ConsoleInput } from '@features/orchestrator/components/console-input';
+import { ConsolePeek } from '@features/orchestrator/components/console-peek';
 import { FleetPane, TRANSCRIPT_FLOOR } from '@features/orchestrator/components/fleet-pane';
 import { OvermindHead } from '@features/orchestrator/components/overmind-head';
 import { PlanRail } from '@features/plan/components/plan-rail';
@@ -62,6 +64,7 @@ import {
 import {
   useActiveTab,
   useBackToOrch,
+  useConsoleShown,
   usePickerState,
   usePlace,
   useRevealStage,
@@ -209,6 +212,13 @@ export function CenterStage() {
    * look at an agent would cost each of them its scrollback.
    */
   const showingAgent = view === 'agent';
+  /**
+   * Round two folds the Overmind's transcript into the dock (HIVE-197): hidden,
+   * never unmounted, for `showingAgent`'s reason. A read that changes on a click,
+   * not on a drag, so the stage may subscribe to it.
+   */
+  const consoleShown = useConsoleShown();
+  const transcriptFolded = roundTwo && view === 'orchestrator' && !consoleShown;
 
   /*
     The plan panel (HIVE-181): a sibling of the terminal region, never inside
@@ -463,7 +473,11 @@ export function CenterStage() {
           here would be a routing bug worth rendering nothing for rather than
           crashing on a missing `project`.
         */}
-        {isTerminalView(view) && entity && isSession(entity) ? (
+        {/* Round two heads a terminal too (HIVE-197); Classic's bar is sessions only. */}
+        {isTerminalView(view) && entity && roundTwo && (isSession(entity) || isTerminal(entity)) ? (
+          <SessionHeader entity={entity} />
+        ) : null}
+        {isTerminalView(view) && entity && !roundTwo && isSession(entity) ? (
           <SessionMetaBar entity={entity} />
         ) : null}
 
@@ -489,7 +503,11 @@ export function CenterStage() {
         */}
         <div ref={paneSplitRef} className="flex min-h-0 flex-1 flex-col">
         {view === 'orchestrator' ? (
-          <FleetPane containerRef={paneSplitRef} floored={!splitting} />
+          <FleetPane
+            containerRef={paneSplitRef}
+            floored={!splitting}
+            split={!roundTwo || consoleShown}
+          />
         ) : null}
 
         {/*
@@ -510,7 +528,7 @@ export function CenterStage() {
           className={cn(
             'flex min-w-0 flex-1 flex-row',
             view === 'orchestrator' && !splitting ? TRANSCRIPT_FLOOR.className : 'min-h-0',
-            showingAgent && 'hidden',
+            (showingAgent || transcriptFolded) && 'hidden',
           )}
         >
         {/*
@@ -557,9 +575,12 @@ export function CenterStage() {
              * `null` while either overlay is open: that marks every surface
              * invisible, so closing it re-reveals the previous one and
              * triggers its refit through the machinery story 042 already has.
+             * The folded console (HIVE-197) takes the same path on unfold.
              */
             activeId={
-              showingOverlay || editorFull || showingAgent ? null : activeTab
+              showingOverlay || editorFull || showingAgent || transcriptFolded
+                ? null
+                : activeTab
             }
             endedId={endedId}
             palette={terminalAppearance.palette}
@@ -628,7 +649,13 @@ export function CenterStage() {
         </div>
         </div>
 
-        {view === 'orchestrator' ? <ConsoleInput /> : null}
+        {/* Round two's dock: the peek line and its show/hide over the prompt (HIVE-197). */}
+        {view === 'orchestrator' ? (
+          <>
+            {roundTwo ? <ConsolePeek /> : null}
+            <ConsoleInput />
+          </>
+        ) : null}
 
         {/*
           The message row exists for surfaces that cannot be typed into

@@ -6118,6 +6118,9 @@ export const useHasResumable = (): boolean =>
     }),
   );
 
+/** The console's last line, for the folded dock's peek (HIVE-197). */
+export const useLastOrchLine = (): string => useHiveStore((state) => state.orchLines.at(-1)?.text ?? '');
+
 /**
  * One agent's run log.
  *
