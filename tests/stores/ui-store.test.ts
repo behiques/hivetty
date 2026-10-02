@@ -528,3 +528,42 @@ describe('ui-store — the place machine (HIVE-195)', () => {
     expect(ui()).toMatchObject({ place: 'home', panelOpen: true });
   });
 });
+
+describe('Sessions place view state (HIVE-197)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('starts unfiltered, folded, Ended folded', () => {
+    const s = useUiStore.getState();
+    expect(s.sessionsProject).toBeNull();
+    expect(s.sessionsFilter).toBe('all');
+    expect(s.endedExpanded).toBe(false);
+    expect(s.expanded).toEqual({});
+  });
+
+  it('setSessionsProject filters and unfolds that project; null clears and keeps folds', () => {
+    useUiStore.getState().setSessionsProject('nova-web');
+    expect(useUiStore.getState().sessionsProject).toBe('nova-web');
+    expect(useUiStore.getState().expanded['nova-web']).toBe(true);
+    useUiStore.getState().setSessionsProject(null);
+    expect(useUiStore.getState().sessionsProject).toBeNull();
+    expect(useUiStore.getState().expanded['nova-web']).toBe(true);
+  });
+
+  it('toggleProjectFold flips, expandProject only opens, and neither touches Classic collapsed', () => {
+    useUiStore.getState().toggleProjectFold('a');
+    expect(useUiStore.getState().expanded.a).toBe(true);
+    useUiStore.getState().toggleProjectFold('a');
+    expect(useUiStore.getState().expanded.a).toBe(false);
+    useUiStore.getState().expandProject('a');
+    useUiStore.getState().expandProject('a');
+    expect(useUiStore.getState().expanded.a).toBe(true);
+    expect(useUiStore.getState().collapsed).toEqual({});
+  });
+
+  it('setSessionsFilter and expandEnded', () => {
+    useUiStore.getState().setSessionsFilter('ended');
+    useUiStore.getState().expandEnded();
+    expect(useUiStore.getState().sessionsFilter).toBe('ended');
+    expect(useUiStore.getState().endedExpanded).toBe(true);
+  });
+});
