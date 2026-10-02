@@ -19,22 +19,22 @@ import { SwarmCreature } from '@components/ui/swarm-creature';
 import { effectiveSelId } from '@features/orchestrator/utils/selection';
 import { prStateText } from '@features/shared/pr-presentation';
 import {
-  useActiveSessions,
   useAgentAskRef,
   useAgentLiveCount,
   useAskingAgentCount,
   useAgentPr,
-  useEndedSessions,
+  useEndedMore,
   useEntity,
-  useFleetAgents,
+  useFleetGroup,
   useHasResumable,
   useNavOrder,
   useOpenEntity,
+  useOvermindHeadCounts,
   usePlanProgress,
   useResumeSession,
   useSessionPr,
 } from '@stores/hive-store';
-import { useActiveTab, useSelId, useSetSelId } from '@stores/ui-store';
+import { useActiveTab, useExpandEnded, useSelId, useSessionsProject, useSetSelId } from '@stores/ui-store';
 
 /**
  * One definition per column, shared by the header row and every data row.
@@ -304,15 +304,17 @@ const COL = {
  */
 export function SessionTable() {
   /**
-   * Both newest-first, and both partitions of one list.
-   *
-   * The table paints them in exactly this order and `useNavOrder` flattens them
-   * in exactly this order, which is what keeps the caret and the rows agreeing
-   * about where "here" is.
+   * The three groups under the Overmind's filters (HIVE-197), from one
+   * `fleetGroupsOf` — the function `useFleetNavOrder` flattens, which is what
+   * keeps the caret and the rows agreeing about where "here" is.
    */
-  const active = useActiveSessions();
-  const ended = useEndedSessions();
-  const agents = useFleetAgents();
+  const active = useFleetGroup('live');
+  const agents = useFleetGroup('agents');
+  const ended = useFleetGroup('ended');
+  const endedMore = useEndedMore();
+  const expandEnded = useExpandEnded();
+  const project = useSessionsProject();
+  const counts = useOvermindHeadCounts(project);
   const askingAgents = useAskingAgentCount();
   /*
     Agents are deliberately **not** part of `empty` (HIVE-117).
@@ -321,8 +323,11 @@ export function SessionTable() {
     a fleet of nothing but agents is exactly the state that sentence is for: the
     tenants are listed below it, and the advice is still the right advice. Folding
     them in would replace it with a bare table and no next step.
+
+    And it is about the fleet, not the filter (HIVE-197): a project with nothing
+    in it is an empty group, not a fleet with nothing running.
   */
-  const empty = active.length === 0 && ended.length === 0;
+  const empty = counts.live === 0 && counts.ended === 0;
   /**
    * Drawn unconditionally, though only rendered when the table is empty: a hook
    * cannot sit behind the `empty` branch. The cost is one array index on a
@@ -466,6 +471,13 @@ export function SessionTable() {
         </div>
       ) : null}
 
+      {active.length > 0 ? (
+        <GroupHead
+          label={`LIVE · ${String(active.length)}`}
+          extra={counts.needs > 0 ? `· ${String(counts.needs)} NEEDS YOU` : null}
+          tone="text-amber"
+        />
+      ) : null}
       {active.map((id) => (
         <SessionTableRow key={id} id={id} reserveAction={reserveAction} />
       ))}
@@ -500,44 +512,64 @@ export function SessionTable() {
         `asking` wants exactly as much as a session that is `waiting`. Below
         `ENDED` would file the live half of the app under the finished half.
 
-        The heading carries a count where `ACTIVE` and `ENDED` do not, and that
-        asymmetry is deliberate rather than an oversight: those two are lists
-        the user is already reading row by row, while the agents are a
-        *standing* population — mostly asleep, mostly not worth reading — and
-        the only number that earns attention is how many of them are waiting.
+        Every head carries a count since HIVE-197, and each adds the one number
+        that earns attention: how many need you, how many agents are asking,
+        how many ended today. Filtered to a project, the agents head names the
+        ones working there instead.
       */}
       {agents.length > 0 ? (
         <>
-          <div className="flex items-center gap-2 px-2 pt-3.5 pb-1.5">
-            <span className="shrink-0 text-[11px] tracking-[0.06em] text-term-head">
-              AGENTS · {agents.length}
-            </span>
-            {askingAgents > 0 ? (
-              <span className="shrink-0 text-[11px] tracking-[0.06em] text-amber">
-                {askingAgents} asking
-              </span>
-            ) : null}
-            <span className="flex-1 border-t border-border" />
-          </div>
+          {project === null ? (
+            <GroupHead
+              label={`AGENTS · ${String(agents.length)}`}
+              extra={askingAgents > 0 ? `· ${String(askingAgents)} ASKING` : null}
+              tone="text-amber"
+            />
+          ) : (
+            <GroupHead label={`AGENTS WORKING HERE · ${String(agents.length)}`} />
+          )}
           {agents.map((id) => (
             <AgentTableRow key={id} id={id} reserveAction={reserveAction} />
           ))}
         </>
       ) : null}
 
-      {ended.length > 0 ? (
+      {/*
+        Unfiltered, ENDED holds today's endings and folds the rest behind
+        "N more ›" (HIVE-197); a project filter or the Ended filter shows them
+        whole. `fleetGroupsOf` decides which, so the caret walks the same rows.
+      */}
+      {ended.length + endedMore > 0 ? (
         <>
-          <div className="flex items-center gap-2 px-2 pt-3.5 pb-1.5">
-            <span className="shrink-0 text-[11px] tracking-[0.06em] text-term-head">
-              ENDED
-            </span>
-            <span className="flex-1 border-t border-border" />
-          </div>
+          <GroupHead
+            label={`ENDED · ${String(ended.length + endedMore)}`}
+            extra={project === null && endedMore > 0 ? `· TODAY ${String(ended.length)}` : null}
+          />
           {ended.map((id) => (
             <SessionTableRow key={id} id={id} reserveAction={reserveAction} />
           ))}
+          {endedMore > 0 ? (
+            <button
+              type="button"
+              onClick={expandEnded}
+              className="px-2 py-[3px] text-left text-brand hover:underline"
+            >
+              {`${String(endedMore)} more ›`}
+            </button>
+          ) : null}
         </>
       ) : null}
+    </div>
+  );
+}
+
+/** A group's heading: its label and count, one extra clause, and a rule (HIVE-197). */
+function GroupHead({ label, extra, tone }: { label: string; extra?: string | null; tone?: string }) {
+  return (
+    <div className="flex items-center gap-2 px-2 pt-3.5 pb-1.5 text-[11px] tracking-[0.06em]">
+      <span className="shrink-0 text-term-head">{label}</span>
+      {extra ? <span className={cn('shrink-0', tone ?? 'text-term-head')}>{extra}</span> : null}
+      <span className="flex-1 border-t border-border" />
     </div>
   );
 }

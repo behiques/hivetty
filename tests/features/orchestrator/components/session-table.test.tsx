@@ -1,6 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
@@ -46,6 +46,8 @@ describe('SessionTable', () => {
     useHiveStore.getState().reset();
     seedDemoFleet();
     useUiStore.getState().reset();
+    // Every ending drawn: these tests are about the rows, not HIVE-197's fold.
+    useUiStore.setState({ endedExpanded: true });
   });
 
   /**
@@ -83,7 +85,7 @@ describe('SessionTable', () => {
     it('shows no ENDED group', () => {
       render(<SessionTable />);
 
-      expect(screen.queryByText('ENDED')).not.toBeInTheDocument();
+      expect(screen.queryByText(/^ENDED/)).not.toBeInTheDocument();
     });
   });
 
@@ -98,7 +100,7 @@ describe('SessionTable', () => {
 
     // The exact split the story's acceptance criteria name.
     expect(rows()).toHaveLength(10);
-    expect(screen.getByText('ENDED')).toBeInTheDocument();
+    expect(screen.getByText(/^ENDED · \d+$/)).toBeInTheDocument();
   });
 
   it('lists active sessions before the divider and done ones after', () => {
@@ -450,13 +452,13 @@ describe('SessionTable', () => {
       restore();
       render(<SessionTable />);
 
-      expect(screen.getByText('ENDED')).toBeInTheDocument();
+      expect(screen.getByText(/^ENDED · \d+$/)).toBeInTheDocument();
       expect(screen.queryByText('PREVIOUS RUN')).not.toBeInTheDocument();
       // `closed` folded into `done` (HIVE-93) — the word the user sees for
       // every deliberate ending, with the *how* carried by `endedBy`.
       expect(screen.getAllByText('done').length).toBeGreaterThan(0);
 
-      const ended = screen.getByText('ENDED');
+      const ended = screen.getByText(/^ENDED · \d+$/);
       const row = screen
         .getAllByRole('button')
         .find((button) => within(button).queryByText(/old-01/) !== null)!;
@@ -485,7 +487,7 @@ describe('SessionTable', () => {
       });
       render(<SessionTable />);
 
-      const ended = screen.getByText('ENDED');
+      const ended = screen.getByText(/^ENDED · \d+$/);
       const row = screen
         .getAllByRole('button')
         .find((button) => within(button).queryByText(/old-term/) !== null)!;
@@ -674,7 +676,7 @@ describe('SessionTable', () => {
       expect(screen.queryByText('PREVIOUS RUN')).not.toBeInTheDocument();
       // The active group has no divider of its own: it is everything above
       // ENDED. Being above that divider is being in ACTIVE.
-      const ended = screen.getByText('ENDED');
+      const ended = screen.getByText(/^ENDED · \d+$/);
       expect(rows[0]!.compareDocumentPosition(ended)).toBe(
         Node.DOCUMENT_POSITION_FOLLOWING,
       );
@@ -859,13 +861,13 @@ describe('SessionTable', () => {
       useHiveStore.getState().hydrateAgents([agent()]);
       const { unmount } = render(<SessionTable />);
 
-      expect(screen.queryByText(/asking/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/ASKING/)).not.toBeInTheDocument();
       unmount();
 
       useHiveStore.getState().hydrateAgents([agent({ status: 'asking' })]);
       render(<SessionTable />);
 
-      expect(screen.getByText('1 asking')).toBeInTheDocument();
+      expect(screen.getByText('· 1 ASKING')).toBeInTheDocument();
     });
 
     /**
@@ -1199,5 +1201,62 @@ describe('SessionTable — columns (HIVE-197)', () => {
     const cell = screen.getByTestId('agent-row').querySelector('[data-col="plan"]');
     expect(cell).not.toBeNull();
     expect(cell).toBeEmptyDOMElement();
+  });
+});
+
+describe('SessionTable — groups (HIVE-197)', () => {
+  const NOW = new Date(2026, 9, 2, 15, 0).getTime();
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const endAll = (endedAt: (index: number) => number) =>
+    act(() => {
+      useHiveStore.setState((state) => {
+        const entities = { ...state.entities };
+        Object.values(entities).forEach((entity, index) => {
+          if (entity.kind === 'session' && (entity.status === 'done' || entity.status === 'terminated')) {
+            entities[entity.id] = { ...entity, endedAt: endedAt(index) };
+          }
+        });
+        return { entities };
+      });
+    });
+
+  it('heads the live rows with LIVE · N and the needs-you count', () => {
+    render(<SessionTable />);
+    expect(screen.getByText(/^LIVE · \d+$/)).toBeInTheDocument();
+    expect(screen.getByText(/^· \d+ NEEDS YOU$/)).toHaveClass('text-amber');
+  });
+
+  it('folds yesterday’s endings behind "N more", which reveals them', async () => {
+    endAll((index) => (index % 2 === 0 ? NOW - 1000 : NOW - 2 * 86_400_000));
+    render(<SessionTable />);
+    expect(screen.getByText(/^ENDED · \d+$/)).toBeInTheDocument();
+    expect(screen.getByText(/^· TODAY \d+$/)).toBeInTheDocument();
+    const more = screen.getByRole('button', { name: /^\d+ more ›$/ });
+    const before = rows().length;
+    await userEvent.click(more);
+    expect(rows().length).toBeGreaterThan(before);
+    expect(screen.queryByRole('button', { name: /more ›$/ })).not.toBeInTheDocument();
+  });
+
+  it('a project filter narrows every group and names the agents head', () => {
+    useUiStore.getState().setSessionsProject('nova-web');
+    render(<SessionTable />);
+    for (const row of rows()) expect(shellOf(row)).toHaveTextContent('nova-web');
+    expect(screen.queryByRole('button', { name: /more ›$/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/^AGENTS · /)).not.toBeInTheDocument();
+  });
+
+  it('the Ended filter hides the live rows', () => {
+    useUiStore.getState().setSessionsFilter('ended');
+    render(<SessionTable />);
+    expect(screen.queryByText(/^LIVE · /)).not.toBeInTheDocument();
   });
 });
