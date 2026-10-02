@@ -53,7 +53,8 @@ const CLASSES: Record<NewProjectVariant, string> = {
  *
  * ## Why the accessible name is not just "new project"
  *
- * The visible text stays lowercase to match `new session`, in both variants —
+ * The visible text is the same in both variants (HIVE-197 relabelled its
+ * neighbours `Session` and `Terminal`; this one is unchanged) —
  * the border changes how loud the control is, not what it is called. The
  * `aria-label` spells out that this *adds* one, for a screen-reader user who
  * arrives here without the tree beneath it. It still contains the visible
