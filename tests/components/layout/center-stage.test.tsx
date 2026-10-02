@@ -1099,3 +1099,39 @@ describe('CenterStage — Home in round two (HIVE-195)', () => {
     expect(screen.queryByRole('heading', { name: 'Home', level: 1 })).not.toBeInTheDocument();
   });
 });
+
+describe('CenterStage — the Overmind head (HIVE-197)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+  });
+
+  afterEach(() => {
+    useAppearanceStore.getState().reset();
+  });
+
+  it('heads the orchestrator view in round two', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    useUiStore.setState({ place: 'sessions', activeTab: 'orch' });
+    render(<CenterStage />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Overmind' })).toBeInTheDocument();
+  });
+
+  it('is absent over a session in round two', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    useUiStore.setState({ place: 'sessions', activeTab: 'hero-refresh' });
+    render(<CenterStage />);
+    expect(screen.queryByRole('heading', { level: 1, name: 'Overmind' })).not.toBeInTheDocument();
+  });
+
+  it('is absent in Classic', () => {
+    useAppearanceStore.getState().setLayout('classic');
+    render(<CenterStage />);
+    expect(screen.queryByRole('heading', { level: 1, name: 'Overmind' })).not.toBeInTheDocument();
+  });
+});

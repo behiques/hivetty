@@ -140,6 +140,15 @@ test('a fleet taller than the stage scrolls, and the console stays on screen', a
       and the newest restored row is the cheapest proof it has. Which element
       carries the name is `table-alignment.spec.ts`'s subject, not this one's.
     */
+    await expect(page.getByText(/^ENDED · \d+$/)).toBeVisible();
+    /*
+      Unfiltered, ENDED draws today's endings and folds the rest behind
+      "N more ›" (HIVE-197). These rows are hours old, so some may be
+      yesterday's depending on when the suite runs: unfold whatever is folded,
+      or the table is shorter than the stage this spec needs it taller than.
+    */
+    const more = page.getByRole('button', { name: /more ›$/ });
+    if ((await more.count()) > 0) await more.click();
     await expect(table).toContainText(`hist-${ROWS - 1}`);
 
     await resizeTo(app, page, MIN_HEIGHT);

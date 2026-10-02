@@ -5,7 +5,7 @@ import { ADVERTISED_VERBS } from '@/types/command';
 import { parseCommand } from '@features/orchestrator/utils/parse-command';
 import { effectiveSelId } from '@features/orchestrator/utils/selection';
 import {
-  useNavOrder,
+  useFleetNavOrder,
   openOrResume,
   useRunOrchCommand,
 } from '@stores/hive-store';
@@ -48,7 +48,7 @@ export function ConsoleInput() {
 
 
   const runOrchCommand = useRunOrchCommand();
-  const navOrder = useNavOrder();
+  const navOrder = useFleetNavOrder();
   const selId = useSelId();
   const setSelId = useSetSelId();
 

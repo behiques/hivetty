@@ -91,6 +91,26 @@ ended by `/clear` cannot be resumed: its terminal already carried on as a new se
 The 20 most recent ended sessions survive a restart. They come back under ENDED, newest
 first. The column **LAST USED** is when each one ended or last resumed.
 
+## Round two: the Sessions place
+
+With **Settings › Appearance › Layout** on round two, the **Sessions** icon opens the
+projects panel beside the overmind.
+
+- The head reads **Projects**, then how many sessions and terminals are live and how many
+  need you. **+** opens the new-session picker.
+- **All projects** shows the whole fleet in the overmind.
+- Each project starts folded. Its counts are an amber dot for sessions waiting on you, a
+  green dot for everything else live, or **no sessions**.
+- Click a project's **name** to filter the overmind to it; that also unfolds it. The
+  caret beside it only folds and unfolds.
+- Unfolded, each session is one line, then the project's terminals, then **+ Session**
+  and **+ Terminal**.
+- Opening a session unfolds its project. Coming back with the back button, `⌘[` or the
+  Sessions icon keeps the filter you left and puts the selection on the session you were
+  in.
+
+**new project** sits at the foot of the panel.
+
 ## Terminals
 
 A terminal is a login shell in a project with no Claude in it: no hooks, no cost, no
@@ -99,7 +119,7 @@ like `vitest` or `vim`.
 
 | Open one from | How |
 | --- | --- |
-| The Projects rail | **terminal** under a project |
+| The Projects rail | **Terminal** under a project |
 | The header | chevron beside **New session** › **New terminal in…** |
 | A session | **terminal here** in its bar, or ``Ctrl+` `` |
 | The console | `term hive`, or `term` for beside the selected row |

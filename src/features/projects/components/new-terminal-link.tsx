@@ -62,7 +62,7 @@ export function NewTerminalLink({
       className="flex items-center gap-1.5 rounded-lg py-[3px] pr-2.5 pl-2 text-left font-mono text-[11.5px] text-subtle hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-subtle"
     >
       <TerminalGlyph size={10} weight="bold" aria-hidden="true" className="shrink-0" />
-      {containerised ? 'terminal · host' : 'terminal'}
+      {containerised ? 'Terminal · host' : 'Terminal'}
     </button>
   );
 }

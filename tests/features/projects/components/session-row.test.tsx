@@ -204,3 +204,16 @@ describe('SessionRow — plan progress', () => {
     expect(rendersA).toBe(beforeA);
   });
 });
+
+describe('SessionRow — compact (HIVE-197)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+  });
+
+  it('compact drops the branch line (HIVE-197)', () => {
+    render(<SessionRow id="hero-refresh" compact />);
+    expect(screen.queryByText('feat/hero-refresh')).not.toBeInTheDocument();
+    expect(screen.getByText('hero-refresh')).toBeInTheDocument();
+  });
+});

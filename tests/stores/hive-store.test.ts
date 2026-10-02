@@ -6168,3 +6168,18 @@ describe('the agent view selectors', () => {
     });
   });
 });
+
+describe('openEntity unfolds the project (HIVE-197)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    seedDemoFleet();
+  });
+
+  it('unfolds a session’s project and leaves the Overmind filter alone', () => {
+    useUiStore.setState({ sessionsProject: 'referral-api' });
+    useHiveStore.getState().openEntity('hero-refresh'); // nova-web
+    expect(useUiStore.getState().expanded['nova-web']).toBe(true);
+    expect(useUiStore.getState().sessionsProject).toBe('referral-api');
+  });
+});

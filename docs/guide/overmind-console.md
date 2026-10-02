@@ -11,9 +11,41 @@ back here.
 
 ## The fleet table
 
-Columns: **SESSION · STATUS · PROJECT · BRANCH · LAST USED · PR**, then a resume button on
-rows that can be resumed. Live rows sit above an **ENDED** divider; agents have their own
-group. Drag the handle under the table to give the transcript more room.
+Columns: **SESSION · PROJECT · BRANCH · STATUS · PLAN · LAST USED · PR**, then a resume
+button on rows that can be resumed. **PLAN** is the session's task progress, a bar and
+`done/total`; it is empty on agent rows and on sessions without a plan.
+
+The rows come in three groups, each under a head with its count:
+
+- **LIVE · N**, plus **· N NEEDS YOU** when sessions are waiting on you.
+- **AGENTS · N**, plus **· N ASKING** when agents have a question open.
+- **ENDED · N**, plus **· TODAY N**. Only today's endings are drawn; the rest wait behind
+  **N more ›**, which shows them all.
+
+Drag the handle under the table to give the transcript more room. The table is the same in
+both layouts.
+
+### Round two: the page head and filters
+
+With **Settings › Appearance › Layout** on round two, the overmind is the **Sessions**
+place's page, and a head sits above the table:
+
+- **Overmind**, then a line counting the fleet: `N live across M projects · N needs you ·
+  N ended`.
+- **All · Live · Ended** narrows the table. **Live** hides the ENDED group; **Ended** shows
+  only ended sessions, all of them.
+- **+ New session** opens the picker.
+
+Click a project in the Sessions panel to filter the table to it. The head then reads
+**Overmind › <project>** (click **Overmind** to widen it again), counts that project's
+sessions, and names the agents working there. **+ New session in <project>** starts one
+there directly. Filtered, ENDED shows every ending for the project, not just today's.
+
+An agent is **working here** while it has a live run on a repository whose name is the
+project folder's name (`repo:acme/nova-web` works in a project at `…/nova-web`). A
+checkout whose folder is named differently from its repository never matches.
+
+`↑` `↓` walk only the rows on screen, in the order the table draws them.
 
 | Key | Does |
 | --- | --- |

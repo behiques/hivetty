@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { ParsedCommand } from '@/types/command';
 import { QUIET_VERBS, USAGE } from '@/types/command';
 import type {
+  Agent,
   Effort,
   Entity,
   Model,
@@ -110,7 +111,7 @@ import type {
   SessionHistoryEntry,
   SessionPrRequest,
 } from '@shared/session-history-contract';
-import { useUiStore } from '@stores/ui-store';
+import { type TableFilter, useFleetView, useUiStore } from '@stores/ui-store';
 
 /**
  * Domain state — what the system knows, as opposed to what the user is looking
@@ -2436,7 +2437,10 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         isEnded(entity.status)
       )
     ) {
-      useUiStore.getState().openTab(id, entity?.kind === 'agent' ? 'agents' : 'sessions');
+      const ui = useUiStore.getState();
+      // Round two's panel shows the opened entry under its project (HIVE-197).
+      if (entity !== undefined && !isAgent(entity)) ui.expandProject(entity.project);
+      ui.openTab(id, entity?.kind === 'agent' ? 'agents' : 'sessions');
       return true;
     }
 
@@ -5900,6 +5904,90 @@ function navOrderOf(state: HiveState): string[] {
 /** Active sessions first, then ended ones — the keyboard nav order (041, 060). */
 export const useNavOrder = () => useHiveStore(useShallow(navOrderOf));
 
+/** What the Overmind table is asked to show (HIVE-197): `useFleetView()`'s answer. */
+export interface FleetView {
+  project: string | null;
+  filter: TableFilter;
+  endedAll: boolean;
+}
+
+/** The Overmind table's rows, group by group, in drawing order (HIVE-197). */
+export interface FleetGroups {
+  live: string[];
+  agents: string[];
+  ended: string[];
+  /** Endings the unfiltered table folds away behind "N more ›". */
+  endedMore: number;
+}
+
+const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
+
+/**
+ * What the Overmind table draws, group by group (HIVE-197). The table paints these
+ * and {@link useFleetNavOrder} flattens them, so the caret and the rows agree —
+ * the rule {@link navOrderOf} keeps for the whole fleet.
+ *
+ * Unfiltered, Ended shows today's endings and counts the rest (`endedMore`);
+ * a project filter or the Ended filter shows them whole. `repo` is the filtered
+ * project's folder name ({@link repoDirName}); `null` means no agent works there.
+ */
+export function fleetGroupsOf(
+  state: Pick<HiveState, 'entities' | 'order' | 'agentOrder'>,
+  view: FleetView,
+  repo: string | null,
+  now: number,
+): FleetGroups {
+  const live: string[] = [];
+  const ended: string[] = [];
+  for (const id of state.order) {
+    const entity = state.entities[id];
+    if (!entity || !isSession(entity)) continue;
+    if (view.project !== null && entity.project !== view.project) continue;
+    (isEnded(entity.status) ? ended : live).push(id);
+  }
+  const agents = rankedAgents(state.agentOrder, state.entities).filter((id) => {
+    if (view.project === null) return true;
+    const entity = state.entities[id];
+    return repo !== null && entity !== undefined && isAgent(entity) && agentWorksIn(entity, repo);
+  });
+  const endedSorted = byRecency(ended, state.entities);
+  const folds = view.project === null && view.filter === 'all' && !view.endedAll;
+  // `recencyOf` of an ended row is its `endedAt`, so "today" is ended today.
+  const shown = folds
+    ? endedSorted.filter((id) => sameDay(recencyOf(state.entities[id] as Session), now))
+    : endedSorted;
+
+  return {
+    live: view.filter === 'ended' ? [] : byRecency(live, state.entities),
+    agents: view.filter === 'ended' ? [] : agents,
+    ended: view.filter === 'live' ? [] : shown,
+    endedMore: view.filter === 'live' ? 0 : endedSorted.length - shown.length,
+  };
+}
+
+/** The folder name of a configured project, or `null` (HIVE-197). */
+export const useProjectRepo = (projectId: string | null): string | null => {
+  const snapshot = useSyncExternalStore(subscribeProjectConfig, projectConfigSnapshot, projectConfigSnapshot);
+  if (projectId === null) return null;
+  return repoDirName(snapshot?.projects.find((project) => project.id === projectId)?.path ?? null);
+};
+
+const useFleetGroups = <T,>(pick: (groups: FleetGroups) => T): T => {
+  const view = useFleetView();
+  const repo = useProjectRepo(view.project);
+  // ponytail: `now` is read per store change, so "today" rolls over at the next update after midnight.
+  return useHiveStore(useShallow((state) => pick(fleetGroupsOf(state, view, repo, Date.now()))));
+};
+
+/** One group of the Overmind table, under the current filters (HIVE-197). */
+export const useFleetGroup = (group: 'live' | 'agents' | 'ended'): string[] =>
+  useFleetGroups((groups) => groups[group]);
+/** How many endings the unfiltered table folds away behind "N more ›". */
+export const useEndedMore = (): number => useFleetGroups((groups) => groups.endedMore);
+/** The rows on screen, flattened in the table's order — what ↑↓ walks (HIVE-197). */
+export const useFleetNavOrder = (): string[] =>
+  useFleetGroups((groups) => [...groups.live, ...groups.agents, ...groups.ended]);
+
 /**
  * Every id the centre stage mounts a terminal surface for (terminals).
  *
@@ -6412,6 +6500,25 @@ function byFleetRank(a: AgentRank, b: AgentRank): number {
   return a.nextRunAt - b.nextRunAt;
 }
 
+/** A project's folder name, the key a `repo:` lane is matched on (HIVE-197). */
+export function repoDirName(path: string | null): string | null {
+  if (path === null) return null;
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop()?.toLowerCase() ?? null;
+}
+
+/**
+ * Whether an agent has a live run in a project (HIVE-197): a `repo:<owner>/<name>`
+ * lane whose `<name>` is the project's folder name.
+ *
+ * ponytail: a checkout whose folder is not the repository's name never matches;
+ * a repo slug on `ProjectConfig` is the upgrade.
+ */
+export function agentWorksIn(agent: Agent, repo: string): boolean {
+  return agent.live.some(
+    (run) => run.lane?.startsWith('repo:') === true && run.lane.split('/').pop()?.toLowerCase() === repo,
+  );
+}
+
 /** The agents of `agentOrder`, ranked — shared by the table and the caret. */
 function rankedAgents(
   order: readonly string[],
@@ -6900,6 +7007,84 @@ export const useProjectLiveCount = (projectId: string): number =>
       return isEnded(entity.status) ? count : count + 1;
     }, 0),
   );
+
+/** A project's live entries, split as the panel colours them (HIVE-197). */
+export const useProjectCounts = (projectId: string): { needs: number; other: number } =>
+  useHiveStore(
+    useShallow((state) => {
+      let needs = 0;
+      let other = 0;
+      for (const id of state.order) {
+        const entity = state.entities[id];
+        if (entity === undefined || isAgent(entity) || entity.project !== projectId) continue;
+        if (isTerminal(entity)) other += entity.ended === undefined ? 1 : 0;
+        else if (entity.status === 'waiting') needs += 1;
+        else if (!isEnded(entity.status)) other += 1;
+      }
+      return { needs, other };
+    }),
+  );
+
+/** The panel head: every live entry, and how many need you (HIVE-197). */
+export const useSessionsHeadCounts = (): { live: number; needs: number } =>
+  useHiveStore(
+    useShallow((state) => {
+      let live = 0;
+      let needs = 0;
+      for (const id of state.order) {
+        const entity = state.entities[id];
+        if (entity === undefined || isAgent(entity)) continue;
+        if (isTerminal(entity)) live += entity.ended === undefined ? 1 : 0;
+        else if (!isEnded(entity.status)) {
+          live += 1;
+          if (entity.status === 'waiting') needs += 1;
+        }
+      }
+      return { live, needs };
+    }),
+  );
+
+/** The Overmind's head line: sessions the table can draw (HIVE-197). */
+export const useOvermindHeadCounts = (project: string | null) =>
+  useHiveStore(
+    useShallow((state) => {
+      const now = Date.now();
+      const projects = new Set<string>();
+      let live = 0;
+      let needs = 0;
+      let ended = 0;
+      let endedToday = 0;
+      for (const id of state.order) {
+        const entity = state.entities[id];
+        if (entity === undefined || !isSession(entity)) continue;
+        if (project !== null && entity.project !== project) continue;
+        if (isEnded(entity.status)) {
+          ended += 1;
+          if (sameDay(recencyOf(entity), now)) endedToday += 1;
+        } else {
+          live += 1;
+          projects.add(entity.project);
+          if (entity.status === 'waiting') needs += 1;
+        }
+      }
+      return { live, projects: projects.size, needs, ended, endedToday };
+    }),
+  );
+
+/** Agents with a live run in a project, ranked (HIVE-197). */
+export const useAgentsWorkingIn = (project: string | null): string[] => {
+  const repo = useProjectRepo(project);
+  return useHiveStore(
+    useShallow((state) =>
+      repo === null
+        ? []
+        : rankedAgents(state.agentOrder, state.entities).filter((id) => {
+            const entity = state.entities[id];
+            return entity !== undefined && isAgent(entity) && agentWorksIn(entity, repo);
+          }),
+    ),
+  );
+};
 
 /** Every work item, in fixture order (story 032). */
 export const useTickets = () =>

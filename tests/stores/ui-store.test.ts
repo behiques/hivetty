@@ -528,3 +528,76 @@ describe('ui-store — the place machine (HIVE-195)', () => {
     expect(ui()).toMatchObject({ place: 'home', panelOpen: true });
   });
 });
+
+describe('Sessions place view state (HIVE-197)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('starts unfiltered, folded, Ended folded', () => {
+    const s = useUiStore.getState();
+    expect(s.sessionsProject).toBeNull();
+    expect(s.sessionsFilter).toBe('all');
+    expect(s.endedExpanded).toBe(false);
+    expect(s.expanded).toEqual({});
+  });
+
+  it('setSessionsProject filters and unfolds that project; null clears and keeps folds', () => {
+    useUiStore.getState().setSessionsProject('nova-web');
+    expect(useUiStore.getState().sessionsProject).toBe('nova-web');
+    expect(useUiStore.getState().expanded['nova-web']).toBe(true);
+    useUiStore.getState().setSessionsProject(null);
+    expect(useUiStore.getState().sessionsProject).toBeNull();
+    expect(useUiStore.getState().expanded['nova-web']).toBe(true);
+  });
+
+  it('toggleProjectFold flips, expandProject only opens, and neither touches Classic collapsed', () => {
+    useUiStore.getState().toggleProjectFold('a');
+    expect(useUiStore.getState().expanded.a).toBe(true);
+    useUiStore.getState().toggleProjectFold('a');
+    expect(useUiStore.getState().expanded.a).toBe(false);
+    useUiStore.getState().expandProject('a');
+    useUiStore.getState().expandProject('a');
+    expect(useUiStore.getState().expanded.a).toBe(true);
+    expect(useUiStore.getState().collapsed).toEqual({});
+  });
+
+  it('setSessionsFilter and expandEnded', () => {
+    useUiStore.getState().setSessionsFilter('ended');
+    useUiStore.getState().expandEnded();
+    expect(useUiStore.getState().sessionsFilter).toBe('ended');
+    expect(useUiStore.getState().endedExpanded).toBe(true);
+  });
+});
+
+describe('back to the Overmind (HIVE-197)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('backToOrch selects the session left and keeps filters and folds', () => {
+    useUiStore.setState({
+      activeTab: 'hero-refresh',
+      sessionsProject: 'nova-web',
+      sessionsFilter: 'live',
+      expanded: { 'nova-web': true },
+    });
+    useUiStore.getState().backToOrch();
+    const s = useUiStore.getState();
+    expect(s.activeTab).toBe('orch');
+    expect(s.selId).toBe('hero-refresh');
+    expect(s.sessionsProject).toBe('nova-web');
+    expect(s.sessionsFilter).toBe('live');
+    expect(s.expanded).toEqual({ 'nova-web': true });
+  });
+
+  it('backToOrch from the Overmind leaves selId alone', () => {
+    useUiStore.setState({ activeTab: 'orch', selId: 'x' });
+    useUiStore.getState().backToOrch();
+    expect(useUiStore.getState().selId).toBe('x');
+  });
+
+  it('the Sessions icon with a session on stage does the same', () => {
+    useUiStore.setState({ place: 'sessions', activeTab: 'lead-form', selId: null });
+    useUiStore.getState().selectPlace('sessions');
+    expect(useUiStore.getState().activeTab).toBe('orch');
+    expect(useUiStore.getState().selId).toBe('lead-form');
+    expect(useUiStore.getState().panelOpen).toBe(true);
+  });
+});

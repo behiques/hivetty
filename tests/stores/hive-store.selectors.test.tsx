@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Session } from '@/types/entity';
+import type { Agent, Entity, Session, Terminal } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
 import type { PlanTaskStatus, SessionPlan } from '@shared/plan-contract';
 
@@ -16,6 +16,10 @@ import {
 } from '@lib/project-config';
 
 import {
+  agentWorksIn,
+  fleetGroupsOf,
+  type FleetView,
+  repoDirName,
   useActiveEntity,
   useActiveSessions,
   useAskingAgentCount,
@@ -24,6 +28,13 @@ import {
   useAgentPr,
   useCounts,
   useFleetAgents,
+  useEndedMore,
+  useFleetGroup,
+  useFleetNavOrder,
+  useAgentsWorkingIn,
+  useOvermindHeadCounts,
+  useProjectCounts,
+  useSessionsHeadCounts,
   useEntity,
   useHasResumable,
   useHiveStore,
@@ -1878,5 +1889,175 @@ describe('plan selectors (HIVE-179)', () => {
     act(() => useHiveStore.getState().setPlan('sess-01', plan('sess-01', ['pending'])));
 
     expect(rendersA).toBe(beforeA);
+  });
+});
+
+describe('agentWorksIn (HIVE-197)', () => {
+  const agent = (lanes: (string | undefined)[]) =>
+    ({
+      kind: 'agent',
+      live: lanes.map((lane, i) => ({ run: `r${String(i)}`, kind: 'task', trigger: 'ledger', startedAt: 1, lane })),
+    }) as unknown as Agent;
+
+  it('matches a repo lane’s name to the folder name, case-insensitively', () => {
+    expect(agentWorksIn(agent(['repo:behiques/Incorpx-Server']), 'incorpx-server')).toBe(true);
+  });
+  it('ignores standing, thread and other repos', () => {
+    expect(agentWorksIn(agent([undefined, 'standing', 'thread:20261002-1-1', 'repo:o/ai-sdk']), 'incorpx-server')).toBe(false);
+  });
+  it('repoDirName takes the last path segment, lowercased; null stays null', () => {
+    expect(repoDirName('/Users/me/Projects/Incorpx-Server/')).toBe('incorpx-server');
+    expect(repoDirName(null)).toBeNull();
+  });
+});
+
+describe('fleetGroupsOf (HIVE-197)', () => {
+  const NOW = new Date(2026, 9, 2, 15, 0).getTime();
+  const TODAY = new Date(2026, 9, 2, 9, 0).getTime();
+  const YESTERDAY = new Date(2026, 9, 1, 9, 0).getTime();
+  const sess = (id: string, project: string, status: Session['status'], over: Partial<Session> = {}): Session => ({
+    kind: 'session', id, project, branch: `b/${id}`, status, task: `task ${id}`, cost: '$0', lines: [], ...over,
+  });
+  const agent = (id: string, lane?: string) =>
+    ({
+      kind: 'agent', id, status: 'working',
+      live: lane ? [{ run: 'r', kind: 'task', trigger: 'ledger', startedAt: 1, lane }] : [],
+    }) as unknown as Agent;
+  const entities: Record<string, Entity> = {
+    a: sess('a', 'p1', 'working', { createdAt: 3 }),
+    b: sess('b', 'p2', 'waiting', { createdAt: 2 }),
+    c: sess('c', 'p1', 'done', { endedAt: TODAY }),
+    d: sess('d', 'p1', 'terminated', { endedAt: YESTERDAY }),
+    e: sess('e', 'p2', 'done', { endedAt: YESTERDAY - 1 }),
+    builder: agent('builder', 'repo:o/p1'),
+    slack: agent('slack'),
+  };
+  const state = { entities, order: ['a', 'b', 'c', 'd', 'e'], agentOrder: ['builder', 'slack'] };
+  const view = (over: Partial<FleetView> = {}): FleetView => ({ project: null, filter: 'all', endedAll: false, ...over });
+
+  it('unfiltered: every live session, every agent, today’s endings and the rest counted', () => {
+    const g = fleetGroupsOf(state, view(), null, NOW);
+    expect(g.live).toEqual(['a', 'b']);
+    expect(new Set(g.agents)).toEqual(new Set(['builder', 'slack']));
+    expect(g.ended).toEqual(['c']);
+    expect(g.endedMore).toBe(2);
+  });
+
+  it('endedAll reveals every ending', () => {
+    const g = fleetGroupsOf(state, view({ endedAll: true }), null, NOW);
+    expect(g.ended).toEqual(['c', 'd', 'e']);
+    expect(g.endedMore).toBe(0);
+  });
+
+  it('a project narrows all three groups and shows its endings whole', () => {
+    const g = fleetGroupsOf(state, view({ project: 'p1' }), 'p1', NOW);
+    expect(g.live).toEqual(['a']);
+    expect(g.agents).toEqual(['builder']);
+    expect(g.ended).toEqual(['c', 'd']);
+    expect(g.endedMore).toBe(0);
+  });
+
+  it('a project with no folder has no agents working in it', () => {
+    expect(fleetGroupsOf(state, view({ project: 'p1' }), null, NOW).agents).toEqual([]);
+  });
+
+  it('orders by recency and fleet rank, not by insertion order', () => {
+    const shuffled = { entities, order: ['b', 'e', 'a', 'd', 'c'], agentOrder: ['slack', 'builder'] };
+    const g = fleetGroupsOf(shuffled, view({ endedAll: true }), null, NOW);
+    expect(g.live).toEqual(['a', 'b']);
+    expect(g.agents).toEqual(['builder', 'slack']);
+    expect(g.ended).toEqual(['c', 'd', 'e']);
+  });
+
+  it('Live hides Ended; Ended shows only Ended, whole', () => {
+    const live = fleetGroupsOf(state, view({ filter: 'live' }), null, NOW);
+    expect(live.ended).toEqual([]);
+    expect(live.endedMore).toBe(0);
+    expect(live.agents).toHaveLength(2);
+    const ended = fleetGroupsOf(state, view({ filter: 'ended' }), null, NOW);
+    expect(ended.live).toEqual([]);
+    expect(ended.agents).toEqual([]);
+    expect(ended.ended).toEqual(['c', 'd', 'e']);
+  });
+});
+
+describe('fleet hooks (HIVE-197)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    seedDemoFleet();
+  });
+
+  it('useFleetNavOrder is the whole fleet under All with Ended unfolded', () => {
+    useUiStore.setState({ endedExpanded: true });
+    const nav = renderHook(() => useNavOrder()).result.current;
+    expect(renderHook(() => useFleetNavOrder()).result.current).toEqual(nav);
+  });
+
+  it('a project filter narrows the order to that project’s rows', () => {
+    useUiStore.setState({ sessionsProject: 'nova-web' });
+    const order = renderHook(() => useFleetNavOrder()).result.current;
+    const live = renderHook(() => useFleetGroup('live')).result.current;
+    expect(live.length).toBeGreaterThan(0);
+    for (const id of live) expect((useHiveStore.getState().entities[id] as Session).project).toBe('nova-web');
+    expect(order.slice(0, live.length)).toEqual(live);
+  });
+
+  it('the Ended filter leaves only ended rows', () => {
+    useUiStore.setState({ sessionsFilter: 'ended' });
+    expect(renderHook(() => useFleetGroup('live')).result.current).toEqual([]);
+    expect(renderHook(() => useEndedMore()).result.current).toBe(0);
+  });
+});
+
+describe('count hooks (HIVE-197)', () => {
+  const NOW = new Date(2026, 9, 2, 15, 0).getTime();
+  const sess = (id: string, project: string, status: Session['status'], over: Partial<Session> = {}): Session => ({
+    kind: 'session', id, project, branch: `b/${id}`, status, task: `task ${id}`, cost: '$0', lines: [], ...over,
+  });
+  const term = (id: string, project: string, over: Partial<Terminal> = {}): Terminal => ({
+    kind: 'terminal', id, project, cwd: `/repos/${project}`, status: 'prompt', createdAt: 1, lines: [], ...over,
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    useHiveStore.getState().reset();
+    useHiveStore.setState({
+      entities: {
+        a: sess('a', 'p1', 'working'),
+        b: sess('b', 'p1', 'waiting'),
+        c: sess('c', 'p2', 'idle'),
+        d: sess('d', 'p1', 'done', { endedAt: NOW - 1000 }),
+        e: sess('e', 'p2', 'done', { endedAt: NOW - 3 * 86_400_000 }),
+        t1: term('t1', 'p1'),
+        t2: term('t2', 'p1', { ended: { reason: 'lost', at: 1 } }),
+      },
+      order: ['a', 'b', 'c', 'd', 'e', 't1', 't2'],
+      agentOrder: [],
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('useProjectCounts splits needs you from the other live entries', () => {
+    expect(renderHook(() => useProjectCounts('p1')).result.current).toEqual({ needs: 1, other: 2 });
+    expect(renderHook(() => useProjectCounts('p3')).result.current).toEqual({ needs: 0, other: 0 });
+  });
+
+  it('useSessionsHeadCounts sums entries', () => {
+    expect(renderHook(() => useSessionsHeadCounts()).result.current).toEqual({ live: 4, needs: 1 });
+  });
+
+  it('useOvermindHeadCounts counts sessions, unfiltered and filtered', () => {
+    expect(renderHook(() => useOvermindHeadCounts(null)).result.current).toEqual({
+      live: 3, projects: 2, needs: 1, ended: 2, endedToday: 1,
+    });
+    expect(renderHook(() => useOvermindHeadCounts('p1')).result.current).toEqual({
+      live: 2, projects: 1, needs: 1, ended: 1, endedToday: 1,
+    });
+  });
+
+  it('useAgentsWorkingIn names agents with a run in the project', () => {
+    expect(renderHook(() => useAgentsWorkingIn(null)).result.current).toEqual([]);
   });
 });
