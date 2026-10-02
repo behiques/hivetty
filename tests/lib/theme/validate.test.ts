@@ -482,6 +482,27 @@ describe('isHiveTheme', () => {
     broken.modes.light.syntax.keyword = 'rgba(0,0,0,0.3)';
     expect(isHiveTheme(broken)).toBe(false);
   });
+
+  /**
+   * HIVE-199: apply.ts now reads the optional creature keys from a stored
+   * theme, so a malformed one must be dropped here rather than crash the boot
+   * or reach the generated `<style>`.
+   */
+  it.each([
+    { label: 'a number', value: 5 as unknown },
+    { label: 'not a colour', value: 'x;} body{display:none' as unknown },
+  ])('rejects an optional creature colour that is $label', ({ value }) => {
+    const broken = structuredClone(BUILT_IN_THEME) as Record<string, any>;
+    broken.modes.dark.ui.creep = value;
+    expect(isHiveTheme(broken)).toBe(false);
+  });
+
+  it('accepts a theme without the optional colours', () => {
+    const bare = structuredClone(BUILT_IN_THEME) as Record<string, any>;
+    delete bare.modes.dark.ui.chitin;
+    delete bare.modes.dark.terminal.surface;
+    expect(isHiveTheme(bare)).toBe(true);
+  });
 });
 
 describe('contrast', () => {

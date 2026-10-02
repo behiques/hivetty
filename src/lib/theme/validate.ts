@@ -533,6 +533,10 @@ export function isHiveTheme(value: unknown): value is HiveTheme {
       for (const key of group.keys) {
         if (!isColour(groupValue[key])) return false;
       }
+      // Optional keys may be absent, never malformed: apply.ts paints them too.
+      for (const key of group.optional) {
+        if (key in groupValue && !isColour(groupValue[key])) return false;
+      }
     }
   }
 
