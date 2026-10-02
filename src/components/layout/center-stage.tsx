@@ -20,6 +20,7 @@ import { EditorPane } from '@features/editor/components/editor-pane';
 import { EditorTabStrip } from '@features/editor/components/editor-tab-strip';
 import { ConsoleInput } from '@features/orchestrator/components/console-input';
 import { FleetPane, TRANSCRIPT_FLOOR } from '@features/orchestrator/components/fleet-pane';
+import { OvermindHead } from '@features/orchestrator/components/overmind-head';
 import { PlanRail } from '@features/plan/components/plan-rail';
 import { MessageInput } from '@features/sessions/components/message-input';
 import { NewSessionPicker } from '@features/sessions/components/new-session-picker';
@@ -167,7 +168,8 @@ export function CenterStage() {
   const editorOpen = activeFileKey !== null;
   const editorFull = editorOpen && placement === 'full';
   const splitting = editorOpen && placement === 'split';
-  const home = layout === 'round-two' && place === 'home';
+  const roundTwo = layout === 'round-two';
+  const home = roundTwo && place === 'home';
 
   const view = resolveView({ activeTab, picker, settings, entity, editorFull, home });
   /**
@@ -483,6 +485,8 @@ export function CenterStage() {
           while the editor splits the stage: in a 20% column a floor would
           overflow it rather than yield.
         */}
+        {/* Round two's page head over the fleet (HIVE-197); Classic has none. */}
+        {roundTwo && view === 'orchestrator' ? <OvermindHead /> : null}
         <div ref={paneSplitRef} className="flex min-h-0 flex-1 flex-col">
         {view === 'orchestrator' ? (
           <FleetPane containerRef={paneSplitRef} floored={!splitting} />
