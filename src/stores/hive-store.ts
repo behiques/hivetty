@@ -111,7 +111,7 @@ import type {
   SessionHistoryEntry,
   SessionPrRequest,
 } from '@shared/session-history-contract';
-import { useUiStore } from '@stores/ui-store';
+import { type TableFilter, useUiStore } from '@stores/ui-store';
 
 /**
  * Domain state — what the system knows, as opposed to what the user is looking
@@ -5903,6 +5903,67 @@ function navOrderOf(state: HiveState): string[] {
 
 /** Active sessions first, then ended ones — the keyboard nav order (041, 060). */
 export const useNavOrder = () => useHiveStore(useShallow(navOrderOf));
+
+/** What the Overmind table is asked to show (HIVE-197): `useFleetView()`'s answer. */
+export interface FleetView {
+  project: string | null;
+  filter: TableFilter;
+  endedAll: boolean;
+}
+
+/** The Overmind table's rows, group by group, in drawing order (HIVE-197). */
+export interface FleetGroups {
+  live: string[];
+  agents: string[];
+  ended: string[];
+  /** Endings the unfiltered table folds away behind "N more ›". */
+  endedMore: number;
+}
+
+const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
+
+/**
+ * What the Overmind table draws, group by group (HIVE-197). The table paints these
+ * and {@link useFleetNavOrder} flattens them, so the caret and the rows agree —
+ * the rule {@link navOrderOf} keeps for the whole fleet.
+ *
+ * Unfiltered, Ended shows today's endings and counts the rest (`endedMore`);
+ * a project filter or the Ended filter shows them whole. `repo` is the filtered
+ * project's folder name ({@link repoDirName}); `null` means no agent works there.
+ */
+export function fleetGroupsOf(
+  state: Pick<HiveState, 'entities' | 'order' | 'agentOrder'>,
+  view: FleetView,
+  repo: string | null,
+  now: number,
+): FleetGroups {
+  const live: string[] = [];
+  const ended: string[] = [];
+  for (const id of state.order) {
+    const entity = state.entities[id];
+    if (!entity || !isSession(entity)) continue;
+    if (view.project !== null && entity.project !== view.project) continue;
+    (isEnded(entity.status) ? ended : live).push(id);
+  }
+  const agents = rankedAgents(state.agentOrder, state.entities).filter((id) => {
+    if (view.project === null) return true;
+    const entity = state.entities[id];
+    return repo !== null && entity !== undefined && isAgent(entity) && agentWorksIn(entity, repo);
+  });
+  const endedSorted = byRecency(ended, state.entities);
+  const folds = view.project === null && view.filter === 'all' && !view.endedAll;
+  // `recencyOf` of an ended row is its `endedAt`, so "today" is ended today.
+  const shown = folds
+    ? endedSorted.filter((id) => sameDay(recencyOf(state.entities[id] as Session), now))
+    : endedSorted;
+
+  return {
+    live: view.filter === 'ended' ? [] : byRecency(live, state.entities),
+    agents: view.filter === 'ended' ? [] : agents,
+    ended: view.filter === 'live' ? [] : shown,
+    endedMore: view.filter === 'live' ? 0 : endedSorted.length - shown.length,
+  };
+}
 
 /**
  * Every id the centre stage mounts a terminal surface for (terminals).

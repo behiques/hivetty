@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { Agent, Session } from '@/types/entity';
+import type { Agent, Entity, Session } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
 import type { PlanTaskStatus, SessionPlan } from '@shared/plan-contract';
 
@@ -17,6 +17,8 @@ import {
 
 import {
   agentWorksIn,
+  fleetGroupsOf,
+  type FleetView,
   repoDirName,
   useActiveEntity,
   useActiveSessions,
@@ -1899,5 +1901,67 @@ describe('agentWorksIn (HIVE-197)', () => {
   it('repoDirName takes the last path segment, lowercased; null stays null', () => {
     expect(repoDirName('/Users/me/Projects/Incorpx-Server/')).toBe('incorpx-server');
     expect(repoDirName(null)).toBeNull();
+  });
+});
+
+describe('fleetGroupsOf (HIVE-197)', () => {
+  const NOW = new Date(2026, 9, 2, 15, 0).getTime();
+  const TODAY = new Date(2026, 9, 2, 9, 0).getTime();
+  const YESTERDAY = new Date(2026, 9, 1, 9, 0).getTime();
+  const sess = (id: string, project: string, status: Session['status'], over: Partial<Session> = {}): Session => ({
+    kind: 'session', id, project, branch: `b/${id}`, status, task: `task ${id}`, cost: '$0', lines: [], ...over,
+  });
+  const agent = (id: string, lane?: string) =>
+    ({
+      kind: 'agent', id, status: 'working',
+      live: lane ? [{ run: 'r', kind: 'task', trigger: 'ledger', startedAt: 1, lane }] : [],
+    }) as unknown as Agent;
+  const entities: Record<string, Entity> = {
+    a: sess('a', 'p1', 'working', { createdAt: 3 }),
+    b: sess('b', 'p2', 'waiting', { createdAt: 2 }),
+    c: sess('c', 'p1', 'done', { endedAt: TODAY }),
+    d: sess('d', 'p1', 'terminated', { endedAt: YESTERDAY }),
+    e: sess('e', 'p2', 'done', { endedAt: YESTERDAY - 1 }),
+    builder: agent('builder', 'repo:o/p1'),
+    slack: agent('slack'),
+  };
+  const state = { entities, order: ['a', 'b', 'c', 'd', 'e'], agentOrder: ['builder', 'slack'] };
+  const view = (over: Partial<FleetView> = {}): FleetView => ({ project: null, filter: 'all', endedAll: false, ...over });
+
+  it('unfiltered: every live session, every agent, today’s endings and the rest counted', () => {
+    const g = fleetGroupsOf(state, view(), null, NOW);
+    expect(g.live).toEqual(['a', 'b']);
+    expect(new Set(g.agents)).toEqual(new Set(['builder', 'slack']));
+    expect(g.ended).toEqual(['c']);
+    expect(g.endedMore).toBe(2);
+  });
+
+  it('endedAll reveals every ending', () => {
+    const g = fleetGroupsOf(state, view({ endedAll: true }), null, NOW);
+    expect(g.ended).toEqual(['c', 'd', 'e']);
+    expect(g.endedMore).toBe(0);
+  });
+
+  it('a project narrows all three groups and shows its endings whole', () => {
+    const g = fleetGroupsOf(state, view({ project: 'p1' }), 'p1', NOW);
+    expect(g.live).toEqual(['a']);
+    expect(g.agents).toEqual(['builder']);
+    expect(g.ended).toEqual(['c', 'd']);
+    expect(g.endedMore).toBe(0);
+  });
+
+  it('a project with no folder has no agents working in it', () => {
+    expect(fleetGroupsOf(state, view({ project: 'p1' }), null, NOW).agents).toEqual([]);
+  });
+
+  it('Live hides Ended; Ended shows only Ended, whole', () => {
+    const live = fleetGroupsOf(state, view({ filter: 'live' }), null, NOW);
+    expect(live.ended).toEqual([]);
+    expect(live.endedMore).toBe(0);
+    expect(live.agents).toHaveLength(2);
+    const ended = fleetGroupsOf(state, view({ filter: 'ended' }), null, NOW);
+    expect(ended.live).toEqual([]);
+    expect(ended.agents).toEqual([]);
+    expect(ended.ended).toEqual(['c', 'd', 'e']);
   });
 });
