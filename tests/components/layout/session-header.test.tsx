@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Session } from '@/types/entity';
+import type { Session, Terminal } from '@/types/entity';
 
 import { SessionHeader } from '@components/layout/session-header';
 import { useHiveStore } from '@stores/hive-store';
@@ -42,5 +42,32 @@ describe('SessionHeader (HIVE-197)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Session menu' }));
     await userEvent.click(screen.getByRole('menuitem', { name: /Terminal here/ }));
     expect(spawn).toHaveBeenCalledWith('hero-refresh');
+  });
+
+  it('over a terminal: the terminal glyph, its name, project · cwd, its state, no model and no menu', () => {
+    const t: Terminal = {
+      kind: 'terminal',
+      id: 'term-5',
+      project: 'ai-sdk',
+      cwd: '/repos/ai-sdk',
+      status: 'prompt',
+      createdAt: 1,
+      lines: [],
+    };
+    render(<SessionHeader entity={t} />);
+    expect(screen.getByText('term-5')).toHaveClass('font-mono');
+    expect(screen.getByText(/^ai-sdk · /)).toBeInTheDocument();
+    expect(screen.getByText('at prompt')).toBeInTheDocument();
+    expect(screen.getByTestId('session-header').querySelector('[data-slot="model"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Session menu' })).not.toBeInTheDocument();
+  });
+
+  it('the menu links the session’s PR', async () => {
+    render(<SessionHeader entity={hero()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Session menu' }));
+    expect(screen.getByRole('menuitem', { name: /Open PR #482/ })).toHaveAttribute(
+      'href',
+      expect.stringContaining('482'),
+    );
   });
 });
