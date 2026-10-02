@@ -566,6 +566,13 @@ describe('Sessions place view state (HIVE-197)', () => {
     expect(useUiStore.getState().sessionsFilter).toBe('ended');
     expect(useUiStore.getState().endedExpanded).toBe(true);
   });
+
+  it('the console starts folded and toggles (HIVE-197)', () => {
+    useUiStore.getState().reset();
+    expect(useUiStore.getState().consoleShown).toBe(false);
+    useUiStore.getState().toggleConsole();
+    expect(useUiStore.getState().consoleShown).toBe(true);
+  });
 });
 
 describe('back to the Overmind (HIVE-197)', () => {
