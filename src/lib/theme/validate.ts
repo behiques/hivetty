@@ -7,6 +7,7 @@ import {
   TERMINAL_SURFACE_KEYS,
   THEME_MODES,
   UI_KEYS,
+  UI_OPTIONAL_KEYS,
   type HiveTheme,
   type SyntaxColors,
   type TerminalColors,
@@ -142,10 +143,12 @@ const MODE_NAMES = THEME_MODES;
  * must not be *unknown* either, or importing a file this app exported would
  * warn about two colours and silently drop them. `surfacesOf` in `ansi.ts`
  * derives them from `bg` when they are absent, so omitting them costs a theme
- * nothing but the chance to choose.
+ * nothing but the chance to choose. HIVE-199's creature colours, `creep` and
+ * `chitin`, are optional ui keys for the same reason; `swarmPaletteOf` derives
+ * them from `bg`, `brand` and `ink`.
  */
 const GROUPS = [
-  { name: 'ui', keys: UI_KEYS, optional: [] as readonly string[] },
+  { name: 'ui', keys: UI_KEYS, optional: UI_OPTIONAL_KEYS as readonly string[] },
   { name: 'syntax', keys: SYNTAX_KEYS, optional: [] as readonly string[] },
   {
     name: 'terminal',

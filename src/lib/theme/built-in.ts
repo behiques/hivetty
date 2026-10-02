@@ -37,6 +37,7 @@ export const BUILT_IN_THEME: HiveTheme = {
         brandFill: '#5e76d0', brandFillHover: '#4f6ac5',
         brandFillStrong: '#334fa9', onBrand: '#ffffff', dangerSolid: '#d3372f',
         onDanger: '#ffffff',
+        creep: '#5b3d8f', chitin: '#b9a7f0',
       },
       syntax: {
         keyword: '#b39ff0', string: '#74b79c', number: '#ffac47',
@@ -68,6 +69,7 @@ export const BUILT_IN_THEME: HiveTheme = {
         brandFill: '#5e76d0', brandFillHover: '#4f6ac5',
         brandFillStrong: '#334fa9', onBrand: '#ffffff', dangerSolid: '#d3372f',
         onDanger: '#ffffff',
+        creep: '#b7a3e6', chitin: '#6a54b0',
       },
       syntax: {
         keyword: '#6f42c1', string: '#2e6b52', number: '#a1541a',

@@ -44,6 +44,8 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | `--cc-on-brand` | `#ffffff` | *(unchanged)* | text/icons on a brand fill |
 | `--cc-danger-solid` | `#d3372f` | *(unchanged)* | notification badge fill |
 | `--cc-on-danger` | `#ffffff` | *(unchanged)* | text/icons on a danger fill |
+| `--cc-creep` | `#5b3d8f` | `#b7a3e6` | the ground under a busy comb patch; the flyers' trace (HIVE-199) |
+| `--cc-chitin` | `#b9a7f0` | `#6a54b0` | the mutalisk's wings, bones and claws (HIVE-199) |
 | `--cc-code-keyword` | `#b39ff0` | `#6f42c1` | editor: keywords |
 | `--cc-code-string` | `#74b79c` | `#2e6b52` | editor: strings, regexps |
 | `--cc-code-number` | `#ffac47` | `#a1541a` | editor: numbers, booleans, null |
