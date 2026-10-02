@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { ParsedCommand } from '@/types/command';
 import { QUIET_VERBS, USAGE } from '@/types/command';
 import type {
+  Agent,
   Effort,
   Entity,
   Model,
@@ -6413,6 +6414,25 @@ function byFleetRank(a: AgentRank, b: AgentRank): number {
   if (b.nextRunAt === 0) return -1;
 
   return a.nextRunAt - b.nextRunAt;
+}
+
+/** A project's folder name, the key a `repo:` lane is matched on (HIVE-197). */
+export function repoDirName(path: string | null): string | null {
+  if (path === null) return null;
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop()?.toLowerCase() ?? null;
+}
+
+/**
+ * Whether an agent has a live run in a project (HIVE-197): a `repo:<owner>/<name>`
+ * lane whose `<name>` is the project's folder name.
+ *
+ * ponytail: a checkout whose folder is not the repository's name never matches;
+ * a repo slug on `ProjectConfig` is the upgrade.
+ */
+export function agentWorksIn(agent: Agent, repo: string): boolean {
+  return agent.live.some(
+    (run) => run.lane?.startsWith('repo:') === true && run.lane.split('/').pop()?.toLowerCase() === repo,
+  );
 }
 
 /** The agents of `agentOrder`, ranked — shared by the table and the caret. */

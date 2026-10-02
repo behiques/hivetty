@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { Session } from '@/types/entity';
+import type { Agent, Session } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
 import type { PlanTaskStatus, SessionPlan } from '@shared/plan-contract';
 
@@ -16,6 +16,8 @@ import {
 } from '@lib/project-config';
 
 import {
+  agentWorksIn,
+  repoDirName,
   useActiveEntity,
   useActiveSessions,
   useAskingAgentCount,
@@ -1878,5 +1880,24 @@ describe('plan selectors (HIVE-179)', () => {
     act(() => useHiveStore.getState().setPlan('sess-01', plan('sess-01', ['pending'])));
 
     expect(rendersA).toBe(beforeA);
+  });
+});
+
+describe('agentWorksIn (HIVE-197)', () => {
+  const agent = (lanes: (string | undefined)[]) =>
+    ({
+      kind: 'agent',
+      live: lanes.map((lane, i) => ({ run: `r${String(i)}`, kind: 'task', trigger: 'ledger', startedAt: 1, lane })),
+    }) as unknown as Agent;
+
+  it('matches a repo lane’s name to the folder name, case-insensitively', () => {
+    expect(agentWorksIn(agent(['repo:behiques/Incorpx-Server']), 'incorpx-server')).toBe(true);
+  });
+  it('ignores standing, thread and other repos', () => {
+    expect(agentWorksIn(agent([undefined, 'standing', 'thread:20261002-1-1', 'repo:o/ai-sdk']), 'incorpx-server')).toBe(false);
+  });
+  it('repoDirName takes the last path segment, lowercased; null stays null', () => {
+    expect(repoDirName('/Users/me/Projects/Incorpx-Server/')).toBe('incorpx-server');
+    expect(repoDirName(null)).toBeNull();
   });
 });
