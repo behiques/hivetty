@@ -2436,7 +2436,10 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         isEnded(entity.status)
       )
     ) {
-      useUiStore.getState().openTab(id, entity?.kind === 'agent' ? 'agents' : 'sessions');
+      const ui = useUiStore.getState();
+      // Round two's panel shows the opened entry under its project (HIVE-197).
+      if (entity !== undefined && !isAgent(entity)) ui.expandProject(entity.project);
+      ui.openTab(id, entity?.kind === 'agent' ? 'agents' : 'sessions');
       return true;
     }
 
