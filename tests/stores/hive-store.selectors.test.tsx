@@ -1954,6 +1954,14 @@ describe('fleetGroupsOf (HIVE-197)', () => {
     expect(fleetGroupsOf(state, view({ project: 'p1' }), null, NOW).agents).toEqual([]);
   });
 
+  it('orders by recency and fleet rank, not by insertion order', () => {
+    const shuffled = { entities, order: ['b', 'e', 'a', 'd', 'c'], agentOrder: ['slack', 'builder'] };
+    const g = fleetGroupsOf(shuffled, view({ endedAll: true }), null, NOW);
+    expect(g.live).toEqual(['a', 'b']);
+    expect(g.agents).toEqual(['builder', 'slack']);
+    expect(g.ended).toEqual(['c', 'd', 'e']);
+  });
+
   it('Live hides Ended; Ended shows only Ended, whole', () => {
     const live = fleetGroupsOf(state, view({ filter: 'live' }), null, NOW);
     expect(live.ended).toEqual([]);
