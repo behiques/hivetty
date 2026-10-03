@@ -364,6 +364,30 @@ describe('createReattachLoop', () => {
     expect(h.statuses.filter((s) => s.state === 'attached')).toHaveLength(1);
   });
 
+  it('a superseded dial that fails does not reschedule over the restart', async () => {
+    const rejects: ((cause: Error) => void)[] = [];
+    const h = harness(
+      async () =>
+        new Promise<RemoteClient>((_resolve, reject) => {
+          rejects.push(reject);
+        }),
+    );
+
+    h.loop.begin(TRANSPORT);
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]);
+    h.loop.dialNow();
+    await vi.advanceTimersByTimeAsync(0);
+    const statusesBefore = h.statuses.length;
+
+    // The timer's dial, now stale, fails: it must neither emit nor arm a timer.
+    rejects[0](new Error('ECONNREFUSED'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.statuses).toHaveLength(statusesBefore);
+
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(h.connect).toHaveBeenCalledTimes(2);
+  });
+
   it('cancels a pending retry', async () => {
     const h = harness(async () => fakeClient());
 
