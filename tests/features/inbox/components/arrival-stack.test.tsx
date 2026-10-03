@@ -58,6 +58,16 @@ describe('ArrivalStack (HIVE-198)', () => {
     expect(container.querySelectorAll('[data-sliver]')).toHaveLength(1);
   });
 
+  it('a newer ask arriving mid-reply gets a fresh card, not the typed draft of the one before', () => {
+    useUiStore.getState().pushArrival('a1', false);
+    render(<ArrivalStack onStage={null} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Other…' }));
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'for a1 only' } });
+    act(() => useUiStore.getState().pushArrival('a2', false));
+    expect(screen.getByRole('article').getAttribute('data-notification')).toBe('a2');
+    expect(screen.queryByLabelText('Your answer')).toBeNull();
+  });
+
   it('a session off stage: a note instead of a card', () => {
     useHiveStore.getState().hydrateNotifs([blocked()]);
     useUiStore.getState().pushArrival('s1', false);

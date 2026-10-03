@@ -103,7 +103,7 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
           {newest.kind === 'session.blocked' ? (
             <SessionNote notif={newest} variant="note" onFold={foldArrivals} />
           ) : newest.action.type === 'ask' ? (
-            <AskCard notif={newest} thread={newest.action.thread} variant="float" onClose={foldArrivals} />
+            <AskCard key={newest.id} notif={newest} thread={newest.action.thread} variant="float" onClose={foldArrivals} />
           ) : (
             <NotificationCard notif={newest} />
           )}
