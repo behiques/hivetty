@@ -146,7 +146,8 @@ call asks you, and no `tools:` entry can grant it:
 | `pr` | one pull request from the Hive's own GitHub sweep, with its unresolved-thread count | standing |
 | `jira_get` | the ticket: description, parent, comments and links, through the token the Work tab holds | standing |
 | `jira_transition` | a status move by name; never backwards; `assignToMe` fills an empty assignee | `tools:` entry or a card |
-| `jira_comment` | a comment, from markdown | `tools:` entry or a card |
+| `jira_comment` | a comment, from markdown, optionally @mentioning people | `tools:` entry or a card |
+| `jira_users` | people on the Jira site by name or email, with the account ids `jira_comment` mentions | standing |
 | `project_auto_merge` | turns a project's auto-merge on or off; answers the projects list | a card or prompt, every call |
 | `approve` | the fence's own prompt tool; the CLI calls it, you never do | standing |
 

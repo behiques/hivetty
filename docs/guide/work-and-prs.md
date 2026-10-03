@@ -69,8 +69,15 @@ Click a row and the ticket's page fills the stage:
 - **Conversation**: Jira's newest 50 comments, oldest first. **Comments | Everything**
   switches between the comments alone and the comments with what the agents and sessions
   posted about the ticket, in time order. Hover a comment for **Reply** and **Copy link**.
-  Reply addresses the box below to its author; Escape in an empty box forgets it. The box
-  posts to Jira, where everyone on the ticket sees it.
+  Reply addresses the box below to its author and starts the comment with an @mention of
+  them, drawn as a chip above the box; **×** removes it, and Escape in an empty box forgets
+  the reply and its chips. Reply on an agent's comment adds no chip, since that comment is
+  yours in Jira. Type `@` and two characters to search everyone on the Jira site: ↑/↓ move,
+  Enter picks a person into a chip, Esc closes the list. **Could not search Jira** means the
+  search failed; the box still works. A comment may be mentions alone. The box posts to
+  Jira, where everyone on the ticket sees it, and Jira notifies each person mentioned.
+  A comment the Hive posted for an agent shows the agent's glyph, its name and **via the
+  Hive**. That is a label, not proof: anyone who can edit the issue can set it.
 - **Properties**, on the right: status, priority and side (read off a title's `[P4]` and
   `[BE]` tags when it has them), project, assignee, the agent on it and its epic; the
   sessions and pull requests on it; and the actions: **New session**, **Move to** the next
