@@ -3,11 +3,14 @@ import { Profiler } from 'react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import type { Session } from '@/types/entity';
+
 import { SessionRow } from '@features/projects/components/session-row';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import type { PlanTaskStatus, SessionPlan } from '@shared/plan-contract';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
+import { notif } from '@tests/support/notifications';
 
 const row = () => screen.getByRole('button');
 
@@ -215,5 +218,43 @@ describe('SessionRow — compact (HIVE-197)', () => {
     render(<SessionRow id="hero-refresh" compact />);
     expect(screen.queryByText('feat/hero-refresh')).not.toBeInTheDocument();
     expect(screen.getByText('hero-refresh')).toBeInTheDocument();
+  });
+});
+
+describe('SessionRow — yours again (HIVE-198)', () => {
+  const T = 'term-ya';
+  const ID = 'sess-ya';
+  const idle: Session = {
+    kind: 'session',
+    id: ID,
+    terminalId: T,
+    project: 'nova-web',
+    status: 'idle',
+    task: 'refresh the hero',
+    cost: '$0.00',
+    lines: [],
+  };
+
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    useHiveStore.setState({ entities: { [ID]: idle }, order: [ID] });
+  });
+
+  it('compact: reads "yours again" while an unswept session.idle row names it', () => {
+    useHiveStore.getState().hydrateNotifs([notif({ kind: 'session.idle', action: { type: 'session', entityId: T } })]);
+    render(<SessionRow id={ID} compact />);
+    expect(screen.getByText('yours again')).toBeInTheDocument();
+  });
+
+  it('reads idle with nothing unswept', () => {
+    render(<SessionRow id={ID} compact />);
+    expect(screen.getByText('idle')).toBeInTheDocument();
+  });
+
+  it('never outside the compact row', () => {
+    useHiveStore.getState().hydrateNotifs([notif({ kind: 'session.idle', action: { type: 'session', entityId: T } })]);
+    render(<SessionRow id={ID} />);
+    expect(screen.queryByText('yours again')).toBeNull();
   });
 });

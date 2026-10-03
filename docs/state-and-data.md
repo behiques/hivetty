@@ -43,6 +43,14 @@ the picker from re-rendering thirteen live terminals.
   `expanded`, round two's fold map, **folded by default** and separate from
   Classic's `collapsed`. `setSessionsProject(id)` also unfolds that project;
   `backToOrch` and the Sessions icon put `selId` on the session being left.
+  Round two's Inbox (HIVE-198), none persisted: `arrivals` (notification ids
+  up as a card or note, newest first), `arrivalPulse` (the latest arrival that
+  came in while the keyboard was in a terminal; the pill pulses once for it)
+  and `inboxDrawer` (`{ open, thread }`). `pushArrival(id, quiet)` raises or
+  pulses and does nothing over an open drawer; `foldArrivals()` empties the
+  queue (the rows stay in Summons); `openInboxDrawer(thread?)` folds and opens;
+  `closeInboxDrawer()`. What is drawn is `arrivals ∩ useSummons(onStage)`, so
+  an answered ask or the on-stage session drop out without anyone re-checking.
   `consoleShown` (`false`) is the overmind's transcript in round two's dock,
   flipped by `toggleConsole`; folded, the stage hides the transcript and the
   table takes the page.
@@ -96,6 +104,11 @@ whose authority lives in the other process, and that shapes both of its actions:
   permanently — the hook mounts once at the composition root and never remounts,
   so there is no second hydrate to recover it. Entries are kept sorted by `id`,
   which is fixed-width and sorts as a string in write order.
+- **`hydrateLedger(entries, closed?)`** also merges the snapshot's
+  `closedAsks` (HIVE-198) into the closed set. `LedgerSnapshot.closedAsks` is
+  every ask thread closed anywhere in main's log: a window opened after an
+  ask's closing entry left the tail would otherwise count it open in the pill
+  and the dock. Optional on the wire, so an older peer still speaks the shape.
 - **`ledgerAppend(entry)`** is the push channel's only entry point. Nothing in
   the renderer writes to this slice directly; a write goes out over IPC and comes
   back on the channel, so the mirror can only ever hold what the log holds.
@@ -358,6 +371,9 @@ Components never read a store object directly and never call `getState()`.
 | `useProjectSessions(projectId)` | a project's sessions that have not ended |
 | `useOpenEntity()` | open an entity's tab, refusing a `terminated` one |
 | `useTicketPrs(ticketKey)` | PRs reachable from a ticket's sessions |
+| `useCurrentRow(terminalId)` | the row behind a terminal now, the subscribing `currentRowFor` (HIVE-198) |
+| `useArrivals()` / `useArrivalPulse()` | ui-store: the Inbox arrival queue and the pill's pulse id (HIVE-198) |
+| `useInboxDrawer()` / `useInboxActions()` | ui-store: the drawer's `{ open, thread }`, and the arrival and drawer actions |
 | `useUnreadCount()` | inbox unread count |
 | `useNotifs()` | the inbox, newest first |
 | `useSummons(onStage)` | the Summons queue, `{ asks, sessions }`, newest first: open `agent.ask` / `agent.permission` and `pr.review_requested`; `session.blocked` less the one on stage (HIVE-214) |
