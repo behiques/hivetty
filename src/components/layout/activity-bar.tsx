@@ -75,13 +75,13 @@ export function ActivityBar() {
           >
             <PlaceIcon size={19} aria-hidden />
             {label}
-            {/* PRs: needs you, amber text (no token is ink on amber, R2). Sessions and Agents: working, grey (HIVE-196). */}
+            {/* PRs: needs you, amber count text (no token is ink on amber, R2). Sessions and Agents: working, grey (HIVE-196). */}
             {count > 0 ? (
               <span
                 aria-hidden
                 className={cn(
                   'absolute top-0.5 right-1.5 rounded-lg bg-chip px-1 font-mono text-[9px] font-semibold',
-                  needsYou ? 'text-amber' : 'text-muted',
+                  needsYou ? 'text-amber-count' : 'text-muted',
                 )}
               >
                 {count}

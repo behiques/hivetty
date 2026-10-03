@@ -1,12 +1,14 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PrConversation } from '@features/pull-requests/components/pr-conversation';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { fixturePr } from '@tests/support/hatchery';
 import { prDetail, prThread } from '@tests/support/pr-detail';
+import { expectNoHexColour, inLight } from '@tests/support/light';
 
 const REVIEW_URL = 'https://github.com/acme/incorpx-server/pull/1182#pullrequestreview-9';
 const detail = prDetail({
@@ -46,7 +48,18 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  act(() => useAppearanceStore.getState().setTheme('dark'));
+});
+
 describe('PrConversation', () => {
+  it('renders in light on tokens alone (HIVE-210)', () => {
+    inLight();
+    const { container } = render(<PrConversation pr={fixturePr()} detail={detail} fixerOnIt={false} />);
+    expect(screen.getByText('Validates every Delaware filing.')).toBeInTheDocument();
+    expectNoHexColour(container);
+  });
+
   it('renders the description, its test plan and the counts', () => {
     render(<PrConversation pr={fixturePr()} detail={detail} fixerOnIt={false} />);
     expect(screen.getByText('Validates every Delaware filing.')).toBeInTheDocument();

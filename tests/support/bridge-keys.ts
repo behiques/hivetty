@@ -91,7 +91,7 @@ export const BRIDGE_SERVER_KEYS = [
 ] as const satisfies readonly (keyof HiveBridge['server'])[];
 
 export const BRIDGE_REMOTE_KEYS = [
-  'pair', 'forget', 'onLinkStatus',
+  'pair', 'forget', 'dialNow', 'onLinkStatus',
 ] as const satisfies readonly (keyof HiveBridge['remote'])[];
 
 export const BRIDGE_PTY_KEYS = [

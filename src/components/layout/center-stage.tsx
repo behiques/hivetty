@@ -14,6 +14,7 @@ import {
 } from '@/types/entity';
 
 import { InboxCorner } from '@components/layout/inbox-corner';
+import { ReconnectLine } from '@components/layout/reconnect-line';
 import { SessionHeader } from '@components/layout/session-header';
 import { SessionMetaBar } from '@components/layout/session-meta-bar';
 import { TerminalHost } from '@components/terminal/terminal-host';
@@ -418,6 +419,12 @@ export function CenterStage() {
 
   return (
     <main ref={stageRef} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-panel-2">
+      {/*
+        Lost the server (HIVE-211): first, so it sits above every place and the
+        picker and the stage keeps the rest of the column. Classic's header
+        chip already says it.
+      */}
+      {roundTwo ? <ReconnectLine /> : null}
       {showingPicker ? <NewSessionPicker /> : null}
       {view === 'settings' ? <SettingsOverlay /> : null}
       {view === 'home' ? <HomePage /> : null}

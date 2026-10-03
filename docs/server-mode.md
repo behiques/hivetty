@@ -336,12 +336,15 @@ the error frame, never a silent change on the server:
 - **`skills:file:drop`** (`REMOTE_REFUSED`): its safety argument, that preload
   minted every source path from a real drop on this device, cannot cross a
   socket.
-- **The nine process-local channels** (`PROCESS_LOCAL`): `app:info`,
+- **The ten process-local channels** (`PROCESS_LOCAL`): `app:info`,
   `updates:status`, `updates:check`, `config:set-remote`, `config:get-remote`,
-  `remote:pair`, `remote:forget`, `notifications:delivery` and
-  `notifications:badge`. Each is about the machine that answers it. A shipped
-  client answers them itself, so a hand-built frame asking the server to forget
-  its credential, change its attachment or run its updater is refused.
+  `remote:pair`, `remote:forget`, `remote:dial-now`, `notifications:delivery`
+  and `notifications:badge`. Each is about the machine that answers it. A
+  shipped client answers them itself, so a hand-built frame asking the server to
+  forget its credential, change its attachment, restart a reconnect loop it does
+  not have or run its updater is refused. `remote:dial-now` is the client's
+  **Try now**: it restarts that client's own reconnect loop, which is why it has
+  to answer with the socket down.
 - **`notifications:act` carrying `url`, `update.download` or `update.install`.**
   The fleet actions (`ask`, `session`, `agent`, `none`) still cross.
 

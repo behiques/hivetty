@@ -1,10 +1,10 @@
 import { PlugsConnected, Plugs } from '@phosphor-icons/react';
-import { useState } from 'react';
 
 import type { Tone } from '@/types/notification';
 
+import { lostSentence } from '@components/layout/lost-note';
 import { Chip } from '@components/ui/chip';
-import { useRemoteLink } from '@stores/hive-store';
+import { useAcknowledgeLost, useRemoteLink, useUnackedLost } from '@stores/hive-store';
 
 /**
  * "This window is attached to another Hive's sessions over a socket"
@@ -59,26 +59,19 @@ import { useRemoteLink } from '@stores/hive-store';
 export function AttachedChip() {
   const link = useRemoteLink();
   /*
-    How many of `lost` the user has already acknowledged with a click (HIVE-140
-    audit, review round 1). Main keeps counting through a reattach, which is the
+    What the dropped link lost, less what the user has cleared (HIVE-140 audit,
+    review round 1). Main keeps counting through a reattach, which is the
     moment the note matters most, and resets only when the window goes local —
-    so a click here is the one way to say "done", and it lives beside the chip
-    that shows the number. Cleared on the same transition main clears on, so
-    losses on the next attachment start from nothing. Adjusted during render
-    rather than in an effect, React's own pattern for state derived from a
-    changed prop.
+    so a click here is the one way to say "done". The acknowledgement lives in
+    the store beside the link (HIVE-211) and resets with it, so a click here
+    also clears the bar's foot and the stage line.
   */
-  const [acknowledged, setAcknowledged] = useState(0);
-  const [attachedBefore, setAttachedBefore] = useState(link !== null);
-  if ((link !== null) !== attachedBefore) {
-    setAttachedBefore(link !== null);
-    if (link === null) setAcknowledged(0);
-  }
+  const lost = useUnackedLost();
+  const acknowledgeLost = useAcknowledgeLost();
 
   if (link === null) return null;
 
   const { state, serverName } = link;
-  const lost = Math.max(0, link.lost - acknowledged);
 
   const tone: Tone =
     state === 'attached' ? 'brand' : state === 'reconnecting' ? 'amber' : 'red';
@@ -108,7 +101,7 @@ export function AttachedChip() {
   const lostNote =
     lost === 0
       ? ''
-      : ` ${String(lost)} ${lost === 1 ? 'action' : 'actions'} (clicks or keystrokes) did not reach ${serverName}; redo ${lost === 1 ? 'it' : 'them'}${state === 'attached' ? '' : ' once it is back'}. Click the count to clear it.`;
+      : ` ${lostSentence(lost, serverName, state === 'attached')} Click the count to clear it.`;
 
   return (
     <Chip tone={tone} title={`${title}${lostNote}`} className="shrink-0">
@@ -117,7 +110,7 @@ export function AttachedChip() {
       {lost > 0 && (
         <button
           type="button"
-          onClick={() => setAcknowledged(link.lost)}
+          onClick={acknowledgeLost}
           aria-label={`${String(lost)} lost — clear`}
           className="cursor-pointer underline decoration-dotted underline-offset-2"
         >

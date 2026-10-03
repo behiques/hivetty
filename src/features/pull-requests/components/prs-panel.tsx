@@ -173,7 +173,7 @@ function Header({
         {needYou > 0 ? (
           <>
             {' · '}
-            <span className="text-amber">{`${String(needYou)} need you`}</span>
+            <span className="text-amber-count">{`${String(needYou)} need you`}</span>
           </>
         ) : null}
       </span>
