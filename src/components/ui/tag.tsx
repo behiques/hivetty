@@ -42,7 +42,7 @@ interface TagProps {
    * Native tooltip text, exactly as `Chip` already takes it.
    *
    * The Radix `Tooltip` atom is the richer answer, but its trigger cannot be
-   * nested inside the left rail's project row — that row *is* a `<button>`,
+   * nested inside the Sessions panel's project row — that row *is* a `<button>`,
    * and a button inside a button is invalid markup that React will warn about
    * and screen readers will read wrong. `title` is announced by assistive tech
    * and needs no wrapper (story 090).

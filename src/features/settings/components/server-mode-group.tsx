@@ -303,7 +303,7 @@ interface ServerModeGroupProps {
    * `AppInfo.attachedServerName` has none of that problem: it is
    * `PROCESS_LOCAL` (Ruling 24), so it is answered by *this* process in both
    * modes, and it is exactly the question "is a socket open, and to what" —
-   * which is what the header chip has always used it for. The config-derived
+   * which is what the connection item has always used it for. The config-derived
    * source stays right where it is right, which is the not-attached case; see
    * {@link ServerModeGroupProps.attachedServer}.
    */
@@ -997,7 +997,7 @@ export function ServerModeGroup({
           ) : attached && link?.state === 'disconnected' ? (
             /*
               Given up, for a reason another dial would reproduce. Red rather
-              than amber for the reason the header chip splits the two: the
+              than amber for the reason the connection item splits the two: the
               user's next move is different, and "stopped trying" is the thing
               they need to know to make it.
             */

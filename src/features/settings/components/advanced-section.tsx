@@ -441,8 +441,8 @@ export function AdvancedSection() {
         comments for why the attach half needs both sources and which question
         each one answers. `useLocalRemote` is the newest of them (HIVE-149):
         the address fields describe this window, which `snapshot.remote` cannot
-        say while attached. `useAttachedServer` is the same hook the header chip
-        reads, so the pane and the chip can never disagree about whether a
+        say while attached. `useAttachedServer` is the same hook the connection item
+        reads, so the pane and the item can never disagree about whether a
         socket is open.
       */}
       <ServerModeGroup

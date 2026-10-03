@@ -59,9 +59,8 @@ export const FLEET_FLOOR_PX = 112;
  * leaves the transcript 112px against its 160px floor: CSS holds the floor, the
  * pane simply stops growing, and a divider driven to `0.8` announces a value
  * nothing on screen reflects — with a dead zone on the way back until the
- * pointer re-crosses the height that was actually painted. `use-rail-widths.ts`
- * documents the same divergence for the rails and closes it the same way: the
- * bounds follow the paint.
+ * pointer re-crosses the height that was actually painted. So the bounds are
+ * computed from the transcript's floor: they follow the paint.
  *
  * `floored` is false while the editor splits the stage. Both CSS floors are
  * lifted there — a 20% column cannot hold them — so the shares are the only
@@ -69,8 +68,7 @@ export const FLEET_FLOOR_PX = 112;
  * height that has not been measured yet: the first frame, and every unit test.
  *
  * When even the two floors do not fit, the range collapses to the table's
- * floor rather than inverting — the same "no room to move" answer the rails
- * give at a window too narrow for their minimums.
+ * floor rather than inverting: a "no room to move" answer.
  */
 export function consoleSplitBounds(
   height: number,
@@ -146,7 +144,7 @@ interface FleetPaneProps {
  *
  * ## What is painted is the bounded value, not the stored one
  *
- * The store keeps intent, as it does for the rails: a ratio chosen on a tall
+ * The store keeps intent: a ratio chosen on a tall
  * window survives a short one and comes back when the window does. What the
  * pane and the divider use is that intent held to {@link consoleSplitBounds},
  * so the slider never announces a value past its own maximum and the basis

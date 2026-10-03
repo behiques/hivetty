@@ -93,11 +93,11 @@ interface AppearanceState {
   sessionPanelTab: SessionPanelTab;
 
   /**
-   * The line under the wordmark, top-left — whose hive this is.
+   * The line under the wordmark — whose hive this is. The activity bar's brand
+   * tooltip shows it.
    *
    * Appearance rather than config, on this store's own test: it is a fact about
-   * the person looking at the screen, it is needed on the first paint of the
-   * header, and the browser target has no config file to read it from. That it
+   * the person looking at the screen, it is needed on the first paint, and the browser target has no config file to read it from. That it
    * happens to name a team does not make it workspace state — no session, PTY
    * or ticket ever reads it.
    *
@@ -264,7 +264,7 @@ export const EDITOR_FONT_SIZES: readonly number[] = [
 ] as const;
 
 /**
- * What the header says under "The Hive" until someone says otherwise.
+ * What the brand tooltip says under "The Hive" until someone says otherwise.
  *
  * A hive's workers are a swarm and this app is a command centre for them, so
  * the default names the room rather than any real team — anyone who has not
@@ -390,8 +390,8 @@ const initialAppearanceState = {
    *
    * This story adds `system` as an *option*; it does not change what the app
    * boots as. "Dark is the default" is story 011's decision, it is what
-   * `:root` in tokens.css encodes, and the smoke spec calls the header's theme
-   * button "the one observable proof of which theme booted". Quietly making a
+   * `:root` in tokens.css encodes, and the smoke spec seeds the theme it
+   * expects to boot with. Quietly making a
    * light-mode machine open light would reverse a documented decision this
    * story has no mandate to reverse — and would do it invisibly, since the
    * only symptom is that the app looks different on someone else's laptop.
@@ -647,8 +647,8 @@ export const useAppearanceStore = create<AppearanceState>()(
        * Stored exactly as typed.
        *
        * Not trimmed here, though it is tempting: the field writes on every
-       * keystroke so the header updates live, and trimming on the way in eats
-       * the space between two words as it is typed. The header trims for
+       * keystroke so the brand tooltip updates live, and trimming on the way in
+       * eats the space between two words as it is typed. Readers trim for
        * display and the settings field trims when it commits.
        *
        * No fallback to the default on empty either — clearing the field is how
@@ -952,7 +952,7 @@ export const useSwarmPalette = (): SwarmPalette =>
   });
 
 /**
- * The header's sublabel, trimmed — empty means the line is not drawn.
+ * The brand tooltip's sublabel, trimmed — empty means the line is not drawn.
  *
  * Trimming here rather than in the setter keeps the settings field typable
  * (see `setTeamName`), and keeps every reader from having to remember it.

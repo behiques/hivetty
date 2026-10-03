@@ -415,8 +415,8 @@ export const useUiStore = create<UiState>()((set) => ({
   ...initialUiState,
 
   // Opening a tab always dismisses the picker: the user has made their choice.
-  // Settings goes with it (story 101) — the rails stay visible behind the
-  // overlay, so a rail click that left settings up would look broken.
+  // Settings goes with it (story 101) — the panels stay visible behind the
+  // overlay, so a panel click that left settings up would look broken.
   openTab: (id, place) =>
     set((state) => ({
       activeTab: id,
@@ -543,7 +543,7 @@ export const useUiStore = create<UiState>()((set) => ({
    * this as part of navigating; this is the case where the destination is
    * already correct and only the overlay is in the way.
    *
-   * It exists because the rails became clickable behind an overlay. Before
+   * It exists because the panels became clickable behind an overlay. Before
    * that, opening a file from the explorer with settings open was unreachable;
    * now it would open the file silently *behind* settings — the tree row
    * highlights, the stage does not change, and the editor appears only once the
@@ -871,7 +871,7 @@ export const useSettingsActions = () =>
  * The pane the overlay should navigate to, or `null` for none outstanding.
  *
  * A **request**, not a current-pane mirror. The overlay is `modal={false}` so
- * the rails stay clickable underneath it, which means `openSettings('agents')`
+ * the panels stay clickable underneath it, which means `openSettings('agents')`
  * can fire while it is already open — reading this only at mount made that
  * click do visibly nothing. The overlay now navigates whenever a request
  * appears and calls `clearSettingsSection` to consume it, so a request acts

@@ -24,9 +24,9 @@ body,
 
 body {
   margin: 0;
-  /* The shell fills the viewport and never scrolls as a page — the left rail,
-     center stage, and activity rail each own their own scrollbar (story 020).
-     Without this, a tall rail would scroll the whole document and drag the
+  /* The shell fills the viewport and never scrolls as a page — the list panel,
+     center stage, and session panel each own their own scrollbar (story 020).
+     Without this, a tall panel would scroll the whole document and drag the
      terminal out of view. */
   overflow: hidden;
   background: var(--cc-bg);
@@ -80,7 +80,7 @@ body {
  *
  * In `@layer base` so a control that genuinely wants the native affordance can
  * ask for it back by naming it. Proven on screen by
- * `tests/e2e/web/search-clear-button.spec.ts`: nothing in the DOM can see this
+ * `tests/e2e/electron/search-clear-button.spec.ts`: nothing in the DOM can see this
  * pseudo element, so only a real browser can say whether it is drawn.
  */
 @layer base {

@@ -545,9 +545,9 @@ interface HiveState {
    * one the four-store split exists for. These arrive from Claude Code's status
    * line on every assistant message plus a 30-second timer, per live session —
    * easily the busiest write in the store. Putting them on `Entity` would give
-   * every session row in the left rail a new object identity on each tick, and
-   * a fleet of thirteen would repaint continuously to move a number that only
-   * the header's chip renders.
+   * every session row in the Sessions panel a new object identity on each tick,
+   * and a fleet of thirteen would repaint continuously to move a number that
+   * only one chip renders.
    *
    * Keyed by entity id, and **not pruned when a session ends**. That is a
    * deliberate non-decision rather than an oversight: the map is bounded by the
@@ -2323,7 +2323,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
        * field* with "Ready for instructions", but story 043 wants that prompt in
        * the **transcript** (`· Ready — type below…`) — which is where the user
        * is actually looking. Putting a fake task on the entity would also make
-       * the meta bar and the rails claim a task that nobody set.
+       * the session header and the panels claim a task that nobody set.
        */
       task: task ?? '',
       /**
@@ -7972,11 +7972,11 @@ export const useLiveSessionCounts = () =>
  *
  * With no seeded projects there is nothing to merge and no precedence to
  * resolve: a project exists because the user mapped it. An empty config means
- * an empty list, which `projects-panel.tsx` says out loud rather than rendering
+ * an empty list, which the Sessions panel says out loud rather than rendering
  * as a blank column.
  *
  * **Config order is the file's order and is never sorted.** Story 103's
- * drag-reorder works by rewriting that array, and the left rail reads it
+ * drag-reorder works by rewriting that array, and the Sessions panel reads it
  * positionally, so sorting here would silently make 103 unimplementable.
  */
 export const useProjects = (): ProjectRow[] => {
@@ -9439,7 +9439,7 @@ export const usePushNotif = () => useHiveStore((state) => state.pushNotif);
  * What this window's attachment is doing, or `null` when it has none
  * (HIVE-150).
  *
- * The header chip and the attach pane both read this rather than
+ * The connection item and the attach pane both read this rather than
  * `AppInfo.attachedServerName`. That field is still the runtime truth, but it
  * is read on demand: a socket that dies without a config write leaves it
  * unread and the chip claiming an attachment that is gone. This is pushed.
@@ -9451,8 +9451,8 @@ export const useSetRemoteLink = () => useHiveStore((state) => state.setRemoteLin
 
 /**
  * What the dropped link lost that the user has not cleared yet (HIVE-211).
- * One count for the bar's foot, the Classic chip and the stage line, so Clear
- * anywhere clears everywhere.
+ * One count for the bar's foot and the stage line, so Clear anywhere clears
+ * everywhere.
  */
 export const useUnackedLost = (): number =>
   useHiveStore((state) =>

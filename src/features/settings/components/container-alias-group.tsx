@@ -129,7 +129,7 @@ export function ContainerAliasGroup({ hostAlias, bind }: ContainerAliasGroupProp
   /*
     Whether the resolved bind is off-loopback at all — the one definition of
     "exposed" (`isLoopbackHost`, HIVE-134), reused rather than re-derived so the
-    header chip and this pane never disagree about what counts as widened.
+    connection item and this pane never disagree about what counts as widened.
   */
   const exposed = !isLoopbackHost(bind.host);
 

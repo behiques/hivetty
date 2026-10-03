@@ -41,8 +41,8 @@ const PINNED_COUNT = 4;
  * ## Why the Radix primitive rather than `components/ui/dialog`
  *
  * The vendored `DialogContent` always portals to `document.body` and centres a
- * fixed-position card. This picker fills the **center stage** — the rails and
- * header stay visible, exactly as the concept shows — so it is composed from
+ * fixed-position card. This picker fills the **center stage** — the panels and
+ * session header stay visible, exactly as the concept shows — so it is composed from
  * the primitive directly and rendered in place.
  *
  * What the story actually asks for is Radix's *behaviour*, and what is kept is
