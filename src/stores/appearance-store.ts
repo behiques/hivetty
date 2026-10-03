@@ -557,15 +557,36 @@ export function sanitizeThemeState(state: Record<string, unknown>): {
  *
  * Every other key is carried across untouched, as in v1 → v2.
  *
- * From v3 on there is nothing to add, only the library to re-check
+ * **v3 → v4 (HIVE-213): Classic is deleted.** `layout`, the four rail keys,
+ * `planPinned` and `showPlanPanel` are dropped from the stored payload, because
+ * `merge` spreads it over the defaults and a stale key would otherwise ride into
+ * live state. Every other key is carried across untouched, as in v1 → v2.
+ *
+ * From v4 on there is nothing to add, only the library to re-check
  * ({@link sanitizeThemeState}) — a payload at the current version has been
  * writable by anything with a `localStorage` handle since the day it existed.
  */
+/** What HIVE-213 retired with Classic; dropped from every payload older than v4. */
+const CLASSIC_KEYS: readonly string[] = [
+  'layout',
+  'railWidthLeft',
+  'railWidthRight',
+  'railCollapsedLeft',
+  'railCollapsedRight',
+  'planPinned',
+  'showPlanPanel',
+];
+
 export function migrateAppearance(
   persisted: unknown,
   version: number,
 ): Record<string, unknown> {
-  const state = (persisted ?? {}) as Record<string, unknown>;
+  const stored = (persisted ?? {}) as Record<string, unknown>;
+
+  if (version >= 4) return { ...stored, ...sanitizeThemeState(stored) };
+
+  // Before v4 the stored object may carry Classic's keys, and `merge` would spread them into live state.
+  const state = Object.fromEntries(Object.entries(stored).filter(([key]) => !CLASSIC_KEYS.includes(key)));
 
   if (version >= 3) return { ...state, ...sanitizeThemeState(state) };
 
@@ -706,7 +727,7 @@ export const useAppearanceStore = create<AppearanceState>()(
     }),
     {
       name: APPEARANCE_STORAGE_KEY,
-      version: 3,
+      version: 4,
       /**
        * `migrateAppearance` is typed loosely (`Record<string, unknown>`) so the
        * test can hand it a bare v1 payload; the persist option needs the exact
@@ -719,8 +740,8 @@ export const useAppearanceStore = create<AppearanceState>()(
        * Where the theme library is actually re-checked.
        *
        * `migrate` only runs when the stored version differs from this one, so
-       * it can never be the gate: the overwhelmingly common case is a v2
-       * payload rehydrating into a v2 store, which skips migration entirely.
+       * it can never be the gate: the overwhelmingly common case is a current
+       * payload rehydrating into a current store, which skips migration entirely.
        * `merge` runs on every rehydrate, whichever path got here, which is what
        * makes {@link sanitizeThemeState} unskippable.
        */

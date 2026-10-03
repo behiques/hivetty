@@ -798,6 +798,82 @@ describe('the v2 → v3 migration', () => {
   });
 });
 
+const CLASSIC_PAYLOAD = {
+  layout: 'classic',
+  railWidthLeft: 360,
+  railWidthRight: 300,
+  railCollapsedLeft: true,
+  railCollapsedRight: false,
+  planPinned: true,
+  showPlanPanel: false,
+};
+
+describe('the v3 → v4 migration (HIVE-213)', () => {
+  it('drops layout and the rail keys and keeps every other key', () => {
+    const kept = {
+      theme: 'light',
+      terminalFont: 'menlo',
+      terminalFontSize: 14,
+      density: 'compact',
+      teamName: 'Swarm',
+      editorEditable: false,
+      editorTabWidth: 4,
+      sessionPanelOpen: false,
+      sessionPanelTab: 'files',
+      themes: {},
+      activeThemeId: 'hive',
+    };
+    const migrated = migrateAppearance({ ...kept, ...CLASSIC_PAYLOAD }, 3);
+
+    for (const key of Object.keys(CLASSIC_PAYLOAD)) expect(migrated).not.toHaveProperty(key);
+    expect(migrated).toEqual(kept);
+  });
+
+  it('still migrates a v1 payload as before, and drops the Classic keys on the way', () => {
+    const migrated = migrateAppearance({ theme: 'dark', editorEditable: false, ...CLASSIC_PAYLOAD }, 1);
+    expect(migrated.themes).toEqual({});
+    expect(migrated.activeThemeId).toBe('hive');
+    expect(migrated).not.toHaveProperty('editorEditable');
+    expect(migrated).not.toHaveProperty('layout');
+  });
+
+  it('still migrates a v2 payload as before', () => {
+    const migrated = migrateAppearance({ theme: 'light', editorEditable: false, railWidthLeft: 400 }, 2);
+    expect(migrated).not.toHaveProperty('editorEditable');
+    expect(migrated).not.toHaveProperty('railWidthLeft');
+    expect(migrated.theme).toBe('light');
+  });
+
+  it('leaves a v4 payload alone apart from the library check', () => {
+    expect(migrateAppearance({ theme: 'light', editorEditable: false }, 4)).toEqual({
+      theme: 'light',
+      editorEditable: false,
+      themes: {},
+      activeThemeId: 'hive',
+    });
+  });
+
+  it('the store is at version 4', () => {
+    expect(useAppearanceStore.persist.getOptions().version).toBe(4);
+  });
+
+  it('a stored v3 payload with Classic keys rehydrates without them, everything else intact', async () => {
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        state: { theme: 'light', density: 'compact', teamName: 'Swarm', ...CLASSIC_PAYLOAD },
+      }),
+    );
+    await useAppearanceStore.persist.rehydrate();
+    const state = useAppearanceStore.getState() as unknown as Record<string, unknown>;
+    for (const key of Object.keys(CLASSIC_PAYLOAD)) expect(key in state).toBe(false);
+    expect(state.theme).toBe('light');
+    expect(state.density).toBe('compact');
+    expect(state.teamName).toBe('Swarm');
+  });
+});
+
 describe('sanitizeThemeState', () => {
   it('keeps a whole theme and the id pointing at it', () => {
     expect(
