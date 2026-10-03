@@ -206,3 +206,60 @@ export function flapHistory(input: {
   }
   return spans;
 }
+
+export type BucketName = 'Before the shipper' | 'Self review and fix' | 'CI' | 'Findings' | 'Waiting on you' | 'Waiting on review';
+export interface Bucket { name: BucketName; ms: number; holder: string | null }
+
+const ORDER: BucketName[] = ['Before the shipper', 'Self review and fix', 'CI', 'Findings', 'Waiting on you', 'Waiting on review'];
+const BY_STAGE: Partial<Record<ShipVisit['stage'], BucketName>> = {
+  intake: 'Self review and fix', 'self-review': 'Self review and fix', 'fix-self': 'Self review and fix',
+  ready: 'CI', ci: 'CI', findings: 'Findings', merge: 'Waiting on you',
+};
+
+interface BucketInput {
+  start: number; end: number; visits: readonly ShipVisit[]; holds: readonly Hold[]; flaps: readonly FlapSpan[];
+  bars: readonly CiBar[]; youWindows: readonly Window[]; draftAt: (p: number) => boolean; opener: string | null;
+}
+
+/** The one bucket the span starting at `p` belongs to: a visit outranks a SUMMONS flap, which outranks the unheld rules. */
+function bucketAt(input: BucketInput, p: number): BucketName {
+  const { visits, flaps, bars, youWindows, draftAt: draft } = input;
+  const visit = visits.find((v) => v.from <= p && p < (v.to ?? Infinity));
+  if (visit !== undefined) {
+    if (visit.stage === 'approval') return covers(youWindows, p) ? 'Waiting on you' : 'Waiting on review';
+    return BY_STAGE[visit.stage] ?? 'Waiting on review';
+  }
+  if (flaps.some((f) => f.flap === 'SUMMONS' && f.from <= p && p < f.to)) return 'Waiting on you';
+  const beforeShipper = p < (visits[0]?.from ?? Infinity);
+  if (beforeShipper && draft(p)) return 'Before the shipper';
+  if (bars.some((b) => b.from <= p && p < b.to)) return 'CI';
+  if (beforeShipper && visits.length > 0) return 'Before the shipper';
+  return 'Waiting on review';
+}
+
+/** "Where the time went" (HIVE-208): every span of the PR's life in one bucket, so they sum to its age. */
+export function timeBuckets(input: BucketInput): Bucket[] {
+  const { start, end, visits, holds, flaps, bars, youWindows, opener } = input;
+  const points = [start, end, ...visits.flatMap((v) => [v.from, v.to ?? end]), ...bars.flatMap((b) => [b.from, b.to]),
+    ...flaps.flatMap((f) => [f.from, f.to]), ...youWindows.flatMap((w) => [w.from, w.to])];
+
+  const ms = new Map<BucketName, number>();
+  const byWho = new Map<BucketName, Map<string, number>>();
+  for (const [p, q] of pairsOf(points, start, end)) {
+    const name = bucketAt(input, p);
+    ms.set(name, (ms.get(name) ?? 0) + (q - p));
+    const who = byWho.get(name) ?? new Map<string, number>();
+    for (const hold of holds) {
+      const overlap = Math.min(q, hold.to) - Math.max(p, hold.from);
+      if (overlap > 0) who.set(hold.who, (who.get(hold.who) ?? 0) + overlap);
+    }
+    byWho.set(name, who);
+  }
+
+  return ORDER.flatMap((name) => {
+    const total = ms.get(name) ?? 0;
+    if (total <= 0) return [];
+    const who = [...(byWho.get(name) ?? [])].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    return [{ name, ms: total, holder: name === 'Before the shipper' ? (opener ?? who) : who }];
+  });
+}

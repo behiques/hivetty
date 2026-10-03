@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { ciBars, flapHistory, fraction, holdIntervals, MIN, ticks } from '@lib/pr-timeline';
-import type { CiBar } from '@lib/pr-timeline';
+import { ciBars, flapHistory, fraction, holdIntervals, MIN, ticks, timeBuckets } from '@lib/pr-timeline';
+import type { Bucket, CiBar, Hold } from '@lib/pr-timeline';
 import type { PrTimeline, PrTimelineRun } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import type { ShipVisit } from '@shared/ledger-derive';
@@ -103,5 +103,32 @@ describe('flapHistory', () => {
       bars: [], visits: [], asksToMe: [], mergeAsks: [], mine: false, end: T0 + 100 * MIN,
     });
     expect(spans.map((s) => s.flap)).toEqual(['LARVA', 'BURROWED']);
+  });
+});
+
+describe('timeBuckets', () => {
+  const v = (stage: ShipVisit['stage'], from: number, to: number | null): ShipVisit => ({ stage, from: T0 + from * MIN, to: to === null ? null : T0 + to * MIN, holder: null });
+  const h = (who: string, from: number, to: number): Hold => ({ who, from: T0 + from * MIN, to: T0 + to * MIN, firstEventId: null });
+  const sum = (bs: Bucket[]) => bs.reduce((s, b) => s + b.ms, 0);
+
+  it('buckets the design PR and sums to its age', () => {
+    const out = timeBuckets({
+      start: T0, end: T0 + 190 * MIN, opener: 'builder', draftAt: () => false, bars: [],
+      visits: [v('intake', 4, 6), v('self-review', 6, 34), v('fix-self', 34, 60), v('ready', 60, 61), v('ci', 61, 110), v('findings', 110, null)],
+      holds: [h('builder', 0, 4), h('shipper', 4, 6), h('acr', 6, 34), h('fixer', 34, 60), h('shipper', 60, 110), h('fixer', 110, 190)],
+      flaps: [{ flap: 'SUMMONS', tone: 'amber', from: T0 + 150 * MIN, to: T0 + 157 * MIN, github: '' }],
+      youWindows: [{ from: T0 + 150 * MIN, to: T0 + 157 * MIN }],
+    });
+    expect(out.map((b) => [b.name, b.ms / MIN, b.holder])).toEqual([
+      ['Before the shipper', 4, 'builder'], ['Self review and fix', 56, 'acr'], ['CI', 50, 'shipper'], ['Findings', 80, 'fixer'],
+    ]);
+    expect(sum(out)).toBe(190 * MIN);
+  });
+
+  it('a PR the shipper never held: draft, CI, waiting on review', () => {
+    const bar: CiBar = { id: 1, number: 1, sha: 's', url: 'u', from: T0 + 20 * MIN, to: T0 + 30 * MIN, state: 'passed', failedJobs: [] };
+    const out = timeBuckets({ start: T0, end: T0 + 100 * MIN, opener: null, draftAt: (p) => p < T0 + 20 * MIN, bars: [bar], visits: [], holds: [], flaps: [], youWindows: [] });
+    expect(out.map((b) => [b.name, b.ms / MIN])).toEqual([['Before the shipper', 20], ['CI', 10], ['Waiting on review', 70]]);
+    expect(sum(out)).toBe(100 * MIN);
   });
 });
