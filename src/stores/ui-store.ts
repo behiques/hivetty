@@ -16,6 +16,14 @@ export type Place = 'home' | 'sessions' | 'work' | 'agents' | 'prs';
 export type TableFilter = 'all' | 'live' | 'ended';
 /** The ticket page's Comments | Everything switch (HIVE-203). */
 export type WorkConversation = 'comments' | 'everything';
+/** The agent page's Activity | Definition switch (HIVE-204). */
+export type AgentPageView = 'activity' | 'definition';
+/** Which agent the Agents place has open, and on which view (HIVE-204). */
+export interface AgentPage {
+  /** `null` is a new agent never saved. */
+  name: string | null;
+  view: AgentPageView;
+}
 
 /**
  * View state — what the user is looking at, as opposed to what the system knows
@@ -180,6 +188,11 @@ interface UiState {
   workFolded: Record<JiraStatusCategory, boolean>;
   /** The ticket page's conversation filter (HIVE-203). View state, not persisted; each open resets it. */
   workConversation: WorkConversation;
+  /**
+   * The Agents place's open page (HIVE-204): which agent, and Activity or Definition. `name: null` is a
+   * new agent never saved. View state, not persisted.
+   */
+  agentPage: AgentPage | null;
 
   /** Open a tab; `place`, when the caller knows the entity's owner, moves the bar with it. */
   openTab: (id: 'orch' | string, place?: Place) => void;
@@ -254,6 +267,13 @@ interface UiState {
   openWorkTicket: (key: string) => void;
   toggleWorkGroup: (category: JiraStatusCategory) => void;
   setWorkConversation: (mode: WorkConversation) => void;
+  /**
+   * Open an agent's page (HIVE-204): moves the bar to Agents, shows its panel and dismisses the
+   * overlays. A named agent also becomes the active tab; a new one leaves the tab alone.
+   */
+  openAgentPage: (name: string | null, view: AgentPageView) => void;
+  setAgentPageView: (view: AgentPageView) => void;
+  closeAgentPage: () => void;
   reset: () => void;
 }
 
@@ -295,6 +315,7 @@ const initialUiState = {
   workTicket: null as string | null,
   workFolded: { todo: false, 'in-progress': false, done: true } as Record<JiraStatusCategory, boolean>,
   workConversation: 'comments' as WorkConversation,
+  agentPage: null as AgentPage | null,
 };
 
 /** Back to the Overmind with the row left behind under the caret (HIVE-197). */
@@ -312,7 +333,14 @@ export const useUiStore = create<UiState>()((set) => ({
   // Settings goes with it (story 101) — the rails stay visible behind the
   // overlay, so a rail click that left settings up would look broken.
   openTab: (id, place) =>
-    set({ activeTab: id, picker: false, settings: false, ...(place ? { place } : {}) }),
+    set({
+      activeTab: id,
+      picker: false,
+      settings: false,
+      ...(place ? { place } : {}),
+      // An agent opened through `openEntity` lands on its page's Activity (HIVE-204).
+      ...(place === 'agents' ? { agentPage: { name: id, view: 'activity' as const } } : {}),
+    }),
 
   /**
    * Return to the orchestrator — the ← pill on the session meta bar, and the
@@ -497,6 +525,18 @@ export const useUiStore = create<UiState>()((set) => ({
   toggleWorkGroup: (category) =>
     set((state) => ({ workFolded: { ...state.workFolded, [category]: !state.workFolded[category] } })),
   setWorkConversation: (mode) => set({ workConversation: mode }),
+  openAgentPage: (name, view) =>
+    set({
+      agentPage: { name, view },
+      place: 'agents',
+      panelOpen: true,
+      picker: false,
+      settings: false,
+      ...(name === null ? {} : { activeTab: name }),
+    }),
+  setAgentPageView: (view) =>
+    set((state) => (state.agentPage === null ? {} : { agentPage: { ...state.agentPage, view } })),
+  closeAgentPage: () => set({ agentPage: null }),
   reset: () => set(initialUiState),
 }));
 
@@ -566,6 +606,16 @@ export const useWorkConversation = () => useUiStore((state) => state.workConvers
 export const useOpenWorkTicket = () => useUiStore((state) => state.openWorkTicket);
 export const useToggleWorkGroup = () => useUiStore((state) => state.toggleWorkGroup);
 export const useSetWorkConversation = () => useUiStore((state) => state.setWorkConversation);
+/** The Agents place's open page and its actions (HIVE-204). */
+export const useAgentPage = () => useUiStore((state) => state.agentPage);
+export const useAgentPageActions = () =>
+  useUiStore(
+    useShallow((state) => ({
+      openAgentPage: state.openAgentPage,
+      setAgentPageView: state.setAgentPageView,
+      closeAgentPage: state.closeAgentPage,
+    })),
+  );
 
 const fleetViewSelector = (state: UiState) => ({
   project: state.sessionsProject,
