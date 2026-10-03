@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { arcCounts, isBlocks, linkArcs, ticketLinksModel, verdict } from '@/lib/ticket-links';
-import type { JiraLink, JiraStatusCategory } from '@shared/jira-contract';
+import {
+  arcCounts,
+  epicLabel,
+  isBlocks,
+  linkArcs,
+  parseCriteria,
+  ticketLinksModel,
+  verdict,
+} from '@/lib/ticket-links';
+import type { AdfBlock, JiraLink, JiraStatusCategory } from '@shared/jira-contract';
 
 const link = (
   key: string,
@@ -127,5 +135,63 @@ describe('ticketLinksModel', () => {
     expect(model.openBlockers.map((t) => t.key)).toEqual(['A-1']);
     expect(model.verdict.tone).toBe('amber');
     expect(model.counts.relates).toEqual({ done: 1, 'in-progress': 0, todo: 0 });
+  });
+});
+
+const run = (text: string) => [{ text, marks: [] as never[] }];
+const h = (text: string, level = 2): AdfBlock => ({ kind: 'heading', runs: run(text), level });
+const li = (text: string, kind: 'bullet' | 'ordered' = 'bullet', depth = 0): AdfBlock => ({
+  kind,
+  runs: run(text),
+  depth,
+});
+const p = (text: string): AdfBlock => ({ kind: 'paragraph', runs: run(text) });
+
+describe('parseCriteria (HIVE-202)', () => {
+  it('"Acceptance criteria", any case, trailing colon: the list items under it', () => {
+    expect(
+      parseCriteria([p('intro'), h('acceptance Criteria:'), li('one'), li('two', 'ordered'), li('nested', 'bullet', 1)]),
+    ).toEqual({ kind: 'criteria', items: [run('one'), run('two'), run('nested')] });
+  });
+  it('"Acceptance" alone; stops at the next heading of the same or a higher level', () => {
+    expect(parseCriteria([h('Acceptance'), li('a'), h('Detail', 3), li('b'), h('Notes', 2), li('c')])).toEqual({
+      kind: 'criteria',
+      items: [run('a'), run('b')],
+    });
+  });
+  it('a heading with no level counts as level 1, and prose between items is skipped', () => {
+    const untitled: AdfBlock = { kind: 'heading', runs: run('Acceptance') };
+    const next: AdfBlock = { kind: 'heading', runs: run('Next') };
+    expect(parseCriteria([untitled, li('a'), p('aside'), h('Sub', 2), li('b'), next, li('c')])).toEqual({
+      kind: 'criteria',
+      items: [run('a'), run('b')],
+    });
+  });
+  it('a task list (mapped to bullets by Task 3) is a list', () => {
+    expect(parseCriteria([h('Acceptance', 2), li('task item')])).toEqual({ kind: 'criteria', items: [run('task item')] });
+  });
+  it('falls back to the description without the heading, or with no items under it', () => {
+    const blocks = [p('just prose')];
+    expect(parseCriteria(blocks)).toEqual({ kind: 'description', blocks });
+    expect(parseCriteria([h('Acceptance'), p('prose only')])).toMatchObject({ kind: 'description' });
+  });
+  it('null for an empty or unread description', () => {
+    expect(parseCriteria([])).toBeNull();
+    expect(parseCriteria(undefined)).toBeNull();
+  });
+});
+
+describe('epicLabel (D6)', () => {
+  const epic = { key: 'HIVE-161', summary: "The Hive's workflow", issueType: 'Epic' };
+  it('key · summary · done/total; "+" when capped; no count before the read', () => {
+    expect(epicLabel(epic, { done: 9, total: 14, capped: false })).toBe("HIVE-161 · The Hive's workflow · 9/14");
+    expect(epicLabel(epic, { done: 120, total: 200, capped: true })).toBe("HIVE-161 · The Hive's workflow · 120/200+");
+    expect(epicLabel(epic)).toBe("HIVE-161 · The Hive's workflow");
+  });
+  it('null with no parent or a non-epic parent', () => {
+    expect(epicLabel(null)).toBeNull();
+    expect(epicLabel(undefined)).toBeNull();
+    expect(epicLabel({ key: 'HIVE-1', summary: 'Story', issueType: 'Story' })).toBeNull();
+    expect(epicLabel({ key: 'HIVE-1', summary: 'Untyped' })).toBeNull();
   });
 });

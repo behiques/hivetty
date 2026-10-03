@@ -1,4 +1,4 @@
-import type { JiraLink, JiraStatusCategory } from '@shared/jira-contract';
+import type { AdfBlock, AdfRun, JiraLink, JiraParentRef, JiraStatusCategory } from '@shared/jira-contract';
 
 /** One linked ticket, as the Ticket tab draws it (HIVE-202). */
 export interface LinkedTicket {
@@ -112,4 +112,49 @@ export function ticketLinksModel(
     verdict: verdict(arcs),
     counts: { waitsOn: arcCounts(arcs.waitsOn), blocks: arcCounts(arcs.blocks), relates: arcCounts(arcs.relates) },
   };
+}
+
+/** The acceptance list, else the description, else nothing (HIVE-202). */
+export type Criteria =
+  | { kind: 'criteria'; items: AdfRun[][] }
+  | { kind: 'description'; blocks: AdfBlock[] }
+  | null;
+
+const ACCEPTANCE = /^acceptance( criteria)?:?$/i;
+const plain = (runs: readonly AdfRun[]) => runs.map((one) => one.text).join('').trim();
+
+/**
+ * The list items under the first "Acceptance criteria" / "Acceptance" heading,
+ * until a heading of the same or a higher level. No such heading, or one with
+ * no list under it: the description itself.
+ */
+export function parseCriteria(description: readonly AdfBlock[] | undefined): Criteria {
+  if (description === undefined || description.length === 0) return null;
+  const at = description.findIndex((block) => block.kind === 'heading' && ACCEPTANCE.test(plain(block.runs)));
+  if (at !== -1) {
+    const level = description[at]?.level ?? 1;
+    const items: AdfRun[][] = [];
+    for (const block of description.slice(at + 1)) {
+      if (block.kind === 'heading' && (block.level ?? 1) <= level) break;
+      if (block.kind === 'bullet' || block.kind === 'ordered') items.push(block.runs);
+    }
+    if (items.length > 0) return { kind: 'criteria', items };
+  }
+  return { kind: 'description', blocks: [...description] };
+}
+
+/** The parent epic's children, done of total (HIVE-202). */
+export interface EpicProgress {
+  done: number;
+  total: number;
+  /** The search hit JIRA_MAX_ISSUES: the total is a floor. */
+  capped: boolean;
+}
+
+/** The ring's label: only an epic gets one (D6). */
+export function epicLabel(parent: JiraParentRef | null | undefined, progress?: EpicProgress): string | null {
+  if (!parent || parent.issueType?.toLowerCase() !== 'epic') return null;
+  const head = `${parent.key} · ${parent.summary}`;
+  if (progress === undefined) return head;
+  return `${head} · ${String(progress.done)}/${String(progress.total)}${progress.capped ? '+' : ''}`;
 }
