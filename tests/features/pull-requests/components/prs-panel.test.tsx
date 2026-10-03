@@ -8,6 +8,19 @@ import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { prRecord } from '@tests/support/prs';
 
+/* Counts the flap's renders: a row that bails out of its memo never renders its flap. */
+const flapRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock('@features/pull-requests/components/flap', async (original) => {
+  const real = await original<typeof import('@features/pull-requests/components/flap')>();
+  return {
+    ...real,
+    Flap: (props: Parameters<typeof real.Flap>[0]) => {
+      flapRenders.count += 1;
+      return real.Flap(props);
+    },
+  };
+});
+
 const sweep = [
   prRecord({ number: 10, title: 'Running', checks: 'running', findings: 0, updatedAt: '2026-10-03T09:00:00Z' }),
   prRecord({ number: 11, title: 'Needs me', checks: 'failing', mine: true, updatedAt: '2026-10-03T08:00:00Z' }),
@@ -150,5 +163,41 @@ describe('PrsPanel source states', () => {
     act(() => useHiveStore.setState({ prs: [], prSource: { kind: 'live', stale: false, repos: 1 } }));
     render(<PrsPanel />);
     expect(screen.getByText('No open pull requests of yours across 1 repository.')).toBeInTheDocument();
+  });
+});
+
+describe('PrsPanel, searching and still rows', () => {
+  it('opens the search row from the icon, and the search replaces the rows', async () => {
+    render(<PrsPanel />);
+    await userEvent.click(screen.getByRole('button', { name: 'Search pull requests' }));
+    expect(screen.getByRole('searchbox', { name: 'Search pull requests' })).toHaveFocus();
+
+    act(() => {
+      useUiStore.setState({ prSearchTerm: 'fee' });
+      useHiveStore.setState((state) => ({
+        prSearch: { ...state.prSearch, results: [prRecord({ number: 77, title: 'Someone else', checks: 'failing', mine: false })] },
+      }));
+    });
+    expect(await screen.findByRole('button', { name: /^#77 Someone else, BURROWED/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^#11 / })).toBeNull();
+  });
+
+  it('closing the search clears it', async () => {
+    useUiStore.setState({ prSearchOpen: true, prSearchTerm: 'fee' });
+    render(<PrsPanel />);
+    await userEvent.click(screen.getByRole('button', { name: 'Search pull requests' }));
+    expect(useUiStore.getState().prSearchTerm).toBe('');
+    expect(useUiStore.getState().prSearchOpen).toBe(false);
+  });
+
+  it('does not re-render a row for a ledger append that names no PR', () => {
+    render(<PrsPanel />);
+    const before = flapRenders.count;
+    act(() => {
+      useHiveStore.setState((state) => ({
+        ledger: [...state.ledger, { id: '20261003-120000-001', ts: Date.now(), from: 'builder', kind: 'post', body: 'task 3 done' }],
+      }));
+    });
+    expect(flapRenders.count).toBe(before);
   });
 });
