@@ -167,17 +167,29 @@ and its merge asks as before.
 
 ![The agent page: Activity with its status tiles, run log and ledger](../assets/guide/10-agent-view.png)
 
-- **Agents tab**: groups Awake, Sleeping, Paused. Asking agents sort first; the tab badge
-  counts their open questions.
+- **Agents tab**: three lanes, each folding under its header. **Summons** holds what needs
+  you (asking, failed, or a definition that will not parse), asking first. **Morphing**
+  holds what is working. **Burrowed** holds what rests: sleeping, then paused, since
+  nothing wakes a paused agent. The panel's header counts summons and morphing, and the
+  tab badge counts open questions.
+- **A row** is the agent's hexagon (amber when it asks, red when it failed, green while it
+  works, a count when more than one run is live), its name with the age of its last word,
+  and that last word: what it last put on the ledger (`ask a3 Reply to Marcos?`,
+  `done Shipped #303`). Hover or focus it for **▶ Run now** and **⏸ Pause** (**▶ Resume**
+  when paused); an answer that is not a start shows in the row for five seconds.
 
 ![The Agents tab with standup-bot sleeping, and the overmind's fleet table](../assets/guide/09-agents-tab.png)
 
 - **Agent page** (click an agent): a header with the agent's name over its description,
-  the **Activity | Definition** switch, **Run now** and **⏸ Pause**. In the Classic layout
+  the **Activity | Definition** switch and **Run now**. In the Classic layout
   it also has **←** back to the overmind. **Run now** works from both views; with unsaved
   edits it says to save first, because a wake reads the file and not what is on screen.
-- **Activity**: tiles for Status, Wake, Next, Today (`N runs · $X`) and Session; the **run
-  log** (Outcome, Turns, Took, Cost) beside the agent's ledger.
+- **Activity**: one row of facts (Status, Wake, Next, Today `N runs · $X`, Session); the
+  **run table** (Outcome, Turns, Took, Cost) over the output, beside the agent's ledger.
+  The table selects a run and the output's heading names it (`Output #4d7d5c5e done · 5
+  turns · 13s · $0.12`); click a row, or Enter or Space on it, to read another. A new run
+  takes the selection only if you were on the latest one, so a run you picked stays put.
+  A failed outcome reads red with its reason beside it, an asking one amber.
 - The box at the bottom posts to the agent. `answer a1 yes, go ahead` answers its open ask.
 - To stop a run now, use `kill <agent>` in the console.
 

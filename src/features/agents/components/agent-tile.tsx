@@ -1,0 +1,59 @@
+import { cn } from '@/lib/utils';
+
+import { Icon } from '@components/ui/icon';
+
+/** What the tile says about its agent; `resting` is sleeping and paused alike. */
+export type TileTone = 'asking' | 'failed' | 'working' | 'resting' | 'invalid';
+
+interface AgentTileProps {
+  icon: string;
+  tone: TileTone;
+  /** Runs in flight. The badge shows only past one: a single run is what working already says. */
+  live: number;
+}
+
+/*
+  Fills and the glow go through `color-mix` on the token rather than an opacity
+  modifier, so they follow the theme's own value and no hex is written down.
+*/
+const TONE: Record<TileTone, string> = {
+  asking:
+    'text-amber [&_polygon]:fill-[color-mix(in_srgb,var(--cc-amber)_22%,transparent)] drop-shadow-[0_0_5px_var(--cc-amber)]',
+  failed: 'text-red [&_polygon]:fill-[color-mix(in_srgb,var(--cc-red)_14%,transparent)]',
+  working: 'text-green',
+  resting: 'text-subtle',
+  invalid: 'text-amber',
+};
+
+/**
+ * The agent's tile in the panel (HIVE-204): a hexagon outlined in its state's
+ * colour, the agent's glyph inside it, and a live-run count when more than one
+ * run is in flight.
+ *
+ * Decoration, so `aria-hidden`: the row's accessible name says the state and
+ * the run count in words, and the colour is never the only carrier.
+ */
+export function AgentTile({ icon, tone, live }: AgentTileProps) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn('relative grid h-10 w-[38px] shrink-0 place-items-center', TONE[tone])}
+    >
+      <svg
+        viewBox="0 0 38 40"
+        className="absolute inset-0 size-full"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.4}
+      >
+        <polygon points="19,1.5 36,10.75 36,29.25 19,38.5 2,29.25 2,10.75" />
+      </svg>
+      <Icon name={icon} size={15} className="relative" />
+      {live > 1 ? (
+        <b className="absolute -top-1 -right-1.5 grid size-[17px] place-items-center rounded-full bg-[color-mix(in_srgb,var(--cc-green)_45%,transparent)] font-mono text-[10px] text-ink">
+          {live}
+        </b>
+      ) : null}
+    </span>
+  );
+}

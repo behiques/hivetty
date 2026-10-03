@@ -138,13 +138,12 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
         {facts === null ? null : (
           <div
             /*
-              A container query, not `sm:`. The tiles live on the stage, and the
-              stage is not the viewport: with both rails dragged wide a 1100px
-              window leaves ~560px here, where `sm:` (a 640px *viewport*) still
-              fires and truncates `Session` and `Today` into five ~105px columns.
-              The same box this grid sits in is what knows.
+              One row that wraps, labels above values and no boxes (HIVE-204):
+              the facts are read as a line of the page, not as five widgets. It
+              wraps rather than switching columns at a breakpoint, so a narrow
+              stage (both rails dragged wide) loses nothing to truncation.
             */
-            className="grid grid-cols-2 gap-1.5 @min-[720px]:grid-cols-5"
+            className="flex flex-wrap gap-x-7 gap-y-2 border-b border-border-soft pb-3 font-sans text-[12.5px]"
           >
             <Fact label="Status" tone={STATUS_TEXT[facts.status]}>
               {STATUS_LABEL[facts.status]}
@@ -182,7 +181,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
         )}
 
         <div className="min-h-0 flex-1">
-          <div className="grid h-full min-h-0 gap-2 [grid-template-columns:minmax(0,1fr)_clamp(280px,22%,380px)] @max-[720px]:[grid-template-columns:minmax(0,1fr)]">
+          <div className="grid h-full min-h-0 gap-3 [grid-template-columns:minmax(0,1fr)_300px] @max-[720px]:[grid-template-columns:minmax(0,1fr)]">
             <AgentRunLog name={entity.id} />
             <AgentLedger name={entity.id} />
           </div>
@@ -266,11 +265,9 @@ interface FactProps {
 
 function Fact({ label, tone, children }: FactProps) {
   return (
-    <div className="min-w-0 rounded-md border border-border-soft bg-panel px-2 py-1.5">
-      <span className="block text-[8.5px] tracking-[0.1em] text-subtle uppercase">
-        {label}
-      </span>
-      <span className={cn('block truncate text-[11px]', tone)}>{children}</span>
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-[10.5px] tracking-[0.06em] text-subtle uppercase">{label}</span>
+      <span className={cn('truncate', tone)}>{children}</span>
     </div>
   );
 }

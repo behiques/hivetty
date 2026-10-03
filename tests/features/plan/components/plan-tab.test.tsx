@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { formatDuration, PlanTab } from '@features/plan/components/plan-tab';
+import { PlanTab } from '@features/plan/components/plan-tab';
+import { formatDuration } from '@lib/format-duration';
 import type { SessionPlan } from '@shared/plan-contract';
 
 const plan: SessionPlan = {

@@ -1,4 +1,5 @@
-import { writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
@@ -32,9 +33,11 @@ const watcherRow = (page: Page) =>
  * - does the two-column split actually lay out, and does it collapse when the
  *   stage is narrow rather than when the window is?
  *
- * No run is started here. Waking an agent spawns a real `claude`, which is
- * `pnpm test:agent`'s job (`tests/live/agent-conformance.test.ts`) and costs
- * money; this spec is about what the renderer draws around it.
+ * No real run is started here. Waking an agent spawns a real `claude`, which
+ * is `pnpm test:agent`'s job (`tests/live/agent-conformance.test.ts`) and
+ * costs money; this spec is about what the renderer draws around it. The one
+ * run it does start (HIVE-204, the run table's selection) is against a stub
+ * executable, as `agent-task-runs.spec.ts` does.
  */
 
 const EMPTY_CONFIG = JSON.stringify({ version: 2, projects: [] }, null, 2);
@@ -160,7 +163,7 @@ test('tells the author what the body below the frontmatter does', async ({}, tes
   await app.close();
 });
 
-test('lists an authored agent in the rail, grouped by state', async ({}, testInfo) => {
+test('lists an authored agent in its lane, and folds the lane', async ({}, testInfo) => {
   const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
 
   try {
@@ -171,21 +174,23 @@ test('lists an authored agent in the rail, grouped by state', async ({}, testInf
     const panel = page.locator('[data-panel="agents"]');
 
     /*
-      A definition that has never run rests, so it files under Sleeping — and
-      the group header carries the count.
-
-      `exact` on both: `getByText` matches case-insensitively by substring, so
-      the header's `Sleeping` and the row meta's `sleeping` are each other's
-      false positives.
+      A definition that has never run rests, so it files under Burrowed
+      (HIVE-204), and its row says the state in words in its name — the tile's
+      colour is never the only carrier.
     */
-    await expect(panel.getByText('Sleeping', { exact: true })).toBeVisible();
-    await expect(panel.getByRole('button', { name: /slack-watcher/ })).toBeVisible();
-    // The status is a word on screen, never colour alone.
-    await expect(
-      panel
-        .getByRole('button', { name: /slack-watcher/ })
-        .getByText('sleeping', { exact: true }),
-    ).toBeVisible();
+    const lane = panel.getByRole('region', { name: 'Burrowed' });
+
+    await expect(lane.getByRole('button', { name: /^slack-watcher, sleeping/ })).toBeVisible();
+
+    // The lane folds from its header, and unfolds again.
+    const header = lane.getByRole('button', { expanded: true });
+
+    await header.click();
+    await expect(lane.getByRole('button', { expanded: false })).toBeVisible();
+    await expect(lane.getByRole('button', { name: /^slack-watcher, / })).toBeHidden();
+
+    await lane.getByRole('button', { expanded: false }).click();
+    await expect(lane.getByRole('button', { name: /^slack-watcher, sleeping/ })).toBeVisible();
   } finally {
     await app.close();
   }
@@ -199,7 +204,7 @@ test('opens the agent view — and no terminal — when the row is clicked', asy
     await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
     await page
       .locator('[data-panel="agents"]')
-      .getByRole('button', { name: /slack-watcher/ })
+      .getByRole('button', { name: /^slack-watcher, / })
       .click();
 
     const view = page.locator('[data-view="agent"]');
@@ -262,7 +267,7 @@ test('lays the run log and the ledger side by side, and stacks them when the sta
     await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
     await page
       .locator('[data-panel="agents"]')
-      .getByRole('button', { name: /slack-watcher/ })
+      .getByRole('button', { name: /^slack-watcher, / })
       .click();
 
     const log = page.locator('[data-region="run-log"]');
@@ -492,7 +497,7 @@ test('pauses and resumes from the console, and the table agrees', async ({}, tes
  * navigation back to the table from here, and none is needed. What matters is
  * that the click reached main and a second surface redrew from the push.
  */
-test('pauses from the agent view, and the rail agrees', async ({}, testInfo) => {
+test('pauses from the row’s slot, and the row agrees', async ({}, testInfo) => {
   const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
 
   try {
@@ -500,24 +505,121 @@ test('pauses from the agent view, and the rail agrees', async ({}, testInfo) => 
     await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
 
     const panel = page.locator('[data-panel="agents"]');
+    const row = panel.getByRole('button', { name: /^slack-watcher, / });
 
-    await expect(
-      panel
-        .getByRole('button', { name: /slack-watcher/ })
-        .getByText('sleeping', { exact: true }),
-    ).toBeVisible();
+    await expect(row).toHaveAccessibleName(/^slack-watcher, sleeping/);
 
-    await panel.getByRole('button', { name: /slack-watcher/ }).click();
-    await expect(page.locator('[data-view="agent"]')).toBeVisible();
-    await page.getByRole('button', { name: /Pause/ }).click();
+    // The slot's actions show on hover (HIVE-204); the page header has none.
+    await row.hover();
+    await panel.getByRole('button', { name: 'Pause slack-watcher' }).click();
 
-    await expect(
-      panel
-        .getByRole('button', { name: /slack-watcher/ })
-        .getByText('paused', { exact: true }),
-    ).toBeVisible();
+    await expect(row).toHaveAccessibleName(/^slack-watcher, paused/);
     // The control names the move, not the state — one button, not two.
-    await expect(page.getByRole('button', { name: /Resume/ })).toBeVisible();
+    await row.hover();
+    await expect(panel.getByRole('button', { name: 'Resume slack-watcher' })).toBeVisible();
+
+    /*
+      Run now on a paused agent is answered, not swallowed: the sentence takes
+      line 2 for five seconds, then the row's own line comes back.
+    */
+    await panel.getByRole('button', { name: 'Run slack-watcher now' }).click();
+
+    const notice = panel.getByRole('status');
+
+    await expect(notice).toContainText('slack-watcher');
+    await expect(notice).toContainText(/paused|resume/);
+    await expect(notice).toBeHidden({ timeout: 7_000 });
+
+    await row.click();
+    await expect(page.locator('[data-view="agent"]')).toBeVisible();
+    await expect(
+      page.locator('[data-view="agent"]').getByRole('button', { name: /Pause|Resume/ }),
+    ).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * A run, start to finish, against a stub `claude` (HIVE-204): the run table
+ * selects the newest run and the output heading names it.
+ *
+ * The stub is `agent-task-runs.spec.ts`'s idea — an executable that writes the
+ * `stream-json` lines the fold reads and exits — so the run costs nothing and
+ * everything between the row and the process is the real thing. The definition
+ * has no `wake:` so the scheduler starts nothing of its own.
+ */
+const STUB = `#!/bin/sh
+printf '%s\\n' '{"type":"system","subtype":"init","session_id":"stub","mcp_servers":[]}'
+printf '%s\\n' '{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"swept the channel"}]}}'
+sleep 3
+printf '%s\\n' '{"type":"result","subtype":"success","num_turns":1,"total_cost_usd":0.001,"session_id":"stub"}'
+`;
+
+const STUB_DEFINITION = `---
+name: sweeper
+description: Sweeps once when asked
+icon: Ghost
+---
+Sweep the channel.
+`;
+
+test('runs from the row, and the run table selects the newest run', async ({}, testInfo) => {
+  test.setTimeout(90_000);
+
+  const configPath = testInfo.outputPath('hive-config.json');
+  const stub = testInfo.outputPath('stub-claude');
+  const folder = join(dirname(configPath), 'agents', 'sweeper');
+
+  writeFileSync(stub, STUB);
+  chmodSync(stub, 0o755);
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, 'AGENT.md'), STUB_DEFINITION);
+  writeFileSync(configPath, JSON.stringify({ version: 2, projects: [], claudeCommand: stub }));
+
+  const app = await launchHive({
+    userDataDir: testInfo.outputPath('user-data'),
+    configPath,
+    env: { CLAUDE_CONFIG_DIR: testInfo.outputPath('claude-config') },
+  });
+  const page = await app.firstWindow();
+
+  try {
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForSelector('header');
+    await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
+
+    const panel = page.locator('[data-panel="agents"]');
+    const row = panel.getByRole('button', { name: /^sweeper, / });
+
+    await row.hover();
+    await panel.getByRole('button', { name: 'Run sweeper now' }).click();
+    await expect(panel.getByRole('region', { name: 'Morphing' })).toBeVisible();
+
+    /*
+      A second press while it works is answered in line 2 — queued behind the
+      run in flight — for five seconds.
+    */
+    await row.hover();
+    await panel.getByRole('button', { name: 'Run sweeper now' }).click();
+
+    const notice = panel.getByRole('status');
+
+    await expect(notice).toContainText('sweeper');
+    await expect(notice).toBeHidden({ timeout: 7_000 });
+
+    await row.click();
+
+    const receipts = page.getByTestId('run-receipts');
+
+    // Every run finishes (the queued one too); the table follows the newest,
+    // and the heading names it.
+    await expect(receipts.locator('[data-live-run]')).toHaveCount(0, { timeout: 30_000 });
+    await expect(receipts.locator('[role="button"]').first()).toBeVisible();
+    await expect(receipts.locator('[aria-current="true"]')).toHaveCount(1);
+    await expect(receipts.locator('[role="button"]').first()).toHaveAttribute('aria-current', 'true');
+    await expect(page.getByTestId('run-output-heading')).toContainText(/^Output#/);
+    await expect(page.getByTestId('run-output-heading')).toContainText('done');
   } finally {
     await app.close();
   }

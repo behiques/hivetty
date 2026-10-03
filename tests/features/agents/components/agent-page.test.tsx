@@ -271,39 +271,16 @@ describe('AgentPage — Run now', () => {
 });
 
 describe('AgentPage — Pause', () => {
-  it('pauses a sleeping agent through the channel (HIVE-117)', async () => {
-    seed();
-    const { pause } = stub();
-    render(<AgentPage name="watcher" />);
-
-    await userEvent.click(screen.getByRole('button', { name: /Pause/ }));
-
-    expect(pause).toHaveBeenCalledWith({ name: 'watcher' });
-  });
-
   /*
-    One control, not two: the states are exclusive, so the button names the
-    move rather than offering a disabled twin.
+    Pause and Resume moved to the panel row's slot (HIVE-204, PR 2), so the
+    header keeps the switch and Run now only.
   */
-  it('offers Resume, and only Resume, for a paused agent', async () => {
-    seed({ status: 'paused' });
-    const { resume } = stub();
+  it.each(['sleeping', 'paused'] as const)('has no Pause or Resume in the header for a %s agent', (status) => {
+    seed({ status });
+    stub();
     render(<AgentPage name="watcher" />);
 
-    expect(screen.queryByRole('button', { name: /⏸ Pause/ })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /Resume/ }));
-
-    expect(resume).toHaveBeenCalledWith({ name: 'watcher' });
-  });
-
-  it('shows why a pause failed instead of swallowing it', async () => {
-    seed();
-    stub({ pause: vi.fn(async () => Promise.reject(new Error('The agent runtime is not running.'))) });
-    render(<AgentPage name="watcher" />);
-
-    await userEvent.click(screen.getByRole('button', { name: /Pause/ }));
-
-    expect(await screen.findByText(/The agent runtime is not running/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Pause|Resume/ })).not.toBeInTheDocument();
   });
 
   it('offers no Stop, because a run is one bounded turn', () => {

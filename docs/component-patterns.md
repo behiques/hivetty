@@ -375,8 +375,9 @@ it is the same bug in both places.
 
 `AgentPage` (`features/agents/components/agent-page.tsx`, HIVE-204) is one agent's page:
 a header, then the body the switch picks. The header carries the identity, the
-`SegmentedControl` for **Activity | Definition**, Run now and Pause; in Classic, which has
-no bar, a back button too, until HIVE-213 retires Classic. Activity is `AgentView`;
+`SegmentedControl` for **Activity | Definition**, and Run now; in Classic, which has
+no bar, a back button too, until HIVE-213 retires Classic. Pause and Resume live in the
+panel row's slot. Activity is `AgentView`;
 Definition is `AgentDefinition`, which owns read, save, rename, delete, revert and the
 shipped strip for one agent and renders `AgentEditor`.
 
@@ -393,9 +394,26 @@ shipped strip for one agent and renders `AgentEditor`.
 - **Run now** refuses with `runRefusal` (no file, or a dirty draft) and otherwise answers
   through `agentRunQueued` / `agentRunRefusal`. The notice is the page's, drawn by
   whichever view is showing.
+- **The run table drives the output.** `AgentRunLog` owns `selected`, the latest run by
+  default; a new run takes it only when the latest was selected (a ref holds the previous
+  latest so the effect can tell following from pinned). Click, Enter or Space selects and
+  `jumpTo`s; the selected row gets `bg-panel-2` and an inset brand bar; the heading names
+  it. Outcomes take `failed` red and `asking` amber from the terminal palette, the reason
+  rides inline, and Took is `formatDuration` (`@lib/format-duration`).
 - **Settings stays fenced.** Settings › Agents opens the page through ui-store and
   imports nothing from the agents slice; the atoms both use (`SettingsGroup`,
   `InlineConfirm`, the shipped marker) live in `features/shared/components/`.
+
+## The agent row
+
+`AgentRow` (HIVE-204) is a tile and two lines with a slot, and the slot is the pattern
+worth copying. Line 1 ends in a fixed-width cell that shows the age at rest; the actions
+are an absolutely positioned sibling of the row button, `invisible` until
+`group-hover` / `group-focus-within`, laid over that cell. Siblings rather than children,
+because a button inside a button is invalid and loses its tab stop; fixed width, so the
+name never shifts when the actions appear. The age hides under the same variants. A
+transient answer (a refusal, a queued wake) replaces line 2 for five seconds as
+`role="status"`, on a timer the next notice re-arms and unmount clears.
 
 ## The new-session picker
 

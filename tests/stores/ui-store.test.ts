@@ -631,6 +631,12 @@ describe('Work place (HIVE-203)', () => {
     expect(useUiStore.getState().workFolded.done).toBe(false);
   });
 
+  it('starts with every agent lane unfolded and folds one (HIVE-204)', () => {
+    expect(useUiStore.getState().agentsFolded).toEqual({ summons: false, morphing: false, burrowed: false });
+    useUiStore.getState().toggleAgentGroup('burrowed');
+    expect(useUiStore.getState().agentsFolded.burrowed).toBe(true);
+  });
+
   it('switches the conversation mode', () => {
     useUiStore.getState().setWorkConversation('everything');
     expect(useUiStore.getState().workConversation).toBe('everything');

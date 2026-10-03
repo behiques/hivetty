@@ -110,6 +110,7 @@ import {
 import {
   LEDGER_MEMORY_CAP,
   type LedgerEntry,
+  type LedgerKind,
   type LedgerReadQuery,
   type LedgerResult,
   type LedgerSnapshot,
@@ -138,7 +139,9 @@ import type {
   SessionHistoryEntry,
   SessionPrRequest,
 } from '@shared/session-history-contract';
-import { type TableFilter, useFleetView, useUiStore } from '@stores/ui-store';
+import { type AgentGroupKey, type TableFilter, useFleetView, useUiStore } from '@stores/ui-store';
+
+export type { AgentGroupKey } from '@stores/ui-store';
 
 /**
  * Domain state — what the system knows, as opposed to what the user is looking
@@ -6336,27 +6339,28 @@ export const useAgentLines = (name: string): TermLine[] =>
 const EMPTY_RUNS: RunSummary[] = [];
 
 interface AgentGroup {
-  key: 'awake' | 'sleeping' | 'paused';
+  key: AgentGroupKey;
   label: string;
   ids: string[];
 }
 
 /**
- * The rail's groups, in the order they are read (HIVE-116).
+ * The panel's lanes, in the order they are read (HIVE-204, from round two).
  *
- * The question a grouping answers here is *should I look at this?*, which is
- * why `failed` files under Awake rather than earning a fourth group: a broken
- * agent is not resting, and filing it under Sleeping would bury the one row
- * that actually needs a person. Inside Awake, `asking` sorts first and ties
- * break on the most recent run — the same "what needs me first" order the
- * fleet table reads in.
+ * The question a lane answers is *should I look at this?* Summons holds what
+ * needs a person: `asking`, `failed`, and a definition that does not parse
+ * (`invalid`), whatever its status, because nothing it does will fix itself.
+ * Inside Summons `asking` sorts first, since somebody is blocked on the user,
+ * then the most recent run. Morphing holds `working`, newest run first.
+ * Burrowed holds `sleeping`, then `paused` (decision 1, 2026-10-02): nothing
+ * wakes a paused agent, so it sits after the ones that will wake on their own.
  *
- * An empty group is omitted rather than drawn with a zero: a header reading
- * `PAUSED 0` is a line of noise about nothing.
+ * An empty lane is omitted rather than drawn with a zero: a header reading
+ * `Morphing 0` is a line of noise about nothing.
  */
 export const useAgentsByGroup = (): AgentGroup[] => {
   /*
-    The three fields the grouping reads, and nothing else.
+    The four fields the grouping reads, and nothing else.
 
     Subscribing to `state.entities` re-ran this on every write to *any* entity
     — a line batch from a running agent, a session's status change — because
@@ -6375,7 +6379,9 @@ export const useAgentsByGroup = (): AgentGroup[] => {
         // so the same narrowing every other agent selector does.
         if (entity === undefined || !isAgent(entity)) return [];
 
-        return [`${id}|${entity.status}|${entity.lastRunAt ?? 0}`];
+        return [
+          `${id}|${entity.status}|${entity.lastRunAt ?? 0}|${entity.invalid === undefined ? 0 : 1}`,
+        ];
       }),
     ),
   );
@@ -6392,37 +6398,53 @@ export const useAgentsByGroup = (): AgentGroup[] => {
       digits and dashes only.
     */
     const parsed = rows.map((row) => {
-      const [id = '', status = '', lastRunAt = '0'] = row.split('|');
+      const [id = '', status = '', lastRunAt = '0', invalid = '0'] =
+        row.split('|');
 
-      return { id, status, lastRunAt: Number(lastRunAt) };
+      return {
+        id,
+        status,
+        lastRunAt: Number(lastRunAt),
+        invalid: invalid === '1',
+      };
     });
 
-    const bucket: Record<AgentGroup['key'], (typeof parsed)[number][]> = {
-      awake: [],
-      sleeping: [],
-      paused: [],
+    type Row = (typeof parsed)[number];
+
+    const bucket: Record<AgentGroupKey, Row[]> = {
+      summons: [],
+      morphing: [],
+      burrowed: [],
     };
 
     for (const row of parsed) {
-      if (row.status === 'paused') bucket.paused.push(row);
-      else if (row.status === 'sleeping') bucket.sleeping.push(row);
-      else bucket.awake.push(row);
+      if (row.invalid || row.status === 'asking' || row.status === 'failed')
+        bucket.summons.push(row);
+      else if (row.status === 'working') bucket.morphing.push(row);
+      else bucket.burrowed.push(row);
     }
 
-    bucket.awake.sort((a, b) => {
-      if (a.status === 'asking' && b.status !== 'asking') return -1;
-      if (b.status === 'asking' && a.status !== 'asking') return 1;
+    const newest = (a: Row, b: Row) => b.lastRunAt - a.lastRunAt;
 
-      return b.lastRunAt - a.lastRunAt;
-    });
+    bucket.summons.sort(
+      (a, b) =>
+        Number(b.status === 'asking') - Number(a.status === 'asking') ||
+        newest(a, b),
+    );
+    bucket.morphing.sort(newest);
+    bucket.burrowed.sort(
+      (a, b) =>
+        Number(a.status === 'paused') - Number(b.status === 'paused') ||
+        newest(a, b),
+    );
 
-    const labels: Record<AgentGroup['key'], string> = {
-      awake: 'Awake',
-      sleeping: 'Sleeping',
-      paused: 'Paused',
+    const labels: Record<AgentGroupKey, string> = {
+      summons: 'Summons',
+      morphing: 'Morphing',
+      burrowed: 'Burrowed',
     };
 
-    return (['awake', 'sleeping', 'paused'] as const)
+    return (['summons', 'morphing', 'burrowed'] as const)
       .filter((key) => bucket[key].length > 0)
       .map((key) => ({
         key,
@@ -6538,8 +6560,8 @@ export const useAgentCount = (): number =>
 /**
  * The three states worth interrupting the user for, loudest first.
  *
- * The order is the rail's own, not a new opinion: `useAgentsByGroup` already
- * sorts `asking` ahead of everything in Awake because somebody is blocked on
+ * The order is the panel's own, not a new opinion: `useAgentsByGroup` already
+ * sorts `asking` ahead of everything in Summons because somebody is blocked on
  * the user, and `useAgentsForFleet` reads the same way. A summary dot that
  * showed green while an agent waited would invert the priority both of those
  * spend code establishing.
@@ -6642,8 +6664,8 @@ export const useAgentAskRef = (name: string): string | undefined => {
  * The agents, ordered for the fleet table's AGENTS group (HIVE-117).
  *
  * A second ordering rather than a reuse of {@link useAgentsByGroup}, because
- * the two surfaces are answering different questions. The rail *groups* —
- * Awake, Sleeping, Paused, three headings the eye scans between. The fleet
+ * the two surfaces are answering different questions. The panel *groups* —
+ * Summons, Morphing, Burrowed, three lanes the eye scans between. The fleet
  * table has one heading and one list, so the order has to carry the whole
  * priority by itself: `asking` (someone is waiting on you), then `working`,
  * then `sleeping` by the wake that comes soonest, then `paused` last because
@@ -8214,6 +8236,36 @@ export const useBuildProgress = (ticketKey: string): BuildProgress | undefined =
   const entries = useHiveStore((state) => state.ledger);
 
   return useMemo(() => buildProgressFor(entries, ticketKey), [entries, ticketKey]);
+};
+
+/** What an agent last said on the ledger, as its panel row shows it (HIVE-204). */
+export interface AgentLastWord {
+  kind: LedgerKind;
+  ref?: string;
+  line: string;
+  ts: number;
+}
+
+/** The agent's last word on the ledger (HIVE-204): newest by id (ids sort in write order), first line. */
+export const useAgentLastWord = (name: string): AgentLastWord | undefined => {
+  const entries = useHiveStore((state) => state.ledger);
+
+  return useMemo(() => {
+    let newest: LedgerEntry | undefined;
+
+    for (const entry of entries) {
+      if (entry.from === name && (newest === undefined || entry.id > newest.id)) newest = entry;
+    }
+
+    if (newest === undefined) return undefined;
+
+    return {
+      kind: newest.kind,
+      ...(newest.ref === undefined ? {} : { ref: newest.ref }),
+      line: newest.body.split('\n', 1)[0] ?? '',
+      ts: newest.ts,
+    };
+  }, [entries, name]);
 };
 
 /** One conversation: the ask, and everything that named it. */

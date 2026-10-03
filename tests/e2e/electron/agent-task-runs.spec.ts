@@ -132,7 +132,7 @@ test('draws two live task runs and counts them in the rail and the fleet', async
 
     const panel = page.locator('[data-panel="agents"]');
 
-    await expect(panel.getByRole('button', { name: /fanout/ })).toBeVisible();
+    await expect(panel.getByRole('button', { name: /^fanout, / })).toBeVisible();
 
     /*
       Two jobs. A `run` **with a prompt** is what makes a wake a job, and a job
@@ -151,13 +151,15 @@ test('draws two live task runs and counts them in the rail and the fleet', async
     await input.press('Enter');
 
     /*
-      The rail counts them. `·2` appears only above one run, so this line is
-      also the assertion that the second `run` was not refused `working` — the
-      refusal a `parallel: 1` agent would have given it.
+      The panel counts them. `2 runs live` is said only above one run, so this
+      line is also the assertion that the second `run` was not refused
+      `working` — the refusal a `parallel: 1` agent would have given it. The
+      row's name says it in words; the tile's badge draws the number (HIVE-204).
     */
-    await expect(panel.getByRole('button', { name: /fanout/ })).toContainText(
-      'working ·2',
-    );
+    const row = panel.getByRole('button', { name: /^fanout, working, 2 runs live/ });
+
+    await expect(row).toBeVisible();
+    await expect(row.locator('b').filter({ hasText: /^2$/ })).toBeVisible();
 
     // And the fleet table, which draws the same count from the same push.
     await expect(
@@ -166,7 +168,7 @@ test('draws two live task runs and counts them in the rail and the fleet', async
 
     // …and the run log draws each of them as its own row, in the receipts'
     // columns, marked as tasks rather than as the standing conversation.
-    await panel.getByRole('button', { name: /fanout/ }).click();
+    await row.click();
 
     const receipts = page.getByTestId('run-receipts');
 

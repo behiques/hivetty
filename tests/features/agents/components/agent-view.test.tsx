@@ -113,6 +113,34 @@ describe('AgentView', () => {
       }
     });
 
+    it('lays them in one row, in order, labels above values and no boxes (HIVE-204)', () => {
+      render(<Harness entity={seed()} />);
+
+      const labels = ['Status', 'Wake', 'Next', 'Today', 'Session'].map((label) => screen.getByText(label));
+      const row = labels[0]?.parentElement?.parentElement as HTMLElement;
+
+      expect(row).toHaveClass('flex', 'flex-wrap');
+      expect(Array.from(row.children).map((fact) => fact.firstElementChild?.textContent)).toEqual([
+        'Status',
+        'Wake',
+        'Next',
+        'Today',
+        'Session',
+      ]);
+
+      for (const label of labels) {
+        expect(label).toHaveClass('text-[10.5px]', 'uppercase');
+        expect(label.parentElement).not.toHaveClass('border');
+        expect(label.parentElement).not.toHaveClass('rounded-md');
+      }
+    });
+
+    it('gives the ledger a 300px column beside the run log', () => {
+      const { container } = render(<Harness entity={seed()} />);
+
+      expect(container.querySelector('[class*="minmax(0,1fr)_300px"]')).not.toBeNull();
+    });
+
     it('shows the rotation as a fraction, so it is visible before it happens', () => {
       render(<Harness entity={seed()} />);
 

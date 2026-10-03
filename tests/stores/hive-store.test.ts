@@ -59,6 +59,7 @@ import {
   useProjectSessions,
   useReattachEpoch,
   useRemoteLink,
+  useAgentLastWord,
   useBuildProgress,
   useIsAgentId,
   useLedgerEntries,
@@ -5419,6 +5420,24 @@ describe('the ledger slice', () => {
     expect(result.current.map((found) => found.id)).toEqual(['2']);
   });
 
+  it("returns the agent's newest entry, first line only (HIVE-204)", () => {
+    useHiveStore.getState().hydrateLedger([
+      entry({ id: '20261002-100000-0001', from: 'acr', kind: 'done', body: 'old', ts: 1 }),
+      entry({ id: '20261002-100100-0002', from: 'shipper', kind: 'post', body: 'not mine', ts: 3 }),
+      entry({ id: '20261002-100050-0003', from: 'acr', kind: 'ask', ref: 'a3', body: 'Reply?\nmore', ts: 2 }),
+    ]);
+
+    const { result } = renderHook(() => useAgentLastWord('acr'));
+    expect(result.current).toEqual({ kind: 'ask', ref: 'a3', line: 'Reply?', ts: 2 });
+  });
+
+  it('has no last word for an agent that never wrote', () => {
+    useHiveStore.getState().hydrateLedger([entry({ id: '1', from: 'acr' })]);
+
+    const { result } = renderHook(() => useAgentLastWord('ghost'));
+    expect(result.current).toBeUndefined();
+  });
+
   it('returns a thread in order', () => {
     useHiveStore.getState().hydrateLedger([
       entry({ id: '1', kind: 'ask' }),
@@ -5608,44 +5627,88 @@ describe('the agent view selectors', () => {
   });
 
   describe('useAgentsByGroup', () => {
-    it('groups by state, with asking first inside Awake', () => {
-      useHiveStore
-        .getState()
-        .hydrateAgents([
-          summary('zzz-working', { status: 'working', lastRunAt: 500 }),
-          summary('aaa-asking', { status: 'asking' }),
-          summary('sleeper', { status: 'sleeping' }),
-          summary('held', { status: 'paused' }),
-        ]);
+    it('files each status and an invalid definition in its lane (HIVE-204)', () => {
+      useHiveStore.getState().hydrateAgents([
+        summary('slack', { status: 'asking', lastRunAt: 1 }),
+        summary('fixer', { status: 'failed', lastRunAt: 5 }),
+        summary('broken', {
+          status: 'sleeping',
+          invalid: 'unknown key: foo',
+          lastRunAt: 9,
+        }),
+        summary('shipper', { status: 'working', lastRunAt: 3 }),
+        summary('builder', { status: 'working', lastRunAt: 4 }),
+        summary('acr', { status: 'sleeping', lastRunAt: 2 }),
+        summary('patrol', { status: 'paused', lastRunAt: 8 }),
+      ]);
 
       const { result } = renderHook(() => useAgentsByGroup());
 
-      expect(result.current.map((group) => [group.key, group.ids])).toEqual([
-        ['awake', ['aaa-asking', 'zzz-working']],
-        ['sleeping', ['sleeper']],
-        ['paused', ['held']],
+      expect(result.current).toEqual([
+        { key: 'summons', label: 'Summons', ids: ['slack', 'broken', 'fixer'] },
+        { key: 'morphing', label: 'Morphing', ids: ['builder', 'shipper'] },
+        { key: 'burrowed', label: 'Burrowed', ids: ['acr', 'patrol'] },
       ]);
     });
 
-    it('breaks an Awake tie on the most recent run', () => {
-      useHiveStore
-        .getState()
-        .hydrateAgents([
-          summary('older', { status: 'working', lastRunAt: 100 }),
-          summary('newer', { status: 'working', lastRunAt: 900 }),
-        ]);
+    it('sorts asking first in Summons even when older', () => {
+      useHiveStore.getState().hydrateAgents([
+        summary('broke', { status: 'failed', lastRunAt: 9 }),
+        summary('waiting', { status: 'asking', lastRunAt: 1 }),
+      ]);
 
       const { result } = renderHook(() => useAgentsByGroup());
 
-      expect(result.current[0]?.ids).toEqual(['newer', 'older']);
+      expect(result.current[0]?.ids).toEqual(['waiting', 'broke']);
     });
 
-    it('omits a group with no members, rather than a header reading zero', () => {
-      useHiveStore.getState().hydrateAgents([summary('sleeper')]);
+    it('sorts sleeping before paused in Burrowed, each newest first', () => {
+      useHiveStore.getState().hydrateAgents([
+        summary('held-new', { status: 'paused', lastRunAt: 9 }),
+        summary('old', { status: 'sleeping', lastRunAt: 1 }),
+        summary('held-old', { status: 'paused', lastRunAt: 2 }),
+        summary('new', { status: 'sleeping', lastRunAt: 5 }),
+      ]);
 
       const { result } = renderHook(() => useAgentsByGroup());
 
-      expect(result.current.map((group) => group.key)).toEqual(['sleeping']);
+      expect(result.current[0]?.ids).toEqual([
+        'new',
+        'old',
+        'held-new',
+        'held-old',
+      ]);
+    });
+
+    it('omits an empty lane, rather than a header reading zero', () => {
+      useHiveStore.getState().hydrateAgents([
+        summary('older', { status: 'working', lastRunAt: 100 }),
+        summary('newer', { status: 'working', lastRunAt: 900 }),
+      ]);
+
+      const { result } = renderHook(() => useAgentsByGroup());
+
+      expect(result.current).toEqual([
+        { key: 'morphing', label: 'Morphing', ids: ['newer', 'older'] },
+      ]);
+    });
+
+    it('lane counts add up to the number of agents', () => {
+      const statuses = ['asking', 'failed', 'working', 'sleeping', 'paused'] as const;
+
+      useHiveStore
+        .getState()
+        .hydrateAgents(
+          statuses.map((status, index) =>
+            summary(`agent-${String(index)}`, { status }),
+          ),
+        );
+
+      const { result } = renderHook(() => useAgentsByGroup());
+
+      expect(
+        result.current.reduce((sum, group) => sum + group.ids.length, 0),
+      ).toBe(statuses.length);
     });
 
     /**
@@ -5690,20 +5753,7 @@ describe('the agent view selectors', () => {
       });
 
       expect(result.current).not.toBe(before);
-      expect(result.current[0]?.key).toBe('awake');
-    });
-
-    it('files a failed agent under Awake, because it is the loudest yes', () => {
-      // The grouping answers "should I look at this?" — a broken agent is not
-      // resting, and burying it under Sleeping would hide the one row that
-      // needs a person.
-      useHiveStore
-        .getState()
-        .hydrateAgents([summary('broke', { status: 'failed' })]);
-
-      const { result } = renderHook(() => useAgentsByGroup());
-
-      expect(result.current[0]?.key).toBe('awake');
+      expect(result.current[0]?.key).toBe('summons');
     });
   });
 

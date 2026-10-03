@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import type { TermLine } from '@/types/terminal';
 
 import { SplitHandle } from '@components/ui/split-handle';
+import { formatDuration } from '@lib/format-duration';
 import type { LiveRunSummary, RunSummary } from '@shared/agent-contract';
 import { formatRunCost } from '@shared/agent-contract';
 import {
@@ -85,10 +86,10 @@ const RUN_LOG_SPLIT_DEFAULT = 0.4;
  * *definite* width, and against a definite width every grid here resolves the
  * same tracks, because only the floors and the factors take part.
  *
- * The reason and prompt lines under a row are `contain: inline-size` for the
+ * The prompt line under a live task's row is `contain: inline-size` for the
  * same reason: a wrapping paragraph's max-content is its unwrapped length,
- * and one long failure reason would otherwise have widened the whole table
- * to fit it on a single line.
+ * and one long prompt would otherwise have widened the whole table to fit it
+ * on a single line.
  *
  * That is also not the `minmax(0,1fr)` this grid once had, and the difference
  * is the zero. A track allowed to reach nothing does reach it the moment the
@@ -96,10 +97,10 @@ const RUN_LOG_SPLIT_DEFAULT = 0.4;
  * first. A floor in `ch` closes that hole: no track can fall below its
  * shortest honest value.
  *
- * The failure reason is still **not a column** — it gets its own line under
- * the row it belongs to, drawn only when there is one — for the reason the
- * old fixed grid recorded: the one field a reader needs in full must not be
- * clipped by a layout it participates in.
+ * The failure reason is **not a column**. Since HIVE-204 it rides inline in
+ * the outcome cell (`failed · app closed`), which truncates, with the whole
+ * sentence in the cell's `title` — one row per run, so the table reads as a
+ * table, and the full reason one hover away.
  *
  * `Turns`, `Took` and `Cost` are right-aligned with `tabular-nums`, so `9s` and
  * `10s` line up on their units and `$0.04` under `$0.16`. Left-aligned digits
@@ -115,6 +116,9 @@ const RECEIPT_GRID =
  * The pointer cursor is not here — `global.css` gives every `[role='button']` one.
  */
 const ROW = 'pb-0.5 hover:bg-hover focus-visible:bg-hover focus-visible:outline-none';
+
+/** The selected run's row: the panel fill and a 2px brand bar inset on its left (HIVE-204). */
+const SELECTED = 'bg-panel-2 shadow-[inset_2px_0_var(--cc-brand)]';
 
 /**
  * What makes a receipts row a button without making it a `<button>`, which may
@@ -299,6 +303,27 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
   const groups = groupsOf(lines, inFlight, receipts);
 
   /*
+    The run the output is showing (HIVE-204), the latest by default.
+
+    A new run takes the selection only from a reader who was on the latest one
+    (decision 2): someone who clicked an older run is reading it, and a run
+    starting elsewhere must not pull them off it. The previous latest is kept in
+    a ref so the effect can tell "was following" from "had pinned".
+  */
+  const latestKey = inFlight[0]?.run ?? receipts[0]?.run ?? null;
+  const [selected, setSelected] = useState<string | null>(latestKey);
+  const previousLatest = useRef(latestKey);
+
+  useEffect(() => {
+    if (latestKey === previousLatest.current) return;
+
+    const was = previousLatest.current;
+
+    setSelected((current) => (current === null || current === was ? latestKey : current));
+    previousLatest.current = latestKey;
+  }, [latestKey]);
+
+  /*
     Which group the autoscroll anchor belongs to: the one that wrote the newest
     line in the buffer.
 
@@ -379,6 +404,27 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
 
     group?.scrollIntoView({ block: 'start' });
   };
+
+  const select = (key: string) => {
+    setSelected(key);
+    jumpTo(key);
+  };
+
+  const selectedLive = inFlight.find((run) => run.run === selected);
+  const selectedReceipt = selectedLive === undefined ? receipts.find((run) => run.run === selected) : undefined;
+  const summary =
+    selectedLive !== undefined
+      ? ['running', formatDuration(now - selectedLive.startedAt)].join(' · ')
+      : selectedReceipt === undefined
+        ? null
+        : [
+            selectedReceipt.outcome,
+            selectedReceipt.turns === undefined ? null : `${String(selectedReceipt.turns)} turns`,
+            formatDuration(selectedReceipt.endedAt - selectedReceipt.startedAt),
+            formatRunCost(selectedReceipt.costUsd),
+          ]
+            .filter((part) => part !== null && part !== undefined)
+            .join(' · ');
 
   return (
     <div
@@ -465,7 +511,8 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
               brand={palette.blue}
               green={palette.green}
               first={index === 0}
-              onJump={() => jumpTo(run.run)}
+              selected={selected === run.run}
+              onJump={() => select(run.run)}
             />
           ))}
 
@@ -483,7 +530,10 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
                 separator in the list is 1px.
               */
               first={index === 0 && inFlight.length === 0}
-              onJump={() => jumpTo(run.run)}
+              selected={selected === run.run}
+              amber={palette.amber}
+              red={palette.red}
+              onJump={() => select(run.run)}
             />
           ))}
           </div>
@@ -526,21 +576,26 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
         header does: the output can be scrolled without losing the label that
         says what it is.
 
-        It reads "Latest output" rather than "Last output" now, because the
-        buffer holds several turns and the newest is on top — "last" named a
-        single run that this has not been for a while.
+        It names the selected run (HIVE-204) — its chip, then the receipt's
+        facts, or `running` and the time so far for one in flight — and so it
+        shows for a live run too, which "Latest output" could not: that heading
+        named whichever run was newest, and the newest was not always the one
+        on screen. No `border-t` of its own: the divider above it is the rule.
       */}
-      {!live && receipts.length > 0 && groups.length > 0 ? (
-        /*
-          No `border-t` of its own any more: the divider above it is the rule
-          now, and a hairline under a hairline read as a 2px seam.
-        */
-        <p
-          className="shrink-0 pt-2 pb-0.5 text-[0.85em] tracking-[0.1em] uppercase"
+      {groups.length > 0 && selected !== null && summary !== null ? (
+        <div
+          className="flex shrink-0 items-center gap-2.5 pt-2 pb-0.5 text-[0.85em]"
           style={{ color: palette.dim }}
+          data-testid="run-output-heading"
         >
-          Latest output
-        </p>
+          <span className="tracking-[0.1em] uppercase">Output</span>
+          <i className="rounded-[5px] bg-panel-2 px-[7px] py-0.5 not-italic" style={{ color: palette.blue }}>
+            {`#${selected.slice(0, 8)}`}
+          </i>
+          <span>{summary}</span>
+          <span className="flex-1" />
+          <span>newest run first</span>
+        </div>
       ) : null}
 
       <div
@@ -798,6 +853,8 @@ interface LiveRowProps {
   brand: string;
   green: string;
   first: boolean;
+  /** The run the output heading names: a panel fill and an inset brand bar (HIVE-204). */
+  selected: boolean;
   onJump: () => void;
 }
 
@@ -828,22 +885,23 @@ function LiveRow({
   brand,
   green,
   first,
+  selected,
   onJump,
 }: LiveRowProps) {
   const at = new Date(run.startedAt).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
   });
-  const seconds = Math.max(0, Math.round((now - run.startedAt) / 1000));
   const standing = run.kind === 'standing';
   // The lane a conversation run holds, or null for the standing lane (HIVE-185).
   const lane = laneLabel(run.lane);
 
   return (
     <div
-      className={cn(ROW, first ? 'pt-1' : 'border-t border-border-soft pt-1')}
+      className={cn(ROW, first ? 'pt-1' : 'border-t border-border-soft pt-1', selected && SELECTED)}
       style={{ color: dim }}
       data-live-run={run.kind}
+      aria-current={selected ? 'true' : undefined}
       {...jumpProps(onJump)}
     >
       <div className={RECEIPT_GRID}>
@@ -867,7 +925,7 @@ function LiveRow({
         </span>
         {/* A turn count a run cannot know until it ends — see the docblock. */}
         <span className="truncate text-right tabular-nums">—</span>
-        <span className="truncate text-right tabular-nums">{`${String(seconds)}s`}</span>
+        <span className="truncate text-right tabular-nums">{formatDuration(now - run.startedAt)}</span>
         {/* A cost a run cannot know until it ends — the same em dash a receipt uses. */}
         <span className="truncate text-right tabular-nums">—</span>
       </div>
@@ -894,6 +952,11 @@ interface RunHeaderProps {
   brand: string;
   /** The row directly under the sticky header, which draws its own rule. */
   first: boolean;
+  /** The run the output heading names (HIVE-204). */
+  selected: boolean;
+  /** The outcome's colours: `failed` red, `asking` amber; the rest stay `dim` (HIVE-204). */
+  amber: string;
+  red: string;
   onJump: () => void;
 }
 
@@ -914,22 +977,25 @@ interface RunHeaderProps {
  * and a run that took `10s` pushed its cost a character right of one that took
  * `9s`. Columns cannot do that.
  *
- * `reason` is not a column at all — it gets its own line under the row, see
- * {@link RECEIPT_GRID}. It rode in the outcome cell first, which clipped it at
- * every window size and font size the app can render.
+ * `reason` is not a column at all — it rides inline in the outcome cell, in
+ * the row's own `dim`, with the whole of it in the cell's `title`; see
+ * {@link RECEIPT_GRID}. The outcome takes its state's colour: `failed` red,
+ * `asking` amber, and the rest the row's plain `dim` (HIVE-204).
  */
-function RunHeader({ run, dim, brand, first, onJump }: RunHeaderProps) {
+function RunHeader({ run, dim, brand, first, selected, amber, red, onJump }: RunHeaderProps) {
   const at = new Date(run.startedAt).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
   });
-  const seconds = Math.max(0, Math.round((run.endedAt - run.startedAt) / 1000));
   const cost = formatRunCost(run.costUsd);
+  const outcomeColor = run.outcome === 'failed' ? red : run.outcome === 'asking' ? amber : undefined;
+  const outcome = run.reason === undefined ? run.outcome : `${run.outcome} · ${run.reason}`;
 
   return (
     <div
-      className={cn(ROW, first ? 'pt-1' : 'border-t border-border-soft pt-1')}
+      className={cn(ROW, first ? 'pt-1' : 'border-t border-border-soft pt-1', selected && SELECTED)}
       style={{ color: dim }}
+      aria-current={selected ? 'true' : undefined}
       {...jumpProps(onJump)}
     >
       <div className={RECEIPT_GRID}>
@@ -946,8 +1012,13 @@ function RunHeader({ run, dim, brand, first, onJump }: RunHeaderProps) {
         {run.trigger}
       </span>
       <span className="truncate tabular-nums">{at}</span>
-      <span className="truncate" title={run.outcome}>
+      <span
+        className="truncate"
+        title={outcome}
+        style={outcomeColor === undefined ? undefined : { color: outcomeColor }}
+      >
         {run.outcome}
+        {run.reason === undefined ? null : <span style={{ color: dim }}>{` · ${run.reason}`}</span>}
       </span>
       {/*
         An em dash rather than a blank for a run that reported no turn count and
@@ -956,21 +1027,11 @@ function RunHeader({ run, dim, brand, first, onJump }: RunHeaderProps) {
         saying.
       */}
       <span className="truncate text-right tabular-nums">{run.turns ?? '—'}</span>
-      <span className="truncate text-right tabular-nums">{`${seconds}s`}</span>
+      <span className="truncate text-right tabular-nums">
+        {formatDuration(run.endedAt - run.startedAt)}
+      </span>
       <span className="truncate text-right tabular-nums">{cost ?? '—'}</span>
       </div>
-
-      {/*
-        Its own line, indented to the Trigger column so it reads as belonging to
-        the row above rather than as a row of its own. Drawn only when a run
-        actually ended badly, which is almost never — so it costs the ordinary
-        row no height and the table no width.
-      */}
-      {run.reason === undefined ? null : (
-        <p className="pl-[11ch] break-words whitespace-pre-wrap [contain:inline-size]">
-          {run.reason}
-        </p>
-      )}
     </div>
   );
 }
