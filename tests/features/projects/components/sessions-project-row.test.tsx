@@ -74,3 +74,25 @@ describe('SessionsProjectRow (HIVE-197)', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('SessionsProjectRow, an unmapped project (HIVE-211 sweep, HIVE-197 row)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    seedDemoFleet();
+    seedDemoProjectConfig();
+  });
+  afterEach(() => resetProjectConfig());
+
+  it('marks a project the config never mentions, with the reason as its title', () => {
+    const ghost: ProjectRow = { id: 'ghost', key: testProjectKey('ghost'), name: 'ghost', icon: 'ph-folder' };
+    render(<SessionsProjectRow project={ghost} />);
+    const tag = screen.getByText('unmapped');
+    expect(tag.getAttribute('title') ?? '').not.toBe('');
+  });
+
+  it('does not mark a mapped project', () => {
+    render(<SessionsProjectRow project={nova} />);
+    expect(screen.queryByText('unmapped')).toBeNull();
+  });
+});
