@@ -7,6 +7,8 @@ import type {
   PrRecord,
   PrRef,
   PrsSnapshot,
+  PrThreadRequest,
+  PrViewedRequest,
 } from '../../../shared/github-contract';
 import { probeCommand } from '../../config/probe';
 
@@ -75,6 +77,12 @@ export interface Github {
   prDetail(request: PrRef): Promise<GhResult<PrDetail>>;
   /** A PR-level comment, under the same scope check as {@link Github.prDetail}. */
   prComment(request: PrCommentRequest): Promise<GhResult<true>>;
+  /** One PR's unified diff (HIVE-207), under the same scope check. */
+  prDiff(request: PrRef): Promise<GhResult<string>>;
+  /** Reply to, resolve or unresolve one review thread (HIVE-207), under the same scope check. */
+  prThread(request: PrThreadRequest): Promise<GhResult<true>>;
+  /** Mark or unmark one file viewed (HIVE-207), under the same scope check. */
+  prViewed(request: PrViewedRequest): Promise<GhResult<true>>;
 }
 
 interface GithubDeps {
@@ -281,6 +289,26 @@ export function createGithub(deps: GithubDeps): Github {
       const scope = await scoped(owner, repo);
       if (!scope.ok) return scope;
       return scope.client.comment(scope.ref, n, body);
+    },
+
+    async prDiff({ owner, repo, n }) {
+      const scope = await scoped(owner, repo);
+      if (!scope.ok) return scope;
+      return scope.client.diff(scope.ref, n);
+    },
+
+    async prThread(request) {
+      const scope = await scoped(request.owner, request.repo);
+      if (!scope.ok) return scope;
+      return request.op === 'reply'
+        ? scope.client.threadReply(scope.ref, request.n, request.threadId, request.body)
+        : scope.client.threadResolved(scope.ref, request.n, request.threadId, request.op === 'resolve');
+    },
+
+    async prViewed({ owner, repo, n, path, viewed }) {
+      const scope = await scoped(owner, repo);
+      if (!scope.ok) return scope;
+      return scope.client.fileViewed(scope.ref, n, path, viewed);
     },
   };
 }

@@ -430,3 +430,45 @@ describe('prDetail and prComment (HIVE-205)', () => {
     await expect(gh.prDetail({ owner: 'acme', repo: 'nova-web', n: 482 })).resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
   });
 });
+
+describe('prDiff, prThread and prViewed (HIVE-207)', () => {
+  const recording = (calls: string[][]): RunAsync => (_file, args) => {
+    calls.push([...args]);
+    const query = args[3] ?? '';
+    const stdout = args[0] === 'repo'
+      ? JSON.stringify({ nameWithOwner: 'acme/nova-web' })
+      : args[0] === 'pr'
+        ? 'diff --git a/x b/x\n'
+        : query.includes('node(id:')
+          ? JSON.stringify({ data: { node: { pullRequest: { number: 482, repository: { owner: { login: 'acme' }, name: 'nova-web' } } } } })
+          : query.includes('resolveReviewThread')
+            ? JSON.stringify({ data: { resolveReviewThread: { thread: { id: 'T', isResolved: true } } } })
+            : query.includes('markFileAsViewed')
+              ? JSON.stringify({ data: { markFileAsViewed: { pullRequest: { id: 'PR_1' } } } })
+              : JSON.stringify({ data: { repository: { pullRequest: { id: 'PR_1' } } } });
+    return Promise.resolve({ code: 0, stdout, stderr: '', timedOut: false });
+  };
+  const github = (calls: string[][]) => createGithub({ config: () => config([project()]), env: () => ({ PATH: withGh() }), run: recording(calls), now: () => 0 });
+
+  it('reads the diff with the resolver’s spelling, whatever case was asked', async () => {
+    const calls: string[][] = [];
+    await expect(github(calls).prDiff({ owner: 'ACME', repo: 'Nova-Web', n: 482 })).resolves.toEqual({ ok: true, value: 'diff --git a/x b/x\n' });
+    expect(calls.find((args) => args[0] === 'pr')).toEqual(['pr', 'diff', '482', '--repo', 'acme/nova-web', '--color', 'never']);
+  });
+
+  it('resolves a thread and marks a file viewed on a mapped repository', async () => {
+    const gh = github([]);
+    await expect(gh.prThread({ owner: 'acme', repo: 'nova-web', n: 482, threadId: 'T', op: 'resolve' })).resolves.toEqual({ ok: true, value: true });
+    await expect(gh.prViewed({ owner: 'acme', repo: 'nova-web', n: 482, path: 'x', viewed: true })).resolves.toEqual({ ok: true, value: true });
+  });
+
+  it('refuses a repository no configured project maps, before any gh pr or GraphQL call', async () => {
+    const calls: string[][] = [];
+    const gh = github(calls);
+    const ref = { owner: 'someone', repo: 'else', n: 1 };
+    await expect(gh.prDiff(ref)).resolves.toMatchObject({ ok: false, error: { kind: 'no-repos' } });
+    await expect(gh.prThread({ ...ref, threadId: 'T', op: 'reply', body: 'hi' })).resolves.toMatchObject({ ok: false, error: { kind: 'no-repos' } });
+    await expect(gh.prViewed({ ...ref, path: 'x', viewed: false })).resolves.toMatchObject({ ok: false, error: { kind: 'no-repos' } });
+    expect(calls.filter((args) => args[0] === 'api' || args[0] === 'pr')).toEqual([]);
+  });
+});
