@@ -101,7 +101,7 @@ describe('PrsPanel (the Hatchery)', () => {
   });
 
   it('shows the search icon only while the sweep is live (R3)', () => {
-    useHiveStore.setState({ prs: [], prSource: { kind: 'unconfigured', message: 'Pull requests need the desktop app.' } });
+    useHiveStore.setState({ prs: [], prSource: { kind: 'unconfigured', message: 'Pull requests need the desktop app.', reason: null } });
     render(<PrsPanel />);
     expect(screen.queryByRole('button', { name: 'Search pull requests' })).toBeNull();
     expect(within(screen.getByText(/need the desktop app/)).queryByRole('button')).toBeNull();
@@ -127,7 +127,11 @@ describe('PrsPanel source states', () => {
     act(() =>
       useHiveStore.setState({
         prs: [],
-        prSource: { kind: 'unconfigured', message: 'No configured project is a GitHub repository.' },
+        prSource: {
+          kind: 'unconfigured',
+          message: 'No configured project is a GitHub repository.',
+          reason: 'no-repos',
+        },
       }),
     );
     render(<PrsPanel />);

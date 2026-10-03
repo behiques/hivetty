@@ -82,6 +82,7 @@ describe('refreshPrs', () => {
     expect(useHiveStore.getState().prSource).toEqual({
       kind: 'unconfigured',
       message: 'Pull requests need the desktop app — this is the browser preview.',
+      reason: null,
     });
     expect(readPullRequests).not.toHaveBeenCalled();
   });
@@ -100,6 +101,7 @@ describe('refreshPrs', () => {
       expect(useHiveStore.getState().prSource).toEqual({
         kind: 'unconfigured',
         message: `it went ${kind}`,
+        reason: kind,
       });
     },
   );
@@ -449,5 +451,22 @@ describe('read and failure times (HIVE-211, D5)', () => {
     state().hydratePrs([prRecord()], 1);
     state().reset();
     expect(state().prsReadAt).toBeNull();
+  });
+});
+
+describe('gh\'s reason (HIVE-211, D6)', () => {
+  it('a different reason with the same sentence is a change', () => {
+    useHiveStore.getState().reportPrsUnconfigured('m', 'not-installed');
+    const before = useHiveStore.getState().prSource;
+    useHiveStore.getState().reportPrsUnconfigured('m', 'unauthenticated');
+    expect(useHiveStore.getState().prSource).not.toBe(before);
+    expect(useHiveStore.getState().prSource).toEqual({ kind: 'unconfigured', message: 'm', reason: 'unauthenticated' });
+  });
+
+  it('the same reason and sentence is not', () => {
+    useHiveStore.getState().reportPrsUnconfigured('m', 'no-repos');
+    const before = useHiveStore.getState().prSource;
+    useHiveStore.getState().reportPrsUnconfigured('m', 'no-repos');
+    expect(useHiveStore.getState().prSource).toBe(before);
   });
 });

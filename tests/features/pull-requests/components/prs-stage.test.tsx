@@ -42,7 +42,7 @@ describe('PrsStage', () => {
   });
 
   it('asks for a pick while the sweep is not live', () => {
-    useHiveStore.setState({ prs: [], prSource: { kind: 'unconfigured', message: 'Pull requests need the desktop app.' } });
+    useHiveStore.setState({ prs: [], prSource: { kind: 'unconfigured', message: 'Pull requests need the desktop app.', reason: null } });
     render(<PrsStage />);
     expect(screen.getByText('Pick a pull request')).toBeInTheDocument();
   });

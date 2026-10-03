@@ -361,6 +361,9 @@ const NO_PR_SEARCH: PrSearchState = {
   error: null,
 };
 
+/** Why the PR sweep has nothing to read from (HIVE-211, D6). `null` is the browser preview. */
+export type GhSetupReason = 'not-installed' | 'unauthenticated' | 'no-repos' | null;
+
 export type PrSource =
   /** A read is in flight and there is nothing yet. The boot state. */
   | { kind: 'loading' }
@@ -370,8 +373,11 @@ export type PrSource =
    * Three ways to get here and the panel says which: no `gh` on this machine,
    * a `gh` that is not logged in, or no configured project that is a GitHub
    * repository. The browser demo lands here too.
+   *
+   * `reason` is which of those it was (HIVE-211, D6), so the stage can pick a
+   * title; `null` is the browser preview, which has no `gh` to be wrong about.
    */
-  | { kind: 'unconfigured'; message: string }
+  | { kind: 'unconfigured'; message: string; reason: GhSetupReason }
   /** At least one successful read. `repos` is how many were swept. */
   | {
       kind: 'live';
@@ -610,7 +616,7 @@ interface HiveState {
   /** A sweep failed. Keeps the PRs it has and marks them stale. */
   reportPrFailure: (message: string) => void;
   /** There is nothing to read from, and that is not a failure. */
-  reportPrsUnconfigured: (message: string) => void;
+  reportPrsUnconfigured: (message: string, reason: GhSetupReason) => void;
   /** Sweep GitHub and install the answer. Never throws. */
   refreshPrs: () => Promise<void>;
 
@@ -5814,17 +5820,19 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * sweep, forever. Both slices are held so the panel's explanation renders once
    * rather than once a minute.
    */
-  reportPrsUnconfigured: (message) =>
+  reportPrsUnconfigured: (message, reason) =>
     set((state) => {
       const source = state.prSource;
       const settled =
-        source.kind === 'unconfigured' && source.message === message;
+        source.kind === 'unconfigured' &&
+        source.message === message &&
+        source.reason === reason;
 
       if (settled && state.prs.length === 0) return state;
 
       return {
         prs: state.prs.length === 0 ? state.prs : [],
-        prSource: settled ? source : { kind: 'unconfigured', message },
+        prSource: settled ? source : { kind: 'unconfigured', message, reason },
       };
     }),
 
@@ -5851,6 +5859,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     if (!isDesktop()) {
       get().reportPrsUnconfigured(
         'Pull requests need the desktop app — this is the browser preview.',
+        null,
       );
       return;
     }
@@ -5908,7 +5917,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           kind === 'unauthenticated' ||
           kind === 'no-repos'
         ) {
-          get().reportPrsUnconfigured(message);
+          get().reportPrsUnconfigured(message, kind);
           return;
         }
 

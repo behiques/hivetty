@@ -482,7 +482,7 @@ describe('hive-store selectors', () => {
 
     it.each([
       ['loading', { kind: 'loading' }],
-      ['unconfigured', { kind: 'unconfigured', message: 'x' }],
+      ['unconfigured', { kind: 'unconfigured', message: 'x', reason: 'not-installed' }],
       ['failed', { kind: 'failed', message: 'x' }],
     ] as const)('usePrNeedsYouCount is 0 while %s', (_name, prSource) => {
       act(() => useHiveStore.setState({ prSource }));
@@ -1534,13 +1534,13 @@ describe('hive-store selectors', () => {
 
     it('holds both slices while the same conclusion repeats', () => {
       act(() => {
-        useHiveStore.getState().reportPrsUnconfigured('no gh on this machine');
+        useHiveStore.getState().reportPrsUnconfigured('no gh on this machine', 'not-installed');
       });
       const { prs, prSource } = useHiveStore.getState();
       expect(prs).toEqual([]);
 
       act(() => {
-        useHiveStore.getState().reportPrsUnconfigured('no gh on this machine');
+        useHiveStore.getState().reportPrsUnconfigured('no gh on this machine', 'not-installed');
       });
 
       expect(useHiveStore.getState().prs).toBe(prs);
@@ -1549,12 +1549,12 @@ describe('hive-store selectors', () => {
 
     it('replaces the conclusion when its explanation changed', () => {
       act(() => {
-        useHiveStore.getState().reportPrsUnconfigured('no gh on this machine');
+        useHiveStore.getState().reportPrsUnconfigured('no gh on this machine', 'not-installed');
       });
       const before = useHiveStore.getState().prSource;
 
       act(() => {
-        useHiveStore.getState().reportPrsUnconfigured('gh is not logged in');
+        useHiveStore.getState().reportPrsUnconfigured('gh is not logged in', 'unauthenticated');
       });
 
       expect(useHiveStore.getState().prSource).not.toBe(before);
@@ -2821,7 +2821,7 @@ describe('usePrsQuiet (HIVE-205)', () => {
     expect(renderHook(() => usePrsQuiet()).result.current).toBe(false);
     for (const prSource of [
       { kind: 'loading' },
-      { kind: 'unconfigured', message: 'x' },
+      { kind: 'unconfigured', message: 'x', reason: 'not-installed' },
       { kind: 'failed', message: 'x' },
     ] as const) {
       useHiveStore.setState({ prs: [], prSource });
@@ -3252,7 +3252,7 @@ describe('listed (HIVE-211): no list without items', () => {
   it('PRs are listed while loading and with PRs only', () => {
     const { result, rerender } = renderHook(() => usePrsListed());
     expect(result.current).toBe(true);
-    act(() => useHiveStore.setState({ prSource: { kind: 'unconfigured', message: 'm' } }));
+    act(() => useHiveStore.setState({ prSource: { kind: 'unconfigured', message: 'm', reason: 'unauthenticated' } }));
     rerender();
     expect(result.current).toBe(false);
     act(() => useHiveStore.setState({ prSource: { kind: 'failed', message: 'x' } }));
