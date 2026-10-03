@@ -5,7 +5,7 @@ import {
   type NotificationKind,
   type NotificationPrefs,
 } from '@shared/notification-contract';
-import { trimNotifications, type AskOpen } from '@shared/notification-lanes';
+import { trimNotifications, waitsOnYou, type AskOpen } from '@shared/notification-lanes';
 
 /**
  * One owner for every notification the app raises (HIVE-75).
@@ -430,16 +430,14 @@ export function createNotificationHub(
   };
 
   /**
-   * Counted from the buffer rather than kept as a tally.
-   *
-   * The codebase's own rule — derived values are computed, never stored — and
-   * the reason it applies here is `NOTIFICATION_CAP`: a counter incremented on
-   * raise and decremented on read would have to also notice an *eviction*, and
-   * an unread row falling off the end of a fifty-deep buffer is exactly the
-   * event a hand-maintained tally forgets. Fifty entries is nothing to walk.
+   * The dock's number: the rows that wait on you (HIVE-214), counted from the
+   * buffer rather than kept as a tally — an eviction or a closing ask is
+   * exactly what a hand-maintained counter forgets. Read state does not enter
+   * into it: a read question is still a question.
    */
   const announce = (): void => {
-    announceBadge(buffer.reduce((n, entry) => n + (entry.unread ? 1 : 0), 0));
+    const open = askOpen();
+    announceBadge(buffer.filter((entry) => waitsOnYou(entry, open)).length);
   };
 
   /**

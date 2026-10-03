@@ -183,10 +183,11 @@ describe('supersede', () => {
     expect(announceDismissed).toHaveBeenCalledWith(first?.id);
   });
 
+  /** A blocked row, because the badge counts only what waits on you (HIVE-214). */
   it('counts the replacement once rather than both', () => {
-    inSession('sess-0z');
-    inSession('sess-0z');
-    inSession('sess-0z');
+    inSession('sess-0z', { kind: 'session.blocked' });
+    inSession('sess-0z', { kind: 'session.blocked' });
+    inSession('sess-0z', { kind: 'session.blocked' });
 
     expect(lastBadge()).toBe(1);
   });
@@ -590,13 +591,24 @@ describe('read-state reaches the renderer', () => {
  * a user sees from outside the window. A count that lags is therefore the whole
  * signal being wrong, not a cosmetic slip.
  */
-describe('the unread count', () => {
-  it('announces the new count as each notification is raised', () => {
+describe('the badge: what waits on you (HIVE-214)', () => {
+  const ask = (id: string) =>
+    raise({ id, kind: 'agent.ask', action: { type: 'ask', thread: id } });
+
+  it('counts a blocked session and an open ask as they are raised', () => {
     raise({ id: 'a' });
     expect(lastBadge()).toBe(1);
 
-    raise({ id: 'b' });
+    ask('q1');
     expect(lastBadge()).toBe(2);
+  });
+
+  it('never counts Burrowed or Echoes', () => {
+    raise({ id: 'i', kind: 'session.idle' });
+    raise({ id: 'n', kind: 'session.input_needed' });
+    raise({ id: 'm', kind: 'pr.merged' });
+
+    expect(lastBadge()).toBe(0);
   });
 
   it('announces nothing for a notification that was dropped', () => {
@@ -611,25 +623,34 @@ describe('the unread count', () => {
     expect(announceBadge).not.toHaveBeenCalled();
   });
 
-  it('counts down as rows are read, one at a time and all at once', () => {
+  it('keeps counting a blocked session once it is read: it still waits on you', () => {
     raise({ id: 'a' });
-    raise({ id: 'b' });
-
     hub.markRead('a');
+
+    expect(lastBadge()).toBe(1);
+  });
+
+  /** An answer only marks the row read (`notify.ts`); the closed thread is what stops the count. */
+  it('stops counting an answered ask', () => {
+    const closed = new Set<string>();
+    hub = makeHub({ closedAsks: () => closed });
+    ask('q1');
     expect(lastBadge()).toBe(1);
 
-    hub.markRead(null);
+    closed.add('q1');
+    hub.markRead('q1');
+
     expect(lastBadge()).toBe(0);
+    expect(hub.list().map((n) => n.id)).toEqual(['q1']);
   });
 
   /**
-   * The reason the count is derived from the buffer rather than tallied. An
-   * unread row falling off the end of the cap is exactly the transition a
-   * hand-maintained counter forgets.
+   * The reason the count is derived from the buffer rather than tallied: what
+   * waits on you is never trimmed, so the number has no ceiling to hit.
    */
-  it('never exceeds the cap, however many are raised', () => {
-    for (let i = 0; i < NOTIFICATION_CAP + 10; i += 1) raise({ id: `n${i}`, kind: 'pr.merged' });
-    expect(lastBadge()).toBe(NOTIFICATION_CAP);
+  it('counts every row that waits on you, past the cap', () => {
+    for (let i = 0; i < NOTIFICATION_CAP + 10; i += 1) raise({ id: `n${i}` });
+    expect(lastBadge()).toBe(NOTIFICATION_CAP + 10);
   });
 
   it('announces zero when the buffer is cleared', () => {
@@ -639,7 +660,7 @@ describe('the unread count', () => {
     expect(lastBadge()).toBe(0);
   });
 
-  /** A toast click is a read, and the badge has to hear about it too. */
+  /** A toast click dismisses its row (HIVE-81), and the badge has to hear about it too. */
   it('counts down when a toast is clicked', () => {
     raise({ id: 'a' });
     announceBadge.mockClear();
@@ -752,11 +773,11 @@ describe('the foreground gate', () => {
     });
   });
 
-  it('leaves the unread count untouched', () => {
+  it('still counts the gated row on the dock: it waits on you wherever you are looking', () => {
     const announceBadge = vi.fn();
     const hub = makeHub({ announceBadge, isForegroundEverywhere: () => true });
     hub.raise({ kind: 'session.blocked', title: 't', action: { type: 'session', entityId: 'term-3' } });
-    expect(announceBadge).toHaveBeenLastCalledWith(0);
+    expect(announceBadge).toHaveBeenLastCalledWith(1);
   });
 
   it('raises normally for a background session', () => {
