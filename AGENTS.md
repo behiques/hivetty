@@ -18,7 +18,7 @@ terminal at the right moment.
 
 Current phase: terminals are **real PTYs**, projects come from a config file,
 tickets from **Jira**, PRs from `gh`, and notifications from Claude Code's hooks.
-The right rail's third tab is a **project explorer** over the active session's
+The session panel's Files tab is a **project explorer** over the active session's
 repository, opening files into a CodeMirror editor on the centre stage. Full
 context and scope: the **HIVE project in Jira**, the backlog.
 
@@ -34,6 +34,7 @@ Zustand · Tailwind v4 · shadcn/ui · pnpm.
 | `pnpm desktop:dev` | electron-vite: the Electron app, renderer HMR included |
 | `pnpm desktop:build` | Type-check, then build `out/{main,preload,renderer}/` |
 | `pnpm desktop:preview` | Run the built Electron app |
+| `pnpm docs:shots` | Retake the guide screenshots from the built app (after `desktop:build`) |
 | `pnpm desktop:dist` | Package `.dmg` + `.zip` into `dist/` (macOS arm64); `:publish` uploads them |
 | `pnpm lint` | ESLint across `src/`, `electron/` and config |
 | `pnpm type-check` | `tsc --noEmit` for the app, the Node-side configs, and `electron/` |
@@ -106,7 +107,7 @@ implementation hours inside the review chain. These rules follow from both:
 | Installers, releases, auto-update, the app name | [`docs/packaging-and-updates.md`](docs/packaging-and-updates.md) |
 | Server mode: the Mac mini deployment, pairing, the LaunchAgent, what a socket may call | [`docs/server-mode.md`](docs/server-mode.md) |
 | Store shape, actions, selectors, fixture data, the caps | [`docs/state-and-data.md`](docs/state-and-data.md) |
-| Panels, atoms, rails, the view-state machine | [`docs/component-patterns.md`](docs/component-patterns.md) |
+| Panels, atoms, the frame, the view-state machine | [`docs/component-patterns.md`](docs/component-patterns.md) |
 | The map: processes, fences, which deep dive owns what | [`docs/architecture.md`](docs/architecture.md) |
 | What a feature does for the user (the guides, indexed) | [`docs/README.md`](docs/README.md) |
 | The ledger, parties, asks and claims; agent definitions | [`docs/agents-and-ledger.md`](docs/agents-and-ledger.md) |
@@ -144,7 +145,8 @@ The renderer reaches it via `@shared`, **type-only** for anything with behaviour
 it, or main-process code lands in the renderer bundle — that compile-time contract.
 
 `src/components/layout/` is the **composition root** and is exempt from the
-`features/` ban: the rails and the center stage exist to mount feature panels.
+`features/` ban: the list panel, the stage and the session panel exist to mount
+feature panels.
 The exemption stops there — `ui/`, `terminal/` and `editor/` stay fully fenced,
 expressed by listing them in `FENCED_COMPONENT_DIRS`, because `except` filters
 the *imported* module and can never exempt the importing file. A **new**
@@ -195,7 +197,7 @@ keystroke from re-rendering thirteen live terminals.
 
 - `hive-store.ts` — domain: entities, tickets, PRs, notifications, transcript,
   and the ledger tail (a capped mirror of main's log; it merges, never replaces).
-- `ui-store.ts` — view state: tabs, selection, picker, rails, tree expansion.
+- `ui-store.ts` — view state: tabs, selection, picker, panels, tree expansion.
 - `appearance-store.ts` — theme, terminal and editor typography, density.
 - `editor-store.ts` — open file buffers: text, dirty, stale, conflict.
 
