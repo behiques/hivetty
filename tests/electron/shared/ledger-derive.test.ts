@@ -115,17 +115,26 @@ describe('isShipping and buildProgressFor (HIVE-171)', () => {
     ];
     expect(isShipping(loose, 'acme/nova', 77)).toBe(true);
     expect(isShipping(loose, 'acme/nova', 7)).toBe(false);
-    expect(buildProgressFor(loose, 'ACME-1')).toEqual({ stage: 'x'.repeat(STAGE_TEXT_MAX), task: 4 });
+    expect(buildProgressFor(loose, 'ACME-1')).toEqual({ from: 'builder', stage: 'x'.repeat(STAGE_TEXT_MAX), task: 4 });
   });
 
   it('reads the newest builder progress for a ticket, key case-insensitive, task optional', () => {
-    expect(buildProgressFor(posts, 'HIVE-7')).toEqual({ stage: 'build', task: 3 });
-    expect(buildProgressFor(posts, 'HIVE-8')).toEqual({ stage: 'verify' });
+    expect(buildProgressFor(posts, 'HIVE-7')).toEqual({ from: 'builder', stage: 'build', task: 3 });
+    expect(buildProgressFor(posts, 'HIVE-8')).toEqual({ from: 'builder', stage: 'verify' });
     expect(buildProgressFor(posts, 'HIVE-9')).toBeUndefined();
     const claimed = [
       entry({ id: 'c1', from: 'builder', kind: 'claim', body: 'claimed HIVE-9', meta: { ticket: 'HIVE-9', stage: 'build', task: 'HIVE-9' } }),
     ];
     expect(buildProgressFor(claimed, 'HIVE-9')).toBeUndefined();
+  });
+
+  it('reads any agent\'s post, newest wins across agents (HIVE-203)', () => {
+    const mixed = [
+      ...posts,
+      entry({ id: 's1', from: 'shipper', body: 'stage', meta: { ticket: 'HIVE-7', stage: 'ci' } }),
+    ];
+    expect(buildProgressFor(mixed, 'HIVE-7')).toEqual({ from: 'shipper', stage: 'ci' });
+    expect(buildProgressFor(posts, 'HIVE-7')).toEqual({ from: 'builder', stage: 'build', task: 3 });
   });
 });
 

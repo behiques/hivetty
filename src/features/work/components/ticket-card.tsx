@@ -80,13 +80,13 @@ export function TicketCard({ ticket }: TicketCardProps) {
       <h3 className="text-[12.5px] leading-[1.4] text-ink">{ticket.title}</h3>
 
       {/*
-        What the builder last said about this ticket (HIVE-171), read off the
-        ledger tail. Absent when no builder has touched it, which is every
-        ticket worked inline.
+        What an agent last said about this ticket (HIVE-171), read off the
+        ledger tail and named by who said it (HIVE-203). Absent when no agent
+        has touched it, which is every ticket worked inline.
       */}
       {build === undefined ? null : (
         <div className="font-mono text-[10.5px] text-subtle">
-          builder · {build.task === undefined ? build.stage : `task ${build.task} done`}
+          {build.from} · {build.task === undefined ? build.stage : `task ${build.task} done`}
         </div>
       )}
 
