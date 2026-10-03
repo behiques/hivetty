@@ -367,6 +367,16 @@ describe('comments', () => {
     }).comments({ key: 'HIVE-71' });
     expect(result.ok).toBe(false);
   });
+
+  it('asks for the comment properties, so a comment posted for an agent reads back with via (HIVE-216)', async () => {
+    const seen: { url: string; method: string }[] = [];
+    const result = await build({
+      fetch: replies([[200, { comments: [rawComment({ properties: [{ key: 'hive.via', value: { agent: 'acr' } }] })] }]], seen),
+    }).comments({ key: 'HIVE-71' });
+
+    expect(new URL(seen[0]?.url ?? '').searchParams.get('expand')).toBe('properties');
+    expect(result.ok && result.value.comments[0]?.via).toEqual({ agent: 'acr' });
+  });
 });
 
 describe('links', () => {

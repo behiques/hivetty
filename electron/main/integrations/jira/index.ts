@@ -565,7 +565,7 @@ export function createJira(deps: {
 
       const result = await connection.client.get<{ comments?: unknown; total?: unknown }>(
         `${ISSUE}/${request.key}/comment`,
-        { orderBy: request.newest ? '-created' : 'created', maxResults: String(JIRA_MAX_COMMENTS) },
+        { orderBy: request.newest ? '-created' : 'created', maxResults: String(JIRA_MAX_COMMENTS), expand: 'properties' },
       );
       if (!result.ok) return result;
 
