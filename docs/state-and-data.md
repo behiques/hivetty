@@ -360,6 +360,10 @@ Components never read a store object directly and never call `getState()`.
 | `useTicketPrs(ticketKey)` | PRs reachable from a ticket's sessions |
 | `useUnreadCount()` | inbox unread count |
 | `useNotifs()` | the inbox, newest first |
+| `useSummons(onStage)` | the Summons queue, `{ asks, sessions }`, newest first: open `agent.ask` / `agent.permission` and `pr.review_requested`; `session.blocked` less the one on stage (HIVE-214) |
+| `useSummonsCount(onStage)` | its length; `useSummonsCount(null)` is the dock's count |
+| `useYoursAgain(terminalId)` | true while an unswept `session.idle` / `session.input_needed` row names that terminal |
+| `useOnStage()` | what is on the centre stage — a terminal id, an agent's row id, or null; `useForegroundSession` and the Inbox both read it (`src/hooks/use-on-stage.ts`) |
 | `usePrs()` | every open PR the fleet produced |
 | `useHatchery()` | every swept PR with its hatch status, in the Hatchery's order (HIVE-215) |
 | `useHatcherySearch()` | the same over the PR search; `null` with no search |
@@ -367,6 +371,7 @@ Components never read a store object directly and never call `getState()`.
 | `useSessionPr(id)` | one row's PR, matched on its branch |
 | `useHasResumable()` | whether the fleet table reserves its Resume column |
 | `useMarkRead()` | mark one notification read, by index |
+
 | `usePushNotif()` | push a notification |
 | `useActiveEntity()` | the entity behind `activeTab`, or `null` |
 | `useLedgerEntries(filter?)` | the ledger tail, by the shared query rules |
@@ -431,10 +436,18 @@ and `needsYou` (SUMMONS, only ever on your own PR). It is in `lib`, not
 Two collections are bounded, because a long-running demo must not grow without
 end:
 
-- **`notifs` at 50** (`NOTIF_CAP`, which is `NOTIFICATION_CAP` from
-  `electron/shared/notification-contract.ts`) — `pushNotif` does the same, and
-  main's notification buffer uses the same constant. An inbox that grows forever
-  stops being an inbox.
+- **`notifs`: 50 rows of news, and every row that waits on you** (HIVE-214).
+  Every kind has a lane in `NOTIFICATION_KIND_SPECS`: **Summons** (`agent.ask`,
+  `agent.permission`, `session.blocked`, `pr.review_requested`), **Burrowed**
+  (`session.idle`, `session.input_needed`) and **Echoes** (the rest).
+  `trimNotifications` in `electron/shared/notification-lanes.ts` keeps at most
+  `NOTIFICATION_CAP` Echo and Burrowed rows, Echoes leaving first, and never a
+  row that waits on you (a Summons row, unless it is an ask whose thread
+  `closedAskThreads` says has closed). `pushNotif`, `hydrateNotifs` and main's
+  hub all trim with it, so a hydration never brings back a row the store
+  dropped. Clear all keeps the same rows. The dock badge is the count of those
+  rows (`useSummonsCount(null)`, and the hub's own count in local mode), read or
+  not; the Classic tab badge and the bell still count unread (`useUnreadCount`).
 - **`ledger` at 500** (`LEDGER_MEMORY_CAP`, in `electron/shared/ledger-contract.ts`)
   — the newest are kept, by both `hydrateLedger` and `ledgerAppend`. Unlike the
   inbox this cap loses nothing: the log on disk is complete, and an older entry is

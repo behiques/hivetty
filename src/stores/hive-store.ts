@@ -133,6 +133,7 @@ import {
   agentSiteFor,
   asksMeAbout,
   buildProgressFor,
+  closedAskThreads,
   isShipping,
   matches,
   mergeWaiting,
@@ -142,7 +143,7 @@ import {
   type BuildProgress,
 } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
-import { NOTIFICATION_CAP } from '@shared/notification-contract';
+import { trimNotifications, waitsOnYou, type AskOpen } from '@shared/notification-lanes';
 import type { PlansSnapshot, SessionPlan } from '@shared/plan-contract';
 import {
   hiveNameFromTitle,
@@ -452,6 +453,13 @@ interface HiveState {
    * without a round trip. Older entries are still there; they are asked for.
    */
   ledger: LedgerEntry[];
+  /**
+   * Every ask thread this window has seen close (HIVE-214), accumulated as
+   * ledger entries arrive. The mirror above forgets a closing entry after
+   * {@link LEDGER_MEMORY_CAP} newer ones, and an answered ask's row can outlive
+   * that; this is what keeps the row closed. Only grows, until a reset.
+   */
+  closedAsks: ReadonlySet<string>;
   orchLines: TermLine[];
 
   /**
@@ -941,16 +949,17 @@ interface HiveState {
 }
 
 /**
- * Inbox cap, matching the hub's (HIVE-75).
- *
- * Eight was an honest bet for a seeded list that never grew. With real
- * producers it is too few: a busy afternoon would push an approval request off
- * the end before the user got back to their desk, which is the one outcome this
- * surface exists to prevent. The renderer's cap and `NOTIFICATION_CAP` in the
- * hub are the same number by intent — a shorter list here would silently
- * discard rows a hydration would then bring straight back.
+ * Is an ask still open (HIVE-214)? The hub asks main's ledger the same
+ * question through the same `closedAskThreads`.
  */
-const NOTIF_CAP = NOTIFICATION_CAP;
+const askOpenIn = (closed: ReadonlySet<string>): AskOpen => (thread) => !closed.has(thread);
+
+/** The closed set after these entries, the same set when none of them closes a thread. */
+const withClosed = (closed: ReadonlySet<string>, entries: readonly LedgerEntry[]): ReadonlySet<string> => {
+  const found = closedAskThreads(entries);
+  if ([...found].every((thread) => closed.has(thread))) return closed;
+  return new Set([...closed, ...found]);
+};
 
 /**
  * Console transcript cap (story 041). Oldest lines drop first.
@@ -987,7 +996,7 @@ const EMPTY_LINES = Object.freeze([]) as unknown as TermLine[];
  *
  * A terminal cleared every twenty minutes for a working day is twenty rows of
  * history in a table whose job is showing what is *running*. Twenty is the same
- * bet `NOTIF_CAP` makes: enough to answer "what did I just finish?", few enough
+ * bet the inbox's cap makes: enough to answer "what did I just finish?", few enough
  * that the live rows stay above the fold.
  *
  * Only `done` rows are capped. A `terminated` row is a process that died and is
@@ -2032,6 +2041,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   notifs: [],
   remoteLink: null,
   ledger: [],
+  closedAsks: new Set<string>(),
   metrics: {},
   plans: {},
   changedFiles: {},
@@ -3491,7 +3501,11 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * dismissing ids the hub no longer holds.
    */
   clearNotifs: () => {
-    set({ notifs: [] });
+    // Clear all keeps what waits on you, as the hub's `clearInbox` does (HIVE-214).
+    set((state) => {
+      const open = askOpenIn(state.closedAsks);
+      return { notifs: state.notifs.filter((notif) => waitsOnYou(notif, open)) };
+    });
     void window.hive?.notifications.clear();
   },
 
@@ -3506,7 +3520,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     set((state) =>
       state.notifs.some((existing) => existing.id === notif.id)
         ? state
-        : { notifs: [notif, ...state.notifs].slice(0, NOTIF_CAP) },
+        : { notifs: trimNotifications([notif, ...state.notifs], askOpenIn(state.closedAsks)) },
     ),
 
   setRemoteLink: (status) => {
@@ -3524,12 +3538,12 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     })),
 
   applyDismiss: (id) =>
-    set((state) => ({
-      notifs:
-        id === null
-          ? []
-          : state.notifs.filter((notif) => notif.id !== id),
-    })),
+    set((state) => {
+      if (id !== null) return { notifs: state.notifs.filter((notif) => notif.id !== id) };
+      // The echo of a Clear all: the hub kept what waits on you, and so does this.
+      const open = askOpenIn(state.closedAsks);
+      return { notifs: state.notifs.filter((notif) => waitsOnYou(notif, open)) };
+    }),
 
   hydrateNotifs: (notifs) =>
     set((state) => {
@@ -3546,7 +3560,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         ...notifs.filter((notif) => !seen.has(notif.id)),
       ].sort((a, b) => b.createdAt - a.createdAt);
 
-      return { notifs: merged.slice(0, NOTIF_CAP) };
+      return { notifs: trimNotifications(merged, askOpenIn(state.closedAsks)) };
     }),
 
   hydrateAgents: (summaries) =>
@@ -3775,11 +3789,17 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         ...entries.filter((entry) => !seen.has(entry.id)),
       ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-      return { ledger: merged.slice(-LEDGER_MEMORY_CAP) };
+      return {
+        ledger: merged.slice(-LEDGER_MEMORY_CAP),
+        closedAsks: withClosed(state.closedAsks, entries),
+      };
     }),
 
   ledgerAppend: (entry) =>
-    set((state) => ({ ledger: [...state.ledger, entry].slice(-LEDGER_MEMORY_CAP) })),
+    set((state) => ({
+      ledger: [...state.ledger, entry].slice(-LEDGER_MEMORY_CAP),
+      closedAsks: withClosed(state.closedAsks, [entry]),
+    })),
 
   answerAsk: async (thread, body, meta) =>
     window.hive?.ledger.answer({
@@ -5766,6 +5786,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       agentOrder: [],
       notifs: [],
       ledger: [],
+      closedAsks: new Set<string>(),
       prs: [],
       // `hydratePrs` sets `prs` and `prSource` together; leaving the old
       // mode's `prSource` standing would claim a source for a list that was
@@ -5883,6 +5904,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       notifs: [],
       remoteLink: null,
       ledger: [],
+      closedAsks: new Set<string>(),
       metrics: {},
       plans: {},
       changedFiles: {},
@@ -8286,6 +8308,60 @@ export const useUnreadCount = () =>
 
 /** The inbox, newest first (story 051). */
 export const useNotifs = () => useHiveStore((state) => state.notifs);
+
+/** The Summons queue (HIVE-214): what waits on you, split for the pill. */
+export interface Summons {
+  /** `agent.ask` and `agent.permission` whose thread is open, and `pr.review_requested`. */
+  asks: HiveNotification[];
+  /** `session.blocked`, less the one on stage. */
+  sessions: HiveNotification[];
+}
+
+/**
+ * One derivation behind both hooks, so the queue and its count cannot
+ * disagree. Rows keep the store's order, newest first.
+ */
+export function summonsOf(
+  notifs: readonly HiveNotification[],
+  closedAsks: ReadonlySet<string>,
+  onStage: string | null,
+): Summons {
+  const open = askOpenIn(closedAsks);
+  const summons: Summons = { asks: [], sessions: [] };
+  for (const notif of notifs) {
+    if (!waitsOnYou(notif, open)) continue;
+    if (notif.kind !== 'session.blocked') summons.asks.push(notif);
+    else if (!(notif.action.type === 'session' && notif.action.entityId === onStage)) {
+      summons.sessions.push(notif);
+    }
+  }
+  return summons;
+}
+
+/** The Summons queue, leaving out the session on stage. Derived, never stored. */
+export const useSummons = (onStage: string | null): Summons => {
+  const notifs = useHiveStore((state) => state.notifs);
+  const closedAsks = useHiveStore((state) => state.closedAsks);
+  return useMemo(() => summonsOf(notifs, closedAsks, onStage), [notifs, closedAsks, onStage]);
+};
+
+/** The queue's length, as a number, so a subscriber re-renders only when it moves. */
+export const useSummonsCount = (onStage: string | null): number =>
+  useHiveStore((state) => {
+    const { asks, sessions } = summonsOf(state.notifs, state.closedAsks, onStage);
+    return asks.length + sessions.length;
+  });
+
+/** True while an unswept `session.idle` or `session.input_needed` row names this terminal. */
+export const useYoursAgain = (terminalId: string): boolean =>
+  useHiveStore((state) =>
+    state.notifs.some(
+      (notif) =>
+        (notif.kind === 'session.idle' || notif.kind === 'session.input_needed') &&
+        notif.action.type === 'session' &&
+        notif.action.entityId === terminalId,
+    ),
+  );
 
 /** Hydration and the push subscription — see `use-ledger-sync.ts`. */
 export const useHydrateLedger = () => useHiveStore((state) => state.hydrateLedger);

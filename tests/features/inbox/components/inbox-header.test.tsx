@@ -48,7 +48,11 @@ describe('InboxHeader', () => {
 
     useHiveStore
       .getState()
-      .hydrateNotifs([notif({ id: 'a' }), notif({ id: 'b' })]);
+      .hydrateNotifs([
+        // News: Clear all keeps what waits on you (HIVE-214).
+        notif({ id: 'a', kind: 'pr.merged', action: { type: 'none' } }),
+        notif({ id: 'b', kind: 'pr.merged', action: { type: 'none' } }),
+      ]);
 
     render(<InboxHeader total={2} unread={1} />);
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }));
