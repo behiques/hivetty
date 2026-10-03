@@ -168,7 +168,7 @@ function WorkHeader() {
           {needYou > 0 ? (
             <>
               {' · '}
-              <span className="text-amber">{needYou} need you</span>
+              <span className="text-amber-count">{needYou} need you</span>
             </>
           ) : null}
         </span>
