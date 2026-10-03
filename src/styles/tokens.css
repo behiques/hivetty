@@ -92,21 +92,6 @@
   --cc-brand-fill-strong: #334fa9; /* Serenity — the signature brand blue */
   --cc-on-brand: #ffffff;
 
-  /**
-   * The diffused glow behind the header's hive mark (HIVE-100).
-   *
-   * The splash's `.bloom` at a smaller scale, and for the same reason: the hive
-   * sprite is a dark creature, so on `--cc-bg` it loses its silhouette to the
-   * ground it sits on. A pool of the signature blue behind it gives the outline
-   * something to be dark *against*.
-   *
-   * A token rather than a literal in the utility, because the strength has to
-   * differ per theme even though `--cc-brand-fill-strong` deliberately does
-   * not: on a near-white panel the same 55% reads as a blue smudge around the
-   * logo rather than as depth behind it.
-   */
-  --cc-bloom: color-mix(in srgb, var(--cc-brand-fill-strong) 72%, transparent);
-
   /* Notification badge fill, and darker than `--cc-red` so that the badge text
      above it clears AA. What that text *is* is `--cc-on-danger`, below — this
      comment used to say "white", which was true of every theme until one
@@ -272,10 +257,6 @@ body[data-theme='light'] {
   --cc-chip-hover: #e2eaee;
   --cc-creep: #b7a3e6;
   --cc-chitin: #6a54b0;
-
-  /* The mark needs no rescuing from a light ground — it is already the darkest
-     thing on it. What is left is a hint of depth, not a halo. */
-  --cc-bloom: color-mix(in srgb, var(--cc-brand-fill-strong) 14%, transparent);
 
   /**
    * The terminal surface, which **does** follow the theme.
