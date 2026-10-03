@@ -16,6 +16,7 @@ import {
   claims,
   closedAskThreads,
   expiredAsks,
+  holderPost,
   isShipping,
   keepNewest,
   laneOfRun,
@@ -23,7 +24,10 @@ import {
   mergeWaiting,
   nextRef,
   openAsks,
+  prEvents,
+  prOpener,
   resolveRef,
+  reviewUrls,
   SHIP_STOPS,
   shipStage,
   shipTrack,
@@ -947,5 +951,40 @@ describe('shipTrack (HIVE-205)', () => {
     expect(track).toMatchObject({ held: true, current: null });
     expect(track.stops.every((s) => s.firstAt === null)).toBe(true);
     expect(shipTrack([claim], '', 1182, at(10)).held).toBe(false);
+  });
+});
+
+describe('the PR page readings (HIVE-205)', () => {
+  const slug = 'acme/server';
+  const log = [
+    entry({ id: 'i1', ts: 1, from: 'builder', kind: 'ask', to: 'shipper', body: 'Ship it', meta: { pr: 1182, repo: slug, ticket: 'INCORP-598', stage: 'intake' } }),
+    entry({ id: 'i2', ts: 2, from: 'sess-b', kind: 'ask', to: 'shipper', body: 'Ship mine', meta: { pr: 7, repo: slug, stage: 'intake' } }),
+    entry({ id: 'f1', ts: 3, from: 'fixer', kind: 'claim', meta: { task: 'acme/server#1182 findings' } }),
+    entry({ id: 'f2', ts: 4, from: 'fixer', body: 'On it: acme/server#1182 finding 1, the registered agent' }),
+    entry({ id: 'f3', ts: 5, from: 'fixer', body: 'acme/server#7 is clean' }),
+    entry({ id: 'r1', ts: 6, from: 'acr', kind: 'answer', body: 'changes requested', meta: { review_url: 'https://github.com/acme/server/pull/1182#pullrequestreview-7' } }),
+    entry({ id: 'r2', ts: 7, from: 'sess-a', body: 'x', meta: { review_url: 'https://github.com/acme/server/pull/1182#pullrequestreview-9' } }),
+    entry({ id: 'f4', ts: 8, from: 'fixer', body: 'Pushed the fix for acme/server#1182' }),
+  ];
+
+  it('prEvents: every entry naming the PR, oldest first', () => {
+    expect(prEvents(log, slug, 1182).map((e) => e.id)).toEqual(['i1', 'f1', 'f2', 'f4']);
+    expect(prEvents(log, '', 1182)).toEqual([]);
+  });
+
+  it('reviewUrls: acr’s review URLs only', () => {
+    expect([...reviewUrls(log)]).toEqual(['https://github.com/acme/server/pull/1182#pullrequestreview-7']);
+  });
+
+  it('prOpener: who handed the PR to the shipper, or null', () => {
+    expect(prOpener(log, slug, 1182)).toBe('builder');
+    expect(prOpener(log, 'ACME/Server', 7)).toBe('sess-b');
+    expect(prOpener(log, slug, 99)).toBeNull();
+  });
+
+  it('holderPost: the holder’s newest entry naming the PR', () => {
+    expect(holderPost(log, slug, 1182, 'fixer')?.id).toBe('f4');
+    expect(holderPost(log, slug, 1182, 'acr')).toBeNull();
+    expect(holderPost(log, '', 1182, 'fixer')).toBeNull();
   });
 });

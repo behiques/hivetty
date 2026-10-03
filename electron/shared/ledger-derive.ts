@@ -548,6 +548,45 @@ export function shipTrack(entries: readonly LedgerEntry[], slug: string, n: numb
   return { held, current: at === undefined ? null : (stops.find((stop) => stop.stage === at.stage) ?? null), stops };
 }
 
+/** Every entry naming one PR, oldest first: the PR page's Everything filter (HIVE-205). */
+export function prEvents(entries: readonly LedgerEntry[], slug: string, n: number): LedgerEntry[] {
+  if (slug === '') return [];
+  return entries.filter((entry) => namesPrAnywhere(entry, slug, n));
+}
+
+/** acr's `meta.review_url`s: a GitHub review whose URL is here came through the Hive (HIVE-205). */
+export function reviewUrls(entries: readonly LedgerEntry[]): ReadonlySet<string> {
+  const urls = new Set<string>();
+  for (const entry of entries) {
+    const url = entry.meta?.['review_url'];
+    if (entry.from === 'acr' && typeof url === 'string' && url !== '') urls.add(url);
+  }
+  return urls;
+}
+
+/**
+ * Who handed a PR to the shipper (HIVE-205): the `from` of the oldest intake
+ * ask to `shipper` naming it — `builder` for a PR the builder opened, a session
+ * id for one a session handed over — or `null`.
+ */
+export function prOpener(entries: readonly LedgerEntry[], slug: string, n: number): string | null {
+  if (slug === '') return null;
+  const intake = entries.find(
+    (entry) => entry.kind === 'ask' && entry.to === 'shipper' && entry.meta?.['stage'] === 'intake' && namesPr(entry.meta, slug, n),
+  );
+  return intake?.from ?? null;
+}
+
+/** The holder's newest entry naming the PR, for the ship track's "now" line (HIVE-205, D11). */
+export function holderPost(entries: readonly LedgerEntry[], slug: string, n: number, holder: string): LedgerEntry | null {
+  if (slug === '') return null;
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i]!;
+    if (entry.from === holder && namesPrAnywhere(entry, slug, n)) return entry;
+  }
+  return null;
+}
+
 /** Where an agent is working (HIVE-172). */
 interface AgentSite {
   /** The worktree the agent's newest post named, absolute. */
