@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
 
+import { goToPlace, openConsole } from '../fixtures/places';
+
 import { launchHive } from './fixtures/hive-app';
 
 /**
@@ -128,11 +130,14 @@ test('draws two live task runs and counts them in the rail and the fleet', async
 
     // The agent has to have reached the store before the console can resolve
     // the name — `run` matches against `entities`, not against main's registry.
-    await page.getByRole('tab', { name: /Agents/ }).click();
+    await goToPlace(page, 'Agents');
 
     const panel = page.locator('[data-panel="agents"]');
 
     await expect(panel.getByRole('button', { name: /^fanout, / })).toBeVisible();
+
+    // The console and its transcript are the Overmind's, folded until shown in round two.
+    await openConsole(page);
 
     /*
       Two jobs. A `run` **with a prompt** is what makes a wake a job, and a job
@@ -156,15 +161,16 @@ test('draws two live task runs and counts them in the rail and the fleet', async
       `working` — the refusal a `parallel: 1` agent would have given it. The
       row's name says it in words; the tile's badge draws the number (HIVE-204).
     */
-    const row = panel.getByRole('button', { name: /^fanout, working, 2 runs live/ });
-
-    await expect(row).toBeVisible();
-    await expect(row.locator('b').filter({ hasText: /^2$/ })).toBeVisible();
-
-    // And the fleet table, which draws the same count from the same push.
+    // The fleet table, on the Overmind, draws the count from the push.
     await expect(
       page.getByTestId('agent-row').filter({ hasText: 'fanout' }).locator('[data-col="status"]'),
     ).toHaveText('working ·2');
+
+    // And the Agents panel, which draws the same count from the same push.
+    await goToPlace(page, 'Agents');
+    const row = panel.getByRole('button', { name: /^fanout, working, 2 runs live/ });
+    await expect(row).toBeVisible();
+    await expect(row.locator('b').filter({ hasText: /^2$/ })).toBeVisible();
 
     // …and the run log draws each of them as its own row, in the receipts'
     // columns, marked as tasks rather than as the standing conversation.

@@ -13,8 +13,8 @@ export const placeButton = (page: Page, name: PlaceName): Locator =>
 
 /**
  * Go to a place without folding its panel. A click on the current place
- * toggles the panel (ui-store `selectPlace`), the same trap `selectRailTab`
- * guarded against for rail tabs.
+ * toggles the panel (ui-store `selectPlace`), the same trap the old rail-tab
+ * helper guarded against.
  */
 export async function goToPlace(page: Page, name: PlaceName): Promise<void> {
   const button = placeButton(page, name);
@@ -23,15 +23,14 @@ export async function goToPlace(page: Page, name: PlaceName): Promise<void> {
 }
 
 /**
- * The Overmind on the stage. A place change keeps whatever terminal holds
- * the stage, so a session on screen is left by its own back control.
+ * The Overmind on the stage. A place change keeps whatever holds the stage (a
+ * session, a terminal, an agent's page); a second click on Sessions, already
+ * current, returns the stage to the Overmind (ui-store `selectPlace`).
  */
 export async function goToOvermind(page: Page): Promise<void> {
   await goToPlace(page, 'Sessions');
   const head = page.getByRole('main').getByRole('heading', { level: 1, name: /^Overmind/ });
-  const back = page.getByRole('button', { name: 'Back to overmind' });
-  await expect(head.or(back)).toBeVisible();
-  if (await back.isVisible()) await back.click();
+  if (!(await head.isVisible())) await placeButton(page, 'Sessions').click();
   await expect(head).toBeVisible();
 }
 

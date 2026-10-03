@@ -3,7 +3,8 @@ import { dirname, join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { selectRailTab } from '../fixtures/rail-tabs';
+import { goToOvermind, goToPlace, openConsole } from '../fixtures/places';
+
 import {
   expectAgentSource,
   fillAgentSource,
@@ -87,11 +88,10 @@ async function authorAgent(page: Page, { stay = false }: { stay?: boolean } = {}
   await page.getByRole('button', { name: 'Save' }).click();
   await expectSavedAs(page, 'slack-watcher');
 
-  // Back to the Overmind, where the specs below start. Classic only: round two
+  // Back to the Overmind, where the specs below start. Round two's agent page
   // has no back button, and the bar is the way out.
   if (stay) return;
-  const back = page.getByRole('button', { name: 'Back to overmind' });
-  if (await back.isVisible()) await back.click();
+  await goToOvermind(page);
 }
 
 /**
@@ -169,7 +169,7 @@ test('lists an authored agent in its lane, and folds the lane', async ({}, testI
   try {
     await authorAgent(page);
 
-    await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
+    await goToPlace(page, 'Agents');
 
     const panel = page.locator('[data-panel="agents"]');
 
@@ -201,7 +201,7 @@ test('opens the agent view — and no terminal — when the row is clicked', asy
 
   try {
     await authorAgent(page);
-    await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
+    await goToPlace(page, 'Agents');
     await page
       .locator('[data-panel="agents"]')
       .getByRole('button', { name: /^slack-watcher, / })
@@ -226,7 +226,7 @@ test('opens the agent view — and no terminal — when the row is clicked', asy
       absent from a tree; only the built app can show that the surface a person
       actually sees is the agent view and nothing else.
     */
-    await expect(page.getByTestId('session-meta-bar')).toHaveCount(0);
+    await expect(page.getByTestId('session-header')).toHaveCount(0);
     await expect(
       page.locator('[data-testid="terminal-surface"]:visible'),
     ).toHaveCount(0);
@@ -264,7 +264,7 @@ test('lays the run log and the ledger side by side, and stacks them when the sta
 
   try {
     await authorAgent(page);
-    await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
+    await goToPlace(page, 'Agents');
     await page
       .locator('[data-panel="agents"]')
       .getByRole('button', { name: /^slack-watcher, / })
@@ -296,11 +296,11 @@ test('lays the run log and the ledger side by side, and stacks them when the sta
     /*
       Now narrow the *window* until the stage crosses 720px. A media query would
       also pass this; what makes the container query the right tool is that the
-      rails are draggable, so the stage can be narrow inside a wide window. This
+      bar and the list panel take width, so the stage can be narrow inside a wide window. This
       asserts the collapse happens at all — `resolve-view` and the component
       tests carry the rest.
     */
-    await page.setViewportSize({ width: 1100, height: 800 });
+    await page.setViewportSize({ width: 760, height: 800 });
 
     const after = await wide();
 
@@ -402,6 +402,7 @@ test('prints the agents table in the console', async ({}, testInfo) => {
 
   try {
     await authorAgent(page);
+    await openConsole(page);
 
     const input = page.getByRole('textbox', { name: 'Overmind command' });
 
@@ -434,6 +435,7 @@ test('pauses and resumes from the console, and the table agrees', async ({}, tes
 
   try {
     await authorAgent(page);
+    await openConsole(page);
 
     const status = watcherRow(page).locator('[data-col="status"]');
     const input = page.getByRole('textbox', { name: 'Overmind command' });
@@ -502,7 +504,7 @@ test('pauses from the row’s slot, and the row agrees', async ({}, testInfo) =>
 
   try {
     await authorAgent(page);
-    await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
+    await goToPlace(page, 'Agents');
 
     const panel = page.locator('[data-panel="agents"]');
     const row = panel.getByRole('button', { name: /^slack-watcher, / });
@@ -593,7 +595,7 @@ test('runs from the row, and the run table selects the newest run', async ({}, t
   try {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForSelector('nav[aria-label="Places"]');
-    await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
+    await goToPlace(page, 'Agents');
 
     const panel = page.locator('[data-panel="agents"]');
     const row = panel.getByRole('button', { name: /^sweeper, / });
