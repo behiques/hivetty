@@ -4,7 +4,8 @@ import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import type { HatcheryRow } from '@/types/pull-request';
 
-import { FLAP_TEXT, Flap } from '@features/pull-requests/components/flap';
+import { Flap } from '@features/pull-requests/components/flap';
+import { FLAP_TEXT } from '@features/shared/flap-tone';
 
 interface PrRowProps {
   row: HatcheryRow;

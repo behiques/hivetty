@@ -65,6 +65,9 @@ const TONE: Record<Flap, FlapTone> = {
   HATCHED: 'brand',
 };
 
+/** A flap's tone, from the one table: Home's counts and the Hatchery never disagree (HIVE-200). */
+export const flapTone = (flap: Flap): FlapTone => TONE[flap];
+
 const STATE_WORD = { open: 'Open', approved: 'Approved', draft: 'Draft', merged: 'Merged' } as const;
 const findingsWords = (n: number) => `${n} open finding${n === 1 ? '' : 's'}`;
 const COCOON_WORDS: Record<string, string> = {

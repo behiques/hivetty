@@ -573,6 +573,24 @@ existing `ResizeObserver` answers with exactly one refit;
 because happy-dom lays nothing out. The width change animates under
 `motion-safe:` only, and so does the in-progress ring's `ccpulse`.
 
+## Home: the strip and the first-run page
+
+Under the comb, `home-strip.tsx` is a `1.4fr 1fr 1fr` grid that keeps its three
+columns at every moment. Column 1 is **Needs you** while the Summons queue
+(`useSummonsCount(useOnStage())`, the pill's count) is non-empty, oldest wait
+first, five rows and a "N more in the Inbox" line; otherwise **While you were
+away**, which says so in one dim line when nothing happened. Column 2 is
+**Coming up**; column 3 is **Limits** over **Pull requests**. Those three are
+not drawn when empty: no scheduled or held work, no metrics, no live PRs. Every
+row is `strip-row.tsx`'s one line, never wrapped. Only Needs you rows click, and
+for now they open the asker; HIVE-198 rewires them (and the more line) to its
+drawer.
+
+`home-page.tsx` swaps comb and strip for `first-run.tsx` while `useProjects()`
+is empty: seven breathing empty cells (`animate-ccbreathe`, stilled by the
+reduced-motion clamp) and three steps, Add a project, Integrations (Settings on
+that pane) and New session, disabled until a project exists.
+
 ## Not built yet
 
 Keyboard navigation beyond the global chords in `src/hooks/use-app-chords.ts`,
