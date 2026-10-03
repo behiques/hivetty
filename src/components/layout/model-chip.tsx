@@ -17,6 +17,8 @@ interface StatProps {
   pct: number;
   /** The word beside the number — `ctx`, or a reset time for the two limits. */
   detail: string;
+  /** The narrow header's detail (HIVE-213): `5h` / `wk`, so the two limits stay told apart. */
+  short?: string;
   /** Names the quantity for assistive tech; never abbreviated. */
   label: string;
 }
@@ -31,12 +33,23 @@ interface StatProps {
  * exists must take its divider with it — a border left behind by an absent stat
  * is a hairline against nothing.
  */
-function Stat({ pct, detail, label }: StatProps) {
+function Stat({ pct, detail, short, label }: StatProps) {
   return (
     <span className="flex shrink-0 items-center gap-1 border-l border-border pl-2">
       <GaugeRing pct={pct} label={label} />
       <span className={TONE_TEXT[gaugeTone(pct)]}>{pctLabel(pct)}</span>
-      <span className="text-subtle">{detail}</span>
+      {short === undefined ? (
+        <span className="text-subtle">{detail}</span>
+      ) : (
+        <>
+          <span data-detail="long" className="text-subtle @max-[880px]:hidden">
+            {detail}
+          </span>
+          <span data-detail="short" className="hidden text-subtle @max-[880px]:inline">
+            {short}
+          </span>
+        </>
+      )}
     </span>
   );
 }
@@ -115,24 +128,21 @@ function Stat({ pct, detail, label }: StatProps) {
  * all rather than assumed away — the tooltip drops it too, so nothing on screen
  * half-reports a window.
  *
- * ## Width, and what actually happens when the header narrows
+ * ## Width, and what gives way
  *
- * The fleet counts give first: they drop to bare numbers so this chip keeps its
- * stats (`status-counts.tsx`). Only past that does the deficit land here, and
- * `overflow-hidden` on the row lets the *stats* fall off the end rather than
- * forcing the header to scroll.
- *
- * It **clips rather than ellipsises**, and that is deliberate rather than a
- * `truncate` that failed. `text-overflow` acts on inline content; every child
- * of this row is a flex item, so an ellipsis has nothing to attach to and
- * `truncate` here would silently do nothing but hide the overflow. Clipping at a
- * hairline separator reads as "there is more", which is the honest signal — and
- * the full string, every label spelled out, stays in the `title`.
+ * `clip` (default on) keeps `min-w-0` and `overflow-hidden`, so a mount with
+ * no size container of its own — the Classic header — loses stats off the end
+ * rather than overrunning its neighbours. The session header passes
+ * `clip={false}`: it is a size container, sizes the chip to its content and
+ * gives way in order. As the stage narrows the title truncates first, then the resets
+ * give way to `5h` / `wk` (both spans render; the container picks one), then
+ * the status word hides. The model label and the three percentages never go,
+ * and nothing clips. The full string, both resets included, stays in `title`.
  *
  * The separators are hairline borders rather than `│` glyphs so they do not
  * change width with the font.
  */
-export function ModelChip() {
+export function ModelChip({ clip = true }: { clip?: boolean } = {}) {
   const entity = useActiveEntity();
   const metrics = useSessionMetrics(entity?.id);
 
@@ -199,10 +209,10 @@ export function ModelChip() {
         apart, two mono sizes half a pixel apart across one 56px row is a
         misalignment, not a distinction.
       */
-      className="flex min-w-0 items-center gap-1.5 whitespace-nowrap font-mono text-xs text-muted"
+      className={`flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-muted${clip ? ' min-w-0' : ''}`}
     >
       <Brain size={13} weight="regular" className="shrink-0 text-brand" />
-      <span className="flex min-w-0 items-center gap-2 overflow-hidden">
+      <span className={`flex items-center gap-2${clip ? ' min-w-0 overflow-hidden' : ''}`}>
         <span className="shrink-0">{label}</span>
 
         {context === null ? null : (
@@ -213,6 +223,7 @@ export function ModelChip() {
           <Stat
             pct={fiveHour}
             label="session limit"
+            short="5h"
             /*
               The window's *name* when the percentage arrived without a reset,
               not a second em dash. The two travel together in every payload
@@ -227,6 +238,7 @@ export function ModelChip() {
           <Stat
             pct={sevenDay}
             label="weekly limit"
+            short="wk"
             detail={sevenDayReset === null ? 'week' : `↻ ${sevenDayReset}`}
           />
         )}
