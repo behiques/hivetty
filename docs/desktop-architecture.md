@@ -55,6 +55,24 @@ placeholder are how. It will never have real terminals.
 `src/` is not moved, wrapped, or forked. `electron/` is a sibling, which is what
 keeps every ESLint import zone, alias site and `tests/` mirror intact.
 
+## The splash
+
+`splash.html` is a third document beside `index.html` and `about.html`: no React,
+no store, no preload, no channel. It holds a 960×600 chamber whose copy is fixed
+and whose right side is a live canvas, the comb globe (HIVE-212): ninety cells
+close into a globe inside the rings, each log line lights its cells (4 green, 3
+violet, 2 amber), "hive cluster online" draws an amber orbit, and seven mutalisks
+rise from the globe's heart to circle it. `src/splash/globe.ts` is the geometry
+and the frame, `src/splash/stage.ts` the palette and the loop; the clock is the
+document's, the one `chamber.ts` schedules the copy on. Under reduced motion it
+draws one frame at `GLOBE_STILL_T` and schedules none. About draws the same globe,
+formed and turning.
+
+Its fence: the splash may import from `src/lib/` only the mutalisk, its palette
+type, `hexPath` and `lib/theme/colour` (`eslint.config.mjs`, proved both ways by
+`pnpm verify:boundaries`). The CSP has no `media-src`: the splash used to inline
+an mp4 and needed one; nothing in the app plays media now.
+
 ## Processes
 
 | | Runs | May import | Never |

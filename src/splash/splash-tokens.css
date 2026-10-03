@@ -5,7 +5,7 @@
  * `src/styles/tokens.css` opens with `@import 'tailwindcss'`. Importing it here
  * would pull the whole framework — preflight, the theme layer, every generated
  * utility — into a document whose entire job is to paint before the app can.
- * The splash uses thirteen colours and no utilities; it should not wait for
+ * The splash uses eighteen colours and no utilities; it should not wait for
  * three thousand it will never name.
  *
  * So the values are copied, exactly as `ansi.ts` copies the terminal's light
@@ -34,6 +34,15 @@
   --cc-term-head: #4d5a86;
   --cc-brand-fill: #5e76d0;
   --cc-brand-fill-strong: #334fa9;
+
+  /* The comb globe's (HIVE-212): the rest of a SwarmPalette. The carapace and
+     the creep's clear stop are derived from these in `stage.ts`, as
+     `swarmPaletteOf` derives them for Home. */
+  --cc-panel-2: #121731;
+  --cc-subtle: #6b779f;
+  --cc-red: #ff8d85;
+  --cc-creep: #5b3d8f;
+  --cc-chitin: #b9a7f0;
 
   /**
    * The one face the app uses, copied from `--font-mono` in `tokens.css` and
