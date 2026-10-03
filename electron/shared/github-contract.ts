@@ -246,7 +246,7 @@ export interface PrFile {
   viewed: PrFileViewed;
 }
 
-export type PrCheckStatus ='success' | 'failure' | 'running' | 'queued' | 'neutral';
+export type PrCheckStatus = 'success' | 'failure' | 'running' | 'queued' | 'neutral';
 
 /** A check run or a commit status on the head commit, read as one shape. */
 export interface PrCheck {
