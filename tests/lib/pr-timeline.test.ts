@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { ciBars, fraction, holdIntervals, MIN, ticks } from '@lib/pr-timeline';
-import type { PrTimelineRun } from '@shared/github-contract';
+import { ciBars, flapHistory, fraction, holdIntervals, MIN, ticks } from '@lib/pr-timeline';
+import type { CiBar } from '@lib/pr-timeline';
+import type { PrTimeline, PrTimelineRun } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
+import type { ShipVisit } from '@shared/ledger-derive';
 
 const T0 = new Date(2026, 9, 3, 11, 0).getTime();
 
@@ -73,5 +75,33 @@ describe('holdIntervals', () => {
     const holds = holdIntervals([...events, release], [...all, release], slug, 1182, 'builder', T0, T0 + 190 * MIN);
     expect(holds.at(-1)).toMatchObject({ who: 'fixer', to: T0 + 120 * MIN });
     expect(holdIntervals([], [], slug, 1182, null, T0, T0 + 10 * MIN)).toEqual([]);
+  });
+});
+
+describe('flapHistory', () => {
+  const at = (m: number) => new Date(T0 + m * MIN).toISOString();
+  const timeline: PrTimeline = { createdAt: at(0), mergedAt: null, isDraft: false, commits: [], runs: [], reviews: [], comments: [],
+    events: [{ kind: 'ready', at: at(60), actor: null }] };
+  const v = (stage: ShipVisit['stage'], from: number, to: number | null): ShipVisit => ({ stage, from: T0 + from * MIN, to: to === null ? null : T0 + to * MIN, holder: null });
+  const bar = (from: number, to: number, state: CiBar['state']): CiBar => ({ id: from, number: from, sha: 's', url: 'u', from: T0 + from * MIN, to: T0 + to * MIN, state, failedJobs: [] });
+
+  it('replays hatchStatus at each change point: LARVA, COCOONING, INCUBATING, MUTATING, SUMMONS, MUTATING', () => {
+    const spans = flapHistory({
+      timeline, bars: [bar(61, 72, 'passed')],
+      visits: [v('intake', 4, 6), v('self-review', 6, 34), v('fix-self', 34, 60), v('ready', 60, 61), v('ci', 61, 110), v('findings', 110, null)],
+      asksToMe: [{ from: T0 + 150 * MIN, to: T0 + 157 * MIN }], mergeAsks: [], mine: true, end: T0 + 190 * MIN,
+    });
+    expect(spans.map((s) => [s.flap, (s.from - T0) / MIN, (s.to - T0) / MIN])).toEqual([
+      ['LARVA', 0, 4], ['COCOONING', 4, 60], ['INCUBATING', 60, 110], ['MUTATING', 110, 150], ['SUMMONS', 150, 157], ['MUTATING', 157, 190],
+    ]);
+    expect(spans[0]?.tone).toBe('muted');
+  });
+
+  it('a PR nobody held: draft LARVA, then BURROWED, HATCHED from the merge', () => {
+    const spans = flapHistory({
+      timeline: { ...timeline, mergedAt: at(100), events: [{ kind: 'ready', at: at(20), actor: null }, { kind: 'merged', at: at(100), actor: null }] },
+      bars: [], visits: [], asksToMe: [], mergeAsks: [], mine: false, end: T0 + 100 * MIN,
+    });
+    expect(spans.map((s) => s.flap)).toEqual(['LARVA', 'BURROWED']);
   });
 });

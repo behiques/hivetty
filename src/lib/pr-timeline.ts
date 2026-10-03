@@ -4,8 +4,12 @@
  * track. No React and no store; every function takes its clock.
  */
 
-import type { PrTimelineRun } from '@shared/github-contract';
+import { flapTone, hatchStatus } from '@/lib/pr-hatch';
+import type { Flap, FlapTone, Pr } from '@/types/pull-request';
+
+import type { PrTimeline, PrTimelineRun } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
+import type { ShipVisit } from '@shared/ledger-derive';
 
 export const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -15,6 +19,18 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const pad = (n: number) => String(n).padStart(2, '0');
 
 export interface Tick { at: number; f: number; label: string }
+
+/** The change points between `start` and `end`, deduped and sorted, as `[from, to)` pairs. */
+function pairsOf(points: readonly number[], start: number, end: number): [number, number][] {
+  const sorted = [...new Set(points.filter((p) => p >= start && p <= end))].sort((a, b) => a - b);
+  const out: [number, number][] = [];
+  let prev: number | undefined;
+  for (const p of sorted) {
+    if (prev !== undefined) out.push([prev, p]);
+    prev = p;
+  }
+  return out;
+}
 
 /** Where `t` sits between `start` and `end`, 0 to 1. */
 export function fraction(t: number, start: number, end: number): number {
@@ -133,4 +149,60 @@ export function holdIntervals(
     const ask = events.find((entry) => entry.kind === 'ask' && entry.to === hold.who && entry.ts === hold.from);
     return { ...hold, firstEventId: own?.id ?? ask?.id ?? null };
   });
+}
+
+export interface FlapSpan { flap: Flap; tone: FlapTone; from: number; to: number; github: string }
+export interface Window { from: number; to: number }
+
+const covers = (windows: readonly Window[], p: number) => windows.some((w) => w.from <= p && p < w.to);
+
+/** Draft at `p`: the latest draft/ready event at or before it, else the opposite of the first one after it, else `isDraft`. */
+function draftAt(timeline: PrTimeline, p: number): boolean {
+  const flips = timeline.events.filter((e) => e.kind === 'ready' || e.kind === 'draft').map((e) => ({ kind: e.kind, at: Date.parse(e.at) }));
+  const before = flips.filter((f) => f.at <= p).at(-1);
+  if (before !== undefined) return before.kind === 'draft';
+  const after = flips.find((f) => f.at > p);
+  return after !== undefined ? after.kind === 'ready' : timeline.isDraft;
+}
+
+/** Running while any bar is in flight, else the newest finished bar's verdict. */
+function checksAt(bars: readonly CiBar[], p: number): Pr['checks'] {
+  if (bars.some((b) => b.from <= p && p < b.to)) return 'running';
+  const last = bars.filter((b) => b.to <= p).at(-1);
+  return last?.state === 'failed' ? 'failing' : 'passing';
+}
+
+/**
+ * The PR's flaps from creation to `end` (HIVE-208): `hatchStatus` replayed at
+ * every point any of its inputs changed, neighbours with one flap merged.
+ * Findings count is not historical, so it is 0: the findings stage alone is
+ * what makes a held PR MUTATING.
+ */
+export function flapHistory(input: {
+  timeline: PrTimeline; bars: readonly CiBar[]; visits: readonly ShipVisit[];
+  asksToMe: readonly Window[]; mergeAsks: readonly Window[]; mine: boolean; end: number;
+}): FlapSpan[] {
+  const { timeline, bars, visits, asksToMe, mergeAsks, mine, end } = input;
+  const start = Date.parse(timeline.createdAt);
+  const merged = timeline.mergedAt === null ? Infinity : Date.parse(timeline.mergedAt);
+  const points = [
+    start, end, ...timeline.events.map((e) => Date.parse(e.at)),
+    ...bars.flatMap((b) => [b.from, b.to]), ...visits.flatMap((v) => [v.from, v.to ?? end]),
+    ...[...asksToMe, ...mergeAsks].flatMap((w) => [w.from, w.to]),
+  ];
+
+  const spans: FlapSpan[] = [];
+  for (const [p, to] of pairsOf(points, start, end)) {
+    const visit = visits.find((v) => v.from <= p && p < (v.to ?? Infinity));
+    const state: Pr['state'] = p >= merged ? 'merged' : draftAt(timeline, p) ? 'draft' : 'open';
+    const hatch = hatchStatus(
+      { state, findings: 0, checks: checksAt(bars, p), mine, mergedAt: timeline.mergedAt },
+      { stage: visit?.stage ?? null, askedMe: covers(asksToMe, p), mergeWaiting: covers(mergeAsks, p) },
+      p,
+    );
+    const last = spans.at(-1);
+    if (last?.flap === hatch.flap) last.to = to;
+    else spans.push({ flap: hatch.flap, tone: flapTone(hatch.flap), from: p, to, github: hatch.github });
+  }
+  return spans;
 }
