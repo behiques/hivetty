@@ -836,11 +836,6 @@ export function watchSystemTheme(): () => void {
  *
  * Components never read the store object directly and never call `getState()`.
  */
-const themeActionsSelector = (state: AppearanceState) => ({
-  setTheme: state.setTheme,
-  toggleTheme: state.toggleTheme,
-});
-
 const themeLibraryActionsSelector = (state: AppearanceState) => ({
   addTheme: state.addTheme,
   activateTheme: state.activateTheme,
@@ -887,19 +882,6 @@ const appearanceSettingsSelector = (state: AppearanceState) => ({
   density: state.density,
   teamName: state.teamName,
 });
-
-/**
- * The theme actually on screen.
- *
- * Everything that paints reads this, never the stored preference — `system` is
- * not a palette and no consumer should have to know that.
- */
-export const useTheme = (): ResolvedTheme =>
-  useAppearanceStore((state) => resolveTheme(state.theme, state.systemDark));
-
-/** Theme actions, referentially stable across unrelated state changes. */
-export const useThemeActions = () =>
-  useAppearanceStore(useShallow(themeActionsSelector));
 
 /** The imported theme library, keyed by import id. */
 export const useThemes = (): Record<string, HiveTheme> =>

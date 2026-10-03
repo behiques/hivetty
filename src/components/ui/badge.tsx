@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-export type BadgeTone = 'danger' | 'brand' | 'muted' | 'green';
+type BadgeTone = 'danger' | 'brand' | 'muted' | 'green';
 
 const TONE_FILL: Record<BadgeTone, string> = {
   // `on-danger`, not `on-brand`: one token cannot be legible on both fills.

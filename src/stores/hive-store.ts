@@ -175,7 +175,6 @@ import {
   shipStage,
   shipTrack,
   thread,
-  type BuildProgress,
   type ShipTrack,
 } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
@@ -8924,9 +8923,6 @@ export const useEpicLabel = (ticketKey: string): string | null =>
 export const useUnreadCount = () =>
   useHiveStore((state) => state.notifs.filter((notif) => notif.unread).length);
 
-/** The inbox, newest first (story 051). */
-export const useNotifs = () => useHiveStore((state) => state.notifs);
-
 /** The Summons queue (HIVE-214): what waits on you, split for the pill. */
 export interface Summons {
   /** `agent.ask` and `agent.permission` whose thread is open, and `pr.review_requested`. */
@@ -9025,7 +9021,7 @@ export const useLedgerEntries = (filter?: LedgerReadQuery): LedgerEntry[] => {
 /**
  * Whether the shipper holds a PR, for its card's badge (HIVE-171).
  *
- * `slug` is `owner/name`. Memoised over the tail like `useBuildProgress`, so
+ * `slug` is `owner/name`. Memoised over the tail, so
  * the scan runs once per ledger change rather than once per store change.
  */
 export const useShipping = (slug: string, n: number): boolean => {
@@ -9099,13 +9095,6 @@ export const useReviewUrls = (): ReadonlySet<string> => {
 export const useHolderPost = (slug: string, n: number, holder: string | null): LedgerEntry | null => {
   const entries = useHiveStore((state) => state.ledger);
   return useMemo(() => (holder === null ? null : holderPost(entries, slug, n, holder)), [entries, slug, n, holder]);
-};
-
-/** The builder's latest progress on a ticket, for its card's line (HIVE-171). */
-export const useBuildProgress = (ticketKey: string): BuildProgress | undefined => {
-  const entries = useHiveStore((state) => state.ledger);
-
-  return useMemo(() => buildProgressFor(entries, ticketKey), [entries, ticketKey]);
 };
 
 /** What an agent last said on the ledger, as its panel row shows it (HIVE-204). */
@@ -9429,8 +9418,6 @@ export const useAnswerAsk = () => useHiveStore((state) => state.answerAsk);
 export const useDismissNotif = () =>
   useHiveStore((state) => state.dismissNotif);
 
-/** Empty the inbox — the panel's Clear all. */
-export const useClearNotifs = () => useHiveStore((state) => state.clearNotifs);
 
 /** Push a notification — the stream's entry point (stories 051, 061, HIVE-75). */
 export const usePushNotif = () => useHiveStore((state) => state.pushNotif);

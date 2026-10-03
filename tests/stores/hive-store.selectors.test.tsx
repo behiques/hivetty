@@ -47,7 +47,6 @@ import {
   useHiveStore,
   useEndedSessions,
   useNavOrder,
-  useNotifs,
   useChangedFileCount,
   useChangedFileMark,
   useChangedFiles,
@@ -1233,23 +1232,7 @@ describe('hive-store selectors', () => {
     });
   });
 
-  describe('rail selectors', () => {
-    it('useNotifs returns the inbox newest first', () => {
-      const { result } = renderHook(() => useNotifs());
-      expect(result.current).toHaveLength(0);
-
-      act(() => {
-        useHiveStore
-          .getState()
-          .hydrateNotifs([
-            notif({ id: 'a', title: 'older', createdAt: 1_000 }),
-            notif({ id: 'b', title: 'newer', createdAt: 2_000 }),
-          ]);
-      });
-
-      expect(result.current.map((n) => n.title)).toEqual(['newer', 'older']);
-    });
-
+  describe('list selectors', () => {
     it('usePrs returns the seeded PRs, in order', () => {
       const { result } = renderHook(() => usePrs());
 

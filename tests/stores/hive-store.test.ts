@@ -58,7 +58,6 @@ import {
   useReattachEpoch,
   useRemoteLink,
   useAgentLastWord,
-  useBuildProgress,
   useIsAgentId,
   useLedgerEntries,
   useNavOrder,
@@ -5487,21 +5486,14 @@ describe('the ledger slice', () => {
     expect(result.current.map((found) => found.id)).toEqual(['1', '3']);
   });
 
-  it('reads the workflow stage off the tail and keeps the answer stable until the ledger moves (HIVE-171)', () => {
+  it('reads the workflow stage off the tail until the ledger moves (HIVE-171)', () => {
     useHiveStore.getState().hydrateLedger([
       entry({ id: '1', from: 'shipper', kind: 'post', meta: { pr: 4, repo: 'acme/nova', stage: 'ci' } }),
       entry({ id: '2', from: 'builder', kind: 'post', meta: { ticket: 'ACME-9', stage: 'build', task: 2 } }),
     ]);
 
     const ship = renderHook(() => useShipping('acme/nova', 4));
-    const build = renderHook(() => useBuildProgress('ACME-9'));
     expect(ship.result.current).toBe(true);
-    expect(build.result.current).toEqual({ from: 'builder', stage: 'build', task: 2 });
-
-    const before = build.result.current;
-    act(() => useHiveStore.getState().setSessionStatus('hero-refresh', 'working'));
-    build.rerender();
-    expect(build.result.current).toBe(before);
 
     act(() =>
       useHiveStore.getState().hydrateLedger([

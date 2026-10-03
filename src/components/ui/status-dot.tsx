@@ -21,7 +21,7 @@ import type { IdleDetail } from '@shared/hook-contract';
  * so that one word means one colour wherever it is drawn, and only `failed`
  * needed a hue the session vocabulary does not have.
  */
-export type DotStatus = SessionStatus | AgentStatus | TerminalStatus;
+type DotStatus = SessionStatus | AgentStatus | TerminalStatus;
 
 /**
  * `terminated` is muted, not blue, and not `subtle` either (story 108).
