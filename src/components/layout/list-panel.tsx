@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { AgentsPanel } from '@features/agents/components/agents-panel';
 import { SessionsPanel } from '@features/projects/components/sessions-panel';
 import { PrsPanel } from '@features/pull-requests/components/prs-panel';
-import { WorkList } from '@features/work/components/work-panel';
+import { WorkPanel } from '@features/work/components/work-panel';
 import {
   useAgentsListed,
   usePrsListed,
@@ -31,7 +31,7 @@ import {
 const PANELS: Record<Place, ComponentType | null> = {
   home: null,
   sessions: SessionsPanel,
-  work: WorkList,
+  work: WorkPanel,
   agents: AgentsPanel,
   prs: PrsPanel,
 };

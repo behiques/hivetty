@@ -1,10 +1,10 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { Session } from '@/types/entity';
 import type { Ticket } from '@/types/ticket';
-import { WorkList, WorkPanel } from '@features/work/components/work-panel';
+import { WorkPanel } from '@features/work/components/work-panel';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
@@ -51,7 +51,7 @@ describe('WorkPanel rows (HIVE-203)', () => {
   });
 
   it('heads the panel with the counts, need-you in amber', () => {
-    render(<WorkList />);
+    render(<WorkPanel />);
 
     expect(screen.getByText('Work')).toBeInTheDocument();
     expect(screen.getByText(/3 tickets/)).toBeInTheDocument();
@@ -60,13 +60,13 @@ describe('WorkPanel rows (HIVE-203)', () => {
 
   it('drops need-you at zero', () => {
     setWaiting(false);
-    render(<WorkList />);
+    render(<WorkPanel />);
 
     expect(screen.queryByText(/need you/)).not.toBeInTheDocument();
   });
 
   it('groups in order, Done folded until opened, and folds a group on click', async () => {
-    render(<WorkList />);
+    render(<WorkPanel />);
 
     const groups = screen.getAllByRole('button', { expanded: true }).concat(screen.getAllByRole('button', { expanded: false }));
     expect(groups.map((group) => group.textContent)).toEqual(['In progress1', 'To do1', 'Done1']);
@@ -83,7 +83,7 @@ describe('WorkPanel rows (HIVE-203)', () => {
 
   it('has no header for an empty group', () => {
     useHiveStore.setState({ tickets: [ticket('T-2', 'todo', 'To Do')] });
-    render(<WorkList />);
+    render(<WorkPanel />);
 
     expect(screen.queryByRole('button', { name: /^In progress/ })).not.toBeInTheDocument();
     expect(header(/^To do/)).toBeInTheDocument();
@@ -94,7 +94,7 @@ describe('WorkPanel rows (HIVE-203)', () => {
     useHiveStore.setState((state) => ({
       ticketSearch: { ...state.ticketSearch, term: 'x', results: [ticket('S-1', 'todo', 'To Do')] },
     }));
-    render(<WorkList />);
+    render(<WorkPanel />);
 
     expect(screen.getByText('S-1 title')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^To do/ })).not.toBeInTheDocument();
@@ -102,7 +102,7 @@ describe('WorkPanel rows (HIVE-203)', () => {
   });
 
   it('shows the search box only once the search button is pressed', async () => {
-    render(<WorkList />);
+    render(<WorkPanel />);
     expect(screen.queryByRole('searchbox', { name: 'Search tickets' })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Search tickets' }));
@@ -112,17 +112,11 @@ describe('WorkPanel rows (HIVE-203)', () => {
   });
 
   it('opens a ticket from its row', async () => {
-    render(<WorkList />);
+    render(<WorkPanel />);
 
     await userEvent.click(screen.getByText('GRAC-3018 title'));
 
     expect(useUiStore.getState().workTicket).toBe('GRAC-3018');
   });
 
-  it('keeps the cards for Classic', () => {
-    render(<WorkPanel />);
-
-    expect(screen.getAllByRole('article')).toHaveLength(3);
-    expect(within(screen.getAllByRole('article')[0]!).getByText('GRAC-3018')).toBeInTheDocument();
-  });
 });
