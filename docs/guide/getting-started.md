@@ -55,7 +55,7 @@ You can also add, rename, re-key or clone projects in **Settings › Projects**.
 
 ## Start your first session
 
-1. Click **New session** in the header.
+1. Click **New session** in the header (in round two, the **+** beside **Projects** in the Sessions place).
 2. Type part of the project name and press **Enter**.
 3. Pick a model and effort first if you want. The defaults are `opus` and `high`.
 
