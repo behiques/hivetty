@@ -32,18 +32,17 @@ the picker from re-rendering thirteen live terminals.
   orchestrator daemon: `spawnSession`, `sendToEntity`, `runOrchCommand`,
   `markAllRead`, `markRead`, `pushNotif`, `appendEntityLines`. It also holds the
   **ledger** and **plans** slices — see below.
-- `src/stores/ui-store.ts` — view state: `activeTab`, `selId`, `leftTab`,
-  `railTab`, `collapsed`, picker fields, `showActivityRail`,
-  `explorerExpanded`, `explorerProjectId`, and round two's place machine —
-  `place` (`'home'` on every launch) and `panelOpen` (`true`), HIVE-195.
-  Neither persists: a launch always opens on Home with its panel open.
+- `src/stores/ui-store.ts` — view state: `activeTab`, `selId`, picker fields,
+  `settings`, `explorerExpanded`, the search boxes, and the place machine —
+  `place` (`'home'` on every launch), `panelOpen` (`true`) and `narrow`
+  (HIVE-195, HIVE-211). None persists: a launch always opens on Home with its
+  panel open.
   The Sessions place adds (HIVE-197), none persisted: `sessionsProject`
   (the overmind's project filter, `null` for all), `sessionsFilter`
   (`'all' | 'live' | 'ended'`), `endedExpanded` ("N more ›" pressed) and
-  `expanded`, round two's fold map, **folded by default** and separate from
-  Classic's `collapsed`. `setSessionsProject(id)` also unfolds that project;
+  `expanded`, the Sessions panel's fold map, **folded by default**. `setSessionsProject(id)` also unfolds that project;
   `backToOrch` and the Sessions icon put `selId` on the session being left.
-  Round two's Inbox (HIVE-198), none persisted: `arrivals` (notification ids
+  The Inbox (HIVE-198), none persisted: `arrivals` (notification ids
   up as a card or note, newest first), `arrivalPulse` (the latest arrival that
   came in while the keyboard was in a terminal; the pill pulses once for it)
   and `inboxDrawer` (`{ open, thread }`). `pushArrival(id, quiet)` raises or
@@ -51,7 +50,7 @@ the picker from re-rendering thirteen live terminals.
   queue (the rows stay in Summons); `openInboxDrawer(thread?)` folds and opens;
   `closeInboxDrawer()`. What is drawn is `arrivals ∩ useSummons(onStage)`, so
   an answered ask or the on-stage session drop out without anyone re-checking.
-  `consoleShown` (`false`) is the overmind's transcript in round two's dock,
+  `consoleShown` (`false`) is the overmind's transcript in the dock,
   flipped by `toggleConsole`; folded, the stage hides the transcript and the
   table takes the page.
   The Work place adds (HIVE-203), none persisted: `workTicket` (the ticket
@@ -62,10 +61,10 @@ the picker from re-rendering thirteen live terminals.
   and dismisses the overlays.
 - `src/stores/appearance-store.ts` — durable preferences: `theme`, the terminal
   and editor typography, `editorPlacement`, `editorNav`, `editorEditable`,
-  `density`, `layout` (`'classic' | 'round-two'`, HIVE-195), round two's
+  `density`, `teamName`, the theme library (`themes`, `activeThemeId`), the
   session panel — `sessionPanelOpen` (default `true`) and `sessionPanelTab`
-  (`'plan' | 'ticket' | 'pr' | 'files'`, default `'plan'`, HIVE-201) — the rail widths,
-  and the three draggable splits — `editorSplitRatio`
+  (`'plan' | 'ticket' | 'pr' | 'files'`, default `'plan'`, HIVE-201) — and the
+  three draggable splits — `editorSplitRatio`
   (terminal against editor), `consoleSplitRatio` (fleet table against
   transcript, on the overmind) and `runLogSplitRatio` (receipts against output,
   in an agent's run log).
@@ -287,10 +286,10 @@ structural rather than a matter of taste:
   field becomes a question somebody has to remember to answer, and answering it
   wrong is silent.
 
-`layout` persists with no version bump. `merge` guards it on every rehydrate:
-anything but `'round-two'` — an absent key included — reads as `'classic'`, so
-a stored value from a later build cannot strand the app in a frame it does not
-know.
+The persisted payload is at `version: 4`. `migrateAppearance` drops Classic's
+keys (`CLASSIC_KEYS`) on the way up from v3 (HIVE-213), because `merge` spreads
+the stored object over the defaults and a stale key would otherwise ride into live
+state. Every other key is carried across untouched.
 
 `systemDark` is the one exception inside `appearance-store` — it is an
 observation of the OS, not a preference, so it is excluded from `partialize`.
@@ -500,7 +499,7 @@ is persisted: `prPage` (the last PR opened, which `useOpenPr()` keeps while it i
 still a row), `prTab`, `prsFolded` (the HATCHED fold, folded by default),
 `prConversation` (Comments or Everything) and `prSearchOpen` (the panel's search
 row; also what lets a quiet Hatchery draw its panel). The stage resolves to a
-`prs` view in round two on the PRs place, just below Agents.
+`prs` view on the PRs place, just below Agents.
 
 `Pr` (and `PrRecord`) carry `mergedAt` and `mine`; `Pr` also carries `updatedAt`.
 
@@ -551,7 +550,7 @@ end:
   hub all trim with it, so a hydration never brings back a row the store
   dropped. Clear all keeps the same rows. The dock badge is the count of those
   rows (`useSummonsCount(null)`, and the hub's own count in local mode), read or
-  not; the Classic tab badge and the bell still count unread (`useUnreadCount`).
+  not. `useUnreadCount` still counts unread rows.
 - **`ledger` at 500** (`LEDGER_MEMORY_CAP`, in `electron/shared/ledger-contract.ts`)
   — the newest are kept, by both `hydrateLedger` and `ledgerAppend`. Unlike the
   inbox this cap loses nothing: the log on disk is complete, and an older entry is
@@ -593,7 +592,7 @@ pre-populated now start empty in both targets, because each has a real producer:
 
 `src/data/fixtures.ts` used to hold the concept's whole dataset — 10 sessions, 3
 agents, 5 projects, 8 tickets and the orchestrator boot banner — and the store
-loaded it at launch. That is what made the header count a fleet that was not
+loaded it at launch. That is what made the old header count a fleet that was not
 running, the projects tree list repositories nobody had mapped, and the WORK tab
 paint eight sample tickets for a frame before the real Jira read replaced them.
 

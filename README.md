@@ -65,7 +65,7 @@ Built for Claude Code.
 
 1. Download the `.dmg` from [the latest release](https://github.com/yunidbauza/the-hive/releases/latest)
    (macOS, Apple silicon). It updates itself.
-2. Open it, click **+ new project** in the left rail, and choose a repository folder.
+2. Open it, click **Add a project** on Home, and choose a repository folder.
 3. Click **New session**, type the project's name, and press Enter.
 
 That is a live Claude Code session. The full walkthrough is in
