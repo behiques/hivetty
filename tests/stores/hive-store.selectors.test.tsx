@@ -82,6 +82,8 @@ import {
   useShipTrack,
   useAccountLimits,
   useComingUp,
+  useWhileAway,
+  whileAwayOf,
 } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { notif } from '../support/notifications';
@@ -2721,6 +2723,7 @@ describe('Home strip selectors (HIVE-200)', () => {
       expect(result.current).toBe(before);
     });
   });
+
   describe('useComingUp', () => {
     const agent = (id: string, nextRunAt?: number): Agent =>
       ({
@@ -2803,6 +2806,98 @@ describe('Home strip selectors (HIVE-200)', () => {
         useHiveStore.getState().appendEntityLines('hero-refresh', [{ text: 'more', color: 'ink' }]),
       );
       expect(result.current).toBe(before);
+    });
+  });
+
+  describe('useWhileAway', () => {
+    const SINCE = Date.parse('2026-10-03T13:10:00Z');
+    const before = '2026-10-03T12:00:00Z';
+    const after = '2026-10-03T14:00:00Z';
+    const run = (id: string, ts: number, outcome: string): LedgerEntry => ({
+      id,
+      ts,
+      from: 'acr',
+      kind: 'event',
+      body: `run.ended — ${outcome}`,
+      meta: { run: id, outcome },
+    });
+    const closed = (pr: number): LedgerEntry => ({
+      id: `c${pr}`,
+      ts: SINCE + 1,
+      from: 'shipper',
+      kind: 'post',
+      body: 'closed',
+      meta: { stage: 'closed', repo: 'acme/nova-web', pr },
+    });
+
+    beforeEach(() => {
+      act(() =>
+        useHiveStore.setState({
+          prs: [
+            prRecord({ number: 302, state: 'merged', mergedAt: after, updatedAt: after, branch: 'm1' }),
+            prRecord({ number: 303, state: 'merged', mergedAt: after, updatedAt: after, branch: 'm2' }),
+            prRecord({ number: 290, state: 'merged', mergedAt: before, updatedAt: before, branch: 'm0' }),
+          ],
+          notifs: [
+            notif({ kind: 'session.goal', title: 'pty-resize goal done', createdAt: SINCE + 5 }),
+            notif({ kind: 'session.goal', title: 'old goal', createdAt: SINCE - 5 }),
+          ],
+          ledger: [
+            run('r0', SINCE - 1, 'done'),
+            run('r1', SINCE + 1, 'done'),
+            run('r2', SINCE + 2, 'failed'),
+            closed(302),
+            closed(303),
+          ],
+          tickets: [],
+        }),
+      );
+    });
+
+    it('counts what happened after since and nothing before it', () => {
+      const { result } = renderHook(() => useWhileAway(SINCE));
+      expect(result.current.hatched).toEqual({ numbers: [302, 303], by: 'shipper' });
+      expect(result.current.goals).toEqual(['pty-resize goal done']);
+      expect(result.current.runs).toEqual({ total: 2, failed: 1 });
+    });
+
+    it('names no merging party when no closed post covers every PR', () => {
+      act(() => useHiveStore.setState((s) => ({ ledger: s.ledger.filter((e) => e.id !== 'c303') })));
+      expect(renderHook(() => useWhileAway(SINCE)).result.current.hatched).toEqual({
+        numbers: [302, 303],
+      });
+    });
+
+    it('names ready tickets with no session, the first two keys and the total', () => {
+      expect(
+        whileAwayOf({ prs: [], notifs: [], ledger: [], readyKeys: ['A-1', 'B-2', 'C-3'] }, SINCE).ready,
+      ).toEqual({ keys: ['A-1', 'B-2'], total: 3 });
+    });
+
+    it('reads todo tickets with no live session from the store', () => {
+      const ticket = (key: string) => ({
+        key,
+        status: 'To Do',
+        statusCategory: 'todo' as const,
+        title: key,
+        priority: null,
+        assignee: null,
+      });
+      // GRAC-3018 has a fixture session in seedDemoFleet; a fresh todo key has none.
+      act(() => useHiveStore.setState({ tickets: [ticket('NEW-1'), ticket('GRAC-3018')] }));
+      expect(renderHook(() => useWhileAway(SINCE)).result.current.ready).toEqual({
+        keys: ['NEW-1'],
+        total: 1,
+      });
+    });
+
+    it('holds its identity across terminal output', () => {
+      const { result } = renderHook(() => useWhileAway(SINCE));
+      const first = result.current;
+      act(() =>
+        useHiveStore.getState().appendEntityLines('hero-refresh', [{ text: 'more', color: 'ink' }]),
+      );
+      expect(result.current).toBe(first);
     });
   });
 });

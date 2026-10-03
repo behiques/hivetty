@@ -7231,6 +7231,83 @@ export const useComingUp = (): ComingUpRow[] => {
   }, [keys, ledger]);
 };
 
+/** Home's While you were away (HIVE-200). */
+export interface WhileAway {
+  hatched: { numbers: number[]; by?: string };
+  goals: string[];
+  runs: { total: number; failed: number };
+  ready: { keys: string[]; total: number };
+}
+
+const READY_NAMED = 2;
+
+/**
+ * What happened after `since`, from state already in the renderer. Runs are
+ * bounded by the ledger tail (`LEDGER_MEMORY_CAP`), so a busy day can
+ * undercount; the row says so in its tooltip.
+ */
+export function whileAwayOf(
+  input: {
+    prs: readonly PrRecord[];
+    notifs: readonly HiveNotification[];
+    ledger: readonly LedgerEntry[];
+    readyKeys: readonly string[];
+  },
+  since: number,
+): WhileAway {
+  const merged = input.prs.filter(
+    (pr) => pr.state === 'merged' && Date.parse(pr.mergedAt ?? pr.updatedAt) > since,
+  );
+  const closers = merged.map(
+    (pr) =>
+      input.ledger.find(
+        (e) =>
+          e.meta?.['stage'] === 'closed' &&
+          String(e.meta['pr']) === String(pr.number) &&
+          String(e.meta['repo']).toLowerCase() === `${pr.owner}/${pr.repo}`.toLowerCase(),
+      )?.from,
+  );
+  const first = closers[0];
+  const by = first !== undefined && closers.every((who) => who === first) ? first : undefined;
+
+  let total = 0;
+  let failed = 0;
+  for (const e of input.ledger) {
+    if (e.kind !== 'event' || e.ts <= since || !e.body.startsWith('run.ended')) continue;
+    total += 1;
+    if (e.meta?.['outcome'] === 'failed') failed += 1;
+  }
+
+  return {
+    hatched: {
+      numbers: merged.map((pr) => pr.number).sort((a, b) => a - b),
+      ...(by === undefined ? {} : { by }),
+    },
+    goals: input.notifs
+      .filter((n) => n.kind === 'session.goal' && n.createdAt > since)
+      .map((n) => n.title),
+    runs: { total, failed },
+    ready: { keys: input.readyKeys.slice(0, READY_NAMED), total: input.readyKeys.length },
+  };
+}
+
+/** Home's While you were away (HIVE-200). Memoised over its slices, so a terminal write costs nothing. */
+export const useWhileAway = (since: number): WhileAway => {
+  const prs = useHiveStore((state) => state.prs);
+  const notifs = useHiveStore((state) => state.notifs);
+  const ledger = useHiveStore((state) => state.ledger);
+  const tickets = useHiveStore((state) => state.tickets);
+  const fleet = useHiveStore(selectSessionFacets);
+  return useMemo(() => {
+    const readyKeys = tickets
+      .filter(
+        (t) => t.statusCategory === 'todo' && liveSessionsForTicket(t.key, fleet).length === 0,
+      )
+      .map((t) => t.key);
+    return whileAwayOf({ prs, notifs, ledger, readyKeys }, since);
+  }, [prs, notifs, ledger, tickets, fleet, since]);
+};
+
 /**
  * The session's plan, or undefined (HIVE-179). Stable identity: main
  * publishes a new object only on a change, so this re-renders only then.
