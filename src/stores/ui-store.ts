@@ -634,7 +634,7 @@ export const useUiStore = create<UiState>()((set) => ({
   setPrTab: (tab) => set({ prTab: tab }),
   showPrRun: (sha) => set({ prRun: sha, prJob: null }),
   showPrJob: (id) => set({ prJob: id }),
-  openPrChecks: (jobId) => set({ prTab: 'checks', prJob: jobId }),
+  openPrChecks: (jobId) => set({ prTab: 'checks', prRun: null, prJob: jobId }),
   togglePrsFolded: () => set((state) => ({ prsFolded: !state.prsFolded })),
   setPrConversation: (mode) => set({ prConversation: mode }),
   setPrSearchOpen: (open) => set({ prSearchOpen: open }),
