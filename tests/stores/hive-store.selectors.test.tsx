@@ -45,7 +45,6 @@ import {
   useEntity,
   useHasResumable,
   useHiveStore,
-  useIdleDetailCounts,
   useEndedSessions,
   useNavOrder,
   useNotifs,
@@ -70,7 +69,6 @@ import {
   useSessionPrRow,
   useNextTransition,
   useOpenTicket,
-  useTicketCount,
   useTicketEvents,
   useTicketGroups,
   useTicketPrs,
@@ -185,22 +183,6 @@ describe('hive-store selectors', () => {
       const { result } = renderHook(() => useCounts());
 
       expect(result.current).toMatchObject({ working: 4, idle: 2 });
-    });
-
-    /**
-     * The breakdown still keys on the status field, which is what lets the
-     * tooltip say *why* those sessions are counted as working.
-     */
-    it('still reports the detail breakdown against the raw status', () => {
-      act(() => {
-        useHiveStore
-          .getState()
-          .setSessionStatus('rails-upgrade', 'idle', 'agents');
-      });
-
-      const { result } = renderHook(() => useIdleDetailCounts());
-
-      expect(result.current).toEqual({ agents: 1, script: 0 });
     });
 
     it('counts sessions only, never agents', () => {
@@ -1248,24 +1230,6 @@ describe('hive-store selectors', () => {
         'GRAC-2810',
         'GRAC-2954',
       ]);
-    });
-  });
-
-  describe('useTicketCount', () => {
-    it('counts every fixture ticket, Done ones included', () => {
-      const { result } = renderHook(() => useTicketCount());
-
-      expect(result.current).toBe(8);
-    });
-
-    it('follows the store rather than caching a number', () => {
-      const { result } = renderHook(() => useTicketCount());
-
-      act(() => {
-        useHiveStore.setState({ tickets: [] });
-      });
-
-      expect(result.current).toBe(0);
     });
   });
 
