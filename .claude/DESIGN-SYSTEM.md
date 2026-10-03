@@ -58,6 +58,23 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | `--cc-code-active-line` | `#202b50` | `#eef7ff` | editor: current line (painted at 35%) |
 | `--cc-code-selection` | `#2b3768` | `#cfe3f7` | editor: selection |
 
+**The needs-you count colour (HIVE-210), `text-amber-count`.** Dark: the amber
+itself. Light: the amber with 30% ink (a `color-mix`, not a hex), at least 4.5:1
+on bg, panel, panel-2 and chip, where `--cc-amber` as text is about 3.5:1 on
+white. Used only for needs-you count numbers: the activity bar, the Inbox pill,
+the project rows and Home's Needs you strip. Every other amber stays `--cc-amber`.
+Being a mix, an imported theme derives it from its own amber and ink.
+
+**Colours derived from the creatures' two:**
+
+- the carapace: chitin 18% into bg (`swarmPaletteOf`, `colour.ts`);
+- the empty Hatchery's egg: a `--cc-chip` shell stroked `--cc-subtle`, on a
+  `--cc-creep` pool, with chitin spores at 60%;
+- the Timeline's hold bars: chitin at 16% fill and 45% border, the holder's
+  name in `text-ink`; the "Before the shipper" bucket is chitin 18% into panel.
+
+Creep and chitin are bound as utilities too: `bg-creep`, `text-chitin` and the rest.
+
 **The editor and the terminal both follow the theme.** They did not always. The
 terminal was pinned dark in both themes on the reasoning that a terminal is a
 terminal in every theme — true of a terminal *emulator*, whose window is the
@@ -319,6 +336,24 @@ Canvas (HIVE-199): The Comb animates on a `<canvas>`, so the
 `useReducedMotion()` and draws one still frame instead; it pauses when the
 document is hidden or the canvas is off screen. Every state still reads from
 colour and shape.
+
+Round two under reduced motion (HIVE-210), one line each:
+
+- **The comb:** no rAF, one settled frame, and the loop stops and starts live
+  when the setting flips.
+- **First-run breathing cells:** the CSS clamp; opacity 1 at rest.
+- **The empty Hatchery's egg:** the hook drops the classes, unmounts the
+  spores and keeps the crack closed.
+- **Arrival cards and the Inbox pill's pulse:** the hook; the card appears in
+  place and the pill does not pulse.
+- **`animate-ccpulse` dots and the reconnecting ring:** the CSS clamp.
+- **Hatchery flaps:** the hook; the word changes with no turn.
+- **Checks edges:** the hook.
+
+The global rule plays a CSS animation once at about 0 ms and then shows the
+element's un-animated style, so that style must be the legible resting state.
+Canvas loops, rAF work and SVG SMIL are out of its reach and must read
+`useReducedMotion()`.
 
 ## Chrome
 

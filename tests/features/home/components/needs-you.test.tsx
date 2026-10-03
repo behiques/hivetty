@@ -32,6 +32,8 @@ describe('NeedsYou', () => {
     useHiveStore.setState({ notifs: [ask('builder', 2), ask('slack', 31), ask('shipper', 14)] });
     render(<NeedsYou />);
     expect(screen.getByRole('heading', { name: /needs you/i })).toHaveTextContent('3');
+    expect(screen.getByText('3').className).toContain('text-amber-count');
+    expect(screen.getByText('31m').className).toContain('text-amber-count');
     const rows = screen.getAllByRole('button');
     expect(rows.map((r) => r.textContent)).toEqual([
       expect.stringContaining('31m'),

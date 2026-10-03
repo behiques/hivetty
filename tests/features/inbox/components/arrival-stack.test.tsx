@@ -8,6 +8,9 @@ import { useUiStore } from '@stores/ui-store';
 import { seedLedger } from '@tests/support/ledger';
 import { notif, resetNotifIds } from '@tests/support/notifications';
 
+const motion = vi.hoisted(() => ({ reduced: false }));
+vi.mock('@hooks/use-reduced-motion', () => ({ useReducedMotion: () => motion.reduced }));
+
 const askEntry = (id: string) => ({
   id,
   ts: Date.now(),
@@ -24,6 +27,7 @@ const askRow = (id: string) =>
 const blocked = () => notif({ id: 's1', kind: 'session.blocked', action: { type: 'session', entityId: 'nova' } });
 
 beforeEach(() => {
+  motion.reduced = false;
   resetNotifIds();
   useUiStore.getState().reset();
   seedLedger(['a1', 'a2', 'a3'].map(askEntry));
@@ -31,6 +35,20 @@ beforeEach(() => {
 });
 
 describe('ArrivalStack (HIVE-198)', () => {
+  it('the card appears in place under reduced motion: no rise', () => {
+    motion.reduced = true;
+    useUiStore.getState().pushArrival('a1', false);
+    const { container } = render(<ArrivalStack onStage={null} />);
+    expect(screen.getByRole('article')).toBeTruthy();
+    expect(container.querySelector('.motion-safe\\:animate-ccslidein')).toBeNull();
+  });
+
+  it('the card rises with motion on', () => {
+    useUiStore.getState().pushArrival('a1', false);
+    const { container } = render(<ArrivalStack onStage={null} />);
+    expect(container.querySelector('.motion-safe\\:animate-ccslidein')).not.toBeNull();
+  });
+
   it('draws nothing with nothing up', () => {
     render(<ArrivalStack onStage={null} />);
     expect(screen.queryByRole('article')).toBeNull();
