@@ -1023,6 +1023,11 @@ describe('parseLedgerReadQuery', () => {
     expect(() => parseLedgerReadQuery({ ticket: 7 })).toThrow();
   });
 
+  it('refuses a ticket key longer than 64 characters (HIVE-203)', () => {
+    expect(parseLedgerReadQuery({ ticket: 'K'.repeat(64) })).toEqual({ ticket: 'K'.repeat(64) });
+    expect(() => parseLedgerReadQuery({ ticket: 'K'.repeat(65) })).toThrow(/64/);
+  });
+
   it('keeps only the fields it knows', () => {
     expect(
       parseLedgerReadQuery({ to: 'sess-a', kind: 'ask', limit: 5, bogus: 'x' }),

@@ -2754,6 +2754,9 @@ const optionalMeta = (
   return asRecord(value, `${label}.meta`);
 };
 
+/** A ticket key is a handful of characters; this only bounds the filter (HIVE-203). */
+const LEDGER_TICKET_MAX = 64;
+
 export function parseLedgerReadQuery(input: unknown): LedgerReadQuery {
   const source = asRecord(input, 'ledger query');
   const query: LedgerReadQuery = {};
@@ -2769,7 +2772,12 @@ export function parseLedgerReadQuery(input: unknown): LedgerReadQuery {
   const since = optionalString(source, 'since', 'ledger query');
   if (since !== undefined) query.since = since;
   const ticket = optionalString(source, 'ticket', 'ledger query');
-  if (ticket !== undefined) query.ticket = ticket;
+  if (ticket !== undefined) {
+    if (ticket.length > LEDGER_TICKET_MAX) {
+      throw new TypeError(`ledger query.ticket must be at most ${LEDGER_TICKET_MAX} characters`);
+    }
+    query.ticket = ticket;
+  }
 
   const limit = source.limit;
   if (limit !== undefined) {
