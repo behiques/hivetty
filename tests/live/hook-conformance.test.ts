@@ -606,7 +606,7 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
         },
         activate: () => undefined,
         announceRead: () => undefined,
-        announceUnread: (count) => {
+        announceBadge: (count) => {
           badge = count;
         },
         announceDismissed: () => undefined,

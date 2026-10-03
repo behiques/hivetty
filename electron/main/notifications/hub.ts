@@ -136,7 +136,8 @@ export interface NotificationHubOptions {
    */
   announceDismissed: (id: string | null) => void;
   /**
-   * How many are still unread, after every change to the buffer.
+   * The count on the dock badge: the rows that wait on you (HIVE-214), after
+   * every change to the buffer.
    *
    * Pushed rather than offered as a getter, because the consumer is the **dock
    * badge** and a badge is only ever wrong in one direction: nobody notices a
@@ -148,7 +149,7 @@ export interface NotificationHubOptions {
    * Electron's notifications outright, so the dock badge is not decoration
    * beside the toast, it is the only thing the user sees from outside the app.
    */
-  announceUnread: (count: number) => void;
+  announceBadge: (count: number) => void;
   now: () => number;
   /**
    * Is **every** attended surface already looking at what this notification is
@@ -379,7 +380,7 @@ export function createNotificationHub(
     activate,
     announceRead,
     announceDismissed,
-    announceUnread,
+    announceBadge,
     now,
     isForegroundEverywhere,
     subjectName,
@@ -424,7 +425,7 @@ export function createNotificationHub(
    * event a hand-maintained tally forgets. Fifty entries is nothing to walk.
    */
   const announce = (): void => {
-    announceUnread(buffer.reduce((n, entry) => n + (entry.unread ? 1 : 0), 0));
+    announceBadge(buffer.reduce((n, entry) => n + (entry.unread ? 1 : 0), 0));
   };
 
   /**

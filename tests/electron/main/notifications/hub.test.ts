@@ -19,7 +19,7 @@ let present: Mock<(options: PresentOptions) => void>;
 let broadcast: Mock<(notification: HiveNotification) => void>;
 let activate: Mock<(action: NotificationAction) => void>;
 let announceRead: Mock<(id: string | null, unread: boolean) => void>;
-let announceUnread: Mock<(count: number) => void>;
+let announceBadge: Mock<(count: number) => void>;
 let announceDismissed: Mock<(id: string | null) => void>;
 
 let now: number;
@@ -31,7 +31,7 @@ beforeEach(() => {
   broadcast = vi.fn();
   activate = vi.fn();
   announceRead = vi.fn();
-  announceUnread = vi.fn();
+  announceBadge = vi.fn();
   announceDismissed = vi.fn();
   now = 1_700_000_000_000;
 
@@ -41,7 +41,7 @@ beforeEach(() => {
     broadcast: (notification) => broadcast(notification),
     activate: (action) => activate(action),
     announceRead: (id, unread) => announceRead(id, unread),
-    announceUnread: (count) => announceUnread(count),
+    announceBadge: (count) => announceBadge(count),
     announceDismissed: (id) => announceDismissed(id),
     now: () => now,
   });
@@ -49,7 +49,7 @@ beforeEach(() => {
 
 /**
  * A hub built from the shared collaborators above, with room to override or
- * add options per test — chiefly `present`, `announceUnread` and, for HIVE-81
+ * add options per test — chiefly `present`, `announceBadge` and, for HIVE-81
  * (widened to the fleet in HIVE-154), `isForegroundEverywhere`.
  */
 const makeHub = (overrides: Partial<NotificationHubOptions> = {}): NotificationHub =>
@@ -59,15 +59,15 @@ const makeHub = (overrides: Partial<NotificationHubOptions> = {}): NotificationH
     broadcast: (notification) => broadcast(notification),
     activate: (action) => activate(action),
     announceRead: (id, unread) => announceRead(id, unread),
-    announceUnread: (count) => announceUnread(count),
+    announceBadge: (count) => announceBadge(count),
     announceDismissed: (id) => announceDismissed(id),
     now: () => now,
     ...overrides,
   });
 
 /** The most recent count pushed at the dock badge. */
-const lastUnread = (): number | undefined =>
-  announceUnread.mock.calls.at(-1)?.[0];
+const lastBadge = (): number | undefined =>
+  announceBadge.mock.calls.at(-1)?.[0];
 
 const raise = (over: Partial<Parameters<NotificationHub['raise']>[0]> = {}) =>
   hub.raise({ kind: 'session.blocked', title: 'blocked', ...over });
@@ -188,7 +188,7 @@ describe('supersede', () => {
     inSession('sess-0z');
     inSession('sess-0z');
 
-    expect(lastUnread()).toBe(1);
+    expect(lastBadge()).toBe(1);
   });
 
   it('keeps two sessions apart', () => {
@@ -318,12 +318,12 @@ describe('the buffer', () => {
     it('stops counting a dismissed row that was still unread', () => {
       raise({ id: 'a' });
       raise({ id: 'b' });
-      expect(lastUnread()).toBe(2);
+      expect(lastBadge()).toBe(2);
 
       hub.dismiss('a');
 
       // The badge is a derivation of the buffer, so nothing else recomputes it.
-      expect(lastUnread()).toBe(1);
+      expect(lastBadge()).toBe(1);
     });
 
     it('does not re-raise a dismissed notification on a duplicate event', () => {
@@ -342,13 +342,13 @@ describe('the buffer', () => {
     it('is a no-op for an id it does not hold', () => {
       // Reachable: the renderer may act on a row the cap has since trimmed.
       raise({ id: 'a' });
-      announceUnread.mockClear();
+      announceBadge.mockClear();
 
       hub.dismiss('nope');
 
       expect(hub.list().map((n) => n.id)).toEqual(['a']);
       // No spurious badge announcement for a buffer that did not change.
-      expect(announceUnread).not.toHaveBeenCalled();
+      expect(announceBadge).not.toHaveBeenCalled();
     });
   });
 
@@ -363,12 +363,12 @@ describe('the buffer', () => {
       raise({ id: 'a' });
       raise({ id: 'b' });
       raise({ id: 'c' });
-      expect(lastUnread()).toBe(3);
+      expect(lastBadge()).toBe(3);
 
       hub.clearInbox();
 
       expect(hub.list()).toEqual([]);
-      expect(lastUnread()).toBe(0);
+      expect(lastBadge()).toBe(0);
     });
 
     it('announces once, with a null id, rather than once per row', () => {
@@ -398,14 +398,14 @@ describe('the buffer', () => {
 
     it('says nothing when the buffer is already empty', () => {
       announceDismissed.mockClear();
-      announceUnread.mockClear();
+      announceBadge.mockClear();
 
       hub.clearInbox();
 
       // A double-click on Clear all must not push a second event at every
       // window.
       expect(announceDismissed).not.toHaveBeenCalled();
-      expect(announceUnread).not.toHaveBeenCalled();
+      expect(announceBadge).not.toHaveBeenCalled();
     });
   });
 
@@ -510,11 +510,11 @@ describe('presentation', () => {
 
     it('keeps the row in the unread count after its toast is clicked', () => {
       raiseAsk();
-      const before = lastUnread();
+      const before = lastBadge();
 
       present.mock.calls[0][0].onClick();
 
-      expect(lastUnread()).toBe(before);
+      expect(lastBadge()).toBe(before);
     });
   });
 
@@ -572,22 +572,22 @@ describe('read-state reaches the renderer', () => {
 describe('the unread count', () => {
   it('announces the new count as each notification is raised', () => {
     raise({ id: 'a' });
-    expect(lastUnread()).toBe(1);
+    expect(lastBadge()).toBe(1);
 
     raise({ id: 'b' });
-    expect(lastUnread()).toBe(2);
+    expect(lastBadge()).toBe(2);
   });
 
   it('announces nothing for a notification that was dropped', () => {
     raise({ id: 'a' });
-    announceUnread.mockClear();
+    announceBadge.mockClear();
 
     // A duplicate id, and then a kind switched off.
     raise({ id: 'a' });
     prefs = { 'session.blocked': 'off' };
     raise({ id: 'c' });
 
-    expect(announceUnread).not.toHaveBeenCalled();
+    expect(announceBadge).not.toHaveBeenCalled();
   });
 
   it('counts down as rows are read, one at a time and all at once', () => {
@@ -595,10 +595,10 @@ describe('the unread count', () => {
     raise({ id: 'b' });
 
     hub.markRead('a');
-    expect(lastUnread()).toBe(1);
+    expect(lastBadge()).toBe(1);
 
     hub.markRead(null);
-    expect(lastUnread()).toBe(0);
+    expect(lastBadge()).toBe(0);
   });
 
   /**
@@ -608,24 +608,24 @@ describe('the unread count', () => {
    */
   it('never exceeds the cap, however many are raised', () => {
     for (let i = 0; i < NOTIFICATION_CAP + 10; i += 1) raise({ id: `n${i}` });
-    expect(lastUnread()).toBe(NOTIFICATION_CAP);
+    expect(lastBadge()).toBe(NOTIFICATION_CAP);
   });
 
   it('announces zero when the buffer is cleared', () => {
     raise({ id: 'a' });
     hub.clear();
 
-    expect(lastUnread()).toBe(0);
+    expect(lastBadge()).toBe(0);
   });
 
   /** A toast click is a read, and the badge has to hear about it too. */
   it('counts down when a toast is clicked', () => {
     raise({ id: 'a' });
-    announceUnread.mockClear();
+    announceBadge.mockClear();
 
     present.mock.calls[0][0].onClick();
 
-    expect(lastUnread()).toBe(0);
+    expect(lastBadge()).toBe(0);
   });
 });
 
@@ -670,7 +670,7 @@ describe('robustness', () => {
       broadcast: (notification) => broadcast(notification),
       activate: (action) => activate(action),
       announceRead: (id, unread) => announceRead(id, unread),
-      announceUnread: (count) => announceUnread(count),
+      announceBadge: (count) => announceBadge(count),
       announceDismissed: (id) => announceDismissed(id),
       now: () => now,
     });
@@ -732,10 +732,10 @@ describe('the foreground gate', () => {
   });
 
   it('leaves the unread count untouched', () => {
-    const announceUnread = vi.fn();
-    const hub = makeHub({ announceUnread, isForegroundEverywhere: () => true });
+    const announceBadge = vi.fn();
+    const hub = makeHub({ announceBadge, isForegroundEverywhere: () => true });
     hub.raise({ kind: 'session.blocked', title: 't', action: { type: 'session', entityId: 'term-3' } });
-    expect(announceUnread).toHaveBeenLastCalledWith(0);
+    expect(announceBadge).toHaveBeenLastCalledWith(0);
   });
 
   it('raises normally for a background session', () => {
@@ -933,19 +933,19 @@ describe('promote', () => {
   it('raises nothing at all when the kind has been switched off since the raise', () => {
     const present = vi.fn();
     const announceRead = vi.fn();
-    const announceUnread = vi.fn();
+    const announceBadge = vi.fn();
     let foreground = true;
     const hub = makeHub({
       present,
       announceRead,
-      announceUnread,
+      announceBadge,
       isForegroundEverywhere: () => foreground,
     });
 
     const raised = hub.raise({ kind: 'session.blocked', title: 't', action: { type: 'session', entityId: 'term-3' } })!;
     present.mockClear();
     announceRead.mockClear();
-    announceUnread.mockClear();
+    announceBadge.mockClear();
 
     prefs = { 'session.blocked': 'off' };
     foreground = false;
@@ -954,7 +954,7 @@ describe('promote', () => {
     expect(hub.list()[0].unread).toBe(false);
     expect(present).not.toHaveBeenCalled();
     expect(announceRead).not.toHaveBeenCalled();
-    expect(announceUnread).not.toHaveBeenCalled();
+    expect(announceBadge).not.toHaveBeenCalled();
   });
 
   /**
@@ -1200,10 +1200,10 @@ describe('dismissForeground', () => {
 
   it('tells the renderer about each row it removed, and re-counts the badge', () => {
     const announceDismissed = vi.fn();
-    const announceUnread = vi.fn();
+    const announceBadge = vi.fn();
     const hub = makeHub({
       announceDismissed,
-      announceUnread,
+      announceBadge,
       isForegroundEverywhere: () => true,
     });
     // Raised while the session is foreground, so both arrive already-read and
@@ -1212,25 +1212,25 @@ describe('dismissForeground', () => {
     // nobody can see.
     const gated = hub.raise(sessionRow('session.idle', 'term-3'))!;
     hub.promote(gated.id);
-    announceUnread.mockClear();
+    announceBadge.mockClear();
     announceDismissed.mockClear();
 
     hub.dismissForeground(['session.idle']);
 
     expect(announceDismissed).toHaveBeenCalledWith(gated.id);
-    expect(announceUnread).toHaveBeenLastCalledWith(0);
+    expect(announceBadge).toHaveBeenLastCalledWith(0);
   });
 
   it('says nothing at all when it matched nothing', () => {
     const announceDismissed = vi.fn();
-    const announceUnread = vi.fn();
-    const hub = makeHub({ announceDismissed, announceUnread, isForegroundEverywhere: () => true });
-    announceUnread.mockClear();
+    const announceBadge = vi.fn();
+    const hub = makeHub({ announceDismissed, announceBadge, isForegroundEverywhere: () => true });
+    announceBadge.mockClear();
 
     hub.dismissForeground(['session.idle']);
 
     expect(announceDismissed).not.toHaveBeenCalled();
-    expect(announceUnread).not.toHaveBeenCalled();
+    expect(announceBadge).not.toHaveBeenCalled();
   });
 
   /**
@@ -1301,11 +1301,11 @@ describe('dismissForSession', () => {
   });
 
   it('says nothing at all when it matched nothing', () => {
-    announceUnread.mockClear();
+    announceBadge.mockClear();
 
     hub.dismissForSession('term-3', ['session.blocked']);
 
     expect(announceDismissed).not.toHaveBeenCalled();
-    expect(announceUnread).not.toHaveBeenCalled();
+    expect(announceBadge).not.toHaveBeenCalled();
   });
 });

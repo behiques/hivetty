@@ -1776,7 +1776,7 @@ export function registerIpcHandlers(
      * dock was showing a count on somebody else's behalf, on a dock that
      * server mode has hidden anyway.
      */
-    announceUnread: (count) => {
+    announceBadge: (count) => {
       if (isServerMode()) return;
       badgeDock(count);
     },
@@ -1847,7 +1847,7 @@ export function registerIpcHandlers(
    * The renderer reports its unread count whatever mode it is in, and only an
    * attached process acts on it — `remote-proxy.ts` answers it by badging this
    * machine's dock, because no hub runs there. Here the hub does run, counts
-   * its own buffer, and badges the dock through `announceUnread` above. Two
+   * its own buffer, and badges the dock through `announceBadge` above. Two
    * writers of one badge would race, so in this mode the hub is the only one.
    *
    * Bound rather than left unbound so the renderer's call resolves instead of
