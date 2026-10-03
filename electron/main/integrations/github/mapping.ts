@@ -2,10 +2,13 @@ import {
   GH_MERGED_WINDOW_MS,
   type GhPrChecks,
   type GhPrState,
+  type PrCheck,
+  type PrCheckStatus,
   type PrComment,
   type PrDetail,
   type PrRecord,
   type PrReview,
+  type PrThread,
 } from '../../../shared/github-contract';
 import { isRecord } from '../../../shared/guards';
 
@@ -355,6 +358,71 @@ function toReview(raw: unknown): PrReview | null {
   };
 }
 
+function toThread(raw: unknown): PrThread | null {
+  if (!isRecord(raw)) return null;
+  const id = text(raw.id);
+  const path = text(raw.path);
+  if (id === null || path === null) return null;
+  return {
+    id,
+    isResolved: raw.isResolved === true,
+    isOutdated: raw.isOutdated === true,
+    path,
+    line: whole(raw.line),
+    originalLine: whole(raw.originalLine),
+    diffSide: text(raw.diffSide),
+    comments: each(raw.comments, (node) => {
+      const comment = toComment(node);
+      if (comment === null || !isRecord(node)) return null;
+      return { ...comment, diffHunk: typeof node.diffHunk === 'string' ? node.diffHunk : '' };
+    }),
+  };
+}
+
+/** A check run's status and conclusion, or a commit status's state, as one word. */
+function checkStatus(raw: Record<string, unknown>): PrCheckStatus {
+  if (raw.__typename === 'StatusContext') {
+    const state = text(raw.state);
+    if (state === 'SUCCESS') return 'success';
+    if (state === 'FAILURE' || state === 'ERROR') return 'failure';
+    return 'running';
+  }
+  const status = text(raw.status);
+  if (status === 'IN_PROGRESS') return 'running';
+  if (status !== 'COMPLETED') return 'queued';
+  const conclusion = text(raw.conclusion);
+  if (conclusion === 'SUCCESS') return 'success';
+  if (conclusion === 'NEUTRAL' || conclusion === 'SKIPPED' || conclusion === 'STALE') return 'neutral';
+  return 'failure';
+}
+
+function toCheck(raw: unknown): PrCheck | null {
+  if (!isRecord(raw)) return null;
+  const status = raw.__typename === 'StatusContext';
+  const name = text(status ? raw.context : raw.name);
+  if (name === null) return null;
+  return {
+    name,
+    status: checkStatus(raw),
+    startedAt: text(status ? raw.createdAt : raw.startedAt),
+    completedAt: status ? null : text(raw.completedAt),
+    url: text(status ? raw.targetUrl : raw.detailsUrl),
+  };
+}
+
+/** The head commit's rollup contexts, or nothing. */
+function contextsOf(raw: Record<string, unknown>): unknown {
+  const head = nodesIn(raw.commits)[0];
+  const commit = isRecord(head) ? head.commit : null;
+  const rollup = isRecord(commit) ? commit.statusCheckRollup : null;
+  return isRecord(rollup) ? rollup.contexts : null;
+}
+
+function toReviewer(raw: unknown): string | null {
+  const reviewer = isRecord(raw) ? raw.requestedReviewer : null;
+  return isRecord(reviewer) ? (text(reviewer.login) ?? text(reviewer.name)) : null;
+}
+
 /** The pull request under `repository`, or `null`. */
 function pullRequestOf(payload: unknown): Record<string, unknown> | null {
   const repository = isRecord(payload) ? payload.repository : null;
@@ -403,9 +471,9 @@ export function toPrDetail(payload: unknown, owner: string, repo: string): PrDet
     mergeStateStatus: text(raw.mergeStateStatus),
     comments: each(raw.comments, toComment),
     reviews: each(raw.reviews, toReview),
-    reviewRequests: [],
-    threads: [],
-    checks: [],
+    reviewRequests: each(raw.reviewRequests, toReviewer),
+    threads: each(raw.reviewThreads, toThread),
+    checks: each(contextsOf(raw), toCheck),
   };
 }
 

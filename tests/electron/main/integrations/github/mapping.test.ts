@@ -580,6 +580,59 @@ describe('toPrDetail (HIVE-205)', () => {
     expect(toPrDetail(undefined, 'acme', 'server')).toBeNull();
   });
 
+  it('maps threads with their hunks, a null line once outdated', () => {
+    const detail = toPrDetail(payload(pr({ reviewThreads: { nodes: [
+      { id: 'T1', isResolved: false, isOutdated: true, path: 'src/fees/validator.ts', line: null, originalLine: 118, diffSide: 'RIGHT',
+        comments: { nodes: [{ author: { login: 'acr-bot' }, body: 'An LLC without an agent passes.', createdAt: '2026-10-03T08:50:00Z', url: 'https://github.com/acme/server/pull/1182#discussion_r1', diffHunk: '@@ -116,3 +116,3 @@\n if (llc) return ok();' }] } },
+      { id: 'T2', isResolved: true, isOutdated: false, path: 'a.ts', line: 3, originalLine: 3, diffSide: null, comments: { nodes: [{ author: null, body: 'x', createdAt: '2026-10-03T08:51:00Z', url: 'https://u/2' }] } },
+      { id: null, path: 'dropped.ts' },
+    ] } })), 'acme', 'server');
+
+    expect(detail?.threads).toEqual([
+      { id: 'T1', isResolved: false, isOutdated: true, path: 'src/fees/validator.ts', line: null, originalLine: 118, diffSide: 'RIGHT',
+        comments: [{ author: 'acr-bot', body: 'An LLC without an agent passes.', createdAt: '2026-10-03T08:50:00Z', url: 'https://github.com/acme/server/pull/1182#discussion_r1', diffHunk: '@@ -116,3 +116,3 @@\n if (llc) return ok();' }] },
+      { id: 'T2', isResolved: true, isOutdated: false, path: 'a.ts', line: 3, originalLine: 3, diffSide: null,
+        comments: [{ author: null, body: 'x', createdAt: '2026-10-03T08:51:00Z', url: 'https://u/2', diffHunk: '' }] },
+    ]);
+  });
+
+  it('reads check runs and commit statuses as one shape', () => {
+    const contexts = { nodes: [
+      { __typename: 'CheckRun', name: 'lint', status: 'COMPLETED', conclusion: 'SUCCESS', startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:01:00Z', detailsUrl: 'https://ci/1' },
+      { __typename: 'CheckRun', name: 'integration', status: 'COMPLETED', conclusion: 'TIMED_OUT', startedAt: null, completedAt: null, detailsUrl: null },
+      { __typename: 'CheckRun', name: 'e2e', status: 'IN_PROGRESS', conclusion: null, startedAt: '2026-10-03T10:02:00Z', completedAt: null, detailsUrl: 'https://ci/3' },
+      { __typename: 'CheckRun', name: 'build', status: 'QUEUED', conclusion: null },
+      { __typename: 'CheckRun', name: 'docs', status: 'COMPLETED', conclusion: 'SKIPPED' },
+      { __typename: 'StatusContext', context: 'vercel', state: 'PENDING', targetUrl: 'https://v/1', createdAt: '2026-10-03T10:03:00Z' },
+      { __typename: 'StatusContext', context: 'legacy', state: 'ERROR', targetUrl: null, createdAt: null },
+      { __typename: 'CheckRun', name: null, status: 'COMPLETED' },
+    ] };
+    const detail = toPrDetail(payload(pr({ commits: { nodes: [{ commit: { statusCheckRollup: { contexts } } }] } })), 'acme', 'server');
+
+    expect(detail?.checks).toEqual([
+      { name: 'lint', status: 'success', startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:01:00Z', url: 'https://ci/1' },
+      { name: 'integration', status: 'failure', startedAt: null, completedAt: null, url: null },
+      { name: 'e2e', status: 'running', startedAt: '2026-10-03T10:02:00Z', completedAt: null, url: 'https://ci/3' },
+      { name: 'build', status: 'queued', startedAt: null, completedAt: null, url: null },
+      { name: 'docs', status: 'neutral', startedAt: null, completedAt: null, url: null },
+      { name: 'vercel', status: 'running', startedAt: '2026-10-03T10:03:00Z', completedAt: null, url: 'https://v/1' },
+      { name: 'legacy', status: 'failure', startedAt: null, completedAt: null, url: null },
+    ]);
+  });
+
+  it('has no checks when the head commit has no rollup', () => {
+    expect(toPrDetail(payload(pr({ commits: { nodes: [{ commit: { statusCheckRollup: null } }] } })), 'acme', 'server')?.checks).toEqual([]);
+  });
+
+  it('names requested users by login and teams by name', () => {
+    const detail = toPrDetail(payload(pr({ reviewRequests: { nodes: [
+      { requestedReviewer: { login: 'maria' } },
+      { requestedReviewer: { name: 'platform' } },
+      { requestedReviewer: null },
+    ] } })), 'acme', 'server');
+    expect(detail?.reviewRequests).toEqual(['maria', 'platform']);
+  });
+
   it('reads the node id, and whether a comment was added', () => {
     expect(readPrId(payload({ id: 'PR_kwDO1' }))).toBe('PR_kwDO1');
     expect(readPrId(payload(null))).toBeNull();
