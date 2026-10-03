@@ -53,6 +53,7 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
               type="button"
               data-state={node.state}
               aria-label={`${label}, ${node.state}, ${node.time}`}
+              title={label}
               onClick={() => {
                 if (node.matrix !== null) onExpand(node.matrix);
                 else if (node.jobId !== null) onJob(node.jobId);

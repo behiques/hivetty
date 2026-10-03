@@ -176,6 +176,22 @@ describe('layoutGraph', () => {
     expect(at(graph, 'install')?.x).toBe(0);
   });
 
+  it('orders workflows by file name, whatever order their runs arrive in, so the same one is always boxed', () => {
+    const preview = wf('preview.yml', [['preview', []]], 'Preview');
+    const previewFirst = [run({ id: 2, workflowName: 'Preview' }), run({ id: 1, workflowName: 'CI' })];
+    const graph = layoutGraph([ci, preview], previewFirst, { ...jobs, 2: [job(50, 'preview', { runId: 2 })] }, new Set(), NOW);
+    expect(graph.files).toEqual(['ci.yml', 'preview.yml']);
+    expect(graph.groups.map((g) => g.file)).toEqual(['preview.yml']);
+    expect(col(graph, 'install')).toBe(0);
+  });
+
+  it('opens matrix legs in name order, numbers counted as numbers', () => {
+    const matrix = wf('ci.yml', [['unit', []]]);
+    const legs = { 1: [job(21, 'unit (10)'), job(22, 'unit (3)'), job(23, 'unit (1)'), job(24, 'unit (2)')] };
+    const open = layoutGraph([matrix], runs, legs, new Set(['unit']), NOW);
+    expect(open.nodes.map((n) => n.label)).toEqual(['unit (1)', 'unit (2)', 'unit (3)', 'unit (10)']);
+  });
+
   it('draws jobs from a run with no workflow file as boxes without edges', () => {
     const graph = layoutGraph([], [run({ id: 1, workflowName: '.github/workflows/gone.yml' })], { 1: [job(60, 'lint'), job(61, 'unit')] }, new Set(), NOW);
     expect(graph.nodes.map((n) => [n.label, n.x])).toEqual([['lint', 0], ['unit', 0]]);

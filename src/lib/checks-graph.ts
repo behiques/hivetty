@@ -160,17 +160,24 @@ export function layoutGraph(
   const sections: { file: string; placed: Placed[]; needs: Map<string, string[]> }[] = [];
   let base = 0;
 
-  /* `runs` is newest first: a workflow that ran twice for one sha (push and pull_request) is drawn once, from its newest run. */
-  const drawn = new Set<string>();
+  const flowOf = (one: WorkflowRun) => workflows.find((w) => w.name === one.workflowName || one.workflowName.endsWith(w.file));
+  const fileOf = (one: WorkflowRun) => flowOf(one)?.file ?? one.workflowName;
+  /*
+    `runs` is newest first: a workflow that ran twice for one sha (push and
+    pull_request) is drawn once, from its newest run. Then by file name, so the
+    first (unboxed) workflow does not change with the order runs arrive in.
+  */
+  const chosen = runs
+    .filter((one, i) => runs.findIndex((other) => other.workflowName === one.workflowName) === i)
+    .sort((a, b) => fileOf(a).localeCompare(fileOf(b)));
   const seenKeys = new Set<string>();
-  for (const one of runs) {
-    if (drawn.has(one.workflowName)) continue;
-    drawn.add(one.workflowName);
-    const flow = workflows.find((w) => w.name === one.workflowName || one.workflowName.endsWith(w.file));
+  for (const one of chosen) {
+    const flow = flowOf(one);
     const pool = [...(jobsByRun[one.id] ?? [])];
     const defs = flow?.jobs ?? [];
     const units: Unit[] = defs.map((def) => {
-      const legs = pool.filter((j) => claims(def, j.name));
+      /* Name order, numbers as numbers: GitHub lists matrix legs in no particular order. */
+      const legs = pool.filter((j) => claims(def, j.name)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
       for (const leg of legs) pool.splice(pool.indexOf(leg), 1);
       return { def, legs };
     });
