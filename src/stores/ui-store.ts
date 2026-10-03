@@ -32,8 +32,8 @@ export interface AgentPage {
   view: AgentPageView;
 }
 
-/** The PR page's tabs (HIVE-205); HIVE-206, 207 and 208 add Checks, Files and Timeline. */
-export type PrTab = 'conversation';
+/** The PR page's tabs (HIVE-205); Checks is HIVE-206's, and HIVE-207 and 208 add Files and Timeline. */
+export type PrTab = 'conversation' | 'checks';
 /** Which PR the PRs place last opened (HIVE-205). */
 export interface PrPageRef {
   owner: string;
@@ -221,6 +221,10 @@ interface UiState {
   prPage: PrPageRef | null;
   /** The PR page's tab; kept across PRs, so Checks stays Checks (HIVE-205). */
   prTab: PrTab;
+  /** The Checks tab's shown push, by head sha; null shows the newest (HIVE-206). Not persisted. */
+  prRun: string | null;
+  /** The job clicked in the Checks graph; null shows the failed one (HIVE-206). Not persisted. */
+  prJob: number | null;
   /** Whether the Hatched group is folded; it starts folded (HIVE-205). */
   prsFolded: boolean;
   /** The PR page's Comments | Everything filter; each open resets it (HIVE-205). */
@@ -309,12 +313,31 @@ interface UiState {
   openAgentPage: (name: string | null, view: AgentPageView) => void;
   setAgentPageView: (view: AgentPageView) => void;
   closeAgentPage: () => void;
-  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab. */
+  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab; forgets the Checks tab's shown push and job (HIVE-206). */
   openPrPage: (ref: PrPageRef) => void;
   setPrTab: (tab: PrTab) => void;
+  showPrRun: (sha: string) => void;
+  showPrJob: (id: number | null) => void;
+  openPrChecks: (jobId: number | null) => void;
   togglePrsFolded: () => void;
   setPrConversation: (mode: WorkConversation) => void;
   setPrSearchOpen: (open: boolean) => void;
+  /** Notification ids up as a card or note, newest first (HIVE-198). Not persisted. */
+  arrivals: string[];
+  /** The latest arrival that came in while the keyboard was in a terminal: the pill pulses once for it. */
+  arrivalPulse: string | null;
+  /** The Inbox drawer, and the ask thread it was opened on. */
+  inboxDrawer: { open: boolean; thread: string | null };
+  /**
+   * A live Summons arrival (HIVE-198). `quiet` (the keyboard is in a terminal) only pulses
+   * the pill; otherwise it rises, deduped, newest first. Nothing rises over an open drawer.
+   */
+  pushArrival: (id: string, quiet: boolean) => void;
+  /** Everything up folds into the pill. The rows stay in the Summons queue. */
+  foldArrivals: () => void;
+  /** Open the drawer, on an ask's thread when one is named, folding what was up. */
+  openInboxDrawer: (thread?: string) => void;
+  closeInboxDrawer: () => void;
   /** When this window last lost focus, else when it launched (HIVE-200's "since"). View state, not persisted. */
   awaySince: number;
   markAway: (at: number) => void;
@@ -363,9 +386,14 @@ const initialUiState = {
   agentPage: null as AgentPage | null,
   prPage: null as PrPageRef | null,
   prTab: 'conversation' as PrTab,
+  prRun: null as string | null,
+  prJob: null as number | null,
   prsFolded: true,
   prConversation: 'comments' as WorkConversation,
   prSearchOpen: false,
+  arrivals: [] as string[],
+  arrivalPulse: null as string | null,
+  inboxDrawer: { open: false, thread: null } as { open: boolean; thread: string | null },
   awaySince: Date.now(),
 };
 
@@ -598,13 +626,27 @@ export const useUiStore = create<UiState>()((set) => ({
       place: 'prs',
       panelOpen: true,
       prConversation: 'comments',
+      prRun: null,
+      prJob: null,
       picker: false,
       settings: false,
     }),
   setPrTab: (tab) => set({ prTab: tab }),
+  showPrRun: (sha) => set({ prRun: sha, prJob: null }),
+  showPrJob: (id) => set({ prJob: id }),
+  openPrChecks: (jobId) => set({ prTab: 'checks', prJob: jobId }),
   togglePrsFolded: () => set((state) => ({ prsFolded: !state.prsFolded })),
   setPrConversation: (mode) => set({ prConversation: mode }),
   setPrSearchOpen: (open) => set({ prSearchOpen: open }),
+  pushArrival: (id, quiet) =>
+    set((state) => {
+      if (quiet) return { arrivalPulse: id };
+      if (state.inboxDrawer.open) return {};
+      return { arrivals: [id, ...state.arrivals.filter((x) => x !== id)] };
+    }),
+  foldArrivals: () => set({ arrivals: [] }),
+  openInboxDrawer: (thread) => set({ inboxDrawer: { open: true, thread: thread ?? null }, arrivals: [] }),
+  closeInboxDrawer: () => set({ inboxDrawer: { open: false, thread: null } }),
   markAway: (at) => set({ awaySince: at }),
   reset: () => set(initialUiState),
 }));
@@ -638,6 +680,13 @@ const settingsActionsSelector = (state: UiState) => ({
   openSettings: state.openSettings,
   closeSettings: state.closeSettings,
   clearSettingsSection: state.clearSettingsSection,
+});
+
+const inboxActionsSelector = (state: UiState) => ({
+  pushArrival: state.pushArrival,
+  foldArrivals: state.foldArrivals,
+  openInboxDrawer: state.openInboxDrawer,
+  closeInboxDrawer: state.closeInboxDrawer,
 });
 
 const pickerActionsSelector = (state: UiState) => ({
@@ -692,6 +741,9 @@ export const useAgentPageActions = () =>
 /** The PRs place's open PR, tab, fold, filter and search (HIVE-205). */
 export const usePrPage = () => useUiStore((state) => state.prPage);
 export const usePrTab = () => useUiStore((state) => state.prTab);
+/** The Checks tab's shown push and clicked job (HIVE-206). */
+export const usePrRun = () => useUiStore((state) => state.prRun);
+export const usePrJob = () => useUiStore((state) => state.prJob);
 export const usePrsFolded = () => useUiStore((state) => state.prsFolded);
 export const usePrConversation = () => useUiStore((state) => state.prConversation);
 export const usePrSearchOpen = () => useUiStore((state) => state.prSearchOpen);
@@ -700,6 +752,9 @@ export const usePrPageActions = () =>
     useShallow((state) => ({
       openPrPage: state.openPrPage,
       setPrTab: state.setPrTab,
+      showPrRun: state.showPrRun,
+      showPrJob: state.showPrJob,
+      openPrChecks: state.openPrChecks,
       togglePrsFolded: state.togglePrsFolded,
       setPrConversation: state.setPrConversation,
       setPrSearchOpen: state.setPrSearchOpen,
@@ -802,6 +857,18 @@ export const useNewSessionDefaults = () =>
 
 /** Whether the settings overlay is open (story 101). */
 export const useSettingsOpen = () => useUiStore((state) => state.settings);
+
+/** The inbox arrival queue, newest first (HIVE-198). */
+export const useArrivals = () => useUiStore((state) => state.arrivals);
+
+/** The latest quiet arrival, which the pill pulses once for. */
+export const useArrivalPulse = () => useUiStore((state) => state.arrivalPulse);
+
+/** The Inbox drawer: open, and the thread it was opened on. */
+export const useInboxDrawer = () => useUiStore((state) => state.inboxDrawer);
+
+/** Inbox arrival and drawer actions, referentially stable. */
+export const useInboxActions = () => useUiStore(useShallow(inboxActionsSelector));
 
 /** Settings actions, referentially stable across unrelated state changes. */
 export const useSettingsActions = () =>

@@ -43,6 +43,14 @@ the picker from re-rendering thirteen live terminals.
   `expanded`, round two's fold map, **folded by default** and separate from
   Classic's `collapsed`. `setSessionsProject(id)` also unfolds that project;
   `backToOrch` and the Sessions icon put `selId` on the session being left.
+  Round two's Inbox (HIVE-198), none persisted: `arrivals` (notification ids
+  up as a card or note, newest first), `arrivalPulse` (the latest arrival that
+  came in while the keyboard was in a terminal; the pill pulses once for it)
+  and `inboxDrawer` (`{ open, thread }`). `pushArrival(id, quiet)` raises or
+  pulses and does nothing over an open drawer; `foldArrivals()` empties the
+  queue (the rows stay in Summons); `openInboxDrawer(thread?)` folds and opens;
+  `closeInboxDrawer()`. What is drawn is `arrivals ∩ useSummons(onStage)`, so
+  an answered ask or the on-stage session drop out without anyone re-checking.
   `consoleShown` (`false`) is the overmind's transcript in round two's dock,
   flipped by `toggleConsole`; folded, the stage hides the transcript and the
   table takes the page.
@@ -96,6 +104,11 @@ whose authority lives in the other process, and that shapes both of its actions:
   permanently — the hook mounts once at the composition root and never remounts,
   so there is no second hydrate to recover it. Entries are kept sorted by `id`,
   which is fixed-width and sorts as a string in write order.
+- **`hydrateLedger(entries, closed?)`** also merges the snapshot's
+  `closedAsks` (HIVE-198) into the closed set. `LedgerSnapshot.closedAsks` is
+  every ask thread closed anywhere in main's log: a window opened after an
+  ask's closing entry left the tail would otherwise count it open in the pill
+  and the dock. Optional on the wire, so an older peer still speaks the shape.
 - **`ledgerAppend(entry)`** is the push channel's only entry point. Nothing in
   the renderer writes to this slice directly; a write goes out over IPC and comes
   back on the channel, so the mirror can only ever hold what the log holds.
@@ -358,6 +371,9 @@ Components never read a store object directly and never call `getState()`.
 | `useProjectSessions(projectId)` | a project's sessions that have not ended |
 | `useOpenEntity()` | open an entity's tab, refusing a `terminated` one |
 | `useTicketPrs(ticketKey)` | PRs reachable from a ticket's sessions |
+| `useCurrentRow(terminalId)` | the row behind a terminal now, the subscribing `currentRowFor` (HIVE-198) |
+| `useArrivals()` / `useArrivalPulse()` | ui-store: the Inbox arrival queue and the pill's pulse id (HIVE-198) |
+| `useInboxDrawer()` / `useInboxActions()` | ui-store: the drawer's `{ open, thread }`, and the arrival and drawer actions |
 | `useUnreadCount()` | inbox unread count |
 | `useNotifs()` | the inbox, newest first |
 | `useSummons(onStage)` | the Summons queue, `{ asks, sessions }`, newest first: open `agent.ask` / `agent.permission` and `pr.review_requested`; `session.blocked` less the one on stage (HIVE-214) |
@@ -378,6 +394,7 @@ Components never read a store object directly and never call `getState()`.
 | `useShipTrack(slug, n)` | the shipper's eight stops for one PR, with time and holder (HIVE-205) |
 | `useMergeAsk(slug, n)` | the shipper's open merge card for one PR, the ask the PR page's Merge answers (HIVE-205) |
 | `useSessionPr(id)` | one row's PR, matched on its branch |
+| `useSessionPrRow(id)` | the session's PR with its Hatchery row, matched by URL; `row: null` for a remembered PR. The session panel's PR tab and dot (HIVE-209) |
 | `useHasResumable()` | whether the fleet table reserves its Resume column |
 | `useMarkRead()` | mark one notification read, by index |
 
@@ -448,6 +465,17 @@ by"), `useReviewUrls` ("via the Hive"), `useHolderPost` (the track's now line)
 and `useMergeAsk`. `usePrsQuiet()` is the empty Hatchery.
 
 **The Files tab (HIVE-207).** `PrDetail.files` holds the first 100 changed files: path, +/−, change type and GitHub's `viewerViewedState` as `viewed`/`unviewed`/`dismissed`. `changedFiles` is the true total. The diff text lives in its own PR-keyed slice, `prDiffs`, read at the detail's `headSha`: once per sha, and again when the 60s detail poll sees the head move. It has its own slice because `loadPrDetail` replaces a detail wholesale. The same cap applies, and it is dropped with the PR. Parsing (`src/lib/unified-diff.ts`), the tree, counts and thread placement (`src/lib/pr-files.ts`) are computed on render, never stored. **Viewed state lives on GitHub, not in a store.** `setPrFileViewed` patches the one file at once, rolls it back on a refusal, and re-reads the detail either way. Thread writes (`replyToPrThread`, `setPrThreadResolved`) are not optimistic; the reload shows them.
+The Checks tab (HIVE-206) reads a fifth PR slice, `prChecks`, keyed by `prKey`
+and capped and dropped with `prDetails` (`PR_DETAIL_CAP`, `dropLeftPrs`). An
+entry holds the head branch's runs (`gh run list`, 40, folded into the last
+eight pushes by `foldPushes`), the checkout's workflow graph, the jobs of each
+run it has shown (by run id) and each failed job's cut log (by job id). It is
+its own slice because `loadPrDetail` replaces its entry whole every minute.
+**The rate rule:** runs and jobs are read only for the selected PR and only
+while its Checks tab is mounted, by a tab-local `createPoller` at 60s; the
+failed log once per job id, on show, never on a timer. The shown push and the
+clicked job are `ui-store`'s `prRun` and `prJob`, not persisted. The graph, the
+pushes and the shown job are derived in selectors over `src/lib/checks-graph.ts`.
 
 The ui-store's PRs fields are flat, as `workTicket` and `agentPage` are, and none
 is persisted: `prPage` (the last PR opened, which `useOpenPr()` keeps while it is

@@ -275,7 +275,7 @@ export const PR_DETAIL_QUERY = [
   `      files(first: ${PAGE}) { nodes { path additions deletions changeType viewerViewedState } }`,
   `      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: ${PAGE}) { nodes {`,
   '        __typename',
-  '        ... on CheckRun { name status conclusion startedAt completedAt detailsUrl }',
+  '        ... on CheckRun { name status conclusion startedAt completedAt detailsUrl databaseId checkSuite { app { slug } } }',
   '        ... on StatusContext { context state targetUrl createdAt }',
   '      } } } } } }',
   '    }',

@@ -2,9 +2,17 @@ import { useEffect, useState } from 'react';
 
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { cn } from '@/lib/utils';
-import type { HatchStatus } from '@/types/pull-request';
+import type { FlapTone, HatchStatus } from '@/types/pull-request';
 
 import { FLAP_TEXT } from '@features/shared/flap-tone';
+
+/** The same tones as a dot: the session panel's PR tab and strip icon (HIVE-209). */
+export const FLAP_DOT: Record<FlapTone, string> = {
+  muted: 'bg-subtle',
+  green: 'bg-green',
+  amber: 'bg-amber',
+  brand: 'bg-brand',
+};
 
 /** Half of `ccflap`'s 360ms: the word lands edge-on. */
 const HALF_TURN_MS = 180;

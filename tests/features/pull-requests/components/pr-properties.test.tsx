@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session } from '@/types/entity';
 
@@ -9,10 +9,10 @@ import { hatchRow } from '@tests/support/hatchery';
 import { prDetail } from '@tests/support/pr-detail';
 
 const checks = [
-  { name: 'lint', status: 'success' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:00:41Z', url: 'https://ci/lint' },
-  { name: 'integration', status: 'failure' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:03:10Z', url: 'https://ci/int' },
-  { name: 'e2e', status: 'running' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: null, url: 'https://ci/e2e' },
-  { name: 'build', status: 'queued' as const, startedAt: null, completedAt: null, url: 'https://ci/build' },
+  { name: 'lint', status: 'success' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:00:41Z', url: 'https://ci/lint', app: 'github-actions', jobId: null },
+  { name: 'integration', status: 'failure' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:03:10Z', url: 'https://ci/int', app: 'github-actions', jobId: null },
+  { name: 'e2e', status: 'running' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: null, url: 'https://ci/e2e', app: 'github-actions', jobId: null },
+  { name: 'build', status: 'queued' as const, startedAt: null, completedAt: null, url: 'https://ci/build', app: 'github-actions', jobId: null },
 ];
 const row = hatchRow({ session: 'fee-rule' }, { flap: 'MUTATING', tone: 'green', github: 'Open · 2 open findings, fixer on it' });
 
@@ -29,6 +29,14 @@ beforeEach(() => {
 const section = (name: string) => screen.getByRole('heading', { name }).parentElement!;
 
 describe('PrProperties', () => {
+  it('reads a running check by how long it has run and a queued one as queued', () => {
+    vi.useFakeTimers({ now: Date.parse('2026-10-03T10:02:10Z') });
+    render(<PrProperties row={row} detail={prDetail({ checks })} />);
+    expect(screen.getByRole('link', { name: /e2e/ })).toHaveTextContent('running 2m');
+    expect(screen.getByRole('link', { name: /build/ })).toHaveTextContent('queued');
+    vi.useRealTimers();
+  });
+
   it("shows the flap and GitHub's words", () => {
     render(<PrProperties row={row} detail={prDetail()} />);
     expect(within(section('Status')).getByText('MUTATING')).toBeInTheDocument();

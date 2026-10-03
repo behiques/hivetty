@@ -64,9 +64,10 @@ import { isThisMachineAction } from './notification-contract';
  * `mergedAt` and `mine`.
  * 9 → 10 (HIVE-216): `CH` gained `jira:users`; `jira:comments`' comments gained `authorId` and `via`, and their runs `mention`; `jira:add-comment` takes `mentions`.
  * 10 → 11 (HIVE-205): `CH` gained `github:pr-detail` and `github:pr-comment`.
- * 11 → 12 (HIVE-207): `CH` gained `github:pr-diff`, `github:pr-thread` and `github:pr-viewed`; `PrDetail` gained `files`.
+ * 11 → 12 (HIVE-206): `CH` gained `github:pr-runs`, `github:run-jobs`, `github:job-log` and `github:rerun-failed`; `PrCheck` gained `app` and `jobId`.
+ * 12 → 13 (HIVE-207): `CH` gained `github:pr-diff`, `github:pr-thread` and `github:pr-viewed`; `PrDetail` gained `files`.
  */
-export const REMOTE_PROTOCOL_VERSION = 12;
+export const REMOTE_PROTOCOL_VERSION = 13;
 
 /**
  * What a frame is for.
@@ -199,6 +200,10 @@ export const FRAME_KIND = {
   [CH.githubPrDiff]: 'call',
   [CH.githubPrThread]: 'call',
   [CH.githubPrViewed]: 'call',
+  [CH.githubPrRuns]: 'call',
+  [CH.githubRunJobs]: 'call',
+  [CH.githubJobLog]: 'call',
+  [CH.githubRerunFailed]: 'call',
   [CH.notificationsActivate]: 'event',
   [CH.notificationsNew]: 'event',
   /*
@@ -489,6 +494,11 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.githubPrDiff]: 'execute',
   [CH.githubPrThread]: 'execute',
   [CH.githubPrViewed]: 'execute',
+  // Each spawns `gh run` on the server (HIVE-206).
+  [CH.githubPrRuns]: 'execute',
+  [CH.githubRunJobs]: 'execute',
+  [CH.githubJobLog]: 'execute',
+  [CH.githubRerunFailed]: 'execute',
   [CH.notificationsActivate]: 'read',
   [CH.notificationsNew]: 'read',
   [CH.notificationsToast]: 'read',

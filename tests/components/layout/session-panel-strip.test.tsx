@@ -1,5 +1,5 @@
-import { Files } from '@phosphor-icons/react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { Files, GitPullRequest } from '@phosphor-icons/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SessionPanelStrip, type StripTab } from '@components/layout/session-panel-strip';
@@ -24,6 +24,18 @@ const files = (count: number): StripTab => ({
 });
 
 describe('SessionPanelStrip (HIVE-201)', () => {
+  it('draws a tab dot in its tone, and none without one', () => {
+    render(
+      <SessionPanelStrip
+        plan={undefined}
+        tabs={[{ id: 'pr', label: 'PR', Icon: GitPullRequest, fact: '#313 · Open', dot: 'amber' }, files(0)]}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(within(screen.getByRole('button', { name: '#313 · Open' })).getByTestId('pr-dot')).toHaveClass('bg-amber');
+    expect(within(screen.getByRole('button', { name: 'Files' })).queryByTestId('pr-dot')).toBeNull();
+  });
+
   it('draws the plan rings, then each other tab with its fact; each opens its tab', () => {
     const onOpen = vi.fn();
     render(<SessionPanelStrip plan={plan} tabs={[files(2)]} onOpen={onOpen} />);

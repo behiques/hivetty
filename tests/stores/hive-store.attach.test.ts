@@ -98,6 +98,14 @@ describe('applyAttachSnapshot', () => {
     expect(ids).toContain('20260830-140000-0002');
   });
 
+  it('carries the snapshot\'s closed asks into the closed set (HIVE-198)', () => {
+    state().applyAttachSnapshot({
+      [CH.ledgerList]: { entries: [], openAsks: [], claims: {}, closedAsks: ['q1'] },
+    });
+
+    expect(state().closedAsks.has('q1')).toBe(true);
+  });
+
   it('unions notifications by id', () => {
     state().hydrateNotifs([notif({ id: 'old-notif' })]);
 

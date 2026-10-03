@@ -2188,30 +2188,20 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       });
     }, 60_000);
 
-    it('11d. answers github:pr-diff over an attached socket (HIVE-207)', async () => {
+    it.each([
+      ['11d', CH.githubPrRuns, { owner: 'hive-conformance', repo: 'nowhere', branch: 'main' }],
+      ['11e', CH.githubRunJobs, { owner: 'hive-conformance', repo: 'nowhere', id: 1 }],
+      ['11f', CH.githubJobLog, { owner: 'hive-conformance', repo: 'nowhere', id: 1 }],
+      ['11g', CH.githubRerunFailed, { owner: 'hive-conformance', repo: 'nowhere', id: 1 }],
+      ['11h', CH.githubPrDiff, { owner: 'hive-conformance', repo: 'nowhere', n: 1 }],
+      ['11i', CH.githubPrThread, { owner: 'hive-conformance', repo: 'nowhere', n: 1, threadId: 'PRRT_never', op: 'resolve' }],
+      ['11j', CH.githubPrViewed, { owner: 'hive-conformance', repo: 'nowhere', n: 1, path: 'never.ts', viewed: true }],
+    ] as const)('%s. answers %s over an attached socket (HIVE-206, HIVE-207)', async (_n, channel, payload) => {
       const client = await attached();
-      const result = await client.call(CH.githubPrDiff, { owner: 'hive-conformance', repo: 'nowhere', n: 1 });
+      const result = await client.call(channel, payload);
 
-      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
-        kind: 'result',
-        payload: { ok: false },
-      });
-    }, 60_000);
-
-    it('11e. answers github:pr-thread over an attached socket (HIVE-207)', async () => {
-      const client = await attached();
-      const result = await client.call(CH.githubPrThread, { owner: 'hive-conformance', repo: 'nowhere', n: 1, threadId: 'PRRT_never', op: 'resolve' });
-
-      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
-        kind: 'result',
-        payload: { ok: false },
-      });
-    }, 60_000);
-
-    it('11f. answers github:pr-viewed over an attached socket (HIVE-207)', async () => {
-      const client = await attached();
-      const result = await client.call(CH.githubPrViewed, { owner: 'hive-conformance', repo: 'nowhere', n: 1, path: 'never.ts', viewed: true });
-
+      // Unmapped (and `gh` may be absent): the execute-graded call crosses the
+      // socket and answers with a GhResult refusal, never a throw.
       expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
         kind: 'result',
         payload: { ok: false },

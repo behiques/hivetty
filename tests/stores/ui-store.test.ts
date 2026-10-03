@@ -741,6 +741,83 @@ describe('ui-store — the PRs place (HIVE-205)', () => {
   });
 });
 
+describe('the Checks tab selection (HIVE-206)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('openPrChecks shows the Checks tab on a job', () => {
+    useUiStore.getState().openPrChecks(77);
+    expect(useUiStore.getState()).toMatchObject({ prTab: 'checks', prJob: 77 });
+  });
+
+  it('showPrRun shows a push and lets go of the clicked job', () => {
+    useUiStore.setState({ prJob: 77 });
+    useUiStore.getState().showPrRun('9f3c2ab');
+    expect(useUiStore.getState()).toMatchObject({ prRun: '9f3c2ab', prJob: null });
+  });
+
+  it('showPrJob picks a job', () => {
+    useUiStore.getState().showPrJob(12);
+    expect(useUiStore.getState().prJob).toBe(12);
+  });
+
+  it('openPrPage forgets the shown push and job, and keeps the tab', () => {
+    useUiStore.setState({ prTab: 'checks', prRun: 'abc', prJob: 3 });
+    useUiStore.getState().openPrPage({ owner: 'acme', repo: 'server', n: 1 });
+    expect(useUiStore.getState()).toMatchObject({ prTab: 'checks', prRun: null, prJob: null });
+  });
+});
+
+describe('ui-store — the inbox arrival queue (HIVE-198)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('starts empty with the drawer shut', () => {
+    const s = useUiStore.getState();
+    expect(s.arrivals).toEqual([]);
+    expect(s.arrivalPulse).toBeNull();
+    expect(s.inboxDrawer).toEqual({ open: false, thread: null });
+  });
+
+  it('pushes newest first and never twice', () => {
+    const { pushArrival } = useUiStore.getState();
+    pushArrival('a', false);
+    pushArrival('b', false);
+    pushArrival('a', false);
+    expect(useUiStore.getState().arrivals).toEqual(['a', 'b']);
+  });
+
+  it('a quiet arrival pulses instead of rising', () => {
+    useUiStore.getState().pushArrival('a', true);
+    expect(useUiStore.getState().arrivals).toEqual([]);
+    expect(useUiStore.getState().arrivalPulse).toBe('a');
+  });
+
+  it('nothing rises while the drawer is open', () => {
+    useUiStore.getState().openInboxDrawer();
+    useUiStore.getState().pushArrival('a', false);
+    expect(useUiStore.getState().arrivals).toEqual([]);
+  });
+
+  it('folds the queue', () => {
+    useUiStore.getState().pushArrival('a', false);
+    useUiStore.getState().foldArrivals();
+    expect(useUiStore.getState().arrivals).toEqual([]);
+  });
+
+  it('opens the drawer on a thread, folding what was up, and closes it', () => {
+    useUiStore.getState().pushArrival('a', false);
+    useUiStore.getState().openInboxDrawer('t1');
+    expect(useUiStore.getState().inboxDrawer).toEqual({ open: true, thread: 't1' });
+    expect(useUiStore.getState().arrivals).toEqual([]);
+    useUiStore.getState().closeInboxDrawer();
+    expect(useUiStore.getState().inboxDrawer).toEqual({ open: false, thread: null });
+  });
+
+  it('opens without a thread', () => {
+    useUiStore.getState().openInboxDrawer();
+    expect(useUiStore.getState().inboxDrawer).toEqual({ open: true, thread: null });
+  });
+});
+
 describe('awaySince (HIVE-200)', () => {
   beforeEach(() => {
     useUiStore.getState().reset();

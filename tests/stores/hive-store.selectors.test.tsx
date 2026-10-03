@@ -19,12 +19,14 @@ import {
 import {
   accountLimitsOf,
   agentWorksIn,
+  currentRowFor,
   flapCountsOf,
   fleetGroupsOf,
   type FleetView,
   repoDirName,
   useActiveEntity,
   useActiveSessions,
+  useCurrentRow,
   useAskingAgentCount,
   useAgentLive,
   useAgentLiveCount,
@@ -59,6 +61,7 @@ import {
   usePrNeedsYouCount,
   usePrFlapCounts,
   useSessionPr,
+  useSessionPrRow,
   useNextTransition,
   useOpenTicket,
   useTicketCount,
@@ -77,7 +80,12 @@ import {
   useCommentOnPr,
   useHolderPost,
   useLoadPrDetail,
+  useChecksGraph,
+  usePrChecks,
+  usePrChecksActions,
   usePrDetail,
+  usePushes,
+  useShownJob,
   usePrEvents,
   usePrOpener,
   useReviewUrls,
@@ -974,6 +982,25 @@ describe('hive-store selectors', () => {
       expect(renderHook(() => useSummonsCount(null)).result.current).toBe(0);
     });
 
+    it('a close older than the mirror still closes the ask, via the snapshot (HIVE-198)', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([ask('a1')]);
+        // The entries lack both the ask and its answer: they rolled out of main's tail.
+        useHiveStore.getState().hydrateLedger([], ['a1']);
+      });
+
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(0);
+    });
+
+    it('merges closed threads from the snapshot rather than replacing them (HIVE-198)', () => {
+      act(() => {
+        useHiveStore.getState().hydrateLedger([], ['a1']);
+        useHiveStore.getState().hydrateLedger([], ['a2']);
+      });
+
+      expect([...useHiveStore.getState().closedAsks].sort()).toEqual(['a1', 'a2']);
+    });
+
     it('leaves out the session on stage, and counts it for the dock', () => {
       act(() => {
         useHiveStore.getState().hydrateNotifs([blocked('b1', 'term-1'), blocked('b2', 'term-2')]);
@@ -982,6 +1009,25 @@ describe('hive-store selectors', () => {
       expect(renderHook(() => useSummons('term-1')).result.current.sessions.map((n) => n.id)).toEqual(['b2']);
       expect(renderHook(() => useSummonsCount('term-1')).result.current).toBe(1);
       expect(renderHook(() => useSummonsCount(null)).result.current).toBe(2);
+    });
+  });
+
+  describe('useCurrentRow (HIVE-198)', () => {
+    it('resolves a terminal to the row currentRowFor names', () => {
+      const row: Session = {
+        kind: 'session',
+        id: 'sess-row',
+        terminalId: 'term-row',
+        project: 'the-hive',
+        status: 'idle',
+        task: 'x',
+        cost: '$0.00',
+        lines: [],
+      };
+      act(() => useHiveStore.setState({ entities: { 'sess-row': row }, order: ['sess-row'] }));
+
+      expect(currentRowFor('term-row')).toBe('sess-row');
+      expect(renderHook(() => useCurrentRow('term-row')).result.current).toBe('sess-row');
     });
   });
 
@@ -2681,6 +2727,96 @@ describe('usePrsQuiet (HIVE-205)', () => {
       useHiveStore.setState({ prs: [], prSource });
       expect(renderHook(() => usePrsQuiet()).result.current).toBe(false);
     }
+  });
+});
+
+describe('the Checks selectors (HIVE-206)', () => {
+  const KEY = 'acme/nova-web#482';
+  const run = (id: number, headSha: string, conclusion: string | null = 'success') => ({
+    id, number: id, attempt: 1, status: 'completed', conclusion, headSha, event: 'push',
+    workflowName: 'CI', createdAt: '2026-10-03T14:00:00Z', updatedAt: 'u', url: 'u' });
+  const job = (id: number, runId: number, conclusion = 'success') => ({ id, runId, name: `job${String(id)}`, status: 'completed',
+    conclusion, startedAt: null, completedAt: null, url: 'u', steps: [] });
+
+  beforeEach(() => {
+    useHiveStore.setState({ prChecks: { [KEY]: { key: KEY, state: 'ok', workflows: [],
+      runs: [run(2, 'new', 'failure'), run(1, 'old')],
+      jobs: { 2: [job(21, 2), job(22, 2, 'failure')], 1: [job(11, 1)] }, logs: {} } } });
+  });
+
+  it('folds the runs into pushes, oldest first', () => {
+    const { result } = renderHook(() => usePushes(KEY));
+    expect(result.current.map((p) => [p.sha, p.state])).toEqual([['old', 'passed'], ['new', 'failed']]);
+  });
+
+  it('lays out the newest push, or the one asked for', () => {
+    expect(renderHook(() => useChecksGraph(KEY, null, new Set())).result.current?.nodes.map((n) => n.jobId)).toEqual([21, 22]);
+    expect(renderHook(() => useChecksGraph(KEY, 'old', new Set())).result.current?.nodes.map((n) => n.jobId)).toEqual([11]);
+    expect(renderHook(() => useChecksGraph('acme/x#1', null, new Set())).result.current).toBeNull();
+  });
+
+  it('shows the clicked job, else the failed one, else none', () => {
+    expect(renderHook(() => useShownJob(KEY, null, null)).result.current?.id).toBe(22);
+    expect(renderHook(() => useShownJob(KEY, null, 21)).result.current?.id).toBe(21);
+    expect(renderHook(() => useShownJob(KEY, 'old', null)).result.current).toBeNull();
+    expect(renderHook(() => useShownJob('acme/x#1', null, null)).result.current).toBeNull();
+  });
+
+  it('hands the entry and the three actions through', () => {
+    expect(renderHook(() => usePrChecks(KEY)).result.current?.state).toBe('ok');
+    expect(Object.keys(renderHook(() => usePrChecksActions()).result.current).sort()).toEqual(['loadJobLog', 'loadPrChecks', 'rerunFailed']);
+  });
+});
+
+describe('useSessionPrRow (HIVE-209)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+  });
+
+  it("pairs the session's PR with its Hatchery row", () => {
+    const { result } = renderHook(() => useSessionPrRow('hero-refresh'));
+    expect(result.current?.pr.n).toBe(482);
+    expect(result.current?.row?.pr.url).toBe('https://github.com/demo/nova-web/pull/482');
+    expect(result.current?.row?.hatch.flap).toBeDefined();
+  });
+
+  it('is null with no PR, and a remembered PR has no row', () => {
+    act(() => useHiveStore.setState({ prs: [] }));
+    const { result, rerender } = renderHook(() => useSessionPrRow('hero-refresh'));
+    expect(result.current).toBeNull();
+
+    act(() =>
+      useHiveStore.setState((state) => ({
+        entities: {
+          ...state.entities,
+          'hero-refresh': {
+            ...state.entities['hero-refresh'],
+            lastPr: { number: 118, url: 'https://github.com/demo/nova-web/pull/118' },
+          } as never,
+        },
+      })),
+    );
+    rerender();
+    expect(result.current).toEqual({ pr: { n: 118, url: 'https://github.com/demo/nova-web/pull/118' }, row: null });
+  });
+
+  it('matches by URL, so the same number in another repo is not this row', () => {
+    act(() =>
+      useHiveStore.setState((state) => ({
+        prs: [
+          { ...state.prs[0]!, repo: 'other', url: 'https://github.com/demo/other/pull/482', branch: 'x' },
+          ...state.prs,
+        ],
+      })),
+    );
+    const { result } = renderHook(() => useSessionPrRow('hero-refresh'));
+    expect(result.current?.row?.pr.repo).toBe('nova-web');
+  });
+
+  it('is null for an id that is not a session', () => {
+    const { result } = renderHook(() => useSessionPrRow('nope'));
+    expect(result.current).toBeNull();
   });
 });
 

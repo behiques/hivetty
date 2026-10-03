@@ -325,6 +325,10 @@ describe('the PR page documents (HIVE-205)', () => {
     expect(PR_DETAIL_QUERY).toContain('reviewThreads(last: 100)');
   });
 
+  it('selects each check run’s job id and app (HIVE-206)', () => {
+    expect(PR_DETAIL_QUERY).toContain('... on CheckRun { name status conclusion startedAt completedAt detailsUrl databaseId checkSuite { app { slug } } }');
+  });
+
   it('reads every field the page draws', () => {
     for (const field of [
       'body', 'createdAt', 'mergedAt', 'baseRefName', 'headRefName', 'headRefOid',

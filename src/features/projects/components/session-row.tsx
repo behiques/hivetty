@@ -1,9 +1,9 @@
 import { cn } from '@/lib/utils';
-import { branchLabel, entityLabel, isSession } from '@/types/entity';
+import { branchLabel, entityLabel, isSession, terminalOf } from '@/types/entity';
 
 import { Badge } from '@components/ui/badge';
 import { StatusDot, statusLabel, statusText } from '@components/ui/status-dot';
-import { useEntity, useOpenEntity, usePlanProgress } from '@stores/hive-store';
+import { useEntity, useOpenEntity, usePlanProgress, useYoursAgain } from '@stores/hive-store';
 import { useActiveTab } from '@stores/ui-store';
 
 interface SessionRowProps {
@@ -29,6 +29,8 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
   const openEntity = useOpenEntity();
   // Before the guard: a hook cannot sit behind an early return (HIVE-182).
   const progress = usePlanProgress(id);
+  // Also before the guard, with '' when there is no session to name (HIVE-198).
+  const yoursAgain = useYoursAgain(entity && isSession(entity) ? terminalOf(entity) : '');
 
   if (!entity || !isSession(entity)) return null;
 
@@ -56,7 +58,13 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
             statusText(entity.status, entity.idleDetail),
           )}
         >
-          {statusLabel(entity.status, entity.idleDetail)}
+          {/*
+            Round two's panel says a session that finished for you is yours
+            again, until opening it sweeps the row (HIVE-198). Idle's tone.
+          */}
+          {compact && yoursAgain && entity.status === 'idle'
+            ? 'yours again'
+            : statusLabel(entity.status, entity.idleDetail)}
         </span>
         {/*
           The session's plan progress (HIVE-182), after the status label: the

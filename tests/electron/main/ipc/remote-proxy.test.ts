@@ -64,7 +64,7 @@ vi.mock('../../../../electron/main/notifications/activate-here', () => ({
  *
  * The three channel lists below are derived from `FRAME_KIND` — the same
  * table `registerRemoteProxy` itself walks — but the counts asserted against
- * them (118, 6, 29, 124) are literals, not read back off the derived lists.
+ * them (122, 6, 29, 128) are literals, not read back off the derived lists.
  * `tests/shared/remote-contract.test.ts:82,125` pins the same four numbers
  * independently. A channel added to the contract without a home in this file
  * fails a count here, which is the point: a self-referential assertion could
@@ -222,7 +222,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(118);
+    expect(callChannels.length).toBe(122);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -532,7 +532,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(124);
+    expect(remoteProxyBindingsSize()).toBe(128);
   });
 
   /**
@@ -1044,6 +1044,13 @@ describe('registerRemoteProxy', () => {
       expect(countsAsAction(CH.ptyResize, 'notify')).toBe(false);
     });
 
+    it('counts the Checks tab’s polls as background and its log read and re-run as actions (HIVE-206)', () => {
+      expect(countsAsAction(CH.githubPrRuns, 'call')).toBe(false);
+      expect(countsAsAction(CH.githubRunJobs, 'call')).toBe(false);
+      expect(countsAsAction(CH.githubJobLog, 'call')).toBe(true);
+      expect(countsAsAction(CH.githubRerunFailed, 'call')).toBe(true);
+    });
+
     it('does not count a read the closed link rejected', async () => {
       const client = fakeClient();
       client.call.mockRejectedValue(new Error('Cannot call config:get: the connection to mini is closed.'));
@@ -1106,12 +1113,12 @@ describe('registerRemoteProxy', () => {
 
     resetRemoteProxy();
 
-    // 124 (118 call + 6 notify), the same literal `records every binding`
+    // 128 (122 call + 6 notify), the same literal `records every binding`
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(124);
-    expect(removeAllListeners).toHaveBeenCalledTimes(124);
+    expect(removeHandler).toHaveBeenCalledTimes(128);
+    expect(removeAllListeners).toHaveBeenCalledTimes(128);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

@@ -8,6 +8,8 @@ import {
   parsePrDiffRequest,
   parsePrThreadRequest,
   parsePrViewedRequest,
+  parsePrRunsRequest,
+  parseRunRef,
 } from '../../../electron/shared/guards';
 
 /** The PR page's two payloads (HIVE-205): a repository, a number, and a comment's body. */
@@ -100,5 +102,32 @@ describe('parsePrViewedRequest (HIVE-207)', () => {
     ['a non-boolean viewed', { ...ref, path: 'a', viewed: 'yes' }],
   ])('refuses %s', (_name, input) => {
     expect(() => parsePrViewedRequest(input)).toThrow(IpcValidationError);
+  });
+});
+
+describe('Checks payloads (HIVE-206)', () => {
+  it('accepts a repository and a branch', () => {
+    expect(parsePrRunsRequest({ owner: 'acme', repo: 'nova-web', branch: 'feat/hive-206-x' }))
+      .toEqual({ owner: 'acme', repo: 'nova-web', branch: 'feat/hive-206-x' });
+  });
+
+  it.each(['', '-x', 'a b', 'a\tb', 'a\u0000b', 'x'.repeat(256)])('refuses the branch %j', (branch) => {
+    expect(() => parsePrRunsRequest({ owner: 'acme', repo: 'nova-web', branch })).toThrow(/prRuns\.branch/);
+  });
+
+  it('refuses a malformed owner as prDetail does', () => {
+    expect(() => parsePrRunsRequest({ owner: '-acme', repo: 'nova-web', branch: 'main' })).toThrow(/prRuns\.owner/);
+  });
+
+  it('accepts a positive whole id', () => {
+    expect(parseRunRef({ owner: 'acme', repo: 'nova-web', id: 2207 }, 'runJobs')).toEqual({ owner: 'acme', repo: 'nova-web', id: 2207 });
+  });
+
+  it.each([0, -1, 1.5, '7', Number.MAX_SAFE_INTEGER + 1, null])('refuses the id %j', (id) => {
+    expect(() => parseRunRef({ owner: 'acme', repo: 'nova-web', id }, 'jobLog')).toThrow(/jobLog\.id/);
+  });
+
+  it('refuses an extra key', () => {
+    expect(() => parseRunRef({ owner: 'acme', repo: 'nova-web', id: 1, cmd: 'x' }, 'rerunFailed')).toThrow();
   });
 });
