@@ -84,7 +84,7 @@ export function TicketConversation({ issueKey }: TicketConversationProps) {
       }
       setState({
         kind: 'ready',
-        loaded: { comments: comments.value, links: links.value },
+        loaded: { comments: comments.value.comments, links: links.value },
       });
     });
   };

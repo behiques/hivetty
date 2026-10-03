@@ -4,6 +4,7 @@ import {
   addJiraComment,
   clearJiraToken,
   readJiraComments,
+  readJiraDetail,
   readJiraIssue,
   readJiraLinks,
   readJiraStatus,
@@ -51,6 +52,7 @@ describe('with no bridge', () => {
     await expect(testJiraConnection()).resolves.toBeNull();
     await expect(searchJiraIssues()).resolves.toBeNull();
     await expect(readJiraIssue({ key: 'HIVE-1' })).resolves.toBeNull();
+    await expect(readJiraDetail({ key: 'HIVE-1' })).resolves.toBeNull();
   });
 
   it('logs nothing — the browser demo is not a failure', async () => {
@@ -169,6 +171,15 @@ describe('the read verbs (HIVE-68)', () => {
     expect(issue).toHaveBeenCalledWith({ key: 'HIVE-68' });
   });
 
+  it('reads an issue\'s detail through the bridge (HIVE-203)', async () => {
+    const value = { description: [], parent: { key: 'HIVE-194', summary: 'Round two' } };
+    const detail = vi.fn(() => Promise.resolve({ ok: true as const, value }));
+    bridge({ detail });
+
+    await expect(readJiraDetail({ key: 'HIVE-203' })).resolves.toEqual({ ok: true, value });
+    expect(detail).toHaveBeenCalledWith({ key: 'HIVE-203' });
+  });
+
   it('reports a rejected read channel as null, naming the verb', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     bridge({ search: () => Promise.reject(new Error('channel down')) });
@@ -188,7 +199,7 @@ describe('the conversation verbs (HIVE-71)', () => {
   });
 
   it('pass the key through', async () => {
-    const comments = vi.fn(() => Promise.resolve({ ok: true as const, value: [] }));
+    const comments = vi.fn(() => Promise.resolve({ ok: true as const, value: { comments: [], total: 0 } }));
     bridge({ comments });
 
     await readJiraComments({ key: 'HIVE-71' });

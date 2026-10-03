@@ -1885,8 +1885,13 @@ export function parseJiraTransitionsRequest(
 export function parseJiraConversationRequest(
   input: unknown,
 ): JiraConversationRequest {
-  const raw = assertShape(input, ['key'], 'jiraConversation');
-  return { key: assertJiraIssueKey(raw.key, 'jiraConversation.key') };
+  const raw = assertShape(input, ['key'], 'jiraConversation', ['newest']);
+  const request: JiraConversationRequest = { key: assertJiraIssueKey(raw.key, 'jiraConversation.key') };
+  if (raw.newest !== undefined) {
+    if (raw.newest !== true) return fail('jiraConversation.newest must be true when present');
+    request.newest = true;
+  }
+  return request;
 }
 
 /**
@@ -2754,6 +2759,9 @@ const optionalMeta = (
   return asRecord(value, `${label}.meta`);
 };
 
+/** A ticket key is a handful of characters; this only bounds the filter (HIVE-203). */
+const LEDGER_TICKET_MAX = 64;
+
 export function parseLedgerReadQuery(input: unknown): LedgerReadQuery {
   const source = asRecord(input, 'ledger query');
   const query: LedgerReadQuery = {};
@@ -2768,6 +2776,13 @@ export function parseLedgerReadQuery(input: unknown): LedgerReadQuery {
   if (thread !== undefined) query.thread = thread;
   const since = optionalString(source, 'since', 'ledger query');
   if (since !== undefined) query.since = since;
+  const ticket = optionalString(source, 'ticket', 'ledger query');
+  if (ticket !== undefined) {
+    if (ticket.length > LEDGER_TICKET_MAX) {
+      throw new TypeError(`ledger query.ticket must be at most ${LEDGER_TICKET_MAX} characters`);
+    }
+    query.ticket = ticket;
+  }
 
   const limit = source.limit;
   if (limit !== undefined) {

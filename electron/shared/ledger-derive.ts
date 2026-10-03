@@ -372,19 +372,23 @@ export function agentSiteFor(
   return worktree === undefined ? undefined : { worktree };
 }
 
-/** What the builder last reported for a ticket (HIVE-171). */
+/** What an agent last reported for a ticket (HIVE-171). */
 export interface BuildProgress {
+  /** Who posted it: any agent, not only the builder (HIVE-203). */
+  from: string;
   stage: string;
   /** The task it finished, when the post named one. */
   task?: number;
 }
 
 /**
- * The builder's latest progress for one ticket, or nothing (HIVE-171).
+ * The newest agent progress for one ticket, or nothing (HIVE-171).
  *
  * The builder posts one `post` per completed task with
- * `meta: { ticket, stage: "build", task, worktree }` (`resources/agents/builder`).
- * Same reading rule as {@link isShipping}: the newest matching post.
+ * `meta: { ticket, stage: "build", task, worktree }` (`resources/agents/builder`);
+ * the shipper and the fixer post their own stages on the same ticket. Any
+ * party's `post` counts, and `from` says whose it was (HIVE-203). Same reading
+ * rule as {@link isShipping}: the newest matching post.
  */
 export function buildProgressFor(
   entries: readonly LedgerEntry[],
@@ -393,14 +397,16 @@ export function buildProgressFor(
   const key = ticketKey.toUpperCase();
   for (let i = entries.length - 1; i >= 0; i -= 1) {
     const entry = entries[i]!;
-    if (entry.from !== 'builder' || entry.kind !== 'post') continue;
+    if (entry.kind !== 'post') continue;
     const meta = entry.meta ?? {};
     const ticket = meta['ticket'];
     const stage = meta['stage'];
     if (typeof ticket !== 'string' || ticket.toUpperCase() !== key || typeof stage !== 'string') continue;
     const task = wholeNumberOf(meta['task']);
     const text = stage.slice(0, STAGE_TEXT_MAX);
-    return task === undefined ? { stage: text } : { stage: text, task };
+    return task === undefined
+      ? { from: entry.from, stage: text }
+      : { from: entry.from, stage: text, task };
   }
   return undefined;
 }
@@ -442,6 +448,10 @@ export function matches(entry: LedgerEntry, query: LedgerReadQuery): boolean {
   }
   if (query.to !== undefined && entry.to !== undefined && entry.to !== query.to) return false;
   if (query.since !== undefined && entry.id <= query.since) return false;
+  if (query.ticket !== undefined) {
+    const ticket = entry.meta?.['ticket'];
+    if (typeof ticket !== 'string' || ticket.toUpperCase() !== query.ticket.toUpperCase()) return false;
+  }
   return true;
 }
 

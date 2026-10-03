@@ -198,6 +198,8 @@ describe('WorkPanel', () => {
             status: 'To Do',
             statusCategory: 'todo',
             title: 'Nobody is working this one',
+            priority: null,
+            assignee: null,
           },
         ],
       });
@@ -240,6 +242,8 @@ describe('WorkPanel — searching', () => {
     status: 'In Progress',
     statusCategory: 'in-progress' as const,
     title: `about ${key}`,
+    priority: null,
+    assignee: null,
     url: `https://example.invalid/${key}`,
   });
 

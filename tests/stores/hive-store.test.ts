@@ -5439,7 +5439,7 @@ describe('the ledger slice', () => {
     const ship = renderHook(() => useShipping('acme/nova', 4));
     const build = renderHook(() => useBuildProgress('ACME-9'));
     expect(ship.result.current).toBe(true);
-    expect(build.result.current).toEqual({ stage: 'build', task: 2 });
+    expect(build.result.current).toEqual({ from: 'builder', stage: 'build', task: 2 });
 
     const before = build.result.current;
     act(() => useHiveStore.getState().setSessionStatus('hero-refresh', 'working'));

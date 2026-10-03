@@ -22,6 +22,8 @@ const ticket = (over: Partial<Ticket> = {}): Ticket => ({
   status: 'In Progress',
   statusCategory: 'in-progress',
   title: 'Hero refresh: migrate to semantic tokens',
+  priority: null,
+  assignee: null,
   ...over,
 });
 
@@ -51,6 +53,22 @@ describe('TicketCard', () => {
     render(<TicketCard ticket={ticket()} />);
 
     expect(screen.getByText('builder · task 4 done')).toBeInTheDocument();
+  });
+
+  it('shows any agent\'s progress, named by who posted it (HIVE-203)', () => {
+    useHiveStore.getState().hydrateLedger([
+      {
+        id: 'f1',
+        ts: 1,
+        from: 'fixer',
+        kind: 'post',
+        body: 'fixing',
+        meta: { ticket: ticket().key, stage: 'fix' },
+      },
+    ]);
+    render(<TicketCard ticket={ticket()} />);
+
+    expect(screen.getByText('fixer · fix')).toBeInTheDocument();
   });
 
   it('lists the sessions working the ticket', () => {

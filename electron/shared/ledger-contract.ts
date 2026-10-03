@@ -108,6 +108,8 @@ export interface LedgerReadQuery {
   thread?: string;
   /** Exclusive lower bound, an entry id. */
   since?: string;
+  /** Entries whose `meta.ticket` names this key, case-insensitive (HIVE-203). */
+  ticket?: string;
   /** Keep at most this many, newest. */
   limit?: number;
 }

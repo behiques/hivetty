@@ -1762,6 +1762,8 @@ function toTicket(issue: JiraIssue): Ticket {
     status: issue.status,
     statusCategory: issue.statusCategory,
     title: issue.summary,
+    priority: issue.priority,
+    assignee: issue.assignee,
     url: issue.url,
   };
 }
@@ -4881,13 +4883,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       if (at === -1) return state;
 
       const next = [...state.tickets];
-      next[at] = {
-        key: issue.key,
-        status: issue.status,
-        statusCategory: issue.statusCategory,
-        title: issue.summary,
-        url: issue.url,
-      };
+      next[at] = toTicket(issue);
       return { tickets: next };
     }),
 

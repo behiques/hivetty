@@ -359,6 +359,16 @@ describe('parseJiraConversationRequest', () => {
     refuses(() => parseJiraConversationRequest({ key: 'nope' }), /key/);
     refuses(() => parseJiraConversationRequest({}), /missing key/);
   });
+
+  it('admits newest: true and refuses any other newest (HIVE-203)', () => {
+    expect(parseJiraConversationRequest({ key: 'HIVE-71', newest: true })).toEqual({ key: 'HIVE-71', newest: true });
+    refuses(() => parseJiraConversationRequest({ key: 'HIVE-71', newest: 'yes' }), /newest/);
+    refuses(() => parseJiraConversationRequest({ key: 'HIVE-71', newest: false }), /newest/);
+  });
+
+  it('still refuses a key it does not know (HIVE-203)', () => {
+    refuses(() => parseJiraConversationRequest({ key: 'HIVE-71', bogus: 1 }), /bogus/);
+  });
 });
 
 describe('parseAddJiraCommentRequest', () => {

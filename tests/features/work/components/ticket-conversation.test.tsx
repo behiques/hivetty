@@ -58,7 +58,7 @@ const openIt = async (): Promise<ReturnType<typeof userEvent.setup>> => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  readJiraComments.mockResolvedValue({ ok: true, value: [comment()] });
+  readJiraComments.mockResolvedValue({ ok: true, value: { comments: [comment()], total: 1 } });
   readJiraLinks.mockResolvedValue({ ok: true, value: [] });
   addJiraComment.mockResolvedValue({
     ok: true,
@@ -109,7 +109,7 @@ describe('comments', () => {
   it('marks an edited comment, and only an edited one', async () => {
     readJiraComments.mockResolvedValue({
       ok: true,
-      value: [comment(), comment({ id: '2', updated: '2026-08-08T09:00:00Z' })],
+      value: { comments: [comment(), comment({ id: '2', updated: '2026-08-08T09:00:00Z' })], total: 2 },
     });
     await openIt();
 
@@ -119,7 +119,7 @@ describe('comments', () => {
   });
 
   it('says so when there are none', async () => {
-    readJiraComments.mockResolvedValue({ ok: true, value: [] });
+    readJiraComments.mockResolvedValue({ ok: true, value: { comments: [], total: 0 } });
     await openIt();
 
     expect(await screen.findByText('No comments yet.')).toBeInTheDocument();

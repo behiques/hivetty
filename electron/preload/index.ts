@@ -99,8 +99,10 @@ import {
 } from '@shared/ipc-contract';
 import type {
   JiraComment,
+  JiraCommentPage,
   JiraIdentity,
   JiraIssue,
+  JiraIssueDetail,
   JiraLink,
   JiraResult,
   JiraSearchResult,
@@ -649,6 +651,9 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.jiraSearch, request),
     issue: (request: JiraIssueRequest): Promise<JiraResult<JiraIssue>> =>
       ipcRenderer.invoke(CH.jiraIssue, request),
+    // HIVE-203. The description and the parent, for the ticket page.
+    detail: (request: JiraIssueRequest): Promise<JiraResult<JiraIssueDetail>> =>
+      ipcRenderer.invoke(CH.jiraDetail, request),
     // HIVE-70. The read, and the epic's one write.
     transitions: (
       request: JiraTransitionsRequest,
@@ -661,7 +666,7 @@ const bridge: HiveBridge = {
     // HIVE-71. Two reads, and the one verb that sends free text.
     comments: (
       request: JiraConversationRequest,
-    ): Promise<JiraResult<JiraComment[]>> =>
+    ): Promise<JiraResult<JiraCommentPage>> =>
       ipcRenderer.invoke(CH.jiraComments, request),
     links: (
       request: JiraConversationRequest,
