@@ -7,6 +7,7 @@ import { resetShippedState } from '@/lib/shipped';
 import { isAgent, type Agent } from '@/types/entity';
 
 import { AgentPage } from '@features/agents/components/agent-page';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { useEditorStore } from '@stores/editor-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
@@ -75,6 +76,7 @@ const stub = (agents: Record<string, unknown> = {}) => {
 const runNow = () => screen.getByRole('button', { name: 'Run now' });
 
 beforeEach(() => {
+  useAppearanceStore.getState().reset();
   useHiveStore.getState().reset();
   useUiStore.getState().reset();
   useEditorStore.getState().reset();
@@ -98,13 +100,32 @@ describe('AgentPage — the header', () => {
     expect(runNow()).toBeEnabled();
   });
 
-  it('has no back button and no Edit definition', () => {
+  it('has no back button in round two, and no Edit definition', () => {
     seed();
     stub();
+    useAppearanceStore.getState().setLayout('round-two');
     render(<AgentPage name="watcher" />);
 
     expect(screen.queryByRole('button', { name: 'Back to overmind' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Edit definition/ })).toBeNull();
+  });
+
+  /*
+    Classic has no bar, so the page keeps its way back until HIVE-213 retires
+    Classic: without it an agent page is entered from three places and left
+    from none.
+  */
+  it('keeps the way back to the overmind in Classic', async () => {
+    seed();
+    stub();
+    useAppearanceStore.getState().setLayout('classic');
+    useUiStore.getState().openAgentPage('watcher', 'activity');
+    render(<AgentPage name="watcher" />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to overmind' }));
+
+    expect(useUiStore.getState().activeTab).toBe('orch');
+    expect(useUiStore.getState().place).toBe('sessions');
   });
 
   it('opens on Activity when nothing says otherwise', () => {

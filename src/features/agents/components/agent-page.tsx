@@ -1,3 +1,4 @@
+import { ArrowLeft } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 
 import { isAgent } from '@/types/entity';
@@ -8,9 +9,10 @@ import { AgentDefinition } from '@features/agents/components/agent-definition';
 import { runRefusal } from '@features/agents/components/agent-editor';
 import { AgentView } from '@features/agents/components/agent-view';
 import { useAgents } from '@hooks/use-agents';
+import { useLayout } from '@stores/appearance-store';
 import { useAgentDraft } from '@stores/editor-store';
 import { agentRunQueued, agentRunRefusal, useEntity } from '@stores/hive-store';
-import { useAgentPage, useAgentPageActions, type AgentPageView } from '@stores/ui-store';
+import { useAgentPage, useAgentPageActions, useBackToOrch, type AgentPageView } from '@stores/ui-store';
 
 const VIEWS = [
   { value: 'activity', label: 'Activity' },
@@ -23,10 +25,12 @@ const VIEWS = [
  *
  * The header is the agent's identity — its glyph, its name over its
  * description — then the Activity | Definition switch and Run now. Pause stays
- * here until the lanes panel's row takes it, so it is never unreachable. There
- * is no back button: the page belongs to the Agents place, and the bar is the
- * way to another place. Edit definition is gone too, because Definition is one
- * click away on the switch.
+ * here until the lanes panel's row takes it, so it is never unreachable. In
+ * round two there is no back button: the page belongs to the Agents place, and
+ * the bar and the panels are the navigation. Classic has no bar, so there the
+ * button stays — without it an agent page is entered from three places and
+ * left from none — until HIVE-213 retires Classic. Edit definition is gone,
+ * because Definition is one click away on the switch.
  *
  * Run now is in the header so it is in both views, and it stays **enabled**:
  * a refusal is answered with the sentence, under the header on Activity and in
@@ -34,6 +38,8 @@ const VIEWS = [
  */
 export function AgentPage({ name }: { name: string | null }) {
   const page = useAgentPage();
+  const classic = useLayout() === 'classic';
+  const backToOrch = useBackToOrch();
   const { setAgentPageView } = useAgentPageActions();
   const entity = useEntity(name ?? '');
   const agent = entity !== undefined && isAgent(entity) ? entity : undefined;
@@ -100,6 +106,17 @@ export function AgentPage({ name }: { name: string | null }) {
   return (
     <div className="@container flex min-h-0 flex-1 flex-col" data-view="agent">
       <header className="flex shrink-0 items-center gap-3 border-b border-border-soft bg-panel px-5 py-3">
+        {classic ? (
+          <button
+            type="button"
+            onClick={backToOrch}
+            title="Back to overmind"
+            aria-label="Back to overmind"
+            className="flex shrink-0 items-center gap-1 rounded-full bg-chip px-2.5 py-1 text-muted hover:text-ink"
+          >
+            <ArrowLeft size={12} weight="bold" aria-hidden="true" />
+          </button>
+        ) : null}
         <Icon name={agent?.icon ?? 'ph-robot'} size={20} className="shrink-0 text-subtle" />
         <span className="flex max-w-[420px] min-w-0 flex-col">
           <span className="truncate font-mono text-[13px] font-semibold">{name ?? 'New agent'}</span>
