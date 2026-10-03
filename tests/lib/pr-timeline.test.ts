@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { ciBars, flapHistory, fraction, holdIntervals, MIN, ticks, timeBuckets } from '@lib/pr-timeline';
-import type { Bucket, CiBar, Hold } from '@lib/pr-timeline';
+import { ciBars, flapHistory, fraction, holdIntervals, MIN, ticks, timeBuckets, timeSentence } from '@lib/pr-timeline';
+import type { Bucket, BucketName, CiBar, Hold } from '@lib/pr-timeline';
 import type { PrTimeline, PrTimelineRun } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import type { ShipVisit } from '@shared/ledger-derive';
@@ -130,5 +130,21 @@ describe('timeBuckets', () => {
     const out = timeBuckets({ start: T0, end: T0 + 100 * MIN, opener: null, draftAt: (p) => p < T0 + 20 * MIN, bars: [bar], visits: [], holds: [], flaps: [], youWindows: [] });
     expect(out.map((b) => [b.name, b.ms / MIN])).toEqual([['Before the shipper', 20], ['CI', 10], ['Waiting on review', 70]]);
     expect(sum(out)).toBe(100 * MIN);
+  });
+});
+
+describe('timeSentence', () => {
+  const b = (name: BucketName, m: number, holder: string | null): Bucket => ({ name, ms: m * MIN, holder });
+  const failed = (job: string): CiBar => ({ id: 1, number: 1, sha: 's', url: 'u', from: 0, to: 1, state: 'failed', failedJobs: [job] });
+  it('names the longest wait and a repeated failure', () => {
+    expect(timeSentence([b('Self review and fix', 56, 'acr'), b('Findings', 80, 'fixer')], [failed('integration'), failed('integration'), failed('lint')]))
+      .toBe("The longest wait was the fixer on acr's findings, and two CI runs failed on the same job, integration. Every mark opens its event in the conversation.");
+  });
+  it('a PR the shipper never held, one failure', () => {
+    expect(timeSentence([b('CI', 10, null), b('Waiting on review', 70, null)], [failed('unit')]))
+      .toBe('The longest wait was the reviewers. Every mark opens its event in the conversation.');
+  });
+  it('nothing to say yet', () => {
+    expect(timeSentence([], [])).toBe('Every mark opens its event in the conversation.');
   });
 });

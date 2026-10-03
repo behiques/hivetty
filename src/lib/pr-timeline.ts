@@ -263,3 +263,31 @@ export function timeBuckets(input: BucketInput): Bucket[] {
     return [{ name, ms: total, holder: name === 'Before the shipper' ? (opener ?? who) : who }];
   });
 }
+
+const COUNT = ['zero', 'one', 'two', 'three', 'four'];
+const TAIL = 'Every mark opens its event in the conversation.';
+
+function whoWaited({ name, holder }: Bucket): string {
+  if (name === 'Findings' && holder === 'fixer') return "the fixer on acr's findings";
+  if (name === 'Self review and fix' && holder === 'acr') return "acr's self review";
+  if (name === 'Self review and fix' && holder === 'fixer') return 'the fixer on the self review';
+  if (name === 'Waiting on you') return 'you';
+  if (name === 'Waiting on review') return 'the reviewers';
+  if (name === 'CI') return 'CI';
+  if (name === 'Before the shipper') return holder === null ? 'the draft' : `the ${holder} before the shipper took it`;
+  return holder === null ? name.toLowerCase() : `the ${holder} on ${name.toLowerCase()}`;
+}
+
+/** One sentence under the bar (HIVE-208): the longest wait, and a job that failed twice or more. Only these two cases, by the ticket. */
+export function timeSentence(buckets: readonly Bucket[], bars: readonly CiBar[]): string {
+  const longest = [...buckets].sort((a, b) => b.ms - a.ms)[0];
+  if (longest === undefined) return TAIL;
+  const fails = new Map<string, number>();
+  for (const bar of bars) {
+    if (bar.state !== 'failed') continue;
+    for (const job of new Set(bar.failedJobs)) fails.set(job, (fails.get(job) ?? 0) + 1);
+  }
+  const [job, count] = [...fails].sort((a, b) => b[1] - a[1])[0] ?? ['', 0];
+  const repeated = count >= 2 ? `, and ${COUNT[count] ?? String(count)} CI runs failed on the same job, ${job}` : '';
+  return `The longest wait was ${whoWaited(longest)}${repeated}. ${TAIL}`;
+}
