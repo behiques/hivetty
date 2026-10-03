@@ -36,7 +36,8 @@ you choose **Compare**, **Take shipped prompt** or **Keep mine**. An agent you d
 
 ## Create an agent
 
-**Agents tab › + New agent…** (or **+ New agent** in **Settings › Agents**) opens a new
+**+ New agent…** at the foot of the Agents panel, or its head's **+** (or **+ New agent** in
+**Settings › Agents**), opens a new
 agent's page on **Definition**. The form sits on the left and the file's source on the
 right; both edit the same text. When the stage is narrower than 900px they become
 **Form | Source** tabs. The bar above them names the file, or says *not saved yet*, and
@@ -89,7 +90,7 @@ Keys are snake_case. An unknown key is an error, not ignored.
 | Key | Values | Default |
 | --- | --- | --- |
 | `name` | lower-case, digits, dashes; equals the folder name | required |
-| `description` | one line, shown in the rail | required |
+| `description` | one line, shown in the Agents panel | required |
 | `icon` | a Phosphor icon name, like `ph-robot` | required |
 | `model` / `effort` | as for sessions | Claude's default |
 | `wake.every` | `5m`, `2h`, `daily` (whole minutes, at least 1m) | none |
@@ -167,22 +168,21 @@ and its merge asks as before.
 
 ![The agent page: Activity with its status tiles, run log and ledger](../assets/guide/10-agent-view.png)
 
-- **Agents tab**: three lanes, each folding under its header. **Summons** holds what needs
-  you (asking, failed, or a definition that will not parse), asking first. **Morphing**
-  holds what is working. **Burrowed** holds what rests: sleeping, then paused, since
-  nothing wakes a paused agent. The panel's header counts summons and morphing, and the
-  tab badge counts open questions.
+- **The Agents panel**: three lanes, each folding under its name. **Summons** holds what
+  needs you (asking, failed, or a definition that will not parse), asking first.
+  **Morphing** holds what is working. **Burrowed** holds what rests: sleeping, then paused,
+  since nothing wakes a paused agent. The panel's head counts summons and morphing, and the
+  bar's Agents icon counts what is working.
 - **A row** is the agent's hexagon (amber when it asks, red when it failed, green while it
   works, a count when more than one run is live), its name with the age of its last word,
   and that last word: what it last put on the ledger (`ask a3 Reply to Marcos?`,
   `done Shipped #303`). Hover or focus it for **▶ Run now** and **⏸ Pause** (**▶ Resume**
   when paused); an answer that is not a start shows in the row for five seconds.
 
-![The Agents tab with standup-bot sleeping, and the overmind's fleet table](../assets/guide/09-agents-tab.png)
+![The Agents place: the lanes in the list panel and an agent's page on the stage](../assets/guide/09-agents-tab.png)
 
-- **Agent page** (click an agent): a header with the agent's name over its description,
-  the **Activity | Definition** switch and **Run now**. In the Classic layout
-  it also has **←** back to the overmind. **Run now** works from both views; with unsaved
+- **Agent page** (click an agent): the agent's name over its description, the
+  **Activity | Definition** switch and **Run now**. **Run now** works from both views; with unsaved
   edits it says to save first, because a wake reads the file and not what is on screen.
 - **Activity**: one row of facts (Status, Wake, Next, Today `N runs · $X`, Session); the
   **run table** (Outcome, Turns, Took, Cost) over the output, beside the agent's ledger.
@@ -194,7 +194,7 @@ and its merge asks as before.
 - **Paused.** A paused agent's Status reads amber, and the box gives way to a bar: "acr is
   paused. Nothing wakes it, not the ledger, not a schedule, until you resume it." **Resume**
   brings the box back with whatever you had typed in it.
-- **No agents yet.** In round two, with no agent defined, the Agents place has no list and
+- **No agents yet.** With no agent defined, the Agents place has no list and
   the stage offers **New agent**.
 - To stop a run now, use `kill <agent>` in the console.
 

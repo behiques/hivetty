@@ -1,6 +1,6 @@
 # Settings
 
-Open Settings with the gear in the header. Nine sections, top to bottom. Almost everything
+Open Settings with the gear at the foot of the bar. Nine sections, top to bottom. Almost everything
 here is written to `~/.hive/config.json` ([The config file](configuration.md)); appearance
 and editor preferences stay on this machine.
 
@@ -52,16 +52,8 @@ Create and edit [agents](agents.md) with a form or as source.
 
 ## Appearance
 
-Mode, [themes](themes.md), terminal font and scrollback, the
-[plan panel](plan-panel.md) beside the terminal (**Show plan panel**; off keeps
-the count on the session row), team name, density.
-
-**Layout** — Classic (the default) or Round two. Round two puts the places on a
-bar at the left, with one list beside the stage. It switches live, without
-restarting a terminal, and is kept per device and per window. Round two opens
-on Home on every launch. Round two has no header: the connection item and
-Settings sit at the foot of the bar, and Mode here is where light and dark
-switch.
+Mode (light and dark), [themes](themes.md), terminal font, size and scrollback, team name
+(the bar's hexagon shows it on hover), density.
 
 ## Editor
 

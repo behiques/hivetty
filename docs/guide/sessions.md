@@ -103,7 +103,7 @@ The **Sessions** icon on the bar opens the Sessions panel beside the overmind.
 - Click a project's **name** to filter the overmind to it; that also unfolds it. The
   caret beside it only folds and unfolds.
 - Unfolded, each session is one line, then the project's terminals, then **+ Session**
-  and **+ Terminal**.
+  and **Terminal**.
 - Opening a session unfolds its project. Coming back with the back button, `⌘[` or the
   Sessions icon keeps the filter you left and puts the selection on the session you were
   in.
@@ -146,7 +146,7 @@ like `vitest` or `vim`.
 
 | Open one from | How |
 | --- | --- |
-| The Sessions panel | **+ Terminal** under an unfolded project |
+| The Sessions panel | **Terminal** under an unfolded project |
 | A session | **Terminal here** in its session header's **⋯** menu, or ``Ctrl+` `` |
 | The console | `term hive`, or `term` for beside the selected row |
 
