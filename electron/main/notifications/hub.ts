@@ -1,11 +1,11 @@
 import {
-  NOTIFICATION_CAP,
   NOTIFICATION_KIND_SPECS,
   type HiveNotification,
   type NotificationAction,
   type NotificationKind,
   type NotificationPrefs,
 } from '@shared/notification-contract';
+import { trimNotifications, type AskOpen } from '@shared/notification-lanes';
 
 /**
  * One owner for every notification the app raises (HIVE-75).
@@ -173,6 +173,13 @@ export interface NotificationHubOptions {
    * target's absence of one — behaves exactly as it did before.
    */
   isForegroundEverywhere?: (action: NotificationAction) => boolean;
+  /**
+   * Ask threads that no longer wait on anyone (HIVE-214) — `closedAskThreads`
+   * over main's ledger. Read once per count, trim and clear, never captured: an
+   * answer only marks its row read, so this is how the hub learns the ask is
+   * gone. Absent means every ask is open, which every older test relies on.
+   */
+  closedAsks?: () => ReadonlySet<string>;
   /**
    * What to call a notification's `subject` in a **desktop toast** (HIVE-110).
    *
@@ -383,11 +390,18 @@ export function createNotificationHub(
     announceBadge,
     now,
     isForegroundEverywhere,
+    closedAsks,
     subjectName,
   } = options;
 
   let buffer: HiveNotification[] = [];
   const seen = new Set<string>();
+  const NONE: ReadonlySet<string> = new Set();
+  /** One read of the closed set per pass over the buffer. */
+  const askOpen = (): AskOpen => {
+    const closed = closedAsks?.() ?? NONE;
+    return (thread) => !closed.has(thread);
+  };
 
   /**
    * What a **toast** calls this notification (HIVE-110).
@@ -787,10 +801,10 @@ export function createNotificationHub(
                 (entry) => supersedeKey(entry.kind, entry.action) === key,
               );
 
-        buffer = [
-          notification,
-          ...buffer.filter((entry) => !superseded.includes(entry)),
-        ].slice(0, NOTIFICATION_CAP);
+        buffer = trimNotifications(
+          [notification, ...buffer.filter((entry) => !superseded.includes(entry))],
+          askOpen(),
+        );
 
         /**
          * Counted once, from the settled buffer. A supersede is a removal and

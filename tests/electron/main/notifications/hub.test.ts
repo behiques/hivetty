@@ -131,8 +131,8 @@ describe('identity', () => {
    * buffer and then see it again, and that is still not news.
    */
   it('still refuses a duplicate after the buffer has evicted it', () => {
-    raise({ id: 'first' });
-    for (let i = 0; i < NOTIFICATION_CAP + 5; i += 1) raise({ id: `fill-${i}` });
+    raise({ id: 'first', kind: 'pr.merged' });
+    for (let i = 0; i < NOTIFICATION_CAP + 5; i += 1) raise({ id: `fill-${i}`, kind: 'pr.merged' });
 
     expect(hub.list().some((n) => n.id === 'first')).toBe(false);
     expect(raise({ id: 'first' })).toBeNull();
@@ -281,9 +281,30 @@ describe('the buffer', () => {
     expect(hub.list().map((n) => n.title)).toEqual(['second', 'first']);
   });
 
-  it('caps at NOTIFICATION_CAP', () => {
-    for (let i = 0; i < NOTIFICATION_CAP + 10; i += 1) raise({ id: `n${i}` });
+  it('caps the news at NOTIFICATION_CAP', () => {
+    for (let i = 0; i < NOTIFICATION_CAP + 10; i += 1) raise({ id: `n${i}`, kind: 'pr.merged' });
     expect(hub.list()).toHaveLength(NOTIFICATION_CAP);
+  });
+
+  /** HIVE-214: news piling up never pushes out an open ask. */
+  it('keeps every open ask through a burst of news', () => {
+    for (let i = 0; i < 6; i += 1) {
+      raise({ id: `ask-${i}`, kind: 'agent.ask', action: { type: 'ask', thread: `ask-${i}` } });
+    }
+    for (let i = 0; i < 60; i += 1) raise({ id: `echo-${i}`, kind: 'pr.merged' });
+
+    expect(hub.list().filter((n) => n.kind === 'agent.ask')).toHaveLength(6);
+    expect(hub.list()).toHaveLength(NOTIFICATION_CAP + 6);
+  });
+
+  it('lets an answered ask go with the news', () => {
+    const closed = new Set<string>();
+    hub = makeHub({ closedAsks: () => closed });
+    raise({ id: 'ask-0', kind: 'agent.ask', action: { type: 'ask', thread: 'ask-0' } });
+    closed.add('ask-0');
+    for (let i = 0; i < NOTIFICATION_CAP; i += 1) raise({ id: `echo-${i}`, kind: 'pr.merged' });
+
+    expect(hub.list().map((n) => n.id)).not.toContain('ask-0');
   });
 
   it('marks one read by id, and all of them for null', () => {
@@ -607,7 +628,7 @@ describe('the unread count', () => {
    * hand-maintained counter forgets.
    */
   it('never exceeds the cap, however many are raised', () => {
-    for (let i = 0; i < NOTIFICATION_CAP + 10; i += 1) raise({ id: `n${i}` });
+    for (let i = 0; i < NOTIFICATION_CAP + 10; i += 1) raise({ id: `n${i}`, kind: 'pr.merged' });
     expect(lastBadge()).toBe(NOTIFICATION_CAP);
   });
 
