@@ -5,7 +5,6 @@ import { BUILT_IN_THEME } from '@lib/theme/built-in';
 import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
 import { swarmPaletteOf } from '@lib/theme/colour';
 import { type HiveTheme } from '@lib/theme/contract';
-import { RAIL_MIN, railMaxWidth } from '@lib/rail-width';
 import { useUiStore } from '@stores/ui-store';
 import {
   APPEARANCE_STORAGE_KEY,
@@ -15,9 +14,6 @@ import {
   resolveTheme,
   sanitizeThemeState,
   useAppearanceStore,
-  syncRailWidths,
-  useLayout,
-  useSetLayout,
   useSwarmPalette,
   useTerminalAppearance,
   watchSystemTheme,
@@ -94,8 +90,6 @@ beforeEach(() => {
   localStorage.clear();
   document.body.removeAttribute('data-theme');
   document.body.removeAttribute('data-density');
-  document.body.style.removeProperty('--cc-rail-w-left');
-  document.body.style.removeProperty('--cc-rail-w-right');
   useAppearanceStore.setState({ systemDark: true });
   useAppearanceStore.getState().reset();
 });
@@ -179,6 +173,21 @@ describe('appearance-store — density', () => {
 
     useAppearanceStore.getState().setDensity('comfortable');
     expect(document.body.hasAttribute('data-density')).toBe(false);
+  });
+});
+
+describe('appearance-store — no Classic state (HIVE-213)', () => {
+  it('has no layout, rail or plan-rail state (HIVE-213)', () => {
+    const state = useAppearanceStore.getState() as unknown as Record<string, unknown>;
+    for (const key of ['layout', 'railWidthLeft', 'railWidthRight', 'railCollapsedLeft', 'railCollapsedRight', 'planPinned', 'showPlanPanel']) {
+      expect(key in state).toBe(false);
+    }
+  });
+
+  it('setDensity writes only the density attribute (HIVE-213)', () => {
+    useAppearanceStore.getState().setDensity('compact');
+    expect(document.body.dataset.density).toBe('compact');
+    expect(document.body.style.getPropertyValue('--cc-rail-w-left')).toBe('');
   });
 });
 
@@ -280,211 +289,6 @@ describe('appearance-store — the terminal palette', () => {
   });
 });
 
-/**
- * Rail widths (HIVE-105).
- *
- * The arithmetic is proved in `tests/lib/rail-width.test.ts`. What is left for
- * the store is everything that arithmetic cannot answer: what is stored versus
- * what is painted, which custom property ends up on `<body>`, and what survives
- * a reload.
- */
-describe('appearance-store — rail widths', () => {
-  const COMFORTABLE = RAIL_MIN.comfortable;
-
-  /** What `use-rail-widths` does, minus React. */
-  const paint = (windowWidth = 1440, showActivityRail = true) =>
-    syncRailWidths({
-      storedLeft: useAppearanceStore.getState().railWidthLeft,
-      storedRight: useAppearanceStore.getState().railWidthRight,
-      min: RAIL_MIN[useAppearanceStore.getState().density],
-      windowWidth,
-      left: 'expanded',
-      right: showActivityRail ? 'expanded' : 'hidden',
-    });
-
-  const inlineLeft = () => document.body.style.getPropertyValue('--cc-rail-w-left');
-  const inlineRight = () => document.body.style.getPropertyValue('--cc-rail-w-right');
-
-  it('starts following the stylesheet rather than at a number', () => {
-    expect(useAppearanceStore.getState().railWidthLeft).toBeNull();
-    expect(useAppearanceStore.getState().railWidthRight).toBeNull();
-  });
-
-  /**
-   * The distinction the whole feature turns on. A rail nobody has dragged gets
-   * *no* inline property, so `tokens.css` — density rules included — keeps
-   * control of it. Writing today's number inline would freeze it there.
-   */
-  it('leaves an untouched rail to the stylesheet', () => {
-    paint();
-
-    expect(inlineLeft()).toBe('');
-    expect(inlineRight()).toBe('');
-  });
-
-  it('writes an override once a rail is dragged', () => {
-    useAppearanceStore.getState().setRailWidth('left', 400);
-    paint();
-
-    expect(inlineLeft()).toBe('400px');
-    expect(inlineRight()).toBe('');
-  });
-
-  it('hands the rail back to the stylesheet on reset', () => {
-    useAppearanceStore.getState().setRailWidth('left', 400);
-    paint();
-    expect(inlineLeft()).toBe('400px');
-
-    useAppearanceStore.getState().resetRailWidth('left');
-    paint();
-
-    expect(useAppearanceStore.getState().railWidthLeft).toBeNull();
-    expect(inlineLeft()).toBe('');
-  });
-
-  it('never writes a width for a rail that is not mounted', () => {
-    useAppearanceStore.getState().setRailWidth('right', 400);
-    paint(1440, false);
-
-    expect(inlineRight()).toBe('');
-  });
-
-  describe('what gets stored', () => {
-    it('refuses to store a width below the density minimum', () => {
-      useAppearanceStore.getState().setRailWidth('left', 100);
-      expect(useAppearanceStore.getState().railWidthLeft).toBe(COMFORTABLE.left);
-    });
-
-    it('refuses to store a width above the absolute cap', () => {
-      useAppearanceStore.getState().setRailWidth('left', 9999);
-      expect(useAppearanceStore.getState().railWidthLeft).toBe(520);
-    });
-
-    it('ignores a width that is not a number', () => {
-      useAppearanceStore.getState().setRailWidth('left', Number.NaN);
-      expect(useAppearanceStore.getState().railWidthLeft).toBeNull();
-    });
-
-    it('stores whole pixels', () => {
-      useAppearanceStore.getState().setRailWidth('left', 400.6);
-      expect(useAppearanceStore.getState().railWidthLeft).toBe(401);
-    });
-
-    /**
-     * **Stored intent, not painted pixels.** The window is what squeezes a
-     * width; the store must not learn from the squeeze, or a narrow moment
-     * would permanently cost the user the width they chose.
-     */
-    it('survives a window that is too narrow to honour it', () => {
-      useAppearanceStore.getState().setRailWidth('left', 500);
-
-      const squeezed = paint(1100);
-      expect(squeezed.left).toBe(Math.floor(railMaxWidth(1100)));
-      expect(squeezed.left).toBeLessThan(500);
-      expect(useAppearanceStore.getState().railWidthLeft).toBe(500);
-
-      const restored = paint(1920);
-      expect(restored.left).toBe(500);
-    });
-  });
-
-  describe('density', () => {
-    /** A rail nobody dragged still re-spaces when density changes. */
-    it('leaves an untouched rail free to follow a density change', () => {
-      useAppearanceStore.getState().setDensity('compact');
-      expect(inlineLeft()).toBe('');
-
-      expect(paint().left).toBe(RAIL_MIN.compact.left);
-    });
-
-    it('keeps a hand-set width across a density change', () => {
-      useAppearanceStore.getState().setRailWidth('left', 400);
-      useAppearanceStore.getState().setDensity('compact');
-
-      expect(useAppearanceStore.getState().railWidthLeft).toBe(400);
-      /*
-        Asserted through a paint at a stated width rather than by reading the
-        property `setDensity` just wrote. That write measured happy-dom's own
-        narrow window, so it is legitimately a squeezed number — which is the
-        behaviour under test two cases up, not this one.
-      */
-      expect(paint(1920).left).toBe(400);
-    });
-
-    /**
-     * A width that was legal at compact is below the comfortable minimum.
-     * Painting must lift it; the stored intent stays where the user put it.
-     */
-    it('lifts a width stored under a narrower density', () => {
-      useAppearanceStore.getState().setDensity('compact');
-      useAppearanceStore.getState().setRailWidth('left', RAIL_MIN.compact.left);
-      useAppearanceStore.getState().setDensity('comfortable');
-
-      expect(paint().left).toBe(COMFORTABLE.left);
-    });
-  });
-
-  describe('persistence', () => {
-    it('writes both widths to localStorage', () => {
-      useAppearanceStore.getState().setRailWidth('left', 400);
-      useAppearanceStore.getState().setRailWidth('right', 380);
-
-      const raw = localStorage.getItem(APPEARANCE_STORAGE_KEY);
-      expect(JSON.parse(raw ?? '{}').state).toMatchObject({
-        railWidthLeft: 400,
-        railWidthRight: 380,
-      });
-    });
-
-    it('persists the null that means "follow the stylesheet"', () => {
-      useAppearanceStore.getState().setRailWidth('left', 400);
-      useAppearanceStore.getState().resetRailWidth('left');
-
-      const raw = localStorage.getItem(APPEARANCE_STORAGE_KEY);
-      expect(JSON.parse(raw ?? '{}').state.railWidthLeft).toBeNull();
-    });
-
-    it('returns to following the stylesheet on reset()', () => {
-      useAppearanceStore.getState().setRailWidth('left', 400);
-      useAppearanceStore.getState().reset();
-
-      expect(useAppearanceStore.getState().railWidthLeft).toBeNull();
-      expect(inlineLeft()).toBe('');
-    });
-  });
-});
-
-/** The plan drawer's pin (HIVE-181): a layout choice, persisted like the rails. */
-describe('appearance-store — planPinned', () => {
-  it('defaults to unpinned', () => {
-    expect(useAppearanceStore.getState().planPinned).toBe(false);
-  });
-
-  it('pins and unpins, and persists the choice', () => {
-    useAppearanceStore.getState().setPlanPinned(true);
-
-    expect(useAppearanceStore.getState().planPinned).toBe(true);
-    const raw = localStorage.getItem(APPEARANCE_STORAGE_KEY);
-    expect((JSON.parse(raw as string) as { state: { planPinned: unknown } }).state.planPinned).toBe(true);
-
-    useAppearanceStore.getState().setPlanPinned(false);
-
-    expect(useAppearanceStore.getState().planPinned).toBe(false);
-  });
-
-  it('hydrates a stored state from before the field existed to unpinned', async () => {
-    localStorage.setItem(
-      APPEARANCE_STORAGE_KEY,
-      JSON.stringify({ version: 3, state: { theme: 'light', railCollapsedRight: true } }),
-    );
-
-    await useAppearanceStore.persist.rehydrate();
-
-    expect(useAppearanceStore.getState().planPinned).toBe(false);
-    expect(useAppearanceStore.getState().railCollapsedRight).toBe(true);
-  });
-});
-
 describe('appearance-store — persistence', () => {
   it('writes only the whitelisted preferences to localStorage', () => {
     useAppearanceStore.getState().setTheme('light');
@@ -501,15 +305,8 @@ describe('appearance-store — persistence', () => {
       terminalFontSize: 12.5,
       terminalScrollback: 5000,
       density: 'compact',
-      layout: 'round-two',
       sessionPanelOpen: true,
       sessionPanelTab: 'plan',
-      railWidthLeft: null,
-      railWidthRight: null,
-      railCollapsedLeft: false,
-      railCollapsedRight: false,
-      planPinned: false,
-      showPlanPanel: true,
       teamName: 'Swarm Command',
       editorPlacement: 'full',
       editorSplitAxis: 'vertical',
@@ -1091,195 +888,6 @@ describe('sanitizeThemeState', () => {
   });
 });
 
-describe('rail collapse', () => {
-  it('starts expanded on both sides', () => {
-    const state = useAppearanceStore.getState();
-    expect(state.railCollapsedLeft).toBe(false);
-    expect(state.railCollapsedRight).toBe(false);
-  });
-
-  it('toggles one side and leaves the other alone', () => {
-    useAppearanceStore.getState().toggleRailCollapsed('left');
-
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(true);
-    expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
-  });
-
-  it('sets a side explicitly', () => {
-    useAppearanceStore.getState().setRailCollapsed('right', true);
-    expect(useAppearanceStore.getState().railCollapsedRight).toBe(true);
-
-    useAppearanceStore.getState().setRailCollapsed('right', false);
-    expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
-  });
-
-  it('clears the flag when a width is written to the same side', () => {
-    // Drag-to-expand calls only `setRailWidth`. Clearing here is what
-    // makes that one call enough, and what stops the width and the flag
-    // from ever disagreeing.
-    useAppearanceStore.getState().setRailCollapsed('left', true);
-    useAppearanceStore.getState().setRailWidth('left', 360);
-
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(false);
-    expect(useAppearanceStore.getState().railWidthLeft).toBe(360);
-  });
-
-  it('does not clear the flag on the other side', () => {
-    useAppearanceStore.getState().setRailCollapsed('right', true);
-    useAppearanceStore.getState().setRailWidth('left', 360);
-
-    expect(useAppearanceStore.getState().railCollapsedRight).toBe(true);
-  });
-
-  it('leaves the flag alone when the width is reset', () => {
-    // "Go back to the default width" is a statement about width. A
-    // collapsed rail has no width opinion to reset.
-    useAppearanceStore.getState().setRailCollapsed('left', true);
-    useAppearanceStore.getState().resetRailWidth('left');
-
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(true);
-  });
-
-  it('restores both to expanded on reset', () => {
-    useAppearanceStore.getState().toggleRailCollapsed('left');
-    useAppearanceStore.getState().toggleRailCollapsed('right');
-    useAppearanceStore.getState().reset();
-
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(false);
-    expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
-  });
-});
-
-describe('rail collapse migration', () => {
-  it('migrateAppearance passes unknown-key-absence through untouched', () => {
-    // Documents the input to the real pipeline exercised below: a v3 payload
-    // written before collapse existed simply has no opinion on the flag.
-    const migrated = migrateAppearance({ density: 'comfortable' }, 3);
-    expect(migrated.railCollapsedLeft).toBeUndefined();
-  });
-
-  it('reads a v3 payload written before collapse existed as expanded', async () => {
-    // The regression this guards: the persist `merge` option spreads
-    // `currentState` before the persisted payload, so a payload that lacks
-    // `railCollapsedLeft`/`railCollapsedRight` (as every payload written
-    // before this feature existed does) must fall back to `initialAppearanceState`'s
-    // `false` — not to `undefined`, which would render a strip on first
-    // launch for every existing user. This goes through the actual `persist`
-    // rehydration path (matching the store's current `version: 3`, so no
-    // `migrate` branch runs — only `merge`) rather than reimplementing it.
-    localStorage.setItem(
-      APPEARANCE_STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        state: {
-          density: 'compact',
-        },
-      }),
-    );
-
-    vi.resetModules();
-    const { useAppearanceStore: store } = await import('@stores/appearance-store');
-
-    expect(store.getState().railCollapsedLeft).toBe(false);
-    expect(store.getState().railCollapsedRight).toBe(false);
-  });
-});
-
-/** The Show plan panel setting (HIVE-182): on by default, hides the rail only. */
-describe('appearance-store — showPlanPanel', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    useAppearanceStore.getState().reset();
-  });
-
-  it('defaults to showing the panel', () => {
-    expect(useAppearanceStore.getState().showPlanPanel).toBe(true);
-  });
-
-  it('hides and shows it, and persists the choice', () => {
-    useAppearanceStore.getState().setShowPlanPanel(false);
-
-    expect(useAppearanceStore.getState().showPlanPanel).toBe(false);
-    const raw = localStorage.getItem(APPEARANCE_STORAGE_KEY);
-    expect((JSON.parse(raw as string) as { state: { showPlanPanel: unknown } }).state.showPlanPanel).toBe(false);
-
-    useAppearanceStore.getState().setShowPlanPanel(true);
-
-    expect(useAppearanceStore.getState().showPlanPanel).toBe(true);
-  });
-
-  it('hydrates a stored state from before the field existed to shown', async () => {
-    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ version: 3, state: { theme: 'light' } }));
-
-    await useAppearanceStore.persist.rehydrate();
-
-    expect(useAppearanceStore.getState().showPlanPanel).toBe(true);
-  });
-});
-
-describe('appearance-store — layout (HIVE-195)', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    useAppearanceStore.getState().reset();
-  });
-
-  it('defaults to round two (HIVE-213)', () => {
-    expect(useAppearanceStore.getState().layout).toBe('round-two');
-  });
-
-  it('setLayout persists it', () => {
-    useAppearanceStore.getState().setLayout('classic');
-
-    expect(useAppearanceStore.getState().layout).toBe('classic');
-    const { state } = JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) as string) as {
-      state: Record<string, unknown>;
-    };
-    expect(state.layout).toBe('classic');
-  });
-
-  it('rehydrates a stored state without the key to round two', async () => {
-    useAppearanceStore.getState().setLayout('classic');
-    localStorage.setItem(
-      APPEARANCE_STORAGE_KEY,
-      JSON.stringify({ version: 3, state: { theme: 'light' } }),
-    );
-
-    await useAppearanceStore.persist.rehydrate();
-
-    expect(useAppearanceStore.getState().layout).toBe('round-two');
-  });
-
-  it('rehydrates an unknown stored layout to round two', async () => {
-    localStorage.setItem(
-      APPEARANCE_STORAGE_KEY,
-      JSON.stringify({ version: 3, state: { layout: 'sideways' } }),
-    );
-
-    await useAppearanceStore.persist.rehydrate();
-
-    expect(useAppearanceStore.getState().layout).toBe('round-two');
-  });
-
-  it('keeps a stored classic until Classic is retired', async () => {
-    localStorage.setItem(
-      APPEARANCE_STORAGE_KEY,
-      JSON.stringify({ version: 3, state: { layout: 'classic' } }),
-    );
-
-    await useAppearanceStore.persist.rehydrate();
-
-    expect(useAppearanceStore.getState().layout).toBe('classic');
-  });
-
-  it('useLayout and useSetLayout read and write it', () => {
-    const { result } = renderHook(() => ({ layout: useLayout(), setLayout: useSetLayout() }));
-
-    act(() => result.current.setLayout('round-two'));
-
-    expect(result.current.layout).toBe('round-two');
-  });
-});
-
 describe('appearance-store — the swarm palette (HIVE-199)', () => {
   it('is the built-in palette for the resolved mode', () => {
     const { result, rerender } = renderHook(() => useSwarmPalette());
@@ -1350,7 +958,7 @@ describe('appearance-store — session panel (HIVE-201)', () => {
     useAppearanceStore.getState().setSessionPanelOpen(false);
     localStorage.setItem(
       APPEARANCE_STORAGE_KEY,
-      JSON.stringify({ state: { layout: 'round-two' }, version: 3 }),
+      JSON.stringify({ state: { theme: 'dark' }, version: 3 }),
     );
     await useAppearanceStore.persist.rehydrate();
     expect(useAppearanceStore.getState()).toMatchObject({ sessionPanelOpen: true, sessionPanelTab: 'plan' });

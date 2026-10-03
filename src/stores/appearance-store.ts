@@ -2,14 +2,6 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
-import {
-  clampRailWidths,
-  isRailDefault,
-  RAIL_MAX_PX,
-  RAIL_MIN,
-  type RailWidthInput,
-  type RailWidths,
-} from '@lib/rail-width';
 import type { SwarmPalette } from '@lib/swarm/palette';
 import {
   DEFAULT_TERMINAL_FONT,
@@ -57,12 +49,6 @@ type ResolvedTheme = 'dark' | 'light';
 
 export type Density = 'comfortable' | 'compact';
 
-/** Which frame the app draws (HIVE-195). Classic is deleted by HIVE-213. */
-export type Layout = 'classic' | 'round-two';
-
-/** Which rail a width belongs to. */
-type RailSide = 'left' | 'right';
-
 /**
  * Where an opened file renders.
  *
@@ -98,7 +84,6 @@ interface AppearanceState {
   terminalFontSize: number;
   terminalScrollback: number;
   density: Density;
-  layout: Layout;
   /**
    * Round two's session panel (HIVE-201): open or closed is one setting for
    * the app, and the last tab follows you from session to session. Ticket and
@@ -106,56 +91,6 @@ interface AppearanceState {
    */
   sessionPanelOpen: boolean;
   sessionPanelTab: SessionPanelTab;
-
-  /**
-   * How wide the user dragged each rail, or `null` for "follow density"
-   * (HIVE-105).
-   *
-   * Appearance on this store's own test — a durable choice about how the screen
-   * looks, needed before the first paint, and meaningless to the browser
-   * target's absent config file. It is also the arrangement `editorSplitRatio`
-   * already established: persisted like everything here, but written by
-   * dragging rather than by a control in Settings, because a width has no
-   * sensible discrete choices and a number field would be a worse interface
-   * than the handle itself.
-   *
-   * **`null` is a real state, not a missing one.** It means the rail is
-   * following `--cc-rail-w-*` from the stylesheet, so a later density change
-   * still moves it; a width that happened to equal today's default would not.
-   * That is what double-click-to-reset restores.
-   *
-   * Stored *intent*, not painted pixels — bounded only by the per-rail minimum
-   * and the absolute cap, never by the current window. The window-dependent
-   * bounds live in `clampRailWidths` and are applied on the way to the screen,
-   * so shrinking the window and growing it back returns the rail to the width
-   * that was actually chosen. See `@lib/rail-width`.
-   */
-  railWidthLeft: number | null;
-  railWidthRight: number | null;
-
-  /**
-   * Whether each rail is showing its icon strip instead of its panel.
-   *
-   * Persisted like everything else here, which is exactly right for this one:
-   * a rail the user collapsed should still be collapsed at the next launch, and
-   * because it is persisted the strip paints on the *first* frame rather than
-   * after a hydration flash. See {@link applyStoredRailWidths}.
-   */
-  railCollapsedLeft: boolean;
-  railCollapsedRight: boolean;
-
-  /**
-   * The plan drawer docked beside the terminal (HIVE-181). A layout choice,
-   * persisted with the rail widths: unpinned, the drawer only peeks over the
-   * terminal on hover or focus.
-   */
-  planPinned: boolean;
-  /**
-   * Whether the plan panel shows beside the terminal at all (HIVE-182). Off
-   * hides the glyph rail only; the count on the session row stays, because it
-   * costs no terminal columns.
-   */
-  showPlanPanel: boolean;
 
   /**
    * The line under the wordmark, top-left — whose hive this is.
@@ -272,26 +207,11 @@ interface AppearanceState {
   setTerminalFontSize: (size: number) => void;
   setTerminalScrollback: (lines: number) => void;
   setDensity: (density: Density) => void;
-  setLayout: (layout: Layout) => void;
   /** Open or close round two's session panel (HIVE-201). */
   setSessionPanelOpen: (open: boolean) => void;
   toggleSessionPanel: () => void;
   /** The tab the session panel shows (HIVE-201). */
   setSessionPanelTab: (tab: SessionPanelTab) => void;
-  /**
-   * Record a dragged rail width. Bounded by the per-rail minimum and the
-   * absolute cap only — see {@link AppearanceState.railWidthLeft}.
-   */
-  setRailWidth: (side: RailSide, width: number) => void;
-  /** Hand the rail back to the stylesheet: `null`, not today's default number. */
-  resetRailWidth: (side: RailSide) => void;
-  setRailCollapsed: (side: RailSide, collapsed: boolean) => void;
-  /** The click-the-active-tab gesture, and both keyboard chords. */
-  toggleRailCollapsed: (side: RailSide) => void;
-  /** Dock the plan drawer beside the terminal, or let it peek again (HIVE-181). */
-  setPlanPinned: (pinned: boolean) => void;
-  /** Show or hide the plan panel beside the terminal (HIVE-182). */
-  setShowPlanPanel: (show: boolean) => void;
   setTeamName: (name: string) => void;
   setSystemDark: (dark: boolean) => void;
 
@@ -407,8 +327,8 @@ function applyTheme(theme: ResolvedTheme) {
  * Write density to `<body data-density>`, the same mechanism as the theme.
  *
  * Comfortable is the default and carries no attribute, so the `:root` values in
- * tokens.css apply unmodified. One attribute write re-spaces both rails and
- * every row in them, and no component re-renders to do it.
+ * tokens.css apply unmodified. One attribute write re-spaces every list row and
+ * card, and no component re-renders to do it.
  */
 function applyDensity(density: Density) {
   if (typeof document === 'undefined') return;
@@ -455,175 +375,12 @@ export function activeThemeOf(
   return null;
 }
 
-/**
- * Write the rail widths to the same two custom properties the stylesheet
- * declares (HIVE-105) — the mechanism `applyDensity` uses, for the same reason:
- * one write re-sizes a rail and no component re-renders to do it.
- *
- * ## Why the properties, and not a width prop on each rail
- *
- * `--cc-rail-w-left` / `--cc-rail-w-right` are not only read by the rails.
- * `header.tsx` used to size its right-hand button cluster with
- * `calc(var(--cc-rail-w-right) - 1rem)` so the buttons sit over the activity
- * rail rather than straddling its border. Deliver the width by any other route
- * and the rails move while the header stays where it was — a bug that looks
- * like a header bug and is not.
- *
- * ## Why it removes the property instead of writing the default
- *
- * An inline property on `<body>` beats `body[data-density='compact']`, which is
- * exactly the precedence a user override should have. But that same precedence
- * would freeze a rail the user never touched: write `320px` inline and
- * switching to compact leaves it at 320px forever. So a rail sitting at its
- * default has its property *removed*, and the stylesheet — density rules
- * included — takes back over.
- *
- * A **collapsed** rail always takes the write branch, and that is correct: 44px
- * is never equal to a minimum, so `isRailDefault` is false, and the stylesheet
- * has no notion of a strip — the inline property is the only thing that can
- * paint one. The `widths.right === 0` guard still catches the unmounted case
- * and is untouched.
- *
- * ## `--cc-rail-w-left-open` / `--cc-rail-w-right-open`
- *
- * A second pair, carrying `openWidths` — the same clamp, computed with both
- * rails forced `expanded` regardless of what either is actually doing. They
- * exist because `header.tsx` used to size its zones from the plain pair above,
- * and a **collapsed** rail paints those at 44px: a header zone claiming that
- * width shrank to a box its content did not fit in, and the neighbouring zone
- * slid over to fill the gap. The plain pair is correct for the rails
- * themselves, which really are 44px wide when collapsed; it was never correct
- * for a header that must not reflow every time a rail is toggled. The `-open`
- * pair is what lets the header claim "where this rail's edge is when
- * expanded" as a fact independent of the rail's current display, so collapsing
- * one never moves anything beside it.
- *
- * The same remove-vs-default rule applies, for the same reason: an `-open`
- * property sitting at the density minimum is removed rather than written, so a
- * later density change still reaches it through the stylesheet instead of
- * finding a stale inline value. Unlike the plain pair, `-open` never takes an
- * unconditional write branch — it is never asked to paint a 44px strip, since
- * forcing `expanded` is the entire point.
- */
-export function applyRailWidths(
-  widths: RailWidths,
-  min: { left: number; right: number },
-  openWidths: RailWidths,
-) {
-  if (typeof document === 'undefined') return;
-
-  const { style } = document.body;
-
-  if (isRailDefault(widths.left, min.left)) {
-    style.removeProperty('--cc-rail-w-left');
-  } else {
-    style.setProperty('--cc-rail-w-left', `${widths.left}px`);
-  }
-
-  /*
-    The right rail is skipped entirely when it is unmounted: `clampRailWidths`
-    reports 0 for it, which is not a width anybody should paint, and the header
-    already drops its `calc()` column in that case.
-  */
-  if (widths.right === 0 || isRailDefault(widths.right, min.right)) {
-    style.removeProperty('--cc-rail-w-right');
-  } else {
-    style.setProperty('--cc-rail-w-right', `${widths.right}px`);
-  }
-
-  if (isRailDefault(openWidths.left, min.left)) {
-    style.removeProperty('--cc-rail-w-left-open');
-  } else {
-    style.setProperty('--cc-rail-w-left-open', `${openWidths.left}px`);
-  }
-
-  if (isRailDefault(openWidths.right, min.right)) {
-    style.removeProperty('--cc-rail-w-right-open');
-  } else {
-    style.setProperty('--cc-rail-w-right-open', `${openWidths.right}px`);
-  }
-}
-
-/**
- * Clamp and paint in one call, for the callers that have no separate render
- * pass to hang the two halves off — {@link applyStoredRailWidths} below, and
- * the store's own tests.
- *
- * `use-rail-widths` deliberately does *not* use this. A React component can
- * clamp during render (it is pure) and write during layout, and splitting the
- * two is what keeps a drag from costing a second render per pointer event.
- *
- * Takes its whole input rather than reading the store, because half of that
- * input is not store state — the window's width belongs to the DOM and
- * `showActivityRail` belongs to `ui-store`, which this store may not read.
- *
- * Also derives the `-open` pair `applyRailWidths` now writes, the same way
- * `use-rail-widths` does: the same input, run through `clampRailWidths` a
- * second time with both rails forced `expanded`.
- */
-export function syncRailWidths(input: RailWidthInput): RailWidths {
-  const widths = clampRailWidths(input);
-  const openWidths = clampRailWidths({ ...input, left: 'expanded', right: 'expanded' });
-  applyRailWidths(widths, input.min, openWidths);
-  return widths;
-}
-
-/**
- * The rail widths implied by the store alone, for the paths that have no
- * `showActivityRail` to hand — rehydration and reset.
- *
- * Collapse **is** persisted, unlike `showActivityRail`, so this path has the
- * real answer and the strip paints on the first frame rather than after a
- * hydration flash. The right rail is still assumed mounted: `showActivityRail`
- * lives in `ui-store`, which this store may not read and which persists
- * nothing, so at rehydration — during module evaluation, before React mounts —
- * it is its initial `true` and there is no other answer it could have.
- *
- * `setDensity` is the one caller that can run later, with the rail genuinely
- * hidden. What it writes then is a `--cc-rail-w-right` for a rail nobody is
- * painting: unread, because the only other consumer of that property is the
- * header cluster, which drops its `calc()` column when the rail is hidden — and
- * corrected by `use-rail-widths` in the same commit phase regardless.
- */
-function applyStoredRailWidths(
-  state: Pick<
-    AppearanceState,
-    'railWidthLeft' | 'railWidthRight' | 'railCollapsedLeft' | 'railCollapsedRight' | 'density'
-  >,
-) {
-  syncRailWidths({
-    storedLeft: state.railWidthLeft,
-    storedRight: state.railWidthRight,
-    min: RAIL_MIN[state.density],
-    windowWidth: typeof window === 'undefined' ? 0 : window.innerWidth,
-    left: state.railCollapsedLeft ? 'collapsed' : 'expanded',
-    right: state.railCollapsedRight ? 'collapsed' : 'expanded',
-  });
-}
-
 /** Push everything that lives on `<body>` (and the theme style element) at once — rehydration and reset. */
 function applyAll(
-  state: Pick<
-    AppearanceState,
-    | 'theme'
-    | 'systemDark'
-    | 'density'
-    | 'themes'
-    | 'activeThemeId'
-    | 'railWidthLeft'
-    | 'railWidthRight'
-    | 'railCollapsedLeft'
-    | 'railCollapsedRight'
-  >,
+  state: Pick<AppearanceState, 'theme' | 'systemDark' | 'density' | 'themes' | 'activeThemeId'>,
 ) {
   applyTheme(resolveTheme(state.theme, state.systemDark));
   applyDensity(state.density);
-  /*
-    After `applyDensity`, and it has to stay that way: the density attribute
-    decides which `--cc-rail-w-*` the stylesheet offers, and this decides
-    whether an inline override sits on top of it.
-  */
-  applyStoredRailWidths(state);
   applyThemeColors(activeThemeOf(state));
 }
 
@@ -644,17 +401,9 @@ const initialAppearanceState = {
   terminalFontSize: DEFAULT_TERMINAL_FONT_SIZE,
   terminalScrollback: DEFAULT_TERMINAL_SCROLLBACK,
   density: 'comfortable' as Density,
-  layout: 'round-two' as Layout,
   /** Open, on Plan: Files is where the Explorer lived, so open shows the user what moved (D14). */
   sessionPanelOpen: true,
   sessionPanelTab: 'plan' as SessionPanelTab,
-  /** `null` — follow the stylesheet — until somebody drags a rail. */
-  railWidthLeft: null as number | null,
-  railWidthRight: null as number | null,
-  railCollapsedLeft: false,
-  railCollapsedRight: false,
-  planPinned: false,
-  showPlanPanel: true,
   teamName: DEFAULT_TEAM_NAME,
 
   /** Full stage: the editor is a place you go, not a permanent tax on the terminal. */
@@ -662,7 +411,8 @@ const initialAppearanceState = {
   /**
    * Vertical, chosen against the merits and recorded as such.
    *
-   * With both rails mounted the shell already spends ~590px on chrome, so a
+   * With the bar, the list panel and the session panel open the shell
+   * spends ~680px on chrome, so a
    * vertical split leaves the terminal around 40 columns on a 1440px display —
    * narrow enough that agent output, tables and diffs wrap badly. `horizontal`
    * keeps the terminal full-width and is the better default on the merits; this
@@ -692,15 +442,8 @@ interface PersistedAppearanceState {
   terminalFontSize: number;
   terminalScrollback: number;
   density: Density;
-  layout: Layout;
   sessionPanelOpen: boolean;
   sessionPanelTab: SessionPanelTab;
-  railWidthLeft: number | null;
-  railWidthRight: number | null;
-  railCollapsedLeft: boolean;
-  railCollapsedRight: boolean;
-  planPinned: boolean;
-  showPlanPanel: boolean;
   teamName: string;
   editorPlacement: EditorPlacement;
   editorSplitAxis: EditorSplitAxis;
@@ -873,69 +616,11 @@ export const useAppearanceStore = create<AppearanceState>()(
       setDensity: (density) => {
         applyDensity(density);
         set({ density });
-        /*
-          Re-run the override after the attribute changes. A rail the user never
-          touched has no inline property, so this is what re-spaces it; a rail
-          they did set keeps its width, but its *minimum* just moved and the
-          override may now need clamping up to it.
-        */
-        applyStoredRailWidths({ ...get(), density });
       },
-
-      setLayout: (layout) => set({ layout }),
 
       setSessionPanelOpen: (sessionPanelOpen) => set({ sessionPanelOpen }),
       toggleSessionPanel: () => set((state) => ({ sessionPanelOpen: !state.sessionPanelOpen })),
       setSessionPanelTab: (sessionPanelTab) => set({ sessionPanelTab }),
-
-      /**
-       * Clamped to `[min, RAIL_MAX_PX]` and no further.
-       *
-       * Deliberately not clamped against the window here. The window-dependent
-       * bounds — the 30% share and the stage floor — belong to
-       * `clampRailWidths` on the way to the screen, because a width stored
-       * after being squeezed by a small window is a width the user never chose
-       * and would never get back. What is stored is intent; what is painted is
-       * intent within today's window.
-       */
-      setRailWidth: (side, width) => {
-        if (!Number.isFinite(width)) return;
-
-        const min = RAIL_MIN[get().density][side];
-        const next = Math.round(Math.min(RAIL_MAX_PX, Math.max(min, width)));
-
-        /*
-          Writing a width is an unambiguous statement that the rail should be
-          visible at that width, and it is the only thing drag-to-expand calls.
-          Clearing here is what lets that gesture need no second action.
-        */
-        set(
-          side === 'left'
-            ? { railWidthLeft: next, railCollapsedLeft: false }
-            : { railWidthRight: next, railCollapsedRight: false },
-        );
-      },
-
-      resetRailWidth: (side) =>
-        set(side === 'left' ? { railWidthLeft: null } : { railWidthRight: null }),
-
-      setRailCollapsed: (side, collapsed) =>
-        set(
-          side === 'left'
-            ? { railCollapsedLeft: collapsed }
-            : { railCollapsedRight: collapsed },
-        ),
-
-      toggleRailCollapsed: (side) =>
-        set((state) =>
-          side === 'left'
-            ? { railCollapsedLeft: !state.railCollapsedLeft }
-            : { railCollapsedRight: !state.railCollapsedRight },
-        ),
-
-      setPlanPinned: (planPinned) => set({ planPinned }),
-
-      setShowPlanPanel: (showPlanPanel) => set({ showPlanPanel }),
 
       /**
        * Stored exactly as typed.
@@ -1045,8 +730,6 @@ export const useAppearanceStore = create<AppearanceState>()(
           ...currentState,
           ...persisted,
           ...sanitizeThemeState(persisted),
-          // Round two unless Classic was chosen (HIVE-213); PR C removes the key.
-          layout: persisted.layout === 'classic' ? 'classic' : 'round-two',
           // No version bump for HIVE-201: an absent or bad value reads as the default.
           sessionPanelOpen:
             typeof persisted.sessionPanelOpen === 'boolean' ? persisted.sessionPanelOpen : true,
@@ -1066,15 +749,8 @@ export const useAppearanceStore = create<AppearanceState>()(
         terminalFontSize: state.terminalFontSize,
         terminalScrollback: state.terminalScrollback,
         density: state.density,
-        layout: state.layout,
         sessionPanelOpen: state.sessionPanelOpen,
         sessionPanelTab: state.sessionPanelTab,
-        railWidthLeft: state.railWidthLeft,
-        railWidthRight: state.railWidthRight,
-        railCollapsedLeft: state.railCollapsedLeft,
-        railCollapsedRight: state.railCollapsedRight,
-        planPinned: state.planPinned,
-        showPlanPanel: state.showPlanPanel,
         teamName: state.teamName,
         editorPlacement: state.editorPlacement,
         editorSplitAxis: state.editorSplitAxis,
@@ -1180,7 +856,6 @@ const appearanceActionsSelector = (state: AppearanceState) => ({
   setTerminalScrollback: state.setTerminalScrollback,
   setDensity: state.setDensity,
   setTeamName: state.setTeamName,
-  setShowPlanPanel: state.setShowPlanPanel,
 });
 
 const appearanceSettingsSelector = (state: AppearanceState) => ({
@@ -1190,7 +865,6 @@ const appearanceSettingsSelector = (state: AppearanceState) => ({
   terminalScrollback: state.terminalScrollback,
   density: state.density,
   teamName: state.teamName,
-  showPlanPanel: state.showPlanPanel,
 });
 
 /**
@@ -1271,16 +945,6 @@ export const useAppearanceSettings = () =>
 export const useAppearanceActions = () =>
   useAppearanceStore(useShallow(appearanceActionsSelector));
 
-/** Whether the plan drawer is docked beside the terminal (HIVE-181). */
-export const usePlanPinned = () => useAppearanceStore((state) => state.planPinned);
-/** Dock or undock the plan drawer (HIVE-181). */
-export const useSetPlanPinned = () => useAppearanceStore((state) => state.setPlanPinned);
-/** Whether the plan panel shows beside the terminal (HIVE-182). */
-export const useShowPlanPanel = () => useAppearanceStore((state) => state.showPlanPanel);
-/** Which frame the app draws (HIVE-195). */
-export const useLayout = () => useAppearanceStore((state) => state.layout);
-/** Switch the frame, live (HIVE-195). */
-export const useSetLayout = () => useAppearanceStore((state) => state.setLayout);
 /** Whether round two's session panel is open (HIVE-201). */
 export const useSessionPanelOpen = () => useAppearanceStore((state) => state.sessionPanelOpen);
 /** The session panel's last tab (HIVE-201). */
@@ -1377,40 +1041,6 @@ export const useRunLogSplitRatio = () =>
 
 export const useSetRunLogSplitRatio = () =>
   useAppearanceStore((state) => state.setRunLogSplitRatio);
-
-/**
- * The stored rail widths, their collapse flags, and the density they are
- * bounded by (HIVE-105).
- *
- * Deliberately these fields and no more. `use-rail-widths` is the only
- * consumer, it runs at the composition root, and widening this selector would
- * re-run the clamp — and touch `<body>` — every time an unrelated appearance
- * field changed. The collapse flags belong here rather than behind a second
- * hook because every consumer of the widths also needs to know whether a rail
- * is currently a strip.
- */
-const railWidthSelector = (state: AppearanceState) => ({
-  railWidthLeft: state.railWidthLeft,
-  railWidthRight: state.railWidthRight,
-  railCollapsedLeft: state.railCollapsedLeft,
-  railCollapsedRight: state.railCollapsedRight,
-  density: state.density,
-});
-
-export const useRailWidthState = () => useAppearanceStore(useShallow(railWidthSelector));
-
-/** Written by dragging a rail's handle, for the same reason as the divider above. */
-export const useSetRailWidth = () => useAppearanceStore((state) => state.setRailWidth);
-
-/** Double-click on a handle — back to following the stylesheet. */
-export const useResetRailWidth = () => useAppearanceStore((state) => state.resetRailWidth);
-
-/** The strip gesture and both chords. */
-export const useToggleRailCollapsed = () =>
-  useAppearanceStore((state) => state.toggleRailCollapsed);
-
-/** Drag-past-the-edge, and the header bell un-collapsing the activity rail. */
-export const useSetRailCollapsed = () => useAppearanceStore((state) => state.setRailCollapsed);
 
 /** The editor section's current values and its setters. */
 export const useEditorSettings = () =>
