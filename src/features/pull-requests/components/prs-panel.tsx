@@ -238,7 +238,7 @@ export function PrsPanel() {
   const onOpen = useCallback(
     (row: HatcheryRow) => {
       if (layout === 'round-two') {
-        openPrPage({ owner: row.pr.owner, repo: row.pr.repo, n: row.pr.n });
+        openPrPage({ owner: row.pr.owner, repo: row.pr.repo, n: row.pr.n, row });
         return;
       }
       window.open(row.pr.url, '_blank', 'noopener,noreferrer');
