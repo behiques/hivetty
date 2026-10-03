@@ -217,6 +217,29 @@ export function splashWindow(app: ElectronApplication): Page | undefined {
   return app.windows().find(isSplash);
 }
 
+/**
+ * Size the app's own window's content area (HIVE-213, the guide shots).
+ *
+ * The real window, not `page.setViewportSize`: emulating a viewport leaves the
+ * BrowserWindow at its own size, and a terminal measured before the emulation
+ * keeps the old grid.
+ */
+export async function setContentSize(
+  app: ElectronApplication,
+  width: number,
+  height: number,
+): Promise<void> {
+  await app.evaluate(
+    ({ BrowserWindow }, [w, h]) => {
+      const win = BrowserWindow.getAllWindows().find(
+        (candidate) => !candidate.webContents.getURL().includes('splash.html'),
+      );
+      win?.setContentSize(w!, h!);
+    },
+    [width, height],
+  );
+}
+
 export { expect };
 
 /**

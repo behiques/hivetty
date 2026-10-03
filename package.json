@@ -41,6 +41,7 @@
     "test:e2e": "playwright test",
     "test:e2e:web": "playwright test --project=web",
     "test:e2e:electron": "PW_ELECTRON_ONLY=1 playwright test --project=electron",
+    "docs:shots": "HIVE_GUIDE_SHOTS=1 PW_ELECTRON_ONLY=1 playwright test --project=electron tests/e2e/electron/guide-shots.spec.ts",
     "test:pty": "electron-vite build && ELECTRON_RUN_AS_NODE=1 electron scripts/run-pty-conformance.mjs",
     "test:back": "HIVE_LIVE_BACK_PROOF=1 PW_ELECTRON_ONLY=1 playwright test --project=electron tests/e2e/electron/bare-back-claim.spec.ts",
     "test:nudge": "HIVE_LIVE_NUDGE_PROOF=1 PW_ELECTRON_ONLY=1 playwright test --project=electron tests/e2e/electron/nudge-splice.spec.ts",
