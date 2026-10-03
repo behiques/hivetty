@@ -29,6 +29,7 @@ import {
   useActiveSessions,
   useCurrentRow,
   useAskingAgentCount,
+  useWorkingAgentCount,
   useAgentLive,
   useAgentLiveCount,
   useAgentPr,
@@ -2083,6 +2084,58 @@ describe('hive-store selectors', () => {
 
       expect(result.current).not.toHaveProperty('asking');
       expect(result.current).not.toHaveProperty('agents');
+    });
+  });
+
+  describe('useWorkingAgentCount (HIVE-196)', () => {
+    const agent = (over: Partial<AgentSummary> = {}): AgentSummary => ({
+      name: 'slack-watcher',
+      description: 'Watches.',
+      icon: 'Robot',
+      status: 'sleeping',
+      wake: { on: [] },
+      mcp: [],
+      tools: [],
+      rotateAfter: 50,
+      runs: [],
+      ...over,
+    });
+
+    it('counts only the working agents', () => {
+      act(() => {
+        useHiveStore.getState().hydrateAgents([
+          agent({ name: 'a', status: 'working' }),
+          agent({ name: 'b', status: 'working' }),
+          agent({ name: 'c', status: 'asking' }),
+        ]);
+      });
+
+      const { result } = renderHook(() => useWorkingAgentCount());
+
+      expect(result.current).toBe(2);
+    });
+
+    it('re-renders only when the count changes', () => {
+      act(() => {
+        useHiveStore.getState().hydrateAgents([agent({ name: 'a', status: 'working' })]);
+      });
+      let renders = 0;
+      renderHook(() => {
+        renders += 1;
+        return useWorkingAgentCount();
+      });
+      const before = renders;
+
+      act(() => useHiveStore.getState().appendEntityLines('hero-refresh', [{ text: 'more', color: 'ink' }]));
+      expect(renders).toBe(before);
+
+      act(() => {
+        useHiveStore.getState().hydrateAgents([
+          agent({ name: 'a', status: 'working' }),
+          agent({ name: 'b', status: 'working' }),
+        ]);
+      });
+      expect(renders).toBe(before + 1);
     });
   });
 

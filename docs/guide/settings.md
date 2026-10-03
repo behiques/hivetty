@@ -59,7 +59,9 @@ the count on the session row), team name, density.
 **Layout** — Classic (the default) or Round two. Round two puts the places on a
 bar at the left, with one list beside the stage. It switches live, without
 restarting a terminal, and is kept per device and per window. Round two opens
-on Home on every launch.
+on Home on every launch. Round two has no header: the connection item and
+Settings sit at the foot of the bar, and Mode here is where light and dark
+switch.
 
 ## Editor
 

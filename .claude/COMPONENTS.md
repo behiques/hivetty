@@ -24,6 +24,7 @@ library** — every added primitive is code we own and must keep.
 | `dialog` | the new-session picker overlay (story 044) |
 | `tooltip` | the meta-bar back button (story 040) |
 | `dropdown-menu` | model / effort selection (story 044) |
+| `popover` | the round-two connection item (HIVE-196) |
 
 Everything else the concept needs is a Hive atom, because the concept's chrome is
 tighter and more terminal-native than shadcn's defaults.
@@ -35,6 +36,12 @@ to be. Two adaptations are in place and should be preserved on regeneration:
   icon library.
 - `dialog.tsx`'s footer close control is a plain styled `DialogPrimitive.Close`
   rather than `ui/button.tsx`'s `Button` atom, which postdates it.
+
+### `Popover` / `PopoverTrigger` / `PopoverContent`
+
+`src/components/ui/popover.tsx` — HIVE-196. The shadcn wrapper over `radix-ui`'s `Popover`;
+content portals, `sideOffset` 4, `bg-panel` with `border-border`. Esc, a click outside or a second
+click closes it.
 
 ## Terminal
 
@@ -359,8 +366,21 @@ glyph on top (Phosphor `Hexagon`, `weight="fill"`, `text-amber`, 22px) carries
 the team name as its accessible name and its tooltip, "The Hive" when the name
 is empty. Below it the five places — Home, Sessions, Work, Agents, PRs — each a
 52px button calling `selectPlace`; the active one has `aria-current="page"`.
-Settings sits at the foot and calls `openSettings()`. No Search and no
-connection item yet.
+The foot holds `ConnectionItem` and Settings (`openSettings()`); no Search.
+Sessions and Agents carry working counts in grey, PRs its needs-you count in
+amber; a zero draws nothing (HIVE-196).
+
+### `<ConnectionItem />`
+
+`src/components/layout/connection-item.tsx` — HIVE-196. No props.
+
+Round two's connection state at the bar's foot, `data-testid="connection-item"`. A dot over a
+9.5px label; the label is the first of `connectionStates()` (`src/lib/connection-states.ts`):
+disconnected › reconnecting › exposed › demo › attached › serving › local. Click opens a
+`Popover` listing every state that holds, with today's chip sentences, the lost-actions note and
+Clear, the next-try countdown, and `openSettings('advanced')` links. Reads only what is bound and
+attached now (`useReceiverExposure`, `useServerExposure`, `useServingDeviceCount`, `useRemoteLink`,
+`isDesktop`).
 
 ### `<ListPanel />`
 

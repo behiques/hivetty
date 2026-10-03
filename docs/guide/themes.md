@@ -1,7 +1,7 @@
 # Themes
 
 One theme colours everything: the chrome, the terminal and the code editor. Every theme has a
-light and a dark mode; the sun and moon in the header switch between them.
+light and a dark mode; the sun and moon in the header switch between them (in round two, Settings › Appearance › Mode).
 
 **On this page:** [Pick a theme](#pick-a-theme) · [Import your own](#import-your-own) ·
 [The theme file](#the-theme-file) · [Other appearance settings](#other-appearance-settings)
