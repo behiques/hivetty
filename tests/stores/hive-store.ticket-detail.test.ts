@@ -194,3 +194,104 @@ describe('loadTicketDetail (HIVE-203)', () => {
     expect(state().ticketDetail).toBeNull();
   });
 });
+
+describe('refreshTicketDetail (HIVE-203)', () => {
+  it('re-reads detail, comments and transitions of the open ticket, not its history', async () => {
+    await state().loadTicketDetail('HIVE-7');
+    vi.clearAllMocks();
+    readJiraComments.mockResolvedValue(ok({ comments: [comment('1'), comment('2')], total: 4 }));
+
+    await state().refreshTicketDetail('HIVE-7');
+
+    expect(readJiraDetail).toHaveBeenCalledWith({ key: 'HIVE-7' });
+    expect(readJiraComments).toHaveBeenCalledWith({ key: 'HIVE-7', newest: true });
+    expect(readJiraTransitions).toHaveBeenCalledWith({ key: 'HIVE-7' });
+    expect(ledgerList).not.toHaveBeenCalled();
+    expect(readJiraIssue).not.toHaveBeenCalled();
+    expect(state().ticketDetail).toMatchObject({ comments: [comment('1'), comment('2')], total: 4, history: [entry] });
+  });
+
+  it('re-reads the issue only when the slice holds one', async () => {
+    await state().loadTicketDetail('HIVE-8');
+    vi.clearAllMocks();
+
+    await state().refreshTicketDetail('HIVE-8');
+
+    expect(readJiraIssue).toHaveBeenCalledWith({ key: 'HIVE-8' });
+  });
+
+  it('does nothing for a key that is not open', async () => {
+    await state().loadTicketDetail('HIVE-7');
+    vi.clearAllMocks();
+
+    await state().refreshTicketDetail('HIVE-8');
+
+    expect(readJiraDetail).not.toHaveBeenCalled();
+    expect(state().ticketDetail?.key).toBe('HIVE-7');
+  });
+});
+
+describe('appendTicketComment (HIVE-203)', () => {
+  it('pushes the comment and counts it', async () => {
+    await state().loadTicketDetail('HIVE-7');
+    state().appendTicketComment('HIVE-7', comment('9'));
+
+    expect(state().ticketDetail?.comments).toEqual([comment('1'), comment('9')]);
+    expect(state().ticketDetail?.total).toBe(4);
+  });
+
+  it('starts from nothing when no comments were read', () => {
+    useHiveStore.setState({ ticketDetail: { key: 'HIVE-7', problems: {} } });
+    state().appendTicketComment('HIVE-7', comment('9'));
+
+    expect(state().ticketDetail).toMatchObject({ comments: [comment('9')], total: 1 });
+  });
+
+  it('ignores another key', async () => {
+    await state().loadTicketDetail('HIVE-7');
+    const before = state().ticketDetail;
+    state().appendTicketComment('HIVE-8', comment('9'));
+
+    expect(state().ticketDetail).toBe(before);
+  });
+});
+
+describe('reloadTicketTransitions (HIVE-203)', () => {
+  it('replaces the transitions of the open ticket', async () => {
+    await state().loadTicketDetail('HIVE-7');
+    const back: JiraTransition = { id: '11', name: 'Reopen', to: { name: 'To Do', statusCategory: 'todo' } };
+    readJiraTransitions.mockResolvedValue(ok([back]));
+
+    await state().reloadTicketTransitions('HIVE-7');
+
+    expect(state().ticketDetail?.transitions).toEqual([back]);
+  });
+
+  it('does nothing for a key that is not open', async () => {
+    await state().loadTicketDetail('HIVE-7');
+    vi.clearAllMocks();
+
+    await state().reloadTicketTransitions('HIVE-8');
+
+    expect(readJiraTransitions).not.toHaveBeenCalled();
+  });
+});
+
+describe('setTicketDetailIssue (HIVE-203)', () => {
+  it('replaces the issue the slice read for itself', async () => {
+    await state().loadTicketDetail('HIVE-8');
+    state().setTicketDetailIssue({ ...issue, status: 'Done', statusCategory: 'done' });
+
+    expect(state().ticketDetail?.issue).toMatchObject({ key: 'HIVE-8', status: 'Done', statusCategory: 'done' });
+  });
+
+  it('leaves a listed ticket to the list, and ignores another key', async () => {
+    await state().loadTicketDetail('HIVE-7');
+    const before = state().ticketDetail;
+
+    state().setTicketDetailIssue({ ...issue, key: 'HIVE-7' });
+    state().setTicketDetailIssue(issue);
+
+    expect(state().ticketDetail).toBe(before);
+  });
+});

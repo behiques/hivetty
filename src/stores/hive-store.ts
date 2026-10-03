@@ -89,7 +89,7 @@ import {
   type RemoteLinkStatus,
   type SessionNameReport,
 } from '@shared/ipc-contract';
-import type { JiraIssue } from '@shared/jira-contract';
+import type { JiraComment, JiraIssue } from '@shared/jira-contract';
 import {
   LEDGER_MEMORY_CAP,
   type LedgerEntry,
@@ -456,6 +456,17 @@ interface HiveState {
    * when the list does not hold it. Each part merges as it lands.
    */
   loadTicketDetail: (key: string) => Promise<void>;
+  /** Re-read the open ticket's page; a key that is not open does nothing (HIVE-203). */
+  refreshTicketDetail: (key: string) => Promise<void>;
+  /** A comment this app just posted, shown without a re-read (HIVE-203). */
+  appendTicketComment: (key: string, comment: JiraComment) => void;
+  /** Re-read what the open ticket can become, after its status moved (HIVE-203). */
+  reloadTicketTransitions: (key: string) => Promise<void>;
+  /**
+   * Install a re-read issue for a ticket the list does not hold (HIVE-203).
+   * A listed ticket is `updateTicket`'s; this leaves it alone.
+   */
+  setTicketDetailIssue: (issue: JiraIssue) => void;
   /** Read the configured query and install the answer (HIVE-69). */
   refreshTickets: () => Promise<void>;
 
@@ -1843,6 +1854,72 @@ const ATTACH_SNAPSHOT_HANDLERS: Partial<
     if (result.ok) store.hydratePrs(result.value.prs, result.value.repos);
   },
 };
+
+/** The store's own `set`, as the helpers outside the creator take it. */
+type SetHive = (
+  partial: Partial<HiveState> | ((state: HiveState) => Partial<HiveState> | HiveState),
+) => void;
+
+/**
+ * Read the open ticket's parts and merge each as it lands (HIVE-203).
+ *
+ * The parts merge separately so one failed read never blanks another: a
+ * comments outage leaves the description standing, and a read that fails
+ * keeps what the last one found with the problem beside it. An answer that
+ * arrives for a key no longer open is dropped rather than written over the
+ * ticket that replaced it.
+ */
+async function readTicketParts(
+  get: () => HiveState,
+  set: SetHive,
+  key: string,
+  read: { ledger: boolean; issue: boolean },
+): Promise<void> {
+  const open = () => get().ticketDetail?.key === key;
+  const merge = (patch: Partial<TicketDetail>) => {
+    if (!open()) return;
+    set((state) => ({ ticketDetail: { ...state.ticketDetail!, ...patch } }));
+  };
+  const problem = (part: 'detail' | 'comments', message: string | undefined) => {
+    if (!open()) return;
+    set((state) => {
+      const problems = { ...state.ticketDetail!.problems };
+      if (message === undefined) delete problems[part];
+      else problems[part] = message;
+      return { ticketDetail: { ...state.ticketDetail!, problems } };
+    });
+  };
+
+  await Promise.all([
+    readJiraDetail({ key }).then((result) => {
+      if (result === null) return problem('detail', BRIDGE_ERROR);
+      if (!result.ok) return problem('detail', result.error.message);
+      merge({ detail: result.value, readAt: Date.now() });
+      problem('detail', undefined);
+    }),
+    readJiraComments({ key, newest: true }).then((result) => {
+      if (result === null) return problem('comments', BRIDGE_ERROR);
+      if (!result.ok) return problem('comments', result.error.message);
+      merge({ comments: result.value.comments, total: result.value.total, readAt: Date.now() });
+      problem('comments', undefined);
+    }),
+    readJiraTransitions({ key }).then((result) => {
+      if (result?.ok) merge({ transitions: result.value });
+    }),
+    read.issue
+      ? readJiraIssue({ key }).then((result) => {
+          if (result?.ok) merge({ issue: toTicket(result.value) });
+        })
+      : Promise.resolve(),
+    read.ledger
+      ? (window.hive?.ledger.list({ ticket: key }) ?? Promise.resolve(undefined))
+          .then((snapshot) => {
+            if (snapshot) merge({ history: snapshot.entries });
+          })
+          .catch(() => undefined)
+      : Promise.resolve(),
+  ]);
+}
 
 export const useHiveStore = create<HiveState>()((set, get) => ({
   ...emptySeeds(),
@@ -4914,50 +4991,47 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    */
   loadTicketDetail: async (key) => {
     if (get().ticketDetail?.key !== key) set({ ticketDetail: { key, problems: {} } });
-    const open = () => get().ticketDetail?.key === key;
-    const merge = (patch: Partial<TicketDetail>) => {
-      if (!open()) return;
-      set((state) => ({ ticketDetail: { ...state.ticketDetail!, ...patch } }));
-    };
-    const problem = (part: 'detail' | 'comments', message: string | undefined) => {
-      if (!open()) return;
-      set((state) => {
-        const problems = { ...state.ticketDetail!.problems };
-        if (message === undefined) delete problems[part];
-        else problems[part] = message;
-        return { ticketDetail: { ...state.ticketDetail!, problems } };
-      });
-    };
     const inList = get().tickets.some((ticket) => ticket.key === key);
-
-    await Promise.all([
-      readJiraDetail({ key }).then((result) => {
-        if (result === null) return problem('detail', BRIDGE_ERROR);
-        if (!result.ok) return problem('detail', result.error.message);
-        merge({ detail: result.value, readAt: Date.now() });
-        problem('detail', undefined);
-      }),
-      readJiraComments({ key, newest: true }).then((result) => {
-        if (result === null) return problem('comments', BRIDGE_ERROR);
-        if (!result.ok) return problem('comments', result.error.message);
-        merge({ comments: result.value.comments, total: result.value.total, readAt: Date.now() });
-        problem('comments', undefined);
-      }),
-      readJiraTransitions({ key }).then((result) => {
-        if (result?.ok) merge({ transitions: result.value });
-      }),
-      inList
-        ? Promise.resolve()
-        : readJiraIssue({ key }).then((result) => {
-            if (result?.ok) merge({ issue: toTicket(result.value) });
-          }),
-      (window.hive?.ledger.list({ ticket: key }) ?? Promise.resolve(undefined))
-        .then((snapshot) => {
-          if (snapshot) merge({ history: snapshot.entries });
-        })
-        .catch(() => undefined),
-    ]);
+    await readTicketParts(get, set, key, { ledger: true, issue: !inList });
   },
+
+  /**
+   * The page poller's call (HIVE-203): detail, comments and transitions again.
+   * Not the ledger history — the tail carries what is appended after the open —
+   * and the issue only when the slice read one for itself.
+   */
+  refreshTicketDetail: async (key) => {
+    const open = get().ticketDetail;
+    if (open?.key !== key) return;
+    await readTicketParts(get, set, key, { ledger: false, issue: open.issue !== undefined });
+  },
+
+  appendTicketComment: (key, comment) =>
+    set((state) => {
+      const open = state.ticketDetail;
+      if (open?.key !== key) return state;
+      return {
+        ticketDetail: {
+          ...open,
+          comments: [...(open.comments ?? []), comment],
+          total: (open.total ?? open.comments?.length ?? 0) + 1,
+        },
+      };
+    }),
+
+  reloadTicketTransitions: async (key) => {
+    if (get().ticketDetail?.key !== key) return;
+    const result = await readJiraTransitions({ key });
+    if (!result?.ok || get().ticketDetail?.key !== key) return;
+    set((state) => ({ ticketDetail: { ...state.ticketDetail!, transitions: result.value } }));
+  },
+
+  setTicketDetailIssue: (issue) =>
+    set((state) => {
+      const open = state.ticketDetail;
+      if (open?.key !== issue.key || open.issue === undefined) return state;
+      return { ticketDetail: { ...open, issue: toTicket(issue) } };
+    }),
 
   /**
    * Read the configured query and install the answer (HIVE-69).
@@ -7312,6 +7386,22 @@ export const useTicketDetail = (): TicketDetail | null =>
 /** Read the open ticket's page (HIVE-203). */
 export const useLoadTicketDetail = (): ((key: string) => Promise<void>) =>
   useHiveStore((state) => state.loadTicketDetail);
+
+/** The page poller's re-read of the open ticket (HIVE-203). */
+export const useRefreshTicketDetail = (): ((key: string) => Promise<void>) =>
+  useHiveStore((state) => state.refreshTicketDetail);
+
+/** Show a just-posted comment on the open ticket (HIVE-203). */
+export const useAppendTicketComment = (): ((key: string, comment: JiraComment) => void) =>
+  useHiveStore((state) => state.appendTicketComment);
+
+/** Re-read the open ticket's transitions (HIVE-203). */
+export const useReloadTicketTransitions = (): ((key: string) => Promise<void>) =>
+  useHiveStore((state) => state.reloadTicketTransitions);
+
+/** Install a re-read issue for an open ticket the list does not hold (HIVE-203). */
+export const useSetTicketDetailIssue = (): ((issue: JiraIssue) => void) =>
+  useHiveStore((state) => state.setTicketDetailIssue);
 
 /**
  * The five things the fleet-derived selectors below actually read off a session.
