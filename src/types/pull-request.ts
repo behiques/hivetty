@@ -24,6 +24,12 @@ export interface Pr {
   url: string;
   /** `headRefName`. The only thing a session is matched on. */
   branch: string;
+  /** ISO 8601 from GitHub. Orders the Hatchery within a flap (HIVE-215). */
+  updatedAt: string;
+  /** ISO 8601, `null` until merged. The HATCHED time and the merged order (HIVE-215). */
+  mergedAt: string | null;
+  /** The token's owner wrote it. Only a PR of yours can read SUMMONS (HIVE-215). */
+  mine: boolean;
   /**
    * The session that owns it, or `null` when no live session is on that branch.
    *

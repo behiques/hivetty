@@ -8412,6 +8412,9 @@ const resolvePrs = (
     checks: pr.checks,
     url: pr.url,
     branch: pr.branch,
+    updatedAt: pr.updatedAt,
+    mergedAt: pr.mergedAt,
+    mine: pr.mine,
     session: sessionForPr(pr, fleet),
   }));
 

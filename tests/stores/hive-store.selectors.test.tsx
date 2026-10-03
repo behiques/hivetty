@@ -69,6 +69,7 @@ import { notif } from '../support/notifications';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
 
 import { testProjectKey } from '@tests/support/project-key';
+import { prRecord } from '@tests/support/prs';
 
 /**
  * Every selector hook is asserted against the fixtures. Derived values are
@@ -345,6 +346,23 @@ describe('hive-store selectors', () => {
   });
 
   describe('usePrs', () => {
+    it('carries updatedAt, mergedAt and mine through (HIVE-215)', () => {
+      act(() => {
+        useHiveStore.setState({
+          prs: [prRecord({ number: 7, state: 'merged', mergedAt: '2026-08-09T11:32:00Z', mine: true })],
+        });
+      });
+
+      const { result } = renderHook(() => usePrs());
+
+      expect(result.current[0]).toMatchObject({
+        n: 7,
+        updatedAt: '2026-08-09T12:00:00Z',
+        mergedAt: '2026-08-09T11:32:00Z',
+        mine: true,
+      });
+    });
+
     /**
      * The owning session is a *match*, not a stored field.
      *
