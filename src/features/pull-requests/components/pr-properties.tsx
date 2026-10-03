@@ -68,7 +68,7 @@ export function CheckRow({ check }: { check: PrCheck }) {
   const body = (
     <>
       <CheckIcon status={check.status} />
-      <span className="font-mono text-ink">{check.name}</span>
+      <span data-testid="check-name" className="font-mono text-ink">{check.name}</span>
       <span className="flex-1" />
       <span className="font-mono text-[11.5px] text-muted">{checkTime(check, Date.now())}</span>
     </>
