@@ -67,6 +67,34 @@ describe('PrDiff', () => {
     expect(onOpenFile).toHaveBeenLastCalledWith('src/fees/validator.ts', 117);
   });
 
+  it('keeps a removed line and an added one of the same number apart, and opens at the new side (#24)', async () => {
+    const onOpenFile = vi.fn();
+    render(<PrDiff {...props({ onOpenFile })} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Old line 115' }));
+    const rows = (kind: string) => document.querySelector(`[data-kind="${kind}"]`);
+    expect(rows('del')?.className).toContain('inset_2px');
+    expect(rows('add')?.className).not.toContain('inset_2px');
+    await userEvent.click(screen.getByRole('button', { name: 'Open in the editor' }));
+    expect(onOpenFile).toHaveBeenLastCalledWith('src/fees/validator.ts', 115);
+  });
+
+  it('in Split, selecting the left gutter highlights the left row only (#24)', async () => {
+    useUiStore.getState().setPrDiffView('split');
+    render(<PrDiff {...props({ onOpenFile: vi.fn() })} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Old line 115' }));
+    const left = document.querySelector('[data-side="left"] [data-kind="del"]');
+    const right = document.querySelector('[data-side="right"] [data-kind="add"]');
+    expect(left?.className).toContain('inset_2px');
+    expect(right?.className).not.toContain('inset_2px');
+  });
+
+  it('offers Retry beside a failed read (#24)', async () => {
+    const onRetry = vi.fn();
+    render(<PrDiff {...props({ problem: 'GitHub said no.', onRetry })} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
   it('has no Open in the editor without a root, or for a deleted file', () => {
     const { rerender } = render(<PrDiff {...props()} />);
     expect(screen.queryByRole('button', { name: 'Open in the editor' })).toBeNull();

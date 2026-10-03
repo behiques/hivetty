@@ -26,18 +26,36 @@ const SIGN: Record<DiffLine['kind'], { text: string; tone: string }> = {
   context: { text: '', tone: 'text-subtle' },
 };
 
-/** The number a row is selected and opened at: the new side's, the old one for a removed line. */
-const lineOf = (line: DiffLine): number => line.newN ?? line.oldN ?? 1;
+/** A selected gutter number: its side too, since a removed line and an added one can share a number. */
+interface Selection {
+  side: 'L' | 'R';
+  n: number;
+  /** Where the editor opens: always a new-side line. */
+  open: number;
+}
+
+/**
+ * The new-side line a row opens the editor at: its own, else (a removed line)
+ * the next line the hunk keeps on the new side, else the last one before it.
+ */
+function openLineOf(lines: DiffLine[], index: number): number {
+  const own = lines[index]?.newN;
+  if (own !== null && own !== undefined) return own;
+  const next = lines.slice(index + 1).find((line) => line.newN !== null)?.newN;
+  if (next !== null && next !== undefined) return next;
+  const before = lines.slice(0, index).findLast((line) => line.newN !== null)?.newN;
+  return before ?? 1;
+}
 
 /** One diff row: a 46px number gutter (a button, selecting the line), a 16px sign, the text. */
-export function DiffRow({ line, n, selected, onSelect }: { line: DiffLine; n: number | null; selected: boolean; onSelect: (n: number) => void }) {
+export function DiffRow({ line, n, side, selected, onSelect }: { line: DiffLine; n: number | null; side: 'L' | 'R'; selected: boolean; onSelect: () => void }) {
   const sign = SIGN[line.kind];
   return (
     <div data-kind={line.kind} className={cn('flex pr-4 whitespace-pre', WASH[line.kind], selected && 'shadow-[inset_2px_0_var(--cc-amber)]')}>
       {n === null ? (
         <span className="w-[46px] shrink-0" />
       ) : (
-        <button type="button" aria-label={`Line ${String(n)}`} onClick={() => onSelect(n)} className="w-[46px] shrink-0 pr-2.5 text-right text-subtle hover:text-ink">
+        <button type="button" aria-label={`${side === 'L' ? 'Old line' : 'Line'} ${String(n)}`} onClick={onSelect} className="w-[46px] shrink-0 pr-2.5 text-right text-subtle hover:text-ink">
           {n}
         </button>
       )}
@@ -64,19 +82,44 @@ export interface PrDiffProps {
   readOnly: boolean;
   onViewed: (viewed: boolean) => Promise<GhResult<true>>;
   onOpenFile?: (path: string, line: number) => void;
+  /** Read the diff again after a failed read; the head has not moved, so nothing else would. */
+  onRetry?: () => void;
   writes?: ThreadWrites;
   fixerOnIt: boolean;
 }
 
-export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, readOnly, onViewed, onOpenFile, writes, fixerOnIt }: PrDiffProps) {
+/** The diff read's failure, with Retry when the parent can re-read. */
+function ProblemLine({ problem, onRetry, className }: { problem: string | undefined; onRetry?: () => void; className: string }) {
+  if (problem === undefined) return null;
+  return (
+    <p className={cn('flex items-center gap-2 font-sans text-[12px] text-amber', className)}>
+      {problem}
+      {onRetry === undefined ? null : (
+        <button type="button" onClick={onRetry} className="text-brand hover:underline">
+          Retry
+        </button>
+      )}
+    </p>
+  );
+}
+
+/** With nothing selected, the editor opens at the first changed line. */
+function firstOpenLine(diff: DiffFile | null): number {
+  for (const hunk of diff?.hunks ?? []) {
+    const i = hunk.lines.findIndex((line) => line.kind !== 'context');
+    if (i >= 0) return openLineOf(hunk.lines, i);
+  }
+  return 1;
+}
+
+export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, readOnly, onViewed, onOpenFile, onRetry, writes, fixerOnIt }: PrDiffProps) {
   const view = usePrDiffView();
   const { setPrDiffView } = usePrPageActions();
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Selection | null>(null);
   const [viewedProblem, setViewedProblem] = useState<string | null>(null);
   // A re-toggle mid-write would roll back to the wrong state, so Viewed waits for its write (#22).
   const [pending, setPending] = useState(false);
-  const firstChanged = diff?.hunks.flatMap((hunk) => hunk.lines).find((line) => line.kind !== 'context');
-  const openAt = selected ?? (firstChanged === undefined ? 1 : lineOf(firstChanged));
+  const openAt = selected?.open ?? firstOpenLine(diff);
   const showable = diff !== null && !diff.binary && diff.hunks.length > 0;
   const placed = useMemo(() => (diff === null ? null : placeThreads(diff, threads)), [diff, threads]);
 
@@ -131,20 +174,30 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
           </div>
         ) : showable ? (
           <>
-            {problem === undefined ? null : <p className="px-[18px] pb-2 font-sans text-[12px] text-amber">{problem}</p>}
+            <ProblemLine problem={problem} onRetry={onRetry} className="px-[18px] pb-2" />
             {placed?.outdated.map(card)}
             {diff.hunks.map((hunk, h) => (
               <div key={`${String(h)}${hunk.header}`}>
                 <div className="px-[18px] py-0.5 text-subtle">{hunk.header}</div>
                 {view === 'unified'
-                  ? hunk.lines.map((line, i) => (
+                  ? hunk.lines.map((line, i) => {
+                      const side = line.newN === null ? 'L' : 'R';
+                      const n = line.newN ?? line.oldN;
+                      return (
                       <Fragment key={i}>
-                        <DiffRow line={line} n={line.newN ?? line.oldN} selected={selected === lineOf(line)} onSelect={setSelected} />
+                        <DiffRow
+                          line={line}
+                          n={n}
+                          side={side}
+                          selected={n !== null && selected?.side === side && selected.n === n}
+                          onSelect={() => n !== null && setSelected({ side, n, open: openLineOf(hunk.lines, i) })}
+                        />
                         {line.oldN !== null && line.kind !== 'context' ? under(lineKey('L', line.oldN)) : null}
                         {line.newN !== null ? under(lineKey('R', line.newN)) : null}
                         {line.kind === 'context' && line.oldN !== null ? under(lineKey('L', line.oldN)) : null}
                       </Fragment>
-                    ))
+                      );
+                    })
                   : splitRows(hunk).map((row, i) => (
                       <Fragment key={i}>
                         <div data-testid={`split-row-${String(i)}`} className="grid grid-cols-2">
@@ -152,14 +205,32 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                             {row.left === null ? (
                               <div className="h-full" />
                             ) : (
-                              <DiffRow line={row.left} n={row.left.oldN} selected={selected === lineOf(row.left)} onSelect={setSelected} />
+                              <DiffRow
+                                line={row.left}
+                                n={row.left.oldN}
+                                side="L"
+                                selected={selected?.side === 'L' && selected.n === row.left.oldN}
+                                onSelect={() => {
+                                  const left = row.left;
+                                  if (left?.oldN != null) setSelected({ side: 'L', n: left.oldN, open: openLineOf(hunk.lines, hunk.lines.indexOf(left)) });
+                                }}
+                              />
                             )}
                           </div>
                           <div data-side="right" className="min-w-0">
                             {row.right === null ? (
                               <div className="h-full" />
                             ) : (
-                              <DiffRow line={row.right} n={row.right.newN} selected={selected === lineOf(row.right)} onSelect={setSelected} />
+                              <DiffRow
+                                line={row.right}
+                                n={row.right.newN}
+                                side="R"
+                                selected={selected?.side === 'R' && selected.n === row.right.newN}
+                                onSelect={() => {
+                                  const right = row.right;
+                                  if (right?.newN != null) setSelected({ side: 'R', n: right.newN, open: right.newN });
+                                }}
+                              />
                             )}
                           </div>
                         </div>
@@ -173,7 +244,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
         ) : (
           <div className="flex flex-col gap-1 px-[18px] py-4 font-sans text-[13px]">
             <p className="text-muted">No diff to show</p>
-            {problem === undefined ? null : <p className="text-[12px] text-amber">{problem}</p>}
+            <ProblemLine problem={problem} onRetry={onRetry} className="" />
             <a href={`${prUrl}/files`} target="_blank" rel="noreferrer" className="text-[12px] text-brand hover:underline">
               See it on GitHub
             </a>

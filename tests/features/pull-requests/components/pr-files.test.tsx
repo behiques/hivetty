@@ -44,6 +44,21 @@ describe('PrFiles', () => {
     expect(screen.getByRole('heading', { name: 'src/fees/validator.ts' })).toBeInTheDocument();
   });
 
+  it('says "No file matches." when the filter matches nothing (#24)', async () => {
+    render(<PrFiles pr={pr} detail={detail} fixerOnIt={false} />);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Filter files' }), 'zzzz');
+    expect(screen.getByText('No file matches.')).toBeInTheDocument();
+  });
+
+  it('reads the diff again at the same head when Retry is pressed after a failed read (#24)', async () => {
+    useHiveStore.setState({ prDiffs: { [key]: { key, sha: 'abc', state: 'failed', problem: 'GitHub said no.' } } });
+    render(<PrFiles pr={pr} detail={detail} fixerOnIt={false} />);
+    expect(loadPrDiff).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(loadPrDiff).toHaveBeenCalledTimes(2);
+    expect(loadPrDiff).toHaveBeenLastCalledWith(pr.owner, pr.repo, pr.n, 'abc');
+  });
+
   it('shows the file you pick', async () => {
     render(<PrFiles pr={pr} detail={detail} fixerOnIt={false} />);
     await userEvent.click(screen.getByRole('button', { name: /README\.md/ }));

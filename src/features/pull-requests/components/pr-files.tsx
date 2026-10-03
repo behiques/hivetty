@@ -8,7 +8,7 @@ import { PrFileTree } from '@features/pull-requests/components/pr-file-tree';
 import { useThreadWrites } from '@features/pull-requests/use-thread-writes';
 import type { PrDetail } from '@shared/github-contract';
 import { prKey, useLoadPrDiff, useParsedPrDiff, usePrDiff, useSetPrFileViewed } from '@stores/hive-store';
-import { usePrFile, usePrFileFilter, usePrPageActions } from '@stores/ui-store';
+import { usePrFile, usePrPageActions } from '@stores/ui-store';
 
 /**
  * The PR page's Files tab (HIVE-207): the tree beside the selected file's
@@ -23,7 +23,6 @@ export function PrFiles({ pr, detail, fixerOnIt, onOpenFile }: { pr: Pr; detail:
   const setViewed = useSetPrFileViewed();
   const writes = useThreadWrites(pr);
   const chosen = usePrFile();
-  const filter = usePrFileFilter();
   const { setPrFile } = usePrPageActions();
 
   useEffect(() => {
@@ -42,7 +41,7 @@ export function PrFiles({ pr, detail, fixerOnIt, onOpenFile }: { pr: Pr; detail:
     <div className="flex min-h-0 flex-1">
       <PrFileTree detail={detail} selected={path} onSelect={setPrFile} />
       {file === undefined ? (
-        <p className="px-[18px] py-4 text-[13px] text-muted">{filter === '' ? 'No files changed.' : 'No file matches.'}</p>
+        <p className="px-[18px] py-4 text-[13px] text-muted">No files changed.</p>
       ) : (
         <PrDiff
           key={file.path}
@@ -55,6 +54,7 @@ export function PrFiles({ pr, detail, fixerOnIt, onOpenFile }: { pr: Pr; detail:
           readOnly={pr.state === 'merged'}
           onViewed={(viewed) => setViewed(pr.owner, pr.repo, pr.n, file.path, viewed)}
           onOpenFile={onOpenFile}
+          onRetry={() => void load(pr.owner, pr.repo, pr.n, detail.headSha)}
           writes={writes}
           fixerOnIt={fixerOnIt}
         />

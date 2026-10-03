@@ -41,6 +41,7 @@ export function PrFileTree({ detail, selected, onSelect }: { detail: PrDetail; s
           </>
         ) : null}
       </p>
+      {tree.length === 0 && filter !== '' ? <p className="px-1.5 py-2 text-muted">No file matches.</p> : null}
       {tree.map((group) => (
         <div key={group.dir} className="flex flex-col gap-px">
           {group.dir === '' ? null : (
