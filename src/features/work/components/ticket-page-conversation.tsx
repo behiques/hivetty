@@ -3,15 +3,24 @@ import { type RefObject, useMemo, useRef, useState } from 'react';
 
 import { addJiraComment } from '@/lib/jira';
 import { BRIDGE_ERROR } from '@/lib/utils';
+import { isAgent } from '@/types/entity';
 
+import { Icon } from '@components/ui/icon';
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { AdfBlocks } from '@features/work/components/adf-blocks';
+import {
+  activeMention,
+  initials,
+  MentionList,
+  useMentionPicker,
+} from '@features/work/components/mention-picker';
 import { LinesSkeleton, TicketProblem } from '@features/work/components/ticket-page-parts';
 import { commentTime } from '@features/work/ticket-presentation';
-import type { JiraComment } from '@shared/jira-contract';
+import type { JiraComment, JiraMention, JiraUser } from '@shared/jira-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import {
   useAppendTicketComment,
+  useEntity,
   useLoadTicketDetail,
   useOpenTicket,
   useTicketDetail,
@@ -30,11 +39,25 @@ type Item =
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** `Dana Kim` → `DK`; a one-word name gives its first two letters, `acr` → `AC`. */
-export function initials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  const letters = words.length >= 2 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? '').slice(0, 2);
-  return letters.toUpperCase();
+export { initials } from '@features/work/components/mention-picker';
+
+/**
+ * The gutter of a comment the Hive posted for an agent (HIVE-216): the agent's
+ * own glyph in a rounded square. Its own component so a person's row never
+ * subscribes to the fleet.
+ */
+function ViaFace({ agent }: { agent: string }) {
+  const entity = useEntity(agent);
+  const icon = entity !== undefined && isAgent(entity) ? entity.icon : 'ph-robot';
+  return (
+    <span
+      aria-hidden
+      data-gutter="agent"
+      className="grid size-[26px] place-items-center rounded-[7px] border border-border bg-chip text-brand"
+    >
+      <Icon name={icon} size={14} />
+    </span>
+  );
 }
 
 const ROW = 'group grid grid-cols-[30px_minmax(0,1fr)] gap-2.5 rounded-lg px-1.5 py-[7px] hover:bg-panel focus-within:bg-panel';
@@ -52,7 +75,7 @@ function CommentItem({
 }: {
   comment: JiraComment;
   url: string | undefined;
-  onReply: (author: string) => void;
+  onReply: (comment: JiraComment) => void;
 }) {
   const copy = () => {
     if (url === undefined) return;
@@ -61,15 +84,20 @@ function CommentItem({
 
   return (
     <li className={ROW}>
-      <span
-        aria-hidden
-        className="grid size-[26px] place-items-center rounded-full bg-panel-2 text-[10px] font-semibold text-ink"
-      >
-        {initials(comment.author)}
-      </span>
+      {comment.via === undefined ? (
+        <span
+          aria-hidden
+          className="grid size-[26px] place-items-center rounded-full bg-panel-2 text-[10px] font-semibold text-ink"
+        >
+          {initials(comment.author)}
+        </span>
+      ) : (
+        <ViaFace agent={comment.via.agent} />
+      )}
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex items-baseline gap-2 text-[12.5px]">
-          <span className="font-medium text-ink">{comment.author}</span>
+          <span className="font-medium text-ink">{comment.via?.agent ?? comment.author}</span>
+          {comment.via === undefined ? null : <span className="text-[11px] text-subtle">via the Hive</span>}
           <span className="flex-1" />
           <span className="relative w-[120px] shrink-0 text-right">
             <time
@@ -79,7 +107,7 @@ function CommentItem({
               {commentTime(comment.created)}
             </time>
             <span className="invisible absolute inset-0 flex justify-end gap-3 group-focus-within:visible group-hover:visible">
-              <button type="button" className={ACTION} onClick={() => onReply(comment.author)}>
+              <button type="button" className={ACTION} onClick={() => onReply(comment)}>
                 Reply
               </button>
               <button type="button" className={ACTION} onClick={copy}>
@@ -124,25 +152,44 @@ function ReplyBox({
   replyTo,
   onForget,
   box,
+  mentions,
+  setMentions,
 }: {
   ticketKey: string;
   /** The author Reply was pressed on; only the placeholder says so. */
   replyTo: string | null;
   onForget: () => void;
   box: RefObject<HTMLTextAreaElement | null>;
+  /** The people the comment will mention, drawn as chips above the box (HIVE-216). */
+  mentions: JiraMention[];
+  setMentions: (next: JiraMention[]) => void;
 }) {
   const append = useAppendTicketComment();
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
   const [problem, setProblem] = useState<string[] | null>(null);
+  const [caret, setCaret] = useState(0);
+  const mention = activeMention(draft, caret);
+  const picker = useMentionPicker(mention?.query ?? null);
+  const listId = `${ticketKey}-mentions`;
+  const highlighted = picker.open ? picker.users[picker.active] : undefined;
+
+  const pick = (user: JiraUser) => {
+    if (mention === null) return;
+    setDraft(draft.slice(0, mention.start) + draft.slice(caret));
+    setCaret(mention.start);
+    if (!mentions.some((m) => m.accountId === user.accountId)) {
+      setMentions([...mentions, { accountId: user.accountId, name: user.displayName }]);
+    }
+  };
 
   const post = () => {
     const markdown = draft.trim();
-    if (markdown === '') return;
+    if (markdown === '' && mentions.length === 0) return;
 
     setPosting(true);
     setProblem(null);
-    void addJiraComment({ key: ticketKey, markdown }).then((result) => {
+    void addJiraComment({ key: ticketKey, markdown, ...(mentions.length === 0 ? {} : { mentions }) }).then((result) => {
       setPosting(false);
       if (result === null) return setProblem([BRIDGE_ERROR]);
       if (!result.ok) return setProblem([result.error.message, ...(result.error.details ?? [])]);
@@ -154,18 +201,76 @@ function ReplyBox({
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border-soft bg-panel p-3">
-      <textarea
-        ref={box}
-        rows={3}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape' && draft === '') onForget();
-        }}
-        aria-label={`Comment on ${ticketKey}`}
-        placeholder={replyTo === null ? 'Add a comment — markdown works' : `Reply to ${replyTo}…`}
-        className="resize-y bg-transparent text-[13px] text-ink outline-none placeholder:text-subtle"
-      />
+      {mentions.length === 0 ? null : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {mentions.map((mention) => (
+            <span
+              key={mention.accountId}
+              className="inline-flex items-center gap-1 rounded-[4px] bg-chip py-0.5 pl-1.5 pr-1 text-[12px] font-medium text-brand"
+            >
+              @{mention.name}
+              <button
+                type="button"
+                aria-label={`Remove mention of ${mention.name}`}
+                onClick={() => setMentions(mentions.filter((m) => m.accountId !== mention.accountId))}
+                className="px-0.5 text-muted hover:text-ink"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="relative">
+        <textarea
+          ref={box}
+          rows={3}
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setCaret(event.target.selectionStart);
+          }}
+          onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+          onKeyDown={(event) => {
+            if (picker.open) {
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                picker.move(event.key === 'ArrowDown' ? 1 : -1);
+                return;
+              }
+              const chosen = picker.current();
+              if (event.key === 'Enter' && chosen !== undefined) {
+                event.preventDefault();
+                pick(chosen);
+                return;
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                picker.dismiss();
+                return;
+              }
+            }
+            if (event.key === 'Escape' && draft === '') onForget();
+          }}
+          aria-label={`Comment on ${ticketKey}`}
+          role="combobox"
+          aria-expanded={picker.open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={highlighted === undefined ? undefined : `${listId}-${highlighted.accountId}`}
+          placeholder={replyTo === null ? 'Add a comment — markdown works' : `Reply to ${replyTo}…`}
+          className="w-full resize-y bg-transparent text-[13px] text-ink outline-none placeholder:text-subtle"
+        />
+        {picker.open ? (
+          <MentionList
+            id={listId}
+            users={picker.users}
+            failed={picker.failed}
+            active={picker.active}
+            onPick={pick}
+          />
+        ) : null}
+      </div>
       <div className="flex items-center gap-2 text-[12px]">
         <span className="rounded-md border border-border-soft px-2 py-0.5 text-ink">Comment on Jira</span>
         <span className="text-muted">everyone on the ticket sees it</span>
@@ -173,7 +278,7 @@ function ReplyBox({
         <button
           type="button"
           onClick={post}
-          disabled={posting || draft.trim() === ''}
+          disabled={posting || (draft.trim() === '' && mentions.length === 0)}
           className="rounded-md bg-brand-fill px-3 py-1 text-ink hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-brand-fill"
         >
           {posting ? 'Posting…' : 'Comment'}
@@ -206,10 +311,26 @@ export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
   const retry = () => void load(ticketKey, 'page');
   const box = useRef<HTMLTextAreaElement>(null);
   const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [mentions, setMentions] = useState<JiraMention[]>([]);
+  // The chip Reply added, so replying to someone else swaps it rather than notifying both.
+  const [replied, setReplied] = useState<string | null>(null);
 
-  const reply = (author: string) => {
-    setReplyTo(author);
+  const reply = (to: JiraComment) => {
+    setReplyTo(to.author);
+    // An agent's comment is the token owner's in Jira, which is you: nobody to notify.
+    const target = to.via === undefined ? to.authorId : undefined;
+    setReplied(target ?? null);
+    setMentions((held) => {
+      const kept = held.filter((m) => m.accountId !== replied);
+      if (target === undefined || kept.some((m) => m.accountId === target)) return kept;
+      return [...kept, { accountId: target, name: to.author }];
+    });
     box.current?.focus();
+  };
+  const forget = () => {
+    setReplyTo(null);
+    setReplied(null);
+    setMentions([]);
   };
 
   const items = useMemo<Item[]>(() => {
@@ -276,7 +397,14 @@ export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
         </>
       )}
 
-      <ReplyBox ticketKey={ticketKey} replyTo={replyTo} onForget={() => setReplyTo(null)} box={box} />
+      <ReplyBox
+        ticketKey={ticketKey}
+        replyTo={replyTo}
+        onForget={forget}
+        box={box}
+        mentions={mentions}
+        setMentions={setMentions}
+      />
     </section>
   );
 }

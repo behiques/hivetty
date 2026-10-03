@@ -518,6 +518,9 @@ describe('exposed surface', () => {
       key: 'HIVE-71',
       markdown: 'hi',
     });
+
+    await jira().users({ query: 'da' });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.jiraUsers, { query: 'da' });
   });
 
   /**

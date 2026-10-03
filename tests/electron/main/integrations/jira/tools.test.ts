@@ -35,6 +35,7 @@ const source = (over: Partial<JiraToolSource> = {}): JiraToolSource => ({
   comments: vi.fn(async () => ok({ comments: [], total: 0 })),
   links: vi.fn(async () => ok([])),
   addComment: vi.fn(async () => ok({ id: '1', author: 'me', created: 'now', body: [] })),
+  searchUsers: vi.fn(async () => ok([{ accountId: 'a1', displayName: 'Dana' }])),
   assignToMe: vi.fn(async () => ok(issue({ status: 'In Progress', assignee: 'Me' }))),
   ...over,
 });
@@ -184,7 +185,21 @@ describe('jiraToolsFor (HIVE-174)', () => {
   it('comment passes through', async () => {
     const jira = source();
     const result = await jiraToolsFor(jira).comment({ key: 'HIVE-7', markdown: 'hi' });
-    expect(jira.addComment).toHaveBeenCalledWith({ key: 'HIVE-7', markdown: 'hi' });
+    expect(jira.addComment).toHaveBeenCalledWith({ key: 'HIVE-7', markdown: 'hi' }, undefined);
     expect(result).toEqual(ok({ id: '1', author: 'me', created: 'now', body: [] }));
+  });
+
+  it('comment forwards via, and posts without one when none is given (HIVE-216)', async () => {
+    const jira = source();
+    await jiraToolsFor(jira).comment({ key: 'HIVE-7', markdown: 'hi' }, { agent: 'builder' });
+    expect(jira.addComment).toHaveBeenLastCalledWith({ key: 'HIVE-7', markdown: 'hi' }, { agent: 'builder' });
+    await jiraToolsFor(jira).comment({ key: 'HIVE-7', markdown: 'hi' });
+    expect(jira.addComment).toHaveBeenLastCalledWith({ key: 'HIVE-7', markdown: 'hi' }, undefined);
+  });
+
+  it('users passes through to searchUsers (HIVE-216)', async () => {
+    const jira = source();
+    expect(await jiraToolsFor(jira).users({ query: 'da' })).toEqual(ok([{ accountId: 'a1', displayName: 'Dana' }]));
+    expect(jira.searchUsers).toHaveBeenCalledWith({ query: 'da' });
   });
 });

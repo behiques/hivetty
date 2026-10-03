@@ -1,7 +1,8 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { Agent } from '@/types/entity';
 import type { Ticket, TicketDetail } from '@/types/ticket';
 import { TicketPageConversation } from '@features/work/components/ticket-page-conversation';
 import { useHiveStore } from '@stores/hive-store';
@@ -14,6 +15,7 @@ import type { LedgerEntry } from '@shared/ledger-contract';
 const readJiraDetail = vi.fn();
 const readJiraComments = vi.fn();
 const addJiraComment = vi.fn();
+const searchJiraUsers = vi.fn();
 
 vi.mock('@/lib/jira', () => ({
   readJiraStatus: () => Promise.resolve(null),
@@ -23,6 +25,7 @@ vi.mock('@/lib/jira', () => ({
   readJiraDetail: (request: unknown) => readJiraDetail(request),
   readJiraComments: (request: unknown) => readJiraComments(request),
   addJiraComment: (request: unknown) => addJiraComment(request),
+  searchJiraUsers: (request: unknown) => searchJiraUsers(request),
 }));
 
 const ticket: Ticket = {
@@ -40,7 +43,7 @@ const comment = (id: string, author: string, created: string, text: string): Jir
   created,
   body: [{ kind: 'paragraph', runs: [{ text, marks: [] }] }],
 });
-const dana = comment('100', 'Dana Kim', '2026-10-01T10:00:00.000Z', 'First words');
+const dana = { ...comment('100', 'Dana Kim', '2026-10-01T10:00:00.000Z', 'First words'), authorId: '712020:dana' };
 const acr = comment('101', 'acr', '2026-10-01T12:00:00.000Z', 'Second words');
 const event = (id: string, ts: number, meta: Record<string, unknown>, body = 'Built it\nmore detail'): LedgerEntry => ({
   id,
@@ -192,7 +195,7 @@ describe('TicketPageConversation (HIVE-203)', () => {
 });
 
 describe('the reply box (HIVE-203)', () => {
-  const box = () => screen.getByRole('textbox', { name: 'Comment on HIVE-7' });
+  const box = () => screen.getByRole('combobox', { name: 'Comment on HIVE-7' });
 
   it('replies to a comment, and Escape in an empty box forgets whom', async () => {
     render(<TicketPageConversation ticketKey="HIVE-7" />);
@@ -274,5 +277,213 @@ describe('the reply box (HIVE-203)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
 
     expect(await screen.findByText(/./, { selector: 'p.text-amber' })).toBeInTheDocument();
+  });
+});
+
+describe('comments posted for an agent (HIVE-216)', () => {
+  const viaBuilder: JiraComment = { ...comment('103', 'Yunid Bauza', '2026-10-01T13:00:00.000Z', 'Task 3 done'), via: { agent: 'builder' } };
+
+  it('draws the agent: its glyph in a rounded square, its name, and "via the Hive"', () => {
+    seed({ comments: [dana, viaBuilder], total: 2 });
+    useHiveStore.setState({
+      entities: { builder: { kind: 'agent', id: 'builder', icon: 'ph-robot' } as unknown as Agent },
+    });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    const row = items()[1]!;
+    expect(within(row).getByText('builder')).toBeInTheDocument();
+    expect(within(row).getByText('via the Hive')).toHaveClass('text-subtle');
+    expect(within(row).queryByText('Yunid Bauza')).toBeNull();
+    expect(row.querySelector('[data-gutter="agent"]')).not.toBeNull();
+    expect(within(items()[0]!).getByText('DK')).toBeInTheDocument();
+  });
+
+  it('still draws an agent this machine does not know, with the generic glyph', () => {
+    seed({ comments: [viaBuilder], total: 1 });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    expect(within(items()[0]!).getByText('via the Hive')).toBeInTheDocument();
+    expect(items()[0]!.querySelector('[data-gutter="agent"] svg')).not.toBeNull();
+  });
+
+  it('draws a person\'s face, even for a comment you wrote in Jira', () => {
+    seed({ comments: [comment('104', 'Yunid Bauza', '2026-10-01T14:00:00.000Z', 'mine')], total: 1 });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    expect(within(items()[0]!).getByText('YB')).toBeInTheDocument();
+    expect(screen.queryByText('via the Hive')).toBeNull();
+  });
+});
+
+describe('mentions in the reply box (HIVE-216)', () => {
+  const box = () => screen.getByRole('combobox', { name: 'Comment on HIVE-7' });
+
+  it('Reply adds the author as a chip, and the post carries it', async () => {
+    addJiraComment.mockResolvedValue({ ok: true, value: comment('105', 'Me', '2026-10-01T15:00:00.000Z', 'ok') });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    expect(screen.getByText('@Dana Kim')).toBeInTheDocument();
+
+    await userEvent.type(box(), 'thanks');
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(addJiraComment).toHaveBeenCalledWith({
+      key: 'HIVE-7',
+      markdown: 'thanks',
+      mentions: [{ accountId: '712020:dana', name: 'Dana Kim' }],
+    });
+    expect(await screen.findByText('ok')).toBeInTheDocument();
+    expect(screen.queryByText('@Dana Kim')).toBeNull();
+  });
+
+  it('posts a comment that is the chip alone, and only then', async () => {
+    addJiraComment.mockResolvedValue({ ok: true, value: comment('106', 'Me', '2026-10-01T15:00:00.000Z', 'x') });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+    expect(screen.getByRole('button', { name: 'Comment' })).toBeDisabled();
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(addJiraComment).toHaveBeenCalledWith({
+      key: 'HIVE-7',
+      markdown: '',
+      mentions: [{ accountId: '712020:dana', name: 'Dana Kim' }],
+    });
+  });
+
+  it('× removes the chip; Escape in an empty box clears the chip and the reply', async () => {
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove mention of Dana Kim' }));
+    expect(screen.queryByText('@Dana Kim')).toBeNull();
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByText('@Dana Kim')).toBeNull();
+    expect(box()).toHaveAttribute('placeholder', 'Add a comment — markdown works');
+  });
+
+  it('Reply on a second comment swaps the chip, so only that author is notified', async () => {
+    const lee = { ...comment('108', 'Lee Ro', '2026-10-01T17:00:00.000Z', 'Third words'), authorId: '712020:lee' };
+    seed({ comments: [dana, lee], total: 2 });
+    addJiraComment.mockResolvedValue({ ok: true, value: comment('109', 'Me', '2026-10-01T18:00:00.000Z', 'ok') });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.click(within(items()[1]!).getByRole('button', { name: 'Reply' }));
+    expect(screen.queryByText('@Dana Kim')).toBeNull();
+    expect(screen.getByText('@Lee Ro')).toBeInTheDocument();
+
+    await userEvent.type(box(), 'thanks');
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+    expect(addJiraComment).toHaveBeenCalledWith({
+      key: 'HIVE-7',
+      markdown: 'thanks',
+      mentions: [{ accountId: '712020:lee', name: 'Lee Ro' }],
+    });
+  });
+
+  it('Reply on an agent\'s comment, or one with no author id, adds no chip', async () => {
+    const viaAcr: JiraComment = { ...acr, authorId: '712020:me', via: { agent: 'acr' } };
+    seed({ comments: [viaAcr, comment('107', 'Old', '2026-10-01T16:00:00.000Z', 'no id')], total: 2 });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.click(within(items()[1]!).getByRole('button', { name: 'Reply' }));
+
+    expect(screen.queryByRole('button', { name: /Remove mention/ })).toBeNull();
+    expect(box()).toHaveAttribute('placeholder', 'Reply to Old…');
+  });
+
+  it('keeps the draft and the chips when Jira refuses', async () => {
+    addJiraComment.mockResolvedValue({ ok: false, error: { kind: 'invalid', message: 'Jira refused it' } });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.type(box(), 'draft');
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(await screen.findByText('Jira refused it')).toBeInTheDocument();
+    expect(screen.getByText('@Dana Kim')).toBeInTheDocument();
+    expect(box()).toHaveValue('draft');
+  });
+});
+
+describe('the @ picker (HIVE-216)', () => {
+  const box = () => screen.getByRole('combobox', { name: 'Comment on HIVE-7' });
+  /*
+    `shouldAdvanceTime`, as notification-card.test.tsx does: Testing Library's
+    async wrapper waits on a zero timeout, which a frozen clock never fires.
+    The debounce restarts on every keystroke, so the few real milliseconds a
+    typed string takes never reach 250; the test advances those by hand.
+  */
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  afterEach(() => vi.useRealTimers());
+
+  const people = [
+    { accountId: '712020:carla', displayName: 'Carla Ruiz' },
+    { accountId: '712020:cam', displayName: 'Cam Mendes' },
+  ];
+
+  it('searches 250ms after @ and two characters, and Enter picks into a chip without sending', async () => {
+    searchJiraUsers.mockResolvedValue({ ok: true, value: people });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await user().type(box(), 'thanks @ca');
+    expect(searchJiraUsers).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(searchJiraUsers).toHaveBeenCalledTimes(1);
+    expect(searchJiraUsers).toHaveBeenCalledWith({ query: 'ca' });
+
+    const list = await screen.findByRole('listbox', { name: 'Mention someone' });
+    expect(within(list).getAllByRole('option')).toHaveLength(2);
+    expect(box()).toHaveAttribute('aria-expanded', 'true');
+
+    await user().keyboard('{ArrowDown}{Enter}');
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(screen.getByText('@Cam Mendes')).toBeInTheDocument();
+    expect(box()).toHaveValue('thanks ');
+    expect(addJiraComment).not.toHaveBeenCalled();
+  });
+
+  it('asks once for the newest query while typing fast', async () => {
+    searchJiraUsers.mockResolvedValue({ ok: true, value: people });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await user().type(box(), '@car');
+    await act(() => vi.advanceTimersByTimeAsync(250));
+
+    expect(searchJiraUsers).toHaveBeenCalledTimes(1);
+    expect(searchJiraUsers).toHaveBeenCalledWith({ query: 'car' });
+  });
+
+  it('Escape closes the list and keeps the text', async () => {
+    searchJiraUsers.mockResolvedValue({ ok: true, value: people });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await user().type(box(), '@ca');
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    await screen.findByRole('listbox');
+    await user().keyboard('{Escape}');
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(box()).toHaveValue('@ca');
+  });
+
+  it('says it could not search, in one line, and the box keeps working', async () => {
+    searchJiraUsers.mockResolvedValue({ ok: false, error: { kind: 'timeout', message: 'slow' } });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await user().type(box(), '@ca');
+    await act(() => vi.advanceTimersByTimeAsync(250));
+
+    expect(await screen.findByText('Could not search Jira')).toBeInTheDocument();
+    await user().type(box(), 'rl');
+    expect(box()).toHaveValue('@carl');
   });
 });

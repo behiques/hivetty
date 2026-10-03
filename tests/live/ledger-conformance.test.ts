@@ -182,6 +182,8 @@ describe.skipIf(!RUN)('the hive MCP server, against a real claude', () => {
       'jira_get',
       'jira_transition',
       'jira_comment',
+      // HIVE-216.
+      'jira_users',
     ]) {
       expect(out).toContain(`mcp__hive__${name}`);
     }

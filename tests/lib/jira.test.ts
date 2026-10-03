@@ -10,6 +10,7 @@ import {
   readJiraStatus,
   saveJiraToken,
   searchJiraIssues,
+  searchJiraUsers,
   testJiraConnection,
 } from '@lib/jira';
 import type { JiraStatus } from '@shared/jira-contract';
@@ -196,6 +197,7 @@ describe('the conversation verbs (HIVE-71)', () => {
     await expect(
       addJiraComment({ key: 'HIVE-1', markdown: 'hi' }),
     ).resolves.toBeNull();
+    await expect(searchJiraUsers({ query: 'da' })).resolves.toBeNull();
   });
 
   it('pass the key through', async () => {
@@ -233,5 +235,12 @@ describe('the conversation verbs (HIVE-71)', () => {
     await addJiraComment({ key: 'HIVE-71', markdown: 'private thoughts' });
 
     expect(JSON.stringify(spy.mock.calls)).not.toContain('private thoughts');
+  });
+
+  it('searches users through the bridge (HIVE-216)', async () => {
+    const users = vi.fn(() => Promise.resolve({ ok: true as const, value: [] }));
+    bridge({ users });
+    await searchJiraUsers({ query: 'da' });
+    expect(users).toHaveBeenCalledWith({ query: 'da' });
   });
 });
