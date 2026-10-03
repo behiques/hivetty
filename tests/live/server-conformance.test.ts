@@ -3850,6 +3850,26 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       );
 
       /*
+        HIVE-196: round two has no header; the bar's foot names the server
+        instead. The layout is switched live from Settings › Appearance rather
+        than seeded and reloaded, so the attach and the open Settings survive.
+      */
+      const CONNECTION = `document.querySelector('[data-testid="connection-item"]')?.innerText ?? ''`;
+      const clickButton = (text: string) =>
+        ui.evaluate(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)}).click()`);
+      const setLayout = async (label: 'Classic' | 'Round two') => {
+        await clickButton('Appearance');
+        await ui.evaluate(
+          `[...document.querySelectorAll('[role="radiogroup"][aria-label="Layout"] [role="radio"]')].find((r) => r.textContent.trim() === ${JSON.stringify(label)}).click()`,
+        );
+        await clickButton('Advanced');
+        await untilUi(`${SWITCH} !== null`, 'the Advanced pane to render again');
+      };
+      await setLayout('Round two');
+      await untilUi(`(${CONNECTION}).includes('${hostname()}')`, 'the connection item to name the attached server');
+      await setLayout('Classic');
+
+      /*
         **The address field is present and correct here, and HIVE-149 is what
         changed that.** This asserted its absence, and the copy explaining the
         absence, for as long as the field could only read the proxied block:
@@ -3926,6 +3946,9 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       // test, not the word "attached": a "disconnected" chip left standing after
       // a deliberate detach is the regression this guards.
       await untilUi(`!(${HEADER_CHIPS}).includes('· ${hostname()}')`, 'the header chip to go once detached');
+      await setLayout('Round two');
+      await untilUi(`(${CONNECTION}).trim() === 'Local'`, 'the connection item to read Local once detached');
+      await setLayout('Classic');
 
       const info = await ui.evaluate<AppInfo>('window.hive.appInfo()');
       expect(info.attachedServerName).toBeNull();
