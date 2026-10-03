@@ -45,7 +45,7 @@ export function InboxPill({ onStage }: InboxPillProps) {
       )}
     >
       <Bell size={14} className="text-amber" aria-hidden />
-      <b className="font-mono font-semibold text-amber">{count}</b>
+      <b className="font-mono font-semibold text-amber-count">{count}</b>
       <span>need you</span>
     </button>
   );

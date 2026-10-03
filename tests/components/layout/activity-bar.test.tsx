@@ -92,7 +92,7 @@ describe('the PRs count (HIVE-205)', () => {
     });
     renderBar();
     const item = screen.getByRole('button', { name: 'PRs, 2 need you' });
-    expect(within(item).getByText('2')).toHaveClass('text-amber');
+    expect(within(item).getByText('2')).toHaveClass('text-amber-count');
   });
 
   it('shows nothing at zero, or while the first read is out', () => {

@@ -64,7 +64,7 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
               unmapped
             </Tag>
           ) : null}
-          {needs > 0 ? <Count tone="text-amber" dot="bg-amber" n={needs} title="need you" /> : null}
+          {needs > 0 ? <Count tone="text-amber-count" dot="bg-amber" n={needs} title="need you" /> : null}
           {other > 0 ? <Count tone="text-green" dot="bg-green" n={other} title="other live" /> : null}
           {needs + other === 0 ? (
             <span className="shrink-0 font-mono text-[11px] text-subtle">no sessions</span>
