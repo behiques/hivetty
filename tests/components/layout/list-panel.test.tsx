@@ -9,7 +9,6 @@ import { resetProjectConfig } from '@lib/project-config';
 import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
 import { prRecord } from '@tests/support/prs';
 
-vi.mock('@features/projects/components/projects-panel', () => ({ ProjectsPanel: () => <p>projects-panel</p> }));
 vi.mock('@features/projects/components/sessions-panel', () => ({ SessionsPanel: () => <p>sessions-panel</p> }));
 vi.mock('@features/work/components/work-panel', () => ({
   WorkPanel: () => <p>work-list</p>,
