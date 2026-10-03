@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { InlineConfirm } from '@features/settings/components/inline-confirm';
+import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import type { ShippedStatus } from '@shared/shipped-contract';
 
 /**

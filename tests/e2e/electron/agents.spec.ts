@@ -7,6 +7,7 @@ import {
   expectAgentSource,
   fillAgentSource,
 } from './fixtures/agent-source';
+import { expectSavedAs, newAgentPage, showSource } from './fixtures/agent-page';
 import { launchHive, SHIPPED_AGENTS } from './fixtures/hive-app';
 
 /**
@@ -72,20 +73,22 @@ async function launchWithConfig(outputPath: (name: string) => string): Promise<{
   return { app, page };
 }
 
-/** Author one agent through Settings › Agents, then come back out. */
-async function authorAgent(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-  await page.getByRole('button', { name: 'Agents' }).click();
-
-  await page.getByRole('button', { name: '+ New agent' }).click();
-  await page.getByRole('tab', { name: 'Source' }).click();
+/**
+ * Author one agent on its page, from Settings › Agents' New agent (HIVE-204),
+ * then go back to the Overmind.
+ */
+async function authorAgent(page: Page, { stay = false }: { stay?: boolean } = {}): Promise<void> {
+  await newAgentPage(page);
+  await showSource(page);
   await fillAgentSource(page, DEFINITION);
   await page.getByRole('button', { name: 'Save' }).click();
+  await expectSavedAs(page, 'slack-watcher');
 
-  await expect(page.getByRole('button', { name: /slack-watcher/ })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Close settings' }).click();
+  // Back to the Overmind, where the specs below start. Classic only: round two
+  // has no back button, and the bar is the way out.
+  if (stay) return;
+  const back = page.getByRole('button', { name: 'Back to overmind' });
+  if (await back.isVisible()) await back.click();
 }
 
 /**
@@ -107,10 +110,7 @@ async function authorAgent(page: Page): Promise<void> {
 test('accepts spaces typed into the agent form fields', async ({}, testInfo) => {
   const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
 
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-  await page.getByRole('button', { name: 'Agents' }).click();
-  await page.getByRole('button', { name: '+ New agent' }).click();
+  await newAgentPage(page);
 
   const description = page.getByRole('textbox', { name: 'description' });
 
@@ -134,7 +134,7 @@ test('accepts spaces typed into the agent form fields', async ({}, testInfo) => 
     does at the ends, which is the behaviour the draft exists to hide from the
     typist rather than to defeat.
   */
-  await page.getByRole('tab', { name: 'Source' }).click();
+  await showSource(page);
 
   await expectAgentSource(page, /description: watches my open PRs/);
   await expectAgentSource(page, /tools: \[Bash\(gh \*\), Read\]/);
@@ -143,7 +143,7 @@ test('accepts spaces typed into the agent form fields', async ({}, testInfo) => 
 });
 
 /**
- * The Source tab says what the body is for.
+ * The source pane says what the body is for.
  *
  * Every frontmatter field has a `FIELD_HELP` sentence under its control; the
  * body had none anywhere, and it is the field users read as a description of
@@ -152,13 +152,8 @@ test('accepts spaces typed into the agent form fields', async ({}, testInfo) => 
 test('tells the author what the body below the frontmatter does', async ({}, testInfo) => {
   const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
 
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: 'Agents' }).click();
-  await page.getByRole('button', { name: '+ New agent' }).click();
-
-  await expect(page.getByText(/carried out on every wake/)).toHaveCount(0);
-
-  await page.getByRole('tab', { name: 'Source' }).click();
+  await newAgentPage(page);
+  await showSource(page);
 
   await expect(page.getByText(/carried out on every wake/)).toBeVisible();
 
@@ -523,6 +518,37 @@ test('pauses from the agent view, and the rail agrees', async ({}, testInfo) => 
     ).toBeVisible();
     // The control names the move, not the state — one button, not two.
     await expect(page.getByRole('button', { name: /Resume/ })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * Drafts are kept, not guarded (HIVE-204): an edit survives a trip to Activity
+ * and back, and Save is what makes it saved.
+ */
+test('keeps an unsaved definition across Activity and back, until Save', async ({}, testInfo) => {
+  const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
+
+  try {
+    await authorAgent(page, { stay: true });
+
+    const description = page.getByRole('textbox', { name: 'description' });
+
+    await description.click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' closely');
+    await expect(page.getByText('unsaved', { exact: true })).toBeVisible();
+
+    await page.getByRole('radio', { name: 'Activity' }).click();
+    await expect(page.getByText('Status', { exact: true })).toBeVisible();
+    await page.getByRole('radio', { name: 'Definition' }).click();
+
+    await expect(page.getByText('unsaved', { exact: true })).toBeVisible();
+    await expect(description).toHaveValue('Watches the channel closely');
+
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('saved', { exact: true })).toBeVisible();
   } finally {
     await app.close();
   }

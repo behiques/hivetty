@@ -45,15 +45,13 @@ describe('AgentsPanel', () => {
    * Nothing creates a background agent yet, so the panel says that instead of
    * listing three that do not exist.
    */
-  it('points at the pane that creates one when empty', () => {
+  it('offers New agent when empty', () => {
     useHiveStore.getState().reset();
 
     render(<AgentsPanel />);
 
-    expect(
-      screen.getByText(/No agents yet — create one in Settings › Agents/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByText(/No agents yet\./)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ New agent…' })).toBeInTheDocument();
   });
 
   it('renders every seeded agent, in agentOrder', () => {
@@ -255,28 +253,23 @@ describe('AgentsPanel', () => {
   });
 
   describe('the way to make another one', () => {
-    it('opens Settings › Agents, because that is where authoring lives', async () => {
+    it('opens a never-saved agent page on Definition (HIVE-204)', async () => {
       render(<AgentsPanel />);
 
-      await userEvent.click(
-        screen.getByRole('button', { name: /New agent/i }),
-      );
+      await userEvent.click(screen.getByRole('button', { name: /New agent/i }));
 
-      expect(useUiStore.getState().settings).toBe(true);
-      expect(useUiStore.getState().settingsSection).toBe('agents');
+      expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
+      expect(useUiStore.getState().settings).toBe(false);
     });
 
-    it('is absent while the empty state is up, which names the pane itself', () => {
+    it('does the same from the empty state', async () => {
       useHiveStore.getState().reset();
 
       render(<AgentsPanel />);
 
-      expect(
-        screen.queryByRole('button', { name: /New agent/i }),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.getByText(/create one in Settings › Agents/i),
-      ).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: /New agent/i }));
+
+      expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
     });
   });
 });

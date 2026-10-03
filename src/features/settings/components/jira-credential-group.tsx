@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
 import { SecretField } from '@components/ui/secret-field';
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import { clearJiraToken, saveJiraToken, testJiraConnection } from '@lib/jira';
 import { BRIDGE_ERROR } from '@lib/utils';
 import { JIRA_TOKEN_ENV } from '@shared/jira-contract';

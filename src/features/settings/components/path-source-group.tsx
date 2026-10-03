@@ -2,7 +2,7 @@ import { CheckCircle, WarningCircle } from '@phosphor-icons/react';
 
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import type { LoginEnvStatus } from '@shared/ipc-contract';
 
 /**

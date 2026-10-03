@@ -36,9 +36,19 @@ you choose **Compare**, **Take shipped prompt** or **Keep mine**. An agent you d
 
 ## Create an agent
 
-**Agents tab › + New agent…** opens **Settings › Agents**. Fill in the **Form**, or switch
-to **Source** and write the file. Both edit the same text. A file you write by hand shows
-up without a restart, and a broken one is listed with its problem.
+**Agents tab › + New agent…** (or **+ New agent** in **Settings › Agents**) opens a new
+agent's page on **Definition**. The form sits on the left and the file's source on the
+right; both edit the same text. When the stage is narrower than 900px they become
+**Form | Source** tabs. The bar above them names the file, or says *not saved yet*, and
+reads **unsaved** in amber until you **Save**.
+
+Your edits are kept: go to another agent or another place and come back, and the unsaved
+text is still there. **Revert** puts it back to what is on disk. **Delete** asks first,
+then removes the folder and closes the page.
+
+**Settings › Agents** lists your agents. Clicking one opens its page on Definition. A
+file you write by hand shows up without a restart, and a broken one is listed with its
+problem.
 
 ![Settings › Agents with the form for standup-bot](../assets/guide/21-agent-form.png)
 
@@ -155,16 +165,19 @@ and its merge asks as before.
 
 ## Watch an agent work
 
-![The agent view: Run now, Pause, Edit definition, status tiles, run log and ledger](../assets/guide/10-agent-view.png)
+![The agent page: Activity with its status tiles, run log and ledger](../assets/guide/10-agent-view.png)
 
 - **Agents tab**: groups Awake, Sleeping, Paused. Asking agents sort first; the tab badge
   counts their open questions.
 
 ![The Agents tab with standup-bot sleeping, and the overmind's fleet table](../assets/guide/09-agents-tab.png)
 
-- **Agent view** (click an agent): **▶ Run now**, **⏸ Pause**, **Edit definition**; tiles
-  for Status, Wake, Next, Today (`N runs · $X`) and Session; the **run log** (Outcome, Turns,
-  Took, Cost) beside the agent's ledger.
+- **Agent page** (click an agent): a header with the agent's name over its description,
+  the **Activity | Definition** switch, **Run now** and **⏸ Pause**. In the Classic layout
+  it also has **←** back to the overmind. **Run now** works from both views; with unsaved
+  edits it says to save first, because a wake reads the file and not what is on screen.
+- **Activity**: tiles for Status, Wake, Next, Today (`N runs · $X`) and Session; the **run
+  log** (Outcome, Turns, Took, Cost) beside the agent's ledger.
 - The box at the bottom posts to the agent. `answer a1 yes, go ahead` answers its open ask.
 - To stop a run now, use `kill <agent>` in the console.
 

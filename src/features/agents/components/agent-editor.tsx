@@ -3,12 +3,29 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 import { EditorSurface } from '@components/editor/editor-surface';
-import { AgentForm } from '@features/settings/components/agent-form';
+import { AgentForm } from '@features/agents/components/agent-form';
 import { languageFor } from '@lib/explorer/language';
 import type { AgentProblem } from '@shared/agent-contract';
 import { useEditorAppearance } from '@stores/appearance-store';
 
 type Tab = 'form' | 'source';
+
+/**
+ * Why Run now would refuse, or `null` when it would not — the page header's
+ * gate (HIVE-204), kept beside the editor whose buffer it is about.
+ *
+ * A wake reads `AGENT.md` off disk — it does not see the draft — so running
+ * with unsaved edits would execute the previous version while the screen shows
+ * the new one, and a never-saved agent has no file at all. A definition main
+ * refused is not predicted here: the run comes back with the runtime's own
+ * `invalid` refusal. Refusals only the runtime knows (working, paused) are not
+ * predicted either; they arrive as an `AgentRunResult`.
+ */
+export function runRefusal(path: string | null, dirty: boolean): string | null {
+  if (path === null) return 'Save it first — there is no definition on disk yet.';
+  if (dirty) return 'Save first — a wake reads the file, not this buffer.';
+  return null;
+}
 
 /**
  * The markdown grammar, resolved once at module scope.
@@ -33,21 +50,14 @@ interface AgentEditorProps {
   onChange: (source: string) => void;
   onSave: () => void;
   onDelete: () => void;
-  /**
-   * Wake this agent once, now (HIVE-117's verb, reached from here at last).
-   *
-   * The section owns the call rather than this component, for the reason every
-   * other verb on this pane is a prop: the editor holds a buffer and knows
-   * nothing about which agent is open on disk — `path` is a string it renders,
-   * not a name it could pass to a bridge.
-   */
-  onRun: () => void;
+  /** Put the buffer back to the file as last read or saved. Offered only while dirty. */
+  onRevert: () => void;
   /**
    * What the last run attempt answered, or `null`.
    *
    * **Deliberately not a `problems` entry**, which is where this landed first
-   * and where it was a trap. `problems` is what makes Save refuse *and* what
-   * {@link cannotRun} reads, so reporting "it is already working" through it
+   * and where it was a trap. `problems` is what made Save refuse *and* what
+   * Run now's gate read, so reporting "it is already working" through it
    * disabled the very button that had just produced the message — and
    * relabelled it "this definition cannot be read", which was false: the
    * definition parsed, which is why the call reached main at all. The state
@@ -68,23 +78,17 @@ interface AgentEditorProps {
 }
 
 /**
- * The editor half of Settings › Agents (HIVE-114).
+ * An agent's `AGENT.md`, on the agent page's Definition view (HIVE-114, moved
+ * from Settings › Agents in HIVE-204).
  *
- * `skill-editor.tsx`'s frame, with a Form/Source tab pair in the header.
+ * ## Side by side, with tabs below 900px
  *
- * ## Why tabs rather than a form above the source
- *
- * The ticket describes the form as a head *above* the body, and at this pane's
- * real width that does not fit: the editor column is roughly 450–650px after
- * the list, and ten fields stacked over a textarea leave the body prompt
- * — the part the user actually writes prose into — the smallest thing on
- * screen. A side-by-side split is worse: each half lands near 300px, where
- * `slack.channel:#incorp-dev` wraps.
- *
- * Tabs give both views the full height. The cost is that you cannot watch the
- * frontmatter change as you edit the form, and that cost is cheap precisely
- * because the patch is surgical — there is nothing surprising to watch. See
- * `agent-form.tsx`.
+ * In Settings this was tabs only: the editor column was roughly 450–650px after
+ * the list, and a split there landed each half near 300px, where
+ * `slack.channel:#incorp-dev` wraps. The page gives it the whole stage, so at
+ * 900px of container and up the form takes a 520px column and the source the
+ * rest, and you can watch the frontmatter change as you edit the form. Below
+ * that the Form | Source tabs come back, each with the full height.
  *
  * ## Why the real editor, and not a `<textarea>`
  *
@@ -102,8 +106,8 @@ interface AgentEditorProps {
  * panel, and `Mod-s` bound *inside* the view, which is the only place a save
  * shortcut can be bound and still fire while CodeMirror holds focus. Markdown
  * highlighting comes with it, so the `---` fences and the keys between them
- * stop reading as prose. The cost is one CodeMirror mount in settings, which is
- * lazy-chunked like every other and only built when the Source tab is opened.
+ * stop reading as prose. The cost is one CodeMirror mount on the page, which is
+ * lazy-chunked like every other.
  */
 export function AgentEditor({
   path,
@@ -114,7 +118,7 @@ export function AgentEditor({
   onChange,
   onSave,
   onDelete,
-  onRun,
+  onRevert,
   notice,
   actionsHidden = false,
 }: AgentEditorProps) {
@@ -132,35 +136,6 @@ export function AgentEditor({
    */
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
-
-  /**
-   * Why Run now would refuse, or `null` when it would not.
-   *
-   * The button used to carry a literal `disabled` and the title "Agents do not
-   * run yet — that lands with the waker." The waker landed: `agents.run` is the
-   * same channel the agent view's own Run now has been calling since HIVE-117,
-   * and leaving a dead control beside it told users the feature was missing
-   * from the one screen where they had just finished configuring it.
-   *
-   * The three conditions are all about *what would actually run*. A wake reads
-   * `AGENT.md` off disk — it does not see this buffer — so running with unsaved
-   * edits would execute the previous version while the screen shows the new
-   * one, and running a definition main has already refused would fail on the
-   * problem the footer is showing. A never-saved agent has no file at all.
-   *
-   * Refusals that only main can know — the agent is working, or paused — are
-   * not predicted here and must not appear in this chain. They arrive as an
-   * `AgentRunResult` and are drawn from {@link AgentEditorProps.notice}, which
-   * says why that is a separate channel rather than a fourth condition.
-   */
-  const cannotRun =
-    path === null
-      ? 'Save it first — there is no definition on disk yet.'
-      : dirty
-        ? 'Save first — a wake reads the file, not this buffer.'
-        : problems.length > 0
-          ? 'Fix the problems first — this definition cannot be read.'
-          : null;
 
   /*
     What the footer says, and what it deliberately does not.
@@ -183,7 +158,7 @@ export function AgentEditor({
     }
 
     /*
-      On the Source tab the form is not mounted, so nothing else on screen is
+      On the narrow Source tab the form is hidden, so nothing else on screen is
       showing these. Say the first one in full rather than counting — a count
       with no reachable detail is the disabled-Save-with-no-explanation this
       whole line exists to replace.
@@ -259,76 +234,76 @@ export function AgentEditor({
   }, []);
 
   return (
-    <div
-      ref={frame}
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[7px] border border-border"
-    >
-      <div className="flex items-center justify-between gap-3 border-b border-border-soft px-2.5 py-1.5">
-        <div role="tablist" aria-label="Agent editor view" className="flex gap-1">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'form'}
-            onClick={() => setTab('form')}
-            className={tabClass('form')}
-          >
-            Form
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'source'}
-            onClick={() => setTab('source')}
-            className={tabClass('source')}
-          >
-            Source
-          </button>
-        </div>
-
-        <span
-          className={
-            dirty
-              ? 'shrink-0 text-[11px] text-brand'
-              : 'shrink-0 text-[11px] text-subtle'
-          }
-        >
+    <div ref={frame} className="@container flex min-h-0 flex-1 flex-col overflow-hidden">
+      {/*
+        The bar: the path, not the name — the name is in the page header, and
+        what this adds is *where the bytes go*, which is what a user needs when
+        they go looking for the file outside the app. `min-w-0` is load-bearing:
+        without it `truncate` never engages and a long path widens the page.
+      */}
+      <div className="flex items-center gap-3 border-b border-border-soft px-5 py-2 text-[12px]">
+        <span className="min-w-0 flex-1 truncate font-mono text-subtle">{path ?? 'not saved yet'}</span>
+        <span className={dirty ? 'shrink-0 font-sans text-amber' : 'shrink-0 font-sans text-subtle'}>
           {dirty ? 'unsaved' : 'saved'}
         </span>
       </div>
 
       {/*
-        The path, not the name — the name is on the selected row, and what this
-        adds is *where the bytes go*, which is what a user needs when they go
-        looking for the file outside the app. `min-w-0` is load-bearing for the
-        reason `skill-editor.tsx` spells out: without it `truncate` never
-        engages and a long path widens the panel instead of ellipsising.
-
-        Its own row under the tabs, because the tabs took the header line that
-        Skills gives to the path.
+        Below 900px of stage, today's Form | Source tabs; at or above, both
+        panes side by side and the tabs go. A container query rather than a
+        viewport one: the stage's width is what the panes share, and the rails
+        beside it take a different share of the window on every layout.
       */}
-      <div className="border-b border-border-soft px-2.5 py-1">
-        <span className="block min-w-0 truncate font-mono text-[11px] text-subtle">
-          {path ?? 'New agent'}
-        </span>
+      <div
+        role="tablist"
+        aria-label="Agent editor view"
+        className="flex gap-1 border-b border-border-soft px-2.5 py-1.5 @min-[900px]:hidden"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'form'}
+          onClick={() => setTab('form')}
+          className={tabClass('form')}
+        >
+          Form
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'source'}
+          onClick={() => setTab('source')}
+          className={tabClass('source')}
+        >
+          Source
+        </button>
       </div>
 
-      {tab === 'form' ? (
-        <AgentForm
-          source={source}
-          problems={problems}
-          taken={taken}
-          onChange={onChange}
-        />
-      ) : (
-        <>
+      {/*
+        Both panes edit the one buffer, so in wide mode the source is mounted
+        even while the narrow tab says Form: there is nothing to keep in step.
+      */}
+      <div className="grid min-h-0 flex-1 @min-[900px]:grid-cols-[520px_minmax(0,1fr)]">
+        <div
+          className={cn(
+            'min-h-0 overflow-y-auto font-sans @min-[900px]:block @min-[900px]:border-r @min-[900px]:border-border-soft',
+            tab === 'form' ? 'block' : 'hidden',
+          )}
+        >
+          <AgentForm
+            source={source}
+            problems={problems}
+            taken={taken}
+            onChange={onChange}
+          />
+        </div>
+        <div className={cn('min-h-0 flex-col @min-[900px]:flex', tab === 'source' ? 'flex' : 'hidden')}>
           {/*
-            The one thing the Source tab could not say for itself, and the one
-            users got wrong: the text under the frontmatter is the agent's job,
-            re-read on every wake — not a description of what sort of agent it
-            is. Every field above the line has a `FIELD_HELP` sentence; the body
-            is the largest thing in the file and had none.
+            The one thing the source could not say for itself, and the one users
+            got wrong: the text under the frontmatter is the agent's job, re-read
+            on every wake — not a description of what sort of agent it is.
           */}
-          <p className="border-b border-border-soft px-2.5 py-1.5 text-[11px] leading-relaxed text-subtle">
+          <p className="border-b border-border-soft px-[18px] py-2 font-sans text-[12px] leading-relaxed text-subtle">
             Below the <code className="font-mono">---</code> is what this agent
             does, carried out on every wake. Write it as instructions, not as a
             description.
@@ -336,9 +311,9 @@ export function AgentEditor({
           {/*
             `readOnly` is hard-`false`, and deliberately not
             `!appearance.editable`. That setting is the explorer's guard against
-            editing repo files by accident; this pane exists to write this one
-            file, and a settings editor that silently refused every keystroke
-            because of a preference set three panes away would read as broken.
+            editing repo files by accident; this page exists to write this one
+            file, and an editor that silently refused every keystroke because of
+            a preference set elsewhere would read as broken.
 
             The `fileKey` is the path, so the caret and the undo history survive
             a trip to the Form tab and back — and a *different* agent gets a
@@ -360,10 +335,10 @@ export function AgentEditor({
             onChange={onChange}
             onSave={onSave}
           />
-        </>
-      )}
+        </div>
+      </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-border-soft px-2.5 py-1.5">
+      <div className="flex items-center justify-between gap-3 border-t border-border-soft px-5 py-2 font-sans">
         {/*
           The notice outranks the standing line, and is amber rather than red:
           "it is already working" is the system behaving correctly, not a fault
@@ -394,20 +369,13 @@ export function AgentEditor({
           >
             Delete
           </button>
-          {/*
-            Native `title`, not a Radix tooltip: this affordance predates
-            `TooltipProvider` (now mounted in `app.tsx` for the rail strips —
-            see `.claude/COMPONENTS.md`), and the one other
-            disabled-with-explanation control in the app made the same choice.
-          */}
           <button
             type="button"
-            disabled={cannotRun !== null}
-            onClick={onRun}
-            title={cannotRun ?? 'Wake this agent once, now.'}
+            onClick={onRevert}
+            disabled={!dirty}
             className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
           >
-            Run now
+            Revert
           </button>
           <button
             type="button"

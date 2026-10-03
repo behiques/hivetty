@@ -6,7 +6,7 @@ import {
   HeldBanner,
   ShippedDot,
   ShippedStrip,
-} from '@features/settings/components/shipped-marker';
+} from '@features/shared/components/shipped-marker';
 
 import { shippedStatus } from '../../../support/shipped';
 

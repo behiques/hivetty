@@ -7,7 +7,7 @@ import { Button } from '@components/ui/button';
 import { SecretField } from '@components/ui/secret-field';
 import { Switch } from '@components/ui/switch';
 import { TextField } from '@components/ui/text-field';
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useProjectConfig } from '@hooks/use-project-config';
 import { installProjectConfig } from '@lib/project-config';
 import {

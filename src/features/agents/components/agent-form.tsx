@@ -6,7 +6,7 @@ import {
   type SegmentedOption,
 } from '@components/ui/segmented-control';
 import { Switch } from '@components/ui/switch';
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import {
   AGENT_FIELDS,
   AGENT_LIMIT_DEFAULTS,

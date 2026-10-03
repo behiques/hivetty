@@ -7,10 +7,18 @@ import {
   expectAgentSource,
   fillAgentSource,
 } from './fixtures/agent-source';
+import {
+  expectSavedAs,
+  newAgentPage,
+  openSettingsAgents,
+  showForm,
+  showSource,
+} from './fixtures/agent-page';
 import { launchHive } from './fixtures/hive-app';
 
 /**
- * Settings › Agents against the built app (HIVE-114).
+ * Settings › Agents against the built app (HIVE-114), and the agent page it
+ * opens for authoring since HIVE-204.
  *
  * The unit suites prove each half against fakes — a stubbed snapshot renders a
  * row, a mocked bridge routes a verb, a temp directory accepts a write — and
@@ -71,11 +79,7 @@ async function launchWithConfig(
   return { app, page, configPath };
 }
 
-const openAgents = async (page: Page): Promise<void> => {
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-  await page.getByRole('button', { name: 'Agents' }).click();
-};
+const openAgents = openSettingsAgents;
 
 const DEFINITION = `---
 name: slack-watcher
@@ -103,12 +107,14 @@ test('authors an agent through the pane and writes it to disk', async ({}, testI
       page.getByText(/write one and it will be listed here/i),
     ).toBeVisible();
 
-    await page.getByRole('button', { name: '+ New agent' }).click();
-    await page.getByRole('tab', { name: 'Source' }).click();
+    await page.getByRole('button', { name: '+ New agent', exact: true }).click();
+    await showSource(page);
     await fillAgentSource(page, DEFINITION);
     await page.getByRole('button', { name: 'Save' }).click();
+    await expectSavedAs(page, 'slack-watcher');
 
     // The row appears without a reload — the write is followed by a re-list.
+    await openAgents(page);
     await expect(
       page.getByRole('button', { name: /slack-watcher/ }),
     ).toBeVisible();
@@ -140,11 +146,10 @@ test('adds a schedule time the presets do not offer, and saves it', async ({}, t
   );
 
   try {
-    await openAgents(page);
-    await page.getByRole('button', { name: '+ New agent' }).click();
-    await page.getByRole('tab', { name: 'Source' }).click();
+    await newAgentPage(page);
+    await showSource(page);
     await fillAgentSource(page, DEFINITION);
-    await page.getByRole('tab', { name: 'Form' }).click();
+    await showForm(page);
 
     await page.getByRole('radio', { name: 'on a schedule' }).click();
     await page.getByRole('button', { name: '+ time' }).click();
@@ -159,9 +164,7 @@ test('adds a schedule time the presets do not offer, and saves it', async ({}, t
     );
 
     await page.getByRole('button', { name: 'Save' }).click();
-    await expect(
-      page.getByRole('button', { name: /slack-watcher/ }),
-    ).toBeVisible();
+    await expectSavedAs(page, 'slack-watcher');
 
     const written = readFileSync(
       join(dirname(configPath), 'agents', 'slack-watcher', 'AGENT.md'),
@@ -187,13 +190,16 @@ test('refuses a sub-minute wake interval and writes nothing', async ({}, testInf
   const target = join(dirname(configPath), 'agents', 'slack-watcher', 'AGENT.md');
 
   try {
-    await openAgents(page);
-    await page.getByRole('button', { name: '+ New agent' }).click();
-    await page.getByRole('tab', { name: 'Source' }).click();
+    await newAgentPage(page);
+    await showSource(page);
     await fillAgentSource(page, DEFINITION.replace('every: 5m', 'every: 30s'));
     await page.getByRole('button', { name: 'Save' }).click();
 
-    await expect(page.getByText(/minutes \(5m\)|faster than 1m/i)).toBeVisible();
+    // Visible only: on the narrow Source tab the form stays mounted, hidden,
+    // with the same sentence beside its field (HIVE-204).
+    await expect(
+      page.getByText(/minutes \(5m\)|faster than 1m/i).filter({ visible: true }),
+    ).toBeVisible();
     expect(existsSync(target)).toBe(false);
   } finally {
     await app.close();
@@ -241,14 +247,11 @@ test('an agent authored in the pane survives a restart', async ({}, testInfo) =>
   const first = await launchWithConfig(outputPath);
 
   try {
-    await openAgents(first.page);
-    await first.page.getByRole('button', { name: '+ New agent' }).click();
-    await first.page.getByRole('tab', { name: 'Source' }).click();
+    await newAgentPage(first.page);
+    await showSource(first.page);
     await fillAgentSource(first.page, DEFINITION);
     await first.page.getByRole('button', { name: 'Save' }).click();
-    await expect(
-      first.page.getByRole('button', { name: /slack-watcher/ }),
-    ).toBeVisible();
+    await expectSavedAs(first.page, 'slack-watcher');
   } finally {
     await first.app.close();
   }
@@ -289,9 +292,7 @@ test('authors an agent through the form controls', async ({}, testInfo) => {
   );
 
   try {
-    await openAgents(page);
-
-    await page.getByRole('button', { name: '+ New agent' }).click();
+    await newAgentPage(page);
 
     // The template seeds a roster name, so the form opens valid rather than
     // opening on a refusal the form itself cannot answer.
@@ -313,10 +314,7 @@ test('authors an agent through the form controls', async ({}, testInfo) => {
     await page.getByRole('button', { name: 'sun' }).click();
 
     await page.getByRole('button', { name: 'Save' }).click();
-
-    await expect(
-      page.getByRole('button', { name: /build-watcher/ }),
-    ).toBeVisible();
+    await expectSavedAs(page, 'build-watcher');
 
     const written = readFileSync(
       join(dirname(configPath), 'agents', 'build-watcher', 'AGENT.md'),
@@ -350,9 +348,7 @@ test('writes check and a daily cap, and hides check on a schedule', async ({}, t
   );
 
   try {
-    await openAgents(page);
-
-    await page.getByRole('button', { name: '+ New agent' }).click();
+    await newAgentPage(page);
 
     const name = page.getByRole('textbox', { name: 'name' });
     await expect(name).toBeVisible();
@@ -369,7 +365,7 @@ test('writes check and a daily cap, and hides check on a schedule', async ({}, t
     await page.getByRole('textbox', { name: 'daily cap $' }).fill('0.50');
 
     await page.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByRole('button', { name: /cap-watcher/ })).toBeVisible();
+    await expectSavedAs(page, 'cap-watcher');
 
     const agentMd = join(dirname(configPath), 'agents', 'cap-watcher', 'AGENT.md');
 
@@ -386,7 +382,7 @@ test('writes check and a daily cap, and hides check on a schedule', async ({}, t
     await expect(check).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByRole('button', { name: /cap-watcher/ })).toBeVisible();
+    await expectSavedAs(page, 'cap-watcher');
 
     const after = readFileSync(agentMd, 'utf8');
 
@@ -426,9 +422,7 @@ test('every wake interval stays inside the control, and daily is clickable', asy
   );
 
   try {
-    await openAgents(page);
-
-    await page.getByRole('button', { name: '+ New agent' }).click();
+    await newAgentPage(page);
 
     const name = page.getByRole('textbox', { name: 'name' });
     await expect(name).toBeVisible();
@@ -460,7 +454,7 @@ test('every wake interval stays inside the control, and daily is clickable', asy
     // And the far end of the ladder is not merely on screen but usable.
     await every.getByRole('radio', { name: 'daily', exact: true }).click();
     await page.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByRole('button', { name: /slow-watcher/ })).toBeVisible();
+    await expectSavedAs(page, 'slow-watcher');
 
     const written = readFileSync(
       join(dirname(configPath), 'agents', 'slow-watcher', 'AGENT.md'),
@@ -478,9 +472,8 @@ test('seeds a new agent with an icon the registry can draw', async ({}, testInfo
   );
 
   try {
-    await openAgents(page);
-    await page.getByRole('button', { name: '+ New agent' }).click();
-    await page.getByRole('tab', { name: 'Source' }).click();
+    await newAgentPage(page);
+    await showSource(page);
 
     await expectAgentSource(page, /icon: ph-[a-z-]+/);
   } finally {
@@ -501,11 +494,10 @@ test('switches an agent into a container and writes the block to disk (HIVE-137)
   );
 
   try {
-    await openAgents(page);
-    await page.getByRole('button', { name: '+ New agent' }).click();
-    await page.getByRole('tab', { name: 'Source' }).click();
+    await newAgentPage(page);
+    await showSource(page);
     await fillAgentSource(page, DEFINITION);
-    await page.getByRole('tab', { name: 'Form' }).click();
+    await showForm(page);
 
     const toggle = page.getByRole('switch', { name: /runs in a container/i });
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
@@ -526,6 +518,32 @@ test('switches an agent into a container and writes the block to disk (HIVE-137)
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
     await page.getByRole('button', { name: 'Save' }).click();
     await expect.poll(() => readFileSync(file, 'utf8')).not.toContain('container');
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * Settings opens the page now, rather than holding an editor of its own
+ * (HIVE-204): a row closes Settings and lands on that agent's Definition.
+ */
+test('opening an agent from Settings shows its page on Definition', async ({}, testInfo) => {
+  const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
+
+  try {
+    await newAgentPage(page);
+    await showSource(page);
+    await fillAgentSource(page, DEFINITION);
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expectSavedAs(page, 'slack-watcher');
+
+    await openAgents(page);
+    await page.getByRole('button', { name: /slack-watcher/ }).click();
+
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeHidden();
+    await expect(page.locator('[data-view="agent"]')).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Definition', checked: true })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'name' })).toHaveValue('slack-watcher');
   } finally {
     await app.close();
   }

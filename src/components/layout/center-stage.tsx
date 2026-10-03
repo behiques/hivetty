@@ -16,7 +16,8 @@ import { SessionMetaBar } from '@components/layout/session-meta-bar';
 import { TerminalHost } from '@components/terminal/terminal-host';
 import { SplitHandle } from '@components/ui/split-handle';
 import { TerminalHint } from '@components/ui/terminal-hint';
-import { AgentView } from '@features/agents/components/agent-view';
+import { AgentPage } from '@features/agents/components/agent-page';
+import { AgentsStage } from '@features/agents/components/agents-stage';
 import { EditorPane } from '@features/editor/components/editor-pane';
 import { EditorTabStrip } from '@features/editor/components/editor-tab-strip';
 import { HomePage } from '@features/home/components/home-page';
@@ -65,6 +66,7 @@ import {
 } from '@stores/hive-store';
 import {
   useActiveTab,
+  useAgentPage,
   useBackToOrch,
   useConsoleShown,
   usePickerState,
@@ -176,8 +178,10 @@ export function CenterStage() {
   const roundTwo = layout === 'round-two';
   const home = roundTwo && place === 'home';
   const work = roundTwo && place === 'work';
+  const agentPage = useAgentPage();
+  const agents = place === 'agents' && (roundTwo || agentPage !== null);
 
-  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work });
+  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work, agents });
   /**
    * Whether the session on screen is still starting (HIVE-101).
    *
@@ -198,11 +202,11 @@ export function CenterStage() {
    * `activeId` — and a settings overlay that did not extend it would render on
    * top of thirteen live terminals.
    *
-   * Round two's Home (HIVE-195) and Work (HIVE-203) join them: each covers the
-   * stage the same way.
+   * Round two's Home (HIVE-195), Work (HIVE-203) and the Agents stage (HIVE-204)
+   * join them: each covers the stage the same way.
    */
   const showingOverlay =
-    showingPicker || view === 'settings' || view === 'home' || view === 'work';
+    showingPicker || view === 'settings' || view === 'home' || view === 'work' || view === 'agents';
   /**
    * The agent view owns the whole column, so the terminal region stands down.
    *
@@ -416,6 +420,7 @@ export function CenterStage() {
       {view === 'settings' ? <SettingsOverlay /> : null}
       {view === 'home' ? <HomePage /> : null}
       {view === 'work' ? <WorkStage /> : null}
+      {view === 'agents' ? <AgentsStage /> : null}
 
       {/*
         Hidden, never unmounted. Tearing the terminal region down for the
@@ -513,10 +518,11 @@ export function CenterStage() {
         {/*
           The agent's own surface, mounted the way the console's table is:
           beside the terminal region rather than inside it, because it is not a
-          terminal and must not inherit one's chrome (HIVE-116).
+          terminal and must not inherit one's chrome (HIVE-116). Its page since
+          HIVE-204: the header with Activity | Definition over the body.
         */}
         {view === 'agent' && entity !== null && isAgent(entity) ? (
-          <AgentView entity={entity} />
+          <AgentPage key={entity.id} name={entity.id} />
         ) : null}
 
         {/*
