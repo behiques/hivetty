@@ -337,3 +337,34 @@ describe('detail and comment (HIVE-205)', () => {
     await expect(client.comment(REF, 482, 'hello')).resolves.toMatchObject({ ok: false, error: { kind: 'rate-limited' } });
   });
 });
+
+describe('diff (HIVE-207)', () => {
+  const REF: RepoRef = { owner: 'acme', name: 'nova-web' };
+  const DIFF = 'diff --git a/src/a.ts b/src/a.ts\nindex 1..2 100644\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1 +1 @@\n-old\n+new\n';
+
+  it('runs gh pr diff with the resolver’s repository, no colour, and answers the text', async () => {
+    const calls: string[][] = [];
+    const client = createGithubClient('/usr/bin/gh', (_file, args) => {
+      calls.push([...args]);
+      return Promise.resolve({ code: 0, stdout: DIFF, stderr: '', timedOut: false });
+    });
+    await expect(client.diff(REF, 482)).resolves.toEqual({ ok: true, value: DIFF });
+    expect(calls).toEqual([['pr', 'diff', '482', '--repo', 'acme/nova-web', '--color', 'never']]);
+  });
+
+  it('classifies a refusal without leaking its output', async () => {
+    const client = createGithubClient('/usr/bin/gh', () =>
+      Promise.resolve({ code: 1, stdout: 'diff --git secret', stderr: 'HTTP 406: Sorry, the diff exceeded the maximum number of lines (20000) ghp_secret', timedOut: false }));
+    const result = await client.diff(REF, 482);
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('ghp_secret');
+    expect(JSON.stringify(result)).not.toContain('diff --git');
+  });
+
+  it('answers not-installed when gh will not run, and a timeout as one', async () => {
+    await expect(createGithubClient('/usr/bin/gh', () => Promise.reject(new Error('ENOENT'))).diff(REF, 1))
+      .resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
+    await expect(createGithubClient('/usr/bin/gh', () => Promise.resolve({ code: -1, stdout: '', stderr: '', timedOut: true })).diff(REF, 1))
+      .resolves.toMatchObject({ ok: false, error: { kind: 'timeout' } });
+  });
+});

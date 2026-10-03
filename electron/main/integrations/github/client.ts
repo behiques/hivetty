@@ -75,6 +75,8 @@ export interface GithubClient {
   detail(repo: RepoRef, n: number): Promise<GhResult<PrDetail>>;
   /** A PR-level comment (HIVE-205): the PR's id is read from GitHub first, then `addComment`. */
   comment(repo: RepoRef, n: number, body: string): Promise<GhResult<true>>;
+  /** The PR's unified diff (HIVE-207), as `gh pr diff` prints it. */
+  diff(repo: RepoRef, n: number): Promise<GhResult<string>>;
 }
 
 export function createGithubClient(
@@ -278,6 +280,18 @@ export function createGithubClient(
         return { ok: false, error: classifyGhFailure(posted.stderr, posted.timedOut) };
       }
       return { ok: true, value: true };
+    },
+
+    async diff(repo, n) {
+      let result;
+      try {
+        // argv, no shell: the repository is the resolver's spelling and the number a guarded whole number.
+        result = await run(ghPath, ['pr', 'diff', String(n), '--repo', `${repo.owner}/${repo.name}`, '--color', 'never']);
+      } catch {
+        return NOT_RUN;
+      }
+      if (result.code !== 0) return { ok: false, error: classifyGhFailure(result.stderr, result.timedOut) };
+      return { ok: true, value: result.stdout };
     },
   };
 }
