@@ -368,8 +368,9 @@ connection item yet.
 
 Today's panel for the current place, at `--cc-list-w`, in a
 `<section aria-label="<Place> list">`: `ProjectsPanel` for Sessions,
-`WorkPanel`, `AgentsPanel`, `PrsPanel`. Home has none, and nothing renders when
-`panelOpen` is false. Not resizable and no collapsed strip. Each place's own
+`WorkPanel`, `AgentsPanel`, `PrsPanel` (the Hatchery). Home has none, and nothing
+renders when `panelOpen` is false, or for PRs while the Hatchery is quiet and no
+search is open. Not resizable and no collapsed strip. Each place's own
 story replaces its entry.
 
 ### `components/layout/` is the composition root
@@ -564,21 +565,62 @@ A stack of notification cards, newest first, from `useNotifs()`.
   the margin below it held full height while the button collapsed, and the list
   jumped when the remainder unmounted.
 
-### `<PrsPanel />` and `<PrCard />`
+### The Hatchery: `<PrsPanel />`, `<PrRow />`, `<Flap />`
 
-`src/features/pull-requests/components/` — story 052, built.
+`src/features/pull-requests/components/` — HIVE-205, built (replaced story 052's
+`<PrCard />` and its badge row).
 
-One card per PR from `usePrs()`, with a wrapping badge row.
+One two-line row per PR from `useHatchery()` (HIVE-215's order: SUMMONS first),
+under a header that says `N open · M need you`.
 
-- **Badges come from `composeBadges()` in `features/shared/pr-presentation.ts`**,
-  never from local `if`s — see the note in that file for why the rules live
-  outside this slice.
-- **The badge row is unguarded** because every `PrListState` yields at least one
-  badge; an `if (badges.length)` would be an unreachable branch.
-- **Clicking opens the owning *session* when one is live, and GitHub when none
-  is.** The agent that produced a PR is where a human can act on the findings —
-  but a merged PR's session has usually ended, and `openEntity` refuses those,
-  so `Pr.session` resolves to `null` and the card becomes a real link instead.
+- **Merged PRs fold under `HATCHED · N · last 24h`**, folded by default
+  (`prsFolded` in the ui-store), drawn only when something merged.
+- **Search is the header's icon**, shown only while the sweep is live (a search
+  needs `gh`). It opens `PrSearchRow` with the box focused (`focusOnMount`, an
+  effect, since jsx-a11y bans `autoFocus`); a search replaces the rows with
+  `useHatcherySearch()`, by the same flap rules. Closing it clears it.
+- **Rows are memoised by value** (`PrRow`'s `sameRow`) and keyed by
+  `prKey(owner, repo, n)`; `onOpen` is a stable callback and `open` a string
+  comparison, so a ledger append that names no PR re-renders no row.
+- **The flap turns only when its word changes** between two renders of the same
+  row: never on mount, so never on first render, a fold or a search. SUMMONS
+  pulses. Under `useReducedMotion` it neither turns nor pulses.
+- **Round two opens the page** (`openPrPage`); **Classic opens GitHub**, since the
+  Classic rail has no page.
+
+### The PR page: `<PrPage />`, `<ShipTrack />`, `<PrConversation />`, `<ThreadCard />`, `<PrProperties />`, `<PrCommentBox />`
+
+`src/features/pull-requests/components/` — HIVE-205, built. `<PrsStage />` picks
+what the stage shows: the empty Hatchery, the page for `useOpenPr()`, or "Pick a
+pull request" while the sweep is not live.
+
+- **The detail is polled** once a minute through its own `createPoller`; the page
+  is keyed on the PR, so opening another is a new mount and a fresh read. A
+  failed refresh keeps the last detail with the problem above it.
+- **`PR_TABS` is the tab list** HIVE-206/207/208 append to; a stored tab this
+  page does not have falls back to Conversation in the page, not in the store.
+- **The ship track** is `bandStops()` over PR 1's `shipTrack`: the shipper's
+  eight stops while it holds the PR, all eight ticked once merged after it ran,
+  else the short Draft · Open · Review · Merge from GitHub's state.
+- **A merged PR is read-only**: no comment box, and the actions are GitHub alone.
+- **Merge answers the shipper's merge card** (`useMergeAsk`) with `allow-once`,
+  the same answer the Inbox card's narrowest rung sends, and is disabled until
+  that card exists. One ledger write at a time; a refusal or a failed call shows
+  inline in amber. No `gh` write is added.
+- **Nothing from GitHub is HTML.** Bodies and comments go through `<Markdown />`
+  (`src/features/shared/components/markdown.tsx`): `marked`'s lexer to React
+  elements, raw HTML as text, links only for `http(s):` and `mailto:`.
+
+### `<EmptyHatchery />`
+
+`src/features/pull-requests/components/empty-hatchery.tsx` — HIVE-205, built.
+
+When the sweep is live and empty the list panel draws nothing (unless a search
+is open) and the stage shows a dormant egg on the creep, in tokens only. Search
+older PRs opens the panel with the search; New session opens the picker. Under
+reduced motion every animation class is dropped: the crack stays closed and no
+spores are drawn. The panel slides in (`animate-ccslidein`) only on the quiet →
+listed change, never on mount.
 
 ### `<ExplorerPanel />` and `<TreeNode />`
 

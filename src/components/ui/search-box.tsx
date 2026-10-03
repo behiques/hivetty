@@ -1,4 +1,5 @@
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
+import { useEffect, useRef } from 'react';
 
 interface SearchBoxProps {
   /** The placeholder and the accessible name, e.g. "Search files". */
@@ -6,6 +7,8 @@ interface SearchBoxProps {
   value: string;
   onChange: (value: string) => void;
   onClear: () => void;
+  /** Focus on mount, for a box that appears because it was asked for. */
+  focusOnMount?: boolean;
 }
 
 /**
@@ -16,11 +19,19 @@ interface SearchBoxProps {
  * searchbox role; the one clear button drawn is this one
  * (`tests/e2e/web/search-clear-button.spec.ts`).
  */
-export function SearchBox({ label, value, onChange, onClear }: SearchBoxProps) {
+export function SearchBox({ label, value, onChange, onClear, focusOnMount }: SearchBoxProps) {
+  const input = useRef<HTMLInputElement>(null);
+
+  /* An effect, not `autoFocus` (jsx-a11y): the box was asked for, so it takes the focus once. */
+  useEffect(() => {
+    if (focusOnMount) input.current?.focus();
+  }, [focusOnMount]);
+
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-panel-2 px-2 py-1.5 focus-within:border-brand">
       <MagnifyingGlass size={12} className="shrink-0 text-subtle" />
       <input
+        ref={input}
         type="search"
         value={value}
         onChange={(event) => {

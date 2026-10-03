@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import type { Effort, Model } from '@/types/entity';
+import type { HatcheryRow } from '@/types/pull-request';
 import type { SettingsSection } from '@/types/settings';
 
 import type { FsSearchMode } from '@shared/fs-contract';
@@ -38,6 +39,8 @@ export interface PrPageRef {
   owner: string;
   repo: string;
   n: number;
+  /** The row the click carried: a searched PR is no row of the sweep, so the page cannot find it there. */
+  row?: HatcheryRow;
 }
 
 /**

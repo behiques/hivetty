@@ -88,24 +88,18 @@ async function cancelButtonWidths(cdp: CDPSession): Promise<number[]> {
 /**
  * Every search box the browser target can reach, and how to get to it.
  *
- * The two live in different rails — PRS in the activity rail on the right, WORK
- * in the left one — which is why each carries its own way in rather than
- * sharing a tab helper.
+ * Each carries its own way in rather than sharing a tab helper. The PRs box is
+ * missing since HIVE-205: it opens only from the Hatchery's search icon, which
+ * shows only while the sweep is live, and the browser target has no `gh`. Its
+ * clear button is the same shared `SearchBox`, proven by the Work case here and
+ * by the component tests.
  *
  * The Explorer's box is missing on purpose: it needs a session with a
  * repository behind it, and the browser target has no bridge to provide one. It
- * is the same `type="search"` under the same global rule, and the two here
+ * is the same `type="search"` under the same global rule, and the one here
  * prove the rule ships.
  */
 const BOXES = [
-  {
-    label: 'Search pull requests',
-    open: (page: Page) =>
-      page
-        .getByRole('tablist', { name: 'Activity sections' })
-        .getByRole('tab', { name: /^PRs/i })
-        .click(),
-  },
   {
     label: 'Search tickets',
     open: (page: Page) =>

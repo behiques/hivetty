@@ -33,6 +33,15 @@ describe('openPrRow', () => {
     expect(openPrRow(rows, null)?.pr.n).toBe(871);
   });
 
+  it('opens a searched PR that is not in the sweep, from the row the click carried', () => {
+    const searched = row(7777);
+    expect(openPrRow(rows, { owner: 'acme', repo: 'server', n: 7777, row: searched })).toBe(searched);
+  });
+
+  it('prefers the sweep row over the carried one when the PR is in both', () => {
+    expect(openPrRow(rows, { owner: 'acme', repo: 'server', n: 1182, row: row(1182) })).toBe(rows[1]);
+  });
+
   it('falls back to the top row when nothing needs you, and to null with no rows', () => {
     expect(openPrRow([row(1182), row(305)], null)?.pr.n).toBe(1182);
     expect(openPrRow([], { owner: 'acme', repo: 'server', n: 1182 })).toBeNull();

@@ -2,6 +2,7 @@ import { CaretRight, Files, ListChecks, Ticket } from '@phosphor-icons/react';
 import { useCallback, type ReactNode } from 'react';
 
 import { useNarrowWindow } from '@/hooks/use-narrow-window';
+import { useOpenFileAt } from '@/hooks/use-open-file-at';
 import { cn } from '@/lib/utils';
 import { isSession, isTerminal, terminalOf, type Session, type Terminal } from '@/types/entity';
 import type { Ticket as TicketModel } from '@/types/ticket';
@@ -10,19 +11,16 @@ import { SessionPanelStrip, type StripTab } from '@components/layout/session-pan
 import { ExplorerPanel } from '@features/explorer/components/explorer-panel';
 import { PlanTab } from '@features/plan/components/plan-tab';
 import { TicketTab } from '@features/work/components/ticket-tab';
-import { resolvePaths } from '@lib/explorer/fs-client';
 import type { SessionPlan } from '@shared/plan-contract';
 import {
   type SessionPanelTab,
-  useEditorLayout,
   useSessionPanelOpen,
   useSessionPanelTab,
   useSetSessionPanelOpen,
   useSetSessionPanelTab,
 } from '@stores/appearance-store';
-import { useEditorActions } from '@stores/editor-store';
 import { useActiveEntity, useChangedFileCount, useOpenTicket, usePlan } from '@stores/hive-store';
-import { usePlace, useRevealStage } from '@stores/ui-store';
+import { usePlace } from '@stores/ui-store';
 
 interface TabContext {
   entity: Session | Terminal;
@@ -115,23 +113,15 @@ export function SessionPanel() {
   const setOpen = useSetSessionPanelOpen();
   const setTab = useSetSessionPanelTab();
   const narrow = useNarrowWindow();
-  const { openFile, closeAll } = useEditorActions();
-  const { nav } = useEditorLayout();
-  const revealStage = useRevealStage();
+  const { openPath } = useOpenFileAt();
 
   /** As terminal file links do (center-stage.tsx): resolve under the session's root, then open. */
   const openPlanFile = useCallback(
     (file: string) => {
       if (owner === null) return;
-      const sessionId = isSession(owner) ? owner.id : undefined;
-      void resolvePaths(owner.project, sessionId, [file]).then(([target]) => {
-        if (target === null || target === undefined) return;
-        if (nav === 'single') closeAll();
-        openFile(owner.project, target.relPath, sessionId, target.rootKey);
-        revealStage();
-      });
+      void openPath(owner.project, isSession(owner) ? owner.id : undefined, file);
     },
-    [owner, nav, closeAll, openFile, revealStage],
+    [owner, openPath],
   );
 
   if (owner === null || place === 'home') return null;

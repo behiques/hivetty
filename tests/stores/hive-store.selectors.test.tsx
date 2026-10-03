@@ -51,6 +51,7 @@ import {
   useProjects,
   useProjectSessions,
   usePrs,
+  usePrsQuiet,
   useHatchery,
   useHatcherySearch,
   usePrNeedsYouCount,
@@ -2629,5 +2630,22 @@ describe('the PR page selectors (HIVE-205)', () => {
     expect(renderHook(() => usePrDetail('acme/server#1182')).result.current).toEqual({ key: 'acme/server#1182', state: 'loading' });
     expect(renderHook(() => useLoadPrDetail()).result.current).toBe(useHiveStore.getState().loadPrDetail);
     expect(renderHook(() => useCommentOnPr()).result.current).toBe(useHiveStore.getState().commentOnPr);
+  });
+});
+
+describe('usePrsQuiet (HIVE-205)', () => {
+  it('is true only for a live, empty sweep', () => {
+    useHiveStore.setState({ prs: [], prSource: { kind: 'live', stale: false, repos: 2 } });
+    expect(renderHook(() => usePrsQuiet()).result.current).toBe(true);
+    useHiveStore.setState({ prs: [prRecord()] });
+    expect(renderHook(() => usePrsQuiet()).result.current).toBe(false);
+    for (const prSource of [
+      { kind: 'loading' },
+      { kind: 'unconfigured', message: 'x' },
+      { kind: 'failed', message: 'x' },
+    ] as const) {
+      useHiveStore.setState({ prs: [], prSource });
+      expect(renderHook(() => usePrsQuiet()).result.current).toBe(false);
+    }
   });
 });

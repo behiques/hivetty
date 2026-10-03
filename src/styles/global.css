@@ -149,6 +149,18 @@ body {
   }
 }
 
+/* The Hatchery's panel arriving when the first PR appears (HIVE-205, R4). */
+@keyframes ccslidein {
+  from {
+    transform: translateX(-12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
 @keyframes ccblink {
   0%,
   100% {
@@ -156,6 +168,96 @@ body {
   }
   50% {
     opacity: 0;
+  }
+}
+
+/* The flap turning over a changed word (HIVE-205): the word swaps at half way, edge-on. */
+@keyframes ccflap {
+  0%,
+  100% {
+    transform: rotateX(0deg);
+  }
+  50% {
+    transform: rotateX(90deg);
+  }
+}
+
+/* The empty Hatchery's dormant egg (HIVE-205): one 7s loop. It rocks, a crack
+   of light opens half way and closes, the yolk glows, spores drift, the creep
+   breathes. Nothing emerges. `useReducedMotion` drops every class. */
+@keyframes cceggrock {
+  0%,
+  30%,
+  100% {
+    transform: rotate(0deg);
+  }
+  36% {
+    transform: rotate(-5deg);
+  }
+  42% {
+    transform: rotate(4deg);
+  }
+  48% {
+    transform: rotate(-3deg);
+  }
+  54% {
+    transform: rotate(1.5deg);
+  }
+  60% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes cceggcrack {
+  0%,
+  38% {
+    stroke-dashoffset: 100;
+    opacity: 1;
+  }
+  52% {
+    stroke-dashoffset: 55;
+  }
+  62% {
+    stroke-dashoffset: 55;
+    opacity: 1;
+  }
+  78%,
+  100% {
+    stroke-dashoffset: 100;
+    opacity: 0;
+  }
+}
+
+@keyframes cceggglow {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  45% {
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes ccspore {
+  0% {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  15% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-90px);
+  }
+}
+
+@keyframes cccreep {
+  50% {
+    transform: scale(1.06, 1.1);
   }
 }
 

@@ -935,6 +935,21 @@ The shipper's asks to `reply-to` carry `meta: { pr, repo }`, so an ask naming a
 PR of yours (or a `gh pr merge … --repo` permission card) reads that PR as
 SUMMONS (HIVE-215).
 
+The PR page (HIVE-205) reads the same log four more ways. `shipTrack(entries,
+slug, n, now)` walks the shipper's entries naming the PR oldest first into its
+eight stops (`SHIP_STOPS`), each with when it was first reached, the time spent
+there over every visit, and its holder: `acr` or `fixer` when the shipper asked
+one about the PR during the visit (by `meta.pr` + `meta.repo`, or `slug#n` in the
+ask's body), else `shipper`. `prEvents` is every entry naming the PR, for the
+Conversation's Everything; `reviewUrls` is acr's `meta.review_url`s, so a GitHub
+review written through the Hive shows as acr; `prOpener` is who sent the
+shipper's intake ask. `mergeAsk(open, slug, n)` returns the shipper's open
+`gh pr merge … --repo` permission card itself (`mergeWaiting` is
+`mergeAsk(...) !== undefined`): the page's Merge answers that card with
+`allow-once`, the narrowest rung, exactly as the Inbox card would. Its **Ask acr
+to look again** posts `{ to: 'acr', kind: 'ask', body: 'Review <url> again',
+meta: { pr, repo } }`; a refusal (acr not a party) shows inline.
+
 A read can be narrowed to one ticket (HIVE-203): `LedgerReadQuery.ticket` keeps the
 entries whose `meta.ticket` names the key, case-insensitively, so `ledger:list
 { ticket }` is a ticket's whole history in one call. The guard admits a string of at

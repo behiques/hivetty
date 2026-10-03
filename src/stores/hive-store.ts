@@ -137,6 +137,7 @@ import {
   holderPost,
   isShipping,
   matches,
+  mergeAsk,
   mergeWaiting,
   openAsks,
   prEvents,
@@ -8510,6 +8511,16 @@ export const useShipping = (slug: string, n: number): boolean => {
 };
 
 /**
+ * The shipper's merge card for one PR, or `undefined` (HIVE-205): what the PR
+ * page's Merge answers. `Date.now()` inside the memo, as `openAsks`' other
+ * readers do; an ask retired by its ttl alone stays until the next append.
+ */
+export const useMergeAsk = (slug: string, n: number): OpenAsk | undefined => {
+  const entries = useHiveStore((state) => state.ledger);
+  return useMemo(() => mergeAsk(openAsks(entries, Date.now()), slug, n), [entries, slug, n]);
+};
+
+/**
  * One PR's ship track (HIVE-205), memoised over the tail like {@link useShipping}.
  * `Date.now()` is read inside the memo, as the `openAsks` selectors do: the open
  * stop's time moves on the next ledger change or page poll, not by the second.
@@ -8764,6 +8775,14 @@ export const useSessionPr = (id: string): SessionPr | null => {
 
 /** Where the PR list came from, and how much to trust it. */
 export const usePrSource = () => useHiveStore((state) => state.prSource);
+
+/**
+ * The Hatchery is quiet (HIVE-205, D15): the sweep is live and found nothing.
+ * The sweep is the Hatchery's list, so empty here is empty there. A boolean
+ * selector, so the list panel does not re-render on every PR change.
+ */
+export const usePrsQuiet = (): boolean =>
+  useHiveStore((state) => state.prSource.kind === 'live' && state.prs.length === 0);
 
 /** Sweep GitHub. The poller's entry point — see `hooks/use-pr-refresh.ts`. */
 export const useRefreshPrs = () => useHiveStore((state) => state.refreshPrs);

@@ -95,3 +95,12 @@ test('Sessions shows the projects panel and the Overmind, and the filter narrows
   await page.getByRole('radio', { name: 'All' }).click();
   await expect(page.getByRole('radio', { name: 'All' })).toBeChecked();
 });
+
+test('PRs on the bar opens the place: its panel, and a stage waiting for a PR', async ({ page }) => {
+  await place(page, 'PRs').click();
+  await expect(place(page, 'PRs')).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('region', { name: 'PRs list' })).toBeVisible();
+  // The browser target has no `gh`: the panel says so and the stage waits (PR content is component-tested).
+  await expect(page.getByText(/need the desktop app/i)).toBeVisible();
+  await expect(page.getByText('Pick a pull request')).toBeVisible();
+});
