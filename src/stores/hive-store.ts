@@ -263,7 +263,13 @@ export type TicketSource =
   /** Desktop with nothing configured. The panel explains rather than sits empty. */
   | { kind: 'unconfigured' }
   /** Desktop, at least one successful read. */
-  | { kind: 'live'; stale: boolean; capped: boolean }
+  | {
+      kind: 'live';
+      stale: boolean;
+      capped: boolean;
+      /** First failure of the current outage (HIVE-211); present only while stale. */
+      failedAt?: number;
+    }
   /** Desktop, and the first read failed. There is nothing to keep. */
   | { kind: 'failed'; message: string };
 
@@ -465,6 +471,12 @@ interface HiveState {
   prTimelines: Record<string, PrTimelineEntry>;
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
+  /**
+   * When the last good ticket read landed (HIVE-211). Beside the source, not in
+   * it (D5): the sweep is once a minute and the source is kept referentially
+   * stable, so a time inside it would re-render every reader every minute.
+   */
+  ticketsReadAt: number | null;
   /**
    * The PRs GitHub reported, exactly as they crossed IPC.
    *
@@ -2202,6 +2214,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * has no bridge to Jira.
    */
   ticketSource: { kind: 'loading' } as TicketSource,
+  ticketsReadAt: null as number | null,
   ticketDetails: {} as Record<string, TicketDetail>,
   prDetails: {} as Record<string, PrDetailEntry>,
   prDiffs: {} as Record<string, PrDiffEntry>,
@@ -5201,6 +5214,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         ticketSource: settled
           ? source
           : { kind: 'live', stale: false, capped },
+        ticketsReadAt: Date.now(),
       };
     }),
 
@@ -5229,7 +5243,9 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       if (source.kind === 'live') {
         // `return state` rather than an empty patch: zippering an unchanged
         // partial still rebuilds the root object and wakes every listener.
-        return source.stale ? state : { ticketSource: { ...source, stale: true } };
+        return source.stale
+          ? state
+          : { ticketSource: { ...source, stale: true, failedAt: Date.now() } };
       }
 
       return source.kind === 'failed' && source.message === message
@@ -6184,6 +6200,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       */
       tickets: [],
       ticketSource: { kind: 'loading' },
+      ticketsReadAt: null,
       ticketDetails: {},
       prDetails: {},
       prDiffs: {},
@@ -6285,6 +6302,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       plans: {},
       changedFiles: {},
       ticketSource: { kind: 'loading' },
+      ticketsReadAt: null,
       ticketDetails: {},
       prDetails: {},
       prDiffs: {},
@@ -8186,6 +8204,10 @@ export const useTickets = () =>
 /** Where the ticket list came from, and how much to trust it (HIVE-69). */
 export const useTicketSource = (): TicketSource =>
   useHiveStore((state) => state.ticketSource);
+
+/** When the last good ticket read landed (HIVE-211, D5): the stale line's second time. */
+export const useTicketsReadAt = (): number | null =>
+  useHiveStore((state) => state.ticketsReadAt);
 
 /** The refresh action, for the panel's mount effect and its retry (HIVE-69). */
 export const useRefreshTickets = (): (() => Promise<void>) =>
