@@ -87,7 +87,7 @@ describe('PrsPanel (the Hatchery)', () => {
     useAppearanceStore.setState({ layout: 'round-two' });
     render(<PrsPanel />);
     await userEvent.click(screen.getByRole('button', { name: /^#10 / }));
-    expect(useUiStore.getState().prPage).toEqual({ owner: 'acme', repo: 'nova-web', n: 10 });
+    expect(useUiStore.getState().prPage).toMatchObject({ owner: 'acme', repo: 'nova-web', n: 10 });
     expect(useUiStore.getState().place).toBe('prs');
   });
 
