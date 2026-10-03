@@ -27,10 +27,17 @@ const RANK: Record<JobState, number> = { skipped: 0, passed: 1, waiting: 2, runn
 export const worst = (states: readonly JobState[]): JobState =>
   states.reduce<JobState>((acc, state) => (RANK[state] > RANK[acc] ? state : acc), 'skipped');
 
-/** Runs (newest first, as `gh run list` gives them) folded by head sha: the last `max` pushes, oldest first (D1). */
+/**
+ * Runs (newest first, as `gh run list` gives them) folded by head sha: the last
+ * `max` pushes, oldest first (D1). A workflow run twice on one push keeps only
+ * its newest run, so each workflow file is drawn once.
+ */
 export function foldPushes(runs: readonly WorkflowRun[], max = 8): Push[] {
   const bySha = new Map<string, WorkflowRun[]>();
-  for (const one of runs) bySha.set(one.headSha, [...(bySha.get(one.headSha) ?? []), one]);
+  for (const one of runs) {
+    const group = bySha.get(one.headSha) ?? [];
+    if (!group.some((r) => r.workflowName === one.workflowName)) bySha.set(one.headSha, [...group, one]);
+  }
   return [...bySha]
     .slice(0, max)
     .map(([sha, group]): Push => {
