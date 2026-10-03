@@ -233,10 +233,9 @@ describe('AgentsPanel', () => {
 
       render(<AgentsPanel />);
 
-      expect(screen.getByText('Awake')).toBeInTheDocument();
-      expect(screen.getByText('Paused')).toBeInTheDocument();
-      // Two awake, one paused — the counts sit beside their headers.
-      expect(screen.getByText('2')).toBeInTheDocument();
+      expect(screen.getByText('Summons')).toBeInTheDocument();
+      expect(screen.getByText('Morphing')).toBeInTheDocument();
+      expect(screen.getByText('Burrowed')).toBeInTheDocument();
     });
 
     it('omits a group with nothing in it, rather than a header reading zero', () => {
@@ -246,9 +245,9 @@ describe('AgentsPanel', () => {
 
       render(<AgentsPanel />);
 
-      expect(screen.getByText('Sleeping')).toBeInTheDocument();
-      expect(screen.queryByText('Awake')).not.toBeInTheDocument();
-      expect(screen.queryByText('Paused')).not.toBeInTheDocument();
+      expect(screen.getByText('Burrowed')).toBeInTheDocument();
+      expect(screen.queryByText('Summons')).not.toBeInTheDocument();
+      expect(screen.queryByText('Morphing')).not.toBeInTheDocument();
     });
   });
 
