@@ -24,6 +24,10 @@ export interface Ticket {
    */
   statusCategory: JiraStatusCategory;
   title: string;
+  /** Jira's priority name; `null` on a project without a scheme (HIVE-203). */
+  priority: string | null;
+  /** Display name; `null` when unassigned (HIVE-203). */
+  assignee: string | null;
   /*
     There is deliberately no `sessions` array here (HIVE-73).
 

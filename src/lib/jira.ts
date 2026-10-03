@@ -8,8 +8,10 @@ import type {
 } from '@shared/config-contract';
 import type {
   JiraComment,
+  JiraCommentPage,
   JiraIdentity,
   JiraIssue,
+  JiraIssueDetail,
   JiraLink,
   JiraResult,
   JiraSearchResult,
@@ -99,6 +101,12 @@ export const readJiraIssue = (
 ): Promise<JiraResult<JiraIssue> | null> =>
   call('issue', (bridge) => bridge.jira.issue(request));
 
+/** An issue's description and parent (HIVE-203). */
+export const readJiraDetail = (
+  request: JiraIssueRequest,
+): Promise<JiraResult<JiraIssueDetail> | null> =>
+  call('detail', (bridge) => bridge.jira.detail(request));
+
 /** What an issue can become right now (HIVE-70). Read per issue, never cached. */
 export const readJiraTransitions = (
   request: JiraTransitionsRequest,
@@ -116,10 +124,10 @@ export const applyJiraTransition = (
 ): Promise<JiraResult<JiraIssue> | null> =>
   call('applyTransition', (bridge) => bridge.jira.applyTransition(request));
 
-/** An issue's conversation, oldest first (HIVE-71). */
+/** A page of an issue's conversation, oldest first, with the thread's total (HIVE-71, HIVE-203). */
 export const readJiraComments = (
   request: JiraConversationRequest,
-): Promise<JiraResult<JiraComment[]> | null> =>
+): Promise<JiraResult<JiraCommentPage> | null> =>
   call('comments', (bridge) => bridge.jira.comments(request));
 
 /** Remote and Jira-to-Jira links, merged, with their direction wording. */

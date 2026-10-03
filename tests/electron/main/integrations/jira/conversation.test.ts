@@ -253,7 +253,27 @@ describe('comments', () => {
     // A comment thread is an argument, and reading one backwards is how you
     // misunderstand it.
     expect(url.searchParams.get('orderBy')).toBe('created');
-    expect(result.ok && result.value).toHaveLength(1);
+    expect(result.ok && result.value.comments).toHaveLength(1);
+  });
+
+  it('reads the newest page when asked, still oldest first, with the total (HIVE-203)', async () => {
+    const seen: { url: string; method: string }[] = [];
+    const result = await build({
+      fetch: replies([[200, { total: 80, comments: [rawComment({ id: '9' }), rawComment({ id: '8' })] }]], seen),
+    }).comments({ key: 'HIVE-71', newest: true });
+
+    const url = new URL(seen[0]?.url ?? '');
+    expect(url.searchParams.get('orderBy')).toBe('-created');
+    expect(result).toEqual({
+      ok: true,
+      value: { comments: [expect.objectContaining({ id: '8' }), expect.objectContaining({ id: '9' })], total: 80 },
+    });
+  });
+
+  it('falls back to the count when Jira sends no total (HIVE-203)', async () => {
+    const result = await build({ fetch: replies([[200, { comments: [rawComment()] }]]) })
+      .comments({ key: 'HIVE-71' });
+    expect(result.ok && result.value.total).toBe(1);
   });
 
   it('skips an unreadable comment rather than losing the conversation', async () => {
@@ -263,13 +283,13 @@ describe('comments', () => {
       ]),
     }).comments({ key: 'HIVE-71' });
 
-    expect(result.ok && result.value.map((c) => c.id)).toEqual(['10001', '2']);
+    expect(result.ok && result.value.comments.map((c) => c.id)).toEqual(['10001', '2']);
   });
 
   it('answers an empty list when there are none', async () => {
     const result = await build({ fetch: replies([[200, { comments: [] }]]) })
       .comments({ key: 'HIVE-71' });
-    expect(result).toEqual({ ok: true, value: [] });
+    expect(result).toEqual({ ok: true, value: { comments: [], total: 0 } });
   });
 
   it('refuses before configuration, without asking', async () => {

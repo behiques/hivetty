@@ -32,7 +32,7 @@ const source = (over: Partial<JiraToolSource> = {}): JiraToolSource => ({
   applyTransition: vi.fn(async (request: { transitionId: string }) =>
     ok(issue({ status: transitions.find((t) => t.id === request.transitionId)?.to.name ?? '?' })),
   ),
-  comments: vi.fn(async () => ok([])),
+  comments: vi.fn(async () => ok({ comments: [], total: 0 })),
   links: vi.fn(async () => ok([])),
   addComment: vi.fn(async () => ok({ id: '1', author: 'me', created: 'now', body: [] })),
   assignToMe: vi.fn(async () => ok(issue({ status: 'In Progress', assignee: 'Me' }))),
@@ -162,12 +162,23 @@ describe('jiraToolsFor (HIVE-174)', () => {
     expect(moved.ok && moved.value.assigned).toBe('Not assigned: no permission');
   });
 
-  it('get says when the comments read hit its cap', async () => {
+  it('get says when the thread holds more comments than were read', async () => {
     const full = Array.from({ length: 50 }, (_, i) => ({ id: String(i), author: 'a', created: 'c', body: [] }));
-    const result = await jiraToolsFor(source({ comments: async () => ok(full) })).get({ key: 'HIVE-7' });
-    expect(result.ok && result.value.partial).toEqual([
-      'comments: only the oldest 50 were read; the thread may be longer',
-    ]);
+    const result = await jiraToolsFor(source({ comments: async () => ok({ comments: full, total: 80 }) })).get({ key: 'HIVE-7' });
+    expect(result.ok && result.value.partial).toEqual(['comments: only the oldest 50 of 80 were read']);
+    expect(result.ok && result.value.comments).toHaveLength(50);
+  });
+
+  it('get says nothing when an unreadable comment made the page shorter than the total (HIVE-203)', async () => {
+    const two = [{ id: '1', author: 'a', created: 'c', body: [] }, { id: '3', author: 'a', created: 'c', body: [] }];
+    const result = await jiraToolsFor(source({ comments: async () => ok({ comments: two, total: 3 }) })).get({ key: 'HIVE-7' });
+    expect(result.ok && result.value.partial).toEqual([]);
+  });
+
+  it('get says nothing of a full page that is the whole thread (HIVE-203)', async () => {
+    const full = Array.from({ length: 50 }, (_, i) => ({ id: String(i), author: 'a', created: 'c', body: [] }));
+    const result = await jiraToolsFor(source({ comments: async () => ok({ comments: full, total: 50 }) })).get({ key: 'HIVE-7' });
+    expect(result.ok && result.value.partial).toEqual([]);
   });
 
   it('comment passes through', async () => {
