@@ -312,6 +312,13 @@ describe('the PR page documents (HIVE-205)', () => {
     expect(PR_COMMENT_MUTATION).toContain('addComment(input: { subjectId: $subjectId, body: $body })');
   });
 
+  it('reads the newest page of comments, reviews and threads, not the oldest', () => {
+    // A PR past one page would otherwise lose exactly the entries the page is for.
+    expect(PR_DETAIL_QUERY).toContain('comments(last: 100) { nodes { author { login } body createdAt url } }');
+    expect(PR_DETAIL_QUERY).toContain('reviews(last: 100)');
+    expect(PR_DETAIL_QUERY).toContain('reviewThreads(last: 100)');
+  });
+
   it('reads every field the page draws', () => {
     for (const field of [
       'body', 'createdAt', 'mergedAt', 'baseRefName', 'headRefName', 'headRefOid',
