@@ -130,8 +130,11 @@ function Stat({ pct, detail, short, label }: StatProps) {
  *
  * ## Width, and what gives way
  *
- * It sizes to its content in the session header (HIVE-213), which is a size
- * container. As the stage narrows the title truncates first, then the resets
+ * `clip` (default on) keeps `min-w-0` and `overflow-hidden`, so a mount with
+ * no size container of its own — the Classic header — loses stats off the end
+ * rather than overrunning its neighbours. The session header passes
+ * `clip={false}`: it is a size container, sizes the chip to its content and
+ * gives way in order. As the stage narrows the title truncates first, then the resets
  * give way to `5h` / `wk` (both spans render; the container picks one), then
  * the status word hides. The model label and the three percentages never go,
  * and nothing clips. The full string, both resets included, stays in `title`.
@@ -139,7 +142,7 @@ function Stat({ pct, detail, short, label }: StatProps) {
  * The separators are hairline borders rather than `│` glyphs so they do not
  * change width with the font.
  */
-export function ModelChip() {
+export function ModelChip({ clip = true }: { clip?: boolean } = {}) {
   const entity = useActiveEntity();
   const metrics = useSessionMetrics(entity?.id);
 
@@ -206,10 +209,10 @@ export function ModelChip() {
         apart, two mono sizes half a pixel apart across one 56px row is a
         misalignment, not a distinction.
       */
-      className="flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-muted"
+      className={`flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-muted${clip ? ' min-w-0' : ''}`}
     >
       <Brain size={13} weight="regular" className="shrink-0 text-brand" />
-      <span className="flex items-center gap-2">
+      <span className={`flex items-center gap-2${clip ? ' min-w-0 overflow-hidden' : ''}`}>
         <span className="shrink-0">{label}</span>
 
         {context === null ? null : (

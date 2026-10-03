@@ -287,10 +287,21 @@ describe('ModelChip', () => {
     expect(chip.getAttribute('title')).toMatch(/session limit 12%, resets .+ · weekly limit 46%, resets /);
   });
 
-  it('no longer clips its stats row (HIVE-213)', () => {
+  it('clips its stats row by default, so the Classic header cannot be overrun (HIVE-213)', () => {
     useUiStore.setState({ activeTab: 'hero-refresh' });
     act(() => useHiveStore.getState().setSessionMetrics('hero-refresh', { contextPct: 46 }));
     render(<ModelChip />);
-    expect(screen.getByTestId('model-chip').querySelector('.overflow-hidden')).toBeNull();
+    const chip = screen.getByTestId('model-chip');
+    expect(chip).toHaveClass('min-w-0');
+    expect(chip.querySelector('.overflow-hidden')).not.toBeNull();
+  });
+
+  it('does not clip when the mount opts out, as the session header does (HIVE-213)', () => {
+    useUiStore.setState({ activeTab: 'hero-refresh' });
+    act(() => useHiveStore.getState().setSessionMetrics('hero-refresh', { contextPct: 46 }));
+    render(<ModelChip clip={false} />);
+    const chip = screen.getByTestId('model-chip');
+    expect(chip).not.toHaveClass('min-w-0');
+    expect(chip.querySelector('.overflow-hidden')).toBeNull();
   });
 });
