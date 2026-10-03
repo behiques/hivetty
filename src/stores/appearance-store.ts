@@ -87,6 +87,11 @@ export type EditorSplitAxis = 'horizontal' | 'vertical';
  */
 export type EditorNav = 'tabs' | 'single';
 
+/** Round two's session panel tabs (HIVE-201). Ticket is HIVE-202's, PR is HIVE-209's. */
+export type SessionPanelTab = 'plan' | 'ticket' | 'pr' | 'files';
+
+const SESSION_PANEL_TABS: readonly SessionPanelTab[] = ['plan', 'ticket', 'pr', 'files'];
+
 interface AppearanceState {
   theme: ThemePreference;
   terminalFont: TerminalFontId;
@@ -94,6 +99,13 @@ interface AppearanceState {
   terminalScrollback: number;
   density: Density;
   layout: Layout;
+  /**
+   * Round two's session panel (HIVE-201): open or closed is one setting for
+   * the app, and the last tab follows you from session to session. Ticket and
+   * PR exist from the start so HIVE-202 and HIVE-209 need no migration.
+   */
+  sessionPanelOpen: boolean;
+  sessionPanelTab: SessionPanelTab;
 
   /**
    * How wide the user dragged each rail, or `null` for "follow density"
@@ -261,6 +273,11 @@ interface AppearanceState {
   setTerminalScrollback: (lines: number) => void;
   setDensity: (density: Density) => void;
   setLayout: (layout: Layout) => void;
+  /** Open or close round two's session panel (HIVE-201). */
+  setSessionPanelOpen: (open: boolean) => void;
+  toggleSessionPanel: () => void;
+  /** The tab the session panel shows (HIVE-201). */
+  setSessionPanelTab: (tab: SessionPanelTab) => void;
   /**
    * Record a dragged rail width. Bounded by the per-rail minimum and the
    * absolute cap only — see {@link AppearanceState.railWidthLeft}.
@@ -628,6 +645,9 @@ const initialAppearanceState = {
   terminalScrollback: DEFAULT_TERMINAL_SCROLLBACK,
   density: 'comfortable' as Density,
   layout: 'classic' as Layout,
+  /** Open, on Plan: Files is where the Explorer lived, so open shows the user what moved (D14). */
+  sessionPanelOpen: true,
+  sessionPanelTab: 'plan' as SessionPanelTab,
   /** `null` — follow the stylesheet — until somebody drags a rail. */
   railWidthLeft: null as number | null,
   railWidthRight: null as number | null,
@@ -673,6 +693,8 @@ interface PersistedAppearanceState {
   terminalScrollback: number;
   density: Density;
   layout: Layout;
+  sessionPanelOpen: boolean;
+  sessionPanelTab: SessionPanelTab;
   railWidthLeft: number | null;
   railWidthRight: number | null;
   railCollapsedLeft: boolean;
@@ -862,6 +884,10 @@ export const useAppearanceStore = create<AppearanceState>()(
 
       setLayout: (layout) => set({ layout }),
 
+      setSessionPanelOpen: (sessionPanelOpen) => set({ sessionPanelOpen }),
+      toggleSessionPanel: () => set((state) => ({ sessionPanelOpen: !state.sessionPanelOpen })),
+      setSessionPanelTab: (sessionPanelTab) => set({ sessionPanelTab }),
+
       /**
        * Clamped to `[min, RAIL_MAX_PX]` and no further.
        *
@@ -1021,6 +1047,12 @@ export const useAppearanceStore = create<AppearanceState>()(
           ...sanitizeThemeState(persisted),
           // Anything but the one other value reads as the default, absent key included.
           layout: persisted.layout === 'round-two' ? 'round-two' : 'classic',
+          // No version bump for HIVE-201: an absent or bad value reads as the default.
+          sessionPanelOpen:
+            typeof persisted.sessionPanelOpen === 'boolean' ? persisted.sessionPanelOpen : true,
+          sessionPanelTab: SESSION_PANEL_TABS.includes(persisted.sessionPanelTab as SessionPanelTab)
+            ? (persisted.sessionPanelTab as SessionPanelTab)
+            : 'plan',
         } as AppearanceState;
       },
       storage: createJSONStorage(() => localStorage),
@@ -1035,6 +1067,8 @@ export const useAppearanceStore = create<AppearanceState>()(
         terminalScrollback: state.terminalScrollback,
         density: state.density,
         layout: state.layout,
+        sessionPanelOpen: state.sessionPanelOpen,
+        sessionPanelTab: state.sessionPanelTab,
         railWidthLeft: state.railWidthLeft,
         railWidthRight: state.railWidthRight,
         railCollapsedLeft: state.railCollapsedLeft,
@@ -1247,6 +1281,13 @@ export const useShowPlanPanel = () => useAppearanceStore((state) => state.showPl
 export const useLayout = () => useAppearanceStore((state) => state.layout);
 /** Switch the frame, live (HIVE-195). */
 export const useSetLayout = () => useAppearanceStore((state) => state.setLayout);
+/** Whether round two's session panel is open (HIVE-201). */
+export const useSessionPanelOpen = () => useAppearanceStore((state) => state.sessionPanelOpen);
+/** The session panel's last tab (HIVE-201). */
+export const useSessionPanelTab = () => useAppearanceStore((state) => state.sessionPanelTab);
+export const useSetSessionPanelOpen = () => useAppearanceStore((state) => state.setSessionPanelOpen);
+export const useToggleSessionPanel = () => useAppearanceStore((state) => state.toggleSessionPanel);
+export const useSetSessionPanelTab = () => useAppearanceStore((state) => state.setSessionPanelTab);
 
 /**
  * Everything the CodeMirror surface needs, resolved.
