@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { Agent } from '@/types/entity';
 import type { Ticket, TicketDetail } from '@/types/ticket';
 import { TicketPageConversation } from '@features/work/components/ticket-page-conversation';
 import { useHiveStore } from '@stores/hive-store';
@@ -14,6 +15,7 @@ import type { LedgerEntry } from '@shared/ledger-contract';
 const readJiraDetail = vi.fn();
 const readJiraComments = vi.fn();
 const addJiraComment = vi.fn();
+const searchJiraUsers = vi.fn();
 
 vi.mock('@/lib/jira', () => ({
   readJiraStatus: () => Promise.resolve(null),
@@ -23,6 +25,7 @@ vi.mock('@/lib/jira', () => ({
   readJiraDetail: (request: unknown) => readJiraDetail(request),
   readJiraComments: (request: unknown) => readJiraComments(request),
   addJiraComment: (request: unknown) => addJiraComment(request),
+  searchJiraUsers: (request: unknown) => searchJiraUsers(request),
 }));
 
 const ticket: Ticket = {
@@ -274,5 +277,40 @@ describe('the reply box (HIVE-203)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
 
     expect(await screen.findByText(/./, { selector: 'p.text-amber' })).toBeInTheDocument();
+  });
+});
+
+describe('comments posted for an agent (HIVE-216)', () => {
+  const viaBuilder: JiraComment = { ...comment('103', 'Yunid Bauza', '2026-10-01T13:00:00.000Z', 'Task 3 done'), via: { agent: 'builder' } };
+
+  it('draws the agent: its glyph in a rounded square, its name, and "via the Hive"', () => {
+    seed({ comments: [dana, viaBuilder], total: 2 });
+    useHiveStore.setState({
+      entities: { builder: { kind: 'agent', id: 'builder', icon: 'ph-robot' } as unknown as Agent },
+    });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    const row = items()[1]!;
+    expect(within(row).getByText('builder')).toBeInTheDocument();
+    expect(within(row).getByText('via the Hive')).toHaveClass('text-subtle');
+    expect(within(row).queryByText('Yunid Bauza')).toBeNull();
+    expect(row.querySelector('[data-gutter="agent"]')).not.toBeNull();
+    expect(within(items()[0]!).getByText('DK')).toBeInTheDocument();
+  });
+
+  it('still draws an agent this machine does not know, with the generic glyph', () => {
+    seed({ comments: [viaBuilder], total: 1 });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    expect(within(items()[0]!).getByText('via the Hive')).toBeInTheDocument();
+    expect(items()[0]!.querySelector('[data-gutter="agent"] svg')).not.toBeNull();
+  });
+
+  it('draws a person\'s face, even for a comment you wrote in Jira', () => {
+    seed({ comments: [comment('104', 'Yunid Bauza', '2026-10-01T14:00:00.000Z', 'mine')], total: 1 });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    expect(within(items()[0]!).getByText('YB')).toBeInTheDocument();
+    expect(screen.queryByText('via the Hive')).toBeNull();
   });
 });

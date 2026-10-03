@@ -3,7 +3,9 @@ import { type RefObject, useMemo, useRef, useState } from 'react';
 
 import { addJiraComment } from '@/lib/jira';
 import { BRIDGE_ERROR } from '@/lib/utils';
+import { isAgent } from '@/types/entity';
 
+import { Icon } from '@components/ui/icon';
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { AdfBlocks } from '@features/work/components/adf-blocks';
 import { LinesSkeleton, TicketProblem } from '@features/work/components/ticket-page-parts';
@@ -12,6 +14,7 @@ import type { JiraComment } from '@shared/jira-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import {
   useAppendTicketComment,
+  useEntity,
   useLoadTicketDetail,
   useOpenTicket,
   useTicketDetail,
@@ -35,6 +38,25 @@ export function initials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
   const letters = words.length >= 2 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? '').slice(0, 2);
   return letters.toUpperCase();
+}
+
+/**
+ * The gutter of a comment the Hive posted for an agent (HIVE-216): the agent's
+ * own glyph in a rounded square. Its own component so a person's row never
+ * subscribes to the fleet.
+ */
+function ViaFace({ agent }: { agent: string }) {
+  const entity = useEntity(agent);
+  const icon = entity !== undefined && isAgent(entity) ? entity.icon : 'ph-robot';
+  return (
+    <span
+      aria-hidden
+      data-gutter="agent"
+      className="grid size-[26px] place-items-center rounded-[7px] border border-border bg-chip text-brand"
+    >
+      <Icon name={icon} size={14} />
+    </span>
+  );
 }
 
 const ROW = 'group grid grid-cols-[30px_minmax(0,1fr)] gap-2.5 rounded-lg px-1.5 py-[7px] hover:bg-panel focus-within:bg-panel';
@@ -61,15 +83,20 @@ function CommentItem({
 
   return (
     <li className={ROW}>
-      <span
-        aria-hidden
-        className="grid size-[26px] place-items-center rounded-full bg-panel-2 text-[10px] font-semibold text-ink"
-      >
-        {initials(comment.author)}
-      </span>
+      {comment.via === undefined ? (
+        <span
+          aria-hidden
+          className="grid size-[26px] place-items-center rounded-full bg-panel-2 text-[10px] font-semibold text-ink"
+        >
+          {initials(comment.author)}
+        </span>
+      ) : (
+        <ViaFace agent={comment.via.agent} />
+      )}
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex items-baseline gap-2 text-[12.5px]">
-          <span className="font-medium text-ink">{comment.author}</span>
+          <span className="font-medium text-ink">{comment.via?.agent ?? comment.author}</span>
+          {comment.via === undefined ? null : <span className="text-[11px] text-subtle">via the Hive</span>}
           <span className="flex-1" />
           <span className="relative w-[120px] shrink-0 text-right">
             <time
