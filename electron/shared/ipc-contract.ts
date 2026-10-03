@@ -100,6 +100,7 @@ import type {
   PrRef,
   PrsSnapshot,
   PrThreadRequest,
+  PrTimeline,
   PrViewedRequest,
   PrRuns,
   PrRunsRequest,
@@ -611,6 +612,8 @@ export const CH = {
   githubPrComment: 'github:pr-comment',
   /** One PR's unified diff (HIVE-207), under {@link CH.githubPrDetail}'s scope check. `gh pr diff`, argv only. */
   githubPrDiff: 'github:pr-diff',
+  /** One PR's history for the Timeline tab (HIVE-208), under {@link CH.githubPrDetail}'s scope check. Constant GraphQL, bound variables. */
+  githubPrTimeline: 'github:pr-timeline',
   /**
    * Reply to, resolve or unresolve one review thread (HIVE-207), under the
    * same scope check. Main proves the thread is on the scoped PR before writing.
@@ -2555,6 +2558,8 @@ export interface HiveBridge {
     prComment(request: PrCommentRequest): Promise<GhResult<true>>;
     /** One PR's unified diff (HIVE-207), under the same scope. */
     prDiff(request: PrRef): Promise<GhResult<string>>;
+    /** One PR's history for the Timeline tab (HIVE-208), under the same scope. */
+    prTimeline(request: PrRef): Promise<GhResult<PrTimeline>>;
     /** Reply to, resolve or unresolve a review thread (HIVE-207), under the same scope. */
     prThread(request: PrThreadRequest): Promise<GhResult<true>>;
     /** Mark or unmark a file viewed (HIVE-207), under the same scope. */

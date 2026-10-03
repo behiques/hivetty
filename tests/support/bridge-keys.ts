@@ -43,6 +43,7 @@ export const BRIDGE_FS_KEYS = [
 
 export const BRIDGE_GITHUB_KEYS = [
   'prs', 'searchPrs', 'prDetail', 'prComment', 'prRuns', 'runJobs', 'jobLog', 'rerunFailed', 'prDiff', 'prThread', 'prViewed',
+  'prTimeline',
 ] as const satisfies readonly (keyof HiveBridge['github'])[];
 
 export const BRIDGE_JIRA_KEYS = [
