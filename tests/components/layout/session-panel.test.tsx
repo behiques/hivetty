@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session, Terminal } from '@/types/entity';
+import type { Ticket } from '@/types/ticket';
 import { pickTab, SessionPanel } from '@components/layout/session-panel';
 import type { SessionPlan } from '@shared/plan-contract';
 import { useAppearanceStore } from '@stores/appearance-store';
@@ -21,6 +22,21 @@ vi.mock('@lib/explorer/fs-client', async (importOriginal) => ({
 vi.mock('@features/explorer/components/explorer-panel', () => ({
   ExplorerPanel: ({ changesId }: { changesId?: string }) => <div>explorer {changesId ?? 'none'}</div>,
 }));
+
+vi.mock('@features/work/components/ticket-tab', () => ({
+  TicketTab: ({ ticketKey }: { ticketKey: string }) => <div>ticket {ticketKey}</div>,
+}));
+
+/** Point the seeded `hero-refresh` session at a ticket, or at none. */
+const workOn = (ticket: string | undefined) => {
+  act(() => {
+    useHiveStore.setState((state) => {
+      const { ticket: _old, ...rest } = state.entities['hero-refresh'] as Session;
+      const next: Session = ticket === undefined ? rest : { ...rest, ticket };
+      return { entities: { ...state.entities, 'hero-refresh': next } };
+    });
+  });
+};
 
 const plan = (entityId: string): SessionPlan => ({
   entityId,
@@ -72,6 +88,8 @@ describe('pickTab', () => {
 
 describe('SessionPanel (HIVE-201)', () => {
   beforeEach(() => {
+    // The seeded session works on a ticket; these are about Plan and Files alone.
+    workOn(undefined);
     useHiveStore.getState().setPlan('hero-refresh', plan('hero-refresh'));
     useHiveStore.getState().setChangedFiles('hero-refresh', changed);
   });
@@ -138,6 +156,65 @@ describe('SessionPanel (HIVE-201)', () => {
       useUiStore.getState().openTab('hero-2', 'sessions');
     });
     render(<SessionPanel />);
+    expect(within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Plan', 'Files 2']);
+  });
+});
+
+describe('SessionPanel: the Ticket tab (HIVE-202)', () => {
+  const listed: Ticket = {
+    key: 'HIVE-193',
+    status: 'In Progress',
+    statusCategory: 'in-progress',
+    title: 'Fix it',
+    priority: null,
+    assignee: null,
+  };
+
+  beforeEach(() => {
+    workOn('HIVE-193');
+    useHiveStore.getState().setPlan('hero-refresh', plan('hero-refresh'));
+    useHiveStore.getState().setChangedFiles('hero-refresh', changed);
+    useHiveStore.setState({ tickets: [listed] });
+  });
+
+  it('sits between Plan and Files, and shows the tab for the session’s key', () => {
+    render(<SessionPanel />);
+    expect(within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Plan', 'Ticket', 'Files 2']);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Ticket' }));
+
+    expect(useAppearanceStore.getState().sessionPanelTab).toBe('ticket');
+    expect(screen.getByText('ticket HIVE-193')).toBeInTheDocument();
+  });
+
+  it('closed, the strip says the key and status, and opens the panel on Ticket', () => {
+    act(() => {
+      useAppearanceStore.getState().setSessionPanelOpen(false);
+    });
+    render(<SessionPanel />);
+    const fact = screen.getByRole('button', { name: 'HIVE-193 · In Progress' });
+    expect(fact).toHaveAttribute('title', 'HIVE-193 · In Progress');
+
+    fireEvent.click(fact);
+
+    expect(useAppearanceStore.getState()).toMatchObject({ sessionPanelOpen: true, sessionPanelTab: 'ticket' });
+    expect(screen.getByText('ticket HIVE-193')).toBeInTheDocument();
+  });
+
+  it('closed, the strip says the key alone before the ticket is read', () => {
+    useHiveStore.setState({ tickets: [] });
+    act(() => {
+      useAppearanceStore.getState().setSessionPanelOpen(false);
+    });
+    render(<SessionPanel />);
+
+    expect(screen.getByRole('button', { name: 'HIVE-193' })).toHaveAttribute('title', 'HIVE-193');
+  });
+
+  it('a session on no ticket has no Ticket tab', () => {
+    workOn(undefined);
+    render(<SessionPanel />);
+
     expect(within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Plan', 'Files 2']);
   });
 });

@@ -190,29 +190,54 @@ session's own. Three selectors read it: `useChangedFiles(id)`,
 primitive so a tree row re-renders only on its own change.
 `clearModeEntities` clears the slice with `plans`.
 
-### The open ticket's detail slice
+### The keyed ticket slice
 
-`hive-store.state.ticketDetail` is the Work page's data for **one** ticket
-(HIVE-203): `{ key, issue?, detail?, comments?, total?, transitions?,
-history?, readAt?, problems }`. Opening another key replaces it.
+`hive-store.state.ticketDetails` is the data for every ticket a reader has
+opened, keyed by issue key (HIVE-203, keyed by HIVE-202): the Work page and any
+number of Ticket tabs read side by side. Each entry is `{ key, issue?, detail?,
+comments?, total?, transitions?, history?, readAt?, links?, secondHop?,
+epicProgress?, problems }`. The map holds at most `TICKET_DETAIL_CAP` (16),
+the newest last; opening or refreshing a key moves it to the end, and the
+oldest falls off. An answer that lands for an evicted key is dropped.
 
-- `loadTicketDetail(key)` reads in parallel: `jira:detail`, the newest
-  comments (`jira:comments { newest: true }`), `jira:transitions`,
-  `ledger:list { ticket }`, and `jira:issue` only when the list does not hold
-  the key. **Each part merges as it lands**, so one failed read never blanks
-  another: a failure sets `problems.detail` or `problems.comments` and keeps
-  what the last read found. An answer for a key no longer open is dropped.
-- `refreshTicketDetail(key)` is the page's 60 s poller: detail, comments and
-  transitions again, not the ledger history (the tail carries what is appended
-  after the open).
+- `loadTicketDetail(key, want)` reads in parallel through `readTicketParts`:
+  `jira:detail`, the newest comments (`jira:comments { newest: true }`),
+  `jira:transitions`, and `jira:issue` only when the list does not hold the
+  key. `want` says who is asking. `'page'` adds `ledger:list { ticket }`;
+  `'tab'` adds `jira:links` instead. **Each part merges as it lands**, so one
+  failed read never blanks another: a failure sets `problems.detail`,
+  `problems.comments` or `problems.links` and keeps what the last read found.
+- The tab's **second hop**: for each link that is a Blocks link pointing
+  outward (the tickets this one blocks), `jira:links` is read again and the
+  ticket's own outward Blocks links go in `secondHop`, keyed by that ticket. It
+  is read only at five issue links or fewer (`SECOND_HOP_MAX_LINKS`). A later
+  read with more than five, or with nothing blocked, **clears** `secondHop`, so
+  a stale hop is never left drawn.
+- **Epic progress**: when the detail's parent is an epic, one `jira:search`
+  for `parent = <epic>` counts the children done of total, with `capped` when
+  the search was cut. The epic key is checked against the issue-key pattern
+  before it goes into the JQL. A failed search **clears** `epicProgress`; the
+  ring's label then shows the epic without a count.
+- `refreshTicketDetail(key, want)` is the pollers' call: detail, comments and
+  transitions again (and links, for `'tab'`), not the ledger history (the tail
+  carries what is appended after the open). A key never loaded does nothing.
+  The page and the Ticket tab each poll only after their own first load, so a
+  ticket the map already holds is read once on open, not twice.
 - `appendTicketComment(key, comment)` shows a just-posted comment and counts it.
 - `reloadTicketTransitions(key)` re-reads the transitions after the status
-  moves. They are cached here for the open ticket only; the pill's menu still
-  reads its own on open.
+  moves. They are cached here; the pill's menu still reads its own on open.
 - `setTicketDetailIssue(issue)` installs a re-read issue for a ticket the list
   does not hold; a listed one is `updateTicket`'s.
 
-Every reset path clears it.
+`JiraLink` (`electron/shared/jira-contract.ts`) gained optional fields for the
+Jira-to-Jira kind: `key`, `summary`, `statusCategory`, `linkType` (the link
+type's name: "Blocks", "Relates") and `direction` (`'inward'` or `'outward'`:
+which end the *other* issue is on). Remote links and older servers omit them.
+`lib/ticket-links.ts` reads "Blocks" by the type's name, whatever its wording
+(`isBlocks`): an inward Blocks link is a ticket this one **waits on**, an
+outward one a ticket it **blocks**, and every other type is a bead.
+
+Every reset path clears the map.
 
 ### The freshness rule
 
@@ -349,10 +374,14 @@ Components never read a store object directly and never call `getState()`.
 | `useSwarmPalette()` | the swarm canvas's colours for the active theme and mode (appearance store) |
 | `useTicketGroups()` | the Work panel's groups (In progress, To do, Done; empty ones dropped) with `total` and `needYou` (HIVE-203) |
 | `useTicketRowModels(tickets)` | each ticket's row: title without tags, tone, and the one leading fact (`lib/ticket-activity.ts`) |
-| `useOpenTicket(key)` | the list's ticket, else the issue `ticketDetail` read for itself |
+| `useOpenTicket(key)` | the list's ticket, else the issue `ticketDetails[key]` read for itself |
 | `useTicketProperties(key)` | the page's key/values: status, priority (tag, else Jira), side, project, assignee, agent, epic |
-| `useTicketEvents(key)` | the ticket's ledger events: `ticketDetail.history` plus the tail, deduped and in id order |
+| `useTicketEvents(key)` | the ticket's ledger events: `ticketDetails[key].history` plus the tail, deduped and in id order |
 | `useNextTransition(key)` | the first transition exactly one status category forward, or nothing |
+| `useTicketLinks(key)` | the Ticket tab's links on three arcs (waits on, blocks, relates) with the verdict, open blockers and per-arc status counts (HIVE-202) |
+| `useTicketCriteria(key)` | the acceptance-criteria list under its heading, else the description, else nothing |
+| `useLatestComment(key)` | the newest comment read |
+| `useEpicLabel(key)` | the ring's label, `KEY · title · done/total` (`+` when capped), only for an epic |
 
 Derived values are computed in selectors and **never stored** — one source of
 truth for every number on screen.

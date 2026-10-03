@@ -59,8 +59,9 @@ import { isThisMachineAction } from './notification-contract';
  * 6 → 7 (HIVE-201): `CH` gained `changed-files:list` and `changed-files:changed`;
  * `plan:changed`'s tasks gained `activeForm`, `startedAt`, `endedAt` and the plan `fileAt`.
  * The same bump covers `jira:detail` (HIVE-203), which landed at 6 without one.
+ * 7 → 8 (HIVE-202): `jira:links`' issue links gained `key`, `summary`, `statusCategory`, `linkType` and `direction`; `jira:detail`'s parent gained `issueType`.
  */
-export const REMOTE_PROTOCOL_VERSION = 7;
+export const REMOTE_PROTOCOL_VERSION = 8;
 
 /**
  * What a frame is for.

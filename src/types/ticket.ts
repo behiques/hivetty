@@ -1,6 +1,7 @@
 import type {
   JiraComment,
   JiraIssueDetail,
+  JiraLink,
   JiraStatusCategory,
   JiraTransition,
 } from '@shared/jira-contract';
@@ -34,6 +35,8 @@ export interface Ticket {
   priority: string | null;
   /** Display name; `null` when unassigned (HIVE-203). */
   assignee: string | null;
+  /** Jira's issue type name, "Bug", "Story" (HIVE-202). Absent on fixtures. */
+  issueType?: string;
   /*
     There is deliberately no `sessions` array here (HIVE-73).
 
@@ -55,8 +58,19 @@ export interface Ticket {
   url?: string;
 }
 
+/** The parent epic's children, done of total (HIVE-202). */
+export interface EpicProgress {
+  done: number;
+  total: number;
+  /** The search hit JIRA_MAX_ISSUES: the total is a floor. */
+  capped: boolean;
+}
+
+/** What a reader of a ticket wants beside the common parts (HIVE-202): the page wants its ledger history, the Ticket tab its links. */
+export type TicketDetailWant = 'page' | 'tab';
+
 /**
- * The open ticket's page data (HIVE-203). One ticket at a time; another key replaces it.
+ * One entry per ticket read, keyed by issue key (HIVE-203, HIVE-202).
  *
  * Every part is optional because each read merges on its own as it lands: one
  * failed read never blanks another, and a part read before stays on screen with
@@ -76,7 +90,13 @@ export interface TicketDetail {
   history?: LedgerEntry[];
   /** When the detail or comments last read successfully (ms). */
   readAt?: number;
-  problems: { detail?: string; comments?: string };
+  /** jira:links, for the Ticket tab (HIVE-202). */
+  links?: JiraLink[];
+  /** For each ticket this one blocks: its own outward Blocks links. Read only at ≤ SECOND_HOP_MAX_LINKS issue links. */
+  secondHop?: Record<string, JiraLink[]>;
+  /** The parent epic's children, done of total (HIVE-202). */
+  epicProgress?: EpicProgress;
+  problems: { detail?: string; comments?: string; links?: string };
 }
 
 /** The ticket page's key/value column, derived (HIVE-203). Absent keys have no row. */
