@@ -5,6 +5,7 @@ import { InboxPill } from '@features/inbox/components/inbox-pill';
 import { useOnStage } from '@hooks/use-on-stage';
 import { useStageInset } from '@hooks/use-stage-inset';
 import { useDisplayName, useThread } from '@stores/hive-store';
+import { useSettingsOpen } from '@stores/ui-store';
 
 interface InboxCornerProps {
   /** The stage it sits on, measured for the page's own input. */
@@ -29,8 +30,12 @@ export function InboxCorner({ stage, viewKey }: InboxCornerProps) {
   const thread = newest?.action.type === 'ask' ? newest.action.thread : '';
   const from = useThread(thread).find((entry) => entry.id === thread)?.from ?? '';
   const sessionName = useDisplayName(newest?.action.type === 'session' ? newest.action.entityId : '');
+  // Silent while Settings holds the stack back: a reader hears what is drawn, when it is drawn.
+  const settings = useSettingsOpen();
   const said =
-    newest === undefined ? '' : announcement(newest, newest.kind === 'session.blocked' ? sessionName : from);
+    newest === undefined || settings
+      ? ''
+      : announcement(newest, newest.kind === 'session.blocked' ? sessionName : from);
 
   return (
     <div

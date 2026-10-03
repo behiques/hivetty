@@ -50,6 +50,16 @@ describe('InboxCorner (HIVE-198)', () => {
     expect(screen.getByTestId('inbox-live')).toHaveTextContent(/asked a question$/);
   });
 
+  it('says nothing while Settings holds the stack back', () => {
+    useHiveStore.getState().hydrateNotifs([
+      notif({ id: 'a1', kind: 'agent.ask', title: 'Run the ledger tests?', action: { type: 'ask', thread: 'a1' } }),
+    ]);
+    useUiStore.getState().pushArrival('a1', false);
+    useUiStore.getState().openSettings();
+    render(<InboxCorner stage={stage()} viewKey="home" />);
+    expect(screen.getByTestId('inbox-live')).toBeEmptyDOMElement();
+  });
+
   it('keeps the live region mounted and silent with nothing up', () => {
     render(<InboxCorner stage={stage()} viewKey="home" />);
     expect(screen.getByTestId('inbox-live')).toBeEmptyDOMElement();

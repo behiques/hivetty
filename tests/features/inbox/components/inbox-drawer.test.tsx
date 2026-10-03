@@ -82,6 +82,19 @@ describe('InboxDrawer (HIVE-198)', () => {
     before.remove();
   });
 
+  it('re-aimed at another thread while open, close still returns focus to where it began', () => {
+    const before = document.createElement('button');
+    document.body.append(before);
+    before.focus();
+    useUiStore.getState().openInboxDrawer('a1');
+    render(<InboxDrawer onStage={null} />);
+    act(() => useUiStore.getState().openInboxDrawer('a2'));
+    expect(document.activeElement?.getAttribute('data-thread')).toBe('a2');
+    act(() => useUiStore.getState().closeInboxDrawer());
+    expect(document.activeElement).toBe(before);
+    before.remove();
+  });
+
   it('opened on a thread, that card has focus', () => {
     useUiStore.getState().openInboxDrawer('a1');
     render(<InboxDrawer onStage={null} />);
