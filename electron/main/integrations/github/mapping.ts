@@ -2,7 +2,10 @@ import {
   GH_MERGED_WINDOW_MS,
   type GhPrChecks,
   type GhPrState,
+  type PrComment,
+  type PrDetail,
   type PrRecord,
+  type PrReview,
 } from '../../../shared/github-contract';
 import { isRecord } from '../../../shared/guards';
 
@@ -308,4 +311,111 @@ export function collectSearchPrs(payload: unknown): PrRecord[] {
     if (landed !== 0) return landed;
     return right.updatedAt.localeCompare(left.updatedAt);
   });
+}
+
+function whole(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) ? value : null;
+}
+
+/** `author { login }`, or `null` for a ghost. */
+function loginOf(value: unknown): string | null {
+  return isRecord(value) ? text(value.login) : null;
+}
+
+/** A connection's `nodes`, or nothing. */
+function nodesIn(value: unknown): unknown[] {
+  return isRecord(value) && Array.isArray(value.nodes) ? value.nodes : [];
+}
+
+/** Each node through `read`, the unreadable ones dropped. */
+function each<T>(value: unknown, read: (raw: unknown) => T | null): T[] {
+  return nodesIn(value).map(read).filter((item): item is T => item !== null);
+}
+
+function toComment(raw: unknown): PrComment | null {
+  if (!isRecord(raw)) return null;
+  const createdAt = text(raw.createdAt);
+  const url = text(raw.url);
+  if (createdAt === null || url === null) return null;
+  return { author: loginOf(raw.author), body: typeof raw.body === 'string' ? raw.body : '', createdAt, url };
+}
+
+/** A submitted review; a `PENDING` one is the viewer's unsent draft and is left out. */
+function toReview(raw: unknown): PrReview | null {
+  if (!isRecord(raw)) return null;
+  const state = text(raw.state);
+  const url = text(raw.url);
+  if (state === null || state === 'PENDING' || url === null) return null;
+  return {
+    author: loginOf(raw.author),
+    state,
+    body: typeof raw.body === 'string' ? raw.body : '',
+    submittedAt: text(raw.submittedAt),
+    url,
+  };
+}
+
+/** The pull request under `repository`, or `null`. */
+function pullRequestOf(payload: unknown): Record<string, unknown> | null {
+  const repository = isRecord(payload) ? payload.repository : null;
+  const raw = isRecord(repository) ? repository.pullRequest : null;
+  return isRecord(raw) ? raw : null;
+}
+
+/**
+ * One PR's page from `PR_DETAIL_QUERY`'s data (HIVE-205), or `null` when the
+ * PR is missing or lacks a field the page cannot do without. Defensive like
+ * {@link toPrRecord}: a malformed comment, review, thread or check costs
+ * itself, a missing scalar is `null` (a count `0`), and nothing throws.
+ */
+export function toPrDetail(payload: unknown, owner: string, repo: string): PrDetail | null {
+  const raw = pullRequestOf(payload);
+  if (raw === null) return null;
+
+  const id = text(raw.id);
+  const number = whole(raw.number);
+  const title = text(raw.title);
+  const url = text(raw.url);
+  const createdAt = text(raw.createdAt);
+  if (id === null || number === null || title === null || url === null || createdAt === null) return null;
+
+  const state = text(raw.state);
+  return {
+    id,
+    owner,
+    repo,
+    number,
+    title,
+    url,
+    state: state === 'MERGED' ? 'merged' : state === 'CLOSED' ? 'closed' : 'open',
+    isDraft: raw.isDraft === true,
+    body: typeof raw.body === 'string' ? raw.body : '',
+    createdAt,
+    mergedAt: text(raw.mergedAt),
+    baseRef: text(raw.baseRefName),
+    headRef: text(raw.headRefName),
+    headSha: text(raw.headRefOid),
+    additions: whole(raw.additions) ?? 0,
+    deletions: whole(raw.deletions) ?? 0,
+    changedFiles: whole(raw.changedFiles) ?? 0,
+    author: loginOf(raw.author),
+    reviewDecision: text(raw.reviewDecision),
+    mergeStateStatus: text(raw.mergeStateStatus),
+    comments: each(raw.comments, toComment),
+    reviews: each(raw.reviews, toReview),
+    reviewRequests: [],
+    threads: [],
+    checks: [],
+  };
+}
+
+/** The PR's node id from `PR_ID_QUERY`'s data, or `null`. */
+export function readPrId(payload: unknown): string | null {
+  const raw = pullRequestOf(payload);
+  return raw === null ? null : text(raw.id);
+}
+
+/** Whether `PR_COMMENT_MUTATION` answered with the comment added. */
+export function commentAdded(payload: unknown): boolean {
+  return isRecord(payload) && isRecord(payload.addComment);
 }

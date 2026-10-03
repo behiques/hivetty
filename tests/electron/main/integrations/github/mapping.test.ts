@@ -4,9 +4,12 @@ import { describe, expect, it } from 'vitest';
 import {
   collectPrs,
   collectSearchPrs,
+  commentAdded,
   countFindings,
+  readPrId,
   readViewerLogin,
   toChecks,
+  toPrDetail,
   toPrRecord,
   toState,
 } from '../../../../../electron/main/integrations/github/mapping';
@@ -502,5 +505,86 @@ describe('mergedAt and mine (HIVE-215)', () => {
   it('marks nothing mine in a search whose payload names no viewer', () => {
     const prs = collectSearchPrs({ open: { nodes: [node()] }, merged: { nodes: [] } });
     expect(prs[0]?.mine).toBe(false);
+  });
+});
+
+describe('toPrDetail (HIVE-205)', () => {
+  const pr = (over: Record<string, unknown> = {}) => ({
+    id: 'PR_kwDO1',
+    number: 1182,
+    title: 'Fee rule validator',
+    url: 'https://github.com/acme/server/pull/1182',
+    state: 'OPEN',
+    isDraft: false,
+    body: 'Validates **every** filing.\n\n- [x] corporations\n- [ ] LLCs',
+    createdAt: '2026-10-03T08:00:00Z',
+    mergedAt: null,
+    baseRefName: 'main',
+    headRefName: 'feat/fee-rule',
+    headRefOid: '9f3c2ab',
+    additions: 214,
+    deletions: 38,
+    changedFiles: 9,
+    author: { login: 'octocat' },
+    reviewDecision: 'CHANGES_REQUESTED',
+    mergeStateStatus: null,
+    comments: { nodes: [
+      { author: { login: 'maria' }, body: 'Does this cover 2026?', createdAt: '2026-10-03T09:31:00Z', url: 'https://github.com/acme/server/pull/1182#issuecomment-1' },
+      { author: null, body: 'from a deleted account', createdAt: '2026-10-03T09:40:00Z', url: 'https://github.com/acme/server/pull/1182#issuecomment-2' },
+      { author: { login: 'x' }, body: 'no url', createdAt: '2026-10-03T09:41:00Z' },
+    ] },
+    reviews: { nodes: [
+      { author: { login: 'acr-bot' }, state: 'CHANGES_REQUESTED', body: 'Three findings.', submittedAt: '2026-10-03T08:50:00Z', url: 'https://github.com/acme/server/pull/1182#pullrequestreview-7' },
+      { author: { login: 'octocat' }, state: 'PENDING', body: '', submittedAt: null, url: 'https://github.com/acme/server/pull/1182#pullrequestreview-8' },
+    ] },
+    reviewRequests: { nodes: [] },
+    reviewThreads: { nodes: [] },
+    commits: { nodes: [] },
+    ...over,
+  });
+  const payload = (node: unknown) => ({ repository: { pullRequest: node } });
+
+  it('maps the scalars, keeping the configured owner and repo', () => {
+    expect(toPrDetail(payload(pr()), 'acme', 'server')).toMatchObject({
+      id: 'PR_kwDO1', owner: 'acme', repo: 'server', number: 1182, title: 'Fee rule validator',
+      state: 'open', isDraft: false, createdAt: '2026-10-03T08:00:00Z', mergedAt: null,
+      baseRef: 'main', headRef: 'feat/fee-rule', headSha: '9f3c2ab',
+      additions: 214, deletions: 38, changedFiles: 9, author: 'octocat',
+      reviewDecision: 'CHANGES_REQUESTED', mergeStateStatus: null,
+    });
+  });
+
+  it('reads MERGED and CLOSED, and nulls as nulls or zero', () => {
+    expect(toPrDetail(payload(pr({ state: 'MERGED', mergedAt: '2026-10-03T11:32:00Z' })), 'acme', 'server'))
+      .toMatchObject({ state: 'merged', mergedAt: '2026-10-03T11:32:00Z' });
+    expect(toPrDetail(payload(pr({ state: 'CLOSED', author: null, body: null, additions: null, baseRefName: null })), 'acme', 'server'))
+      .toMatchObject({ state: 'closed', author: null, body: '', additions: 0, baseRef: null });
+  });
+
+  it('keeps a ghost author as null and drops a comment it cannot place', () => {
+    const detail = toPrDetail(payload(pr()), 'acme', 'server');
+    expect(detail?.comments.map((comment) => comment.author)).toEqual(['maria', null]);
+  });
+
+  it('keeps submitted reviews and leaves the pending draft out', () => {
+    const detail = toPrDetail(payload(pr()), 'acme', 'server');
+    expect(detail?.reviews).toEqual([
+      { author: 'acr-bot', state: 'CHANGES_REQUESTED', body: 'Three findings.', submittedAt: '2026-10-03T08:50:00Z', url: 'https://github.com/acme/server/pull/1182#pullrequestreview-7' },
+    ]);
+  });
+
+  it('answers null with no pull request, or one missing a required field', () => {
+    expect(toPrDetail(payload(null), 'acme', 'server')).toBeNull();
+    expect(toPrDetail({ repository: null }, 'acme', 'server')).toBeNull();
+    expect(toPrDetail(payload(pr({ id: null })), 'acme', 'server')).toBeNull();
+    expect(toPrDetail(undefined, 'acme', 'server')).toBeNull();
+  });
+
+  it('reads the node id, and whether a comment was added', () => {
+    expect(readPrId(payload({ id: 'PR_kwDO1' }))).toBe('PR_kwDO1');
+    expect(readPrId(payload(null))).toBeNull();
+    expect(commentAdded({ addComment: { subject: { id: 'PR_kwDO1' } } })).toBe(true);
+    expect(commentAdded({ addComment: null })).toBe(false);
+    expect(commentAdded(undefined)).toBe(false);
   });
 });
