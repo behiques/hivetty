@@ -928,6 +928,13 @@ newest `meta.worktree` and `meta.checkout`, and it too stops at the agent's own
 `release`: the shipper removes the worktree after the merge. The console's
 `term <agent>` maps the checkout to a project and starts a shell in the worktree.
 
+`shipStage(entries, slug, n)` turns that yes or no into the stage: the newest
+shipper post's `meta.stage`, `'intake'` from the claim before any post, `null`
+after the release or `closed`. `isShipping` is `shipStage(...) !== null`.
+The shipper's asks to `reply-to` carry `meta: { pr, repo }`, so an ask naming a
+PR of yours (or a `gh pr merge … --repo` permission card) reads that PR as
+SUMMONS (HIVE-215).
+
 A read can be narrowed to one ticket (HIVE-203): `LedgerReadQuery.ticket` keeps the
 entries whose `meta.ticket` names the key, case-insensitively, so `ledger:list
 { ticket }` is a ticket's whole history in one call. The guard admits a string of at
