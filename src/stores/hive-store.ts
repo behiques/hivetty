@@ -448,6 +448,13 @@ interface HiveState {
    * without a round trip. Older entries are still there; they are asked for.
    */
   ledger: LedgerEntry[];
+  /**
+   * Every ask thread this window has seen close (HIVE-214), accumulated as
+   * ledger entries arrive. The mirror above forgets a closing entry after
+   * {@link LEDGER_MEMORY_CAP} newer ones, and an answered ask's row can outlive
+   * that; this is what keeps the row closed. Only grows, until a reset.
+   */
+  closedAsks: ReadonlySet<string>;
   orchLines: TermLine[];
 
   /**
@@ -937,12 +944,16 @@ interface HiveState {
 }
 
 /**
- * Is an ask still open, read off the ledger mirror (HIVE-214)? The hub asks
- * main's ledger the same question through the same `closedAskThreads`.
+ * Is an ask still open (HIVE-214)? The hub asks main's ledger the same
+ * question through the same `closedAskThreads`.
  */
-const askOpenIn = (ledger: readonly LedgerEntry[]): AskOpen => {
-  const closed = closedAskThreads(ledger);
-  return (thread) => !closed.has(thread);
+const askOpenIn = (closed: ReadonlySet<string>): AskOpen => (thread) => !closed.has(thread);
+
+/** The closed set after these entries, the same set when none of them closes a thread. */
+const withClosed = (closed: ReadonlySet<string>, entries: readonly LedgerEntry[]): ReadonlySet<string> => {
+  const found = closedAskThreads(entries);
+  if ([...found].every((thread) => closed.has(thread))) return closed;
+  return new Set([...closed, ...found]);
 };
 
 /**
@@ -2025,6 +2036,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   notifs: [],
   remoteLink: null,
   ledger: [],
+  closedAsks: new Set<string>(),
   metrics: {},
   plans: {},
   changedFiles: {},
@@ -3486,7 +3498,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   clearNotifs: () => {
     // Clear all keeps what waits on you, as the hub's `clearInbox` does (HIVE-214).
     set((state) => {
-      const open = askOpenIn(state.ledger);
+      const open = askOpenIn(state.closedAsks);
       return { notifs: state.notifs.filter((notif) => waitsOnYou(notif, open)) };
     });
     void window.hive?.notifications.clear();
@@ -3503,7 +3515,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     set((state) =>
       state.notifs.some((existing) => existing.id === notif.id)
         ? state
-        : { notifs: trimNotifications([notif, ...state.notifs], askOpenIn(state.ledger)) },
+        : { notifs: trimNotifications([notif, ...state.notifs], askOpenIn(state.closedAsks)) },
     ),
 
   setRemoteLink: (status) => {
@@ -3524,7 +3536,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     set((state) => {
       if (id !== null) return { notifs: state.notifs.filter((notif) => notif.id !== id) };
       // The echo of a Clear all: the hub kept what waits on you, and so does this.
-      const open = askOpenIn(state.ledger);
+      const open = askOpenIn(state.closedAsks);
       return { notifs: state.notifs.filter((notif) => waitsOnYou(notif, open)) };
     }),
 
@@ -3543,7 +3555,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         ...notifs.filter((notif) => !seen.has(notif.id)),
       ].sort((a, b) => b.createdAt - a.createdAt);
 
-      return { notifs: trimNotifications(merged, askOpenIn(state.ledger)) };
+      return { notifs: trimNotifications(merged, askOpenIn(state.closedAsks)) };
     }),
 
   hydrateAgents: (summaries) =>
@@ -3772,11 +3784,17 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         ...entries.filter((entry) => !seen.has(entry.id)),
       ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-      return { ledger: merged.slice(-LEDGER_MEMORY_CAP) };
+      return {
+        ledger: merged.slice(-LEDGER_MEMORY_CAP),
+        closedAsks: withClosed(state.closedAsks, entries),
+      };
     }),
 
   ledgerAppend: (entry) =>
-    set((state) => ({ ledger: [...state.ledger, entry].slice(-LEDGER_MEMORY_CAP) })),
+    set((state) => ({
+      ledger: [...state.ledger, entry].slice(-LEDGER_MEMORY_CAP),
+      closedAsks: withClosed(state.closedAsks, [entry]),
+    })),
 
   answerAsk: async (thread, body, meta) =>
     window.hive?.ledger.answer({
@@ -5763,6 +5781,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       agentOrder: [],
       notifs: [],
       ledger: [],
+      closedAsks: new Set<string>(),
       prs: [],
       // `hydratePrs` sets `prs` and `prSource` together; leaving the old
       // mode's `prSource` standing would claim a source for a list that was
@@ -5880,6 +5899,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       notifs: [],
       remoteLink: null,
       ledger: [],
+      closedAsks: new Set<string>(),
       metrics: {},
       plans: {},
       changedFiles: {},
@@ -8298,10 +8318,10 @@ export interface Summons {
  */
 export function summonsOf(
   notifs: readonly HiveNotification[],
-  ledger: readonly LedgerEntry[],
+  closedAsks: ReadonlySet<string>,
   onStage: string | null,
 ): Summons {
-  const open = askOpenIn(ledger);
+  const open = askOpenIn(closedAsks);
   const summons: Summons = { asks: [], sessions: [] };
   for (const notif of notifs) {
     if (!waitsOnYou(notif, open)) continue;
@@ -8316,14 +8336,14 @@ export function summonsOf(
 /** The Summons queue, leaving out the session on stage. Derived, never stored. */
 export const useSummons = (onStage: string | null): Summons => {
   const notifs = useHiveStore((state) => state.notifs);
-  const ledger = useHiveStore((state) => state.ledger);
-  return useMemo(() => summonsOf(notifs, ledger, onStage), [notifs, ledger, onStage]);
+  const closedAsks = useHiveStore((state) => state.closedAsks);
+  return useMemo(() => summonsOf(notifs, closedAsks, onStage), [notifs, closedAsks, onStage]);
 };
 
 /** The queue's length, as a number, so a subscriber re-renders only when it moves. */
 export const useSummonsCount = (onStage: string | null): number =>
   useHiveStore((state) => {
-    const { asks, sessions } = summonsOf(state.notifs, state.ledger, onStage);
+    const { asks, sessions } = summonsOf(state.notifs, state.closedAsks, onStage);
     return asks.length + sessions.length;
   });
 

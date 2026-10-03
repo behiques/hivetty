@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Agent, Entity, Session, Terminal } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
-import type { LedgerEntry } from '@shared/ledger-contract';
+import { LEDGER_MEMORY_CAP, type LedgerEntry } from '@shared/ledger-contract';
 import type { PlanTaskStatus, SessionPlan } from '@shared/plan-contract';
 
 import {
@@ -748,7 +748,7 @@ describe('hive-store selectors', () => {
       ({ id, ts: 1, from: 'sess-a', kind, body: '', thread });
 
     beforeEach(() => {
-      act(() => useHiveStore.setState({ notifs: [], ledger: [] }));
+      act(() => useHiveStore.setState({ notifs: [], ledger: [], closedAsks: new Set() }));
     });
 
     it('splits asks from blocked sessions, newest first, and ignores the rest', () => {
@@ -797,6 +797,23 @@ describe('hive-store selectors', () => {
       });
 
       expect(renderHook(() => useSummonsCount(null)).result.current).toBe(1);
+    });
+
+    it('keeps an ask closed after its closing entry rolls out of the mirror', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([ask('q1')]);
+        useHiveStore.getState().ledgerAppend(closing('x1', 'answer', 'q1'));
+      });
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(0);
+
+      act(() => {
+        for (let i = 0; i < LEDGER_MEMORY_CAP; i += 1) {
+          useHiveStore.getState().ledgerAppend({ id: `y${String(i).padStart(4, '0')}`, ts: 1, from: 'a', kind: 'post', body: '' });
+        }
+      });
+
+      expect(useHiveStore.getState().ledger.some((entry) => entry.id === 'x1')).toBe(false);
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(0);
     });
 
     it('leaves out the session on stage, and counts it for the dock', () => {

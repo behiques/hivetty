@@ -363,12 +363,12 @@ Components never read a store object directly and never call `getState()`.
 | `useSummons(onStage)` | the Summons queue, `{ asks, sessions }`, newest first: open `agent.ask` / `agent.permission` and `pr.review_requested`; `session.blocked` less the one on stage (HIVE-214) |
 | `useSummonsCount(onStage)` | its length; `useSummonsCount(null)` is the dock's count |
 | `useYoursAgain(terminalId)` | true while an unswept `session.idle` / `session.input_needed` row names that terminal |
+| `useOnStage()` | what is on the centre stage — a terminal id, an agent's row id, or null; `useForegroundSession` and the Inbox both read it (`src/hooks/use-on-stage.ts`) |
 | `usePrs()` | every open PR the fleet produced |
 | `useSessionPr(id)` | one row's PR, matched on its branch |
 | `useHasResumable()` | whether the fleet table reserves its Resume column |
 | `useMarkRead()` | mark one notification read, by index |
 
-`useOnStage()` (`src/hooks/use-on-stage.ts`) is what is on the centre stage — a terminal id, an agent's row id, or null; `useForegroundSession` and the Inbox both read it.
 | `usePushNotif()` | push a notification |
 | `useActiveEntity()` | the entity behind `activeTab`, or `null` |
 | `useLedgerEntries(filter?)` | the ledger tail, by the shared query rules |
