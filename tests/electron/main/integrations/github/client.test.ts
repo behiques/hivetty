@@ -2,7 +2,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createGithubClient } from '../../../../../electron/main/integrations/github/client';
-import type { RepoRef } from '../../../../../electron/main/integrations/github/query';
+import {
+  PR_COMMENT_MUTATION,
+  PR_DETAIL_QUERY,
+  PR_ID_QUERY,
+  type RepoRef,
+} from '../../../../../electron/main/integrations/github/query';
 import type { RunAsync } from '../../../../../electron/main/integrations/github/run';
 
 /**
@@ -265,5 +270,70 @@ describe('createGithubClient', () => {
     ).sweep(REPOS, NOW);
 
     expect(JSON.stringify(result)).not.toContain('ghp_secret');
+  });
+});
+
+describe('detail and comment (HIVE-205)', () => {
+  const REF: RepoRef = { owner: 'acme', name: 'nova-web' };
+  const DETAIL = JSON.stringify({ data: { repository: { pullRequest: {
+    id: 'PR_1', number: 482, title: 'Hero', url: 'https://github.com/acme/nova-web/pull/482',
+    state: 'OPEN', isDraft: false, body: '', createdAt: '2026-08-09T10:00:00Z',
+  } } } });
+  const recording = (answer: (args: readonly string[]) => string, calls: string[][]): RunAsync =>
+    (_file, args) => {
+      calls.push([...args]);
+      return Promise.resolve({ code: 0, stdout: answer(args), stderr: '', timedOut: false });
+    };
+
+  it('reads one PR with owner and name as -f strings and the number as -F', async () => {
+    const calls: string[][] = [];
+    const client = createGithubClient('/usr/bin/gh', recording(() => DETAIL, calls));
+
+    await expect(client.detail(REF, 482)).resolves.toMatchObject({ ok: true, value: { id: 'PR_1', owner: 'acme', repo: 'nova-web', number: 482 } });
+    expect(calls).toEqual([[
+      'api', 'graphql', '-f', `query=${PR_DETAIL_QUERY}`,
+      '-f', 'owner=acme', '-f', 'name=nova-web', '-F', 'number=482',
+    ]]);
+  });
+
+  it('classifies a read with no pull request, and a gh that will not run', async () => {
+    const missing = createGithubClient('/usr/bin/gh', () =>
+      Promise.resolve({ code: 1, stdout: JSON.stringify({ data: { repository: { pullRequest: null } } }), stderr: 'HTTP 401: Bad credentials', timedOut: false }));
+    await expect(missing.detail(REF, 482)).resolves.toMatchObject({ ok: false, error: { kind: 'unauthenticated' } });
+
+    const broken = createGithubClient('/usr/bin/gh', () => Promise.reject(new Error('ENOENT')));
+    await expect(broken.detail(REF, 482)).resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
+  });
+
+  it('reads the PR id, then adds the comment with the body as a -f string', async () => {
+    const calls: string[][] = [];
+    const client = createGithubClient('/usr/bin/gh', recording((args) =>
+      args[3]?.includes('addComment') === true
+        ? JSON.stringify({ data: { addComment: { subject: { id: 'PR_1' } } } })
+        : JSON.stringify({ data: { repository: { pullRequest: { id: 'PR_1' } } } }), calls));
+
+    await expect(client.comment(REF, 482, '@/etc/passwd\nsecond line')).resolves.toEqual({ ok: true, value: true });
+    expect(calls).toEqual([
+      ['api', 'graphql', '-f', `query=${PR_ID_QUERY}`, '-f', 'owner=acme', '-f', 'name=nova-web', '-F', 'number=482'],
+      ['api', 'graphql', '-f', `query=${PR_COMMENT_MUTATION}`, '-f', 'subjectId=PR_1', '-f', 'body=@/etc/passwd\nsecond line'],
+    ]);
+  });
+
+  it('never sends the mutation without an id read from GitHub', async () => {
+    const calls: string[][] = [];
+    const client = createGithubClient('/usr/bin/gh', recording(() => JSON.stringify({ data: { repository: { pullRequest: null } } }), calls));
+
+    await expect(client.comment(REF, 482, 'hello')).resolves.toMatchObject({ ok: false, error: { kind: 'unknown' } });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('reports a mutation GitHub refused', async () => {
+    const client = createGithubClient('/usr/bin/gh', (_file, args) => Promise.resolve({
+      code: 1,
+      stdout: args[3]?.includes('addComment') === true ? JSON.stringify({ data: { addComment: null } }) : JSON.stringify({ data: { repository: { pullRequest: { id: 'PR_1' } } } }),
+      stderr: 'API rate limit exceeded',
+      timedOut: false,
+    }));
+    await expect(client.comment(REF, 482, 'hello')).resolves.toMatchObject({ ok: false, error: { kind: 'rate-limited' } });
   });
 });

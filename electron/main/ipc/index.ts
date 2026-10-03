@@ -50,7 +50,7 @@ import type {
   SearchResults,
   WriteFileResult,
 } from '@shared/fs-contract';
-import type { GhResult, PrRecord, PrsSnapshot } from '@shared/github-contract';
+import type { GhResult, PrDetail, PrRecord, PrsSnapshot } from '@shared/github-contract';
 import {
   isRecord,
   parseAckRequest,
@@ -78,6 +78,8 @@ import {
   parseMarkReadRequest,
   parseNotificationAction,
   parsePairDeviceRequest,
+  parsePrCommentRequest,
+  parsePrDetailRequest,
   parsePromptReport,
   parseReadDirRequest,
   parseReadFileRequest,
@@ -4018,6 +4020,26 @@ export function registerIpcHandlers(
       // Same race as `github:prs` — see the note there.
       await loginEnvStatus();
       return github.searchPrs(request.term, request.projectId);
+    },
+  );
+
+  handle(
+    CH.githubPrDetail,
+    async (_event, payload): Promise<GhResult<PrDetail>> => {
+      // Parsed before the await, so a bad payload is refused at once.
+      const request = parsePrDetailRequest(payload);
+      // Same race as `github:prs` — see the note there.
+      await loginEnvStatus();
+      return github.prDetail(request);
+    },
+  );
+
+  handle(
+    CH.githubPrComment,
+    async (_event, payload): Promise<GhResult<true>> => {
+      const request = parsePrCommentRequest(payload);
+      await loginEnvStatus();
+      return github.prComment(request);
     },
   );
 

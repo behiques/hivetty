@@ -70,6 +70,14 @@ import {
   useYoursAgain,
   useCombEntities,
   useCombSummary,
+  useCommentOnPr,
+  useHolderPost,
+  useLoadPrDetail,
+  usePrDetail,
+  usePrEvents,
+  usePrOpener,
+  useReviewUrls,
+  useShipTrack,
 } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { notif } from '../support/notifications';
@@ -2581,5 +2589,45 @@ describe('Work page selectors (HIVE-203)', () => {
       expect(renderHook(() => useOpenTicket('HIVE-9')).result.current).toBeUndefined();
       expect(renderHook(() => useOpenTicket(null)).result.current).toBeUndefined();
     });
+  });
+});
+
+describe('the PR page selectors (HIVE-205)', () => {
+  const slug = 'acme/server';
+  const ledger: LedgerEntry[] = [
+    { id: '1', ts: 1_000, from: 'builder', kind: 'ask', to: 'shipper', body: 'ship', meta: { pr: 1182, repo: slug, stage: 'intake' } },
+    { id: '2', ts: 2_000, from: 'shipper', kind: 'claim', body: '', meta: { task: 'acme/server#1182' } },
+    { id: '3', ts: 3_000, from: 'shipper', kind: 'post', body: 'findings', meta: { pr: 1182, repo: slug, stage: 'findings' } },
+    { id: '4', ts: 3_000, from: 'shipper', kind: 'ask', to: 'fixer', body: 'acme/server#1182: three findings' },
+    { id: '5', ts: 4_000, from: 'fixer', kind: 'post', body: 'On it: acme/server#1182 finding 2' },
+    { id: '6', ts: 5_000, from: 'acr', kind: 'answer', body: 'done', meta: { review_url: 'https://github.com/acme/server/pull/1182#pullrequestreview-7' } },
+  ];
+
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useHiveStore.setState({ ledger });
+  });
+
+  it('reads the track, the events, the opener and the holder’s post from the tail', () => {
+    expect(renderHook(() => useShipTrack(slug, 1182)).result.current.current).toMatchObject({ stage: 'findings', holder: 'fixer' });
+    expect(renderHook(() => usePrEvents(slug, 1182)).result.current.map((e) => e.id)).toEqual(['1', '2', '3', '4', '5']);
+    expect(renderHook(() => usePrOpener(slug, 1182)).result.current).toBe('builder');
+    expect(renderHook(() => useHolderPost(slug, 1182, 'fixer')).result.current?.id).toBe('5');
+    expect(renderHook(() => useHolderPost(slug, 1182, null)).result.current).toBeNull();
+    expect([...renderHook(() => useReviewUrls()).result.current]).toEqual(['https://github.com/acme/server/pull/1182#pullrequestreview-7']);
+  });
+
+  it('keeps the same answer until the ledger changes', () => {
+    const { result, rerender } = renderHook(() => usePrEvents(slug, 1182));
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
+  });
+
+  it('reads one detail entry and hands out the two actions', () => {
+    useHiveStore.setState({ prDetails: { 'acme/server#1182': { key: 'acme/server#1182', state: 'loading' } } });
+    expect(renderHook(() => usePrDetail('acme/server#1182')).result.current).toEqual({ key: 'acme/server#1182', state: 'loading' });
+    expect(renderHook(() => useLoadPrDetail()).result.current).toBe(useHiveStore.getState().loadPrDetail);
+    expect(renderHook(() => useCommentOnPr()).result.current).toBe(useHiveStore.getState().commentOnPr);
   });
 });

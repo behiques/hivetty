@@ -69,7 +69,7 @@ import type {
   WriteFileRequest,
 } from './fs-contract';
 import { MAX_FILE_BYTES, MAX_RESOLVE_CANDIDATES } from './fs-contract';
-import type { PrLookup } from './github-contract';
+import type { PrCommentRequest, PrLookup, PrRef } from './github-contract';
 import type {
   AckRequest,
   PromptReport,
@@ -1846,6 +1846,55 @@ export function parseSearchPrsRequest(input: unknown): {
       ? { projectId: assertId(raw.projectId, 'searchPrs.projectId') }
       : {}),
   };
+}
+
+/** A GitHub owner and repository name: `REPO_SLUG`'s two halves, below. */
+const GH_OWNER = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+const GH_REPO = /^(?!\.\.?$)[A-Za-z0-9_.-]{1,100}$/;
+
+/** GitHub's own limit on a comment body, in characters. */
+const MAX_PR_COMMENT = 65_536;
+
+function assertPrRef(raw: Record<string, unknown>, label: string): PrRef {
+  const owner = assertString(raw.owner, `${label}.owner`);
+  if (!GH_OWNER.test(owner)) return fail(`${label}.owner: not a GitHub owner`);
+  const repo = assertString(raw.repo, `${label}.repo`);
+  if (!GH_REPO.test(repo)) return fail(`${label}.repo: not a GitHub repository name`);
+  const n = raw.n;
+  if (typeof n !== 'number' || !Number.isSafeInteger(n) || n < 1) {
+    return fail(`${label}.n: expected a positive whole number`);
+  }
+  return { owner, repo, n };
+}
+
+/**
+ * `github:pr-detail` (HIVE-205): one PR by repository and number.
+ *
+ * The first `github:` payload that names a repository. The charset check here
+ * refuses nonsense with a sentence; what keeps the name to the user's own
+ * projects is main's scope check (`integrations/github/index.ts`), which looks
+ * it up among the configured repositories and hands `gh` the resolver's
+ * spelling. The number must be a positive safe integer because it travels with
+ * `-F`, the flag that types its value.
+ */
+export function parsePrDetailRequest(input: unknown): PrRef {
+  return assertPrRef(assertShape(input, ['owner', 'repo', 'n'], 'prDetail'), 'prDetail');
+}
+
+/**
+ * `github:pr-comment` (HIVE-205): the same PR, and a markdown body. Checked as
+ * `parseAddJiraCommentRequest` checks its body — not blank, bounded, no control
+ * characters but tab, newline and carriage return — at GitHub's own limit.
+ */
+export function parsePrCommentRequest(input: unknown): PrCommentRequest {
+  const raw = assertShape(input, ['owner', 'repo', 'n', 'body'], 'prComment');
+  const body = assertString(raw.body, 'prComment.body');
+  if (body.trim() === '') return fail('prComment.body: must not be empty');
+  if (body.length > MAX_PR_COMMENT) return fail('prComment.body: too long');
+  if (hasControlCharactersOutsideWhitespace(body)) {
+    return fail('prComment.body: control characters are not allowed');
+  }
+  return { ...assertPrRef(raw, 'prComment'), body };
 }
 
 export function parseJiraIssueRequest(input: unknown): JiraIssueRequest {

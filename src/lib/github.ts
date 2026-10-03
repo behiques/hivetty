@@ -1,4 +1,4 @@
-import type { GhResult, PrRecord, PrsSnapshot } from '@shared/github-contract';
+import type { GhResult, PrCommentRequest, PrDetail, PrRecord, PrRef, PrsSnapshot } from '@shared/github-contract';
 
 /**
  * The renderer's half of the GitHub bridge.
@@ -43,6 +43,32 @@ export const searchPullRequests = async (
     return await bridge.github.searchPrs(term, projectId);
   } catch (cause) {
     console.error('[hive] github.searchPrs failed:', cause);
+    return null;
+  }
+};
+
+/** One PR's page (HIVE-205). Same two `null` cases as {@link readPullRequests}. */
+export const readPrDetail = async (request: PrRef): Promise<GhResult<PrDetail> | null> => {
+  const bridge = window.hive;
+  if (!bridge) return null;
+
+  try {
+    return await bridge.github.prDetail(request);
+  } catch (cause) {
+    console.error('[hive] github.prDetail failed:', cause);
+    return null;
+  }
+};
+
+/** Post a PR-level comment (HIVE-205). Same two `null` cases as {@link readPullRequests}. */
+export const postPrComment = async (request: PrCommentRequest): Promise<GhResult<true> | null> => {
+  const bridge = window.hive;
+  if (!bridge) return null;
+
+  try {
+    return await bridge.github.prComment(request);
+  } catch (cause) {
+    console.error('[hive] github.prComment failed:', cause);
     return null;
   }
 };

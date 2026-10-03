@@ -701,3 +701,42 @@ describe('ui-store — the agent page (HIVE-204)', () => {
     expect(useUiStore.getState().place).toBe('agents');
   });
 });
+
+describe('ui-store — the PRs place (HIVE-205)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('starts with no PR open, on Conversation, Hatched folded, Comments, no search', () => {
+    expect(useUiStore.getState()).toMatchObject({
+      prPage: null, prTab: 'conversation', prsFolded: true, prConversation: 'comments', prSearchOpen: false,
+    });
+  });
+
+  it('openPrPage opens the PRs place on the PR, dismisses overlays, keeps the tab and resets the filter', () => {
+    useUiStore.getState().openPicker();
+    useUiStore.getState().setPrConversation('everything');
+    useUiStore.setState({ panelOpen: false });
+
+    useUiStore.getState().openPrPage({ owner: 'acme', repo: 'server', n: 1182 });
+
+    expect(useUiStore.getState()).toMatchObject({
+      prPage: { owner: 'acme', repo: 'server', n: 1182 },
+      place: 'prs', panelOpen: true, picker: false, settings: false,
+      prTab: 'conversation', prConversation: 'comments',
+    });
+  });
+
+  it('toggles the fold, sets the tab, the filter and the search', () => {
+    const ui = useUiStore.getState();
+    ui.togglePrsFolded();
+    ui.setPrTab('conversation');
+    ui.setPrConversation('everything');
+    ui.setPrSearchOpen(true);
+    expect(useUiStore.getState()).toMatchObject({ prsFolded: false, prTab: 'conversation', prConversation: 'everything', prSearchOpen: true });
+  });
+
+  it('is reset with the rest of the view state', () => {
+    useUiStore.getState().openPrPage({ owner: 'acme', repo: 'server', n: 1 });
+    useUiStore.getState().reset();
+    expect(useUiStore.getState().prPage).toBeNull();
+  });
+});

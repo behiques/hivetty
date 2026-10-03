@@ -1,11 +1,16 @@
 import type { ConfigSnapshot } from '../../../shared/config-contract';
 import type {
+  GhError,
   GhResult,
+  PrCommentRequest,
+  PrDetail,
   PrRecord,
+  PrRef,
   PrsSnapshot,
 } from '../../../shared/github-contract';
 import { probeCommand } from '../../config/probe';
 
+import { ghError } from './classify';
 import { createGithubClient, type GithubClient } from './client';
 import type { RepoRef } from './query';
 import { createRepoResolver, type RepoResolver } from './repos';
@@ -62,6 +67,14 @@ export interface Github {
    * project it cannot place.
    */
   resolveProjects(): Promise<Map<string, RepoRef>>;
+  /**
+   * One PR's page (HIVE-205). Refused, before any GraphQL call, when no
+   * configured project maps `owner/repo`; what reaches `gh` is the resolver's
+   * spelling of the repository, never the renderer's.
+   */
+  prDetail(request: PrRef): Promise<GhResult<PrDetail>>;
+  /** A PR-level comment, under the same scope check as {@link Github.prDetail}. */
+  prComment(request: PrCommentRequest): Promise<GhResult<true>>;
 }
 
 interface GithubDeps {
@@ -154,6 +167,40 @@ export function createGithub(deps: GithubDeps): Github {
     return { ok: true, value };
   };
 
+  /**
+   * The configured repository a request names, and the client to ask it with
+   * (HIVE-205). Case-insensitive, as GitHub's names are. Nothing mapped is a
+   * refusal, never a widening: the renderer names a repository here, and this
+   * is what keeps that name to the user's own projects.
+   */
+  const scoped = async (
+    owner: string,
+    repo: string,
+  ): Promise<{ ok: true; client: GithubClient; ref: RepoRef } | { ok: false; error: GhError }> => {
+    const { resolved } = probeCommand('gh', deps.env().PATH ?? '');
+    if (resolved === null) {
+      return { ok: false, error: ghError('not-installed', 'GitHub CLI (`gh`) was not found on this machine.') };
+    }
+
+    if (cachedFor !== resolved || resolver === null || client === null) {
+      cachedFor = resolved;
+      resolver = createRepoResolver(resolved, deps.run);
+      client = createGithubClient(resolved, deps.run);
+    }
+
+    const { repos, failure } = await resolver.resolve(deps.config().projects);
+    const ref = repos.find(
+      (candidate) =>
+        candidate.owner.toLowerCase() === owner.toLowerCase() &&
+        candidate.name.toLowerCase() === repo.toLowerCase(),
+    );
+    if (ref !== undefined) return { ok: true, client, ref };
+
+    // Same precedence as `prs()`: `gh auth login` is not reported as `no-repos`.
+    if (repos.length === 0 && failure !== null) return { ok: false, error: failure };
+    return { ok: false, error: ghError('no-repos', `${owner}/${repo} is not a configured project's repository.`) };
+  };
+
   return {
     prs() {
       inflight ??= sweep().finally(() => {
@@ -222,6 +269,18 @@ export function createGithub(deps: GithubDeps): Github {
       }
 
       return client.search(term, repos);
+    },
+
+    async prDetail({ owner, repo, n }) {
+      const scope = await scoped(owner, repo);
+      if (!scope.ok) return scope;
+      return scope.client.detail(scope.ref, n);
+    },
+
+    async prComment({ owner, repo, n, body }) {
+      const scope = await scoped(owner, repo);
+      if (!scope.ok) return scope;
+      return scope.client.comment(scope.ref, n, body);
     },
   };
 }

@@ -31,6 +31,15 @@ export interface AgentPage {
   view: AgentPageView;
 }
 
+/** The PR page's tabs (HIVE-205); HIVE-206, 207 and 208 add Checks, Files and Timeline. */
+export type PrTab = 'conversation';
+/** Which PR the PRs place last opened (HIVE-205). */
+export interface PrPageRef {
+  owner: string;
+  repo: string;
+  n: number;
+}
+
 /**
  * View state — what the user is looking at, as opposed to what the system knows
  * (which lives in `hive-store.ts`).
@@ -201,6 +210,20 @@ interface UiState {
    * new agent never saved. View state, not persisted.
    */
   agentPage: AgentPage | null;
+  /**
+   * The PR the PRs place last opened (HIVE-205). The page shows it while it is
+   * still in the list; the opening rule (`features/pull-requests/open-pr.ts`)
+   * falls back otherwise. View state, not persisted.
+   */
+  prPage: PrPageRef | null;
+  /** The PR page's tab; kept across PRs, so Checks stays Checks (HIVE-205). */
+  prTab: PrTab;
+  /** Whether the Hatched group is folded; it starts folded (HIVE-205). */
+  prsFolded: boolean;
+  /** The PR page's Comments | Everything filter; each open resets it (HIVE-205). */
+  prConversation: WorkConversation;
+  /** The PRs panel's search row is open, which also draws the panel over the empty Hatchery (HIVE-205). */
+  prSearchOpen: boolean;
 
   /** Open a tab; `place`, when the caller knows the entity's owner, moves the bar with it. */
   openTab: (id: 'orch' | string, place?: Place) => void;
@@ -283,6 +306,12 @@ interface UiState {
   openAgentPage: (name: string | null, view: AgentPageView) => void;
   setAgentPageView: (view: AgentPageView) => void;
   closeAgentPage: () => void;
+  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab. */
+  openPrPage: (ref: PrPageRef) => void;
+  setPrTab: (tab: PrTab) => void;
+  togglePrsFolded: () => void;
+  setPrConversation: (mode: WorkConversation) => void;
+  setPrSearchOpen: (open: boolean) => void;
   reset: () => void;
 }
 
@@ -326,6 +355,11 @@ const initialUiState = {
   workConversation: 'comments' as WorkConversation,
   agentsFolded: { summons: false, morphing: false, burrowed: false } as Record<AgentGroupKey, boolean>,
   agentPage: null as AgentPage | null,
+  prPage: null as PrPageRef | null,
+  prTab: 'conversation' as PrTab,
+  prsFolded: true,
+  prConversation: 'comments' as WorkConversation,
+  prSearchOpen: false,
 };
 
 /** Back to the Overmind with the row left behind under the caret (HIVE-197). */
@@ -551,6 +585,19 @@ export const useUiStore = create<UiState>()((set) => ({
   setAgentPageView: (view) =>
     set((state) => (state.agentPage === null ? {} : { agentPage: { ...state.agentPage, view } })),
   closeAgentPage: () => set({ agentPage: null }),
+  openPrPage: (ref) =>
+    set({
+      prPage: ref,
+      place: 'prs',
+      panelOpen: true,
+      prConversation: 'comments',
+      picker: false,
+      settings: false,
+    }),
+  setPrTab: (tab) => set({ prTab: tab }),
+  togglePrsFolded: () => set((state) => ({ prsFolded: !state.prsFolded })),
+  setPrConversation: (mode) => set({ prConversation: mode }),
+  setPrSearchOpen: (open) => set({ prSearchOpen: open }),
   reset: () => set(initialUiState),
 }));
 
@@ -631,6 +678,23 @@ export const useAgentPageActions = () =>
       openAgentPage: state.openAgentPage,
       setAgentPageView: state.setAgentPageView,
       closeAgentPage: state.closeAgentPage,
+    })),
+  );
+
+/** The PRs place's open PR, tab, fold, filter and search (HIVE-205). */
+export const usePrPage = () => useUiStore((state) => state.prPage);
+export const usePrTab = () => useUiStore((state) => state.prTab);
+export const usePrsFolded = () => useUiStore((state) => state.prsFolded);
+export const usePrConversation = () => useUiStore((state) => state.prConversation);
+export const usePrSearchOpen = () => useUiStore((state) => state.prSearchOpen);
+export const usePrPageActions = () =>
+  useUiStore(
+    useShallow((state) => ({
+      openPrPage: state.openPrPage,
+      setPrTab: state.setPrTab,
+      togglePrsFolded: state.togglePrsFolded,
+      setPrConversation: state.setPrConversation,
+      setPrSearchOpen: state.setPrSearchOpen,
     })),
   );
 
