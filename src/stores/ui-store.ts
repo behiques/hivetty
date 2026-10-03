@@ -532,7 +532,9 @@ export const useUiStore = create<UiState>()((set) => ({
       panelOpen: true,
       picker: false,
       settings: false,
-      ...(name === null ? {} : { activeTab: name }),
+      // A new agent has no tab: leaving an agent's tab active would let resolveView show that agent's page
+      // instead of the blank definition, and Save would overwrite it.
+      activeTab: name ?? 'orch',
     }),
   setAgentPageView: (view) =>
     set((state) => (state.agentPage === null ? {} : { agentPage: { ...state.agentPage, view } })),

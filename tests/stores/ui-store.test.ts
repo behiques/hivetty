@@ -658,10 +658,9 @@ describe('ui-store — the agent page (HIVE-204)', () => {
     });
   });
 
-  it('opening a named page also makes it the active tab; a new agent leaves the tab alone', () => {
+  it('opening a named page also makes it the active tab; a new agent returns the tab to the orchestrator', () => {
     useUiStore.getState().openAgentPage('acr', 'activity');
     expect(useUiStore.getState().activeTab).toBe('acr');
-    useUiStore.getState().openTab('orch');
     useUiStore.getState().openAgentPage(null, 'definition');
     expect(useUiStore.getState().activeTab).toBe('orch');
     expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
