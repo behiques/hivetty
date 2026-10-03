@@ -133,6 +133,7 @@ import {
 } from '@shared/ipc-contract';
 import type {
   JiraComment,
+  JiraCommentPage,
   JiraIdentity,
   JiraIssue,
   JiraLink,
@@ -4025,7 +4026,7 @@ export function registerIpcHandlers(
   );
   handle(
     CH.jiraComments,
-    (_event, payload): Promise<JiraResult<JiraComment[]>> =>
+    (_event, payload): Promise<JiraResult<JiraCommentPage>> =>
       jira.comments(parseJiraConversationRequest(payload)),
   );
   handle(

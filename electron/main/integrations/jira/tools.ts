@@ -27,8 +27,9 @@ const same = (a: string, b: string): boolean => a.trim().toLowerCase() === b.tri
  * description, the comments or the links that fail are reported in `partial`
  * beside what did arrive. A model with the summary and half the thread can
  * still work; one with a refusal cannot. The comments read is the oldest
- * `JIRA_MAX_COMMENTS`, and a full page is reported in `partial` too: "every
- * comment" and "the first fifty" are different answers.
+ * `JIRA_MAX_COMMENTS`, and a thread longer than that is reported in `partial`
+ * too, with Jira's total: "every comment" and "the first fifty" are different
+ * answers (HIVE-203).
  *
  * `transition` is by status name because that is what every skill says
  * ("Jira → In Review"); the id is Jira's business. Three no-ops, each said in
@@ -109,8 +110,8 @@ export function jiraToolsFor(jira: JiraToolSource): JiraToolHandlers {
       const partial: string[] = [];
       if (!detail.ok) partial.push(`description: ${detail.error.message}`);
       if (!comments.ok) partial.push(`comments: ${comments.error.message}`);
-      else if (comments.value.length >= JIRA_MAX_COMMENTS) {
-        partial.push(`comments: only the oldest ${JIRA_MAX_COMMENTS} were read; the thread may be longer`);
+      else if (comments.value.total > comments.value.comments.length) {
+        partial.push(`comments: only the oldest ${JIRA_MAX_COMMENTS} of ${comments.value.total} were read`);
       }
       if (!links.ok) partial.push(`links: ${links.error.message}`);
 
@@ -119,7 +120,7 @@ export function jiraToolsFor(jira: JiraToolSource): JiraToolHandlers {
         value: {
           issue: issue.value,
           detail: detail.ok ? detail.value : null,
-          comments: comments.ok ? comments.value : [],
+          comments: comments.ok ? comments.value.comments : [],
           links: links.ok ? links.value : [],
           partial,
         },

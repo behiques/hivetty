@@ -1885,8 +1885,13 @@ export function parseJiraTransitionsRequest(
 export function parseJiraConversationRequest(
   input: unknown,
 ): JiraConversationRequest {
-  const raw = assertShape(input, ['key'], 'jiraConversation');
-  return { key: assertJiraIssueKey(raw.key, 'jiraConversation.key') };
+  const raw = assertShape(input, ['key'], 'jiraConversation', ['newest']);
+  const request: JiraConversationRequest = { key: assertJiraIssueKey(raw.key, 'jiraConversation.key') };
+  if (raw.newest !== undefined) {
+    if (raw.newest !== true) return fail('jiraConversation.newest must be true when present');
+    request.newest = true;
+  }
+  return request;
 }
 
 /**

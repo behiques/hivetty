@@ -93,6 +93,7 @@ import type {
 import type { GhResult, PrRecord, PrsSnapshot } from './github-contract';
 import type {
   JiraComment,
+  JiraCommentPage,
   JiraIdentity,
   JiraIssue,
   JiraLink,
@@ -2541,10 +2542,10 @@ export interface HiveBridge {
     applyTransition(
       request: ApplyJiraTransitionRequest,
     ): Promise<JiraResult<JiraIssue>>;
-    /** An issue's conversation, oldest first (HIVE-71). Rendered, not raw ADF. */
+    /** A page of an issue's conversation, oldest first, with the thread's total (HIVE-71, HIVE-203). Rendered, not raw ADF. */
     comments(
       request: JiraConversationRequest,
-    ): Promise<JiraResult<JiraComment[]>>;
+    ): Promise<JiraResult<JiraCommentPage>>;
     /** Remote links and Jira-to-Jira links, merged, with direction (HIVE-71). */
     links(request: JiraConversationRequest): Promise<JiraResult<JiraLink[]>>;
     /**

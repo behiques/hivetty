@@ -8,6 +8,7 @@ import type {
 } from '@shared/config-contract';
 import type {
   JiraComment,
+  JiraCommentPage,
   JiraIdentity,
   JiraIssue,
   JiraLink,
@@ -116,10 +117,10 @@ export const applyJiraTransition = (
 ): Promise<JiraResult<JiraIssue> | null> =>
   call('applyTransition', (bridge) => bridge.jira.applyTransition(request));
 
-/** An issue's conversation, oldest first (HIVE-71). */
+/** A page of an issue's conversation, oldest first, with the thread's total (HIVE-71, HIVE-203). */
 export const readJiraComments = (
   request: JiraConversationRequest,
-): Promise<JiraResult<JiraComment[]> | null> =>
+): Promise<JiraResult<JiraCommentPage> | null> =>
   call('comments', (bridge) => bridge.jira.comments(request));
 
 /** Remote and Jira-to-Jira links, merged, with their direction wording. */

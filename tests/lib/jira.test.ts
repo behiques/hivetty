@@ -188,7 +188,7 @@ describe('the conversation verbs (HIVE-71)', () => {
   });
 
   it('pass the key through', async () => {
-    const comments = vi.fn(() => Promise.resolve({ ok: true as const, value: [] }));
+    const comments = vi.fn(() => Promise.resolve({ ok: true as const, value: { comments: [], total: 0 } }));
     bridge({ comments });
 
     await readJiraComments({ key: 'HIVE-71' });

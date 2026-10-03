@@ -22,6 +22,7 @@ import {
   type JiraResult,
   type JiraSearchResult,
   type JiraComment,
+  type JiraCommentPage,
   type JiraLink,
   type JiraStatus,
   type JiraTransition,
@@ -93,8 +94,8 @@ export interface Jira {
   applyTransition(
     request: ApplyJiraTransitionRequest,
   ): Promise<JiraResult<JiraIssue>>;
-  /** An issue's conversation, oldest first (HIVE-71). */
-  comments(request: JiraConversationRequest): Promise<JiraResult<JiraComment[]>>;
+  /** A page of an issue's conversation, oldest first, with the thread's total (HIVE-71, HIVE-203). */
+  comments(request: JiraConversationRequest): Promise<JiraResult<JiraCommentPage>>;
   /** Remote links and Jira-to-Jira links, in one list (HIVE-71). */
   links(request: JiraConversationRequest): Promise<JiraResult<JiraLink[]>>;
   /** Post a comment written as markdown (HIVE-71). */
@@ -546,14 +547,19 @@ export function createJira(deps: {
      * argument backwards is how you misunderstand it. Jira's default for this
      * endpoint is already ascending; asking explicitly means a change to that
      * default does not silently reverse the panel.
+     *
+     * `newest` reads the latest page instead (descending, then reversed), so a
+     * long thread shows its end rather than its first fifty; still oldest
+     * first (HIVE-203). `total` is Jira's count of the whole thread, which is
+     * how a caller knows the page is not all of it.
      */
     async comments(request) {
       const connection = connect();
       if (!connection.ok) return connection.error;
 
-      const result = await connection.client.get<{ comments?: unknown }>(
+      const result = await connection.client.get<{ comments?: unknown; total?: unknown }>(
         `${ISSUE}/${request.key}/comment`,
-        { orderBy: 'created', maxResults: String(JIRA_MAX_COMMENTS) },
+        { orderBy: request.newest ? '-created' : 'created', maxResults: String(JIRA_MAX_COMMENTS) },
       );
       if (!result.ok) return result;
 
@@ -566,7 +572,9 @@ export function createJira(deps: {
         const one = toComment(entry);
         if (one !== null) mapped.push(one);
       }
-      return { ok: true, value: mapped };
+      if (request.newest) mapped.reverse();
+      const total = typeof result.value.total === 'number' ? result.value.total : mapped.length;
+      return { ok: true, value: { comments: mapped, total } };
     },
 
     /**

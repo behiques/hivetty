@@ -99,6 +99,7 @@ import {
 } from '@shared/ipc-contract';
 import type {
   JiraComment,
+  JiraCommentPage,
   JiraIdentity,
   JiraIssue,
   JiraLink,
@@ -661,7 +662,7 @@ const bridge: HiveBridge = {
     // HIVE-71. Two reads, and the one verb that sends free text.
     comments: (
       request: JiraConversationRequest,
-    ): Promise<JiraResult<JiraComment[]>> =>
+    ): Promise<JiraResult<JiraCommentPage>> =>
       ipcRenderer.invoke(CH.jiraComments, request),
     links: (
       request: JiraConversationRequest,
