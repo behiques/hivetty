@@ -2352,6 +2352,19 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       }
     }, 30_000);
 
+    /**
+     * 29b. Try now, hand-built (HIVE-211). The proxy answers `remote:dial-now`
+     * from the asking machine's own reconnect loop, so no shipped client sends
+     * it; a server has no loop of a peer's to restart, and refuses it.
+     */
+    it('29b. refuses a hand-built remote:dial-now', async () => {
+      const client = await attached();
+      const result = await client.call(CH.remoteDialNow, undefined);
+
+      expect(result).toMatchObject({ kind: 'error', code: 'remote-refused' });
+      expect((result as ErrorFrame).message).toMatch(/own reconnect loop/);
+    }, 30_000);
+
     it('15. delivers ledger:changed and agents:changed to the attached client', async () => {
       const client = await attached();
       const seen = client.collectEvents();
@@ -4065,7 +4078,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         transition it exists to observe.
       */
       await renderer.evaluate(
-        'window.__link = null; window.hive.remote.onLinkStatus((status) => { window.__link = status; }); true',
+        'window.__link = null; window.__links = []; window.hive.remote.onLinkStatus((status) => { window.__link = status; window.__links.push(status); }); true',
       );
 
       /*
@@ -4119,78 +4132,149 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       expect(linkWhileUp.attachedServerName).not.toBeNull();
 
       /*
-        The drop itself: the server process is killed outright. No close frame,
-        no detach — the shape a rebooting mini or a tailnet going down actually
-        has, and the one HIVE-144 left unhandled.
+        HIVE-211: the stage's reconnect line is round two's, so the layout is
+        switched live from Settings › Appearance, as 21h does, which leaves the
+        attachment alone. It goes back to Classic at the end, for the cases
+        after this one.
       */
-      await stopApp(serverApp);
-      serverApp = undefined;
-      onServer?.close();
-      onServer = undefined;
+      const ui = renderer;
+      const until = (expression: string, what: string, timeoutMs = 30_000): Promise<void> =>
+        waitForAsync(
+          async () => {
+            try {
+              return await ui.evaluate<boolean>(expression);
+            } catch {
+              return false;
+            }
+          },
+          what,
+          timeoutMs,
+        );
+      const BUTTON = (text: string, scope = 'document'): string =>
+        `[...${scope}.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`;
+      const NAV = `document.querySelector('[aria-label="Settings sections"]')`;
+      const RADIO = (label: string): string =>
+        `[...document.querySelectorAll('[role="radiogroup"][aria-label="Layout"] [role="radio"]')].find((r) => r.textContent.trim() === ${JSON.stringify(label)})`;
+      const setLayout = async (label: 'Classic' | 'Round two', opener: string): Promise<void> => {
+        await ui.evaluate(`${opener}.click()`);
+        await until(`${NAV} !== null`, 'the Settings overlay');
+        await ui.evaluate(`${BUTTON('Appearance', NAV)}.click()`);
+        await until(`${RADIO(label)} !== undefined`, 'the Layout control');
+        await ui.evaluate(`${RADIO(label)}.click()`);
+        await ui.evaluate(`document.querySelector('button[aria-label="Close settings"]').click()`);
+        await until(`${NAV} === null`, 'the Settings overlay to close');
+      };
+      const LINE = `[...document.querySelectorAll('[role="status"]')].find((s) => s.innerText.includes('Lost the Hive on'))`;
+      const serverName = linkWhileUp.attachedServerName ?? '';
+      await setLayout('Round two', `document.querySelector('button[aria-label="Settings"]')`);
+      try {
 
-      /*
-        The client says so, rather than going on claiming an attachment. This
-        is the whole defect in one assertion: before this story `attached`
-        stayed pointed at the dead client for the life of the window, so
-        `attachedServerName` answered a machine that no longer existed and the
-        header chip kept naming it.
-      */
-      await waitForAsync(
-        async () =>
-          (await renderer!.evaluate<RemoteLinkStatus | null>(
-            'window.__link ?? null',
-          ))?.state === 'reconnecting',
-        'the client to report it is reconnecting, not attached',
-        60_000,
-      );
+        /*
+          The drop itself: the server process is killed outright. No close frame,
+          no detach — the shape a rebooting mini or a tailnet going down actually
+          has, and the one HIVE-144 left unhandled.
+        */
+        await stopApp(serverApp);
+        serverApp = undefined;
+        onServer?.close();
+        onServer = undefined;
 
-      /*
-        The server comes back on the same port, from the same config — which by
-        now carries the device case 21b paired, so the returning client's
-        credential is still good. Rebooted rather than re-created for the reason
-        the transcript claim needs: `pty:restart` would be a *new* generation
-        and prove the opposite of what this case is about.
-      */
-      const rebooted = spawnApp(['--server'], serverConfigPath, serverUserDataDir);
-      serverApp = rebooted.child;
-      serverRecord = rebooted.record;
-      await waitForListener('127.0.0.1', serverPort, 60_000);
+        /*
+          The client says so, rather than going on claiming an attachment. This
+          is the whole defect in one assertion: before this story `attached`
+          stayed pointed at the dead client for the life of the window, so
+          `attachedServerName` answered a machine that no longer existed and the
+          header chip kept naming it.
+        */
+        await waitForAsync(
+          async () =>
+            (await renderer!.evaluate<RemoteLinkStatus | null>(
+              'window.__link ?? null',
+            ))?.state === 'reconnecting',
+          'the client to report it is reconnecting, not attached',
+          60_000,
+        );
 
-      /*
-        And it comes back on its own. Nothing in this case dials — no switch is
-        flipped, no button clicked. The bound is the backoff's own ceiling plus
-        room for the app to finish booting; a client that needed a human would
-        simply never satisfy this.
-      */
-      await waitForAsync(
-        async () =>
-          (await renderer!.evaluate<RemoteLinkStatus | null>(
-            'window.__link ?? null',
-          ))?.state === 'attached',
-        'the client to reattach with nobody asking it to',
-        120_000,
-      );
+        // HIVE-211: across the top of the stage, naming the server, counting down.
+        await until(
+          `(${LINE})?.innerText.includes(${JSON.stringify(`Lost the Hive on ${serverName}.`)}) === true && (${LINE}).innerText.includes('Reconnecting in')`,
+          'the reconnect line to name the lost server and count down',
+        );
 
-      const linkAfter = await renderer.evaluate<RemoteLinkStatus | null>('window.__link ?? null');
-      /*
-        The epoch moved, which is what the renderer keys its per-surface effects
-        on. A reattach that came back without moving it would leave the
-        explorer's watcher and the foreground record pointing at a surface the
-        server released when the old socket died.
-      */
-      expect(linkAfter?.epoch ?? 0).toBeGreaterThan(0);
+        /*
+          Try now, against a backoff parked at least four seconds out: the third
+          step. A restart is the only thing that emits attempt 1 again, so a status
+          with attempt 1 after the click is the dial happening at once rather than
+          at the pending step. The server is still down, so that dial fails and
+          the schedule carries on from there.
+        */
+        await until('(window.__link?.attempt ?? 0) >= 3', 'the backoff to reach its third step', 30_000);
+        const clickedAt = await ui.evaluate<number>(
+          `(() => { window.__linksAtTry = window.__links.length; ${BUTTON('Try now')}.click(); return Date.now(); })()`,
+        );
+        await until(
+          `window.__links.slice(window.__linksAtTry).some((s) => s.state === 'reconnecting' && s.attempt === 1)`,
+          'Try now to restart the backoff and dial at once',
+          3_000,
+        );
+        const restarted = await ui.evaluate<RemoteLinkStatus>(
+          `window.__links.slice(window.__linksAtTry).find((s) => s.state === 'reconnecting' && s.attempt === 1)`,
+        );
+        expect(Math.abs((restarted.nextAttemptAt ?? 0) - clickedAt)).toBeLessThan(1_000);
 
-      const infoAfter = await renderer.evaluate<AppInfo>('window.hive.appInfo()');
-      expect(infoAfter.attachedServerName).toBe(linkWhileUp.attachedServerName);
+        /*
+          The server comes back on the same port, from the same config — which by
+          now carries the device case 21b paired, so the returning client's
+          credential is still good. Rebooted rather than re-created for the reason
+          the transcript claim needs: `pty:restart` would be a *new* generation
+          and prove the opposite of what this case is about.
+        */
+        const rebooted = spawnApp(['--server'], serverConfigPath, serverUserDataDir);
+        serverApp = rebooted.child;
+        serverRecord = rebooted.record;
+        await waitForListener('127.0.0.1', serverPort, 60_000);
 
-      /*
-        And the surface is genuinely rebound rather than merely reported: a call
-        answered by the far process, on the server's own seeded project, which
-        the client's own config cannot produce. Before the rebind these
-        bindings closed over the dead client and every one of them rejected.
-      */
-      const config = await renderer.evaluate<ConfigSnapshot>('window.hive.config.get()');
-      expect(config.projects.map((project) => project.id)).toEqual([servedProjectId]);
+        /*
+          And it comes back on its own. Nothing in this case dials — no switch is
+          flipped, no button clicked. The bound is the backoff's own ceiling plus
+          room for the app to finish booting; a client that needed a human would
+          simply never satisfy this.
+        */
+        await waitForAsync(
+          async () =>
+            (await renderer!.evaluate<RemoteLinkStatus | null>(
+              'window.__link ?? null',
+            ))?.state === 'attached',
+          'the client to reattach with nobody asking it to',
+          120_000,
+        );
+
+        const linkAfter = await renderer.evaluate<RemoteLinkStatus | null>('window.__link ?? null');
+        /*
+          The epoch moved, which is what the renderer keys its per-surface effects
+          on. A reattach that came back without moving it would leave the
+          explorer's watcher and the foreground record pointing at a surface the
+          server released when the old socket died.
+        */
+        expect(linkAfter?.epoch ?? 0).toBeGreaterThan(0);
+
+        const infoAfter = await renderer.evaluate<AppInfo>('window.hive.appInfo()');
+        expect(infoAfter.attachedServerName).toBe(linkWhileUp.attachedServerName);
+
+        /*
+          And the surface is genuinely rebound rather than merely reported: a call
+          answered by the far process, on the server's own seeded project, which
+          the client's own config cannot produce. Before the rebind these
+          bindings closed over the dead client and every one of them rejected.
+        */
+        const config = await renderer.evaluate<ConfigSnapshot>('window.hive.config.get()');
+        expect(config.projects.map((project) => project.id)).toEqual([servedProjectId]);
+
+        // HIVE-211: and the line is gone with the outage.
+        await until(`${LINE} === undefined`, 'the reconnect line to go once reattached');
+      } finally {
+        await setLayout('Classic', BUTTON('Settings'));
+      }
     }, 300_000);
 
     /**
