@@ -680,18 +680,21 @@ export function createNotificationHub(
   };
 
   /**
-   * The bulk gesture. Same two follow-ups as `dismiss`, once.
+   * The bulk gesture, which clears the news and nothing that waits on you
+   * (HIVE-214): an open ask or a blocked session leaves only when it is
+   * answered, closed, expired or swept with its session.
    *
-   * `announceDismissed(null)` rather than one call per row: the renderer's
-   * handler is a filter over its own list, so N events would be N re-renders of
-   * a list that is about to be empty either way.
+   * `announceDismissed(null)` rather than one call per row: the renderer
+   * applies the same filter to its own list (`applyDismiss(null)`).
    *
-   * An already-empty buffer announces nothing, so a double-click on Clear all
-   * does not push a second event at every window.
+   * A clear that drops nothing announces nothing, so a double-click on Clear
+   * all does not push a second event at every window.
    */
   const clearInbox = (): void => {
-    if (buffer.length === 0) return;
-    buffer = [];
+    const open = askOpen();
+    const kept = buffer.filter((entry) => waitsOnYou(entry, open));
+    if (kept.length === buffer.length) return;
+    buffer = kept;
     announceDismissed(null);
     announce();
   };

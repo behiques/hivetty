@@ -381,11 +381,11 @@ describe('the buffer', () => {
    * guarantee away. See `CH.notificationsClear`.
    */
   describe('clear', () => {
-    it('empties list() and zeroes the badge', () => {
-      raise({ id: 'a' });
-      raise({ id: 'b' });
-      raise({ id: 'c' });
-      expect(lastBadge()).toBe(3);
+    it('empties list() of news and announces the badge', () => {
+      raise({ id: 'a', kind: 'pr.merged' });
+      raise({ id: 'b', kind: 'pr.merged' });
+      raise({ id: 'c', kind: 'pr.merged' });
+      announceBadge.mockClear();
 
       hub.clearInbox();
 
@@ -394,8 +394,8 @@ describe('the buffer', () => {
     });
 
     it('announces once, with a null id, rather than once per row', () => {
-      raise({ id: 'a' });
-      raise({ id: 'b' });
+      raise({ id: 'a', kind: 'pr.merged' });
+      raise({ id: 'b', kind: 'pr.merged' });
       announceDismissed.mockClear();
 
       hub.clearInbox();
@@ -405,16 +405,37 @@ describe('the buffer', () => {
       expect(announceDismissed).toHaveBeenCalledWith(null);
     });
 
+    /** HIVE-214: a click cannot erase an open question. */
+    it('keeps the rows that wait on you', () => {
+      raise({ id: 'blocked' });
+      raise({ id: 'q1', kind: 'agent.ask', action: { type: 'ask', thread: 'q1' } });
+      raise({ id: 'news', kind: 'pr.merged' });
+
+      hub.clearInbox();
+
+      expect(hub.list().map((n) => n.id).sort()).toEqual(['blocked', 'q1']);
+      expect(lastBadge()).toBe(2);
+    });
+
+    it('says nothing when only rows that wait on you remain', () => {
+      raise({ id: 'blocked' });
+      announceDismissed.mockClear();
+
+      hub.clearInbox();
+
+      expect(announceDismissed).not.toHaveBeenCalled();
+    });
+
     it('keeps every id in the dedup set', () => {
-      raise({ id: 'a' });
-      raise({ id: 'b' });
+      raise({ id: 'a', kind: 'pr.merged' });
+      raise({ id: 'b', kind: 'pr.merged' });
 
       hub.clearInbox();
 
       // Clearing the inbox must not re-arm every notification in it to be
       // raised again by the next duplicate event — the same rule as `dismiss`.
-      expect(raise({ id: 'a' })).toBeNull();
-      expect(raise({ id: 'b' })).toBeNull();
+      expect(raise({ id: 'a', kind: 'pr.merged' })).toBeNull();
+      expect(raise({ id: 'b', kind: 'pr.merged' })).toBeNull();
       expect(hub.list()).toEqual([]);
     });
 
