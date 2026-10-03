@@ -102,6 +102,7 @@ import type {
   JiraCommentPage,
   JiraIdentity,
   JiraIssue,
+  JiraIssueDetail,
   JiraLink,
   JiraResult,
   JiraSearchResult,
@@ -650,6 +651,9 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.jiraSearch, request),
     issue: (request: JiraIssueRequest): Promise<JiraResult<JiraIssue>> =>
       ipcRenderer.invoke(CH.jiraIssue, request),
+    // HIVE-203. The description and the parent, for the ticket page.
+    detail: (request: JiraIssueRequest): Promise<JiraResult<JiraIssueDetail>> =>
+      ipcRenderer.invoke(CH.jiraDetail, request),
     // HIVE-70. The read, and the epic's one write.
     transitions: (
       request: JiraTransitionsRequest,

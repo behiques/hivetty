@@ -136,6 +136,7 @@ import type {
   JiraCommentPage,
   JiraIdentity,
   JiraIssue,
+  JiraIssueDetail,
   JiraLink,
   JiraResult,
   JiraSearchResult,
@@ -4013,6 +4014,11 @@ export function registerIpcHandlers(
     CH.jiraIssue,
     (_event, payload): Promise<JiraResult<JiraIssue>> =>
       jira.issue(parseJiraIssueRequest(payload)),
+  );
+  handle(
+    CH.jiraDetail,
+    (_event, payload): Promise<JiraResult<JiraIssueDetail>> =>
+      jira.detail(parseJiraIssueRequest(payload)),
   );
   handle(
     CH.jiraTransitions,

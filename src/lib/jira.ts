@@ -11,6 +11,7 @@ import type {
   JiraCommentPage,
   JiraIdentity,
   JiraIssue,
+  JiraIssueDetail,
   JiraLink,
   JiraResult,
   JiraSearchResult,
@@ -99,6 +100,12 @@ export const readJiraIssue = (
   request: JiraIssueRequest,
 ): Promise<JiraResult<JiraIssue> | null> =>
   call('issue', (bridge) => bridge.jira.issue(request));
+
+/** An issue's description and parent (HIVE-203). */
+export const readJiraDetail = (
+  request: JiraIssueRequest,
+): Promise<JiraResult<JiraIssueDetail> | null> =>
+  call('detail', (bridge) => bridge.jira.detail(request));
 
 /** What an issue can become right now (HIVE-70). Read per issue, never cached. */
 export const readJiraTransitions = (
