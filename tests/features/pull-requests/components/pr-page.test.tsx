@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PrPage } from '@features/pull-requests/components/pr-page';
@@ -84,5 +85,12 @@ describe('PrPage', () => {
     useHiveStore.setState({ prDetails: { [key]: { key, state: 'failed', problem: 'GitHub said no.' } } });
     rerender(<PrPage row={row} />);
     expect(screen.getByText('GitHub said no.')).toBeInTheDocument();
+  });
+
+  it('has a Files tab labelled with the changed-file count, and shows the tree on it (HIVE-207)', async () => {
+    useHiveStore.setState({ loadPrDiff: vi.fn(() => Promise.resolve()) });
+    render(<PrPage row={row} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Files 9' }));
+    expect(screen.getByRole('complementary', { name: 'Changed files' })).toBeInTheDocument();
   });
 });

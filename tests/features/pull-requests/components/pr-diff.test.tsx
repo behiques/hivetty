@@ -126,4 +126,16 @@ describe('PrDiff — Split and threads (HIVE-207)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Resolve' }));
     expect(writes.setResolved).toHaveBeenCalledWith('PRRT_1', true);
   });
+
+  it('shows a skeleton while the diff is loading (HIVE-207)', () => {
+    render(<PrDiff {...props({ diff: null, loading: true })} />);
+    expect(screen.getByRole('status', { name: 'Loading diff' })).toBeInTheDocument();
+    expect(screen.queryByText('No diff to show')).toBeNull();
+  });
+
+  it('shows a failed re-read as a banner over the diff it still has (carry-over from #22)', () => {
+    render(<PrDiff {...props({ problem: 'rate limited' })} />);
+    expect(screen.getByText('rate limited')).toBeInTheDocument();
+    expect(screen.queryByText('No diff to show')).toBeNull();
+  });
 });

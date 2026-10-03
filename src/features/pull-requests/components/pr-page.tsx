@@ -13,6 +13,7 @@ import { SegmentedControl } from '@components/ui/segmented-control';
 import { Flap } from '@features/pull-requests/components/flap';
 import { PrCommentBox } from '@features/pull-requests/components/pr-comment-box';
 import { PrConversation } from '@features/pull-requests/components/pr-conversation';
+import { PrFiles } from '@features/pull-requests/components/pr-files';
 import { PrActions, PrProperties } from '@features/pull-requests/components/pr-properties';
 import { ShipTrack } from '@features/pull-requests/components/ship-track';
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
@@ -32,11 +33,11 @@ import {
 } from '@stores/hive-store';
 import { usePrPageActions, usePrTab, type PrTab } from '@stores/ui-store';
 
-/** The tab strip; HIVE-206/207/208 append Checks, Files and Timeline. */
-export const PR_TABS = [{ value: 'conversation', label: 'Conversation' }] as const satisfies readonly {
-  value: PrTab;
-  label: string;
-}[];
+/** The tab strip; Files is HIVE-207's, and HIVE-206 and 208 append Checks and Timeline. */
+export const PR_TABS = [
+  { value: 'conversation', label: 'Conversation' },
+  { value: 'files', label: 'Files' },
+] as const satisfies readonly { value: PrTab; label: string }[];
 
 /** The open PR's detail re-reads once a minute while it is on stage; the first sweep is the open's read. */
 const usePagePoller = createPoller({ intervalMs: 60_000 });
@@ -88,6 +89,11 @@ export function PrPage({ row }: { row: HatcheryRow }) {
   const detail = entry?.detail;
   /* A tab this PR does not have falls back here, not in the store, so the choice survives the next PR (D14). */
   const tab: PrTab = PR_TABS.some((t) => t.value === chosen) ? chosen : 'conversation';
+  /* Files carries the changed-file count once the detail is read (HIVE-207). */
+  const tabs: { value: PrTab; label: string }[] = PR_TABS.map((t) =>
+    t.value === 'files' && detail !== undefined ? { ...t, label: `Files ${String(detail.changedFiles)}` } : t,
+  );
+  const fixerOnIt = !merged && track.held && track.current?.holder === 'fixer';
 
   usePagePoller(useCallback(() => load(pr.owner, pr.repo, pr.n), [load, pr.owner, pr.repo, pr.n]));
 
@@ -120,7 +126,7 @@ export function PrPage({ row }: { row: HatcheryRow }) {
           <Facts pr={pr} detail={detail} />
         </div>
         <span className="flex-1" />
-        <SegmentedControl label="Tab" options={PR_TABS} value={tab} onChange={setPrTab} />
+        <SegmentedControl label="Tab" options={tabs} value={tab} onChange={setPrTab} />
         <a
           href={pr.url}
           target="_blank"
@@ -133,41 +139,48 @@ export function PrPage({ row }: { row: HatcheryRow }) {
       </header>
       <ShipTrack pr={pr} />
       <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto px-8 pb-6">
-          {detail === undefined ? (
-            entry?.state === 'failed' ? (
-              <div className="pt-4">
-                <SourceProblem message={entry.problem ?? 'Could not read this pull request.'} onRetry={retry} />
+        {/* The Files tab scrolls its tree and its diff on its own, so it sits outside the padded column. */}
+        {detail !== undefined && tab === 'files' ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            {entry?.problem === undefined ? null : (
+              <div className="px-8 pt-3">
+                <SourceProblem message={entry.problem} onRetry={retry} />
               </div>
-            ) : (
-              <div
-                role="status"
-                aria-label="Loading pull request"
-                aria-busy
-                className="flex animate-pulse flex-col gap-2 pt-4"
-              >
-                <SkeletonBar className="w-[92%]" />
-                <SkeletonBar className="w-[84%]" />
-                <SkeletonBar className="w-[58%]" />
-              </div>
-            )
-          ) : (
-            <>
-              {entry?.problem === undefined ? null : (
-                <div className="pt-3">
-                  <SourceProblem message={entry.problem} onRetry={retry} />
+            )}
+            <PrFiles pr={pr} detail={detail} fixerOnIt={fixerOnIt} onOpenFile={onOpenFile} />
+          </div>
+        ) : (
+          <div className="min-w-0 flex-1 overflow-y-auto px-8 pb-6">
+            {detail === undefined ? (
+              entry?.state === 'failed' ? (
+                <div className="pt-4">
+                  <SourceProblem message={entry.problem ?? 'Could not read this pull request.'} onRetry={retry} />
                 </div>
-              )}
-              <PrConversation
-                pr={pr}
-                detail={detail}
-                fixerOnIt={!merged && track.held && track.current?.holder === 'fixer'}
-                onOpenFile={onOpenFile}
-              />
-              {merged ? null : <PrCommentBox pr={pr} />}
-            </>
-          )}
-        </div>
+              ) : (
+                <div
+                  role="status"
+                  aria-label="Loading pull request"
+                  aria-busy
+                  className="flex animate-pulse flex-col gap-2 pt-4"
+                >
+                  <SkeletonBar className="w-[92%]" />
+                  <SkeletonBar className="w-[84%]" />
+                  <SkeletonBar className="w-[58%]" />
+                </div>
+              )
+            ) : (
+              <>
+                {entry?.problem === undefined ? null : (
+                  <div className="pt-3">
+                    <SourceProblem message={entry.problem} onRetry={retry} />
+                  </div>
+                )}
+                <PrConversation pr={pr} detail={detail} fixerOnIt={fixerOnIt} onOpenFile={onOpenFile} />
+                {merged ? null : <PrCommentBox pr={pr} />}
+              </>
+            )}
+          </div>
+        )}
         <aside className="w-[260px] shrink-0 overflow-y-auto border-l border-border-soft px-4 py-[18px]">
           <PrProperties row={row} detail={detail} actions={<PrActions row={row} />} />
         </aside>

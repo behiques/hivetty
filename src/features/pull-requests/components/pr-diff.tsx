@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { ThreadCard, type ThreadWrites } from '@features/pull-requests/components/thread-card';
+import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 import type { GhResult, PrFile, PrThread } from '@shared/github-contract';
 import { usePrDiffView, usePrPageActions, type PrDiffView } from '@stores/ui-store';
 
@@ -55,7 +56,10 @@ export interface PrDiffProps {
   file: PrFile;
   diff: DiffFile | null;
   threads: PrThread[];
+  /** The diff read's failure; over the diff when an older text is still shown (#22), else in its place. */
   problem?: string;
+  /** No text yet: the first read, or an entry the slice evicted. */
+  loading?: boolean;
   prUrl: string;
   readOnly: boolean;
   onViewed: (viewed: boolean) => Promise<GhResult<true>>;
@@ -64,7 +68,7 @@ export interface PrDiffProps {
   fixerOnIt: boolean;
 }
 
-export function PrDiff({ file, diff, threads, problem, prUrl, readOnly, onViewed, onOpenFile, writes, fixerOnIt }: PrDiffProps) {
+export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, readOnly, onViewed, onOpenFile, writes, fixerOnIt }: PrDiffProps) {
   const view = usePrDiffView();
   const { setPrDiffView } = usePrPageActions();
   const [selected, setSelected] = useState<number | null>(null);
@@ -119,8 +123,15 @@ export function PrDiff({ file, diff, threads, problem, prUrl, readOnly, onViewed
       </div>
       {viewedProblem === null ? null : <p className="px-[18px] pt-2 text-[12px] text-amber">{viewedProblem}</p>}
       <div className="min-h-0 flex-1 overflow-auto py-2 font-mono text-[12.5px] leading-[1.75]">
-        {showable ? (
+        {loading ? (
+          <div role="status" aria-label="Loading diff" aria-busy className="flex animate-pulse flex-col gap-2 px-[18px] pt-2">
+            <SkeletonBar className="w-[92%]" />
+            <SkeletonBar className="w-[84%]" />
+            <SkeletonBar className="w-[58%]" />
+          </div>
+        ) : showable ? (
           <>
+            {problem === undefined ? null : <p className="px-[18px] pb-2 font-sans text-[12px] text-amber">{problem}</p>}
             {placed?.outdated.map(card)}
             {diff.hunks.map((hunk, h) => (
               <div key={`${String(h)}${hunk.header}`}>
