@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRIDGE_ERROR } from '@lib/utils';
 import { PR_DETAIL_CAP, useHiveStore } from '@stores/hive-store';
 
+import { prDetail, prFile } from '../support/pr-detail';
 import { prRecord } from '../support/prs';
 
 /** The Files tab's slices (HIVE-207). `lib/github` is mocked: what is under test is how each answer lands. */
@@ -105,5 +106,90 @@ describe('loadPrDiff (HIVE-207)', () => {
 
     state().hydratePrs([prRecord({ number: 483 })], 1);
     expect(Object.keys(state().prDiffs)).toEqual(['acme/nova-web#483']);
+  });
+});
+
+const seed = (files = [prFile({ path: 'a.ts', viewed: 'unviewed' }), prFile({ path: 'b.ts', viewed: 'dismissed' })]) =>
+  useHiveStore.setState({ prDetails: { [KEY]: { key: KEY, state: 'ok', detail: prDetail({ owner: 'acme', repo: 'nova-web', number: 482, files }) } } });
+
+describe('thread writes (HIVE-207)', () => {
+  it('replies, then reloads the detail', async () => {
+    writePrThread.mockResolvedValue(ok(true));
+    readPrDetail.mockResolvedValue(ok(prDetail()));
+    await expect(state().replyToPrThread('acme', 'nova-web', 482, 'T', 'On it')).resolves.toEqual(ok(true));
+    expect(writePrThread).toHaveBeenCalledWith({ owner: 'acme', repo: 'nova-web', n: 482, threadId: 'T', op: 'reply', body: 'On it' });
+    expect(readPrDetail).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([[true, 'resolve'], [false, 'unresolve']] as const)('resolved=%s sends %s, then reloads', async (resolved, op) => {
+    writePrThread.mockResolvedValue(ok(true));
+    readPrDetail.mockResolvedValue(ok(prDetail()));
+    await state().setPrThreadResolved('acme', 'nova-web', 482, 'T', resolved);
+    expect(writePrThread).toHaveBeenCalledWith({ owner: 'acme', repo: 'nova-web', n: 482, threadId: 'T', op });
+    expect(readPrDetail).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers a refusal and still reloads', async () => {
+    writePrThread.mockResolvedValue(refused('not on this PR'));
+    readPrDetail.mockResolvedValue(ok(prDetail()));
+    await expect(state().setPrThreadResolved('acme', 'nova-web', 482, 'T', true)).resolves.toEqual(refused('not on this PR'));
+    expect(readPrDetail).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers the bridge error with no bridge', async () => {
+    writePrThread.mockResolvedValue(null);
+    readPrDetail.mockResolvedValue(null);
+    await expect(state().replyToPrThread('acme', 'nova-web', 482, 'T', 'x')).resolves.toEqual({
+      ok: false, error: { kind: 'unknown', message: BRIDGE_ERROR },
+    });
+  });
+});
+
+describe('setPrFileViewed (HIVE-207)', () => {
+  const viewedOf = (path: string) => state().prDetails[KEY]?.detail?.files.find((f) => f.path === path)?.viewed;
+
+  it('shows the mark at once, before GitHub answers', async () => {
+    seed();
+    let land!: (value: unknown) => void;
+    writePrViewed.mockReturnValue(new Promise((done) => { land = done; }));
+    readPrDetail.mockReturnValue(new Promise(() => undefined));
+    const pending = state().setPrFileViewed('acme', 'nova-web', 482, 'a.ts', true);
+    expect(viewedOf('a.ts')).toBe('viewed');
+    expect(writePrViewed).toHaveBeenCalledWith({ owner: 'acme', repo: 'nova-web', n: 482, path: 'a.ts', viewed: true });
+    land(ok(true));
+    void pending;
+  });
+
+  it('unmarks a dismissed file to unviewed', async () => {
+    seed();
+    writePrViewed.mockResolvedValue(ok(true));
+    readPrDetail.mockReturnValue(new Promise(() => undefined));
+    void state().setPrFileViewed('acme', 'nova-web', 482, 'b.ts', false);
+    expect(viewedOf('b.ts')).toBe('unviewed');
+  });
+
+  it('rolls the one file back on a refusal and answers the reason', async () => {
+    seed();
+    writePrViewed.mockResolvedValue(refused('Resource not accessible'));
+    readPrDetail.mockReturnValue(new Promise(() => undefined));
+    void state().setPrFileViewed('acme', 'nova-web', 482, 'b.ts', true);
+    expect(viewedOf('b.ts')).toBe('viewed');
+    await vi.waitFor(() => expect(viewedOf('b.ts')).toBe('dismissed'));
+    expect(viewedOf('a.ts')).toBe('unviewed');
+  });
+
+  it('reloads the detail after, success or not', async () => {
+    seed();
+    writePrViewed.mockResolvedValueOnce(ok(true)).mockResolvedValueOnce(refused('no'));
+    readPrDetail.mockResolvedValue(ok(prDetail({ owner: 'acme', repo: 'nova-web', number: 482, files: [prFile({ path: 'a.ts', viewed: 'viewed' })] })));
+    await expect(state().setPrFileViewed('acme', 'nova-web', 482, 'a.ts', true)).resolves.toEqual(ok(true));
+    await expect(state().setPrFileViewed('acme', 'nova-web', 482, 'a.ts', false)).resolves.toEqual(refused('no'));
+    expect(readPrDetail).toHaveBeenCalledTimes(2);
+  });
+
+  it('writes even with no detail loaded, and patches nothing', async () => {
+    writePrViewed.mockResolvedValue(ok(true));
+    readPrDetail.mockResolvedValue(null);
+    await expect(state().setPrFileViewed('acme', 'nova-web', 482, 'a.ts', true)).resolves.toEqual(ok(true));
   });
 });

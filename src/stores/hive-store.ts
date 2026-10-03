@@ -39,7 +39,15 @@ import {
   describeWake,
   runsToday,
 } from '@lib/agents';
-import { postPrComment, readPrDetail, readPrDiff, readPullRequests, searchPullRequests } from '@lib/github';
+import {
+  postPrComment,
+  readPrDetail,
+  readPrDiff,
+  readPullRequests,
+  searchPullRequests,
+  writePrThread,
+  writePrViewed,
+} from '@lib/github';
 import {
   readJiraComments,
   readJiraDetail,
@@ -104,7 +112,7 @@ import type {
   ChangedFilesSnapshot,
 } from '@shared/changed-files-contract';
 import type { ModeChange } from '@shared/config-contract';
-import type { GhResult, PrDetail, PrRecord, PrsSnapshot } from '@shared/github-contract';
+import type { GhResult, PrDetail, PrFileViewed, PrRecord, PrsSnapshot } from '@shared/github-contract';
 import type { IdleDetail } from '@shared/hook-contract';
 import {
   CH,
@@ -528,6 +536,12 @@ interface HiveState {
   commentOnPr: (owner: string, repo: string, n: number, body: string) => Promise<GhResult<true>>;
   /** Read one PR's diff at a head sha: once per sha, again when it moves (HIVE-207). */
   loadPrDiff: (owner: string, repo: string, n: number, sha: string | null) => Promise<void>;
+  /** Reply to a review thread, then re-read the PR either way (HIVE-207). */
+  replyToPrThread: (owner: string, repo: string, n: number, threadId: string, body: string) => Promise<GhResult<true>>;
+  /** Resolve or unresolve a review thread, then re-read the PR either way (HIVE-207). */
+  setPrThreadResolved: (owner: string, repo: string, n: number, threadId: string, resolved: boolean) => Promise<GhResult<true>>;
+  /** Mark or unmark a file viewed: shown at once, rolled back on a refusal, re-read either way (HIVE-207). */
+  setPrFileViewed: (owner: string, repo: string, n: number, path: string, viewed: boolean) => Promise<GhResult<true>>;
   /** A comment this app just posted, shown without a re-read (HIVE-203). */
   appendTicketComment: (key: string, comment: JiraComment) => void;
   /** Re-read what the open ticket can become, after its status moved (HIVE-203). */
@@ -1943,6 +1957,9 @@ export const TICKET_DETAIL_CAP = 16;
 
 /** How many PRs' detail the store holds at once (HIVE-205): the open page and HIVE-209's PR tabs. */
 export const PR_DETAIL_CAP = 8;
+
+/** A PR write with no bridge to make it (HIVE-205, HIVE-207). */
+const BRIDGE_REFUSAL = { ok: false as const, error: { kind: 'unknown' as const, message: BRIDGE_ERROR } };
 
 /** The `prDetails` key: `owner/repo#n`, lowercased as GitHub's names compare (HIVE-205). */
 export const prKey = (owner: string, repo: string, n: number): string => `${owner}/${repo}#${n}`.toLowerCase();
@@ -5247,7 +5264,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
   commentOnPr: async (owner, repo, n, body) => {
     const result = await postPrComment({ owner, repo, n, body });
-    if (result === null) return { ok: false, error: { kind: 'unknown', message: BRIDGE_ERROR } };
+    if (result === null) return BRIDGE_REFUSAL;
     if (result.ok) await get().loadPrDetail(owner, repo, n);
     return result;
   },
@@ -5279,6 +5296,47 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           : { ...entry, state: 'failed', problem: result === null ? BRIDGE_ERROR : result.error.message };
       return { prDiffs: { ...state.prDiffs, [key]: next } };
     });
+  },
+
+  /** Reply to a review thread (HIVE-207); the reply shows on the reload, which runs either way. */
+  replyToPrThread: async (owner, repo, n, threadId, body) => {
+    const result = (await writePrThread({ owner, repo, n, threadId, op: 'reply', body })) ?? BRIDGE_REFUSAL;
+    await get().loadPrDetail(owner, repo, n);
+    return result;
+  },
+
+  /** Resolve or unresolve a review thread (HIVE-207); the chip flips on the reload. */
+  setPrThreadResolved: async (owner, repo, n, threadId, resolved) => {
+    const result =
+      (await writePrThread({ owner, repo, n, threadId, op: resolved ? 'resolve' : 'unresolve' })) ?? BRIDGE_REFUSAL;
+    await get().loadPrDetail(owner, repo, n);
+    return result;
+  },
+
+  /**
+   * Mark or unmark a file viewed (HIVE-207). Shown at once, rolled back to what
+   * it was if GitHub refuses, and read back from GitHub either way: the state
+   * lives there, never here.
+   */
+  // ponytail: a detail poll landing mid-write can show the old state for one round trip; a pending overlay if it shows.
+  setPrFileViewed: async (owner, repo, n, path, viewed) => {
+    const key = prKey(owner, repo, n);
+    const patch = (to: PrFileViewed) =>
+      set((state) => {
+        const entry = state.prDetails[key];
+        const detail = entry?.detail;
+        if (entry === undefined || detail === undefined) return state;
+        const files = detail.files.map((file) => (file.path === path ? { ...file, viewed: to } : file));
+        return { prDetails: { ...state.prDetails, [key]: { ...entry, detail: { ...detail, files } } } };
+      });
+    // Read before the patch below, so a refusal restores what GitHub last said.
+    const before = get().prDetails[key]?.detail?.files.find((file) => file.path === path)?.viewed;
+
+    patch(viewed ? 'viewed' : 'unviewed');
+    const result = (await writePrViewed({ owner, repo, n, path, viewed })) ?? BRIDGE_REFUSAL;
+    if (!result.ok && before !== undefined) patch(before);
+    await get().loadPrDetail(owner, repo, n);
+    return result;
   },
 
   appendTicketComment: (key, comment) =>
