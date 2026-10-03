@@ -4,6 +4,7 @@ import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
 import { EmptyState, EmptyStatePath } from '@components/ui/empty-state';
 import { Icon } from '@components/ui/icon';
+import { ChangedFiles } from '@features/explorer/components/changed-files';
 import { ExplorerResults } from '@features/explorer/components/explorer-results';
 import { ExplorerSearchRow } from '@features/explorer/components/explorer-search-row';
 import { TreeNode } from '@features/explorer/components/tree-node';
@@ -44,7 +45,13 @@ import {
  * with a file open. `useProjectWatcher()` is mounted at the composition root
  * instead, and this panel reads the revision counter it bumps.
  */
-export function ExplorerPanel() {
+/**
+ * `changesId` is main's id for the session on stage (`terminalOf(session)`,
+ * HIVE-201): round two's Files tab passes it, and the panel lists the
+ * session's changed files above the tree and marks them in it. Classic's
+ * rail passes nothing and shows no marks; they belong to the session panel.
+ */
+export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
   const { project, root: subRoot, sessionId, display, branch } = useExplorerProject();
   /**
    * Main's verdict on which tree the reads below actually resolve under.
@@ -338,6 +345,10 @@ export function ExplorerPanel() {
         than anything this panel could compose, and the same one the projects
         tree shows for the same project.
       */}
+      {usable && !searching ? (
+        <ChangedFiles changesId={changesId} subRoot={subRoot} onOpenFile={onOpenFile} />
+      ) : null}
+
       {!usable ? (
         <EmptyState>{access.reason ?? 'This project has no folder.'}</EmptyState>
       ) : null}
@@ -372,6 +383,7 @@ export function ExplorerPanel() {
               refreshToken={refreshToken}
               sessionId={sessionId}
               rootKey={explorerRoot?.key ?? ''}
+              changesId={changesId}
               onOpenFile={onOpenFile}
             />
           ))
