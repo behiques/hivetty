@@ -18,6 +18,7 @@ import {
   useOpenEntity,
   useThread,
 } from '@stores/hive-store';
+import { useMarkAnsweredHere } from '@stores/ui-store';
 
 import { PermissionControls } from './permission-controls';
 
@@ -115,6 +116,7 @@ const rungsOf = (value: unknown): Rung[] =>
 export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = false }: AskCardProps) {
   const entries = useThread(thread);
   const answerAsk = useAnswerAsk();
+  const markAnsweredHere = useMarkAnsweredHere();
 
   const ask = entries.find((entry) => entry.id === thread);
   const answer = entries.find((entry) => entry.kind === 'answer');
@@ -306,6 +308,8 @@ export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = f
         from `{ ok: false }` and must not be rendered as one.
       */
       if (result !== undefined && !result.ok) setRefusal(result.reason);
+      // So the line this card leaves says "answered", never "answered on" this machine (HIVE-218).
+      else markAnsweredHere(thread);
     } catch (cause) {
       /*
         A rejected bridge call, not a refusal — the IPC channel itself threw

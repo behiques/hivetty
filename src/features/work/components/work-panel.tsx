@@ -16,6 +16,7 @@ import { TicketCard } from '@features/work/components/ticket-card';
 import { TicketListSkeleton } from '@features/work/components/ticket-card-skeleton';
 import { TicketRow } from '@features/work/components/ticket-row';
 import { WorkSearchRow } from '@features/work/components/work-search-row';
+import { JIRA_MAX_ISSUES } from '@shared/jira-contract';
 import {
   useRefreshTickets,
   useTicketGroups,
@@ -103,7 +104,7 @@ function SourceNotice({
   if (source.capped) {
     return (
       <p className="px-1 pb-1 text-[11.5px] leading-[1.45] text-subtle">
-        Showing the first 200 — your query matched more.
+        {`Showing the first ${String(JIRA_MAX_ISSUES)} — your query matched more. Narrow it in Jira.`}
       </p>
     );
   }

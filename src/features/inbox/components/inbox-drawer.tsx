@@ -1,10 +1,12 @@
 import { X } from '@phosphor-icons/react';
 import { useEffect, useRef } from 'react';
 
+import { useLeavingAsks } from '@features/inbox/hooks/use-leaving-asks';
 import { useSummons } from '@stores/hive-store';
 import { useInboxActions, useInboxDrawer } from '@stores/ui-store';
 
 import { AskCard } from './ask-card';
+import { AskLeaving } from './ask-leaving';
 import { NotificationCard } from './notification-card';
 import { SessionNote } from './session-note';
 
@@ -28,6 +30,8 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
   const { open, thread } = useInboxDrawer();
   const { closeInboxDrawer } = useInboxActions();
   const { asks, sessions } = useSummons(onStage);
+  // A closed ask keeps its place for one beat with its reason (HIVE-218); the count stays on live rows.
+  const placed = useLeavingAsks(asks);
   const ref = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -82,17 +86,19 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
       {asks.length + sessions.length === 0 ? (
         <p className="px-0.5 text-[12.5px] text-muted">Nothing waits on you.</p>
       ) : null}
-      {asks.map((row) => (
+      {placed.map(({ row, leaving }) => (
         <div
           key={row.id}
           data-thread={row.action.type === 'ask' ? row.action.thread : undefined}
           tabIndex={-1}
           className="outline-none"
         >
-          {row.action.type === 'ask' ? (
-            <AskCard notif={row} thread={row.action.thread} variant="float" openLink />
-          ) : (
+          {row.action.type !== 'ask' ? (
             <NotificationCard notif={row} />
+          ) : leaving ? (
+            <AskLeaving notif={row} thread={row.action.thread} />
+          ) : (
+            <AskCard notif={row} thread={row.action.thread} variant="float" openLink />
           )}
         </div>
       ))}
