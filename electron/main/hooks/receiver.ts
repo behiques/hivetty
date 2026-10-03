@@ -1171,10 +1171,22 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     handleJira(headers, body, truncated, parseJiraTransitionByName, (request) =>
       onJira.transition(request),
     );
-  const handleJiraComment: Route['handle'] = (headers, body, truncated) =>
-    handleJira(headers, body, truncated, parseAddJiraCommentRequest, (request) =>
-      onJira.comment(request),
+  /**
+   * `/jira/comment` (HIVE-174), marked for an agent (HIVE-216).
+   *
+   * The caller is the authenticated header, never the body: an id the app
+   * knows as an agent and not as a session — the test `/hook` routes by — is
+   * an agent, and its comment carries `via`. A session caller, the person's
+   * own terminal, posts as itself.
+   */
+  const handleJiraComment: Route['handle'] = (headers, body, truncated) => {
+    const caller = headers[HOOK_HEADER_SESSION];
+    const agent =
+      typeof caller === 'string' && knowsAgent(caller) && !knowsSession(caller) ? caller : undefined;
+    return handleJira(headers, body, truncated, parseAddJiraCommentRequest, (request) =>
+      agent === undefined ? onJira.comment(request) : onJira.comment(request, { agent }),
     );
+  };
 
   /** `/projects` (HIVE-173): the caller is the header, the body is unread. */
   function handleProjects(headers: Record<string, string | string[] | undefined>): Reply {

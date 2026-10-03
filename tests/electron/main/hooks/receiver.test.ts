@@ -3116,6 +3116,7 @@ describe('the projects and pr routes (HIVE-173)', () => {
 
 describe('the Jira routes (HIVE-174)', () => {
   const CALLER = 'builder';
+  const AGENT = 'shipper';
   const ISSUE = {
     key: 'HIVE-7',
     summary: 'Ship the thing',
@@ -3130,13 +3131,14 @@ describe('the Jira routes (HIVE-174)', () => {
 
   let receiver: Receiver;
   let url: string;
-  let calls: { tool: string; request: unknown }[];
+  let calls: { tool: string; request: unknown; via?: unknown }[];
   let failNext: boolean;
+  let onJira: JiraToolHandlers;
 
   beforeEach(async () => {
     calls = [];
     failNext = false;
-    const onJira: JiraToolHandlers = {
+    onJira = {
       get: (request) => {
         calls.push({ tool: 'get', request });
         if (failNext) return Promise.reject(new Error('ECONNREFUSED /Users/someone/.hive'));
@@ -3146,8 +3148,8 @@ describe('the Jira routes (HIVE-174)', () => {
         calls.push({ tool: 'transition', request });
         return Promise.resolve({ ok: false, error: { kind: 'not-found', message: `${request.key} does not exist.` } });
       },
-      comment: (request) => {
-        calls.push({ tool: 'comment', request });
+      comment: (request, via) => {
+        calls.push({ tool: 'comment', request, ...(via === undefined ? {} : { via }) });
         return Promise.resolve({ ok: true, value: { id: '3', author: 'me', created: 'now', body: [] } });
       },
       users: (request) => {
@@ -3167,6 +3169,7 @@ describe('the Jira routes (HIVE-174)', () => {
       onMetrics: () => {},
       ...noLedger,
       ...noAgents,
+      knowsAgent: (entityId: string) => entityId === AGENT,
       onJira,
     });
     const started = await receiver.start();
@@ -3209,6 +3212,58 @@ describe('the Jira routes (HIVE-174)', () => {
       { tool: 'transition', request: { key: 'HIVE-9', status: 'Done' } },
       { tool: 'comment', request: { key: 'HIVE-7', markdown: 'hi' } },
     ]);
+  });
+
+  it('marks a comment from an agent caller with via, and never one from a session or a body field (HIVE-216)', async () => {
+    await post(JIRA_COMMENT_PATH, JSON.stringify({ key: 'HIVE-7', markdown: 'from the agent' }), { [HOOK_HEADER_SESSION]: AGENT });
+    await post(JIRA_COMMENT_PATH, JSON.stringify({ key: 'HIVE-7', markdown: 'from the session' }), { [HOOK_HEADER_SESSION]: CALLER });
+    const forged = await post(
+      JIRA_COMMENT_PATH,
+      JSON.stringify({ key: 'HIVE-7', markdown: 'forged', via: { agent: 'shipper' } }),
+      { [HOOK_HEADER_SESSION]: CALLER },
+    );
+
+    expect(forged.status).toBe(400);
+    expect(calls).toEqual([
+      { tool: 'comment', request: { key: 'HIVE-7', markdown: 'from the agent' }, via: { agent: AGENT } },
+      { tool: 'comment', request: { key: 'HIVE-7', markdown: 'from the session' } },
+    ]);
+  });
+
+  it('reads an id that is both a session and an agent as a session: no via (HIVE-216)', async () => {
+    const both = createReceiver({
+      knowsSession: (entityId) => entityId === CALLER || entityId === AGENT,
+      onEvent: () => {},
+      onPlanTool: () => {},
+      onTicketIntent: () => {},
+      onPromptName: () => {},
+      onCleared: () => {},
+      onDone: () => {},
+      onReady: () => {},
+      onMetrics: () => {},
+      ...noLedger,
+      ...noAgents,
+      knowsAgent: (entityId: string) => entityId === AGENT,
+      onJira,
+    });
+    try {
+      const started = await both.start();
+      expect(started).not.toBeNull();
+      const response = await fetch(`${new URL(started as string).origin}${JIRA_COMMENT_PATH}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          [HOOK_HEADER_SESSION]: AGENT,
+          [HOOK_HEADER_TOKEN]: both.tokenFor(AGENT),
+        },
+        body: JSON.stringify({ key: 'HIVE-7', markdown: 'from a session named like an agent' }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(calls).toEqual([{ tool: 'comment', request: { key: 'HIVE-7', markdown: 'from a session named like an agent' } }]);
+    } finally {
+      await both.stop();
+    }
   });
 
   it('refuses a malformed body with 400 and the guard\'s sentence, calling nothing', async () => {
