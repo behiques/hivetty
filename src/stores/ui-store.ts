@@ -322,6 +322,25 @@ interface UiState {
   togglePrsFolded: () => void;
   setPrConversation: (mode: WorkConversation) => void;
   setPrSearchOpen: (open: boolean) => void;
+  /** Notification ids up as a card or note, newest first (HIVE-198). Not persisted. */
+  arrivals: string[];
+  /** The latest arrival that came in while the keyboard was in a terminal: the pill pulses once for it. */
+  arrivalPulse: string | null;
+  /** The Inbox drawer, and the ask thread it was opened on. */
+  inboxDrawer: { open: boolean; thread: string | null };
+  /**
+   * A live Summons arrival (HIVE-198). `quiet` (the keyboard is in a terminal) only pulses
+   * the pill; otherwise it rises, deduped, newest first. Nothing rises over an open drawer.
+   */
+  pushArrival: (id: string, quiet: boolean) => void;
+  /** Everything up folds into the pill. The rows stay in the Summons queue. */
+  foldArrivals: () => void;
+  /** Open the drawer, on an ask's thread when one is named, folding what was up. */
+  openInboxDrawer: (thread?: string) => void;
+  closeInboxDrawer: () => void;
+  /** When this window last lost focus, else when it launched (HIVE-200's "since"). View state, not persisted. */
+  awaySince: number;
+  markAway: (at: number) => void;
   reset: () => void;
 }
 
@@ -372,6 +391,10 @@ const initialUiState = {
   prsFolded: true,
   prConversation: 'comments' as WorkConversation,
   prSearchOpen: false,
+  arrivals: [] as string[],
+  arrivalPulse: null as string | null,
+  inboxDrawer: { open: false, thread: null } as { open: boolean; thread: string | null },
+  awaySince: Date.now(),
 };
 
 /** Back to the Overmind with the row left behind under the caret (HIVE-197). */
@@ -615,6 +638,16 @@ export const useUiStore = create<UiState>()((set) => ({
   togglePrsFolded: () => set((state) => ({ prsFolded: !state.prsFolded })),
   setPrConversation: (mode) => set({ prConversation: mode }),
   setPrSearchOpen: (open) => set({ prSearchOpen: open }),
+  pushArrival: (id, quiet) =>
+    set((state) => {
+      if (quiet) return { arrivalPulse: id };
+      if (state.inboxDrawer.open) return {};
+      return { arrivals: [id, ...state.arrivals.filter((x) => x !== id)] };
+    }),
+  foldArrivals: () => set({ arrivals: [] }),
+  openInboxDrawer: (thread) => set({ inboxDrawer: { open: true, thread: thread ?? null }, arrivals: [] }),
+  closeInboxDrawer: () => set({ inboxDrawer: { open: false, thread: null } }),
+  markAway: (at) => set({ awaySince: at }),
   reset: () => set(initialUiState),
 }));
 
@@ -647,6 +680,13 @@ const settingsActionsSelector = (state: UiState) => ({
   openSettings: state.openSettings,
   closeSettings: state.closeSettings,
   clearSettingsSection: state.clearSettingsSection,
+});
+
+const inboxActionsSelector = (state: UiState) => ({
+  pushArrival: state.pushArrival,
+  foldArrivals: state.foldArrivals,
+  openInboxDrawer: state.openInboxDrawer,
+  closeInboxDrawer: state.closeInboxDrawer,
 });
 
 const pickerActionsSelector = (state: UiState) => ({
@@ -818,6 +858,18 @@ export const useNewSessionDefaults = () =>
 /** Whether the settings overlay is open (story 101). */
 export const useSettingsOpen = () => useUiStore((state) => state.settings);
 
+/** The inbox arrival queue, newest first (HIVE-198). */
+export const useArrivals = () => useUiStore((state) => state.arrivals);
+
+/** The latest quiet arrival, which the pill pulses once for. */
+export const useArrivalPulse = () => useUiStore((state) => state.arrivalPulse);
+
+/** The Inbox drawer: open, and the thread it was opened on. */
+export const useInboxDrawer = () => useUiStore((state) => state.inboxDrawer);
+
+/** Inbox arrival and drawer actions, referentially stable. */
+export const useInboxActions = () => useUiStore(useShallow(inboxActionsSelector));
+
 /** Settings actions, referentially stable across unrelated state changes. */
 export const useSettingsActions = () =>
   useUiStore(useShallow(settingsActionsSelector));
@@ -868,3 +920,7 @@ export const useBumpFsRevision = () =>
   useUiStore((state) => state.bumpFsRevision);
 
 
+
+/** Home's "since" (HIVE-200). */
+export const useAwaySince = () => useUiStore((state) => state.awaySince);
+export const useMarkAway = () => useUiStore((state) => state.markAway);

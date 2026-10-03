@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { AgentTile, type TileTone } from '@features/agents/components/agent-tile';
+import { AgentTile, type TileTone } from '@features/shared/components/agent-tile';
 
 const tile = (tone: TileTone, live = 0) =>
   render(<AgentTile icon="ph-robot" tone={tone} live={live} />).container
@@ -36,5 +36,13 @@ describe('AgentTile', () => {
 
   it('is decoration, hidden from assistive tech', () => {
     expect(tile('resting')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('draws a small tile, without the glow, for a card header (HIVE-198)', () => {
+    const { container } = render(<AgentTile icon="ph-robot" tone="asking" live={0} size="sm" />);
+    const small = container.firstElementChild as HTMLElement;
+    expect(small.className).toContain('w-6');
+    expect(small.className).not.toContain('drop-shadow');
+    expect(small.className).toMatch(/fill-.*--cc-amber.*22%/);
   });
 });

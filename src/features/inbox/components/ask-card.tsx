@@ -1,16 +1,21 @@
+import { X } from '@phosphor-icons/react';
 import { useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
+import { isAgent } from '@/types/entity';
 import type { HiveNotification } from '@/types/notification';
 
 import { Button } from '@components/ui/button';
+import { AgentTile } from '@features/shared/components/agent-tile';
 import { useRelativeTime } from '@hooks/use-relative-time';
 import { asInbound } from '@shared/ledger-derive';
 import type { Rung, RungId } from '@shared/permission-rules';
 import {
   useAnswerAsk,
   useDisplayName,
+  useEntity,
   useIsAgentId,
+  useOpenEntity,
   useThread,
 } from '@stores/hive-store';
 
@@ -20,7 +25,20 @@ interface AskCardProps {
   notif: HiveNotification;
   /** Narrowed by the dispatcher, so this component never re-checks the union. */
   thread: string;
+  /**
+   * `rail` is the Classic Inbox's card. `float` is round two's (HIVE-198): the
+   * arrival over the pill and the drawer's card, headed by the asker's glyph,
+   * what it did, and how long it has waited.
+   */
+  variant?: 'rail' | 'float';
+  /** Float only: a ✕ that folds the card into the pill. */
+  onClose?: () => void;
+  /** Float only: "Open <asker> ›" under the controls. */
+  openLink?: boolean;
 }
+
+/** Under a minute, the wait reads "now" in amber: the ask has just arrived. */
+const FRESH_MS = 60_000;
 
 /** An option that closes the ask badly, and should not look like the safe one. */
 const NEGATIVE = /^(reject|deny|no)$/i;
@@ -94,7 +112,7 @@ const rungsOf = (value: unknown): Rung[] =>
  * showing options that post into a thread this process cannot see would be a
  * control that lies.
  */
-export function AskCard({ notif, thread }: AskCardProps) {
+export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = false }: AskCardProps) {
   const entries = useThread(thread);
   const answerAsk = useAnswerAsk();
 
@@ -139,6 +157,9 @@ export function AskCard({ notif, thread }: AskCardProps) {
   const sessionName = useDisplayName(fromIsAgent ? '' : from);
   const asker = fromIsAgent ? from : sessionName;
   const age = useRelativeTime(ask?.ts ?? notif.createdAt);
+  const askerEntity = useEntity(fromIsAgent ? from : '');
+  const openEntity = useOpenEntity();
+  const float = variant === 'float';
 
   const [draft, setDraft] = useState<string | null>(null);
   const [reply, setReply] = useState('');
@@ -336,27 +357,72 @@ export function AskCard({ notif, thread }: AskCardProps) {
     <article
       data-notification={notif.id}
       aria-label={`Ask from ${asker}: ${notif.title}`}
-      className={cn(
-        'mb-[var(--cc-list-gap-sm)] flex flex-col gap-1 rounded-r-xl rounded-l border border-l-2 px-3 py-[var(--cc-card-py)] text-left last:mb-0',
-        'border-border',
-        tone,
-      )}
+      className={
+        float
+          ? 'flex flex-col gap-[9px] rounded-[10px] border border-border bg-panel-2 px-3.5 py-3 text-left text-[12.5px]'
+          : cn(
+              'mb-[var(--cc-list-gap-sm)] flex flex-col gap-1 rounded-r-xl rounded-l border border-l-2 px-3 py-[var(--cc-card-py)] text-left last:mb-0',
+              'border-border',
+              tone,
+            )
+      }
     >
       {children}
     </article>
   );
 
-  const meta = (trailing?: ReactNode) => (
-    <div className="flex items-center gap-1.5 text-[10px] text-subtle">
-      <span className="font-medium text-muted">{asker}</span>
+  /*
+    `Date.now()` in render is the same clock `useRelativeTime` reads; the card
+    re-renders with it, so "now" turns into the age within the minute.
+  */
+  const fresh = Date.now() - (ask?.ts ?? notif.createdAt) < FRESH_MS;
+  const verb = isPermission ? 'wants to run a command' : quote !== undefined ? 'drafted a reply' : 'asks';
+
+  // Round two's head row: the asker's glyph, its name, what it did, the wait, and the fold.
+  const floatMeta = () => (
+    <div className="flex items-center gap-[7px] text-[12px] text-muted">
+      {askerEntity !== undefined && isAgent(askerEntity) ? (
+        <AgentTile icon={askerEntity.icon} tone="asking" live={0} size="sm" />
+      ) : (
+        <span aria-hidden className="size-2 shrink-0 rounded-full bg-amber" />
+      )}
+      <b className="font-semibold text-ink">{asker}</b>
+      <span>{verb}</span>
       {redirectedFrom !== undefined ? (
         <span data-redirected-from={redirectedFrom}>meant for {redirectedFrom}, which ended</span>
       ) : null}
-      <span className="opacity-50">·</span>
-      <span>{age}</span>
-      {trailing}
+      <span className="flex-1" />
+      <span className={cn('font-mono', fresh ? 'text-amber' : 'text-subtle')}>{fresh ? 'now' : age}</span>
+      {onClose === undefined ? null : (
+        <button
+          type="button"
+          aria-label="Fold into the pill"
+          onClick={onClose}
+          className="grid size-[22px] place-items-center rounded-md text-muted hover:bg-hover"
+        >
+          <X size={14} />
+        </button>
+      )}
     </div>
   );
+
+  const meta = (trailing?: ReactNode) =>
+    float ? (
+      floatMeta()
+    ) : (
+      <div className="flex items-center gap-1.5 text-[10px] text-subtle">
+        <span className="font-medium text-muted">{asker}</span>
+        {redirectedFrom !== undefined ? (
+          <span data-redirected-from={redirectedFrom}>meant for {redirectedFrom}, which ended</span>
+        ) : null}
+        <span className="opacity-50">·</span>
+        <span>{age}</span>
+        {trailing}
+      </div>
+    );
+
+  // The question: the rail's 12.5px line, or the float card's 14px title.
+  const titleClass = float ? 'text-[14px] font-semibold text-ink' : 'text-[12.5px] font-semibold text-ink';
 
   /**
    * Answered, and checked **before** the missing-entry fallback below.
@@ -394,7 +460,7 @@ export function AskCard({ notif, thread }: AskCardProps) {
       'border-l-border',
       <>
         {meta()}
-        <span className="text-[12.5px] font-semibold text-ink">{notif.title}</span>
+        <span className={titleClass}>{notif.title}</span>
         {notif.body === '' ? null : (
           <span className="text-[11.5px] leading-[1.4] text-muted">{notif.body}</span>
         )}
@@ -429,7 +495,7 @@ export function AskCard({ notif, thread }: AskCardProps) {
           <span>ask {ask.id.slice(-4)}</span>
         </>,
       )}
-      <span className="text-[12.5px] font-semibold text-ink">{title}</span>
+      <span className={titleClass}>{title}</span>
       {detail === '' ? null : isPermission ? (
         /*
           The command, as a mono block (spec §3.6). It is the actual risk
@@ -583,6 +649,16 @@ export function AskCard({ notif, thread }: AskCardProps) {
           </>
         )}
       </div>
+
+      {float && openLink ? (
+        <button
+          type="button"
+          onClick={() => openEntity(from)}
+          className="self-end text-[12px] text-brand hover:underline"
+        >
+          {`Open ${asker} ›`}
+        </button>
+      ) : null}
 
       {refusal === null ? null : (
         /*

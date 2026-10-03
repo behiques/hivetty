@@ -120,6 +120,24 @@ ticket blocks also shows the first ticket **it** blocks, one step further out.
 The tab reads the ticket when it opens, and again every minute while it is the visible
 tab. A failed read says so with **Retry**, and what was already shown stays.
 
+## The PR tab
+
+A session that has opened a pull request gets a **PR** tab in its panel, between
+Ticket and Files (HIVE-209). Top to bottom: `#313 · INCUBATING · open`, the
+title, `head → base · +75 −6 · 2 files`; **Checks 2 of 4**, one row per check in
+GitHub's order with its time (`41s`, `running 2m`, `queued`); **Review**, the
+shipper while it holds the PR ("took it · checks running") and each reviewer,
+requested or with a verdict; **Open threads**, each unresolved thread as
+`path:line` with its first comment — click one to open the file at that line;
+then **Open on GitHub** and **Show in PRs**. The details re-read once a minute,
+only while the tab is showing.
+
+The tab and its strip icon appear when the sweep first matches a PR to the
+session's branch; the panel does not switch to it. Both carry a dot in the PR's
+flap tone: amber when it needs you, green while it moves, grey for a draft,
+parked or remembered PR, brand once merged. A PR the sweep can no longer see
+(remembered) shows its number, "last seen" and Open on GitHub only.
+
 ## Start a session from a ticket
 
 Click **new session** on a ticket. The picker opens with the ticket key filled in, because a

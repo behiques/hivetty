@@ -28,7 +28,7 @@ import {
   terminalOf,
 } from '@/types/entity';
 import type { HiveNotification } from '@/types/notification';
-import type { HatcheryRow, Pr, SessionPr, TicketPr } from '@/types/pull-request';
+import type { Flap, FlapTone, HatcheryRow, Pr, SessionPr, TicketPr } from '@/types/pull-request';
 import type { TermLine } from '@/types/terminal';
 import type { Ticket, TicketDetail, TicketDetailWant, TicketProperties } from '@/types/ticket';
 
@@ -61,7 +61,7 @@ import {
 } from '@lib/jira';
 import { buildTicketSearchJql } from '@lib/jira-search';
 import { ledgerRows } from '@lib/ledger/console-rows';
-import { hatchStatus, sortHatchery } from '@lib/pr-hatch';
+import { FLAP_RANK, flapTone, hatchStatus, sortHatchery } from '@lib/pr-hatch';
 import {
   projectConfigSnapshot,
   projectContainerised,
@@ -149,11 +149,13 @@ import {
   type OpenAsk,
 } from '@shared/ledger-contract';
 import {
+  afterTarget,
   agentSiteFor,
   asksMeAbout,
   buildProgressFor,
   closedAskThreads,
   holderPost,
+  isHeld,
   isShipping,
   matches,
   mergeAsk,
@@ -747,8 +749,11 @@ interface HiveState {
    * A union rather than a replacement, for the reason `hydrateNotifs` above
    * gives — and see the note at the implementation for why a dropped entry
    * here would never come back.
+   *
+   * `closed` is the snapshot's `closedAsks` (HIVE-198), merged into the
+   * closed set the same way.
    */
-  hydrateLedger: (entries: LedgerEntry[]) => void;
+  hydrateLedger: (entries: LedgerEntry[], closed?: readonly string[]) => void;
   /** One entry landed — append it to the tail. */
   ledgerAppend: (entry: LedgerEntry) => void;
   /** One session's plan changed; `null` means it has none any more (HIVE-179). */
@@ -1936,7 +1941,7 @@ const ATTACH_SNAPSHOT_HANDLERS: Partial<
   [CH.agentsList]: (value, store) =>
     store.hydrateAgents((value as AgentsSnapshot).agents),
   [CH.ledgerList]: (value, store) =>
-    store.hydrateLedger((value as LedgerSnapshot).entries),
+    store.hydrateLedger((value as LedgerSnapshot).entries, (value as LedgerSnapshot).closedAsks),
   [CH.plansList]: (value, store) => store.hydratePlans((value as PlansSnapshot).plans),
   [CH.changedFilesList]: (value, store) =>
     store.hydrateChangedFiles((value as ChangedFilesSnapshot).sessions),
@@ -3859,7 +3864,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       },
     })),
 
-  hydrateLedger: (entries) =>
+  hydrateLedger: (entries, closed = []) =>
     set((state) => {
       /**
        * Union, not replacement — `hydrateNotifs`' reason, with one difference
@@ -3883,7 +3888,17 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
       return {
         ledger: merged.slice(-LEDGER_MEMORY_CAP),
-        closedAsks: withClosed(state.closedAsks, entries),
+        /*
+          The snapshot's own closed threads first (HIVE-198): a close older
+          than main's tail is in neither `entries` nor the mirror, and a
+          window opened after it would otherwise count the ask as open.
+        */
+        closedAsks: withClosed(
+          closed.every((thread) => state.closedAsks.has(thread))
+            ? state.closedAsks
+            : new Set([...state.closedAsks, ...closed]),
+          entries,
+        ),
       };
     }),
 
@@ -7246,6 +7261,185 @@ export const useSetSessionMetrics = () =>
 export const useSessionMetrics = (id: string | undefined) =>
   useHiveStore((state) => (id === undefined ? undefined : state.metrics[id]));
 
+/** The account's rate limits (HIVE-200): account-global, so any session's reading is the account's. */
+export interface AccountLimits {
+  fiveHourPct?: number;
+  fiveHourResetsAt?: number;
+  sevenDayPct?: number;
+  sevenDayResetsAt?: number;
+}
+
+const LIMIT_WINDOWS = {
+  fiveHour: ['fiveHourPct', 'fiveHourResetsAt'],
+  sevenDay: ['sevenDayPct', 'sevenDayResetsAt'],
+} as const;
+
+/**
+ * One window across every session's reading (D7): the latest `resetsAt` wins,
+ * since an older one belongs to a window that already rolled; within it, the
+ * highest percentage, since usage only grows inside a window. A reading with no
+ * reset ranks below every reading with one. An unreported window stays absent.
+ */
+function bestWindow(
+  metrics: Record<string, SessionMetrics>,
+  window: keyof typeof LIMIT_WINDOWS,
+): AccountLimits {
+  const [pctKey, resetKey] = LIMIT_WINDOWS[window];
+  let pct: number | undefined;
+  let at: number | undefined;
+  for (const m of Object.values(metrics)) {
+    const p = m[pctKey];
+    if (p === undefined) continue;
+    const r = m[resetKey];
+    const better =
+      pct === undefined || (r ?? -1) > (at ?? -1) || ((r ?? -1) === (at ?? -1) && p > pct);
+    if (better) {
+      pct = p;
+      at = r;
+    }
+  }
+  if (pct === undefined) return {};
+  return at === undefined ? { [pctKey]: pct } : { [pctKey]: pct, [resetKey]: at };
+}
+
+export const accountLimitsOf = (metrics: Record<string, SessionMetrics>): AccountLimits => ({
+  ...bestWindow(metrics, 'fiveHour'),
+  ...bestWindow(metrics, 'sevenDay'),
+});
+
+/** Home's Limits (HIVE-200). Four primitives under `useShallow`, so only a moved number re-renders. */
+export const useAccountLimits = (): AccountLimits =>
+  useHiveStore(useShallow((state) => accountLimitsOf(state.metrics)));
+
+/** One Coming up row (HIVE-200): a scheduled wake (`at`, ms) or a held pickup (no `at`). */
+export interface ComingUpRow {
+  id: string;
+  agent: string;
+  what: string;
+  at?: number;
+}
+
+const COMING_UP_MAX = 5;
+
+export function comingUpOf(
+  agents: readonly { id: string; sub: string; nextRunAt: number }[],
+  ledger: readonly LedgerEntry[],
+): ComingUpRow[] {
+  const scheduled = [...agents]
+    .sort((a, b) => a.nextRunAt - b.nextRunAt)
+    .map((a) => ({ id: a.id, agent: a.id, what: a.sub, at: a.nextRunAt }));
+  const heldRows = ledger.flatMap((entry) => {
+    const target = afterTarget(entry);
+    if (target === undefined || entry.to === undefined || !isHeld(entry, ledger)) return [];
+    const ticket = entry.meta?.['ticket'];
+    const work = typeof ticket === 'string' ? ticket : (entry.body.split('\n')[0] ?? '');
+    const repo = target.repo.split('/').pop() ?? target.repo;
+    return [{ id: entry.id, agent: entry.to, what: `picks up ${work} when ${repo}#${target.pr} ships` }];
+  });
+  return [...scheduled, ...heldRows].slice(0, COMING_UP_MAX);
+}
+
+const COMING_UP_SEP = '\u0000';
+
+/** Scheduled agents as strings, so `useShallow` sees no change on a terminal write. */
+const scheduledKeys = (state: HiveState): string[] =>
+  state.agentOrder.flatMap((id) => {
+    const entity = state.entities[id];
+    return entity !== undefined && isAgent(entity) && entity.nextRunAt !== undefined
+      ? [[entity.id, entity.nextRunAt, entity.sub].join(COMING_UP_SEP)]
+      : [];
+  });
+
+/** Home's Coming up (HIVE-200): scheduled wakes soonest first, then held pickups. At most five. */
+export const useComingUp = (): ComingUpRow[] => {
+  const keys = useHiveStore(useShallow(scheduledKeys));
+  const ledger = useHiveStore((state) => state.ledger);
+  return useMemo(() => {
+    const agents = keys.map((key) => {
+      const [id = '', at = '0', sub = ''] = key.split(COMING_UP_SEP);
+      return { id, sub, nextRunAt: Number(at) };
+    });
+    return comingUpOf(agents, ledger);
+  }, [keys, ledger]);
+};
+
+/** Home's While you were away (HIVE-200). */
+export interface WhileAway {
+  hatched: { numbers: number[]; by?: string };
+  goals: string[];
+  runs: { total: number; failed: number };
+  ready: { keys: string[]; total: number };
+}
+
+const READY_NAMED = 2;
+
+/**
+ * What happened after `since`, from state already in the renderer. Runs are
+ * bounded by the ledger tail (`LEDGER_MEMORY_CAP`), so a busy day can
+ * undercount; the row says so in its tooltip.
+ */
+export function whileAwayOf(
+  input: {
+    prs: readonly PrRecord[];
+    notifs: readonly HiveNotification[];
+    ledger: readonly LedgerEntry[];
+    readyKeys: readonly string[];
+  },
+  since: number,
+): WhileAway {
+  const merged = input.prs.filter(
+    (pr) => pr.state === 'merged' && Date.parse(pr.mergedAt ?? pr.updatedAt) > since,
+  );
+  const closers = merged.map(
+    (pr) =>
+      input.ledger.find(
+        (e) =>
+          e.meta?.['stage'] === 'closed' &&
+          String(e.meta['pr']) === String(pr.number) &&
+          String(e.meta['repo']).toLowerCase() === `${pr.owner}/${pr.repo}`.toLowerCase(),
+      )?.from,
+  );
+  const first = closers[0];
+  const by = first !== undefined && closers.every((who) => who === first) ? first : undefined;
+
+  let total = 0;
+  let failed = 0;
+  for (const e of input.ledger) {
+    if (e.kind !== 'event' || e.ts <= since || !e.body.startsWith('run.ended')) continue;
+    total += 1;
+    if (e.meta?.['outcome'] === 'failed') failed += 1;
+  }
+
+  return {
+    hatched: {
+      numbers: merged.map((pr) => pr.number).sort((a, b) => a - b),
+      ...(by === undefined ? {} : { by }),
+    },
+    goals: input.notifs
+      .filter((n) => n.kind === 'session.goal' && n.createdAt > since)
+      .map((n) => n.title),
+    runs: { total, failed },
+    ready: { keys: input.readyKeys.slice(0, READY_NAMED), total: input.readyKeys.length },
+  };
+}
+
+/** Home's While you were away (HIVE-200). Memoised over its slices, so a terminal write costs nothing. */
+export const useWhileAway = (since: number): WhileAway => {
+  const prs = useHiveStore((state) => state.prs);
+  const notifs = useHiveStore((state) => state.notifs);
+  const ledger = useHiveStore((state) => state.ledger);
+  const tickets = useHiveStore((state) => state.tickets);
+  const fleet = useHiveStore(selectSessionFacets);
+  return useMemo(() => {
+    const readyKeys = tickets
+      .filter(
+        (t) => t.statusCategory === 'todo' && liveSessionsForTicket(t.key, fleet).length === 0,
+      )
+      .map((t) => t.key);
+    return whileAwayOf({ prs, notifs, ledger, readyKeys }, since);
+  }, [prs, notifs, ledger, tickets, fleet, since]);
+};
+
 /**
  * The session's plan, or undefined (HIVE-179). Stable identity: main
  * publishes a new object only on a change, so this re-renders only then.
@@ -7513,6 +7707,10 @@ export const useSessionBooting = (id: string): boolean =>
 export function currentRowFor(id: string): string {
   return currentSessionIn(useHiveStore.getState(), id);
 }
+
+/** {@link currentRowFor} for a render path (HIVE-198): re-resolves when the row behind a terminal changes. */
+export const useCurrentRow = (terminalId: string): string =>
+  useHiveStore((state) => currentSessionIn(state, terminalId));
 
 /**
  * True when `id` currently names an agent, not a terminal (HIVE-118).
@@ -8893,6 +9091,29 @@ export const usePrNeedsYouCount = (): number => {
   return live ? rows.filter((row) => row.hatch.needsYou).length : 0;
 };
 
+/** One flap's count for Home (HIVE-200). */
+export interface FlapCount {
+  flap: Flap;
+  count: number;
+  tone: FlapTone;
+}
+
+/** Counts per flap over the Hatchery's rows, in `FLAP_RANK` order; a flap with no PR is left out. */
+export function flapCountsOf(rows: readonly HatcheryRow[]): FlapCount[] {
+  const counts = new Map<Flap, number>();
+  for (const { hatch } of rows) counts.set(hatch.flap, (counts.get(hatch.flap) ?? 0) + 1);
+  return [...counts]
+    .sort(([a], [b]) => FLAP_RANK[a] - FLAP_RANK[b])
+    .map(([flap, count]) => ({ flap, count, tone: flapTone(flap) }));
+}
+
+/** Home's Pull requests (HIVE-200), over HIVE-215's one rule. Empty unless the sweep is live. */
+export const usePrFlapCounts = (): FlapCount[] => {
+  const rows = useHatchery();
+  const live = useHiveStore((state) => state.prSource.kind === 'live');
+  return useMemo(() => (live ? flapCountsOf(rows) : []), [rows, live]);
+};
+
 /**
  * One row's pull request, resolved from the live list (HIVE-100).
  *
@@ -8925,6 +9146,28 @@ export const useSessionPr = (id: string): SessionPr | null => {
   return useMemo(
     () => resolveSessionPr(branch, project, prs, remembered),
     [branch, project, prs, remembered],
+  );
+};
+
+/** A session's PR and, when the sweep can see it, its Hatchery row (HIVE-209). */
+export interface SessionPrRow {
+  pr: SessionPr;
+  /** `null` for a remembered PR: no owner, repo or title to read details with. */
+  row: HatcheryRow | null;
+}
+
+/**
+ * The session panel's PR tab and strip dot read this (HIVE-209): `useSessionPr`
+ * for which PR, `useHatchery` for its flap. Matched by URL, which is unique
+ * across repos where the number is not.
+ */
+export const useSessionPrRow = (id: string): SessionPrRow | null => {
+  const pr = useSessionPr(id);
+  const rows = useHatchery();
+
+  return useMemo(
+    () => (pr === null ? null : { pr, row: rows.find((row) => row.pr.url === pr.url) ?? null }),
+    [pr, rows],
   );
 };
 

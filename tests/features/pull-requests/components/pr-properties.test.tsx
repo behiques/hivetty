@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session } from '@/types/entity';
 
@@ -29,6 +29,14 @@ beforeEach(() => {
 const section = (name: string) => screen.getByRole('heading', { name }).parentElement!;
 
 describe('PrProperties', () => {
+  it('reads a running check by how long it has run and a queued one as queued', () => {
+    vi.useFakeTimers({ now: Date.parse('2026-10-03T10:02:10Z') });
+    render(<PrProperties row={row} detail={prDetail({ checks })} />);
+    expect(screen.getByRole('link', { name: /e2e/ })).toHaveTextContent('running 2m');
+    expect(screen.getByRole('link', { name: /build/ })).toHaveTextContent('queued');
+    vi.useRealTimers();
+  });
+
   it("shows the flap and GitHub's words", () => {
     render(<PrProperties row={row} detail={prDetail()} />);
     expect(within(section('Status')).getByText('MUTATING')).toBeInTheDocument();

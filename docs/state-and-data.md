@@ -43,6 +43,14 @@ the picker from re-rendering thirteen live terminals.
   `expanded`, round two's fold map, **folded by default** and separate from
   Classic's `collapsed`. `setSessionsProject(id)` also unfolds that project;
   `backToOrch` and the Sessions icon put `selId` on the session being left.
+  Round two's Inbox (HIVE-198), none persisted: `arrivals` (notification ids
+  up as a card or note, newest first), `arrivalPulse` (the latest arrival that
+  came in while the keyboard was in a terminal; the pill pulses once for it)
+  and `inboxDrawer` (`{ open, thread }`). `pushArrival(id, quiet)` raises or
+  pulses and does nothing over an open drawer; `foldArrivals()` empties the
+  queue (the rows stay in Summons); `openInboxDrawer(thread?)` folds and opens;
+  `closeInboxDrawer()`. What is drawn is `arrivals ∩ useSummons(onStage)`, so
+  an answered ask or the on-stage session drop out without anyone re-checking.
   `consoleShown` (`false`) is the overmind's transcript in round two's dock,
   flipped by `toggleConsole`; folded, the stage hides the transcript and the
   table takes the page.
@@ -96,6 +104,11 @@ whose authority lives in the other process, and that shapes both of its actions:
   permanently — the hook mounts once at the composition root and never remounts,
   so there is no second hydrate to recover it. Entries are kept sorted by `id`,
   which is fixed-width and sorts as a string in write order.
+- **`hydrateLedger(entries, closed?)`** also merges the snapshot's
+  `closedAsks` (HIVE-198) into the closed set. `LedgerSnapshot.closedAsks` is
+  every ask thread closed anywhere in main's log: a window opened after an
+  ask's closing entry left the tail would otherwise count it open in the pill
+  and the dock. Optional on the wire, so an older peer still speaks the shape.
 - **`ledgerAppend(entry)`** is the push channel's only entry point. Nothing in
   the renderer writes to this slice directly; a write goes out over IPC and comes
   back on the channel, so the mirror can only ever hold what the log holds.
@@ -358,6 +371,9 @@ Components never read a store object directly and never call `getState()`.
 | `useProjectSessions(projectId)` | a project's sessions that have not ended |
 | `useOpenEntity()` | open an entity's tab, refusing a `terminated` one |
 | `useTicketPrs(ticketKey)` | PRs reachable from a ticket's sessions |
+| `useCurrentRow(terminalId)` | the row behind a terminal now, the subscribing `currentRowFor` (HIVE-198) |
+| `useArrivals()` / `useArrivalPulse()` | ui-store: the Inbox arrival queue and the pill's pulse id (HIVE-198) |
+| `useInboxDrawer()` / `useInboxActions()` | ui-store: the drawer's `{ open, thread }`, and the arrival and drawer actions |
 | `useUnreadCount()` | inbox unread count |
 | `useNotifs()` | the inbox, newest first |
 | `useSummons(onStage)` | the Summons queue, `{ asks, sessions }`, newest first: open `agent.ask` / `agent.permission` and `pr.review_requested`; `session.blocked` less the one on stage (HIVE-214) |
@@ -373,6 +389,7 @@ Components never read a store object directly and never call `getState()`.
 | `useShipTrack(slug, n)` | the shipper's eight stops for one PR, with time and holder (HIVE-205) |
 | `useMergeAsk(slug, n)` | the shipper's open merge card for one PR, the ask the PR page's Merge answers (HIVE-205) |
 | `useSessionPr(id)` | one row's PR, matched on its branch |
+| `useSessionPrRow(id)` | the session's PR with its Hatchery row, matched by URL; `row: null` for a remembered PR. The session panel's PR tab and dot (HIVE-209) |
 | `useHasResumable()` | whether the fleet table reserves its Resume column |
 | `useMarkRead()` | mark one notification read, by index |
 
@@ -462,6 +479,31 @@ row; also what lets a quiet Hatchery draw its panel). The stage resolves to a
 `prs` view in round two on the PRs place, just below Agents.
 
 `Pr` (and `PrRecord`) carry `mergedAt` and `mine`; `Pr` also carries `updatedAt`.
+
+### Home's strip (HIVE-200)
+
+Every number Home's strip shows is derived from state the renderer already
+holds; nothing new is stored but `awaySince`. Each reading is a pure `…Of`
+function in `hive-store.ts` behind a hook that keeps its identity across an
+unrelated write (a terminal line re-renders none of them).
+
+- `useAccountLimits()` (`accountLimitsOf(metrics)`): the account's five-hour and
+  seven-day windows. Limits are account-global, so any session's reading is the
+  account's; per window the reading with the latest `resetsAt` wins, then the
+  highest percentage, and a reading with no reset ranks below every one with one.
+  An unreported window is absent, never 0.
+- `useComingUp()` (`comingUpOf`): agents with a `nextRunAt`, soonest first, then
+  held asks (`isHeld`, an `after:` PR not yet closed) as "picks up X when repo#N
+  ships". At most five.
+- `useWhileAway(since)` (`whileAwayOf`): PRs merged after `since` (and the one
+  party whose `closed` post covers them all), `session.goal` notification titles,
+  `run.ended` events in the ledger tail with the failed ones counted, and todo
+  tickets with no live session. Runs are bounded by `LEDGER_MEMORY_CAP`, so a busy
+  day can undercount; the row's tooltip says so.
+- `usePrFlapCounts()` (`flapCountsOf`): counts per flap over `useHatchery()`, in
+  `FLAP_RANK` order, toned by `flapTone`; empty unless `prSource` is live.
+- `ui-store.awaySince`: when this window last lost focus (`useAwayTracker`,
+  mounted once in the app shell), else when it launched. Per window, not persisted.
 
 ## Caps
 

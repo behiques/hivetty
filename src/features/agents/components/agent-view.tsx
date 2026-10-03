@@ -203,7 +203,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
         says `overmind ❯`: the row is addressed to somebody, and which somebody
         is the one thing a prompt should say.
       */}
-      <div className="flex shrink-0 items-center gap-2.5 border-t border-border-soft bg-term-input px-[18px] py-2.5">
+      <div data-stage-input="" className="flex shrink-0 items-center gap-2.5 border-t border-border-soft bg-term-input px-[18px] py-2.5">
         <span className="shrink-0 font-mono text-[13px] text-green">
           {`${entity.id} ❯`}
         </span>

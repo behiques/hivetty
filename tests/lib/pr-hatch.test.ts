@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { FLAP_RANK, hatchStatus, mergedWords, sortHatchery } from '@lib/pr-hatch';
+import { FLAP_RANK, flapTone, hatchStatus, mergedWords, sortHatchery } from '@lib/pr-hatch';
 import type { HatchFacts, HatcheryRow, Pr } from '@/types/pull-request';
 
 /** Local wall-clock times, so the assertions hold in any TZ the suite runs in. */
@@ -118,4 +118,11 @@ describe('hatchStatus', () => {
   it('reads an unknown stage as rule 12 for a non-draft', () => {
     expect(of({}, held('unheard-of'))).toMatchObject({ flap: 'BURROWED', github: 'Open · waiting on review' });
   });
+});
+
+it('flapTone reads the one tone table (HIVE-200)', () => {
+  expect(flapTone('SUMMONS')).toBe('amber');
+  expect(flapTone('INCUBATING')).toBe('green');
+  expect(flapTone('HATCHED')).toBe('brand');
+  expect(flapTone('LARVA')).toBe('muted');
 });
