@@ -32,6 +32,7 @@ describe('PrChecks', () => {
   it('reads on mount for this PR’s head branch', () => {
     render(<PrChecks pr={pr} detail={prDetail()} />);
     expect(loadPrChecks).toHaveBeenCalledWith(pr.owner, pr.repo, pr.n, prDetail().headRef ?? pr.branch, undefined);
+    expect(loadPrChecks).toHaveBeenCalledTimes(1);
   });
 
   it('says there are no checks on the head commit rather than drawing an empty graph', () => {

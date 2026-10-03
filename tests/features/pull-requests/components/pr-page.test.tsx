@@ -111,6 +111,28 @@ describe('the Checks tab (HIVE-206)', () => {
     expect(loadPrChecks).toHaveBeenCalledTimes(2);
   });
 
+  it('reads the clicked push once, without stacking on the read still out, then keeps the minute (HIVE-206)', async () => {
+    let release: (() => void) | undefined;
+    loadPrChecks.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    render(<PrPage row={row} />);
+    await act(async () => { useUiStore.getState().setPrTab('checks'); await Promise.resolve(); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(1);
+
+    await act(async () => { useUiStore.getState().showPrRun('older'); await Promise.resolve(); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(1);
+    await act(async () => { release?.(); await Promise.resolve(); await Promise.resolve(); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(2);
+    expect(loadPrChecks).toHaveBeenLastCalledWith('acme', 'incorpx-server', 1182, 'feat/incorp-598-fee-rule', 'older');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(3);
+  });
+
   it('carries a red dot while a check fails', () => {
     render(<PrPage row={hatchRow({ checks: 'failing' }, { flap: 'MUTATING', tone: 'green' })} />);
     expect(screen.getByRole('radio', { name: 'Checks, failing' })).toBeInTheDocument();
