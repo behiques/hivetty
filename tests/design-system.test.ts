@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { TERM } from '@lib/terminal/ansi';
+import { mixColour, parseColour } from '@lib/theme/colour';
+import { contrastRatio } from '@lib/theme/validate';
 
 /**
  * Story 015 requires `.claude/DESIGN-SYSTEM.md` to reproduce the token sets and
@@ -208,5 +210,32 @@ describe('AGENTS.md', () => {
     expect(agents).toContain('TerminalTransport');
     expect(agents).toContain('selector hook');
     expect(agents).toContain('80%');
+  });
+});
+
+describe('the amber count colour (HIVE-210)', () => {
+  const declared = (selector: RegExp) =>
+    /--cc-amber-count:\s*([^;]+);/.exec(block(tokensCss, selector))?.[1]?.trim();
+
+  it('is the drawn amber in dark', () => {
+    expect(declared(/:root\s*\{/)).toBe('var(--cc-amber)');
+  });
+
+  it('clears AA on every light ground a count sits on', () => {
+    const value = declared(/body\[data-theme='light'\]\s*\{/);
+    const match = /^color-mix\(in srgb, var\(--cc-amber\) (\d+)%, var\(--cc-ink\)\)$/.exec(
+      value ?? '',
+    );
+    expect(match, `unexpected light --cc-amber-count: ${String(value)}`).not.toBeNull();
+    const amberShare = Number(match![1]) / 100;
+    const mixed = mixColour(lightTokens['--cc-amber']!, lightTokens['--cc-ink']!, 1 - amberShare);
+    // contrastRatio reads hex only, and mixColour hands back `rgb(r g b)`.
+    const count = `#${parseColour(mixed)!
+      .slice(0, 3)
+      .map((channel) => Math.round(channel).toString(16).padStart(2, '0'))
+      .join('')}`;
+    for (const ground of ['--cc-bg', '--cc-panel', '--cc-panel-2', '--cc-chip']) {
+      expect(contrastRatio(count, lightTokens[ground]!), ground).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
