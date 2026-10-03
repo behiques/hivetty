@@ -40,6 +40,16 @@ describe('foldPushes', () => {
     expect(push?.runs).toHaveLength(2);
   });
 
+  it('keeps only the newest run of each workflow within a push, so a workflow is drawn once (D1)', () => {
+    const [push] = foldPushes([
+      run({ id: 3, number: 2209, headSha: 'x', createdAt: '2026-10-03T14:02:00Z' }),
+      run({ id: 2, number: 2208, workflowName: 'Preview', headSha: 'x' }),
+      run({ id: 1, number: 2207, conclusion: 'failure', headSha: 'x', createdAt: '2026-10-03T13:59:00Z' }),
+    ]);
+    expect(push?.runs.map((r) => r.id)).toEqual([3, 2]);
+    expect(push).toMatchObject({ number: 2209, state: 'passed', startedAt: '2026-10-03T14:00:00Z' });
+  });
+
   it('calls a push with a run in flight running', () => {
     expect(foldPushes([run({ status: 'queued', conclusion: null })])[0]?.state).toBe('running');
   });

@@ -9,8 +9,9 @@ import { cn } from '@/lib/utils';
 import { isSession } from '@/types/entity';
 import type { HatcheryRow, Pr } from '@/types/pull-request';
 
-import { SegmentedControl } from '@components/ui/segmented-control';
+import { SegmentedControl, type SegmentedOption } from '@components/ui/segmented-control';
 import { Flap } from '@features/pull-requests/components/flap';
+import { PrChecks } from '@features/pull-requests/components/pr-checks';
 import { PrCommentBox } from '@features/pull-requests/components/pr-comment-box';
 import { PrConversation } from '@features/pull-requests/components/pr-conversation';
 import { PrActions, PrProperties } from '@features/pull-requests/components/pr-properties';
@@ -32,11 +33,11 @@ import {
 } from '@stores/hive-store';
 import { usePrPageActions, usePrTab, type PrTab } from '@stores/ui-store';
 
-/** The tab strip; HIVE-206/207/208 append Checks, Files and Timeline. */
-export const PR_TABS = [{ value: 'conversation', label: 'Conversation' }] as const satisfies readonly {
-  value: PrTab;
-  label: string;
-}[];
+/** The tab strip; HIVE-207/208 append Files and Timeline. */
+export const PR_TABS = [
+  { value: 'conversation', label: 'Conversation' },
+  { value: 'checks', label: 'Checks' },
+] as const satisfies readonly SegmentedOption<PrTab>[];
 
 /** The open PR's detail re-reads once a minute while it is on stage; the first sweep is the open's read. */
 const usePagePoller = createPoller({ intervalMs: 60_000 });
@@ -106,6 +107,8 @@ export function PrPage({ row }: { row: HatcheryRow }) {
       : (path: string, line: number) => void openPath(projectId, session?.id, path, { line });
 
   const retry = () => void load(pr.owner, pr.repo, pr.n);
+  /* The Checks tab carries a red dot while a check fails (HIVE-206). */
+  const tabs = PR_TABS.map((t) => (t.value === 'checks' ? { ...t, alert: pr.checks === 'failing' } : t));
 
   return (
     <section aria-label={`Pull request #${String(pr.n)}`} className="flex min-h-0 flex-1 flex-col">
@@ -120,7 +123,7 @@ export function PrPage({ row }: { row: HatcheryRow }) {
           <Facts pr={pr} detail={detail} />
         </div>
         <span className="flex-1" />
-        <SegmentedControl label="Tab" options={PR_TABS} value={tab} onChange={setPrTab} />
+        <SegmentedControl label="Tab" options={tabs} value={tab} onChange={setPrTab} />
         <a
           href={pr.url}
           target="_blank"
@@ -158,13 +161,22 @@ export function PrPage({ row }: { row: HatcheryRow }) {
                   <SourceProblem message={entry.problem} onRetry={retry} />
                 </div>
               )}
-              <PrConversation
-                pr={pr}
-                detail={detail}
-                fixerOnIt={!merged && track.held && track.current?.holder === 'fixer'}
-                onOpenFile={onOpenFile}
-              />
-              {merged ? null : <PrCommentBox pr={pr} />}
+              {tab === 'checks' ? (
+                /* -mx-8 cancels the column's px-8: the Checks layout carries its own 24px gutters. */
+                <div className="-mx-8">
+                  <PrChecks pr={pr} detail={detail} />
+                </div>
+              ) : (
+                <>
+                  <PrConversation
+                    pr={pr}
+                    detail={detail}
+                    fixerOnIt={!merged && track.held && track.current?.holder === 'fixer'}
+                    onOpenFile={onOpenFile}
+                  />
+                  {merged ? null : <PrCommentBox pr={pr} />}
+                </>
+              )}
             </>
           )}
         </div>

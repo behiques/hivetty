@@ -11,6 +11,7 @@ import { checkTime } from '@features/pull-requests/session-pr';
 import type { PrCheck, PrDetail, PrReview } from '@shared/github-contract';
 import type { LedgerResult } from '@shared/ledger-contract';
 import { useAnswerAsk, useEntity, useMergeAsk, useOpenEntity, useReviewUrls } from '@stores/hive-store';
+import { usePrPageActions } from '@stores/ui-store';
 
 const HEADING = 'flex items-center pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase';
 const CHECK_ROW = 'flex items-center gap-[9px] rounded px-1 py-[5px] text-[12.5px]';
@@ -64,7 +65,8 @@ export function reviewers(detail: PrDetail, viaHive: ReadonlySet<string>): { who
   return [...done, ...asked];
 }
 
-export function CheckRow({ check }: { check: PrCheck }) {
+/** A check: with `onOpen` a button (the PR page opens its Checks tab, HIVE-206), else a link to its page on GitHub. */
+export function CheckRow({ check, onOpen }: { check: PrCheck; onOpen?: (check: PrCheck) => void }) {
   const body = (
     <>
       <CheckIcon status={check.status} />
@@ -73,6 +75,13 @@ export function CheckRow({ check }: { check: PrCheck }) {
       <span className="font-mono text-[11.5px] text-muted">{checkTime(check, Date.now())}</span>
     </>
   );
+  if (onOpen !== undefined) {
+    return (
+      <button type="button" onClick={() => onOpen(check)} className={cn(CHECK_ROW, 'w-full text-left hover:bg-hover')}>
+        {body}
+      </button>
+    );
+  }
   /* A StatusContext may carry no page; then there is nothing to open. */
   if (check.url === null) return <div className={CHECK_ROW}>{body}</div>;
   return (
@@ -84,8 +93,8 @@ export function CheckRow({ check }: { check: PrCheck }) {
 
 /**
  * The PR page's right column (HIVE-205): status, checks, reviewers, the linked
- * ticket and the actions. A check opens its page on GitHub until HIVE-206's
- * Checks tab exists (D20). A section with nothing to say is left out.
+ * ticket and the actions. A check opens the Checks tab on its job (HIVE-206).
+ * A section with nothing to say is left out.
  */
 export function PrProperties({
   row,
@@ -97,6 +106,7 @@ export function PrProperties({
   actions?: ReactNode;
 }) {
   const { pr, hatch } = row;
+  const { openPrChecks } = usePrPageActions();
   const viaHive = useReviewUrls();
   const entity = useEntity(pr.session ?? '');
   const session = entity !== undefined && isSession(entity) ? entity : null;
@@ -122,7 +132,7 @@ export function PrProperties({
           }
         >
           {detail.checks.map((check, i) => (
-            <CheckRow key={`${check.name}-${String(i)}`} check={check} />
+            <CheckRow key={`${check.name}-${String(i)}`} check={check} onOpen={(one) => openPrChecks(one.jobId)} />
           ))}
         </Section>
       ) : null}

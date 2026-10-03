@@ -1,10 +1,11 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session } from '@/types/entity';
 
 import { PrProperties } from '@features/pull-requests/components/pr-properties';
 import { useHiveStore } from '@stores/hive-store';
+import { useUiStore } from '@stores/ui-store';
 import { hatchRow } from '@tests/support/hatchery';
 import { prDetail } from '@tests/support/pr-detail';
 
@@ -32,8 +33,8 @@ describe('PrProperties', () => {
   it('reads a running check by how long it has run and a queued one as queued', () => {
     vi.useFakeTimers({ now: Date.parse('2026-10-03T10:02:10Z') });
     render(<PrProperties row={row} detail={prDetail({ checks })} />);
-    expect(screen.getByRole('link', { name: /e2e/ })).toHaveTextContent('running 2m');
-    expect(screen.getByRole('link', { name: /build/ })).toHaveTextContent('queued');
+    expect(screen.getByRole('button', { name: /e2e/ })).toHaveTextContent('running 2m');
+    expect(screen.getByRole('button', { name: /build/ })).toHaveTextContent('queued');
     vi.useRealTimers();
   });
 
@@ -43,18 +44,27 @@ describe('PrProperties', () => {
     expect(within(section('Status')).getByText('Open · 2 open findings, fixer on it')).toBeInTheDocument();
   });
 
-  it('lists every check with its state, the failing count in red, each opening on GitHub', () => {
+  it('lists every check with its state and the failing count in red', () => {
     render(<PrProperties row={row} detail={prDetail({ checks })} />);
     expect(screen.getByText('1 failing')).toHaveClass('text-red');
-    expect(screen.getByRole('link', { name: /integration/ })).toHaveAttribute('href', 'https://ci/int');
-    expect(screen.getByRole('link', { name: /integration/ })).toHaveTextContent('3m 10s');
-    expect(screen.getByRole('link', { name: /e2e/ }).querySelector('[data-check="running"]')).not.toBeNull();
-    expect(screen.getByRole('link', { name: /build/ }).querySelector('[data-check="queued"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /integration/ })).toHaveTextContent('3m 10s');
+    expect(screen.getByRole('button', { name: /e2e/ }).querySelector('[data-check="running"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /build/ }).querySelector('[data-check="queued"]')).not.toBeNull();
   });
 
-  it('draws a check with no page as a plain row', () => {
+  it('opens the Checks tab on the check’s job when a check is clicked (HIVE-206)', () => {
+    useUiStore.getState().reset();
+    render(<PrProperties row={row} detail={prDetail({ checks: [
+      { name: 'integration', status: 'failure', startedAt: null, completedAt: null, url: 'https://x', app: 'github-actions', jobId: 77 },
+    ] })} />);
+    fireEvent.click(screen.getByRole('button', { name: /integration/ }));
+    expect(useUiStore.getState()).toMatchObject({ prTab: 'checks', prJob: 77 });
+  });
+
+  it('opens a check with no page on GitHub in the Checks tab too', () => {
     render(<PrProperties row={row} detail={prDetail({ checks: [{ ...checks[0]!, url: null }] })} />);
     expect(screen.queryByRole('link', { name: /lint/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /lint/ })).toBeInTheDocument();
     expect(within(section('Checks')).getByText('lint')).toBeInTheDocument();
   });
 

@@ -1,14 +1,13 @@
-import { Binoculars, Bug, Check, PaperPlaneTilt, Robot, type Icon } from '@phosphor-icons/react';
+import { Check } from '@phosphor-icons/react';
 import { Fragment, useMemo } from 'react';
 
 import { formatDuration } from '@/lib/format-duration';
 import { cn } from '@/lib/utils';
 import type { Pr } from '@/types/pull-request';
 
+import { holderIcon } from '@features/pull-requests/holder-icon';
 import { bandStops, stopTitle, type BandStop } from '@features/pull-requests/ship-band';
 import { useHolderPost, useShipTrack } from '@stores/hive-store';
-
-const HOLDER_ICON: Record<string, Icon> = { acr: Binoculars, fixer: Bug, shipper: PaperPlaneTilt };
 
 const DOT: Record<BandStop['state'], string> = {
   done: 'border-[color-mix(in_srgb,var(--cc-green)_55%,var(--cc-border))] text-green',
@@ -29,7 +28,7 @@ export function ShipTrack({ pr }: { pr: Pr }) {
   const current = pr.state !== 'merged' && track.held ? track.current : null;
   const holder = current?.holder ?? null;
   const post = useHolderPost(slug, pr.n, holder);
-  const HolderIcon = holder === null ? null : (HOLDER_ICON[holder] ?? Robot);
+  const HolderIcon = holder === null ? null : holderIcon(holder);
   const nowIndex = stops.findIndex((s) => s.state === 'now');
 
   return (

@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PrPage } from '@features/pull-requests/components/pr-page';
 import { prKey, useHiveStore } from '@stores/hive-store';
@@ -62,7 +62,7 @@ describe('PrPage', () => {
   });
 
   it('falls back to Conversation for a tab this PR does not have', () => {
-    useUiStore.setState({ prTab: 'checks' as never });
+    useUiStore.setState({ prTab: 'files' as never });
     render(<PrPage row={row} />);
     expect(screen.getByRole('radio', { name: 'Conversation' })).toBeChecked();
   });
@@ -84,5 +84,57 @@ describe('PrPage', () => {
     useHiveStore.setState({ prDetails: { [key]: { key, state: 'failed', problem: 'GitHub said no.' } } });
     rerender(<PrPage row={row} />);
     expect(screen.getByText('GitHub said no.')).toBeInTheDocument();
+  });
+});
+
+describe('the Checks tab (HIVE-206)', () => {
+  const loadPrChecks = vi.fn(() => Promise.resolve());
+  beforeEach(() => {
+    vi.useFakeTimers();
+    useHiveStore.setState({ loadPrChecks });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  // Async acts: the poller skips a tick while the last read's promise is unsettled, so microtasks must flush between steps.
+  it('reads nothing while hidden, once on showing, once a minute while shown, and nothing once hidden again', async () => {
+    render(<PrPage row={row} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+    expect(loadPrChecks).not.toHaveBeenCalled();
+
+    await act(async () => { useUiStore.getState().setPrTab('checks'); await Promise.resolve(); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(2);
+
+    await act(async () => { useUiStore.getState().setPrTab('conversation'); await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the clicked push once, without stacking on the read still out, then keeps the minute (HIVE-206)', async () => {
+    let release: (() => void) | undefined;
+    loadPrChecks.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    render(<PrPage row={row} />);
+    await act(async () => { useUiStore.getState().setPrTab('checks'); await Promise.resolve(); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(1);
+
+    await act(async () => { useUiStore.getState().showPrRun('older'); await Promise.resolve(); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(1);
+    await act(async () => { release?.(); await Promise.resolve(); await Promise.resolve(); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(2);
+    expect(loadPrChecks).toHaveBeenLastCalledWith('acme', 'incorpx-server', 1182, 'feat/incorp-598-fee-rule', 'older');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(loadPrChecks).toHaveBeenCalledTimes(3);
+  });
+
+  it('carries a red dot while a check fails', () => {
+    render(<PrPage row={hatchRow({ checks: 'failing' }, { flap: 'MUTATING', tone: 'green' })} />);
+    expect(screen.getByRole('radio', { name: 'Checks, failing' })).toBeInTheDocument();
   });
 });

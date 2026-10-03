@@ -21,6 +21,8 @@ import { cn } from '@/lib/utils';
 export interface SegmentedOption<T extends string> {
   value: T;
   label: string;
+  /** A red dot after the label, read as ", failing" (HIVE-206: the Checks tab while a check fails). */
+  alert?: boolean;
 }
 
 interface SegmentedControlProps<T extends string> {
@@ -200,6 +202,8 @@ export function SegmentedControl<T extends string>({
             role="radio"
             id={`${groupId}-${option.value}`}
             aria-checked={selected}
+            // The alert dot is drawn aria-hidden; its words ride on the name.
+            aria-label={option.alert === true ? `${option.label}, failing` : undefined}
             disabled={dead}
             // Roving tabindex: one stop for the whole group, not one per option.
             tabIndex={option.value === tabStop ? 0 : -1}
@@ -269,6 +273,9 @@ export function SegmentedControl<T extends string>({
             )}
           >
             {option.label}
+            {option.alert === true ? (
+              <span aria-hidden className="ml-1.5 inline-block size-1.5 shrink-0 rounded-full bg-red" />
+            ) : null}
           </button>
         );
       })}
