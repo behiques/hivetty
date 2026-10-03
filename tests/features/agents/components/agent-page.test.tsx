@@ -100,32 +100,13 @@ describe('AgentPage — the header', () => {
     expect(runNow()).toBeEnabled();
   });
 
-  it('has no back button in round two, and no Edit definition', () => {
+  it('draws no back button, whatever the stored layout, and no Edit definition (HIVE-213)', () => {
     seed();
     stub();
-    useAppearanceStore.getState().setLayout('round-two');
     render(<AgentPage name="watcher" />);
 
-    expect(screen.queryByRole('button', { name: 'Back to overmind' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back to overmind' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Edit definition/ })).toBeNull();
-  });
-
-  /*
-    Classic has no bar, so the page keeps its way back until HIVE-213 retires
-    Classic: without it an agent page is entered from three places and left
-    from none.
-  */
-  it('keeps the way back to the overmind in Classic', async () => {
-    seed();
-    stub();
-    useAppearanceStore.getState().setLayout('classic');
-    useUiStore.getState().openAgentPage('watcher', 'activity');
-    render(<AgentPage name="watcher" />);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Back to overmind' }));
-
-    expect(useUiStore.getState().activeTab).toBe('orch');
-    expect(useUiStore.getState().place).toBe('sessions');
   });
 
   it('opens on Activity when nothing says otherwise', () => {
