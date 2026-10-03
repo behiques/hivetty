@@ -79,6 +79,7 @@ function localAnswerFor(
     localRemotePair: (payload: unknown) => unknown;
     localRemoteForget: () => void;
     localRemotePaired: () => boolean;
+    localDialNow: () => void;
   },
 ): ((payload: unknown) => unknown | Promise<unknown>) | null {
   switch (channel) {
@@ -124,6 +125,13 @@ function localAnswerFor(
     */
     case CH.notificationsBadge:
       return (payload) => badgeDock(payload);
+    /*
+      The tenth (HIVE-211), handed down for `CH.remoteForget`'s cycle reason:
+      the reconnect loop it restarts lives in `router.ts`. It has to answer
+      here because the moment it matters is the moment the socket is down.
+    */
+    case CH.remoteDialNow:
+      return () => deps.localDialNow();
     default:
       return null;
   }
@@ -391,6 +399,12 @@ export function registerRemoteProxy(deps: {
    */
   localRemotePaired?: () => boolean;
   /**
+   * Try now (HIVE-211): restarts this process's reconnect loop. Defaults to a
+   * no-op rather than a throw, unlike the four above: a proxy registered without
+   * a loop has nothing to dial, and doing nothing is the true answer.
+   */
+  localDialNow?: () => void;
+  /**
    * Where a reconnect's `resumeFrom` is built from (HIVE-150).
    *
    * Optional because a proxy without one is still a correct proxy — it simply
@@ -422,6 +436,7 @@ export function registerRemoteProxy(deps: {
     localRemotePair = noLocalRemotePair,
     localRemoteForget = noLocalRemoteForget,
     localRemotePaired = () => false,
+    localDialNow = () => undefined,
     resumeTracker,
     onLinkLoss = () => undefined,
   } = deps;
@@ -491,6 +506,7 @@ export function registerRemoteProxy(deps: {
             localRemotePair,
             localRemoteForget,
             localRemotePaired,
+            localDialNow,
           })
         : null;
       /*

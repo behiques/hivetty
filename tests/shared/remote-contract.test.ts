@@ -81,7 +81,7 @@ const MAIN_ONLY: ReadonlyMap<string, FrameKind> = new Map([
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(158);
+    expect(entries).toHaveLength(159);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -125,11 +125,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 123 call, 6 notify and 29 event', () => {
+  it('splits 124 call, 6 notify and 29 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 123, notify: 6, event: 29 });
+    expect(tally).toEqual({ call: 124, notify: 6, event: 29 });
   });
 
   /**
@@ -202,11 +202,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 158 as 66 read, 44 mutate and 48 execute', () => {
+  it('grades the 159 as 66 read, 45 mutate and 48 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 66, mutate: 44, execute: 48 });
+    expect(tally).toEqual({ read: 66, mutate: 45, execute: 48 });
   });
 
   /**
@@ -505,7 +505,7 @@ describe('remote contract: process-local channels refused at the receiving end (
     PROCESS_LOCAL.forEach((channel, index) => expect(reasons[index]).toContain(channel));
   });
 
-  it('refuses the same eight whatever payload a peer attaches', () => {
+  it('refuses every PROCESS_LOCAL channel whatever payload a peer attaches', () => {
     for (const channel of PROCESS_LOCAL) {
       expect(remoteRefusedReason(channel, { anything: true }), channel).not.toBeNull();
     }
@@ -728,7 +728,7 @@ describe('WINDOW_BOUND', () => {
  * admitted and nobody had applied it to.
  */
 describe('PROCESS_LOCAL', () => {
-  it('names exactly nine channels', () => {
+  it('names exactly ten channels', () => {
     expect([...PROCESS_LOCAL].sort()).toEqual(
       [
         CH.appInfo,
@@ -740,8 +740,20 @@ describe('PROCESS_LOCAL', () => {
         CH.configGetRemote,
         CH.notificationsDelivery,
         CH.notificationsBadge,
+        CH.remoteDialNow,
       ].sort(),
     );
+  });
+
+  /*
+    Named on its own (HIVE-211). Try now restarts *this* process's reconnect
+    loop, at the one moment there is no socket to proxy it over, and a server
+    has no loop of a peer's to restart.
+  */
+  it('answers remote:dial-now locally, because the reconnect loop is this machine\'s own', () => {
+    expect(isProcessLocal('remote:dial-now')).toBe(true);
+    expect(isClientFrameAllowed('call', CH.remoteDialNow, 'execute')).toBe(false);
+    expect(remoteRefusedReason(CH.remoteDialNow, undefined)).toMatch(/reconnect loop/);
   });
 
   /*

@@ -1,13 +1,14 @@
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { isAgent, isSession } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
 import type { GhResult, PrsSnapshot } from '@shared/github-contract';
-import { CH } from '@shared/ipc-contract';
+import { CH, type RemoteLinkStatus } from '@shared/ipc-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import type { SessionPlan } from '@shared/plan-contract';
 import type { SessionHistoryEntry } from '@shared/session-history-contract';
-import { useHiveStore } from '@stores/hive-store';
+import { useHiveStore, useUnackedLost } from '@stores/hive-store';
 
 import { notif } from '../support/notifications';
 import { prRecord } from '../support/prs';
@@ -501,5 +502,40 @@ describe('changed files (HIVE-201)', () => {
     state().setChangedFiles('s1', [a]);
     state().reset();
     expect(state().changedFiles).toEqual({});
+  });
+});
+
+describe('the lost count, acknowledged (HIVE-211)', () => {
+  const link = (lost: number): RemoteLinkStatus => ({
+    state: 'reconnecting',
+    serverName: 'mini',
+    attempt: 1,
+    nextAttemptAt: 0,
+    reason: null,
+    epoch: 1,
+    lost,
+  });
+  beforeEach(() => state().reset());
+
+  it('Clear acknowledges what was lost so far; more losses show again', () => {
+    const { result } = renderHook(() => useUnackedLost());
+    act(() => state().setRemoteLink(link(3)));
+    expect(result.current).toBe(3);
+    act(() => state().acknowledgeLost());
+    expect(result.current).toBe(0);
+    act(() => state().setRemoteLink(link(5)));
+    expect(result.current).toBe(2);
+  });
+
+  it('going local resets the acknowledgement in the same write', () => {
+    state().setRemoteLink(link(3));
+    state().acknowledgeLost();
+    state().setRemoteLink(null);
+    expect(state().remoteLostAcked).toBe(0);
+  });
+
+  it('acknowledges nothing with no link', () => {
+    state().acknowledgeLost();
+    expect(state().remoteLostAcked).toBe(0);
   });
 });

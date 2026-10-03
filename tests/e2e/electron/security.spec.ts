@@ -393,8 +393,13 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * link change state gains nothing it could not already infer from the calls
    * failing, which is why this addition is a widening of *what the window
    * knows* rather than of what it can do.
+   *
+   * `dialNow` (HIVE-211, Try now) touches no credential either: it asks this
+   * machine's own reconnect loop to dial the server it already holds a
+   * credential for, now rather than at the next backoff step. It takes no
+   * payload, so the page cannot point it anywhere, and a server refuses it.
    */
-  expect(surface.remote).toEqual(['forget', 'onLinkStatus', 'pair']);
+  expect(surface.remote).toEqual(['dialNow', 'forget', 'onLinkStatus', 'pair']);
   expect(surface.skills).toEqual([
     'fileDrop',
     'fileImport',

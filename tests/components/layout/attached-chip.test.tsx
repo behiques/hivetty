@@ -1,12 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AttachedChip } from '@components/layout/attached-chip';
 import type { RemoteLinkStatus } from '@shared/ipc-contract';
-
-vi.mock('@stores/hive-store', () => ({ useRemoteLink: vi.fn() }));
-import { useRemoteLink } from '@stores/hive-store';
+import { useHiveStore } from '@stores/hive-store';
 
 const link = (over: Partial<RemoteLinkStatus> = {}): RemoteLinkStatus => ({
   state: 'attached',
@@ -21,10 +19,12 @@ const link = (over: Partial<RemoteLinkStatus> = {}): RemoteLinkStatus => ({
 
 /** Installs a link status as the pushed one, or `null` for no attachment. */
 const showing = (status: RemoteLinkStatus | null): void => {
-  vi.mocked(useRemoteLink).mockReturnValue(status);
+  act(() => useHiveStore.getState().setRemoteLink(status));
 };
 
 describe('AttachedChip', () => {
+  beforeEach(() => useHiveStore.getState().reset());
+
   /*
     A positive control, run first and asserted independently: this proves the
     query below actually finds the chip when there is a link, so the "renders
@@ -70,6 +70,24 @@ describe('AttachedChip', () => {
     showing(link({ state: 'reconnecting', lost: 4 }));
     rerender(<AttachedChip />);
     expect(screen.getByRole('button', { name: '1 lost — clear' })).toBeInTheDocument();
+  });
+
+  /*
+    HIVE-211: the acknowledgement lives in the store beside the link, so Clear
+    here clears the bar's foot and the stage line too, and theirs clears this.
+  */
+  it('clears into the store, and hides what the store already acknowledged', async () => {
+    showing(link({ lost: 3 }));
+    const { rerender } = render(<AttachedChip />);
+
+    await userEvent.click(screen.getByRole('button', { name: '3 lost — clear' }));
+    expect(useHiveStore.getState().remoteLostAcked).toBe(3);
+
+    act(() => useHiveStore.setState({ remoteLostAcked: 0 }));
+    rerender(<AttachedChip />);
+    expect(screen.getByRole('button', { name: '3 lost — clear' })).toBeInTheDocument();
+    act(() => useHiveStore.getState().acknowledgeLost());
+    expect(screen.queryByRole('button', { name: /lost/ })).not.toBeInTheDocument();
   });
 
   it('forgets the acknowledgement when the window goes local', async () => {

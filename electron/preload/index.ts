@@ -401,6 +401,8 @@ const bridge: HiveBridge = {
     ): Promise<{ paired: true } | { error: string }> =>
       ipcRenderer.invoke(CH.remotePair, request),
     forget: (): Promise<void> => ipcRenderer.invoke(CH.remoteForget),
+    /** Try now (HIVE-211): dial the dropped server at once. */
+    dialNow: (): Promise<void> => ipcRenderer.invoke(CH.remoteDialNow),
     /**
      * What this window's attachment is doing (HIVE-150).
      *

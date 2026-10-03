@@ -1156,6 +1156,61 @@ describe('CenterStage — Work in round two (HIVE-203)', () => {
   });
 });
 
+describe('CenterStage — the reconnect line (HIVE-211)', () => {
+  const reconnecting = {
+    state: 'reconnecting',
+    serverName: 'mini',
+    attempt: 2,
+    nextAttemptAt: null,
+    reason: null,
+    epoch: 1,
+    lost: 0,
+  } as const;
+
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
+    useAppearanceStore.getState().setLayout('round-two');
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+    useHiveStore.getState().setRemoteLink(reconnecting);
+  });
+
+  afterEach(() => {
+    useAppearanceStore.getState().reset();
+  });
+
+  it.each(['home', 'work', 'agents', 'prs', 'sessions'] as const)(
+    'says the server is lost across the top of %s',
+    (place) => {
+      useUiStore.setState({ place });
+      render(<CenterStage />);
+
+      const line = screen.getByText('Lost the Hive on mini.').closest('[role="status"]');
+      expect(line).not.toBeNull();
+      // First in the stage, above whatever the place draws.
+      expect(screen.getByRole('main').firstElementChild).toBe(line);
+    },
+  );
+
+  it('goes once the link is back', () => {
+    render(<CenterStage />);
+    act(() => useHiveStore.getState().setRemoteLink({ ...reconnecting, state: 'attached' }));
+
+    expect(screen.queryByText('Lost the Hive on mini.')).not.toBeInTheDocument();
+  });
+
+  it('draws no line in Classic, where the header chip already says it', () => {
+    useAppearanceStore.getState().setLayout('classic');
+    render(<CenterStage />);
+
+    expect(screen.queryByText('Lost the Hive on mini.')).not.toBeInTheDocument();
+  });
+});
+
 describe('CenterStage — the Overmind head (HIVE-197)', () => {
   beforeEach(() => {
     useHiveStore.getState().reset();

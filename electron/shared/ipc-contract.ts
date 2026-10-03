@@ -429,6 +429,11 @@ export const CH = {
    */
   remoteForget: 'remote:forget',
   /**
+   * Dial the dropped server now instead of waiting out the backoff (HIVE-211, Try now).
+   * Process-local: it is about this client's own reconnect loop, and it has to answer with the socket down.
+   */
+  remoteDialNow: 'remote:dial-now',
+  /**
    * What this window's attachment is doing right now (HIVE-150).
    *
    * A **push**, for the reason {@link CH.slackSocketStatus} is one: the socket
@@ -2285,6 +2290,8 @@ export interface HiveBridge {
     pair(request: RemotePairRequest): Promise<{ paired: true } | { error: string }>;
     /** Discard the credential {@link HiveBridge.remote.pair} stored. Idempotent. */
     forget(): Promise<void>;
+    /** Dial the dropped server now, restarting the backoff (Try now, HIVE-211). A no-op unless reconnecting. */
+    dialNow(): Promise<void>;
     /**
      * What this window's attachment is doing right now (HIVE-150).
      *
