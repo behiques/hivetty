@@ -16,6 +16,8 @@ import {
   buildPrQuery,
   buildPrVariables,
   buildSearchVariables,
+  FILE_UNVIEWED_MUTATION,
+  FILE_VIEWED_MUTATION,
   PR_COMMENT_MUTATION,
   PR_DETAIL_QUERY,
   PR_ID_QUERY,
@@ -87,6 +89,8 @@ export interface GithubClient {
   threadReply(repo: RepoRef, n: number, threadId: string, body: string): Promise<GhResult<true>>;
   /** Resolve or unresolve a review thread (HIVE-207), behind the same proof. */
   threadResolved(repo: RepoRef, n: number, threadId: string, resolved: boolean): Promise<GhResult<true>>;
+  /** Mark or unmark a file viewed (HIVE-207): the PR's id is read from GitHub first, as {@link GithubClient.comment} does. */
+  fileViewed(repo: RepoRef, n: number, path: string, viewed: boolean): Promise<GhResult<true>>;
 }
 
 export function createGithubClient(
@@ -340,6 +344,17 @@ export function createGithubClient(
       return resolved
         ? write(THREAD_RESOLVE_MUTATION, 'resolveReviewThread', { threadId })
         : write(THREAD_UNRESOLVE_MUTATION, 'unresolveReviewThread', { threadId });
+    },
+
+    async fileViewed(repo, n, path, viewed) {
+      const found = await graphql(PR_ID_QUERY, { owner: repo.owner, name: repo.name }, { number: n });
+      if (found === null) return NOT_RUN;
+      // The PR is GitHub's own id for the scoped PR, never a renderer value.
+      const id = readPrId(found.data);
+      if (id === null) return { ok: false, error: classifyGhFailure(found.stderr, found.timedOut) };
+      return viewed
+        ? write(FILE_VIEWED_MUTATION, 'markFileAsViewed', { pullRequestId: id, path })
+        : write(FILE_UNVIEWED_MUTATION, 'unmarkFileAsViewed', { pullRequestId: id, path });
     },
   };
 }

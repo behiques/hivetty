@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createGithubClient } from '../../../../../electron/main/integrations/github/client';
 import {
+  FILE_UNVIEWED_MUTATION,
+  FILE_VIEWED_MUTATION,
   PR_COMMENT_MUTATION,
   PR_DETAIL_QUERY,
   PR_ID_QUERY,
@@ -434,6 +436,48 @@ describe('thread writes (HIVE-207)', () => {
 
   it('answers not-installed when gh will not run', async () => {
     await expect(createGithubClient('/usr/bin/gh', () => Promise.reject(new Error('ENOENT'))).threadReply(REF, 1, 'T', 'x'))
+      .resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
+  });
+});
+
+describe('fileViewed (HIVE-207)', () => {
+  const REF: RepoRef = { owner: 'acme', name: 'nova-web' };
+  const recording = (mutation: string, calls: string[][]): RunAsync => (_file, args) => {
+    calls.push([...args]);
+    const stdout = args[3]?.startsWith('query=mutation') === true ? mutation : JSON.stringify({ data: { repository: { pullRequest: { id: 'PR_1' } } } });
+    return Promise.resolve({ code: 0, stdout, stderr: '', timedOut: false });
+  };
+
+  it.each([
+    [true, FILE_VIEWED_MUTATION, 'markFileAsViewed'],
+    [false, FILE_UNVIEWED_MUTATION, 'unmarkFileAsViewed'],
+  ])('viewed=%s reads the PR id from GitHub, then writes with the path as a -f string', async (viewed, doc, field) => {
+    const calls: string[][] = [];
+    const client = createGithubClient('/usr/bin/gh', recording(JSON.stringify({ data: { [field]: { pullRequest: { id: 'PR_1' } } } }), calls));
+    await expect(client.fileViewed(REF, 482, 'src/a b.ts', viewed)).resolves.toEqual({ ok: true, value: true });
+    expect(calls).toEqual([
+      ['api', 'graphql', '-f', `query=${PR_ID_QUERY}`, '-f', 'owner=acme', '-f', 'name=nova-web', '-F', 'number=482'],
+      ['api', 'graphql', '-f', `query=${doc}`, '-f', 'pullRequestId=PR_1', '-f', 'path=src/a b.ts'],
+    ]);
+  });
+
+  it('never writes without an id read from GitHub', async () => {
+    const calls: string[][] = [];
+    const client = createGithubClient('/usr/bin/gh', (_file, args) => {
+      calls.push([...args]);
+      return Promise.resolve({ code: 0, stdout: JSON.stringify({ data: { repository: { pullRequest: null } } }), stderr: '', timedOut: false });
+    });
+    await expect(client.fileViewed(REF, 482, 'src/a.ts', true)).resolves.toMatchObject({ ok: false, error: { kind: 'unknown' } });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('reports a refused write', async () => {
+    const client = createGithubClient('/usr/bin/gh', recording(JSON.stringify({ data: { markFileAsViewed: null } }), []));
+    await expect(client.fileViewed(REF, 482, 'src/a.ts', true)).resolves.toMatchObject({ ok: false });
+  });
+
+  it('answers not-installed when gh will not run', async () => {
+    await expect(createGithubClient('/usr/bin/gh', () => Promise.reject(new Error('ENOENT'))).fileViewed(REF, 1, 'a', true))
       .resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
   });
 });
