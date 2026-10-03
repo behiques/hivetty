@@ -395,6 +395,14 @@ export interface JiraLink {
   relationship?: string;
   /** Jira-to-Jira only. */
   status?: string;
+  /** Jira-to-Jira only (HIVE-202): the linked issue's key, title and category. */
+  key?: string;
+  summary?: string;
+  statusCategory?: JiraStatusCategory;
+  /** Jira-to-Jira only (HIVE-202): the link type's name, "Blocks", "Relates", "Duplicate". */
+  linkType?: string;
+  /** Jira-to-Jira only (HIVE-202): which end of the link the *other* issue is on. */
+  direction?: 'inward' | 'outward';
 }
 
 /** How many comments are read at once. Bounded, like every other list. */

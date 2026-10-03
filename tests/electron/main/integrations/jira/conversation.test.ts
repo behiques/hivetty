@@ -211,7 +211,43 @@ describe('toIssueLink — the direction is the whole point', () => {
       url: `https://${SITE}/browse/HIVE-72`,
       relationship: 'blocks',
       status: 'To Do',
+      key: 'HIVE-72',
+      summary: 'A bug',
+      statusCategory: 'todo',
+      linkType: 'Blocks',
+      direction: 'outward',
     });
+  });
+
+  it('carries the structured fields beside the wording (HIVE-202)', () => {
+    const outward = toIssueLink(
+      {
+        type: linkType,
+        outwardIssue: {
+          key: 'HIVE-72',
+          fields: { summary: 'A bug', status: { name: 'In Review', statusCategory: { key: 'indeterminate' } } },
+        },
+      },
+      SITE,
+    );
+    const inward = toIssueLink(
+      { type: linkType, inwardIssue: { key: 'HIVE-1', fields: { summary: 'Root', status: { name: 'Done', statusCategory: { key: 'done' } } } } },
+      SITE,
+    );
+
+    expect(outward).toEqual({
+      kind: 'issue',
+      title: 'HIVE-72 — A bug',
+      url: `https://${SITE}/browse/HIVE-72`,
+      relationship: 'blocks',
+      status: 'In Review',
+      key: 'HIVE-72',
+      summary: 'A bug',
+      statusCategory: 'in-progress',
+      linkType: 'Blocks',
+      direction: 'outward',
+    });
+    expect(inward).toMatchObject({ key: 'HIVE-1', statusCategory: 'done', linkType: 'Blocks', direction: 'inward', relationship: 'is blocked by' });
   });
 
   it('uses the inward wording for an inwardIssue', () => {
