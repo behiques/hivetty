@@ -490,4 +490,40 @@ describe('addComment', () => {
 
     expect(JSON.stringify(result)).not.toContain(TOKEN);
   });
+
+  it('sends the via property only when posting for an agent (HIVE-216)', async () => {
+    const seen: { url: string; method: string; body?: unknown }[] = [];
+    const jira = build({ fetch: replies([[201, rawComment()], [201, rawComment()]], seen) });
+
+    await jira.addComment({ key: 'HIVE-71', markdown: 'hi' }, { agent: 'builder' });
+    await jira.addComment({ key: 'HIVE-71', markdown: 'hi' });
+
+    expect((seen[0]?.body as { properties?: unknown }).properties).toEqual([
+      { key: 'hive.via', value: { agent: 'builder' } },
+    ]);
+    expect(seen[1]?.body).not.toHaveProperty('properties');
+  });
+
+  it('puts mention nodes first, and posts a mention-only comment (HIVE-216)', async () => {
+    const seen: { url: string; method: string; body?: unknown }[] = [];
+    await build({ fetch: replies([[201, rawComment()]], seen) }).addComment({
+      key: 'HIVE-71',
+      markdown: '',
+      mentions: [{ accountId: '712020:dana', name: 'Dana Kim' }],
+    });
+
+    const body = seen[0]?.body as { body: { content: { content: unknown[] }[] } };
+    expect(body.body.content[0]?.content[0]).toEqual({
+      type: 'mention',
+      attrs: { id: '712020:dana', text: '@Dana Kim' },
+    });
+  });
+
+  it('answers a comment posted for an agent with via already set (HIVE-216)', async () => {
+    const result = await build({
+      fetch: replies([[201, rawComment({ properties: [{ key: 'hive.via', value: { agent: 'builder' } }] })]]),
+    }).addComment({ key: 'HIVE-71', markdown: 'hi' }, { agent: 'builder' });
+
+    expect(result.ok && result.value.via).toEqual({ agent: 'builder' });
+  });
 });

@@ -16,6 +16,7 @@ import {
   JIRA_PAGE_SIZE,
   JIRA_SITE_ENV,
   JIRA_TOKEN_ENV,
+  JIRA_VIA_PROPERTY,
   type JiraIdentity,
   type JiraIssue,
   type JiraIssueDetail,
@@ -30,6 +31,7 @@ import {
 
 import { validateAdf } from './adf/adf-validate';
 import { convertMarkdown } from './adf/markdown-to-adf';
+import { withMentions } from './adf/with-mentions';
 import {
   createJiraAuth,
   type JiraAuth,
@@ -98,8 +100,12 @@ export interface Jira {
   comments(request: JiraConversationRequest): Promise<JiraResult<JiraCommentPage>>;
   /** Remote links and Jira-to-Jira links, in one list (HIVE-71). */
   links(request: JiraConversationRequest): Promise<JiraResult<JiraLink[]>>;
-  /** Post a comment written as markdown (HIVE-71). */
-  addComment(request: AddJiraCommentRequest): Promise<JiraResult<JiraComment>>;
+  /**
+   * Post a comment written as markdown (HIVE-71). `via` marks it as posted
+   * for an agent (HIVE-216): main-only, set by the receiver from its caller
+   * header, never from a payload — `AddJiraCommentRequest` has no such field.
+   */
+  addComment(request: AddJiraCommentRequest, via?: { agent: string }): Promise<JiraResult<JiraComment>>;
   /**
    * Assign the issue to whoever owns the token, then re-read it. The identity
    * comes from `/myself`, never from the caller: a parameter naming who to
@@ -642,11 +648,11 @@ export function createJira(deps: {
      * string, but "is this a valid ADF tree" is exactly the question this
      * validator exists to answer, in main, where the answer is enforceable.
      */
-    async addComment(request) {
+    async addComment(request, via) {
       const connection = connect();
       if (!connection.ok) return connection.error;
 
-      const body = convertMarkdown(request.markdown);
+      const body = withMentions(convertMarkdown(request.markdown), request.mentions ?? []);
       const validation = validateAdf(body);
       /**
        * Defensive, and deliberately so.
@@ -676,7 +682,7 @@ export function createJira(deps: {
 
       const posted = await connection.client.post<unknown>(
         `${ISSUE}/${request.key}/comment`,
-        { body },
+        via === undefined ? { body } : { body, properties: [{ key: JIRA_VIA_PROPERTY, value: { agent: via.agent } }] },
       );
       if (!posted.ok) return posted;
 
