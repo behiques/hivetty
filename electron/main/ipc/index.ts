@@ -4338,6 +4338,13 @@ export function registerIpcHandlers(
   handle(CH.remoteForget, (): void => {
     applyRemoteForget(remoteTokenStore);
   });
+  /**
+   * Try now (HIVE-211). A no-op in local mode, and not a placeholder: the
+   * reconnect loop exists only while attached, when `registerRemoteProxy`
+   * answers this channel from `router.ts`'s `dialNowAttached`. Bound here so
+   * the call resolves in both modes rather than failing on a missing handler.
+   */
+  handle(CH.remoteDialNow, (): void => undefined);
 
   /**
    * Slack's MCP server (HIVE-123) — four verbs, none taking a payload.

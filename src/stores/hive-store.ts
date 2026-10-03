@@ -490,6 +490,12 @@ interface HiveState {
    */
   remoteLink: RemoteLinkStatus | null;
   /**
+   * How much of `remoteLink.lost` the user has cleared (HIVE-211; was
+   * ConnectionItem's local state). Main resets `lost` only when the window goes
+   * local, so this resets with it.
+   */
+  remoteLostAcked: number;
+  /**
    * The ledger's tail (HIVE-111).
    *
    * A mirror, not the source — main owns the log and this holds the newest
@@ -757,6 +763,8 @@ interface HiveState {
   pushNotif: (notif: HiveNotification) => void;
   /** Install the link status main just pushed, or `null` for none (HIVE-150). */
   setRemoteLink: (status: RemoteLinkStatus | null) => void;
+  /** Clear the lost count as it stands, wherever it shows (HIVE-211). */
+  acknowledgeLost: () => void;
   /**
    * Merge main's buffer into what is already here, newest first (HIVE-75).
    *
@@ -2187,6 +2195,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   ...emptySeeds(),
   notifs: [],
   remoteLink: null,
+  remoteLostAcked: 0,
   ledger: [],
   closedAsks: new Set<string>(),
   metrics: {},
@@ -3675,8 +3684,13 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     ),
 
   setRemoteLink: (status) => {
-    set({ remoteLink: status });
+    set(status === null ? { remoteLink: null, remoteLostAcked: 0 } : { remoteLink: status });
   },
+
+  acknowledgeLost: () =>
+    set((state) =>
+      state.remoteLink === null ? state : { remoteLostAcked: state.remoteLink.lost },
+    ),
 
   applyRead: (id, unread) =>
     set((state) => ({
@@ -6279,6 +6293,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       ...emptySeeds(),
       notifs: [],
       remoteLink: null,
+      remoteLostAcked: 0,
       ledger: [],
       closedAsks: new Set<string>(),
       metrics: {},
@@ -9487,6 +9502,19 @@ export const useRemoteLink = () => useHiveStore((state) => state.remoteLink);
 
 /** Install the link status main just pushed (HIVE-150). */
 export const useSetRemoteLink = () => useHiveStore((state) => state.setRemoteLink);
+
+/**
+ * What the dropped link lost that the user has not cleared yet (HIVE-211).
+ * One count for the bar's foot, the Classic chip and the stage line, so Clear
+ * anywhere clears everywhere.
+ */
+export const useUnackedLost = (): number =>
+  useHiveStore((state) =>
+    state.remoteLink === null ? 0 : Math.max(0, state.remoteLink.lost - state.remoteLostAcked),
+  );
+
+/** Clear the lost count (HIVE-211). */
+export const useAcknowledgeLost = () => useHiveStore((state) => state.acknowledgeLost);
 
 /**
  * Re-state the fleet from an accept frame's snapshot (HIVE-150).

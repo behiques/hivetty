@@ -1,7 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { lostSentence } from '@components/layout/lost-note';
+import { NextTry } from '@components/layout/next-try';
 import { Popover, PopoverContent, PopoverTrigger } from '@components/ui/popover';
 import { isDesktop } from '@config/runtime';
 import {
@@ -10,7 +12,7 @@ import {
   useServingDeviceCount,
 } from '@hooks/use-project-config';
 import { connectionStates, type ConnectionState } from '@lib/connection-states';
-import { useRemoteLink } from '@stores/hive-store';
+import { useAcknowledgeLost, useRemoteLink, useUnackedLost } from '@stores/hive-store';
 import { useSettingsActions } from '@stores/ui-store';
 
 /** The bar's item shape (`activity-bar.tsx`), with room for a dot instead of an icon. */
@@ -44,21 +46,6 @@ function Dot({ state }: { state: ConnectionState }) {
   return <span data-dot aria-hidden className={cn('size-2 shrink-0 rounded-full', DOT[state])} />;
 }
 
-/** "Next try in Ns." Mounted only inside the open popover, so the interval lives only while it is open. */
-function NextTry({ at }: { at: number }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(id);
-  }, []);
-  const seconds = Math.max(0, Math.ceil((at - now) / 1_000));
-  return (
-    <>
-      {' '}Next try in <span className="font-mono text-ink">{seconds}s</span>.
-    </>
-  );
-}
-
 /**
  * Round two's connection state, at the bar's foot (HIVE-196). It replaces the
  * header's Demo, Exposure, Serving and Attached chips and keeps their source
@@ -76,27 +63,19 @@ export function ConnectionItem() {
   const name = link?.serverName ?? '';
 
   /*
-    How many of `lost` the user has acknowledged with Clear (from AttachedChip,
-    HIVE-140). Main keeps counting through a reattach and resets only when the
-    window goes local, so the acknowledgement resets on that same transition.
-    Adjusted during render, React's pattern for state derived from a prop.
+    What the dropped link lost that nobody has cleared (HIVE-140). The
+    acknowledgement lives in the store beside the link (HIVE-211), so Clear
+    here, on the Classic chip or on the stage line clears all three.
   */
-  const [acknowledged, setAcknowledged] = useState(0);
-  const [attachedBefore, setAttachedBefore] = useState(link !== null);
-  if ((link !== null) !== attachedBefore) {
-    setAttachedBefore(link !== null);
-    if (link === null) setAcknowledged(0);
-  }
-  const lost = link === null ? 0 : Math.max(0, link.lost - acknowledged);
+  const lost = useUnackedLost();
+  const acknowledgeLost = useAcknowledgeLost();
   const lostNote =
     link === null || lost === 0 ? null : (
       <span className="mt-1 flex items-baseline gap-2">
-        <span>
-          {`${String(lost)} ${lost === 1 ? 'action' : 'actions'} (clicks or keystrokes) did not reach ${name}; redo ${lost === 1 ? 'it' : 'them'}${link.state === 'attached' ? '' : ' once it is back'}.`}
-        </span>
+        <span>{lostSentence(lost, name, link.state === 'attached')}</span>
         <button
           type="button"
-          onClick={() => setAcknowledged(link.lost)}
+          onClick={acknowledgeLost}
           className="shrink-0 rounded-md bg-chip px-2 py-0.5 text-[11px] text-ink hover:bg-chip-hover"
         >
           Clear
@@ -155,7 +134,12 @@ export function ConnectionItem() {
       body: (
         <>
           The connection dropped and is being re-established. Your sessions are still running there.
-          {link === null || link.nextAttemptAt === null ? null : <NextTry at={link.nextAttemptAt} />}
+          {link === null || link.nextAttemptAt === null ? null : (
+            <>
+              {' '}
+              <NextTry at={link.nextAttemptAt} prefix="Next try in" />.
+            </>
+          )}
           {lostNote}
         </>
       ),

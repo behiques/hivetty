@@ -438,7 +438,7 @@ const { remoteProxyBindingsSize, resetRemoteProxy } = await import(
 );
 const { PlaintextRefusedError } = await import('../../../../electron/remote-client/socket');
 const { BACKOFF_MS } = await import('../../../../electron/main/ipc/reattach');
-const { attachedResumeTracker, attachedServerName, registerIpc, switchIpcMode } = await import(
+const { attachedResumeTracker, attachedServerName, dialNowAttached, registerIpc, switchIpcMode } = await import(
   '../../../../electron/main/ipc/router'
 );
 const { resetServerModeForTest, setServerMode } = await import(
@@ -505,7 +505,8 @@ describe('remote composition (HIVE-143)', () => {
       removed two and added one, taking them to 99; HIVE-149 added
       `config:get-remote`, which brings them back to 100; HIVE-159 added
       `notifications:badge`, taking them to 101. HIVE-203 added `jira:detail`,
-      one more `call`. HIVE-216 added `jira:users`, one more `call`. The arithmetic in
+      one more `call`. HIVE-216 added `jira:users`, one more `call`. HIVE-211 added
+      `remote:dial-now`, one more `call`. The arithmetic in
       this note read 100 + 6 against an asserted 105 until HIVE-153 re-derived
       it — the literal was right and the note was stale, which is the wrong way
       round for a number three files pin, and is why it is re-derived here
@@ -522,7 +523,7 @@ describe('remote composition (HIVE-143)', () => {
       elsewhere, by the real `ipcMain.handle` refusing a second handler for a
       channel — not by this number.
     */
-    expect(remoteRegistrySize()).toBe(129);
+    expect(remoteRegistrySize()).toBe(130);
   });
 
   it('re-registers every channel after a reset without throwing (HIVE-144)', () => {
@@ -1101,12 +1102,12 @@ describe('handlers that dereference the Electron event', () => {
 describe('the mode switch (HIVE-144)', () => {
   /**
    * Both modes bind the same channels: every `call` and every `notify` in the
-   * contract, and no `event` — 129 of them. Written once here because the two
+   * contract, and no `event` — 130 of them. Written once here because the two
    * surfaces agreeing on this number is itself the invariant. `remote-proxy
-   * .test.ts` and the registry case above own the question of whether 129 is
+   * .test.ts` and the registry case above own the question of whether 130 is
    * still the right number; this file only asks whether the two agree.
    */
-  const BOUND_CHANNELS = 129;
+  const BOUND_CHANNELS = 130;
 
   /**
    * `assertSender` compares `senderFrame` to `sender.mainFrame` by identity,
@@ -1588,6 +1589,38 @@ describe('the mode switch (HIVE-144)', () => {
       expect(remoteProxyBindingsSize()).toBe(BOUND_CHANNELS);
       expect(attachedServerName()).toBe('mini');
       expect(connect).toHaveBeenCalledTimes(2);
+    });
+
+    /**
+     * Try now (HIVE-211), through the real router and the real proxy: the
+     * channel is answered on this machine, with the socket down, and the
+     * dial it asks for happens at once rather than at the pending step.
+     */
+    it('dials at once on remote:dial-now, answered locally with the socket down', async () => {
+      boundLocally();
+      const first = fakeClient();
+      const connect = vi.fn(() => Promise.resolve(fakeClient()));
+      connect.mockResolvedValueOnce(first);
+      await switchIpcMode('remote', opts({ connect }));
+
+      first.drop();
+      await expect(invoke(CH.remoteDialNow)).resolves.toBeUndefined();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(connect).toHaveBeenCalledTimes(2);
+      expect(first.call).not.toHaveBeenCalledWith(CH.remoteDialNow, expect.anything());
+      expect(attachedServerName()).toBe('mini');
+    });
+
+    it('does nothing on dial-now without a reconnect loop', async () => {
+      boundLocally();
+      const connect = vi.fn(() => Promise.resolve(fakeClient()));
+      await switchIpcMode('remote', opts({ connect }));
+      await switchIpcMode('local', opts());
+
+      expect(() => dialNowAttached()).not.toThrow();
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(connect).toHaveBeenCalledTimes(1);
     });
 
     it('dials again naming where each watched terminal left off', async () => {
