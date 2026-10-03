@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentRunLog } from '@features/agents/components/agent-run-log';
 import {
@@ -69,6 +69,9 @@ const summary = (over: Partial<AgentSummary> = {}): AgentSummary => ({
   runs: [],
   ...over,
 });
+
+/** The output's heading: the line that names the selected run (HIVE-204). */
+const heading = (): HTMLElement => screen.getByTestId('run-output-heading');
 
 const seed = (over: Partial<AgentSummary> = {}): void => {
   useHiveStore.getState().hydrateAgents([summary(over)]);
@@ -766,22 +769,107 @@ describe('AgentRunLog', () => {
       The heading names the output below it, so it must not appear while a run
       is live — that output is this run's, not the last one's.
     */
-    it('withholds the Latest output heading while a run is live', () => {
+    it('heads a live run as running, never as the last one', () => {
       seed({ status: 'working', runs: [run(1)], live: [standing()] });
-      lines(['mid-flight']);
+      lines(['mid-flight'], 'live-standing');
 
       render(<AgentRunLog name="watcher" />);
 
       expect(screen.queryByText('Latest output')).toBeNull();
+      expect(heading()).toHaveTextContent(/^Output#live-starunning · /);
     });
 
     it('heads the output once the run has ended', () => {
       seed({ status: 'sleeping', runs: [run(1)] });
-      lines(['it finished']);
+      lines(['it finished'], 'r1');
 
       render(<AgentRunLog name="watcher" />);
 
-      expect(screen.getByText('Latest output')).toBeInTheDocument();
+      expect(heading()).toHaveTextContent('Output#r1done · 2 turns · 4s · $0.01newest run first');
+    });
+  });
+
+  /**
+   * The table drives the output (HIVE-204): one run is selected, the heading
+   * names it, and a new run takes the selection only from a reader who was
+   * already on the latest (decision 2).
+   */
+  describe('the selected run', () => {
+    const LATEST = '4d7d5c5e-2b1a-4c3d-9e8f-001122334455';
+    const latest = run(9, {
+      run: LATEST,
+      turns: 5,
+      startedAt: Date.UTC(2026, 8, 1, 13, 0, 0),
+      endedAt: Date.UTC(2026, 8, 1, 13, 0, 13),
+      costUsd: 0.12,
+    });
+    const rowOf = (text: string): HTMLElement =>
+      within(screen.getByTestId('run-receipts')).getByText(text).closest('[role="button"]') as HTMLElement;
+
+    beforeEach(() => {
+      vi.spyOn(window.HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('opens on the latest run, and the heading names it', () => {
+      seed({ runs: [run(1), latest] });
+      lines(['old'], 'r1');
+      lines(['new'], LATEST);
+
+      render(<AgentRunLog name="watcher" />);
+
+      expect(rowOf('#4d7d5c5e')).toHaveAttribute('aria-current', 'true');
+      expect(rowOf('#4d7d5c5e')).toHaveClass('bg-panel-2');
+      expect(rowOf('#r1')).not.toHaveAttribute('aria-current');
+      expect(heading()).toHaveTextContent('Output#4d7d5c5edone · 5 turns · 13s · $0.12newest run first');
+      expect(screen.queryByText('Latest output')).toBeNull();
+    });
+
+    it('selects an older run on click, and scrolls the output to it', () => {
+      seed({ runs: [run(1), latest] });
+      lines(['old'], 'r1');
+      lines(['new'], LATEST);
+
+      render(<AgentRunLog name="watcher" />);
+      fireEvent.click(rowOf('#r1'));
+
+      expect(rowOf('#r1')).toHaveAttribute('aria-current', 'true');
+      expect(rowOf('#4d7d5c5e')).not.toHaveAttribute('aria-current');
+      expect(vi.mocked(window.HTMLElement.prototype.scrollIntoView).mock.contexts.at(-1)).toBe(
+        screen.getByTestId('run-output').querySelector('[data-run-group="r1"]'),
+      );
+      expect(heading()).toHaveTextContent(/^Output#r1done/);
+    });
+
+    it.each(['Enter', ' '])('selects a run with %j', (key) => {
+      seed({ runs: [run(1), latest] });
+
+      render(<AgentRunLog name="watcher" />);
+      fireEvent.keyDown(rowOf('#r1'), { key });
+
+      expect(rowOf('#r1')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('follows a new run while the latest was selected', () => {
+      seed({ runs: [run(1)] });
+
+      render(<AgentRunLog name="watcher" />);
+      act(() => seed({ runs: [run(1), latest] }));
+
+      expect(rowOf('#4d7d5c5e')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('keeps an older run pinned when a new one arrives', () => {
+      seed({ runs: [run(1), run(2)] });
+
+      render(<AgentRunLog name="watcher" />);
+      fireEvent.click(rowOf('#r1'));
+      act(() => seed({ runs: [run(1), run(2), latest] }));
+
+      expect(rowOf('#r1')).toHaveAttribute('aria-current', 'true');
+      expect(rowOf('#4d7d5c5e')).not.toHaveAttribute('aria-current');
     });
   });
 

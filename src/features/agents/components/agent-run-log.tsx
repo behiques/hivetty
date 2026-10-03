@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import type { TermLine } from '@/types/terminal';
 
 import { SplitHandle } from '@components/ui/split-handle';
+import { formatDuration } from '@lib/format-duration';
 import type { LiveRunSummary, RunSummary } from '@shared/agent-contract';
 import { formatRunCost } from '@shared/agent-contract';
 import {
@@ -115,6 +116,9 @@ const RECEIPT_GRID =
  * The pointer cursor is not here — `global.css` gives every `[role='button']` one.
  */
 const ROW = 'pb-0.5 hover:bg-hover focus-visible:bg-hover focus-visible:outline-none';
+
+/** The selected run's row: the panel fill and a 2px brand bar inset on its left (HIVE-204). */
+const SELECTED = 'bg-panel-2 shadow-[inset_2px_0_var(--cc-brand)]';
 
 /**
  * What makes a receipts row a button without making it a `<button>`, which may
@@ -299,6 +303,27 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
   const groups = groupsOf(lines, inFlight, receipts);
 
   /*
+    The run the output is showing (HIVE-204), the latest by default.
+
+    A new run takes the selection only from a reader who was on the latest one
+    (decision 2): someone who clicked an older run is reading it, and a run
+    starting elsewhere must not pull them off it. The previous latest is kept in
+    a ref so the effect can tell "was following" from "had pinned".
+  */
+  const latestKey = inFlight[0]?.run ?? receipts[0]?.run ?? null;
+  const [selected, setSelected] = useState<string | null>(latestKey);
+  const previousLatest = useRef(latestKey);
+
+  useEffect(() => {
+    if (latestKey === previousLatest.current) return;
+
+    const was = previousLatest.current;
+
+    setSelected((current) => (current === null || current === was ? latestKey : current));
+    previousLatest.current = latestKey;
+  }, [latestKey]);
+
+  /*
     Which group the autoscroll anchor belongs to: the one that wrote the newest
     line in the buffer.
 
@@ -379,6 +404,27 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
 
     group?.scrollIntoView({ block: 'start' });
   };
+
+  const select = (key: string) => {
+    setSelected(key);
+    jumpTo(key);
+  };
+
+  const selectedLive = inFlight.find((run) => run.run === selected);
+  const selectedReceipt = selectedLive === undefined ? receipts.find((run) => run.run === selected) : undefined;
+  const summary =
+    selectedLive !== undefined
+      ? ['running', formatDuration(now - selectedLive.startedAt)].join(' · ')
+      : selectedReceipt === undefined
+        ? null
+        : [
+            selectedReceipt.outcome,
+            selectedReceipt.turns === undefined ? null : `${String(selectedReceipt.turns)} turns`,
+            formatDuration(selectedReceipt.endedAt - selectedReceipt.startedAt),
+            formatRunCost(selectedReceipt.costUsd),
+          ]
+            .filter((part) => part !== null && part !== undefined)
+            .join(' · ');
 
   return (
     <div
@@ -465,7 +511,8 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
               brand={palette.blue}
               green={palette.green}
               first={index === 0}
-              onJump={() => jumpTo(run.run)}
+              selected={selected === run.run}
+              onJump={() => select(run.run)}
             />
           ))}
 
@@ -483,7 +530,8 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
                 separator in the list is 1px.
               */
               first={index === 0 && inFlight.length === 0}
-              onJump={() => jumpTo(run.run)}
+              selected={selected === run.run}
+              onJump={() => select(run.run)}
             />
           ))}
           </div>
@@ -526,21 +574,26 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
         header does: the output can be scrolled without losing the label that
         says what it is.
 
-        It reads "Latest output" rather than "Last output" now, because the
-        buffer holds several turns and the newest is on top — "last" named a
-        single run that this has not been for a while.
+        It names the selected run (HIVE-204) — its chip, then the receipt's
+        facts, or `running` and the time so far for one in flight — and so it
+        shows for a live run too, which "Latest output" could not: that heading
+        named whichever run was newest, and the newest was not always the one
+        on screen. No `border-t` of its own: the divider above it is the rule.
       */}
-      {!live && receipts.length > 0 && groups.length > 0 ? (
-        /*
-          No `border-t` of its own any more: the divider above it is the rule
-          now, and a hairline under a hairline read as a 2px seam.
-        */
-        <p
-          className="shrink-0 pt-2 pb-0.5 text-[0.85em] tracking-[0.1em] uppercase"
+      {groups.length > 0 && selected !== null && summary !== null ? (
+        <div
+          className="flex shrink-0 items-center gap-2.5 pt-2 pb-0.5 text-[0.85em]"
           style={{ color: palette.dim }}
+          data-testid="run-output-heading"
         >
-          Latest output
-        </p>
+          <span className="tracking-[0.1em] uppercase">Output</span>
+          <i className="rounded-[5px] bg-panel-2 px-[7px] py-0.5 not-italic" style={{ color: palette.blue }}>
+            {`#${selected.slice(0, 8)}`}
+          </i>
+          <span>{summary}</span>
+          <span className="flex-1" />
+          <span>newest run first</span>
+        </div>
       ) : null}
 
       <div
@@ -798,6 +851,8 @@ interface LiveRowProps {
   brand: string;
   green: string;
   first: boolean;
+  /** The run the output heading names: a panel fill and an inset brand bar (HIVE-204). */
+  selected: boolean;
   onJump: () => void;
 }
 
@@ -828,6 +883,7 @@ function LiveRow({
   brand,
   green,
   first,
+  selected,
   onJump,
 }: LiveRowProps) {
   const at = new Date(run.startedAt).toLocaleTimeString([], {
@@ -841,9 +897,10 @@ function LiveRow({
 
   return (
     <div
-      className={cn(ROW, first ? 'pt-1' : 'border-t border-border-soft pt-1')}
+      className={cn(ROW, first ? 'pt-1' : 'border-t border-border-soft pt-1', selected && SELECTED)}
       style={{ color: dim }}
       data-live-run={run.kind}
+      aria-current={selected ? 'true' : undefined}
       {...jumpProps(onJump)}
     >
       <div className={RECEIPT_GRID}>
@@ -894,6 +951,8 @@ interface RunHeaderProps {
   brand: string;
   /** The row directly under the sticky header, which draws its own rule. */
   first: boolean;
+  /** The run the output heading names (HIVE-204). */
+  selected: boolean;
   onJump: () => void;
 }
 
@@ -918,7 +977,7 @@ interface RunHeaderProps {
  * {@link RECEIPT_GRID}. It rode in the outcome cell first, which clipped it at
  * every window size and font size the app can render.
  */
-function RunHeader({ run, dim, brand, first, onJump }: RunHeaderProps) {
+function RunHeader({ run, dim, brand, first, selected, onJump }: RunHeaderProps) {
   const at = new Date(run.startedAt).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -928,8 +987,9 @@ function RunHeader({ run, dim, brand, first, onJump }: RunHeaderProps) {
 
   return (
     <div
-      className={cn(ROW, first ? 'pt-1' : 'border-t border-border-soft pt-1')}
+      className={cn(ROW, first ? 'pt-1' : 'border-t border-border-soft pt-1', selected && SELECTED)}
       style={{ color: dim }}
+      aria-current={selected ? 'true' : undefined}
       {...jumpProps(onJump)}
     >
       <div className={RECEIPT_GRID}>
