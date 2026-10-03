@@ -110,7 +110,7 @@ export function jiraToolsFor(jira: JiraToolSource): JiraToolHandlers {
       const partial: string[] = [];
       if (!detail.ok) partial.push(`description: ${detail.error.message}`);
       if (!comments.ok) partial.push(`comments: ${comments.error.message}`);
-      else if (comments.value.total > comments.value.comments.length) {
+      else if (comments.value.total > JIRA_MAX_COMMENTS) {
         partial.push(`comments: only the oldest ${JIRA_MAX_COMMENTS} of ${comments.value.total} were read`);
       }
       if (!links.ok) partial.push(`links: ${links.error.message}`);

@@ -169,6 +169,12 @@ describe('jiraToolsFor (HIVE-174)', () => {
     expect(result.ok && result.value.comments).toHaveLength(50);
   });
 
+  it('get says nothing when an unreadable comment made the page shorter than the total (HIVE-203)', async () => {
+    const two = [{ id: '1', author: 'a', created: 'c', body: [] }, { id: '3', author: 'a', created: 'c', body: [] }];
+    const result = await jiraToolsFor(source({ comments: async () => ok({ comments: two, total: 3 }) })).get({ key: 'HIVE-7' });
+    expect(result.ok && result.value.partial).toEqual([]);
+  });
+
   it('get says nothing of a full page that is the whole thread (HIVE-203)', async () => {
     const full = Array.from({ length: 50 }, (_, i) => ({ id: String(i), author: 'a', created: 'c', body: [] }));
     const result = await jiraToolsFor(source({ comments: async () => ok({ comments: full, total: 50 }) })).get({ key: 'HIVE-7' });

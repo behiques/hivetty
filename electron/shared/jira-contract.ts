@@ -361,13 +361,13 @@ export interface AdfBlock {
   depth?: number;
 }
 
-/** One comment on an issue (HIVE-71). */
 /** A page of an issue's comments, oldest first, and how many the thread holds (HIVE-203). */
 export interface JiraCommentPage {
   comments: JiraComment[];
   total: number;
 }
 
+/** One comment on an issue (HIVE-71). */
 export interface JiraComment {
   id: string;
   author: string;
