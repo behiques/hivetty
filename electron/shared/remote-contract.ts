@@ -58,6 +58,7 @@ import { isThisMachineAction } from './notification-contract';
  * and `shipped:keep-mine`.
  * 6 → 7 (HIVE-201): `CH` gained `changed-files:list` and `changed-files:changed`;
  * `plan:changed`'s tasks gained `activeForm`, `startedAt`, `endedAt` and the plan `fileAt`.
+ * The same bump covers `jira:detail` (HIVE-203), which landed at 6 without one.
  */
 export const REMOTE_PROTOCOL_VERSION = 7;
 
@@ -169,6 +170,7 @@ export const FRAME_KIND = {
   [CH.jiraTest]: 'call',
   [CH.jiraSearch]: 'call',
   [CH.jiraIssue]: 'call',
+  [CH.jiraDetail]: 'call',
   [CH.jiraTransitions]: 'call',
   [CH.jiraApplyTransition]: 'call',
   [CH.jiraComments]: 'call',
@@ -451,6 +453,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.jiraTest]: 'read',
   [CH.jiraSearch]: 'read',
   [CH.jiraIssue]: 'read',
+  [CH.jiraDetail]: 'read',
   [CH.jiraTransitions]: 'read',
   [CH.jiraApplyTransition]: 'mutate',
   [CH.jiraComments]: 'read',

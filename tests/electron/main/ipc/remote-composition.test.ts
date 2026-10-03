@@ -504,7 +504,8 @@ describe('remote composition (HIVE-143)', () => {
       and `remote:forget`, all three `call`, taking calls to 100; HIVE-146 then
       removed two and added one, taking them to 99; HIVE-149 added
       `config:get-remote`, which brings them back to 100; HIVE-159 added
-      `notifications:badge`, taking them to 101. The arithmetic in
+      `notifications:badge`, taking them to 101. HIVE-203 added `jira:detail`,
+      one more `call`. The arithmetic in
       this note read 100 + 6 against an asserted 105 until HIVE-153 re-derived
       it — the literal was right and the note was stale, which is the wrong way
       round for a number three files pin, and is why it is re-derived here
@@ -521,7 +522,7 @@ describe('remote composition (HIVE-143)', () => {
       elsewhere, by the real `ipcMain.handle` refusing a second handler for a
       channel — not by this number.
     */
-    expect(remoteRegistrySize()).toBe(117);
+    expect(remoteRegistrySize()).toBe(118);
   });
 
   it('re-registers every channel after a reset without throwing (HIVE-144)', () => {
@@ -1100,12 +1101,12 @@ describe('handlers that dereference the Electron event', () => {
 describe('the mode switch (HIVE-144)', () => {
   /**
    * Both modes bind the same channels: every `call` and every `notify` in the
-   * contract, and no `event` — 117 of them. Written once here because the two
+   * contract, and no `event` — 118 of them. Written once here because the two
    * surfaces agreeing on this number is itself the invariant. `remote-proxy
-   * .test.ts` and the registry case above own the question of whether 117 is
+   * .test.ts` and the registry case above own the question of whether 118 is
    * still the right number; this file only asks whether the two agree.
    */
-  const BOUND_CHANNELS = 117;
+  const BOUND_CHANNELS = 118;
 
   /**
    * `assertSender` compares `senderFrame` to `sender.mainFrame` by identity,

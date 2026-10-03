@@ -917,14 +917,21 @@ Two more derivations read the same way (HIVE-171). `isShipping(entries, slug, n)
 whether the shipper's newest `post` for a PR, `meta.pr` and `meta.repo` compared against
 the whole `owner/name`, is at any stage but `closed`; it answers false once the shipper has
 released its `owner/name#N` claim. The card shows `shipping`, not the stage: most stages
-repeat a GitHub badge. `buildProgressFor(entries, key)` is the builder's newest for a
-ticket. The PR card and the ticket card read them through `useShipping` and
+repeat a GitHub badge. `buildProgressFor(entries, key)` is the newest `post` from **any**
+agent whose `meta.ticket` names the key and whose `meta.stage` is a string, returned as
+`{ from, stage, task? }` so the card can say whose it was (HIVE-203; it read only the
+builder's before). The PR card and the ticket card read them through `useShipping` and
 `useBuildProgress`; nothing is stored. Both keys are named in the ledger tools' `meta`
 description, because that description is the only place the model is told the shape.
 `agentSiteFor(entries, agent)` (HIVE-172) is the same reading for the agent's
 newest `meta.worktree` and `meta.checkout`, and it too stops at the agent's own
 `release`: the shipper removes the worktree after the merge. The console's
 `term <agent>` maps the checkout to a project and starts a shell in the worktree.
+
+A read can be narrowed to one ticket (HIVE-203): `LedgerReadQuery.ticket` keeps the
+entries whose `meta.ticket` names the key, case-insensitively, so `ledger:list
+{ ticket }` is a ticket's whole history in one call. The guard admits a string of at
+most 64 characters. The MCP `ledger_read` tool does not expose it.
 
 ## The routes
 
@@ -1294,9 +1301,11 @@ asked, so the tool is in `HIVE_CONSENT_TOOLS` and in `ONCE_ONLY_TOOLS`
 The route is `/projects/auto-merge`. A landed write is pushed to the renderer
 on `config:changed`, so Settings › Projects shows it without a reload.
 
-The comments read is the oldest `JIRA_MAX_COMMENTS`; a full page is named in
-`partial`, because "every comment" and "the first fifty" are different
-answers.
+The comments read is the oldest `JIRA_MAX_COMMENTS`. `jira.comments` answers a page
+with Jira's `total`, and a thread longer than the cap is named in `partial` with that
+total, because "every comment" and "the first fifty" are different answers. The
+renderer can ask for the newest page instead (`newest: true`), still oldest first
+(HIVE-203).
 
 **The routes.** `/jira/get`, `/jira/transition` and `/jira/comment`, one
 handler shape: refuse, cap (`JIRA_TOOL_MAX_BYTES`), parse with the same guards

@@ -94,8 +94,10 @@ import type {
 import type { GhResult, PrRecord, PrsSnapshot } from './github-contract';
 import type {
   JiraComment,
+  JiraCommentPage,
   JiraIdentity,
   JiraIssue,
+  JiraIssueDetail,
   JiraLink,
   JiraResult,
   JiraSearchResult,
@@ -455,6 +457,8 @@ export const CH = {
    */
   jiraSearch: 'jira:search',
   jiraIssue: 'jira:issue',
+  /** The description and the parent (HIVE-174's `detail()`), for the ticket page (HIVE-203). */
+  jiraDetail: 'jira:detail',
   /**
    * Transitions (HIVE-70) — the epic's first **write** to Jira.
    *
@@ -2521,6 +2525,8 @@ export interface HiveBridge {
     search(request: JiraSearchRequest): Promise<JiraResult<JiraSearchResult>>;
     /** Read one issue by key (HIVE-68). The key is pattern-matched in main. */
     issue(request: JiraIssueRequest): Promise<JiraResult<JiraIssue>>;
+    /** One issue's description and parent (HIVE-203). Read-only, like `issue`. */
+    detail(request: JiraIssueRequest): Promise<JiraResult<JiraIssueDetail>>;
     /**
      * What this issue can become right now (HIVE-70).
      *
@@ -2547,10 +2553,10 @@ export interface HiveBridge {
     applyTransition(
       request: ApplyJiraTransitionRequest,
     ): Promise<JiraResult<JiraIssue>>;
-    /** An issue's conversation, oldest first (HIVE-71). Rendered, not raw ADF. */
+    /** A page of an issue's conversation, oldest first, with the thread's total (HIVE-71, HIVE-203). Rendered, not raw ADF. */
     comments(
       request: JiraConversationRequest,
-    ): Promise<JiraResult<JiraComment[]>>;
+    ): Promise<JiraResult<JiraCommentPage>>;
     /** Remote links and Jira-to-Jira links, merged, with direction (HIVE-71). */
     links(request: JiraConversationRequest): Promise<JiraResult<JiraLink[]>>;
     /**

@@ -2347,6 +2347,8 @@ export interface ApplyJiraTransitionRequest {
 /** Payload of `jira:comments` and `jira:links` (HIVE-71). */
 export interface JiraConversationRequest {
   key: string;
+  /** The newest page rather than the oldest; still returned oldest first (HIVE-203). Comments only. */
+  newest?: true;
 }
 
 /**

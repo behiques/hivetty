@@ -91,6 +91,8 @@ describe('hydrateTickets', () => {
       status: 'In Progress',
       statusCategory: 'in-progress',
       title: 'A real ticket',
+      priority: 'Medium',
+      assignee: 'Yunid Bauza',
       url: 'https://behiques.atlassian.net/browse/HIVE-1',
     });
   });
@@ -344,5 +346,15 @@ describe('updateTicket (HIVE-70)', () => {
       stale: false,
       capped: true,
     });
+  });
+});
+
+describe('priority and assignee (HIVE-203)', () => {
+  it('carries priority and assignee from Jira, on install and on update', () => {
+    state().hydrateTickets([issue()], false);
+    expect(state().tickets[0]).toMatchObject({ priority: 'Medium', assignee: 'Yunid Bauza' });
+
+    state().updateTicket(issue({ priority: 'High', assignee: null }));
+    expect(state().tickets[0]).toMatchObject({ priority: 'High', assignee: null });
   });
 });

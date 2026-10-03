@@ -427,6 +427,12 @@ type TicketSource =
   | { kind: 'failed'; message: string };
 ```
 
+A `Ticket` carries Jira's `priority` and the `assignee`'s display name beside the
+status and title, each `null` when Jira has none (HIVE-203). `toTicket` is the one
+mapping from a `JiraIssue`; `hydrateTickets` and `updateTicket` both go through it.
+The description and the parent are not on the list: the ticket page reads them per
+issue on `jira:detail`.
+
 `loading` replaced a `fixtures` variant that meant "these eight are samples",
 which is precisely what made real issues arrive *behind* fake ones. The panel
 renders a skeleton for it — see `ticket-card-skeleton.tsx`.

@@ -86,6 +86,8 @@ describe('a mode switch while a search is on screen', () => {
             status: 'In Progress',
             statusCategory: 'in-progress' as const,
             title: 'from the departed machine',
+            priority: null,
+            assignee: null,
           },
         ],
         searching: false,

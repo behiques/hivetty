@@ -262,6 +262,18 @@ export interface JiraTransition {
   };
 }
 
+/** Forward is up this ladder (HIVE-174); the Work page's next step reads it too (HIVE-203). */
+export const STATUS_CATEGORY_RANK: Record<JiraStatusCategory, number> = { todo: 0, 'in-progress': 1, done: 2 };
+
+/** The first transition Jira lists whose target is exactly one category forward, or nothing. */
+export function nextTransition(
+  transitions: readonly JiraTransition[],
+  current: JiraStatusCategory,
+): JiraTransition | undefined {
+  const want = STATUS_CATEGORY_RANK[current] + 1;
+  return transitions.find((transition) => STATUS_CATEGORY_RANK[transition.to.statusCategory] === want);
+}
+
 /** How many of Jira's own error strings are carried across IPC (HIVE-70). */
 export const JIRA_MAX_DETAILS = 10;
 
@@ -347,6 +359,12 @@ export interface AdfBlock {
   language?: string;
   /** List items only — how deeply nested, from 0. */
   depth?: number;
+}
+
+/** A page of an issue's comments, oldest first, and how many the thread holds (HIVE-203). */
+export interface JiraCommentPage {
+  comments: JiraComment[];
+  total: number;
 }
 
 /** One comment on an issue (HIVE-71). */

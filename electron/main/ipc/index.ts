@@ -133,8 +133,10 @@ import {
 } from '@shared/ipc-contract';
 import type {
   JiraComment,
+  JiraCommentPage,
   JiraIdentity,
   JiraIssue,
+  JiraIssueDetail,
   JiraLink,
   JiraResult,
   JiraSearchResult,
@@ -4016,6 +4018,11 @@ export function registerIpcHandlers(
       jira.issue(parseJiraIssueRequest(payload)),
   );
   handle(
+    CH.jiraDetail,
+    (_event, payload): Promise<JiraResult<JiraIssueDetail>> =>
+      jira.detail(parseJiraIssueRequest(payload)),
+  );
+  handle(
     CH.jiraTransitions,
     (_event, payload): Promise<JiraResult<JiraTransition[]>> =>
       jira.transitions(parseJiraTransitionsRequest(payload)),
@@ -4027,7 +4034,7 @@ export function registerIpcHandlers(
   );
   handle(
     CH.jiraComments,
-    (_event, payload): Promise<JiraResult<JiraComment[]>> =>
+    (_event, payload): Promise<JiraResult<JiraCommentPage>> =>
       jira.comments(parseJiraConversationRequest(payload)),
   );
   handle(
