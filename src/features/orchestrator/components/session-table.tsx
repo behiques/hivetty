@@ -121,6 +121,13 @@ import { useActiveTab, useExpandEnded, useSelId, useSessionsProject, useSetSelId
  * Resume column the sum is 426px (no slot, one gap fewer) and the table still
  * fits that window, by 2px.
  *
+ * **Round two below 1,200px gives the column back (HIVE-211, D8).** The 58px
+ * was measured with round two's list panel taking its column beside the
+ * stage. Under 1,200px that panel overlays the stage instead and starts closed,
+ * so the 1100px window hands the table `--cc-list-w` more and the 486px floor
+ * fits. Classic's rails are unchanged and keep the numbers above.
+ * `table-alignment.spec.ts` holds round two at 1100px with a Resume column.
+ *
  * **The plan count raised it by 44px**, from 396 (HIVE-182): `STATUS` carries a
  * session's `done/total` beside its label now, and that cell may not truncate.
  * That put it at 440, past the 428px line the 1100px window gives a table with

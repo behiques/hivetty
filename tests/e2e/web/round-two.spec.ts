@@ -38,43 +38,31 @@ test('Home with no project is the first-run page, and Integrations opens Setting
   await expect(page.getByRole('heading', { name: 'Integrations', level: 2 })).toBeVisible();
 });
 
-test('each place opens its panel, and the active icon closes it', async ({ page }) => {
-  for (const [name, label] of [
-    ['Sessions', 'Sessions list'],
-    ['Work', 'Work list'],
-    ['Agents', 'Agents list'],
-    ['PRs', 'PRs list'],
+/*
+  No list without items (HIVE-211): the browser target has no project, no Jira,
+  no gh and no agent, so every place draws no panel and its stage says why. A
+  place with a list, the rail chord and the narrow overlay are proved in a real
+  window, with a project configured: `tests/e2e/electron/list-panel.spec.ts`.
+*/
+test('each place with nothing to list draws no panel, and its stage says why (HIVE-211)', async ({ page }) => {
+  for (const [name, heading] of [
+    ['Work', "Jira isn't connected"],
+    ['Agents', 'No agents yet'],
+    ['PRs', "Pull requests aren't available here"],
   ] as const) {
     await place(page, name).click();
-    await expect(page.getByRole('region', { name: label })).toBeVisible();
     await expect(place(page, name)).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+    await expect(panel(page)).toHaveCount(0);
   }
-
-  await place(page, 'PRs').click();
-  await expect(panel(page)).toHaveCount(0);
-  await place(page, 'PRs').click();
-  await expect(page.getByRole('region', { name: 'PRs list' })).toBeVisible();
 });
 
-test('the rail chord toggles the panel', async ({ page }) => {
+test('Work with no Jira shows the not-connected page and no list (HIVE-211)', async ({ page }) => {
   await place(page, 'Work').click();
-  await expect(page.getByRole('region', { name: 'Work list' })).toBeVisible();
-  // No Jira in the browser target: the panel says so, and the stage waits for a ticket (HIVE-203).
-  await expect(page.getByText('No Jira connection yet')).toBeVisible();
-  await expect(page.getByText('Pick a ticket')).toBeVisible();
-
-  // The app reads the platform off the browser, not the OS (`src/lib/platform.ts`),
-  // and the web project emulates Desktop Chrome, so ask the page the same question.
-  const mac = await page.evaluate(() => {
-    const data = (navigator as { userAgentData?: { platform?: string } }).userAgentData;
-    if (data?.platform) return data.platform.toLowerCase().startsWith('mac');
-    return /mac/i.test(navigator.platform || navigator.userAgent);
-  });
-  const chord = mac ? 'Meta+b' : 'Control+Shift+b';
-  await page.keyboard.press(chord);
-  await expect(panel(page)).toHaveCount(0);
-  await page.keyboard.press(chord);
-  await expect(page.getByRole('region', { name: 'Work list' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: "Jira isn't connected" })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Work list' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Connect Jira' }).click();
+  await expect(page.getByRole('heading', { name: 'Integrations', level: 2 })).toBeVisible();
 });
 
 test('Settings opens from the bar, and Classic comes back from it', async ({ page }) => {
@@ -97,23 +85,24 @@ test('Settings opens from the bar, and Classic comes back from it', async ({ pag
   await expect(page.getByRole('complementary', { name: 'Activity' })).toBeVisible();
 });
 
-test('Sessions shows the projects panel and the Overmind, and the filter narrows it', async ({ page }) => {
+test('Sessions with no project shows the Overmind and no panel, and the filter narrows it', async ({ page }) => {
   await place(page, 'Sessions').click();
-  await expect(page.getByRole('region', { name: 'Sessions list' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'Overmind' })).toBeVisible();
+  await expect(panel(page)).toHaveCount(0);
   await page.getByRole('radio', { name: 'Ended' }).click();
   await expect(page.getByRole('radio', { name: 'Ended' })).toBeChecked();
   await page.getByRole('radio', { name: 'All' }).click();
   await expect(page.getByRole('radio', { name: 'All' })).toBeChecked();
 });
 
-test('PRs on the bar opens the place: its panel, and a stage waiting for a PR', async ({ page }) => {
+test('PRs on the bar opens the place, and the stage says why there is no list (HIVE-211)', async ({ page }) => {
   await place(page, 'PRs').click();
   await expect(place(page, 'PRs')).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('region', { name: 'PRs list' })).toBeVisible();
-  // The browser target has no `gh`: the panel says so and the stage waits (PR content is component-tested).
+  await expect(page.getByRole('region', { name: 'PRs list' })).toHaveCount(0);
+  // The browser target has no `gh`: main's sentence is the body, and there is no terminal to open.
   await expect(page.getByText(/need the desktop app/i)).toBeVisible();
-  await expect(page.getByText('Pick a pull request')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open a terminal' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible();
 });
 
 test('no inbox pill with nothing waiting (HIVE-198)', async ({ page }) => {
