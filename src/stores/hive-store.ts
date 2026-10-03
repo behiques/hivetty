@@ -130,6 +130,7 @@ import {
 import {
   agentSiteFor,
   buildProgressFor,
+  closedAskThreads,
   isShipping,
   matches,
   openAsks,
@@ -137,7 +138,7 @@ import {
   type BuildProgress,
 } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
-import { NOTIFICATION_CAP } from '@shared/notification-contract';
+import { trimNotifications, waitsOnYou, type AskOpen } from '@shared/notification-lanes';
 import type { PlansSnapshot, SessionPlan } from '@shared/plan-contract';
 import {
   hiveNameFromTitle,
@@ -936,16 +937,13 @@ interface HiveState {
 }
 
 /**
- * Inbox cap, matching the hub's (HIVE-75).
- *
- * Eight was an honest bet for a seeded list that never grew. With real
- * producers it is too few: a busy afternoon would push an approval request off
- * the end before the user got back to their desk, which is the one outcome this
- * surface exists to prevent. The renderer's cap and `NOTIFICATION_CAP` in the
- * hub are the same number by intent — a shorter list here would silently
- * discard rows a hydration would then bring straight back.
+ * Is an ask still open, read off the ledger mirror (HIVE-214)? The hub asks
+ * main's ledger the same question through the same `closedAskThreads`.
  */
-const NOTIF_CAP = NOTIFICATION_CAP;
+const askOpenIn = (ledger: readonly LedgerEntry[]): AskOpen => {
+  const closed = closedAskThreads(ledger);
+  return (thread) => !closed.has(thread);
+};
 
 /**
  * Console transcript cap (story 041). Oldest lines drop first.
@@ -982,7 +980,7 @@ const EMPTY_LINES = Object.freeze([]) as unknown as TermLine[];
  *
  * A terminal cleared every twenty minutes for a working day is twenty rows of
  * history in a table whose job is showing what is *running*. Twenty is the same
- * bet `NOTIF_CAP` makes: enough to answer "what did I just finish?", few enough
+ * bet the inbox's cap makes: enough to answer "what did I just finish?", few enough
  * that the live rows stay above the fold.
  *
  * Only `done` rows are capped. A `terminated` row is a process that died and is
@@ -3486,7 +3484,11 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * dismissing ids the hub no longer holds.
    */
   clearNotifs: () => {
-    set({ notifs: [] });
+    // Clear all keeps what waits on you, as the hub's `clearInbox` does (HIVE-214).
+    set((state) => {
+      const open = askOpenIn(state.ledger);
+      return { notifs: state.notifs.filter((notif) => waitsOnYou(notif, open)) };
+    });
     void window.hive?.notifications.clear();
   },
 
@@ -3501,7 +3503,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     set((state) =>
       state.notifs.some((existing) => existing.id === notif.id)
         ? state
-        : { notifs: [notif, ...state.notifs].slice(0, NOTIF_CAP) },
+        : { notifs: trimNotifications([notif, ...state.notifs], askOpenIn(state.ledger)) },
     ),
 
   setRemoteLink: (status) => {
@@ -3519,12 +3521,12 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     })),
 
   applyDismiss: (id) =>
-    set((state) => ({
-      notifs:
-        id === null
-          ? []
-          : state.notifs.filter((notif) => notif.id !== id),
-    })),
+    set((state) => {
+      if (id !== null) return { notifs: state.notifs.filter((notif) => notif.id !== id) };
+      // The echo of a Clear all: the hub kept what waits on you, and so does this.
+      const open = askOpenIn(state.ledger);
+      return { notifs: state.notifs.filter((notif) => waitsOnYou(notif, open)) };
+    }),
 
   hydrateNotifs: (notifs) =>
     set((state) => {
@@ -3541,7 +3543,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         ...notifs.filter((notif) => !seen.has(notif.id)),
       ].sort((a, b) => b.createdAt - a.createdAt);
 
-      return { notifs: merged.slice(0, NOTIF_CAP) };
+      return { notifs: trimNotifications(merged, askOpenIn(state.ledger)) };
     }),
 
   hydrateAgents: (summaries) =>
