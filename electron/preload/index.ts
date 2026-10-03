@@ -109,6 +109,8 @@ import type {
   JiraSearchResult,
   JiraStatus,
   JiraTransition,
+  JiraUser,
+  JiraUsersRequest,
 } from '@shared/jira-contract';
 import type {
   LedgerAnswerRequest,
@@ -677,6 +679,9 @@ const bridge: HiveBridge = {
       request: AddJiraCommentRequest,
     ): Promise<JiraResult<JiraComment>> =>
       ipcRenderer.invoke(CH.jiraAddComment, request),
+    // HIVE-216: the @ picker's search.
+    users: (request: JiraUsersRequest): Promise<JiraResult<JiraUser[]>> =>
+      ipcRenderer.invoke(CH.jiraUsers, request),
   },
   /*
     HIVE-123. Four verbs, none of them returning a credential — see the

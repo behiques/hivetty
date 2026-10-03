@@ -62,8 +62,9 @@ import { isThisMachineAction } from './notification-contract';
  * 7 → 8 (HIVE-202): `jira:links`' issue links gained `key`, `summary`, `statusCategory`, `linkType` and `direction`; `jira:detail`'s parent gained `issueType`.
  * 8 → 9 (HIVE-215): `PrRecord` (on `github:prs` and `github:search-prs`) gained
  * `mergedAt` and `mine`.
+ * 9 → 10 (HIVE-216): `CH` gained `jira:users`; `jira:comments`' comments gained `authorId` and `via`, and their runs `mention`; `jira:add-comment` takes `mentions`.
  */
-export const REMOTE_PROTOCOL_VERSION = 9;
+export const REMOTE_PROTOCOL_VERSION = 10;
 
 /**
  * What a frame is for.
@@ -179,6 +180,7 @@ export const FRAME_KIND = {
   [CH.jiraComments]: 'call',
   [CH.jiraLinks]: 'call',
   [CH.jiraAddComment]: 'call',
+  [CH.jiraUsers]: 'call',
   [CH.slackStatus]: 'call',
   [CH.slackSignIn]: 'call',
   [CH.slackSignOut]: 'call',
@@ -462,6 +464,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.jiraComments]: 'read',
   [CH.jiraLinks]: 'read',
   [CH.jiraAddComment]: 'mutate',
+  [CH.jiraUsers]: 'read',
   [CH.slackStatus]: 'execute',
   [CH.slackSignIn]: 'execute',
   [CH.slackSignOut]: 'execute',

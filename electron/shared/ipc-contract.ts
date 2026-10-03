@@ -103,6 +103,8 @@ import type {
   JiraSearchResult,
   JiraStatus,
   JiraTransition,
+  JiraUser,
+  JiraUsersRequest,
 } from './jira-contract';
 import type {
   LedgerAnswerRequest,
@@ -478,6 +480,8 @@ export const CH = {
   jiraComments: 'jira:comments',
   jiraLinks: 'jira:links',
   jiraAddComment: 'jira:add-comment',
+  /** People to mention (HIVE-216): the `@` picker's search. A read; one bounded query string. */
+  jiraUsers: 'jira:users',
   /**
    * Slack's MCP server (HIVE-123).
    *
@@ -2572,6 +2576,8 @@ export interface HiveBridge {
     addComment(
       request: AddJiraCommentRequest,
     ): Promise<JiraResult<JiraComment>>;
+    /** Active people on the site matching a query, up to eight (HIVE-216). The query is guarded in main. */
+    users(request: JiraUsersRequest): Promise<JiraResult<JiraUser[]>>;
   };
   /**
    * Slack — the MCP server (HIVE-123) and socket mode (HIVE-124).
