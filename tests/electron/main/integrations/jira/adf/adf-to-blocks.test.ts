@@ -151,6 +151,29 @@ describe('lists', () => {
     );
     expect(blocks[0]?.kind).toBe('ordered');
   });
+
+  it('maps a taskList to one bullet block per item, nested by depth (HIVE-202)', () => {
+    const item = (text: string, extra: object[] = []) => ({
+      type: 'taskItem',
+      attrs: { localId: text, state: 'TODO' },
+      content: [{ type: 'text', text }, ...extra],
+    });
+    const blocks = adfToBlocks(
+      doc([
+        {
+          type: 'taskList',
+          attrs: { localId: 'l' },
+          content: [item('first'), item('second'), { type: 'taskList', content: [item('nested')] }],
+        },
+      ]),
+    );
+
+    expect(blocks).toEqual([
+      { kind: 'bullet', runs: [{ text: 'first', marks: [] }], depth: 0 },
+      { kind: 'bullet', runs: [{ text: 'second', marks: [] }], depth: 0 },
+      { kind: 'bullet', runs: [{ text: 'nested', marks: [] }], depth: 1 },
+    ]);
+  });
 });
 
 describe('runs', () => {
