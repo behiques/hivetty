@@ -9,9 +9,7 @@ import type { FsSearchMode } from '@shared/fs-contract';
 import type { JiraStatusCategory } from '@shared/jira-contract';
 
 
-export type LeftTab = 'projects' | 'work' | 'agents';
-export type RailTab = 'inbox' | 'prs' | 'explorer';
-/** The round-two activity bar's places (HIVE-195). Classic ignores them. */
+/** The activity bar's places (HIVE-195). */
 export type Place = 'home' | 'sessions' | 'work' | 'agents' | 'prs';
 /** The Overmind table's segmented filter (HIVE-197). */
 export type TableFilter = 'all' | 'live' | 'ended';
@@ -80,8 +78,6 @@ interface UiState {
    * would put the caret on whichever session happened to arrive first.
    */
   selId: string | null;
-  leftTab: LeftTab;
-  railTab: RailTab;
   /**
    * What the PRs panel's search box holds. `''` means the panel shows the
    * ordinary sweep — the user's own open and recently-merged pull requests.
@@ -144,11 +140,10 @@ interface UiState {
    * {@link UiState.prSearchAllRepos} follows.
    */
   workSearchMineOnly: boolean;
-  collapsed: Record<string, boolean>; // project id -> collapsed
   picker: boolean; // new-session overlay open
   pickerQuery: string;
   /**
-   * The ticket the picker was opened *for*, or `null` for the header button.
+   * The ticket the picker was opened *for*, or `null` when opened from New session on the Overmind.
    *
    * View state rather than domain state: it is a property of the overlay
    * currently on screen, not something the app knows about the ticket. It dies
@@ -160,7 +155,6 @@ interface UiState {
   settingsSection: SettingsSection | null;
   newModel: Model;
   newEffort: Effort;
-  showActivityRail: boolean;
   /** Which place the round-two bar has open (HIVE-195). Every launch starts on Home. */
   place: Place;
   /** Whether that place's list panel shows beside the stage. */
@@ -174,11 +168,7 @@ interface UiState {
   endedExpanded: boolean;
   /** The Overmind's transcript, folded by default in round two (HIVE-197). */
   consoleShown: boolean;
-  /**
-   * Round two's fold map, **folded by default** (HIVE-197). Separate from
-   * Classic's `collapsed`, which defaults to unfolded, so neither layout's
-   * default leaks into the other.
-   */
+  /** The Sessions list's fold map, **folded by default** (HIVE-197). */
   expanded: Record<string, boolean>;
 
   /**
@@ -264,8 +254,6 @@ interface UiState {
   expandProject: (id: string) => void;
   /** Put the caret on a row, or clear it with `null`. */
   setSelId: (id: string | null) => void;
-  setLeftTab: (tab: LeftTab) => void;
-  setRailTab: (tab: RailTab) => void;
   setPrSearchTerm: (term: string) => void;
   setPrSearchAllRepos: (all: boolean) => void;
   /** Empty the box and put the scope back to the session's project. */
@@ -278,20 +266,6 @@ interface UiState {
   setWorkSearchMineOnly: (mine: boolean) => void;
   /** Empty the box and put the scope back to everyone's tickets. */
   clearWorkSearch: () => void;
-  /**
-   * Show a rail tab, revealing the rail if it was hidden (HIVE-93).
-   *
-   * Distinct from `setRailTab` because that one only changes which tab is
-   * selected — on a collapsed rail it selects a tab nobody can see. And distinct
-   * from `toggleActivityRail`, which would *hide* the rail when it is already
-   * open: exactly the wrong outcome for the header bell, whose job is "show me
-   * the inbox" rather than "flip the rail".
-   *
-   * Idempotent, so a second click on the bell leaves the inbox up instead of
-   * playing peekaboo with it.
-   */
-  revealRailTab: (tab: RailTab) => void;
-  toggleProject: (id: string) => void;
   openPicker: (ticketKey?: string) => void;
   closePicker: () => void;
   revealStage: () => void;
@@ -308,7 +282,6 @@ interface UiState {
   setPickerQuery: (query: string) => void;
   setNewModel: (model: Model) => void;
   setNewEffort: (effort: Effort) => void;
-  toggleActivityRail: () => void;
   toggleExplorerDir: (projectId: string, relPath: string) => void;
   collapseExplorer: () => void;
   bumpFsRevision: () => void;
@@ -374,15 +347,12 @@ interface UiState {
 const initialUiState = {
   activeTab: 'orch' as 'orch' | string,
   selId: null as string | null,
-  leftTab: 'projects' as LeftTab,
-  railTab: 'inbox' as RailTab,
   prSearchTerm: '',
   prSearchAllRepos: false,
   explorerSearchTerm: '',
   explorerSearchMode: 'name' as FsSearchMode,
   workSearchTerm: '',
   workSearchMineOnly: false,
-  collapsed: {} as Record<string, boolean>,
   picker: false,
   pickerQuery: '',
   pickerTicket: null as string | null,
@@ -396,7 +366,6 @@ const initialUiState = {
   settingsSection: null as SettingsSection | null,
   newModel: 'opus' as Model,
   newEffort: 'high' as Effort,
-  showActivityRail: true,
   place: 'home' as Place,
   panelOpen: true,
   narrow: false,
@@ -505,8 +474,6 @@ export const useUiStore = create<UiState>()((set) => ({
     set((state) => (state.expanded[id] ? state : { expanded: { ...state.expanded, [id]: true } })),
 
   setSelId: (id) => set({ selId: id }),
-  setLeftTab: (tab) => set({ leftTab: tab }),
-  setRailTab: (tab) => set({ railTab: tab }),
 
   /*
     Clearing the box resets the scope with it. The two belong to one question,
@@ -537,15 +504,6 @@ export const useUiStore = create<UiState>()((set) => ({
     ),
   setWorkSearchMineOnly: (mine) => set({ workSearchMineOnly: mine }),
   clearWorkSearch: () => set({ workSearchTerm: '', workSearchMineOnly: false }),
-
-  // `showActivityRail: true` unconditionally rather than a toggle — see the
-  // interface note for why the bell must not flip it.
-  revealRailTab: (tab) => set({ railTab: tab, showActivityRail: true }),
-
-  toggleProject: (id) =>
-    set((state) => ({
-      collapsed: { ...state.collapsed, [id]: !state.collapsed[id] },
-    })),
 
   /**
    * Open the picker, optionally *for* a ticket.
@@ -609,9 +567,6 @@ export const useUiStore = create<UiState>()((set) => ({
 
   setNewModel: (model) => set({ newModel: model }),
   setNewEffort: (effort) => set({ newEffort: effort }),
-
-  toggleActivityRail: () =>
-    set((state) => ({ showActivityRail: !state.showActivityRail })),
 
   toggleExplorerDir: (projectId, relPath) =>
     set((state) => {
@@ -715,11 +670,6 @@ export const useUiStore = create<UiState>()((set) => ({
  * Every consumer goes through a named hook so a change to one slice of state
  * cannot re-render everything subscribed to the store.
  */
-const railStateSelector = (state: UiState) => ({
-  railTab: state.railTab,
-  showActivityRail: state.showActivityRail,
-});
-
 const pickerStateSelector = (state: UiState) => ({
   picker: state.picker,
   pickerQuery: state.pickerQuery,
@@ -756,10 +706,6 @@ const pickerActionsSelector = (state: UiState) => ({
 
 /** Dismiss a full-stage overlay when the destination is already correct. */
 export const useRevealStage = () => useUiStore((state) => state.revealStage);
-
-/** Show a rail tab, opening the rail if it was hidden (HIVE-93). */
-export const useRevealRailTab = () =>
-  useUiStore((state) => state.revealRailTab);
 
 /** Which tab the center stage is showing. */
 export const useActiveTab = () => useUiStore((state) => state.activeTab);
@@ -847,19 +793,9 @@ export const useExpandEnded = () => useUiStore((state) => state.expandEnded);
 /** The dock's transcript, shown or folded (HIVE-197). */
 export const useConsoleShown = () => useUiStore((state) => state.consoleShown);
 export const useToggleConsole = () => useUiStore((state) => state.toggleConsole);
-/** Per row, like `useProjectCollapsed`. */
+/** Per row, so one fold re-renders one row. */
 export const useProjectExpanded = (id: string) => useUiStore((state) => Boolean(state.expanded[id]));
 export const useToggleProjectFold = () => useUiStore((state) => state.toggleProjectFold);
-
-/** Left rail tab + setter. */
-export const useLeftTab = () => useUiStore((state) => state.leftTab);
-export const useSetLeftTab = () => useUiStore((state) => state.setLeftTab);
-
-/** Activity rail state. */
-export const useRailState = () => useUiStore(useShallow(railStateSelector));
-
-/** Switch rail panels — the activity rail's tab bar (story 050). */
-export const useSetRailTab = () => useUiStore((state) => state.setRailTab);
 
 /** The PRs panel's search box: what is typed, and how wide it reaches. */
 export const usePrSearchTerm = () => useUiStore((state) => state.prSearchTerm);
@@ -894,22 +830,6 @@ export const useSetWorkSearchMineOnly = () =>
   useUiStore((state) => state.setWorkSearchMineOnly);
 export const useClearWorkSearch = () =>
   useUiStore((state) => state.clearWorkSearch);
-
-/**
- * Whether the activity rail is mounted (story 020).
- *
- * Deliberately narrower than `useRailState()`: the shell only cares about
- * visibility, and subscribing it to `railTab` too would re-render all three
- * regions — terminal included — every time the user switches rail tabs.
- */
-export const useShowActivityRail = () =>
-  useUiStore((state) => state.showActivityRail);
-
-/** Whether a project is collapsed in the projects panel. */
-export const useProjectCollapsed = (id: string) =>
-  useUiStore((state) => Boolean(state.collapsed[id]));
-
-export const useToggleProject = () => useUiStore((state) => state.toggleProject);
 
 /**
  * The model and effort a new session starts with.
@@ -972,9 +892,8 @@ export const useSetSelId = () => useUiStore((state) => state.setSelId);
 /**
  * Whether one explorer directory is expanded.
  *
- * Per row, like `useProjectCollapsed`, and for the same reason: subscribing the
- * whole tree to the expansion map would re-render every visible row each time
- * any one of them opened.
+ * Per row: subscribing the whole tree to the expansion map would re-render
+ * every visible row each time any one of them opened.
  */
 export const useExplorerExpanded = (projectId: string, relPath: string) =>
   useUiStore((state) => Boolean(state.explorerExpanded[`${projectId}:${relPath}`]));
