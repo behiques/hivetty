@@ -3226,7 +3226,9 @@ export function registerIpcHandlers(
     onJira: {
       get: (request) => jiraToolsFor(jira).get(request),
       transition: (request) => jiraToolsFor(jira).transition(request),
-      comment: (request) => jiraToolsFor(jira).comment(request),
+      // HIVE-216: `via` is the receiver's, from its caller header; forwarded untouched.
+      comment: (request, via) => jiraToolsFor(jira).comment(request, via),
+      users: (request) => jiraToolsFor(jira).users(request),
     },
     /*
       The uuid is forwarded, not dropped: `noteTurnEnded` ignores a `Stop`

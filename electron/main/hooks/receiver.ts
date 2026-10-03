@@ -585,7 +585,7 @@ const JIRA_NOT_WIRED: JiraToolHandlers = (() => {
       ok: false,
       error: { kind: 'bad-query', message: 'the Jira integration is not wired to this receiver' },
     });
-  return { get: refused, transition: refused, comment: refused };
+  return { get: refused, transition: refused, comment: refused, users: refused };
 })();
 
 interface Route {

@@ -3150,6 +3150,10 @@ describe('the Jira routes (HIVE-174)', () => {
         calls.push({ tool: 'comment', request });
         return Promise.resolve({ ok: true, value: { id: '3', author: 'me', created: 'now', body: [] } });
       },
+      users: (request) => {
+        calls.push({ tool: 'users', request });
+        return Promise.resolve({ ok: true, value: [{ accountId: 'a1', displayName: 'Dana' }] });
+      },
     };
     receiver = createReceiver({
       knowsSession: (entityId) => entityId === CALLER,
@@ -3501,6 +3505,7 @@ describe('the MCP route', () => {
         transition: () => Promise.reject(new Error('not exercised')),
         comment: () =>
           Promise.resolve({ ok: true, value: { id: '4', author: 'me', created: 'now', body: [] } }),
+        users: () => Promise.resolve({ ok: true, value: [{ accountId: 'a1', displayName: 'Dana' }] }),
       },
       onLedgerRead: (_caller, query) => ledger.read(query),
       onLedgerPost: (caller, request) => {

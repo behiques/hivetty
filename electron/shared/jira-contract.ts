@@ -529,12 +529,15 @@ export interface JiraToolTransitionReply {
 }
 
 /**
- * The three answers, as the receiver serves them and the tools call them.
+ * The four answers, as the receiver serves them and the tools call them.
  * Implemented by `jiraToolsFor` in main over the Jira integration; the
  * receiver takes it as one optional option with a "not wired" default.
  */
 export interface JiraToolHandlers {
   get(request: JiraToolKeyRequest): Promise<JiraResult<JiraToolIssue>>;
   transition(request: JiraTransitionByName): Promise<JiraResult<JiraToolTransitionReply>>;
-  comment(request: JiraToolCommentRequest): Promise<JiraResult<JiraComment>>;
+  /** `via` is set by the receiver from its caller header when an agent asked (HIVE-216). */
+  comment(request: JiraToolCommentRequest, via?: { agent: string }): Promise<JiraResult<JiraComment>>;
+  /** People to mention (HIVE-216). */
+  users(request: JiraUsersRequest): Promise<JiraResult<JiraUser[]>>;
 }

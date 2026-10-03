@@ -3618,6 +3618,7 @@ describe('createSessions forwards the Jira tools (HIVE-174)', () => {
       get: () => Promise.reject(new Error('not exercised')),
       transition: () => Promise.reject(new Error('not exercised')),
       comment: () => Promise.reject(new Error('not exercised')),
+      users: () => Promise.reject(new Error('not exercised')),
     };
     let started: Record<string, unknown> | undefined;
 
