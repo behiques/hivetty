@@ -28,7 +28,7 @@ import {
   terminalOf,
 } from '@/types/entity';
 import type { HiveNotification } from '@/types/notification';
-import type { Pr, SessionPr, TicketPr } from '@/types/pull-request';
+import type { HatcheryRow, Pr, SessionPr, TicketPr } from '@/types/pull-request';
 import type { TermLine } from '@/types/terminal';
 import type { Ticket, TicketDetail, TicketDetailWant, TicketProperties } from '@/types/ticket';
 
@@ -51,6 +51,7 @@ import {
 } from '@lib/jira';
 import { buildTicketSearchJql } from '@lib/jira-search';
 import { ledgerRows } from '@lib/ledger/console-rows';
+import { hatchStatus, sortHatchery } from '@lib/pr-hatch';
 import {
   projectConfigSnapshot,
   projectContainerised,
@@ -120,6 +121,7 @@ import {
 } from '@shared/jira-contract';
 import {
   LEDGER_MEMORY_CAP,
+  OVERMIND,
   type LedgerEntry,
   type LedgerKind,
   type LedgerReadQuery,
@@ -129,10 +131,13 @@ import {
 } from '@shared/ledger-contract';
 import {
   agentSiteFor,
+  asksMeAbout,
   buildProgressFor,
   isShipping,
   matches,
+  mergeWaiting,
   openAsks,
+  shipStage,
   thread,
   type BuildProgress,
 } from '@shared/ledger-derive';
@@ -8445,6 +8450,78 @@ export const usePrSearchResults = (): Pr[] | null => {
     () => (results === null ? null : resolvePrs(results, fleet)),
     [results, fleet],
   );
+};
+
+/**
+ * `Pr[]` → the Hatchery's rows: each PR's hatch status from three ledger
+ * readings, sorted (HIVE-215). Shared by the sweep and the search so the two
+ * lists cannot disagree about a flap.
+ *
+ * `now` is read inside the caller's memo, as the selectors over `openAsks`
+ * read it: the memo reruns on every ledger or PR change and the 60 s sweep
+ * replaces `prs`, so an ask retired by its ttl with nothing else changing
+ * stays counted until the next sweep at most.
+ */
+const hatcheryOf = (
+  prs: readonly Pr[],
+  ledger: readonly LedgerEntry[],
+  fleet: ReturnType<typeof selectSessionFacets>,
+  now: number,
+): HatcheryRow[] => {
+  const open = openAsks(ledger, now);
+  const sessions = new Set(fleet.map((facet) => facet.id));
+  const toMe = (to: string) => to === OVERMIND || sessions.has(to);
+
+  return sortHatchery(
+    prs.map((pr) => {
+      const slug = `${pr.owner}/${pr.repo}`;
+      const facts = {
+        stage: shipStage(ledger, slug, pr.n),
+        askedMe: asksMeAbout(open, slug, pr.n, toMe),
+        mergeWaiting: mergeWaiting(open, slug, pr.n),
+      };
+      return { pr, hatch: hatchStatus(pr, facts, now) };
+    }),
+  );
+};
+
+/**
+ * Every swept PR with its hatch status, in the Hatchery's order (HIVE-215).
+ *
+ * The one list HIVE-205's rows, HIVE-200's per-flap counts and HIVE-209's
+ * sub line all read. Memoised over `prs`, the session facets and the ledger,
+ * as {@link usePrs} and {@link useShipping} are.
+ */
+export const useHatchery = (): HatcheryRow[] => {
+  const prs = useHiveStore((state) => state.prs);
+  const fleet = useHiveStore(selectSessionFacets);
+  const ledger = useHiveStore((state) => state.ledger);
+
+  return useMemo(() => hatcheryOf(resolvePrs(prs, fleet), ledger, fleet, Date.now()), [prs, fleet, ledger]);
+};
+
+/** The same over the searched PRs; `null` while nothing is searched. Others' PRs never SUMMONS. */
+export const useHatcherySearch = (): HatcheryRow[] | null => {
+  const results = useHiveStore((state) => state.prSearch.results);
+  const fleet = useHiveStore(selectSessionFacets);
+  const ledger = useHiveStore((state) => state.ledger);
+
+  return useMemo(
+    () => (results === null ? null : hatcheryOf(resolvePrs(results, fleet), ledger, fleet, Date.now())),
+    [results, fleet, ledger],
+  );
+};
+
+/**
+ * How many swept PRs need you (SUMMONS), for the bar (HIVE-205; HIVE-196
+ * deferred it here). The sweep only, never a search; 0 unless the source is
+ * live, so a loading, unconfigured or failed read draws no count.
+ */
+export const usePrNeedsYouCount = (): number => {
+  const rows = useHatchery();
+  const live = useHiveStore((state) => state.prSource.kind === 'live');
+
+  return live ? rows.filter((row) => row.hatch.needsYou).length : 0;
 };
 
 /**

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { FLAP_RANK, hatchStatus, mergedWords, sortHatchery } from '@/lib/pr-hatch';
+import { FLAP_RANK, hatchStatus, mergedWords, sortHatchery } from '@lib/pr-hatch';
 import type { HatchFacts, HatcheryRow, Pr } from '@/types/pull-request';
 
 /** Local wall-clock times, so the assertions hold in any TZ the suite runs in. */
