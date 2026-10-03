@@ -187,6 +187,12 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
     await expect(cells.filter({ hasText: /Summons · nova-web/ })).toHaveCount(1);
     await expect(cells.filter({ hasText: /Burrowed · nova-web/ })).toHaveCount(1);
 
+    // Reduced motion is emulated for this whole test: nothing on Home is running,
+    // the arrival card (if one is up for the waiting session) included (HIVE-210).
+    const running = () =>
+      page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length);
+    await expect.poll(running).toBe(0);
+
     // The patch's first cell: column 2, row 7 at R 36, in the comb's logical space.
     const canvas = page.getByRole('img', { name: /need/ });
     const box = await canvas.boundingBox();
@@ -218,6 +224,24 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
     await post(waiting, 'Stop');
     await expect(page.getByRole('heading', { level: 2, name: 'Nothing needs you' })).toBeVisible();
     await shoot('home-comb-calm');
+
+    // Held still: two reads half a second apart are the same picture (HIVE-210).
+    const comb = page.getByRole('img', { name: /need/ });
+    const frame = () => comb.evaluate((el) => (el as HTMLCanvasElement).toDataURL());
+    const first = await frame();
+    await page.waitForTimeout(500);
+    expect(await frame()).toBe(first);
+    expect(await running()).toBe(0);
+
+    // In light, the canvas's own ground is the light stage colour (from the palette, not a hex).
+    await setMode(page, 'Light');
+    await settle(page);
+    const corner = await comb.evaluate((el) => {
+      const c = el as HTMLCanvasElement;
+      return Array.from(c.getContext('2d')!.getImageData(2, 2, 1, 1).data.slice(0, 3));
+    });
+    expect(corner).toEqual([253, 253, 251]);
+    await setMode(page, 'Dark');
   } finally {
     await app.close();
   }
