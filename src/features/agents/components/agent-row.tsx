@@ -1,3 +1,6 @@
+import { Pause, Play } from '@phosphor-icons/react';
+import { useEffect, useState } from 'react';
+
 import { cn } from '@/lib/utils';
 import { isAgent } from '@/types/entity';
 
@@ -6,6 +9,8 @@ import { AgentTile, type TileTone } from '@features/agents/components/agent-tile
 import { useAge } from '@hooks/use-relative-time';
 import type { LedgerKind } from '@shared/ledger-contract';
 import {
+  agentRunQueued,
+  agentRunRefusal,
   useAgentLastWord,
   useAgentLiveCount,
   useEntity,
@@ -26,6 +31,11 @@ const KEYWORD_TONE: Partial<Record<LedgerKind, string>> = {
   done: 'text-green',
 };
 
+/** How long a Run now or Pause answer holds line 2 before the last word comes back. */
+const NOTICE_MS = 5000;
+
+const messageOf = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
+
 /**
  * One background agent in the panel (HIVE-204): a hexagon tile, the name with
  * the age of its last word, and the last word itself.
@@ -44,6 +54,15 @@ const KEYWORD_TONE: Partial<Record<LedgerKind, string>> = {
  * its reason instead, because that is the one thing that helps; a paused agent
  * that has never written says `paused`.
  *
+ * ## The slot
+ *
+ * At rest the slot at the end of line 1 shows the last word's age. On hover or
+ * focus Run now and Pause (Resume, for a paused agent) show over it, through
+ * the bridge calls the page used. They sit beside the row's button rather than
+ * inside it, so each keeps its own tab stop, and the slot's width is fixed so
+ * the name never moves. An answer that is not a start (a refusal, a queued
+ * wake, a rejected pause) takes line 2 for five seconds, as a status.
+ *
  * ## The state in words
  *
  * The tile is decoration. The accessible name says the state, the live-run
@@ -58,8 +77,49 @@ export function AgentRow({ id }: AgentRowProps) {
   // `0` when it has never written: a fixed timestamp keeps the ticking clock's
   // effect from re-arming on every render, and the age is not drawn then.
   const age = useAge(last?.ts ?? 0);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Re-armed by each new notice, and cleared on unmount.
+  useEffect(() => {
+    if (notice === null) return undefined;
+
+    const timer = setTimeout(() => setNotice(null), NOTICE_MS);
+
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   if (!entity || !isAgent(entity)) return null;
+
+  const paused = entity.status === 'paused';
+
+  /*
+    The wording comes from `agentRunRefusal` and `agentRunQueued` (HIVE-117):
+    they switch exhaustively over the union, so the next refusal is a compile
+    error rather than a plausible sentence.
+  */
+  const runNow = () => {
+    setNotice(null);
+    void window.hive?.agents
+      .run({ name: id })
+      .then((result) => {
+        if (result.started) return;
+        setNotice('queued' in result ? agentRunQueued(id, result) : agentRunRefusal(id, result));
+      })
+      .catch((cause: unknown) => setNotice(messageOf(cause)));
+  };
+
+  // Both channels reject when the runtime is not up, so both need the catch.
+  const togglePause = () => {
+    setNotice(null);
+
+    const bridge = window.hive?.agents;
+
+    if (bridge === undefined) return;
+
+    void (paused ? bridge.resume({ name: id }) : bridge.pause({ name: id })).catch((cause: unknown) =>
+      setNotice(messageOf(cause)),
+    );
+  };
 
   const broken = entity.invalid !== undefined;
   const current = page?.name === id;
@@ -105,14 +165,40 @@ export function AgentRow({ id }: AgentRowProps) {
               {last === undefined ? '' : age}
             </span>
           </span>
-          <span className="truncate text-[12.5px] text-muted">
-            {keyword === '' ? null : (
-              <i className={cn('mr-1 font-mono text-[12px] not-italic', keywordTone)}>{keyword}</i>
-            )}
-            {text}
-          </span>
+          {notice === null ? (
+            <span className="truncate text-[12.5px] text-muted">
+              {keyword === '' ? null : (
+                <i className={cn('mr-1 font-mono text-[12px] not-italic', keywordTone)}>{keyword}</i>
+              )}
+              {text}
+            </span>
+          ) : (
+            <span role="status" className="truncate text-[12.5px] text-amber">
+              {notice}
+            </span>
+          )}
         </span>
       </button>
+      <span className="invisible absolute top-2 right-2 flex gap-2.5 group-focus-within:visible group-hover:visible">
+        <button
+          type="button"
+          aria-label={`Run ${id} now`}
+          title="Wake this agent once, now."
+          onClick={runNow}
+          className="rounded p-0.5 text-muted hover:text-ink"
+        >
+          <Play size={13} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          aria-label={paused ? `Resume ${id}` : `Pause ${id}`}
+          title={paused ? 'Let this agent wake again' : 'Stop this agent waking. A turn already running finishes.'}
+          onClick={togglePause}
+          className="rounded p-0.5 text-muted hover:text-ink"
+        >
+          {paused ? <Play size={13} aria-hidden="true" /> : <Pause size={13} aria-hidden="true" />}
+        </button>
+      </span>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -184,5 +184,121 @@ describe('AgentRow', () => {
     render(<AgentRow id="watcher" />);
 
     expect(screen.getByRole('button', { name: /^watcher/ })).not.toHaveAttribute('aria-current');
+  });
+});
+
+/**
+ * The row's slot (HIVE-204): Run now and Pause show over the age on hover or
+ * focus, and an answer that is not a start takes line 2 for five seconds.
+ */
+describe('AgentRow — the slot', () => {
+  const stub = (agents: Record<string, unknown> = {}) => {
+    const bridge = {
+      run: vi.fn(async () => ({ started: true, run: 'r1' })),
+      pause: vi.fn(async () => 'paused'),
+      resume: vi.fn(async () => 'sleeping'),
+      ...agents,
+    };
+
+    vi.stubGlobal('hive', { agents: bridge });
+
+    return bridge;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(NOW);
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    useHiveStore.getState().hydrateAgents([summary({ name: 'acr' })]);
+    said({ from: 'acr', kind: 'done', body: 'Reviewed #303' });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+  it('labels its actions and shows them only on hover or focus, over a fixed slot', () => {
+    stub();
+    render(<AgentRow id="acr" />);
+
+    const run = screen.getByRole('button', { name: 'Run acr now' });
+    const pause = screen.getByRole('button', { name: 'Pause acr' });
+    const actions = run.parentElement as HTMLElement;
+
+    expect(pause.parentElement).toBe(actions);
+    expect(actions).toHaveClass('invisible', 'group-hover:visible', 'group-focus-within:visible');
+    expect(screen.getByText('2m')).toHaveClass('w-[44px]');
+  });
+
+  it('offers Resume for a paused agent, and resumes it', async () => {
+    useHiveStore.getState().hydrateAgents([summary({ name: 'acr', status: 'paused' })]);
+    const { resume, pause } = stub();
+    render(<AgentRow id="acr" />);
+
+    await user().click(screen.getByRole('button', { name: 'Resume acr' }));
+
+    expect(resume).toHaveBeenCalledWith({ name: 'acr' });
+    expect(pause).not.toHaveBeenCalled();
+  });
+
+  it('pauses through the bridge', async () => {
+    const { pause } = stub();
+    render(<AgentRow id="acr" />);
+
+    await user().click(screen.getByRole('button', { name: 'Pause acr' }));
+
+    expect(pause).toHaveBeenCalledWith({ name: 'acr' });
+  });
+
+  it('says a refusal in line 2 for five seconds, then the last word again', async () => {
+    stub({ run: vi.fn(async () => ({ started: false, refused: 'working' })) });
+    render(<AgentRow id="acr" />);
+
+    await user().click(screen.getByRole('button', { name: 'Run acr now' }));
+
+    const notice = await screen.findByRole('status');
+    expect(notice).toHaveTextContent('acr is working — try again when it sleeps');
+    expect(notice).toHaveClass('text-amber');
+    expect(screen.queryByText('Reviewed #303')).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByText('Reviewed #303')).toBeInTheDocument();
+  });
+
+  it('says a queued wake the same way', async () => {
+    stub({ run: vi.fn(async () => ({ started: false, queued: true, behind: 'working' })) });
+    render(<AgentRow id="acr" />);
+
+    await user().click(screen.getByRole('button', { name: 'Run acr now' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'queued for acr — it will run when its current turn ends',
+    );
+  });
+
+  it('says why a pause failed', async () => {
+    stub({ pause: vi.fn(async () => Promise.reject(new Error('The agent runtime is not running.'))) });
+    render(<AgentRow id="acr" />);
+
+    await user().click(screen.getByRole('button', { name: 'Pause acr' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('The agent runtime is not running.');
+  });
+
+  it('says nothing when the run starts', async () => {
+    const { run } = stub();
+    render(<AgentRow id="acr" />);
+
+    await user().click(screen.getByRole('button', { name: 'Run acr now' }));
+
+    expect(run).toHaveBeenCalledWith({ name: 'acr' });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

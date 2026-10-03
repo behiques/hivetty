@@ -15,8 +15,8 @@ const agentRow = (id: string) =>
   screen.getByRole('button', { name: new RegExp(`^${id}`) });
 
 /**
- * Every row, and never the `+ New agent…` footer, the header's + or a lane
- * header (HIVE-116, HIVE-204).
+ * Every row, and never the `+ New agent…` footer, the header's +, a lane
+ * header or a row's slot actions (HIVE-116, HIVE-204).
  *
  * Those are buttons in the same panel, so a bare `getAllByRole('button')`
  * counts them as tenants. Filtering here keeps these assertions exact rather
@@ -29,6 +29,7 @@ const agentRows = () =>
       (button) =>
         !button.textContent?.startsWith('+ New agent') &&
         button.getAttribute('aria-label') !== 'New agent' &&
+        !/^(Run .* now|Pause .*|Resume .*)$/.test(button.getAttribute('aria-label') ?? '') &&
         !button.hasAttribute('aria-expanded'),
     );
 
