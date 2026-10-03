@@ -172,6 +172,9 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
     await post(working, 'UserPromptSubmit');
     await post(waiting, 'SessionStart');
     await post(waiting, 'UserPromptSubmit');
+    // What raises the Summons row in the real app (HIVE-217's headline counts the
+    // queue): the PermissionRequest. Its `permission_prompt` echo raises nothing.
+    await post(waiting, 'PermissionRequest', { tool_name: 'Bash' });
     await post(waiting, 'Notification', { notification_type: 'permission_prompt' });
     await post(idle, 'SessionStart');
     await post(idle, 'Stop');
