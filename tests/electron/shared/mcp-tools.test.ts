@@ -20,6 +20,7 @@ const stub = (overrides: Partial<ReceiverClient> = {}): ReceiverClient => ({
   jiraGet: vi.fn(async () => NOT_WIRED),
   jiraTransition: vi.fn(async () => NOT_WIRED),
   jiraComment: vi.fn(async () => NOT_WIRED),
+  jiraUsers: vi.fn(async () => NOT_WIRED),
   // Retro B: a receiver with nothing composed refuses, and says so.
   projectAutoMerge: vi.fn(async () => {
     throw new ReceiverError(409, 'auto-merge switching is not wired to this receiver; nothing was changed');

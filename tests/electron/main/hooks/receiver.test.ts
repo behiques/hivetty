@@ -23,6 +23,7 @@ import {
   JIRA_GET_PATH,
   JIRA_TOOL_MAX_BYTES,
   JIRA_TRANSITION_PATH,
+  JIRA_USERS_PATH,
   type JiraToolHandlers,
 } from '../../../../electron/shared/jira-contract';
 import {
@@ -192,6 +193,13 @@ const ROUTES: {
     name: '/jira/comment',
     url: (r) => `${r.origin as string}${JIRA_COMMENT_PATH}`,
     body: { key: 'HIVE-1', markdown: 'hi' },
+    ok: 200,
+    refused: 403,
+  },
+  {
+    name: '/jira/users',
+    url: (r) => `${r.origin as string}${JIRA_USERS_PATH}`,
+    body: { query: 'da' },
     ok: 200,
     refused: 403,
   },
@@ -3207,10 +3215,14 @@ describe('the Jira routes (HIVE-174)', () => {
     expect(said.status).toBe(200);
     expect(await said.json()).toEqual({ ok: true, value: { id: '3', author: 'me', created: 'now', body: [] } });
 
+    const found = await post(JIRA_USERS_PATH, JSON.stringify({ query: 'da' }), { [HOOK_HEADER_SESSION]: CALLER });
+    expect(await found.json()).toEqual({ ok: true, value: [{ accountId: 'a1', displayName: 'Dana' }] });
+
     expect(calls).toEqual([
       { tool: 'get', request: { key: 'HIVE-7' } },
       { tool: 'transition', request: { key: 'HIVE-9', status: 'Done' } },
       { tool: 'comment', request: { key: 'HIVE-7', markdown: 'hi' } },
+      { tool: 'users', request: { query: 'da' } },
     ]);
   });
 
@@ -3271,6 +3283,7 @@ describe('the Jira routes (HIVE-174)', () => {
       [JIRA_GET_PATH, { key: 'nope' }, /jiraIssue\.key/],
       [JIRA_TRANSITION_PATH, { key: 'HIVE-7', status: '' }, /jiraTransition\.status/],
       [JIRA_COMMENT_PATH, { key: 'HIVE-7', markdown: '' }, /addJiraComment\.markdown/],
+      [JIRA_USERS_PATH, { query: '' }, /jiraUsers\.query/],
     ];
     for (const [path, body, reason] of cases) {
       const response = await post(path, JSON.stringify(body), { [HOOK_HEADER_SESSION]: CALLER });
@@ -3336,7 +3349,7 @@ describe('the Jira routes (HIVE-174)', () => {
   });
 
   it('refuses an unknown id and a foreign token on every Jira route', async () => {
-    for (const path of [JIRA_GET_PATH, JIRA_TRANSITION_PATH, JIRA_COMMENT_PATH]) {
+    for (const path of [JIRA_GET_PATH, JIRA_TRANSITION_PATH, JIRA_COMMENT_PATH, JIRA_USERS_PATH]) {
       const unknown = await post(path, '{}', { [HOOK_HEADER_SESSION]: 'nobody-at-all' });
       expect(unknown.status).toBe(404);
       const foreign = await fetch(`${origin()}${path}`, {
