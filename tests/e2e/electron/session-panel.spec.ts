@@ -35,20 +35,6 @@ async function expectMarker(path: string, contents: string): Promise<void> {
   await expect.poll(() => readMarker(path), { timeout: 15_000 }).toBe(contents);
 }
 
-/** Seed round two before the first frame that matters, as `sessions-place.spec.ts` does. */
-async function useRoundTwo(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const raw = localStorage.getItem('hive.appearance');
-    const stored = raw === null ? { version: 3, state: {} } : (JSON.parse(raw) as { version: number; state: object });
-    localStorage.setItem(
-      'hive.appearance',
-      JSON.stringify({ ...stored, state: { ...stored.state, layout: 'round-two' } }),
-    );
-  });
-  await page.reload();
-  await page.waitForSelector('nav[aria-label="Places"]');
-}
-
 /** Start a session from the filtered Overmind and answer with its id. */
 async function startRoundTwoSession(page: Page): Promise<string> {
   await page
@@ -100,7 +86,7 @@ test("a session's task hooks show in the strip and the Plan tab", async ({}, tes
 
   try {
     await page.waitForLoadState('domcontentloaded');
-    await useRoundTwo(page);
+    await page.waitForSelector('nav[aria-label="Places"]');
     const session = await startRoundTwoSession(page);
     const post = async (body: Record<string, unknown>) => {
       posts += 1;
@@ -165,7 +151,7 @@ test('an edit lands in Changed in this session with its mark', async ({}, testIn
 
   try {
     await page.waitForLoadState('domcontentloaded');
-    await useRoundTwo(page);
+    await page.waitForSelector('nav[aria-label="Places"]');
     const session = await startRoundTwoSession(page);
     const marker = testInfo.outputPath('posted-edit.txt');
     await shell(
@@ -207,7 +193,7 @@ test('open and closed survive a relaunch', async ({}, testInfo) => {
   let page = await app.firstWindow();
   try {
     await page.waitForLoadState('domcontentloaded');
-    await useRoundTwo(page);
+    await page.waitForSelector('nav[aria-label="Places"]');
     await startRoundTwoSession(page);
     await page.getByRole('button', { name: 'Close the session panel' }).click();
     await expect(page.getByRole('tablist')).toHaveCount(0);

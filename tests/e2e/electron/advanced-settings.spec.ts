@@ -457,10 +457,6 @@ test('round two: the bar foot reads Exposed and its popover names the address', 
   const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.evaluate(() =>
-    localStorage.setItem('hive.appearance', JSON.stringify({ version: 3, state: { layout: 'round-two' } })),
-  );
-  await page.reload();
   await page.waitForSelector('nav[aria-label="Places"]');
 
   await expect(page.locator('header')).toHaveCount(0);

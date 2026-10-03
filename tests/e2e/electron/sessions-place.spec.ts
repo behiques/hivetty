@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 import { launchHive, writeProjectConfig } from './fixtures/hive-app';
 
@@ -19,18 +19,6 @@ import { launchHive, writeProjectConfig } from './fixtures/hive-app';
 const PROJECT = 'nova-web';
 const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
 
-/** Seed round two before the first frame that matters, as `round-two.spec.ts` does. */
-async function useRoundTwo(page: Page): Promise<void> {
-  await page.evaluate(() =>
-    localStorage.setItem(
-      'hive.appearance',
-      JSON.stringify({ version: 3, state: { layout: 'round-two' } }),
-    ),
-  );
-  await page.reload();
-  await page.waitForSelector('nav[aria-label="Places"]');
-}
-
 test('⌘[ from a session returns to the Overmind with the filter kept and the row selected', async ({}, testInfo) => {
   const configPath = testInfo.outputPath('hive-config.json');
   writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
@@ -39,7 +27,7 @@ test('⌘[ from a session returns to the Overmind with the filter kept and the r
   await page.waitForLoadState('domcontentloaded');
 
   try {
-    await useRoundTwo(page);
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     await page
       .getByRole('navigation', { name: 'Places' })

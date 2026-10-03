@@ -523,15 +523,6 @@ test('round two at the minimum window: the panel takes no column, and PR stays u
   await page.waitForLoadState('domcontentloaded');
 
   try {
-    await page.evaluate(() => {
-      const raw = localStorage.getItem('hive.appearance');
-      const stored = raw === null ? { version: 3, state: {} } : (JSON.parse(raw) as { version: number; state: object });
-      localStorage.setItem(
-        'hive.appearance',
-        JSON.stringify({ ...stored, state: { ...stored.state, layout: 'round-two' } }),
-      );
-    });
-    await page.reload();
     await page.waitForSelector('nav[aria-label="Places"]');
     await resizeTo(second, page, 1100);
 

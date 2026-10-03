@@ -1,22 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Round two's frame in a real browser (HIVE-195). Seeded before the first
- * frame, because the store reads `localStorage` synchronously on boot.
+ * Round two's frame in a real browser (HIVE-195). It is the default layout
+ * (HIVE-213), so a fresh profile boots straight into it.
  */
 const bar = (page: Page) => page.getByRole('navigation', { name: 'Places' });
 const place = (page: Page, name: string) => bar(page).getByRole('button', { name, exact: true });
 const panel = (page: Page) => page.getByRole('region', { name: / list$/ });
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    if (sessionStorage.getItem('seeded')) return;
-    sessionStorage.setItem('seeded', '1');
-    localStorage.setItem(
-      'hive.appearance',
-      JSON.stringify({ version: 3, state: { layout: 'round-two' } }),
-    );
-  });
   await page.goto('/?sim=0');
 });
 

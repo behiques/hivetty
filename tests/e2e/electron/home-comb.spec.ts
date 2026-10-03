@@ -76,18 +76,6 @@ function postHookCommand(
   );
 }
 
-/** Seed round two before the first frame that matters, as `sessions-place.spec.ts` does. */
-async function useRoundTwo(page: Page): Promise<void> {
-  await page.evaluate(() =>
-    localStorage.setItem(
-      'hive.appearance',
-      JSON.stringify({ version: 3, state: { layout: 'round-two', theme: 'dark' } }),
-    ),
-  );
-  await page.reload();
-  await page.waitForSelector('nav[aria-label="Places"]');
-}
-
 const places = (page: Page) => page.getByRole('navigation', { name: 'Places' });
 
 const terminalIds = (page: Page): Promise<string[]> =>
@@ -159,7 +147,7 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
   try {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.waitForLoadState('domcontentloaded');
-    await useRoundTwo(page);
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     const working = await startSession(page, bootDir);
     await goHome();

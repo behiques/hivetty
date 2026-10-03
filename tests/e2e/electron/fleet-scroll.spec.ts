@@ -257,13 +257,6 @@ test('round two: the docked console folds the transcript and keeps the prompt on
   await page.waitForLoadState('domcontentloaded');
 
   try {
-    await page.evaluate(() =>
-      localStorage.setItem(
-        'hive.appearance',
-        JSON.stringify({ version: 3, state: { layout: 'round-two' } }),
-      ),
-    );
-    await page.reload();
     await page.waitForSelector('nav[aria-label="Places"]');
     await page
       .getByRole('navigation', { name: 'Places' })
