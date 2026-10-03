@@ -341,7 +341,7 @@ test('the split placement setting puts the terminal and the editor side by side'
     await page.getByRole('button', { name: 'Settings' }).click();
     /*
       `exact`, because an accessible name matches as a substring by default and
-      the left rail is full of names nobody chose: a session row reads
+      the Sessions list is full of names nobody chose: a session row reads
       `sess-01 working <branch>`, so this resolved to two elements the moment
       the work happened on a branch with "editor" in it. The settings nav item
       is the only control actually called `Editor`.
