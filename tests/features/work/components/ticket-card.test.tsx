@@ -22,6 +22,8 @@ const ticket = (over: Partial<Ticket> = {}): Ticket => ({
   status: 'In Progress',
   statusCategory: 'in-progress',
   title: 'Hero refresh: migrate to semantic tokens',
+  priority: null,
+  assignee: null,
   ...over,
 });
 
