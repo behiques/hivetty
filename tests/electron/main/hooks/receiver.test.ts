@@ -2991,6 +2991,8 @@ describe('the projects and pr routes (HIVE-173)', () => {
     findings: 2,
     checks: 'passing' as const,
     updatedAt: '2026-09-11T10:00:00Z',
+    mergedAt: null,
+    mine: true,
   };
 
   let receiver: Receiver;

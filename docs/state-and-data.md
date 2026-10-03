@@ -365,6 +365,9 @@ Components never read a store object directly and never call `getState()`.
 | `useYoursAgain(terminalId)` | true while an unswept `session.idle` / `session.input_needed` row names that terminal |
 | `useOnStage()` | what is on the centre stage — a terminal id, an agent's row id, or null; `useForegroundSession` and the Inbox both read it (`src/hooks/use-on-stage.ts`) |
 | `usePrs()` | every open PR the fleet produced |
+| `useHatchery()` | every swept PR with its hatch status, in the Hatchery's order (HIVE-215) |
+| `useHatcherySearch()` | the same over the PR search; `null` with no search |
+| `usePrNeedsYouCount()` | how many swept PRs read SUMMONS; 0 unless `prSource` is live |
 | `useSessionPr(id)` | one row's PR, matched on its branch |
 | `useHasResumable()` | whether the fleet table reserves its Resume column |
 | `useMarkRead()` | mark one notification read, by index |
@@ -410,6 +413,23 @@ is the comb's own Summons count until HIVE-214's `useSummonsCount` lands.
 `useSwarmPalette` is memoised per theme `ui` object, so an unrelated
 appearance write hands back the same reference; a theme without `creep` and
 `chitin` gets them derived from its own `bg`, `brand` and `ink`.
+
+### The hatch status (HIVE-215)
+
+Every PR has one word for what is happening to it: LARVA, COCOONING, INCUBATING,
+MUTATING, BURROWED, HATCHING, SUMMONS or HATCHED. `hatchStatus(pr, facts, now)` in
+`src/lib/pr-hatch.ts` derives it with its tone, GitHub's words, its sort rank
+and `needsYou` (SUMMONS, only ever on your own PR). It is in `lib`, not
+`features/shared`, because the store composes it. The facts come from the ledger:
+`shipStage`, `asksMeAbout` and `mergeWaiting` (`electron/shared/ledger-derive.ts`).
+
+- `useHatchery()`: every swept PR with its status, sorted (open by flap then
+  `updatedAt`, merged after by `mergedAt`). The one list the Hatchery, Home's
+  counts and the session panel's PR tab read.
+- `useHatcherySearch()`: the same over the search; `null` with no search.
+- `usePrNeedsYouCount()`: SUMMONS in the sweep; 0 unless `prSource` is live.
+
+`Pr` (and `PrRecord`) carry `mergedAt` and `mine`; `Pr` also carries `updatedAt`.
 
 ## Caps
 

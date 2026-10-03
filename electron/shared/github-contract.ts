@@ -51,6 +51,14 @@ export interface PrRecord {
   checks: GhPrChecks;
   /** ISO 8601, straight from GitHub. Used for ordering, never parsed for display. */
   updatedAt: string;
+  /** ISO 8601, as `updatedAt`; `null` until the PR merges. The HATCHED time (HIVE-215). */
+  mergedAt: string | null;
+  /**
+   * Whether the token's owner wrote it (HIVE-215). Every sweep record is, by
+   * `collectPrs`' author check; a search result is when its author is the
+   * payload's `viewer`. Only a PR of yours can ask for you (SUMMONS).
+   */
+  mine: boolean;
 }
 
 /**

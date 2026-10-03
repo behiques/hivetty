@@ -170,6 +170,8 @@ describe('toPrRecord', () => {
       findings: 0,
       checks: 'passing',
       updatedAt: '2026-08-09T11:00:00Z',
+      mergedAt: null,
+      mine: false,
     });
   });
 
@@ -464,5 +466,41 @@ describe('collectSearchPrs', () => {
   it('answers empty for a payload with nothing in it', () => {
     expect(collectSearchPrs(null)).toEqual([]);
     expect(collectSearchPrs({})).toEqual([]);
+  });
+});
+
+describe('mergedAt and mine (HIVE-215)', () => {
+  it('keeps mergedAt on a merged PR and null on an open one', () => {
+    const merged = toPrRecord(node({ state: 'MERGED', mergedAt: '2026-08-09T11:32:00Z' }));
+    expect(merged?.mergedAt).toBe('2026-08-09T11:32:00Z');
+    expect(toPrRecord(node())?.mergedAt).toBeNull();
+  });
+
+  it('marks every sweep record mine', () => {
+    const prs = collectPrs(
+      { viewer: { login: 'octocat' }, open: { nodes: [node()] }, merged: { nodes: [] } },
+      'octocat',
+      NOW,
+    );
+    expect(prs.map((pr) => pr.mine)).toEqual([true]);
+  });
+
+  it('marks a search result mine only when the viewer wrote it', () => {
+    const prs = collectSearchPrs({
+      viewer: { login: 'octocat' },
+      open: {
+        nodes: [
+          node({ number: 1, author: { login: 'octocat' } }),
+          node({ number: 2, author: { login: 'someone-else' } }),
+        ],
+      },
+      merged: { nodes: [] },
+    });
+    expect(prs.map((pr) => [pr.number, pr.mine])).toEqual([[1, true], [2, false]]);
+  });
+
+  it('marks nothing mine in a search whose payload names no viewer', () => {
+    const prs = collectSearchPrs({ open: { nodes: [node()] }, merged: { nodes: [] } });
+    expect(prs[0]?.mine).toBe(false);
   });
 });

@@ -51,6 +51,9 @@ import {
   useProjects,
   useProjectSessions,
   usePrs,
+  useHatchery,
+  useHatcherySearch,
+  usePrNeedsYouCount,
   useSessionPr,
   useNextTransition,
   useOpenTicket,
@@ -73,6 +76,7 @@ import { notif } from '../support/notifications';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
 
 import { testProjectKey } from '@tests/support/project-key';
+import { prRecord } from '@tests/support/prs';
 
 /**
  * Every selector hook is asserted against the fixtures. Derived values are
@@ -348,7 +352,108 @@ describe('hive-store selectors', () => {
     });
   });
 
+  describe('the Hatchery (HIVE-215)', () => {
+    const shipper = (id: string, n: number, stage: string): LedgerEntry => ({
+      id, ts: Date.now(), from: 'shipper', kind: 'post', body: 'stage', meta: { pr: n, repo: 'acme/nova-web', stage },
+    });
+
+    beforeEach(() => {
+      act(() => {
+        useHiveStore.setState({
+          prSource: { kind: 'live', stale: false, repos: 1 },
+          prs: [
+            prRecord({ number: 1, findings: 0, checks: 'passing', branch: 'b1' }),
+            prRecord({ number: 2, findings: 2, branch: 'b2' }),
+            prRecord({ number: 3, findings: 0, state: 'draft', branch: 'b3' }),
+            prRecord({ number: 4, findings: 0, branch: 'b4' }),
+          ],
+          ledger: [shipper('l1', 4, 'merge')],
+        });
+      });
+    });
+
+    it('lists every swept PR with its status, in the Hatchery\'s order', () => {
+      const { result } = renderHook(() => useHatchery());
+      expect(result.current.map((row) => [row.pr.n, row.hatch.flap])).toEqual([
+        [2, 'SUMMONS'],
+        [4, 'HATCHING'],
+        [1, 'BURROWED'],
+        [3, 'LARVA'],
+      ]);
+    });
+
+    it('reads an ask to the overmind naming a PR as SUMMONS', () => {
+      act(() => {
+        useHiveStore.setState((state) => ({
+          ledger: [...state.ledger, { id: 'a1', ts: Date.now(), from: 'shipper', kind: 'ask', to: 'overmind', body: 'PR #1 waits on a review', meta: { pr: 1, repo: 'acme/nova-web' } }],
+        }));
+      });
+      const { result } = renderHook(() => useHatchery());
+      expect(result.current.find((row) => row.pr.n === 1)?.hatch.flap).toBe('SUMMONS');
+    });
+
+    it('returns an equal list when the ledger grows by an entry naming no PR', () => {
+      const { result } = renderHook(() => useHatchery());
+      const before = result.current;
+      act(() => {
+        useHiveStore.setState((state) => ({
+          ledger: [...state.ledger, { id: 'z1', ts: Date.now(), from: 'sess-a', kind: 'post', body: 'hello' }],
+        }));
+      });
+      expect(result.current).toEqual(before);
+    });
+
+    it('useHatcherySearch is null with no search, and never summons for others', () => {
+      const { result } = renderHook(() => useHatcherySearch());
+      expect(result.current).toBeNull();
+      act(() => {
+        useHiveStore.setState((state) => ({
+          prSearch: { ...state.prSearch, results: [prRecord({ number: 9, findings: 3, mine: false })] },
+        }));
+      });
+      expect(result.current?.map((row) => row.hatch.flap)).toEqual(['BURROWED']);
+    });
+
+    it('usePrNeedsYouCount counts SUMMONS over the sweep', () => {
+      const { result } = renderHook(() => usePrNeedsYouCount());
+      expect(result.current).toBe(1);
+    });
+
+    it.each([
+      ['loading', { kind: 'loading' }],
+      ['unconfigured', { kind: 'unconfigured', message: 'x' }],
+      ['failed', { kind: 'failed', message: 'x' }],
+    ] as const)('usePrNeedsYouCount is 0 while %s', (_name, prSource) => {
+      act(() => useHiveStore.setState({ prSource }));
+      const { result } = renderHook(() => usePrNeedsYouCount());
+      expect(result.current).toBe(0);
+    });
+
+    it('usePrNeedsYouCount is 0 with no PRs', () => {
+      act(() => useHiveStore.setState({ prs: [] }));
+      const { result } = renderHook(() => usePrNeedsYouCount());
+      expect(result.current).toBe(0);
+    });
+  });
+
   describe('usePrs', () => {
+    it('carries updatedAt, mergedAt and mine through (HIVE-215)', () => {
+      act(() => {
+        useHiveStore.setState({
+          prs: [prRecord({ number: 7, state: 'merged', mergedAt: '2026-08-09T11:32:00Z', mine: true })],
+        });
+      });
+
+      const { result } = renderHook(() => usePrs());
+
+      expect(result.current[0]).toMatchObject({
+        n: 7,
+        updatedAt: '2026-08-09T12:00:00Z',
+        mergedAt: '2026-08-09T11:32:00Z',
+        mine: true,
+      });
+    });
+
     /**
      * The owning session is a *match*, not a stored field.
      *
@@ -463,6 +568,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing' as const,
               updatedAt: '2026-08-09T15:00:00Z',
+              mergedAt: null,
+              mine: true,
             },
           ],
         }));
@@ -557,6 +664,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing' as const,
               updatedAt: '2026-08-09T12:55:04Z',
+              mergedAt: null,
+              mine: true,
             },
             ...state.prs,
           ],
@@ -595,6 +704,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing' as const,
               updatedAt: '2026-08-09T12:55:04Z',
+              mergedAt: null,
+              mine: true,
             },
             ...state.prs,
           ],
@@ -638,6 +749,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing' as const,
               updatedAt: '2026-08-09T12:55:04Z',
+              mergedAt: null,
+              mine: true,
             },
             ...state.prs,
           ],
@@ -685,6 +798,8 @@ describe('hive-store selectors', () => {
         findings: 0,
         checks: 'passing' as const,
         updatedAt: '2026-08-09T15:00:00Z',
+        mergedAt: null,
+        mine: true,
       });
 
       act(() => {
@@ -1457,6 +1572,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing',
               updatedAt: '2026-08-10T09:00:00Z',
+              mergedAt: null,
+              mine: true,
             } satisfies PrRecord,
           ],
         }));
@@ -1490,6 +1607,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing',
               updatedAt: '2026-08-01T00:00:00Z',
+              mergedAt: null,
+              mine: true,
             } satisfies PrRecord,
             {
               number: 700,
@@ -1502,6 +1621,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing',
               updatedAt: '2026-08-20T00:00:00Z',
+              mergedAt: null,
+              mine: true,
             } satisfies PrRecord,
           ],
         }));
@@ -1534,6 +1655,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing',
               updatedAt: '2099-01-01T00:00:00Z',
+              mergedAt: '2099-01-01T00:00:00Z',
+              mine: true,
             } satisfies PrRecord,
           ],
         }));

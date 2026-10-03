@@ -60,8 +60,10 @@ import { isThisMachineAction } from './notification-contract';
  * `plan:changed`'s tasks gained `activeForm`, `startedAt`, `endedAt` and the plan `fileAt`.
  * The same bump covers `jira:detail` (HIVE-203), which landed at 6 without one.
  * 7 → 8 (HIVE-202): `jira:links`' issue links gained `key`, `summary`, `statusCategory`, `linkType` and `direction`; `jira:detail`'s parent gained `issueType`.
+ * 8 → 9 (HIVE-215): `PrRecord` (on `github:prs` and `github:search-prs`) gained
+ * `mergedAt` and `mine`.
  */
-export const REMOTE_PROTOCOL_VERSION = 8;
+export const REMOTE_PROTOCOL_VERSION = 9;
 
 /**
  * What a frame is for.
