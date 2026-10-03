@@ -1,13 +1,15 @@
-import { CaretRight, Files, ListChecks } from '@phosphor-icons/react';
+import { CaretRight, Files, ListChecks, Ticket } from '@phosphor-icons/react';
 import { useCallback, type ReactNode } from 'react';
 
 import { useNarrowWindow } from '@/hooks/use-narrow-window';
 import { cn } from '@/lib/utils';
 import { isSession, isTerminal, terminalOf, type Session, type Terminal } from '@/types/entity';
+import type { Ticket as TicketModel } from '@/types/ticket';
 
 import { SessionPanelStrip, type StripTab } from '@components/layout/session-panel-strip';
 import { ExplorerPanel } from '@features/explorer/components/explorer-panel';
 import { PlanTab } from '@features/plan/components/plan-tab';
+import { TicketTab } from '@features/work/components/ticket-tab';
 import { resolvePaths } from '@lib/explorer/fs-client';
 import type { SessionPlan } from '@shared/plan-contract';
 import {
@@ -19,7 +21,7 @@ import {
   useSetSessionPanelTab,
 } from '@stores/appearance-store';
 import { useEditorActions } from '@stores/editor-store';
-import { useActiveEntity, useChangedFileCount, usePlan } from '@stores/hive-store';
+import { useActiveEntity, useChangedFileCount, useOpenTicket, usePlan } from '@stores/hive-store';
 import { usePlace, useRevealStage } from '@stores/ui-store';
 
 interface TabContext {
@@ -28,6 +30,9 @@ interface TabContext {
   mainId: string | undefined;
   plan: SessionPlan | undefined;
   changedCount: number;
+  /** The session's Jira key, if it works on one (HIVE-202). */
+  ticketKey: string | undefined;
+  ticket: TicketModel | undefined;
   openPlanFile: (file: string) => void;
 }
 
@@ -42,8 +47,8 @@ interface TabSpec {
 }
 
 /**
- * The tabs, in order (HIVE-201). HIVE-202 inserts Ticket and HIVE-209 PR
- * between Plan and Files; nothing else in the shell changes for them.
+ * The tabs, in order (HIVE-201). HIVE-202 added Ticket; HIVE-209 adds PR
+ * between Ticket and Files. Nothing else in the shell changes for them.
  */
 const TABS: readonly TabSpec[] = [
   {
@@ -58,6 +63,15 @@ const TABS: readonly TabSpec[] = [
         : `Plan, ${String(plan.tasks.filter((task) => task.status === 'completed').length)} of ${String(plan.tasks.length)} done`,
     body: ({ plan, openPlanFile }) =>
       plan === undefined ? null : <PlanTab plan={plan} onOpenFile={openPlanFile} />,
+  },
+  {
+    id: 'ticket',
+    label: () => 'Ticket',
+    exists: ({ ticketKey }) => ticketKey !== undefined,
+    Icon: Ticket,
+    fact: ({ ticketKey, ticket }) => (ticket ? `${ticket.key} · ${ticket.status}` : (ticketKey ?? 'Ticket')),
+    body: ({ entity, ticketKey }) =>
+      ticketKey === undefined ? null : <TicketTab ticketKey={ticketKey} sessionId={entity.id} />,
   },
   {
     id: 'files',
@@ -94,6 +108,8 @@ export function SessionPanel() {
   const mainId = owner !== null && isSession(owner) ? terminalOf(owner) : undefined;
   const plan = usePlan(mainId);
   const changedCount = useChangedFileCount(mainId);
+  const ticketKey = owner !== null && isSession(owner) ? owner.ticket : undefined;
+  const ticket = useOpenTicket(ticketKey ?? null);
   const open = useSessionPanelOpen();
   const tab = useSessionPanelTab();
   const setOpen = useSetSessionPanelOpen();
@@ -120,7 +136,7 @@ export function SessionPanel() {
 
   if (owner === null || place === 'home') return null;
 
-  const ctx: TabContext = { entity: owner, mainId, plan, changedCount, openPlanFile };
+  const ctx: TabContext = { entity: owner, mainId, plan, changedCount, ticketKey, ticket, openPlanFile };
   const existing = TABS.filter((spec) => spec.exists(ctx));
   const shown = pickTab(
     existing.map((spec) => spec.id),
