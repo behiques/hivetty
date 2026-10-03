@@ -6360,7 +6360,7 @@ interface AgentGroup {
  */
 export const useAgentsByGroup = (): AgentGroup[] => {
   /*
-    The three fields the grouping reads, and nothing else.
+    The four fields the grouping reads, and nothing else.
 
     Subscribing to `state.entities` re-ran this on every write to *any* entity
     — a line batch from a running agent, a session's status change — because
