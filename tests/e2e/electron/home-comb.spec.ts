@@ -96,13 +96,13 @@ const terminalIds = (page: Page): Promise<string[]> =>
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-terminal-id') ?? ''));
 
 /**
- * Start one session on the project through the title bar's picker; answers its
- * id. Scoped to the `header`, since round two also draws a "New session" "+"
- * in the panel head.
+ * Start one session on the project through the projects panel's "+" (round
+ * two's New session, HIVE-197); answers its id.
  */
 async function startSession(page: Page, bootDir: string): Promise<string> {
   const before = await terminalIds(page);
-  await page.locator('header').getByRole('button', { name: 'New session', exact: true }).click();
+  await places(page).getByRole('button', { name: 'Sessions', exact: true }).click();
+  await page.locator('[data-panel="sessions"]').getByRole('button', { name: 'New session', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Search all projects' })).toBeFocused();
   await page.keyboard.type(PROJECT);
   await page.keyboard.press('Enter');
@@ -122,6 +122,17 @@ const settle = (page: Page) =>
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       }),
   );
+
+/** The way a person switches mode in round two: Settings › Appearance › Mode. */
+async function setMode(page: Page, mode: 'Light' | 'Dark'): Promise<void> {
+  await places(page).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Appearance', exact: true })
+    .click();
+  await page.getByRole('radiogroup', { name: 'Mode' }).getByRole('radio', { name: mode }).click();
+  await page.keyboard.press('Escape');
+}
 
 test('Home draws the comb: one cell per session, the headline, a hover, both themes', async ({}, testInfo) => {
   // Three sessions booted and a dozen hook posts: more than the default 30 s.
@@ -192,10 +203,10 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
     const shoot = async (name: string) => {
       await settle(page);
       await page.screenshot({ path: testInfo.outputPath(`${name}-dark.png`) });
-      await page.getByRole('button', { name: 'Switch to light theme' }).click();
+      await setMode(page, 'Light');
       await settle(page);
       await page.screenshot({ path: testInfo.outputPath(`${name}-light.png`) });
-      await page.getByRole('button', { name: 'Switch to dark theme' }).click();
+      await setMode(page, 'Dark');
     };
     await shoot('home-comb-needs');
 

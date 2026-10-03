@@ -108,6 +108,8 @@ projects panel beside the overmind.
 - Opening a session unfolds its project. Coming back with the back button, `⌘[` or the
   Sessions icon keeps the filter you left and puts the selection on the session you were
   in.
+- The session header over the terminal carries the model and its usage gauges; a plain
+  terminal's has none.
 
 **new project** sits at the foot of the panel.
 

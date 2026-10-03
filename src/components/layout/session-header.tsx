@@ -11,6 +11,7 @@ import {
   type Terminal,
 } from '@/types/entity';
 
+import { ModelChip } from '@components/layout/model-chip';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,9 +27,8 @@ import { useBackToOrch } from '@stores/ui-store';
 
 /**
  * Round two's header over a session or a terminal (HIVE-197). Classic keeps
- * `SessionMetaBar`. The model slot is empty until HIVE-196 mounts `ModelChip`
- * in it; it is sized for `chipLabel` and the context gauge now so the line
- * does not move then.
+ * `SessionMetaBar`. The model slot holds `ModelChip` (HIVE-196), which reads
+ * the active entity: this header only renders over the active session.
  */
 export function SessionHeader({ entity }: { entity: Session | Terminal }) {
   const backToOrch = useBackToOrch();
@@ -73,7 +73,9 @@ function SessionLine({ session }: { session: Session }) {
         <StatusDot status={session.status} detail={session.idleDetail} />
         {statusLabel(session.status, session.idleDetail)}
       </span>
-      <span data-slot="model" className="w-[200px] shrink-0" />
+      <span data-slot="model" className="w-[200px] shrink-0">
+        <ModelChip />
+      </span>
       <SessionMenu session={session} />
     </>
   );

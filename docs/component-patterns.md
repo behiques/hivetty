@@ -64,7 +64,9 @@ Settings › Appearance › **Layout** picks the frame. Classic, the default, is
 tree above: `LeftRail` plus HIVE-105's `RailHandles`. Round two swaps the left of
 the row for `ActivityBar` (a 64px `<nav aria-label="Places">`) and `ListPanel`
 (one 300px list for the current place), and drops the handles — the panel is
-fixed. `Header` and `TitleBar` render in both.
+fixed. `TitleBar` renders in both; `Header` is Classic's only (HIVE-196) —
+round two's connection state is `ConnectionItem` at the bar's foot, and
+`TitleBar` is the macOS drag strip.
 
 ```
 Row (Classic)       LeftRail                 │ CenterStage │ ActivityRail │ RailHandles

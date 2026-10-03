@@ -10,9 +10,10 @@ import {
 
 import { cn } from '@/lib/utils';
 
+import { ConnectionItem } from '@components/layout/connection-item';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip';
 import { useTeamName } from '@stores/appearance-store';
-import { usePrNeedsYouCount } from '@stores/hive-store';
+import { useCounts, usePrNeedsYouCount, useWorkingAgentCount } from '@stores/hive-store';
 import { usePlace, useSelectPlace, useSettingsActions, type Place } from '@stores/ui-store';
 
 const PLACES: readonly { id: Place; label: string; icon: Icon }[] = [
@@ -30,9 +31,9 @@ const ITEM =
  * Round two's activity bar (HIVE-195): the brand, the five places, Settings.
  *
  * Picking a place is the whole interaction; the ui-store's `selectPlace` owns
- * what a click on the active one means. The foot holds Settings only — the
- * connection item is HIVE-196's, and Search is left out until a story says
- * what it searches. The team name the header's `BrandBlock` shows has no room
+ * what a click on the active one means. The foot holds the connection item
+ * (HIVE-196) and Settings; Search is left out until a story says what it
+ * searches. The team name the header's `BrandBlock` shows has no room
  * here, so it is the glyph's tooltip.
  */
 export function ActivityBar() {
@@ -41,6 +42,8 @@ export function ActivityBar() {
   const { openSettings } = useSettingsActions();
   const brand = useTeamName() || 'The Hive';
   const prsNeedYou = usePrNeedsYouCount();
+  const sessionsWorking = useCounts().working;
+  const agentsWorking = useWorkingAgentCount();
 
   return (
     <nav
@@ -58,23 +61,28 @@ export function ActivityBar() {
 
       {PLACES.map(({ id, label, icon: PlaceIcon }) => {
         const active = id === place;
-        const count = id === 'prs' ? prsNeedYou : 0;
+        // Live counts in grey, needs-you in amber, never inventory (HIVE-196).
+        const count = id === 'prs' ? prsNeedYou : id === 'sessions' ? sessionsWorking : id === 'agents' ? agentsWorking : 0;
+        const needsYou = id === 'prs';
         return (
           <button
             key={id}
             type="button"
             aria-current={active ? 'page' : undefined}
-            aria-label={count > 0 ? `${label}, ${String(count)} need you` : undefined}
+            aria-label={count > 0 ? `${label}, ${String(count)} ${needsYou ? 'need you' : 'working'}` : undefined}
             onClick={() => selectPlace(id)}
             className={cn(ITEM, active ? 'bg-panel-2 text-ink' : 'text-muted hover:bg-hover')}
           >
             <PlaceIcon size={19} aria-hidden />
             {label}
-            {/* HIVE-196 deferred the PRs count to the flap rule; HIVE-215 derives it, this draws it. Amber text, not an amber fill: no token is ink on amber (R2). */}
+            {/* PRs: needs you, amber text (no token is ink on amber, R2). Sessions and Agents: working, grey (HIVE-196). */}
             {count > 0 ? (
               <span
                 aria-hidden
-                className="absolute top-0.5 right-1.5 rounded-lg bg-chip px-1 font-mono text-[9px] font-semibold text-amber"
+                className={cn(
+                  'absolute top-0.5 right-1.5 rounded-lg bg-chip px-1 font-mono text-[9px] font-semibold',
+                  needsYou ? 'text-amber' : 'text-muted',
+                )}
               >
                 {count}
               </span>
@@ -84,6 +92,8 @@ export function ActivityBar() {
       })}
 
       <span className="flex-1" />
+
+      <ConnectionItem />
 
       <button
         type="button"

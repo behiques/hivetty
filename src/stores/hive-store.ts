@@ -7247,6 +7247,20 @@ export const useAskingAgentCount = (): number =>
     return asking;
   });
 
+/** Agents working right now: the bar's Agents count (HIVE-196). Same walk as `useAskingAgentCount`. */
+export const useWorkingAgentCount = (): number =>
+  useHiveStore((state) => {
+    let working = 0;
+    for (const id of state.agentOrder) {
+      const entity = state.entities[id];
+      if (entity !== undefined && isAgent(entity) && entity.status === 'working') {
+        working += 1;
+      }
+    }
+
+    return working;
+  });
+
 /** An agent's pull request: always a number, linkable only when the sweep knows it. */
 interface AgentPr {
   n: number;

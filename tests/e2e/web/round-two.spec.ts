@@ -120,3 +120,31 @@ test('no inbox pill with nothing waiting (HIVE-198)', async ({ page }) => {
   await expect(bar(page)).toBeVisible();
   await expect(page.getByRole('button', { name: /^Inbox, / })).toHaveCount(0);
 });
+
+test('round two has no header; the bar foot reads Demo in amber and says why (HIVE-196)', async ({ page }) => {
+  await expect(bar(page)).toBeVisible();
+  await expect(page.getByRole('banner')).toHaveCount(0);
+
+  const item = page.getByTestId('connection-item');
+  await expect(item).toHaveText('Demo');
+  await expect(item).toHaveClass(/text-amber/);
+  await item.click();
+  await expect(page.getByRole('dialog', { name: 'Connection' })).toContainText(
+    'Real sessions need the desktop app.',
+  );
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Connection' })).toHaveCount(0);
+});
+
+test('Settings opens from the bar, and Mode still switches the theme (HIVE-196)', async ({ page }) => {
+  await bar(page).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Appearance', exact: true })
+    .click();
+  await page.getByRole('radiogroup', { name: 'Mode' }).getByRole('radio', { name: 'Light' }).click();
+  await expect(page.locator('body')).toHaveAttribute('data-theme', 'light');
+  await page.getByRole('radiogroup', { name: 'Mode' }).getByRole('radio', { name: 'Dark' }).click();
+  // Dark carries no `data-theme`: `:root` is dark (terminal-theme.spec.ts).
+  await expect(page.locator('body')).not.toHaveAttribute('data-theme', /.*/);
+});

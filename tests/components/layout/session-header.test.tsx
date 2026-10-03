@@ -19,13 +19,15 @@ describe('SessionHeader (HIVE-197)', () => {
     seedDemoFleet();
   });
 
-  it('reads ‹ Overmind, the title over project · branch, the status and an empty model slot', () => {
+  it('reads ‹ Overmind, the title over project · branch, the status and the model', () => {
+    useUiStore.getState().openTab('hero-refresh', 'sessions');
     render(<SessionHeader entity={hero()} />);
     expect(screen.getByRole('button', { name: 'Back to overmind' })).toHaveTextContent('Overmind');
     expect(screen.getByText('hero-refresh')).toHaveAttribute('title', hero().task);
     expect(screen.getByText('nova-web · feat/hero-refresh')).toBeInTheDocument();
     expect(screen.getByText('working')).toBeInTheDocument();
-    expect(screen.getByTestId('session-header').querySelector('[data-slot="model"]')).toBeEmptyDOMElement();
+    const slot = screen.getByTestId('session-header').querySelector('[data-slot="model"]');
+    expect(slot?.querySelector('[data-testid="model-chip"]')).not.toBeNull();
   });
 
   it('names the back chord for the platform in the button title', () => {

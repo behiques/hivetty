@@ -2,11 +2,14 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import type { AgentSummary } from '@shared/agent-contract';
+
 import { ActivityBar } from '@components/layout/activity-bar';
 import { TooltipProvider } from '@components/ui/tooltip';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
+import { seedDemoFleet } from '@tests/support/demo-fleet';
 import { prRecord } from '@tests/support/prs';
 
 const renderBar = () =>
@@ -100,5 +103,63 @@ describe('the PRs count (HIVE-205)', () => {
     useHiveStore.setState({ prSource: { kind: 'loading' }, prs: [prRecord({ checks: 'failing', mine: true })] });
     renderBar();
     expect(within(screen.getByRole('button', { name: 'PRs' })).queryByText(/^\d+$/)).toBeNull();
+  });
+});
+
+describe('the working counts (HIVE-196)', () => {
+  const agent = (over: Partial<AgentSummary> = {}): AgentSummary => ({
+    name: 'a',
+    description: 'Watches.',
+    icon: 'Robot',
+    status: 'sleeping',
+    wake: { on: [] },
+    mcp: [],
+    tools: [],
+    rotateAfter: 50,
+    runs: [],
+    ...over,
+  });
+
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    useHiveStore.getState().reset();
+  });
+
+  it('Sessions and Agents carry their working counts, in grey', () => {
+    seedDemoFleet();
+    useHiveStore.getState().hydrateAgents([
+      agent({ name: 'a', status: 'working' }),
+      agent({ name: 'b', status: 'working' }),
+      agent({ name: 'c', status: 'asking' }),
+    ]);
+    renderBar();
+
+    const sessions = screen.getByRole('button', { name: 'Sessions, 4 working' });
+    expect(within(sessions).getByText('4')).toHaveClass('text-muted');
+    const agents = screen.getByRole('button', { name: 'Agents, 2 working' });
+    expect(within(agents).getByText('2')).toHaveClass('text-muted');
+  });
+
+  it('a zero draws nothing, and Home and Work never carry a count', () => {
+    seedDemoFleet();
+    renderBar();
+    expect(within(screen.getByRole('button', { name: 'Agents' })).queryByText(/^\d+$/)).toBeNull();
+    expect(within(screen.getByRole('button', { name: 'Home' })).queryByText(/^\d+$/)).toBeNull();
+    expect(within(screen.getByRole('button', { name: 'Work' })).queryByText(/^\d+$/)).toBeNull();
+  });
+});
+
+describe('the connection item (HIVE-196)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  it('sits at the foot, above Settings', () => {
+    renderBar();
+    const item = screen.getByTestId('connection-item');
+    const settings = screen.getByRole('button', { name: 'Settings' });
+    // The browser target under test: no bridge, so the item reads Demo.
+    expect(item).toHaveAccessibleName('Connection: Demo');
+    expect(item.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
