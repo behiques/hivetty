@@ -103,13 +103,22 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
   const reload = useReloadTicketTransitions();
 
   /*
-    The poller before the load: its first sweep runs on mount, and run first it
-    finds no entry for the key in the map and returns at once, so opening a
-    ticket reads each part once rather than twice.
+    The load does the first read of a key; the poller only the later ones. Its
+    sweep on mount (or on a new key) runs before the load's effect and is
+    skipped, so a key the map already holds — the page opened again, or a
+    Ticket tab read it first — is read once on open, not twice, and the load
+    alone reads the ledger history.
   */
-  usePagePoller(useCallback(() => refresh(ticketKey, 'page'), [ticketKey, refresh]));
+  const loaded = useRef<string | null>(null);
+  usePagePoller(
+    useCallback(
+      () => (loaded.current === ticketKey ? refresh(ticketKey, 'page') : Promise.resolve()),
+      [ticketKey, refresh],
+    ),
+  );
 
   useEffect(() => {
+    loaded.current = ticketKey;
     void load(ticketKey, 'page');
   }, [ticketKey, load]);
 

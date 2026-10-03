@@ -120,6 +120,24 @@ describe('TicketPage (HIVE-203)', () => {
     await waitFor(() => expect(readJiraDetail).toHaveBeenCalledWith({ key: 'GRAC-3022' }));
   });
 
+  it('reads each part of a key already held once, history included (HIVE-202)', async () => {
+    const ledgerList = vi.fn().mockResolvedValue({ entries: [], openAsks: [], claims: {} });
+    window.hive = { ledger: { list: ledgerList } } as unknown as NonNullable<Window['hive']>;
+    useHiveStore.setState({ ticketDetails: { 'GRAC-3018': { key: 'GRAC-3018', problems: {} } } });
+
+    try {
+      render(<TicketPage ticketKey="GRAC-3018" />);
+      await screen.findByText('The description');
+
+      expect(readJiraDetail).toHaveBeenCalledTimes(1);
+      expect(readJiraComments).toHaveBeenCalledTimes(1);
+      expect(ledgerList).toHaveBeenCalledTimes(1);
+      expect(ledgerList).toHaveBeenCalledWith({ ticket: 'GRAC-3018' });
+    } finally {
+      delete (window as { hive?: unknown }).hive;
+    }
+  });
+
   it('shows a failed read with Retry in place of the description', async () => {
     readJiraDetail.mockResolvedValue(fail('Jira is down'));
     render(<TicketPage ticketKey="GRAC-3018" />);

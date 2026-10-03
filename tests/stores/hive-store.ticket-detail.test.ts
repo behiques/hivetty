@@ -162,6 +162,34 @@ describe('loadTicketDetail (HIVE-203)', () => {
     expect(state().ticketDetails['HIVE-7']).toBeUndefined();
   });
 
+  it('drops a failed read for a key evicted while it was in flight', async () => {
+    const late = deferred<ReturnType<typeof fail>>();
+    readJiraComments.mockReturnValueOnce(late.promise);
+    const pending = state().loadTicketDetail('HIVE-7', 'page');
+    useHiveStore.setState({ ticketDetails: {} });
+    late.resolve(fail('late'));
+    await pending;
+    expect(state().ticketDetails['HIVE-7']).toBeUndefined();
+  });
+
+  it('keeps two keys in flight apart when their answers land in reverse order', async () => {
+    const seven = deferred<ReturnType<typeof ok<JiraIssueDetail>>>();
+    const eight = deferred<ReturnType<typeof ok<JiraIssueDetail>>>();
+    const sevenDetail: JiraIssueDetail = { description: [], parent: { key: 'HIVE-1', summary: 'Seven' } };
+    const eightDetail: JiraIssueDetail = { description: [], parent: { key: 'HIVE-2', summary: 'Eight' } };
+    readJiraDetail.mockReturnValueOnce(seven.promise).mockReturnValueOnce(eight.promise);
+    const first = state().loadTicketDetail('HIVE-7', 'page');
+    const second = state().loadTicketDetail('HIVE-8', 'tab');
+
+    eight.resolve(ok(eightDetail));
+    await second;
+    seven.resolve(ok(sevenDetail));
+    await first;
+
+    expect(state().ticketDetails['HIVE-7']?.detail).toEqual(sevenDetail);
+    expect(state().ticketDetails['HIVE-8']?.detail).toEqual(eightDetail);
+  });
+
   it(`holds at most ${String(TICKET_DETAIL_CAP)} tickets; a load or refresh makes one the newest`, async () => {
     for (let n = 1; n <= TICKET_DETAIL_CAP; n += 1) await state().loadTicketDetail(`HIVE-${String(n)}`, 'tab');
     await state().refreshTicketDetail('HIVE-1', 'tab');
@@ -273,6 +301,19 @@ describe('reloadTicketTransitions (HIVE-203)', () => {
     await state().reloadTicketTransitions('HIVE-7');
 
     expect(state().ticketDetails['HIVE-7']?.transitions).toEqual([back]);
+  });
+
+  it('drops the answer for a key evicted while the read was in flight', async () => {
+    await state().loadTicketDetail('HIVE-7', 'page');
+    const late = deferred<ReturnType<typeof ok<JiraTransition[]>>>();
+    readJiraTransitions.mockReturnValueOnce(late.promise);
+
+    const pending = state().reloadTicketTransitions('HIVE-7');
+    useHiveStore.setState({ ticketDetails: {} });
+    late.resolve(ok([transition]));
+    await pending;
+
+    expect(state().ticketDetails['HIVE-7']).toBeUndefined();
   });
 
   it('does nothing for a key that is not open', async () => {
