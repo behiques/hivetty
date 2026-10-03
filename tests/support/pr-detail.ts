@@ -1,4 +1,4 @@
-import type { PrDetail, PrThread } from '@shared/github-contract';
+import type { PrDetail, PrFile, PrThread } from '@shared/github-contract';
 
 /** One PR's detail with every field defaulted (HIVE-205). */
 export function prDetail(overrides: Partial<PrDetail> = {}): PrDetail {
@@ -28,6 +28,19 @@ export function prDetail(overrides: Partial<PrDetail> = {}): PrDetail {
     reviewRequests: [],
     threads: [],
     checks: [],
+    files: [],
+    ...overrides,
+  };
+}
+
+/** One changed file (HIVE-207). */
+export function prFile(overrides: Partial<PrFile> = {}): PrFile {
+  return {
+    path: 'src/fees/validator.ts',
+    additions: 88,
+    deletions: 9,
+    changeType: 'modified',
+    viewed: 'unviewed',
     ...overrides,
   };
 }

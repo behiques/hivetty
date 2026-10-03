@@ -272,6 +272,7 @@ export const PR_DETAIL_QUERY = [
   `      reviewRequests(first: ${PAGE}) { nodes { requestedReviewer { ... on User { login } ... on Team { name } } } }`,
   `      reviewThreads(last: ${PAGE}) { nodes { id isResolved isOutdated path line originalLine diffSide`,
   `        comments(first: ${PAGE}) { nodes { author { login } body createdAt url diffHunk } } } }`,
+  `      files(first: ${PAGE}) { nodes { path additions deletions changeType viewerViewedState } }`,
   `      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: ${PAGE}) { nodes {`,
   '        __typename',
   '        ... on CheckRun { name status conclusion startedAt completedAt detailsUrl databaseId checkSuite { app { slug } } }',
@@ -293,5 +294,46 @@ export const PR_ID_QUERY = [
 export const PR_COMMENT_MUTATION = [
   'mutation($subjectId: ID!, $body: String!) {',
   '  addComment(input: { subjectId: $subjectId, body: $body }) { subject { id } }',
+  '}',
+].join('\n');
+
+/**
+ * Which PR a review thread is on (HIVE-207). A thread id comes from the
+ * renderer, so main proves it belongs to the scoped PR before writing to it.
+ */
+export const PR_THREAD_OWNER_QUERY = [
+  'query($id: ID!) {',
+  '  node(id: $id) { ... on PullRequestReviewThread { pullRequest { number repository { owner { login } name } } } }',
+  '}',
+].join('\n');
+
+export const THREAD_REPLY_MUTATION = [
+  'mutation($threadId: ID!, $body: String!) {',
+  '  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $threadId, body: $body }) { comment { id } }',
+  '}',
+].join('\n');
+
+export const THREAD_RESOLVE_MUTATION = [
+  'mutation($threadId: ID!) {',
+  '  resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } }',
+  '}',
+].join('\n');
+
+export const THREAD_UNRESOLVE_MUTATION = [
+  'mutation($threadId: ID!) {',
+  '  unresolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } }',
+  '}',
+].join('\n');
+
+/** Viewed is GitHub's own (HIVE-207): the PR id is read by main through PR_ID_QUERY. */
+export const FILE_VIEWED_MUTATION = [
+  'mutation($pullRequestId: ID!, $path: String!) {',
+  '  markFileAsViewed(input: { pullRequestId: $pullRequestId, path: $path }) { pullRequest { id } }',
+  '}',
+].join('\n');
+
+export const FILE_UNVIEWED_MUTATION = [
+  'mutation($pullRequestId: ID!, $path: String!) {',
+  '  unmarkFileAsViewed(input: { pullRequestId: $pullRequestId, path: $path }) { pullRequest { id } }',
   '}',
 ].join('\n');

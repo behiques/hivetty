@@ -80,6 +80,9 @@ import {
   parsePairDeviceRequest,
   parsePrCommentRequest,
   parsePrDetailRequest,
+  parsePrDiffRequest,
+  parsePrThreadRequest,
+  parsePrViewedRequest,
   parsePrRunsRequest,
   parsePromptReport,
   parseReadDirRequest,
@@ -4045,6 +4048,32 @@ export function registerIpcHandlers(
     },
   );
 
+  handle(
+    CH.githubPrDiff,
+    async (_event, payload): Promise<GhResult<string>> => {
+      const request = parsePrDiffRequest(payload);
+      await loginEnvStatus();
+      return github.prDiff(request);
+    },
+  );
+
+  handle(
+    CH.githubPrThread,
+    async (_event, payload): Promise<GhResult<true>> => {
+      const request = parsePrThreadRequest(payload);
+      await loginEnvStatus();
+      return github.prThread(request);
+    },
+  );
+
+  handle(
+    CH.githubPrViewed,
+    async (_event, payload): Promise<GhResult<true>> => {
+      const request = parsePrViewedRequest(payload);
+      await loginEnvStatus();
+      return github.prViewed(request);
+    },
+  );
   handle(CH.githubPrRuns, async (_event, payload): Promise<GhResult<PrRuns>> => {
     const request = parsePrRunsRequest(payload);
     await loginEnvStatus();

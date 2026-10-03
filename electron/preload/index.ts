@@ -83,6 +83,8 @@ import type {
   PrRuns,
   PrRunsRequest,
   PrsSnapshot,
+  PrThreadRequest,
+  PrViewedRequest,
   RunJob,
   RunRef,
 } from '@shared/github-contract';
@@ -649,6 +651,15 @@ const bridge: HiveBridge = {
     /** A PR-level comment. See `CH.githubPrComment`. */
     prComment: (request: PrCommentRequest): Promise<GhResult<true>> =>
       ipcRenderer.invoke(CH.githubPrComment, request) as Promise<GhResult<true>>,
+    /** One PR's diff. See `CH.githubPrDiff`. */
+    prDiff: (request: PrRef): Promise<GhResult<string>> =>
+      ipcRenderer.invoke(CH.githubPrDiff, request) as Promise<GhResult<string>>,
+    /** A thread write. See `CH.githubPrThread`. */
+    prThread: (request: PrThreadRequest): Promise<GhResult<true>> =>
+      ipcRenderer.invoke(CH.githubPrThread, request) as Promise<GhResult<true>>,
+    /** A viewed write. See `CH.githubPrViewed`. */
+    prViewed: (request: PrViewedRequest): Promise<GhResult<true>> =>
+      ipcRenderer.invoke(CH.githubPrViewed, request) as Promise<GhResult<true>>,
     /** The Checks tab's reads and re-run failed (HIVE-206). See `CH.githubPrRuns`. */
     prRuns: (request: PrRunsRequest): Promise<GhResult<PrRuns>> =>
       ipcRenderer.invoke(CH.githubPrRuns, request) as Promise<GhResult<PrRuns>>,

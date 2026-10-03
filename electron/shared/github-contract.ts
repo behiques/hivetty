@@ -191,6 +191,18 @@ export interface PrCommentRequest extends PrRef {
   body: string;
 }
 
+/** `github:pr-thread` (HIVE-207): a reply, a resolve or an unresolve on one review thread. */
+export type PrThreadRequest = PrRef & { threadId: string } & (
+    | { op: 'reply'; body: string }
+    | { op: 'resolve' | 'unresolve' }
+  );
+
+/** `github:pr-viewed` (HIVE-207): mark or unmark one path viewed. */
+export interface PrViewedRequest extends PrRef {
+  path: string;
+  viewed: boolean;
+}
+
 /** A PR-level comment. `author` is `null` for a deleted ("ghost") account. */
 export interface PrComment {
   author: string | null;
@@ -220,6 +232,18 @@ export interface PrThread {
   originalLine: number | null;
   diffSide: string | null;
   comments: PrThreadComment[];
+}
+
+/** GitHub's `viewerViewedState`; `dismissed` is "pushed to since you viewed it" (HIVE-207). */
+export type PrFileViewed = 'viewed' | 'unviewed' | 'dismissed';
+
+/** One changed file (HIVE-207). `changeType` is GitHub's PatchStatus, lowercased. */
+export interface PrFile {
+  path: string;
+  additions: number;
+  deletions: number;
+  changeType: string;
+  viewed: PrFileViewed;
 }
 
 export type PrCheckStatus = 'success' | 'failure' | 'running' | 'queued' | 'neutral';
@@ -265,6 +289,8 @@ export interface PrDetail {
   reviewRequests: string[];
   threads: PrThread[];
   checks: PrCheck[];
+  /** At most GH_DETAIL_PAGE; `changedFiles` is the true total (HIVE-207). */
+  files: PrFile[];
 }
 
 /** `github:pr-runs` (HIVE-206): the runs of one PR's head branch. */

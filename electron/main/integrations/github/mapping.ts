@@ -6,6 +6,7 @@ import {
   type PrCheckStatus,
   type PrComment,
   type PrDetail,
+  type PrFile,
   type PrRecord,
   type PrReview,
   type PrThread,
@@ -380,6 +381,21 @@ function toThread(raw: unknown): PrThread | null {
   };
 }
 
+/** One changed file (HIVE-207). `DISMISSED` is GitHub's "pushed to since you viewed it". */
+function toFile(raw: unknown): PrFile | null {
+  if (!isRecord(raw)) return null;
+  const path = text(raw.path);
+  if (path === null) return null;
+  const state = text(raw.viewerViewedState);
+  return {
+    path,
+    additions: whole(raw.additions) ?? 0,
+    deletions: whole(raw.deletions) ?? 0,
+    changeType: (text(raw.changeType) ?? 'modified').toLowerCase(),
+    viewed: state === 'VIEWED' ? 'viewed' : state === 'DISMISSED' ? 'dismissed' : 'unviewed',
+  };
+}
+
 /** A check run's status and conclusion, or a commit status's state, as one word. */
 function checkStatus(raw: Record<string, unknown>): PrCheckStatus {
   if (raw.__typename === 'StatusContext') {
@@ -480,6 +496,7 @@ export function toPrDetail(payload: unknown, owner: string, repo: string): PrDet
     reviewRequests: each(raw.reviewRequests, toReviewer),
     threads: each(raw.reviewThreads, toThread),
     checks: each(contextsOf(raw), toCheck),
+    files: each(raw.files, toFile),
   };
 }
 
@@ -487,6 +504,44 @@ export function toPrDetail(payload: unknown, owner: string, repo: string): PrDet
 export function readPrId(payload: unknown): string | null {
   const raw = pullRequestOf(payload);
   return raw === null ? null : text(raw.id);
+}
+
+/** The PR a review thread is on, from `PR_THREAD_OWNER_QUERY`'s data (HIVE-207), or `null`. */
+export function readThreadPr(payload: unknown): { owner: string; name: string; number: number } | null {
+  const node = isRecord(payload) ? payload.node : null;
+  const pr = isRecord(node) ? node.pullRequest : null;
+  const repository = isRecord(pr) ? pr.repository : null;
+  if (!isRecord(pr) || !isRecord(repository)) return null;
+  const number = whole(pr.number);
+  const owner = loginOf(repository.owner);
+  const name = text(repository.name);
+  return number === null || owner === null || name === null ? null : { owner, name, number };
+}
+
+/**
+ * Whether a mutation answered with its own field (HIVE-207), and that field
+ * echoes what the write was for (`echoed`); an empty `errors` proves nothing.
+ */
+export function mutated(
+  payload: unknown,
+  field: string,
+  echoed: (answer: Record<string, unknown>) => boolean = () => true,
+): boolean {
+  if (!isRecord(payload)) return false;
+  const answer = payload[field];
+  return isRecord(answer) && echoed(answer);
+}
+
+/** A mutation's answer echoes `{ [key]: { id } }`: the comment posted, the PR marked (HIVE-207). */
+export function echoedId(answer: Record<string, unknown>, key: string): boolean {
+  const inner = answer[key];
+  return isRecord(inner) && text(inner.id) !== null;
+}
+
+/** A resolve or unresolve echoes the thread at the state it was asked for (HIVE-207). */
+export function echoedResolved(answer: Record<string, unknown>, resolved: boolean): boolean {
+  const thread = answer.thread;
+  return isRecord(thread) && thread.isResolved === resolved;
 }
 
 /** Whether `PR_COMMENT_MUTATION` answered with the comment added. */
