@@ -118,11 +118,11 @@ export function EmptyHatchery() {
         The next one hatches here when a session or the builder opens it.
       </p>
       <div className="flex justify-center gap-1.5">
-        <Button onClick={() => setPrSearchOpen(true)}>
+        <Button className="inline-flex items-center gap-1.5" onClick={() => setPrSearchOpen(true)}>
           <MagnifyingGlass size={13} aria-hidden />
           Search older PRs
         </Button>
-        <Button variant="primary" onClick={() => openPicker()}>
+        <Button variant="primary" className="inline-flex items-center gap-1.5" onClick={() => openPicker()}>
           <Hexagon size={13} aria-hidden />
           New session
         </Button>

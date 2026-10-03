@@ -27,6 +27,14 @@ describe('EmptyHatchery', () => {
     expect(useUiStore.getState().prSearchOpen).toBe(true);
   });
 
+  it('sets each button\'s icon beside its label, not above it', () => {
+    // Preflight makes an svg a block; without a flex button the icon takes its own line.
+    render(<EmptyHatchery />);
+    for (const name of ['Search older PRs', 'New session']) {
+      expect(screen.getByRole('button', { name }).className).toMatch(/\binline-flex\b.*\bitems-center\b/);
+    }
+  });
+
   it('New session opens the picker', async () => {
     render(<EmptyHatchery />);
     await userEvent.click(screen.getByRole('button', { name: 'New session' }));
