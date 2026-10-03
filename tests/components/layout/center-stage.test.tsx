@@ -809,6 +809,41 @@ describe('CenterStage — terminals', () => {
   });
 });
 
+describe('CenterStage — an ended session (HIVE-211)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+    useAppearanceStore.getState().setLayout('round-two');
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+  });
+  afterEach(() => useAppearanceStore.getState().reset());
+
+  it('covers a terminated session in round two, over its still-mounted terminal', () => {
+    useHiveStore.getState().setSessionStatus('hero-refresh', 'terminated');
+    useUiStore.getState().openTab('hero-refresh', 'sessions');
+    render(<CenterStage />);
+    expect(screen.getByTestId('session-ended-cover')).toBeInTheDocument();
+    expect(visibleSurfaces()).toHaveLength(1);
+  });
+
+  it('does not cover a live session', () => {
+    useUiStore.getState().openTab('hero-refresh', 'sessions');
+    render(<CenterStage />);
+    expect(screen.queryByTestId('session-ended-cover')).toBeNull();
+  });
+
+  it('does not cover an ended session in Classic', () => {
+    useAppearanceStore.getState().setLayout('classic');
+    useHiveStore.getState().setSessionStatus('hero-refresh', 'terminated');
+    useUiStore.getState().openTab('hero-refresh', 'sessions');
+    render(<CenterStage />);
+    expect(screen.queryByTestId('session-ended-cover')).toBeNull();
+  });
+});
+
 /**
  * The plan rail (HIVE-181): mounted beside the terminal region for a session
  * with a plan, in the terminal view only, and pinned through appearance-store.
