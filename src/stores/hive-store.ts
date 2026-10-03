@@ -373,7 +373,13 @@ export type PrSource =
    */
   | { kind: 'unconfigured'; message: string }
   /** At least one successful read. `repos` is how many were swept. */
-  | { kind: 'live'; stale: boolean; repos: number }
+  | {
+      kind: 'live';
+      stale: boolean;
+      repos: number;
+      /** First failure of the current outage (HIVE-211); present only while stale. */
+      failedAt?: number;
+    }
   /** The first read failed, and there is nothing to keep. */
   | { kind: 'failed'; message: string };
 
@@ -489,6 +495,8 @@ interface HiveState {
   prs: PrRecord[];
   /** Where {@link HiveState.prs} came from. */
   prSource: PrSource;
+  /** When the last good PR sweep landed (HIVE-211). Beside the source, as {@link HiveState.ticketsReadAt} is (D5). */
+  prsReadAt: number | null;
   notifs: HiveNotification[];
   /**
    * What this window's attachment is doing, or `null` when it has none
@@ -2223,6 +2231,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
   /** Loading until the first sweep answers, for the same reason as above. */
   prSource: { kind: 'loading' } as PrSource,
+  prsReadAt: null as number | null,
   prSearch: NO_PR_SEARCH,
   ticketSearch: NO_TICKET_SEARCH,
 
@@ -5741,6 +5750,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       return {
         prs: samePrs(prs, state.prs) ? state.prs : prs,
         prSource: settled ? source : { kind: 'live', stale: false, repos },
+        prsReadAt: Date.now(),
         // Omitted rather than assigned when nothing was learned — the common
         // case by a wide margin, once a fleet's PRs have settled. Writing an
         // identical map back would wake every entity subscriber on every tick
@@ -5782,7 +5792,9 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         // partial still rebuilds the root object and wakes every listener.
         // Returning the state itself is what `setSessionStatus` does, and
         // zustand short-circuits on it.
-        return source.stale ? state : { prSource: { ...source, stale: true } };
+        return source.stale
+          ? state
+          : { prSource: { ...source, stale: true, failedAt: Date.now() } };
       }
 
       return source.kind === 'failed' && source.message === message
@@ -6181,6 +6193,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       // just emptied. `{ kind: 'loading' }` is the same value `reset()` and
       // this store's own initial state use for "nothing read yet".
       prSource: { kind: 'loading' },
+      prsReadAt: null,
       /*
         **Tickets are the remote machine's too, and this used to be wrong in
         the other direction.**
@@ -6309,6 +6322,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       prChecks: {},
       prTimelines: {},
       prSource: { kind: 'loading' },
+      prsReadAt: null,
       prSearch: NO_PR_SEARCH,
       ticketSearch: NO_TICKET_SEARCH,
     });
@@ -9489,6 +9503,9 @@ export const useAgentsListed = (): boolean =>
 
 /** Projects come from the config snapshot, not the store, so this reads `useProjects`. */
 export const useSessionsListed = (): boolean => useProjects().length > 0;
+
+/** When the last good PR sweep landed (HIVE-211, D5): the stale line's second time. */
+export const usePrsReadAt = (): number | null => useHiveStore((state) => state.prsReadAt);
 
 /** Sweep GitHub. The poller's entry point — see `hooks/use-pr-refresh.ts`. */
 export const useRefreshPrs = () => useHiveStore((state) => state.refreshPrs);
