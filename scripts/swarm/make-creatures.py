@@ -13,11 +13,9 @@ Each creature is emitted twice:
 The still is not an optimisation. Animated WebP ignores
 `prefers-reduced-motion` entirely — the browser plays it regardless — so the
 only way to honour the setting is to hand the element a different file, which
-is what `swarm-creature.tsx` does. `src/splash/splash.ts` already works around
-the same limitation for the cold-start sprite.
+is what `swarm-creature.tsx` does.
 
-Pillow rather than ffmpeg or cwebp, matching `scripts/splash/make-gif.mjs`:
-neither is in this project's toolchain.
+Pillow rather than ffmpeg or cwebp: neither is in this project's toolchain.
 
     python3 scripts/swarm/make-creatures.py <source-dir>
 
