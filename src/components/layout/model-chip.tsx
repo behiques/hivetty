@@ -130,19 +130,16 @@ function Stat({ pct, detail, short, label }: StatProps) {
  *
  * ## Width, and what gives way
  *
- * `clip` (default on) keeps `min-w-0` and `overflow-hidden`, so a mount with
- * no size container of its own — the Classic header — loses stats off the end
- * rather than overrunning its neighbours. The session header passes
- * `clip={false}`: it is a size container, sizes the chip to its content and
- * gives way in order. As the stage narrows the title truncates first, then the resets
- * give way to `5h` / `wk` (both spans render; the container picks one), then
- * the status word hides. The model label and the three percentages never go,
+ * The chip sizes to its content and never clips. The session header is a size
+ * container and gives way in order: as the stage narrows the title truncates
+ * first, then the resets give way to `5h` / `wk` (both spans render; the
+ * container picks one), then the status word hides. The model label and the three percentages never go,
  * and nothing clips. The full string, both resets included, stays in `title`.
  *
  * The separators are hairline borders rather than `│` glyphs so they do not
  * change width with the font.
  */
-export function ModelChip({ clip = true }: { clip?: boolean } = {}) {
+export function ModelChip() {
   const entity = useActiveEntity();
   const metrics = useSessionMetrics(entity?.id);
 
@@ -182,7 +179,7 @@ export function ModelChip({ clip = true }: { clip?: boolean } = {}) {
     <span
       title={title}
       /*
-        A stable handle for the layout specs, like `status-counts` already has.
+        A stable handle for the layout specs.
         The Electron suite used to find this element by `getByTitle(/\(1M\)/)`,
         which stopped working the moment the window suffix became *derived* from
         `metrics.contextWindow`: that suite stubs `claude` out entirely
@@ -196,23 +193,15 @@ export function ModelChip({ clip = true }: { clip?: boolean } = {}) {
       /*
         Plain text, not a pill.
 
-        This used to be a `Chip` — `rounded-full bg-chip px-3 py-1` — which gave
-        the header two competing surfaces: a filled capsule on the left and the
-        fleet counts sitting as bare text on the right, both of them mono, muted
-        and reporting the same *kind* of thing. The fill implied the metrics were
-        a distinct object you could act on. They are a readout, exactly as the
-        counts are, so they now render like one and the header reads as one line
-        of status text broken by the centre.
-
-        The type matches `status-counts.tsx` (`font-mono text-xs text-muted`)
-        rather than the chip's `text-[11.5px]`: with no capsule to set them
-        apart, two mono sizes half a pixel apart across one 56px row is a
-        misalignment, not a distinction.
+        This used to be a `Chip` — `rounded-full bg-chip px-3 py-1`. The fill
+        implied the metrics were a distinct object you could act on. They are a
+        readout, so they render like one: `font-mono text-xs text-muted` rather
+        than the chip's `text-[11.5px]`.
       */
-      className={`flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-muted${clip ? ' min-w-0' : ''}`}
+      className="flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-muted"
     >
       <Brain size={13} weight="regular" className="shrink-0 text-brand" />
-      <span className={`flex items-center gap-2${clip ? ' min-w-0 overflow-hidden' : ''}`}>
+      <span className="flex items-center gap-2">
         <span className="shrink-0">{label}</span>
 
         {context === null ? null : (

@@ -40,15 +40,14 @@ import {
  *
  * ## The watcher does *not* live here
  *
- * It did, and that was a bug: the rail swaps panels and the shell can unmount
- * the rail entirely, so freshness died the moment the user looked at the Inbox
- * with a file open. `useProjectWatcher()` is mounted at the composition root
+ * It did, and that was a bug: the session panel swaps tabs and can close
+ * entirely, so freshness died the moment the user left the Files tab with a
+ * file open. `useProjectWatcher()` is mounted at the composition root
  * instead, and this panel reads the revision counter it bumps.
  *
  * `changesId` is main's id for the session on stage (`terminalOf(session)`,
- * HIVE-201): round two's Files tab passes it, and the panel lists the
- * session's changed files above the tree and marks them in it. Classic's
- * rail passes nothing and shows no marks; they belong to the session panel.
+ * HIVE-201): the session panel's Files tab passes it, and the panel lists the
+ * session's changed files above the tree and marks them in it.
  */
 export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
   const { project, root: subRoot, sessionId, display, branch } = useExplorerProject();
@@ -298,7 +297,7 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
           Not decoration: the two questions a user asks of a file tree
           mid-session are *which directory* and *which branch*, and the panel
           could answer neither. `branchLabel`'s em dash is deliberately not used
-          here — the rail already prints it in the session meta bar, and a
+          here — the session header already prints it, and a
           second em dash in a 320px column is noise rather than an answer.
         */}
         {branch === undefined ? null : (

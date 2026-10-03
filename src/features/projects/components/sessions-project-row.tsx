@@ -27,8 +27,7 @@ function Entry({ id }: { id: string }) {
 
 /**
  * One project in round two's Sessions panel (HIVE-197): folded by default, the
- * name filters the Overmind, the caret only folds. Classic's `ProjectRow` is
- * untouched until phase 2 deletes it.
+ * name filters the Overmind, the caret only folds.
  */
 export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
   const ids = useProjectSessions(project.id);

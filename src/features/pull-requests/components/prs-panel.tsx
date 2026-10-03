@@ -15,7 +15,6 @@ import { PrSearchRow } from '@features/pull-requests/components/pr-search-row';
 import { useOpenPr } from '@features/pull-requests/open-pr';
 import { SourceProblem } from '@features/shared/components/source-problem';
 import { StaleLine } from '@features/shared/components/stale-line';
-import { useLayout } from '@stores/appearance-store';
 import {
   prKey,
   useActiveEntity,
@@ -106,20 +105,17 @@ function SourceNotice({
 /**
  * The panel's own scroll boundary.
  *
- * The rail's `role="tabpanel"` wrapper scrolls whatever panel it holds, which
- * for this one meant the search row and its repo scope travelling upward with
- * the results — controls that describe the list scrolling out of reach of the
- * list they describe.
+ * The list panel's wrapper scrolls whatever panel it holds, which for this one
+ * meant the search row and its repo scope travelling upward with the results —
+ * controls that describe the list scrolling out of reach of the list they
+ * describe.
  *
- * Filling the rail's height exactly is what fixes it: the outer scroller then
+ * Filling the panel's height exactly is what fixes it: the outer scroller then
  * has nothing to scroll and never engages, and the region below the pinned
  * header becomes the only thing that moves. That is preferable to `sticky`,
  * which keeps the row in view but leaves it inside the scrolling flow — so it
  * still needs an opaque fill to hide the cards passing under it, and the
  * scrollbar still spans the whole panel including the part that never moves.
- *
- * The WORK panel is deliberately left alone: it has no header to pin, so its
- * cards scrolling in the rail's own container is already the right behaviour.
  */
 function PrsLayout({
   header,
@@ -211,7 +207,6 @@ export function PrsPanel() {
   const folded = usePrsFolded();
   const { openPrPage, togglePrsFolded, setPrSearchOpen } = usePrPageActions();
   const clearSearch = useClearPrSearch();
-  const layout = useLayout();
   const openRow = useOpenPr();
 
   /**
@@ -237,16 +232,10 @@ export function PrsPanel() {
   */
   const pull = usePullToRefresh({ onRefresh: refresh, disabled: searching || source.kind === 'loading' });
 
-  /** Round two opens the page; Classic has no page, so GitHub (D17). Stable, so rows stay memoised. */
+  /** A row opens its page (D17). Stable, so rows stay memoised. */
   const onOpen = useCallback(
-    (row: HatcheryRow) => {
-      if (layout === 'round-two') {
-        openPrPage({ owner: row.pr.owner, repo: row.pr.repo, n: row.pr.n, row });
-        return;
-      }
-      window.open(row.pr.url, '_blank', 'noopener,noreferrer');
-    },
-    [layout, openPrPage],
+    (row: HatcheryRow) => openPrPage({ owner: row.pr.owner, repo: row.pr.repo, n: row.pr.n, row }),
+    [openPrPage],
   );
 
   const toggleSearch = () => {
@@ -255,7 +244,7 @@ export function PrsPanel() {
   };
 
   /* A string, not the row: the rows are rebuilt on every append, and `open` must stay equal for the memo. */
-  const openKey = layout === 'round-two' && openRow !== null ? rowKey(openRow) : null;
+  const openKey = openRow !== null ? rowKey(openRow) : null;
   const live = rows.filter((row) => row.pr.state !== 'merged');
   const hatched = rows.filter((row) => row.pr.state === 'merged');
   const draw = (row: HatcheryRow) => {

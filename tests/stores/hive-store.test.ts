@@ -44,9 +44,7 @@ import {
   agentStatusWord,
   agentStatusColor,
   useActiveSessions,
-  useAgentCount,
   useAgentFacts,
-  useAgentFleetStatus,
   useAgentRuns,
   useAgentsByGroup,
   useAgentThread,
@@ -60,7 +58,6 @@ import {
   useReattachEpoch,
   useRemoteLink,
   useAgentLastWord,
-  useBuildProgress,
   useIsAgentId,
   useLedgerEntries,
   useNavOrder,
@@ -3046,8 +3043,8 @@ describe('hive-store', () => {
       It used to take every summary's name, so a definition the guard below
       refused kept its place in the order with nothing behind it. Every
       selector that walks the order narrows with `isAgent` and quietly skipped
-      it, which is why the lie survived — until `useAgentCount` turned the
-      array's length into a number on screen.
+      it, which is why the lie survived — until a count over `agentOrder`
+      turned the array's length into a number on screen.
     */
     it('leaves out a name the session guard refused', () => {
       seedDemoProjectConfig();
@@ -5489,21 +5486,14 @@ describe('the ledger slice', () => {
     expect(result.current.map((found) => found.id)).toEqual(['1', '3']);
   });
 
-  it('reads the workflow stage off the tail and keeps the answer stable until the ledger moves (HIVE-171)', () => {
+  it('reads the workflow stage off the tail until the ledger moves (HIVE-171)', () => {
     useHiveStore.getState().hydrateLedger([
       entry({ id: '1', from: 'shipper', kind: 'post', meta: { pr: 4, repo: 'acme/nova', stage: 'ci' } }),
       entry({ id: '2', from: 'builder', kind: 'post', meta: { ticket: 'ACME-9', stage: 'build', task: 2 } }),
     ]);
 
     const ship = renderHook(() => useShipping('acme/nova', 4));
-    const build = renderHook(() => useBuildProgress('ACME-9'));
     expect(ship.result.current).toBe(true);
-    expect(build.result.current).toEqual({ from: 'builder', stage: 'build', task: 2 });
-
-    const before = build.result.current;
-    act(() => useHiveStore.getState().setSessionStatus('hero-refresh', 'working'));
-    build.rerender();
-    expect(build.result.current).toBe(before);
 
     act(() =>
       useHiveStore.getState().hydrateLedger([
@@ -5901,154 +5891,6 @@ describe('the agent view selectors', () => {
       const { result } = renderHook(() => useAgentFacts('nobody'));
 
       expect(result.current).toBeNull();
-    });
-  });
-
-  describe('useAgentCount', () => {
-    it('counts the agents on disk, whatever they are doing', () => {
-      useHiveStore
-        .getState()
-        .hydrateAgents([
-          summary('watcher', { status: 'working' }),
-          summary('patrol', { status: 'paused' }),
-        ]);
-
-      const { result } = renderHook(() => useAgentCount());
-
-      expect(result.current).toBe(2);
-    });
-
-    it('is zero before any agent is hydrated', () => {
-      const { result } = renderHook(() => useAgentCount());
-
-      expect(result.current).toBe(0);
-    });
-
-    it('ignores sessions', () => {
-      seedDemoFleet();
-      useHiveStore.getState().hydrateAgents([summary('watcher')]);
-
-      const { result } = renderHook(() => useAgentCount());
-
-      expect(result.current).toBe(1);
-    });
-
-    /*
-      The case the guard in `hydrateAgents` exists for, and the one this count
-      made visible. `entities` holds both kinds in one map and an agent name is
-      a legal session id, so a definition named after a live session is refused
-      the entity write — and used to keep its place in `agentOrder` anyway. The
-      badge would then read "2 agents" while the panel listed one and the dot,
-      which narrows, reported on one.
-    */
-    it('does not count a definition the session guard refused', () => {
-      seedDemoProjectConfig();
-      const id = useHiveStore.getState().spawnSession('nova-web');
-
-      useHiveStore.getState().hydrateAgents([summary(id), summary('watcher')]);
-
-      const { result } = renderHook(() => useAgentCount());
-
-      expect(result.current).toBe(1);
-      // The terminal is untouched — it is why the guard refused the write.
-      expect(useHiveStore.getState().entities[id]?.kind).toBe('session');
-    });
-  });
-
-  describe('useAgentFleetStatus', () => {
-    it('is undefined when every agent is resting', () => {
-      useHiveStore
-        .getState()
-        .hydrateAgents([
-          summary('watcher', { status: 'sleeping' }),
-          summary('patrol', { status: 'paused' }),
-        ]);
-
-      const { result } = renderHook(() => useAgentFleetStatus());
-
-      expect(result.current).toBeUndefined();
-    });
-
-    it('is undefined with no agents at all', () => {
-      const { result } = renderHook(() => useAgentFleetStatus());
-
-      expect(result.current).toBeUndefined();
-    });
-
-    it('reports a working agent', () => {
-      useHiveStore
-        .getState()
-        .hydrateAgents([
-          summary('watcher', { status: 'working' }),
-          summary('patrol', { status: 'sleeping' }),
-        ]);
-
-      const { result } = renderHook(() => useAgentFleetStatus());
-
-      expect(result.current).toBe('working');
-    });
-
-    /*
-      The precedence the rail's own grouping already reads in: `asking` sorts
-      ahead of everything in `useAgentsByGroup` because somebody is blocked on
-      the user, and a summary dot that showed green while an agent waited would
-      invert that.
-    */
-    it('prefers asking over working', () => {
-      useHiveStore
-        .getState()
-        .hydrateAgents([
-          summary('watcher', { status: 'working' }),
-          summary('patrol', { status: 'asking' }),
-        ]);
-
-      const { result } = renderHook(() => useAgentFleetStatus());
-
-      expect(result.current).toBe('asking');
-    });
-
-    it('prefers failed over working', () => {
-      useHiveStore
-        .getState()
-        .hydrateAgents([
-          summary('watcher', { status: 'working' }),
-          summary('patrol', { status: 'failed' }),
-        ]);
-
-      const { result } = renderHook(() => useAgentFleetStatus());
-
-      expect(result.current).toBe('failed');
-    });
-
-    it('prefers asking over failed', () => {
-      useHiveStore
-        .getState()
-        .hydrateAgents([
-          summary('watcher', { status: 'failed' }),
-          summary('patrol', { status: 'asking' }),
-        ]);
-
-      const { result } = renderHook(() => useAgentFleetStatus());
-
-      expect(result.current).toBe('asking');
-    });
-
-    /*
-      An unparseable definition is filed as `sleeping` by `registry.ts`, which
-      has nowhere better to put a folder it could not read. Taking that at face
-      value would leave a broken agent with no mark at all — invisible in the
-      collapsed rail, which is the one place the dot is the whole signal.
-    */
-    it('counts an unparseable definition as a failure, not as sleep', () => {
-      useHiveStore
-        .getState()
-        .hydrateAgents([
-          summary('broke', { status: 'sleeping', invalid: 'bad frontmatter' }),
-        ]);
-
-      const { result } = renderHook(() => useAgentFleetStatus());
-
-      expect(result.current).toBe('failed');
     });
   });
 

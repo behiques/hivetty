@@ -1,10 +1,10 @@
 import { isEntityView, resolveView } from '@/lib/resolve-view';
 import { isSession, terminalOf } from '@/types/entity';
 
-import { useEditorLayout, useLayout } from '@stores/appearance-store';
+import { useEditorLayout } from '@stores/appearance-store';
 import { useActiveFileKey } from '@stores/editor-store';
 import { useActiveEntity } from '@stores/hive-store';
-import { useActiveTab, useAgentPage, usePickerState, usePlace, useSettingsOpen } from '@stores/ui-store';
+import { useActiveTab, usePickerState, usePlace, useSettingsOpen } from '@stores/ui-store';
 
 /**
  * What is on the centre stage: a terminal id, an agent's row id, or null
@@ -52,15 +52,13 @@ export function useOnStage(): string | null {
   const settings = useSettingsOpen();
   const activeFileKey = useActiveFileKey();
   const { placement } = useEditorLayout();
-  const layout = useLayout();
   const place = usePlace();
 
   const editorFull = activeFileKey !== null && placement === 'full';
-  const home = layout === 'round-two' && place === 'home';
-  const work = layout === 'round-two' && place === 'work';
-  const agentPage = useAgentPage();
-  const agents = place === 'agents' && (layout === 'round-two' || agentPage !== null);
-  const prs = layout === 'round-two' && place === 'prs';
+  const home = place === 'home';
+  const work = place === 'work';
+  const agents = place === 'agents';
+  const prs = place === 'prs';
   const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work, agents, prs });
   /*
     `entity` is non-null whenever the view is an entity view — `resolveView`

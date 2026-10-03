@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { AgentsPanel } from '@features/agents/components/agents-panel';
 import { SessionsPanel } from '@features/projects/components/sessions-panel';
 import { PrsPanel } from '@features/pull-requests/components/prs-panel';
-import { WorkList } from '@features/work/components/work-panel';
+import { WorkPanel } from '@features/work/components/work-panel';
 import {
   useAgentsListed,
   usePrsListed,
@@ -25,13 +25,12 @@ import {
 /**
  * Each place's panel (HIVE-195). Home has none. Sessions has its own since
  * HIVE-197, Work its grouped rows since HIVE-203, Agents since HIVE-204, and
- * PRs is the Hatchery since HIVE-205. PRs also still shows in the ActivityRail
- * until HIVE-201 retires it — accepted while round two is opt-in.
+ * PRs is the Hatchery since HIVE-205.
  */
 const PANELS: Record<Place, ComponentType | null> = {
   home: null,
   sessions: SessionsPanel,
-  work: WorkList,
+  work: WorkPanel,
   agents: AgentsPanel,
   prs: PrsPanel,
 };
@@ -46,8 +45,8 @@ const LABELS: Record<Place, string> = {
 
 /**
  * Round two's one list panel: fixed at `--cc-list-w`, beside the stage, never
- * instead of it. Not resizable and no collapsed strip — HIVE-105's handles and
- * strip stay Classic's; closing is `panelOpen`.
+ * instead of it. Not resizable and no collapsed strip — closing is
+ * `panelOpen`.
  *
  * No list without items (HIVE-211): a place with nothing to list draws no
  * panel, and its stage says why — Jira not connected, gh signed out, no agent,

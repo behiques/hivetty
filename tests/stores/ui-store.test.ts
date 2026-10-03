@@ -15,13 +15,8 @@ describe('ui-store — view state', () => {
     useUiStore.getState().reset();
   });
 
-  it('starts on the orchestrator with the projects and inbox tabs', () => {
-    const state = useUiStore.getState();
-
-    expect(state.activeTab).toBe('orch');
-    expect(state.leftTab).toBe('projects');
-    expect(state.railTab).toBe('inbox');
-    expect(state.showActivityRail).toBe(true);
+  it('starts on the orchestrator', () => {
+    expect(useUiStore.getState().activeTab).toBe('orch');
   });
 
   it('openTab switches the center stage and dismisses the picker', () => {
@@ -96,31 +91,6 @@ describe('ui-store — view state', () => {
     });
   });
 
-  it('toggleProject collapses and expands', () => {
-    const { toggleProject } = useUiStore.getState();
-
-    toggleProject('nova-web');
-    expect(useUiStore.getState().collapsed['nova-web']).toBe(true);
-
-    toggleProject('nova-web');
-    expect(useUiStore.getState().collapsed['nova-web']).toBe(false);
-  });
-
-  it('tracks each project independently', () => {
-    useUiStore.getState().toggleProject('nova-web');
-
-    expect(useUiStore.getState().collapsed['nova-web']).toBe(true);
-    expect(useUiStore.getState().collapsed['referral-api']).toBeUndefined();
-  });
-
-  it('switches left and rail tabs', () => {
-    useUiStore.getState().setLeftTab('agents');
-    useUiStore.getState().setRailTab('prs');
-
-    expect(useUiStore.getState().leftTab).toBe('agents');
-    expect(useUiStore.getState().railTab).toBe('prs');
-  });
-
   it('clears a stale query when the picker reopens', () => {
     const { openPicker, setPickerQuery, closePicker } = useUiStore.getState();
 
@@ -144,11 +114,6 @@ describe('ui-store — view state', () => {
     expect(useUiStore.getState().newEffort).toBe('low');
   });
 
-  it('toggles the activity rail', () => {
-    useUiStore.getState().toggleActivityRail();
-    expect(useUiStore.getState().showActivityRail).toBe(false);
-  });
-
   it('tracks the orchestrator table selection by id', () => {
     useUiStore.getState().setSelId('webhooks');
     expect(useUiStore.getState().selId).toBe('webhooks');
@@ -169,17 +134,13 @@ describe('ui-store — view state', () => {
   it('reset returns every field to its initial value', () => {
     const state = useUiStore.getState();
     state.openTab('webhooks');
-    state.setLeftTab('agents');
     state.setSelId('webhooks');
-    state.toggleProject('nova-web');
 
     useUiStore.getState().reset();
 
     expect(useUiStore.getState()).toMatchObject({
       activeTab: 'orch',
-      leftTab: 'projects',
       selId: null,
-      collapsed: {},
     });
   });
 });
@@ -297,39 +258,6 @@ describe('the explorer tree', () => {
     useUiStore.getState().reset();
 
     expect(useUiStore.getState().explorerExpanded).toEqual({});
-  });
-});
-
-describe('revealRailTab (HIVE-93)', () => {
-  it('selects the tab and opens the rail', () => {
-    useUiStore.setState({ railTab: 'prs', showActivityRail: false });
-
-    useUiStore.getState().revealRailTab('inbox');
-
-    expect(useUiStore.getState().railTab).toBe('inbox');
-    expect(useUiStore.getState().showActivityRail).toBe(true);
-  });
-
-  it('is idempotent, so a second click does not hide the rail', () => {
-    /**
-     * The distinction from `toggleActivityRail`, which is what the header bell
-     * must not do: a user clicking the bell twice is asking for the inbox twice,
-     * not asking for it and then asking for it to go away.
-     */
-    useUiStore.getState().revealRailTab('inbox');
-    useUiStore.getState().revealRailTab('inbox');
-
-    expect(useUiStore.getState().showActivityRail).toBe(true);
-    expect(useUiStore.getState().railTab).toBe('inbox');
-  });
-
-  it('does not disturb the rail when only the tab differs', () => {
-    useUiStore.setState({ railTab: 'explorer', showActivityRail: true });
-
-    useUiStore.getState().revealRailTab('inbox');
-
-    expect(useUiStore.getState().railTab).toBe('inbox');
-    expect(useUiStore.getState().showActivityRail).toBe(true);
   });
 });
 
@@ -529,6 +457,19 @@ describe('ui-store — the place machine (HIVE-195)', () => {
   });
 });
 
+describe('reset (HIVE-213)', () => {
+  it('restores Home with the panel open, and no rail fields exist', () => {
+    useUiStore.setState({ place: 'prs', panelOpen: false });
+    useUiStore.getState().reset();
+    const state = useUiStore.getState() as unknown as Record<string, unknown>;
+    expect(state.place).toBe('home');
+    expect(state.panelOpen).toBe(true);
+    for (const key of ['leftTab', 'railTab', 'showActivityRail', 'collapsed']) {
+      expect(key in state).toBe(false);
+    }
+  });
+});
+
 describe('Sessions place view state (HIVE-197)', () => {
   beforeEach(() => useUiStore.getState().reset());
 
@@ -549,7 +490,7 @@ describe('Sessions place view state (HIVE-197)', () => {
     expect(useUiStore.getState().expanded['nova-web']).toBe(true);
   });
 
-  it('toggleProjectFold flips, expandProject only opens, and neither touches Classic collapsed', () => {
+  it('toggleProjectFold flips, and expandProject only opens', () => {
     useUiStore.getState().toggleProjectFold('a');
     expect(useUiStore.getState().expanded.a).toBe(true);
     useUiStore.getState().toggleProjectFold('a');
@@ -557,7 +498,6 @@ describe('Sessions place view state (HIVE-197)', () => {
     useUiStore.getState().expandProject('a');
     useUiStore.getState().expandProject('a');
     expect(useUiStore.getState().expanded.a).toBe(true);
-    expect(useUiStore.getState().collapsed).toEqual({});
   });
 
   it('setSessionsFilter and expandEnded', () => {

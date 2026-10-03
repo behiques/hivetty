@@ -4,8 +4,7 @@ import { PlanGlyph } from './plan-glyph';
 
 /**
  * The plan at rest (HIVE-201): a `done/total` count, or ✓, over one ring per
- * task. Drawn inside the Classic rail's button and round two's strip, so the
- * two closed forms read the same.
+ * task. Drawn in round two's strip.
  */
 export function PlanRings({ plan }: { plan: SessionPlan }) {
   const done = plan.tasks.filter((task) => task.status === 'completed').length;

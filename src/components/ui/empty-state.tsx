@@ -58,7 +58,7 @@ type EmptyStateProps = {
 );
 
 /**
- * What a left-rail panel says when it has nothing to list.
+ * What a list panel says when it has nothing to list.
  *
  * ## Why this exists at all
  *
