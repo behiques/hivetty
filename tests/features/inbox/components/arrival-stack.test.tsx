@@ -239,5 +239,7 @@ describe('an arrival leaves with its reason (HIVE-218)', () => {
     act(() => useUiStore.getState().foldArrivals());
     expect(screen.queryByRole('article')).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
+    // No empty card box for the beat it is held.
+    expect(screen.queryByTestId('arrival-stack')).toBeNull();
   });
 });

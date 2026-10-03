@@ -9,7 +9,7 @@ import { useSummons } from '@stores/hive-store';
 import { useArrivals, useInboxActions, useSettingsOpen } from '@stores/ui-store';
 
 import { AskCard } from './ask-card';
-import { AskLeaving } from './ask-leaving';
+import { AskLeaving, useLeaveReason } from './ask-leaving';
 import { NotificationCard } from './notification-card';
 import { SessionNote } from './session-note';
 
@@ -84,7 +84,10 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
   }, [up, held.hover, held.focus, arrivals, foldArrivals]);
 
   const [shown] = placed;
-  if (settings || shown === undefined) return null;
+  // A row folded or dismissed by hand left without closing: nothing to say, so no box either.
+  const leftClosed =
+    useLeaveReason(shown?.leaving === true && shown.row.action.type === 'ask' ? shown.row.action.thread : '') !== null;
+  if (settings || shown === undefined || (shown.leaving && !leftClosed)) return null;
   const newest = shown.row;
 
   const slivers = Math.max(0, Math.min(visible.length - 1, 2));

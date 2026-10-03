@@ -19,6 +19,13 @@ export function leaveReason(entries: readonly LedgerEntry[], thread: string, ans
   return expired ? { kind: 'expired' } : null;
 }
 
+/** Why `thread` closed, live from the store (HIVE-218). `''` asks nothing and answers `null`. */
+export function useLeaveReason(thread: string): LeaveReason {
+  const entries = useThread(thread);
+  const here = useAnsweredHere(thread);
+  return thread === '' ? null : leaveReason(entries, thread, here);
+}
+
 /**
  * The line a closed ask leaves behind for one beat (HIVE-218), styled as the collapsed
  * "answered" line `AskCard` draws. Nothing for a row that left without closing. It fades in
@@ -26,12 +33,11 @@ export function leaveReason(entries: readonly LedgerEntry[], thread: string, ans
  */
 export function AskLeaving({ notif, thread }: { notif: HiveNotification; thread: string }) {
   const entries = useThread(thread);
-  const here = useAnsweredHere(thread);
+  const reason = useLeaveReason(thread);
   const ask = entries.find((entry) => entry.id === thread);
   const from = ask?.from ?? entries.find((entry) => entry.kind === 'answer')?.to ?? '';
   const fromIsAgent = useIsAgentId(from);
   const sessionName = useDisplayName(fromIsAgent ? '' : from);
-  const reason = leaveReason(entries, thread, here);
   if (reason === null) return null;
   const asker = (fromIsAgent ? from : sessionName) || notif.title;
 
