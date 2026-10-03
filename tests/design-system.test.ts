@@ -217,6 +217,11 @@ describe('the amber count colour (HIVE-210)', () => {
   const declared = (selector: RegExp) =>
     /--cc-amber-count:\s*([^;]+);/.exec(block(tokensCss, selector))?.[1]?.trim();
 
+  it('binds the creature colours as Tailwind utilities (HIVE-210)', () => {
+    expect(tokensCss).toContain('--color-creep: var(--cc-creep);');
+    expect(tokensCss).toContain('--color-chitin: var(--cc-chitin);');
+  });
+
   it('is the drawn amber in dark', () => {
     expect(declared(/:root\s*\{/)).toBe('var(--cc-amber)');
   });

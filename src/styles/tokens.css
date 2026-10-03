@@ -359,6 +359,8 @@ body[data-theme='light'] {
   --color-green: var(--cc-green);
   --color-amber: var(--cc-amber);
   --color-amber-count: var(--cc-amber-count);
+  --color-creep: var(--cc-creep);
+  --color-chitin: var(--cc-chitin);
   --color-red: var(--cc-red);
   --color-chip: var(--cc-chip);
   --color-chip-hover: var(--cc-chip-hover);
