@@ -27,7 +27,7 @@ import { useShowActivityRail } from '@stores/ui-store';
 /**
  * The fixed three-column command-center chrome.
  *
- * Header on top, then a single row that fills the rest of the viewport:
+ * Header on top (Classic only; round two has none, HIVE-196), then a single row that fills the rest of the viewport:
  * navigation left, terminal center, activity right. Nothing here scrolls — the
  * three regions own their own scrollbars, so the terminal keeps a stable size
  * no matter how much lands in the rails.
@@ -180,7 +180,8 @@ export function AppShell() {
         unchanged on every target that does not have floating traffic lights.
       */}
       <TitleBar />
-      <Header />
+      {/* Round two retires the header (HIVE-196); `TitleBar` stays as the macOS drag strip. The null keeps the row's child index. */}
+      {roundTwo ? null : <Header />}
 
       {/*
         `railRef` is what the two drag handles measure against: a rail's width

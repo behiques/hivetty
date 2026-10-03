@@ -147,6 +147,8 @@ describe('AppShell — Layout (HIVE-195)', () => {
 
     expect(screen.getByRole('navigation', { name: 'Projects, work, and agents' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Places' })).not.toBeInTheDocument();
+    expect(screen.getByRole('banner')).toBeInTheDocument();
+    expect(screen.queryByTestId('connection-item')).not.toBeInTheDocument();
   });
 
   it('draws the bar and the list panel in round two, and no activity rail (HIVE-201)', () => {
@@ -155,7 +157,7 @@ describe('AppShell — Layout (HIVE-195)', () => {
 
     renderShell();
 
-    expect(screen.getByRole('banner')).toBeInTheDocument();
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Places' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Work list' })).toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument();
@@ -170,10 +172,12 @@ describe('AppShell — Layout (HIVE-195)', () => {
 
     act(() => useAppearanceStore.getState().setLayout('round-two'));
     expect(screen.getByRole('navigation', { name: 'Places' })).toBeInTheDocument();
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
     expect(screen.getByRole('main')).toBe(stage);
 
     act(() => useAppearanceStore.getState().setLayout('classic'));
     expect(screen.getByRole('navigation', { name: 'Projects, work, and agents' })).toBeInTheDocument();
+    expect(screen.getByRole('banner')).toBeInTheDocument();
     expect(screen.getByRole('main')).toBe(stage);
   });
 
