@@ -78,7 +78,7 @@ import type {
   SpawnTerminalRequest,
   WriteRequest,
 } from './ipc-contract';
-import { ISSUE_KEY_PATTERN, type JiraMention, type JiraTransitionByName } from './jira-contract';
+import { ISSUE_KEY_PATTERN, type JiraMention, type JiraTransitionByName, type JiraUsersRequest } from './jira-contract';
 import {
   LEDGER_KINDS,
   type LedgerAnswerRequest,
@@ -1961,6 +1961,18 @@ export function parseAddJiraCommentRequest(
     markdown,
     ...(mentions.length === 0 ? {} : { mentions }),
   };
+}
+
+const MAX_USER_QUERY = 64;
+
+/** `{ query }` for the `@` picker and `jira_users` (HIVE-216): one URL-encoded parameter, bounded and printable. */
+export function parseJiraUsersRequest(input: unknown): JiraUsersRequest {
+  const raw = assertShape(input, ['query'], 'jiraUsers');
+  const query = assertString(raw.query, 'jiraUsers.query').trim();
+  if (query === '') return fail('jiraUsers.query: must not be empty');
+  if (query.length > MAX_USER_QUERY) return fail('jiraUsers.query: too long');
+  if (hasControlCharacters(query)) return fail('jiraUsers.query: control characters are not allowed');
+  return { query };
 }
 
 const MAX_STATUS_NAME = 64;

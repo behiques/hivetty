@@ -9,6 +9,7 @@ import {
   parseJiraIssueRequest,
   parseJiraSearchRequest,
   parseJiraTransitionsRequest,
+  parseJiraUsersRequest,
   parseSetJiraRequest,
   parseSetJiraTokenRequest,
 } from '../../../electron/shared/guards';
@@ -494,5 +495,19 @@ describe('parseAddJiraCommentRequest', () => {
       () => parseAddJiraCommentRequest({ key: 'HIVE-71', markdown: 'x', via: { agent: 'builder' } }),
       /unexpected key "via"/,
     );
+  });
+});
+
+describe('parseJiraUsersRequest (HIVE-216)', () => {
+  it('accepts a query, trimmed', () => {
+    expect(parseJiraUsersRequest({ query: '  dana ' })).toEqual({ query: 'dana' });
+  });
+
+  it('refuses an empty, over-long or control-character query, and any other key', () => {
+    refuses(() => parseJiraUsersRequest({ query: '   ' }), /jiraUsers\.query: must not be empty/);
+    refuses(() => parseJiraUsersRequest({ query: 'x'.repeat(65) }), /jiraUsers\.query: too long/);
+    refuses(() => parseJiraUsersRequest({ query: 'da\u0000na' }), /control characters/);
+    refuses(() => parseJiraUsersRequest({ query: 'dana', maxResults: 50 }), /unexpected key "maxResults"/);
+    refuses(() => parseJiraUsersRequest({}), /missing key "query"/);
   });
 });
