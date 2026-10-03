@@ -83,6 +83,21 @@ describe('WorkStage (HIVE-203)', () => {
 
     expect(await screen.findByRole('region', { name: 'Ticket GRAC-3018' })).toBeInTheDocument();
   });
+  it('says why when there is nothing to list (HIVE-211)', () => {
+    useHiveStore.setState({ ticketSource: { kind: 'unconfigured' }, tickets: [] });
+    render(<WorkStage />);
+
+    expect(screen.getByRole('heading', { name: "Jira isn't connected" })).toBeInTheDocument();
+    expect(screen.queryByText('Pick a ticket')).toBeNull();
+  });
+
+  it('still shows an open ticket when nothing is listed (HIVE-211)', async () => {
+    useHiveStore.setState({ ticketSource: { kind: 'unconfigured' } });
+    useUiStore.getState().openWorkTicket('GRAC-3018');
+    render(<WorkStage />);
+
+    expect(await screen.findByRole('region', { name: 'Ticket GRAC-3018' })).toBeInTheDocument();
+  });
 });
 
 describe('TicketPage (HIVE-203)', () => {
