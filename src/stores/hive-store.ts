@@ -46,6 +46,7 @@ import {
   readPrDetail,
   readPrDiff,
   readPrRuns,
+  readPrTimeline,
   readPullRequests,
   readRunJobs,
   rerunFailedJobs,
@@ -125,6 +126,7 @@ import type {
   PrFileViewed,
   PrRecord,
   PrsSnapshot,
+  PrTimeline,
   RunJob,
   WorkflowDef,
   WorkflowRun,
@@ -458,6 +460,8 @@ interface HiveState {
   prDiffs: Record<string, PrDiffEntry>;
   /** The Checks tab's reads per PR, keyed by {@link prKey} (HIVE-206). At most PR_DETAIL_CAP, the newest last. */
   prChecks: Record<string, PrChecksEntry>;
+  /** The Timeline tab's reads per PR, keyed by {@link prKey} (HIVE-208). At most PR_DETAIL_CAP, the newest last. */
+  prTimelines: Record<string, PrTimelineEntry>;
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
   /**
@@ -550,6 +554,8 @@ interface HiveState {
   refreshTicketDetail: (key: string, want: TicketDetailWant) => Promise<void>;
   /** Read one PR's detail: the first read and every refresh (HIVE-205). */
   loadPrDetail: (owner: string, repo: string, n: number) => Promise<void>;
+  /** Read one PR's Timeline: GitHub's history every call, the ledger's once (HIVE-208). */
+  loadPrTimeline: (owner: string, repo: string, n: number) => Promise<void>;
   /** Comment on a PR, then re-read it; the answer says why a post failed (HIVE-205). */
   commentOnPr: (owner: string, repo: string, n: number, body: string) => Promise<GhResult<true>>;
   /** Read one PR's diff at a head sha: once per sha, again when it moves (HIVE-207). */
@@ -2000,6 +2006,24 @@ export interface PrDetailEntry {
   readAt?: number;
 }
 
+/** One PR's Timeline as read (HIVE-208). A failed refresh keeps `timeline` and `history` beside the `problem`. */
+export interface PrTimelineEntry {
+  key: string;
+  state: 'loading' | 'ok' | 'failed';
+  problem?: string;
+  timeline?: PrTimeline;
+  /** The ledger from a day before the PR opened, read once. */
+  history?: LedgerEntry[];
+  readAt?: number;
+}
+
+/** `20261003-090507`: a ledger id's leading two segments, local time, as `electron/main/ledger/store.ts` writes them (HIVE-208). */
+export const ledgerIdAt = (ms: number): string => {
+  const at = new Date(ms);
+  const p = (v: number) => String(v).padStart(2, '0');
+  return `${at.getFullYear()}${p(at.getMonth() + 1)}${p(at.getDate())}-${p(at.getHours())}${p(at.getMinutes())}${p(at.getSeconds())}`;
+};
+
 /** One PR's diff text, read at a head sha (HIVE-207). A failed read keeps the last text beside the problem. */
 export interface PrDiffEntry {
   key: string;
@@ -2181,6 +2205,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   prDetails: {} as Record<string, PrDetailEntry>,
   prDiffs: {} as Record<string, PrDiffEntry>,
   prChecks: {} as Record<string, PrChecksEntry>,
+  prTimelines: {} as Record<string, PrTimelineEntry>,
 
   /** Loading until the first sweep answers, for the same reason as above. */
   prSource: { kind: 'loading' } as PrSource,
@@ -5318,6 +5343,40 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     });
   },
 
+  /**
+   * One PR's Timeline (HIVE-208): GitHub's history every call, and the ledger
+   * from a day before the PR opened, once — the renderer's tail is capped at
+   * 500, and a long PR's early holds fall out of it. A day of slack covers a
+   * server-mode client in another zone; `prEvents` drops the extras.
+   */
+  loadPrTimeline: async (owner, repo, n) => {
+    const key = prKey(owner, repo, n);
+    set((state) => ({
+      prTimelines: touchDetail(state.prTimelines, key, state.prTimelines[key] ?? { key, state: 'loading' as const }, PR_DETAIL_CAP),
+    }));
+
+    const result = await readPrTimeline({ owner, repo, n });
+    set((state) => {
+      const entry = state.prTimelines[key];
+      if (entry === undefined) return state;
+      const next: PrTimelineEntry =
+        result?.ok === true
+          ? { key, state: 'ok', timeline: result.value, readAt: Date.now(), ...(entry.history === undefined ? {} : { history: entry.history }) }
+          : { ...entry, state: 'failed', problem: result === null ? BRIDGE_ERROR : result.error.message };
+      return { prTimelines: { ...state.prTimelines, [key]: next } };
+    });
+
+    const held = get().prTimelines[key];
+    if (result?.ok !== true || held === undefined || held.history !== undefined) return;
+    const since = ledgerIdAt(Date.parse(result.value.createdAt) - 86_400_000);
+    const snapshot = await (window.hive?.ledger.list({ since }) ?? Promise.resolve(undefined)).catch(() => undefined);
+    if (snapshot === undefined) return;
+    set((state) => {
+      const entry = state.prTimelines[key];
+      return entry === undefined ? state : { prTimelines: { ...state.prTimelines, [key]: { ...entry, history: snapshot.entries } } };
+    });
+  },
+
   commentOnPr: async (owner, repo, n, body) => {
     const result = await postPrComment({ owner, repo, n, body });
     if (result === null) return BRIDGE_REFUSAL;
@@ -6128,6 +6187,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       prDetails: {},
       prDiffs: {},
       prChecks: {},
+      prTimelines: {},
       /*
         Not "an orphan quietly wasting memory" the way it first read — session
         ids are **not unique across machines**. `nextSpawnId`/`rememberSpawnId`
@@ -6228,6 +6288,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       prDetails: {},
       prDiffs: {},
       prChecks: {},
+      prTimelines: {},
       prSource: { kind: 'loading' },
       prSearch: NO_PR_SEARCH,
       ticketSearch: NO_TICKET_SEARCH,
