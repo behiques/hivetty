@@ -110,6 +110,13 @@ body {
   }
 }
 
+/* The first-run cells (HIVE-200). The global reduced-motion clamp stills them. */
+@keyframes ccbreathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+
 /**
  * An inbox card sliding out to the right, with the list closing over it.
  *

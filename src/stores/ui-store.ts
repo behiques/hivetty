@@ -315,6 +315,9 @@ interface UiState {
   togglePrsFolded: () => void;
   setPrConversation: (mode: WorkConversation) => void;
   setPrSearchOpen: (open: boolean) => void;
+  /** When this window last lost focus, else when it launched (HIVE-200's "since"). View state, not persisted. */
+  awaySince: number;
+  markAway: (at: number) => void;
   reset: () => void;
 }
 
@@ -363,6 +366,7 @@ const initialUiState = {
   prsFolded: true,
   prConversation: 'comments' as WorkConversation,
   prSearchOpen: false,
+  awaySince: Date.now(),
 };
 
 /** Back to the Overmind with the row left behind under the caret (HIVE-197). */
@@ -601,6 +605,7 @@ export const useUiStore = create<UiState>()((set) => ({
   togglePrsFolded: () => set((state) => ({ prsFolded: !state.prsFolded })),
   setPrConversation: (mode) => set({ prConversation: mode }),
   setPrSearchOpen: (open) => set({ prSearchOpen: open }),
+  markAway: (at) => set({ awaySince: at }),
   reset: () => set(initialUiState),
 }));
 
@@ -848,3 +853,7 @@ export const useBumpFsRevision = () =>
   useUiStore((state) => state.bumpFsRevision);
 
 
+
+/** Home's "since" (HIVE-200). */
+export const useAwaySince = () => useUiStore((state) => state.awaySince);
+export const useMarkAway = () => useUiStore((state) => state.markAway);
