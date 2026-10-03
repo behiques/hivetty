@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RemoteLinkStatus } from '@shared/ipc-contract';
 
 import { ConnectionItem } from '@components/layout/connection-item';
+import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 
 const src = vi.hoisted(() => ({
@@ -12,7 +13,6 @@ const src = vi.hoisted(() => ({
   exposed: null as string | null,
   serving: null as string | null,
   devices: 0,
-  link: null as RemoteLinkStatus | null,
 }));
 
 vi.mock('@config/runtime', () => ({ isDesktop: () => src.desktop }));
@@ -21,7 +21,6 @@ vi.mock('@hooks/use-project-config', () => ({
   useServerExposure: () => src.serving,
   useServingDeviceCount: () => src.devices,
 }));
-vi.mock('@stores/hive-store', () => ({ useRemoteLink: () => src.link }));
 
 const link = (over: Partial<RemoteLinkStatus> = {}): RemoteLinkStatus => ({
   state: 'attached',
@@ -34,6 +33,11 @@ const link = (over: Partial<RemoteLinkStatus> = {}): RemoteLinkStatus => ({
   ...over,
 });
 
+/** Installs a pushed link status, or `null` for none, in the real store. */
+const setLink = (status: RemoteLinkStatus | null): void => {
+  act(() => useHiveStore.getState().setRemoteLink(status));
+};
+
 const item = () => screen.getByTestId('connection-item');
 const open = async () => {
   await userEvent.click(item());
@@ -42,8 +46,9 @@ const open = async () => {
 
 describe('ConnectionItem (HIVE-196)', () => {
   beforeEach(() => {
-    Object.assign(src, { desktop: true, exposed: null, serving: null, devices: 0, link: null });
+    Object.assign(src, { desktop: true, exposed: null, serving: null, devices: 0 });
     useUiStore.getState().reset();
+    useHiveStore.getState().reset();
   });
 
   it.each([
@@ -55,7 +60,9 @@ describe('ConnectionItem (HIVE-196)', () => {
     ['exposed', { exposed: '0.0.0.0' }, 'Exposed', 'text-amber', 'bg-amber'],
     ['demo', { desktop: false }, 'Demo', 'text-amber', 'bg-amber'],
   ] as const)('%s: label, tone and dot', (_state, over, label, tone, dot) => {
-    Object.assign(src, over);
+    const { link: status = null, ...rest } = over as { link?: RemoteLinkStatus };
+    Object.assign(src, rest);
+    setLink(status);
     render(<ConnectionItem />);
     expect(item()).toHaveTextContent(label);
     expect(item()).toHaveAccessibleName(`Connection: ${label}`);
@@ -64,13 +71,14 @@ describe('ConnectionItem (HIVE-196)', () => {
   });
 
   it('pulses the reconnecting ring', () => {
-    src.link = link({ state: 'reconnecting' });
+    setLink(link({ state: 'reconnecting' }));
     render(<ConnectionItem />);
     expect(item().querySelector('[data-dot]')).toHaveClass('animate-ccpulse');
   });
 
   it('labels by precedence and lists every state that holds', async () => {
-    Object.assign(src, { exposed: '0.0.0.0', link: link() });
+    src.exposed = '0.0.0.0';
+    setLink(link());
     render(<ConnectionItem />);
     expect(item()).toHaveTextContent('Exposed');
 
@@ -105,17 +113,17 @@ describe('ConnectionItem (HIVE-196)', () => {
   });
 
   it('attached, disconnected and demo carry their sentences', async () => {
-    src.link = link();
+    setLink(link());
     const { unmount } = render(<ConnectionItem />);
     expect(await open()).toHaveTextContent('its sessions are what you are driving right now');
     unmount();
 
-    src.link = link({ state: 'disconnected', reason: 'token revoked' });
+    setLink(link({ state: 'disconnected', reason: 'token revoked' }));
     const second = render(<ConnectionItem />);
     expect(await open()).toHaveTextContent('The connection ended and is not being retried: token revoked');
     second.unmount();
 
-    src.link = null;
+    setLink(null);
     src.desktop = false;
     render(<ConnectionItem />);
     expect(await open()).toHaveTextContent('Real sessions need the desktop app.');
@@ -129,15 +137,16 @@ describe('ConnectionItem (HIVE-196)', () => {
 
 describe('ConnectionItem — the link row (HIVE-196)', () => {
   beforeEach(() => {
-    Object.assign(src, { desktop: true, exposed: null, serving: null, devices: 0, link: null });
+    Object.assign(src, { desktop: true, exposed: null, serving: null, devices: 0 });
     useUiStore.getState().reset();
+    useHiveStore.getState().reset();
   });
   afterEach(() => {
     vi.useRealTimers();
   });
 
   it('names what the dropped link swallowed, and Clear acknowledges it', async () => {
-    src.link = link({ state: 'reconnecting', lost: 3 });
+    setLink(link({ state: 'reconnecting', lost: 3 }));
     render(<ConnectionItem />);
     const dialog = await open();
     expect(dialog).toHaveTextContent('3 actions (clicks or keystrokes) did not reach mac-mini; redo them once it is back.');
@@ -148,32 +157,48 @@ describe('ConnectionItem — the link row (HIVE-196)', () => {
   });
 
   it('says it once, without "once it is back", while attached', async () => {
-    src.link = link({ lost: 1 });
+    setLink(link({ lost: 1 }));
     render(<ConnectionItem />);
     expect(await open()).toHaveTextContent('1 action (clicks or keystrokes) did not reach mac-mini; redo it.');
   });
 
   it('a new loss after Clear shows only the new one, and going local resets the count', async () => {
-    src.link = link({ lost: 2 });
+    setLink(link({ lost: 2 }));
     const { rerender } = render(<ConnectionItem />);
     await userEvent.click(within(await open()).getByRole('button', { name: 'Clear' }));
 
-    src.link = link({ lost: 3 });
+    setLink(link({ lost: 3 }));
     rerender(<ConnectionItem />);
     expect(screen.getByRole('dialog')).toHaveTextContent('1 action (clicks or keystrokes)');
 
     await userEvent.keyboard('{Escape}');
-    src.link = null;
+    setLink(null);
     rerender(<ConnectionItem />);
-    src.link = link({ lost: 2 });
+    setLink(link({ lost: 2 }));
     rerender(<ConnectionItem />);
     expect(await open()).toHaveTextContent('2 actions (clicks or keystrokes)');
+  });
+
+  /*
+    HIVE-211: Clear writes the store's acknowledgement, which the Classic chip
+    and the stage line read too, so one Clear clears all three.
+  */
+  it('Clear acknowledges into the store, and a store acknowledgement hides the note', async () => {
+    setLink(link({ state: 'reconnecting', lost: 3 }));
+    render(<ConnectionItem />);
+    await userEvent.click(within(await open()).getByRole('button', { name: 'Clear' }));
+    expect(useHiveStore.getState().remoteLostAcked).toBe(3);
+
+    act(() => useHiveStore.setState({ remoteLostAcked: 0 }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('3 actions');
+    act(() => useHiveStore.setState({ remoteLostAcked: 3 }));
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('did not reach');
   });
 
   it('counts down to the next try while open', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
     vi.setSystemTime(0);
-    src.link = link({ state: 'reconnecting', nextAttemptAt: 8_000 });
+    setLink(link({ state: 'reconnecting', nextAttemptAt: 8_000 }));
     render(<ConnectionItem />);
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await user.click(item());
@@ -186,7 +211,7 @@ describe('ConnectionItem — the link row (HIVE-196)', () => {
   });
 
   it('drops the countdown when no try is scheduled', async () => {
-    src.link = link({ state: 'reconnecting', nextAttemptAt: null });
+    setLink(link({ state: 'reconnecting', nextAttemptAt: null }));
     render(<ConnectionItem />);
     expect(await open()).not.toHaveTextContent('Next try');
   });
