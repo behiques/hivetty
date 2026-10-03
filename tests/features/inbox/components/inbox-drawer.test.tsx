@@ -1,8 +1,9 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InboxDrawer } from '@features/inbox/components/inbox-drawer';
+import { LEAVE_MS } from '@features/inbox/hooks/use-leaving-asks';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
@@ -121,5 +122,24 @@ describe('InboxDrawer (HIVE-198)', () => {
     render(<InboxDrawer onStage={null} />);
     expect(screen.getByText('Nothing waits on you.')).toBeInTheDocument();
     expect(screen.getByText('0 asks · 0 sessions')).toBeInTheDocument();
+  });
+});
+
+describe('a closed ask leaves with its reason (HIVE-218)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('lets an expiring ask leave with "expired", counting only the live ones', () => {
+    vi.useFakeTimers();
+    useUiStore.getState().openInboxDrawer();
+    render(<InboxDrawer onStage={null} />);
+    act(() =>
+      useHiveStore.getState().hydrateLedger([
+        { id: 'x1', ts: Date.now(), from: 'overmind', kind: 'event', body: 'ask a1 expired', thread: 'a1', meta: { expired: 'a1' } },
+      ]),
+    );
+    expect(screen.getByText('expired')).toBeInTheDocument();
+    expect(screen.getByText('1 ask · 1 session')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(LEAVE_MS));
+    expect(screen.queryByText('expired')).toBeNull();
   });
 });
