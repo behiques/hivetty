@@ -45,8 +45,10 @@ src/
                          projects, pull-requests, sessions, settings, work, shared
   lib/swarm/             pure canvas modules (HIVE-199): the palette type, the
                          mutalisk, the comb's layout, motion and drawing. No
-                         colour literals and no imports outside the folder, so
-                         the splash (HIVE-212) reuses it whole
+                         colour literals and no imports outside the folder. The
+                         splash's one exception to its fence (HIVE-212): it may
+                         import mutalisk, palette, comb (hexPath) and
+                         lib/theme/colour, and nothing else from lib/
   stores/                hive, ui, appearance, editor
 electron/
   main/                  config, sessions, hooks, ledger, agents, integrations, server

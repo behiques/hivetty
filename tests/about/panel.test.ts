@@ -18,8 +18,8 @@ import type { UpdateCapability, UpdateStatus } from '@shared/update-contract';
  *
  * Everything here is a pure function over a status or an `AppInfo`, which is
  * the whole reason `panel.ts` is split from `about.ts` — the entry point has to
- * import a `data:` URI of an mp4 and talk to a bridge that only exists inside
- * Electron, and neither is reachable from a unit test.
+ * draw on a canvas and talk to a bridge that only exists inside Electron, and
+ * neither is reachable from a unit test.
  *
  * The update copy gets the most attention because it is the one place this
  * window can state something untrue about the app.
