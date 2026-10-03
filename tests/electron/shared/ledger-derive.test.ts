@@ -965,6 +965,16 @@ describe('shipTrack (HIVE-205)', () => {
     expect(track.stops.every((s) => s.firstAt === null)).toBe(true);
     expect(shipTrack([claim], '', 1182, at(10)).held).toBe(false);
   });
+
+  it('returns its visits oldest first, the open one with no end (HIVE-208)', () => {
+    const track = shipTrack([claim, stage('p1', 2, 'self-review'), askTo('a1', 3, 'acr', 'https://github.com/acme/server/pull/1182 --self'), stage('p2', 30, 'fix-self')], slug, 1182, at(40));
+    expect(track.visits).toEqual([
+      { stage: 'intake', from: at(0), to: at(2), holder: null },
+      { stage: 'self-review', from: at(2), to: at(30), holder: 'acr' },
+      { stage: 'fix-self', from: at(30), to: null, holder: null },
+    ]);
+    expect(shipTrack([], slug, 1182, NOW).visits).toEqual([]);
+  });
 });
 
 describe('the PR page readings (HIVE-205)', () => {
