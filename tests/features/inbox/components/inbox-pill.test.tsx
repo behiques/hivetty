@@ -44,7 +44,7 @@ describe('InboxPill (HIVE-198)', () => {
   it('opens the drawer', async () => {
     useHiveStore.getState().hydrateNotifs([ask('a1')]);
     render(<InboxPill onStage={null} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Inbox, 1 need you' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Inbox, 1 needs you' }));
     expect(useUiStore.getState().inboxDrawer.open).toBe(true);
   });
 
@@ -65,5 +65,28 @@ describe('InboxPill (HIVE-198)', () => {
     useUiStore.getState().pushArrival('a1', true);
     rerender(<InboxPill onStage="lead" />);
     expect(screen.getByRole('button', { name: /^Inbox/ }).className).not.toContain('animate-ccpulse');
+  });
+});
+
+describe('InboxPill, a long queue (HIVE-211)', () => {
+  const asks = (n: number) => Array.from({ length: n }, (_, i) => ask(`a${String(i)}`));
+
+  it('shows 99+ past ninety-nine, and the exact number in its name', () => {
+    useHiveStore.getState().hydrateNotifs(asks(140));
+    render(<InboxPill onStage={null} />);
+    const pill = screen.getByRole('button', { name: 'Inbox, 140 need you' });
+    expect(pill).toHaveTextContent('99+need you');
+  });
+
+  it('shows 99 at ninety-nine', () => {
+    useHiveStore.getState().hydrateNotifs(asks(99));
+    render(<InboxPill onStage={null} />);
+    expect(screen.getByRole('button', { name: 'Inbox, 99 need you' })).toHaveTextContent('99need you');
+  });
+
+  it('is singular for one', () => {
+    useHiveStore.getState().hydrateNotifs(asks(1));
+    render(<InboxPill onStage={null} />);
+    expect(screen.getByRole('button', { name: 'Inbox, 1 needs you' })).toBeInTheDocument();
   });
 });

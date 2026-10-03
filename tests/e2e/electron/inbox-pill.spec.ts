@@ -106,7 +106,7 @@ test('an ask rises without taking the keyboard, folds into the pill, and is answ
     await shell(page, session, postAskCommand('Run the ledger tests?', ['yes', 'no'], first));
     await expectMarker(first, '200');
 
-    await expect(page.getByRole('button', { name: 'Inbox, 1 need you' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Inbox, 1 needs you' })).toBeVisible();
     await expect(page.getByRole('article', { name: /^Ask from / })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('inbox-pill-quiet.png') });
 

@@ -37,7 +37,8 @@ export function InboxPill({ onStage }: InboxPillProps) {
       // Keyed by the pulsing id, so each quiet arrival plays the pulse once.
       key={counted ? pulse : 'still'}
       type="button"
-      aria-label={`Inbox, ${String(count)} need you`}
+      // The exact number, singular-aware, even when the face says 99+ (HIVE-211).
+      aria-label={`Inbox, ${String(count)} ${count === 1 ? 'needs' : 'need'} you`}
       onClick={() => openInboxDrawer()}
       className={cn(
         'flex items-center gap-[7px] rounded-full border border-[color-mix(in_srgb,var(--cc-amber)_45%,var(--cc-border))] bg-panel-2 py-1.5 pr-3 pl-2.5 text-[12px] text-muted shadow-lg',
@@ -45,7 +46,7 @@ export function InboxPill({ onStage }: InboxPillProps) {
       )}
     >
       <Bell size={14} className="text-amber" aria-hidden />
-      <b className="font-mono font-semibold text-amber">{count}</b>
+      <b className="font-mono font-semibold text-amber">{count > 99 ? '99+' : count}</b>
       <span>need you</span>
     </button>
   );

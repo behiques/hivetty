@@ -1388,7 +1388,7 @@ describe('CenterStage — the inbox corner (HIVE-198)', () => {
     useAppearanceStore.getState().setLayout('round-two');
     useUiStore.setState({ place: 'sessions', activeTab: 'orch' });
     render(<CenterStage />);
-    expect(screen.getByRole('button', { name: 'Inbox, 1 need you' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Inbox, 1 needs you' })).toBeInTheDocument();
   });
 
   it('mounts the drawer in round two once it is opened', () => {
