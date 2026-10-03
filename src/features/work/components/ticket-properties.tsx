@@ -1,21 +1,12 @@
-import { ArrowSquareOut, CaretRight, Hexagon } from '@phosphor-icons/react';
-import { type ReactNode, useState } from 'react';
+import { ArrowSquareOut, Hexagon } from '@phosphor-icons/react';
+import type { ReactNode } from 'react';
 
-import { applyJiraTransition } from '@/lib/jira';
-import { BRIDGE_ERROR, cn } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
+import { TicketNextAction } from '@features/work/components/ticket-next-action';
 import { TicketPrRow } from '@features/work/components/ticket-pr-row';
 import { TicketSessionRow } from '@features/work/components/ticket-session-row';
-import {
-  useNextTransition,
-  useOpenTicket,
-  useReloadTicketTransitions,
-  useSetTicketDetailIssue,
-  useTicketPrs,
-  useTicketProperties,
-  useTicketSessions,
-  useUpdateTicket,
-} from '@stores/hive-store';
+import { useOpenTicket, useTicketPrs, useTicketProperties, useTicketSessions } from '@stores/hive-store';
 import { usePickerActions } from '@stores/ui-store';
 
 const HEADING = 'pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase';
@@ -35,34 +26,9 @@ export function TicketProperties({ ticketKey }: { ticketKey: string }) {
   const properties = useTicketProperties(ticketKey);
   const sessions = useTicketSessions(ticketKey);
   const prs = useTicketPrs(ticketKey);
-  const next = useNextTransition(ticketKey);
-  const updateTicket = useUpdateTicket();
-  const setIssue = useSetTicketDetailIssue();
-  const reload = useReloadTicketTransitions();
   const { openPicker } = usePickerActions();
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
 
   if (ticket === undefined || properties === undefined) return null;
-
-  /*
-    The re-read issue goes to both homes a ticket can have — the list, and the
-    slice's own `issue` for one the list does not hold. Each ignores a ticket
-    that is not its own, so calling both is the whole decision.
-  */
-  const apply = () => {
-    if (!next) return;
-    setBusy(true);
-    setProblem(null);
-    void applyJiraTransition({ key: ticketKey, transitionId: next.id }).then((result) => {
-      setBusy(false);
-      if (result === null) return setProblem(BRIDGE_ERROR);
-      if (!result.ok) return setProblem(result.error.message);
-      updateTicket(result.value);
-      setIssue(result.value);
-      void reload(ticketKey);
-    });
-  };
 
   const rows: [string, string | undefined, string?][] = [
     ['Status', properties.status],
@@ -110,13 +76,7 @@ export function TicketProperties({ ticketKey }: { ticketKey: string }) {
         <Hexagon size={13} aria-hidden />
         New session
       </button>
-      {next ? (
-        <button type="button" className={ACTION} onClick={apply} disabled={busy}>
-          <CaretRight size={13} aria-hidden />
-          {`Move to ${next.to.name}`}
-        </button>
-      ) : null}
-      {problem === null ? null : <p className="py-1 text-[12px] text-amber">{problem}</p>}
+      <TicketNextAction ticketKey={ticketKey} className={ACTION} />
       {ticket.url ? (
         <a className={ACTION} href={ticket.url} target="_blank" rel="noreferrer">
           <ArrowSquareOut size={13} aria-hidden />
