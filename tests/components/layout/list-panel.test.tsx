@@ -1,4 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ListPanel } from '@components/layout/list-panel';
@@ -115,5 +116,39 @@ describe('ListPanel, no list without items (HIVE-211)', () => {
     useHiveStore.setState({ prSource: { kind: 'unconfigured', message: 'm', reason: 'unauthenticated' } });
     render(<ListPanel />);
     expect(screen.queryByRole('region', { name: 'PRs list' })).toBeNull();
+  });
+});
+
+describe('ListPanel, the narrow overlay (HIVE-211)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    useHiveStore.getState().reset();
+  });
+
+  it('sits beside the stage when wide', () => {
+    useUiStore.setState({ place: 'work', panelOpen: true });
+    render(<ListPanel />);
+    expect(screen.getByRole('region', { name: 'Work list' })).not.toHaveClass('absolute');
+    expect(screen.queryByTestId('list-veil')).toBeNull();
+  });
+
+  it('overlays the stage while narrow, and the veil or Escape closes it', async () => {
+    useUiStore.setState({ place: 'work', panelOpen: true, narrow: true });
+    render(<ListPanel />);
+    const region = screen.getByRole('region', { name: 'Work list' });
+    expect(region).toHaveClass('absolute', 'shadow-lg');
+    await userEvent.click(screen.getByTestId('list-veil'));
+    expect(useUiStore.getState().panelOpen).toBe(false);
+
+    act(() => useUiStore.setState({ panelOpen: true }));
+    await userEvent.keyboard('{Escape}');
+    expect(useUiStore.getState().panelOpen).toBe(false);
+  });
+
+  it('Escape does nothing when wide', async () => {
+    useUiStore.setState({ place: 'work', panelOpen: true });
+    render(<ListPanel />);
+    await userEvent.keyboard('{Escape}');
+    expect(useUiStore.getState().panelOpen).toBe(true);
   });
 });

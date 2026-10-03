@@ -13,7 +13,14 @@ import {
   useSessionsListed,
   useWorkListed,
 } from '@stores/hive-store';
-import { usePanelOpen, usePlace, usePrSearchOpen, type Place } from '@stores/ui-store';
+import {
+  useNarrow,
+  usePanelOpen,
+  usePlace,
+  usePrSearchOpen,
+  useTogglePanel,
+  type Place,
+} from '@stores/ui-store';
 
 /**
  * Each place's panel (HIVE-195). Home has none. Sessions has its own since
@@ -45,6 +52,9 @@ const LABELS: Record<Place, string> = {
  * No list without items (HIVE-211): a place with nothing to list draws no
  * panel, and its stage says why — Jira not connected, gh signed out, no agent,
  * no project. Loading keeps the panel, for its skeleton.
+ *
+ * Under 1,200px (HIVE-211) it overlays the stage instead of taking a column:
+ * at the bar's edge, over a veil, and a click on the veil or Escape closes it.
  */
 export function ListPanel() {
   const place = usePlace();
@@ -68,15 +78,27 @@ export function ListPanel() {
     wasQuiet.current = prsQuiet;
   });
 
+  const narrow = useNarrow();
+  const togglePanel = useTogglePanel();
+  useEffect(() => {
+    if (!narrow || !panelOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') togglePanel();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [narrow, panelOpen, togglePanel]);
+
   if (!Panel || !panelOpen) return null;
   /* A quiet or unconfigured Hatchery's search still opens it (D15); the stage has the egg otherwise. */
   if (!listed[place] && !(place === 'prs' && searchOpen)) return null;
 
-  return (
+  const panel = (
     <section
       aria-label={`${LABELS[place]} list`}
       className={cn(
         'flex w-[var(--cc-list-w)] shrink-0 flex-col border-r border-border-soft bg-panel px-2.5 pt-3.5 pb-5',
+        narrow && 'absolute inset-y-0 left-[var(--cc-bar-w)] z-30 shadow-lg',
         arriving && 'motion-safe:animate-ccslidein',
       )}
     >
@@ -84,5 +106,19 @@ export function ListPanel() {
         <Panel />
       </div>
     </section>
+  );
+  if (!narrow) return panel;
+
+  return (
+    <>
+      {/* The rest of the row, not the bar: its icons still switch place with the overlay up. */}
+      <div
+        data-testid="list-veil"
+        aria-hidden
+        onClick={togglePanel}
+        className="absolute inset-y-0 right-0 left-[var(--cc-bar-w)] z-20 bg-bg/40"
+      />
+      {panel}
+    </>
   );
 }

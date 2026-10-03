@@ -130,12 +130,23 @@ describe('AppShell', () => {
   });
 });
 
+/** Answers `useNarrowWindow`'s query (HIVE-211) without depending on jsdom's own matchMedia. */
+const stubWindowWidth = (narrow: boolean) => {
+  const mql = { matches: narrow, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  vi.stubGlobal('matchMedia', vi.fn(() => mql as unknown as MediaQueryList));
+};
+
 describe('AppShell — Layout (HIVE-195)', () => {
   beforeEach(() => {
     useUiStore.getState().reset();
     useAppearanceStore.getState().reset();
+    // jsdom's window is 1,024px, which round two reads as narrow (HIVE-211). These cases are about a wide window.
+    stubWindowWidth(false);
   });
-  afterEach(() => resetProjectConfig());
+  afterEach(() => {
+    resetProjectConfig();
+    vi.unstubAllGlobals();
+  });
 
   const renderShell = () =>
     render(
@@ -201,5 +212,26 @@ describe('AppShell — Layout (HIVE-195)', () => {
     renderShell();
     expect(screen.getByRole('complementary', { name: 'Activity' })).toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Session panel' })).not.toBeInTheDocument();
+  });
+});
+
+describe('AppShell — the narrow window (HIVE-211)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('tells ui-store the window is narrow', () => {
+    stubWindowWidth(true);
+    useAppearanceStore.getState().setLayout('round-two');
+
+    render(
+      <TooltipProvider>
+        <AppShell />
+      </TooltipProvider>,
+    );
+
+    expect(useUiStore.getState().narrow).toBe(true);
   });
 });

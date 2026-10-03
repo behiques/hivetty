@@ -18,11 +18,12 @@ import { useAppChords } from '@hooks/use-app-chords';
 import { useAwayTracker } from '@hooks/use-away-since';
 import { useDockBadge } from '@hooks/use-dock-badge';
 import { useForegroundSession } from '@hooks/use-foreground-session';
+import { useNarrowWindow } from '@hooks/use-narrow-window';
 import { useNotificationStream } from '@hooks/use-notification-stream';
 import { useRemoteLinkStream } from '@hooks/use-remote-link';
 import { useSessionNames } from '@hooks/use-session-names';
 import { useLayout, watchSystemTheme } from '@stores/appearance-store';
-import { useShowActivityRail } from '@stores/ui-store';
+import { useSetNarrow, useShowActivityRail } from '@stores/ui-store';
 
 /**
  * The fixed three-column command-center chrome.
@@ -160,6 +161,11 @@ export function AppShell() {
   useAppChords();
   // Home's "since" (HIVE-200).
   useAwayTracker();
+
+  // Under 1,200px the list panel overlays the stage (HIVE-211); the row-pick actions read this.
+  const narrow = useNarrowWindow();
+  const setNarrow = useSetNarrow();
+  useEffect(() => setNarrow(narrow), [narrow, setNarrow]);
 
   /**
    * Follow the OS while the app is open (story 105).
