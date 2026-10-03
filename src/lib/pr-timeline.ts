@@ -4,6 +4,8 @@
  * track. No React and no store; every function takes its clock.
  */
 
+import type { PrTimelineRun } from '@shared/github-contract';
+
 export const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
@@ -40,4 +42,27 @@ export function ticks(start: number, end: number, widthPx: number, minGapPx = 72
   const out: Tick[] = [];
   for (let at = first; at <= end; at += step) out.push({ at, f: fraction(at, start, end), label: clock(at, days) });
   return out;
+}
+
+export interface CiBar {
+  id: number;
+  number: number;
+  sha: string;
+  url: string;
+  from: number;
+  to: number;
+  state: PrTimelineRun['state'];
+  failedJobs: string[];
+}
+
+/** One bar per run, start to end; a running one ends at `now`; skipped and cancelled runs are not drawn. */
+export function ciBars(runs: readonly PrTimelineRun[], now: number): CiBar[] {
+  return runs
+    .filter((run) => run.state !== 'other')
+    .map((run) => {
+      const from = Date.parse(run.startedAt);
+      const to = run.endedAt === null ? now : Math.max(from, Date.parse(run.endedAt));
+      return { id: run.id, number: run.number, sha: run.sha, url: run.url, from, to, state: run.state, failedJobs: run.failedJobs };
+    })
+    .sort((a, b) => a.from - b.from);
 }

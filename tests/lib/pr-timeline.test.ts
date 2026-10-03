@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { fraction, MIN, ticks } from '@lib/pr-timeline';
+import { ciBars, fraction, MIN, ticks } from '@lib/pr-timeline';
+import type { PrTimelineRun } from '@shared/github-contract';
 
 const T0 = new Date(2026, 9, 3, 11, 0).getTime();
 
@@ -27,5 +28,20 @@ describe('ticks', () => {
     const gaps = out.slice(1).map((t, i) => (t.f - out[i]!.f) * 900);
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(56);
     expect(out[0]?.label).toBe('Sat 11:00');
+  });
+});
+
+describe('ciBars', () => {
+  const run = (over: Partial<PrTimelineRun>): PrTimelineRun => ({ id: 1, number: 2198, url: 'u', sha: 'abc', workflow: 'CI',
+    startedAt: new Date(T0 + 61 * MIN).toISOString(), endedAt: new Date(T0 + 72 * MIN).toISOString(), state: 'passed', failedJobs: [], ...over });
+  it('draws passed, failed and running runs oldest first, the running one to now, skipped ones not at all', () => {
+    const bars = ciBars([
+      run({ id: 3, startedAt: new Date(T0 + 186 * MIN).toISOString(), endedAt: null, state: 'running' }),
+      run({ id: 1 }),
+      run({ id: 2, state: 'failed', failedJobs: ['integration'], startedAt: new Date(T0 + 141 * MIN).toISOString(), endedAt: new Date(T0 + 150 * MIN).toISOString() }),
+      run({ id: 4, state: 'other' }),
+    ], T0 + 190 * MIN);
+    expect(bars.map((b) => [b.id, b.state, (b.to - b.from) / MIN])).toEqual([[1, 'passed', 11], [2, 'failed', 9], [3, 'running', 4]]);
+    expect(bars[1]?.failedJobs).toEqual(['integration']);
   });
 });
