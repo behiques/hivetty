@@ -172,6 +172,7 @@ describe('AppearanceSection', () => {
   });
 
   it('switches the layout (HIVE-195)', async () => {
+    useAppearanceStore.getState().setLayout('classic');
     render(<AppearanceSection />);
     const group = screen.getByRole('radiogroup', { name: 'Layout' });
     expect(within(group).getByRole('radio', { name: 'Classic' })).toBeChecked();

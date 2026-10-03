@@ -16,6 +16,7 @@ describe('AppShell', () => {
   beforeEach(() => {
     useUiStore.getState().reset();
     useAppearanceStore.getState().reset();
+    useAppearanceStore.getState().setLayout('classic');
   });
 
   it('renders all four regions', () => {
@@ -140,6 +141,7 @@ describe('AppShell — Layout (HIVE-195)', () => {
   beforeEach(() => {
     useUiStore.getState().reset();
     useAppearanceStore.getState().reset();
+    useAppearanceStore.getState().setLayout('classic');
     // jsdom's window is 1,024px, which round two reads as narrow (HIVE-211). These cases are about a wide window.
     stubWindowWidth(false);
   });
@@ -155,7 +157,7 @@ describe('AppShell — Layout (HIVE-195)', () => {
       </TooltipProvider>,
     );
 
-  it('draws Classic by default', () => {
+  it('draws Classic when it is chosen', () => {
     renderShell();
 
     expect(screen.getByRole('navigation', { name: 'Projects, work, and agents' })).toBeInTheDocument();

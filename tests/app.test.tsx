@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '@/app';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { useUiStore } from '@stores/ui-store';
 
 vi.mock('@xterm/xterm');
@@ -16,6 +17,8 @@ describe('App', () => {
   beforeEach(() => {
     document.body.removeAttribute('data-theme');
     useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
+    useAppearanceStore.getState().setLayout('classic');
   });
 
   it('mounts the app shell', () => {
