@@ -2,6 +2,7 @@ import { CombHeadline, headlineText, summaryText } from '@features/home/componen
 import { FirstRun } from '@features/home/components/first-run';
 import { HomeStrip } from '@features/home/components/home-strip';
 import { TheComb } from '@features/home/components/the-comb';
+import { useProjectConfig } from '@hooks/use-project-config';
 import { useCombSummary, useProjects } from '@stores/hive-store';
 
 /**
@@ -13,11 +14,15 @@ import { useCombSummary, useProjects } from '@stores/hive-store';
  */
 export function HomePage() {
   const summary = useCombSummary();
-  const firstRun = useProjects().length === 0;
+  const projects = useProjects();
+  // `null` is the config not having landed yet; with no bridge (the browser
+  // target) it never will, and that absence is the answer, so it is first run.
+  const loading = useProjectConfig() === null && window.hive !== undefined;
+  const firstRun = projects.length === 0;
   return (
     <section aria-label="Home" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <h1 className="sr-only">Home</h1>
-      {firstRun ? (
+      {loading ? null : firstRun ? (
         <FirstRun />
       ) : (
         <>

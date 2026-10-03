@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Session } from '@/types/entity';
 
-import { emptySnapshot } from '../../../../electron/shared/config-contract';
+import { emptySnapshot } from '@shared/config-contract';
 import { HomePage } from '@features/home/components/home-page';
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 import { useHiveStore } from '@stores/hive-store';
@@ -47,6 +47,18 @@ describe('HomePage', () => {
   it('mounts the strip under the comb', () => {
     render(<HomePage />);
     expect(screen.getByRole('heading', { name: /needs you|while you were away/i, level: 3 })).toBeInTheDocument();
+  });
+
+  it('shows neither page while the config is still loading', () => {
+    window.hive = {} as typeof window.hive;
+    try {
+      setProjectConfigForTest(null);
+      render(<HomePage />);
+      expect(screen.queryByRole('heading', { name: 'An empty hive' })).toBeNull();
+      expect(screen.queryByRole('img', { name: /needs you/ })).toBeNull();
+    } finally {
+      delete (window as { hive?: unknown }).hive;
+    }
   });
 
   it('shows the first-run page instead with no project mapped', () => {
