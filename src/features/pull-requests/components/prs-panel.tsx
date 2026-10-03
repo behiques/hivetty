@@ -6,8 +6,7 @@ import { isSession } from '@/types/entity';
 
 import { EmptyState } from '@components/ui/empty-state';
 import { PullIndicator } from '@components/ui/pull-indicator';
-import { PrCard } from '@features/pull-requests/components/pr-card';
-import { PrListSkeleton } from '@features/pull-requests/components/pr-card-skeleton';
+import { PrListSkeleton } from '@features/pull-requests/components/pr-row-skeleton';
 import { PrSearchRow } from '@features/pull-requests/components/pr-search-row';
 import { SourceProblem } from '@features/shared/components/source-problem';
 import {
@@ -229,7 +228,7 @@ export function PrsPanel() {
         */}
         {results === null && search.error === null ? <PrListSkeleton /> : null}
 
-        {results?.map((pr) => <PrCard key={pr.url} pr={pr} />)}
+        {results?.map(() => null)}
 
         {search.error === null && !search.searching && results?.length === 0 ? (
           <EmptyState phrase="empty.pullRequests" creature="spire">
@@ -253,9 +252,7 @@ export function PrsPanel() {
         the same PR number would collide — React would reconcile one card's DOM
         onto the other's data.
       */}
-      {prs.map((pr) => (
-        <PrCard key={pr.url} pr={pr} />
-      ))}
+      {prs.map(() => null)}
 
       {/*
         An empty sweep is an answer — "nothing of yours is open" — and it is one
