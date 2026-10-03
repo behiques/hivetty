@@ -1,5 +1,5 @@
-import { Check, Minus, X } from '@phosphor-icons/react';
-import type { ReactNode } from 'react';
+import { ArrowSquareOut, Binoculars, Check, GitMerge, Hexagon, Minus, X } from '@phosphor-icons/react';
+import { useState, type ReactNode } from 'react';
 
 import { formatDuration } from '@/lib/format-duration';
 import { cn } from '@/lib/utils';
@@ -9,7 +9,7 @@ import type { HatcheryRow } from '@/types/pull-request';
 import { statusLabel } from '@components/ui/status-dot';
 import { Flap } from '@features/pull-requests/components/flap';
 import type { PrCheck, PrDetail, PrReview } from '@shared/github-contract';
-import { useEntity, useReviewUrls } from '@stores/hive-store';
+import { useAnswerAsk, useEntity, useMergeAsk, useOpenEntity, useReviewUrls } from '@stores/hive-store';
 
 const HEADING = 'flex items-center pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase';
 const CHECK_ROW = 'flex items-center gap-[9px] rounded px-1 py-[5px] text-[12.5px]';
@@ -152,6 +152,77 @@ export function PrProperties({
       ) : null}
 
       {actions === undefined ? null : <Section title="Actions">{actions}</Section>}
+    </div>
+  );
+}
+
+const ACTION =
+  'flex items-center gap-2 px-1 py-1.5 text-left text-[12.5px] text-brand hover:underline disabled:cursor-not-allowed disabled:text-subtle disabled:no-underline';
+
+/**
+ * What can be done from the page (HIVE-205, D16). No new `gh` writes: Merge
+ * answers the shipper's waiting merge card with the narrowest rung, as the
+ * Inbox card's Allow does, and is disabled until there is one; Ready for review
+ * on a draft nobody holds opens GitHub; Ask acr is a ledger ask; Open the
+ * session needs a live session. A merged PR keeps GitHub alone.
+ */
+export function PrActions({ row }: { row: HatcheryRow }) {
+  const { pr, hatch } = row;
+  const slug = `${pr.owner}/${pr.repo}`;
+  const card = useMergeAsk(slug, pr.n);
+  const answerAsk = useAnswerAsk();
+  const openEntity = useOpenEntity();
+  const [note, setNote] = useState<{ text: string; tone: 'muted' | 'amber' } | null>(null);
+  const session = pr.session;
+
+  const github = (
+    <a className={ACTION} href={pr.url} target="_blank" rel="noreferrer">
+      <ArrowSquareOut size={13} aria-hidden />
+      Open on GitHub
+    </a>
+  );
+  if (pr.state === 'merged') return github;
+
+  const merge = () => {
+    if (card === undefined) return;
+    void answerAsk(card.id, 'allow-once').then((result) => {
+      if (result !== undefined && !result.ok) setNote({ text: result.reason, tone: 'amber' });
+    });
+  };
+
+  const askAcr = () => {
+    void window.hive?.ledger
+      .post({ to: 'acr', kind: 'ask', body: `Review ${pr.url} again`, meta: { pr: pr.n, repo: slug } })
+      .then((result) => setNote(result.ok ? { text: 'Asked acr', tone: 'muted' } : { text: result.reason, tone: 'amber' }));
+  };
+
+  return (
+    <div className="flex flex-col">
+      <button type="button" className={ACTION} disabled={card === undefined} onClick={merge}>
+        <GitMerge size={13} aria-hidden />
+        Merge
+        {card === undefined ? <span className="text-subtle">· after approval</span> : null}
+      </button>
+      {hatch.flap === 'LARVA' ? (
+        <a className={ACTION} href={pr.url} target="_blank" rel="noreferrer">
+          <ArrowSquareOut size={13} aria-hidden />
+          Ready for review
+        </a>
+      ) : null}
+      <button type="button" className={ACTION} onClick={askAcr}>
+        <Binoculars size={13} aria-hidden />
+        Ask acr to look again
+      </button>
+      {session === null ? null : (
+        <button type="button" className={ACTION} onClick={() => openEntity(session)}>
+          <Hexagon size={13} aria-hidden />
+          Open the session
+        </button>
+      )}
+      {github}
+      {note === null ? null : (
+        <p className={cn('px-1 pt-1 text-[12px]', note.tone === 'amber' ? 'text-amber' : 'text-muted')}>{note.text}</p>
+      )}
     </div>
   );
 }

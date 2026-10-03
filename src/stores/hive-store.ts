@@ -137,6 +137,7 @@ import {
   holderPost,
   isShipping,
   matches,
+  mergeAsk,
   mergeWaiting,
   openAsks,
   prEvents,
@@ -8507,6 +8508,16 @@ export const useShipping = (slug: string, n: number): boolean => {
   const entries = useHiveStore((state) => state.ledger);
 
   return useMemo(() => isShipping(entries, slug, n), [entries, slug, n]);
+};
+
+/**
+ * The shipper's merge card for one PR, or `undefined` (HIVE-205): what the PR
+ * page's Merge answers. `Date.now()` inside the memo, as `openAsks`' other
+ * readers do; an ask retired by its ttl alone stays until the next append.
+ */
+export const useMergeAsk = (slug: string, n: number): OpenAsk | undefined => {
+  const entries = useHiveStore((state) => state.ledger);
+  return useMemo(() => mergeAsk(openAsks(entries, Date.now()), slug, n), [entries, slug, n]);
 };
 
 /**

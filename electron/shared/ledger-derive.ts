@@ -389,17 +389,18 @@ const MERGE_COMMAND = /^\s*gh\s+pr\s+merge\s+(\d+)\b/;
 const REPO_FLAG = /\s--repo(?:=|\s+)(\S+)/;
 
 /**
- * Whether the shipper's merge waits on your card (HIVE-215, rule 2).
+ * The shipper's merge card waiting on you, or `undefined` (HIVE-215; the ask
+ * itself since HIVE-205, whose Merge answers it).
  *
  * The card is a permission ask from `shipper`: `meta.kind: 'permission'`,
  * `meta.tool: 'Bash'`, `meta.input.command` the merge. N and the repo are
  * read from the command itself; a command with no `--repo` cannot say which
  * repo it merges, so it matches nothing.
  */
-export function mergeWaiting(open: readonly OpenAsk[], slug: string, n: number): boolean {
+export function mergeAsk(open: readonly OpenAsk[], slug: string, n: number): OpenAsk | undefined {
   const wanted = slug.toLowerCase();
-  if (wanted === '') return false;
-  return open.some((ask) => {
+  if (wanted === '') return undefined;
+  return open.find((ask) => {
     if (ask.from !== 'shipper') return false;
     const meta = ask.meta ?? {};
     if (meta['kind'] !== 'permission' || meta['tool'] !== 'Bash') return false;
@@ -410,6 +411,11 @@ export function mergeWaiting(open: readonly OpenAsk[], slug: string, n: number):
     const repo = REPO_FLAG.exec(command)?.[1];
     return number !== undefined && Number(number) === n && repo?.toLowerCase() === wanted;
   });
+}
+
+/** Whether the shipper's merge waits on your card (HIVE-215, rule 2). */
+export function mergeWaiting(open: readonly OpenAsk[], slug: string, n: number): boolean {
+  return mergeAsk(open, slug, n) !== undefined;
 }
 
 /** The shipper's stops, in the order `resources/skills/ship/SKILL.md` walks them (HIVE-205). */
