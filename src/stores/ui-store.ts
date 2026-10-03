@@ -32,7 +32,7 @@ export interface AgentPage {
   view: AgentPageView;
 }
 
-/** The PR page's tabs (HIVE-205); HIVE-206, 207 and 208 add Checks, Files and Timeline. */
+/** The PR page's tabs (HIVE-205); Checks is HIVE-206's, and HIVE-207 and 208 add Files and Timeline. */
 export type PrTab = 'conversation' | 'checks';
 /** Which PR the PRs place last opened (HIVE-205). */
 export interface PrPageRef {
@@ -313,7 +313,7 @@ interface UiState {
   openAgentPage: (name: string | null, view: AgentPageView) => void;
   setAgentPageView: (view: AgentPageView) => void;
   closeAgentPage: () => void;
-  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab. */
+  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab; forgets the Checks tab's shown push and job (HIVE-206). */
   openPrPage: (ref: PrPageRef) => void;
   setPrTab: (tab: PrTab) => void;
   showPrRun: (sha: string) => void;

@@ -442,6 +442,18 @@ the ledger: `useShipTrack`, `usePrEvents` (Everything), `usePrOpener` ("opened
 by"), `useReviewUrls` ("via the Hive"), `useHolderPost` (the track's now line)
 and `useMergeAsk`. `usePrsQuiet()` is the empty Hatchery.
 
+The Checks tab (HIVE-206) reads a fifth PR slice, `prChecks`, keyed by `prKey`
+and capped and dropped with `prDetails` (`PR_DETAIL_CAP`, `dropLeftPrs`). An
+entry holds the head branch's runs (`gh run list`, 40, folded into the last
+eight pushes by `foldPushes`), the checkout's workflow graph, the jobs of each
+run it has shown (by run id) and each failed job's cut log (by job id). It is
+its own slice because `loadPrDetail` replaces its entry whole every minute.
+**The rate rule:** runs and jobs are read only for the selected PR and only
+while its Checks tab is mounted, by a tab-local `createPoller` at 60s; the
+failed log once per job id, on show, never on a timer. The shown push and the
+clicked job are `ui-store`'s `prRun` and `prJob`, not persisted. The graph, the
+pushes and the shown job are derived in selectors over `src/lib/checks-graph.ts`.
+
 The ui-store's PRs fields are flat, as `workTicket` and `agentPage` are, and none
 is persisted: `prPage` (the last PR opened, which `useOpenPr()` keeps while it is
 still a row), `prTab`, `prsFolded` (the HATCHED fold, folded by default),
