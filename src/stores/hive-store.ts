@@ -28,7 +28,7 @@ import {
   terminalOf,
 } from '@/types/entity';
 import type { HiveNotification } from '@/types/notification';
-import type { HatcheryRow, Pr, SessionPr, TicketPr } from '@/types/pull-request';
+import type { Flap, FlapTone, HatcheryRow, Pr, SessionPr, TicketPr } from '@/types/pull-request';
 import type { TermLine } from '@/types/terminal';
 import type { Ticket, TicketDetail, TicketDetailWant, TicketProperties } from '@/types/ticket';
 
@@ -51,7 +51,7 @@ import {
 } from '@lib/jira';
 import { buildTicketSearchJql } from '@lib/jira-search';
 import { ledgerRows } from '@lib/ledger/console-rows';
-import { hatchStatus, sortHatchery } from '@lib/pr-hatch';
+import { FLAP_RANK, flapTone, hatchStatus, sortHatchery } from '@lib/pr-hatch';
 import {
   projectConfigSnapshot,
   projectContainerised,
@@ -8917,6 +8917,29 @@ export const usePrNeedsYouCount = (): number => {
   const live = useHiveStore((state) => state.prSource.kind === 'live');
 
   return live ? rows.filter((row) => row.hatch.needsYou).length : 0;
+};
+
+/** One flap's count for Home (HIVE-200). */
+export interface FlapCount {
+  flap: Flap;
+  count: number;
+  tone: FlapTone;
+}
+
+/** Counts per flap over the Hatchery's rows, in `FLAP_RANK` order; a flap with no PR is left out. */
+export function flapCountsOf(rows: readonly HatcheryRow[]): FlapCount[] {
+  const counts = new Map<Flap, number>();
+  for (const { hatch } of rows) counts.set(hatch.flap, (counts.get(hatch.flap) ?? 0) + 1);
+  return [...counts]
+    .sort(([a], [b]) => FLAP_RANK[a] - FLAP_RANK[b])
+    .map(([flap, count]) => ({ flap, count, tone: flapTone(flap) }));
+}
+
+/** Home's Pull requests (HIVE-200), over HIVE-215's one rule. Empty unless the sweep is live. */
+export const usePrFlapCounts = (): FlapCount[] => {
+  const rows = useHatchery();
+  const live = useHiveStore((state) => state.prSource.kind === 'live');
+  return useMemo(() => (live ? flapCountsOf(rows) : []), [rows, live]);
 };
 
 /**

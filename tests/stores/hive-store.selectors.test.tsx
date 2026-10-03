@@ -19,6 +19,7 @@ import {
 import {
   accountLimitsOf,
   agentWorksIn,
+  flapCountsOf,
   fleetGroupsOf,
   type FleetView,
   repoDirName,
@@ -56,6 +57,7 @@ import {
   useHatchery,
   useHatcherySearch,
   usePrNeedsYouCount,
+  usePrFlapCounts,
   useSessionPr,
   useNextTransition,
   useOpenTicket,
@@ -384,6 +386,33 @@ describe('hive-store selectors', () => {
           ledger: [shipper('l1', 4, 'merge')],
         });
       });
+    });
+
+    it('usePrFlapCounts agrees with useHatchery, in rank order (HIVE-200)', () => {
+      const rows = renderHook(() => useHatchery()).result.current;
+      const { result } = renderHook(() => usePrFlapCounts());
+      expect(result.current).toEqual(flapCountsOf(rows));
+      expect(result.current.map((c) => [c.flap, c.count])).toEqual([
+        ['SUMMONS', 1],
+        ['HATCHING', 1],
+        ['BURROWED', 1],
+        ['LARVA', 1],
+      ]);
+      expect(result.current[0]?.tone).toBe('amber');
+    });
+
+    it('usePrFlapCounts is empty unless the source is live (HIVE-200)', () => {
+      act(() => useHiveStore.setState({ prSource: { kind: 'loading' } }));
+      expect(renderHook(() => usePrFlapCounts()).result.current).toEqual([]);
+    });
+
+    it('usePrFlapCounts holds its identity across terminal output (HIVE-200)', () => {
+      const { result } = renderHook(() => usePrFlapCounts());
+      const first = result.current;
+      act(() =>
+        useHiveStore.getState().appendEntityLines('hero-refresh', [{ text: 'more', color: 'ink' }]),
+      );
+      expect(result.current).toBe(first);
     });
 
     it('lists every swept PR with its status, in the Hatchery\'s order', () => {

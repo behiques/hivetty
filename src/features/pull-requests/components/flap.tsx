@@ -2,15 +2,9 @@ import { useEffect, useState } from 'react';
 
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { cn } from '@/lib/utils';
-import type { FlapTone, HatchStatus } from '@/types/pull-request';
+import type { HatchStatus } from '@/types/pull-request';
 
-/** One utility per tone (HIVE-215): the flap's word, and the row's glyph. */
-export const FLAP_TEXT: Record<FlapTone, string> = {
-  muted: 'text-muted',
-  green: 'text-green',
-  amber: 'text-amber',
-  brand: 'text-brand',
-};
+import { FLAP_TEXT } from '@features/shared/flap-tone';
 
 /** Half of `ccflap`'s 360ms: the word lands edge-on. */
 const HALF_TURN_MS = 180;

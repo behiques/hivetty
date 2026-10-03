@@ -10,13 +10,14 @@ import { isSession } from '@/types/entity';
 import type { HatcheryRow, Pr } from '@/types/pull-request';
 
 import { SegmentedControl } from '@components/ui/segmented-control';
-import { FLAP_TEXT, Flap } from '@features/pull-requests/components/flap';
+import { Flap } from '@features/pull-requests/components/flap';
 import { PrCommentBox } from '@features/pull-requests/components/pr-comment-box';
 import { PrConversation } from '@features/pull-requests/components/pr-conversation';
 import { PrActions, PrProperties } from '@features/pull-requests/components/pr-properties';
 import { ShipTrack } from '@features/pull-requests/components/ship-track';
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 import { SourceProblem } from '@features/shared/components/source-problem';
+import { FLAP_TEXT } from '@features/shared/flap-tone';
 import type { PrDetail } from '@shared/github-contract';
 import {
   prKey,
