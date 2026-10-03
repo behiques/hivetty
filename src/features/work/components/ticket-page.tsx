@@ -5,6 +5,8 @@ import type { Ticket } from '@/types/ticket';
 
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 import { AdfBlocks } from '@features/work/components/adf-blocks';
+import { TicketPageConversation } from '@features/work/components/ticket-page-conversation';
+import { LinesSkeleton, TicketProblem } from '@features/work/components/ticket-page-parts';
 import { TicketProperties } from '@features/work/components/ticket-properties';
 import { TicketTransitionMenu } from '@features/work/components/ticket-transition-menu';
 import {
@@ -19,48 +21,6 @@ import { useWorkTicket } from '@stores/ui-store';
 
 /** The open ticket's page re-reads once a minute while it is on stage (HIVE-203, D9). */
 const usePagePoller = createPoller({ intervalMs: 60_000 });
-
-/** `HH:MM`, the age a section shows beside a failed re-read. */
-const clock = (ms: number) =>
-  new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-
-/**
- * A section's failed read, drawn in that section's place (HIVE-203).
- *
- * With content already on screen the content stays and this says how old it
- * is, so a Jira outage reads as "possibly out of date" rather than as nothing.
- */
-export function TicketProblem({
-  message,
-  onRetry,
-  readAt,
-}: {
-  message: string;
-  onRetry: () => void;
-  /** When the section last read; omitted when nothing was ever shown. */
-  readAt?: number;
-}) {
-  return (
-    <p className="flex flex-wrap items-baseline gap-2 text-[12px]">
-      <span className="text-amber">{message}</span>
-      <button type="button" onClick={onRetry} className="text-brand hover:underline">
-        Retry
-      </button>
-      {readAt === undefined ? null : <span className="text-subtle">as of {clock(readAt)}</span>}
-    </p>
-  );
-}
-
-/** Three ragged bars in the shape of the text they stand for. */
-export function LinesSkeleton({ label }: { label: string }) {
-  return (
-    <div role="status" aria-label={label} aria-busy className="flex animate-pulse flex-col gap-2 py-1">
-      <SkeletonBar className="w-[92%]" />
-      <SkeletonBar className="w-[84%]" />
-      <SkeletonBar className="w-[58%]" />
-    </div>
-  );
-}
 
 /** The description, its skeleton until the first read, or its problem in its place. */
 function Description({ ticketKey }: { ticketKey: string }) {
@@ -172,6 +132,7 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
       <div className="min-w-0 flex-1 overflow-y-auto p-8">
         <Header ticketKey={ticketKey} ticket={ticket} />
         <Description ticketKey={ticketKey} />
+        <TicketPageConversation ticketKey={ticketKey} />
       </div>
       <aside className="w-[260px] shrink-0 overflow-y-auto border-l border-border-soft px-4 py-[18px]">
         <TicketProperties ticketKey={ticketKey} />
