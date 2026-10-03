@@ -74,7 +74,12 @@ import {
   useCommentOnPr,
   useHolderPost,
   useLoadPrDetail,
+  useChecksGraph,
+  usePrChecks,
+  usePrChecksActions,
   usePrDetail,
+  usePushes,
+  useShownJob,
   usePrEvents,
   usePrOpener,
   useReviewUrls,
@@ -2647,5 +2652,43 @@ describe('usePrsQuiet (HIVE-205)', () => {
       useHiveStore.setState({ prs: [], prSource });
       expect(renderHook(() => usePrsQuiet()).result.current).toBe(false);
     }
+  });
+});
+
+describe('the Checks selectors (HIVE-206)', () => {
+  const KEY = 'acme/nova-web#482';
+  const run = (id: number, headSha: string, conclusion: string | null = 'success') => ({
+    id, number: id, attempt: 1, status: 'completed', conclusion, headSha, event: 'push',
+    workflowName: 'CI', createdAt: '2026-10-03T14:00:00Z', updatedAt: 'u', url: 'u' });
+  const job = (id: number, runId: number, conclusion = 'success') => ({ id, runId, name: `job${String(id)}`, status: 'completed',
+    conclusion, startedAt: null, completedAt: null, url: 'u', steps: [] });
+
+  beforeEach(() => {
+    useHiveStore.setState({ prChecks: { [KEY]: { key: KEY, state: 'ok', workflows: [],
+      runs: [run(2, 'new', 'failure'), run(1, 'old')],
+      jobs: { 2: [job(21, 2), job(22, 2, 'failure')], 1: [job(11, 1)] }, logs: {} } } });
+  });
+
+  it('folds the runs into pushes, oldest first', () => {
+    const { result } = renderHook(() => usePushes(KEY));
+    expect(result.current.map((p) => [p.sha, p.state])).toEqual([['old', 'passed'], ['new', 'failed']]);
+  });
+
+  it('lays out the newest push, or the one asked for', () => {
+    expect(renderHook(() => useChecksGraph(KEY, null, new Set())).result.current?.nodes.map((n) => n.jobId)).toEqual([21, 22]);
+    expect(renderHook(() => useChecksGraph(KEY, 'old', new Set())).result.current?.nodes.map((n) => n.jobId)).toEqual([11]);
+    expect(renderHook(() => useChecksGraph('acme/x#1', null, new Set())).result.current).toBeNull();
+  });
+
+  it('shows the clicked job, else the failed one, else none', () => {
+    expect(renderHook(() => useShownJob(KEY, null, null)).result.current?.id).toBe(22);
+    expect(renderHook(() => useShownJob(KEY, null, 21)).result.current?.id).toBe(21);
+    expect(renderHook(() => useShownJob(KEY, 'old', null)).result.current).toBeNull();
+    expect(renderHook(() => useShownJob('acme/x#1', null, null)).result.current).toBeNull();
+  });
+
+  it('hands the entry and the three actions through', () => {
+    expect(renderHook(() => usePrChecks(KEY)).result.current?.state).toBe('ok');
+    expect(Object.keys(renderHook(() => usePrChecksActions()).result.current).sort()).toEqual(['loadJobLog', 'loadPrChecks', 'rerunFailed']);
   });
 });

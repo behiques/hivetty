@@ -39,7 +39,7 @@ import {
   describeWake,
   runsToday,
 } from '@lib/agents';
-import { foldPushes } from '@lib/checks-graph';
+import { type ChecksGraph, foldPushes, jobState, layoutGraph, type Push } from '@lib/checks-graph';
 import {
   postPrComment,
   readJobLog,
@@ -7802,6 +7802,42 @@ export const useRefreshTicketDetail = (): ((key: string, want: TicketDetailWant)
 /** One PR's detail, or undefined before its first load (HIVE-205). `key` is {@link prKey}'s. */
 export const usePrDetail = (key: string): PrDetailEntry | undefined =>
   useHiveStore((state) => state.prDetails[key]);
+
+/** One PR's Checks reads (HIVE-206). */
+export const usePrChecks = (key: string): PrChecksEntry | undefined => useHiveStore((state) => state.prChecks[key]);
+
+/** The last eight pushes, oldest first (HIVE-206, D1). */
+export const usePushes = (key: string): Push[] => {
+  const runs = useHiveStore((state) => state.prChecks[key]?.runs);
+  return useMemo(() => foldPushes(runs ?? []), [runs]);
+};
+
+/** The shown push (`sha`, else the newest) laid out; null until runs are read or when there are none. */
+export const useChecksGraph = (key: string, sha: string | null, expanded: ReadonlySet<string>): ChecksGraph | null => {
+  const entry = useHiveStore((state) => state.prChecks[key]);
+  const pushes = usePushes(key);
+  return useMemo(() => {
+    const push = pushes.find((p) => p.sha === sha) ?? pushes.at(-1);
+    if (entry === undefined || push === undefined) return null;
+    return layoutGraph(entry.workflows ?? [], push.runs, entry.jobs, expanded, Date.now());
+  }, [entry, pushes, sha, expanded]);
+};
+
+/** The job under the graph: the clicked one, else the shown push's first failed job (HIVE-206). */
+export const useShownJob = (key: string, sha: string | null, clicked: number | null): RunJob | null => {
+  const entry = useHiveStore((state) => state.prChecks[key]);
+  const pushes = usePushes(key);
+  return useMemo(() => {
+    const push = pushes.find((p) => p.sha === sha) ?? pushes.at(-1);
+    if (entry === undefined || push === undefined) return null;
+    const jobs = push.runs.flatMap((one) => entry.jobs[one.id] ?? []);
+    return jobs.find((j) => j.id === clicked) ?? jobs.find((j) => jobState(j.status, j.conclusion) === 'failed') ?? null;
+  }, [entry, pushes, sha, clicked]);
+};
+
+/** The Checks tab's three actions. */
+export const usePrChecksActions = () =>
+  useHiveStore(useShallow((state) => ({ loadPrChecks: state.loadPrChecks, loadJobLog: state.loadJobLog, rerunFailed: state.rerunFailed })));
 
 /** Read, or re-read, one PR's detail (HIVE-205). */
 export const useLoadPrDetail = (): ((owner: string, repo: string, n: number) => Promise<void>) =>
