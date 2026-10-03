@@ -69,7 +69,15 @@ import type {
   WriteFileRequest,
 } from './fs-contract';
 import { MAX_FILE_BYTES, MAX_RESOLVE_CANDIDATES } from './fs-contract';
-import type { PrCommentRequest, PrLookup, PrRef, PrRunsRequest, RunRef } from './github-contract';
+import type {
+  PrCommentRequest,
+  PrLookup,
+  PrRef,
+  PrRunsRequest,
+  PrThreadRequest,
+  PrViewedRequest,
+  RunRef,
+} from './github-contract';
 import type {
   AckRequest,
   PromptReport,
@@ -1908,6 +1916,15 @@ export function parsePrDetailRequest(input: unknown): PrRef {
   return assertPrRef(assertShape(input, ['owner', 'repo', 'n'], 'prDetail'), 'prDetail');
 }
 
+/** A markdown body GitHub will take: not blank, at its limit, no control characters but tab, newline and CR. */
+function assertPrBody(value: unknown, label: string): string {
+  const body = assertString(value, label);
+  if (body.trim() === '') return fail(`${label}: must not be empty`);
+  if (body.length > MAX_PR_COMMENT) return fail(`${label}: too long`);
+  if (hasControlCharactersOutsideWhitespace(body)) return fail(`${label}: control characters are not allowed`);
+  return body;
+}
+
 /**
  * `github:pr-comment` (HIVE-205): the same PR, and a markdown body. Checked as
  * `parseAddJiraCommentRequest` checks its body — not blank, bounded, no control
@@ -1915,13 +1932,43 @@ export function parsePrDetailRequest(input: unknown): PrRef {
  */
 export function parsePrCommentRequest(input: unknown): PrCommentRequest {
   const raw = assertShape(input, ['owner', 'repo', 'n', 'body'], 'prComment');
-  const body = assertString(raw.body, 'prComment.body');
-  if (body.trim() === '') return fail('prComment.body: must not be empty');
-  if (body.length > MAX_PR_COMMENT) return fail('prComment.body: too long');
-  if (hasControlCharactersOutsideWhitespace(body)) {
-    return fail('prComment.body: control characters are not allowed');
-  }
-  return { ...assertPrRef(raw, 'prComment'), body };
+  return { ...assertPrRef(raw, 'prComment'), body: assertPrBody(raw.body, 'prComment.body') };
+}
+
+/** A GitHub node id: base64-ish, bounded. */
+const GH_NODE_ID = /^[A-Za-z0-9_=-]{1,200}$/;
+/** Longer than any path git will hold in a PR. */
+const MAX_PR_PATH = 4096;
+
+/** `github:pr-diff` (HIVE-207): one PR, as `github:pr-detail`. */
+export function parsePrDiffRequest(input: unknown): PrRef {
+  return assertPrRef(assertShape(input, ['owner', 'repo', 'n'], 'prDiff'), 'prDiff');
+}
+
+/**
+ * `github:pr-thread` (HIVE-207): a reply (with its body) or a resolve or
+ * unresolve (with none) on one review thread. Main proves the thread is on
+ * this PR before writing; this only refuses nonsense.
+ */
+export function parsePrThreadRequest(input: unknown): PrThreadRequest {
+  const raw = assertShape(input, ['owner', 'repo', 'n', 'threadId', 'op'], 'prThread', ['body']);
+  const ref = assertPrRef(raw, 'prThread');
+  const threadId = assertString(raw.threadId, 'prThread.threadId');
+  if (!GH_NODE_ID.test(threadId)) return fail('prThread.threadId: not a GitHub node id');
+  if (raw.op === 'reply') return { ...ref, threadId, op: 'reply', body: assertPrBody(raw.body, 'prThread.body') };
+  if (raw.op !== 'resolve' && raw.op !== 'unresolve') return fail('prThread.op: expected reply, resolve or unresolve');
+  if (raw.body !== undefined) return fail('prThread.body: only a reply has a body');
+  return { ...ref, threadId, op: raw.op };
+}
+
+/** `github:pr-viewed` (HIVE-207): mark or unmark one path viewed. */
+export function parsePrViewedRequest(input: unknown): PrViewedRequest {
+  const raw = assertShape(input, ['owner', 'repo', 'n', 'path', 'viewed'], 'prViewed');
+  const path = assertString(raw.path, 'prViewed.path');
+  if (path === '' || path.length > MAX_PR_PATH) return fail('prViewed.path: expected 1 to 4096 characters');
+  if (hasControlCharacters(path)) return fail('prViewed.path: control characters are not allowed');
+  if (typeof raw.viewed !== 'boolean') return fail('prViewed.viewed: expected a boolean');
+  return { ...assertPrRef(raw, 'prViewed'), path, viewed: raw.viewed };
 }
 
 export function parseJiraIssueRequest(input: unknown): JiraIssueRequest {

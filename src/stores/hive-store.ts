@@ -44,11 +44,14 @@ import {
   postPrComment,
   readJobLog,
   readPrDetail,
+  readPrDiff,
   readPrRuns,
   readPullRequests,
   readRunJobs,
   rerunFailedJobs,
   searchPullRequests,
+  writePrThread,
+  writePrViewed,
 } from '@lib/github';
 import {
   readJiraComments,
@@ -96,6 +99,7 @@ import {
   type TicketLinksModel,
 } from '@lib/ticket-links';
 import { parseTitleTags } from '@lib/ticket-tags';
+import { type DiffFile, parseUnifiedDiff } from '@lib/unified-diff';
 import { BRIDGE_ERROR } from '@lib/utils';
 import {
   SESSION_ID_PREFIX_PATTERN,
@@ -118,6 +122,7 @@ import type {
   GhResult,
   JobLog,
   PrDetail,
+  PrFileViewed,
   PrRecord,
   PrsSnapshot,
   RunJob,
@@ -449,6 +454,8 @@ interface HiveState {
   ticketDetails: Record<string, TicketDetail>;
   /** What has been read for each PR a page or tab opened, keyed by {@link prKey} (HIVE-205). At most PR_DETAIL_CAP, the newest last. */
   prDetails: Record<string, PrDetailEntry>;
+  /** Each open PR's diff, keyed by {@link prKey} (HIVE-207): its own slice, since loadPrDetail replaces a detail wholesale. */
+  prDiffs: Record<string, PrDiffEntry>;
   /** The Checks tab's reads per PR, keyed by {@link prKey} (HIVE-206). At most PR_DETAIL_CAP, the newest last. */
   prChecks: Record<string, PrChecksEntry>;
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
@@ -545,6 +552,14 @@ interface HiveState {
   loadPrDetail: (owner: string, repo: string, n: number) => Promise<void>;
   /** Comment on a PR, then re-read it; the answer says why a post failed (HIVE-205). */
   commentOnPr: (owner: string, repo: string, n: number, body: string) => Promise<GhResult<true>>;
+  /** Read one PR's diff at a head sha: once per sha, again when it moves (HIVE-207). */
+  loadPrDiff: (owner: string, repo: string, n: number, sha: string | null) => Promise<void>;
+  /** Reply to a review thread, then re-read the PR either way (HIVE-207). */
+  replyToPrThread: (owner: string, repo: string, n: number, threadId: string, body: string) => Promise<GhResult<true>>;
+  /** Resolve or unresolve a review thread, then re-read the PR either way (HIVE-207). */
+  setPrThreadResolved: (owner: string, repo: string, n: number, threadId: string, resolved: boolean) => Promise<GhResult<true>>;
+  /** Mark or unmark a file viewed: shown at once, rolled back on a refusal, re-read either way (HIVE-207). */
+  setPrFileViewed: (owner: string, repo: string, n: number, path: string, viewed: boolean) => Promise<GhResult<true>>;
   /** Read a PR's runs and workflows, then the jobs of the shown push (`sha`, else the newest) (HIVE-206). */
   loadPrChecks: (owner: string, repo: string, n: number, branch: string, sha?: string) => Promise<void>;
   /** Read a failed job's log once per job id; only a failed read reads again (HIVE-206). */
@@ -1970,6 +1985,9 @@ export const TICKET_DETAIL_CAP = 16;
 /** How many PRs' detail the store holds at once (HIVE-205): the open page and HIVE-209's PR tabs. */
 export const PR_DETAIL_CAP = 8;
 
+/** A PR write with no bridge to make it (HIVE-205, HIVE-207). */
+const BRIDGE_REFUSAL = { ok: false as const, error: { kind: 'unknown' as const, message: BRIDGE_ERROR } };
+
 /** The `prDetails` key: `owner/repo#n`, lowercased as GitHub's names compare (HIVE-205). */
 export const prKey = (owner: string, repo: string, n: number): string => `${owner}/${repo}#${n}`.toLowerCase();
 
@@ -1980,6 +1998,15 @@ export interface PrDetailEntry {
   state: 'loading' | 'ok' | 'failed';
   problem?: string;
   readAt?: number;
+}
+
+/** One PR's diff text, read at a head sha (HIVE-207). A failed read keeps the last text beside the problem. */
+export interface PrDiffEntry {
+  key: string;
+  sha: string | null;
+  state: 'loading' | 'ok' | 'failed';
+  text?: string;
+  problem?: string;
 }
 
 /** One job's failed log, read once per job id (HIVE-206). */
@@ -2152,6 +2179,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   ticketSource: { kind: 'loading' } as TicketSource,
   ticketDetails: {} as Record<string, TicketDetail>,
   prDetails: {} as Record<string, PrDetailEntry>,
+  prDiffs: {} as Record<string, PrDiffEntry>,
   prChecks: {} as Record<string, PrChecksEntry>,
 
   /** Loading until the first sweep answers, for the same reason as above. */
@@ -5292,8 +5320,78 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
   commentOnPr: async (owner, repo, n, body) => {
     const result = await postPrComment({ owner, repo, n, body });
-    if (result === null) return { ok: false, error: { kind: 'unknown', message: BRIDGE_ERROR } };
+    if (result === null) return BRIDGE_REFUSAL;
     if (result.ok) await get().loadPrDetail(owner, repo, n);
+    return result;
+  },
+
+  /**
+   * One PR's diff at `sha` (HIVE-207). Nothing to do when it is already read,
+   * or being read, at that sha; a failure retries. Keeps the old text while it
+   * reads, and drops an answer for a sha that has since moved on.
+   */
+  loadPrDiff: async (owner, repo, n, sha) => {
+    const key = prKey(owner, repo, n);
+    const current = get().prDiffs[key];
+    if (current !== undefined && current.sha === sha && current.state !== 'failed') return;
+    set((state) => {
+      const { problem: _problem, ...kept } = state.prDiffs[key] ?? { key };
+      return {
+        prDiffs: touchDetail(state.prDiffs, key, { ...kept, key, sha, state: 'loading' as const }, PR_DETAIL_CAP),
+      };
+    });
+
+    const result = await readPrDiff({ owner, repo, n });
+
+    set((state) => {
+      const entry = state.prDiffs[key];
+      if (entry === undefined || entry.sha !== sha) return state;
+      const next: PrDiffEntry =
+        result?.ok === true
+          ? { key, sha, state: 'ok', text: result.value }
+          : { ...entry, state: 'failed', problem: result === null ? BRIDGE_ERROR : result.error.message };
+      return { prDiffs: { ...state.prDiffs, [key]: next } };
+    });
+  },
+
+  /** Reply to a review thread (HIVE-207); the reply shows on the reload, which runs either way. */
+  replyToPrThread: async (owner, repo, n, threadId, body) => {
+    const result = (await writePrThread({ owner, repo, n, threadId, op: 'reply', body })) ?? BRIDGE_REFUSAL;
+    await get().loadPrDetail(owner, repo, n);
+    return result;
+  },
+
+  /** Resolve or unresolve a review thread (HIVE-207); the chip flips on the reload. */
+  setPrThreadResolved: async (owner, repo, n, threadId, resolved) => {
+    const result =
+      (await writePrThread({ owner, repo, n, threadId, op: resolved ? 'resolve' : 'unresolve' })) ?? BRIDGE_REFUSAL;
+    await get().loadPrDetail(owner, repo, n);
+    return result;
+  },
+
+  /**
+   * Mark or unmark a file viewed (HIVE-207). Shown at once, rolled back to what
+   * it was if GitHub refuses, and read back from GitHub either way: the state
+   * lives there, never here.
+   */
+  // ponytail: a detail poll landing mid-write can show the old state for one round trip; a pending overlay if it shows.
+  setPrFileViewed: async (owner, repo, n, path, viewed) => {
+    const key = prKey(owner, repo, n);
+    const patch = (to: PrFileViewed) =>
+      set((state) => {
+        const entry = state.prDetails[key];
+        const detail = entry?.detail;
+        if (entry === undefined || detail === undefined) return state;
+        const files = detail.files.map((file) => (file.path === path ? { ...file, viewed: to } : file));
+        return { prDetails: { ...state.prDetails, [key]: { ...entry, detail: { ...detail, files } } } };
+      });
+    // Read before the patch below, so a refusal restores what was showing.
+    const before = get().prDetails[key]?.detail?.files.find((file) => file.path === path)?.viewed;
+
+    patch(viewed ? 'viewed' : 'unviewed');
+    const result = (await writePrViewed({ owner, repo, n, path, viewed })) ?? BRIDGE_REFUSAL;
+    if (!result.ok && before !== undefined) patch(before);
+    await get().loadPrDetail(owner, repo, n);
     return result;
   },
 
@@ -5561,6 +5659,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         source.kind === 'live' && !source.stale && source.repos === repos;
       const entities = rememberSessionPrs(state.entities, learned);
       const prDetails = dropLeftPrs(state.prDetails, state.prs, prs);
+      const prDiffs = dropLeftPrs(state.prDiffs, state.prs, prs);
       const prChecks = dropLeftPrs(state.prChecks, state.prs, prs);
 
       return {
@@ -5572,6 +5671,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         // of a once-a-minute poller.
         ...(entities === state.entities ? {} : { entities }),
         ...(prDetails === state.prDetails ? {} : { prDetails }),
+        ...(prDiffs === state.prDiffs ? {} : { prDiffs }),
         ...(prChecks === state.prChecks ? {} : { prChecks }),
       };
     });
@@ -6026,6 +6126,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       ticketSource: { kind: 'loading' },
       ticketDetails: {},
       prDetails: {},
+      prDiffs: {},
       prChecks: {},
       /*
         Not "an orphan quietly wasting memory" the way it first read — session
@@ -6125,6 +6226,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       ticketSource: { kind: 'loading' },
       ticketDetails: {},
       prDetails: {},
+      prDiffs: {},
       prChecks: {},
       prSource: { kind: 'loading' },
       prSearch: NO_PR_SEARCH,
@@ -8044,6 +8146,27 @@ export const useLoadPrDetail = (): ((owner: string, repo: string, n: number) => 
 /** Comment on a PR, then re-read it (HIVE-205). */
 export const useCommentOnPr = (): ((owner: string, repo: string, n: number, body: string) => Promise<GhResult<true>>) =>
   useHiveStore((state) => state.commentOnPr);
+
+/** One PR's diff entry (HIVE-207). `key` is {@link prKey}'s. */
+export const usePrDiff = (key: string): PrDiffEntry | undefined => useHiveStore((state) => state.prDiffs[key]);
+
+/** One PR's diff, parsed: once per text, never stored (HIVE-207). `null` before the first text. */
+export const useParsedPrDiff = (key: string): DiffFile[] | null => {
+  const text = useHiveStore((state) => state.prDiffs[key]?.text);
+  return useMemo(() => (text === undefined ? null : parseUnifiedDiff(text)), [text]);
+};
+
+/** Read one PR's diff at a head sha (HIVE-207). */
+export const useLoadPrDiff = (): HiveState['loadPrDiff'] => useHiveStore((state) => state.loadPrDiff);
+
+/** Reply to, resolve and unresolve a review thread (HIVE-207). */
+export const usePrThreadActions = (): {
+  reply: HiveState['replyToPrThread'];
+  setResolved: HiveState['setPrThreadResolved'];
+} => useHiveStore(useShallow((state) => ({ reply: state.replyToPrThread, setResolved: state.setPrThreadResolved })));
+
+/** Mark or unmark a file viewed (HIVE-207). */
+export const useSetPrFileViewed = (): HiveState['setPrFileViewed'] => useHiveStore((state) => state.setPrFileViewed);
 
 /** Show a just-posted comment on the open ticket (HIVE-203). */
 export const useAppendTicketComment = (): ((key: string, comment: JiraComment) => void) =>

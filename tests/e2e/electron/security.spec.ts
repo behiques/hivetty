@@ -448,8 +448,24 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * owner/repo no configured project maps, before `gh` runs, and hands `gh`
    * the resolver's spelling (`tests/electron/main/integrations/github/index.test.ts`).
    * The widest reach is still the user's own mapped projects.
+   *
+   * HIVE-206 added `prRuns`, `runJobs`, `jobLog` and `rerunFailed`, and HIVE-207
+   * `prDiff`, `prThread` and `prViewed`: each names a repository and passes the
+   * same scope check before `gh` runs.
    */
-  expect(surface.github).toEqual(['prComment', 'prDetail', 'prs', 'searchPrs']);
+  expect(surface.github).toEqual([
+    'jobLog',
+    'prComment',
+    'prDetail',
+    'prDiff',
+    'prRuns',
+    'prThread',
+    'prViewed',
+    'prs',
+    'rerunFailed',
+    'runJobs',
+    'searchPrs',
+  ]);
   /**
    * `root` is the only verb on this bridge that **answers** with a path.
    *

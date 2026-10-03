@@ -6,7 +6,11 @@ import {
   collectSearchPrs,
   commentAdded,
   countFindings,
+  echoedId,
+  echoedResolved,
+  mutated,
   readPrId,
+  readThreadPr,
   readViewerLogin,
   toChecks,
   toPrDetail,
@@ -554,6 +558,25 @@ describe('toPrDetail (HIVE-205)', () => {
     });
   });
 
+  it('maps the changed files, GitHub’s viewed state included (HIVE-207)', () => {
+    const detail = toPrDetail(payload(pr({ files: { nodes: [
+      { path: 'src/a.ts', additions: 3, deletions: 1, changeType: 'MODIFIED', viewerViewedState: 'VIEWED' },
+      { path: 'src/b.ts', additions: 0, deletions: 0, changeType: 'RENAMED', viewerViewedState: 'DISMISSED' },
+      { path: 'src/c.ts', additions: null, deletions: 2, changeType: null, viewerViewedState: 'UNVIEWED' },
+      { additions: 1 },
+      null,
+    ] } })), 'acme', 'server');
+    expect(detail?.files).toEqual([
+      { path: 'src/a.ts', additions: 3, deletions: 1, changeType: 'modified', viewed: 'viewed' },
+      { path: 'src/b.ts', additions: 0, deletions: 0, changeType: 'renamed', viewed: 'dismissed' },
+      { path: 'src/c.ts', additions: 0, deletions: 2, changeType: 'modified', viewed: 'unviewed' },
+    ]);
+  });
+
+  it('has no files when GitHub sent none (HIVE-207)', () => {
+    expect(toPrDetail(payload(pr()), 'acme', 'server')?.files).toEqual([]);
+  });
+
   it('reads MERGED and CLOSED, and nulls as nulls or zero', () => {
     expect(toPrDetail(payload(pr({ state: 'MERGED', mergedAt: '2026-10-03T11:32:00Z' })), 'acme', 'server'))
       .toMatchObject({ state: 'merged', mergedAt: '2026-10-03T11:32:00Z' });
@@ -660,5 +683,29 @@ describe('toPrDetail (HIVE-205)', () => {
     expect(commentAdded({ addComment: { subject: { id: 'PR_kwDO1' } } })).toBe(true);
     expect(commentAdded({ addComment: null })).toBe(false);
     expect(commentAdded(undefined)).toBe(false);
+  });
+});
+
+describe('readThreadPr and mutated (HIVE-207)', () => {
+  it('reads the PR a thread is on', () => {
+    expect(readThreadPr({ node: { pullRequest: { number: 482, repository: { owner: { login: 'acme' }, name: 'nova-web' } } } }))
+      .toEqual({ owner: 'acme', name: 'nova-web', number: 482 });
+  });
+  it.each([[null], [{ node: null }], [{ node: {} }], [{ node: { pullRequest: { number: 1 } } }]])('is null for %j', (payload) => {
+    expect(readThreadPr(payload)).toBeNull();
+  });
+  it('says whether a mutation answered with its field', () => {
+    expect(mutated({ resolveReviewThread: { thread: { id: 'T' } } }, 'resolveReviewThread')).toBe(true);
+    expect(mutated({ resolveReviewThread: null }, 'resolveReviewThread')).toBe(false);
+    expect(mutated(undefined, 'resolveReviewThread')).toBe(false);
+  });
+  it('reads success from the echo, never from a hollow answer', () => {
+    const resolvedTo = (to: boolean) => (answer: Record<string, unknown>) => echoedResolved(answer, to);
+    expect(mutated({ resolveReviewThread: { thread: { id: 'T', isResolved: true } } }, 'resolveReviewThread', resolvedTo(true))).toBe(true);
+    expect(mutated({ resolveReviewThread: { thread: { id: 'T', isResolved: false } } }, 'resolveReviewThread', resolvedTo(true))).toBe(false);
+    expect(mutated({ resolveReviewThread: { thread: null } }, 'resolveReviewThread', resolvedTo(true))).toBe(false);
+    expect(echoedId({ comment: { id: 'C' } }, 'comment')).toBe(true);
+    expect(echoedId({ comment: null }, 'comment')).toBe(false);
+    expect(echoedId({ comment: { id: 7 } }, 'comment')).toBe(false);
   });
 });

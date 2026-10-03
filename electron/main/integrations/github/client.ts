@@ -5,8 +5,12 @@ import {
   collectPrs,
   collectSearchPrs,
   commentAdded,
+  echoedId,
+  echoedResolved,
   hasAnyConnection,
+  mutated,
   readPrId,
+  readThreadPr,
   readViewerLogin,
   toPrDetail,
 } from './mapping';
@@ -14,11 +18,17 @@ import {
   buildPrQuery,
   buildPrVariables,
   buildSearchVariables,
+  FILE_UNVIEWED_MUTATION,
+  FILE_VIEWED_MUTATION,
   PR_COMMENT_MUTATION,
   PR_DETAIL_QUERY,
   PR_ID_QUERY,
+  PR_THREAD_OWNER_QUERY,
   repoQualifiers,
   safeSearchTerm,
+  THREAD_REPLY_MUTATION,
+  THREAD_RESOLVE_MUTATION,
+  THREAD_UNRESOLVE_MUTATION,
   type RepoRef,
 } from './query';
 import type { RunAsync } from './run';
@@ -75,6 +85,14 @@ export interface GithubClient {
   detail(repo: RepoRef, n: number): Promise<GhResult<PrDetail>>;
   /** A PR-level comment (HIVE-205): the PR's id is read from GitHub first, then `addComment`. */
   comment(repo: RepoRef, n: number, body: string): Promise<GhResult<true>>;
+  /** The PR's unified diff (HIVE-207), as `gh pr diff` prints it. */
+  diff(repo: RepoRef, n: number): Promise<GhResult<string>>;
+  /** Reply to a review thread (HIVE-207), once the thread is proved to be on this PR. */
+  threadReply(repo: RepoRef, n: number, threadId: string, body: string): Promise<GhResult<true>>;
+  /** Resolve or unresolve a review thread (HIVE-207), behind the same proof. */
+  threadResolved(repo: RepoRef, n: number, threadId: string, resolved: boolean): Promise<GhResult<true>>;
+  /** Mark or unmark a file viewed (HIVE-207): the PR's id is read from GitHub first, as {@link GithubClient.comment} does. */
+  fileViewed(repo: RepoRef, n: number, path: string, viewed: boolean): Promise<GhResult<true>>;
 }
 
 export function createGithubClient(
@@ -220,6 +238,35 @@ export function createGithubClient(
     };
   };
 
+  /**
+   * Whether `threadId` is a thread on this PR (HIVE-207). The id comes from
+   * the renderer; this keeps a write on the PR `scoped()` admitted.
+   */
+  const threadOnPr = async (repo: RepoRef, n: number, threadId: string): Promise<GhResult<true>> => {
+    const found = await graphql(PR_THREAD_OWNER_QUERY, { id: threadId });
+    if (found === null) return NOT_RUN;
+    const on = readThreadPr(found.data);
+    if (on === null) return { ok: false, error: classifyGhFailure(found.stderr, found.timedOut) };
+    const same =
+      on.number === n &&
+      on.owner.toLowerCase() === repo.owner.toLowerCase() &&
+      on.name.toLowerCase() === repo.name.toLowerCase();
+    return same ? { ok: true, value: true } : { ok: false, error: ghError('unknown', 'That thread is not on this pull request.') };
+  };
+
+  /** One mutation whose success is its field in `data`, echoing what was written. */
+  const write = async (
+    query: string,
+    field: string,
+    strings: Record<string, string>,
+    echoed: (answer: Record<string, unknown>) => boolean,
+  ): Promise<GhResult<true>> => {
+    const answer = await graphql(query, strings);
+    if (answer === null) return NOT_RUN;
+    if (!mutated(answer.data, field, echoed)) return { ok: false, error: classifyGhFailure(answer.stderr, answer.timedOut) };
+    return { ok: true, value: true };
+  };
+
   return {
     async sweep(repos, now) {
       const scoped = scopeFor(repos);
@@ -278,6 +325,47 @@ export function createGithubClient(
         return { ok: false, error: classifyGhFailure(posted.stderr, posted.timedOut) };
       }
       return { ok: true, value: true };
+    },
+
+    async diff(repo, n) {
+      let result;
+      try {
+        // argv, no shell: the repository is the resolver's spelling and the number a guarded whole number.
+        result = await run(ghPath, ['pr', 'diff', String(n), '--repo', `${repo.owner}/${repo.name}`, '--color', 'never']);
+      } catch {
+        return NOT_RUN;
+      }
+      if (result.code !== 0) return { ok: false, error: classifyGhFailure(result.stderr, result.timedOut) };
+      return { ok: true, value: result.stdout };
+    },
+
+    async threadReply(repo, n, threadId, body) {
+      const on = await threadOnPr(repo, n, threadId);
+      if (!on.ok) return on;
+      return write(THREAD_REPLY_MUTATION, 'addPullRequestReviewThreadReply', { threadId, body }, (answer) =>
+        echoedId(answer, 'comment'),
+      );
+    },
+
+    async threadResolved(repo, n, threadId, resolved) {
+      const on = await threadOnPr(repo, n, threadId);
+      if (!on.ok) return on;
+      const echoed = (answer: Record<string, unknown>) => echoedResolved(answer, resolved);
+      return resolved
+        ? write(THREAD_RESOLVE_MUTATION, 'resolveReviewThread', { threadId }, echoed)
+        : write(THREAD_UNRESOLVE_MUTATION, 'unresolveReviewThread', { threadId }, echoed);
+    },
+
+    async fileViewed(repo, n, path, viewed) {
+      const found = await graphql(PR_ID_QUERY, { owner: repo.owner, name: repo.name }, { number: n });
+      if (found === null) return NOT_RUN;
+      // The PR is GitHub's own id for the scoped PR, never a renderer value.
+      const id = readPrId(found.data);
+      if (id === null) return { ok: false, error: classifyGhFailure(found.stderr, found.timedOut) };
+      const echoed = (answer: Record<string, unknown>) => echoedId(answer, 'pullRequest');
+      return viewed
+        ? write(FILE_VIEWED_MUTATION, 'markFileAsViewed', { pullRequestId: id, path }, echoed)
+        : write(FILE_UNVIEWED_MUTATION, 'unmarkFileAsViewed', { pullRequestId: id, path }, echoed);
     },
   };
 }
