@@ -61,8 +61,8 @@ export function GhSetupPage() {
           <code>gh auth login</code>
         </pre>
         <p>
-          Settings › Integrations › Command line shows which <code className="font-mono">gh</code> the Hive
-          found, and who it is signed in as.
+          Settings › Integrations › Command line shows which <code className="font-mono">gh</code> the app found
+          and who it is signed in as.
         </p>
       </EmptyPlace>
     );

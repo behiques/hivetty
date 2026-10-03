@@ -83,6 +83,7 @@ describe('WorkStage (HIVE-203)', () => {
 
     expect(await screen.findByRole('region', { name: 'Ticket GRAC-3018' })).toBeInTheDocument();
   });
+
   it('says why when there is nothing to list (HIVE-211)', () => {
     useHiveStore.setState({ ticketSource: { kind: 'unconfigured' }, tickets: [] });
     render(<WorkStage />);
