@@ -536,6 +536,21 @@ describe('addComment', () => {
 
     expect(result.ok && result.value.via).toEqual({ agent: 'builder' });
   });
+
+  it('sets via itself when Jira\'s answer to the POST leaves the property out (HIVE-216)', async () => {
+    const result = await build({ fetch: replies([[201, rawComment()]]) }).addComment(
+      { key: 'HIVE-71', markdown: 'hi' },
+      { agent: 'builder' },
+    );
+
+    expect(result.ok && result.value.via).toEqual({ agent: 'builder' });
+  });
+
+  it('leaves via off a comment posted for nobody', async () => {
+    const result = await build({ fetch: replies([[201, rawComment()]]) }).addComment({ key: 'HIVE-71', markdown: 'hi' });
+
+    expect(result.ok && result.value.via).toBeUndefined();
+  });
 });
 
 describe('searchUsers (HIVE-216)', () => {

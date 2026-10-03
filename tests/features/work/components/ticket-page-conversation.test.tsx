@@ -365,6 +365,26 @@ describe('mentions in the reply box (HIVE-216)', () => {
     expect(box()).toHaveAttribute('placeholder', 'Add a comment — markdown works');
   });
 
+  it('Reply on a second comment swaps the chip, so only that author is notified', async () => {
+    const lee = { ...comment('108', 'Lee Ro', '2026-10-01T17:00:00.000Z', 'Third words'), authorId: '712020:lee' };
+    seed({ comments: [dana, lee], total: 2 });
+    addJiraComment.mockResolvedValue({ ok: true, value: comment('109', 'Me', '2026-10-01T18:00:00.000Z', 'ok') });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.click(within(items()[1]!).getByRole('button', { name: 'Reply' }));
+    expect(screen.queryByText('@Dana Kim')).toBeNull();
+    expect(screen.getByText('@Lee Ro')).toBeInTheDocument();
+
+    await userEvent.type(box(), 'thanks');
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+    expect(addJiraComment).toHaveBeenCalledWith({
+      key: 'HIVE-7',
+      markdown: 'thanks',
+      mentions: [{ accountId: '712020:lee', name: 'Lee Ro' }],
+    });
+  });
+
   it('Reply on an agent\'s comment, or one with no author id, adds no chip', async () => {
     const viaAcr: JiraComment = { ...acr, authorId: '712020:me', via: { agent: 'acr' } };
     seed({ comments: [viaAcr, comment('107', 'Old', '2026-10-01T16:00:00.000Z', 'no id')], total: 2 });

@@ -312,18 +312,24 @@ export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [mentions, setMentions] = useState<JiraMention[]>([]);
+  // The chip Reply added, so replying to someone else swaps it rather than notifying both.
+  const [replied, setReplied] = useState<string | null>(null);
 
   const reply = (to: JiraComment) => {
     setReplyTo(to.author);
     // An agent's comment is the token owner's in Jira, which is you: nobody to notify.
-    if (to.via === undefined && to.authorId !== undefined) {
-      const mention = { accountId: to.authorId, name: to.author };
-      setMentions((held) => (held.some((m) => m.accountId === mention.accountId) ? held : [...held, mention]));
-    }
+    const target = to.via === undefined ? to.authorId : undefined;
+    setReplied(target ?? null);
+    setMentions((held) => {
+      const kept = held.filter((m) => m.accountId !== replied);
+      if (target === undefined || kept.some((m) => m.accountId === target)) return kept;
+      return [...kept, { accountId: target, name: to.author }];
+    });
     box.current?.focus();
   };
   const forget = () => {
     setReplyTo(null);
+    setReplied(null);
     setMentions([]);
   };
 

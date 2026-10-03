@@ -702,7 +702,9 @@ export function createJira(deps: {
           },
         };
       }
-      return { ok: true, value: mapped };
+      // Jira's answer to the POST need not echo the property it was sent; the
+      // caller appends this to the page without a re-read, so say who it was for.
+      return { ok: true, value: via === undefined ? mapped : { ...mapped, via: { agent: via.agent } } };
     },
 
     async searchUsers(request) {
