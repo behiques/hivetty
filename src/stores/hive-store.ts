@@ -7408,6 +7408,10 @@ export function currentRowFor(id: string): string {
   return currentSessionIn(useHiveStore.getState(), id);
 }
 
+/** {@link currentRowFor} for a render path (HIVE-198): re-resolves when the row behind a terminal changes. */
+export const useCurrentRow = (terminalId: string): string =>
+  useHiveStore((state) => currentSessionIn(state, terminalId));
+
 /**
  * True when `id` currently names an agent, not a terminal (HIVE-118).
  *

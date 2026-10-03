@@ -18,11 +18,13 @@ import {
 
 import {
   agentWorksIn,
+  currentRowFor,
   fleetGroupsOf,
   type FleetView,
   repoDirName,
   useActiveEntity,
   useActiveSessions,
+  useCurrentRow,
   useAskingAgentCount,
   useAgentLive,
   useAgentLiveCount,
@@ -967,6 +969,25 @@ describe('hive-store selectors', () => {
       expect(renderHook(() => useSummons('term-1')).result.current.sessions.map((n) => n.id)).toEqual(['b2']);
       expect(renderHook(() => useSummonsCount('term-1')).result.current).toBe(1);
       expect(renderHook(() => useSummonsCount(null)).result.current).toBe(2);
+    });
+  });
+
+  describe('useCurrentRow (HIVE-198)', () => {
+    it('resolves a terminal to the row currentRowFor names', () => {
+      const row: Session = {
+        kind: 'session',
+        id: 'sess-row',
+        terminalId: 'term-row',
+        project: 'the-hive',
+        status: 'idle',
+        task: 'x',
+        cost: '$0.00',
+        lines: [],
+      };
+      act(() => useHiveStore.setState({ entities: { 'sess-row': row }, order: ['sess-row'] }));
+
+      expect(currentRowFor('term-row')).toBe('sess-row');
+      expect(renderHook(() => useCurrentRow('term-row')).result.current).toBe('sess-row');
     });
   });
 
