@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { announcement, ARRIVAL_FOLD_MS, ArrivalStack } from '@features/inbox/components/arrival-stack';
+import { LEAVE_MS } from '@features/inbox/hooks/use-leaving-asks';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 
@@ -213,4 +214,30 @@ it('an arrival never moves focus', () => {
   expect(screen.getByRole('article')).toBeInTheDocument();
   expect(document.activeElement).toBe(input);
   input.remove();
+});
+
+describe('an arrival leaves with its reason (HIVE-218)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('lets the arrival leave with "answered on mac-mini" when another device answers', () => {
+    vi.useFakeTimers();
+    useUiStore.getState().pushArrival('a1', false);
+    render(<ArrivalStack onStage={null} />);
+    act(() =>
+      useHiveStore.getState().hydrateLedger([
+        { id: 'x1', ts: Date.now(), from: 'overmind', to: 'builder', kind: 'answer', body: 'yes', thread: 'a1', meta: { answeredOn: 'mac-mini' } },
+      ]),
+    );
+    expect(screen.getByText('mac-mini')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(LEAVE_MS));
+    expect(screen.queryByTestId('arrival-stack')).toBeNull();
+  });
+
+  it('draws nothing when a fold takes the arrival down', () => {
+    useUiStore.getState().pushArrival('a1', false);
+    render(<ArrivalStack onStage={null} />);
+    act(() => useUiStore.getState().foldArrivals());
+    expect(screen.queryByRole('article')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
 });

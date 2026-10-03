@@ -3,11 +3,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { HiveNotification } from '@/types/notification';
 
+import { useLeavingAsks } from '@features/inbox/hooks/use-leaving-asks';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
 import { useSummons } from '@stores/hive-store';
 import { useArrivals, useInboxActions, useSettingsOpen } from '@stores/ui-store';
 
 import { AskCard } from './ask-card';
+import { AskLeaving } from './ask-leaving';
 import { NotificationCard } from './notification-card';
 import { SessionNote } from './session-note';
 
@@ -58,6 +60,12 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
   const arrivals = useArrivals();
   const [held, setHeld] = useState({ hover: false, focus: false });
   const up = !settings && visible.length > 0;
+  /*
+    The slot's content (HIVE-218): the newest live arrival, or an ask that just
+    closed, held one beat with its reason. `up`, the fold timer and the burst
+    count stay on live rows only.
+  */
+  const placed = useLeavingAsks(visible);
 
   /*
     A hold belongs to the stack it was taken on. Folded under the pointer (✕,
@@ -75,10 +83,11 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
     return () => clearTimeout(timer);
   }, [up, held.hover, held.focus, arrivals, foldArrivals]);
 
-  const [newest] = visible;
-  if (settings || newest === undefined) return null;
+  const [shown] = placed;
+  if (settings || shown === undefined) return null;
+  const newest = shown.row;
 
-  const slivers = Math.min(visible.length - 1, 2);
+  const slivers = Math.max(0, Math.min(visible.length - 1, 2));
 
   return (
     <div
@@ -100,7 +109,9 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
       ) : null}
       <div className={cn('relative w-[380px]', !reduced && 'motion-safe:animate-ccslidein')}>
         <div className="relative z-[2] rounded-[10px] shadow-xl [&>article]:border-[color-mix(in_srgb,var(--cc-amber)_55%,var(--cc-border))]">
-          {newest.kind === 'session.blocked' ? (
+          {shown.leaving && newest.action.type === 'ask' ? (
+            <AskLeaving notif={newest} thread={newest.action.thread} />
+          ) : newest.kind === 'session.blocked' ? (
             <SessionNote notif={newest} variant="note" onFold={foldArrivals} />
           ) : newest.action.type === 'ask' ? (
             <AskCard key={newest.id} notif={newest} thread={newest.action.thread} variant="float" onClose={foldArrivals} />
