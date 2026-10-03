@@ -58,13 +58,13 @@
       </svg>
 
       <!--
-        Two ways to draw one creature. The canvas is the mp4 with its white
-        ground keyed away frame by frame; the image is the same loop with the
-        transparency already baked in, shown only if the video never produces
-        a frame. `splash.ts` picks, and exactly one is ever visible.
+        The comb globe (HIVE-212): ninety cells close into a globe that turns
+        inside the rings, each log line lights its cells, and seven mutalisks
+        rise from its heart to circle it. One transparent canvas the size of the
+        chamber; the bloom, the pool and the rings stay CSS and SVG beneath it.
+        `splash.ts` draws it.
       -->
-      <canvas class="sprite" id="sprite" width="486" height="526"></canvas>
-      <img class="sprite" id="sprite-fallback" alt="" hidden />
+      <canvas class="globe" id="globe" aria-hidden="true"></canvas>
 
       <div class="vignette"></div>
       <div class="scanlines"></div>
