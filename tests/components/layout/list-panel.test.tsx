@@ -6,7 +6,10 @@ import { useUiStore, type Place } from '@stores/ui-store';
 
 vi.mock('@features/projects/components/projects-panel', () => ({ ProjectsPanel: () => <p>projects-panel</p> }));
 vi.mock('@features/projects/components/sessions-panel', () => ({ SessionsPanel: () => <p>sessions-panel</p> }));
-vi.mock('@features/work/components/work-panel', () => ({ WorkPanel: () => <p>work-panel</p> }));
+vi.mock('@features/work/components/work-panel', () => ({
+  WorkPanel: () => <p>work-panel</p>,
+  WorkList: () => <p>work-list</p>,
+}));
 vi.mock('@features/agents/components/agents-panel', () => ({ AgentsPanel: () => <p>agents-panel</p> }));
 vi.mock('@features/pull-requests/components/prs-panel', () => ({ PrsPanel: () => <p>prs-panel</p> }));
 
@@ -17,7 +20,7 @@ describe('ListPanel (HIVE-195)', () => {
 
   it.each<[Place, string, string]>([
     ['sessions', 'Sessions list', 'sessions-panel'],
-    ['work', 'Work list', 'work-panel'],
+    ['work', 'Work list', 'work-list'],
     ['agents', 'Agents list', 'agents-panel'],
     ['prs', 'PRs list', 'prs-panel'],
   ])('mounts %s’s panel', (place, label, marker) => {
