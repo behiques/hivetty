@@ -1,3 +1,4 @@
+import type { DiffFile } from '@lib/unified-diff';
 import type { PrFile, PrThread } from '@shared/github-contract';
 
 /**
@@ -48,4 +49,31 @@ export function threadMark(path: string, threads: readonly PrThread[]): 'open' |
 export function firstFile(tree: readonly FileGroup[], threads: readonly PrThread[]): string | null {
   const all = tree.flatMap((group) => group.files);
   return (all.find((file) => threadMark(file.path, threads) === 'open') ?? all[0])?.path ?? null;
+}
+
+/** A diff row's address: the new side's number on the right, the old side's on the left. */
+export const lineKey = (side: 'L' | 'R', n: number): string => `${side}:${n}`;
+
+/**
+ * Where each of a file's threads sits (HIVE-207): under the line `line` names
+ * on its `diffSide` (RIGHT the new number, LEFT the old), or at the top as
+ * outdated when GitHub says so, it has no line, or the diff no longer shows it.
+ */
+export function placeThreads(file: DiffFile, threads: readonly PrThread[]): { outdated: PrThread[]; at: Map<string, PrThread[]> } {
+  const shown = new Set<string>();
+  for (const hunk of file.hunks) {
+    for (const line of hunk.lines) {
+      if (line.newN !== null) shown.add(lineKey('R', line.newN));
+      if (line.oldN !== null) shown.add(lineKey('L', line.oldN));
+    }
+  }
+  const at = new Map<string, PrThread[]>();
+  const outdated: PrThread[] = [];
+  for (const thread of threads) {
+    if (thread.path !== file.path) continue;
+    const key = thread.line === null ? null : lineKey(thread.diffSide === 'LEFT' ? 'L' : 'R', thread.line);
+    if (thread.isOutdated || key === null || !shown.has(key)) outdated.push(thread);
+    else at.set(key, [...(at.get(key) ?? []), thread]);
+  }
+  return { outdated, at };
 }
