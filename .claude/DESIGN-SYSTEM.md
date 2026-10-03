@@ -314,6 +314,12 @@ utility rather than hand-written CSS.
 to ~0. Safe because animation here is always decoration — the pulsing dot repeats
 information the label already carries.
 
+Canvas (HIVE-199): The Comb animates on a `<canvas>`, so the
+`prefers-reduced-motion` CSS collapse cannot reach it. It reads
+`useReducedMotion()` and draws one still frame instead; it pauses when the
+document is hidden or the canvas is off screen. Every state still reads from
+colour and shape.
+
 ## Chrome
 
 - Header height **56px**; left rail **320px**; activity rail **316px**.

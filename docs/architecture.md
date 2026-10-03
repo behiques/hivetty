@@ -41,8 +41,12 @@ src/
   components/layout/     the composition root: rails and centre stage mount features
   components/terminal/   the terminal seam (speaks only TerminalTransport)
   components/editor/     the editor seam
-  features/<slice>/      agents, editor, explorer, inbox, orchestrator, projects,
-                         pull-requests, sessions, settings, work, shared
+  features/<slice>/      agents, editor, explorer, home, inbox, orchestrator,
+                         projects, pull-requests, sessions, settings, work, shared
+  lib/swarm/             pure canvas modules (HIVE-199): the palette type, the
+                         mutalisk, the comb's layout, motion and drawing. No
+                         colour literals and no imports outside the folder, so
+                         the splash (HIVE-212) reuses it whole
   stores/                hive, ui, appearance, editor
 electron/
   main/                  config, sessions, hooks, ledger, agents, integrations, server

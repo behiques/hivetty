@@ -172,6 +172,33 @@ Two precedence rules carry the weight:
   while Home covers the stage. `CenterStage` hides the terminal region behind it
   exactly as it does behind the picker.
 
+### Home: The Comb (HIVE-199)
+
+Home is `features/home`'s `HomePage`: a visually hidden `<h1>Home</h1>`, then
+`CombHeadline` ("N things need you" over the counts) laid over `TheComb`, a hex
+canvas of every live session, terminal and agent. HIVE-200's strip mounts
+under the comb.
+
+**The canvas host pattern.** `TheComb` is the example to copy for any animated
+canvas:
+
+- It lays out and draws in a **logical space** (1376 × 520, the prototype's
+  canvas) and scales it uniformly to the element; hit-testing converts the
+  pointer back into logical units.
+- A `ResizeObserver` keeps the backing store at the element's size, device
+  pixel ratio capped at 2.
+- `requestAnimationFrame` runs only while the canvas **intersects** the
+  viewport, the document is **visible** and the component is **mounted**;
+  elapsed time is real and clamped, so a 120 Hz display flies no faster.
+- Data and the palette reach the loop **through a ref**, so a session changing
+  state or a theme switch repaints the next frame without restarting it.
+- Under reduced motion there is no loop: one still frame, redrawn when the data
+  or the palette changes.
+- Colour comes from `useSwarmPalette()`, never `getComputedStyle`;
+  `src/lib/swarm/` holds no colour literal.
+- A visually hidden list holds one button per cell, labelled with the tooltip's
+  text, so the comb works from the keyboard and reads to a screen reader.
+
 ### What the component does with it
 
 `CenterStage` is the composition root: it reads the stores so
