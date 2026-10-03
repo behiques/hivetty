@@ -162,6 +162,7 @@ export const FRAME_KIND = {
   [CH.configGetRemote]: 'call',
   [CH.remotePair]: 'call',
   [CH.remoteForget]: 'call',
+  [CH.remoteDialNow]: 'call',
   /*
     HIVE-150. An `event` so it binds nothing in the proxy — pushes travel
     server-to-client and have no `ipcMain.handle`/`ipcMain.on` of their own,
@@ -464,6 +465,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.configGetRemote]: 'read',
   [CH.remotePair]: 'mutate',
   [CH.remoteForget]: 'mutate',
+  [CH.remoteDialNow]: 'mutate',
   // A push, and every push is `read`: a client observes an event, it never
   // causes one (HIVE-150).
   [CH.remoteLinkStatus]: 'read',
@@ -861,6 +863,13 @@ const PROCESS_LOCAL_REFUSALS = {
   */
   [CH.notificationsBadge]:
     "notifications:badge writes the unread count onto the answering machine's dock. The count belongs on the dock of the machine showing that inbox, so the asking machine badges its own and a server refuses it.",
+  /*
+    The tenth (HIVE-211). Try now on a client whose server dropped: it restarts *this* process's
+    reconnect loop. There is no socket to proxy it over at the moment it matters, and a server has
+    no loop of a peer's to restart.
+  */
+  [CH.remoteDialNow]:
+    "remote:dial-now restarts the answering process's own reconnect loop. A server has no loop of a peer's to restart, so the asking machine dials for itself and a server refuses it.",
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**

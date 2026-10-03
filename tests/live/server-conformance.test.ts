@@ -944,8 +944,8 @@ interface RendererDriver {
  * registry `registerIpcHandlers` fills. That surface is deliberately **not**
  * `ipcMain`, and the whole of HIVE-144 lives on `ipcMain`: `config:set-remote`
  * unbinds the channel it is answering on there, `registerRemoteProxy` rebinds
- * those same channel names against a socket there, and Ruling 24's three
- * `PROCESS_LOCAL` channels are the ones that keep answering locally *there*
+ * those same channel names against a socket there, and the `PROCESS_LOCAL`
+ * channels (three at Ruling 24, ten since HIVE-211) keep answering locally *there*
  * while everything beside them is proxied. A `ws` client cannot see any of it.
  * The renderer is the only caller that can, because it is the only caller
  * `ipcMain` has — which is precisely why "a second app attaches" was left as a
