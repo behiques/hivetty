@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { FLAP_RANK, mergedWords, sortHatchery } from '@/lib/pr-hatch';
-import type { HatcheryRow, Pr } from '@/types/pull-request';
+import { FLAP_RANK, hatchStatus, mergedWords, sortHatchery } from '@/lib/pr-hatch';
+import type { HatchFacts, HatcheryRow, Pr } from '@/types/pull-request';
 
 /** Local wall-clock times, so the assertions hold in any TZ the suite runs in. */
 const local = (month: number, day: number, h: number, m: number) => new Date(2026, month, day, h, m).getTime();
@@ -58,5 +58,64 @@ describe('sortHatchery', () => {
     const rows = [row(1, 'LARVA'), row(2, 'SUMMONS')];
     sortHatchery(rows);
     expect(rows.map((r) => r.pr.n)).toEqual([1, 2]);
+  });
+});
+
+describe('hatchStatus', () => {
+  const none: HatchFacts = { stage: null, askedMe: false, mergeWaiting: false };
+  const held = (stage: string): HatchFacts => ({ ...none, stage });
+  const of = (over: Partial<Pr>, facts = none) => hatchStatus(pr(over), facts, NOW);
+
+  it.each([
+    ['1 merged', { state: 'merged', mergedAt: new Date(local(9, 3, 11, 32)).toISOString() }, none, 'HATCHED', 'brand', 'Merged 11:32'],
+    ['2 merge waiting', { state: 'approved' }, { ...none, mergeWaiting: true }, 'SUMMONS', 'amber', 'Approved · waiting for your merge'],
+    ['2 asked at approval', {}, { ...held('approval'), askedMe: true }, 'SUMMONS', 'amber', 'Open · the shipper asks about the review'],
+    ['2 asked elsewhere', { state: 'draft' }, { ...held('self-review'), askedMe: true }, 'SUMMONS', 'amber', 'Draft · the shipper asks you'],
+    ['3 intake', { state: 'draft' }, held('intake'), 'COCOONING', 'muted', 'Draft · the shipper took it'],
+    ['3 self-review', { state: 'draft' }, held('self-review'), 'COCOONING', 'muted', 'Draft · self review by acr'],
+    ['3 fix-self', { state: 'draft' }, held('fix-self'), 'COCOONING', 'muted', 'Draft · fixing the self review'],
+    ['4 ci running', { checks: 'running' }, held('ci'), 'INCUBATING', 'green', 'Open · checks running'],
+    ['4 ready', {}, held('ready'), 'INCUBATING', 'green', 'Open · being marked ready'],
+    ['5 findings', { findings: 3 }, held('findings'), 'MUTATING', 'green', 'Open · 3 open findings, fixer on it'],
+    ['5 ci failing', { checks: 'failing' }, held('ci'), 'MUTATING', 'green', 'Open · checks failing, fixer on it'],
+    ['6 approval', {}, held('approval'), 'BURROWED', 'muted', 'Open · waiting on review'],
+    ['7 merge', { state: 'approved' }, held('merge'), 'HATCHING', 'green', 'Approved · the shipper is merging it'],
+    ['8 draft unheld', { state: 'draft', checks: 'failing' }, none, 'LARVA', 'muted', 'Draft · nobody is driving it'],
+    ['9 failing', { checks: 'failing' }, none, 'SUMMONS', 'amber', 'Open · checks failing'],
+    ['9 findings', { findings: 1 }, none, 'SUMMONS', 'amber', 'Open · 1 open finding'],
+    ['9 both', { checks: 'failing', findings: 2 }, none, 'SUMMONS', 'amber', 'Open · checks failing, 2 open findings'],
+    ['10 approved', { state: 'approved' }, none, 'SUMMONS', 'amber', 'Approved · waiting for your merge'],
+    ['11 running', { checks: 'running' }, none, 'INCUBATING', 'green', 'Open · checks running'],
+    ['12 mine', {}, none, 'BURROWED', 'muted', 'Open · waiting on review'],
+    ['12 not mine', { mine: false }, none, 'BURROWED', 'muted', 'Open · waits on its author'],
+  ] as const)('rule %s', (_name, over, facts, flap, tone, github) => {
+    const status = of(over as Partial<Pr>, facts);
+    expect(status).toMatchObject({ flap, tone, github, rank: FLAP_RANK[flap], needsYou: flap === 'SUMMONS' });
+  });
+
+  it('carries the HATCHED time as at', () => {
+    expect(of({ state: 'merged', mergedAt: new Date(local(9, 3, 11, 32)).toISOString() }).at).toBe('11:32');
+    expect(of({}).at).toBeUndefined();
+  });
+
+  it('gives the first matching rule: merged beats a waiting merge, an ask beats the stage', () => {
+    expect(of({ state: 'merged', mergedAt: null }, { ...held('merge'), mergeWaiting: true }).flap).toBe('HATCHED');
+    expect(of({ findings: 2 }, { ...held('findings'), askedMe: true }).flap).toBe('SUMMONS');
+  });
+
+  it('never summons for someone else\'s PR (rules 2, 9, 10)', () => {
+    expect(of({ mine: false, state: 'approved' }, { ...none, mergeWaiting: true, askedMe: true }).flap).not.toBe('SUMMONS');
+    expect(of({ mine: false, checks: 'failing', findings: 2 }).flap).toBe('BURROWED');
+    expect(of({ mine: false, state: 'approved' }).flap).toBe('BURROWED');
+  });
+
+  it('never paints a draft green at any held stage', () => {
+    for (const stage of ['intake', 'self-review', 'fix-self', 'ready', 'ci', 'findings', 'approval', 'merge', 'unheard-of']) {
+      expect(of({ state: 'draft', checks: 'running', findings: 1 }, held(stage)).tone).not.toBe('green');
+    }
+  });
+
+  it('reads an unknown stage as rule 12 for a non-draft', () => {
+    expect(of({}, held('unheard-of'))).toMatchObject({ flap: 'BURROWED', github: 'Open · waiting on review' });
   });
 });

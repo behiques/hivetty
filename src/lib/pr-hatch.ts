@@ -1,4 +1,4 @@
-import type { Flap, HatcheryRow } from '@/types/pull-request';
+import type { Flap, FlapTone, HatchFacts, HatcheryRow, HatchStatus, Pr } from '@/types/pull-request';
 
 /**
  * The PR hatch status (HIVE-215): one rule for every surface that names a
@@ -52,4 +52,81 @@ export function sortHatchery(rows: readonly HatcheryRow[]): HatcheryRow[] {
     if (a.pr.state === 'merged') return newestFirst(a.pr.mergedAt, b.pr.mergedAt);
     return a.hatch.rank - b.hatch.rank || newestFirst(a.pr.updatedAt, b.pr.updatedAt);
   });
+}
+
+const TONE: Record<Flap, FlapTone> = {
+  SUMMONS: 'amber',
+  HATCHING: 'green',
+  MUTATING: 'green',
+  INCUBATING: 'green',
+  COCOONING: 'muted',
+  BURROWED: 'muted',
+  LARVA: 'muted',
+  HATCHED: 'brand',
+};
+
+const STATE_WORD = { open: 'Open', approved: 'Approved', draft: 'Draft', merged: 'Merged' } as const;
+const findingsWords = (n: number) => `${n} open finding${n === 1 ? '' : 's'}`;
+const COCOON_WORDS: Record<string, string> = {
+  intake: 'the shipper took it',
+  'self-review': 'self review by acr',
+  'fix-self': 'fixing the self review',
+};
+
+const status = (flap: Flap, github: string, at?: string): HatchStatus => ({
+  flap,
+  ...(at === undefined ? {} : { at }),
+  tone: TONE[flap],
+  github,
+  rank: FLAP_RANK[flap],
+  needsYou: flap === 'SUMMONS',
+});
+
+/**
+ * A PR's flap, by the ticket's table: first match wins (HIVE-215).
+ *
+ * "Held" is `facts.stage !== null`. SUMMONS is only ever yours. A draft is
+ * never green: held at any stage it is COCOONING, unheld it is LARVA. A held
+ * stage the table does not name falls through to the unheld rules.
+ */
+export function hatchStatus(
+  pr: Pick<Pr, 'state' | 'findings' | 'checks' | 'mine' | 'mergedAt'>,
+  facts: HatchFacts,
+  now: number,
+): HatchStatus {
+  const { stage } = facts;
+  const s = STATE_WORD[pr.state];
+  const failing = pr.checks === 'failing';
+
+  if (pr.state === 'merged') {
+    const merged = mergedWords(pr.mergedAt, now);
+    return status('HATCHED', merged.words, merged.at);
+  }
+  if (pr.mine && facts.mergeWaiting) return status('SUMMONS', 'Approved · waiting for your merge');
+  if (pr.mine && facts.askedMe) {
+    return status('SUMMONS', `${s} · ${stage === 'approval' ? 'the shipper asks about the review' : 'the shipper asks you'}`);
+  }
+  if (stage !== null) {
+    const cocoon = COCOON_WORDS[stage];
+    if (cocoon !== undefined) return status('COCOONING', `${s} · ${cocoon}`);
+    if (pr.state === 'draft') return status('COCOONING', `Draft · held at ${stage}`);
+    if ((stage === 'ready' || stage === 'ci') && !failing) {
+      const why = pr.checks === 'running' ? 'checks running' : stage === 'ready' ? 'being marked ready' : 'checks passing';
+      return status('INCUBATING', `${s} · ${why}`);
+    }
+    if (stage === 'findings') {
+      return status('MUTATING', `${s} · ${pr.findings > 0 ? `${findingsWords(pr.findings)}, fixer on it` : 'fixer on it'}`);
+    }
+    if (stage === 'ci') return status('MUTATING', `${s} · checks failing, fixer on it`);
+    if (stage === 'approval') return status('BURROWED', `${s} · waiting on review`);
+    if (stage === 'merge') return status('HATCHING', `${s} · the shipper is merging it`);
+  }
+  if (pr.state === 'draft') return status('LARVA', 'Draft · nobody is driving it');
+  if (pr.mine && (failing || pr.findings > 0)) {
+    const why = [failing ? 'checks failing' : null, pr.findings > 0 ? findingsWords(pr.findings) : null];
+    return status('SUMMONS', `${s} · ${why.filter((w) => w !== null).join(', ')}`);
+  }
+  if (pr.mine && pr.state === 'approved') return status('SUMMONS', 'Approved · waiting for your merge');
+  if (pr.checks === 'running') return status('INCUBATING', `${s} · checks running`);
+  return status('BURROWED', `${s} · ${pr.mine ? 'waiting on review' : 'waits on its author'}`);
 }
