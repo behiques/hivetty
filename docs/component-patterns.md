@@ -371,6 +371,32 @@ only just made. Over a live terminal the stage steps aside entirely and the
 surface focuses itself, which is the same guard duplicated rather than assumed:
 it is the same bug in both places.
 
+## The agent page
+
+`AgentPage` (`features/agents/components/agent-page.tsx`, HIVE-204) is one agent's page:
+a header, then the body the switch picks. The header carries the identity, the
+`SegmentedControl` for **Activity | Definition**, Run now and Pause; in Classic, which has
+no bar, a back button too, until HIVE-213 retires Classic. Activity is `AgentView`;
+Definition is `AgentDefinition`, which owns read, save, rename, delete, revert and the
+shipped strip for one agent and renders `AgentEditor`.
+
+- **Which agent, which view** is `agentPage` in ui-store (`openAgentPage`,
+  `setAgentPageView`, `closeAgentPage`); `name: null` is a new agent never saved.
+  `openTab(id, 'agents')` sets it to Activity, so `openEntity` needs no change.
+- **The stage.** `resolveView` takes `agents` (the Agents place owns the stage: round
+  two, or Classic with a page open) and returns `'agents'` unless the active tab is an
+  agent, which still resolves to `'agent'`. `'agents'` mounts `AgentsStage`: the page, or
+  "Pick an agent". Both mount `AgentPage` keyed by name.
+- **Drafts** live in editor-store's `agentDrafts`, keyed by name (`''` for the new agent),
+  so leaving the page loses nothing and asks nothing. Revert is the only discard. A Save
+  that creates or renames moves the draft to the new name.
+- **Run now** refuses with `runRefusal` (no file, or a dirty draft) and otherwise answers
+  through `agentRunQueued` / `agentRunRefusal`. The notice is the page's, drawn by
+  whichever view is showing.
+- **Settings stays fenced.** Settings › Agents opens the page through ui-store and
+  imports nothing from the agents slice; the atoms both use (`SettingsGroup`,
+  `InlineConfirm`, the shipped marker) live in `features/shared/components/`.
+
 ## The new-session picker
 
 Keyboard-first: New session → type a query → Enter → a live terminal, hands
