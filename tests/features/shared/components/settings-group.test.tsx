@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import { SettingsProviderGroup } from '@features/settings/components/settings-provider-group';
 
 describe('SettingsGroup', () => {

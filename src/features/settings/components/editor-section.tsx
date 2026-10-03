@@ -4,7 +4,7 @@ import {
 } from '@components/ui/segmented-control';
 import { SelectField, type SelectFieldOption } from '@components/ui/select-field';
 import { Switch } from '@components/ui/switch';
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { TERMINAL_FONTS, type TerminalFontId } from '@lib/terminal/fonts';
 import {

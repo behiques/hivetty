@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { TextField } from '@components/ui/text-field';
 import { ContainerCommandPreview } from '@features/settings/components/container-command-preview';
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import { SettingsNestingContext } from '@features/settings/components/settings-nesting';
 import { setProjectRuntimeConfig } from '@lib/project-config';
 import type {

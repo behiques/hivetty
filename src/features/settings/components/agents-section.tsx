@@ -20,13 +20,13 @@ import {
 import { Icon } from '@components/ui/icon';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { AgentEditor } from '@features/settings/components/agent-editor';
-import { InlineConfirm } from '@features/settings/components/inline-confirm';
+import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import {
   HeldBanner,
   ShippedDot,
   ShippedStrip,
-} from '@features/settings/components/shipped-marker';
+} from '@features/shared/components/shipped-marker';
 import { useAgents } from '@hooks/use-agents';
 import { useShipped } from '@hooks/use-shipped';
 import {

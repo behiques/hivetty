@@ -4,7 +4,7 @@ import {
   SegmentedControl,
   type SegmentedOption,
 } from '@components/ui/segmented-control';
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { useProjectConfig } from '@hooks/use-project-config';
 import {

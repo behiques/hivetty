@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@components/ui/button';
 import { Switch } from '@components/ui/switch';
 import { TextField } from '@components/ui/text-field';
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import {
   forgetRemoteDevice,
   pairDevice,

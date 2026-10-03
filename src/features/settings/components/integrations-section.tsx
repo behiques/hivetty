@@ -7,7 +7,7 @@ import { JiraConnectionGroup } from '@features/settings/components/jira-connecti
 import { JiraCredentialGroup } from '@features/settings/components/jira-credential-group';
 import { JiraQueryGroup } from '@features/settings/components/jira-query-group';
 import { PathProbes } from '@features/settings/components/path-probes';
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import { SettingsProviderGroup } from '@features/settings/components/settings-provider-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SlackGroup } from '@features/settings/components/slack-group';

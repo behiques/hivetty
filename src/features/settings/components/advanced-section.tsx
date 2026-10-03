@@ -11,7 +11,7 @@ import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { ConfigResetConfirm } from '@features/settings/components/config-reset-confirm';
 import { ContainerAliasGroup } from '@features/settings/components/container-alias-group';
 import { ServerModeGroup } from '@features/settings/components/server-mode-group';
-import { SettingsGroup } from '@features/settings/components/settings-group';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import {
   useAttachedServer,

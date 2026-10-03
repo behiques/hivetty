@@ -27,14 +27,14 @@ import {
 
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { REMOTE_DISABLED_REASON } from '@config/runtime';
-import { InlineConfirm } from '@features/settings/components/inline-confirm';
+import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import { SessionPluginsRow } from '@features/settings/components/session-plugins-row';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import {
   HeldBanner,
   ShippedDot,
   ShippedStrip,
-} from '@features/settings/components/shipped-marker';
+} from '@features/shared/components/shipped-marker';
 import { SkillBundle } from '@features/settings/components/skill-bundle';
 import { SkillEditor } from '@features/settings/components/skill-editor';
 import { SkillPathPrompt } from '@features/settings/components/skill-path-prompt';

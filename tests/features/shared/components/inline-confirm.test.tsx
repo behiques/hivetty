@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { InlineConfirm } from '@features/settings/components/inline-confirm';
+import { InlineConfirm } from '@features/shared/components/inline-confirm';
 
 /**
  * The shell both destructive confirmations share. What matters is that it
