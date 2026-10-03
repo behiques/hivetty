@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session } from '@/types/entity';
+import type { AgentSummary } from '@shared/agent-contract';
 import { TheComb } from '@features/home/components/the-comb';
 import { COMB_W, layoutComb } from '@lib/swarm/comb';
 import { useAppearanceStore } from '@stores/appearance-store';
@@ -185,5 +186,62 @@ describe('TheComb — hover, click and the hidden list', () => {
     expect(buttons[0]).toHaveAccessibleName('s0, Summons · p1, needs input');
     fireEvent.click(buttons[1]!);
     expect(openEntity).toHaveBeenCalledWith('s1');
+  });
+});
+
+describe('TheComb — the cells that fold others (decision D6)', () => {
+  const agentSummary = (name: string): AgentSummary => ({
+    name, description: '', icon: 'Robot', status: 'working', wake: { on: [] }, mcp: [], tools: [], rotateAfter: 50, runs: [],
+  });
+
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      { left: 0, top: 0, width: COMB_W, height: 520, right: COMB_W, bottom: 520, x: 0, y: 0, toJSON: () => ({}) } as DOMRect,
+    );
+  });
+
+  it('opens Agents from the swarm\'s "+N" cell', () => {
+    useHiveStore.setState({ entities: {}, order: [], agentOrder: [] });
+    act(() => useHiveStore.getState().hydrateAgents(Array.from({ length: 16 }, (_, i) => agentSummary(`agent-${i}`))));
+    render(<TheComb label="x" />);
+    fireEvent.click(screen.getByRole('button', { name: /^3 more agents/ }));
+    expect(useUiStore.getState().place).toBe('agents');
+  });
+
+  it('opens Sessions on every project from the "+N projects" cell', () => {
+    const entities = Object.fromEntries(
+      Array.from({ length: 13 }, (_, i) => [`s${i}`, { ...sess(`s${i}`, 'idle'), project: `p${i}` }]),
+    );
+    useHiveStore.setState({ entities, order: Object.keys(entities), agentOrder: [] });
+    act(() => useUiStore.getState().setSessionsProject('p0'));
+    render(<TheComb label="x" />);
+    fireEvent.click(screen.getByRole('button', { name: /^2 more projects/ }));
+    expect(useUiStore.getState()).toMatchObject({ place: 'sessions', sessionsProject: null });
+  });
+
+  it('does nothing over empty comb', () => {
+    const openEntity = vi.fn(() => true);
+    useHiveStore.setState({ openEntity });
+    render(<TheComb label="x" />);
+    fireEvent.mouseMove(screen.getByRole('img'), { clientX: 5, clientY: 5 });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    fireEvent.click(screen.getByRole('img'), { clientX: 5, clientY: 5 });
+    expect(openEntity).not.toHaveBeenCalled();
+  });
+
+  it('draws a working cell to its plan, and steps on real elapsed time', () => {
+    act(() =>
+      useHiveStore.getState().setPlan('a', {
+        entityId: 'a', source: 'task-tools', allDone: false,
+        tasks: [{ id: '1', title: 'x', status: 'completed' }, { id: '2', title: 'y', status: 'pending' }],
+      }),
+    );
+    render(<TheComb label="x" />);
+    FakeIntersectionObserver.last!.fire(true);
+    const before = rec.calls.filter((c) => c.op === 'fillRect').length;
+    act(() => raf.mock.calls[0]![0](16));
+    act(() => raf.mock.calls[1]![0](32));
+    expect(rec.calls.filter((c) => c.op === 'fillRect').length).toBe(before + 2);
   });
 });
