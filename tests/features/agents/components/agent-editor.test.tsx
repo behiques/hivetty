@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AgentEditor } from '@features/settings/components/agent-editor';
+import { AgentEditor } from '@features/agents/components/agent-editor';
 import { surfaceText } from '@tests/support/editor-surface';
 
 import type { AgentProblem } from '@shared/agent-contract';
@@ -29,7 +29,7 @@ interface Props {
   onChange: (source: string) => void;
   onSave: () => void;
   onDelete: () => void;
-  onRun: () => void;
+  onRevert: () => void;
   notice: string | null;
   taken: readonly string[];
 }
@@ -43,7 +43,7 @@ const props: Props = {
   onChange: vi.fn(),
   onSave: vi.fn(),
   onDelete: vi.fn(),
-  onRun: vi.fn(),
+  onRevert: vi.fn(),
   notice: null,
 };
 
@@ -304,50 +304,26 @@ describe('AgentEditor', () => {
 
   describe('the footer', () => {
     /*
-      The waker landed, so the button is live. It used to carry a literal
-      `disabled` and a title saying agents did not run yet, which was false on
-      the one screen where a user had just finished configuring one.
+      Run now left the footer for the agent page's header (HIVE-204), which
+      shows it in both views; the footer keeps the verbs about this buffer.
     */
-    it('runs a saved, valid definition', async () => {
-      const onRun = vi.fn();
+    it('has no Run now', () => {
+      setup();
 
-      setup({ onRun });
-
-      const run = screen.getByRole('button', { name: 'Run now' });
-
-      expect(run).toBeEnabled();
-      await userEvent.click(run);
-
-      expect(onRun).toHaveBeenCalled();
+      expect(screen.queryByRole('button', { name: 'Run now' })).toBeNull();
     });
 
-    /*
-      A wake reads AGENT.md off disk and never sees this buffer, so running it
-      would execute the previous version while the screen shows the new one.
-      Each refusal says which of the three it is — a disabled control with no
-      reason is what this pane replaced.
-    */
-    it.each([
-      ['unsaved edits', { dirty: true }, /save first/i],
-      ['a definition never saved', { path: null }, /no definition on disk/i],
-      [
-        'problems main refused',
-        { problems: [{ field: 'wake.every', reason: 'Must be a duration.' }] },
-        /fix the problems/i,
-      ],
-    ])('refuses to run with %s, and says why', async (_name, over, reason) => {
-      const onRun = vi.fn();
+    it('enables Revert only while dirty, and reverts on click', async () => {
+      const onRevert = vi.fn();
+      const { unmount } = render(<AgentEditor {...props} onRevert={onRevert} />);
 
-      setup({ ...over, onRun });
+      expect(screen.getByRole('button', { name: 'Revert' })).toBeDisabled();
+      unmount();
 
-      const run = screen.getByRole('button', { name: 'Run now' });
+      render(<AgentEditor {...props} dirty onRevert={onRevert} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Revert' }));
 
-      expect(run).toBeDisabled();
-      // Native title: the app mounts no TooltipProvider.
-      expect(run).toHaveAttribute('title', expect.stringMatching(reason));
-
-      await userEvent.click(run);
-      expect(onRun).not.toHaveBeenCalled();
+      expect(onRevert).toHaveBeenCalledTimes(1);
     });
 
     it('saves and deletes', async () => {

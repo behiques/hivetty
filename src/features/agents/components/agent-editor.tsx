@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 import { EditorSurface } from '@components/editor/editor-surface';
-import { AgentForm } from '@features/settings/components/agent-form';
+import { AgentForm } from '@features/agents/components/agent-form';
 import { languageFor } from '@lib/explorer/language';
 import type { AgentProblem } from '@shared/agent-contract';
 import { useEditorAppearance } from '@stores/appearance-store';
@@ -33,21 +33,14 @@ interface AgentEditorProps {
   onChange: (source: string) => void;
   onSave: () => void;
   onDelete: () => void;
-  /**
-   * Wake this agent once, now (HIVE-117's verb, reached from here at last).
-   *
-   * The section owns the call rather than this component, for the reason every
-   * other verb on this pane is a prop: the editor holds a buffer and knows
-   * nothing about which agent is open on disk — `path` is a string it renders,
-   * not a name it could pass to a bridge.
-   */
-  onRun: () => void;
+  /** Put the buffer back to the file as last read or saved. Offered only while dirty. */
+  onRevert: () => void;
   /**
    * What the last run attempt answered, or `null`.
    *
    * **Deliberately not a `problems` entry**, which is where this landed first
-   * and where it was a trap. `problems` is what makes Save refuse *and* what
-   * {@link cannotRun} reads, so reporting "it is already working" through it
+   * and where it was a trap. `problems` is what made Save refuse *and* what
+   * Run now's gate read, so reporting "it is already working" through it
    * disabled the very button that had just produced the message — and
    * relabelled it "this definition cannot be read", which was false: the
    * definition parsed, which is why the call reached main at all. The state
@@ -114,7 +107,7 @@ export function AgentEditor({
   onChange,
   onSave,
   onDelete,
-  onRun,
+  onRevert,
   notice,
   actionsHidden = false,
 }: AgentEditorProps) {
@@ -132,35 +125,6 @@ export function AgentEditor({
    */
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
-
-  /**
-   * Why Run now would refuse, or `null` when it would not.
-   *
-   * The button used to carry a literal `disabled` and the title "Agents do not
-   * run yet — that lands with the waker." The waker landed: `agents.run` is the
-   * same channel the agent view's own Run now has been calling since HIVE-117,
-   * and leaving a dead control beside it told users the feature was missing
-   * from the one screen where they had just finished configuring it.
-   *
-   * The three conditions are all about *what would actually run*. A wake reads
-   * `AGENT.md` off disk — it does not see this buffer — so running with unsaved
-   * edits would execute the previous version while the screen shows the new
-   * one, and running a definition main has already refused would fail on the
-   * problem the footer is showing. A never-saved agent has no file at all.
-   *
-   * Refusals that only main can know — the agent is working, or paused — are
-   * not predicted here and must not appear in this chain. They arrive as an
-   * `AgentRunResult` and are drawn from {@link AgentEditorProps.notice}, which
-   * says why that is a separate channel rather than a fourth condition.
-   */
-  const cannotRun =
-    path === null
-      ? 'Save it first — there is no definition on disk yet.'
-      : dirty
-        ? 'Save first — a wake reads the file, not this buffer.'
-        : problems.length > 0
-          ? 'Fix the problems first — this definition cannot be read.'
-          : null;
 
   /*
     What the footer says, and what it deliberately does not.
@@ -394,20 +358,13 @@ export function AgentEditor({
           >
             Delete
           </button>
-          {/*
-            Native `title`, not a Radix tooltip: this affordance predates
-            `TooltipProvider` (now mounted in `app.tsx` for the rail strips —
-            see `.claude/COMPONENTS.md`), and the one other
-            disabled-with-explanation control in the app made the same choice.
-          */}
           <button
             type="button"
-            disabled={cannotRun !== null}
-            onClick={onRun}
-            title={cannotRun ?? 'Wake this agent once, now.'}
+            onClick={onRevert}
+            disabled={!dirty}
             className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
           >
-            Run now
+            Revert
           </button>
           <button
             type="button"
