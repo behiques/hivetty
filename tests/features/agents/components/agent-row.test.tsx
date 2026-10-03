@@ -142,6 +142,17 @@ describe('AgentRow', () => {
     expect(screen.getByRole('button', { name: /^watcher, paused/ })).toBeInTheDocument();
   });
 
+  it('says paused for a paused agent that has written, beside its last word', () => {
+    hydrate({ status: 'paused' });
+    said({ kind: 'done', body: 'Shipped #303' });
+
+    render(<AgentRow id="watcher" />);
+
+    expect(screen.getByText('paused')).toHaveClass('text-amber');
+    expect(screen.getByText('Shipped #303')).toBeInTheDocument();
+    expect(screen.queryByText('done')).not.toBeInTheDocument();
+  });
+
   it('says the state, the live runs and the last word in its accessible name', () => {
     useHiveStore
       .getState()

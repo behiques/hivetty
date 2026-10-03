@@ -52,7 +52,7 @@ const messageOf = (cause: unknown) => (cause instanceof Error ? cause.message : 
  * as a coloured keyword (an ask by its ref, so it can be answered by name) and
  * the entry's first line. A definition that does not parse shows `invalid` and
  * its reason instead, because that is the one thing that helps; a paused agent
- * that has never written says `paused`.
+ * says `paused` in place of the keyword, beside its last word if it has one.
  *
  * ## The slot
  *
@@ -132,12 +132,12 @@ export function AgentRow({ id }: AgentRowProps) {
 
   let keyword = '';
   if (broken) keyword = 'invalid';
-  else if (last !== undefined) keyword = last.kind === 'ask' && last.ref !== undefined ? `ask ${last.ref}` : last.kind;
   else if (entity.status === 'paused') keyword = 'paused';
+  else if (last !== undefined) keyword = last.kind === 'ask' && last.ref !== undefined ? `ask ${last.ref}` : last.kind;
 
   const text = broken ? entity.invalid : (last?.line ?? '');
   const keywordTone =
-    broken || last === undefined ? 'text-amber' : (KEYWORD_TONE[last.kind] ?? 'text-subtle');
+    broken || paused || last === undefined ? 'text-amber' : (KEYWORD_TONE[last.kind] ?? 'text-subtle');
 
   const state = broken ? 'invalid' : STATUS_LABEL[entity.status];
   const name =
