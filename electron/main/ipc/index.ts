@@ -144,6 +144,7 @@ import type {
   JiraTransition,
 } from '@shared/jira-contract';
 import { LEDGER_DIR, OVERMIND } from '@shared/ledger-contract';
+import { closedAskThreads } from '@shared/ledger-derive';
 import {
   isThisMachineAction,
   type NotificationAction,
@@ -1784,6 +1785,20 @@ export function registerIpcHandlers(
     now: () => Date.now(),
     isForegroundEverywhere: (action) =>
       action.type === 'session' && isForegroundEverywhere(action.entityId),
+    /**
+     * Which asks are closed (HIVE-214): the same reading the renderer makes of
+     * its mirror, so the local dock and an attached dock count alike.
+     *
+     * `ledger` is bound further down; a count taken before it exists treats
+     * every ask as open, which is what a fresh log would say anyway.
+     */
+    closedAsks: () => {
+      try {
+        return closedAskThreads(ledger.read({}).entries);
+      } catch {
+        return new Set<string>();
+      }
+    },
     subjectName: (terminalId) => sessionNames.get(terminalId),
   });
 

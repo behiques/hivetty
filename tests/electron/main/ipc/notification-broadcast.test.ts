@@ -92,6 +92,7 @@ interface Presenter {
   announceRead: (id: string, unread: number) => void;
   announceDismissed: (id: string) => void;
   announceBadge: (count: number) => void;
+  closedAsks: () => ReadonlySet<string>;
 }
 
 let presenter: Presenter | undefined;
@@ -164,6 +165,11 @@ beforeEach(() => {
 describe('the notification hub’s presenters (HIVE-75)', () => {
   it('is wired at all — the fixture captured the presenter', () => {
     expect(presenter).toBeDefined();
+  });
+
+  /** HIVE-214: the hub learns which asks are closed from main's own ledger. */
+  it('hands the hub a closed-ask reader that answers before the ledger has entries', () => {
+    expect(presenter!.closedAsks()).toBeInstanceOf(Set);
   });
 
   it('reaches every surface with a raised notification', () => {
