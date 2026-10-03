@@ -1,11 +1,13 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PrChecks } from '@features/pull-requests/components/pr-checks';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { prKey, useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { hatchRow } from '@tests/support/hatchery';
 import { prDetail } from '@tests/support/pr-detail';
+import { expectNoHexColour, inLight } from '@tests/support/light';
 
 const { pr } = hatchRow({}, { flap: 'MUTATING', tone: 'green' });
 const key = prKey(pr.owner, pr.repo, pr.n);
@@ -28,6 +30,10 @@ beforeEach(() => {
   useHiveStore.setState({ loadPrChecks, loadJobLog, rerunFailed });
 });
 
+afterEach(() => {
+  act(() => useAppearanceStore.getState().setTheme('dark'));
+});
+
 describe('PrChecks', () => {
   it('reads on mount for this PR’s head branch', () => {
     render(<PrChecks pr={pr} detail={prDetail()} />);
@@ -39,6 +45,14 @@ describe('PrChecks', () => {
     seed([], {});
     render(<PrChecks pr={pr} detail={prDetail({ headSha: '9f3c2ab0123', checks: [] })} />);
     expect(screen.getByText('No checks on 9f3c2ab')).toBeInTheDocument();
+  });
+
+  it('renders in light on tokens alone (HIVE-210)', () => {
+    seed([run(2, 'new', 'failure'), run(1, 'old', 'success')], { 2: [job(21, 2, 'success'), job(22, 2, 'failure')] });
+    inLight();
+    const { container } = render(<PrChecks pr={pr} detail={prDetail()} />);
+    expect(screen.getByText('JOB22')).toBeInTheDocument();
+    expectNoHexColour(container);
   });
 
   it('draws the newest push, shows its failed job and reads that job’s log once', () => {

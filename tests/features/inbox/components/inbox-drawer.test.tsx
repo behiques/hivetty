@@ -1,13 +1,15 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { InboxDrawer } from '@features/inbox/components/inbox-drawer';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 
 import { seedLedger } from '@tests/support/ledger';
 import { notif, resetNotifIds } from '@tests/support/notifications';
+import { expectNoHexColour, inLight } from '@tests/support/light';
 
 const askEntry = (id: string) => ({
   id,
@@ -34,10 +36,22 @@ beforeEach(() => {
   ]);
 });
 
+afterEach(() => {
+  act(() => useAppearanceStore.getState().setTheme('dark'));
+});
+
 describe('InboxDrawer (HIVE-198)', () => {
   it('renders nothing while shut', () => {
     render(<InboxDrawer onStage={null} />);
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('renders in light on tokens alone (HIVE-210)', () => {
+    useUiStore.getState().openInboxDrawer();
+    inLight();
+    const { baseElement } = render(<InboxDrawer onStage={null} />);
+    expect(screen.getByText('2 asks · 1 session')).toBeInTheDocument();
+    expectNoHexColour(baseElement);
   });
 
   it('heads the queue and draws every card whole, then the sessions off stage', () => {

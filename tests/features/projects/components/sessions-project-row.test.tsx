@@ -39,7 +39,7 @@ describe('SessionsProjectRow (HIVE-197)', () => {
     render(<SessionsProjectRow project={nova} />);
     expect(screen.getByRole('button', { name: 'Unfold nova-web' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: 'New session in nova-web' })).not.toBeInTheDocument();
-    expect(screen.getByTitle('need you')).toHaveClass('text-amber');
+    expect(screen.getByTitle('need you')).toHaveClass('text-amber-count');
     expect(screen.getByTitle('other live')).toHaveClass('text-green');
   });
 

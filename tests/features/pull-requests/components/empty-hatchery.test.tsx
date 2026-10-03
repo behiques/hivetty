@@ -1,9 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EmptyHatchery } from '@features/pull-requests/components/empty-hatchery';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { useUiStore } from '@stores/ui-store';
+import { expectNoHexColour, inLight } from '@tests/support/light';
 
 const motion = { reduced: false };
 vi.mock('@/hooks/use-reduced-motion', () => ({ useReducedMotion: () => motion.reduced }));
@@ -13,7 +15,18 @@ beforeEach(() => {
   useUiStore.getState().reset();
 });
 
+afterEach(() => {
+  act(() => useAppearanceStore.getState().setTheme('dark'));
+});
+
 describe('EmptyHatchery', () => {
+  it('renders in light on tokens alone (HIVE-210)', () => {
+    inLight();
+    const { container } = render(<EmptyHatchery />);
+    expect(screen.getByRole('heading', { name: 'The Hatchery is quiet' })).toBeInTheDocument();
+    expectNoHexColour(container);
+  });
+
   it('says the Hatchery is quiet and what comes next', () => {
     render(<EmptyHatchery />);
     expect(screen.getByRole('heading', { name: 'The Hatchery is quiet' })).toBeInTheDocument();

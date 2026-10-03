@@ -40,6 +40,9 @@
   --cc-brand: #8fa7f2;
   --cc-green: #74b79c;
   --cc-amber: #ffac47;
+  /* Needs-you counts drawn as amber text (activity bar, Inbox pill, project rows, Home's strip).
+     Dark already clears AA, so it is the amber itself. */
+  --cc-amber-count: var(--cc-amber);
   --cc-red: #ff8d85;
   --cc-chip: #1c2648;
   /**
@@ -259,6 +262,9 @@ body[data-theme='light'] {
   --cc-brand: #334fa9;
   --cc-green: #2e6b52;
   --cc-amber: #c77414;
+  /* #c77414 as text is 3.5:1 on white; 30% ink takes it past 4.5:1 on every light ground,
+     chip included (HIVE-210). A mix, not a hex: an imported theme derives it from its own colours. */
+  --cc-amber-count: color-mix(in srgb, var(--cc-amber) 70%, var(--cc-ink));
   --cc-red: #d3372f;
   --cc-chip: #edf2f4;
   /* Light lifts by *deepening*: the chip already sits below a white panel, so
@@ -352,6 +358,9 @@ body[data-theme='light'] {
   --color-brand: var(--cc-brand);
   --color-green: var(--cc-green);
   --color-amber: var(--cc-amber);
+  --color-amber-count: var(--cc-amber-count);
+  --color-creep: var(--cc-creep);
+  --color-chitin: var(--cc-chitin);
   --color-red: var(--cc-red);
   --color-chip: var(--cc-chip);
   --color-chip-hover: var(--cc-chip-hover);

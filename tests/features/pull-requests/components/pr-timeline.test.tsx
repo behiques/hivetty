@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrTimeline } from '@features/pull-requests/components/pr-timeline';
 import type { PrTimeline as Timeline } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { prKey, useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { hatchRow } from '@tests/support/hatchery';
+import { expectNoHexColour, inLight } from '@tests/support/light';
 
 const MIN = 60_000;
 const T0 = new Date(2026, 9, 3, 11, 0).getTime();
@@ -59,6 +61,10 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
+afterEach(() => {
+  act(() => useAppearanceStore.getState().setTheme('dark'));
+});
+
 describe('PrTimeline', () => {
   it('reads on mount, once a minute while shown, and not after it unmounts', async () => {
     const { unmount } = render(<PrTimeline pr={pr} />);
@@ -93,6 +99,14 @@ describe('PrTimeline', () => {
     expect(screen.queryByText('12:30')).toBeNull();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('renders in light on tokens alone (HIVE-210)', () => {
+    seed();
+    inLight();
+    const { container } = render(<PrTimeline pr={pr} />);
+    expect(screen.getByRole('heading', { name: /where the 3h 10m went/i })).toBeInTheDocument();
+    expectNoHexColour(container);
   });
 
   it('draws every lane and its marks', () => {

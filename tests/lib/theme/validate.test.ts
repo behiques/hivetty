@@ -268,6 +268,15 @@ describe('the creature colours (HIVE-199)', () => {
     const result = importTheme(JSON.stringify(BUILT_IN_THEME), 'hive.json');
     expect(result.ok && result.theme.modes.light.ui.chitin).toBe('#6a54b0');
   });
+
+  it('rejects an unreadable creep like any other ui colour', () => {
+    const modes = structuredClone(BUILT_IN_THEME.modes) as Record<string, any>;
+    modes.dark.ui.creep = 'not-a-colour';
+    const result = importTheme(fullTheme({ modes }), 'bad.json');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.detail).toBe('modes.dark.ui.creep is not a colour the Hive can read.');
+  });
 });
 
 describe('colour parsing', () => {

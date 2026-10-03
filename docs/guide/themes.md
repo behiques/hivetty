@@ -49,9 +49,13 @@ template is easiest.
 
 | Group | Keys | Colours |
 | --- | --- | --- |
-| `ui` | 28 | the app chrome: backgrounds, borders, ink, brand, status colours |
+| `ui` | 28 (+2 optional) | the app chrome: backgrounds, borders, ink, brand, status colours |
 | `syntax` | 11 | the editor: keyword, string, number, comment, selection… |
 | `terminal` | 11 (+2 optional) | xterm: background, ink and the ANSI colours |
+
+`ui.creep` and `ui.chitin` colour Home's comb creatures. They are optional: a theme without them
+imports with no warning, and the app derives both from the theme's own background, brand and ink,
+so its creatures match it rather than the Hive's violet.
 
 The importer refuses a file over 256 KB, a version other than 1, a missing mode, a bad
 colour (naming the key), or a `terminal.bg` that differs from `ui.termBg`.
