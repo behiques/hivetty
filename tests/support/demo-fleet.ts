@@ -485,6 +485,8 @@ export function createDemoFleet(): DemoFleet {
         findings: 2,
         checks: 'passing',
         updatedAt: '2026-08-09T14:37:00Z',
+        mergedAt: null,
+        mine: true,
       },
       {
         number: 219,
@@ -497,6 +499,8 @@ export function createDemoFleet(): DemoFleet {
         findings: 0,
         checks: 'passing',
         updatedAt: '2026-08-09T14:20:00Z',
+        mergedAt: null,
+        mine: true,
       },
       {
         number: 495,
@@ -509,6 +513,8 @@ export function createDemoFleet(): DemoFleet {
         findings: 0,
         checks: 'running',
         updatedAt: '2026-08-09T13:58:00Z',
+        mergedAt: null,
+        mine: true,
       },
       {
         number: 31,
@@ -521,6 +527,8 @@ export function createDemoFleet(): DemoFleet {
         findings: 0,
         checks: 'passing',
         updatedAt: '2026-08-09T09:14:00Z',
+        mergedAt: '2026-08-09T09:14:00Z',
+        mine: true,
       },
       {
         number: 77,
@@ -533,6 +541,8 @@ export function createDemoFleet(): DemoFleet {
         findings: 0,
         checks: 'passing',
         updatedAt: '2026-08-09T11:02:00Z',
+        mergedAt: '2026-08-09T11:02:00Z',
+        mine: true,
       },
     ],
     orchLines: [

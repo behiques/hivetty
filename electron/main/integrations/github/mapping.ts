@@ -136,7 +136,7 @@ function repoOf(raw: Record<string, unknown>): { name: string; owner: string } |
  * routine outcome here rather than a corruption — those arrive as `{}` and leave
  * as `null`, costing themselves and nothing else.
  */
-export function toPrRecord(raw: unknown): PrRecord | null {
+export function toPrRecord(raw: unknown, mine = false): PrRecord | null {
   if (!isRecord(raw)) return null;
 
   const number = raw.number;
@@ -168,6 +168,8 @@ export function toPrRecord(raw: unknown): PrRecord | null {
     findings: countFindings(raw),
     checks: toChecks(raw),
     updatedAt,
+    mergedAt: text(raw.mergedAt),
+    mine,
   };
 }
 
@@ -245,7 +247,7 @@ export function collectPrs(
 
   for (const node of nodesOf(payload, 'open')) {
     if (!isAuthoredBy(node, login)) continue;
-    const record = toPrRecord(node);
+    const record = toPrRecord(node, true);
     if (record !== null) records.push(record);
   }
 
@@ -255,7 +257,7 @@ export function collectPrs(
     const merged = mergedAtMs(node);
     if (merged === null || now - merged > GH_MERGED_WINDOW_MS) continue;
 
-    const record = toPrRecord(node);
+    const record = toPrRecord(node, true);
     if (record !== null) records.push(record);
   }
 
@@ -284,15 +286,19 @@ export function collectPrs(
  *
  * The sort is shared: open above merged, newest first within each. A search
  * result set reads like the list it replaces, so it is ordered like it.
+ *
+ * `mine` is the viewer's own authorship, read from the same payload's
+ * `viewer { login }` (HIVE-215); a payload without one marks nothing mine.
  */
 export function collectSearchPrs(payload: unknown): PrRecord[] {
   if (!isRecord(payload)) return [];
 
+  const login = readViewerLogin(payload);
   const records: PrRecord[] = [];
 
   for (const key of ['open', 'merged'] as const) {
     for (const node of nodesOf(payload, key)) {
-      const record = toPrRecord(node);
+      const record = toPrRecord(node, login !== null && isAuthoredBy(node, login));
       if (record !== null) records.push(record);
     }
   }

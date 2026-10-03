@@ -459,6 +459,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing' as const,
               updatedAt: '2026-08-09T15:00:00Z',
+              mergedAt: null,
+              mine: true,
             },
           ],
         }));
@@ -553,6 +555,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing' as const,
               updatedAt: '2026-08-09T12:55:04Z',
+              mergedAt: null,
+              mine: true,
             },
             ...state.prs,
           ],
@@ -591,6 +595,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing' as const,
               updatedAt: '2026-08-09T12:55:04Z',
+              mergedAt: null,
+              mine: true,
             },
             ...state.prs,
           ],
@@ -634,6 +640,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing' as const,
               updatedAt: '2026-08-09T12:55:04Z',
+              mergedAt: null,
+              mine: true,
             },
             ...state.prs,
           ],
@@ -681,6 +689,8 @@ describe('hive-store selectors', () => {
         findings: 0,
         checks: 'passing' as const,
         updatedAt: '2026-08-09T15:00:00Z',
+        mergedAt: null,
+        mine: true,
       });
 
       act(() => {
@@ -1333,6 +1343,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing',
               updatedAt: '2026-08-10T09:00:00Z',
+              mergedAt: null,
+              mine: true,
             } satisfies PrRecord,
           ],
         }));
@@ -1366,6 +1378,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing',
               updatedAt: '2026-08-01T00:00:00Z',
+              mergedAt: null,
+              mine: true,
             } satisfies PrRecord,
             {
               number: 700,
@@ -1378,6 +1392,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing',
               updatedAt: '2026-08-20T00:00:00Z',
+              mergedAt: null,
+              mine: true,
             } satisfies PrRecord,
           ],
         }));
@@ -1410,6 +1426,8 @@ describe('hive-store selectors', () => {
               findings: 0,
               checks: 'passing',
               updatedAt: '2099-01-01T00:00:00Z',
+              mergedAt: '2099-01-01T00:00:00Z',
+              mine: true,
             } satisfies PrRecord,
           ],
         }));
