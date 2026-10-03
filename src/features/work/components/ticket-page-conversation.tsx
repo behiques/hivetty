@@ -10,7 +10,7 @@ import { SegmentedControl } from '@components/ui/segmented-control';
 import { AdfBlocks } from '@features/work/components/adf-blocks';
 import { LinesSkeleton, TicketProblem } from '@features/work/components/ticket-page-parts';
 import { commentTime } from '@features/work/ticket-presentation';
-import type { JiraComment } from '@shared/jira-contract';
+import type { JiraComment, JiraMention } from '@shared/jira-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import {
   useAppendTicketComment,
@@ -74,7 +74,7 @@ function CommentItem({
 }: {
   comment: JiraComment;
   url: string | undefined;
-  onReply: (author: string) => void;
+  onReply: (comment: JiraComment) => void;
 }) {
   const copy = () => {
     if (url === undefined) return;
@@ -106,7 +106,7 @@ function CommentItem({
               {commentTime(comment.created)}
             </time>
             <span className="invisible absolute inset-0 flex justify-end gap-3 group-focus-within:visible group-hover:visible">
-              <button type="button" className={ACTION} onClick={() => onReply(comment.author)}>
+              <button type="button" className={ACTION} onClick={() => onReply(comment)}>
                 Reply
               </button>
               <button type="button" className={ACTION} onClick={copy}>
@@ -151,12 +151,17 @@ function ReplyBox({
   replyTo,
   onForget,
   box,
+  mentions,
+  setMentions,
 }: {
   ticketKey: string;
   /** The author Reply was pressed on; only the placeholder says so. */
   replyTo: string | null;
   onForget: () => void;
   box: RefObject<HTMLTextAreaElement | null>;
+  /** The people the comment will mention, drawn as chips above the box (HIVE-216). */
+  mentions: JiraMention[];
+  setMentions: (next: JiraMention[]) => void;
 }) {
   const append = useAppendTicketComment();
   const [draft, setDraft] = useState('');
@@ -165,11 +170,11 @@ function ReplyBox({
 
   const post = () => {
     const markdown = draft.trim();
-    if (markdown === '') return;
+    if (markdown === '' && mentions.length === 0) return;
 
     setPosting(true);
     setProblem(null);
-    void addJiraComment({ key: ticketKey, markdown }).then((result) => {
+    void addJiraComment({ key: ticketKey, markdown, ...(mentions.length === 0 ? {} : { mentions }) }).then((result) => {
       setPosting(false);
       if (result === null) return setProblem([BRIDGE_ERROR]);
       if (!result.ok) return setProblem([result.error.message, ...(result.error.details ?? [])]);
@@ -181,6 +186,26 @@ function ReplyBox({
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border-soft bg-panel p-3">
+      {mentions.length === 0 ? null : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {mentions.map((mention) => (
+            <span
+              key={mention.accountId}
+              className="inline-flex items-center gap-1 rounded-[4px] bg-chip py-0.5 pl-1.5 pr-1 text-[12px] font-medium text-brand"
+            >
+              @{mention.name}
+              <button
+                type="button"
+                aria-label={`Remove mention of ${mention.name}`}
+                onClick={() => setMentions(mentions.filter((m) => m.accountId !== mention.accountId))}
+                className="px-0.5 text-muted hover:text-ink"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <textarea
         ref={box}
         rows={3}
@@ -200,7 +225,7 @@ function ReplyBox({
         <button
           type="button"
           onClick={post}
-          disabled={posting || draft.trim() === ''}
+          disabled={posting || (draft.trim() === '' && mentions.length === 0)}
           className="rounded-md bg-brand-fill px-3 py-1 text-ink hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-brand-fill"
         >
           {posting ? 'Posting…' : 'Comment'}
@@ -233,10 +258,20 @@ export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
   const retry = () => void load(ticketKey, 'page');
   const box = useRef<HTMLTextAreaElement>(null);
   const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [mentions, setMentions] = useState<JiraMention[]>([]);
 
-  const reply = (author: string) => {
-    setReplyTo(author);
+  const reply = (to: JiraComment) => {
+    setReplyTo(to.author);
+    // An agent's comment is the token owner's in Jira, which is you: nobody to notify.
+    if (to.via === undefined && to.authorId !== undefined) {
+      const mention = { accountId: to.authorId, name: to.author };
+      setMentions((held) => (held.some((m) => m.accountId === mention.accountId) ? held : [...held, mention]));
+    }
     box.current?.focus();
+  };
+  const forget = () => {
+    setReplyTo(null);
+    setMentions([]);
   };
 
   const items = useMemo<Item[]>(() => {
@@ -303,7 +338,14 @@ export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
         </>
       )}
 
-      <ReplyBox ticketKey={ticketKey} replyTo={replyTo} onForget={() => setReplyTo(null)} box={box} />
+      <ReplyBox
+        ticketKey={ticketKey}
+        replyTo={replyTo}
+        onForget={forget}
+        box={box}
+        mentions={mentions}
+        setMentions={setMentions}
+      />
     </section>
   );
 }

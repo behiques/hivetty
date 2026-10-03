@@ -43,7 +43,7 @@ const comment = (id: string, author: string, created: string, text: string): Jir
   created,
   body: [{ kind: 'paragraph', runs: [{ text, marks: [] }] }],
 });
-const dana = comment('100', 'Dana Kim', '2026-10-01T10:00:00.000Z', 'First words');
+const dana = { ...comment('100', 'Dana Kim', '2026-10-01T10:00:00.000Z', 'First words'), authorId: '712020:dana' };
 const acr = comment('101', 'acr', '2026-10-01T12:00:00.000Z', 'Second words');
 const event = (id: string, ts: number, meta: Record<string, unknown>, body = 'Built it\nmore detail'): LedgerEntry => ({
   id,
@@ -312,5 +312,81 @@ describe('comments posted for an agent (HIVE-216)', () => {
 
     expect(within(items()[0]!).getByText('YB')).toBeInTheDocument();
     expect(screen.queryByText('via the Hive')).toBeNull();
+  });
+});
+
+describe('mentions in the reply box (HIVE-216)', () => {
+  const box = () => screen.getByRole('textbox', { name: 'Comment on HIVE-7' });
+
+  it('Reply adds the author as a chip, and the post carries it', async () => {
+    addJiraComment.mockResolvedValue({ ok: true, value: comment('105', 'Me', '2026-10-01T15:00:00.000Z', 'ok') });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    expect(screen.getByText('@Dana Kim')).toBeInTheDocument();
+
+    await userEvent.type(box(), 'thanks');
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(addJiraComment).toHaveBeenCalledWith({
+      key: 'HIVE-7',
+      markdown: 'thanks',
+      mentions: [{ accountId: '712020:dana', name: 'Dana Kim' }],
+    });
+    expect(await screen.findByText('ok')).toBeInTheDocument();
+    expect(screen.queryByText('@Dana Kim')).toBeNull();
+  });
+
+  it('posts a comment that is the chip alone, and only then', async () => {
+    addJiraComment.mockResolvedValue({ ok: true, value: comment('106', 'Me', '2026-10-01T15:00:00.000Z', 'x') });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+    expect(screen.getByRole('button', { name: 'Comment' })).toBeDisabled();
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(addJiraComment).toHaveBeenCalledWith({
+      key: 'HIVE-7',
+      markdown: '',
+      mentions: [{ accountId: '712020:dana', name: 'Dana Kim' }],
+    });
+  });
+
+  it('× removes the chip; Escape in an empty box clears the chip and the reply', async () => {
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove mention of Dana Kim' }));
+    expect(screen.queryByText('@Dana Kim')).toBeNull();
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByText('@Dana Kim')).toBeNull();
+    expect(box()).toHaveAttribute('placeholder', 'Add a comment — markdown works');
+  });
+
+  it('Reply on an agent\'s comment, or one with no author id, adds no chip', async () => {
+    const viaAcr: JiraComment = { ...acr, authorId: '712020:me', via: { agent: 'acr' } };
+    seed({ comments: [viaAcr, comment('107', 'Old', '2026-10-01T16:00:00.000Z', 'no id')], total: 2 });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.click(within(items()[1]!).getByRole('button', { name: 'Reply' }));
+
+    expect(screen.queryByRole('button', { name: /Remove mention/ })).toBeNull();
+    expect(box()).toHaveAttribute('placeholder', 'Reply to Old…');
+  });
+
+  it('keeps the draft and the chips when Jira refuses', async () => {
+    addJiraComment.mockResolvedValue({ ok: false, error: { kind: 'invalid', message: 'Jira refused it' } });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+    await userEvent.type(box(), 'draft');
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(await screen.findByText('Jira refused it')).toBeInTheDocument();
+    expect(screen.getByText('@Dana Kim')).toBeInTheDocument();
+    expect(box()).toHaveValue('draft');
   });
 });
