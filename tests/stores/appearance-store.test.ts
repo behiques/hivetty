@@ -187,7 +187,7 @@ describe('appearance-store — no Classic state (HIVE-213)', () => {
   it('setDensity writes only the density attribute (HIVE-213)', () => {
     useAppearanceStore.getState().setDensity('compact');
     expect(document.body.dataset.density).toBe('compact');
-    expect(document.body.style.getPropertyValue('--cc-rail-w-left')).toBe('');
+    expect(document.body.getAttribute('style') ?? '').toBe('');
   });
 });
 
