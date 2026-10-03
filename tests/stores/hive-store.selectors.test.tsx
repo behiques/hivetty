@@ -51,8 +51,13 @@ import {
   useProjectSessions,
   usePrs,
   useSessionPr,
+  useNextTransition,
+  useOpenTicket,
   useTicketCount,
+  useTicketEvents,
+  useTicketGroups,
   useTicketPrs,
+  useTicketProperties,
   useTickets,
   useTicketSessions,
   useUnreadCount,
@@ -2172,6 +2177,158 @@ describe('comb selectors (HIVE-199)', () => {
       expect(renderHook(() => useChangedFileMark(undefined, 'b.ts')).result.current).toBeUndefined();
       expect(renderHook(() => useChangedFiles('s1')).result.current).toEqual([a, b]);
       expect(renderHook(() => useChangedFiles(undefined)).result.current).toBeUndefined();
+    });
+  });
+});
+
+/** The Work page's selectors (HIVE-203). */
+describe('Work page selectors (HIVE-203)', () => {
+  const entry = (id: string, ticket: string, from = 'builder') => ({
+    id,
+    ts: 1,
+    from,
+    kind: 'post' as const,
+    body: 'x',
+    meta: { ticket, stage: 'build' },
+  });
+  const sessionOn = (ticket: string): Session => {
+    const id = useHiveStore.getState().order.find((key) => {
+      const entity = useHiveStore.getState().entities[key];
+      return entity?.kind === 'session' && entity.ticket === ticket;
+    });
+    return useHiveStore.getState().entities[id!] as Session;
+  };
+  const setSession = (session: Session) =>
+    useHiveStore.setState((state) => ({ entities: { ...state.entities, [session.id]: session } }));
+
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useHiveStore.setState({ prs: [], ledger: [] });
+  });
+
+  describe('useTicketGroups', () => {
+    it('turns a ticket amber, and counts it, when a session on it waits', () => {
+      setSession({ ...sessionOn('GRAC-3018'), status: 'working' });
+      const { result } = renderHook(() => useTicketGroups());
+      const rowOf = () =>
+        result.current.groups.flatMap((group) => group.rows).find((row) => row.ticket.key === 'GRAC-3018');
+      const before = result.current.needYou;
+      expect(rowOf()?.tone).toBe('green');
+
+      act(() => setSession({ ...sessionOn('GRAC-3018'), status: 'waiting' }));
+
+      expect(rowOf()).toMatchObject({ tone: 'amber', fact: 'waiting on you' });
+      expect(result.current.needYou).toBe(before + 1);
+      expect(result.current.total).toBe(useHiveStore.getState().tickets.length);
+      expect(result.current.groups.map((group) => group.category)).toEqual(['in-progress', 'done']);
+    });
+  });
+
+  describe('useTicketProperties', () => {
+    const tag = (title: string, priority: string | null = null) =>
+      useHiveStore.setState((state) => ({
+        tickets: state.tickets.map((ticket) =>
+          ticket.key === 'GRAC-3018' ? { ...ticket, title, priority, assignee: null } : ticket,
+        ),
+      }));
+
+    it('reads the tag priority over Jira, the side, the project, the agent and Unassigned', () => {
+      tag('[BE][P4]-Hero', 'High');
+      useHiveStore.setState({ ledger: [entry('20261002-100000-0001', 'GRAC-3018', 'fixer')] });
+      const { result } = renderHook(() => useTicketProperties('GRAC-3018'));
+
+      expect(result.current).toEqual({
+        status: 'In Progress',
+        priority: 'P4',
+        side: 'BE',
+        project: sessionOn('GRAC-3018').project,
+        assignee: 'Unassigned',
+        agent: 'fixer',
+      });
+    });
+
+    it("uses Jira's priority without a tag, and has no side", () => {
+      tag('Hero', 'High');
+      const { result } = renderHook(() => useTicketProperties('GRAC-3018'));
+
+      expect(result.current?.priority).toBe('High');
+      expect(result.current).not.toHaveProperty('side');
+      expect(result.current).not.toHaveProperty('agent');
+    });
+
+    it('has no project without a live session, and an epic once the slice holds a parent', () => {
+      const { result } = renderHook(() => useTicketProperties('GRAC-2810'));
+      expect(result.current).not.toHaveProperty('project');
+      expect(result.current).not.toHaveProperty('priority');
+      expect(result.current).not.toHaveProperty('epic');
+
+      act(() =>
+        useHiveStore.setState({
+          ticketDetail: {
+            key: 'GRAC-2810',
+            detail: { description: [], parent: { key: 'GRAC-1', summary: 'Epic' } },
+            problems: {},
+          },
+        }),
+      );
+
+      expect(result.current?.epic).toBe('GRAC-1');
+    });
+
+    it('is undefined for an unknown ticket', () => {
+      const { result } = renderHook(() => useTicketProperties('NOPE-1'));
+      expect(result.current).toBeUndefined();
+    });
+  });
+
+  describe('useTicketEvents', () => {
+    it('merges the history with the tail, deduped and in id order, for this ticket only', () => {
+      const a = entry('20261002-100000-0001', 'GRAC-3018');
+      const b = entry('20261002-100000-0002', 'grac-3018');
+      const c = entry('20261002-100000-0003', 'GRAC-3018');
+      const other = entry('20261002-100000-0004', 'GRAC-3022');
+      useHiveStore.setState({
+        ledger: [c, b, other],
+        ticketDetail: { key: 'GRAC-3018', history: [a, b], problems: {} },
+      });
+      const { result } = renderHook(() => useTicketEvents('GRAC-3018'));
+
+      expect(result.current.map((event) => event.id)).toEqual([a.id, b.id, c.id]);
+    });
+
+    it("ignores another ticket's history", () => {
+      useHiveStore.setState({
+        ticketDetail: { key: 'GRAC-3022', history: [entry('20261002-100000-0001', 'GRAC-3022')], problems: {} },
+      });
+      const { result } = renderHook(() => useTicketEvents('GRAC-3018'));
+
+      expect(result.current).toEqual([]);
+    });
+  });
+
+  describe('useNextTransition', () => {
+    it('is undefined without transitions, and the forward one with them', () => {
+      const { result } = renderHook(() => useNextTransition('GRAC-3018'));
+      expect(result.current).toBeUndefined();
+
+      const done = { id: '31', name: 'Finish', to: { name: 'Done', statusCategory: 'done' as const } };
+      const back = { id: '11', name: 'Reopen', to: { name: 'To Do', statusCategory: 'todo' as const } };
+      act(() => useHiveStore.setState({ ticketDetail: { key: 'GRAC-3018', transitions: [back, done], problems: {} } }));
+
+      expect(result.current).toEqual(done);
+    });
+  });
+
+  describe('useOpenTicket', () => {
+    it('prefers the list, falls back to the issue the slice read, else nothing', () => {
+      const issue = { key: 'HIVE-8', status: 'To Do', statusCategory: 'todo' as const, title: 'x', priority: null, assignee: null };
+      useHiveStore.setState({ ticketDetail: { key: 'HIVE-8', issue, problems: {} } });
+
+      expect(renderHook(() => useOpenTicket('GRAC-3018')).result.current?.key).toBe('GRAC-3018');
+      expect(renderHook(() => useOpenTicket('HIVE-8')).result.current).toEqual(issue);
+      expect(renderHook(() => useOpenTicket('HIVE-9')).result.current).toBeUndefined();
+      expect(renderHook(() => useOpenTicket(null)).result.current).toBeUndefined();
     });
   });
 });

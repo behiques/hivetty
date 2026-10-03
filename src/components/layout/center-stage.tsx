@@ -31,6 +31,7 @@ import { SessionBootCover } from '@features/sessions/components/session-boot-cov
 import { TerminalEndedCover } from '@features/sessions/components/terminal-ended-cover';
 import { useSessionBoot } from '@features/sessions/hooks/use-session-boot';
 import { SettingsOverlay } from '@features/settings/components/settings-overlay';
+import { WorkStage } from '@features/work/components/ticket-page';
 import { resolvePaths } from '@lib/explorer/fs-client';
 import { isMacPlatform } from '@lib/platform';
 import type { FileLinkTarget } from '@lib/terminal/file-links';
@@ -174,8 +175,9 @@ export function CenterStage() {
   const splitting = editorOpen && placement === 'split';
   const roundTwo = layout === 'round-two';
   const home = roundTwo && place === 'home';
+  const work = roundTwo && place === 'work';
 
-  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home });
+  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work });
   /**
    * Whether the session on screen is still starting (HIVE-101).
    *
@@ -196,9 +198,11 @@ export function CenterStage() {
    * `activeId` — and a settings overlay that did not extend it would render on
    * top of thirteen live terminals.
    *
-   * Round two's Home (HIVE-195) joins them: it covers the stage the same way.
+   * Round two's Home (HIVE-195) and Work (HIVE-203) join them: each covers the
+   * stage the same way.
    */
-  const showingOverlay = showingPicker || view === 'settings' || view === 'home';
+  const showingOverlay =
+    showingPicker || view === 'settings' || view === 'home' || view === 'work';
   /**
    * The agent view owns the whole column, so the terminal region stands down.
    *
@@ -411,6 +415,7 @@ export function CenterStage() {
       {showingPicker ? <NewSessionPicker /> : null}
       {view === 'settings' ? <SettingsOverlay /> : null}
       {view === 'home' ? <HomePage /> : null}
+      {view === 'work' ? <WorkStage /> : null}
 
       {/*
         Hidden, never unmounted. Tearing the terminal region down for the

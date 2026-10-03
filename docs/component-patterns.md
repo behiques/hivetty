@@ -180,12 +180,12 @@ The stage shows **exactly one thing at a time**, and which one is decided by a
 pure function rather than by nested JSX conditionals:
 
 ```ts
-resolveView({ activeTab, picker, settings, home, entity, editorFull })
-  : 'settings' | 'picker' | 'home' | 'editor' | 'orchestrator' | 'session'
-  | 'agent' | 'terminal'
+resolveView({ activeTab, picker, settings, home, work, entity, editorFull })
+  : 'settings' | 'picker' | 'home' | 'work' | 'editor' | 'orchestrator'
+  | 'session' | 'agent' | 'terminal'
 ```
 
-Precedence runs settings → picker → home → editor → orchestrator → entity.
+Precedence runs settings → picker → home → work → editor → orchestrator → entity.
 
 It lives in `src/lib/resolve-view.ts` and is tested exhaustively. A machine
 embedded in JSX is one that grows a seventh state by accident; this one cannot.
@@ -204,6 +204,10 @@ Two precedence rules carry the weight:
   nor a terminal view, so the foreground gate (HIVE-81) reports no session
   while Home covers the stage. `CenterStage` hides the terminal region behind it
   exactly as it does behind the picker.
+- **Work sits where Home does** (HIVE-203). `work` is true when the layout is
+  round two and the place is Work; the place always owns the stage, the open
+  ticket's page or "Pick a ticket". One place is open at a time, so `home` and
+  `work` are never both true.
 
 ### Home: The Comb (HIVE-199)
 
