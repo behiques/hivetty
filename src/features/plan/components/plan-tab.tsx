@@ -3,17 +3,10 @@ import { useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { formatDuration } from '@lib/format-duration';
 import type { PlanTask, SessionPlan } from '@shared/plan-contract';
 
 import { PlanGlyph } from './plan-glyph';
-
-/** `38s`, `4m 12s`, `1h 2m`. */
-export function formatDuration(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return `${String(s)}s`;
-  if (s < 3600) return `${String(Math.floor(s / 60))}m ${String(s % 60)}s`;
-  return `${String(Math.floor(s / 3600))}h ${String(Math.floor((s % 3600) / 60))}m`;
-}
 
 /** `.hive/plans/x.md`: the path from the Hive's folder down. `PLAN_FILE_PATH` guarantees `/.hive/`. */
 const planFileLabel = (file: string) => file.slice(file.lastIndexOf('/.hive/') + 1);
