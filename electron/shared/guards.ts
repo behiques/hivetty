@@ -1881,11 +1881,6 @@ export function parsePrDetailRequest(input: unknown): PrRef {
   return assertPrRef(assertShape(input, ['owner', 'repo', 'n'], 'prDetail'), 'prDetail');
 }
 
-/**
- * `github:pr-comment` (HIVE-205): the same PR, and a markdown body. Checked as
- * `parseAddJiraCommentRequest` checks its body — not blank, bounded, no control
- * characters but tab, newline and carriage return — at GitHub's own limit.
- */
 /** A markdown body GitHub will take: not blank, at its limit, no control characters but tab, newline and CR. */
 function assertPrBody(value: unknown, label: string): string {
   const body = assertString(value, label);
@@ -1895,6 +1890,11 @@ function assertPrBody(value: unknown, label: string): string {
   return body;
 }
 
+/**
+ * `github:pr-comment` (HIVE-205): the same PR, and a markdown body. Checked as
+ * `parseAddJiraCommentRequest` checks its body — not blank, bounded, no control
+ * characters but tab, newline and carriage return — at GitHub's own limit.
+ */
 export function parsePrCommentRequest(input: unknown): PrCommentRequest {
   const raw = assertShape(input, ['owner', 'repo', 'n', 'body'], 'prComment');
   return { ...assertPrRef(raw, 'prComment'), body: assertPrBody(raw.body, 'prComment.body') };
