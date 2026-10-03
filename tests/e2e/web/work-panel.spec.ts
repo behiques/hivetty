@@ -29,7 +29,7 @@ const workTab = (page: import('@playwright/test').Page) =>
 
 test.beforeEach(async ({ page }) => {
   await page.goto(APP_URL);
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
   await workTab(page).click();
 });
 

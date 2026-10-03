@@ -106,7 +106,7 @@ test('the plan rail appears, peeks without a refit, pins with one, ticks, and le
   try {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     await page.getByRole('button', { name: 'New session', exact: true }).click();
     await expect(page.getByRole('textbox', { name: 'Search all projects' })).toBeFocused();

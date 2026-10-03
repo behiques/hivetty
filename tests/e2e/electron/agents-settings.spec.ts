@@ -74,7 +74,7 @@ async function launchWithConfig(
   const page = await app.firstWindow();
 
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   return { app, page, configPath };
 }
@@ -265,7 +265,7 @@ test('an agent authored in the pane survives a restart', async ({}, testInfo) =>
     const page = await app.firstWindow();
 
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
     await openAgents(page);
 
     await expect(

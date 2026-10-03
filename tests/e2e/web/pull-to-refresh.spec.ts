@@ -39,7 +39,7 @@ async function pull(page: Page, notches: number): Promise<void> {
 
 test.beforeEach(async ({ page }) => {
   await page.goto(APP_URL);
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 });
 
 test('the work list says what the pull will do, then does it', async ({ page }) => {
@@ -103,7 +103,7 @@ test('the inbox, sharing the same scroll container, does not pull', async ({
 test('the Hatchery header stays put while the list scrolls', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 240 });
   await page.goto(APP_URL);
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
   await selectRailTab(activityRail(page).getByRole('tab', { name: /^PRs/ }));
 
   const panel = page.locator('[data-panel="prs"]');

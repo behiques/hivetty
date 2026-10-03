@@ -33,7 +33,7 @@ async function launchWithConfig(
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
   return { app, page, configPath };
 }
 

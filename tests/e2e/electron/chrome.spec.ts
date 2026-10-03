@@ -26,7 +26,7 @@ test('has no native title bar stacked above the app header', async ({
   hive,
   page,
 }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const chrome = await hive.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0]!;
@@ -96,7 +96,7 @@ test('the model chip starts on the left rail edge, not the header midpoint', asy
   try {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     await startSession(page, PROJECT);
 
@@ -167,7 +167,7 @@ test('a narrow header compacts the counts and leaves the model chip whole', asyn
   try {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     await startSession(page, PROJECT);
 
@@ -210,7 +210,7 @@ test('a narrow header compacts the counts and leaves the model chip whole', asyn
 });
 
 test('the traffic lights get their own row above the header', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   /**
    * The header used to carry a 78px inset so the wordmark cleared the lights
@@ -268,7 +268,7 @@ test('the lights are positioned inside the strip, not over the header', async ({
   hive,
   page,
 }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   /**
    * The half a page screenshot cannot prove.
@@ -308,7 +308,7 @@ test('the strip is draggable, so the window can still be moved', async ({ page }
 test('the chip cluster still lands on the rail edge', async ({
   page,
 }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   // The brand's width — the rail's token minus the header's padding — is what
   // puts the chips on the rail's edge, and it survives the inset's removal

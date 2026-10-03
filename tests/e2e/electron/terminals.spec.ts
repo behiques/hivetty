@@ -24,7 +24,7 @@ test('opens at a prompt, names a running command, and leaves on exit', async ({}
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     const tree = page.locator('[data-panel="projects"]');

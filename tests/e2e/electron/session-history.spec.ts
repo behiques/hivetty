@@ -35,7 +35,7 @@ test('start a session, quit, relaunch — it is still listed, under ENDED', asyn
   const first = await launchHive({ userDataDir, configPath });
   const firstWindow = await first.firstWindow();
   await firstWindow.waitForLoadState('domcontentloaded');
-  await firstWindow.waitForSelector('header');
+  await firstWindow.waitForSelector('nav[aria-label="Places"]');
 
   const id = await startSession(firstWindow, PROJECT);
 
@@ -51,7 +51,7 @@ test('start a session, quit, relaunch — it is still listed, under ENDED', asyn
   const second = await launchHive({ userDataDir, configPath });
   const secondWindow = await second.firstWindow();
   await secondWindow.waitForLoadState('domcontentloaded');
-  await secondWindow.waitForSelector('header');
+  await secondWindow.waitForSelector('nav[aria-label="Places"]');
 
   try {
     /*
@@ -142,7 +142,7 @@ test('a fresh profile still boots with an empty fleet', async ({}, testInfo) => 
   });
   const window = await app.firstWindow();
   await window.waitForLoadState('domcontentloaded');
-  await window.waitForSelector('header');
+  await window.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await expect(window.getByTestId('session-table-empty')).toBeVisible();

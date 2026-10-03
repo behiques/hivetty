@@ -30,7 +30,7 @@ import { expect, test } from '@playwright/test';
  */
 test('the pool paints behind the mark, not over it', async ({ page }) => {
   await page.goto('/?sim=0');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const layering = await page.evaluate(() => {
     const pool = document.querySelector('header .brand-bloom');

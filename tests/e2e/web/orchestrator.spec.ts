@@ -31,7 +31,7 @@ const run = async (page: Page, command: string): Promise<void> => {
 
 test.beforeEach(async ({ page }) => {
   await page.goto(APP_URL);
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
   await expect(transcript(page)).toBeVisible();
 });
 

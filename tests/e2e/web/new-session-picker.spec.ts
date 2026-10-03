@@ -29,7 +29,7 @@ const APP_URL = '/?sim=0';
 
 test.beforeEach(async ({ page }) => {
   await page.goto(APP_URL);
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 });
 
 test('the header opens a picker with no ticket on it', async ({ page }) => {

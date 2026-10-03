@@ -141,7 +141,7 @@ async function expectArgs(path: string, contents: string): Promise<void> {
 
 async function openSession(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
   await startSession(page, PROJECT);
   await expect(page.locator(`[data-terminal-id="${SESSION}"]`)).toBeVisible();
 }
@@ -563,7 +563,7 @@ test('a session starts as the model and effort it was spawned with', async ({}, 
   try {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     await page.evaluate(
       ([sessionId, projectId]) =>
@@ -614,7 +614,7 @@ test('a session spawned without a model gets the bare command', async ({}, testI
   try {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     await page.evaluate(
       ([sessionId, projectId]) =>
@@ -645,7 +645,7 @@ test('an unmapped project is refused by name, with the file to edit', async ({},
   try {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     const message = await page.evaluate(
       ([sessionId, projectId]) =>

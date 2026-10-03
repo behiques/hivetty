@@ -8,7 +8,7 @@ import { expect, test } from './fixtures/hive-app';
  */
 
 test('opens exactly one window, titled and visible', async ({ hive, page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const window = await hive.evaluate(({ BrowserWindow }) => {
     const all = BrowserWindow.getAllWindows();
@@ -37,7 +37,7 @@ test('shows no white flash — the window paints the app background', async ({
   hive,
   page,
 }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const background = await hive.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0]!.getBackgroundColor(),
@@ -59,7 +59,7 @@ test('loads its assets from disk — no broken images', async ({ page }) => {
 });
 
 test('is the desktop target, so it shows no demo chip', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await expect(page.getByText('demo', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => typeof window.hive)).toBe('object');

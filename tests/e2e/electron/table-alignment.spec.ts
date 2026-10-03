@@ -136,7 +136,7 @@ test('the PR header sits over the PR cells', async ({}, testInfo) => {
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await startSession(page, PROJECT);
@@ -167,7 +167,7 @@ test('the PLAN header sits over the plan cells', async ({}, testInfo) => {
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await startSession(page, PROJECT);
@@ -199,7 +199,7 @@ test('the PR header still sits over the PR cells beside a resume control', async
   const first = await launchHive({ userDataDir, configPath });
   const firstWindow = await first.firstWindow();
   await firstWindow.waitForLoadState('domcontentloaded');
-  await firstWindow.waitForSelector('header');
+  await firstWindow.waitForSelector('nav[aria-label="Places"]');
   await startSession(firstWindow, PROJECT);
 
   // The session-history write is debounced at 400ms — `session-history.spec.ts`
@@ -210,7 +210,7 @@ test('the PR header still sits over the PR cells beside a resume control', async
   const second = await launchHive({ userDataDir, configPath });
   const page = await second.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await expect(endedHead(page)).toBeVisible();
@@ -283,7 +283,7 @@ test('the status column fits its widest label at the minimum window size', async
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     // The window the arithmetic in `COL` is written against.
@@ -367,7 +367,7 @@ test('the columns hold together at the minimum window with a resumable row', asy
   const first = await launchHive({ userDataDir, configPath });
   const firstWindow = await first.firstWindow();
   await firstWindow.waitForLoadState('domcontentloaded');
-  await firstWindow.waitForSelector('header');
+  await firstWindow.waitForSelector('nav[aria-label="Places"]');
   await startSession(firstWindow, PROJECT);
 
   // The session-history write is debounced at 400ms — see `session-history.spec.ts`.
@@ -377,7 +377,7 @@ test('the columns hold together at the minimum window with a resumable row', asy
   const second = await launchHive({ userDataDir, configPath });
   const page = await second.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await resizeTo(second, page, 1100);
@@ -386,7 +386,7 @@ test('the columns hold together at the minimum window with a resumable row', asy
       Wait for the restored fleet to paint **before** counting.
 
       `count()` does not auto-wait, and the session history arrives over IPC after
-      `waitForSelector('header')` has already resolved. Counting straight away
+      `waitForSelector('nav[aria-label="Places"]')` has already resolved. Counting straight away
       can therefore find zero Resume controls simply because no row has
       rendered yet — and the `test.skip` below is this test's only guard, so a
       premature count skips it green while never exercising the regression at
@@ -468,7 +468,7 @@ test('the LAST USED column fits its widest label at the minimum window size', as
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await resizeTo(app, page, 1100);
@@ -513,7 +513,7 @@ test('round two at the minimum window: the panel takes no column, and PR stays u
   const first = await launchHive({ userDataDir, configPath });
   const firstWindow = await first.firstWindow();
   await firstWindow.waitForLoadState('domcontentloaded');
-  await firstWindow.waitForSelector('header');
+  await firstWindow.waitForSelector('nav[aria-label="Places"]');
   await startSession(firstWindow, PROJECT);
   await firstWindow.waitForTimeout(700);
   await first.close();

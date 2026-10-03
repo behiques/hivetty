@@ -9,7 +9,7 @@ import { expect, test } from './fixtures/hive-app';
  */
 
 test('the three non-negotiable webPreferences flags hold', async ({ hive, page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const prefs = await hive.evaluate(({ BrowserWindow }) => {
     /**
@@ -39,7 +39,7 @@ test('the three non-negotiable webPreferences flags hold', async ({ hive, page }
 });
 
 test('the renderer cannot reach Node', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const reachable = await page.evaluate(() => ({
     require: typeof (globalThis as Record<string, unknown>).require,
@@ -59,7 +59,7 @@ test('the renderer cannot reach Node', async ({ page }) => {
 });
 
 test('window.hive exposes only the documented verbs', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const surface = await page.evaluate(() => ({
     top: Object.keys(window.hive!).sort(),
@@ -1113,7 +1113,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
 test('ipcRenderer is not reachable through the bridge at any depth', async ({
   page,
 }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const leaked = await page.evaluate(() => {
     const seen = new Set<unknown>();
@@ -1134,7 +1134,7 @@ test('ipcRenderer is not reachable through the bridge at any depth', async ({
 });
 
 test('the bridge round-trips to the main process', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const info = await page.evaluate(() => window.hive!.appInfo());
 
@@ -1145,7 +1145,7 @@ test('the bridge round-trips to the main process', async ({ page }) => {
 test('the production CSP is applied, with no unsafe-eval and no wildcard', async ({
   page,
 }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const csp = await page.evaluate(async () => {
     const response = await fetch(location.href);
@@ -1163,7 +1163,7 @@ test('the production CSP is applied, with no unsafe-eval and no wildcard', async
 });
 
 test('window.open is denied', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const opened = await page.evaluate(() => window.open('https://example.com'));
 

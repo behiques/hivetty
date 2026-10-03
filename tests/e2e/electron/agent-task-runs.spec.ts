@@ -121,7 +121,7 @@ test('draws two live task runs and counts them in the rail and the fleet', async
 
   try {
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     const input = page.getByRole('textbox', { name: 'Overmind command' });
     const transcript = page.getByRole('main').locator('.xterm');

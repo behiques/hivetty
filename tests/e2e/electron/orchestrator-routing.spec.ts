@@ -139,7 +139,7 @@ test.beforeAll(async ({}, testInfo) => {
   });
   page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 });
 
 test.afterAll(async () => {

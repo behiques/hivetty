@@ -83,7 +83,7 @@ async function openLiveSession(
   markers: { ready: string; bootstrap: string },
 ): Promise<Locator> {
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
   await startSession(page, PROJECT);
 
   const terminal = page.locator(`[data-terminal-id="${SESSION}"]`);
@@ -432,7 +432,7 @@ test('the interactive terminal takes a GPU context; the console does not', async
   try {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     // The console is a command surface, never a shell (story 041) — so it stays
     // on the DOM renderer even in the desktop build.
@@ -470,7 +470,7 @@ test('a hidden terminal gives its GPU context back and takes one again on return
   try {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     /**
      * Two sessions, then switch between them.

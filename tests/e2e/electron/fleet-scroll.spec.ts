@@ -131,7 +131,7 @@ test('a fleet taller than the stage scrolls, and the console stays on screen', a
   const app = await launchHive({ userDataDir, configPath });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     const table = page.getByTestId('session-table');

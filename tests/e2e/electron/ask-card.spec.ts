@@ -223,7 +223,7 @@ test('the scope ladder keeps one row however long the path is', async ({}, testI
 
   try {
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     await page.getByRole('button', { name: 'New session', exact: true }).click();
     const search = page.getByRole('textbox', { name: 'Search all projects' });
@@ -293,7 +293,7 @@ test('a permission card names the call the click authorises, not the body', asyn
 
   try {
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     await page.getByRole('button', { name: 'New session', exact: true }).click();
     const search = page.getByRole('textbox', { name: 'Search all projects' });
@@ -357,7 +357,7 @@ test('an ask posted to the ledger becomes a card, and answering it collapses the
 
   try {
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     // Start the one session whose environment carries a real receiver token.
     await page.getByRole('button', { name: 'New session', exact: true }).click();

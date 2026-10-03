@@ -26,7 +26,7 @@ const theme = (page: import('@playwright/test').Page) =>
 
 test.beforeEach(async ({ page }) => {
   await page.goto(APP_URL);
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 });
 
 test('the header stays clickable while settings is open', async ({ page }) => {

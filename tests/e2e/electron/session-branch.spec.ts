@@ -91,7 +91,7 @@ test('the meta bar shows the repository branch, not a generated one', async ({},
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const id = await startSession(page, 'scratch');
 
@@ -155,7 +155,7 @@ test('a project that is not a repository shows an em dash', async ({}, testInfo)
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const id = await startSession(page, 'plain');
 

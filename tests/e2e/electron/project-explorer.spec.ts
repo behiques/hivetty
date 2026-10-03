@@ -89,7 +89,7 @@ async function launch(outputPath: (name: string) => string, repo: string) {
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   /**
    * A session first — the explorer follows the one on screen (HIVE-93).

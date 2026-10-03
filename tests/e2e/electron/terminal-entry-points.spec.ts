@@ -25,7 +25,7 @@ test('the header chevron opens a terminal, and terminal here opens one beside a 
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await page.getByRole('button', { name: 'Terminal in a project' }).click();

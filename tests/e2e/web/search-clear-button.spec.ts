@@ -115,7 +115,7 @@ for (const { label, open } of BOXES) {
     page,
   }) => {
     await page.goto(APP_URL);
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
     await open(page);
 
     await expectOneClearButton(page, label);

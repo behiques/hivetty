@@ -24,7 +24,7 @@ import { expect, test } from './fixtures/hive-app';
  */
 
 test('the header counts nothing', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
   const header = page.getByRole('banner');
 
   await expect(header.getByText('0 working')).toBeVisible();
@@ -35,7 +35,7 @@ test('the header counts nothing', async ({ page }) => {
 });
 
 test('the projects tab explains that nothing is mapped', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const rail = page.getByRole('navigation', {
     name: 'Projects, work, and agents',
@@ -56,7 +56,7 @@ test('the projects tab explains that nothing is mapped', async ({ page }) => {
 });
 
 test('the orchestrator says its fleet is empty', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   /**
    * `toContainText`, not `toHaveText`: the block leads with a drawn flavour
@@ -88,7 +88,7 @@ test('the orchestrator says its fleet is empty', async ({ page }) => {
  * which is exactly where the eight `GRAC-` tickets used to flash.
  */
 test('the work tab shows no ticket it did not get from Jira', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const rail = page.getByRole('navigation', {
     name: 'Projects, work, and agents',
@@ -116,7 +116,7 @@ test('the work tab shows no ticket it did not get from Jira', async ({ page }) =
  * appears while one is up.
  */
 test('the work tab opens on a skeleton, not on data', async ({ page }) => {
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   const rail = page.getByRole('navigation', {
     name: 'Projects, work, and agents',
@@ -186,7 +186,7 @@ test.describe('with the shipped agents deleted', () => {
   test.use({ unseeded: true });
 
   test('the agents tab is empty and says why', async ({ page }) => {
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     const rail = page.getByRole('navigation', {
       name: 'Projects, work, and agents',

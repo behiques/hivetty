@@ -25,7 +25,7 @@ const heightOf = async (field: Locator): Promise<number> => {
 
 test.beforeEach(async ({ page }) => {
   await page.goto(APP_URL);
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 });
 
 test('Shift+Enter adds a line and the row grows to match', async ({ page }) => {

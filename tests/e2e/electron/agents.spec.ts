@@ -71,7 +71,7 @@ async function launchWithConfig(outputPath: (name: string) => string): Promise<{
   const page = await app.firstWindow();
 
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   return { app, page };
 }
@@ -592,7 +592,7 @@ test('runs from the row, and the run table selects the newest run', async ({}, t
 
   try {
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('header');
+    await page.waitForSelector('nav[aria-label="Places"]');
     await selectRailTab(page.getByRole('tab', { name: /Agents/ }));
 
     const panel = page.locator('[data-panel="agents"]');

@@ -77,7 +77,7 @@ test('reports the config path and this build’s versions', async ({}, testInfo)
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -108,7 +108,7 @@ test('reload re-reads a file edited underneath the running app', async ({}, test
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -155,7 +155,7 @@ test('reload regenerates the skills plugin and names what needs a restart', asyn
   const userDataDir = testInfo.outputPath('user-data');
   const app = await launchHive({ userDataDir, configPath });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -197,7 +197,7 @@ test('reset writes the template and empties the project list', async ({}, testIn
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   // Prove there is something to lose before losing it.
   expect((read(configPath).projects as unknown[]).length).toBe(1);
@@ -242,7 +242,7 @@ test('cancelling the confirmation leaves the file alone', async ({}, testInfo) =
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -270,7 +270,7 @@ test('the Containers group shows the resolved host alias', async ({}, testInfo) 
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -301,7 +301,7 @@ test('typing an alias writes it to the file and preserves the rest', async ({}, 
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -340,7 +340,7 @@ test('the off-loopback bind is off, and its fields are hidden, by default', asyn
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -375,7 +375,7 @@ test('turning the bind switch on reveals the fields and writes an address', asyn
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -427,7 +427,7 @@ test('the header names the address when the app starts exposed', async ({}, test
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await expect(page.getByTestId('header-chips').getByText('0.0.0.0')).toBeVisible();
 
@@ -505,7 +505,7 @@ test('the chip survives the switch going loopback — it reports the running bin
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await expect(page.getByTestId('header-chips').getByText('0.0.0.0')).toBeVisible();
 
@@ -541,7 +541,7 @@ test('the Server mode group renders between Containers and Reset', async ({}, te
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -571,7 +571,7 @@ test('the Serve this machine switch is off, and its fields are hidden, by defaul
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -596,7 +596,7 @@ test('turning server mode on reveals the bind fields and writes enabled: true', 
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -625,7 +625,7 @@ test('the Attach to a server switch is off, and its fields are hidden, by defaul
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
@@ -659,7 +659,7 @@ test('the attach address field refuses a public address, and writes nothing', as
     configPath,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openAdvanced(page);
 
