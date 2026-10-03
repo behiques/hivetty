@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { cn } from '@/lib/utils';
-import type { HatchStatus } from '@/types/pull-request';
+import type { FlapTone, HatchStatus } from '@/types/pull-request';
 
 import { FLAP_TEXT } from '@features/shared/flap-tone';
 
