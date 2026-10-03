@@ -33,11 +33,15 @@ const SHAPE: Record<LaneMark['shape'], string> = {
 /** Where `f` sits on the axis, past the label column. */
 export const axisLeft = (f: number) => `calc(${String(GUTTER)}px + (100% - ${String(GUTTER)}px) * ${String(f)})`;
 
-/** An element's width, measured on mount and on every resize; 0 until measured (and under happy-dom). */
-export function useMeasuredWidth(ref: RefObject<HTMLElement | null>): number {
+/**
+ * An element's width, measured when it mounts and on every resize; 0 until
+ * measured (and under happy-dom). Returns the callback ref to hang on the
+ * element, so an element that mounts late is still measured.
+ */
+export function useMeasuredWidth(): [(el: HTMLElement | null) => void, number] {
+  const [el, setEl] = useState<HTMLElement | null>(null);
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
-    const el = ref.current;
     if (el === null) return undefined;
     const measure = () => setWidth(el.clientWidth);
     measure();
@@ -45,8 +49,8 @@ export function useMeasuredWidth(ref: RefObject<HTMLElement | null>): number {
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [ref]);
-  return width;
+  }, [el]);
+  return [setEl, width];
 }
 
 /**
@@ -54,8 +58,8 @@ export function useMeasuredWidth(ref: RefObject<HTMLElement | null>): number {
  * and one tooltip shown on hover or focus. Enter on a mark is a native click.
  */
 export function TimelineLane({ label, marks, height = 52 }: { label: string; marks: LaneMark[]; height?: 40 | 52 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const laneWidth = Math.max(0, useMeasuredWidth(ref) - GUTTER);
+  const [ref, measured] = useMeasuredWidth();
+  const laneWidth = Math.max(0, measured - GUTTER);
   const [hover, setHover] = useState<{ key: string; tip: string[]; left: string } | null>(null);
 
   return (

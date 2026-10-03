@@ -156,8 +156,7 @@ export function PrTimeline({ pr }: { pr: Pr }) {
   /* Captured per poll, so the model's memo holds between ticks. */
   const [now, setNow] = useState(Date.now);
   const model = useTimelineModel(pr, now);
-  const axisRef = useRef<HTMLDivElement>(null);
-  const width = useMeasuredWidth(axisRef);
+  const [axisRef, width] = useMeasuredWidth();
 
   usePollTimeline(
     useCallback(() => load(pr.owner, pr.repo, pr.n).then(() => setNow(Date.now())), [load, pr.owner, pr.repo, pr.n]),

@@ -76,6 +76,25 @@ describe('PrTimeline', () => {
     expect(screen.getByRole('status', { name: 'Loading timeline' })).toBeInTheDocument();
   });
 
+  it('ticks the axis at its measured width when the lanes arrive after the skeleton, and again on resize', () => {
+    let width = 900;
+    let resize: () => void = () => undefined;
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => width);
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(cb: () => void) { resize = cb; }
+      observe() { /* measured through `resize` */ }
+      disconnect() { /* nothing held */ }
+    });
+    render(<PrTimeline pr={pr} />);
+    act(() => seed());
+    expect(screen.getByText('12:30')).toBeInTheDocument();
+    width = 400;
+    act(() => resize());
+    expect(screen.queryByText('12:30')).toBeNull();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it('draws every lane and its marks', () => {
     seed();
     render(<PrTimeline pr={pr} />);

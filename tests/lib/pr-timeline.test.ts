@@ -203,6 +203,18 @@ describe('buildTimeline', () => {
     expect(model.flaps.filter((f) => f.flap === 'SUMMONS').map((f) => [(f.from - T0) / MIN, (f.to - T0) / MIN])).toEqual([[120, 130], [170, 190]]);
   });
 
+  it('an ask closed by done, failed or the overmind\'s expiry stops waiting there, as an answer would', () => {
+    const waits = (close: LedgerEntry) => {
+      const ask = e('q', 120, { kind: 'ask', to: 'overmind', meta: { ...pr } });
+      const model = buildTimeline({ timeline, entries: [...entries.slice(0, 11), ask, close], slug, n: 1182, mine: true, toMe: (to) => to === 'overmind', now: T0 + 190 * MIN });
+      return model.flaps.filter((f) => f.flap === 'SUMMONS').map((f) => [(f.from - T0) / MIN, (f.to - T0) / MIN]);
+    };
+    expect(waits(e('d', 130, { from: 'shipper', kind: 'done', thread: 'q' }))).toEqual([[120, 130]]);
+    expect(waits(e('x', 135, { from: 'shipper', kind: 'failed', thread: 'q' }))).toEqual([[120, 135]]);
+    expect(waits(e('ex', 140, { from: 'overmind', kind: 'event', meta: { expired: 'q' } }))).toEqual([[120, 140]]);
+    expect(waits(e('fx', 140, { from: 'builder', kind: 'event', meta: { expired: 'q' } }))).toEqual([[120, 190]]);
+  });
+
   it('labels other reviews by author and state, amber on changes requested', () => {
     const reviews = [{ at: at(10), author: 'maria-k', state: 'CHANGES_REQUESTED', url: 'R3' }, { at: at(5), author: null, state: 'APPROVED', url: 'R4' },
       { at: at(6), author: 'x', state: 'DISMISSED', url: 'R5' }];

@@ -9,7 +9,7 @@ import type { Flap, FlapTone, Pr } from '@/types/pull-request';
 
 import type { PrTimeline, PrTimelineRun } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
-import { prEvents, prOpener, shipTrack } from '@shared/ledger-derive';
+import { CLOSING_KINDS, prEvents, prOpener, shipTrack } from '@shared/ledger-derive';
 import type { ShipVisit } from '@shared/ledger-derive';
 
 export const MIN = 60_000;
@@ -106,8 +106,7 @@ function shipperSpans(events: readonly LedgerEntry[], all: readonly LedgerEntry[
       if (held !== null) spans.push({ from: held, to: entry.ts });
       held = null;
     } else if (entry.kind === 'ask' && (entry.to === 'acr' || entry.to === 'fixer')) {
-      const answer = all.find((a) => a.kind === 'answer' && a.thread === entry.id);
-      asks.push({ who: entry.to, from: entry.ts, to: answer?.ts ?? now });
+      asks.push({ who: entry.to, from: entry.ts, to: closedAt(entry, all) ?? now });
     }
   }
   if (held !== null) spans.push({ from: held, to: now });
@@ -309,10 +308,14 @@ const findingsOf = (entry: LedgerEntry): number => {
   return typeof n === 'number' ? n : 0;
 };
 
-/** `[ask, its answer)`, or to `end` while it is unanswered. */
+/** When an ask stopped waiting: its answer, a done or failed on its thread, or the overmind's expiry marker; undefined while open. */
+export const closedAt = (ask: LedgerEntry, entries: readonly LedgerEntry[]): number | undefined =>
+  entries.find((a) => (a.thread === ask.id && CLOSING_KINDS.has(a.kind)) || (a.from === 'overmind' && a.meta?.['expired'] === ask.id))?.ts;
+
+/** `[ask, its close)`, or to `end` while it is open. */
 const windowOf = (ask: LedgerEntry, entries: readonly LedgerEntry[], end: number): Window => ({
   from: ask.ts,
-  to: entries.find((a) => a.kind === 'answer' && a.thread === ask.id)?.ts ?? end,
+  to: closedAt(ask, entries) ?? end,
 });
 
 /** GitHub's reviews (acr's labelled from its answer) and acr's self reviews from the ledger, by time. */
