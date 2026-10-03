@@ -18,6 +18,9 @@ const pr = (overrides: Partial<Pr> = {}): Pr => ({
   checks: 'passing',
   url: 'https://github.com/acme/nova-web/pull/482',
   branch: 'feat/hero-refresh',
+  updatedAt: '2026-08-09T12:00:00Z',
+  mergedAt: null,
+  mine: true,
   session: 'hero-refresh',
   ...overrides,
 });

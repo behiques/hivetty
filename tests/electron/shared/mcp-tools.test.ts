@@ -721,6 +721,8 @@ describe('createToolHandlers — projects and pr (HIVE-173)', () => {
     findings: 2,
     checks: 'passing' as const,
     updatedAt: '2026-09-11T10:00:00Z',
+    mergedAt: null,
+    mine: true,
   };
 
   it('lists projects with their path, consent and container mount', async () => {
