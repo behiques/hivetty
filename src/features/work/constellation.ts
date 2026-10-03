@@ -19,6 +19,12 @@ const CENTRE_R = 26;
 const HOP_R = 114;
 const HOP_CELL_R = 9;
 const STEP = 26;
+const BEAD_STEP = 16;
+const BEAD_SPAN = 130;
+const BEAD_LABEL_MAX = 3;
+const PR_R = 102;
+const PR_CELL_R = 10;
+const PR_ANGLE = -12;
 const ARC_MAX = 6;
 const UPPER: [number, number] = [-150, -30];
 const LOWER: [number, number] = [30, 150];
@@ -53,6 +59,15 @@ export interface HopCell extends Point {
   ticket: LinkedTicket;
 }
 
+export interface Bead extends Point {
+  angle: number;
+  state: CellState;
+  ticket: LinkedTicket;
+  /** Only while there are BEAD_LABEL_MAX beads or fewer. */
+  label?: string;
+  labelAt?: Point;
+}
+
 export interface Edge {
   from: Point;
   to: Point;
@@ -70,10 +85,14 @@ export interface ConstellationInput {
 
 export interface ConstellationLayout {
   ring: Point & { r: number };
+  epicLabel: (Point & { text: string }) | null;
   centre: Point & { r: number; label: string; blocked: boolean };
   cells: Cell[];
   hops: HopCell[];
   edges: Edge[];
+  beads: Bead[];
+  relatesLabel: (Point & { text: string }) | null;
+  pr: (Point & { r: number; label: string; labelAt: Point }) | null;
 }
 
 export const STATE: Record<JiraStatusCategory, CellState> = { done: 'done', 'in-progress': 'prog', todo: 'todo' };
@@ -158,11 +177,44 @@ export function layoutConstellation(input: ConstellationInput): ConstellationLay
     }
   }
 
+  const beads: Bead[] = [];
+  const count = arcs.relates.length;
+  const beadSpan = Math.min(BEAD_SPAN, (count - 1) * BEAD_STEP);
+  arcs.relates.forEach((ticket, i) => {
+    const angle = count === 1 ? 180 : 180 - beadSpan / 2 + (beadSpan / (count - 1)) * i;
+    const at = polar(angle, RING_R);
+    beads.push({
+      ...at,
+      angle,
+      state: STATE[ticket.statusCategory],
+      ticket,
+      ...(count <= BEAD_LABEL_MAX ? { label: shortKey(ticket.key, me), labelAt: { x: at.x + 10, y: at.y + 4 } } : {}),
+    });
+  });
+  const left = polar(180, RING_R);
+  const relatesLabel =
+    count === 0
+      ? null
+      : count <= BEAD_LABEL_MAX
+        ? { x: left.x + 10, y: left.y + 22, text: 'relates' }
+        : { x: left.x + 12, y: left.y + 4, text: `relates · ${String(count)}` };
+
+  let pr: ConstellationLayout['pr'] = null;
+  if (input.pr !== null) {
+    const at = polar(PR_ANGLE, PR_R);
+    pr = { ...at, r: PR_CELL_R, label: `#${String(input.pr)}`, labelAt: { x: at.x, y: at.y - 15 } };
+    edges.push({ from: { x: CENTRE.x + 27, y: CENTRE.y - 5 }, to: { x: at.x - 10, y: at.y + 3 }, kind: 'pr' });
+  }
+
   return {
     ring: { ...CENTRE, r: RING_R },
+    epicLabel: input.epicLabel === null ? null : { x: CENTRE.x, y: 14, text: input.epicLabel },
     centre: { ...CENTRE, r: CENTRE_R, label: shortKey(me, me), blocked: cells.some((one) => one.open) },
     cells,
     hops,
     edges,
+    beads,
+    relatesLabel,
+    pr,
   };
 }

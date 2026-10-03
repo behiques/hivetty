@@ -67,3 +67,34 @@ describe('layoutConstellation — the artifact densities', () => {
     expect(layout.hops).toEqual([]);
   });
 });
+
+describe('beads, PR and the ring label', () => {
+  it('normal: one labelled bead at 180°, "relates" under it, the PR at −12° on 102, the epic label above', () => {
+    const layout = layoutConstellation({ me: 'HIVE-193', arcs: normal, epicLabel: "HIVE-161 · The Hive's workflow · 9/14", pr: 313 });
+    expect(layout.beads).toHaveLength(1);
+    expect(layout.beads[0]).toMatchObject({ angle: 180, label: '179', state: 'done' });
+    expect(layout.relatesLabel?.text).toBe('relates');
+    expect(layout.pr).toMatchObject({ label: '#313', r: 10 });
+    expect(Math.round(layout.pr!.x)).toBe(Math.round(148 + 102 * Math.cos((-12 * Math.PI) / 180)));
+    expect(layout.edges.at(-1)?.kind).toBe('pr');
+    expect(layout.epicLabel).toMatchObject({ x: 148, y: 14, text: "HIVE-161 · The Hive's workflow · 9/14" });
+  });
+
+  it('many related (INCORP-586): eight unlabelled beads 16° apart, "relates · 8", other-project keys whole', () => {
+    const relates = [t('INCORP-585'), t('INCORP-589', 'in-progress'), t('INCORP-570', 'done'), t('INCORP-571', 'done'), t('INCORP-574', 'done'), t('HIVE-193', 'in-progress'), t('INCORP-590'), t('INCORP-592')];
+    const layout = layoutConstellation({ me: 'INCORP-586', arcs: arcs({ blocks: [t('INCORP-601')], relates }), epicLabel: null, pr: 412 });
+    expect(layout.beads.map((b) => Math.round(b.angle))).toEqual([124, 140, 156, 172, 188, 204, 220, 236]);
+    expect(layout.beads.every((b) => b.label === undefined)).toBe(true);
+    expect(layout.beads[5]?.ticket.key).toBe('HIVE-193');
+    expect(layout.relatesLabel?.text).toBe('relates · 8');
+    expect(layout.cells[0]?.label).toBe('601');
+  });
+
+  it('no relates, no PR, no epic: none of them drawn', () => {
+    const layout = layoutConstellation({ me: 'A-1', arcs: arcs({ waitsOn: [t('A-2')] }), epicLabel: null, pr: null });
+    expect(layout.beads).toEqual([]);
+    expect(layout.relatesLabel).toBeNull();
+    expect(layout.pr).toBeNull();
+    expect(layout.epicLabel).toBeNull();
+  });
+});
