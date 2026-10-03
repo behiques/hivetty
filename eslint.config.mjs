@@ -22,6 +22,7 @@ const FEATURE_SLICES = [
   'agents',
   'editor',
   'explorer',
+  'home',
   'inbox',
   'orchestrator',
   'plan',

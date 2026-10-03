@@ -53,6 +53,8 @@ import {
   useTickets,
   useTicketSessions,
   useUnreadCount,
+  useCombEntities,
+  useCombSummary,
 } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { notif } from '../support/notifications';
@@ -2059,5 +2061,88 @@ describe('count hooks (HIVE-197)', () => {
 
   it('useAgentsWorkingIn names agents with a run in the project', () => {
     expect(renderHook(() => useAgentsWorkingIn(null)).result.current).toEqual([]);
+  });
+});
+
+describe('comb selectors (HIVE-199)', () => {
+  const NOW = new Date(2026, 9, 2, 15, 0).getTime();
+  const sess = (id: string, project: string, status: Session['status'], over: Partial<Session> = {}): Session => ({
+    kind: 'session', id, project, branch: `b/${id}`, status, task: `task ${id}`, cost: '$0', lines: [], ...over,
+  });
+  const term = (id: string, project: string, over: Partial<Terminal> = {}): Terminal => ({
+    kind: 'terminal', id, project, cwd: `/repos/${project}`, status: 'prompt', createdAt: 1, lines: [], ...over,
+  });
+  const summary = (over: Partial<AgentSummary>): AgentSummary => ({
+    name: 'x', description: '', icon: 'Robot', status: 'sleeping', wake: { on: [] }, mcp: [], tools: [], rotateAfter: 50, runs: [], ...over,
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    useHiveStore.getState().reset();
+    act(() => {
+      useHiveStore.getState().hydrateAgents([
+        summary({ name: 'asker', status: 'asking' }),
+        summary({ name: 'broken', status: 'sleeping', invalid: 'bad frontmatter' }),
+        summary({ name: 'quitter', status: 'failed', runs: [{ outcome: 'failed', reason: 'hit the 150-turn limit', startedAt: 1, endedAt: 2 } as never] }),
+        summary({ name: 'resting', status: 'paused' }),
+        summary({ name: 'runner', status: 'working' }),
+      ]);
+      useHiveStore.setState((s) => ({
+        entities: {
+          ...s.entities,
+          a: sess('a', 'p1', 'working', { name: 'Alpha' }),
+          b: sess('b', 'p1', 'waiting'),
+          c: sess('c', 'p2', 'idle'),
+          d: sess('d', 'p2', 'idle', { idleDetail: 'agents' }),
+          e: sess('e', 'p1', 'done'),
+          t1: term('t1', 'p1'),
+          t2: term('t2', 'p1', { ended: { reason: 'lost', at: 1 } }),
+        },
+        order: ['a', 'b', 'c', 'd', 'e', 't1', 't2'],
+        ledger: [{ id: '20261002-145000-0001', ts: NOW - 14 * 60_000, from: 'asker', to: 'overmind', kind: 'ask', ref: 'a1', body: 'Merge #305?\nIt is approved.' }],
+      }));
+      useHiveStore.getState().setPlan('a', {
+        entityId: 'a', source: 'task-tools', allDone: false,
+        tasks: [{ id: '1', title: 'x', status: 'completed' }, { id: '2', title: 'y', status: 'pending' }],
+      });
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('maps sessions, terminals and agents to comb states, and drops what has ended', () => {
+    const { result } = renderHook(() => useCombEntities());
+    const by = Object.fromEntries(result.current.map((e) => [e.id, e]));
+    expect(Object.keys(by).sort()).toEqual(['a', 'asker', 'b', 'broken', 'c', 'd', 'quitter', 'resting', 'runner', 't1']);
+    expect(by.a).toMatchObject({ name: 'Alpha', kind: 'session', project: 'p1', state: 'morphing', done: 1, total: 2 });
+    expect(by.b).toMatchObject({ name: 'b', state: 'summons' });
+    expect(by.c).toMatchObject({ state: 'burrowed' });
+    expect(by.d).toMatchObject({ state: 'morphing', idleDetail: 'agents' });
+    expect(by.t1).toMatchObject({ kind: 'terminal', state: 'terminal', status: 'prompt' });
+    expect(by.asker).toMatchObject({ kind: 'agent', project: 'swarm', state: 'summons', ask: 'Merge #305?', askedAt: NOW - 14 * 60_000 });
+    expect(by.broken).toMatchObject({ state: 'failed', reason: 'bad frontmatter' });
+    expect(by.quitter).toMatchObject({ state: 'failed', reason: 'hit the 150-turn limit' });
+    expect(by.resting).toMatchObject({ state: 'burrowed', nextRun: 'paused' });
+    expect(by.runner).toMatchObject({ state: 'morphing' });
+  });
+
+  it('does not re-render on a transcript line or an unrelated write', () => {
+    let renders = 0;
+    renderHook(() => { renders += 1; return useCombEntities(); });
+    const before = renders;
+    act(() => useHiveStore.getState().appendEntityLines('a', [{ text: 'more', color: 'ink' }]));
+    act(() => useHiveStore.setState((s) => ({ entities: { ...s.entities, a: { ...(s.entities.a as Session), cost: '$9' } } })));
+    expect(renders).toBe(before);
+  });
+
+  it('re-renders when a state changes', () => {
+    const { result } = renderHook(() => useCombEntities());
+    act(() => useHiveStore.getState().appendEntityLines('c', [], 'waiting'));
+    expect(result.current.find((e) => e.id === 'c')!.state).toBe('summons');
+  });
+
+  it('summarises for the headline', () => {
+    const { result } = renderHook(() => useCombSummary());
+    expect(result.current).toEqual({ needs: 2, working: 3, failed: 2, resting: 3, projects: 2, agents: 5 });
   });
 });

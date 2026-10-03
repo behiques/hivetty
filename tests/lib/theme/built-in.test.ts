@@ -5,6 +5,7 @@ import {
   SYNTAX_KEYS,
   TERMINAL_KEYS,
   UI_KEYS,
+  UI_OPTIONAL_KEYS,
   syntaxTokenName,
   uiTokenName,
 } from '@lib/theme/contract';
@@ -20,6 +21,7 @@ describe('the format', () => {
     expect(UI_KEYS).toHaveLength(28);
     expect(SYNTAX_KEYS).toHaveLength(11);
     expect(TERMINAL_KEYS).toHaveLength(11);
+    expect(UI_OPTIONAL_KEYS).toEqual(['creep', 'chitin']);
   });
 });
 
@@ -30,6 +32,15 @@ describe('the built-in theme mirrors tokens.css', () => {
   it('matches the dark ui block', () => {
     for (const key of UI_KEYS) {
       expect(BUILT_IN_THEME.modes.dark.ui[key], key).toBe(dark[uiTokenName(key)]);
+    }
+  });
+
+  it.each([
+    ['dark', dark],
+    ['light', light],
+  ] as const)('carries the creature colours in the %s block', (mode, block) => {
+    for (const key of UI_OPTIONAL_KEYS) {
+      expect(BUILT_IN_THEME.modes[mode].ui[key], key).toBe(block[uiTokenName(key)]);
     }
   });
 
@@ -81,6 +92,7 @@ describe('the built-in theme mirrors tokens.css', () => {
    */
   const THEMEABLE_TOKENS = new Set<string>([
     ...UI_KEYS.map(uiTokenName),
+    ...UI_OPTIONAL_KEYS.map(uiTokenName),
     ...SYNTAX_KEYS.map(syntaxTokenName),
   ]);
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BUILT_IN_THEME } from '@lib/theme/built-in';
-import { MAX_THEME_BYTES } from '@lib/theme/contract';
+import { MAX_THEME_BYTES, THEME_MODES } from '@lib/theme/contract';
 import { importTheme, isHiveTheme, utf8ByteLength } from '@lib/theme/validate';
 
 /** A complete, valid theme built by recolouring the built-in. */
@@ -249,6 +249,27 @@ describe('unknown keys', () => {
   });
 });
 
+describe('the creature colours (HIVE-199)', () => {
+  it('imports a theme without creep and chitin with no warning about them', () => {
+    const theme = structuredClone(BUILT_IN_THEME);
+    for (const mode of THEME_MODES) {
+      delete theme.modes[mode].ui.creep;
+      delete theme.modes[mode].ui.chitin;
+    }
+    const result = importTheme(JSON.stringify(theme), 'old.json');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.theme.modes.dark.ui.creep).toBeUndefined();
+    expect(result.inherited).toBe(0);
+    expect(result.notes.join('\n')).not.toMatch(/creep|chitin/);
+  });
+
+  it('round-trips a theme that carries them', () => {
+    const result = importTheme(JSON.stringify(BUILT_IN_THEME), 'hive.json');
+    expect(result.ok && result.theme.modes.light.ui.chitin).toBe('#6a54b0');
+  });
+});
+
 describe('colour parsing', () => {
   it('names the exact path of an unparseable colour', () => {
     const modes = structuredClone(BUILT_IN_THEME.modes) as Record<string, any>;
@@ -460,6 +481,27 @@ describe('isHiveTheme', () => {
     const broken = structuredClone(BUILT_IN_THEME) as Record<string, any>;
     broken.modes.light.syntax.keyword = 'rgba(0,0,0,0.3)';
     expect(isHiveTheme(broken)).toBe(false);
+  });
+
+  /**
+   * HIVE-199: apply.ts now reads the optional creature keys from a stored
+   * theme, so a malformed one must be dropped here rather than crash the boot
+   * or reach the generated `<style>`.
+   */
+  it.each([
+    { label: 'a number', value: 5 as unknown },
+    { label: 'not a colour', value: 'x;} body{display:none' as unknown },
+  ])('rejects an optional creature colour that is $label', ({ value }) => {
+    const broken = structuredClone(BUILT_IN_THEME) as Record<string, any>;
+    broken.modes.dark.ui.creep = value;
+    expect(isHiveTheme(broken)).toBe(false);
+  });
+
+  it('accepts a theme without the optional colours', () => {
+    const bare = structuredClone(BUILT_IN_THEME) as Record<string, any>;
+    delete bare.modes.dark.ui.chitin;
+    delete bare.modes.dark.terminal.surface;
+    expect(isHiveTheme(bare)).toBe(true);
   });
 });
 

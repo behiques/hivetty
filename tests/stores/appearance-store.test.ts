@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BUILT_IN_THEME } from '@lib/theme/built-in';
 import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
+import { swarmPaletteOf } from '@lib/theme/colour';
 import { type HiveTheme } from '@lib/theme/contract';
 import { RAIL_MIN, railMaxWidth } from '@lib/rail-width';
 import {
@@ -16,6 +17,7 @@ import {
   syncRailWidths,
   useLayout,
   useSetLayout,
+  useSwarmPalette,
   useTerminalAppearance,
   watchSystemTheme,
 } from '@stores/appearance-store';
@@ -1256,5 +1258,52 @@ describe('appearance-store — layout (HIVE-195)', () => {
     act(() => result.current.setLayout('round-two'));
 
     expect(result.current.layout).toBe('round-two');
+  });
+});
+
+describe('appearance-store — the swarm palette (HIVE-199)', () => {
+  it('is the built-in palette for the resolved mode', () => {
+    const { result, rerender } = renderHook(() => useSwarmPalette());
+    act(() => useAppearanceStore.getState().setTheme('light'));
+    rerender();
+    expect(result.current).toEqual(swarmPaletteOf(BUILT_IN_THEME.modes.light.ui));
+    act(() => useAppearanceStore.getState().setTheme('dark'));
+    rerender();
+    expect(result.current.creep).toBe('#5b3d8f');
+  });
+
+  it("uses an imported theme's creep and chitin", () => {
+    const theme = structuredClone(nordFixture);
+    theme.modes.dark.ui.creep = '#123456';
+    act(() => {
+      useAppearanceStore.getState().setTheme('dark');
+      useAppearanceStore.getState().addTheme('nord', theme);
+      useAppearanceStore.getState().activateTheme('nord');
+    });
+    const { result } = renderHook(() => useSwarmPalette());
+    expect(result.current.creep).toBe('#123456');
+    expect(result.current).toEqual(swarmPaletteOf(theme.modes.dark.ui));
+  });
+
+  it("derives them for an imported theme that lacks them", () => {
+    const theme = structuredClone(nordFixture);
+    delete theme.modes.dark.ui.creep;
+    delete theme.modes.dark.ui.chitin;
+    act(() => {
+      useAppearanceStore.getState().setTheme('dark');
+      useAppearanceStore.getState().addTheme('nord', theme);
+      useAppearanceStore.getState().activateTheme('nord');
+    });
+    const { result } = renderHook(() => useSwarmPalette());
+    expect(result.current.creep).toBe(swarmPaletteOf(theme.modes.dark.ui).creep);
+    expect(result.current.creep).not.toBe('#5b3d8f');
+  });
+
+  it('is the same object across unrelated writes', () => {
+    const { result, rerender } = renderHook(() => useSwarmPalette());
+    const first = result.current;
+    act(() => useAppearanceStore.getState().setTerminalFontSize(16));
+    rerender();
+    expect(result.current).toBe(first);
   });
 });

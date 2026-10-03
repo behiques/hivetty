@@ -10,6 +10,7 @@ import {
   type RailWidthInput,
   type RailWidths,
 } from '@lib/rail-width';
+import type { SwarmPalette } from '@lib/swarm/palette';
 import {
   DEFAULT_TERMINAL_FONT,
   DEFAULT_TERMINAL_FONT_SIZE,
@@ -20,7 +21,8 @@ import {
 import { applyThemeColors } from '@lib/theme/apply';
 import { BUILT_IN_THEME } from '@lib/theme/built-in';
 import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
-import { BUILT_IN_THEME_ID, type HiveTheme } from '@lib/theme/contract';
+import { swarmPaletteOf } from '@lib/theme/colour';
+import { BUILT_IN_THEME_ID, type HiveTheme, type UiColors } from '@lib/theme/contract';
 import { isHiveTheme } from '@lib/theme/validate';
 
 /**
@@ -1194,6 +1196,31 @@ export const useThemeLibraryActions = () =>
  */
 export const useTerminalAppearance = () =>
   useAppearanceStore(useShallow(terminalAppearanceSelector));
+
+/** One palette per ui object, so a re-read hands back the same reference. */
+const swarmPalettes = new WeakMap<UiColors, SwarmPalette>();
+
+/**
+ * The swarm canvas's colours (HIVE-199), built like the terminal's palette:
+ * from the active theme's resolved mode, never from `getComputedStyle`.
+ *
+ * Memoised on the theme's `ui` object rather than rebuilt per read, so an
+ * unrelated appearance write returns the same reference and Home does not
+ * repaint for it; a theme or mode switch is a different `ui` object and a new
+ * palette.
+ */
+export const useSwarmPalette = (): SwarmPalette =>
+  useAppearanceStore((state) => {
+    const ui = (activeThemeOf(state) ?? BUILT_IN_THEME).modes[
+      resolveTheme(state.theme, state.systemDark)
+    ].ui;
+    let palette = swarmPalettes.get(ui);
+    if (palette === undefined) {
+      palette = swarmPaletteOf(ui);
+      swarmPalettes.set(ui, palette);
+    }
+    return palette;
+  });
 
 /**
  * The header's sublabel, trimmed — empty means the line is not drawn.
