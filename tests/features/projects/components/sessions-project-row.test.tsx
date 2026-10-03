@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ProjectRow } from '@/types/entity';
 
 import { SessionsProjectRow } from '@features/projects/components/sessions-project-row';
-import { resetProjectConfig } from '@lib/project-config';
+import { projectConfigSnapshot, resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
@@ -94,5 +94,35 @@ describe('SessionsProjectRow, an unmapped project (HIVE-211 sweep, HIVE-197 row)
   it('does not mark a mapped project', () => {
     render(<SessionsProjectRow project={nova} />);
     expect(screen.queryByText('unmapped')).toBeNull();
+  });
+
+  it('offers Map it in Settings once the unmapped project is the filter (HIVE-218)', async () => {
+    const ghost: ProjectRow = { id: 'ghost', key: testProjectKey('ghost'), name: 'ghost', icon: 'ph-folder' };
+    render(<SessionsProjectRow project={ghost} />);
+    expect(screen.queryByRole('button', { name: 'Map it in Settings' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /^ghost/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Map it in Settings' }));
+    expect(useUiStore.getState().settings).toBe(true);
+    expect(useUiStore.getState().settingsSection).toBe('projects');
+  });
+
+  it('says Fix it in Settings for a project whose path is bad (HIVE-218)', async () => {
+    const config = projectConfigSnapshot();
+    if (config === null) throw new Error('the demo config was not seeded');
+    setProjectConfigForTest({
+      ...config,
+      projects: config.projects.map((project) =>
+        project.id === 'nova-web' ? { ...project, status: 'missing' as const } : project,
+      ),
+    });
+    render(<SessionsProjectRow project={nova} />);
+    await userEvent.click(screen.getByRole('button', { name: /^nova-web/ }));
+    expect(screen.getByRole('button', { name: 'Fix it in Settings' })).toBeInTheDocument();
+  });
+
+  it('offers nothing for a mapped project, even as the filter (HIVE-218)', async () => {
+    render(<SessionsProjectRow project={nova} />);
+    await userEvent.click(screen.getByRole('button', { name: /^nova-web/ }));
+    expect(screen.queryByRole('button', { name: /in Settings$/ })).toBeNull();
   });
 });
