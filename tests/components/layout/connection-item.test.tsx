@@ -1,6 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { RemoteLinkStatus } from '@shared/ipc-contract';
 
@@ -124,5 +124,70 @@ describe('ConnectionItem (HIVE-196)', () => {
   it('never renders a header', () => {
     render(<ConnectionItem />);
     expect(screen.queryByRole('banner')).toBeNull();
+  });
+});
+
+describe('ConnectionItem — the link row (HIVE-196)', () => {
+  beforeEach(() => {
+    Object.assign(src, { desktop: true, exposed: null, serving: null, devices: 0, link: null });
+    useUiStore.getState().reset();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('names what the dropped link swallowed, and Clear acknowledges it', async () => {
+    src.link = link({ state: 'reconnecting', lost: 3 });
+    render(<ConnectionItem />);
+    const dialog = await open();
+    expect(dialog).toHaveTextContent('3 actions (clicks or keystrokes) did not reach mac-mini; redo them once it is back.');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Clear' }));
+
+    expect(dialog).not.toHaveTextContent('did not reach');
+  });
+
+  it('says it once, without "once it is back", while attached', async () => {
+    src.link = link({ lost: 1 });
+    render(<ConnectionItem />);
+    expect(await open()).toHaveTextContent('1 action (clicks or keystrokes) did not reach mac-mini; redo it.');
+  });
+
+  it('a new loss after Clear shows only the new one, and going local resets the count', async () => {
+    src.link = link({ lost: 2 });
+    const { rerender } = render(<ConnectionItem />);
+    await userEvent.click(within(await open()).getByRole('button', { name: 'Clear' }));
+
+    src.link = link({ lost: 3 });
+    rerender(<ConnectionItem />);
+    expect(screen.getByRole('dialog')).toHaveTextContent('1 action (clicks or keystrokes)');
+
+    await userEvent.keyboard('{Escape}');
+    src.link = null;
+    rerender(<ConnectionItem />);
+    src.link = link({ lost: 2 });
+    rerender(<ConnectionItem />);
+    expect(await open()).toHaveTextContent('2 actions (clicks or keystrokes)');
+  });
+
+  it('counts down to the next try while open', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    vi.setSystemTime(0);
+    src.link = link({ state: 'reconnecting', nextAttemptAt: 8_000 });
+    render(<ConnectionItem />);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(item());
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Next try in 8s.');
+
+    act(() => vi.advanceTimersByTime(1_000));
+
+    expect(dialog).toHaveTextContent('Next try in 7s.');
+  });
+
+  it('drops the countdown when no try is scheduled', async () => {
+    src.link = link({ state: 'reconnecting', nextAttemptAt: null });
+    render(<ConnectionItem />);
+    expect(await open()).not.toHaveTextContent('Next try');
   });
 });
