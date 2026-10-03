@@ -477,6 +477,23 @@ failed log once per job id, on show, never on a timer. The shown push and the
 clicked job are `ui-store`'s `prRun` and `prJob`, not persisted. The graph, the
 pushes and the shown job are derived in selectors over `src/lib/checks-graph.ts`.
 
+**The Timeline tab (HIVE-208).** A sixth PR slice, `prTimelines`, keyed by `prKey`
+and capped and dropped with `prDetails`. It is its own slice because `loadPrDetail`
+replaces a detail's entry whole every minute. An entry holds `github:pr-timeline`'s
+read (commits, runs, reviews, comments) and the ledger `history`. `loadPrTimeline`
+re-reads GitHub on every call, from a tab-local 60s poller that runs only while the
+tab is mounted, and reads the ledger **once**, from a day before the PR opened: the
+renderer's live tail is capped at 500, so a long PR's early holds would fall out of
+it. The day is slack for a server-mode client in another zone; `prEvents` drops the
+extras. A failed refresh keeps `timeline` and `history` beside the `problem`.
+`useTimelineModel(pr, now)` merges `history` with the live ledger by id (the tail
+wins) and runs `buildTimeline` in `src/lib/pr-timeline.ts`: the flap band, the
+commit, CI, review, comment and agent lanes, the time scale, and the buckets with
+their sentence. **Nothing derived is stored**; the tab captures `now` per poll so
+the memo holds between ticks. `ui-store`'s `prFocus` (not persisted) is the
+Conversation item a mark was clicked through to, by its list key; the Conversation
+scrolls to it and clears it.
+
 The ui-store's PRs fields are flat, as `workTicket` and `agentPage` are, and none
 is persisted: `prPage` (the last PR opened, which `useOpenPr()` keeps while it is
 still a row), `prTab`, `prsFolded` (the HATCHED fold, folded by default),
