@@ -351,8 +351,8 @@ test('the off-loopback bind is off, and its fields are hidden, by default', asyn
   await expect(page.getByLabel(/^port$/i)).toBeHidden();
   await expect(page.getByLabel(/allowed origins/i)).toBeHidden();
 
-  // Nothing is claimed in the header, because nothing is exposed.
-  await expect(page.getByTestId('header-chips').getByText('127.0.0.1')).toHaveCount(0);
+  // Nothing is claimed at the bar's foot, because nothing is exposed.
+  await expect(page.getByTestId('connection-item')).not.toHaveText('Exposed');
 
   await app.close();
 });
@@ -398,12 +398,12 @@ test('turning the bind switch on reveals the fields and writes an address', asyn
 });
 
 /**
- * The header chip, on a config that seeds `receiver.bind.host` already
- * non-loopback — proving the chip end to end from a *file* rather than from
+ * The connection item, on a config that seeds `receiver.bind.host` already
+ * non-loopback — proving the item end to end from a *file* rather than from
  * whatever state the switch test above left behind, since each spec launches
  * its own app against its own seed.
  */
-test('the header names the address when the app starts exposed', async ({}, testInfo) => {
+test('the connection item names the address when the app starts exposed', async ({}, testInfo) => {
   const configPath = testInfo.outputPath('hive-config.json');
   writeFileSync(
     configPath,
@@ -429,41 +429,11 @@ test('the header names the address when the app starts exposed', async ({}, test
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await expect(page.getByTestId('header-chips').getByText('0.0.0.0')).toBeVisible();
-
-  await app.close();
-});
-
-/** HIVE-196: round two has no header; the bar's foot carries the exposure. */
-test('round two: the bar foot reads Exposed and its popover names the address', async ({}, testInfo) => {
-  const configPath = testInfo.outputPath('hive-config.json');
-  writeFileSync(
-    configPath,
-    JSON.stringify(
-      {
-        version: 2,
-        shell: '/bin/sh',
-        projects: [],
-        receiver: {
-          hostAlias: 'host.docker.internal',
-          bind: { host: '0.0.0.0', port: 0, allowedOrigins: [] },
-        },
-      },
-      null,
-      2,
-    ),
-  );
-
-  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
-  const page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('nav[aria-label="Places"]');
-
-  await expect(page.locator('header')).toHaveCount(0);
   const item = page.getByTestId('connection-item');
   await expect(item).toHaveText('Exposed');
   await item.click();
   await expect(page.getByRole('dialog', { name: 'Connection' })).toContainText('0.0.0.0');
+  await page.keyboard.press('Escape');
 
   await app.close();
 });
@@ -475,12 +445,12 @@ test('round two: the bar foot reads Exposed and its popover names the address', 
  * at next launch" already says. Toggling the settings switch off rewrites the
  * config file and its in-memory snapshot to loopback *instantly*, but the
  * socket this app bound wide at launch keeps listening until the app actually
- * restarts. A chip sourced from that snapshot would vanish the instant the
- * switch is toggled and read as safe; it would not be. So the chip must
+ * restarts. An item sourced from that snapshot would vanish the instant the
+ * switch is toggled and read as safe; it would not be. So the connection item must
  * survive exactly this sequence, still naming the address, because the
  * process is still reachable off loopback for the rest of this run.
  */
-test('the chip survives the switch going loopback — it reports the running bind, not the file (HIVE-134)', async ({}, testInfo) => {
+test('the connection item survives the switch going loopback — it reports the running bind, not the file (HIVE-134)', async ({}, testInfo) => {
   const configPath = testInfo.outputPath('hive-config.json');
   writeFileSync(
     configPath,
@@ -503,22 +473,29 @@ test('the chip survives the switch going loopback — it reports the running bin
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await expect(page.getByTestId('header-chips').getByText('0.0.0.0')).toBeVisible();
+  const item = page.getByTestId('connection-item');
+  await expect(item).toHaveText('Exposed');
+  await item.click();
+  await expect(page.getByRole('dialog', { name: 'Connection' })).toContainText('0.0.0.0');
+  await page.keyboard.press('Escape');
 
   await openAdvanced(page);
   await page.getByRole('switch', { name: /off loopback/i }).click();
 
   // The file, proving the toggle really did rewrite it to loopback — the
-  // half of the story a config-derived chip would have reacted to.
+  // half of the story a config-derived item would have reacted to.
   await expect
     .poll(() => (read(configPath).receiver as Record<string, unknown> | undefined)
       ?.bind as Record<string, unknown> | undefined)
     .toMatchObject({ host: '127.0.0.1' });
 
-  // The chip, proving it did not react to that write: the socket this
-  // session opened at boot is still bound to `0.0.0.0` and still reachable,
-  // and the header still has to say so.
-  await expect(page.getByTestId('header-chips').getByText('0.0.0.0')).toBeVisible();
+  // The connection item, proving it did not react to that write: the socket
+  // this session opened at boot is still bound to `0.0.0.0` and still
+  // reachable, and the connection item still has to say so.
+  await expect(item).toHaveText('Exposed');
+  await item.click();
+  await expect(page.getByRole('dialog', { name: 'Connection' })).toContainText('0.0.0.0');
+  await page.keyboard.press('Escape');
 
   await app.close();
 });
