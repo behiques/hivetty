@@ -190,3 +190,89 @@ describe('TicketPageConversation (HIVE-203)', () => {
     expect(screen.getByText('No comments yet.')).toBeInTheDocument();
   });
 });
+
+describe('the reply box (HIVE-203)', () => {
+  const box = () => screen.getByRole('textbox', { name: 'Comment on HIVE-7' });
+
+  it('replies to a comment, and Escape in an empty box forgets whom', async () => {
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+    expect(box()).toHaveAttribute('placeholder', 'Add a comment — markdown works');
+
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+
+    expect(box()).toHaveAttribute('placeholder', 'Reply to Dana Kim…');
+    expect(box()).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(box()).toHaveAttribute('placeholder', 'Add a comment — markdown works');
+  });
+
+  it('keeps the reply when Escape lands on a box with text', async () => {
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+    await userEvent.click(within(items()[0]!).getByRole('button', { name: 'Reply' }));
+
+    await userEvent.type(box(), 'hi');
+    await userEvent.keyboard('{Escape}');
+
+    expect(box()).toHaveAttribute('placeholder', 'Reply to Dana Kim…');
+    expect(box()).toHaveValue('hi');
+  });
+
+  it('says where the comment goes and who sees it', () => {
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    expect(screen.getByText('Comment on Jira')).toBeInTheDocument();
+    expect(screen.getByText('everyone on the ticket sees it')).toBeInTheDocument();
+  });
+
+  it('disables Comment while empty and while posting', async () => {
+    let finish!: (value: unknown) => void;
+    addJiraComment.mockReturnValue(new Promise((done) => (finish = done)));
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+    expect(screen.getByRole('button', { name: 'Comment' })).toBeDisabled();
+
+    await userEvent.type(box(), 'hello');
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(screen.getByRole('button', { name: 'Posting…' })).toBeDisabled();
+    finish(null);
+  });
+
+  it('posts the trimmed draft, clears the box and shows the comment', async () => {
+    const posted = comment('102', 'Me Myself', '2026-10-01T13:00:00.000Z', 'Posted words');
+    addJiraComment.mockResolvedValue({ ok: true, value: posted });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.type(box(), '  Posted words  ');
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(addJiraComment).toHaveBeenCalledWith({ key: 'HIVE-7', markdown: 'Posted words' });
+    expect(await screen.findByText('Posted words')).toBeInTheDocument();
+    expect(box()).toHaveValue('');
+    expect(useHiveStore.getState().ticketDetail?.total).toBe(3);
+  });
+
+  it('shows a refusal and each detail in amber, keeping the draft', async () => {
+    addJiraComment.mockResolvedValue({
+      ok: false,
+      error: { kind: 'invalid', message: 'Jira refused it', details: ['body: too long'] },
+    });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.type(box(), 'draft');
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(await screen.findByText('Jira refused it')).toHaveClass('text-amber');
+    expect(screen.getByText('body: too long')).toHaveClass('text-amber');
+    expect(box()).toHaveValue('draft');
+  });
+
+  it('names a missing bridge', async () => {
+    addJiraComment.mockResolvedValue(null);
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await userEvent.type(box(), 'draft');
+    await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(await screen.findByText(/./, { selector: 'p.text-amber' })).toBeInTheDocument();
+  });
+});

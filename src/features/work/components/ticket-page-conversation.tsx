@@ -1,5 +1,8 @@
 import { GitPullRequest, Hexagon } from '@phosphor-icons/react';
-import { useMemo } from 'react';
+import { type RefObject, useMemo, useRef, useState } from 'react';
+
+import { addJiraComment } from '@/lib/jira';
+import { BRIDGE_ERROR } from '@/lib/utils';
 
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { AdfBlocks } from '@features/work/components/adf-blocks';
@@ -8,6 +11,7 @@ import { commentTime } from '@features/work/ticket-presentation';
 import type { JiraComment } from '@shared/jira-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import {
+  useAppendTicketComment,
   useLoadTicketDetail,
   useOpenTicket,
   useTicketDetail,
@@ -98,7 +102,7 @@ function EventItem({ entry }: { entry: LedgerEntry }) {
   const Glyph = pr ? GitPullRequest : Hexagon;
 
   return (
-    <li className="grid grid-cols-[30px_minmax(0,1fr)_auto] items-center px-1.5 py-1 text-[12px] text-muted">
+    <li className="grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 px-1.5 py-1 text-[12px] text-muted">
       <span data-glyph={pr ? 'pr' : 'session'} className="grid place-items-center text-subtle">
         <Glyph size={13} aria-hidden />
       </span>
@@ -110,18 +114,86 @@ function EventItem({ entry }: { entry: LedgerEntry }) {
 }
 
 /**
+ * Comment on Jira from the page (HIVE-203). The post logic is the card
+ * conversation's: the trimmed markdown goes to main, and the comment Jira
+ * answers with is shown at once rather than re-reading the thread. A refusal
+ * keeps the draft, with Jira's own words, in amber.
+ */
+function ReplyBox({
+  ticketKey,
+  replyTo,
+  onForget,
+  box,
+}: {
+  ticketKey: string;
+  /** The author Reply was pressed on; only the placeholder says so. */
+  replyTo: string | null;
+  onForget: () => void;
+  box: RefObject<HTMLTextAreaElement | null>;
+}) {
+  const append = useAppendTicketComment();
+  const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [problem, setProblem] = useState<string[] | null>(null);
+
+  const post = () => {
+    const markdown = draft.trim();
+    if (markdown === '') return;
+
+    setPosting(true);
+    setProblem(null);
+    void addJiraComment({ key: ticketKey, markdown }).then((result) => {
+      setPosting(false);
+      if (result === null) return setProblem([BRIDGE_ERROR]);
+      if (!result.ok) return setProblem([result.error.message, ...(result.error.details ?? [])]);
+      setDraft('');
+      onForget();
+      append(ticketKey, result.value);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-border-soft bg-panel p-3">
+      <textarea
+        ref={box}
+        rows={3}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && draft === '') onForget();
+        }}
+        aria-label={`Comment on ${ticketKey}`}
+        placeholder={replyTo === null ? 'Add a comment — markdown works' : `Reply to ${replyTo}…`}
+        className="resize-y bg-transparent text-[13px] text-ink outline-none placeholder:text-subtle"
+      />
+      <div className="flex items-center gap-2 text-[12px]">
+        <span className="rounded-md border border-border-soft px-2 py-0.5 text-ink">Comment on Jira</span>
+        <span className="text-muted">everyone on the ticket sees it</span>
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={post}
+          disabled={posting || draft.trim() === ''}
+          className="rounded-md bg-brand-fill px-3 py-1 text-ink hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-brand-fill"
+        >
+          {posting ? 'Posting…' : 'Comment'}
+        </button>
+      </div>
+      {problem?.map((line) => (
+        <p key={line} className="text-[12px] text-amber">
+          {line}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/**
  * The ticket page's conversation (HIVE-203): Jira's comments, newest
  * `JIRA_MAX_COMMENTS` oldest-first, and — on Everything — the ledger's events
  * for the ticket interleaved with them by time.
  */
-export function TicketPageConversation({
-  ticketKey,
-  onReply = () => undefined,
-}: {
-  ticketKey: string;
-  /** Reply on a comment: the author the reply box should address. */
-  onReply?: (author: string) => void;
-}) {
+export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
   const detail = useTicketDetail();
   const events = useTicketEvents(ticketKey);
   const ticket = useOpenTicket(ticketKey);
@@ -133,6 +205,13 @@ export function TicketPageConversation({
   const total = mine?.total ?? comments?.length ?? 0;
   const problem = mine?.problems.comments;
   const retry = () => void load(ticketKey);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+
+  const reply = (author: string) => {
+    setReplyTo(author);
+    box.current?.focus();
+  };
 
   const items = useMemo<Item[]>(() => {
     const said: Item[] = (comments ?? []).map((comment) => ({
@@ -168,11 +247,14 @@ export function TicketPageConversation({
         <>
           {total > comments.length ? (
             <p className="text-[12px] text-subtle">
-              {`Showing the latest ${comments.length} of ${total} · `}
+              {`Showing the latest ${comments.length} of ${total}`}
               {ticket?.url ? (
-                <a href={ticket.url} target="_blank" rel="noreferrer" className="text-brand hover:underline">
-                  Open in Jira
-                </a>
+                <>
+                  {' · '}
+                  <a href={ticket.url} target="_blank" rel="noreferrer" className="text-brand hover:underline">
+                    Open in Jira
+                  </a>
+                </>
               ) : null}
             </p>
           ) : null}
@@ -185,7 +267,7 @@ export function TicketPageConversation({
             <ul aria-label="Conversation" className="flex flex-col gap-0.5">
               {items.map((item) =>
                 item.kind === 'comment' ? (
-                  <CommentItem key={`c-${item.comment.id}`} comment={item.comment} url={ticket?.url} onReply={onReply} />
+                  <CommentItem key={`c-${item.comment.id}`} comment={item.comment} url={ticket?.url} onReply={reply} />
                 ) : (
                   <EventItem key={`e-${item.entry.id}`} entry={item.entry} />
                 ),
@@ -194,6 +276,8 @@ export function TicketPageConversation({
           )}
         </>
       )}
+
+      <ReplyBox ticketKey={ticketKey} replyTo={replyTo} onForget={() => setReplyTo(null)} box={box} />
     </section>
   );
 }
