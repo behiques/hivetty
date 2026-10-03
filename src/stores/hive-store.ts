@@ -9443,6 +9443,31 @@ export const usePrSource = () => useHiveStore((state) => state.prSource);
 export const usePrsQuiet = (): boolean =>
   useHiveStore((state) => state.prSource.kind === 'live' && state.prs.length === 0);
 
+/**
+ * No list without items (HIVE-211): each place's panel is drawn only while it
+ * has something to list. Loading keeps the panel, for its skeleton; anything
+ * else empty hands the stage a page that says why.
+ */
+export const useWorkListed = (): boolean =>
+  useHiveStore(
+    (state) =>
+      state.ticketSource.kind === 'loading' ||
+      (state.ticketSource.kind === 'live' && state.tickets.length > 0),
+  );
+
+export const usePrsListed = (): boolean =>
+  useHiveStore(
+    (state) =>
+      state.prSource.kind === 'loading' ||
+      (state.prSource.kind === 'live' && state.prs.length > 0),
+  );
+
+export const useAgentsListed = (): boolean =>
+  useHiveStore((state) => Object.values(state.entities).some(isAgent));
+
+/** Projects come from the config snapshot, not the store, so this reads `useProjects`. */
+export const useSessionsListed = (): boolean => useProjects().length > 0;
+
 /** Sweep GitHub. The poller's entry point — see `hooks/use-pr-refresh.ts`. */
 export const useRefreshPrs = () => useHiveStore((state) => state.refreshPrs);
 

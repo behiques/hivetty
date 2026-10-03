@@ -58,6 +58,10 @@ import {
   useProjectSessions,
   usePrs,
   usePrsQuiet,
+  useAgentsListed,
+  usePrsListed,
+  useSessionsListed,
+  useWorkListed,
   useHatchery,
   useHatcherySearch,
   usePrNeedsYouCount,
@@ -102,10 +106,11 @@ import {
 } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { notif } from '../support/notifications';
-import { seedDemoFleet } from '@tests/support/demo-fleet';
+import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
 
 import { testProjectKey } from '@tests/support/project-key';
 import { prRecord } from '@tests/support/prs';
+import type { JiraIssue } from '@shared/jira-contract';
 
 /**
  * Every selector hook is asserted against the fixtures. Derived values are
@@ -3205,5 +3210,78 @@ describe('Home strip selectors (HIVE-200)', () => {
       );
       expect(result.current).toBe(first);
     });
+  });
+});
+
+describe('listed (HIVE-211): no list without items', () => {
+  const jiraIssue = (over: Partial<JiraIssue> = {}): JiraIssue => ({
+    key: 'HIVE-1',
+    summary: 'A real ticket',
+    status: 'In Progress',
+    statusCategory: 'in-progress',
+    issueType: 'Story',
+    priority: 'Medium',
+    assignee: 'Yunid Bauza',
+    updated: '2026-08-07T00:00:00.000-0400',
+    url: 'https://behiques.atlassian.net/browse/HIVE-1',
+    ...over,
+  });
+
+  beforeEach(() => useHiveStore.getState().reset());
+  afterEach(() => resetProjectConfig());
+
+  it('Work is listed while loading and with tickets, not when unconfigured, failed or empty', () => {
+    const { result, rerender } = renderHook(() => useWorkListed());
+    expect(result.current).toBe(true); // loading: the skeleton is the message
+    act(() => useHiveStore.setState({ ticketSource: { kind: 'unconfigured' } }));
+    rerender();
+    expect(result.current).toBe(false);
+    act(() => useHiveStore.setState({ ticketSource: { kind: 'failed', message: 'x' } }));
+    rerender();
+    expect(result.current).toBe(false);
+    act(() =>
+      useHiveStore.setState({ ticketSource: { kind: 'live', stale: false, capped: false }, tickets: [] }),
+    );
+    rerender();
+    expect(result.current).toBe(false);
+    act(() => useHiveStore.getState().hydrateTickets([jiraIssue()], false));
+    rerender();
+    expect(result.current).toBe(true);
+  });
+
+  it('PRs are listed while loading and with PRs only', () => {
+    const { result, rerender } = renderHook(() => usePrsListed());
+    expect(result.current).toBe(true);
+    act(() => useHiveStore.setState({ prSource: { kind: 'unconfigured', message: 'm' } }));
+    rerender();
+    expect(result.current).toBe(false);
+    act(() => useHiveStore.setState({ prSource: { kind: 'failed', message: 'x' } }));
+    rerender();
+    expect(result.current).toBe(false);
+    act(() => useHiveStore.setState({ prSource: { kind: 'live', stale: false, repos: 1 }, prs: [] }));
+    rerender();
+    expect(result.current).toBe(false);
+    act(() => useHiveStore.setState({ prs: [prRecord()] }));
+    rerender();
+    expect(result.current).toBe(true);
+  });
+
+  it('Agents are listed once one agent exists', () => {
+    const { result, rerender } = renderHook(() => useAgentsListed());
+    expect(result.current).toBe(false);
+    act(() => {
+      seedDemoFleet();
+    });
+    rerender();
+    expect(result.current).toBe(true);
+  });
+
+  it('Sessions are listed once one project is configured', () => {
+    setProjectConfigForTest(emptySnapshot('/tmp/hive/config.json'));
+    const { result, rerender } = renderHook(() => useSessionsListed());
+    expect(result.current).toBe(false);
+    act(() => seedDemoProjectConfig());
+    rerender();
+    expect(result.current).toBe(true);
   });
 });
