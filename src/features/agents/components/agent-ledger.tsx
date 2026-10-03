@@ -129,14 +129,16 @@ export function AgentLedger({ name }: AgentLedgerProps) {
  * `ask` is amber because an open question is the "needs you" state everywhere
  * else in the app; `done` and `answer` are green because they close something;
  * `failed` is red. The bookkeeping kinds — `post`, `claim`, `release` — are
- * deliberately muted: they are the record working, not news.
+ * deliberately muted: they are the record working, not news. So is `event`
+ * (HIVE-204), in the quieter grey: a run starting or ending is the runtime
+ * keeping its own record, and it outnumbers everything else in the column.
  */
 const KIND_TONE: Record<LedgerKind, string> = {
   ask: 'text-amber',
   answer: 'text-green',
   done: 'text-green',
   failed: 'text-red',
-  event: 'text-brand',
+  event: 'text-subtle',
   handoff: 'text-brand',
   post: 'text-muted',
   claim: 'text-muted',
