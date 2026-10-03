@@ -75,7 +75,15 @@ import {
   type TicketGroup,
   type TicketRowModel,
 } from '@lib/ticket-activity';
-import { isBlocks, SECOND_HOP_MAX_LINKS } from '@lib/ticket-links';
+import {
+  type Criteria,
+  epicLabel,
+  isBlocks,
+  parseCriteria,
+  SECOND_HOP_MAX_LINKS,
+  ticketLinksModel,
+  type TicketLinksModel,
+} from '@lib/ticket-links';
 import { parseTitleTags } from '@lib/ticket-tags';
 import { BRIDGE_ERROR } from '@lib/utils';
 import {
@@ -8230,6 +8238,30 @@ export const useNextTransition = (ticketKey: string): JiraTransition | undefined
     [ticket, transitions],
   );
 };
+
+/** The Ticket tab's links, sorted into arcs with the verdict and counts (HIVE-202). */
+export const useTicketLinks = (ticketKey: string): TicketLinksModel | undefined => {
+  const links = useHiveStore((state) => state.ticketDetails[ticketKey]?.links);
+  const secondHop = useHiveStore((state) => state.ticketDetails[ticketKey]?.secondHop);
+  return useMemo(() => (links === undefined ? undefined : ticketLinksModel(links, secondHop)), [links, secondHop]);
+};
+
+/** The acceptance list, else the description, else null (HIVE-202). */
+export const useTicketCriteria = (ticketKey: string): Criteria => {
+  const description = useHiveStore((state) => state.ticketDetails[ticketKey]?.detail?.description);
+  return useMemo(() => parseCriteria(description), [description]);
+};
+
+/** The newest comment read: the comments page is the newest fifty, oldest first (HIVE-202, D1). */
+export const useLatestComment = (ticketKey: string): JiraComment | undefined =>
+  useHiveStore((state) => state.ticketDetails[ticketKey]?.comments?.at(-1));
+
+/** The ring's label, only for an epic (HIVE-202, D6). */
+export const useEpicLabel = (ticketKey: string): string | null =>
+  useHiveStore((state) => {
+    const entry = state.ticketDetails[ticketKey];
+    return epicLabel(entry?.detail?.parent, entry?.epicProgress);
+  });
 
 /**
  * How many work items exist — the left rail's Work tab badge (story 030).
