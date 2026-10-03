@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -91,5 +91,29 @@ describe('PrConversation', () => {
     unmount();
     render(<PrConversation pr={fixturePr({ state: 'merged' })} detail={one} fixerOnIt={false} />);
     expect(screen.queryByRole('button', { name: 'Reply' })).toBeNull();
+  });
+
+  it("scrolls to the Timeline's item once it is in the list, then clears the focus (HIVE-208)", () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const one = prDetail({
+      comments: [{ author: 'maria', body: 'Hi.', createdAt: '2026-10-03T11:31:00Z', url: 'https://c/1' }],
+    });
+    const { container } = render(<PrConversation pr={fixturePr()} detail={one} fixerOnIt={false} />);
+    act(() => useUiStore.getState().focusPrEvent('c-https://c/1', false));
+    const li = container.querySelector('li[data-key="c-https://c/1"]');
+    expect(li).not.toBeNull();
+    expect(scroll).toHaveBeenCalledWith({ block: 'center' });
+    expect(scroll.mock.contexts[0]).toBe(li);
+    expect(useUiStore.getState().prFocus).toBeNull();
+  });
+
+  it('keeps a focus whose item is not in the list yet (HIVE-208)', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    render(<PrConversation pr={fixturePr()} detail={detail} fixerOnIt={false} />);
+    act(() => useUiStore.getState().focusPrEvent('e-missing', true));
+    expect(scroll).not.toHaveBeenCalled();
+    expect(useUiStore.getState().prFocus).toBe('e-missing');
   });
 });

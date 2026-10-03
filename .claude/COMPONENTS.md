@@ -617,7 +617,7 @@ pull request" while the sweep is not live.
 - **The detail is polled** once a minute through its own `createPoller`; the page
   is keyed on the PR, so opening another is a new mount and a fresh read. A
   failed refresh keeps the last detail with the problem above it.
-- **`PR_TABS` is the tab list** (Conversation, Checks) HIVE-207/208 append to; a stored tab this
+- **`PR_TABS` is the tab list** (Conversation, Files, Checks, Timeline); a stored tab this
   page does not have falls back to Conversation in the page, not in the store.
 - **The ship track** is `bandStops()` over PR 1's `shipTrack`: the shipper's
   eight stops while it holds the PR, all eight ticked once merged after it ran,
@@ -666,6 +666,36 @@ so runs and jobs are read only while it is shown.
 - **`JobSteps`** is the shown job, with Re-run failed, Open the log, and "<holder> has it" (`holderIcon`). **`JobLog`** shows the cut log, toned by `classifyLogLine`.
 - **No runs and no other checks** reads "No checks on <sha>".
 - A tab can carry `SegmentedOption.alert`, a red dot that reads ", failing".
+
+### The Timeline tab: `<PrTimeline />`, `<TimelineLane />`, `<TimeBuckets />`
+
+`src/features/pull-requests/components/` — HIVE-208, built. Derivation is
+`src/lib/pr-timeline.ts`; the component only draws `useTimelineModel`.
+
+- **`<PrTimeline pr />`** (`pr-timeline.tsx`) mounts its own 60s poller, so the
+  read runs only while the tab is shown. It draws a skeleton until the first read, a
+  `SourceProblem` with Retry when that fails, and the problem above the lanes when a
+  refresh fails. Six lanes (Flap, Commits, CI, Reviews, Comments, Agents), the tick
+  row, a green "now" line while the PR is open, and `<TimeBuckets />` below.
+- **`<TimelineLane label marks height? />`** (`timeline-lane.tsx`): a 130px label
+  gutter (`GUTTER`; the axis, ticks and now line share it via `axisLeft`), lanes 52px
+  high, the Flap lane 40px. `LaneMark` is `{ key, from, to?, shape, tone, word?, tip, onOpen }`:
+  `from`/`to` are 0..1 on the axis, `tone` comes from a fixed class table, never
+  built from data, and `word` is drawn inside a span only when it fits.
+- **Marks are buttons** (`aria-label` is the tooltip text). One tooltip per lane
+  shows on hover and on focus, so focus equals hover, and Enter is a native click.
+- **Mark sizes:** flap 22px band; commit a 10px ring; CI bar 12px; review a 12px
+  diamond (amber when it asks for changes); comment a 12 × 11px bubble; hold a 20px
+  pill. Colours are tokens: green/red CI, brand for commits and comments,
+  chitin for holds, amber for reviews that wait on you. MUTATING is green stripes.
+- **Where each mark lands:** a CI bar opens Checks on its push (`showPrRun(sha)`);
+  a commit opens GitHub in a new tab; a review, comment, flap or hold calls
+  `focusPrEvent` and the Conversation scrolls to it (the ledger events by `e-<id>`,
+  GitHub's by `r-<url>` / `c-<url>`). A flap or hold with no ledger event falls back to
+  the Conversation tab, a hold to Everything.
+- **`<TimeBuckets age buckets sentence />`** (`time-buckets.tsx`): "Where the 3h 20m
+  went", one stacked bar of up to six buckets sized by time (a 24-minute floor so
+  none vanishes), and the sentence. `dur` is the tab's one duration format.
 
 ### `<EmptyHatchery />`
 

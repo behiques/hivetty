@@ -440,6 +440,8 @@ export interface ShipTrack {
   current: ShipStop | null;
   /** All eight, in {@link SHIP_STOPS} order. */
   stops: ShipStop[];
+  /** Every visit, oldest first; the open one has `to: null` (HIVE-208, the Timeline's buckets). */
+  visits: ShipVisit[];
 }
 
 const isShipStop = (stage: unknown): stage is ShipStopName =>
@@ -471,7 +473,7 @@ function namesPrAnywhere(entry: LedgerEntry, slug: string, n: number): boolean {
   return mentions(body, wanted) || mentions(body, `${slug.toLowerCase()}/pull/${n}`);
 }
 
-interface ShipVisit {
+export interface ShipVisit {
   stage: ShipStopName;
   from: number;
   to: number | null;
@@ -551,7 +553,12 @@ export function shipTrack(entries: readonly LedgerEntry[], slug: string, n: numb
     };
   });
   const at = held ? visits[open] : undefined;
-  return { held, current: at === undefined ? null : (stops.find((stop) => stop.stage === at.stage) ?? null), stops };
+  return {
+    held,
+    current: at === undefined ? null : (stops.find((stop) => stop.stage === at.stage) ?? null),
+    stops,
+    visits: visits.map((visit) => ({ ...visit })),
+  };
 }
 
 /** Every entry naming one PR, oldest first: the PR page's Everything filter (HIVE-205). */

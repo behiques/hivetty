@@ -9,6 +9,7 @@ import type {
   PrRunsRequest,
   PrsSnapshot,
   PrThreadRequest,
+  PrTimeline,
   PrViewedRequest,
   RunJob,
   RunRef,
@@ -70,6 +71,19 @@ export const readPrDetail = async (request: PrRef): Promise<GhResult<PrDetail> |
     return await bridge.github.prDetail(request);
   } catch (cause) {
     console.error('[hive] github.prDetail failed:', cause);
+    return null;
+  }
+};
+
+/** One PR's history for the Timeline tab (HIVE-208). Same two `null` cases as {@link readPullRequests}. */
+export const readPrTimeline = async (request: PrRef): Promise<GhResult<PrTimeline> | null> => {
+  const bridge = window.hive;
+  if (!bridge) return null;
+
+  try {
+    return await bridge.github.prTimeline(request);
+  } catch (cause) {
+    console.error('[hive] github.prTimeline failed:', cause);
     return null;
   }
 };

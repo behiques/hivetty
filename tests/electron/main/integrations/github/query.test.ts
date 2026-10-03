@@ -11,6 +11,7 @@ import {
   PR_DETAIL_QUERY,
   PR_ID_QUERY,
   PR_THREAD_OWNER_QUERY,
+  PR_TIMELINE_QUERY,
   repoQualifiers,
   THREAD_REPLY_MUTATION,
   THREAD_RESOLVE_MUTATION,
@@ -356,5 +357,16 @@ describe('HIVE-207 documents', () => {
   ])('%s declares its variables and binds nothing else', (_name, doc, parts) => {
     for (const part of parts) expect(doc).toContain(part);
     expect(doc).not.toMatch(/\$\{/);
+  });
+});
+
+describe('PR_TIMELINE_QUERY (HIVE-208)', () => {
+  it('binds owner, name and number and reads the timeline item types the tab draws', () => {
+    expect(PR_TIMELINE_QUERY).toContain('query($owner: String!, $name: String!, $number: Int!)');
+    expect(PR_TIMELINE_QUERY).toContain('timelineItems(last: 100, itemTypes: [PULL_REQUEST_COMMIT, READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, PULL_REQUEST_REVIEW, ISSUE_COMMENT, REVIEW_REQUESTED_EVENT, MERGED_EVENT])');
+    expect(PR_TIMELINE_QUERY).toContain('checkSuites(first: 20)');
+    expect(PR_TIMELINE_QUERY).toContain('workflowRun { runNumber url databaseId workflow { name } }');
+    expect(PR_TIMELINE_QUERY).toContain('checkRuns(first: 10, filterBy: { conclusions: [FAILURE, TIMED_OUT] })');
+    expect(PR_TIMELINE_QUERY).not.toMatch(/\$\{/);
   });
 });

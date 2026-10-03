@@ -283,6 +283,34 @@ export const PR_DETAIL_QUERY = [
   '}',
 ].join('\n');
 
+/**
+ * One PR's history for the Timeline tab (HIVE-208): its newest hundred
+ * timeline items, and for each commit its check suites, the CI bars. The
+ * Timeline makes no `gh run` reads, so the rate rule on runs holds.
+ */
+export const PR_TIMELINE_QUERY = [
+  PR_VARIABLES,
+  '  repository(owner: $owner, name: $name) {',
+  '    pullRequest(number: $number) {',
+  '      createdAt mergedAt isDraft',
+  '      timelineItems(last: 100, itemTypes: [PULL_REQUEST_COMMIT, READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, PULL_REQUEST_REVIEW, ISSUE_COMMENT, REVIEW_REQUESTED_EVENT, MERGED_EVENT]) { nodes {',
+  '        __typename',
+  '        ... on PullRequestCommit { url commit { oid committedDate',
+  '          checkSuites(first: 20) { nodes { status conclusion createdAt updatedAt',
+  '            workflowRun { runNumber url databaseId workflow { name } }',
+  '            checkRuns(first: 10, filterBy: { conclusions: [FAILURE, TIMED_OUT] }) { nodes { name } } } } } }',
+  '        ... on ReadyForReviewEvent { createdAt actor { login } }',
+  '        ... on ConvertToDraftEvent { createdAt actor { login } }',
+  '        ... on PullRequestReview { submittedAt author { login } state url }',
+  '        ... on IssueComment { createdAt author { login } url }',
+  '        ... on ReviewRequestedEvent { createdAt actor { login } }',
+  '        ... on MergedEvent { createdAt actor { login } }',
+  '      } }',
+  '    }',
+  '  }',
+  '}',
+].join('\n');
+
 /** The PR's node id, which `addComment` takes as its subject (HIVE-205). */
 export const PR_ID_QUERY = [
   PR_VARIABLES,

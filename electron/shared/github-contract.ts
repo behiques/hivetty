@@ -293,6 +293,35 @@ export interface PrDetail {
   files: PrFile[];
 }
 
+/** One CI run on the Timeline, from a commit's check suite (HIVE-208). */
+export interface PrTimelineRun {
+  /** The workflow run's database id. */
+  id: number;
+  number: number;
+  url: string;
+  /** The commit the suite ran on. */
+  sha: string;
+  workflow: string;
+  startedAt: string;
+  /** `null` while it runs. */
+  endedAt: string | null;
+  state: 'passed' | 'failed' | 'running' | 'other';
+  /** The names of its failed check runs (jobs), at most ten. */
+  failedJobs: string[];
+}
+
+/** A PR's history for the Timeline tab (HIVE-208). Newest hundred timeline items. */
+export interface PrTimeline {
+  createdAt: string;
+  mergedAt: string | null;
+  isDraft: boolean;
+  commits: { oid: string; at: string; url: string }[];
+  runs: PrTimelineRun[];
+  reviews: { at: string; author: string | null; state: string; url: string }[];
+  comments: { at: string; author: string | null; url: string }[];
+  events: { kind: 'ready' | 'draft' | 'review-requested' | 'merged'; at: string; actor: string | null }[];
+}
+
 /** `github:pr-runs` (HIVE-206): the runs of one PR's head branch. */
 export interface PrRunsRequest { owner: string; repo: string; branch: string }
 /** A run or a job, by id, in a configured repository (HIVE-206). */

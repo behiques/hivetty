@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,7 +63,7 @@ describe('PrPage', () => {
   });
 
   it('falls back to Conversation for a tab this PR does not have', () => {
-    useUiStore.setState({ prTab: 'timeline' as never });
+    useUiStore.setState({ prTab: 'insights' as never });
     render(<PrPage row={row} />);
     expect(screen.getByRole('radio', { name: 'Conversation' })).toBeChecked();
   });
@@ -144,5 +144,17 @@ describe('the Checks tab (HIVE-206)', () => {
   it('carries a red dot while a check fails', () => {
     render(<PrPage row={hatchRow({ checks: 'failing' }, { flap: 'MUTATING', tone: 'green' })} />);
     expect(screen.getByRole('radio', { name: 'Checks, failing' })).toBeInTheDocument();
+  });
+});
+
+describe('the Timeline tab (HIVE-208)', () => {
+  it('is the last tab, and choosing it shows the Timeline instead of the Conversation', async () => {
+    useHiveStore.setState({ loadPrTimeline: vi.fn(() => Promise.resolve()) });
+    render(<PrPage row={row} />);
+    const tabs = within(screen.getByRole('radiogroup', { name: 'Tab' })).getAllByRole('radio');
+    expect(tabs.at(-1)?.textContent).toBe('Timeline');
+    await userEvent.click(screen.getByRole('radio', { name: 'Timeline' }));
+    expect(screen.getByRole('region', { name: 'Timeline' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Conversation' })).toBeNull();
   });
 });

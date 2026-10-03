@@ -9,6 +9,7 @@ import {
   PR_DETAIL_QUERY,
   PR_ID_QUERY,
   PR_THREAD_OWNER_QUERY,
+  PR_TIMELINE_QUERY,
   type RepoRef,
   THREAD_REPLY_MUTATION,
   THREAD_RESOLVE_MUTATION,
@@ -341,6 +342,30 @@ describe('detail and comment (HIVE-205)', () => {
       timedOut: false,
     }));
     await expect(client.comment(REF, 482, 'hello')).resolves.toMatchObject({ ok: false, error: { kind: 'rate-limited' } });
+  });
+});
+
+describe('timeline (HIVE-208)', () => {
+  const REF: RepoRef = { owner: 'acme', name: 'server' };
+  const TIMELINE = JSON.stringify({ data: { repository: { pullRequest: {
+    createdAt: '2026-10-03T11:00:00Z', mergedAt: null, isDraft: false, timelineItems: { nodes: [] } } } } });
+  const recording = (answer: () => string, calls: string[][]): RunAsync => (_file, args) => {
+    calls.push([...args]);
+    return Promise.resolve({ code: 0, stdout: answer(), stderr: '', timedOut: false });
+  };
+
+  it('reads one PR with owner and name as -f and the number as -F', async () => {
+    const calls: string[][] = [];
+    const client = createGithubClient('/usr/bin/gh', recording(() => TIMELINE, calls));
+    await expect(client.timeline(REF, 1182)).resolves.toMatchObject({ ok: true, value: { createdAt: '2026-10-03T11:00:00Z', runs: [] } });
+    expect(calls).toEqual([['api', 'graphql', '-f', `query=${PR_TIMELINE_QUERY}`, '-f', 'owner=acme', '-f', 'name=server', '-F', 'number=1182']]);
+  });
+
+  it('classifies an unreadable answer, and says when gh could not run', async () => {
+    const failing = createGithubClient('/usr/bin/gh', answering({ code: 1, stderr: 'Could not resolve to a Repository' }));
+    await expect(failing.timeline(REF, 1182)).resolves.toMatchObject({ ok: false });
+    const absent = createGithubClient('/usr/bin/gh', () => Promise.reject(new Error('ENOENT')));
+    await expect(absent.timeline(REF, 1182)).resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
   });
 });
 

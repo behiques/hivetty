@@ -66,8 +66,9 @@ import { isThisMachineAction } from './notification-contract';
  * 10 → 11 (HIVE-205): `CH` gained `github:pr-detail` and `github:pr-comment`.
  * 11 → 12 (HIVE-206): `CH` gained `github:pr-runs`, `github:run-jobs`, `github:job-log` and `github:rerun-failed`; `PrCheck` gained `app` and `jobId`.
  * 12 → 13 (HIVE-207): `CH` gained `github:pr-diff`, `github:pr-thread` and `github:pr-viewed`; `PrDetail` gained `files`.
+ * 13 → 14 (HIVE-208): `CH` gained `github:pr-timeline`.
  */
-export const REMOTE_PROTOCOL_VERSION = 13;
+export const REMOTE_PROTOCOL_VERSION = 14;
 
 /**
  * What a frame is for.
@@ -198,6 +199,7 @@ export const FRAME_KIND = {
   [CH.githubPrDetail]: 'call',
   [CH.githubPrComment]: 'call',
   [CH.githubPrDiff]: 'call',
+  [CH.githubPrTimeline]: 'call',
   [CH.githubPrThread]: 'call',
   [CH.githubPrViewed]: 'call',
   [CH.githubPrRuns]: 'call',
@@ -492,6 +494,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.githubPrDetail]: 'execute',
   [CH.githubPrComment]: 'execute',
   [CH.githubPrDiff]: 'execute',
+  [CH.githubPrTimeline]: 'execute',
   [CH.githubPrThread]: 'execute',
   [CH.githubPrViewed]: 'execute',
   // Each spawns `gh run` on the server (HIVE-206).

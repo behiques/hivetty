@@ -451,7 +451,8 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    *
    * HIVE-206 added `prRuns`, `runJobs`, `jobLog` and `rerunFailed`, and HIVE-207
    * `prDiff`, `prThread` and `prViewed`: each names a repository and passes the
-   * same scope check before `gh` runs.
+   * same scope check before `gh` runs. HIVE-208 adds `prTimeline`, which names
+   * a repository and passes the same scope check before `gh` runs.
    */
   expect(surface.github).toEqual([
     'jobLog',
@@ -460,6 +461,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'prDiff',
     'prRuns',
     'prThread',
+    'prTimeline',
     'prViewed',
     'prs',
     'rerunFailed',

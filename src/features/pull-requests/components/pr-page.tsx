@@ -16,6 +16,7 @@ import { PrCommentBox } from '@features/pull-requests/components/pr-comment-box'
 import { PrConversation } from '@features/pull-requests/components/pr-conversation';
 import { PrFiles } from '@features/pull-requests/components/pr-files';
 import { PrActions, PrProperties } from '@features/pull-requests/components/pr-properties';
+import { PrTimeline } from '@features/pull-requests/components/pr-timeline';
 import { ShipTrack } from '@features/pull-requests/components/ship-track';
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 import { SourceProblem } from '@features/shared/components/source-problem';
@@ -34,11 +35,12 @@ import {
 } from '@stores/hive-store';
 import { usePrPageActions, usePrTab, type PrTab } from '@stores/ui-store';
 
-/** The tab strip; Files is HIVE-207's, Checks is HIVE-206's, and HIVE-208 appends Timeline. */
+/** The tab strip; Files is HIVE-207's, Checks is HIVE-206's, Timeline is HIVE-208's. */
 export const PR_TABS = [
   { value: 'conversation', label: 'Conversation' },
   { value: 'files', label: 'Files' },
   { value: 'checks', label: 'Checks' },
+  { value: 'timeline', label: 'Timeline' },
 ] as const satisfies readonly SegmentedOption<PrTab>[];
 
 /** The open PR's detail re-reads once a minute while it is on stage; the first sweep is the open's read. */
@@ -185,6 +187,11 @@ export function PrPage({ row }: { row: HatcheryRow }) {
                   /* -mx-8 cancels the column's px-8: the Checks layout carries its own 24px gutters. */
                   <div className="-mx-8">
                     <PrChecks pr={pr} detail={detail} />
+                  </div>
+                ) : tab === 'timeline' ? (
+                  /* -mx-8 cancels the column's px-8: the Timeline carries its own 24px gutters (HIVE-208). */
+                  <div className="-mx-8">
+                    <PrTimeline pr={pr} />
                   </div>
                 ) : (
                   <>

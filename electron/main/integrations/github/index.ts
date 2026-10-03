@@ -11,6 +11,7 @@ import type {
   PrRunsRequest,
   PrsSnapshot,
   PrThreadRequest,
+  PrTimeline,
   PrViewedRequest,
   RunJob,
   RunRef,
@@ -82,6 +83,8 @@ export interface Github {
    * spelling of the repository, never the renderer's.
    */
   prDetail(request: PrRef): Promise<GhResult<PrDetail>>;
+  /** One PR's history for the Timeline tab (HIVE-208), under the same scope check as {@link Github.prDetail}. */
+  prTimeline(request: PrRef): Promise<GhResult<PrTimeline>>;
   /** A PR-level comment, under the same scope check as {@link Github.prDetail}. */
   prComment(request: PrCommentRequest): Promise<GhResult<true>>;
   /** One PR's unified diff (HIVE-207), under the same scope check. */
@@ -316,6 +319,12 @@ export function createGithub(deps: GithubDeps): Github {
       const scope = await scoped(owner, repo);
       if (!scope.ok) return scope;
       return scope.client.detail(scope.ref, n);
+    },
+
+    async prTimeline({ owner, repo, n }) {
+      const scope = await scoped(owner, repo);
+      if (!scope.ok) return scope;
+      return scope.client.timeline(scope.ref, n);
     },
 
     async prComment({ owner, repo, n, body }) {

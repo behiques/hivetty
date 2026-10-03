@@ -345,7 +345,8 @@ export function lostToTheLink(cause: unknown): boolean {
  * every minute, the PR page re-reads `github:pr-detail` on its own poll
  * (HIVE-205), the Checks tab re-reads `github:pr-runs` and
  * `github:run-jobs` on its own (HIVE-206), and the Files tab re-reads
- * `github:pr-diff` when that poll sees the head move (HIVE-207); grading alone
+ * `github:pr-diff` when that poll sees the head move (HIVE-207), and the
+ * Timeline tab re-reads `github:pr-timeline` on its own (HIVE-208); grading alone
  * would count them all, since shelling out to `gh` is `execute`. Never an
  * action the user has to redo. A comment, a failed log opened, a re-run, a
  * thread write and a Viewed mark are.
@@ -356,6 +357,7 @@ const BACKGROUND_CALLS: ReadonlySet<string> = new Set([
   CH.githubPrRuns,
   CH.githubRunJobs,
   CH.githubPrDiff,
+  CH.githubPrTimeline,
 ]);
 
 /**

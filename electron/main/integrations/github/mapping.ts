@@ -10,6 +10,8 @@ import {
   type PrRecord,
   type PrReview,
   type PrThread,
+  type PrTimeline,
+  type PrTimelineRun,
 } from '../../../shared/github-contract';
 import { isRecord } from '../../../shared/guards';
 
@@ -498,6 +500,69 @@ export function toPrDetail(payload: unknown, owner: string, repo: string): PrDet
     checks: each(contextsOf(raw), toCheck),
     files: each(raw.files, toFile),
   };
+}
+
+const RUN_STATE = (status: string | null, conclusion: string | null): PrTimelineRun['state'] =>
+  status !== 'COMPLETED' ? 'running' : conclusion === 'SUCCESS' ? 'passed' : conclusion === 'FAILURE' || conclusion === 'TIMED_OUT' || conclusion === 'STARTUP_FAILURE' ? 'failed' : 'other';
+
+/** A commit's workflow suites as runs (HIVE-208). A suite with no workflow run is another app's, and is dropped. */
+function runsOf(sha: string, suites: unknown): PrTimelineRun[] {
+  return nodesIn(suites).flatMap((raw): PrTimelineRun[] => {
+    if (!isRecord(raw) || !isRecord(raw.workflowRun)) return [];
+    const run = raw.workflowRun;
+    const id = whole(run.databaseId);
+    const number = whole(run.runNumber);
+    const startedAt = text(raw.createdAt);
+    if (id === null || number === null || startedAt === null) return [];
+    const state = RUN_STATE(text(raw.status), text(raw.conclusion));
+    return [{
+      id, number, url: text(run.url) ?? '', sha,
+      workflow: isRecord(run.workflow) ? (text(run.workflow.name) ?? '') : '',
+      startedAt,
+      endedAt: state === 'running' ? null : text(raw.updatedAt),
+      state,
+      failedJobs: nodesIn(raw.checkRuns).flatMap((r) => (isRecord(r) && text(r.name) !== null ? [text(r.name)!] : [])),
+    }];
+  });
+}
+
+const EVENT_KIND: Record<string, PrTimeline['events'][number]['kind']> = {
+  ReadyForReviewEvent: 'ready', ConvertToDraftEvent: 'draft', ReviewRequestedEvent: 'review-requested', MergedEvent: 'merged',
+};
+
+/**
+ * One PR's history from `PR_TIMELINE_QUERY`'s data (HIVE-208), or `null` when
+ * the PR or its `createdAt` is missing. An item it cannot read costs itself.
+ */
+export function toPrTimeline(payload: unknown): PrTimeline | null {
+  const raw = pullRequestOf(payload);
+  const createdAt = raw === null ? null : text(raw.createdAt);
+  if (raw === null || createdAt === null) return null;
+
+  const timeline: PrTimeline = { createdAt, mergedAt: text(raw.mergedAt), isDraft: raw.isDraft === true, commits: [], runs: [], reviews: [], comments: [], events: [] };
+  for (const item of nodesIn(raw.timelineItems)) {
+    if (!isRecord(item)) continue;
+    const type = text(item.__typename) ?? '';
+    if (type === 'PullRequestCommit' && isRecord(item.commit)) {
+      const oid = text(item.commit.oid);
+      const at = text(item.commit.committedDate);
+      if (oid === null || at === null) continue;
+      timeline.commits.push({ oid, at, url: text(item.url) ?? '' });
+      timeline.runs.push(...runsOf(oid, item.commit.checkSuites));
+    } else if (type === 'PullRequestReview') {
+      const at = text(item.submittedAt);
+      const url = text(item.url);
+      if (at !== null && url !== null) timeline.reviews.push({ at, author: loginOf(item.author), state: text(item.state) ?? '', url });
+    } else if (type === 'IssueComment') {
+      const at = text(item.createdAt);
+      const url = text(item.url);
+      if (at !== null && url !== null) timeline.comments.push({ at, author: loginOf(item.author), url });
+    } else if (EVENT_KIND[type] !== undefined) {
+      const at = text(item.createdAt);
+      if (at !== null) timeline.events.push({ kind: EVENT_KIND[type], at, actor: loginOf(item.actor) });
+    }
+  }
+  return timeline;
 }
 
 /** The PR's node id from `PR_ID_QUERY`'s data, or `null`. */

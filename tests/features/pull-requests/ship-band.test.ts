@@ -11,9 +11,9 @@ const stop = (
 ): ShipStop => ({ stage, firstAt, spentMs, holder });
 const track = (current: ShipStop['stage'] | null, held = current !== null): ShipTrack => {
   const stops = SHIP_STOPS.map((s) => stop(s, s === current ? 4_800_000 : 60_000, s === 'self-review' ? 'acr' : 'shipper'));
-  return { held, current: stops.find((s) => s.stage === current) ?? null, stops };
+  return { held, current: stops.find((s) => s.stage === current) ?? null, stops, visits: [] };
 };
-const none: ShipTrack = { held: false, current: null, stops: SHIP_STOPS.map((s) => stop(s)) };
+const none: ShipTrack = { held: false, current: null, stops: SHIP_STOPS.map((s) => stop(s)), visits: [] };
 const states = (stops: ReturnType<typeof bandStops>) => stops.map((s) => `${s.label}:${s.state}`);
 
 describe('bandStops', () => {
