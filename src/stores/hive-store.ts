@@ -1816,6 +1816,7 @@ function toTicket(issue: JiraIssue): Ticket {
     title: issue.summary,
     priority: issue.priority,
     assignee: issue.assignee,
+    issueType: issue.issueType,
     url: issue.url,
   };
 }

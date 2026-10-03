@@ -105,7 +105,12 @@ describe('loadTicketDetail (HIVE-203)', () => {
     await state().loadTicketDetail('HIVE-8');
 
     expect(readJiraIssue).toHaveBeenCalledWith({ key: 'HIVE-8' });
-    expect(state().ticketDetail?.issue).toMatchObject({ key: 'HIVE-8', title: '[BE] Remote ticket', priority: 'High' });
+    expect(state().ticketDetail?.issue).toMatchObject({
+      key: 'HIVE-8',
+      title: '[BE] Remote ticket',
+      priority: 'High',
+      issueType: 'Story',
+    });
   });
 
   it('records a failed comments read without blanking the detail', async () => {

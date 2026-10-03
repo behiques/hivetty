@@ -34,6 +34,8 @@ export interface Ticket {
   priority: string | null;
   /** Display name; `null` when unassigned (HIVE-203). */
   assignee: string | null;
+  /** Jira's issue type name, "Bug", "Story" (HIVE-202). Absent on fixtures. */
+  issueType?: string;
   /*
     There is deliberately no `sessions` array here (HIVE-73).
 
