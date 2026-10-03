@@ -10,7 +10,7 @@ import {
   emptySnapshot,
   type ConfigSnapshot,
 } from '../../electron/shared/config-contract';
-import type { PrRecord } from '../../electron/shared/github-contract';
+import type { PrRecord, PrTimeline } from '../../electron/shared/github-contract';
 import {
   resetProjectConfig,
   setProjectConfigForTest,
@@ -90,6 +90,9 @@ import {
   usePrOpener,
   useReviewUrls,
   useShipTrack,
+  useLoadPrTimeline,
+  usePrTimelineEntry,
+  useTimelineModel,
   useAccountLimits,
   useComingUp,
   useWhileAway,
@@ -2710,6 +2713,44 @@ describe('the PR page selectors (HIVE-205)', () => {
     expect(renderHook(() => usePrDetail('acme/server#1182')).result.current).toEqual({ key: 'acme/server#1182', state: 'loading' });
     expect(renderHook(() => useLoadPrDetail()).result.current).toBe(useHiveStore.getState().loadPrDetail);
     expect(renderHook(() => useCommentOnPr()).result.current).toBe(useHiveStore.getState().commentOnPr);
+  });
+});
+
+describe('the Timeline selectors (HIVE-208)', () => {
+  const slug = 'acme/server';
+  const KEY = 'acme/server#1182';
+  const T0 = Date.parse('2026-10-03T11:00:00Z');
+  const MIN = 60_000;
+  const pr = { owner: 'acme', repo: 'server', n: 1182, mine: true };
+  const timeline: PrTimeline = {
+    createdAt: new Date(T0).toISOString(), mergedAt: null, isDraft: false,
+    commits: [], runs: [], reviews: [], comments: [], events: [],
+  };
+  const intake: LedgerEntry = { id: '20261003-110400-0001', ts: T0 + 4 * MIN, from: 'builder', kind: 'ask', to: 'shipper', body: 'ship', meta: { pr: 1182, repo: slug, stage: 'intake' } };
+  const claim: LedgerEntry = { id: '20261003-110500-0001', ts: T0 + 5 * MIN, from: 'shipper', kind: 'claim', body: '', meta: { task: 'acme/server#1182' } };
+
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+  });
+
+  it('is null before any read, and hands out the entry and the load action', () => {
+    expect(renderHook(() => useTimelineModel(pr, T0 + 60 * MIN)).result.current).toBeNull();
+    expect(renderHook(() => usePrTimelineEntry(KEY)).result.current).toBeUndefined();
+    expect(renderHook(() => useLoadPrTimeline()).result.current).toBe(useHiveStore.getState().loadPrTimeline);
+  });
+
+  it('merges the history read on open with the live tail, and keeps the same model for the same now', () => {
+    useHiveStore.setState({
+      prTimelines: { [KEY]: { key: KEY, state: 'ok', timeline, history: [intake] } },
+      ledger: [intake, claim],
+    });
+    const { result, rerender } = renderHook(() => useTimelineModel(pr, T0 + 60 * MIN));
+    expect(result.current?.holds.map((h) => h.who)).toEqual(['builder', 'shipper']);
+    expect(result.current?.holds[1]).toMatchObject({ from: T0 + 5 * MIN, to: T0 + 60 * MIN });
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
+    expect(renderHook(() => usePrTimelineEntry(KEY)).result.current?.timeline).toBe(timeline);
   });
 });
 

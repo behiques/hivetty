@@ -66,6 +66,7 @@ import {
 import { buildTicketSearchJql } from '@lib/jira-search';
 import { ledgerRows } from '@lib/ledger/console-rows';
 import { FLAP_RANK, flapTone, hatchStatus, sortHatchery } from '@lib/pr-hatch';
+import { buildTimeline, type TimelineModel } from '@lib/pr-timeline';
 import {
   projectConfigSnapshot,
   projectContainerised,
@@ -8211,6 +8212,13 @@ export const useCommentOnPr = (): ((owner: string, repo: string, n: number, body
 /** One PR's diff entry (HIVE-207). `key` is {@link prKey}'s. */
 export const usePrDiff = (key: string): PrDiffEntry | undefined => useHiveStore((state) => state.prDiffs[key]);
 
+/** One PR's Timeline entry (HIVE-208). `key` is {@link prKey}'s. */
+export const usePrTimelineEntry = (key: string): PrTimelineEntry | undefined => useHiveStore((state) => state.prTimelines[key]);
+
+/** Read, or re-read, one PR's Timeline (HIVE-208). */
+export const useLoadPrTimeline = (): ((owner: string, repo: string, n: number) => Promise<void>) =>
+  useHiveStore((state) => state.loadPrTimeline);
+
 /** One PR's diff, parsed: once per text, never stored (HIVE-207). `null` before the first text. */
 export const useParsedPrDiff = (key: string): DiffFile[] | null => {
   const text = useHiveStore((state) => state.prDiffs[key]?.text);
@@ -9065,6 +9073,29 @@ export const useMergeAsk = (slug: string, n: number): OpenAsk | undefined => {
 export const useShipTrack = (slug: string, n: number): ShipTrack => {
   const entries = useHiveStore((state) => state.ledger);
   return useMemo(() => shipTrack(entries, slug, n, Date.now()), [entries, slug, n]);
+};
+
+/**
+ * The Timeline's lanes and buckets (HIVE-208): derived, never stored; `null`
+ * until the timeline is read. The ledger is the history read once on open
+ * merged with the live tail by id, the tail winning. "To me" is the fleet's
+ * reading, as the Hatchery's.
+ */
+export const useTimelineModel = (pr: Pick<Pr, 'owner' | 'repo' | 'n' | 'mine'>, now: number): TimelineModel | null => {
+  const entry = useHiveStore((state) => state.prTimelines[prKey(pr.owner, pr.repo, pr.n)]);
+  const ledger = useHiveStore((state) => state.ledger);
+  const fleet = useHiveStore(selectSessionFacets);
+  const timeline = entry?.timeline;
+  const history = entry?.history;
+  return useMemo(() => {
+    if (timeline === undefined) return null;
+    const byId = new Map<string, LedgerEntry>();
+    for (const e of [...(history ?? []), ...ledger]) byId.set(e.id, e);
+    const entries = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+    const sessions = new Set(fleet.map((facet) => facet.id));
+    const toMe = (to: string) => to === OVERMIND || sessions.has(to);
+    return buildTimeline({ timeline, entries, slug: `${pr.owner}/${pr.repo}`, n: pr.n, mine: pr.mine, toMe, now });
+  }, [timeline, history, ledger, fleet, pr.owner, pr.repo, pr.n, pr.mine, now]);
 };
 
 /** Every ledger entry naming one PR, oldest first: the Everything filter (HIVE-205). */
