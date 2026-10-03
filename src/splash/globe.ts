@@ -123,3 +123,70 @@ export function cellAt(cell: GlobeCell, t: number): PlacedCell {
 /** How lit a cell is, 0 to 1, easing in over 0.4s from its log line. */
 export const cellLight = (cell: GlobeCell, t: number): number =>
   cell.kind ? easeO(after(t, LIGHT_AT[cell.kind], 0.4)) : 0;
+
+/** The orbit: a circle of radius RO, flattened by its incline and rolled on screen. */
+const RO = GLOBE_R * 1.22;
+const FLAT = 0.24;
+const ROLL = -0.42;
+
+/** "hive cluster online": the orbit draws itself, and the swarm follows 0.35s later. */
+export const ORBIT_AT = LOG_SCHEDULE[4]!;
+const FLY0 = ORBIT_AT + 0.35;
+export const FLYER_COUNT = 7;
+const GAP = 0.16;
+const CLIMB = 0.75;
+const LAP = 0.85;
+
+/** The orbit's point at angle `a`: x, y and depth (`sin a`, the near half positive). */
+export function orbitPoint(a: number): [number, number, number] {
+  const x = Math.cos(a) * RO;
+  const y = Math.sin(a) * RO * FLAT;
+  return [x * Math.cos(ROLL) - y * Math.sin(ROLL), x * Math.sin(ROLL) + y * Math.cos(ROLL), Math.sin(a)];
+}
+
+/** When flyer `i` leaves the heart. */
+export const flyerStart = (i: number): number => FLY0 + i * GAP;
+
+export interface FlyerPos {
+  x: number;
+  y: number;
+  /** -1 behind the globe to 1 in front; 1 while climbing out of the heart. */
+  z: number;
+  alpha: number;
+  climbing: boolean;
+}
+
+/**
+ * Flyer `i` at `t`: climbing from the heart to its slot on the orbit, lifted on
+ * an arc, then circling. Answers for any `t`, before its start included (it is
+ * at the centre then), because the heading is read from where it just was.
+ */
+export function flyerAt(i: number, t: number): FlyerPos {
+  const d = t - flyerStart(i);
+  const a0 = -Math.PI / 2 + i * ((Math.PI * 2) / FLYER_COUNT);
+  // Against the landing moment, not `d < CLIMB`: the subtraction can land a hair short of it.
+  if (t < flyerStart(i) + CLIMB) {
+    const e = easeIO(d / CLIMB);
+    const [ox, oy] = orbitPoint(a0);
+    return {
+      x: lerp(0, ox, e),
+      y: lerp(0, oy, e) - Math.sin(e * Math.PI) * 26,
+      z: 1,
+      alpha: clamp01(d / 0.25),
+      climbing: true,
+    };
+  }
+  const [x, y, z] = orbitPoint(a0 + (d - CLIMB) * LAP);
+  return { x, y, z, alpha: 1, climbing: false };
+}
+
+/** The heart's glow, 0 to 1: in as the swarm starts to rise, out once the last flyer is up. */
+export const heartAt = (t: number): number =>
+  easeO(after(t, FLY0 - 0.2, 0.4)) * (1 - easeO(after(t, FLY0 + FLYER_COUNT * GAP + 0.6, 0.6)));
+
+/**
+ * The still the splash holds under reduced motion, and where About's clock
+ * starts: every flyer is on the orbit (the seventh lands at 4.34s) and the
+ * heart has faded.
+ */
+export const GLOBE_STILL_T = 4.95;

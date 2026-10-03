@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
 import { LOG_SCHEDULE } from '@/splash/chamber';
-import { cellAt, cellLight, GLOBE_CELLS, GLOBE_R, LIGHT_AT } from '@/splash/globe';
+import {
+  cellAt,
+  cellLight,
+  FLYER_COUNT,
+  flyerAt,
+  flyerStart,
+  GLOBE_CELLS,
+  GLOBE_R,
+  GLOBE_STILL_T,
+  heartAt,
+  LIGHT_AT,
+  ORBIT_AT,
+  orbitPoint,
+} from '@/splash/globe';
 
 describe('the globe cells', () => {
   it('are ninety points on the unit sphere', () => {
@@ -53,5 +66,60 @@ describe('the globe cells', () => {
   it('turns: the same cell is somewhere else a second later', () => {
     const cell = GLOBE_CELLS[20]!;
     expect(cellAt(cell, 4).X).not.toBeCloseTo(cellAt(cell, 5).X, 3);
+  });
+});
+
+describe('the orbit', () => {
+  it('is in front at π/2 and behind at 3π/2', () => {
+    expect(orbitPoint(Math.PI / 2)[2]).toBeGreaterThan(0);
+    expect(orbitPoint((3 * Math.PI) / 2)[2]).toBeLessThan(0);
+  });
+
+  it('draws at "hive cluster online"', () => {
+    expect(ORBIT_AT).toBe(LOG_SCHEDULE[4]);
+  });
+});
+
+describe('the flyers', () => {
+  it('are seven, one every 0.16s from 2.63s', () => {
+    expect(FLYER_COUNT).toBe(7);
+    for (let i = 0; i < FLYER_COUNT; i++) expect(flyerStart(i)).toBeCloseTo(2.63 + 0.16 * i, 9);
+  });
+
+  it('appear at the centre and climb to their slot in 0.75s', () => {
+    for (let i = 0; i < FLYER_COUNT; i++) {
+      const born = flyerAt(i, flyerStart(i));
+      expect(born.x).toBeCloseTo(0, 9);
+      expect(born.y).toBeCloseTo(0, 9);
+      expect(born.alpha).toBe(0);
+      expect(born.climbing).toBe(true);
+
+      const slot = orbitPoint(-Math.PI / 2 + (i * 2 * Math.PI) / 7);
+      const landed = flyerAt(i, flyerStart(i) + 0.75);
+      expect(landed.x).toBeCloseTo(slot[0], 6);
+      expect(landed.y).toBeCloseTo(slot[1], 6);
+      expect(landed.climbing).toBe(false);
+      expect(landed.alpha).toBe(1);
+    }
+  });
+
+  it('circle the orbit once landed', () => {
+    const a = flyerAt(0, 4);
+    const b = flyerAt(0, 5);
+    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(1);
+  });
+
+  it('are all out by the still the splash holds under reduced motion', () => {
+    expect(GLOBE_STILL_T).toBeGreaterThanOrEqual(flyerStart(FLYER_COUNT - 1) + 0.75);
+    for (let i = 0; i < FLYER_COUNT; i++) expect(flyerAt(i, GLOBE_STILL_T).climbing).toBe(false);
+  });
+});
+
+describe('the heart', () => {
+  it('is dark before 2.43s and after 4.95s, and glows between', () => {
+    expect(heartAt(2.42)).toBe(0);
+    expect(heartAt(3.5)).toBeGreaterThan(0.99);
+    expect(heartAt(4.95)).toBe(0);
+    expect(heartAt(6)).toBe(0);
   });
 });
