@@ -8776,6 +8776,14 @@ export const useSessionPr = (id: string): SessionPr | null => {
 /** Where the PR list came from, and how much to trust it. */
 export const usePrSource = () => useHiveStore((state) => state.prSource);
 
+/**
+ * The Hatchery is quiet (HIVE-205, D15): the sweep is live and found nothing.
+ * The sweep is the Hatchery's list, so empty here is empty there. A boolean
+ * selector, so the list panel does not re-render on every PR change.
+ */
+export const usePrsQuiet = (): boolean =>
+  useHiveStore((state) => state.prSource.kind === 'live' && state.prs.length === 0);
+
 /** Sweep GitHub. The poller's entry point — see `hooks/use-pr-refresh.ts`. */
 export const useRefreshPrs = () => useHiveStore((state) => state.refreshPrs);
 

@@ -27,6 +27,7 @@ import { ConsolePeek } from '@features/orchestrator/components/console-peek';
 import { FleetPane, TRANSCRIPT_FLOOR } from '@features/orchestrator/components/fleet-pane';
 import { OvermindHead } from '@features/orchestrator/components/overmind-head';
 import { PlanRail } from '@features/plan/components/plan-rail';
+import { PrsStage } from '@features/pull-requests/components/prs-stage';
 import { MessageInput } from '@features/sessions/components/message-input';
 import { NewSessionPicker } from '@features/sessions/components/new-session-picker';
 import { SessionBootCover } from '@features/sessions/components/session-boot-cover';
@@ -168,7 +169,9 @@ export function CenterStage() {
   const agentPage = useAgentPage();
   const agents = place === 'agents' && (roundTwo || agentPage !== null);
 
-  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work, agents });
+  const prs = roundTwo && place === 'prs';
+
+  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work, agents, prs });
   /**
    * Whether the session on screen is still starting (HIVE-101).
    *
@@ -189,11 +192,16 @@ export function CenterStage() {
    * `activeId` — and a settings overlay that did not extend it would render on
    * top of thirteen live terminals.
    *
-   * Round two's Home (HIVE-195), Work (HIVE-203) and the Agents stage (HIVE-204)
-   * join them: each covers the stage the same way.
+   * Round two's Home (HIVE-195), Work (HIVE-203), the Agents stage (HIVE-204)
+   * and PRs (HIVE-205) join them: each covers the stage the same way.
    */
   const showingOverlay =
-    showingPicker || view === 'settings' || view === 'home' || view === 'work' || view === 'agents';
+    showingPicker ||
+    view === 'settings' ||
+    view === 'home' ||
+    view === 'work' ||
+    view === 'agents' ||
+    view === 'prs';
   /**
    * The agent view owns the whole column, so the terminal region stands down.
    *
@@ -408,6 +416,7 @@ export function CenterStage() {
       {view === 'home' ? <HomePage /> : null}
       {view === 'work' ? <WorkStage /> : null}
       {view === 'agents' ? <AgentsStage /> : null}
+      {view === 'prs' ? <PrsStage /> : null}
 
       {/*
         Hidden, never unmounted. Tearing the terminal region down for the

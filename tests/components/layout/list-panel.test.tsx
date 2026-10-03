@@ -1,8 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ListPanel } from '@components/layout/list-panel';
+import { useHiveStore } from '@stores/hive-store';
 import { useUiStore, type Place } from '@stores/ui-store';
+import { prRecord } from '@tests/support/prs';
 
 vi.mock('@features/projects/components/projects-panel', () => ({ ProjectsPanel: () => <p>projects-panel</p> }));
 vi.mock('@features/projects/components/sessions-panel', () => ({ SessionsPanel: () => <p>sessions-panel</p> }));
@@ -42,5 +44,36 @@ describe('ListPanel (HIVE-195)', () => {
     useUiStore.setState({ place: 'work', panelOpen: false });
     const { container } = render(<ListPanel />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('ListPanel, the Hatchery (HIVE-205)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    useHiveStore.getState().reset();
+  });
+
+  it('draws no PRs panel for a quiet Hatchery, unless a search is open (D15)', () => {
+    useUiStore.setState({ place: 'prs', panelOpen: true });
+    useHiveStore.setState({ prs: [], prSource: { kind: 'live', stale: false, repos: 1 } });
+    render(<ListPanel />);
+    expect(screen.queryByRole('region', { name: 'PRs list' })).toBeNull();
+    act(() => useUiStore.setState({ prSearchOpen: true }));
+    expect(screen.getByRole('region', { name: 'PRs list' })).toBeInTheDocument();
+  });
+
+  it('slides the Hatchery in when the first PR appears, never on mount (R4)', () => {
+    useUiStore.setState({ place: 'prs', panelOpen: true, prSearchOpen: false });
+    useHiveStore.setState({ prs: [], prSource: { kind: 'live', stale: false, repos: 1 } });
+    render(<ListPanel />);
+    act(() => useHiveStore.setState({ prs: [prRecord()] }));
+    expect(screen.getByRole('region', { name: 'PRs list' }).className).toContain('animate-ccslidein');
+  });
+
+  it('does not slide a Hatchery that was never quiet (R4)', () => {
+    useUiStore.setState({ place: 'prs', panelOpen: true });
+    useHiveStore.setState({ prs: [prRecord()], prSource: { kind: 'live', stale: false, repos: 1 } });
+    render(<ListPanel />);
+    expect(screen.getByRole('region', { name: 'PRs list' }).className).not.toContain('animate-ccslidein');
   });
 });

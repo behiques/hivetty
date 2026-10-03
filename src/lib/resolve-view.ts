@@ -10,6 +10,7 @@ export type ViewState =
   | 'home'
   | 'work'
   | 'agents'
+  | 'prs'
   | 'editor'
   | 'orchestrator'
   | 'session'
@@ -42,6 +43,12 @@ export interface ViewInput {
    * open. An agent `activeTab` still resolves to `'agent'`; anything else shows the agents stage.
    */
   agents: boolean;
+  /**
+   * Round two's PRs place owns the stage (HIVE-205): the open PR's page, the
+   * empty Hatchery, or "Pick a pull request". Never true with `home`, `work`
+   * or `agents`: one place is open at a time.
+   */
+  prs: boolean;
   /** The entity behind `activeTab`, or null for the orchestrator. */
   entity: Entity | null;
   /**
@@ -83,6 +90,8 @@ export interface ViewInput {
  * 2c. **Agents sits just below Work** (HIVE-204). The place owns the stage
  *    with an agent's page or "Pick an agent", except that an agent
  *    `activeTab` still resolves to `'agent'` so the page shows for it.
+ * 2d. **PRs sits just below Agents** (HIVE-205), the same way: the place owns
+ *    the stage and leaves `activeTab` alone.
  * 3. **The editor sits below both overlays and above the entity views.** It is
  *    not an overlay — it has no scrim, no focus trap and no dismissal — but it
  *    does fill the stage, so a settings pane opened from behind it must win.
@@ -100,6 +109,7 @@ export function resolveView({
   home,
   work,
   agents,
+  prs,
   entity,
   editorFull,
 }: ViewInput): ViewState {
@@ -108,6 +118,7 @@ export function resolveView({
   if (home) return 'home';
   if (work) return 'work';
   if (agents && !(entity !== null && entity.kind === 'agent')) return 'agents';
+  if (prs) return 'prs';
   if (editorFull) return 'editor';
   if (activeTab === ORCH_TAB) return 'orchestrator';
   if (!entity) return 'orchestrator';

@@ -149,6 +149,18 @@ body {
   }
 }
 
+/* The Hatchery's panel arriving when the first PR appears (HIVE-205, R4). */
+@keyframes ccslidein {
+  from {
+    transform: translateX(-12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
 @keyframes ccblink {
   0%,
   100% {
