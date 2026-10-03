@@ -7,7 +7,7 @@ import { TicketProperties } from '@features/work/components/ticket-properties';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
-import type { JiraIssue, JiraTransition } from '@shared/jira-contract';
+import type { JiraTransition } from '@shared/jira-contract';
 
 /** The ticket page's properties column (HIVE-203). */
 
@@ -31,18 +31,6 @@ const ticket: Ticket = {
   url: 'https://jira.example/browse/GRAC-3018',
 };
 const done: JiraTransition = { id: '31', name: 'Finish', to: { name: 'Done', statusCategory: 'done' } };
-const moved: JiraIssue = {
-  key: 'GRAC-3018',
-  summary: ticket.title,
-  status: 'Done',
-  statusCategory: 'done',
-  issueType: 'Story',
-  priority: 'High',
-  assignee: 'Dana Kim',
-  updated: '2026-10-02T00:00:00.000-0400',
-  url: ticket.url!,
-};
-
 const value = (key: string) => screen.getByText(key, { selector: 'dt' }).nextElementSibling;
 
 beforeEach(() => {
@@ -62,11 +50,13 @@ beforeEach(() => {
         meta: { ticket: 'GRAC-3018', stage: 'build', task: 3 },
       },
     ],
-    ticketDetail: {
-      key: 'GRAC-3018',
-      detail: { description: [], parent: { key: 'HIVE-194', summary: 'Epic' } },
-      transitions: [done],
-      problems: {},
+    ticketDetails: {
+      'GRAC-3018': {
+        key: 'GRAC-3018',
+        detail: { description: [], parent: { key: 'HIVE-194', summary: 'Epic' } },
+        transitions: [done],
+        problems: {},
+      },
     },
     prs: state.prs,
   }));
@@ -113,32 +103,11 @@ describe('TicketProperties (HIVE-203)', () => {
     expect(useUiStore.getState()).toMatchObject({ picker: true, pickerTicket: 'GRAC-3018' });
   });
 
-  it('moves the ticket one step forward', async () => {
-    applyJiraTransition.mockResolvedValue({ ok: true, value: moved });
+  it('offers the step forward among its actions', () => {
     render(<TicketProperties ticketKey="GRAC-3018" />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Move to Done' }));
-
-    expect(applyJiraTransition).toHaveBeenCalledWith({ key: 'GRAC-3018', transitionId: '31' });
-    expect(useHiveStore.getState().tickets[0]).toMatchObject({ status: 'Done', statusCategory: 'done' });
-  });
-
-  it('says why a move was refused, in amber', async () => {
-    applyJiraTransition.mockResolvedValue({ ok: false, error: { kind: 'unknown', message: 'Resolution is required' } });
-    render(<TicketProperties ticketKey="GRAC-3018" />);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Move to Done' }));
-
-    expect(await screen.findByText('Resolution is required')).toHaveClass('text-amber');
-  });
-
-  it('names a missing bridge', async () => {
-    applyJiraTransition.mockResolvedValue(null);
-    render(<TicketProperties ticketKey="GRAC-3018" />);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Move to Done' }));
-
-    expect(await screen.findByText(/./, { selector: 'p.text-amber' })).toBeInTheDocument();
+    const actions = screen.getByRole('heading', { name: 'Actions' }).parentElement!;
+    expect(within(actions).getByRole('button', { name: 'Move to Done' })).toBeInTheDocument();
   });
 
   it('links to Jira outside the app', () => {

@@ -2125,6 +2125,18 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       });
     }, 30_000);
 
+    it('10c. answers jira:detail over an attached socket (HIVE-202)', async () => {
+      const client = await attached();
+      const result = await client.call(CH.jiraDetail, { key: 'HIVE-1' });
+
+      // The served app has no Jira configured: what is proved is that the read
+      // crosses the socket and answers with a JiraResult, not what Jira says.
+      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
+        kind: 'result',
+        payload: { ok: false },
+      });
+    }, 30_000);
+
     it('11. answers github:prs over an attached socket', async () => {
       const client = await attached();
       const result = await client.call(CH.githubPrs, undefined);

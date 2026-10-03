@@ -194,17 +194,16 @@ function ReplyBox({
  * for the ticket interleaved with them by time.
  */
 export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
-  const detail = useTicketDetail();
+  const mine = useTicketDetail(ticketKey);
   const events = useTicketEvents(ticketKey);
   const ticket = useOpenTicket(ticketKey);
   const mode = useWorkConversation();
   const setMode = useSetWorkConversation();
   const load = useLoadTicketDetail();
-  const mine = detail?.key === ticketKey ? detail : null;
   const comments = mine?.comments;
   const total = mine?.total ?? comments?.length ?? 0;
   const problem = mine?.problems.comments;
-  const retry = () => void load(ticketKey);
+  const retry = () => void load(ticketKey, 'page');
   const box = useRef<HTMLTextAreaElement>(null);
   const [replyTo, setReplyTo] = useState<string | null>(null);
 

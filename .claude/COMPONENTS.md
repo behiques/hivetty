@@ -465,6 +465,12 @@ because the PRs panel (052) is a separate slice that must agree with this one.
 - **`TicketProperties`** — `useTicketProperties`' rows (a row without a value is
   left out), the ticket's sessions and PRs, and New session, Move to the next
   status, Open in Jira.
+- **`TicketTab`** / **`TicketConstellation`** — HIVE-202: the session panel's
+  Ticket tab (`ticket-tab.tsx`): header, acceptance criteria or description,
+  latest comment, Links (verdict, constellation, a row per arc) and the footer
+  with Open the ticket ›. The layout is `constellation.ts`'s numbers, the arcs and
+  verdict `lib/ticket-links.ts`'s; the component draws them. It loads with
+  `want: 'tab'` and polls once a minute while mounted, after its first load.
 
 ### `<AgentsPanel />`, `<AgentRow />` and `<AgentTile />`
 

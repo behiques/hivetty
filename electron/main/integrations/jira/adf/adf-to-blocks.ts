@@ -118,6 +118,19 @@ function listBlocks(
   return out;
 }
 
+/**
+ * A task list's items, one `bullet` block each (HIVE-202). The TODO/DONE state
+ * is dropped: nothing in the app checks a criterion, so nothing claims to. A
+ * nested taskList sits directly in the list (not inside an item) in Jira's ADF.
+ */
+function taskBlocks(node: AdfNode, depth: number): AdfBlock[] {
+  return (node.content ?? []).flatMap((child): AdfBlock[] => {
+    if (child.type === 'taskList') return taskBlocks(child, depth + 1);
+    if (child.type !== 'taskItem') return [];
+    return [{ kind: 'bullet', runs: runsOf(child.content), depth }];
+  });
+}
+
 function blockOf(node: AdfNode): AdfBlock[] {
   switch (node.type) {
     case 'paragraph':
@@ -154,6 +167,8 @@ function blockOf(node: AdfNode): AdfBlock[] {
       return listBlocks(node, 'bullet', 0);
     case 'orderedList':
       return listBlocks(node, 'ordered', 0);
+    case 'taskList':
+      return taskBlocks(node, 0);
     case 'rule':
       return [{ kind: 'rule', runs: [] }];
     default: {

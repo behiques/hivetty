@@ -215,15 +215,21 @@ export function toIssueLink(raw: unknown, site: string): JiraLink | null {
 
   const fields = isRecord(other.fields) ? other.fields : null;
   const summary = fields === null ? null : text(fields.summary);
-  const status =
-    fields !== null && isRecord(fields.status) ? text(fields.status.name) : null;
+  const status = fields !== null && isRecord(fields.status) ? fields.status : null;
+  const statusName = status === null ? null : text(status.name);
+  const linkType = text(type.name);
 
   return {
     kind: 'issue',
     title: summary === null ? key : `${key} — ${summary}`,
     url: `https://${site}/browse/${key}`,
     relationship,
-    ...(status === null ? {} : { status }),
+    ...(statusName === null ? {} : { status: statusName }),
+    key,
+    summary: summary ?? '',
+    statusCategory: toStatusCategory(isRecord(status?.statusCategory) ? status.statusCategory.key : undefined),
+    ...(linkType === null ? {} : { linkType }),
+    direction: outward !== null ? 'outward' : 'inward',
   };
 }
 
@@ -239,11 +245,17 @@ export function toIssueDetail(raw: unknown): JiraIssueDetail | null {
   const parent = isRecord(fields.parent) ? fields.parent : null;
   const parentKey = parent === null ? null : text(parent.key);
   const parentFields = parent !== null && isRecord(parent.fields) ? parent.fields : null;
+  const parentType =
+    parentFields !== null && isRecord(parentFields.issuetype) ? text(parentFields.issuetype.name) : null;
   return {
     description: adfToBlocks(fields.description),
     parent:
       parentKey === null
         ? null
-        : { key: parentKey, summary: (parentFields === null ? null : text(parentFields.summary)) ?? '' },
+        : {
+            key: parentKey,
+            summary: (parentFields === null ? null : text(parentFields.summary)) ?? '',
+            ...(parentType === null ? {} : { issueType: parentType }),
+          },
   };
 }

@@ -79,6 +79,40 @@ Click a row and the ticket's page fills the stage:
 The page re-reads the ticket every minute while it is open. A read that fails says so in
 its section with **Retry**, and what was already on screen stays, marked with its time.
 
+## The Ticket tab
+
+In round two, a session started from a ticket has a **Ticket** tab in the session panel,
+so what was asked for sits beside what the session says it did. Top to bottom:
+
+- **The header**: the key, the type and the status pill, then the title.
+- **Acceptance criteria**: the list items under the description's "Acceptance" or
+  "Acceptance criteria" heading. With no such list it shows the **Description** instead.
+- **Latest comment**: the newest one, with its author and time.
+- **Links**: a line of verdict, a drawing, and a row for each kind of link that opens its
+  list. Click a ticket in a list, or in the drawing, to open it on the Work page.
+- **The footer**: **Move to** the next status when there is one, and **Open the ticket ›**,
+  which opens the ticket's page on Work.
+
+The verdict is amber when something open blocks the ticket: `Blocked by 2 open: HIVE-188,
+HIVE-190.` Otherwise it is green: `Clear to go.` then `Nothing blocks it`, `Its one blocker
+is done` or `All 3 blockers are done`, and `; 1 ticket waits on it` or `; 4 tickets wait on
+it` when others wait on this one.
+
+The drawing, the constellation, puts the ticket in the middle of its epic's ring. What it
+**waits on** is on the upper arc and what **waits on it** on the lower, one cell per ticket:
+a check for done, a filled dot for in progress, an empty ring for to do, amber when it is
+a blocker not done. Past six on an arc it shows five and a `+N`. Related tickets are beads
+on the ring's left, labelled only up to three of them. The session's pull request is to the
+right. Keys in the ticket's own project drop the prefix. The epic's name heads the ring,
+with `done/total` when Jira can count its children. With five links or fewer, a ticket the
+ticket blocks also shows the first ticket **it** blocks, one step further out.
+
+"Blocks" means Jira's link type of that name, whatever its wording; every other type
+(Relates, Duplicate) is a bead. A ticket with no links says `No linked tickets`.
+
+The tab reads the ticket when it opens, and again every minute while it is the visible
+tab. A failed read says so with **Retry**, and what was already shown stays.
+
 ## Start a session from a ticket
 
 Click **new session** on a ticket. The picker opens with the ticket key filled in, because a

@@ -74,6 +74,10 @@ wording ("Pushing the branch") under the title. Each task shows how long it ran,
 or has been running, and the header adds up the total. Times start when a task
 first goes in progress, so rewriting the list does not reset them.
 
+A session started from a ticket also has a **Ticket** tab, between Plan and Files: the
+ticket's criteria, its latest comment and its links. See [The Ticket
+tab](work-and-prs.md#the-ticket-tab).
+
 **Where it came from** appears when the session has written a `hive:plan` file.
 It names the file and the time it was written; click it to open the plan in the
 editor. The file stays there after the tasks move on to Claude's own list, and

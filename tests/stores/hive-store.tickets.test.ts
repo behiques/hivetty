@@ -93,6 +93,7 @@ describe('hydrateTickets', () => {
       title: 'A real ticket',
       priority: 'Medium',
       assignee: 'Yunid Bauza',
+      issueType: 'Story',
       url: 'https://behiques.atlassian.net/browse/HIVE-1',
     });
   });

@@ -30,7 +30,7 @@ import {
 import type { HiveNotification } from '@/types/notification';
 import type { Pr, SessionPr, TicketPr } from '@/types/pull-request';
 import type { TermLine } from '@/types/terminal';
-import type { Ticket, TicketDetail, TicketProperties } from '@/types/ticket';
+import type { Ticket, TicketDetail, TicketDetailWant, TicketProperties } from '@/types/ticket';
 
 import { isDesktop } from '@config/runtime';
 import {
@@ -44,6 +44,7 @@ import {
   readJiraComments,
   readJiraDetail,
   readJiraIssue,
+  readJiraLinks,
   readJiraStatus,
   readJiraTransitions,
   searchJiraIssues,
@@ -74,6 +75,15 @@ import {
   type TicketGroup,
   type TicketRowModel,
 } from '@lib/ticket-activity';
+import {
+  type Criteria,
+  epicLabel,
+  isBlocks,
+  parseCriteria,
+  SECOND_HOP_MAX_LINKS,
+  ticketLinksModel,
+  type TicketLinksModel,
+} from '@lib/ticket-links';
 import { parseTitleTags } from '@lib/ticket-tags';
 import { BRIDGE_ERROR } from '@lib/utils';
 import {
@@ -102,6 +112,7 @@ import {
   type SessionNameReport,
 } from '@shared/ipc-contract';
 import {
+  ISSUE_KEY_PATTERN,
   nextTransition,
   type JiraComment,
   type JiraIssue,
@@ -396,8 +407,12 @@ interface HiveState {
    * a project through `entity.project` — that string needs no table here.
    */
   tickets: Ticket[];
-  /** The ticket open on the Work page, and what has been read for it (HIVE-203). */
-  ticketDetail: TicketDetail | null;
+  /**
+   * What has been read for each ticket a reader opened, keyed by issue key
+   * (HIVE-203, keyed by HIVE-202): the Work page and any number of Ticket tabs
+   * side by side. Holds at most TICKET_DETAIL_CAP, the newest last.
+   */
+  ticketDetails: Record<string, TicketDetail>;
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
   /**
@@ -473,13 +488,14 @@ interface HiveState {
   /** Replace one ticket after a transition moved it (HIVE-70). */
   updateTicket: (issue: JiraIssue) => void;
   /**
-   * Read everything the ticket page shows for `key` (HIVE-203): its detail, the
-   * newest comments, its transitions, its ledger history, and the issue itself
-   * when the list does not hold it. Each part merges as it lands.
+   * Read everything a reader of `key` shows (HIVE-203, HIVE-202): its detail,
+   * the newest comments, its transitions, the issue itself when the list does
+   * not hold it, and, by `want`, the page's ledger history. Each part merges as
+   * it lands.
    */
-  loadTicketDetail: (key: string) => Promise<void>;
-  /** Re-read the open ticket's page; a key that is not open does nothing (HIVE-203). */
-  refreshTicketDetail: (key: string) => Promise<void>;
+  loadTicketDetail: (key: string, want: TicketDetailWant) => Promise<void>;
+  /** Re-read a ticket already held; a key never loaded does nothing (HIVE-203, HIVE-202). */
+  refreshTicketDetail: (key: string, want: TicketDetailWant) => Promise<void>;
   /** A comment this app just posted, shown without a re-read (HIVE-203). */
   appendTicketComment: (key: string, comment: JiraComment) => void;
   /** Re-read what the open ticket can become, after its status moved (HIVE-203). */
@@ -1816,6 +1832,7 @@ function toTicket(issue: JiraIssue): Ticket {
     title: issue.summary,
     priority: issue.priority,
     assignee: issue.assignee,
+    issueType: issue.issueType,
     url: issue.url,
   };
 }
@@ -1888,42 +1905,70 @@ type SetHive = (
   partial: Partial<HiveState> | ((state: HiveState) => Partial<HiveState> | HiveState),
 ) => void;
 
+/** How many tickets' detail the store holds at once (HIVE-202). */
+export const TICKET_DETAIL_CAP = 16;
+
 /**
- * Read the open ticket's parts and merge each as it lands (HIVE-203).
+ * `map` with `key` moved to the newest end, and only the newest
+ * TICKET_DETAIL_CAP kept. Issue keys are never integer-like, so insertion
+ * order is the object's key order.
+ */
+// ponytail: insertion-order cap; an LRU by view if a day of sessions ever outgrows sixteen.
+function touchDetail(map: Record<string, TicketDetail>, key: string, entry: TicketDetail): Record<string, TicketDetail> {
+  const { [key]: _old, ...rest } = map;
+  return Object.fromEntries(Object.entries({ ...rest, [key]: entry }).slice(-TICKET_DETAIL_CAP));
+}
+
+/**
+ * Read one ticket's parts and merge each as it lands (HIVE-203, keyed by HIVE-202).
  *
  * The parts merge separately so one failed read never blanks another: a
  * comments outage leaves the description standing, and a read that fails
  * keeps what the last one found with the problem beside it. An answer that
- * arrives for a key no longer open is dropped rather than written over the
- * ticket that replaced it.
+ * arrives for a key evicted from the map meanwhile is dropped: every write
+ * re-reads the entry at write time and does nothing when it is gone.
  */
 async function readTicketParts(
   get: () => HiveState,
   set: SetHive,
   key: string,
-  read: { ledger: boolean; issue: boolean },
+  read: { ledger: boolean; issue: boolean; links: boolean },
 ): Promise<void> {
-  const open = () => get().ticketDetail?.key === key;
+  const open = () => get().ticketDetails[key] !== undefined;
   const merge = (patch: Partial<TicketDetail>) => {
     if (!open()) return;
-    set((state) => ({ ticketDetail: { ...state.ticketDetail!, ...patch } }));
+    set((state) => {
+      const entry = state.ticketDetails[key];
+      if (entry === undefined) return state;
+      return { ticketDetails: { ...state.ticketDetails, [key]: { ...entry, ...patch } } };
+    });
   };
-  const problem = (part: 'detail' | 'comments', message: string | undefined) => {
+  const problem = (part: keyof TicketDetail['problems'], message: string | undefined) => {
     if (!open()) return;
     set((state) => {
-      const problems = { ...state.ticketDetail!.problems };
+      const entry = state.ticketDetails[key];
+      if (entry === undefined) return state;
+      const problems = { ...entry.problems };
       if (message === undefined) delete problems[part];
       else problems[part] = message;
-      return { ticketDetail: { ...state.ticketDetail!, problems } };
+      return { ticketDetails: { ...state.ticketDetails, [key]: { ...entry, problems } } };
     });
   };
 
   await Promise.all([
-    readJiraDetail({ key }).then((result) => {
+    readJiraDetail({ key }).then(async (result) => {
       if (result === null) return problem('detail', BRIDGE_ERROR);
       if (!result.ok) return problem('detail', result.error.message);
       merge({ detail: result.value, readAt: Date.now() });
       problem('detail', undefined);
+      const epic = result.value.parent;
+      if (read.links && open() && epic?.issueType?.toLowerCase() === 'epic' && ISSUE_KEY_PATTERN.test(epic.key)) {
+        // The key is checked before it is put in the JQL: it came from a server.
+        const found = await searchJiraIssues({ jql: `parent = ${epic.key}` });
+        if (!found?.ok) return merge({ epicProgress: undefined });
+        const done = found.value.issues.filter((one) => one.statusCategory === 'done').length;
+        merge({ epicProgress: { done, total: found.value.issues.length, capped: found.value.capped } });
+      }
     }),
     readJiraComments({ key, newest: true }).then((result) => {
       if (result === null) return problem('comments', BRIDGE_ERROR);
@@ -1946,6 +1991,34 @@ async function readTicketParts(
           })
           .catch(() => undefined)
       : Promise.resolve(),
+    read.links
+      ? readJiraLinks({ key }).then(async (result) => {
+          if (result === null) return problem('links', BRIDGE_ERROR);
+          if (!result.ok) return problem('links', result.error.message);
+          problem('links', undefined);
+          const issues = result.value.filter((link) => link.kind === 'issue');
+          const blocked =
+            issues.length > SECOND_HOP_MAX_LINKS
+              ? []
+              : issues.flatMap((link) =>
+                  isBlocks(link) && link.direction !== 'inward' && link.key !== undefined ? [link.key] : [],
+                );
+          // No hop to read: an earlier one must not stay drawn (past the cap, or nothing blocked any more).
+          if (blocked.length === 0) return merge({ links: result.value, secondHop: undefined });
+          merge({ links: result.value });
+          if (!open()) return;
+          const hops = await Promise.all(
+            blocked.map(async (next) => {
+              const answer = await readJiraLinks({ key: next });
+              const onward = answer?.ok
+                ? answer.value.filter((link) => link.kind === 'issue' && isBlocks(link) && link.direction === 'outward')
+                : [];
+              return [next, onward] as const;
+            }),
+          );
+          merge({ secondHop: Object.fromEntries(hops) });
+        })
+      : Promise.resolve(),
   ]);
 }
 
@@ -1967,7 +2040,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * has no bridge to Jira.
    */
   ticketSource: { kind: 'loading' } as TicketSource,
-  ticketDetail: null as TicketDetail | null,
+  ticketDetails: {} as Record<string, TicketDetail>,
 
   /** Loading until the first sweep answers, for the same reason as above. */
   prSource: { kind: 'loading' } as PrSource,
@@ -5028,56 +5101,70 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     }),
 
   /**
-   * Read the open ticket's page (HIVE-203).
+   * Read one ticket for a reader (HIVE-203, keyed by HIVE-202).
    *
    * The parts merge separately, each as its answer lands, so one failed read
    * never blanks another: a comments outage leaves the description standing,
    * and a reload that fails keeps what the last one read with the problem
-   * beside it. Another key resets the slice first; an answer that arrives for
-   * a key no longer open is dropped rather than written over the new one.
+   * beside it. The entry is created (or kept) and made the newest, which may
+   * evict the oldest; an answer that arrives for an evicted key is dropped.
    */
-  loadTicketDetail: async (key) => {
-    if (get().ticketDetail?.key !== key) set({ ticketDetail: { key, problems: {} } });
+  loadTicketDetail: async (key, want) => {
+    set((state) => ({
+      ticketDetails: touchDetail(state.ticketDetails, key, state.ticketDetails[key] ?? { key, problems: {} }),
+    }));
     const inList = get().tickets.some((ticket) => ticket.key === key);
-    await readTicketParts(get, set, key, { ledger: true, issue: !inList });
+    await readTicketParts(get, set, key, { ledger: want === 'page', issue: !inList, links: want === 'tab' });
   },
 
   /**
-   * The page poller's call (HIVE-203): detail, comments and transitions again.
-   * Not the ledger history — the tail carries what is appended after the open —
-   * and the issue only when the slice read one for itself.
+   * A poller's call (HIVE-203, HIVE-202): detail, comments and transitions
+   * again. Not the ledger history — the tail carries what is appended after
+   * the open — and the issue only when the entry read one for itself. A key
+   * never loaded does nothing.
    */
-  refreshTicketDetail: async (key) => {
-    const open = get().ticketDetail;
-    if (open?.key !== key) return;
-    await readTicketParts(get, set, key, { ledger: false, issue: open.issue !== undefined });
+  refreshTicketDetail: async (key, want) => {
+    const entry = get().ticketDetails[key];
+    if (entry === undefined) return;
+    set((state) => {
+      const current = state.ticketDetails[key];
+      return current === undefined ? state : { ticketDetails: touchDetail(state.ticketDetails, key, current) };
+    });
+    await readTicketParts(get, set, key, { ledger: false, issue: entry.issue !== undefined, links: want === 'tab' });
   },
 
   appendTicketComment: (key, comment) =>
     set((state) => {
-      const open = state.ticketDetail;
-      if (open?.key !== key) return state;
+      const entry = state.ticketDetails[key];
+      if (entry === undefined) return state;
       return {
-        ticketDetail: {
-          ...open,
-          comments: [...(open.comments ?? []), comment],
-          total: (open.total ?? open.comments?.length ?? 0) + 1,
+        ticketDetails: {
+          ...state.ticketDetails,
+          [key]: {
+            ...entry,
+            comments: [...(entry.comments ?? []), comment],
+            total: (entry.total ?? entry.comments?.length ?? 0) + 1,
+          },
         },
       };
     }),
 
   reloadTicketTransitions: async (key) => {
-    if (get().ticketDetail?.key !== key) return;
+    if (get().ticketDetails[key] === undefined) return;
     const result = await readJiraTransitions({ key });
-    if (!result?.ok || get().ticketDetail?.key !== key) return;
-    set((state) => ({ ticketDetail: { ...state.ticketDetail!, transitions: result.value } }));
+    if (!result?.ok) return;
+    set((state) => {
+      const entry = state.ticketDetails[key];
+      if (entry === undefined) return state;
+      return { ticketDetails: { ...state.ticketDetails, [key]: { ...entry, transitions: result.value } } };
+    });
   },
 
   setTicketDetailIssue: (issue) =>
     set((state) => {
-      const open = state.ticketDetail;
-      if (open?.key !== issue.key || open.issue === undefined) return state;
-      return { ticketDetail: { ...open, issue: toTicket(issue) } };
+      const entry = state.ticketDetails[issue.key];
+      if (entry?.issue === undefined) return state;
+      return { ticketDetails: { ...state.ticketDetails, [issue.key]: { ...entry, issue: toTicket(issue) } } };
     }),
 
   /**
@@ -5699,7 +5786,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       */
       tickets: [],
       ticketSource: { kind: 'loading' },
-      ticketDetail: null,
+      ticketDetails: {},
       /*
         Not "an orphan quietly wasting memory" the way it first read — session
         ids are **not unique across machines**. `nextSpawnId`/`rememberSpawnId`
@@ -5795,7 +5882,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       plans: {},
       changedFiles: {},
       ticketSource: { kind: 'loading' },
-      ticketDetail: null,
+      ticketDetails: {},
       prSource: { kind: 'loading' },
       prSearch: NO_PR_SEARCH,
       ticketSearch: NO_TICKET_SEARCH,
@@ -7472,16 +7559,16 @@ export const useRefreshTickets = (): (() => Promise<void>) =>
 export const useUpdateTicket = (): ((issue: JiraIssue) => void) =>
   useHiveStore((state) => state.updateTicket);
 
-/** The open ticket's page data, or null before one opens (HIVE-203). */
-export const useTicketDetail = (): TicketDetail | null =>
-  useHiveStore((state) => state.ticketDetail);
+/** One ticket's detail, or undefined before its first load (HIVE-203, keyed by HIVE-202). */
+export const useTicketDetail = (ticketKey: string): TicketDetail | undefined =>
+  useHiveStore((state) => state.ticketDetails[ticketKey]);
 
-/** Read the open ticket's page (HIVE-203). */
-export const useLoadTicketDetail = (): ((key: string) => Promise<void>) =>
+/** Read one ticket for the page or the Ticket tab (HIVE-203, HIVE-202). */
+export const useLoadTicketDetail = (): ((key: string, want: TicketDetailWant) => Promise<void>) =>
   useHiveStore((state) => state.loadTicketDetail);
 
-/** The page poller's re-read of the open ticket (HIVE-203). */
-export const useRefreshTicketDetail = (): ((key: string) => Promise<void>) =>
+/** A poller's re-read of a ticket already held (HIVE-203, HIVE-202). */
+export const useRefreshTicketDetail = (): ((key: string, want: TicketDetailWant) => Promise<void>) =>
   useHiveStore((state) => state.refreshTicketDetail);
 
 /** Show a just-posted comment on the open ticket (HIVE-203). */
@@ -8095,8 +8182,7 @@ export const useOpenTicket = (ticketKey: string | null): Ticket | undefined =>
     if (ticketKey === null) return undefined;
     const listed = state.tickets.find((ticket) => ticket.key === ticketKey);
     if (listed) return listed;
-    const open = state.ticketDetail;
-    return open?.key === ticketKey ? open.issue : undefined;
+    return state.ticketDetails[ticketKey]?.issue;
   });
 
 /** The ticket page's key/value column (HIVE-203). */
@@ -8105,9 +8191,7 @@ export const useTicketProperties = (ticketKey: string): TicketProperties | undef
   const fleet = useHiveStore(selectSessionFacets);
   const entities = useHiveStore((state) => state.entities);
   const ledger = useHiveStore((state) => state.ledger);
-  const parent = useHiveStore((state) =>
-    state.ticketDetail?.key === ticketKey ? state.ticketDetail.detail?.parent : undefined,
-  );
+  const parent = useHiveStore((state) => state.ticketDetails[ticketKey]?.detail?.parent);
 
   return useMemo(() => {
     if (ticket === undefined) return undefined;
@@ -8135,9 +8219,7 @@ export const useTicketProperties = (ticketKey: string): TicketProperties | undef
  * sort in write order.
  */
 export const useTicketEvents = (ticketKey: string): LedgerEntry[] => {
-  const history = useHiveStore((state) =>
-    state.ticketDetail?.key === ticketKey ? state.ticketDetail.history : undefined,
-  );
+  const history = useHiveStore((state) => state.ticketDetails[ticketKey]?.history);
   const ledger = useHiveStore((state) => state.ledger);
   const query = useMemo<LedgerReadQuery>(() => ({ ticket: ticketKey }), [ticketKey]);
 
@@ -8152,15 +8234,37 @@ export const useTicketEvents = (ticketKey: string): LedgerEntry[] => {
 /** The one step forward from the ticket's status, from its cached transitions (HIVE-203, D6). */
 export const useNextTransition = (ticketKey: string): JiraTransition | undefined => {
   const ticket = useOpenTicket(ticketKey);
-  const transitions = useHiveStore((state) =>
-    state.ticketDetail?.key === ticketKey ? state.ticketDetail.transitions : undefined,
-  );
+  const transitions = useHiveStore((state) => state.ticketDetails[ticketKey]?.transitions);
 
   return useMemo(
     () => (ticket === undefined ? undefined : nextTransition(transitions ?? [], ticket.statusCategory)),
     [ticket, transitions],
   );
 };
+
+/** The Ticket tab's links, sorted into arcs with the verdict and counts (HIVE-202). */
+export const useTicketLinks = (ticketKey: string): TicketLinksModel | undefined => {
+  const links = useHiveStore((state) => state.ticketDetails[ticketKey]?.links);
+  const secondHop = useHiveStore((state) => state.ticketDetails[ticketKey]?.secondHop);
+  return useMemo(() => (links === undefined ? undefined : ticketLinksModel(links, secondHop)), [links, secondHop]);
+};
+
+/** The acceptance list, else the description, else null (HIVE-202). */
+export const useTicketCriteria = (ticketKey: string): Criteria => {
+  const description = useHiveStore((state) => state.ticketDetails[ticketKey]?.detail?.description);
+  return useMemo(() => parseCriteria(description), [description]);
+};
+
+/** The newest comment read: the comments page is the newest fifty, oldest first (HIVE-202, D1). */
+export const useLatestComment = (ticketKey: string): JiraComment | undefined =>
+  useHiveStore((state) => state.ticketDetails[ticketKey]?.comments?.at(-1));
+
+/** The ring's label, only for an epic (HIVE-202, D6). */
+export const useEpicLabel = (ticketKey: string): string | null =>
+  useHiveStore((state) => {
+    const entry = state.ticketDetails[ticketKey];
+    return epicLabel(entry?.detail?.parent, entry?.epicProgress);
+  });
 
 /**
  * How many work items exist — the left rail's Work tab badge (story 030).

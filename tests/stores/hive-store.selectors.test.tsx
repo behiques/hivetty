@@ -2265,10 +2265,12 @@ describe('Work page selectors (HIVE-203)', () => {
 
       act(() =>
         useHiveStore.setState({
-          ticketDetail: {
-            key: 'GRAC-2810',
-            detail: { description: [], parent: { key: 'GRAC-1', summary: 'Epic' } },
-            problems: {},
+          ticketDetails: {
+            'GRAC-2810': {
+              key: 'GRAC-2810',
+              detail: { description: [], parent: { key: 'GRAC-1', summary: 'Epic' } },
+              problems: {},
+            },
           },
         }),
       );
@@ -2290,7 +2292,7 @@ describe('Work page selectors (HIVE-203)', () => {
       const other = entry('20261002-100000-0004', 'GRAC-3022');
       useHiveStore.setState({
         ledger: [c, b, other],
-        ticketDetail: { key: 'GRAC-3018', history: [a, b], problems: {} },
+        ticketDetails: { 'GRAC-3018': { key: 'GRAC-3018', history: [a, b], problems: {} } },
       });
       const { result } = renderHook(() => useTicketEvents('GRAC-3018'));
 
@@ -2299,7 +2301,9 @@ describe('Work page selectors (HIVE-203)', () => {
 
     it("ignores another ticket's history", () => {
       useHiveStore.setState({
-        ticketDetail: { key: 'GRAC-3022', history: [entry('20261002-100000-0001', 'GRAC-3022')], problems: {} },
+        ticketDetails: {
+          'GRAC-3022': { key: 'GRAC-3022', history: [entry('20261002-100000-0001', 'GRAC-3022')], problems: {} },
+        },
       });
       const { result } = renderHook(() => useTicketEvents('GRAC-3018'));
 
@@ -2314,7 +2318,7 @@ describe('Work page selectors (HIVE-203)', () => {
 
       const done = { id: '31', name: 'Finish', to: { name: 'Done', statusCategory: 'done' as const } };
       const back = { id: '11', name: 'Reopen', to: { name: 'To Do', statusCategory: 'todo' as const } };
-      act(() => useHiveStore.setState({ ticketDetail: { key: 'GRAC-3018', transitions: [back, done], problems: {} } }));
+      act(() => useHiveStore.setState({ ticketDetails: { 'GRAC-3018': { key: 'GRAC-3018', transitions: [back, done], problems: {} } } }));
 
       expect(result.current).toEqual(done);
     });
@@ -2323,7 +2327,7 @@ describe('Work page selectors (HIVE-203)', () => {
   describe('useOpenTicket', () => {
     it('prefers the list, falls back to the issue the slice read, else nothing', () => {
       const issue = { key: 'HIVE-8', status: 'To Do', statusCategory: 'todo' as const, title: 'x', priority: null, assignee: null };
-      useHiveStore.setState({ ticketDetail: { key: 'HIVE-8', issue, problems: {} } });
+      useHiveStore.setState({ ticketDetails: { 'HIVE-8': { key: 'HIVE-8', issue, problems: {} } } });
 
       expect(renderHook(() => useOpenTicket('GRAC-3018')).result.current?.key).toBe('GRAC-3018');
       expect(renderHook(() => useOpenTicket('HIVE-8')).result.current).toEqual(issue);
