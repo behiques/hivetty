@@ -94,6 +94,7 @@ import {
   type TicketLinksModel,
 } from '@lib/ticket-links';
 import { parseTitleTags } from '@lib/ticket-tags';
+import { type DiffFile, parseUnifiedDiff } from '@lib/unified-diff';
 import { BRIDGE_ERROR } from '@lib/utils';
 import {
   SESSION_ID_PREFIX_PATTERN,
@@ -5329,7 +5330,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         const files = detail.files.map((file) => (file.path === path ? { ...file, viewed: to } : file));
         return { prDetails: { ...state.prDetails, [key]: { ...entry, detail: { ...detail, files } } } };
       });
-    // Read before the patch below, so a refusal restores what GitHub last said.
+    // Read before the patch below, so a refusal restores what was showing.
     const before = get().prDetails[key]?.detail?.files.find((file) => file.path === path)?.viewed;
 
     patch(viewed ? 'viewed' : 'unviewed');
@@ -7977,6 +7978,27 @@ export const useLoadPrDetail = (): ((owner: string, repo: string, n: number) => 
 /** Comment on a PR, then re-read it (HIVE-205). */
 export const useCommentOnPr = (): ((owner: string, repo: string, n: number, body: string) => Promise<GhResult<true>>) =>
   useHiveStore((state) => state.commentOnPr);
+
+/** One PR's diff entry (HIVE-207). `key` is {@link prKey}'s. */
+export const usePrDiff = (key: string): PrDiffEntry | undefined => useHiveStore((state) => state.prDiffs[key]);
+
+/** One PR's diff, parsed: once per text, never stored (HIVE-207). `null` before the first text. */
+export const useParsedPrDiff = (key: string): DiffFile[] | null => {
+  const text = useHiveStore((state) => state.prDiffs[key]?.text);
+  return useMemo(() => (text === undefined ? null : parseUnifiedDiff(text)), [text]);
+};
+
+/** Read one PR's diff at a head sha (HIVE-207). */
+export const useLoadPrDiff = (): HiveState['loadPrDiff'] => useHiveStore((state) => state.loadPrDiff);
+
+/** Reply to, resolve and unresolve a review thread (HIVE-207). */
+export const usePrThreadActions = (): {
+  reply: HiveState['replyToPrThread'];
+  setResolved: HiveState['setPrThreadResolved'];
+} => useHiveStore(useShallow((state) => ({ reply: state.replyToPrThread, setResolved: state.setPrThreadResolved })));
+
+/** Mark or unmark a file viewed (HIVE-207). */
+export const useSetPrFileViewed = (): HiveState['setPrFileViewed'] => useHiveStore((state) => state.setPrFileViewed);
 
 /** Show a just-posted comment on the open ticket (HIVE-203). */
 export const useAppendTicketComment = (): ((key: string, comment: JiraComment) => void) =>

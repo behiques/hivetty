@@ -1,7 +1,16 @@
+import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BRIDGE_ERROR } from '@lib/utils';
-import { PR_DETAIL_CAP, useHiveStore } from '@stores/hive-store';
+import {
+  PR_DETAIL_CAP,
+  useHiveStore,
+  useLoadPrDiff,
+  useParsedPrDiff,
+  usePrDiff,
+  usePrThreadActions,
+  useSetPrFileViewed,
+} from '@stores/hive-store';
 
 import { prDetail, prFile } from '../support/pr-detail';
 import { prRecord } from '../support/prs';
@@ -191,5 +200,32 @@ describe('setPrFileViewed (HIVE-207)', () => {
     writePrViewed.mockResolvedValue(ok(true));
     readPrDetail.mockResolvedValue(null);
     await expect(state().setPrFileViewed('acme', 'nova-web', 482, 'a.ts', true)).resolves.toEqual(ok(true));
+  });
+});
+
+describe('the Files selectors (HIVE-207)', () => {
+  const TEXT = 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n';
+
+  it('reads the entry and parses the diff once per text', () => {
+    useHiveStore.setState({ prDiffs: { [KEY]: { key: KEY, sha: 'abc', state: 'ok', text: TEXT } } });
+    expect(renderHook(() => usePrDiff(KEY)).result.current).toMatchObject({ sha: 'abc', state: 'ok' });
+    const { result, rerender } = renderHook(() => useParsedPrDiff(KEY));
+    const first = result.current;
+    expect(first?.[0]?.path).toBe('x');
+    rerender();
+    expect(result.current).toBe(first);
+  });
+
+  it('is null before there is text', () => {
+    const { result } = renderHook(() => useParsedPrDiff(KEY));
+    expect(result.current).toBeNull();
+  });
+
+  it('hands out the actions', () => {
+    const { result } = renderHook(() => ({ load: useLoadPrDiff(), thread: usePrThreadActions(), viewed: useSetPrFileViewed() }));
+    expect(result.current.load).toBe(state().loadPrDiff);
+    expect(result.current.thread.reply).toBe(state().replyToPrThread);
+    expect(result.current.thread.setResolved).toBe(state().setPrThreadResolved);
+    expect(result.current.viewed).toBe(state().setPrFileViewed);
   });
 });
