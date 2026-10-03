@@ -697,4 +697,27 @@ describe('Header', () => {
       expect(chips).not.toHaveTextContent(/\d\.\d+\.\d+\.\d+/);
     });
   });
+
+  describe('the bell in round two (HIVE-198)', () => {
+    afterEach(() => {
+      useAppearanceStore.getState().setLayout('classic');
+    });
+
+    it('opens the inbox drawer, leaving the rail alone', async () => {
+      useAppearanceStore.getState().setLayout('round-two');
+      useUiStore.setState({ railTab: 'explorer' });
+      render(<Header />);
+      await userEvent.click(screen.getByRole('button', { name: /^Inbox — / }));
+      expect(useUiStore.getState().inboxDrawer.open).toBe(true);
+      expect(useUiStore.getState().railTab).toBe('explorer');
+    });
+
+    it('in Classic still reveals the Inbox tab, and no drawer', async () => {
+      useAppearanceStore.getState().setLayout('classic');
+      render(<Header />);
+      await userEvent.click(screen.getByRole('button', { name: /^Inbox — / }));
+      expect(useUiStore.getState().railTab).toBe('inbox');
+      expect(useUiStore.getState().inboxDrawer.open).toBe(false);
+    });
+  });
 });

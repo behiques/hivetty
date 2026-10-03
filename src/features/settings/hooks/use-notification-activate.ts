@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 
+import { useLayout } from '@stores/appearance-store';
 import { currentRowFor, isAgentId, useOpenEntity } from '@stores/hive-store';
-import { useRevealRailTab } from '@stores/ui-store';
+import { useInboxActions, useRevealRailTab } from '@stores/ui-store';
 
 /**
  * Open the session a clicked notification was about (story 106).
@@ -20,6 +21,8 @@ import { useRevealRailTab } from '@stores/ui-store';
 export function useNotificationActivate(): void {
   const openEntity = useOpenEntity();
   const revealRailTab = useRevealRailTab();
+  const roundTwo = useLayout() === 'round-two';
+  const { openInboxDrawer } = useInboxActions();
 
   useEffect(() => {
     // No bridge is the browser demo, where there is no OS to notify.
@@ -69,7 +72,9 @@ export function useNotificationActivate(): void {
        * exactly as it was rather than flipping the rail shut.
        */
       if (event.type === 'ask') {
-        revealRailTab('inbox');
+        // Round two has no Inbox tab: the drawer is where an ask is answered (HIVE-198).
+        if (roundTwo) openInboxDrawer(event.thread);
+        else revealRailTab('inbox');
         return;
       }
 
@@ -77,5 +82,5 @@ export function useNotificationActivate(): void {
         isAgentId(event.entityId) ? event.entityId : currentRowFor(event.entityId),
       );
     });
-  }, [openEntity, revealRailTab]);
+  }, [openEntity, openInboxDrawer, revealRailTab, roundTwo]);
 }
