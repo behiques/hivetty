@@ -196,7 +196,8 @@ export function layoutConstellation(input: ConstellationInput): ConstellationLay
     count === 0
       ? null
       : count <= BEAD_LABEL_MAX
-        ? { x: left.x + 10, y: left.y + 22, text: 'relates' }
+        ? // Under the lowest key: two or three beads put a key where one bead's caption would sit.
+          { x: left.x + 10, y: Math.max(...beads.map((bead) => bead.labelAt?.y ?? left.y)) + 18, text: 'relates' }
         : { x: left.x + 12, y: left.y + 4, text: `relates · ${String(count)}` };
 
   let pr: ConstellationLayout['pr'] = null;

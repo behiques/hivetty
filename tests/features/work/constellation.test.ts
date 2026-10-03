@@ -90,6 +90,17 @@ describe('beads, PR and the ring label', () => {
     expect(layout.cells[0]?.label).toBe('601');
   });
 
+  it('two or three labelled beads: "relates" sits under the lowest key, never on one', () => {
+    for (const relates of [[t('A-2'), t('A-3')], [t('A-2'), t('A-3'), t('A-4')]]) {
+      const layout = layoutConstellation({ me: 'A-1', arcs: arcs({ relates }), epicLabel: null, pr: null });
+      const lowest = Math.max(...layout.beads.map((b) => b.labelAt!.y));
+      expect(layout.relatesLabel!.y).toBeGreaterThanOrEqual(lowest + 12);
+    }
+    const one = layoutConstellation({ me: 'A-1', arcs: arcs({ relates: [t('A-2')] }), epicLabel: null, pr: null });
+    expect(one.relatesLabel?.x).toBeCloseTo(30);
+    expect(one.relatesLabel?.y).toBeCloseTo(172);
+  });
+
   it('no relates, no PR, no epic: none of them drawn', () => {
     const layout = layoutConstellation({ me: 'A-1', arcs: arcs({ waitsOn: [t('A-2')] }), epicLabel: null, pr: null });
     expect(layout.beads).toEqual([]);
