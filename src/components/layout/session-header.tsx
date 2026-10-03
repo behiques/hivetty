@@ -87,7 +87,7 @@ function SessionLine({ session }: { session: Session }) {
         </span>
       </span>
       <span data-slot="model" className="shrink-0">
-        <ModelChip clip={false} />
+        <ModelChip />
       </span>
       <SessionMenu session={session} />
     </>

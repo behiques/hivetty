@@ -287,19 +287,10 @@ describe('ModelChip', () => {
     expect(chip.getAttribute('title')).toMatch(/session limit 12%, resets .+ · weekly limit 46%, resets /);
   });
 
-  it('clips its stats row by default, so the Classic header cannot be overrun (HIVE-213)', () => {
+  it('never clips its stats row: the session header gives way instead (HIVE-213)', () => {
     useUiStore.setState({ activeTab: 'hero-refresh' });
     act(() => useHiveStore.getState().setSessionMetrics('hero-refresh', { contextPct: 46 }));
     render(<ModelChip />);
-    const chip = screen.getByTestId('model-chip');
-    expect(chip).toHaveClass('min-w-0');
-    expect(chip.querySelector('.overflow-hidden')).not.toBeNull();
-  });
-
-  it('does not clip when the mount opts out, as the session header does (HIVE-213)', () => {
-    useUiStore.setState({ activeTab: 'hero-refresh' });
-    act(() => useHiveStore.getState().setSessionMetrics('hero-refresh', { contextPct: 46 }));
-    render(<ModelChip clip={false} />);
     const chip = screen.getByTestId('model-chip');
     expect(chip).not.toHaveClass('min-w-0');
     expect(chip.querySelector('.overflow-hidden')).toBeNull();
