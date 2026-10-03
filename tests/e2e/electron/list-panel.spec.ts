@@ -108,3 +108,29 @@ test('crossing below 1,200px with the panel open closes it', async ({}, testInfo
     await app.close();
   }
 });
+
+test('at 1,100px the session panel is a strip and the list takes no column; widening restores the panel', async ({}, testInfo) => {
+  const { app, page } = await open(testInfo);
+  try {
+    await bar(page).getByRole('button', { name: 'Sessions', exact: true }).click();
+    await sessionsList(page).getByRole('button', { name: new RegExp(`^${PROJECT}`) }).click();
+    await page.getByRole('main').getByRole('button', { name: `New session in ${PROJECT}`, exact: true }).click();
+    await expect(page.locator('[data-terminal-id^="sess-"]').last()).toBeVisible();
+
+    const sessionPanel = page.getByRole('complementary', { name: 'Session panel' });
+    // Open by default while wide: the tabs show.
+    await expect(page.getByRole('tablist')).toBeVisible();
+
+    await resizeTo(app, page, 1100);
+    // The session panel collapses to its strip (HIVE-201), and the list panel, closed by the crossing, takes no column.
+    await expect(page.getByRole('tablist')).toHaveCount(0);
+    await expect(sessionPanel).toBeVisible();
+    await expect(sessionsList(page)).toHaveCount(0);
+
+    await resizeTo(app, page, 1440);
+    await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeGreaterThan(1200);
+    await expect(page.getByRole('tablist')).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
