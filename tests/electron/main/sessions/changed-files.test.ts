@@ -194,4 +194,46 @@ describe('createChangedFiles (HIVE-201)', () => {
     expect(send).not.toHaveBeenCalled();
     expect(files.list().sessions).toEqual([]);
   });
+
+  it('drops a file outside the root, and the root itself', async () => {
+    stage(
+      'u1',
+      [
+        editLine('/elsewhere/x.ts', ['+1']),
+        editLine('/repo-other/y.ts', ['+1']),
+        editLine('/repo', ['+1']),
+        editLine('/repo/z.ts', ['+1']),
+      ].join('\n') + '\n',
+    );
+    const { send, files } = make();
+    await files.onFileTool('sess-01');
+    expect(send.mock.lastCall?.[1]).toMatchObject({ files: [{ path: 'z.ts' }] });
+    expect((send.mock.lastCall?.[1] as { files: unknown[] }).files).toHaveLength(1);
+  });
+
+  it('a session in an out-of-project worktree is relative to that worktree (HIVE-78)', async () => {
+    stage('u1', editLine('/wt/feat/src/a.ts', ['+1']) + '\n');
+    const send = vi.fn();
+    const files = createChangedFiles({
+      send,
+      home,
+      transcriptOf: () => transcript,
+      rootOf: () => Promise.resolve('/wt/feat'),
+    });
+    await files.onFileTool('sess-01');
+    expect(send.mock.lastCall?.[1]).toMatchObject({ files: [{ path: 'src/a.ts' }] });
+  });
+
+  it('no root (no project) publishes nothing', async () => {
+    stage('u1', editLine('/repo/a.ts', ['+1']) + '\n');
+    const send = vi.fn();
+    const files = createChangedFiles({
+      send,
+      home,
+      transcriptOf: () => transcript,
+      rootOf: () => Promise.resolve(null),
+    });
+    await files.onFileTool('sess-01');
+    expect(send).not.toHaveBeenCalled();
+  });
 });
