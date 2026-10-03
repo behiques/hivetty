@@ -139,7 +139,9 @@ import type {
   SessionHistoryEntry,
   SessionPrRequest,
 } from '@shared/session-history-contract';
-import { type TableFilter, useFleetView, useUiStore } from '@stores/ui-store';
+import { type AgentGroupKey, type TableFilter, useFleetView, useUiStore } from '@stores/ui-store';
+
+export type { AgentGroupKey } from '@stores/ui-store';
 
 /**
  * Domain state — what the system knows, as opposed to what the user is looking
@@ -6335,9 +6337,6 @@ export const useAgentLines = (name: string): TermLine[] =>
  * unrelated store write. The same reason `EMPTY_LINES` exists above it.
  */
 const EMPTY_RUNS: RunSummary[] = [];
-
-/** The Agents panel's lanes (HIVE-204). In code a `group`: `lane:` is an agent frontmatter key. */
-export type AgentGroupKey = 'summons' | 'morphing' | 'burrowed';
 
 interface AgentGroup {
   key: AgentGroupKey;

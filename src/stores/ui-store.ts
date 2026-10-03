@@ -18,6 +18,12 @@ export type TableFilter = 'all' | 'live' | 'ended';
 export type WorkConversation = 'comments' | 'everything';
 /** The agent page's Activity | Definition switch (HIVE-204). */
 export type AgentPageView = 'activity' | 'definition';
+
+/**
+ * The Agents panel's lanes (HIVE-204). Declared here, not in hive-store, because hive-store imports this
+ * module. In code a `group`, never a `lane`: `lane:` is an agent frontmatter key (HIVE-184).
+ */
+export type AgentGroupKey = 'summons' | 'morphing' | 'burrowed';
 /** Which agent the Agents place has open, and on which view (HIVE-204). */
 export interface AgentPage {
   /** `null` is a new agent never saved. */
@@ -188,6 +194,8 @@ interface UiState {
   workFolded: Record<JiraStatusCategory, boolean>;
   /** The ticket page's conversation filter (HIVE-203). View state, not persisted; each open resets it. */
   workConversation: WorkConversation;
+  /** Which Agents panel lanes are folded; all start unfolded (HIVE-204). View state, not persisted. */
+  agentsFolded: Record<AgentGroupKey, boolean>;
   /**
    * The Agents place's open page (HIVE-204): which agent, and Activity or Definition. `name: null` is a
    * new agent never saved. View state, not persisted.
@@ -266,6 +274,7 @@ interface UiState {
    */
   openWorkTicket: (key: string) => void;
   toggleWorkGroup: (category: JiraStatusCategory) => void;
+  toggleAgentGroup: (key: AgentGroupKey) => void;
   setWorkConversation: (mode: WorkConversation) => void;
   /**
    * Open an agent's page (HIVE-204): moves the bar to Agents, shows its panel and dismisses the
@@ -315,6 +324,7 @@ const initialUiState = {
   workTicket: null as string | null,
   workFolded: { todo: false, 'in-progress': false, done: true } as Record<JiraStatusCategory, boolean>,
   workConversation: 'comments' as WorkConversation,
+  agentsFolded: { summons: false, morphing: false, burrowed: false } as Record<AgentGroupKey, boolean>,
   agentPage: null as AgentPage | null,
 };
 
@@ -524,6 +534,8 @@ export const useUiStore = create<UiState>()((set) => ({
     }),
   toggleWorkGroup: (category) =>
     set((state) => ({ workFolded: { ...state.workFolded, [category]: !state.workFolded[category] } })),
+  toggleAgentGroup: (key) =>
+    set((state) => ({ agentsFolded: { ...state.agentsFolded, [key]: !state.agentsFolded[key] } })),
   setWorkConversation: (mode) => set({ workConversation: mode }),
   openAgentPage: (name, view) =>
     set({
@@ -608,6 +620,9 @@ export const useWorkConversation = () => useUiStore((state) => state.workConvers
 export const useOpenWorkTicket = () => useUiStore((state) => state.openWorkTicket);
 export const useToggleWorkGroup = () => useUiStore((state) => state.toggleWorkGroup);
 export const useSetWorkConversation = () => useUiStore((state) => state.setWorkConversation);
+/** The Agents panel's lane folds (HIVE-204). */
+export const useAgentsFolded = () => useUiStore((state) => state.agentsFolded);
+export const useToggleAgentGroup = () => useUiStore((state) => state.toggleAgentGroup);
 /** The Agents place's open page and its actions (HIVE-204). */
 export const useAgentPage = () => useUiStore((state) => state.agentPage);
 export const useAgentPageActions = () =>
