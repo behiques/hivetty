@@ -29,6 +29,7 @@ The bar runs down the left edge.
 | **Agents** | Background agents. See [Agents](agents.md) |
 | **PRs** | Your pull requests. See [Jira and pull requests](work-and-prs.md) |
 | Connection item | Where this Hive runs. See below |
+| Sun / moon | Switch between the theme's light and dark mode. From System, it picks the opposite of what is showing |
 | Gear | Open Settings |
 
 Counts sit on the icons. Sessions and Agents show how many are working, in grey. PRs shows how

@@ -297,7 +297,10 @@ glyph on top (Phosphor `Hexagon`, `weight="fill"`, `text-amber`, 22px) carries
 the team name as its accessible name and its tooltip, "The Hive" when the name
 is empty. Below it the five places — Home, Sessions, Work, Agents, PRs — each a
 52px button calling `selectPlace`; the active one has `aria-current="page"`.
-The foot holds `ConnectionItem` and Settings (`openSettings()`); no Search.
+The foot holds `ConnectionItem`, the theme toggle (HIVE-213: Phosphor `Sun` while the
+resolved theme is dark, `Moon` while light, named and titled "Switch to light theme" /
+"Switch to dark theme", calling `toggleTheme` through `useToggleTheme` and reading
+`useResolvedTheme`) and Settings (`openSettings()`); no Search.
 Sessions and Agents carry working counts in grey, PRs its needs-you count in
 amber; a zero draws nothing (HIVE-196).
 

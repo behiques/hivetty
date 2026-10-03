@@ -1,7 +1,8 @@
 # Themes
 
 One theme colours everything: the chrome, the terminal and the code editor. Every theme has a
-light and a dark mode; **Settings › Appearance › Mode** switches between them.
+light and a dark mode. The sun or moon at the foot of the bar switches between them, and
+**Settings › Appearance › Mode** also offers System, which follows macOS.
 
 **On this page:** [Pick a theme](#pick-a-theme) · [Import your own](#import-your-own) ·
 [The theme file](#the-theme-file) · [Other appearance settings](#other-appearance-settings)

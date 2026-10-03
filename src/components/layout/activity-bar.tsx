@@ -4,7 +4,9 @@ import {
   Hexagon,
   House,
   Kanban,
+  Moon,
   Robot,
+  Sun,
   type Icon,
 } from '@phosphor-icons/react';
 
@@ -12,7 +14,7 @@ import { cn } from '@/lib/utils';
 
 import { ConnectionItem } from '@components/layout/connection-item';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip';
-import { useTeamName } from '@stores/appearance-store';
+import { useResolvedTheme, useTeamName, useToggleTheme } from '@stores/appearance-store';
 import { useCounts, usePrNeedsYouCount, useWorkingAgentCount } from '@stores/hive-store';
 import { usePlace, useSelectPlace, useSettingsActions, type Place } from '@stores/ui-store';
 
@@ -32,7 +34,7 @@ const ITEM =
  *
  * Picking a place is the whole interaction; the ui-store's `selectPlace` owns
  * what a click on the active one means. The foot holds the connection item
- * (HIVE-196) and Settings; Search is left out until a story says what it
+ * (HIVE-196), the theme toggle (HIVE-213) and Settings; Search is left out until a story says what it
  * searches. The team name has no room
  * here, so it is the glyph's tooltip.
  */
@@ -44,6 +46,10 @@ export function ActivityBar() {
   const prsNeedYou = usePrNeedsYouCount();
   const sessionsWorking = useCounts().working;
   const agentsWorking = useWorkingAgentCount();
+  const resolvedTheme = useResolvedTheme();
+  const toggleTheme = useToggleTheme();
+  const themeLabel = resolvedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+  const ThemeIcon = resolvedTheme === 'dark' ? Sun : Moon;
 
   return (
     <nav
@@ -94,6 +100,17 @@ export function ActivityBar() {
       <span className="flex-1" />
 
       <ConnectionItem />
+
+      <button
+        type="button"
+        aria-label={themeLabel}
+        title={themeLabel}
+        onClick={toggleTheme}
+        className={cn(ITEM, 'text-muted hover:bg-hover')}
+      >
+        <ThemeIcon size={19} aria-hidden />
+        Theme
+      </button>
 
       <button
         type="button"
