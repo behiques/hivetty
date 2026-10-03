@@ -17,7 +17,7 @@ import { launchHive } from './fixtures/hive-app';
  * Home's comb in the real app (HIVE-199).
  *
  * Three sessions on one project, each driven into a state by hook posts from
- * its own shell, the way `plan-rail.spec.ts` posts its task tools: one
+ * its own shell, the way a session posts its task tools: one
  * working, one waiting, one idle. What only a real window can show is the
  * canvas itself — that it lays the patch out where the layout says, that a
  * hover over it finds the cell, and what it looks like in both themes, which
@@ -74,18 +74,6 @@ function postHookCommand(
     ` --data-binary '${payload}'` +
     ` > '${statusMarker}'`
   );
-}
-
-/** Seed round two before the first frame that matters, as `sessions-place.spec.ts` does. */
-async function useRoundTwo(page: Page): Promise<void> {
-  await page.evaluate(() =>
-    localStorage.setItem(
-      'hive.appearance',
-      JSON.stringify({ version: 3, state: { layout: 'round-two', theme: 'dark' } }),
-    ),
-  );
-  await page.reload();
-  await page.waitForSelector('nav[aria-label="Places"]');
 }
 
 const places = (page: Page) => page.getByRole('navigation', { name: 'Places' });
@@ -159,7 +147,7 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
   try {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.waitForLoadState('domcontentloaded');
-    await useRoundTwo(page);
+    await page.waitForSelector('nav[aria-label="Places"]');
 
     const working = await startSession(page, bootDir);
     await goHome();

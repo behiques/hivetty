@@ -5,7 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
  * projects, so Home is the first-run page and the comb lives in the electron
  * spec (home-comb.spec.ts). With nothing to list it draws no list panel either
  * (HIVE-211), so the panel's colour is checked in list-panel.spec.ts (electron).
- * Seeded before the first frame, as round-two.spec.ts is.
+ * The theme is seeded before the first frame.
  */
 const GROUND = { dark: 'rgb(16, 21, 42)', light: 'rgb(253, 253, 251)' } as const;
 
@@ -24,7 +24,7 @@ for (const theme of ['dark', 'light'] as const) {
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem(
           'hive.appearance',
-          JSON.stringify({ version: 3, state: { layout: 'round-two', theme: mode } }),
+          JSON.stringify({ version: 3, state: { theme: mode } }),
         );
       }, theme);
       await page.goto('/?sim=0');

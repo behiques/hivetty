@@ -36,6 +36,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   useUiStore.getState().openTab('orch');
   useHiveStore.getState().reset();
+  useAppearanceStore.getState().setLayout('classic');
 });
 
 afterEach(() => {

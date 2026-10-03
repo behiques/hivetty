@@ -644,7 +644,7 @@ const initialAppearanceState = {
   terminalFontSize: DEFAULT_TERMINAL_FONT_SIZE,
   terminalScrollback: DEFAULT_TERMINAL_SCROLLBACK,
   density: 'comfortable' as Density,
-  layout: 'classic' as Layout,
+  layout: 'round-two' as Layout,
   /** Open, on Plan: Files is where the Explorer lived, so open shows the user what moved (D14). */
   sessionPanelOpen: true,
   sessionPanelTab: 'plan' as SessionPanelTab,
@@ -1045,8 +1045,8 @@ export const useAppearanceStore = create<AppearanceState>()(
           ...currentState,
           ...persisted,
           ...sanitizeThemeState(persisted),
-          // Anything but the one other value reads as the default, absent key included.
-          layout: persisted.layout === 'round-two' ? 'round-two' : 'classic',
+          // Round two unless Classic was chosen (HIVE-213); PR C removes the key.
+          layout: persisted.layout === 'classic' ? 'classic' : 'round-two',
           // No version bump for HIVE-201: an absent or bad value reads as the default.
           sessionPanelOpen:
             typeof persisted.sessionPanelOpen === 'boolean' ? persisted.sessionPanelOpen : true,

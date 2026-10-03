@@ -3,22 +3,24 @@ import { join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
 
+import { openProject, overmindNewSession } from '../fixtures/places';
+
 import { launchHive, writeProjectConfig } from './fixtures/hive-app';
 
 /**
- * Starting a session from the projects tree, in the built app.
+ * Starting a session from the Sessions list, in the built app.
  *
  * ## Why this cannot be a web spec
  *
  * `useProjects()` reads the workspace config and only the config, and the
- * browser target has no config at all — so the PROJECTS tree is permanently
+ * browser target has no config at all — so the Sessions list is permanently
  * empty there and this control never renders. The desktop app is the only place
  * the surface exists.
  *
  * What the unit tests cannot reach, and this can: that the click runs through a
  * real main process, that the spawn it asks for is granted, and that a terminal
  * actually opens — plus the one regression the whole design is arranged around,
- * that the tree's link and the header's button stay two distinguishable
+ * that the list's link and the Overmind's button stay two distinguishable
  * controls.
  */
 
@@ -32,7 +34,7 @@ async function launch(outputPath: (name: string) => string) {
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
   return { app, page };
 }
 
@@ -45,9 +47,10 @@ test('the tree starts a session, and the link stays below the last one', async (
   const { app, page } = await launch((name) => testInfo.outputPath(name));
 
   try {
-    const tree = page.locator('[data-panel="projects"]');
-    const rows = tree.locator('> div > *');
-    const link = page.getByRole('button', { name: 'New session in nova-web' });
+    const tree = await openProject(page, 'nova-web');
+    // The project's own group: its folder row, then a row per session, then the split row.
+    const rows = tree.locator('[data-panel="sessions"] > div:has([aria-label="Fold nova-web"]) > *');
+    const link = tree.getByRole('button', { name: 'New session in nova-web' });
 
     // Nothing is running, so the link sits directly under the folder row.
     //
@@ -62,28 +65,22 @@ test('the tree starts a session, and the link stays below the last one', async (
     /**
      * The regression this whole arrangement is guarding.
      *
-     * `fixtures/hive-app.ts`'s `startSession` clicks the header button by
+     * `fixtures/hive-app.ts`'s `startSession` clicks the Overmind's button by
      * accessible name to open the picker. Playwright matches names as a
-     * case-insensitive **substring**, so `New session` alone now finds the
-     * header button and every tree link — hence `exact` there and here. Pinned
-     * as an assertion rather than left implicit: if a later change renames the
-     * header button, this fails loudly instead of silently clicking a link.
+     * case-insensitive **substring**, so `New session` alone finds the
+     * Overmind's button, the panel head's "+" and every list link — hence
+     * `exact` and the stage scope there and here. Pinned as an assertion
+     * rather than left implicit: if a later change renames the Overmind's
+     * button, this fails loudly instead of silently clicking a link.
      */
-    await expect(
-      page.getByRole('button', { name: 'New session', exact: true }),
-    ).toHaveCount(1);
-    // Scoped to the tree rather than counted page-wide: the claim is "the link
-    // is one of the loose matches", and a page-global count would also fail
-    // for a second project in this config, or any future control whose name
-    // happens to contain the words.
+    await expect(overmindNewSession(page)).toHaveCount(1);
+    // Scoped to the list rather than counted page-wide. Two loose matches in
+    // round two: the panel head's "+" (named New session) and the project's link.
     await expect(tree.getByRole('button', { name: 'New session' })).toHaveCount(
-      1,
+      2,
     );
 
-    const rail = page.getByRole('navigation', {
-      name: 'Projects, work, and agents',
-    });
-    await rail.screenshot({
+    await tree.screenshot({
       path: 'test-results/evidence/projects-new-session-empty.png',
     });
 
@@ -92,6 +89,8 @@ test('the tree starts a session, and the link stays below the last one', async (
     // A real terminal, from a real spawn — no picker in between.
     const terminal = page.locator('[data-terminal-id^="sess-"]').last();
     await expect(terminal).toBeVisible();
+    // The stage is a session now, so the Overmind's button is gone.
+    await expect(overmindNewSession(page)).toHaveCount(0);
 
     // And the tree grew a session row *above* the split row, which stays last.
     await expect(rows).toHaveCount(3);
@@ -99,7 +98,7 @@ test('the tree starts a session, and the link stays below the last one', async (
       rows.last().getByRole('button', { name: 'New session in nova-web' }),
     ).toBeVisible();
 
-    await rail.screenshot({
+    await tree.screenshot({
       path: 'test-results/evidence/projects-new-session-running.png',
     });
   } finally {
@@ -108,7 +107,7 @@ test('the tree starts a session, and the link stays below the last one', async (
 });
 
 /**
- * The rail draws the display name, in the built app (HIVE-104).
+ * The Sessions list draws the display name, in the built app (HIVE-104).
  *
  * The bug this pins was a *field* mistake, not a propagation one: the row
  * rendered `project.id`, which a rename deliberately never touches, so the old
@@ -131,7 +130,7 @@ test('the tree labels a project with its name, not its id', async ({}, testInfo)
   const { app, page } = await launch((name) => testInfo.outputPath(name));
 
   try {
-    const tree = page.locator('[data-panel="projects"]');
+    const tree = await openProject(page, 'NOVA Web');
 
     await expect(tree.getByText('NOVA Web')).toBeVisible();
     // Both halves: a row printing name *and* id would pass the first alone.
@@ -169,7 +168,7 @@ test('a project whose path does not resolve offers a refusal, not a start', asyn
   try {
     // The link is rendered rather than hidden: the affordance stays where the
     // user expects it and explains itself instead of vanishing.
-    const refused = page.getByRole('button', {
+    const refused = (await openProject(page, 'referral-api')).getByRole('button', {
       name: 'New session in referral-api',
     });
     await expect(refused).toBeVisible();
@@ -177,7 +176,7 @@ test('a project whose path does not resolve offers a refusal, not a start', asyn
     await expect(refused).toHaveAttribute('title', /nowhere\/that\/exists|missing/);
 
     await expect(
-      page.getByRole('button', { name: 'New session in nova-web' }),
+      (await openProject(page, 'nova-web')).getByRole('button', { name: 'New session in nova-web' }),
     ).toBeEnabled();
   } finally {
     await app.close();
@@ -185,7 +184,7 @@ test('a project whose path does not resolve offers a refusal, not a start', asyn
 });
 
 /**
- * The hierarchy pass, in the shipped renderer (the rail half).
+ * The hierarchy pass, in the shipped renderer (the Sessions list half).
  *
  * The claim is about *painted colour*, which no unit test can make: jsdom
  * resolves no custom properties, so `text-brand` there is a class name and
@@ -207,17 +206,16 @@ test('paints a project apart from its sessions, in every theme', async ({}, test
   const { app, page } = await launch((name) => testInfo.outputPath(name));
 
   try {
-    const tree = page.locator('[data-panel="projects"]');
-    const rail = page.getByRole('navigation', {
-      name: 'Projects, work, and agents',
-    });
+    const tree = await openProject(page, 'NOVA Web');
 
     // A session to be different *from*. The link spawns one straight away.
-    await page.getByRole('button', { name: 'New session in NOVA Web' }).click();
+    await tree.getByRole('button', { name: 'New session in NOVA Web' }).click();
     await expect(page.locator('[data-terminal-id^="sess-"]').last()).toBeVisible();
 
-    const projectName = tree.getByText('NOVA Web');
-    const sessionName = tree.locator('[aria-current="true"] span').first();
+    // Scoped to the project's group: "All projects" above it is aria-current too.
+    const group = tree.locator('[data-panel="sessions"] > div:has([aria-label="Fold NOVA Web"])');
+    const projectName = group.getByText('NOVA Web');
+    const sessionName = group.locator('[aria-current="true"] span').first();
 
     const colourOf = (locator: typeof projectName): Promise<string> =>
       locator.evaluate((node) => getComputedStyle(node).color);
@@ -226,12 +224,15 @@ test('paints a project apart from its sessions, in every theme', async ({}, test
     const darkSession = await colourOf(sessionName);
 
     expect(darkProject).not.toBe(darkSession);
-    await rail.screenshot({
+    await tree.screenshot({
       path: 'test-results/evidence/projects-hierarchy-hive-dark.png',
     });
 
     // A different theme, with a brand in a different hue entirely.
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'Places' })
+      .getByRole('button', { name: 'Settings', exact: true })
+      .click();
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
     await page
       .getByRole('navigation', { name: 'Settings sections' })
@@ -247,7 +248,7 @@ test('paints a project apart from its sessions, in every theme', async ({}, test
     // And it is still not the colour of the session beneath it.
     expect(cinderProject).not.toBe(await colourOf(sessionName));
 
-    await rail.screenshot({
+    await tree.screenshot({
       path: 'test-results/evidence/projects-hierarchy-cinder.png',
     });
   } finally {

@@ -7,6 +7,8 @@ import {
   type Page,
 } from '@playwright/test';
 
+import { goToOvermind } from '../fixtures/places';
+
 import {
   launchHive,
   startSession,
@@ -24,10 +26,8 @@ import {
  * — last and narrowest — ended up a whole control adrift. Four thousand unit
  * tests were green throughout. They had to be: happy-dom performs no layout, so
  * a component test can prove the cell *exists* and never that it is under its
- * heading. This is the same reason `rail-alignment.spec.ts` and
- * `chip-alignment.spec.ts` exist, and the defect they were written for is the
- * same defect — a *relationship* between two pieces of markup that no single
- * component owns.
+ * heading. The defect is a *relationship* between two pieces of markup that no
+ * single component owns, and only a real layout engine measures one.
  *
  * ## Why geometry rather than DOM order
  *
@@ -101,7 +101,7 @@ async function resizeTo(
 }
 
 /**
- * Rounded before comparison, for `rail-alignment.spec.ts`'s reason: these are
+ * Rounded before comparison, because these are
  * fractional CSS pixels in a flex line whose free space is divided three ways,
  * and demanding an exact match would fail on a rounding difference rather than
  * on a layout regression.
@@ -136,7 +136,7 @@ test('the PR header sits over the PR cells', async ({}, testInfo) => {
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await startSession(page, PROJECT);
@@ -167,11 +167,11 @@ test('the PLAN header sits over the plan cells', async ({}, testInfo) => {
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await startSession(page, PROJECT);
-    await page.getByRole('button', { name: 'Back to overmind' }).click();
+    await goToOvermind(page);
 
     const xs = await columnXs(page, 'plan');
 
@@ -199,7 +199,7 @@ test('the PR header still sits over the PR cells beside a resume control', async
   const first = await launchHive({ userDataDir, configPath });
   const firstWindow = await first.firstWindow();
   await firstWindow.waitForLoadState('domcontentloaded');
-  await firstWindow.waitForSelector('header');
+  await firstWindow.waitForSelector('nav[aria-label="Places"]');
   await startSession(firstWindow, PROJECT);
 
   // The session-history write is debounced at 400ms — `session-history.spec.ts`
@@ -210,9 +210,10 @@ test('the PR header still sits over the PR cells beside a resume control', async
   const second = await launchHive({ userDataDir, configPath });
   const page = await second.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
+    await goToOvermind(page);
     await expect(endedHead(page)).toBeVisible();
     await revealEnded(page);
 
@@ -254,7 +255,7 @@ test('the PR header still sits over the PR cells beside a resume control', async
  * `COL`'s docblock computes it — 17 characters at 12.5px in this monospace face
  * is about 128px — and that computation is exactly the kind of thing that is
  * right until the type scale, the density or the font stack moves under it.
- * `MIN_WINDOW_SIZE` is 1100px and the two rails leave the centre stage roughly
+ * `MIN_WINDOW_SIZE` is 1100px and the bar and the list panel leave the centre stage roughly
  * 516px of it, so the whole flex line is spent; there is no slack for an
  * estimate to be wrong into.
  *
@@ -283,14 +284,14 @@ test('the status column fits its widest label at the minimum window size', async
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     // The window the arithmetic in `COL` is written against.
     await resizeTo(app, page, 1100);
 
     await startSession(page, PROJECT);
-    await page.getByRole('button', { name: 'Back to overmind' }).click();
+    await goToOvermind(page);
 
     const cell = page.locator('[data-col="status"]').last();
     await expect(cell).toBeVisible();
@@ -367,7 +368,7 @@ test('the columns hold together at the minimum window with a resumable row', asy
   const first = await launchHive({ userDataDir, configPath });
   const firstWindow = await first.firstWindow();
   await firstWindow.waitForLoadState('domcontentloaded');
-  await firstWindow.waitForSelector('header');
+  await firstWindow.waitForSelector('nav[aria-label="Places"]');
   await startSession(firstWindow, PROJECT);
 
   // The session-history write is debounced at 400ms — see `session-history.spec.ts`.
@@ -377,16 +378,17 @@ test('the columns hold together at the minimum window with a resumable row', asy
   const second = await launchHive({ userDataDir, configPath });
   const page = await second.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await resizeTo(second, page, 1100);
+    await goToOvermind(page);
 
     /*
       Wait for the restored fleet to paint **before** counting.
 
       `count()` does not auto-wait, and the session history arrives over IPC after
-      `waitForSelector('header')` has already resolved. Counting straight away
+      `waitForSelector('nav[aria-label="Places"]')` has already resolved. Counting straight away
       can therefore find zero Resume controls simply because no row has
       rendered yet — and the `test.skip` below is this test's only guard, so a
       premature count skips it green while never exercising the regression at
@@ -468,13 +470,13 @@ test('the LAST USED column fits its widest label at the minimum window size', as
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
     await resizeTo(app, page, 1100);
 
     await startSession(page, PROJECT);
-    await page.getByRole('button', { name: 'Back to overmind' }).click();
+    await goToOvermind(page);
 
     const cell = page.locator('[data-col="last-used"]').last();
     await expect(cell).toBeVisible();
@@ -513,7 +515,7 @@ test('round two at the minimum window: the panel takes no column, and PR stays u
   const first = await launchHive({ userDataDir, configPath });
   const firstWindow = await first.firstWindow();
   await firstWindow.waitForLoadState('domcontentloaded');
-  await firstWindow.waitForSelector('header');
+  await firstWindow.waitForSelector('nav[aria-label="Places"]');
   await startSession(firstWindow, PROJECT);
   await firstWindow.waitForTimeout(700);
   await first.close();
@@ -523,15 +525,6 @@ test('round two at the minimum window: the panel takes no column, and PR stays u
   await page.waitForLoadState('domcontentloaded');
 
   try {
-    await page.evaluate(() => {
-      const raw = localStorage.getItem('hive.appearance');
-      const stored = raw === null ? { version: 3, state: {} } : (JSON.parse(raw) as { version: number; state: object });
-      localStorage.setItem(
-        'hive.appearance',
-        JSON.stringify({ ...stored, state: { ...stored.state, layout: 'round-two' } }),
-      );
-    });
-    await page.reload();
     await page.waitForSelector('nav[aria-label="Places"]');
     await resizeTo(second, page, 1100);
 

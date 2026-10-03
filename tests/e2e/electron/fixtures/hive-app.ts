@@ -10,6 +10,8 @@ import {
   type Page,
 } from '@playwright/test';
 
+import { goToOvermind, overmindNewSession } from '../../fixtures/places';
+
 /**
  * The Electron fixture — the ONLY place this suite touches Electron-specific
  * Playwright API (story 085).
@@ -339,16 +341,13 @@ export async function startSession(
   page: Page,
   projectQuery: string,
 ): Promise<string> {
-  /**
-   * `exact` is load-bearing.
-   *
-   * Playwright's `name` matches a **substring**, case-insensitively, unless
-   * told otherwise. The projects tree now renders a per-project start link
-   * named `New session in <project>`, so the loose form matches the header
-   * button *and* one link per mapped project — a strict-mode violation in every
-   * spec that has a config. The header button is what this helper means.
-   */
-  await page.getByRole('button', { name: 'New session', exact: true }).click();
+  /*
+    The Overmind's New session, scoped to the stage (HIVE-213). Round two has
+    no header; the Sessions panel head draws a "+" of the same name, and a
+    per-project link matches the loose form.
+  */
+  await goToOvermind(page);
+  await overmindNewSession(page).click();
 
   const search = page.getByRole('textbox', { name: 'Search all projects' });
   await expect(search).toBeFocused();

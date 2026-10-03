@@ -501,7 +501,7 @@ describe('appearance-store — persistence', () => {
       terminalFontSize: 12.5,
       terminalScrollback: 5000,
       density: 'compact',
-      layout: 'classic',
+      layout: 'round-two',
       sessionPanelOpen: true,
       sessionPanelTab: 'plan',
       railWidthLeft: null,
@@ -1223,22 +1223,22 @@ describe('appearance-store — layout (HIVE-195)', () => {
     useAppearanceStore.getState().reset();
   });
 
-  it('defaults to classic', () => {
-    expect(useAppearanceStore.getState().layout).toBe('classic');
+  it('defaults to round two (HIVE-213)', () => {
+    expect(useAppearanceStore.getState().layout).toBe('round-two');
   });
 
   it('setLayout persists it', () => {
-    useAppearanceStore.getState().setLayout('round-two');
+    useAppearanceStore.getState().setLayout('classic');
 
-    expect(useAppearanceStore.getState().layout).toBe('round-two');
+    expect(useAppearanceStore.getState().layout).toBe('classic');
     const { state } = JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) as string) as {
       state: Record<string, unknown>;
     };
-    expect(state.layout).toBe('round-two');
+    expect(state.layout).toBe('classic');
   });
 
-  it('rehydrates a stored state without the key to classic', async () => {
-    useAppearanceStore.getState().setLayout('round-two');
+  it('rehydrates a stored state without the key to round two', async () => {
+    useAppearanceStore.getState().setLayout('classic');
     localStorage.setItem(
       APPEARANCE_STORAGE_KEY,
       JSON.stringify({ version: 3, state: { theme: 'light' } }),
@@ -1246,13 +1246,24 @@ describe('appearance-store — layout (HIVE-195)', () => {
 
     await useAppearanceStore.persist.rehydrate();
 
-    expect(useAppearanceStore.getState().layout).toBe('classic');
+    expect(useAppearanceStore.getState().layout).toBe('round-two');
   });
 
-  it('rehydrates an unknown stored layout to classic', async () => {
+  it('rehydrates an unknown stored layout to round two', async () => {
     localStorage.setItem(
       APPEARANCE_STORAGE_KEY,
       JSON.stringify({ version: 3, state: { layout: 'sideways' } }),
+    );
+
+    await useAppearanceStore.persist.rehydrate();
+
+    expect(useAppearanceStore.getState().layout).toBe('round-two');
+  });
+
+  it('keeps a stored classic until Classic is retired', async () => {
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ version: 3, state: { layout: 'classic' } }),
     );
 
     await useAppearanceStore.persist.rehydrate();

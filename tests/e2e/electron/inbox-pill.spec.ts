@@ -32,20 +32,6 @@ async function expectMarker(path: string, contents: string): Promise<void> {
   await expect.poll(() => readMarker(path), { timeout: 15_000 }).toBe(contents);
 }
 
-/** Seed round two before the first frame that matters, as `session-panel.spec.ts` does. */
-async function useRoundTwo(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const raw = localStorage.getItem('hive.appearance');
-    const stored = raw === null ? { version: 3, state: {} } : (JSON.parse(raw) as { version: number; state: object });
-    localStorage.setItem(
-      'hive.appearance',
-      JSON.stringify({ ...stored, state: { ...stored.state, layout: 'round-two' } }),
-    );
-  });
-  await page.reload();
-  await page.waitForSelector('nav[aria-label="Places"]');
-}
-
 /** Start a session from the filtered Overmind and answer with its id, as `session-panel.spec.ts` does. */
 async function startRoundTwoSession(page: Page): Promise<string> {
   await page
@@ -97,7 +83,7 @@ test('an ask rises without taking the keyboard, folds into the pill, and is answ
 
   try {
     await page.waitForLoadState('domcontentloaded');
-    await useRoundTwo(page);
+    await page.waitForSelector('nav[aria-label="Places"]');
     const session = await startRoundTwoSession(page);
 
     // The keyboard is in the session's terminal: the quiet rule.

@@ -52,6 +52,7 @@ describe('Header', () => {
      */
     useAppearanceStore.getState().reset();
     useAppearanceStore.getState().setTheme('dark');
+    useAppearanceStore.getState().setLayout('classic');
   });
 
   afterEach(() => {
