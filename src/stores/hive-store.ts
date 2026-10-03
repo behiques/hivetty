@@ -8284,6 +8284,60 @@ export const useUnreadCount = () =>
 /** The inbox, newest first (story 051). */
 export const useNotifs = () => useHiveStore((state) => state.notifs);
 
+/** The Summons queue (HIVE-214): what waits on you, split for the pill. */
+export interface Summons {
+  /** `agent.ask` and `agent.permission` whose thread is open, and `pr.review_requested`. */
+  asks: HiveNotification[];
+  /** `session.blocked`, less the one on stage. */
+  sessions: HiveNotification[];
+}
+
+/**
+ * One derivation behind both hooks, so the queue and its count cannot
+ * disagree. Rows keep the store's order, newest first.
+ */
+export function summonsOf(
+  notifs: readonly HiveNotification[],
+  ledger: readonly LedgerEntry[],
+  onStage: string | null,
+): Summons {
+  const open = askOpenIn(ledger);
+  const summons: Summons = { asks: [], sessions: [] };
+  for (const notif of notifs) {
+    if (!waitsOnYou(notif, open)) continue;
+    if (notif.kind !== 'session.blocked') summons.asks.push(notif);
+    else if (!(notif.action.type === 'session' && notif.action.entityId === onStage)) {
+      summons.sessions.push(notif);
+    }
+  }
+  return summons;
+}
+
+/** The Summons queue, leaving out the session on stage. Derived, never stored. */
+export const useSummons = (onStage: string | null): Summons => {
+  const notifs = useHiveStore((state) => state.notifs);
+  const ledger = useHiveStore((state) => state.ledger);
+  return useMemo(() => summonsOf(notifs, ledger, onStage), [notifs, ledger, onStage]);
+};
+
+/** The queue's length, as a number, so a subscriber re-renders only when it moves. */
+export const useSummonsCount = (onStage: string | null): number =>
+  useHiveStore((state) => {
+    const { asks, sessions } = summonsOf(state.notifs, state.ledger, onStage);
+    return asks.length + sessions.length;
+  });
+
+/** True while an unswept `session.idle` or `session.input_needed` row names this terminal. */
+export const useYoursAgain = (terminalId: string): boolean =>
+  useHiveStore((state) =>
+    state.notifs.some(
+      (notif) =>
+        (notif.kind === 'session.idle' || notif.kind === 'session.input_needed') &&
+        notif.action.type === 'session' &&
+        notif.action.entityId === terminalId,
+    ),
+  );
+
 /** Hydration and the push subscription — see `use-ledger-sync.ts`. */
 export const useHydrateLedger = () => useHiveStore((state) => state.hydrateLedger);
 
