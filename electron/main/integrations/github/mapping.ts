@@ -316,6 +316,7 @@ export function collectSearchPrs(payload: unknown): PrRecord[] {
   });
 }
 
+/** A whole number, or `null`. */
 function whole(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) ? value : null;
 }
