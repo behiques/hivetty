@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyLogLine, foldPushes, jobState, timeText, worst } from '@/lib/checks-graph';
-import type { WorkflowRun } from '@shared/github-contract';
+import { BAND, classifyLogLine, COL, foldPushes, jobState, layoutGraph, NODE_H, timeText, worst } from '@/lib/checks-graph';
+import type { RunJob, WorkflowDef, WorkflowRun } from '@shared/github-contract';
 
 const run = (over: Partial<WorkflowRun>): WorkflowRun => ({
   id: 1, number: 1, attempt: 1, status: 'completed', conclusion: 'success', headSha: 'a', event: 'push',
@@ -70,5 +70,91 @@ describe('classifyLogLine', () => {
     ['    expect(received).toBe(expected)', 'plain'],
   ] as const)('%s is %s', (line, tone) => {
     expect(classifyLogLine(line)).toBe(tone);
+  });
+});
+
+const job = (id: number, name: string, over: Partial<RunJob> = {}): RunJob => ({
+  id, runId: 1, name, status: 'completed', conclusion: 'success', startedAt: '2026-10-03T14:00:00Z',
+  completedAt: '2026-10-03T14:00:38Z', url: `https://x/${String(id)}`, steps: [], ...over,
+});
+const wf = (file: string, jobs: [string, string[], string?][], name: string | null = 'CI'): WorkflowDef =>
+  ({ file, name, jobs: jobs.map(([id, needs, label]) => ({ id, needs, name: label ?? null })) });
+const NOW = Date.parse('2026-10-03T14:05:00Z');
+const at = (graph: ReturnType<typeof layoutGraph>, key: string) => graph.nodes.find((n) => n.key === key);
+const col = (graph: ReturnType<typeof layoutGraph>, key: string) => (at(graph, key)?.x ?? -1) / COL;
+
+describe('layoutGraph', () => {
+  const ci = wf('ci.yml', [['install', []], ['lint', ['install']], ['unit', ['install']], ['build', ['lint', 'unit']]]);
+  const runs = [run({ id: 1, workflowName: 'CI' })];
+  const jobs = { 1: [job(11, 'install'), job(12, 'lint'), job(13, 'unit'), job(14, 'build')] };
+
+  it('puts each job in the column of its longest needs chain: a fan-out then a fan-in', () => {
+    const graph = layoutGraph([ci], runs, jobs, new Set(), NOW);
+    expect([col(graph, 'install'), col(graph, 'lint'), col(graph, 'unit'), col(graph, 'build')]).toEqual([0, 1, 1, 2]);
+  });
+
+  it('centres a column in the band, ninety apart', () => {
+    const graph = layoutGraph([ci], runs, jobs, new Set(), NOW);
+    expect(at(graph, 'install')?.y).toBe(BAND / 2 - NODE_H / 2);
+    expect([at(graph, 'lint')?.y, at(graph, 'unit')?.y]).toEqual([BAND / 2 - 45 - 24, BAND / 2 + 45 - 24]);
+    expect(graph.height).toBe(BAND);
+    expect(graph.width).toBe(2 * COL + 160);
+  });
+
+  it('draws an edge from x+150 to x as a cubic with 36px handles, coloured by its target', () => {
+    const failing = { 1: [job(11, 'install'), job(12, 'lint', { conclusion: 'failure' }), job(13, 'unit', { status: 'in_progress', conclusion: null, completedAt: null }), job(14, 'build', { status: 'queued', conclusion: null })] };
+    const graph = layoutGraph([ci], runs, failing, new Set(), NOW);
+    const edge = graph.edges.find((e) => e.key === 'install>lint');
+    expect(edge?.d).toBe(`M150 150 C186 150, 164 ${String(150 - 45)}, 200 ${String(150 - 45)}`);
+    expect(Object.fromEntries(graph.edges.map((e) => [e.key, e.state]))).toMatchObject({
+      'install>lint': 'bad', 'install>unit': 'flow', 'lint>build': 'wait', 'unit>build': 'wait',
+    });
+  });
+
+  it('lays out a job with no needs, a missing need and a cycle without crashing', () => {
+    const odd = wf('ci.yml', [['a', ['b']], ['b', ['a']], ['c', ['ghost']], ['d', []]]);
+    const graph = layoutGraph([odd], runs, { 1: [] }, new Set(), NOW);
+    expect(graph.nodes.map((n) => n.key).sort()).toEqual(['a', 'b', 'c', 'd']);
+    expect(col(graph, 'c')).toBe(0);
+    expect(graph.nodes.every((n) => n.state === 'waiting' && n.time === 'waits')).toBe(true);
+    expect(graph.edges.every((e) => !e.key.includes('ghost'))).toBe(true);
+  });
+
+  it('folds matrix legs into one box in the worst state, and opens it into its legs', () => {
+    const matrix = wf('ci.yml', [['unit', []], ['report', ['unit']]]);
+    const legs = { 1: [...Array.from({ length: 5 }, (_, i) => job(20 + i, `unit (${String(i)})`)), job(30, 'unit (5)', { conclusion: 'failure' }), job(31, 'report')] };
+    const folded = layoutGraph([matrix], runs, legs, new Set(), NOW);
+    expect(at(folded, 'unit')).toMatchObject({ count: 6, state: 'failed', matrix: 'unit', jobId: null });
+    const open = layoutGraph([matrix], runs, legs, new Set(['unit']), NOW);
+    expect(open.nodes.filter((n) => n.key.startsWith('unit#'))).toHaveLength(6);
+    expect(open.edges.filter((e) => e.key.endsWith('>report'))).toHaveLength(6);
+  });
+
+  it('matches a job named by an expression on the text before it', () => {
+    const named = wf('ci.yml', [['e2e', [], 'e2e ${{ matrix.browser }}']]);
+    const graph = layoutGraph([named], runs, { 1: [job(40, 'e2e chromium')] }, new Set(), NOW);
+    expect(at(graph, 'e2e')).toMatchObject({ jobId: 40, state: 'passed' });
+  });
+
+  it('groups a second workflow in a box past the first, with no edge between them', () => {
+    const preview = wf('preview.yml', [['preview', []]], 'Preview');
+    const both = [run({ id: 1, workflowName: 'CI' }), run({ id: 2, workflowName: 'Preview' })];
+    const graph = layoutGraph([ci, preview], both, { ...jobs, 2: [job(50, 'preview', { runId: 2 })] }, new Set(), NOW);
+    expect(col(graph, 'preview')).toBe(3);
+    expect(graph.groups).toEqual([{ file: 'preview.yml', x: 3 * COL - 8, y: BAND / 2 - 24 - 8, w: 176, h: 64 }]);
+    expect(graph.files).toEqual(['ci.yml', 'preview.yml']);
+    expect(graph.edges.some((e) => e.key.includes('preview'))).toBe(false);
+  });
+
+  it('draws jobs from a run with no workflow file as boxes without edges', () => {
+    const graph = layoutGraph([], [run({ id: 1, workflowName: '.github/workflows/gone.yml' })], { 1: [job(60, 'lint'), job(61, 'unit')] }, new Set(), NOW);
+    expect(graph.nodes.map((n) => [n.label, n.x])).toEqual([['lint', 0], ['unit', 0]]);
+    expect(graph.edges).toEqual([]);
+  });
+
+  it('gives a running job its steps as progress', () => {
+    const steps = [1, 2, 3, 4].map((number) => ({ number, name: `s${String(number)}`, status: number <= 1 ? 'completed' : 'queued', conclusion: null, startedAt: null, completedAt: null }));
+    const graph = layoutGraph([ci], runs, { 1: [job(11, 'install', { status: 'in_progress', conclusion: null, completedAt: null, steps })] }, new Set(), NOW);
+    expect(at(graph, 'install')?.progress).toBe(0.25);
   });
 });
