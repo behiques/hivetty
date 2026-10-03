@@ -39,7 +39,7 @@ import {
   describeWake,
   runsToday,
 } from '@lib/agents';
-import { readPullRequests, searchPullRequests } from '@lib/github';
+import { postPrComment, readPrDetail, readPullRequests, searchPullRequests } from '@lib/github';
 import {
   readJiraComments,
   readJiraDetail,
@@ -104,7 +104,7 @@ import type {
   ChangedFilesSnapshot,
 } from '@shared/changed-files-contract';
 import type { ModeChange } from '@shared/config-contract';
-import type { GhResult, PrRecord, PrsSnapshot } from '@shared/github-contract';
+import type { GhResult, PrDetail, PrRecord, PrsSnapshot } from '@shared/github-contract';
 import type { IdleDetail } from '@shared/hook-contract';
 import {
   CH,
@@ -419,6 +419,8 @@ interface HiveState {
    * side by side. Holds at most TICKET_DETAIL_CAP, the newest last.
    */
   ticketDetails: Record<string, TicketDetail>;
+  /** What has been read for each PR a page or tab opened, keyed by {@link prKey} (HIVE-205). At most PR_DETAIL_CAP, the newest last. */
+  prDetails: Record<string, PrDetailEntry>;
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
   /**
@@ -509,6 +511,10 @@ interface HiveState {
   loadTicketDetail: (key: string, want: TicketDetailWant) => Promise<void>;
   /** Re-read a ticket already held; a key never loaded does nothing (HIVE-203, HIVE-202). */
   refreshTicketDetail: (key: string, want: TicketDetailWant) => Promise<void>;
+  /** Read one PR's detail: the first read and every refresh (HIVE-205). */
+  loadPrDetail: (owner: string, repo: string, n: number) => Promise<void>;
+  /** Comment on a PR, then re-read it; the answer says why a post failed (HIVE-205). */
+  commentOnPr: (owner: string, repo: string, n: number, body: string) => Promise<GhResult<true>>;
   /** A comment this app just posted, shown without a re-read (HIVE-203). */
   appendTicketComment: (key: string, comment: JiraComment) => void;
   /** Re-read what the open ticket can become, after its status moved (HIVE-203). */
@@ -1922,15 +1928,47 @@ type SetHive = (
 /** How many tickets' detail the store holds at once (HIVE-202). */
 export const TICKET_DETAIL_CAP = 16;
 
+/** How many PRs' detail the store holds at once (HIVE-205): the open page and HIVE-209's PR tabs. */
+export const PR_DETAIL_CAP = 8;
+
+/** The `prDetails` key: `owner/repo#n`, lowercased as GitHub's names compare (HIVE-205). */
+export const prKey = (owner: string, repo: string, n: number): string => `${owner}/${repo}#${n}`.toLowerCase();
+
+/** One PR's detail as read (HIVE-205). A failed refresh keeps `detail` beside the `problem`. */
+export interface PrDetailEntry {
+  key: string;
+  detail?: PrDetail;
+  state: 'loading' | 'ok' | 'failed';
+  problem?: string;
+  readAt?: number;
+}
+
 /**
- * `map` with `key` moved to the newest end, and only the newest
- * TICKET_DETAIL_CAP kept. Issue keys are never integer-like, so insertion
- * order is the object's key order.
+ * `map` with `key` moved to the newest end, and only the newest `cap` kept
+ * (TICKET_DETAIL_CAP unless told). Issue keys and PR keys are never
+ * integer-like, so insertion order is the object's key order.
  */
 // ponytail: insertion-order cap; an LRU by view if a day of sessions ever outgrows sixteen.
-function touchDetail(map: Record<string, TicketDetail>, key: string, entry: TicketDetail): Record<string, TicketDetail> {
+function touchDetail<T>(map: Record<string, T>, key: string, entry: T, cap = TICKET_DETAIL_CAP): Record<string, T> {
   const { [key]: _old, ...rest } = map;
-  return Object.fromEntries(Object.entries({ ...rest, [key]: entry }).slice(-TICKET_DETAIL_CAP));
+  return Object.fromEntries(Object.entries({ ...rest, [key]: entry }).slice(-cap));
+}
+
+/**
+ * `details` without the PRs that were in the last sweep and are not in this
+ * one (HIVE-205); the same object when none left, so a quiet sweep writes
+ * nothing. A detail for a PR never swept (a search result) is the cap's.
+ */
+function dropLeftPrs(
+  details: Record<string, PrDetailEntry>,
+  before: readonly PrRecord[],
+  after: readonly PrRecord[],
+): Record<string, PrDetailEntry> {
+  const keyOf = (pr: PrRecord) => prKey(pr.owner, pr.repo, pr.number);
+  const still = new Set(after.map(keyOf));
+  const gone = new Set(before.map(keyOf).filter((key) => !still.has(key) && key in details));
+  if (gone.size === 0) return details;
+  return Object.fromEntries(Object.entries(details).filter(([key]) => !gone.has(key)));
 }
 
 /**
@@ -2056,6 +2094,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    */
   ticketSource: { kind: 'loading' } as TicketSource,
   ticketDetails: {} as Record<string, TicketDetail>,
+  prDetails: {} as Record<string, PrDetailEntry>,
 
   /** Loading until the first sweep answers, for the same reason as above. */
   prSource: { kind: 'loading' } as PrSource,
@@ -5158,6 +5197,38 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     await readTicketParts(get, set, key, { ledger: false, issue: entry.issue !== undefined, links: want === 'tab' });
   },
 
+  /**
+   * One PR's detail (HIVE-205). `loading` only before the first answer; a
+   * failure keeps what the last read found with the problem beside it. The
+   * entry is made the newest, which may evict the oldest, and an answer for a
+   * key gone meanwhile (evicted, a mode switch) is dropped.
+   */
+  loadPrDetail: async (owner, repo, n) => {
+    const key = prKey(owner, repo, n);
+    set((state) => ({
+      prDetails: touchDetail(state.prDetails, key, state.prDetails[key] ?? { key, state: 'loading' as const }, PR_DETAIL_CAP),
+    }));
+
+    const result = await readPrDetail({ owner, repo, n });
+
+    set((state) => {
+      const entry = state.prDetails[key];
+      if (entry === undefined) return state;
+      const next: PrDetailEntry =
+        result?.ok === true
+          ? { key, state: 'ok', detail: result.value, readAt: Date.now() }
+          : { ...entry, state: 'failed', problem: result === null ? BRIDGE_ERROR : result.error.message };
+      return { prDetails: { ...state.prDetails, [key]: next } };
+    });
+  },
+
+  commentOnPr: async (owner, repo, n, body) => {
+    const result = await postPrComment({ owner, repo, n, body });
+    if (result === null) return { ok: false, error: { kind: 'unknown', message: BRIDGE_ERROR } };
+    if (result.ok) await get().loadPrDetail(owner, repo, n);
+    return result;
+  },
+
   appendTicketComment: (key, comment) =>
     set((state) => {
       const entry = state.ticketDetails[key];
@@ -5352,6 +5423,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       const settled =
         source.kind === 'live' && !source.stale && source.repos === repos;
       const entities = rememberSessionPrs(state.entities, learned);
+      const prDetails = dropLeftPrs(state.prDetails, state.prs, prs);
 
       return {
         prs: samePrs(prs, state.prs) ? state.prs : prs,
@@ -5361,6 +5433,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         // identical map back would wake every entity subscriber on every tick
         // of a once-a-minute poller.
         ...(entities === state.entities ? {} : { entities }),
+        ...(prDetails === state.prDetails ? {} : { prDetails }),
       };
     });
 
@@ -5813,6 +5886,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       tickets: [],
       ticketSource: { kind: 'loading' },
       ticketDetails: {},
+      prDetails: {},
       /*
         Not "an orphan quietly wasting memory" the way it first read — session
         ids are **not unique across machines**. `nextSpawnId`/`rememberSpawnId`
@@ -5910,6 +5984,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       changedFiles: {},
       ticketSource: { kind: 'loading' },
       ticketDetails: {},
+      prDetails: {},
       prSource: { kind: 'loading' },
       prSearch: NO_PR_SEARCH,
       ticketSearch: NO_TICKET_SEARCH,
