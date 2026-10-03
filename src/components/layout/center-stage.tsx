@@ -16,7 +16,7 @@ import { SessionMetaBar } from '@components/layout/session-meta-bar';
 import { TerminalHost } from '@components/terminal/terminal-host';
 import { SplitHandle } from '@components/ui/split-handle';
 import { TerminalHint } from '@components/ui/terminal-hint';
-import { AgentView } from '@features/agents/components/agent-view';
+import { AgentPage } from '@features/agents/components/agent-page';
 import { AgentsStage } from '@features/agents/components/agents-stage';
 import { EditorPane } from '@features/editor/components/editor-pane';
 import { EditorTabStrip } from '@features/editor/components/editor-tab-strip';
@@ -518,10 +518,11 @@ export function CenterStage() {
         {/*
           The agent's own surface, mounted the way the console's table is:
           beside the terminal region rather than inside it, because it is not a
-          terminal and must not inherit one's chrome (HIVE-116).
+          terminal and must not inherit one's chrome (HIVE-116). Its page since
+          HIVE-204: the header with Activity | Definition over the body.
         */}
         {view === 'agent' && entity !== null && isAgent(entity) ? (
-          <AgentView entity={entity} />
+          <AgentPage key={entity.id} name={entity.id} />
         ) : null}
 
         {/*
