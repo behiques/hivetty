@@ -839,6 +839,17 @@ describe('CenterStage — the plan rail (HIVE-181)', () => {
     cleanup();
   });
 
+  it('round two draws no plan rail: the session panel carries the plan (HIVE-201)', () => {
+    act(() => useAppearanceStore.getState().setLayout('round-two'));
+    act(() => useHiveStore.getState().setPlan('hero-refresh', plan()));
+    render(<CenterStage />);
+    act(() => useUiStore.getState().openTab('hero-refresh', 'sessions'));
+
+    expect(screen.getByRole('main')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Plan, 0 of 2 done' })).not.toBeInTheDocument();
+    act(() => useAppearanceStore.getState().setLayout('classic'));
+  });
+
   it("shows the rail beside the terminal for a session with a plan", () => {
     act(() => useHiveStore.getState().setPlan('hero-refresh', plan()));
     render(<CenterStage />);

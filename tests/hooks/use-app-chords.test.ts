@@ -69,6 +69,20 @@ describe('useAppChords', () => {
     expect(useUiStore.getState().panelOpen).toBe(false);
   });
 
+  it('round two: the right chord opens and closes the session panel, not the rail (HIVE-201)', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    renderHook(() => useAppChords());
+
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'b', metaKey: true, altKey: true, bubbles: true }),
+      );
+    });
+
+    expect(useAppearanceStore.getState().sessionPanelOpen).toBe(false);
+    expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
+  });
+
   it('toggles the right rail on the alt variant', () => {
     renderHook(() => useAppChords());
 

@@ -4,6 +4,7 @@ import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
 import { EmptyState, EmptyStatePath } from '@components/ui/empty-state';
 import { Icon } from '@components/ui/icon';
+import { ChangedFiles } from '@features/explorer/components/changed-files';
 import { ExplorerResults } from '@features/explorer/components/explorer-results';
 import { ExplorerSearchRow } from '@features/explorer/components/explorer-search-row';
 import { TreeNode } from '@features/explorer/components/tree-node';
@@ -43,8 +44,13 @@ import {
  * the rail entirely, so freshness died the moment the user looked at the Inbox
  * with a file open. `useProjectWatcher()` is mounted at the composition root
  * instead, and this panel reads the revision counter it bumps.
+ *
+ * `changesId` is main's id for the session on stage (`terminalOf(session)`,
+ * HIVE-201): round two's Files tab passes it, and the panel lists the
+ * session's changed files above the tree and marks them in it. Classic's
+ * rail passes nothing and shows no marks; they belong to the session panel.
  */
-export function ExplorerPanel() {
+export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
   const { project, root: subRoot, sessionId, display, branch } = useExplorerProject();
   /**
    * Main's verdict on which tree the reads below actually resolve under.
@@ -332,12 +338,18 @@ export function ExplorerPanel() {
       */}
       {usable ? <ExplorerSearchRow status={status} /> : null}
 
+      {/* The session's own edits, above the tree they mark (HIVE-201). */}
+      {usable && !searching ? (
+        <ChangedFiles changesId={changesId} subRoot={subRoot} onOpenFile={onOpenFile} />
+      ) : null}
+
       {/*
         The project resolves but its directory does not. `access.reason` is the
         config's own verdict, which names the file to edit — a better message
         than anything this panel could compose, and the same one the projects
         tree shows for the same project.
       */}
+
       {!usable ? (
         <EmptyState>{access.reason ?? 'This project has no folder.'}</EmptyState>
       ) : null}
@@ -372,6 +384,7 @@ export function ExplorerPanel() {
               refreshToken={refreshToken}
               sessionId={sessionId}
               rootKey={explorerRoot?.key ?? ''}
+              changesId={changesId}
               onOpenFile={onOpenFile}
             />
           ))

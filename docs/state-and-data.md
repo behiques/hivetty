@@ -54,7 +54,9 @@ the picker from re-rendering thirteen live terminals.
   and dismisses the overlays.
 - `src/stores/appearance-store.ts` — durable preferences: `theme`, the terminal
   and editor typography, `editorPlacement`, `editorNav`, `editorEditable`,
-  `density`, `layout` (`'classic' | 'round-two'`, HIVE-195), the rail widths,
+  `density`, `layout` (`'classic' | 'round-two'`, HIVE-195), round two's
+  session panel — `sessionPanelOpen` (default `true`) and `sessionPanelTab`
+  (`'plan' | 'ticket' | 'pr' | 'files'`, default `'plan'`, HIVE-201) — the rail widths,
   and the three draggable splits — `editorSplitRatio`
   (terminal against editor), `consoleSplitRatio` (fleet table against
   transcript, on the overmind) and `runLogSplitRatio` (receipts against output,
@@ -156,6 +158,37 @@ nothing that asked about another. `clearModeEntities` clears the slice on a
 mode switch for the reason it clears `metrics`: session ids are minted the same
 way on every machine, and a stale plan would draw the departed session's tasks
 against the newly attached one wearing the same id.
+
+The plan's task now carries `activeForm` (Claude's spinner wording, task tools
+only), `startedAt` (first `in_progress`, never re-stamped, so a `TodoWrite`
+rewrite keeps it) and `endedAt` (`completed`). The plan carries `file`, the
+session's last plan file, and `fileAt`, when main accepted the read
+(`electron/shared/plan-contract.ts:19`). `file` survives a later plan from
+another source, and goes with the session: `plans.forget` on a session's end
+and on `/clear`, so a retired conversation's plan file and read time never reach
+the next plan (`electron/main/sessions/index.ts:1193`).
+
+### Changed files (HIVE-201)
+
+`changedFiles` is `Record<entityId, ChangedFile[]>`, one list per session in
+first-seen order, each `{ path, mark: 'A' | 'M', added, removed }`
+(`electron/shared/changed-files-contract.ts`). Main reads the session's own
+transcript (`electron/main/sessions/changed-files.ts`) and the page only
+mirrors it, so the slice holds no rule.
+
+It reaches the store as the plans do: a `changed-files:changed` push per
+change, whole, which `setChangedFiles` applies (`files: []` deletes the key),
+and a `changed-files:list` read that `hydrateChangedFiles` merges by entity id
+(`src/stores/hive-store.ts:3559`). `changed-files:list` is in
+`SNAPSHOT_CHANNELS`, so an attach sees the lists at once. Both channels sit
+beside `plans:list` and `plan:changed`, as `read`; adding them and the plan
+fields bumped `REMOTE_PROTOCOL_VERSION` to 7 (`electron/shared/remote-contract.ts`).
+
+The key is **main's id**, which for a session is `terminalOf(session)`, not the
+session's own. Three selectors read it: `useChangedFiles(id)`,
+`useChangedFileCount(id)` and `useChangedFileMark(id, path)`, which returns a
+primitive so a tree row re-renders only on its own change.
+`clearModeEntities` clears the slice with `plans`.
 
 ### The open ticket's detail slice
 
