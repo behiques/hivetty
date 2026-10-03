@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrDiff } from '@features/pull-requests/components/pr-diff';
 import { parseUnifiedDiff } from '@lib/unified-diff';
 import { useUiStore } from '@stores/ui-store';
-import { prFile } from '@tests/support/pr-detail';
+import { prFile, prThread } from '@tests/support/pr-detail';
 
 const TEXT = [
   'diff --git a/src/fees/validator.ts b/src/fees/validator.ts', '--- a/src/fees/validator.ts', '+++ b/src/fees/validator.ts',
@@ -91,5 +91,39 @@ describe('PrDiff', () => {
     expect(screen.getByRole('checkbox', { name: 'Viewed' })).toBeDisabled();
     await act(async () => settle(ok));
     expect(screen.getByRole('checkbox', { name: 'Viewed' })).toBeEnabled();
+  });
+});
+
+describe('PrDiff — Split and threads (HIVE-207)', () => {
+  it('draws Split with each side’s own numbers, a removal beside its replacement', async () => {
+    render(<PrDiff {...props()} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Split' }));
+    const pair = screen.getByTestId('split-row-1');
+    expect(pair.querySelector('[data-side="left"] [data-kind="del"]')).toHaveTextContent('115−');
+    expect(pair.querySelector('[data-side="right"] [data-kind="add"]')).toHaveTextContent('115+');
+  });
+
+  it('puts a RIGHT thread under its new line and a LEFT thread under its old line', () => {
+    const right = prThread({ id: 'R', line: 116, diffSide: 'RIGHT', comments: [{ ...prThread().comments[0]!, body: 'right side' }] });
+    const left = prThread({ id: 'L', line: 115, diffSide: 'LEFT', comments: [{ ...prThread().comments[0]!, body: 'left side' }] });
+    render(<PrDiff {...props({ threads: [right, left] })} />);
+    const rows = [...document.querySelectorAll('[data-kind], [data-thread]')].map((el) => el.getAttribute('data-thread') ?? el.getAttribute('data-kind'));
+    // context 114, del 115, [L], add 115, context 116, [R], context 117
+    expect(rows).toEqual(['context', 'del', 'L', 'add', 'context', 'R', 'context']);
+    expect(screen.getByText('right side')).toBeInTheDocument();
+  });
+
+  it('lists an outdated thread at the top, marked outdated', () => {
+    render(<PrDiff {...props({ threads: [prThread({ id: 'O', isOutdated: true, line: null })] })} />);
+    const first = document.querySelector('[data-kind], [data-thread]');
+    expect(first).toHaveAttribute('data-thread', 'O');
+    expect(screen.getByText('outdated')).toBeInTheDocument();
+  });
+
+  it('hands the thread its writes and Open the file', async () => {
+    const writes = { reply: vi.fn(), setResolved: vi.fn().mockResolvedValue({ ok: true, value: true }) };
+    render(<PrDiff {...props({ threads: [prThread({ line: 116 })], writes })} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+    expect(writes.setResolved).toHaveBeenCalledWith('PRRT_1', true);
   });
 });

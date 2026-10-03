@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 
-import type { DiffFile, DiffLine } from '@/lib/unified-diff';
+import { lineKey, placeThreads } from '@/lib/pr-files';
+import { splitRows, type DiffFile, type DiffLine } from '@/lib/unified-diff';
 import { cn } from '@/lib/utils';
 
 import { SegmentedControl } from '@components/ui/segmented-control';
-import type { ThreadWrites } from '@features/pull-requests/components/thread-card';
+import { ThreadCard, type ThreadWrites } from '@features/pull-requests/components/thread-card';
 import type { GhResult, PrFile, PrThread } from '@shared/github-contract';
 import { usePrDiffView, usePrPageActions, type PrDiffView } from '@stores/ui-store';
 
@@ -63,7 +64,7 @@ export interface PrDiffProps {
   fixerOnIt: boolean;
 }
 
-export function PrDiff({ file, diff, problem, prUrl, readOnly, onViewed, onOpenFile }: PrDiffProps) {
+export function PrDiff({ file, diff, threads, problem, prUrl, readOnly, onViewed, onOpenFile, writes, fixerOnIt }: PrDiffProps) {
   const view = usePrDiffView();
   const { setPrDiffView } = usePrPageActions();
   const [selected, setSelected] = useState<number | null>(null);
@@ -73,6 +74,14 @@ export function PrDiff({ file, diff, problem, prUrl, readOnly, onViewed, onOpenF
   const firstChanged = diff?.hunks.flatMap((hunk) => hunk.lines).find((line) => line.kind !== 'context');
   const openAt = selected ?? (firstChanged === undefined ? 1 : lineOf(firstChanged));
   const showable = diff !== null && !diff.binary && diff.hunks.length > 0;
+  const placed = useMemo(() => (diff === null ? null : placeThreads(diff, threads)), [diff, threads]);
+
+  const card = (thread: PrThread) => (
+    <div key={thread.id} data-thread={thread.id} className="my-1.5 mr-[18px] ml-[72px] font-sans">
+      <ThreadCard thread={thread} fixerOnIt={fixerOnIt && !thread.isResolved} onOpenFile={onOpenFile} writes={writes} />
+    </div>
+  );
+  const under = (key: string) => placed?.at.get(key)?.map(card);
 
   const toggleViewed = (next: boolean) => {
     setViewedProblem(null);
@@ -111,14 +120,45 @@ export function PrDiff({ file, diff, problem, prUrl, readOnly, onViewed, onOpenF
       {viewedProblem === null ? null : <p className="px-[18px] pt-2 text-[12px] text-amber">{viewedProblem}</p>}
       <div className="min-h-0 flex-1 overflow-auto py-2 font-mono text-[12.5px] leading-[1.75]">
         {showable ? (
-          diff.hunks.map((hunk) => (
-            <div key={hunk.header}>
-              <div className="px-[18px] py-0.5 text-subtle">{hunk.header}</div>
-              {hunk.lines.map((line, i) => (
-                <DiffRow key={i} line={line} n={line.newN ?? line.oldN} selected={selected === lineOf(line)} onSelect={setSelected} />
-              ))}
-            </div>
-          ))
+          <>
+            {placed?.outdated.map(card)}
+            {diff.hunks.map((hunk, h) => (
+              <div key={`${String(h)}${hunk.header}`}>
+                <div className="px-[18px] py-0.5 text-subtle">{hunk.header}</div>
+                {view === 'unified'
+                  ? hunk.lines.map((line, i) => (
+                      <Fragment key={i}>
+                        <DiffRow line={line} n={line.newN ?? line.oldN} selected={selected === lineOf(line)} onSelect={setSelected} />
+                        {line.oldN !== null && line.kind !== 'context' ? under(lineKey('L', line.oldN)) : null}
+                        {line.newN !== null ? under(lineKey('R', line.newN)) : null}
+                        {line.kind === 'context' && line.oldN !== null ? under(lineKey('L', line.oldN)) : null}
+                      </Fragment>
+                    ))
+                  : splitRows(hunk).map((row, i) => (
+                      <Fragment key={i}>
+                        <div data-testid={`split-row-${String(i)}`} className="grid grid-cols-2">
+                          <div data-side="left" className="min-w-0 border-r border-border-soft">
+                            {row.left === null ? (
+                              <div className="h-full" />
+                            ) : (
+                              <DiffRow line={row.left} n={row.left.oldN} selected={selected === lineOf(row.left)} onSelect={setSelected} />
+                            )}
+                          </div>
+                          <div data-side="right" className="min-w-0">
+                            {row.right === null ? (
+                              <div className="h-full" />
+                            ) : (
+                              <DiffRow line={row.right} n={row.right.newN} selected={selected === lineOf(row.right)} onSelect={setSelected} />
+                            )}
+                          </div>
+                        </div>
+                        {row.left !== null && row.left.oldN !== null ? under(lineKey('L', row.left.oldN)) : null}
+                        {row.right !== null && row.right.newN !== null ? under(lineKey('R', row.right.newN)) : null}
+                      </Fragment>
+                    ))}
+              </div>
+            ))}
+          </>
         ) : (
           <div className="flex flex-col gap-1 px-[18px] py-4 font-sans text-[13px]">
             <p className="text-muted">No diff to show</p>
