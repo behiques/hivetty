@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ModelChip } from '@components/layout/model-chip';
@@ -264,5 +264,33 @@ describe('ModelChip', () => {
     rerender(<ModelChip />);
     expect(screen.getByText('12%')).toBeInTheDocument();
     expect(screen.queryByText('46%')).not.toBeInTheDocument();
+  });
+
+  it('carries 5h and wk for the narrow step, and the tooltip keeps both resets (HIVE-213)', () => {
+    useUiStore.setState({ activeTab: 'hero-refresh' });
+    const fiveHourResetsAt = new Date(2026, 7, 11, 14, 30).getTime() / 1000;
+    const sevenDayResetsAt = new Date(2026, 7, 13, 17, 0).getTime() / 1000;
+    act(() =>
+      useHiveStore.getState().setSessionMetrics('hero-refresh', {
+        contextPct: 46,
+        fiveHourPct: 12,
+        sevenDayPct: 46,
+        fiveHourResetsAt,
+        sevenDayResetsAt,
+      }),
+    );
+    render(<ModelChip />);
+    const chip = screen.getByTestId('model-chip');
+    const shorts = [...chip.querySelectorAll('[data-detail="short"]')].map((n) => n.textContent);
+    expect(shorts).toEqual(['5h', 'wk']);
+    expect(chip.querySelectorAll('[data-detail="long"]')).toHaveLength(2);
+    expect(chip.getAttribute('title')).toMatch(/session limit 12%, resets .+ · weekly limit 46%, resets /);
+  });
+
+  it('no longer clips its stats row (HIVE-213)', () => {
+    useUiStore.setState({ activeTab: 'hero-refresh' });
+    act(() => useHiveStore.getState().setSessionMetrics('hero-refresh', { contextPct: 46 }));
+    render(<ModelChip />);
+    expect(screen.getByTestId('model-chip').querySelector('.overflow-hidden')).toBeNull();
   });
 });
