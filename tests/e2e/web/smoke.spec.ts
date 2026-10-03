@@ -6,13 +6,13 @@ import { bar, goToOvermind, goToPlace, openConsole, placeButton } from '../fixtu
  * Smoke — the shell renders in a real browser (story 070).
  *
  * The narrowest useful claim: a production build boots, React mounts, and the
- * the bar, the stage is present and laid out. Everything else in the E2E suite
+ * round-two frame (the bar, the stage) is present and laid out. Everything else in the E2E suite
  * assumes this, so when the app is broken outright this is the spec that should
  * say so first.
  *
  * Locators are role- and text-based per story 070's selector policy. The shell
- * is built from real landmarks — `nav[aria-label]`, `main` — so no `data-testid` is needed here, and coupling to
- * Tailwind classes is banned.
+ * is built from real landmarks — `nav[aria-label]`, `main` — so no
+ * `data-testid` is needed here, and coupling to Tailwind classes is banned.
  */
 
 /**
