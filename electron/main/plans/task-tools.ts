@@ -126,12 +126,26 @@ export function reduceTaskTool(
     }
     case 'TodoWrite': {
       if (!Array.isArray(input.todos)) return plan;
+      // A whole-list rewrite: times survive by title, the only identity a todo has.
+      const previous = new Map(
+        plan?.source === 'task-tools' ? plan.tasks.map((task) => [task.title, task]) : [],
+      );
       const tasks = input.todos.flatMap((todo: unknown, index): PlanTask[] => {
         const fields = record(todo);
         const title = str(fields.content);
         if (title === undefined) return [];
         const status = isStatus(fields.status) ? fields.status : 'pending';
-        return [{ id: String(index + 1), title, status }];
+        const activeForm = str(fields.activeForm);
+        const before = previous.get(title);
+        const base: PlanTask = {
+          id: String(index + 1),
+          title,
+          status: before?.status ?? 'pending',
+          ...(activeForm === undefined ? {} : { activeForm }),
+          ...(before?.startedAt === undefined ? {} : { startedAt: before.startedAt }),
+          ...(before?.endedAt === undefined ? {} : { endedAt: before.endedAt }),
+        };
+        return [stamped(base, status, now)];
       });
       return withTasks(call.entityId, tasks);
     }

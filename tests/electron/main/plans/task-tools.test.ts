@@ -128,9 +128,9 @@ describe('reduceTaskTool', () => {
     });
 
     expect(plan?.tasks).toEqual([
-      { id: '1', title: 'One', status: 'pending' },
-      { id: '2', title: 'Two', status: 'completed' },
-      { id: '4', title: 'Three', status: 'pending' },
+      { id: '1', title: 'One', status: 'pending', activeForm: 'x' },
+      { id: '2', title: 'Two', status: 'completed', activeForm: 'y', endedAt: 0 },
+      { id: '4', title: 'Three', status: 'pending', activeForm: 'w' },
     ]);
   });
 
@@ -233,5 +233,52 @@ describe('reduceTaskTool: activeForm and times (HIVE-201)', () => {
   it('an update that changes nothing returns the same plan', () => {
     const plan = reduceTaskTool(undefined, create('1', 'A', 'Doing A'), 0);
     expect(reduceTaskTool(plan, update({ taskId: '1', activeForm: 'Doing A' }), 5)).toBe(plan);
+  });
+});
+
+describe('reduceTaskTool: TodoWrite times (HIVE-201)', () => {
+  const todo = (todos: { content: string; status: string; activeForm?: string }[]): PlanToolCall => ({
+    entityId: 'sess-01',
+    toolName: 'TodoWrite',
+    toolInput: { todos },
+    toolResponse: {},
+  });
+
+  it('reads activeForm and stamps a todo that starts', () => {
+    const plan = reduceTaskTool(
+      undefined,
+      todo([{ content: 'A', status: 'in_progress', activeForm: 'Doing A' }]),
+      1_000,
+    );
+    expect(plan?.tasks[0]).toEqual({
+      id: '1',
+      title: 'A',
+      status: 'in_progress',
+      activeForm: 'Doing A',
+      startedAt: 1_000,
+    });
+  });
+
+  it('carries startedAt from the previous write by title, and stamps endedAt on completion', () => {
+    let plan = reduceTaskTool(
+      undefined,
+      todo([
+        { content: 'A', status: 'in_progress' },
+        { content: 'B', status: 'pending' },
+      ]),
+      1_000,
+    );
+    plan = reduceTaskTool(
+      plan,
+      todo([
+        { content: 'A', status: 'completed' },
+        { content: 'B', status: 'in_progress' },
+      ]),
+      4_000,
+    );
+    expect(plan?.tasks).toEqual([
+      { id: '1', title: 'A', status: 'completed', startedAt: 1_000, endedAt: 4_000 },
+      { id: '2', title: 'B', status: 'in_progress', startedAt: 4_000 },
+    ]);
   });
 });
