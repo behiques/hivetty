@@ -5,9 +5,9 @@ import type { UpdateStatus } from '@shared/update-contract';
  * The About panel's decisions, with nothing imported that runs and nothing run.
  *
  * Split from `about.ts` for the reason `chamber.ts` is split from `splash.ts`:
- * the entry point has to import a `data:` URI of an mp4, touch the document on
- * load, and talk to a bridge that only exists inside Electron — the exact shape
- * a unit test cannot get inside. Everything that *decides* lives here, takes
+ * the entry point has to draw on a canvas and touch the document on load, and
+ * talk to a bridge that only exists inside Electron — the exact shape a unit
+ * test cannot get inside. Everything that *decides* lives here, takes
  * what it needs as an argument, and returns rather than reaches.
  *
  * What that buys beyond coverage: the update copy — the one place this window
