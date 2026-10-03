@@ -2495,7 +2495,7 @@ describe('comb selectors (HIVE-199)', () => {
 
   it('summarises for the headline', () => {
     const { result } = renderHook(() => useCombSummary());
-    expect(result.current).toEqual({ needs: 2, working: 3, failed: 2, resting: 3, projects: 2, agents: 5 });
+    expect(result.current).toEqual({ working: 3, failed: 2, resting: 3, projects: 2, agents: 5 });
   });
 
   describe('changed-file selectors (HIVE-201)', () => {

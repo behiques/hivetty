@@ -7665,9 +7665,8 @@ export const useCombEntities = (): CombEntity[] => {
   return useMemo(() => rows.map(parseCombRow), [rows]);
 };
 
+/** The comb's own counts. "Needs you" is not one: that is `useSummonsCount` (HIVE-217). */
 export interface CombSummary {
-  /** Summons cells: waiting sessions and asking agents. */
-  needs: number;
   working: number;
   failed: number;
   /** Burrowed cells and terminals. */
@@ -7680,7 +7679,6 @@ export interface CombSummary {
 export function summariseComb(entities: CombEntity[]): CombSummary {
   const count = (state: CellState): number => entities.filter((e) => e.state === state).length;
   return {
-    needs: count('summons'),
     working: count('morphing'),
     failed: count('failed'),
     resting: count('burrowed') + count('terminal'),
