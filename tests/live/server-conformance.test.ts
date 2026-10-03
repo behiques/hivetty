@@ -3825,7 +3825,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Reload').click()`,
       );
       await untilUi(
-        `/Reloaded — 1 project\\./.test(document.body.innerText)`,
+        `/Reloaded — 1 project[.;]/.test(document.body.innerText)`,
         "a Reload answered by the server, which is what puts this window in a boot-attached client's state",
       );
 
