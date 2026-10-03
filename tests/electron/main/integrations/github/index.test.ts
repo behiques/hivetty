@@ -484,7 +484,9 @@ describe('the Checks verbs (HIVE-206)', () => {
   const github = (calls: string[][], path = '/repos/nova-web') => createGithub({
     config: () => config([project({ path })]), env: () => ({ PATH: withGh() }), run: recording(calls), now: () => 0,
   });
-  const ghRunCalls = (calls: string[][]) => calls.filter((args) => args[0] === 'run');
+  /** Every Actions call: `gh run …`, and the job log's `gh api …/actions/jobs/<id>/logs`. */
+  const ghRunCalls = (calls: string[][]) =>
+    calls.filter((args) => args[0] === 'run' || (args[0] === 'api' && args.some((arg) => arg.includes('/actions/'))));
 
   it('reads runs with the resolver’s spelling and the checkout’s workflows', async () => {
     const checkout = join(dir, 'checkout');
@@ -512,12 +514,16 @@ describe('the Checks verbs (HIVE-206)', () => {
     expect(ghRunCalls(calls)).toEqual([]);
   });
 
-  it('routes jobs, log and rerun to gh run with the mapped repository', async () => {
+  it('routes jobs, log and rerun to gh with the mapped repository', async () => {
     const calls: string[][] = [];
     const gh = github(calls);
     await gh.runJobs({ owner: 'acme', repo: 'nova-web', id: 5 });
     await gh.jobLog({ owner: 'acme', repo: 'nova-web', id: 6 });
     await gh.rerunFailed({ owner: 'acme', repo: 'nova-web', id: 7 });
-    expect(ghRunCalls(calls).map((args) => args.slice(0, 3))).toEqual([['run', 'view', '5'], ['run', 'view', '--job'], ['run', 'rerun', '7']]);
+    expect(ghRunCalls(calls).map((args) => args.slice(0, 3))).toEqual([
+      ['run', 'view', '5'],
+      ['api', '--allow-escape-sequences', 'repos/acme/nova-web/actions/jobs/6/logs'],
+      ['run', 'rerun', '7'],
+    ]);
   });
 });
