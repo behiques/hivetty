@@ -1,7 +1,7 @@
-import { act, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { announcement, ArrivalStack } from '@features/inbox/components/arrival-stack';
+import { announcement, ARRIVAL_FOLD_MS, ArrivalStack } from '@features/inbox/components/arrival-stack';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 
@@ -102,4 +102,87 @@ describe('ArrivalStack (HIVE-198)', () => {
       'inbox-redesign asked a question',
     );
   });
+});
+
+describe('the fold (fake timers, HIVE-198)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('folds into the pill after 5 seconds untouched', () => {
+    useUiStore.getState().pushArrival('a1', false);
+    render(<ArrivalStack onStage={null} />);
+    act(() => vi.advanceTimersByTime(ARRIVAL_FOLD_MS - 1));
+    expect(useUiStore.getState().arrivals).toEqual(['a1']);
+    act(() => vi.advanceTimersByTime(1));
+    expect(useUiStore.getState().arrivals).toEqual([]);
+  });
+
+  it('a new arrival restarts the 5 seconds', () => {
+    useUiStore.getState().pushArrival('a1', false);
+    render(<ArrivalStack onStage={null} />);
+    act(() => vi.advanceTimersByTime(4000));
+    act(() => useUiStore.getState().pushArrival('a2', false));
+    act(() => vi.advanceTimersByTime(4000));
+    expect(useUiStore.getState().arrivals).toEqual(['a2', 'a1']);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(useUiStore.getState().arrivals).toEqual([]);
+  });
+
+  it('hovering holds it up; leaving starts a fresh 5 seconds', () => {
+    useUiStore.getState().pushArrival('a1', false);
+    render(<ArrivalStack onStage={null} />);
+    fireEvent.pointerEnter(screen.getByTestId('arrival-stack'));
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(useUiStore.getState().arrivals).toEqual(['a1']);
+    fireEvent.pointerLeave(screen.getByTestId('arrival-stack'));
+    act(() => vi.advanceTimersByTime(ARRIVAL_FOLD_MS));
+    expect(useUiStore.getState().arrivals).toEqual([]);
+  });
+
+  it('focus inside holds it up, and leaving the stack releases it', () => {
+    useUiStore.getState().pushArrival('a1', false);
+    render(<ArrivalStack onStage={null} />);
+    act(() => screen.getByRole('button', { name: 'yes' }).focus());
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(useUiStore.getState().arrivals).toEqual(['a1']);
+    act(() => screen.getByRole('button', { name: 'yes' }).blur());
+    act(() => vi.advanceTimersByTime(ARRIVAL_FOLD_MS));
+    expect(useUiStore.getState().arrivals).toEqual([]);
+  });
+
+  it('✕ folds at once', () => {
+    useUiStore.getState().pushArrival('a1', false);
+    render(<ArrivalStack onStage={null} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Fold into the pill' }));
+    expect(useUiStore.getState().arrivals).toEqual([]);
+  });
+
+  it('a hold dies with the stack it was on: ✕ under the pointer, then the next arrival still folds', () => {
+    useUiStore.getState().pushArrival('a1', false);
+    render(<ArrivalStack onStage={null} />);
+    fireEvent.pointerEnter(screen.getByTestId('arrival-stack'));
+    fireEvent.click(screen.getByRole('button', { name: 'Fold into the pill' }));
+    act(() => useUiStore.getState().pushArrival('a2', false));
+    act(() => vi.advanceTimersByTime(ARRIVAL_FOLD_MS));
+    expect(useUiStore.getState().arrivals).toEqual([]);
+  });
+
+  it('does not fold while held back by Settings', () => {
+    useUiStore.getState().pushArrival('a1', false);
+    useUiStore.getState().openSettings();
+    render(<ArrivalStack onStage={null} />);
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(useUiStore.getState().arrivals).toEqual(['a1']);
+  });
+});
+
+it('an arrival never moves focus', () => {
+  const input = document.createElement('input');
+  document.body.append(input);
+  input.focus();
+  render(<ArrivalStack onStage={null} />);
+  act(() => useUiStore.getState().pushArrival('a1', false));
+  expect(screen.getByRole('article')).toBeInTheDocument();
+  expect(document.activeElement).toBe(input);
+  input.remove();
 });

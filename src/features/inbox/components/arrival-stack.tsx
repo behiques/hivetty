@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import type { HiveNotification } from '@/types/notification';
@@ -10,6 +10,9 @@ import { useArrivals, useInboxActions, useSettingsOpen } from '@stores/ui-store'
 import { AskCard } from './ask-card';
 import { NotificationCard } from './notification-card';
 import { SessionNote } from './session-note';
+
+/** How long an arrival stays up untouched before it folds into the pill. */
+export const ARRIVAL_FOLD_MS = 5000;
 
 /** What the corner's polite live region says for the newest arrival. */
 export const announcement = (row: HiveNotification, asker: string): string =>
@@ -42,13 +45,35 @@ interface ArrivalStackProps {
  * card, or a note for a session off stage, with up to two slivers under it
  * for the rest of a burst. It never takes focus.
  *
- * Not drawn while Settings is open: the queue waits, and rises when it closes.
+ * Not drawn while Settings is open: the queue waits, and rises when it closes,
+ * and its 5 seconds start then, since the fold timer runs only while it is up.
+ * Every arrival restarts the clock (the burst); the pointer over it, or focus
+ * in it (a reply being typed, a button pressed), holds it up.
  */
 export function ArrivalStack({ onStage }: ArrivalStackProps) {
   const visible = useVisibleArrivals(onStage);
   const settings = useSettingsOpen();
   const { foldArrivals } = useInboxActions();
   const reduced = useReducedMotion();
+  const arrivals = useArrivals();
+  const [held, setHeld] = useState({ hover: false, focus: false });
+  const up = !settings && visible.length > 0;
+
+  /*
+    A hold belongs to the stack it was taken on. Folded under the pointer (✕,
+    Later), the stack unmounts before any pointerleave or blur can fire, and a
+    hold left set would keep every later arrival up for good.
+  */
+  useEffect(() => {
+    if (!up) setHeld({ hover: false, focus: false });
+  }, [up]);
+
+  // The burst rule: every arrival restarts the clock, so `arrivals` is a dependency.
+  useEffect(() => {
+    if (!up || held.hover || held.focus) return;
+    const timer = setTimeout(foldArrivals, ARRIVAL_FOLD_MS);
+    return () => clearTimeout(timer);
+  }, [up, held.hover, held.focus, arrivals, foldArrivals]);
 
   const [newest] = visible;
   if (settings || newest === undefined) return null;
@@ -56,7 +81,18 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
   const slivers = Math.min(visible.length - 1, 2);
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
+    <div
+      data-testid="arrival-stack"
+      className="flex flex-col items-end gap-1.5"
+      onPointerEnter={() => setHeld((h) => ({ ...h, hover: true }))}
+      onPointerLeave={() => setHeld((h) => ({ ...h, hover: false }))}
+      onFocus={() => setHeld((h) => ({ ...h, focus: true }))}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setHeld((h) => ({ ...h, focus: false }));
+        }
+      }}
+    >
       {visible.length > 1 ? (
         <span className="rounded-full border border-border bg-panel-2 px-2.5 py-1 text-[11.5px] text-muted">
           {`${String(visible.length)} arrived just now · newest first`}
