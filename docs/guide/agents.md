@@ -191,6 +191,11 @@ and its merge asks as before.
   takes the selection only if you were on the latest one, so a run you picked stays put.
   A failed outcome reads red with its reason beside it, an asking one amber.
 - The box at the bottom posts to the agent. `answer a1 yes, go ahead` answers its open ask.
+- **Paused.** A paused agent's Status reads amber, and the box gives way to a bar: "acr is
+  paused. Nothing wakes it, not the ledger, not a schedule, until you resume it." **Resume**
+  brings the box back with whatever you had typed in it.
+- **No agents yet.** In round two, with no agent defined, the Agents place has no list and
+  the stage offers **New agent**.
 - To stop a run now, use `kill <agent>` in the console.
 
 ## Task runs
