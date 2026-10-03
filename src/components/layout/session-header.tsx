@@ -38,7 +38,7 @@ export function SessionHeader({ entity }: { entity: Session | Terminal }) {
   return (
     <div
       data-testid="session-header"
-      className="flex shrink-0 items-center gap-3 border-b border-border-soft bg-panel px-5 py-2.5"
+      className="@container flex shrink-0 items-center gap-3 border-b border-border-soft bg-panel px-5 py-2.5"
     >
       <button
         type="button"
@@ -60,11 +60,12 @@ function SessionLine({ session }: { session: Session }) {
   // An ended session says so, and why (HIVE-211); the cover over the terminal says the rest.
   const ended = isTerminated(session);
   const reason = ended ? endedReason(session) : undefined;
+  const word = ended ? 'Ended' : statusLabel(session.status, session.idleDetail);
 
   return (
     <>
       <Hexagon size={20} aria-hidden="true" className={cn('shrink-0', tone)} />
-      <span className="flex min-w-0 flex-col">
+      <span className="flex min-w-[140px] shrink flex-col">
         <span className="truncate text-[13px] font-semibold text-ink" title={session.task}>
           {entityLabel(session)}
         </span>
@@ -74,14 +75,18 @@ function SessionLine({ session }: { session: Session }) {
       </span>
       <span className="flex-1" />
       <span
+        data-testid="session-status"
         className={cn('flex shrink-0 items-center gap-1.5 text-[12px]', ended ? 'text-muted' : tone)}
-        title={reason}
+        // The narrowest step hides the word (HIVE-213); the title keeps it for the dot.
+        title={reason ?? word}
         aria-label={reason === undefined ? undefined : `Ended: ${reason}`}
       >
         <StatusDot status={session.status} detail={session.idleDetail} />
-        {ended ? 'Ended' : statusLabel(session.status, session.idleDetail)}
+        <span data-word className="@max-[700px]:sr-only">
+          {word}
+        </span>
       </span>
-      <span data-slot="model" className="w-[200px] shrink-0">
+      <span data-slot="model" className="shrink-0">
         <ModelChip />
       </span>
       <SessionMenu session={session} />

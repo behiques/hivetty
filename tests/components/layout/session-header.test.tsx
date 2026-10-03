@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -36,6 +36,33 @@ describe('SessionHeader (HIVE-197)', () => {
     expect(back).toHaveTextContent(/^$/);
     expect(back.getAttribute('title')).toMatch(/^Back to overmind \(/);
     expect(back.className).toContain('size-7');
+  });
+
+  it('sizes the model slot to its content and renders every metric (HIVE-213)', () => {
+    useUiStore.setState({ activeTab: 'hero-refresh' });
+    act(() =>
+      useHiveStore.getState().setSessionMetrics('hero-refresh', {
+        contextPct: 46,
+        fiveHourPct: 12,
+        sevenDayPct: 63,
+        fiveHourResetsAt: new Date(2026, 7, 11, 14, 30).getTime() / 1000,
+        sevenDayResetsAt: new Date(2026, 7, 13, 17, 0).getTime() / 1000,
+      }),
+    );
+    render(<SessionHeader entity={hero()} />);
+    const slot = screen.getByTestId('session-header').querySelector('[data-slot="model"]')!;
+    expect(slot.className).not.toMatch(/w-\[200px\]/);
+    expect(screen.getByTestId('session-header').className).toContain('@container');
+    const chip = within(slot as HTMLElement).getByTestId('model-chip');
+    expect(chip).toHaveTextContent(/ctx/);
+    expect(chip.querySelectorAll('[data-detail="long"]')).toHaveLength(2);
+  });
+
+  it('moves the status word to the dot title for the narrowest step (HIVE-213)', () => {
+    render(<SessionHeader entity={hero()} />);
+    const status = screen.getByTestId('session-status');
+    expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[700px]:sr-only');
+    expect(status.getAttribute('title')).not.toBeNull();
   });
 
   it('names the back chord for the platform in the button title', () => {
