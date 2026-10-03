@@ -26,18 +26,27 @@ beforeEach(() => {
   useUiStore.getState().reset();
   useEditorStore.getState().reset();
   useAppearanceStore.getState().reset();
-  useAppearanceStore.getState().setLayout('classic');
   useHiveStore.setState({ entities: { 'sess-03': session } });
 });
 
 describe('useOnStage', () => {
   it('is the terminal id of the session on stage', () => {
-    useUiStore.setState({ activeTab: 'sess-03' });
+    useUiStore.setState({ place: 'sessions', activeTab: 'sess-03' });
     expect(renderHook(() => useOnStage()).result.current).toBe('term-3');
   });
 
   it('is null on the orchestrator', () => {
     useUiStore.setState({ activeTab: 'orch' });
+    expect(renderHook(() => useOnStage()).result.current).toBeNull();
+  });
+
+  it('reads the agents place as on stage with no agent page open (HIVE-213)', () => {
+    useUiStore.setState({ place: 'agents', activeTab: 'orch' });
+    expect(renderHook(() => useOnStage()).result.current).toBeNull();
+  });
+
+  it('a session tab behind the Home place is not on stage, whatever the stored layout (HIVE-213)', () => {
+    useUiStore.setState({ place: 'home', activeTab: 'sess-03' });
     expect(renderHook(() => useOnStage()).result.current).toBeNull();
   });
 });
