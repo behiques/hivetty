@@ -1,16 +1,22 @@
-import type { GhResult, PrRecord } from '../../../shared/github-contract';
+import type { GhError, GhResult, PrDetail, PrRecord } from '../../../shared/github-contract';
 
 import { classifyGhFailure, ghError } from './classify';
 import {
   collectPrs,
   collectSearchPrs,
+  commentAdded,
   hasAnyConnection,
+  readPrId,
   readViewerLogin,
+  toPrDetail,
 } from './mapping';
 import {
   buildPrQuery,
   buildPrVariables,
   buildSearchVariables,
+  PR_COMMENT_MUTATION,
+  PR_DETAIL_QUERY,
+  PR_ID_QUERY,
   repoQualifiers,
   safeSearchTerm,
   type RepoRef,
@@ -65,12 +71,60 @@ export interface GithubClient {
    * see `collectSearchPrs`.
    */
   search(term: string, repos: readonly RepoRef[]): Promise<GhResult<PrRecord[]>>;
+  /** One PR's page (HIVE-205). `repo` is the resolver's, never the renderer's spelling. */
+  detail(repo: RepoRef, n: number): Promise<GhResult<PrDetail>>;
+  /** A PR-level comment (HIVE-205): the PR's id is read from GitHub first, then `addComment`. */
+  comment(repo: RepoRef, n: number, body: string): Promise<GhResult<true>>;
 }
 
 export function createGithubClient(
   ghPath: string,
   run: RunAsync,
 ): GithubClient {
+  /** `gh` could not be executed at all; see {@link ask}'s first catch. */
+  const NOT_RUN: { ok: false; error: GhError } = { ok: false, error: ghError('not-installed', 'Could not run `gh`.') };
+
+  /**
+   * One `gh api graphql` call (HIVE-205 factored it out of {@link ask}): the
+   * constant document, string variables with `-f` and whole numbers with `-F`.
+   * `null` when `gh` could not be executed. The body is parsed, never returned
+   * raw: callers read `data` and classify `stderr`, which never escapes.
+   */
+  const graphql = async (
+    query: string,
+    strings: Record<string, string>,
+    numbers: Record<string, number> = {},
+  ): Promise<{ data: unknown; stderr: string; timedOut: boolean } | null> => {
+    const args = ['api', 'graphql', '-f', `query=${query}`];
+
+    for (const [key, value] of Object.entries(strings)) {
+      // `-F` types the value; `-f` keeps it a string. A search expression is
+      // always a string, and `-F` would try to read one that happened to look
+      // numeric as a number — or, worse, one beginning with `@` as a filename.
+      args.push('-f', `${key}=${value}`);
+    }
+    for (const [key, value] of Object.entries(numbers)) {
+      // GraphQL's `Int!` takes a number, which only `-F` sends. The guard has
+      // proved it a positive whole number, so it can name no file.
+      args.push('-F', `${key}=${String(value)}`);
+    }
+
+    let result;
+    try {
+      result = await run(ghPath, args);
+    } catch {
+      return null;
+    }
+
+    let body: GraphqlBody | null = null;
+    try {
+      body = JSON.parse(result.stdout) as GraphqlBody;
+    } catch {
+      body = null;
+    }
+    return { data: body?.data, stderr: result.stderr, timedOut: result.timedOut };
+  };
+
   /**
    * The half of a query that has nothing to do with *which* PRs are wanted.
    *
@@ -83,36 +137,13 @@ export function createGithubClient(
   const ask = async (
     variables: Record<string, string>,
   ): Promise<GhResult<{ data: unknown; login: string }>> => {
-    const args = ['api', 'graphql', '-f', `query=${buildPrQuery()}`];
+    const answer = await graphql(buildPrQuery(), variables);
+    // The binary could not be executed at all. It was on the `PATH` when
+    // the call started, so this is a machine changing underneath the app
+    // rather than a configuration the user can see and fix.
+    if (answer === null) return NOT_RUN;
 
-    for (const [key, value] of Object.entries(variables)) {
-      // `-F` types the value; `-f` keeps it a string. A search expression is
-      // always a string, and `-F` would try to read one that happened to look
-      // numeric as a number — or, worse, one beginning with `@` as a filename.
-      args.push('-f', `${key}=${value}`);
-    }
-
-    let result;
-    try {
-      result = await run(ghPath, args);
-    } catch {
-      // The binary could not be executed at all. It was on the `PATH` when
-      // the call started, so this is a machine changing underneath the app
-      // rather than a configuration the user can see and fix.
-      return {
-        ok: false,
-        error: ghError('not-installed', 'Could not run `gh`.'),
-      };
-    }
-
-    let body: GraphqlBody | null = null;
-    try {
-      body = JSON.parse(result.stdout) as GraphqlBody;
-    } catch {
-      body = null;
-    }
-
-    const data = body?.data;
+    const { data } = answer;
     const login = readViewerLogin(data);
 
     /**
@@ -142,10 +173,7 @@ export function createGithubClient(
      * fails is the partial-data case `collectPrs` is built to keep.
      */
     if (login === null || !hasAnyConnection(data)) {
-      return {
-        ok: false,
-        error: classifyGhFailure(result.stderr, result.timedOut),
-      };
+      return { ok: false, error: classifyGhFailure(answer.stderr, answer.timedOut) };
     }
 
     return { ok: true, value: { data, login } };
@@ -224,6 +252,32 @@ export function createGithubClient(
       if (!answer.ok) return answer;
 
       return { ok: true, value: collectSearchPrs(answer.value.data) };
+    },
+
+    async detail(repo, n) {
+      const answer = await graphql(PR_DETAIL_QUERY, { owner: repo.owner, name: repo.name }, { number: n });
+      if (answer === null) return NOT_RUN;
+
+      const detail = toPrDetail(answer.data, repo.owner, repo.name);
+      if (detail === null) return { ok: false, error: classifyGhFailure(answer.stderr, answer.timedOut) };
+      return { ok: true, value: detail };
+    },
+
+    async comment(repo, n, body) {
+      const found = await graphql(PR_ID_QUERY, { owner: repo.owner, name: repo.name }, { number: n });
+      if (found === null) return NOT_RUN;
+
+      // The subject is GitHub's own id for this PR, never a value the renderer
+      // sent, so a write can only land on the PR the scope check admitted.
+      const id = readPrId(found.data);
+      if (id === null) return { ok: false, error: classifyGhFailure(found.stderr, found.timedOut) };
+
+      const posted = await graphql(PR_COMMENT_MUTATION, { subjectId: id, body });
+      if (posted === null) return NOT_RUN;
+      if (!commentAdded(posted.data)) {
+        return { ok: false, error: classifyGhFailure(posted.stderr, posted.timedOut) };
+      }
+      return { ok: true, value: true };
     },
   };
 }
