@@ -19,6 +19,7 @@ import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet'
 describe('useAppChords', () => {
   beforeEach(() => {
     useAppearanceStore.getState().reset();
+    useAppearanceStore.getState().setLayout('classic');
     useHiveStore.getState().reset();
     seedDemoFleet();
     seedDemoProjectConfig();

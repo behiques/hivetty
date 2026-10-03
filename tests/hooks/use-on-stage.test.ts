@@ -26,6 +26,7 @@ beforeEach(() => {
   useUiStore.getState().reset();
   useEditorStore.getState().reset();
   useAppearanceStore.getState().reset();
+  useAppearanceStore.getState().setLayout('classic');
   useHiveStore.setState({ entities: { 'sess-03': session } });
 });
 

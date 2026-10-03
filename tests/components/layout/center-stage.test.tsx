@@ -63,6 +63,7 @@ describe('CenterStage', () => {
     useHiveStore.getState().reset();
     seedDemoFleet();
     useUiStore.getState().reset();
+    useAppearanceStore.getState().setLayout('classic');
     resetTerminalInstances();
     resetFitAddonInstances();
     resetWebLinksAddonInstances();
@@ -330,6 +331,7 @@ describe('CenterStage — interactive terminals', () => {
     useHiveStore.getState().reset();
     seedDemoFleet();
     useUiStore.getState().reset();
+    useAppearanceStore.getState().setLayout('classic');
     resetTerminalInstances();
     resetFitAddonInstances();
     resetWebLinksAddonInstances();

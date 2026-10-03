@@ -1,22 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Round two's frame in a real browser (HIVE-195). Seeded before the first
- * frame, because the store reads `localStorage` synchronously on boot.
+ * Round two's frame in a real browser (HIVE-195). It is the default layout
+ * (HIVE-213), so a fresh profile boots straight into it.
  */
 const bar = (page: Page) => page.getByRole('navigation', { name: 'Places' });
 const place = (page: Page, name: string) => bar(page).getByRole('button', { name, exact: true });
 const panel = (page: Page) => page.getByRole('region', { name: / list$/ });
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    if (sessionStorage.getItem('seeded')) return;
-    sessionStorage.setItem('seeded', '1');
-    localStorage.setItem(
-      'hive.appearance',
-      JSON.stringify({ version: 3, state: { layout: 'round-two' } }),
-    );
-  });
   await page.goto('/?sim=0');
 });
 
@@ -63,26 +55,6 @@ test('Work with no Jira shows the not-connected page and no list (HIVE-211)', as
   await expect(page.getByRole('region', { name: 'Work list' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Connect Jira' }).click();
   await expect(page.getByRole('heading', { name: 'Integrations', level: 2 })).toBeVisible();
-});
-
-test('Settings opens from the bar, and Classic comes back from it', async ({ page }) => {
-  await bar(page).getByRole('button', { name: 'Settings' }).click();
-  await page
-    .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Appearance' })
-    .click();
-
-  await page
-    .getByRole('radiogroup', { name: 'Layout' })
-    .getByRole('radio', { name: 'Classic' })
-    .click();
-
-  await expect(bar(page)).toHaveCount(0);
-  await expect(page.getByRole('banner')).toBeVisible();
-  await expect(
-    page.getByRole('navigation', { name: 'Projects, work, and agents' }),
-  ).toBeVisible();
-  await expect(page.getByRole('complementary', { name: 'Activity' })).toBeVisible();
 });
 
 test('Sessions with no project shows the Overmind and no panel, and the filter narrows it', async ({ page }) => {

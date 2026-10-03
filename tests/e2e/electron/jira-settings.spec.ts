@@ -84,7 +84,7 @@ test('renders both groups, and says no token is stored', async ({}, testInfo) =>
     env: CLEAN,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openIntegrations(page);
 
@@ -107,7 +107,7 @@ test('a typed site reaches the config file and survives a reopen', async ({}, te
     env: CLEAN,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openIntegrations(page);
 
@@ -150,7 +150,7 @@ test('an emptied field clears the key rather than storing an empty string', asyn
     env: CLEAN,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openIntegrations(page);
   await expect(page.getByLabel('Site')).toHaveValue('behiques.atlassian.net');
@@ -185,7 +185,7 @@ test('fills both fields from the environment, and says where they came from', as
     },
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openIntegrations(page);
 
@@ -212,7 +212,7 @@ test('names JIRA_API_KEY when the app was launched with one', async ({}, testInf
     env: { ...CLEAN, JIRA_API_KEY: 'ATATT-not-a-real-token' },
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openIntegrations(page);
 
@@ -235,7 +235,7 @@ test('reports an unconfigured site instead of hanging on the test button', async
     env: CLEAN,
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   await openIntegrations(page);
   await page.getByRole('button', { name: 'Test connection' }).click();

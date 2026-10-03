@@ -8,6 +8,8 @@ import {
   type Page,
 } from '@playwright/test';
 
+import { openConsole } from '../fixtures/places';
+
 import { launchHive, writeProjectConfig } from './fixtures/hive-app';
 
 /**
@@ -131,9 +133,10 @@ test('a fleet taller than the stage scrolls, and the console stays on screen', a
   const app = await launchHive({ userDataDir, configPath });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('header');
+  await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
+    await openConsole(page);
     const table = page.getByTestId('session-table');
     /*
       By text rather than by role: this waits for the *hydrate* to have landed,
@@ -257,13 +260,6 @@ test('round two: the docked console folds the transcript and keeps the prompt on
   await page.waitForLoadState('domcontentloaded');
 
   try {
-    await page.evaluate(() =>
-      localStorage.setItem(
-        'hive.appearance',
-        JSON.stringify({ version: 3, state: { layout: 'round-two' } }),
-      ),
-    );
-    await page.reload();
     await page.waitForSelector('nav[aria-label="Places"]');
     await page
       .getByRole('navigation', { name: 'Places' })

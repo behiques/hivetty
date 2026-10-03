@@ -25,17 +25,17 @@ const PROJECT = 'nova-web';
 const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
 
 /**
- * Seed round two before the first frame that matters, as `list-panel.spec.ts`
- * does, with the session panel closed: the widths below are the stage beside
- * the list panel alone (about 1,030px at 1440 and 790px at 1200).
+ * Seed the session panel closed before the first frame that matters: the
+ * widths below are the stage beside the list panel alone (about 1,030px at
+ * 1440 and 790px at 1200). Round two is the default layout (HIVE-213).
  */
-async function useRoundTwo(page: Page): Promise<void> {
+async function closeSessionPanel(page: Page): Promise<void> {
   await page.evaluate(() => {
     const raw = localStorage.getItem('hive.appearance');
     const stored = raw === null ? { version: 3, state: {} } : (JSON.parse(raw) as { version: number; state: object });
     localStorage.setItem(
       'hive.appearance',
-      JSON.stringify({ ...stored, state: { ...stored.state, layout: 'round-two', sessionPanelOpen: false } }),
+      JSON.stringify({ ...stored, state: { ...stored.state, sessionPanelOpen: false } }),
     );
   });
   await page.reload();
@@ -102,7 +102,7 @@ test('at 1440px the stats row is whole; at 1200px resets give way and the title 
   try {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await useRoundTwo(page);
+    await closeSessionPanel(page);
     await resizeTo(app, page, 1440);
 
     const id = await startRoundTwoSession(page);

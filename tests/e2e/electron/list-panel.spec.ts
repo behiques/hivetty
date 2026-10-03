@@ -20,20 +20,6 @@ const sessionsList = (page: Page) => page.getByRole('region', { name: 'Sessions 
 const GROUND = { dark: 'rgb(16, 21, 42)', light: 'rgb(253, 253, 251)' } as const;
 const PANEL = { dark: 'rgb(20, 26, 51)', light: 'rgb(255, 255, 255)' } as const;
 
-/** Seed round two before the first frame that matters, as `session-panel.spec.ts` does. */
-async function useRoundTwo(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const raw = localStorage.getItem('hive.appearance');
-    const stored = raw === null ? { version: 3, state: {} } : (JSON.parse(raw) as { version: number; state: object });
-    localStorage.setItem(
-      'hive.appearance',
-      JSON.stringify({ ...stored, state: { ...stored.state, layout: 'round-two' } }),
-    );
-  });
-  await page.reload();
-  await page.waitForSelector('nav[aria-label="Places"]');
-}
-
 async function resizeTo(app: ElectronApplication, page: Page, width: number): Promise<void> {
   await app.evaluate(
     ({ BrowserWindow }, w: number) =>
@@ -49,7 +35,7 @@ async function open(testInfo: { outputPath: (name: string) => string }) {
   const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-  await useRoundTwo(page);
+  await page.waitForSelector('nav[aria-label="Places"]');
   return { app, page };
 }
 

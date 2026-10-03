@@ -13,7 +13,11 @@ import { expect, type Page } from '@playwright/test';
 export async function openSettingsAgents(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Settings' }).click();
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-  await page.getByRole('button', { name: 'Agents' }).click();
+  // Scoped to Settings' nav: the bar has an Agents place of the same name.
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Agents' })
+    .click();
 }
 
 /**
