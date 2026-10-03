@@ -105,3 +105,40 @@ export interface SessionPr {
   /** The GitHub page. What the `#123` link opens. */
   url: string;
 }
+
+/** The swarm's word for what is happening to a PR (HIVE-215). */
+export type Flap =
+  | 'LARVA' | 'COCOONING' | 'INCUBATING' | 'MUTATING' | 'BURROWED' | 'HATCHING' | 'SUMMONS' | 'HATCHED';
+
+/** One per `--cc-*` token: grey a draft or parked, green moving, amber needs you, brand merged. */
+export type FlapTone = 'muted' | 'green' | 'amber' | 'brand';
+
+/** What `hatchStatus` reads from the ledger, besides the PR itself. */
+export interface HatchFacts {
+  /** `shipStage(...)`: the shipper's stage, `null` when nobody holds the PR. */
+  stage: string | null;
+  /** An open ask to you names it. */
+  askedMe: boolean;
+  /** Its merge waits on your card. */
+  mergeWaiting: boolean;
+}
+
+/** A PR's hatch status (HIVE-215): the one rule HIVE-205, HIVE-200 and HIVE-209 read. */
+export interface HatchStatus {
+  flap: Flap;
+  /** HATCHED only: `HH:MM`, local, 24-hour. */
+  at?: string;
+  tone: FlapTone;
+  /** GitHub's words: the state and one reason. The tooltip and accessible text. */
+  github: string;
+  /** The Hatchery's order: SUMMONS 0 … LARVA 6, HATCHED 7. */
+  rank: number;
+  /** Exactly `flap === 'SUMMONS'`. */
+  needsYou: boolean;
+}
+
+/** One Hatchery row. */
+export interface HatcheryRow {
+  pr: Pr;
+  hatch: HatchStatus;
+}
