@@ -1,7 +1,9 @@
+import { useState } from 'react';
+
 import { cn } from '@/lib/utils';
 
 import { Markdown } from '@features/shared/components/markdown';
-import type { PrThread } from '@shared/github-contract';
+import type { GhResult, PrThread } from '@shared/github-contract';
 
 const HUNK_HEADER = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 
@@ -22,24 +24,62 @@ function Chip({ thread, fixerOnIt }: { thread: PrThread; fixerOnIt: boolean }) {
   return <span className={cn('rounded-[5px] px-[7px] py-0.5 font-mono text-[10.5px] font-semibold', tone)}>{text}</span>;
 }
 
+/** The thread's writes (HIVE-207); absent on a read-only page. */
+export interface ThreadWrites {
+  reply: (threadId: string, body: string) => Promise<GhResult<true>>;
+  setResolved: (threadId: string, resolved: boolean) => Promise<GhResult<true>>;
+}
+
 /**
  * One review thread (HIVE-205): path:line, its state, the hunk's last lines,
- * the comment and the replies. Read-only but for Open the file; Reply and
- * Resolve are HIVE-207's. Shared with HIVE-207's Files tab.
+ * the comment and the replies. Open the file, and Reply, Resolve and Unresolve
+ * when `writes` is given (HIVE-207). Shared with HIVE-207's Files tab.
  */
 export function ThreadCard({
   thread,
   fixerOnIt,
   onOpenFile,
+  writes,
 }: {
   thread: PrThread;
   /** The thread is open and the fixer holds the PR (D12). */
   fixerOnIt: boolean;
   /** Absent when the PR has no session or project to open it in (D19). */
   onOpenFile?: (path: string, line: number) => void;
+  /** Absent on a read-only page, as a merged PR's is (D11). */
+  writes?: ThreadWrites;
 }) {
   const [first, ...replies] = thread.comments;
   const line = thread.line ?? thread.originalLine;
+  const [replying, setReplying] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const where = `${thread.path}${line === null ? '' : `:${String(line)}`}`;
+
+  const settle = (result: GhResult<true>, onOk: () => void) => {
+    setBusy(false);
+    if (result.ok) onOk();
+    else setProblem(result.error.message);
+  };
+  const post = () => {
+    const body = draft.trim();
+    if (writes === undefined || body === '') return;
+    setBusy(true);
+    setProblem(null);
+    void writes.reply(thread.id, body).then((result) =>
+      settle(result, () => {
+        setDraft('');
+        setReplying(false);
+      }),
+    );
+  };
+  const toggle = () => {
+    if (writes === undefined) return;
+    setBusy(true);
+    setProblem(null);
+    void writes.setResolved(thread.id, !thread.isResolved).then((result) => settle(result, () => undefined));
+  };
 
   return (
     <div className="overflow-hidden rounded-[9px] border border-border-soft bg-panel text-[12.5px]">
@@ -75,13 +115,57 @@ export function ThreadCard({
           </div>
         </div>
       ))}
-      {onOpenFile !== undefined && line !== null ? (
-        <div className="px-2.5 pt-1.5 pb-[9px] text-[12px]">
-          <button type="button" onClick={() => onOpenFile(thread.path, line)} className="text-brand hover:underline">
-            Open the file
-          </button>
+      {writes !== undefined || (onOpenFile !== undefined && line !== null) ? (
+        <div className="flex gap-3.5 px-2.5 pt-1.5 pb-[9px] text-[12px]">
+          {writes === undefined ? null : (
+            <>
+              <button type="button" onClick={() => setReplying(true)} className="text-brand hover:underline">
+                Reply
+              </button>
+              <button
+                type="button"
+                onClick={toggle}
+                disabled={busy}
+                className="text-brand hover:underline disabled:text-subtle"
+              >
+                {thread.isResolved ? 'Unresolve' : 'Resolve'}
+              </button>
+            </>
+          )}
+          {onOpenFile !== undefined && line !== null ? (
+            <button type="button" onClick={() => onOpenFile(thread.path, line)} className="text-brand hover:underline">
+              Open the file
+            </button>
+          ) : null}
         </div>
       ) : null}
+      {replying ? (
+        <div className="flex flex-col gap-2 border-t border-border-soft px-2.5 py-2">
+          <textarea
+            rows={2}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            aria-label={`Reply to ${where}`}
+            className="resize-y bg-transparent text-[12.5px] text-ink outline-none placeholder:text-subtle"
+            placeholder="Reply…"
+          />
+          <div className="flex justify-end gap-2 text-[12px]">
+            <button type="button" onClick={() => setReplying(false)} className="text-muted hover:underline">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={post}
+              disabled={busy || draft.trim() === ''}
+              aria-label="Post reply"
+              className="rounded-md bg-brand-fill px-3 py-1 text-ink hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:text-subtle"
+            >
+              {busy ? 'Posting…' : 'Reply'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {problem === null ? null : <p className="px-2.5 pb-2 text-[12px] text-amber">{problem}</p>}
     </div>
   );
 }

@@ -711,6 +711,22 @@ describe('ui-store — the PRs place (HIVE-205)', () => {
     });
   });
 
+  it('starts with no file, no filter, Unified (HIVE-207)', () => {
+    const s = useUiStore.getState();
+    expect([s.prFile, s.prFileFilter, s.prDiffView]).toEqual([null, '', 'unified']);
+  });
+
+  it('opening a PR resets the file and the filter but keeps the view and the Files tab (HIVE-207)', () => {
+    const s = useUiStore.getState();
+    s.setPrTab('files');
+    s.setPrFile('src/a.ts');
+    s.setPrFileFilter('fees');
+    s.setPrDiffView('split');
+    s.openPrPage({ owner: 'acme', repo: 'web', n: 2 });
+    const after = useUiStore.getState();
+    expect([after.prTab, after.prFile, after.prFileFilter, after.prDiffView]).toEqual(['files', null, '', 'split']);
+  });
+
   it('openPrPage opens the PRs place on the PR, dismisses overlays, keeps the tab and resets the filter', () => {
     useUiStore.getState().openPicker();
     useUiStore.getState().setPrConversation('everything');
