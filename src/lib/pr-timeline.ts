@@ -9,6 +9,7 @@ import type { Flap, FlapTone, Pr } from '@/types/pull-request';
 
 import type { PrTimeline, PrTimelineRun } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
+import { prEvents, prOpener, shipTrack } from '@shared/ledger-derive';
 import type { ShipVisit } from '@shared/ledger-derive';
 
 export const MIN = 60_000;
@@ -290,4 +291,91 @@ export function timeSentence(buckets: readonly Bucket[], bars: readonly CiBar[])
   const [job, count] = [...fails].sort((a, b) => b[1] - a[1])[0] ?? ['', 0];
   const repeated = count >= 2 ? `, and ${COUNT[count] ?? String(count)} CI runs failed on the same job, ${job}` : '';
   return `The longest wait was ${whoWaited(longest)}${repeated}. ${TAIL}`;
+}
+
+export interface ReviewMark { at: number; label: string; amber: boolean; target: { kind: 'github'; url: string } | { kind: 'ledger'; id: string } }
+export interface CommentMark { at: number; author: string; url: string }
+export interface CommitMark { at: number; oid: string; url: string }
+export interface TimelineModel {
+  start: number; end: number; merged: boolean;
+  flaps: FlapSpan[]; commits: CommitMark[]; bars: CiBar[]; reviews: ReviewMark[]; comments: CommentMark[]; holds: Hold[];
+  buckets: Bucket[]; sentence: string;
+  /** The ledger id of the stage post that opened each flap span's visit, for click-through; null when none. */
+  flapEvents: (string | null)[];
+}
+
+const findingsOf = (entry: LedgerEntry): number => {
+  const n = entry.meta?.['findings'];
+  return typeof n === 'number' ? n : 0;
+};
+
+/** `[ask, its answer)`, or to `end` while it is unanswered. */
+const windowOf = (ask: LedgerEntry, entries: readonly LedgerEntry[], end: number): Window => ({
+  from: ask.ts,
+  to: entries.find((a) => a.kind === 'answer' && a.thread === ask.id)?.ts ?? end,
+});
+
+/** GitHub's reviews (acr's labelled from its answer) and acr's self reviews from the ledger, by time. */
+function reviewMarks(timeline: PrTimeline, entries: readonly LedgerEntry[], events: readonly LedgerEntry[]): ReviewMark[] {
+  const github = timeline.reviews
+    .filter((review) => review.state !== 'PENDING' && review.state !== 'DISMISSED')
+    .map((review): ReviewMark => {
+      const acr = entries.find((entry) => entry.from === 'acr' && entry.kind === 'answer' && entry.meta?.['review_url'] === review.url);
+      const findings = acr === undefined ? 0 : findingsOf(acr);
+      const label = acr === undefined
+        ? `${review.author ?? 'someone'} · ${review.state.toLowerCase().replaceAll('_', ' ')}`
+        : `acr · ${findings} findings`;
+      return { at: Date.parse(review.at), label, amber: review.state === 'CHANGES_REQUESTED' || findings > 0, target: { kind: 'github', url: review.url } };
+    });
+  const self = events
+    .filter((entry) => entry.from === 'acr' && entry.meta?.['mode'] === 'self')
+    .map((entry): ReviewMark => ({ at: entry.ts, label: 'acr · self review', amber: findingsOf(entry) > 0, target: { kind: 'ledger', id: entry.id } }));
+  return [...github, ...self].sort((a, b) => a.at - b.at);
+}
+
+/** `maria-k` → `Maria`. */
+const firstName = (login: string | null): string => {
+  const first = (login ?? 'someone').split(/[-_.]/)[0] ?? '';
+  return first.charAt(0).toUpperCase() + first.slice(1);
+};
+
+/**
+ * The Timeline tab's model (HIVE-208): every lane on one axis from creation
+ * to the merge (else `now`), the buckets and the sentence under them.
+ */
+export function buildTimeline(input: {
+  timeline: PrTimeline; entries: readonly LedgerEntry[]; slug: string; n: number; mine: boolean;
+  toMe: (to: string) => boolean; now: number;
+}): TimelineModel {
+  const { timeline, entries, slug, n, mine, toMe, now } = input;
+  const start = Date.parse(timeline.createdAt);
+  const merged = timeline.mergedAt !== null;
+  const end = timeline.mergedAt === null ? now : Date.parse(timeline.mergedAt);
+  const events = prEvents(entries, slug, n);
+  const visits = shipTrack(entries, slug, n, end).visits;
+  const opener = prOpener(entries, slug, n);
+
+  const named = (entry: LedgerEntry) => entry.meta?.['pr'] === n && String(entry.meta['repo']).toLowerCase() === slug.toLowerCase();
+  const asks = events.filter((entry) => entry.kind === 'ask');
+  const asksToMe = asks.filter((ask) => ask.to !== undefined && toMe(ask.to) && named(ask)).map((ask) => windowOf(ask, entries, end));
+  const mergeAsks = asks
+    .filter((ask) => ask.from === 'shipper' && ask.meta?.['kind'] === 'permission' && ask.meta['tool'] === 'Bash')
+    .map((ask) => windowOf(ask, entries, end));
+
+  const bars = ciBars(timeline.runs, end);
+  const holds = holdIntervals(events, entries, slug, n, opener, start, end);
+  const flaps = flapHistory({ timeline, bars, visits, asksToMe, mergeAsks, mine, end });
+  const buckets = timeBuckets({
+    start, end, visits, holds, flaps, bars, youWindows: [...asksToMe, ...mergeAsks], draftAt: (p) => draftAt(timeline, p), opener,
+  });
+  const stagePosts = events.filter((entry) => entry.from === 'shipper' && entry.kind === 'post' && typeof entry.meta?.['stage'] === 'string');
+
+  return {
+    start, end, merged, flaps, bars, holds, buckets,
+    commits: timeline.commits.map((c) => ({ at: Date.parse(c.at), oid: c.oid, url: c.url })),
+    reviews: reviewMarks(timeline, entries, events),
+    comments: timeline.comments.map((c) => ({ at: Date.parse(c.at), author: firstName(c.author), url: c.url })),
+    sentence: timeSentence(buckets, bars),
+    flapEvents: flaps.map((span) => stagePosts.find((post) => post.ts >= span.from && post.ts < span.to)?.id ?? null),
+  };
 }

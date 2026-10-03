@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ciBars, flapHistory, fraction, holdIntervals, MIN, ticks, timeBuckets, timeSentence } from '@lib/pr-timeline';
+import { buildTimeline, ciBars, flapHistory, fraction, holdIntervals, MIN, ticks, timeBuckets, timeSentence } from '@lib/pr-timeline';
 import type { Bucket, BucketName, CiBar, Hold } from '@lib/pr-timeline';
 import type { PrTimeline, PrTimelineRun } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
@@ -146,5 +146,74 @@ describe('timeSentence', () => {
   });
   it('nothing to say yet', () => {
     expect(timeSentence([], [])).toBe('Every mark opens its event in the conversation.');
+  });
+});
+
+describe('buildTimeline', () => {
+  const slug = 'acme/server';
+  const pr = { pr: 1182, repo: slug };
+  const at = (m: number) => new Date(T0 + m * MIN).toISOString();
+  const e = (id: string, m: number, over: Partial<LedgerEntry>): LedgerEntry => ({ id, ts: T0 + m * MIN, from: 'shipper', kind: 'post', body: '', ...over });
+  const stage = (id: string, m: number, name: string) => e(id, m, { meta: { ...pr, stage: name } });
+  const entries: LedgerEntry[] = [
+    e('i', 4, { from: 'builder', kind: 'ask', to: 'shipper', meta: { ...pr, stage: 'intake' } }),
+    e('c', 4, { kind: 'claim', meta: { task: 'acme/server#1182' } }),
+    stage('s-intake', 4, 'intake'),
+    stage('s-self', 6, 'self-review'),
+    e('a1', 6, { kind: 'ask', to: 'acr', body: 'https://github.com/acme/server/pull/1182 --self' }),
+    e('a1r', 34, { from: 'acr', kind: 'answer', thread: 'a1', to: 'shipper', body: 'self review of acme/server#1182: clean', meta: { mode: 'self', findings: 0 } }),
+    stage('s-fix', 34, 'fix-self'),
+    e('f1', 34, { kind: 'ask', to: 'fixer', body: 'acme/server#1182 findings' }),
+    e('f1r', 60, { from: 'fixer', kind: 'answer', thread: 'f1', to: 'shipper' }),
+    stage('s-ready', 60, 'ready'),
+    stage('s-ci', 61, 'ci'),
+    stage('s-findings', 110, 'findings'),
+    e('f2', 110, { kind: 'ask', to: 'fixer', body: 'acme/server#1182 findings' }),
+    e('a2r', 140, { from: 'acr', kind: 'answer', thread: 'a2', to: 'shipper', meta: { review_url: 'R1', findings: 3 } }),
+  ];
+  const timeline: PrTimeline = {
+    createdAt: at(0), mergedAt: null, isDraft: false,
+    commits: [{ oid: 'abc', at: at(1), url: 'C1' }],
+    runs: [{ id: 1, number: 1, url: 'u', sha: 'abc', workflow: 'CI', startedAt: at(61), endedAt: at(72), state: 'passed', failedJobs: [] }],
+    reviews: [{ at: at(140), author: 'acr-bot', state: 'COMMENTED', url: 'R1' }, { at: at(141), author: null, state: 'PENDING', url: 'R2' }],
+    comments: [{ at: at(150), author: 'maria-k', url: 'K1' }],
+    events: [{ kind: 'ready', at: at(60), actor: null }],
+  };
+
+  it('composes the design PR: flaps, holds, reviews, comments, buckets and the sentence', () => {
+    const model = buildTimeline({ timeline, entries, slug, n: 1182, mine: true, toMe: (to) => to === 'overmind', now: T0 + 190 * MIN });
+    expect(model.end).toBe(T0 + 190 * MIN);
+    expect(model.merged).toBe(false);
+    expect(model.flaps.map((f) => f.flap)).toEqual(['LARVA', 'COCOONING', 'INCUBATING', 'MUTATING']);
+    expect(model.holds.map((h) => h.who)).toEqual(['builder', 'shipper', 'acr', 'fixer', 'shipper', 'fixer']);
+    expect(model.reviews.map((r) => [r.label, r.amber, r.target.kind])).toEqual([['acr · self review', false, 'ledger'], ['acr · 3 findings', true, 'github']]);
+    expect(model.comments[0]?.author).toBe('Maria');
+    expect(model.commits).toEqual([{ at: T0 + MIN, oid: 'abc', url: 'C1' }]);
+    expect(model.buckets.reduce((s, b) => s + b.ms, 0)).toBe(190 * MIN);
+    expect(model.sentence).toMatch(/^The longest wait was the fixer on acr's findings\./);
+    expect(model.flapEvents[0]).toBeNull();
+    expect(model.flapEvents[1]).toBe('s-intake');
+  });
+
+  it('asks to you and the merge card are SUMMONS, and are waiting on you', () => {
+    const ask = e('q', 120, { kind: 'ask', to: 'overmind', meta: { ...pr } });
+    const answer = e('qr', 130, { from: 'overmind', kind: 'answer', thread: 'q' });
+    const merge = e('m', 170, { kind: 'ask', to: 'overmind', body: 'gh pr merge 1182 --repo acme/server', meta: { ...pr, kind: 'permission', tool: 'Bash' } });
+    const model = buildTimeline({ timeline, entries: [...entries.slice(0, 11), ask, answer, merge], slug, n: 1182, mine: true, toMe: (to) => to === 'overmind', now: T0 + 190 * MIN });
+    expect(model.flaps.filter((f) => f.flap === 'SUMMONS').map((f) => [(f.from - T0) / MIN, (f.to - T0) / MIN])).toEqual([[120, 130], [170, 190]]);
+  });
+
+  it('labels other reviews by author and state, amber on changes requested', () => {
+    const reviews = [{ at: at(10), author: 'maria-k', state: 'CHANGES_REQUESTED', url: 'R3' }, { at: at(5), author: null, state: 'APPROVED', url: 'R4' },
+      { at: at(6), author: 'x', state: 'DISMISSED', url: 'R5' }];
+    const model = buildTimeline({ timeline: { ...timeline, reviews, comments: [{ at: at(1), author: null, url: 'K' }] }, entries: [], slug, n: 1182, mine: false, toMe: () => false, now: T0 + 20 * MIN });
+    expect(model.reviews.map((r) => [r.label, r.amber])).toEqual([['someone · approved', false], ['maria-k · changes requested', true]]);
+    expect(model.comments[0]?.author).toBe('Someone');
+  });
+
+  it('a merged PR ends at its merge', () => {
+    const model = buildTimeline({ timeline: { ...timeline, mergedAt: at(100) }, entries: [], slug, n: 1182, mine: false, toMe: () => false, now: T0 + 500 * MIN });
+    expect(model.end).toBe(T0 + 100 * MIN);
+    expect(model.merged).toBe(true);
   });
 });
