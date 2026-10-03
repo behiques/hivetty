@@ -119,10 +119,13 @@ export function createChangedFiles({
   const sessions = new Map<string, SessionState>();
   /** One read in flight per session; a trigger during it chains behind it. */
   const queues = new Map<string, Promise<void>>();
+  /** Bumped by `drop`: a read triggered before it, or still in flight, is stale and publishes nothing. */
+  const generations = new Map<string, number>();
+  const generationOf = (entityId: string): number => generations.get(entityId) ?? 0;
 
   async function publish(entityId: string, state: SessionState): Promise<void> {
     const root = await rootOf(entityId);
-    if (root === null) return;
+    if (root === null || sessions.get(entityId) !== state) return;
     const files: ChangedFile[] = [];
     for (const [absolute, tally] of state.tallies) {
       const path = relative(root, absolute);
@@ -135,7 +138,8 @@ export function createChangedFiles({
     send(CH.changedFilesChanged, { entityId, files } satisfies ChangedFilesEvent);
   }
 
-  async function readNew(entityId: string): Promise<void> {
+  async function readNew(entityId: string, generation: number): Promise<void> {
+    if (generationOf(entityId) !== generation) return;
     const transcript = transcriptOf(entityId);
     if (transcript === undefined) return;
     const path = transcriptPath(home, transcript.cwd, transcript.sessionUuid);
@@ -164,14 +168,16 @@ export function createChangedFiles({
     } finally {
       await handle.close();
     }
+    if (sessions.get(entityId) !== state) return;
     foldTranscriptLines(state.tallies, text.split('\n'));
     await publish(entityId, state);
   }
 
   return {
     onFileTool(entityId) {
+      const generation = generationOf(entityId);
       const next = (queues.get(entityId) ?? Promise.resolve())
-        .then(() => readNew(entityId))
+        .then(() => readNew(entityId, generation))
         .catch((cause: unknown) => {
           // An unreadable transcript skips this read; the offset stays, so the next edit retries.
           console.warn(`[hive] changed files not read (${entityId}):`, cause);
@@ -187,7 +193,7 @@ export function createChangedFiles({
     drop(entityId) {
       const state = sessions.get(entityId);
       sessions.delete(entityId);
-      queues.delete(entityId);
+      generations.set(entityId, generationOf(entityId) + 1);
       if (state !== undefined && state.published.length > 0) {
         send(CH.changedFilesChanged, { entityId, files: [] } satisfies ChangedFilesEvent);
       }

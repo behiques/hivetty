@@ -164,4 +164,34 @@ describe('createChangedFiles (HIVE-201)', () => {
     files.drop('sess-01');
     expect(send).toHaveBeenCalledTimes(2);
   });
+
+  it('a drop during a read, or before a queued one, publishes nothing stale and lists nothing', async () => {
+    stage('u1', editLine('/repo/a.ts', ['+1']) + '\n');
+    const send = vi.fn();
+    let roots = 0;
+    let release: (root: string) => void = () => {};
+    const files = createChangedFiles({
+      send,
+      home,
+      transcriptOf: () => transcript,
+      rootOf: () => {
+        roots += 1;
+        return new Promise<string>((resolve) => {
+          release = resolve;
+        });
+      },
+    });
+    const inFlight = files.onFileTool('sess-01');
+    const queued = files.onFileTool('sess-01');
+    await vi.waitFor(() => {
+      expect(roots).toBe(1);
+    });
+    files.drop('sess-01');
+    release('/repo');
+    await inFlight;
+    release('/repo');
+    await queued;
+    expect(send).not.toHaveBeenCalled();
+    expect(files.list().sessions).toEqual([]);
+  });
 });
