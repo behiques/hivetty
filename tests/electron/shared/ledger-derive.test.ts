@@ -118,7 +118,7 @@ describe('isShipping and buildProgressFor (HIVE-171)', () => {
     expect(buildProgressFor(loose, 'ACME-1')).toEqual({ from: 'builder', stage: 'x'.repeat(STAGE_TEXT_MAX), task: 4 });
   });
 
-  it('reads the newest builder progress for a ticket, key case-insensitive, task optional', () => {
+  it('reads the newest agent progress for a ticket, key case-insensitive, task optional; the builder still answers', () => {
     expect(buildProgressFor(posts, 'HIVE-7')).toEqual({ from: 'builder', stage: 'build', task: 3 });
     expect(buildProgressFor(posts, 'HIVE-8')).toEqual({ from: 'builder', stage: 'verify' });
     expect(buildProgressFor(posts, 'HIVE-9')).toBeUndefined();
