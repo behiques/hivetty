@@ -402,12 +402,17 @@ function toCheck(raw: unknown): PrCheck | null {
   const status = raw.__typename === 'StatusContext';
   const name = text(status ? raw.context : raw.name);
   if (name === null) return null;
+  const suite = !status && isRecord(raw.checkSuite) && isRecord(raw.checkSuite.app) ? raw.checkSuite.app : null;
+  const app = suite === null ? null : text(suite.slug);
+  const id = raw.databaseId;
   return {
     name,
     status: checkStatus(raw),
     startedAt: text(status ? raw.createdAt : raw.startedAt),
     completedAt: status ? null : text(raw.completedAt),
     url: text(status ? raw.targetUrl : raw.detailsUrl),
+    app,
+    jobId: app === 'github-actions' && typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? id : null,
   };
 }
 
