@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import type { PlanTaskStatus, SessionPlan } from '@shared/plan-contract';
 
 import { PlanGlyph } from './plan-glyph';
+import { PlanRings } from './plan-rings';
 
 interface PlanRailProps {
   plan: SessionPlan;
@@ -49,16 +50,7 @@ export function PlanRail({ plan, pinned, onPinnedChange }: PlanRailProps) {
     >
       {pinned ? null : (
         <button type="button" aria-label={summary} className="flex h-full w-full flex-col items-center">
-          <span className="flex h-[30px] items-center font-mono text-[10px] text-green tabular-nums">
-            {plan.allDone ? '✓' : count}
-          </span>
-          <span aria-hidden className="flex flex-col items-center">
-            {plan.tasks.map((task, index) => (
-              <span key={task.id} className="grid h-[26px] place-items-center">
-                <PlanGlyph index={index} status={task.status} proposed={proposed} />
-              </span>
-            ))}
-          </span>
+          <PlanRings plan={plan} />
         </button>
       )}
       <section

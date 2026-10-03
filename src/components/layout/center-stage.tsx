@@ -237,9 +237,10 @@ export function CenterStage() {
   const planPinned = usePlanPinned();
   const setPlanPinned = useSetPlanPinned();
   // Settings › Appearance › Show plan panel (HIVE-182): off hides the rail only.
+  // Classic only (HIVE-201, D3): round two's session panel carries the plan.
   const showPlanPanel = useShowPlanPanel();
   const planRail =
-    showPlanPanel && plan !== undefined && plan.tasks.length > 0 ? (
+    !roundTwo && showPlanPanel && plan !== undefined && plan.tasks.length > 0 ? (
       <PlanRail plan={plan} pinned={planPinned} onPinnedChange={setPlanPinned} />
     ) : null;
 

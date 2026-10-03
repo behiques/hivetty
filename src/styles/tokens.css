@@ -218,6 +218,9 @@
   /* Round two's frame (HIVE-195): fixed, not density-dependent. */
   --cc-bar-w: 64px;
   --cc-list-w: 300px;
+  /* Round two's session panel (HIVE-201): open, and closed to its strip. */
+  --cc-session-panel-w: 320px;
+  --cc-session-strip-w: 46px;
   --cc-rail-gap: 18px;
   --cc-list-gap: 10px;
   --cc-list-gap-sm: 8px;

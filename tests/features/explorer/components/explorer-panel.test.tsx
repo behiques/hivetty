@@ -338,3 +338,37 @@ describe('ExplorerPanel — refreshing', () => {
     expect(watchProject).not.toHaveBeenCalled();
   });
 });
+
+describe('ExplorerPanel — changed in this session (HIVE-201)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().setChangedFiles('main-1', [
+      { path: 'src/app.ts', mark: 'M', added: 3, removed: 1 },
+    ]);
+  });
+
+  it('lists the changed files above the tree when given the session', async () => {
+    render(<ExplorerPanel changesId="main-1" />);
+
+    expect(await screen.findByText('README.md')).toBeInTheDocument();
+    const block = screen.getByRole('region', { name: 'Changed in this session' });
+    expect(block).toHaveTextContent('src/app.ts');
+    expect(
+      block.compareDocumentPosition(screen.getByText('README.md')) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('hides the block while searching, and in Classic, which passes no session', async () => {
+    useUiStore.getState().setExplorerSearchTerm('app');
+    const { unmount } = render(<ExplorerPanel changesId="main-1" />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByRole('region', { name: 'Changed in this session' })).toBeNull();
+    unmount();
+
+    useUiStore.getState().setExplorerSearchTerm('');
+    render(<ExplorerPanel />);
+    expect(await screen.findByText('README.md')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Changed in this session' })).toBeNull();
+  });
+});

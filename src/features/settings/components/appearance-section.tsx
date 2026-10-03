@@ -134,7 +134,7 @@ export function AppearanceSection() {
       >
         <Switch
           label="Show plan panel"
-          description="A slim task list beside the terminal. Off keeps the count on the session row, which costs no terminal columns."
+          description="A slim task list beside the terminal. Off keeps the count on the session row, which costs no terminal columns. Classic layout only."
           checked={settings.showPlanPanel}
           onCheckedChange={setShowPlanPanel}
         />

@@ -7,6 +7,7 @@ import { fileIconName, folderIconName } from '@lib/explorer/file-icon';
 import { childPath } from '@lib/explorer/fs-client';
 import type { DirEntry } from '@shared/fs-contract';
 import { useActiveFileKey, fileKey } from '@stores/editor-store';
+import { useChangedFileMark } from '@stores/hive-store';
 import { useExplorerExpanded, useToggleExplorerDir } from '@stores/ui-store';
 
 interface TreeNodeProps {
@@ -20,6 +21,11 @@ interface TreeNodeProps {
   sessionId?: string;
   /** Which tree these paths are relative to. `''` is the project root. */
   rootKey: string;
+  /**
+   * Main's id for the session whose changed files mark this tree (HIVE-201):
+   * `terminalOf(session)`. Absent in Classic's rail, which shows no marks.
+   */
+  changesId?: string;
   onOpenFile: (relPath: string) => void;
 }
 
@@ -52,6 +58,7 @@ export function TreeNode({
   refreshToken,
   sessionId,
   rootKey,
+  changesId,
   onOpenFile,
 }: TreeNodeProps) {
   const relPath = childPath(parentPath, entry.name);
@@ -63,6 +70,7 @@ export function TreeNode({
   // Keyed with the root, or a file open from a worktree would highlight the
   // same-named row in the project's tree and vice versa.
   const isActive = !isDir && activeKey === fileKey(projectId, relPath, rootKey);
+  const mark = useChangedFileMark(isDir ? undefined : changesId, relPath);
 
   const children = useDirectory(
     projectId,
@@ -120,6 +128,19 @@ export function TreeNode({
         >
           {entry.name}
         </span>
+
+        {mark === undefined ? null : (
+          <i
+            role="img"
+            aria-label={mark === 'A' ? 'added this session' : 'modified this session'}
+            className={cn(
+              'ml-auto w-3.5 shrink-0 text-center font-mono text-[10px] font-semibold not-italic',
+              mark === 'A' ? 'text-green' : 'text-brand',
+            )}
+          >
+            {mark}
+          </i>
+        )}
       </button>
 
       {isDir && expanded ? (
@@ -134,6 +155,7 @@ export function TreeNode({
               refreshToken={refreshToken}
               sessionId={sessionId}
               rootKey={rootKey}
+              changesId={changesId}
               onOpenFile={onOpenFile}
             />
           ))}

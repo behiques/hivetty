@@ -7,6 +7,7 @@ tasks and how far along they are. Its session row carries the same count.
 [Where the tasks come from](#where-the-tasks-come-from) ·
 [When it appears and leaves](#when-it-appears-and-leaves) ·
 [The count on the session row](#the-count-on-the-session-row) ·
+[In round two](#in-round-two) ·
 [Turn it off](#turn-it-off)
 
 ## What it shows
@@ -61,8 +62,26 @@ The same `done/total` sits in green after the session's status, both in the
 Projects rail and in the overmind's fleet table. You can see how far a
 background session has got without opening it.
 
+## In round two
+
+With **Settings › Appearance › Layout** on round two, the rail is replaced by the
+session panel at the window's right edge. Closed, it is a 46px strip: the same
+rings and `3/7` on top, then an icon for each other tab. Click any of them, or
+press the right-rail chord, to open the panel. Under 1,200px wide it stays a strip.
+
+The **Plan** tab lists every task. The one Claude is on shows its present-tense
+wording ("Pushing the branch") under the title. Each task shows how long it ran,
+or has been running, and the header adds up the total. Times start when a task
+first goes in progress, so rewriting the list does not reset them.
+
+**Where it came from** appears when the session has written a `hive:plan` file.
+It names the file and the time it was written; click it to open the plan in the
+editor. The file stays there after the tasks move on to Claude's own list, and
+goes when the session ends.
+
 ## Turn it off
 
 **Settings › Appearance › Plan panel › Show plan panel.** Off hides the rail
 beside the terminal. The count on the session row stays, since it takes no
-room from the terminal.
+room from the terminal. The setting applies to Classic only: round two's panel
+is closed with its own button, and remembers whether it was open.

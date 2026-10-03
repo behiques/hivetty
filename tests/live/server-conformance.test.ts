@@ -2115,6 +2115,16 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       expect(payload.projects.map((project) => project.id)).toContain(seededProjectId);
     }, 30_000);
 
+    it('10b. answers changed-files:list over an attached socket (HIVE-201)', async () => {
+      const client = await attached();
+      const result = await client.call(CH.changedFilesList, undefined);
+
+      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
+        kind: 'result',
+        payload: { sessions: expect.any(Array) },
+      });
+    }, 30_000);
+
     it('11. answers github:prs over an attached socket', async () => {
       const client = await attached();
       const result = await client.call(CH.githubPrs, undefined);
@@ -2748,7 +2758,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       for (const key of keys) expect(SNAPSHOT_CHANNELS).toContain(key);
 
       /*
-        Five of the seven asserted individually rather than by count, so a
+        Six of the eight asserted individually rather than by count, so a
         failure names which one went missing. `github:prs` is deliberately not
         among them: it shells out to a real `gh` and races
         `SNAPSHOT_READ_BUDGET_MS`, and Ruling 15 says a read that misses that
@@ -2761,6 +2771,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         CH.agentsList,
         CH.ledgerList,
         CH.notificationsList,
+        CH.changedFilesList,
       ]) {
         expect(keys, `snapshot was missing ${channel}`).toContain(channel);
       }

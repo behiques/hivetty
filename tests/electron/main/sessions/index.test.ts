@@ -1,6 +1,6 @@
 // @vitest-environment node
 import type { PlanToolCall } from '../../../../electron/main/plans';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -2369,6 +2369,35 @@ describe('/done', () => {
 
       expect(h.planPushes('hero-refresh').at(-1)).toEqual({ entityId: 'hero-refresh', plan: null });
       expect(h.sessions.plans()).toEqual({ plans: [] });
+    });
+
+    it('forgets the plan file the retired conversation read on /clear (HIVE-201)', async () => {
+      const root = realpathSync(mkdtempSync(join(tmpdir(), 'hive-clear-plan-')));
+      try {
+        mkdirSync(join(root, '.hive', 'plans'), { recursive: true });
+        const file = join(root, '.hive', 'plans', 'p.md');
+        writeFileSync(file, '## Task 1: A\n- [ ] one\n');
+        const h = finished();
+        h.open();
+        await h.planTool({
+          entityId: 'hero-refresh',
+          toolName: 'Write',
+          toolInput: { file_path: file },
+          toolResponse: undefined,
+          cwd: root,
+        });
+        expect(h.sessions.plans().plans[0]).toMatchObject({ source: 'plan-file', file });
+
+        h.cleared('hero-refresh');
+        h.planTool(createAlpha('hero-refresh'));
+
+        const plan = h.sessions.plans().plans[0];
+        expect(plan).toMatchObject({ source: 'task-tools' });
+        expect(plan?.file).toBeUndefined();
+        expect(plan?.fileAt).toBeUndefined();
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     });
 
     it('drops the plan when the session finishes', () => {

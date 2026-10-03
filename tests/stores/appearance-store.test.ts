@@ -20,6 +20,11 @@ import {
   useSwarmPalette,
   useTerminalAppearance,
   watchSystemTheme,
+  useSessionPanelOpen,
+  useSessionPanelTab,
+  useSetSessionPanelOpen,
+  useSetSessionPanelTab,
+  useToggleSessionPanel,
 } from '@stores/appearance-store';
 
 /**
@@ -496,6 +501,8 @@ describe('appearance-store — persistence', () => {
       terminalScrollback: 5000,
       density: 'compact',
       layout: 'classic',
+      sessionPanelOpen: true,
+      sessionPanelTab: 'plan',
       railWidthLeft: null,
       railWidthRight: null,
       railCollapsedLeft: false,
@@ -1305,5 +1312,71 @@ describe('appearance-store — the swarm palette (HIVE-199)', () => {
     act(() => useAppearanceStore.getState().setTerminalFontSize(16));
     rerender();
     expect(result.current).toBe(first);
+  });
+});
+
+describe('appearance-store — session panel (HIVE-201)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useAppearanceStore.getState().reset();
+  });
+
+  it('defaults open on plan, and the setters and toggle work', () => {
+    const s = useAppearanceStore.getState();
+    expect([s.sessionPanelOpen, s.sessionPanelTab]).toEqual([true, 'plan']);
+    s.toggleSessionPanel();
+    s.setSessionPanelTab('files');
+    expect([
+      useAppearanceStore.getState().sessionPanelOpen,
+      useAppearanceStore.getState().sessionPanelTab,
+    ]).toEqual([false, 'files']);
+    useAppearanceStore.getState().setSessionPanelOpen(true);
+    expect(useAppearanceStore.getState().sessionPanelOpen).toBe(true);
+  });
+
+  it('persists both, and an old payload or a bad value loads the defaults', async () => {
+    useAppearanceStore.getState().setSessionPanelOpen(false);
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ state: { layout: 'round-two' }, version: 3 }),
+    );
+    await useAppearanceStore.persist.rehydrate();
+    expect(useAppearanceStore.getState()).toMatchObject({ sessionPanelOpen: true, sessionPanelTab: 'plan' });
+
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ state: { sessionPanelOpen: 'yes', sessionPanelTab: 'nope' }, version: 3 }),
+    );
+    await useAppearanceStore.persist.rehydrate();
+    expect(useAppearanceStore.getState()).toMatchObject({ sessionPanelOpen: true, sessionPanelTab: 'plan' });
+
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ state: { sessionPanelOpen: false, sessionPanelTab: 'files' }, version: 3 }),
+    );
+    await useAppearanceStore.persist.rehydrate();
+    expect(useAppearanceStore.getState()).toMatchObject({ sessionPanelOpen: false, sessionPanelTab: 'files' });
+
+    useAppearanceStore.getState().setSessionPanelTab('pr');
+    const { state } = JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) ?? '{}') as {
+      state: Record<string, unknown>;
+    };
+    expect(state).toMatchObject({ sessionPanelOpen: false, sessionPanelTab: 'pr' });
+  });
+
+  it('the hooks read and write it', () => {
+    const { result } = renderHook(() => ({
+      open: useSessionPanelOpen(),
+      tab: useSessionPanelTab(),
+      setOpen: useSetSessionPanelOpen(),
+      toggle: useToggleSessionPanel(),
+      setTab: useSetSessionPanelTab(),
+    }));
+    act(() => result.current.toggle());
+    expect(result.current.open).toBe(false);
+    act(() => result.current.setOpen(true));
+    expect(result.current.open).toBe(true);
+    act(() => result.current.setTab('files'));
+    expect(result.current.tab).toBe('files');
   });
 });

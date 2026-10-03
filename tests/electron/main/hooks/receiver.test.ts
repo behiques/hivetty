@@ -4926,3 +4926,122 @@ describe('hook receiver: plan files and plan mode reach onPlanTool (HIVE-180)', 
     expect(planCalls).toEqual([]);
   });
 });
+
+describe('hook receiver: edits reach onFileTool (HIVE-201)', () => {
+  const SUBAGENT = { agent_id: 'ad74678b565585bbf', agent_type: 'general-purpose' };
+
+  let receiver: Receiver;
+  let url: string;
+  let fileCalls: string[];
+  let planCalls: PlanToolCall[];
+
+  beforeEach(async () => {
+    fileCalls = [];
+    planCalls = [];
+    receiver = createReceiver({
+      onEvent: () => {},
+      onCleared: () => {},
+      onTicketIntent: () => {},
+      onPlanTool: (call) => planCalls.push(call),
+      onFileTool: (entityId) => fileCalls.push(entityId),
+      onPromptName: () => {},
+      onMetrics: () => {},
+      onDone: () => {},
+      onReady: () => {},
+      knowsSession: (entityId) => entityId === 'sess-01',
+      ...noLedger,
+      ...noAgents,
+    });
+    const started = await receiver.start();
+    expect(started).not.toBeNull();
+    url = started as string;
+  });
+
+  afterEach(async () => {
+    await receiver.stop();
+  });
+
+  const toolBody = (
+    toolName: string,
+    toolInput: unknown,
+    extra: Record<string, unknown> = {},
+    event = 'PostToolUse',
+  ) => ({
+    session_id: '43fa9e8a-46e9-4c16-9b5c-549db8c85ef8',
+    cwd: '/repo',
+    ...extra,
+    hook_event_name: event,
+    tool_name: toolName,
+    tool_input: toolInput,
+    tool_response: { ok: true },
+  });
+
+  const post = (body: unknown) =>
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [HOOK_HEADER_TOKEN]: receiver.tokenFor('sess-01'),
+        [HOOK_HEADER_SESSION]: 'sess-01',
+      },
+      body: JSON.stringify(body),
+    });
+
+  it('a main-agent Edit, Write, MultiEdit or NotebookEdit triggers a read', async () => {
+    for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) {
+      await post(toolBody(tool, { file_path: '/repo/a.ts' }));
+    }
+    expect(fileCalls).toEqual(['sess-01', 'sess-01', 'sess-01', 'sess-01']);
+  });
+
+  it('a truncated Edit still triggers a read, by tool_name in the prefix', async () => {
+    const body = toolBody('Edit', {
+      file_path: '/repo/a.ts',
+      old_string: 'x'.repeat(70 * 1024),
+      new_string: 'y',
+    });
+    expect(JSON.stringify(body).length).toBeGreaterThan(HOOK_MAX_BODY_BYTES);
+    await post(body);
+    expect(fileCalls).toEqual(['sess-01']);
+  });
+
+  it("a subagent's edit, whole or truncated, and any PreToolUse or Read, do not", async () => {
+    await post(toolBody('Edit', { file_path: '/repo/a.ts' }, SUBAGENT));
+    await post(toolBody('Write', { file_path: '/repo/a.ts', content: 'x'.repeat(70 * 1024) }, SUBAGENT));
+    await post(toolBody('Edit', { file_path: '/repo/a.ts' }, {}, 'PreToolUse'));
+    await post(toolBody('Read', { file_path: '/repo/a.ts' }));
+    expect(fileCalls).toEqual([]);
+  });
+
+  it('a plan-file write triggers both onPlanTool and onFileTool', async () => {
+    await post(toolBody('Write', { file_path: '/repo/.hive/plans/x.md', content: '## Task 1: A' }));
+    expect(fileCalls).toEqual(['sess-01']);
+    expect(planCalls).toHaveLength(1);
+  });
+
+  it('answers and keeps going when onFileTool throws', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await receiver.stop();
+    receiver = createReceiver({
+      onEvent: () => {},
+      onCleared: () => {},
+      onTicketIntent: () => {},
+      onPlanTool: () => {},
+      onFileTool: () => {
+        throw new Error('boom');
+      },
+      onPromptName: () => {},
+      onMetrics: () => {},
+      onDone: () => {},
+      onReady: () => {},
+      knowsSession: (entityId) => entityId === 'sess-01',
+      ...noLedger,
+      ...noAgents,
+    });
+    url = (await receiver.start()) as string;
+    const response = await post(toolBody('Edit', { file_path: '/repo/a.ts' }));
+    expect(response.status).toBe(204);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('onFileTool threw'), expect.any(Error));
+    error.mockRestore();
+  });
+});

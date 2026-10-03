@@ -68,15 +68,14 @@ fixed. `Header` and `TitleBar` render in both.
 
 ```
 Row (Classic)       LeftRail                 │ CenterStage │ ActivityRail │ RailHandles
-Row (round two)     <>ActivityBar ListPanel</> │ CenterStage │ ActivityRail
+Row (round two)     <>ActivityBar ListPanel</> │ CenterStage │ SessionPanel
 ```
 
 **`CenterStage` holds child index 1 in both layouts**, because the fragment and
 `LeftRail` share slot 0. React therefore keeps the same instance across the
 switch and no live terminal is torn down; wrapping the stage into each branch
-would remount all of them on a settings click. The `ActivityRail` stays at the
-right edge in both layouts until HIVE-201, so PRs shows twice in round two —
-accepted while the frame is opt-in.
+would remount all of them on a settings click. Round two's right edge is the
+session panel, below, in place of the `ActivityRail`.
 
 ### The place machine
 
@@ -124,6 +123,40 @@ place either — it replaces the tab already on stage rather than opening one.
 
 Desktop-width only, by design: no responsive or mobile layout. The rails are
 draggable (`rail-handles.tsx`), and either one collapses to an icon strip.
+
+## The session panel (HIVE-201)
+
+Round two's right side is `SessionPanel` (`src/components/layout/session-panel.tsx:90`),
+mounted by `app-shell.tsx:205` in place of the `ActivityRail`: 320px open, or a
+46px strip closed. Classic is unchanged, and only Classic still draws
+`PlanRail` beside the terminal (`center-stage.tsx`).
+
+**The gate (R1).** It draws while the stage shows a session or a terminal, and
+is not gated on the view. A file opened full-stage from the Files tab must not
+make the panel vanish under the click. The Overmind, agents and Home have no
+such entity, so it returns `null` there.
+
+**The tab table.** `TABS` (`session-panel.tsx:48`) is one row per tab: `id`,
+`label`, `exists`, `Icon`, `fact`, optional `count`, `body`. The tablist, the
+strip and the body all read it, so a new tab is one row. Plan exists once the
+plan has a task; Files always does. HIVE-202's Ticket and HIVE-209's PR go
+between them, and `SessionPanelTab` already names them.
+
+**`pickTab`** (`session-panel.tsx:77`) chooses what shows: the persisted tab
+where it exists, else Plan, else Files. A persisted `'ticket'` is harmless
+until Ticket has a row.
+
+**The strip** (`session-panel-strip.tsx`) is the closed panel: the plan's rings
+on top (`PlanRings`, shared with `PlanRail`), then one icon per other tab with
+its one fact, such as `2 files changed`. Any of them opens the panel on that
+tab. Below 1,200px `use-narrow-window.ts` forces the strip whatever the open
+setting says; with no `matchMedia` it reads as wide. In round two the right
+chord toggles the panel (`use-app-chords.ts:78`).
+
+**The main-id rule (R2).** Plans and changed files are keyed by main's id, and
+a session's is `terminalOf(session)`, not `session.id`. The panel derives it
+once (`session-panel.tsx:94`) and passes it down as `mainId`, and a terminal
+has none, so it gets Files without a plan or marks.
 
 ## The header
 

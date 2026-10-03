@@ -42,6 +42,9 @@ import {
   useEndedSessions,
   useNavOrder,
   useNotifs,
+  useChangedFileCount,
+  useChangedFileMark,
+  useChangedFiles,
   usePlan,
   usePlanProgress,
   useProjects,
@@ -2157,6 +2160,24 @@ describe('comb selectors (HIVE-199)', () => {
   it('summarises for the headline', () => {
     const { result } = renderHook(() => useCombSummary());
     expect(result.current).toEqual({ needs: 2, working: 3, failed: 2, resting: 3, projects: 2, agents: 5 });
+  });
+
+  describe('changed-file selectors (HIVE-201)', () => {
+    const a = { path: 'src/a.ts', mark: 'M' as const, added: 2, removed: 1 };
+    const b = { path: 'b.ts', mark: 'A' as const, added: 4, removed: 0 };
+
+    it('count and mark derive from the list', () => {
+      act(() => {
+        useHiveStore.getState().setChangedFiles('s1', [a, b]);
+      });
+      expect(renderHook(() => useChangedFileCount('s1')).result.current).toBe(2);
+      expect(renderHook(() => useChangedFileCount(undefined)).result.current).toBe(0);
+      expect(renderHook(() => useChangedFileMark('s1', 'b.ts')).result.current).toBe('A');
+      expect(renderHook(() => useChangedFileMark('s1', 'nope')).result.current).toBeUndefined();
+      expect(renderHook(() => useChangedFileMark(undefined, 'b.ts')).result.current).toBeUndefined();
+      expect(renderHook(() => useChangedFiles('s1')).result.current).toEqual([a, b]);
+      expect(renderHook(() => useChangedFiles(undefined)).result.current).toBeUndefined();
+    });
   });
 });
 

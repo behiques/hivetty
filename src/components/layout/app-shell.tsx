@@ -7,6 +7,7 @@ import { Header } from '@components/layout/header';
 import { LeftRail } from '@components/layout/left-rail';
 import { ListPanel } from '@components/layout/list-panel';
 import { RailHandles } from '@components/layout/rail-handles';
+import { SessionPanel } from '@components/layout/session-panel';
 import { TitleBar } from '@components/layout/title-bar';
 import { useProjectWatcher } from '@features/explorer/hooks/use-project-watcher';
 import { useSessionStatus } from '@features/sessions/hooks/use-session-status';
@@ -200,7 +201,8 @@ export function AppShell() {
           <LeftRail />
         )}
         <CenterStage />
-        {showActivityRail ? <ActivityRail /> : null}
+        {/* Round two's right side is the session panel (HIVE-201); Classic keeps its rail. */}
+        {roundTwo ? <SessionPanel /> : showActivityRail ? <ActivityRail /> : null}
 
         {/* HIVE-105's drag handles are Classic's; round two's panel is fixed. */}
         {roundTwo ? null : <RailHandles containerRef={railRef} />}
