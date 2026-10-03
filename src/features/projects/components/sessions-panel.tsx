@@ -44,7 +44,7 @@ export function SessionsPanel() {
         <h2 className="text-[14px] font-semibold text-ink">Projects</h2>
         <span className="text-[12px] text-muted">
           <span className="text-green">{live} live</span> ·{' '}
-          <span className="text-amber">{needs} needs you</span>
+          <span className="text-amber-count">{needs} needs you</span>
         </span>
         <button
           type="button"

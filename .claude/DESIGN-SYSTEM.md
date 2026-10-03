@@ -62,7 +62,9 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 itself. Light: the amber with 30% ink (a `color-mix`, not a hex), at least 4.5:1
 on bg, panel, panel-2 and chip, where `--cc-amber` as text is about 3.5:1 on
 white. Used only for needs-you count numbers: the activity bar, the Inbox pill,
-the project rows and Home's Needs you strip. Every other amber stays `--cc-amber`.
+the project rows, Home's Needs you strip, the Sessions, Agents, Work and PRs list
+headers, and the Overmind's NEEDS YOU and ASKING group heads (on the terminal
+ground, which in light is panel-2). Every other amber stays `--cc-amber`.
 Being a mix, an imported theme derives it from its own amber and ink.
 
 **Colours derived from the creatures' two:**
