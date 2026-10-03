@@ -29,6 +29,12 @@ jobs:
 `;
 
 describe('parseWorkflow', () => {
+  it('reads a block needs list at the same indent as its key', () => {
+    const def = parseWorkflow('ci.yml', 'jobs:\n  build:\n    needs:\n    - lint\n    - unit\n    name: Build\n  lint:\n    runs-on: x\n');
+    expect(def.jobs[0]).toEqual({ id: 'build', name: 'Build', needs: ['lint', 'unit'] });
+    expect(def.jobs.map((j) => j.id)).toEqual(['build', 'lint']);
+  });
+
   it('reads the name, each job id, its name and its needs in every shape', () => {
     expect(parseWorkflow('ci.yml', CI)).toEqual({
       file: 'ci.yml',

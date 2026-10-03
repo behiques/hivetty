@@ -153,7 +153,12 @@ export function layoutGraph(
   const sections: { file: string; placed: Placed[]; needs: Map<string, string[]> }[] = [];
   let base = 0;
 
+  /* `runs` is newest first: a workflow that ran twice for one sha (push and pull_request) is drawn once, from its newest run. */
+  const drawn = new Set<string>();
+  const seenKeys = new Set<string>();
   for (const one of runs) {
+    if (drawn.has(one.workflowName)) continue;
+    drawn.add(one.workflowName);
     const flow = workflows.find((w) => w.name === one.workflowName || one.workflowName.endsWith(w.file));
     const pool = [...(jobsByRun[one.id] ?? [])];
     const defs = flow?.jobs ?? [];
@@ -173,6 +178,11 @@ export function layoutGraph(
       else if (legs.length > 1) for (const leg of legs) placed.push({ node: nodeOf(`${def.id}#${String(leg.id)}`, leg.name, [leg], now, null), defId: def.id, col });
       else placed.push({ node: nodeOf(def.id, legs[0]?.name ?? label, legs, now, null), defId: def.id, col });
     }
+    /* Two workflows may name a job alike: the later one's keys carry its file. */
+    for (const p of placed) {
+      if (seenKeys.has(p.node.key)) p.node.key = `${flow?.file ?? one.workflowName}:${p.node.key}`;
+    }
+    for (const p of placed) seenKeys.add(p.node.key);
     sections.push({ file: flow?.file ?? one.workflowName, placed, needs: new Map(units.map((u) => [u.def.id, u.def.needs])) });
     base += Math.max(0, ...placed.map((p) => p.col - base)) + 1;
   }

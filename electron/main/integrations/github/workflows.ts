@@ -67,7 +67,7 @@ export function parseWorkflow(file: string, text: string): WorkflowDef {
     }
     if (job === null || indent <= jobIndent) continue;
 
-    if (blockNeeds !== -1 && indent > blockNeeds && body.startsWith('- ')) {
+    if (blockNeeds !== -1 && indent >= blockNeeds && body.startsWith('- ')) {
       job.needs.push(scalar(body.slice(2)));
       continue;
     }

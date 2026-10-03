@@ -146,6 +146,26 @@ describe('layoutGraph', () => {
     expect(graph.edges.some((e) => e.key.includes('preview'))).toBe(false);
   });
 
+  it('lays out one workflow once when a push ran it twice (push and pull_request)', () => {
+    const twice = [run({ id: 1, workflowName: 'CI', event: 'pull_request' }), run({ id: 2, workflowName: 'CI', event: 'push' })];
+    const graph = layoutGraph([ci], twice, { 1: jobs[1], 2: jobs[1].map((j) => ({ ...j, id: j.id + 100, runId: 2 })) }, new Set(), NOW);
+    const keys = graph.nodes.map((n) => n.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).toHaveLength(4);
+    expect(new Set(graph.edges.map((e) => e.key)).size).toBe(graph.edges.length);
+  });
+
+  it('keeps node and edge keys unique when two workflows name a job alike', () => {
+    const other = wf('other.yml', [['install', []], ['lint', ['install']]], 'Other');
+    const both = [run({ id: 1, workflowName: 'CI' }), run({ id: 2, workflowName: 'Other' })];
+    const graph = layoutGraph([ci, other], both, { ...jobs, 2: [job(70, 'install', { runId: 2 }), job(71, 'lint', { runId: 2 })] }, new Set(), NOW);
+    const keys = graph.nodes.map((n) => n.key);
+    expect(keys).toHaveLength(6);
+    expect(new Set(keys).size).toBe(6);
+    expect(new Set(graph.edges.map((e) => e.key)).size).toBe(graph.edges.length);
+    expect(at(graph, 'install')?.x).toBe(0);
+  });
+
   it('draws jobs from a run with no workflow file as boxes without edges', () => {
     const graph = layoutGraph([], [run({ id: 1, workflowName: '.github/workflows/gone.yml' })], { 1: [job(60, 'lint'), job(61, 'unit')] }, new Set(), NOW);
     expect(graph.nodes.map((n) => [n.label, n.x])).toEqual([['lint', 0], ['unit', 0]]);
