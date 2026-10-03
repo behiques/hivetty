@@ -821,6 +821,14 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    */
   const NOTIFICATION_TYPE_IN_PREFIX = /"notification_type"\s*:\s*"([a-z_]+)"/;
 
+  /** The tools whose edits the changed-files reader counts (HIVE-201). */
+  const FILE_TOOL_NAMES: ReadonlySet<string> = new Set([
+    'Edit',
+    'Write',
+    'MultiEdit',
+    'NotebookEdit',
+  ]);
+
   /**
    * And once more for `tool_name`, which HIVE-83 needs to keep a blocked
    * session from stranding on `waiting`.
@@ -833,8 +841,6 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * `mcp__server__tool` — so word characters and underscores, same
    * conservatism as the other prefix regexes here.
    */
-  /** The tools whose edits the changed-files reader counts (HIVE-201). */
-  const FILE_TOOL_NAMES: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
   const TOOL_NAME_IN_PREFIX = /"tool_name"\s*:\s*"([A-Za-z0-9_]+)"/;
 
   /**

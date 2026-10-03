@@ -73,6 +73,11 @@ import {
   type LiveRunSummary,
   type RunSummary,
 } from '@shared/agent-contract';
+import type {
+  ChangedFile,
+  ChangedFilesEvent,
+  ChangedFilesSnapshot,
+} from '@shared/changed-files-contract';
 import type { ModeChange } from '@shared/config-contract';
 import type { GhResult, PrRecord, PrsSnapshot } from '@shared/github-contract';
 import type { IdleDetail } from '@shared/hook-contract';
@@ -432,6 +437,8 @@ interface HiveState {
    * is.
    */
   plans: Record<string, SessionPlan>;
+  /** Each session's changed files, keyed by main's entity id (HIVE-201). Mirrors `changed-files:list`. */
+  changedFiles: Record<string, ChangedFile[]>;
 
   /** Replace the ticket list with real issues (HIVE-69). */
   hydrateTickets: (issues: JiraIssue[], capped: boolean) => void;
@@ -638,6 +645,10 @@ interface HiveState {
   setPlan: (entityId: string, plan: SessionPlan | null) => void;
   /** Merge a `plans:list` snapshot by entity id, like {@link hydrateLedger}. */
   hydratePlans: (plans: SessionPlan[]) => void;
+  /** Replace one session's changed files; `[]` removes the entry (HIVE-201). */
+  setChangedFiles: (entityId: string, files: ChangedFile[]) => void;
+  /** Merge a `changed-files:list` snapshot by entity id, like {@link hydratePlans}. */
+  hydrateChangedFiles: (sessions: ChangedFilesEvent[]) => void;
   /**
    * Put last run's fleet back on the table (HIVE-87).
    *
@@ -1813,6 +1824,8 @@ const ATTACH_SNAPSHOT_HANDLERS: Partial<
   [CH.ledgerList]: (value, store) =>
     store.hydrateLedger((value as LedgerSnapshot).entries),
   [CH.plansList]: (value, store) => store.hydratePlans((value as PlansSnapshot).plans),
+  [CH.changedFilesList]: (value, store) =>
+    store.hydrateChangedFiles((value as ChangedFilesSnapshot).sessions),
   [CH.notificationsList]: (value, store) =>
     store.hydrateNotifs(value as HiveNotification[]),
   [CH.githubPrs]: (value, store) => {
@@ -1834,6 +1847,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   ledger: [],
   metrics: {},
   plans: {},
+  changedFiles: {},
   /**
    * Loading until the first read answers.
    *
@@ -3531,6 +3545,24 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     set((state) => ({
       ...state,
       plans: { ...state.plans, ...Object.fromEntries(plans.map((plan) => [plan.entityId, plan])) },
+    })),
+
+  setChangedFiles: (entityId, files) =>
+    set((state) => {
+      if (files.length === 0) {
+        if (!(entityId in state.changedFiles)) return state;
+        const { [entityId]: _gone, ...rest } = state.changedFiles;
+        return { ...state, changedFiles: rest };
+      }
+      return { ...state, changedFiles: { ...state.changedFiles, [entityId]: files } };
+    }),
+  hydrateChangedFiles: (sessions) =>
+    set((state) => ({
+      ...state,
+      changedFiles: {
+        ...state.changedFiles,
+        ...Object.fromEntries(sessions.map((session) => [session.entityId, session.files])),
+      },
     })),
 
   hydrateLedger: (entries) =>
@@ -5527,6 +5559,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       metrics: {},
       // Keyed by the same colliding ids as `metrics` (HIVE-179).
       plans: {},
+      changedFiles: {},
       /*
         Results, not just the request behind them.
 
@@ -5602,6 +5635,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       ledger: [],
       metrics: {},
       plans: {},
+      changedFiles: {},
       ticketSource: { kind: 'loading' },
       prSource: { kind: 'loading' },
       prSearch: NO_PR_SEARCH,
@@ -6877,6 +6911,31 @@ export const useSetPlan = () => useHiveStore((state) => state.setPlan);
 
 /** Merge the `plans:list` snapshot (HIVE-179). */
 export const useHydratePlans = () => useHiveStore((state) => state.hydratePlans);
+
+/** The session's changed files, first-seen order (HIVE-201). Keyed by main's id: pass `terminalOf(session)`. */
+export const useChangedFiles = (id: string | undefined) =>
+  useHiveStore((state) => (id === undefined ? undefined : state.changedFiles[id]));
+
+/** How many files the session changed; 0 without a list. */
+export const useChangedFileCount = (id: string | undefined) =>
+  useHiveStore((state) => (id === undefined ? 0 : (state.changedFiles[id]?.length ?? 0)));
+
+/**
+ * One tree row's mark. A primitive, so a row re-renders only on its own change.
+ *
+ * ponytail: linear scan per row; a session changes tens of files, so a Map
+ * keyed by path is only worth it past hundreds.
+ */
+export const useChangedFileMark = (id: string | undefined, path: string) =>
+  useHiveStore((state) =>
+    id === undefined ? undefined : state.changedFiles[id]?.find((file) => file.path === path)?.mark,
+  );
+
+/** Replace one session's changed files (HIVE-201). */
+export const useSetChangedFiles = () => useHiveStore((state) => state.setChangedFiles);
+
+/** Merge the `changed-files:list` snapshot (HIVE-201). */
+export const useHydrateChangedFiles = () => useHiveStore((state) => state.hydrateChangedFiles);
 
 /** A confirmed ticket key the user named mid-session (HIVE-78). */
 export const useSetSessionTicket = () =>

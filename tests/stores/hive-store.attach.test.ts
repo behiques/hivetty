@@ -460,3 +460,38 @@ describe('plans (HIVE-179)', () => {
     expect(state().plans).toEqual({});
   });
 });
+
+/** The changed-files slice (HIVE-201): mirrored the way plans are. */
+describe('changed files (HIVE-201)', () => {
+  const a = { path: 'src/a.ts', mark: 'M' as const, added: 2, removed: 1 };
+  const b = { path: 'b.ts', mark: 'A' as const, added: 4, removed: 0 };
+
+  it('hydrates by merging, replaces one session, and deletes on []', () => {
+    state().hydrateChangedFiles([{ entityId: 's1', files: [a] }]);
+    state().setChangedFiles('s2', [b]);
+    expect(state().changedFiles).toEqual({ s1: [a], s2: [b] });
+    state().setChangedFiles('s1', []);
+    expect(state().changedFiles).toEqual({ s2: [b] });
+  });
+
+  it('[] for a session with no list changes nothing', () => {
+    const before = state().changedFiles;
+    state().setChangedFiles('nobody', []);
+    expect(state().changedFiles).toBe(before);
+  });
+
+  it('applyAttachSnapshot hydrates CH.changedFilesList, merging', () => {
+    state().setChangedFiles('old', [b]);
+    state().applyAttachSnapshot({ [CH.changedFilesList]: { sessions: [{ entityId: 's1', files: [a] }] } });
+    expect(state().changedFiles).toEqual({ old: [b], s1: [a] });
+  });
+
+  it('clearModeEntities and reset clear changed files', () => {
+    state().setChangedFiles('s1', [a]);
+    state().clearModeEntities();
+    expect(state().changedFiles).toEqual({});
+    state().setChangedFiles('s1', [a]);
+    state().reset();
+    expect(state().changedFiles).toEqual({});
+  });
+});
