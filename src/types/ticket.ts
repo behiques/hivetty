@@ -78,3 +78,20 @@ export interface TicketDetail {
   readAt?: number;
   problems: { detail?: string; comments?: string };
 }
+
+/** The ticket page's key/value column, derived (HIVE-203). Absent keys have no row. */
+export interface TicketProperties {
+  status: string;
+  /** The title's `[Pn]` tag, else Jira's priority. */
+  priority?: string;
+  /** The title's `[BE]`/`[FE]` tag. */
+  side?: string;
+  /** The first live session's project. */
+  project?: string;
+  /** `Unassigned` when Jira has nobody. */
+  assignee: string;
+  /** Whoever posted the latest progress on the ticket. */
+  agent?: string;
+  /** The parent's key, once the detail has been read. */
+  epic?: string;
+}

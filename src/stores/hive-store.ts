@@ -30,7 +30,7 @@ import {
 import type { HiveNotification } from '@/types/notification';
 import type { Pr, SessionPr, TicketPr } from '@/types/pull-request';
 import type { TermLine } from '@/types/terminal';
-import type { Ticket, TicketDetail } from '@/types/ticket';
+import type { Ticket, TicketDetail, TicketProperties } from '@/types/ticket';
 
 import { isDesktop } from '@config/runtime';
 import {
@@ -68,6 +68,13 @@ import {
   requestSpawnTerminal,
 } from '@lib/terminal/pty-transport';
 import { sendToSession } from '@lib/terminal/session-input';
+import {
+  groupTickets,
+  ticketRow,
+  type TicketGroup,
+  type TicketRowModel,
+} from '@lib/ticket-activity';
+import { parseTitleTags } from '@lib/ticket-tags';
 import { BRIDGE_ERROR } from '@lib/utils';
 import {
   SESSION_ID_PREFIX_PATTERN,
@@ -89,7 +96,12 @@ import {
   type RemoteLinkStatus,
   type SessionNameReport,
 } from '@shared/ipc-contract';
-import type { JiraComment, JiraIssue } from '@shared/jira-contract';
+import {
+  nextTransition,
+  type JiraComment,
+  type JiraIssue,
+  type JiraTransition,
+} from '@shared/jira-contract';
 import {
   LEDGER_MEMORY_CAP,
   type LedgerEntry,
@@ -7952,6 +7964,122 @@ export const useTicket = (ticketKey: string | null): Ticket | undefined =>
       ? undefined
       : state.tickets.find((ticket) => ticket.key === ticketKey),
   );
+
+/**
+ * The Work panel's row for each ticket in `tickets` (HIVE-203): the title with
+ * its tags dropped, the tone of its dot, and the one fact that leads.
+ *
+ * Takes the list rather than reading it so search results get the same rows
+ * as the standing list.
+ */
+export const useTicketRowModels = (tickets: readonly Ticket[]): TicketRowModel[] => {
+  const all = useHiveStore((state) => state.tickets);
+  const fleet = useHiveStore(selectSessionFacets);
+  const entities = useHiveStore((state) => state.entities);
+  const prs = useHiveStore((state) => state.prs);
+  const ledger = useHiveStore((state) => state.ledger);
+
+  // ponytail: recomputes every row on any entity write; the panel is one component, not the terminals.
+  return useMemo(
+    () =>
+      tickets.map((ticket) => {
+        const sessions = liveSessionsForTicket(ticket.key, fleet).flatMap((id) => {
+          const entity = entities[id];
+          return entity && isSession(entity) ? [entity.status] : [];
+        });
+        return ticketRow({
+          ticket,
+          sessions,
+          prs: resolveTicketPrs(ticket.key, all, fleet, prs),
+          progress: buildProgressFor(ledger, ticket.key),
+        });
+      }),
+    [tickets, all, fleet, entities, prs, ledger],
+  );
+};
+
+/** The Work panel's groups, In progress then To do then Done, with its counts (HIVE-203). */
+export const useTicketGroups = (): { groups: TicketGroup[]; total: number; needYou: number } => {
+  const rows = useTicketRowModels(useTickets());
+
+  return useMemo(() => groupTickets(rows), [rows]);
+};
+
+/**
+ * The ticket the Work page shows (HIVE-203): the list's, else the issue the
+ * detail slice read for itself because the list does not hold it.
+ */
+export const useOpenTicket = (ticketKey: string | null): Ticket | undefined =>
+  useHiveStore((state) => {
+    if (ticketKey === null) return undefined;
+    const listed = state.tickets.find((ticket) => ticket.key === ticketKey);
+    if (listed) return listed;
+    const open = state.ticketDetail;
+    return open?.key === ticketKey ? open.issue : undefined;
+  });
+
+/** The ticket page's key/value column (HIVE-203). */
+export const useTicketProperties = (ticketKey: string): TicketProperties | undefined => {
+  const ticket = useOpenTicket(ticketKey);
+  const fleet = useHiveStore(selectSessionFacets);
+  const entities = useHiveStore((state) => state.entities);
+  const ledger = useHiveStore((state) => state.ledger);
+  const parent = useHiveStore((state) =>
+    state.ticketDetail?.key === ticketKey ? state.ticketDetail.detail?.parent : undefined,
+  );
+
+  return useMemo(() => {
+    if (ticket === undefined) return undefined;
+    const tags = parseTitleTags(ticket.title);
+    const priority = tags.priority ?? ticket.priority ?? undefined;
+    const live = liveSessionsForTicket(ticketKey, fleet)
+      .map((id) => entities[id])
+      .find((entity) => entity !== undefined && isSession(entity));
+    const agent = buildProgressFor(ledger, ticketKey)?.from;
+    return {
+      status: ticket.status,
+      ...(priority ? { priority } : {}),
+      ...(tags.side ? { side: tags.side } : {}),
+      ...(live ? { project: live.project } : {}),
+      assignee: ticket.assignee ?? 'Unassigned',
+      ...(agent ? { agent } : {}),
+      ...(parent ? { epic: parent.key } : {}),
+    };
+  }, [ticket, ticketKey, fleet, entities, ledger, parent]);
+};
+
+/**
+ * The ticket's ledger events (HIVE-203): what `ledger:list` answered on open,
+ * plus what the tail has appended since, deduped by id and in id order — ids
+ * sort in write order.
+ */
+export const useTicketEvents = (ticketKey: string): LedgerEntry[] => {
+  const history = useHiveStore((state) =>
+    state.ticketDetail?.key === ticketKey ? state.ticketDetail.history : undefined,
+  );
+  const ledger = useHiveStore((state) => state.ledger);
+  const query = useMemo<LedgerReadQuery>(() => ({ ticket: ticketKey }), [ticketKey]);
+
+  return useMemo(() => {
+    const byId = new Map<string, LedgerEntry>();
+    for (const entry of history ?? []) byId.set(entry.id, entry);
+    for (const entry of ledger) if (matches(entry, query)) byId.set(entry.id, entry);
+    return [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }, [history, ledger, query]);
+};
+
+/** The one step forward from the ticket's status, from its cached transitions (HIVE-203, D6). */
+export const useNextTransition = (ticketKey: string): JiraTransition | undefined => {
+  const ticket = useOpenTicket(ticketKey);
+  const transitions = useHiveStore((state) =>
+    state.ticketDetail?.key === ticketKey ? state.ticketDetail.transitions : undefined,
+  );
+
+  return useMemo(
+    () => (ticket === undefined ? undefined : nextTransition(transitions ?? [], ticket.statusCategory)),
+    [ticket, transitions],
+  );
+};
 
 /**
  * How many work items exist — the left rail's Work tab badge (story 030).
