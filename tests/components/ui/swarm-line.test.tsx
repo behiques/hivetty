@@ -21,7 +21,7 @@ describe('SwarmLine', () => {
    * explaining what actually happened.
    */
   it('is muted, not coloured', () => {
-    render(<SwarmLine phraseKey="empty.inbox" />);
+    render(<SwarmLine phraseKey="empty.work" />);
 
     const line = document.querySelector('[data-swarm-line]');
 
