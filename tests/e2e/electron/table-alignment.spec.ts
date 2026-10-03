@@ -7,6 +7,8 @@ import {
   type Page,
 } from '@playwright/test';
 
+import { goToOvermind } from '../fixtures/places';
+
 import {
   launchHive,
   startSession,
@@ -169,7 +171,7 @@ test('the PLAN header sits over the plan cells', async ({}, testInfo) => {
 
   try {
     await startSession(page, PROJECT);
-    await page.getByRole('button', { name: 'Back to overmind' }).click();
+    await goToOvermind(page);
 
     const xs = await columnXs(page, 'plan');
 
@@ -211,6 +213,7 @@ test('the PR header still sits over the PR cells beside a resume control', async
   await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
+    await goToOvermind(page);
     await expect(endedHead(page)).toBeVisible();
     await revealEnded(page);
 
@@ -252,7 +255,7 @@ test('the PR header still sits over the PR cells beside a resume control', async
  * `COL`'s docblock computes it — 17 characters at 12.5px in this monospace face
  * is about 128px — and that computation is exactly the kind of thing that is
  * right until the type scale, the density or the font stack moves under it.
- * `MIN_WINDOW_SIZE` is 1100px and the two rails leave the centre stage roughly
+ * `MIN_WINDOW_SIZE` is 1100px and the bar and the list panel leave the centre stage roughly
  * 516px of it, so the whole flex line is spent; there is no slack for an
  * estimate to be wrong into.
  *
@@ -288,7 +291,7 @@ test('the status column fits its widest label at the minimum window size', async
     await resizeTo(app, page, 1100);
 
     await startSession(page, PROJECT);
-    await page.getByRole('button', { name: 'Back to overmind' }).click();
+    await goToOvermind(page);
 
     const cell = page.locator('[data-col="status"]').last();
     await expect(cell).toBeVisible();
@@ -379,6 +382,7 @@ test('the columns hold together at the minimum window with a resumable row', asy
 
   try {
     await resizeTo(second, page, 1100);
+    await goToOvermind(page);
 
     /*
       Wait for the restored fleet to paint **before** counting.
@@ -472,7 +476,7 @@ test('the LAST USED column fits its widest label at the minimum window size', as
     await resizeTo(app, page, 1100);
 
     await startSession(page, PROJECT);
-    await page.getByRole('button', { name: 'Back to overmind' }).click();
+    await goToOvermind(page);
 
     const cell = page.locator('[data-col="last-used"]').last();
     await expect(cell).toBeVisible();

@@ -2,6 +2,8 @@ import { join } from 'node:path';
 
 import { test as base, expect } from '@playwright/test';
 
+import { goToOvermind } from '../fixtures/places';
+
 import {
   launchHive,
   startSession,
@@ -54,8 +56,9 @@ test('start a session, quit, relaunch — it is still listed, under ENDED', asyn
   await secondWindow.waitForSelector('nav[aria-label="Places"]');
 
   try {
+    await goToOvermind(secondWindow);
     /*
-      The app boots into the orchestrator, so the table is already on screen.
+      Round two boots on Home, so the table is one place away.
 
       ENDED, not PREVIOUS RUN. That group is gone: it was a layout answer to an
       ordering problem — while the lists were in insertion order, the top of
@@ -74,7 +77,10 @@ test('start a session, quit, relaunch — it is still listed, under ENDED', asyn
       is `resume <id>`. An unanchored pattern matches both and Playwright's
       strict mode — correctly — refuses to guess which one the test meant.
     */
-    const row = secondWindow.getByRole('button', { name: new RegExp(`^${id}\\b`) });
+    // The fleet table's row: the Sessions list draws one for it too.
+    const row = secondWindow
+      .getByTestId('session-table')
+      .getByRole('button', { name: new RegExp(`^${id}\\b`) });
     await expect(row).toBeVisible();
 
     /*
@@ -145,6 +151,7 @@ test('a fresh profile still boots with an empty fleet', async ({}, testInfo) => 
   await window.waitForSelector('nav[aria-label="Places"]');
 
   try {
+    await goToOvermind(window);
     await expect(window.getByTestId('session-table-empty')).toBeVisible();
     await expect(window.getByText(/^ENDED · \d+$/)).toBeHidden();
   } finally {

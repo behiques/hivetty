@@ -8,6 +8,8 @@ import {
   type Page,
 } from '@playwright/test';
 
+import { openConsole } from '../fixtures/places';
+
 import { launchHive, writeProjectConfig } from './fixtures/hive-app';
 
 /**
@@ -134,6 +136,7 @@ test('a fleet taller than the stage scrolls, and the console stays on screen', a
   await page.waitForSelector('nav[aria-label="Places"]');
 
   try {
+    await openConsole(page);
     const table = page.getByTestId('session-table');
     /*
       By text rather than by role: this waits for the *hydrate* to have landed,

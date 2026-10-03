@@ -26,12 +26,20 @@ export async function goToPlace(page: Page, name: PlaceName): Promise<void> {
  * The Overmind on the stage. A place change keeps whatever holds the stage (a
  * session, a terminal, an agent's page); a second click on Sessions, already
  * current, returns the stage to the Overmind (ui-store `selectPlace`).
+ *
+ * Under 1,200px the list panel overlays the stage instead of taking a column
+ * (HIVE-211), so there a further click folds it off the Overmind's controls.
  */
 export async function goToOvermind(page: Page): Promise<void> {
   await goToPlace(page, 'Sessions');
   const head = page.getByRole('main').getByRole('heading', { level: 1, name: /^Overmind/ });
   if (!(await head.isVisible())) await placeButton(page, 'Sessions').click();
   await expect(head).toBeVisible();
+  const list = page.getByRole('region', { name: 'Sessions list' });
+  if ((await page.evaluate(() => window.innerWidth)) < 1200 && (await list.isVisible())) {
+    await placeButton(page, 'Sessions').click();
+    await expect(list).toBeHidden();
+  }
 }
 
 /** The unfiltered Overmind's New session, scoped to the stage: the Sessions panel head has a "+" of the same name. */
