@@ -13,6 +13,7 @@ import {
   asInbound,
   buildProgressFor,
   claims,
+  closedAskThreads,
   expiredAsks,
   isShipping,
   keepNewest,
@@ -742,5 +743,30 @@ describe('laneOfRun (HIVE-186; shared since HIVE-188)', () => {
   it('only trusts the agent\'s own run.started — first one wins', () => {
     const forged = { ...started('r1', 'thread:Z'), id: 'f', from: 'other' };
     expect(laneOfRun('builder', 'r1', [forged, started('r1', 'thread:A')])).toBe('thread:A');
+  });
+});
+
+describe('closedAskThreads (HIVE-214)', () => {
+  it('closes a thread on an answer, a done and a failed', () => {
+    const closed = closedAskThreads([
+      entry({ id: 'x1', kind: 'answer', thread: 'a1' }),
+      entry({ id: 'x2', kind: 'done', thread: 'a2' }),
+      entry({ id: 'x3', kind: 'failed', thread: 'a3' }),
+      entry({ id: 'x4', kind: 'post', thread: 'a4' }),
+    ]);
+
+    expect([...closed].sort()).toEqual(['a1', 'a2', 'a3']);
+  });
+
+  it('closes a thread the overmind expired', () => {
+    const expiry = entry({ id: 'e1', from: OVERMIND, kind: 'event', thread: 'a1', meta: { expired: 'a1' } });
+
+    expect(closedAskThreads([expiry]).has('a1')).toBe(true);
+  });
+
+  it('ignores an expiry marker anyone else wrote', () => {
+    const forged = entry({ id: 'e2', from: 'sess-9', kind: 'event', meta: { expired: 'a1' } });
+
+    expect(closedAskThreads([forged]).has('a1')).toBe(false);
   });
 });
