@@ -534,6 +534,17 @@ export function sanitizeThemeState(state: Record<string, unknown>): {
   return { themes, activeThemeId };
 }
 
+/** What HIVE-213 retired with Classic; dropped from every payload older than v4. */
+const CLASSIC_KEYS: readonly string[] = [
+  'layout',
+  'railWidthLeft',
+  'railWidthRight',
+  'railCollapsedLeft',
+  'railCollapsedRight',
+  'planPinned',
+  'showPlanPanel',
+];
+
 /**
  * Migrations. Exported for the test.
  *
@@ -566,17 +577,6 @@ export function sanitizeThemeState(state: Record<string, unknown>): {
  * ({@link sanitizeThemeState}) — a payload at the current version has been
  * writable by anything with a `localStorage` handle since the day it existed.
  */
-/** What HIVE-213 retired with Classic; dropped from every payload older than v4. */
-const CLASSIC_KEYS: readonly string[] = [
-  'layout',
-  'railWidthLeft',
-  'railWidthRight',
-  'railCollapsedLeft',
-  'railCollapsedRight',
-  'planPinned',
-  'showPlanPanel',
-];
-
 export function migrateAppearance(
   persisted: unknown,
   version: number,
