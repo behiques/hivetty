@@ -1188,8 +1188,9 @@ export function createSessions(options: SessionsOptions): Sessions {
        * running.
        */
       statusTracker.reset(entityId);
-      // The plan belonged to the conversation `/clear` just retired (HIVE-179).
-      plans.drop(entityId);
+      // The plan, and the plan file it read, belonged to the conversation
+      // `/clear` just retired (HIVE-179, HIVE-201).
+      plans.forget(entityId);
       /*
         A declaration belongs to the conversation that made it (HIVE-93).
         `/clear` retires that conversation and opens a successor on the same
