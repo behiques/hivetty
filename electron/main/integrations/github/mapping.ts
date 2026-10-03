@@ -501,6 +501,23 @@ export function readPrId(payload: unknown): string | null {
   return raw === null ? null : text(raw.id);
 }
 
+/** The PR a review thread is on, from `PR_THREAD_OWNER_QUERY`'s data (HIVE-207), or `null`. */
+export function readThreadPr(payload: unknown): { owner: string; name: string; number: number } | null {
+  const node = isRecord(payload) ? payload.node : null;
+  const pr = isRecord(node) ? node.pullRequest : null;
+  const repository = isRecord(pr) ? pr.repository : null;
+  if (!isRecord(pr) || !isRecord(repository)) return null;
+  const number = whole(pr.number);
+  const owner = loginOf(repository.owner);
+  const name = text(repository.name);
+  return number === null || owner === null || name === null ? null : { owner, name, number };
+}
+
+/** Whether a mutation answered with its own field (HIVE-207); an empty `errors` proves nothing. */
+export function mutated(payload: unknown, field: string): boolean {
+  return isRecord(payload) && isRecord(payload[field]);
+}
+
 /** Whether `PR_COMMENT_MUTATION` answered with the comment added. */
 export function commentAdded(payload: unknown): boolean {
   return isRecord(payload) && isRecord(payload.addComment);

@@ -6,7 +6,9 @@ import {
   collectSearchPrs,
   commentAdded,
   countFindings,
+  mutated,
   readPrId,
+  readThreadPr,
   readViewerLogin,
   toChecks,
   toPrDetail,
@@ -658,5 +660,20 @@ describe('toPrDetail (HIVE-205)', () => {
     expect(commentAdded({ addComment: { subject: { id: 'PR_kwDO1' } } })).toBe(true);
     expect(commentAdded({ addComment: null })).toBe(false);
     expect(commentAdded(undefined)).toBe(false);
+  });
+});
+
+describe('readThreadPr and mutated (HIVE-207)', () => {
+  it('reads the PR a thread is on', () => {
+    expect(readThreadPr({ node: { pullRequest: { number: 482, repository: { owner: { login: 'acme' }, name: 'nova-web' } } } }))
+      .toEqual({ owner: 'acme', name: 'nova-web', number: 482 });
+  });
+  it.each([[null], [{ node: null }], [{ node: {} }], [{ node: { pullRequest: { number: 1 } } }]])('is null for %j', (payload) => {
+    expect(readThreadPr(payload)).toBeNull();
+  });
+  it('says whether a mutation answered with its field', () => {
+    expect(mutated({ resolveReviewThread: { thread: { id: 'T' } } }, 'resolveReviewThread')).toBe(true);
+    expect(mutated({ resolveReviewThread: null }, 'resolveReviewThread')).toBe(false);
+    expect(mutated(undefined, 'resolveReviewThread')).toBe(false);
   });
 });

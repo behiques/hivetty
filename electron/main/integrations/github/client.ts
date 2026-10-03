@@ -6,7 +6,9 @@ import {
   collectSearchPrs,
   commentAdded,
   hasAnyConnection,
+  mutated,
   readPrId,
+  readThreadPr,
   readViewerLogin,
   toPrDetail,
 } from './mapping';
@@ -17,8 +19,12 @@ import {
   PR_COMMENT_MUTATION,
   PR_DETAIL_QUERY,
   PR_ID_QUERY,
+  PR_THREAD_OWNER_QUERY,
   repoQualifiers,
   safeSearchTerm,
+  THREAD_REPLY_MUTATION,
+  THREAD_RESOLVE_MUTATION,
+  THREAD_UNRESOLVE_MUTATION,
   type RepoRef,
 } from './query';
 import type { RunAsync } from './run';
@@ -77,6 +83,10 @@ export interface GithubClient {
   comment(repo: RepoRef, n: number, body: string): Promise<GhResult<true>>;
   /** The PR's unified diff (HIVE-207), as `gh pr diff` prints it. */
   diff(repo: RepoRef, n: number): Promise<GhResult<string>>;
+  /** Reply to a review thread (HIVE-207), once the thread is proved to be on this PR. */
+  threadReply(repo: RepoRef, n: number, threadId: string, body: string): Promise<GhResult<true>>;
+  /** Resolve or unresolve a review thread (HIVE-207), behind the same proof. */
+  threadResolved(repo: RepoRef, n: number, threadId: string, resolved: boolean): Promise<GhResult<true>>;
 }
 
 export function createGithubClient(
@@ -222,6 +232,30 @@ export function createGithubClient(
     };
   };
 
+  /**
+   * Whether `threadId` is a thread on this PR (HIVE-207). The id comes from
+   * the renderer; this keeps a write on the PR `scoped()` admitted.
+   */
+  const threadOnPr = async (repo: RepoRef, n: number, threadId: string): Promise<GhResult<true>> => {
+    const found = await graphql(PR_THREAD_OWNER_QUERY, { id: threadId });
+    if (found === null) return NOT_RUN;
+    const on = readThreadPr(found.data);
+    if (on === null) return { ok: false, error: classifyGhFailure(found.stderr, found.timedOut) };
+    const same =
+      on.number === n &&
+      on.owner.toLowerCase() === repo.owner.toLowerCase() &&
+      on.name.toLowerCase() === repo.name.toLowerCase();
+    return same ? { ok: true, value: true } : { ok: false, error: ghError('unknown', 'That thread is not on this pull request.') };
+  };
+
+  /** One mutation whose success is its field in `data`. */
+  const write = async (query: string, field: string, strings: Record<string, string>): Promise<GhResult<true>> => {
+    const answer = await graphql(query, strings);
+    if (answer === null) return NOT_RUN;
+    if (!mutated(answer.data, field)) return { ok: false, error: classifyGhFailure(answer.stderr, answer.timedOut) };
+    return { ok: true, value: true };
+  };
+
   return {
     async sweep(repos, now) {
       const scoped = scopeFor(repos);
@@ -292,6 +326,20 @@ export function createGithubClient(
       }
       if (result.code !== 0) return { ok: false, error: classifyGhFailure(result.stderr, result.timedOut) };
       return { ok: true, value: result.stdout };
+    },
+
+    async threadReply(repo, n, threadId, body) {
+      const on = await threadOnPr(repo, n, threadId);
+      if (!on.ok) return on;
+      return write(THREAD_REPLY_MUTATION, 'addPullRequestReviewThreadReply', { threadId, body });
+    },
+
+    async threadResolved(repo, n, threadId, resolved) {
+      const on = await threadOnPr(repo, n, threadId);
+      if (!on.ok) return on;
+      return resolved
+        ? write(THREAD_RESOLVE_MUTATION, 'resolveReviewThread', { threadId })
+        : write(THREAD_UNRESOLVE_MUTATION, 'unresolveReviewThread', { threadId });
     },
   };
 }

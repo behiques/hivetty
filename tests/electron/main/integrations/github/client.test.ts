@@ -6,7 +6,11 @@ import {
   PR_COMMENT_MUTATION,
   PR_DETAIL_QUERY,
   PR_ID_QUERY,
+  PR_THREAD_OWNER_QUERY,
   type RepoRef,
+  THREAD_REPLY_MUTATION,
+  THREAD_RESOLVE_MUTATION,
+  THREAD_UNRESOLVE_MUTATION,
 } from '../../../../../electron/main/integrations/github/query';
 import type { RunAsync } from '../../../../../electron/main/integrations/github/run';
 
@@ -366,5 +370,70 @@ describe('diff (HIVE-207)', () => {
       .resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
     await expect(createGithubClient('/usr/bin/gh', () => Promise.resolve({ code: -1, stdout: '', stderr: '', timedOut: true })).diff(REF, 1))
       .resolves.toMatchObject({ ok: false, error: { kind: 'timeout' } });
+  });
+});
+
+describe('thread writes (HIVE-207)', () => {
+  const REF: RepoRef = { owner: 'acme', name: 'nova-web' };
+  const ON = (number = 482, owner = 'ACME', name = 'Nova-Web') =>
+    JSON.stringify({ data: { node: { pullRequest: { number, repository: { owner: { login: owner }, name } } } } });
+  const answering = (owner: string, mutation: string, calls: string[][]): RunAsync => (_file, args) => {
+    calls.push([...args]);
+    return Promise.resolve({ code: 0, stdout: args[3]?.includes('node(id:') === true ? owner : mutation, stderr: '', timedOut: false });
+  };
+
+  it('proves the thread is on the PR, then replies with the body as a -f string', async () => {
+    const calls: string[][] = [];
+    const client = createGithubClient('/usr/bin/gh', answering(ON(), JSON.stringify({ data: { addPullRequestReviewThreadReply: { comment: { id: 'C' } } } }), calls));
+    await expect(client.threadReply(REF, 482, 'PRRT_1', '@/etc/passwd')).resolves.toEqual({ ok: true, value: true });
+    expect(calls).toEqual([
+      ['api', 'graphql', '-f', `query=${PR_THREAD_OWNER_QUERY}`, '-f', 'id=PRRT_1'],
+      ['api', 'graphql', '-f', `query=${THREAD_REPLY_MUTATION}`, '-f', 'threadId=PRRT_1', '-f', 'body=@/etc/passwd'],
+    ]);
+  });
+
+  it.each([
+    [true, THREAD_RESOLVE_MUTATION, 'resolveReviewThread'],
+    [false, THREAD_UNRESOLVE_MUTATION, 'unresolveReviewThread'],
+  ])('resolved=%s sends its own mutation', async (resolved, doc, field) => {
+    const calls: string[][] = [];
+    const client = createGithubClient('/usr/bin/gh', answering(ON(), JSON.stringify({ data: { [field]: { thread: { id: 'PRRT_1' } } } }), calls));
+    await expect(client.threadResolved(REF, 482, 'PRRT_1', resolved)).resolves.toEqual({ ok: true, value: true });
+    expect(calls[1]).toEqual(['api', 'graphql', '-f', `query=${doc}`, '-f', 'threadId=PRRT_1']);
+  });
+
+  it.each([
+    ['another number', ON(483)],
+    ['another owner', ON(482, 'evil')],
+    ['another repository', ON(482, 'acme', 'other')],
+    ['no such thread', JSON.stringify({ data: { node: null } })],
+  ])('refuses a thread on %s and never writes', async (_name, owner) => {
+    const calls: string[][] = [];
+    const client = createGithubClient('/usr/bin/gh', answering(owner, '{}', calls));
+    await expect(client.threadReply(REF, 482, 'PRRT_1', 'hi')).resolves.toMatchObject({ ok: false });
+    await expect(client.threadResolved(REF, 482, 'PRRT_1', true)).resolves.toMatchObject({ ok: false });
+    expect(calls.filter((args) => args[3]?.startsWith('query=mutation') === true)).toEqual([]);
+  });
+
+  it('names the mismatch', async () => {
+    const client = createGithubClient('/usr/bin/gh', answering(ON(9), '{}', []));
+    await expect(client.threadReply(REF, 482, 'PRRT_1', 'hi')).resolves.toEqual({
+      ok: false, error: { kind: 'unknown', message: 'That thread is not on this pull request.' },
+    });
+  });
+
+  it('reports a mutation GitHub refused, classified', async () => {
+    const client = createGithubClient('/usr/bin/gh', (_file, args) => Promise.resolve({
+      code: 1,
+      stdout: args[3]?.includes('node(id:') === true ? ON() : JSON.stringify({ data: { resolveReviewThread: null } }),
+      stderr: 'API rate limit exceeded',
+      timedOut: false,
+    }));
+    await expect(client.threadResolved(REF, 482, 'PRRT_1', true)).resolves.toMatchObject({ ok: false, error: { kind: 'rate-limited' } });
+  });
+
+  it('answers not-installed when gh will not run', async () => {
+    await expect(createGithubClient('/usr/bin/gh', () => Promise.reject(new Error('ENOENT'))).threadReply(REF, 1, 'T', 'x'))
+      .resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
   });
 });
