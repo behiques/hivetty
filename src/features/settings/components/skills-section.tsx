@@ -27,17 +27,17 @@ import {
 
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { REMOTE_DISABLED_REASON } from '@config/runtime';
-import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import { SessionPluginsRow } from '@features/settings/components/session-plugins-row';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
+import { SkillBundle } from '@features/settings/components/skill-bundle';
+import { SkillEditor } from '@features/settings/components/skill-editor';
+import { SkillPathPrompt } from '@features/settings/components/skill-path-prompt';
+import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import {
   HeldBanner,
   ShippedDot,
   ShippedStrip,
 } from '@features/shared/components/shipped-marker';
-import { SkillBundle } from '@features/settings/components/skill-bundle';
-import { SkillEditor } from '@features/settings/components/skill-editor';
-import { SkillPathPrompt } from '@features/settings/components/skill-path-prompt';
 import { useRemoteCapabilities } from '@hooks/use-project-config';
 import { useShipped } from '@hooks/use-shipped';
 import { useSkills } from '@hooks/use-skills';
