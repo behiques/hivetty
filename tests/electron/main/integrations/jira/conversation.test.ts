@@ -537,3 +537,33 @@ describe('addComment', () => {
     expect(result.ok && result.value.via).toEqual({ agent: 'builder' });
   });
 });
+
+describe('searchUsers (HIVE-216)', () => {
+  it('asks user/search for eight, and keeps active people only', async () => {
+    const seen: { url: string; method: string }[] = [];
+    const result = await build({
+      fetch: replies(
+        [[200, [
+          { accountId: '712020:dana', displayName: 'Dana Kim', accountType: 'atlassian', active: true },
+          { accountId: 'gone', displayName: 'Gone', accountType: 'atlassian', active: false },
+          { accountId: 'bot', displayName: 'Automation', accountType: 'app', active: true },
+        ]]],
+        seen,
+      ),
+    }).searchUsers({ query: 'da' });
+
+    const url = new URL(seen[0]?.url ?? '');
+    expect(url.pathname).toBe('/rest/api/3/user/search');
+    expect(url.searchParams.get('query')).toBe('da');
+    expect(url.searchParams.get('maxResults')).toBe('8');
+    expect(result).toEqual({ ok: true, value: [{ accountId: '712020:dana', displayName: 'Dana Kim' }] });
+  });
+
+  it('reports a failure, and refuses before configuration without asking', async () => {
+    expect((await build({ fetch: replies([[403, {}]]) }).searchUsers({ query: 'da' })).ok).toBe(false);
+    const seen: { url: string; method: string }[] = [];
+    const bare = await build({ jira: { site: null, email: null, jql: null }, fetch: replies([[200, []]], seen) }).searchUsers({ query: 'da' });
+    expect(bare.ok).toBe(false);
+    expect(seen).toHaveLength(0);
+  });
+});

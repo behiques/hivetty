@@ -27,6 +27,8 @@ import {
   type JiraLink,
   type JiraStatus,
   type JiraTransition,
+  type JiraUser,
+  type JiraUsersRequest,
 } from '../../../shared/jira-contract';
 
 import { validateAdf } from './adf/adf-validate';
@@ -45,6 +47,7 @@ import {
   toIssue,
   toIssueDetail,
   toIssueLink,
+  toJiraUser,
   toRemoteLink,
   toTransition,
 } from './mapping';
@@ -66,6 +69,7 @@ import {
 const MYSELF = '/rest/api/3/myself';
 const SEARCH = '/rest/api/3/search/jql';
 const ISSUE = '/rest/api/3/issue';
+const USER_SEARCH = '/rest/api/3/user/search';
 
 export interface Jira {
   status(): JiraStatus;
@@ -106,6 +110,8 @@ export interface Jira {
    * header, never from a payload — `AddJiraCommentRequest` has no such field.
    */
   addComment(request: AddJiraCommentRequest, via?: { agent: string }): Promise<JiraResult<JiraComment>>;
+  /** People on the site matching a query, for the `@` picker and `jira_users` (HIVE-216). Active people only. */
+  searchUsers(request: JiraUsersRequest): Promise<JiraResult<JiraUser[]>>;
   /**
    * Assign the issue to whoever owns the token, then re-read it. The identity
    * comes from `/myself`, never from the caller: a parameter naming who to
@@ -697,6 +703,21 @@ export function createJira(deps: {
         };
       }
       return { ok: true, value: mapped };
+    },
+
+    async searchUsers(request) {
+      const connection = connect();
+      if (!connection.ok) return connection.error;
+
+      const result = await connection.client.get<unknown>(USER_SEARCH, { query: request.query, maxResults: '8' });
+      if (!result.ok) return result;
+
+      const users: JiraUser[] = [];
+      for (const entry of Array.isArray(result.value) ? result.value : []) {
+        const one = toJiraUser(entry);
+        if (one !== null) users.push(one);
+      }
+      return { ok: true, value: users };
     },
 
     async assignToMe(request) {
