@@ -1,28 +1,36 @@
-import type { ReactNode } from 'react';
+import { CaretRight, MagnifyingGlass } from '@phosphor-icons/react';
+import { useCallback, type ReactNode } from 'react';
 
 import { usePrRefresh } from '@/hooks/use-pr-refresh';
 import { usePullToRefresh } from '@/hooks/use-pull-to-refresh';
+import { cn } from '@/lib/utils';
 import { isSession } from '@/types/entity';
+import type { HatcheryRow } from '@/types/pull-request';
 
 import { EmptyState } from '@components/ui/empty-state';
 import { PullIndicator } from '@components/ui/pull-indicator';
-import { PrCard } from '@features/pull-requests/components/pr-card';
-import { PrListSkeleton } from '@features/pull-requests/components/pr-card-skeleton';
+import { PrRow } from '@features/pull-requests/components/pr-row';
+import { PrListSkeleton } from '@features/pull-requests/components/pr-row-skeleton';
 import { PrSearchRow } from '@features/pull-requests/components/pr-search-row';
+import { useOpenPr } from '@features/pull-requests/open-pr';
 import { SourceProblem } from '@features/shared/components/source-problem';
+import { useLayout } from '@stores/appearance-store';
 import {
+  prKey,
   useActiveEntity,
-  usePrs,
+  useHatchery,
+  useHatcherySearch,
+  usePrNeedsYouCount,
   usePrSearch,
-  usePrSearchResults,
   usePrSource,
   useRefreshPrs,
   type PrSource,
 } from '@stores/hive-store';
-import { usePrSearchTerm } from '@stores/ui-store';
+import { useClearPrSearch, usePrPageActions, usePrSearchOpen, usePrSearchTerm, usePrsFolded } from '@stores/ui-store';
 
 /**
- * Every PR the fleet has open — what is shippable, and what is blocked.
+ * The Hatchery (HIVE-205): every PR the fleet has open, in draft or merged in
+ * the last 24 hours, one two-line row each with HIVE-215's flap.
  *
  * ## Where they come from
  *
@@ -139,21 +147,73 @@ function PrsLayout({
   );
 }
 
+/** "Pull requests", "7 open · 2 need you", and the search icon while the sweep is live. */
+function Header({
+  open,
+  needYou,
+  canSearch,
+  searching,
+  onSearch,
+}: {
+  open: number;
+  needYou: number;
+  /** A search needs `gh`, so the icon shows only while the sweep is live (R3). */
+  canSearch: boolean;
+  searching: boolean;
+  onSearch: () => void;
+}) {
+  return (
+    <div className="flex items-baseline gap-2.5 px-2 pt-2.5 pb-2">
+      <h2 className="text-[14px] font-semibold text-ink">Pull requests</h2>
+      <span className="text-[12px] text-muted">
+        {`${String(open)} open`}
+        {needYou > 0 ? (
+          <>
+            {' · '}
+            <span className="text-amber">{`${String(needYou)} need you`}</span>
+          </>
+        ) : null}
+      </span>
+      <span className="flex-1" />
+      {canSearch ? (
+        <button
+          type="button"
+          aria-label="Search pull requests"
+          aria-pressed={searching}
+          onClick={onSearch}
+          className={cn(
+            'grid size-[22px] place-items-center self-center rounded-md hover:bg-hover',
+            searching ? 'text-ink' : 'text-muted',
+          )}
+        >
+          <MagnifyingGlass size={15} aria-hidden />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** A row's identity: `owner/repo#n`, unique where the short repo name is not (HIVE-171). */
+const rowKey = (row: HatcheryRow) => prKey(row.pr.owner, row.pr.repo, row.pr.n);
+
 export function PrsPanel() {
-  const prs = usePrs();
+  const rows = useHatchery();
+  const results = useHatcherySearch();
+  const needYou = usePrNeedsYouCount();
   const source = usePrSource();
   const refresh = useRefreshPrs();
   const search = usePrSearch();
-  const results = usePrSearchResults();
   const term = usePrSearchTerm();
+  const searchOpen = usePrSearchOpen();
+  const folded = usePrsFolded();
+  const { openPrPage, togglePrsFolded, setPrSearchOpen } = usePrPageActions();
+  const clearSearch = useClearPrSearch();
+  const layout = useLayout();
+  const openRow = useOpenPr();
 
   /**
-   * Which project a narrow search means.
-   *
-   * The active session's, which is the same rule the explorer follows — the
-   * app is organised around "which session am I watching", and a second
-   * selector for the search would be one more thing to keep in step with the
-   * first. `null` when nothing is being watched, which the row renders as a
+   * Which project a narrow search means: the watched session's, the explorer's
+   * rule. `null` when nothing is watched, which the search row renders as a
    * checked, disabled "All repos".
    */
   const entity = useActiveEntity();
@@ -164,29 +224,54 @@ export function PrsPanel() {
 
   /*
     Subscribes this panel to the shared poller: reads now if nothing else was
-    already polling, and keeps the timer alive while the tab is open. The WORK
-    panel holds the same subscription, so closing this one does not stop the
-    ticket cards from staying current.
+    already polling, and keeps the timer alive while the panel is open.
   */
   usePrRefresh();
 
-  const retry = () => {
-    void refresh();
+  /*
+    Overscrolling the top of the list forces a sweep. Off during a search, whose
+    results a sweep would not move, and during the first load.
+  */
+  const pull = usePullToRefresh({ onRefresh: refresh, disabled: searching || source.kind === 'loading' });
+
+  /** Round two opens the page; Classic has no page, so GitHub (D17). Stable, so rows stay memoised. */
+  const onOpen = useCallback(
+    (row: HatcheryRow) => {
+      if (layout === 'round-two') {
+        openPrPage({ owner: row.pr.owner, repo: row.pr.repo, n: row.pr.n, row });
+        return;
+      }
+      window.open(row.pr.url, '_blank', 'noopener,noreferrer');
+    },
+    [layout, openPrPage],
+  );
+
+  const toggleSearch = () => {
+    if (searchOpen) clearSearch();
+    setPrSearchOpen(!searchOpen);
   };
 
-  /*
-    Overscrolling the top of the list forces a sweep.
+  /* A string, not the row: the rows are rebuilt on every append, and `open` must stay equal for the memo. */
+  const openKey = layout === 'round-two' && openRow !== null ? rowKey(openRow) : null;
+  const live = rows.filter((row) => row.pr.state !== 'merged');
+  const hatched = rows.filter((row) => row.pr.state === 'merged');
+  const draw = (row: HatcheryRow) => {
+    const key = rowKey(row);
+    return <PrRow key={key} row={row} open={key === openKey} onOpen={onOpen} />;
+  };
 
-    Off during a search and during the first load. A search replaces the list
-    rather than filtering it, so pulling there would refresh a list the user
-    cannot currently see — and the results it *can* see would not move, which
-    reads as the gesture being broken rather than as it having done something
-    elsewhere.
-  */
-  const pull = usePullToRefresh({
-    onRefresh: refresh,
-    disabled: searching || source.kind === 'loading',
-  });
+  const header: ReactNode = (
+    <>
+      <Header
+        open={live.length}
+        needYou={needYou}
+        canSearch={source.kind === 'live'}
+        searching={searchOpen}
+        onSearch={toggleSearch}
+      />
+      {searchOpen ? <PrSearchRow projectId={projectId} focusOnMount /> : null}
+    </>
+  );
 
   /*
     The skeleton *replaces* the list rather than sitting above it, and only on
@@ -195,42 +280,26 @@ export function PrsPanel() {
   */
   if (source.kind === 'loading' && !searching) {
     return (
-      <PrsLayout header={<PrSearchRow projectId={projectId} />}>
+      <PrsLayout header={header}>
         <PrListSkeleton />
       </PrsLayout>
     );
   }
 
   /*
-    A search takes the panel over completely: its own results, its own empty
-    state, and none of the sweep's notices. Those notices are about the standing
-    list — "these may be out of date", "no project is a GitHub repository" — and
-    none of them describes what a search just did.
+    A search takes the panel over completely: its own results, by the same
+    flap rules (others' PRs never SUMMONS), and none of the sweep's notices,
+    which are about the standing list.
   */
   if (searching) {
     return (
-      <PrsLayout header={<PrSearchRow projectId={projectId} />}>
+      <PrsLayout header={header}>
         {search.error !== null ? (
-          <p className="px-1 pb-1 text-[11.5px] leading-[1.45] text-amber">
-            {search.error}
-          </p>
+          <p className="px-1 pb-1 text-[11.5px] leading-[1.45] text-amber">{search.error}</p>
         ) : null}
-
-        {/*
-          The skeleton stands in only for the **first** answer, while `results`
-          is still `null`. A re-search — narrowing, widening, another keystroke —
-          keeps the rows it has, which is the same rule the sweep's skeleton
-          follows: replacing a live list with grey boxes makes the panel blink
-          for something the user can already see.
-
-          Without this the first keystroke left the panel blank for the whole
-          debounce plus the round trip, because the search branch is entered on
-          the term rather than on a request being out.
-        */}
+        {/* The skeleton stands in only for the first answer; a re-search keeps the rows it has. */}
         {results === null && search.error === null ? <PrListSkeleton /> : null}
-
-        {results?.map((pr) => <PrCard key={pr.url} pr={pr} />)}
-
+        {results?.map(draw)}
         {search.error === null && !search.searching && results?.length === 0 ? (
           <EmptyState phrase="empty.pullRequests" creature="spire">
             Nothing matches “{term}”.
@@ -241,36 +310,33 @@ export function PrsPanel() {
   }
 
   return (
-    <PrsLayout header={<PrSearchRow projectId={projectId} />} listRef={pull.ref}>
+    <PrsLayout header={header} listRef={pull.ref}>
       <PullIndicator distance={pull.distance} phase={pull.phase} />
-
-      <SourceNotice source={source} onRetry={retry} />
-
+      <SourceNotice source={source} onRetry={() => void refresh()} />
+      {live.map(draw)}
+      {hatched.length > 0 ? (
+        <>
+          <button
+            type="button"
+            aria-expanded={!folded}
+            onClick={togglePrsFolded}
+            className="mt-1.5 flex items-center gap-2 border-t border-border-soft px-2 pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase"
+          >
+            <CaretRight size={12} aria-hidden className={cn(!folded && 'rotate-90')} />
+            {`Hatched · ${String(hatched.length)} · last 24h`}
+          </button>
+          {folded ? null : hatched.map(draw)}
+        </>
+      ) : null}
       {/*
-        Keyed on the URL, which is unique by construction. `repo#number` is not:
-        the contract keeps `owner` precisely because two configured repositories
-        can share a short name, and two `docs` repos under different owners with
-        the same PR number would collide — React would reconcile one card's DOM
-        onto the other's data.
+        An empty sweep is an answer, and `repos` says which kind: none open
+        across four repositories is good news; across zero, the app is looking
+        in the wrong place.
       */}
-      {prs.map((pr) => (
-        <PrCard key={pr.url} pr={pr} />
-      ))}
-
-      {/*
-        An empty sweep is an answer — "nothing of yours is open" — and it is one
-        a user can act on only if the panel says it. `repos` is included because
-        the two ways to have no PRs read very differently: none open across four
-        repositories is good news, and none open across zero repositories means
-        the app is looking in the wrong place.
-      */}
-      {prs.length === 0 && source.kind === 'live' ? (
+      {rows.length === 0 && source.kind === 'live' ? (
         <EmptyState phrase="empty.pullRequests" creature="spire">
           No open pull requests of yours across{' '}
-          {source.repos === 1
-            ? '1 repository'
-            : `${String(source.repos)} repositories`}
-          .
+          {source.repos === 1 ? '1 repository' : `${String(source.repos)} repositories`}.
         </EmptyState>
       ) : null}
     </PrsLayout>

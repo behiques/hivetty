@@ -60,7 +60,8 @@ export function useOnStage(): string | null {
   const work = layout === 'round-two' && place === 'work';
   const agentPage = useAgentPage();
   const agents = place === 'agents' && (layout === 'round-two' || agentPage !== null);
-  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work, agents });
+  const prs = layout === 'round-two' && place === 'prs';
+  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work, agents, prs });
   /*
     `entity` is non-null whenever the view is an entity view — `resolveView`
     falls back to the orchestrator without one — so the null check is a type

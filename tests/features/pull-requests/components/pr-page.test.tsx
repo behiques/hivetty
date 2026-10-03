@@ -1,0 +1,88 @@
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { PrPage } from '@features/pull-requests/components/pr-page';
+import { prKey, useHiveStore } from '@stores/hive-store';
+import { useUiStore } from '@stores/ui-store';
+import { hatchRow } from '@tests/support/hatchery';
+import { prDetail } from '@tests/support/pr-detail';
+
+const key = prKey('acme', 'incorpx-server', 1182);
+const load = vi.fn(() => Promise.resolve());
+const row = hatchRow({}, { flap: 'MUTATING', tone: 'green' });
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  useHiveStore.getState().reset();
+  useUiStore.getState().reset();
+  useHiveStore.setState({
+    loadPrDetail: load,
+    prDetails: { [key]: { key, state: 'ok', detail: prDetail(), readAt: Date.now() } },
+    ledger: [
+      {
+        id: '20261003-085000-001',
+        ts: Date.parse('2026-10-03T08:50:00Z'),
+        from: 'builder',
+        to: 'shipper',
+        kind: 'ask',
+        body: 'Ship it',
+        meta: { pr: 1182, repo: 'acme/incorpx-server', stage: 'intake' },
+      },
+    ],
+  });
+  useHiveStore.setState((state) => ({ entities: { ...state.entities, builder: { kind: 'agent', id: 'builder' } as never } }));
+});
+
+describe('PrPage', () => {
+  it('reads the detail on open', () => {
+    render(<PrPage row={row} />);
+    expect(load).toHaveBeenCalledWith('acme', 'incorpx-server', 1182);
+  });
+
+  it('heads with the number, title, flap and the one-line facts', () => {
+    render(<PrPage row={row} />);
+    expect(screen.getByText('#1182')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Fee rule validator for Delaware filings' })).toBeInTheDocument();
+    const facts = screen.getByTestId('pr-facts');
+    expect(facts).toHaveTextContent(
+      'incorpx-server · feat/incorp-598-fee-rule → main · +214 −38 · 9 files · opened by builder for you',
+    );
+    expect(screen.getByText('+214')).toHaveClass('text-green');
+    expect(screen.getByText('−38')).toHaveClass('text-red');
+  });
+
+  it('has the Conversation tab, the GitHub button and the ship track', () => {
+    render(<PrPage row={row} />);
+    expect(screen.getByRole('radio', { name: 'Conversation' })).toBeChecked();
+    expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/acme/incorpx-server/pull/1182',
+    );
+    expect(screen.getByRole('group', { name: 'Ship track' })).toBeInTheDocument();
+  });
+
+  it('falls back to Conversation for a tab this PR does not have', () => {
+    useUiStore.setState({ prTab: 'checks' as never });
+    render(<PrPage row={row} />);
+    expect(screen.getByRole('radio', { name: 'Conversation' })).toBeChecked();
+  });
+
+  it('is read-only once merged: no comment box, actions only GitHub', () => {
+    render(
+      <PrPage
+        row={hatchRow({ state: 'merged', mergedAt: '2026-10-03T11:32:00Z' }, { flap: 'HATCHED', at: '11:32', tone: 'brand' })}
+      />,
+    );
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Merge/ })).toBeNull();
+  });
+
+  it('shows a skeleton before the first read, and the problem in its place on failure', () => {
+    useHiveStore.setState({ prDetails: { [key]: { key, state: 'loading' } } });
+    const { rerender } = render(<PrPage row={row} />);
+    expect(screen.getByRole('status', { name: 'Loading pull request' })).toBeInTheDocument();
+    useHiveStore.setState({ prDetails: { [key]: { key, state: 'failed', problem: 'GitHub said no.' } } });
+    rerender(<PrPage row={row} />);
+    expect(screen.getByText('GitHub said no.')).toBeInTheDocument();
+  });
+});

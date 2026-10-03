@@ -35,6 +35,8 @@ interface PrSearchRowProps {
    * the control says so rather than pretending the choice exists.
    */
   projectId: string | null;
+  /** Focus the box on mount: the Hatchery header's search icon opened it (HIVE-205). */
+  focusOnMount?: boolean;
 }
 
 /**
@@ -58,7 +60,7 @@ interface PrSearchRowProps {
  * changes, so a wide search asked once does not silently govern the next
  * question; `ui-store` owns that rule, because it owns the term.
  */
-export function PrSearchRow({ projectId }: PrSearchRowProps) {
+export function PrSearchRow({ projectId, focusOnMount }: PrSearchRowProps) {
   const term = usePrSearchTerm();
   const allRepos = usePrSearchAllRepos();
   const setTerm = useSetPrSearchTerm();
@@ -137,7 +139,13 @@ export function PrSearchRow({ projectId }: PrSearchRowProps) {
 
   return (
     <div className="flex shrink-0 flex-col gap-1.5 pb-1">
-      <SearchBox label="Search pull requests" value={term} onChange={setTerm} onClear={clearTerm} />
+      <SearchBox
+        label="Search pull requests"
+        value={term}
+        onChange={setTerm}
+        onClear={clearTerm}
+        focusOnMount={focusOnMount}
+      />
 
       {/*
         The second line is only drawn while a search is on, because with an

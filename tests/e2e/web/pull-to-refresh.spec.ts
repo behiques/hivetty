@@ -93,14 +93,14 @@ test('the inbox, sharing the same scroll container, does not pull', async ({
 /**
  * The PRs header is pinned; only the list moves.
  *
- * A unit test can assert the search row renders outside the scrolling element.
- * It cannot assert that the element *scrolls* and the row *does not*, because
+ * A unit test can assert the header renders outside the scrolling element.
+ * It cannot assert that the element *scrolls* and the header *does not*, because
  * that needs a real overflow, which needs layout. The viewport is deliberately
  * short so the panel's own content is taller than the space it has — the
  * browser target has no GitHub bridge and therefore no PR cards to overflow
  * with.
  */
-test('the PR search row stays put while the list scrolls', async ({ page }) => {
+test('the Hatchery header stays put while the list scrolls', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 240 });
   await page.goto(APP_URL);
   await page.waitForSelector('header');
@@ -112,7 +112,7 @@ test('the PR search row stays put while the list scrolls', async ({ page }) => {
   const before = await page.evaluate(() => {
     const root = document.querySelector<HTMLElement>('[data-panel="prs"]')!;
     const scroller = root.querySelector<HTMLElement>('.overflow-y-auto')!;
-    const input = root.querySelector<HTMLElement>('input')!;
+    const input = root.querySelector<HTMLElement>('h2')!;
     return {
       // The whole point: the control is not inside the thing that scrolls.
       inputInsideScroller: scroller.contains(input),
@@ -134,7 +134,7 @@ test('the PR search row stays put while the list scrolls', async ({ page }) => {
     scroller.scrollTop = 9999;
     return {
       scrolled: scroller.scrollTop,
-      inputY: root.querySelector<HTMLElement>('input')!.getBoundingClientRect().y,
+      inputY: root.querySelector<HTMLElement>('h2')!.getBoundingClientRect().y,
     };
   });
 

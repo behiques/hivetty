@@ -21,6 +21,7 @@ import {
   keepNewest,
   laneOfRun,
   matches,
+  mergeAsk,
   mergeWaiting,
   nextRef,
   openAsks,
@@ -236,6 +237,18 @@ describe('the two ask readings (HIVE-215)', () => {
     it('reads --repo=owner/name and ignores another repo', () => {
       expect(mergeWaiting(open([merge('m1', 'gh pr merge 214 --squash --repo=Owner/Name')]), slug, 214)).toBe(true);
       expect(mergeWaiting(open([merge('m2', 'gh pr merge 214 --squash --repo acme/name')]), slug, 214)).toBe(false);
+    });
+  });
+
+  describe('mergeAsk (HIVE-205)', () => {
+    const merge = (id: string, command: string) =>
+      ask(id, { to: OVERMIND, meta: { kind: 'permission', tool: 'Bash', input: { command } } });
+
+    it('returns the waiting merge card itself, so Merge can answer it', () => {
+      const card = merge('m1', 'gh pr merge 214 --squash --match-head-commit abc --repo owner/name');
+      expect(mergeAsk(open([card]), 'owner/name', 214)?.id).toBe('m1');
+      expect(mergeAsk(open([card]), 'owner/name', 215)).toBeUndefined();
+      expect(mergeWaiting(open([card]), 'owner/name', 214)).toBe(true);
     });
   });
 });
