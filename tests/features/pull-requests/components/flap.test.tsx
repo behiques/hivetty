@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Flap } from '@features/pull-requests/components/flap';
+import { FLAP_DOT, Flap } from '@features/pull-requests/components/flap';
 import { fixtureHatch } from '@tests/support/hatchery';
 
 const motion = { reduced: false };
@@ -55,5 +55,11 @@ describe('Flap', () => {
     expect(screen.getByText('SUMMONS')).not.toHaveClass('animate-ccpulse');
     rerender(<Flap hatch={fixtureHatch({ flap: 'MUTATING', tone: 'green' })} />);
     expect(screen.getByText('MUTATING')).not.toHaveClass('animate-ccflap');
+  });
+});
+
+describe('FLAP_DOT', () => {
+  it('one background utility per tone', () => {
+    expect(FLAP_DOT).toEqual({ muted: 'bg-subtle', green: 'bg-green', amber: 'bg-amber', brand: 'bg-brand' });
   });
 });

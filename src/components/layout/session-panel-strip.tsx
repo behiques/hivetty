@@ -1,6 +1,10 @@
 import type { Icon } from '@phosphor-icons/react';
 
+import { cn } from '@/lib/utils';
+import type { FlapTone } from '@/types/pull-request';
+
 import { PlanRings } from '@features/plan/components/plan-rings';
+import { FLAP_DOT } from '@features/pull-requests/components/flap';
 import type { SessionPlan } from '@shared/plan-contract';
 import type { SessionPanelTab } from '@stores/appearance-store';
 
@@ -12,6 +16,8 @@ export interface StripTab {
   /** The button's name and tooltip ("2 files changed"). */
   fact: string;
   count?: number;
+  /** A PR's flap tone (HIVE-209). */
+  dot?: FlapTone;
 }
 
 interface SessionPanelStripProps {
@@ -51,7 +57,7 @@ export function SessionPanelStrip({ plan, tabs, onOpen }: SessionPanelStripProps
           <i aria-hidden data-divider className="my-1.5 h-px w-5 bg-border" />
         </>
       )}
-      {tabs.map(({ id, Icon: TabIcon, fact, count }) => (
+      {tabs.map(({ id, Icon: TabIcon, fact, count, dot }) => (
         <button
           key={id}
           type="button"
@@ -67,6 +73,13 @@ export function SessionPanelStrip({ plan, tabs, onOpen }: SessionPanelStripProps
             <b className="absolute right-0 bottom-0 font-mono text-[10px] font-semibold text-muted">
               {count}
             </b>
+          )}
+          {dot === undefined ? null : (
+            <i
+              aria-hidden
+              data-testid="pr-dot"
+              className={cn('absolute top-[3px] right-[3px] size-1.5 rounded-full ring-2 ring-panel', FLAP_DOT[dot])}
+            />
           )}
         </button>
       ))}

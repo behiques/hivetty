@@ -27,6 +27,10 @@ vi.mock('@features/work/components/ticket-tab', () => ({
   TicketTab: ({ ticketKey }: { ticketKey: string }) => <div>ticket {ticketKey}</div>,
 }));
 
+vi.mock('@features/pull-requests/components/session-pr-tab', () => ({
+  SessionPrTab: ({ sessionPr }: { sessionPr: { pr: { n: number } } }) => <div>pr tab {sessionPr.pr.n}</div>,
+}));
+
 /** Point the seeded `hero-refresh` session at a ticket, or at none. */
 const workOn = (ticket: string | undefined) => {
   act(() => {
@@ -67,6 +71,8 @@ beforeEach(() => {
   );
   useHiveStore.getState().reset();
   seedDemoFleet();
+  // The seed puts PR 482 on hero-refresh; only the PR tab's tests want it.
+  useHiveStore.setState({ prs: [] });
   useUiStore.getState().reset();
   useAppearanceStore.getState().reset();
   useUiStore.getState().openTab('hero-refresh', 'sessions');
@@ -276,5 +282,47 @@ describe('SessionPanel: the plan file (HIVE-201)', () => {
       await Promise.resolve();
     });
     expect(useEditorStore.getState().activeKey).toBeNull();
+  });
+});
+
+describe('the PR tab (HIVE-209)', () => {
+  const withPr = () => {
+    act(() => {
+      useHiveStore.getState().reset();
+      seedDemoFleet();
+    });
+  };
+  const selected = () =>
+    within(tabRow())
+      .getAllByRole('tab')
+      .find((tab) => tab.getAttribute('aria-selected') === 'true')?.textContent;
+
+  it('exists only with a session PR, between Ticket and Files, with its dot', () => {
+    render(<SessionPanel />);
+    expect(screen.queryByRole('tab', { name: /^PR/ })).toBeNull();
+    withPr();
+    const labels = within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent);
+    expect(labels).toContain('PR');
+    expect(labels.indexOf('PR')).toBe(labels.length - 2);
+    expect(within(screen.getByRole('tab', { name: /^PR/ })).getByTestId('pr-dot')).toHaveClass(/^bg-/);
+  });
+
+  it('appearing does not switch the tab; choosing it draws the PR tab', () => {
+    render(<SessionPanel />);
+    const before = selected();
+    withPr();
+    expect(selected()).toBe(before);
+    fireEvent.click(screen.getByRole('tab', { name: /^PR/ }));
+    expect(screen.getByText('pr tab 482')).toBeInTheDocument();
+  });
+
+  it('closed: the strip carries the PR icon with its fact and dot', () => {
+    act(() => {
+      useAppearanceStore.getState().setSessionPanelOpen(false);
+    });
+    withPr();
+    render(<SessionPanel />);
+    const icon = screen.getByRole('button', { name: /^#482 · / });
+    expect(within(icon).getByTestId('pr-dot')).toBeInTheDocument();
   });
 });

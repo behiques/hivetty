@@ -1,13 +1,13 @@
 import { ArrowSquareOut, Binoculars, Check, GitMerge, Hexagon, Minus, X } from '@phosphor-icons/react';
 import { useRef, useState, type ReactNode } from 'react';
 
-import { formatDuration } from '@/lib/format-duration';
 import { cn } from '@/lib/utils';
 import { isSession } from '@/types/entity';
 import type { HatcheryRow } from '@/types/pull-request';
 
 import { statusLabel } from '@components/ui/status-dot';
 import { Flap } from '@features/pull-requests/components/flap';
+import { checkTime } from '@features/pull-requests/session-pr';
 import type { PrCheck, PrDetail, PrReview } from '@shared/github-contract';
 import type { LedgerResult } from '@shared/ledger-contract';
 import { useAnswerAsk, useEntity, useMergeAsk, useOpenEntity, useReviewUrls } from '@stores/hive-store';
@@ -15,7 +15,7 @@ import { useAnswerAsk, useEntity, useMergeAsk, useOpenEntity, useReviewUrls } fr
 const HEADING = 'flex items-center pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase';
 const CHECK_ROW = 'flex items-center gap-[9px] rounded px-1 py-[5px] text-[12.5px]';
 
-function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+export function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
     <div>
       <h2 className={HEADING}>
@@ -43,11 +43,6 @@ function CheckIcon({ status }: { status: PrCheck['status'] }) {
   );
 }
 
-const took = (check: PrCheck) =>
-  check.startedAt !== null && check.completedAt !== null
-    ? formatDuration(Date.parse(check.completedAt) - Date.parse(check.startedAt))
-    : '';
-
 const VERDICT: Record<string, string> = {
   APPROVED: 'approved',
   CHANGES_REQUESTED: 'changes requested',
@@ -59,7 +54,7 @@ const VERDICT: Record<string, string> = {
 const submitted = (review: PrReview) => (review.submittedAt === null ? Number.MAX_SAFE_INTEGER : Date.parse(review.submittedAt));
 
 /** The latest review per author, then anyone requested who has not reviewed. */
-function reviewers(detail: PrDetail, viaHive: ReadonlySet<string>): { who: string; verdict: string }[] {
+export function reviewers(detail: PrDetail, viaHive: ReadonlySet<string>): { who: string; verdict: string }[] {
   const latest = new Map<string, PrReview>();
   for (const review of [...detail.reviews].sort((a, b) => submitted(a) - submitted(b))) {
     latest.set(viaHive.has(review.url) ? 'acr' : (review.author ?? 'ghost'), review);
@@ -69,13 +64,13 @@ function reviewers(detail: PrDetail, viaHive: ReadonlySet<string>): { who: strin
   return [...done, ...asked];
 }
 
-function CheckRow({ check }: { check: PrCheck }) {
+export function CheckRow({ check }: { check: PrCheck }) {
   const body = (
     <>
       <CheckIcon status={check.status} />
-      <span className="font-mono text-ink">{check.name}</span>
+      <span data-testid="check-name" className="font-mono text-ink">{check.name}</span>
       <span className="flex-1" />
-      <span className="font-mono text-[11.5px] text-muted">{took(check)}</span>
+      <span className="font-mono text-[11.5px] text-muted">{checkTime(check, Date.now())}</span>
     </>
   );
   /* A StatusContext may carry no page; then there is nothing to open. */

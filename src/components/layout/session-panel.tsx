@@ -1,15 +1,19 @@
-import { CaretRight, Files, ListChecks, Ticket } from '@phosphor-icons/react';
+import { CaretRight, Files, GitPullRequest, ListChecks, Ticket } from '@phosphor-icons/react';
 import { useCallback, type ReactNode } from 'react';
 
 import { useNarrowWindow } from '@/hooks/use-narrow-window';
 import { useOpenFileAt } from '@/hooks/use-open-file-at';
 import { cn } from '@/lib/utils';
 import { isSession, isTerminal, terminalOf, type Session, type Terminal } from '@/types/entity';
+import type { FlapTone } from '@/types/pull-request';
 import type { Ticket as TicketModel } from '@/types/ticket';
 
 import { SessionPanelStrip, type StripTab } from '@components/layout/session-panel-strip';
 import { ExplorerPanel } from '@features/explorer/components/explorer-panel';
 import { PlanTab } from '@features/plan/components/plan-tab';
+import { FLAP_DOT } from '@features/pull-requests/components/flap';
+import { SessionPrTab } from '@features/pull-requests/components/session-pr-tab';
+import { prFact } from '@features/pull-requests/session-pr';
 import { TicketTab } from '@features/work/components/ticket-tab';
 import type { SessionPlan } from '@shared/plan-contract';
 import {
@@ -19,7 +23,14 @@ import {
   useSetSessionPanelOpen,
   useSetSessionPanelTab,
 } from '@stores/appearance-store';
-import { useActiveEntity, useChangedFileCount, useOpenTicket, usePlan } from '@stores/hive-store';
+import {
+  type SessionPrRow,
+  useActiveEntity,
+  useChangedFileCount,
+  useOpenTicket,
+  usePlan,
+  useSessionPrRow,
+} from '@stores/hive-store';
 import { usePlace } from '@stores/ui-store';
 
 interface TabContext {
@@ -31,6 +42,8 @@ interface TabContext {
   /** The session's Jira key, if it works on one (HIVE-202). */
   ticketKey: string | undefined;
   ticket: TicketModel | undefined;
+  /** The session's PR and its Hatchery row (HIVE-209). */
+  sessionPr: SessionPrRow | null;
   openPlanFile: (file: string) => void;
 }
 
@@ -41,11 +54,13 @@ interface TabSpec {
   Icon: StripTab['Icon'];
   fact: (ctx: TabContext) => string;
   count?: (ctx: TabContext) => number;
+  /** A flap-tone dot after the label and on the strip icon (HIVE-209). */
+  dot?: (ctx: TabContext) => FlapTone;
   body: (ctx: TabContext) => ReactNode;
 }
 
 /**
- * The tabs, in order (HIVE-201). HIVE-202 added Ticket; HIVE-209 adds PR
+ * The tabs, in order (HIVE-201). HIVE-202 added Ticket; HIVE-209 added PR
  * between Ticket and Files. Nothing else in the shell changes for them.
  */
 const TABS: readonly TabSpec[] = [
@@ -70,6 +85,16 @@ const TABS: readonly TabSpec[] = [
     fact: ({ ticketKey, ticket }) => (ticket ? `${ticket.key} · ${ticket.status}` : (ticketKey ?? 'Ticket')),
     body: ({ entity, ticketKey }) =>
       ticketKey === undefined ? null : <TicketTab ticketKey={ticketKey} sessionId={entity.id} />,
+  },
+  {
+    id: 'pr',
+    label: () => 'PR',
+    exists: ({ sessionPr }) => sessionPr !== null,
+    Icon: GitPullRequest,
+    fact: ({ sessionPr }) => (sessionPr === null ? 'PR' : prFact(sessionPr.pr, sessionPr.row)),
+    dot: ({ sessionPr }) => sessionPr?.row?.hatch.tone ?? 'muted',
+    body: ({ entity, sessionPr }) =>
+      sessionPr === null ? null : <SessionPrTab key={sessionPr.pr.url} sessionId={entity.id} sessionPr={sessionPr} />,
   },
   {
     id: 'files',
@@ -108,6 +133,7 @@ export function SessionPanel() {
   const changedCount = useChangedFileCount(mainId);
   const ticketKey = owner !== null && isSession(owner) ? owner.ticket : undefined;
   const ticket = useOpenTicket(ticketKey ?? null);
+  const sessionPr = useSessionPrRow(owner?.id ?? '');
   const open = useSessionPanelOpen();
   const tab = useSessionPanelTab();
   const setOpen = useSetSessionPanelOpen();
@@ -126,7 +152,7 @@ export function SessionPanel() {
 
   if (owner === null || place === 'home') return null;
 
-  const ctx: TabContext = { entity: owner, mainId, plan, changedCount, ticketKey, ticket, openPlanFile };
+  const ctx: TabContext = { entity: owner, mainId, plan, changedCount, ticketKey, ticket, sessionPr, openPlanFile };
   const existing = TABS.filter((spec) => spec.exists(ctx));
   const shown = pickTab(
     existing.map((spec) => spec.id),
@@ -149,6 +175,7 @@ export function SessionPanel() {
             Icon: spec.Icon,
             fact: spec.fact(ctx),
             ...(spec.count === undefined ? {} : { count: spec.count(ctx) }),
+            ...(spec.dot === undefined ? {} : { dot: spec.dot(ctx) }),
           }))}
         onOpen={openTab}
       />
@@ -173,6 +200,13 @@ export function SessionPanel() {
             className={cn('rounded-md px-2 py-1', spec.id === shown ? 'bg-active text-ink' : 'hover:bg-hover')}
           >
             {spec.label(ctx)}
+            {spec.dot === undefined ? null : (
+              <i
+                aria-hidden
+                data-testid="pr-dot"
+                className={cn('ml-1.5 inline-block size-1.5 rounded-full align-middle', FLAP_DOT[spec.dot(ctx)])}
+              />
+            )}
           </button>
         ))}
         <span className="flex-1" />
