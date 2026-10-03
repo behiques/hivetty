@@ -1,3 +1,4 @@
+import type { JiraMention } from './jira-contract';
 import {
   NOTIFICATION_KINDS,
   defaultNotificationPrefs,
@@ -2362,6 +2363,8 @@ export interface JiraConversationRequest {
 export interface AddJiraCommentRequest {
   key: string;
   markdown: string;
+  /** Mentioned at the front of the comment, in order (HIVE-216). Never `via`: the renderer cannot mark a comment as an agent's. */
+  mentions?: JiraMention[];
 }
 
 /**
