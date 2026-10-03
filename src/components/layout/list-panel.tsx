@@ -6,7 +6,13 @@ import { AgentsPanel } from '@features/agents/components/agents-panel';
 import { SessionsPanel } from '@features/projects/components/sessions-panel';
 import { PrsPanel } from '@features/pull-requests/components/prs-panel';
 import { WorkList } from '@features/work/components/work-panel';
-import { usePrsQuiet } from '@stores/hive-store';
+import {
+  useAgentsListed,
+  usePrsListed,
+  usePrsQuiet,
+  useSessionsListed,
+  useWorkListed,
+} from '@stores/hive-store';
 import { usePanelOpen, usePlace, usePrSearchOpen, type Place } from '@stores/ui-store';
 
 /**
@@ -35,6 +41,10 @@ const LABELS: Record<Place, string> = {
  * Round two's one list panel: fixed at `--cc-list-w`, beside the stage, never
  * instead of it. Not resizable and no collapsed strip — HIVE-105's handles and
  * strip stay Classic's; closing is `panelOpen`.
+ *
+ * No list without items (HIVE-211): a place with nothing to list draws no
+ * panel, and its stage says why — Jira not connected, gh signed out, no agent,
+ * no project. Loading keeps the panel, for its skeleton.
  */
 export function ListPanel() {
   const place = usePlace();
@@ -42,6 +52,14 @@ export function ListPanel() {
   const Panel = PANELS[place];
   const prsQuiet = usePrsQuiet();
   const searchOpen = usePrSearchOpen();
+  /* Every hook runs on every render, so all four are read rather than one indexed by place. */
+  const listed: Record<Place, boolean> = {
+    home: false,
+    sessions: useSessionsListed(),
+    work: useWorkListed(),
+    agents: useAgentsListed(),
+    prs: usePrsListed(),
+  };
 
   /* Was the Hatchery quiet on the last render? Only that change slides the panel in (R4), never a mount. */
   const wasQuiet = useRef(prsQuiet);
@@ -51,8 +69,8 @@ export function ListPanel() {
   });
 
   if (!Panel || !panelOpen) return null;
-  /* A quiet Hatchery draws no panel; the stage has the egg (D15). Search older PRs opens it. */
-  if (place === 'prs' && prsQuiet && !searchOpen) return null;
+  /* A quiet or unconfigured Hatchery's search still opens it (D15); the stage has the egg otherwise. */
+  if (!listed[place] && !(place === 'prs' && searchOpen)) return null;
 
   return (
     <section

@@ -1,12 +1,13 @@
 import { act, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppShell } from '@components/layout/app-shell';
 import { TooltipProvider } from '@components/ui/tooltip';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
-import { seedDemoFleet } from '@tests/support/demo-fleet';
+import { resetProjectConfig } from '@lib/project-config';
+import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
 
 vi.mock('@xterm/xterm');
 vi.mock('@xterm/addon-fit');
@@ -134,6 +135,7 @@ describe('AppShell — Layout (HIVE-195)', () => {
     useUiStore.getState().reset();
     useAppearanceStore.getState().reset();
   });
+  afterEach(() => resetProjectConfig());
 
   const renderShell = () =>
     render(
@@ -153,13 +155,15 @@ describe('AppShell — Layout (HIVE-195)', () => {
 
   it('draws the bar and the list panel in round two, and no activity rail (HIVE-201)', () => {
     useAppearanceStore.getState().setLayout('round-two');
-    useUiStore.setState({ place: 'work' });
+    // A place with something to list (HIVE-211): the browser target's Work has no Jira.
+    seedDemoProjectConfig();
+    useUiStore.setState({ place: 'sessions' });
 
     renderShell();
 
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Places' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Work list' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Sessions list' })).toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('navigation', { name: 'Projects, work, and agents' }),
