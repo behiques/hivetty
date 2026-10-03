@@ -88,7 +88,15 @@ export function createActionsClient(gh: string, run: RunAsync): ActionsClient {
       return { ok: true, value: body.jobs.map((j) => toJob(j, runId)).filter((j): j is RunJob => j !== null) };
     },
     async log(repo, jobId) {
-      const answer = await call(['run', 'view', '--job', String(jobId), '--repo', slug(repo), '--log-failed']);
+      /*
+        The REST endpoint, not `gh run view --log-failed`: that refuses every
+        log ("still in progress") until the whole run completes, and the
+        failed job is the one worth reading while the rest still run. The job
+        log is whole, so `cutLog` narrows it to the failed step. The escape
+        flag: `gh api` will not print the runner's ANSI colour otherwise, and
+        `cutLog` strips it.
+      */
+      const answer = await call(['api', '--allow-escape-sequences', `repos/${slug(repo)}/actions/jobs/${String(jobId)}/logs`]);
       if (!answer.ok) return answer;
       return { ok: true, value: cutLog(answer.value.stdout) };
     },

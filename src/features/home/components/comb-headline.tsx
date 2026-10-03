@@ -19,15 +19,15 @@ export const summaryText = (s: CombSummary): string =>
 /**
  * The line over the comb (HIVE-199): how many things need you, then the rest.
  *
- * `needs` is the comb's own Summons count for now (decision D1). When HIVE-214
- * lands `useSummonsCount`, the caller reads that instead, so Home, the strip
- * and the pill can never show two numbers for one fact.
+ * `needs` is the Summons queue's count (`useSummonsCount`, HIVE-217), the one
+ * the strip and the pill read, with the session on stage left out, so the three
+ * can never show two numbers for one fact. The rest of the line is the comb's.
  */
-export function CombHeadline({ summary }: { summary: CombSummary }) {
+export function CombHeadline({ needs, summary }: { needs: number; summary: CombSummary }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 flex items-baseline gap-3.5 bg-linear-to-b from-bg to-transparent px-7 py-[18px]">
-      <h2 className={cn('text-[22px] font-[650] tracking-tight', summary.needs > 0 ? 'text-amber' : 'text-green')}>
-        {headlineText(summary.needs)}
+      <h2 className={cn('text-[22px] font-[650] tracking-tight', needs > 0 ? 'text-amber' : 'text-green')}>
+        {headlineText(needs)}
       </h2>
       <span className="text-muted">{summaryText(summary)}</span>
       <span className="flex-1" />

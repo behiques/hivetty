@@ -27,7 +27,7 @@ import {
   resolveEntityRef,
   terminalOf,
 } from '@/types/entity';
-import type { HiveNotification } from '@/types/notification';
+import type { HiveNotification, NotificationKind } from '@/types/notification';
 import type { Flap, FlapTone, HatcheryRow, Pr, SessionPr, TicketPr } from '@/types/pull-request';
 import type { TermLine } from '@/types/terminal';
 import type { Ticket, TicketDetail, TicketDetailWant, TicketProperties } from '@/types/ticket';
@@ -7479,20 +7479,42 @@ export const useComingUp = (): ComingUpRow[] => {
   }, [keys, ledger]);
 };
 
-/** Home's While you were away (HIVE-200). */
+/** An Echo kind counted on one row, named by its first notification's title. */
+export interface EchoCount {
+  total: number;
+  first?: string;
+}
+
+/** Home's While you were away (HIVE-200), with the Echoes it reads (HIVE-217). */
 export interface WhileAway {
   hatched: { numbers: number[]; by?: string };
   goals: string[];
   runs: { total: number; failed: number };
   ready: { keys: string[]; total: number };
+  checksFailed: EchoCount;
+  approved: EchoCount;
+  clones: { failed: boolean; detail: string }[];
 }
 
 const READY_NAMED = 2;
+
+/** A run that ended without finishing: the outcomes `ledger/notify.ts` raises as `agent.failed`. */
+const RUN_CUT_OFF = new Set(['failed', 'budget', 'turns']);
+
+const echoCount = (rows: readonly HiveNotification[]): EchoCount =>
+  rows[0] === undefined ? { total: 0 } : { total: rows.length, first: rows[0].title };
 
 /**
  * What happened after `since`, from state already in the renderer. Runs are
  * bounded by the ledger tail (`LEDGER_MEMORY_CAP`), so a busy day can
  * undercount; the row says so in its tooltip.
+ *
+ * The Echo lane lands here, since the Inbox shows only what needs you
+ * (HIVE-198). `session.goal` is `goals`. `pr.merged` is left out because
+ * `hatched` already counts every merged PR from the sweep. `agent.done` and
+ * `agent.failed` are left out because each one belongs to a run `runs` already
+ * counts, and `app.update_*` is left out because the update has its own
+ * surface (HIVE-217).
  */
 export function whileAwayOf(
   input: {
@@ -7523,8 +7545,14 @@ export function whileAwayOf(
   for (const e of input.ledger) {
     if (e.kind !== 'event' || e.ts <= since || !e.body.startsWith('run.ended')) continue;
     total += 1;
-    if (e.meta?.['outcome'] === 'failed') failed += 1;
+    if (RUN_CUT_OFF.has(String(e.meta?.['outcome']))) failed += 1;
   }
+
+  // ponytail: bounded by the notification cap, whose trim drops Echoes first, so a long absence can undercount.
+  const echoes = input.notifs
+    .filter((n) => n.createdAt > since)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  const ofKind = (kind: NotificationKind) => echoes.filter((n) => n.kind === kind);
 
   return {
     hatched: {
@@ -7536,6 +7564,12 @@ export function whileAwayOf(
       .map((n) => n.title),
     runs: { total, failed },
     ready: { keys: input.readyKeys.slice(0, READY_NAMED), total: input.readyKeys.length },
+    checksFailed: echoCount(ofKind('pr.checks_failed')),
+    approved: echoCount(ofKind('pr.approved')),
+    // ponytail: a failed clone is told apart only by the title main gives it; an `ok` field on the row would end that.
+    clones: ofKind('clone.done').map((n) =>
+      n.title === 'Clone failed' ? { failed: true, detail: n.body } : { failed: false, detail: '' },
+    ),
   };
 }
 
@@ -7679,9 +7713,8 @@ export const useCombEntities = (): CombEntity[] => {
   return useMemo(() => rows.map(parseCombRow), [rows]);
 };
 
+/** The comb's own counts. "Needs you" is not one: that is `useSummonsCount` (HIVE-217). */
 export interface CombSummary {
-  /** Summons cells: waiting sessions and asking agents. */
-  needs: number;
   working: number;
   failed: number;
   /** Burrowed cells and terminals. */
@@ -7694,7 +7727,6 @@ export interface CombSummary {
 export function summariseComb(entities: CombEntity[]): CombSummary {
   const count = (state: CellState): number => entities.filter((e) => e.state === state).length;
   return {
-    needs: count('summons'),
     working: count('morphing'),
     failed: count('failed'),
     resting: count('burrowed') + count('terminal'),

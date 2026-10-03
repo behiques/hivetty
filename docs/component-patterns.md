@@ -581,12 +581,18 @@ Under the comb, `home-strip.tsx` is a `1.4fr 1fr 1fr` grid that keeps its three
 columns at every moment. Column 1 is **Needs you** while the Summons queue
 (`useSummonsCount(useOnStage())`, the pill's count) is non-empty, oldest wait
 first, five rows and a "N more in the Inbox" line; otherwise **While you were
-away**, which says so in one dim line when nothing happened. Column 2 is
+away**, which says so in one dim line when nothing happened. While you were away
+is where the Echoes live in round two (HIVE-217): after merged PRs, goals, runs
+and ready tickets come checks failed, PRs approved and each clone, every row
+only when non-zero, capped at six with a dim "N more". Column 2 is
 **Coming up**; column 3 is **Limits** over **Pull requests**. Those three are
 not drawn when empty: no scheduled or held work, no metrics, no live PRs. Every
-row is `strip-row.tsx`'s one line, never wrapped. Only Needs you rows click, and
-for now they open the asker; HIVE-198 rewires them (and the more line) to its
-drawer.
+row is `strip-row.tsx`'s one line, never wrapped. Only Needs you rows click:
+each opens the Inbox drawer (`useInboxActions().openInboxDrawer`), on its thread
+for an ask and at the top otherwise, and so does the more line. Nothing is
+answered from Home. The headline over the comb reads the same
+`useSummonsCount(useOnStage())`, so the headline, the strip and the pill always
+show one number.
 
 `home-page.tsx` swaps comb and strip for `first-run.tsx` while `useProjects()`
 is empty: seven breathing empty cells (`animate-ccbreathe`, stilled by the
