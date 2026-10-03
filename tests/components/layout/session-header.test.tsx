@@ -61,7 +61,7 @@ describe('SessionHeader (HIVE-197)', () => {
   it('moves the status word to the dot title for the narrowest step (HIVE-213)', () => {
     render(<SessionHeader entity={hero()} />);
     const status = screen.getByTestId('session-status');
-    expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[700px]:sr-only');
+    expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[760px]:sr-only');
     expect(status.getAttribute('title')).not.toBeNull();
   });
 
