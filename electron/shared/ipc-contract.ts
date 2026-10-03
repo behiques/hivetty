@@ -30,6 +30,7 @@ import type {
   AgentWriteRequest,
   AgentWriteResult,
 } from './agent-contract';
+import type { ChangedFilesEvent, ChangedFilesSnapshot } from './changed-files-contract';
 import type {
   AddProjectRequest,
   BrowseDirRequest,
@@ -1190,6 +1191,7 @@ export const EVENT_CHANNELS = [
   CH.fsChanged,
   CH.ledgerChanged,
   CH.planChanged,
+  CH.changedFilesChanged,
   CH.agentsChanged,
   CH.agentsStatus,
   CH.agentsLines,
@@ -2703,6 +2705,11 @@ export interface HiveBridge {
   plans: {
     list: () => Promise<PlansSnapshot>;
     onChanged: (callback: (event: PlanChangedEvent) => void) => () => void;
+  };
+  /** Changed files (HIVE-201): main reads the transcript; the page only mirrors. */
+  changedFiles: {
+    list: () => Promise<ChangedFilesSnapshot>;
+    onChanged: (callback: (event: ChangedFilesEvent) => void) => () => void;
   };
   /**
    * Agent definitions on disk (HIVE-114).

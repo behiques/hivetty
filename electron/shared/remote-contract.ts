@@ -56,8 +56,10 @@ import { isThisMachineAction } from './notification-contract';
  * 4 → 5 (HIVE-176): `CH` gained `config:set-session-plugin`.
  * 5 → 6: `CH` gained `shipped:status`, `shipped:reset`, `shipped:take-prompt`
  * and `shipped:keep-mine`.
+ * 6 → 7 (HIVE-201): `CH` gained `changed-files:list` and `changed-files:changed`;
+ * `plan:changed`'s tasks gained `activeForm`, `startedAt`, `endedAt` and the plan `fileAt`.
  */
-export const REMOTE_PROTOCOL_VERSION = 6;
+export const REMOTE_PROTOCOL_VERSION = 7;
 
 /**
  * What a frame is for.
@@ -1020,6 +1022,8 @@ export const SNAPSHOT_CHANNELS: readonly Channel[] = [
   CH.configGet,
   // The plans, merged by hydratePlans (hive-store.ts).
   CH.plansList,
+  // Every session's changed files, merged by hydrateChangedFiles (hive-store.ts, HIVE-201).
+  CH.changedFilesList,
 ];
 
 /**

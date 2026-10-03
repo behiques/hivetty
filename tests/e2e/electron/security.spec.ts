@@ -282,6 +282,8 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
   expect(surface.top).toEqual([
     'agents',
     'appInfo',
+    // HIVE-201: read-only, like `plans`: a session's changed files, listed and pushed.
+    'changedFiles',
     'config',
     'fs',
     'github',

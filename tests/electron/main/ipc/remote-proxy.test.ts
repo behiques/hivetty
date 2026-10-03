@@ -64,7 +64,7 @@ vi.mock('../../../../electron/main/notifications/activate-here', () => ({
  *
  * The three channel lists below are derived from `FRAME_KIND` — the same
  * table `registerRemoteProxy` itself walks — but the counts asserted against
- * them (110, 6, 27, 116) are literals, not read back off the derived lists.
+ * them (111, 6, 29, 117) are literals, not read back off the derived lists.
  * `tests/shared/remote-contract.test.ts:82,125` pins the same four numbers
  * independently. A channel added to the contract without a home in this file
  * fails a count here, which is the point: a self-referential assertion could
@@ -222,7 +222,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(110);
+    expect(callChannels.length).toBe(111);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -239,7 +239,7 @@ describe('registerRemoteProxy', () => {
   });
 
   it('binds no handler for an event channel', () => {
-    expect(eventChannels.length).toBe(28);
+    expect(eventChannels.length).toBe(29);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -345,7 +345,7 @@ describe('registerRemoteProxy', () => {
    * the very first one that isn't `pty:data`.
    */
   it('pumps a client event into the broadcaster on the same channel', () => {
-    expect(eventChannels.length).toBe(28);
+    expect(eventChannels.length).toBe(29);
 
     const client = fakeClient();
     const broadcaster = fakeBroadcaster();
@@ -532,7 +532,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(116);
+    expect(remoteProxyBindingsSize()).toBe(117);
   });
 
   /**
@@ -1101,12 +1101,12 @@ describe('registerRemoteProxy', () => {
 
     resetRemoteProxy();
 
-    // 116 (110 call + 6 notify), the same literal `records every binding`
+    // 117 (111 call + 6 notify), the same literal `records every binding`
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(116);
-    expect(removeAllListeners).toHaveBeenCalledTimes(116);
+    expect(removeHandler).toHaveBeenCalledTimes(117);
+    expect(removeAllListeners).toHaveBeenCalledTimes(117);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

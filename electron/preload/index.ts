@@ -14,6 +14,7 @@ import type {
   AgentWriteRequest,
   AgentWriteResult,
 } from '@shared/agent-contract';
+import type { ChangedFilesEvent, ChangedFilesSnapshot } from '@shared/changed-files-contract';
 import type {
   AddProjectRequest,
   BrowseDirRequest,
@@ -761,6 +762,14 @@ const bridge: HiveBridge = {
     /** One session's plan changed, or went (`plan: null`). */
     onChanged: (callback: (event: PlanChangedEvent) => void) =>
       subscribe<PlanChangedEvent>(CH.planChanged, callback),
+  },
+  changedFiles: {
+    /** Every session's changed files. Boot and reattach hydration (HIVE-201). */
+    list: (): Promise<ChangedFilesSnapshot> =>
+      ipcRenderer.invoke(CH.changedFilesList) as Promise<ChangedFilesSnapshot>,
+    /** One session's list changed. */
+    onChanged: (callback: (event: ChangedFilesEvent) => void) =>
+      subscribe<ChangedFilesEvent>(CH.changedFilesChanged, callback),
   },
   updates: {
     status: (): Promise<UpdateStatus> =>
