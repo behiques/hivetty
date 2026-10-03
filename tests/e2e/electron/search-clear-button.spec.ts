@@ -1,6 +1,8 @@
-import { expect, test } from '@playwright/test';
+import { join } from 'node:path';
 
-import type { CDPSession, Page } from '@playwright/test';
+import { expect, test, type CDPSession, type Page } from '@playwright/test';
+
+import { launchHive, startSession, writeProjectConfig } from './fixtures/hive-app';
 
 /**
  * One clear button in a search box, not two.
@@ -26,9 +28,12 @@ import type { CDPSession, Page } from '@playwright/test';
  * the assertion is deliberately over *every* search box the page is showing —
  * the rule is global, and a second one added later inherits both the behaviour
  * and this guard.
+ *
+ * The Explorer's box, in a real window: the browser target draws no list panel
+ * in round two (HIVE-211), so none of its boxes is on screen there.
  */
 
-const APP_URL = '/?sim=0';
+const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
 
 /** The pseudo element Chromium hangs on a non-empty, focused search field. */
 const CANCEL_BUTTON = '-webkit-search-cancel-button';
@@ -85,42 +90,21 @@ async function cancelButtonWidths(cdp: CDPSession): Promise<number[]> {
   return widths;
 }
 
-/**
- * Every search box the browser target can reach, and how to get to it.
- *
- * Each carries its own way in rather than sharing a tab helper. The PRs box is
- * missing since HIVE-205: it opens only from the Hatchery's search icon, which
- * shows only while the sweep is live, and the browser target has no `gh`. Its
- * clear button is the same shared `SearchBox`, proven by the Work case here and
- * by the component tests.
- *
- * The Explorer's box is missing on purpose: it needs a session with a
- * repository behind it, and the browser target has no bridge to provide one. It
- * is the same `type="search"` under the same global rule, and the one here
- * prove the rule ships.
- */
-const BOXES = [
-  {
-    label: 'Search tickets',
-    open: (page: Page) =>
-      page
-        .getByRole('navigation', { name: 'Projects, work, and agents' })
-        .getByRole('tab', { name: /^Work/ })
-        .click(),
-  },
-];
-
-for (const { label, open } of BOXES) {
-  test(`${label}: one clear button, not Chromium’s as well`, async ({
-    page,
-  }) => {
-    await page.goto(APP_URL);
+test('Search files: one clear button, not Chromium’s as well', async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeProjectConfig(configPath, { id: 'nova-web', path: REAL_DIRECTORY });
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  const page = await app.firstWindow();
+  try {
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForSelector('nav[aria-label="Places"]');
-    await open(page);
-
-    await expectOneClearButton(page, label);
-  });
-}
+    await startSession(page, 'nova');
+    await page.getByRole('complementary', { name: 'Session panel' }).getByRole('tab', { name: /^Files/ }).click();
+    await expectOneClearButton(page, 'Search files');
+  } finally {
+    await app.close();
+  }
+});
 
 async function expectOneClearButton(page: Page, label: string): Promise<void> {
   const box = page.getByLabel(label);
