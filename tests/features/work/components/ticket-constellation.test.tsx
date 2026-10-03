@@ -43,6 +43,20 @@ describe('TicketConstellation (HIVE-202)', () => {
     }
   });
 
+  it("colours each arrowhead as its edge: amber into an open blocker, subtle elsewhere", () => {
+    const { container } = draw({ arcs: arcs({ waitsOn: [t('HIVE-209', 'in-progress'), t('HIVE-188', 'done')], blocks: [t('HIVE-194')] }) });
+    const marker = (edge: string) => {
+      const ref = container.querySelector(`[data-edge="${edge}"]`)?.getAttribute('marker-end') ?? '';
+      const id = /^url\(#(.+)\)$/.exec(ref)?.[1] ?? '';
+      return container.querySelector(`marker[id="${id}"]`);
+    };
+
+    for (const [edge, tone] of [['in-open', 'text-amber'], ['in', 'text-subtle'], ['out', 'text-subtle']] as const) {
+      expect(marker(edge)).toHaveClass(tone);
+      expect(marker(edge)?.querySelector('path')).toHaveAttribute('fill', 'currentColor');
+    }
+  });
+
   it('opens a cell on click and a bead on Enter or Space', async () => {
     const { onOpenTicket } = draw();
 

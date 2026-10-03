@@ -1,9 +1,9 @@
-import { type KeyboardEvent, type ReactNode, useMemo } from 'react';
+import { type KeyboardEvent, type ReactNode, useId, useMemo } from 'react';
 
 import type { LinkArcs, LinkedTicket } from '@/lib/ticket-links';
 import { cn } from '@/lib/utils';
 
-import { type CellState, layoutConstellation, type Point, VIEW } from '@features/work/constellation';
+import { type CellState, type Edge, layoutConstellation, type Point, VIEW } from '@features/work/constellation';
 
 /** A pointy-top hexagon's points around (x, y). */
 const hex = (x: number, y: number, r: number) =>
@@ -24,6 +24,10 @@ const BEAD_TONE: Record<CellState, string> = {
   prog: 'text-green',
   todo: 'text-subtle',
 };
+
+/** An edge's tone, which its arrowhead shares: amber only into an open blocker. */
+const edgeTone = (kind: Edge['kind']) => (kind === 'in-open' ? 'text-amber' : 'text-subtle');
+const ARROW_TONES = ['text-amber', 'text-subtle'] as const;
 
 /** The spec draws beads at radius 5; the layout carries only their centres. */
 const BEAD_R = 5;
@@ -89,6 +93,8 @@ export function TicketConstellation({
   onOpenArc: (arc: 'waitsOn' | 'blocks') => void;
 }) {
   const layout = useMemo(() => layoutConstellation({ me, arcs, epicLabel, pr }), [me, arcs, epicLabel, pr]);
+  // Two constellations on one screen must not share marker ids.
+  const arrowId = `cc-arrow-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
 
   return (
     <svg
@@ -98,9 +104,23 @@ export function TicketConstellation({
       role="group"
     >
       <defs>
-        <marker id="cc-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
-          <path d="M0 0L8 4L0 8z" fill="context-stroke" />
-        </marker>
+        {/* One marker per tone: Chromium does not paint fill="context-stroke", and a marker's
+            currentColor is its own, not the edge's. */}
+        {ARROW_TONES.map((tone) => (
+          <marker
+            key={tone}
+            id={`${arrowId}-${tone}`}
+            viewBox="0 0 8 8"
+            refX="7"
+            refY="4"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto"
+            className={tone}
+          >
+            <path d="M0 0L8 4L0 8z" fill="currentColor" />
+          </marker>
+        ))}
       </defs>
       <circle
         cx={layout.ring.x}
@@ -134,8 +154,8 @@ export function TicketConstellation({
           strokeWidth={1.2}
           strokeDasharray={edge.kind === 'pr' ? '1 3' : undefined}
           opacity={edge.kind === 'far' ? 0.45 : 1}
-          markerEnd={edge.kind === 'pr' ? undefined : 'url(#cc-arrow)'}
-          className={edge.kind === 'in-open' ? 'text-amber' : 'text-subtle'}
+          markerEnd={edge.kind === 'pr' ? undefined : `url(#${arrowId}-${edgeTone(edge.kind)})`}
+          className={edgeTone(edge.kind)}
           data-edge={edge.kind}
         />
       ))}
