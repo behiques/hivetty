@@ -50,7 +50,7 @@ import type {
   SearchResults,
   WriteFileResult,
 } from '@shared/fs-contract';
-import type { GhResult, JobLog, PrDetail, PrRecord, PrRuns, PrsSnapshot, RunJob } from '@shared/github-contract';
+import type { GhResult, JobLog, PrDetail, PrRecord, PrRuns, PrsSnapshot, PrTimeline, RunJob } from '@shared/github-contract';
 import {
   isRecord,
   parseAckRequest,
@@ -4054,6 +4054,16 @@ export function registerIpcHandlers(
       const request = parsePrDiffRequest(payload);
       await loginEnvStatus();
       return github.prDiff(request);
+    },
+  );
+
+  handle(
+    CH.githubPrTimeline,
+    async (_event, payload): Promise<GhResult<PrTimeline>> => {
+      // Parsed before the await; the same PR shape as `github:pr-detail` (HIVE-208).
+      const request = parsePrDetailRequest(payload);
+      await loginEnvStatus();
+      return github.prTimeline(request);
     },
   );
 

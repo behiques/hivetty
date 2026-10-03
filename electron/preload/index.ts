@@ -84,6 +84,7 @@ import type {
   PrRunsRequest,
   PrsSnapshot,
   PrThreadRequest,
+  PrTimeline,
   PrViewedRequest,
   RunJob,
   RunRef,
@@ -654,6 +655,9 @@ const bridge: HiveBridge = {
     /** One PR's diff. See `CH.githubPrDiff`. */
     prDiff: (request: PrRef): Promise<GhResult<string>> =>
       ipcRenderer.invoke(CH.githubPrDiff, request) as Promise<GhResult<string>>,
+    /** One PR's history. See `CH.githubPrTimeline`. */
+    prTimeline: (request: PrRef): Promise<GhResult<PrTimeline>> =>
+      ipcRenderer.invoke(CH.githubPrTimeline, request) as Promise<GhResult<PrTimeline>>,
     /** A thread write. See `CH.githubPrThread`. */
     prThread: (request: PrThreadRequest): Promise<GhResult<true>> =>
       ipcRenderer.invoke(CH.githubPrThread, request) as Promise<GhResult<true>>,

@@ -1,4 +1,4 @@
-import type { GhError, GhResult, PrDetail, PrRecord } from '../../../shared/github-contract';
+import type { GhError, GhResult, PrDetail, PrRecord, PrTimeline } from '../../../shared/github-contract';
 
 import { classifyGhFailure, ghError } from './classify';
 import {
@@ -13,6 +13,7 @@ import {
   readThreadPr,
   readViewerLogin,
   toPrDetail,
+  toPrTimeline,
 } from './mapping';
 import {
   buildPrQuery,
@@ -24,6 +25,7 @@ import {
   PR_DETAIL_QUERY,
   PR_ID_QUERY,
   PR_THREAD_OWNER_QUERY,
+  PR_TIMELINE_QUERY,
   repoQualifiers,
   safeSearchTerm,
   THREAD_REPLY_MUTATION,
@@ -83,6 +85,8 @@ export interface GithubClient {
   search(term: string, repos: readonly RepoRef[]): Promise<GhResult<PrRecord[]>>;
   /** One PR's page (HIVE-205). `repo` is the resolver's, never the renderer's spelling. */
   detail(repo: RepoRef, n: number): Promise<GhResult<PrDetail>>;
+  /** One PR's history for the Timeline tab (HIVE-208): timeline items and each commit's check suites. */
+  timeline(repo: RepoRef, n: number): Promise<GhResult<PrTimeline>>;
   /** A PR-level comment (HIVE-205): the PR's id is read from GitHub first, then `addComment`. */
   comment(repo: RepoRef, n: number, body: string): Promise<GhResult<true>>;
   /** The PR's unified diff (HIVE-207), as `gh pr diff` prints it. */
@@ -308,6 +312,15 @@ export function createGithubClient(
       const detail = toPrDetail(answer.data, repo.owner, repo.name);
       if (detail === null) return { ok: false, error: classifyGhFailure(answer.stderr, answer.timedOut) };
       return { ok: true, value: detail };
+    },
+
+    async timeline(repo, n) {
+      const answer = await graphql(PR_TIMELINE_QUERY, { owner: repo.owner, name: repo.name }, { number: n });
+      if (answer === null) return NOT_RUN;
+
+      const timeline = toPrTimeline(answer.data);
+      if (timeline === null) return { ok: false, error: classifyGhFailure(answer.stderr, answer.timedOut) };
+      return { ok: true, value: timeline };
     },
 
     async comment(repo, n, body) {

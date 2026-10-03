@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createGithub } from '../../../../../electron/main/integrations/github';
+import { PR_TIMELINE_QUERY } from '../../../../../electron/main/integrations/github/query';
 import type { RunAsync } from '../../../../../electron/main/integrations/github/run';
 import {
   emptySnapshot,
@@ -428,6 +429,42 @@ describe('prDetail and prComment (HIVE-205)', () => {
   it('answers not-installed without gh', async () => {
     const gh = createGithub({ config: () => config([project()]), env: () => ({ PATH: '/nowhere' }), run: recording([]), now: () => 0 });
     await expect(gh.prDetail({ owner: 'acme', repo: 'nova-web', n: 482 })).resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
+  });
+});
+
+describe('prTimeline (HIVE-208)', () => {
+  const TIMELINE = JSON.stringify({ data: { repository: { pullRequest: {
+    createdAt: '2026-10-03T11:00:00Z', mergedAt: null, isDraft: false, timelineItems: { nodes: [] },
+  } } } });
+  const recording = (calls: string[][]): RunAsync => (_file, args) => {
+    calls.push([...args]);
+    const stdout = args[0] === 'repo' ? JSON.stringify({ nameWithOwner: 'acme/nova-web' }) : TIMELINE;
+    return Promise.resolve({ code: 0, stdout, stderr: '', timedOut: false });
+  };
+  const github = (calls: string[][]) => createGithub({
+    config: () => config([project()]),
+    env: () => ({ PATH: withGh() }),
+    run: recording(calls),
+    now: () => 0,
+  });
+  const graphqlCalls = (calls: string[][]) => calls.filter((args) => args[0] === 'api');
+
+  it('reads a mapped repository’s timeline with the resolver’s spelling, whatever case was asked', async () => {
+    const calls: string[][] = [];
+    await expect(github(calls).prTimeline({ owner: 'ACME', repo: 'Nova-Web', n: 482 }))
+      .resolves.toMatchObject({ ok: true, value: { createdAt: '2026-10-03T11:00:00Z', commits: [] } });
+    expect(graphqlCalls(calls)).toEqual([
+      ['api', 'graphql', '-f', `query=${PR_TIMELINE_QUERY}`, '-f', 'owner=acme', '-f', 'name=nova-web', '-F', 'number=482'],
+    ]);
+  });
+
+  it('refuses a repository no configured project maps, before any GraphQL call', async () => {
+    const calls: string[][] = [];
+    await expect(github(calls).prTimeline({ owner: 'someone', repo: 'else', n: 1 })).resolves.toEqual({
+      ok: false,
+      error: { kind: 'no-repos', message: "someone/else is not a configured project's repository." },
+    });
+    expect(graphqlCalls(calls)).toEqual([]);
   });
 });
 

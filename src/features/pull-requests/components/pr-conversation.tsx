@@ -1,5 +1,5 @@
 import { GitPullRequest, Hexagon } from '@phosphor-icons/react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { cn } from '@/lib/utils';
 import type { Pr } from '@/types/pull-request';
@@ -11,7 +11,7 @@ import { Markdown } from '@features/shared/components/markdown';
 import type { PrComment, PrDetail, PrReview, PrThread } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import { usePrEvents, useReviewUrls } from '@stores/hive-store';
-import { usePrConversation, usePrPageActions } from '@stores/ui-store';
+import { usePrConversation, usePrFocus, usePrPageActions } from '@stores/ui-store';
 
 const MODES = [
   { value: 'comments', label: 'Comments' },
@@ -142,7 +142,9 @@ export function PrConversation({
   const writes = useThreadWrites(pr);
   const viaHive = useReviewUrls();
   const mode = usePrConversation();
-  const { setPrConversation } = usePrPageActions();
+  const focus = usePrFocus();
+  const { setPrConversation, clearPrFocus } = usePrPageActions();
+  const listRef = useRef<HTMLUListElement>(null);
   const reviews = useMemo(() => detail.reviews.filter(shown), [detail.reviews]);
   const openThreads = detail.threads.filter((thread) => !thread.isResolved).length;
 
@@ -174,6 +176,17 @@ export function PrConversation({
     return [...github, ...hive].sort((a, b) => a.at - b.at);
   }, [detail.comments, detail.threads, reviews, events, mode]);
 
+  /* The Timeline clicked through (HIVE-208): scroll its item into view once it is in the list, then let go. */
+  useEffect(() => {
+    if (focus === null) return;
+    const item = [...(listRef.current?.querySelectorAll<HTMLElement>('[data-key]') ?? [])].find(
+      (el) => el.dataset['key'] === focus,
+    );
+    if (item === undefined) return;
+    item.scrollIntoView({ block: 'center' });
+    clearPrFocus();
+  }, [focus, items, clearPrFocus]);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="pt-3 pb-1">
@@ -194,9 +207,9 @@ export function PrConversation({
           <span className="flex-1" />
           <SegmentedControl label="Show" options={MODES} value={mode} onChange={setPrConversation} />
         </div>
-        <ul aria-label="Conversation" className="flex flex-col gap-1">
+        <ul ref={listRef} aria-label="Conversation" className="flex flex-col gap-1">
           {items.map((item) => (
-            <li key={item.key} data-kind={item.kind}>
+            <li key={item.key} data-key={item.key} data-kind={item.kind}>
               {item.kind === 'comment' ? (
                 <>
                   <Said author={item.comment.author ?? 'ghost'} via={false} at={item.comment.createdAt} />

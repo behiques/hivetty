@@ -851,3 +851,24 @@ describe('awaySince (HIVE-200)', () => {
     expect(useUiStore.getState().awaySince).toBe(1_700_000_000_000);
   });
 });
+
+describe('focusPrEvent (HIVE-208)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('lands on Conversation at the item, switching to Everything for a Hive event', () => {
+    useUiStore.getState().setPrTab('timeline');
+    useUiStore.getState().focusPrEvent('e-20261003-110500-0001', true);
+    expect(useUiStore.getState()).toMatchObject({ prTab: 'conversation', prFocus: 'e-20261003-110500-0001', prConversation: 'everything' });
+    useUiStore.getState().setPrConversation('comments');
+    useUiStore.getState().focusPrEvent('c-https://x', false);
+    expect(useUiStore.getState()).toMatchObject({ prFocus: 'c-https://x', prConversation: 'comments' });
+    useUiStore.getState().clearPrFocus();
+    expect(useUiStore.getState().prFocus).toBeNull();
+  });
+
+  it('each open clears it', () => {
+    useUiStore.getState().focusPrEvent('c-https://x', false);
+    useUiStore.getState().openPrPage({ owner: 'acme', repo: 'server', n: 1 });
+    expect(useUiStore.getState().prFocus).toBeNull();
+  });
+});

@@ -32,8 +32,8 @@ export interface AgentPage {
   view: AgentPageView;
 }
 
-/** The PR page's tabs (HIVE-205); Checks is HIVE-206's, Files HIVE-207's, and HIVE-208 adds Timeline. */
-export type PrTab = 'conversation' | 'checks' | 'files';
+/** The PR page's tabs (HIVE-205); Checks is HIVE-206's, Files HIVE-207's, Timeline HIVE-208's. */
+export type PrTab = 'conversation' | 'checks' | 'files' | 'timeline';
 /** The Files tab's diff layout (HIVE-207). */
 export type PrDiffView = 'unified' | 'split';
 /** Which PR the PRs place last opened (HIVE-205). */
@@ -239,6 +239,8 @@ interface UiState {
   prFileFilter: string;
   /** Unified or Split; kept across PRs, as the tab is (HIVE-207). */
   prDiffView: PrDiffView;
+  /** The Conversation item the Timeline clicked through to, by its list key; cleared once scrolled to (HIVE-208). Not persisted. */
+  prFocus: string | null;
 
   /** Open a tab; `place`, when the caller knows the entity's owner, moves the bar with it. */
   openTab: (id: 'orch' | string, place?: Place) => void;
@@ -321,7 +323,7 @@ interface UiState {
   openAgentPage: (name: string | null, view: AgentPageView) => void;
   setAgentPageView: (view: AgentPageView) => void;
   closeAgentPage: () => void;
-  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab; forgets the Checks tab's shown push and job (HIVE-206) and the Files tab's file and filter (HIVE-207). */
+  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab; forgets the Checks tab's shown push and job (HIVE-206), the Files tab's file and filter (HIVE-207), and the Timeline's focus (HIVE-208). */
   openPrPage: (ref: PrPageRef) => void;
   setPrTab: (tab: PrTab) => void;
   showPrRun: (sha: string) => void;
@@ -333,6 +335,9 @@ interface UiState {
   setPrFile: (path: string | null) => void;
   setPrFileFilter: (text: string) => void;
   setPrDiffView: (view: PrDiffView) => void;
+  /** Conversation, scrolled to `key` (`c-<url>`, `r-<url>`, `e-<ledger id>`); `everything` for a Hive event (HIVE-208). */
+  focusPrEvent: (key: string, everything: boolean) => void;
+  clearPrFocus: () => void;
   /** Notification ids up as a card or note, newest first (HIVE-198). Not persisted. */
   arrivals: string[];
   /** The latest arrival that came in while the keyboard was in a terminal: the pill pulses once for it. */
@@ -405,6 +410,7 @@ const initialUiState = {
   prFile: null as string | null,
   prFileFilter: '',
   prDiffView: 'unified' as PrDiffView,
+  prFocus: null as string | null,
   arrivals: [] as string[],
   arrivalPulse: null as string | null,
   inboxDrawer: { open: false, thread: null } as { open: boolean; thread: string | null },
@@ -644,6 +650,7 @@ export const useUiStore = create<UiState>()((set) => ({
       prJob: null,
       prFile: null,
       prFileFilter: '',
+      prFocus: null,
       picker: false,
       settings: false,
     }),
@@ -657,6 +664,9 @@ export const useUiStore = create<UiState>()((set) => ({
   setPrFile: (path) => set({ prFile: path }),
   setPrFileFilter: (text) => set({ prFileFilter: text }),
   setPrDiffView: (view) => set({ prDiffView: view }),
+  focusPrEvent: (key, everything) =>
+    set((state) => ({ prTab: 'conversation', prFocus: key, prConversation: everything ? 'everything' : state.prConversation })),
+  clearPrFocus: () => set({ prFocus: null }),
   pushArrival: (id, quiet) =>
     set((state) => {
       if (quiet) return { arrivalPulse: id };
@@ -770,6 +780,8 @@ export const usePrSearchOpen = () => useUiStore((state) => state.prSearchOpen);
 export const usePrFile = () => useUiStore((state) => state.prFile);
 export const usePrFileFilter = () => useUiStore((state) => state.prFileFilter);
 export const usePrDiffView = () => useUiStore((state) => state.prDiffView);
+/** The Conversation item the Timeline clicked through to (HIVE-208). */
+export const usePrFocus = () => useUiStore((state) => state.prFocus);
 export const usePrPageActions = () =>
   useUiStore(
     useShallow((state) => ({
@@ -784,6 +796,8 @@ export const usePrPageActions = () =>
       setPrFile: state.setPrFile,
       setPrFileFilter: state.setPrFileFilter,
       setPrDiffView: state.setPrDiffView,
+      focusPrEvent: state.focusPrEvent,
+      clearPrFocus: state.clearPrFocus,
     })),
   );
 

@@ -6,6 +6,7 @@ import {
   readPrDetail,
   readPrDiff,
   readPrRuns,
+  readPrTimeline,
   readPullRequests,
   readRunJobs,
   rerunFailedJobs,
@@ -153,6 +154,31 @@ describe('readPrDetail and postPrComment (HIVE-205)', () => {
     await expect(readPrDetail(ref)).resolves.toBeNull();
     await expect(postPrComment({ ...ref, body: 'hi' })).resolves.toBeNull();
     expect(error).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('readPrTimeline (HIVE-208)', () => {
+  const ref = { owner: 'acme', repo: 'web', n: 7 };
+
+  it('answers null with no bridge', async () => {
+    await expect(readPrTimeline(ref)).resolves.toBeNull();
+  });
+
+  it('passes the request and the answer straight through', async () => {
+    const answer = { ok: false, error: { kind: 'no-repos', message: 'acme/web is not a configured project’s repository.' } };
+    const prTimeline = vi.fn().mockResolvedValue(answer);
+    window.hive = { github: { prTimeline } } as unknown as Window['hive'];
+
+    await expect(readPrTimeline(ref)).resolves.toEqual(answer);
+    expect(prTimeline).toHaveBeenCalledWith(ref);
+  });
+
+  it('answers null and logs once when the channel itself fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    window.hive = { github: { prTimeline: vi.fn().mockRejectedValue(new Error('closed')) } } as unknown as Window['hive'];
+
+    await expect(readPrTimeline(ref)).resolves.toBeNull();
+    expect(error).toHaveBeenCalledTimes(1);
   });
 });
 
