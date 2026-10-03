@@ -331,6 +331,9 @@ interface UiState {
   /** Open the drawer, on an ask's thread when one is named, folding what was up. */
   openInboxDrawer: (thread?: string) => void;
   closeInboxDrawer: () => void;
+  /** When this window last lost focus, else when it launched (HIVE-200's "since"). View state, not persisted. */
+  awaySince: number;
+  markAway: (at: number) => void;
   reset: () => void;
 }
 
@@ -382,6 +385,7 @@ const initialUiState = {
   arrivals: [] as string[],
   arrivalPulse: null as string | null,
   inboxDrawer: { open: false, thread: null } as { open: boolean; thread: string | null },
+  awaySince: Date.now(),
 };
 
 /** Back to the Overmind with the row left behind under the caret (HIVE-197). */
@@ -629,6 +633,7 @@ export const useUiStore = create<UiState>()((set) => ({
   foldArrivals: () => set({ arrivals: [] }),
   openInboxDrawer: (thread) => set({ inboxDrawer: { open: true, thread: thread ?? null }, arrivals: [] }),
   closeInboxDrawer: () => set({ inboxDrawer: { open: false, thread: null } }),
+  markAway: (at) => set({ awaySince: at }),
   reset: () => set(initialUiState),
 }));
 
@@ -895,3 +900,7 @@ export const useBumpFsRevision = () =>
   useUiStore((state) => state.bumpFsRevision);
 
 
+
+/** Home's "since" (HIVE-200). */
+export const useAwaySince = () => useUiStore((state) => state.awaySince);
+export const useMarkAway = () => useUiStore((state) => state.markAway);

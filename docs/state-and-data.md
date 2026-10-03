@@ -467,6 +467,31 @@ row; also what lets a quiet Hatchery draw its panel). The stage resolves to a
 
 `Pr` (and `PrRecord`) carry `mergedAt` and `mine`; `Pr` also carries `updatedAt`.
 
+### Home's strip (HIVE-200)
+
+Every number Home's strip shows is derived from state the renderer already
+holds; nothing new is stored but `awaySince`. Each reading is a pure `…Of`
+function in `hive-store.ts` behind a hook that keeps its identity across an
+unrelated write (a terminal line re-renders none of them).
+
+- `useAccountLimits()` (`accountLimitsOf(metrics)`): the account's five-hour and
+  seven-day windows. Limits are account-global, so any session's reading is the
+  account's; per window the reading with the latest `resetsAt` wins, then the
+  highest percentage, and a reading with no reset ranks below every one with one.
+  An unreported window is absent, never 0.
+- `useComingUp()` (`comingUpOf`): agents with a `nextRunAt`, soonest first, then
+  held asks (`isHeld`, an `after:` PR not yet closed) as "picks up X when repo#N
+  ships". At most five.
+- `useWhileAway(since)` (`whileAwayOf`): PRs merged after `since` (and the one
+  party whose `closed` post covers them all), `session.goal` notification titles,
+  `run.ended` events in the ledger tail with the failed ones counted, and todo
+  tickets with no live session. Runs are bounded by `LEDGER_MEMORY_CAP`, so a busy
+  day can undercount; the row's tooltip says so.
+- `usePrFlapCounts()` (`flapCountsOf`): counts per flap over `useHatchery()`, in
+  `FLAP_RANK` order, toned by `flapTone`; empty unless `prSource` is live.
+- `ui-store.awaySince`: when this window last lost focus (`useAwayTracker`,
+  mounted once in the app shell), else when it launched. Per window, not persisted.
+
 ## Caps
 
 Two collections are bounded, because a long-running demo must not grow without

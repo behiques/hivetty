@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   chipLabel,
@@ -8,6 +8,8 @@ import {
   modelLabel,
   pctLabel,
   pctOrNull,
+  resetsDayLabel,
+  timeLeftLabel,
 } from '@/lib/session-metrics';
 
 /**
@@ -169,5 +171,40 @@ describe('chipLabel', () => {
     expect(chipLabel({ contextWindow: 2_000_000 }, 'opus', 'high')).toContain(
       '(2M)',
     );
+  });
+});
+
+describe('timeLeftLabel / resetsDayLabel (HIVE-200)', () => {
+  // Mon 5 Oct 2026, 12:00 local — a fixed clock, never a real one.
+  const NOW = new Date(2026, 9, 5, 12, 0, 0).getTime();
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+  const secs = (ms: number) => Math.floor(ms / 1000);
+
+  it('says hours and minutes left', () => {
+    expect(timeLeftLabel(secs(NOW + (3 * 60 + 12) * 60_000), NOW)).toBe('3h 12m left');
+  });
+  it('says minutes alone under an hour', () => {
+    expect(timeLeftLabel(secs(NOW + 48 * 60_000), NOW)).toBe('48m left');
+  });
+  it('says <1m under a minute', () => {
+    expect(timeLeftLabel(secs(NOW + 20_000), NOW)).toBe('<1m left');
+  });
+  it('is null for an absent, past or implausible reset', () => {
+    expect(timeLeftLabel(undefined, NOW)).toBeNull();
+    expect(timeLeftLabel(secs(NOW - 60_000), NOW)).toBeNull();
+    expect(timeLeftLabel(0, NOW)).toBeNull();
+  });
+  it('names the reset weekday', () => {
+    expect(resetsDayLabel(secs(new Date(2026, 9, 12, 9, 0).getTime()))).toBe(
+      `resets ${new Date(2026, 9, 12).toLocaleDateString(undefined, { weekday: 'short' })}`,
+    );
+  });
+  it('is null for an absent or implausible reset day', () => {
+    expect(resetsDayLabel(undefined)).toBeNull();
+    expect(resetsDayLabel(0)).toBeNull();
   });
 });
