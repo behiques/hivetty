@@ -1065,6 +1065,8 @@ describe('handlers that dereference the Electron event', () => {
       CH.ptyAck,
       CH.fsWatch,
       CH.fsUnwatch,
+      // names the device an answer came from (HIVE-218)
+      CH.ledgerAnswer,
     ];
 
     const expected = new Set(
