@@ -136,7 +136,7 @@ describe('useNotificationActivate', () => {
     (window as { hive?: unknown }).hive = bridge;
     renderHook(() => useNotificationActivate());
 
-    listeners[0]?.({ type: 'ask' });
+    listeners[0]?.({ type: 'ask', thread: 'a41' });
 
     expect(useUiStore.getState().railTab).toBe('inbox');
     expect(useUiStore.getState().showActivityRail).toBe(true);
@@ -149,7 +149,7 @@ describe('useNotificationActivate', () => {
     (window as { hive?: unknown }).hive = bridge;
     renderHook(() => useNotificationActivate());
 
-    listeners[0]?.({ type: 'ask' });
+    listeners[0]?.({ type: 'ask', thread: 'a41' });
 
     expect(useUiStore.getState().activeTab).toBe('orch');
   });

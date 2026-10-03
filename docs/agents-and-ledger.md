@@ -834,7 +834,7 @@ changed it to, so the agent that reads its answer back can tell a rubber stamp
 from a rewrite and can still match the body against the closed set it offered.
 
 A click on an ask's **toast** does not answer it and does not dismiss its row:
-it reveals the card. Main sends `{ type: 'ask' }` on `notifications:activate`
+it reveals the card. Main sends `{ type: 'ask', thread }` on `notifications:activate`
 — the same channel a session's click uses, widened into a union — and the
 renderer answers it with `revealRailTab('inbox')`, because main may not touch
 the rail and the rail can be sitting on another tab or collapsed outright.

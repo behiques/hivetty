@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Agent, Entity, Session, Terminal } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
+import { LEDGER_MEMORY_CAP, type LedgerEntry } from '@shared/ledger-contract';
 import type { PlanTaskStatus, SessionPlan } from '@shared/plan-contract';
 
 import {
@@ -61,6 +62,9 @@ import {
   useTickets,
   useTicketSessions,
   useUnreadCount,
+  useSummons,
+  useSummonsCount,
+  useYoursAgain,
   useCombEntities,
   useCombSummary,
 } from '@stores/hive-store';
@@ -732,6 +736,126 @@ describe('hive-store selectors', () => {
     it('returns nothing for an unknown ticket', () => {
       const { result } = renderHook(() => useTicketPrs('NOPE-1'));
       expect(result.current).toEqual([]);
+    });
+  });
+
+  describe('useSummons and useSummonsCount (HIVE-214)', () => {
+    const ask = (id: string, kind: 'agent.ask' | 'agent.permission' = 'agent.ask') =>
+      notif({ id, kind, action: { type: 'ask', thread: id } });
+    const blocked = (id: string, terminal: string) =>
+      notif({ id, kind: 'session.blocked', action: { type: 'session', entityId: terminal } });
+    const closing = (id: string, kind: 'answer' | 'done' | 'failed', thread: string): LedgerEntry =>
+      ({ id, ts: 1, from: 'sess-a', kind, body: '', thread });
+
+    beforeEach(() => {
+      act(() => useHiveStore.setState({ notifs: [], ledger: [], closedAsks: new Set() }));
+    });
+
+    it('splits asks from blocked sessions, newest first, and ignores the rest', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([
+          { ...ask('q1'), createdAt: 3 },
+          { ...blocked('b1', 'term-1'), createdAt: 2 },
+          { ...ask('p1', 'agent.permission'), createdAt: 1 },
+          notif({ id: 'i', kind: 'session.idle', action: { type: 'session', entityId: 'term-2' } }),
+          notif({ id: 'm', kind: 'pr.merged', action: { type: 'none' } }),
+        ]);
+      });
+
+      const { result } = renderHook(() => useSummons(null));
+      expect(result.current.asks.map((n) => n.id)).toEqual(['q1', 'p1']);
+      expect(result.current.sessions.map((n) => n.id)).toEqual(['b1']);
+
+      const count = renderHook(() => useSummonsCount(null));
+      expect(count.result.current).toBe(3);
+    });
+
+    it.each(['answer', 'done', 'failed'] as const)('drops an ask closed by %s', (kind) => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([ask('q1')]);
+        useHiveStore.getState().hydrateLedger([closing('x1', kind, 'q1')]);
+      });
+
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(0);
+    });
+
+    it('drops an ask the overmind expired', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([ask('q1')]);
+        useHiveStore.getState().hydrateLedger([
+          { id: 'e1', ts: 1, from: 'overmind', kind: 'event', body: 'ask q1 expired', thread: 'q1', meta: { expired: 'q1' } },
+        ]);
+      });
+
+      expect(renderHook(() => useSummons(null)).result.current.asks).toEqual([]);
+    });
+
+    it('keeps an ask whose ask entry is not in the ledger mirror', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([ask('q-old')]);
+        useHiveStore.getState().hydrateLedger([closing('x1', 'answer', 'q-other')]);
+      });
+
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(1);
+    });
+
+    it('keeps an ask closed after its closing entry rolls out of the mirror', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([ask('q1')]);
+        useHiveStore.getState().ledgerAppend(closing('x1', 'answer', 'q1'));
+      });
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(0);
+
+      act(() => {
+        for (let i = 0; i < LEDGER_MEMORY_CAP; i += 1) {
+          useHiveStore.getState().ledgerAppend({ id: `y${String(i).padStart(4, '0')}`, ts: 1, from: 'a', kind: 'post', body: '' });
+        }
+      });
+
+      expect(useHiveStore.getState().ledger.some((entry) => entry.id === 'x1')).toBe(false);
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(0);
+    });
+
+    it('leaves out the session on stage, and counts it for the dock', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([blocked('b1', 'term-1'), blocked('b2', 'term-2')]);
+      });
+
+      expect(renderHook(() => useSummons('term-1')).result.current.sessions.map((n) => n.id)).toEqual(['b2']);
+      expect(renderHook(() => useSummonsCount('term-1')).result.current).toBe(1);
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(2);
+    });
+  });
+
+  describe('useYoursAgain (HIVE-214)', () => {
+    beforeEach(() => {
+      act(() => useHiveStore.setState({ notifs: [] }));
+    });
+
+    it.each(['session.idle', 'session.input_needed'] as const)('is true on an unswept %s row', (kind) => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([
+          notif({ id: 'y', kind, action: { type: 'session', entityId: 'term-1' } }),
+        ]);
+      });
+
+      const { result } = renderHook(() => useYoursAgain('term-1'));
+      expect(result.current).toBe(true);
+
+      act(() => {
+        useHiveStore.getState().applyDismiss('y');
+      });
+      expect(result.current).toBe(false);
+    });
+
+    it('is false for another terminal', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([
+          notif({ id: 'y', kind: 'session.idle', action: { type: 'session', entityId: 'term-2' } }),
+        ]);
+      });
+
+      expect(renderHook(() => useYoursAgain('term-1')).result.current).toBe(false);
     });
   });
 

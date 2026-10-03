@@ -64,12 +64,13 @@ describe('InboxPanel', () => {
     expect(screen.getByRole('button', { name: 'Clear all' })).toBeInTheDocument();
   });
 
-  it('clears every card when Clear all is pressed', async () => {
+  /** News only: Clear all leaves what waits on you (HIVE-214). */
+  it('clears every card of news when Clear all is pressed', async () => {
     useHiveStore
       .getState()
       .hydrateNotifs([
-        notif({ id: 'a', title: 'first' }),
-        notif({ id: 'b', title: 'second' }),
+        notif({ id: 'a', title: 'first', kind: 'pr.merged', action: { type: 'none' } }),
+        notif({ id: 'b', title: 'second', kind: 'pr.merged', action: { type: 'none' } }),
       ]);
 
     render(<InboxPanel />);
@@ -109,7 +110,9 @@ describe('InboxPanel', () => {
 
   it('caps the rendered list at the shared cap', () => {
     for (let i = 0; i < NOTIFICATION_CAP + 5; i += 1) {
-      useHiveStore.getState().pushNotif(notif({ id: `n${i}`, createdAt: i }));
+      useHiveStore
+        .getState()
+        .pushNotif(notif({ id: `n${i}`, createdAt: i, kind: 'pr.merged', action: { type: 'none' } }));
     }
 
     render(<InboxPanel />);

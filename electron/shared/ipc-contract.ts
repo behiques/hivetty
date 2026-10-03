@@ -1528,8 +1528,11 @@ export type NotificationActivateEvent =
    * name for an agent, which the renderer tells apart with `isAgentId`.
    */
   | { type: 'entity'; entityId: string }
-  /** An ask was clicked (HIVE-118). Its card lives in the inbox. */
-  | { type: 'ask' };
+  /**
+   * An ask was clicked (HIVE-118). Its card lives in the inbox; `thread` names
+   * the ask, so the drawer can open on it (HIVE-214, consumed by HIVE-198).
+   */
+  | { type: 'ask'; thread: string };
 
 /**
  * What an attachment is doing, for {@link CH.remoteLinkStatus} (HIVE-150).
