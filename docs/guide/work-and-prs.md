@@ -32,8 +32,6 @@ the macOS Keychain and never leaves the main process.
 
 ## The Work list
 
-<img src="../assets/guide/06-work-tab.png" alt="Work: the ticket list in the list panel and a ticket's page on the stage" width="340">
-
 By default it shows:
 
 ```text
@@ -159,8 +157,6 @@ The session is named for the ticket, and names stay unique: `ABC-123`, then `ABC
 From here, [Working a ticket](workflow.md) walks the rest of the way to Done.
 
 ## The PRs list
-
-<img src="../assets/guide/07-prs-tab.png" alt="PRs: the Hatchery in the list panel and a pull request's page on the stage" width="340">
 
 The list comes from the GitHub CLI, run as you, with two searches:
 
