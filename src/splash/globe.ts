@@ -1,0 +1,125 @@
+import { LOG_SCHEDULE } from './chamber';
+
+/**
+ * The comb globe (HIVE-212; design §11), ported from the prototype's `ZD`
+ * (`.hive/specs/hive-212-ref/round11-splash2.js` while it was being built).
+ *
+ * Everything is centred on the origin: the caller translates to the rings'
+ * centre (the splash) or to its hero (About) and scales. Positions are pure
+ * functions of `t`, seconds on the splash's clock, so the tests can ask where
+ * anything is at any moment; `drawGlobe` only paints what they answer. No
+ * colour lives here: every colour arrives in the palette.
+ */
+
+/** The globe's radius, in chamber pixels. */
+export const GLOBE_R = 140;
+const CELLS = 90;
+/** The golden angle, as the prototype rounds it. */
+const GOLDEN = 2.39996;
+const SPIN = 0.45;
+const TILT = 0.32;
+const FORM_AT = 0.35;
+const FORM_FOR = 1.3;
+
+const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
+const lerp = (a: number, b: number, k: number): number => a + (b - a) * k;
+const after = (t: number, at: number, dur: number): number => clamp01((t - at) / dur);
+const easeO = (x: number): number => 1 - (1 - clamp01(x)) ** 3;
+const easeIO = (x: number): number => {
+  const k = clamp01(x);
+  return k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2;
+};
+
+/** Park–Miller, seed 9, as the prototype seeds its scatter: the same globe every launch. */
+const seeded = (seed: number): (() => number) => {
+  let s = seed % 2147483647;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+};
+
+export type CellKind = 'green' | 'violet' | 'amber';
+
+/** Each colour lights at the log line that names it: sessions, repositories, the two awaiting you. */
+export const LIGHT_AT: Record<CellKind, number> = {
+  green: LOG_SCHEDULE[0]!,
+  violet: LOG_SCHEDULE[2]!,
+  amber: LOG_SCHEDULE[3]!,
+};
+
+/**
+ * Fixed cells, so the lights match the copy (4 sessions, 3 repositories, 2
+ * awaiting). The Fibonacci order runs pole to pole, so even spacing in the
+ * index spreads each colour over the sphere. The prototype drew these at
+ * random and got eight, four and three.
+ */
+const LIT: Record<CellKind, readonly number[]> = {
+  green: [8, 30, 52, 74],
+  violet: [19, 41, 63],
+  amber: [36, 80],
+};
+
+export interface GlobeCell {
+  x: number;
+  y: number;
+  z: number;
+  /** Where it starts, in globe radii before the 2.2 spread. */
+  sx: number;
+  sy: number;
+  /** Its delay into the forming, 0 to 0.5s. */
+  d: number;
+  kind: CellKind | null;
+}
+
+const kindOf = (i: number): CellKind | null =>
+  (Object.keys(LIT) as CellKind[]).find((kind) => LIT[kind].includes(i)) ?? null;
+
+const rnd = seeded(9);
+
+/** Ninety cells on a Fibonacci sphere; the scatter drawn sx, sy, d per cell, in that order. */
+export const GLOBE_CELLS: readonly GlobeCell[] = Array.from({ length: CELLS }, (_, i) => {
+  const y = 1 - (i / (CELLS - 1)) * 2;
+  const r = Math.sqrt(1 - y * y);
+  const th = i * GOLDEN;
+  return {
+    x: Math.cos(th) * r,
+    y,
+    z: Math.sin(th) * r,
+    sx: (rnd() - 0.5) * 2.4,
+    sy: (rnd() - 0.5) * 2.4,
+    d: rnd() * 0.5,
+    kind: kindOf(i),
+  };
+});
+
+export interface PlacedCell {
+  cell: GlobeCell;
+  X: number;
+  Y: number;
+  /** 0 at the back of the globe, 1 at the front. */
+  depth: number;
+  /** 0 while scattered, 1 once in place. */
+  formed: number;
+}
+
+/** Where a cell is at `t`: turned about the vertical axis, tilted toward the viewer, eased in from its scatter. */
+export function cellAt(cell: GlobeCell, t: number): PlacedCell {
+  const rot = t * SPIN;
+  const x1 = cell.x * Math.cos(rot) + cell.z * Math.sin(rot);
+  const z1 = -cell.x * Math.sin(rot) + cell.z * Math.cos(rot);
+  const y2 = cell.y * Math.cos(TILT) - z1 * Math.sin(TILT);
+  const z2 = cell.y * Math.sin(TILT) + z1 * Math.cos(TILT);
+  const formed = easeIO(after(t, FORM_AT + cell.d, FORM_FOR));
+  return {
+    cell,
+    X: lerp(cell.sx * 2.2, x1, formed) * GLOBE_R,
+    Y: lerp(cell.sy * 2.2, y2, formed) * GLOBE_R,
+    depth: (z2 + 1) / 2,
+    formed,
+  };
+}
+
+/** How lit a cell is, 0 to 1, easing in over 0.4s from its log line. */
+export const cellLight = (cell: GlobeCell, t: number): number =>
+  cell.kind ? easeO(after(t, LIGHT_AT[cell.kind], 0.4)) : 0;
