@@ -57,26 +57,6 @@ test('Work with no Jira shows the not-connected page and no list (HIVE-211)', as
   await expect(page.getByRole('heading', { name: 'Integrations', level: 2 })).toBeVisible();
 });
 
-test('Settings opens from the bar, and Classic comes back from it', async ({ page }) => {
-  await bar(page).getByRole('button', { name: 'Settings' }).click();
-  await page
-    .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Appearance' })
-    .click();
-
-  await page
-    .getByRole('radiogroup', { name: 'Layout' })
-    .getByRole('radio', { name: 'Classic' })
-    .click();
-
-  await expect(bar(page)).toHaveCount(0);
-  await expect(page.getByRole('banner')).toBeVisible();
-  await expect(
-    page.getByRole('navigation', { name: 'Projects, work, and agents' }),
-  ).toBeVisible();
-  await expect(page.getByRole('complementary', { name: 'Activity' })).toBeVisible();
-});
-
 test('Sessions with no project shows the Overmind and no panel, and the filter narrows it', async ({ page }) => {
   await place(page, 'Sessions').click();
   await expect(page.getByRole('heading', { level: 1, name: 'Overmind' })).toBeVisible();

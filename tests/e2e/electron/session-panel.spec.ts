@@ -17,8 +17,8 @@ import { launchHive, writeProjectConfig } from './fixtures/hive-app';
 /**
  * Round two's session panel in the real app (HIVE-201).
  *
- * Hooks are posted from inside the session's own shell, as `plan-rail.spec.ts`
- * does. The changed-files case stages a transcript under a replaced HOME and
+ * Hooks are posted from inside the session's own shell, the way a real
+ * session's are. The changed-files case stages a transcript under a replaced HOME and
  * posts the `Edit` that makes main read it: what only the built app shows is
  * the whole trip, receiver to transcript to socket-free push to the Files tab.
  */

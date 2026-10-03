@@ -24,10 +24,8 @@ import {
  * — last and narrowest — ended up a whole control adrift. Four thousand unit
  * tests were green throughout. They had to be: happy-dom performs no layout, so
  * a component test can prove the cell *exists* and never that it is under its
- * heading. This is the same reason `rail-alignment.spec.ts` and
- * `chip-alignment.spec.ts` exist, and the defect they were written for is the
- * same defect — a *relationship* between two pieces of markup that no single
- * component owns.
+ * heading. The defect is a *relationship* between two pieces of markup that no
+ * single component owns, and only a real layout engine measures one.
  *
  * ## Why geometry rather than DOM order
  *
@@ -101,7 +99,7 @@ async function resizeTo(
 }
 
 /**
- * Rounded before comparison, for `rail-alignment.spec.ts`'s reason: these are
+ * Rounded before comparison, because these are
  * fractional CSS pixels in a flex line whose free space is divided three ways,
  * and demanding an exact match would fail on a rounding difference rather than
  * on a layout regression.

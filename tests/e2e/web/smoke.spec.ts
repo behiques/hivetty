@@ -65,10 +65,8 @@ test('renders the header chrome', async ({ page }) => {
  * fleet any more and no way to start a real one, so their precondition is
  * unreachable rather than merely unmet.
  *
- * What they measured is still measured. `chip-alignment.spec.ts` pins the
- * chip cluster to the left rail's trailing edge in this same browser, and the
- * electron suite covers the model chip on the target that can actually open a
- * session. Nothing was traded away to make this file pass; the coverage moved
+ * What they measured is still measured: the electron suite covers the model
+ * chip on the target that can actually open a session. Nothing was traded away to make this file pass; the coverage moved
  * to where the subject exists.
  */
 

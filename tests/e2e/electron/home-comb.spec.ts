@@ -17,7 +17,7 @@ import { launchHive } from './fixtures/hive-app';
  * Home's comb in the real app (HIVE-199).
  *
  * Three sessions on one project, each driven into a state by hook posts from
- * its own shell, the way `plan-rail.spec.ts` posts its task tools: one
+ * its own shell, the way a session posts its task tools: one
  * working, one waiting, one idle. What only a real window can show is the
  * canvas itself — that it lays the patch out where the layout says, that a
  * hover over it finds the cell, and what it looks like in both themes, which
