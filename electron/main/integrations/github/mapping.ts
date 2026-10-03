@@ -6,6 +6,7 @@ import {
   type PrCheckStatus,
   type PrComment,
   type PrDetail,
+  type PrFile,
   type PrRecord,
   type PrReview,
   type PrThread,
@@ -380,6 +381,21 @@ function toThread(raw: unknown): PrThread | null {
   };
 }
 
+/** One changed file (HIVE-207). `DISMISSED` is GitHub's "pushed to since you viewed it". */
+function toFile(raw: unknown): PrFile | null {
+  if (!isRecord(raw)) return null;
+  const path = text(raw.path);
+  if (path === null) return null;
+  const state = text(raw.viewerViewedState);
+  return {
+    path,
+    additions: whole(raw.additions) ?? 0,
+    deletions: whole(raw.deletions) ?? 0,
+    changeType: (text(raw.changeType) ?? 'modified').toLowerCase(),
+    viewed: state === 'VIEWED' ? 'viewed' : state === 'DISMISSED' ? 'dismissed' : 'unviewed',
+  };
+}
+
 /** A check run's status and conclusion, or a commit status's state, as one word. */
 function checkStatus(raw: Record<string, unknown>): PrCheckStatus {
   if (raw.__typename === 'StatusContext') {
@@ -475,6 +491,7 @@ export function toPrDetail(payload: unknown, owner: string, repo: string): PrDet
     reviewRequests: each(raw.reviewRequests, toReviewer),
     threads: each(raw.reviewThreads, toThread),
     checks: each(contextsOf(raw), toCheck),
+    files: each(raw.files, toFile),
   };
 }
 

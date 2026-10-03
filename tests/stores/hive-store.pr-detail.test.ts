@@ -28,7 +28,7 @@ const detail = (n: number): PrDetail => ({
   state: 'open', isDraft: false, body: '', createdAt: '2026-10-03T08:00:00Z', mergedAt: null,
   baseRef: 'main', headRef: 'feat/x', headSha: 'abc', additions: 1, deletions: 0, changedFiles: 1,
   author: 'octocat', reviewDecision: null, mergeStateStatus: null,
-  comments: [], reviews: [], reviewRequests: [], threads: [], checks: [],
+  comments: [], reviews: [], reviewRequests: [], threads: [], checks: [], files: [],
 });
 const ok = <T,>(value: T) => ({ ok: true as const, value });
 const refused = (message: string) => ({ ok: false as const, error: { kind: 'unknown' as const, message } });

@@ -554,6 +554,25 @@ describe('toPrDetail (HIVE-205)', () => {
     });
   });
 
+  it('maps the changed files, GitHub’s viewed state included (HIVE-207)', () => {
+    const detail = toPrDetail(payload(pr({ files: { nodes: [
+      { path: 'src/a.ts', additions: 3, deletions: 1, changeType: 'MODIFIED', viewerViewedState: 'VIEWED' },
+      { path: 'src/b.ts', additions: 0, deletions: 0, changeType: 'RENAMED', viewerViewedState: 'DISMISSED' },
+      { path: 'src/c.ts', additions: null, deletions: 2, changeType: null, viewerViewedState: 'UNVIEWED' },
+      { additions: 1 },
+      null,
+    ] } })), 'acme', 'server');
+    expect(detail?.files).toEqual([
+      { path: 'src/a.ts', additions: 3, deletions: 1, changeType: 'modified', viewed: 'viewed' },
+      { path: 'src/b.ts', additions: 0, deletions: 0, changeType: 'renamed', viewed: 'dismissed' },
+      { path: 'src/c.ts', additions: 0, deletions: 2, changeType: 'modified', viewed: 'unviewed' },
+    ]);
+  });
+
+  it('has no files when GitHub sent none (HIVE-207)', () => {
+    expect(toPrDetail(payload(pr()), 'acme', 'server')?.files).toEqual([]);
+  });
+
   it('reads MERGED and CLOSED, and nulls as nulls or zero', () => {
     expect(toPrDetail(payload(pr({ state: 'MERGED', mergedAt: '2026-10-03T11:32:00Z' })), 'acme', 'server'))
       .toMatchObject({ state: 'merged', mergedAt: '2026-10-03T11:32:00Z' });
