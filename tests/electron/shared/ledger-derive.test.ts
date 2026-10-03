@@ -24,7 +24,9 @@ import {
   nextRef,
   openAsks,
   resolveRef,
+  SHIP_STOPS,
   shipStage,
+  shipTrack,
   thread,
   ttlOf,
   STAGE_TEXT_MAX,
@@ -863,5 +865,87 @@ describe('closedAskThreads (HIVE-214)', () => {
     const forged = entry({ id: 'e2', from: 'sess-9', kind: 'event', meta: { expired: 'a1' } });
 
     expect(closedAskThreads([forged]).has('a1')).toBe(false);
+  });
+});
+
+describe('shipTrack (HIVE-205)', () => {
+  const slug = 'acme/server';
+  const MIN = 60_000;
+  const at = (minutes: number) => NOW - 200 * MIN + minutes * MIN;
+  const claim = entry({ id: 'c1', ts: at(0), from: 'shipper', kind: 'claim', meta: { task: 'Acme/Server#1182' } });
+  const stage = (id: string, minutes: number, name: string) =>
+    entry({ id, ts: at(minutes), from: 'shipper', body: name, meta: { pr: 1182, repo: slug, stage: name } });
+  const askTo = (id: string, minutes: number, to: string, body: string, meta?: Record<string, unknown>) =>
+    entry({ id, ts: at(minutes), from: 'shipper', kind: 'ask', to, body, ...(meta ? { meta } : {}) });
+  const stop = (track: ReturnType<typeof shipTrack>, name: string) => track.stops.find((s) => s.stage === name)!;
+
+  it('has all eight stops, in order, and nothing held with no entries', () => {
+    const track = shipTrack([], slug, 1182, NOW);
+    expect(track.stops.map((s) => s.stage)).toEqual([...SHIP_STOPS]);
+    expect(track).toMatchObject({ held: false, current: null });
+    expect(track.stops.every((s) => s.firstAt === null && s.spentMs === 0 && s.holder === null)).toBe(true);
+  });
+
+  it('walks forward: the claim opens intake, each post the next stop, the last runs to now', () => {
+    const track = shipTrack([claim, stage('p1', 2, 'self-review'), stage('p2', 30, 'fix-self'), stage('p3', 56, 'ready'), stage('p4', 57, 'ci')], slug, 1182, at(100));
+    expect(stop(track, 'intake')).toEqual({ stage: 'intake', firstAt: at(0), spentMs: 2 * MIN, holder: 'shipper' });
+    expect(stop(track, 'self-review')).toMatchObject({ firstAt: at(2), spentMs: 28 * MIN });
+    expect(stop(track, 'ci')).toMatchObject({ firstAt: at(57), spentMs: 43 * MIN });
+    expect(track).toMatchObject({ held: true, current: { stage: 'ci' } });
+    expect(stop(track, 'merge')).toEqual({ stage: 'merge', firstAt: null, spentMs: 0, holder: null });
+  });
+
+  it('steps back from approval to findings, summing the time at findings over both visits', () => {
+    const track = shipTrack([claim, stage('p1', 10, 'findings'), stage('p2', 30, 'approval'), stage('p3', 40, 'findings')], slug, 1182, at(55));
+    expect(stop(track, 'findings')).toMatchObject({ firstAt: at(10), spentMs: (20 + 15) * MIN });
+    expect(stop(track, 'approval')).toMatchObject({ spentMs: 10 * MIN });
+    expect(track.current?.stage).toBe('findings');
+  });
+
+  it('takes the holder from an ask to acr or fixer naming the PR in meta or in its words', () => {
+    const track = shipTrack([
+      claim,
+      stage('p1', 2, 'self-review'),
+      askTo('a1', 2, 'acr', 'Review https://github.com/acme/server/pull/1182 --self'),
+      stage('p2', 30, 'fix-self'),
+      askTo('a2', 30, 'fixer', 'Fix these', { pr: 1182, repo: slug }),
+      stage('p3', 56, 'ready'),
+    ], slug, 1182, at(60));
+    expect(stop(track, 'self-review').holder).toBe('acr');
+    expect(stop(track, 'fix-self').holder).toBe('fixer');
+    expect(stop(track, 'ready').holder).toBe('shipper');
+  });
+
+  it('ignores an ask for another PR in the same window, and a number that only starts the same', () => {
+    const track = shipTrack([
+      claim,
+      stage('p1', 10, 'findings'),
+      askTo('a1', 11, 'fixer', 'acme/server#11820 has findings'),
+      askTo('a2', 12, 'fixer', 'acme/other#1182 has findings'),
+      askTo('a3', 13, 'fixer', 'xacme/server#1182 is not this one'),
+    ], slug, 1182, at(20));
+    expect(stop(track, 'findings').holder).toBe('shipper');
+  });
+
+  it('ends on a release or a closed post, keeping the times', () => {
+    const release = entry({ id: 'r1', ts: at(20), from: 'shipper', kind: 'release', meta: { task: 'acme/server#1182' } });
+    const released = shipTrack([claim, stage('p1', 10, 'ci'), release], slug, 1182, at(90));
+    expect(released).toMatchObject({ held: false, current: null });
+    expect(stop(released, 'ci').spentMs).toBe(10 * MIN);
+
+    const closed = shipTrack([claim, stage('p1', 10, 'merge'), stage('p2', 12, 'closed')], slug, 1182, at(90));
+    expect(closed).toMatchObject({ held: false, current: null });
+    expect(stop(closed, 'merge')).toMatchObject({ firstAt: at(10), spentMs: 2 * MIN });
+  });
+
+  it('reads only the shipper, only this repo, and holds an unknown stage word without a stop', () => {
+    const track = shipTrack([
+      entry({ id: 'x1', ts: at(1), from: 'drone', meta: { pr: 1182, repo: slug, stage: 'ci' } }),
+      entry({ id: 'x2', ts: at(1), from: 'shipper', meta: { pr: 1182, repo: 'other/server', stage: 'ci' } }),
+      stage('p1', 3, 'sync'),
+    ], slug, 1182, at(10));
+    expect(track).toMatchObject({ held: true, current: null });
+    expect(track.stops.every((s) => s.firstAt === null)).toBe(true);
+    expect(shipTrack([claim], '', 1182, at(10)).held).toBe(false);
   });
 });
