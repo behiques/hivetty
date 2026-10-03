@@ -447,9 +447,11 @@ export interface JiraToolCommentRequest {
 }
 
 /** The parent, when the issue has one: an Epic for a story, a story for a subtask. */
-interface JiraParentRef {
+export interface JiraParentRef {
   key: string;
   summary: string;
+  /** Jira's issue type name, "Epic" for an epic (HIVE-202). */
+  issueType?: string;
 }
 
 /**

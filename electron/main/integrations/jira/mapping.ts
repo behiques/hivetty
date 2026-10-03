@@ -245,11 +245,17 @@ export function toIssueDetail(raw: unknown): JiraIssueDetail | null {
   const parent = isRecord(fields.parent) ? fields.parent : null;
   const parentKey = parent === null ? null : text(parent.key);
   const parentFields = parent !== null && isRecord(parent.fields) ? parent.fields : null;
+  const parentType =
+    parentFields !== null && isRecord(parentFields.issuetype) ? text(parentFields.issuetype.name) : null;
   return {
     description: adfToBlocks(fields.description),
     parent:
       parentKey === null
         ? null
-        : { key: parentKey, summary: (parentFields === null ? null : text(parentFields.summary)) ?? '' },
+        : {
+            key: parentKey,
+            summary: (parentFields === null ? null : text(parentFields.summary)) ?? '',
+            ...(parentType === null ? {} : { issueType: parentType }),
+          },
   };
 }
