@@ -15,7 +15,15 @@ import type { Jira } from './index';
 /** The slice of the integration the tools read and write through. */
 export type JiraToolSource = Pick<
   Jira,
-  'issue' | 'detail' | 'transitions' | 'applyTransition' | 'comments' | 'links' | 'addComment' | 'assignToMe'
+  | 'issue'
+  | 'detail'
+  | 'transitions'
+  | 'applyTransition'
+  | 'comments'
+  | 'links'
+  | 'addComment'
+  | 'assignToMe'
+  | 'searchUsers'
 >;
 
 const same = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -144,7 +152,8 @@ export function jiraToolsFor(jira: JiraToolSource): JiraToolHandlers {
       };
     },
 
-    comment: (request) => jira.addComment(request),
+    comment: (request, via) => jira.addComment(request, via),
+    users: (request) => jira.searchUsers(request),
   };
 
 }

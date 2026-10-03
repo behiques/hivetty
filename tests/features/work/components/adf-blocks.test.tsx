@@ -187,3 +187,17 @@ describe('nothing is rendered as markup', () => {
     expect(container.querySelector('script')).toBeNull();
   });
 });
+
+describe('mentions (HIVE-216)', () => {
+  it('draws a mention as a chip, still as text', () => {
+    render(
+      <AdfBlocks
+        blocks={[block({ runs: [{ text: '@Dana Kim', marks: [], mention: true }, { text: ' hi', marks: [] }] })]}
+      />,
+    );
+    const chip = screen.getByText('@Dana Kim');
+    expect(chip.tagName).toBe('SPAN');
+    expect(chip).toHaveAttribute('data-mention');
+    expect(chip).toHaveClass('bg-chip', 'text-brand');
+  });
+});

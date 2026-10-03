@@ -1091,9 +1091,9 @@ enough to earn their own schema.
 `--permission-prompt-tool` and the model is never meant to call, and `agents`,
 described next. That array is the ledger vocabulary the agent
 preamble teaches — one entry per ledger kind — and neither of these writes an
-entry. `tools/list` reports sixteen, in that order: the nine, then `agents`,
-`projects` and `pr` (HIVE-173), the three Jira tools (HIVE-174), then
-`approve` last.
+entry. `tools/list` reports eighteen, in that order: the nine, then `agents`,
+`projects` and `pr` (HIVE-173), the three Jira tools (HIVE-174) and
+`jira_users` (HIVE-216), `project_auto_merge`, then `approve` last.
 
 ### The agents directory: `mcp__hive__agents`
 
@@ -1249,9 +1249,9 @@ honest defaults, an empty list and "not wired", so a receiver composed without
 a config (the live suites) still answers. Both are reads, and both are in the
 standing grants every agent holds.
 
-### Jira through the Hive: `mcp__hive__jira_get`, `jira_transition`, `jira_comment`
+### Jira through the Hive: `mcp__hive__jira_get`, `jira_transition`, `jira_comment`, `jira_users`
 
-Three tools (HIVE-174) over the Jira integration the Work tab already uses,
+Three tools (HIVE-174), and a fourth (HIVE-216), over the Jira integration the Work tab already uses,
 through the token the app holds. An agent, or a container, reads and writes
 tickets with nothing on its PATH and no Atlassian credential in its
 environment; the skills prefer them and fall back to `jira-writer` where they
@@ -1282,14 +1282,27 @@ varies by project. An issue assigned to someone else is left alone. The
 outcome is one sentence in `assigned`; a failed assign lands there too,
 never as a failure of a move that already applied.
 
-`jira_comment { key, markdown }` is `addComment`, unchanged.
+`jira_comment { key, markdown, mentions? }` is `addComment`. `mentions` (HIVE-216) is at
+most ten `{ accountId, name }`, placed as ADF `mention` nodes at the front of the
+comment, and a comment may be mentions alone with `markdown` empty. The account ids
+come from `jira_users { query }`, a read over `/rest/api/3/user/search` that answers
+up to eight active people, each an `accountId` and a `displayName`.
+
+**Via the Hive (HIVE-216).** When the receiver's caller header names a known agent
+that is not also a session, the comment is posted with the comment property
+`hive.via = { agent }`; a session's comment, and every renderer comment, carries
+none, and no payload can set it. `jira.comments` reads it back
+(`expand=properties`) as `JiraComment.via`, keeping only the Hive's key and a valid
+agent name, and the ticket page draws it. It is a label for drawing, never a grant
+and never proof: anyone who can edit the issue can write a property, so nothing
+reads `via` to decide anything, and an agent reading `jira_get` should not either.
 
 **The two writes are consented, not standing.** A transition fires
 automation nobody can take back and a comment is the person's name on a
 ticket, so neither is in `HIVE_STANDING_GRANTS`: the builder and the shipper
 list `mcp__hive__jira_transition` in `tools:`, nobody shipped lists
 `jira_comment`, and an agent without the entry gets the ordinary permission
-ask and inbox card. `jira_get` is a read and stands.
+ask and inbox card. `jira_get` and `jira_users` are reads and stand.
 
 **`project_auto_merge { project, on }` asks every time (retro B).** It sets a
 project's `autoMerge`, found by id or key, and answers the directory `projects`
@@ -1314,7 +1327,7 @@ total, because "every comment" and "the first fifty" are different answers. The
 renderer can ask for the newest page instead (`newest: true`), still oldest first
 (HIVE-203).
 
-**The routes.** `/jira/get`, `/jira/transition` and `/jira/comment`, one
+**The routes.** `/jira/get`, `/jira/transition`, `/jira/comment` and `/jira/users`, one
 handler shape: refuse, cap (`JIRA_TOOL_MAX_BYTES`), parse with the same guards
 the IPC channels use, answer. Jira's own refusals travel inside the 200 as a
 `JiraResult`, so a model reads "HIVE-9 does not exist" rather than a transport

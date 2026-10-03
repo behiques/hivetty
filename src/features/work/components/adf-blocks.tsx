@@ -21,6 +21,14 @@ import type { AdfBlock, AdfRun } from '@shared/jira-contract';
  */
 
 function Run({ run }: { run: AdfRun }) {
+  if (run.mention) {
+    return (
+      <span data-mention className="rounded-[4px] bg-chip px-1 py-px font-medium text-brand">
+        {run.text}
+      </span>
+    );
+  }
+
   const className = cn(
     run.marks.includes('strong') && 'font-semibold text-ink',
     run.marks.includes('em') && 'italic',

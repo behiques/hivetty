@@ -47,7 +47,7 @@ export const BRIDGE_GITHUB_KEYS = [
 
 export const BRIDGE_JIRA_KEYS = [
   'status', 'setToken', 'clearToken', 'test', 'search', 'issue', 'detail', 'transitions',
-  'applyTransition', 'comments', 'links', 'addComment',
+  'applyTransition', 'comments', 'links', 'addComment', 'users',
 ] as const satisfies readonly (keyof HiveBridge['jira'])[];
 
 export const BRIDGE_SLACK_KEYS = [

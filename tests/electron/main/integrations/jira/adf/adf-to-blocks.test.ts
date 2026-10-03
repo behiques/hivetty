@@ -306,3 +306,33 @@ describe('the round trip', () => {
     expect(blocks.some((block) => block.kind === 'bullet')).toBe(true);
   });
 });
+
+describe('mentions (HIVE-216)', () => {
+  it('keeps a mention as a run marked mention, with its display text', () => {
+    const blocks = adfToBlocks(
+      doc([
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'mention', attrs: { id: '712020:9f3c', text: '@Dana Kim' } },
+            { type: 'text', text: ' can you look?' },
+          ],
+        },
+      ]),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: 'paragraph',
+        runs: [
+          { text: '@Dana Kim', marks: [], mention: true },
+          { text: ' can you look?', marks: [] },
+        ],
+      },
+    ]);
+  });
+
+  it('names an unnamed mention rather than dropping it', () => {
+    const blocks = adfToBlocks(doc([{ type: 'paragraph', content: [{ type: 'mention', attrs: { id: 'x' } }] }]));
+    expect(blocks).toEqual([{ kind: 'paragraph', runs: [{ text: '@unknown', marks: [], mention: true }] }]);
+  });
+});

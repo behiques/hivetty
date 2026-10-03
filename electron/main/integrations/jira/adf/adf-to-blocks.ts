@@ -63,12 +63,16 @@ function runsOf(nodes: AdfNode[] | undefined): AdfRun[] {
     }
 
     /**
-     * A mention or an emoji has no `text`, and dropping it would silently
-     * remove the person a comment is addressed to. Jira puts the display form
-     * in `attrs`, so the flattening below picks up whatever is there — and
-     * where there is nothing, the node contributes nothing rather than an empty
-     * artefact.
+     * A mention has no `text` of its own; Jira puts the display form in
+     * `attrs.text` (`@Dana Kim`). Dropping it would silently remove the person
+     * the comment is addressed to, so a nameless one still says someone was
+     * named (HIVE-216).
      */
+    if (node.type === 'mention') {
+      runs.push({ text: node.attrs?.text ?? '@unknown', marks: [], mention: true });
+      return;
+    }
+
     if (node.type === 'inlineCard') {
       const href = node.attrs?.href;
       if (href !== undefined) runs.push({ text: href, marks: [], href });

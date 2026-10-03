@@ -70,6 +70,7 @@ import {
   parseJiraIssueRequest,
   parseJiraSearchRequest,
   parseJiraTransitionsRequest,
+  parseJiraUsersRequest,
   parseKillRequest,
   parseLedgerAnswerRequest,
   parseLedgerPostBody,
@@ -142,6 +143,7 @@ import type {
   JiraSearchResult,
   JiraStatus,
   JiraTransition,
+  JiraUser,
 } from '@shared/jira-contract';
 import { LEDGER_DIR, OVERMIND } from '@shared/ledger-contract';
 import { closedAskThreads } from '@shared/ledger-derive';
@@ -3226,7 +3228,9 @@ export function registerIpcHandlers(
     onJira: {
       get: (request) => jiraToolsFor(jira).get(request),
       transition: (request) => jiraToolsFor(jira).transition(request),
-      comment: (request) => jiraToolsFor(jira).comment(request),
+      // HIVE-216: `via` is the receiver's, from its caller header; forwarded untouched.
+      comment: (request, via) => jiraToolsFor(jira).comment(request, via),
+      users: (request) => jiraToolsFor(jira).users(request),
     },
     /*
       The uuid is forwarded, not dropped: `noteTurnEnded` ignores a `Stop`
@@ -4062,6 +4066,11 @@ export function registerIpcHandlers(
     CH.jiraAddComment,
     (_event, payload): Promise<JiraResult<JiraComment>> =>
       jira.addComment(parseAddJiraCommentRequest(payload)),
+  );
+  handle(
+    CH.jiraUsers,
+    (_event, payload): Promise<JiraResult<JiraUser[]>> =>
+      jira.searchUsers(parseJiraUsersRequest(payload)),
   );
   handle(CH.configSetJira, (_event, payload): ConfigSnapshot =>
     setJira(parseSetJiraRequest(payload)),

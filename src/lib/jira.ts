@@ -17,6 +17,8 @@ import type {
   JiraSearchResult,
   JiraStatus,
   JiraTransition,
+  JiraUser,
+  JiraUsersRequest,
 } from '@shared/jira-contract';
 
 /**
@@ -147,3 +149,9 @@ export const addJiraComment = (
   request: AddJiraCommentRequest,
 ): Promise<JiraResult<JiraComment> | null> =>
   call('addComment', (bridge) => bridge.jira.addComment(request));
+
+/** People on the Jira site matching a query, for the `@` picker (HIVE-216). `null` with no bridge. */
+export const searchJiraUsers = (
+  request: JiraUsersRequest,
+): Promise<JiraResult<JiraUser[]> | null> =>
+  call('users', (bridge) => bridge.jira.users(request));
