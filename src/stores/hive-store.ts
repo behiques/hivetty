@@ -1962,13 +1962,12 @@ async function readTicketParts(
       merge({ detail: result.value, readAt: Date.now() });
       problem('detail', undefined);
       const epic = result.value.parent;
-      if (read.links && epic?.issueType?.toLowerCase() === 'epic' && ISSUE_KEY_PATTERN.test(epic.key)) {
+      if (read.links && open() && epic?.issueType?.toLowerCase() === 'epic' && ISSUE_KEY_PATTERN.test(epic.key)) {
         // The key is checked before it is put in the JQL: it came from a server.
         const found = await searchJiraIssues({ jql: `parent = ${epic.key}` });
-        if (found?.ok) {
-          const done = found.value.issues.filter((one) => one.statusCategory === 'done').length;
-          merge({ epicProgress: { done, total: found.value.issues.length, capped: found.value.capped } });
-        }
+        if (!found?.ok) return merge({ epicProgress: undefined });
+        const done = found.value.issues.filter((one) => one.statusCategory === 'done').length;
+        merge({ epicProgress: { done, total: found.value.issues.length, capped: found.value.capped } });
       }
     }),
     readJiraComments({ key, newest: true }).then((result) => {
@@ -1996,14 +1995,18 @@ async function readTicketParts(
       ? readJiraLinks({ key }).then(async (result) => {
           if (result === null) return problem('links', BRIDGE_ERROR);
           if (!result.ok) return problem('links', result.error.message);
-          merge({ links: result.value });
           problem('links', undefined);
           const issues = result.value.filter((link) => link.kind === 'issue');
-          if (issues.length > SECOND_HOP_MAX_LINKS) return;
-          const blocked = issues.flatMap((link) =>
-            isBlocks(link) && link.direction !== 'inward' && link.key !== undefined ? [link.key] : [],
-          );
-          if (blocked.length === 0 || !open()) return;
+          const blocked =
+            issues.length > SECOND_HOP_MAX_LINKS
+              ? []
+              : issues.flatMap((link) =>
+                  isBlocks(link) && link.direction !== 'inward' && link.key !== undefined ? [link.key] : [],
+                );
+          // No hop to read: an earlier one must not stay drawn (past the cap, or nothing blocked any more).
+          if (blocked.length === 0) return merge({ links: result.value, secondHop: undefined });
+          merge({ links: result.value });
+          if (!open()) return;
           const hops = await Promise.all(
             blocked.map(async (next) => {
               const answer = await readJiraLinks({ key: next });

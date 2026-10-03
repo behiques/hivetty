@@ -1,3 +1,5 @@
+import type { EpicProgress } from '@/types/ticket';
+
 import type { AdfBlock, AdfRun, JiraLink, JiraParentRef, JiraStatusCategory } from '@shared/jira-contract';
 
 /** One linked ticket, as the Ticket tab draws it (HIVE-202). */
@@ -141,14 +143,6 @@ export function parseCriteria(description: readonly AdfBlock[] | undefined): Cri
     if (items.length > 0) return { kind: 'criteria', items };
   }
   return { kind: 'description', blocks: [...description] };
-}
-
-/** The parent epic's children, done of total (HIVE-202). */
-export interface EpicProgress {
-  done: number;
-  total: number;
-  /** The search hit JIRA_MAX_ISSUES: the total is a floor. */
-  capped: boolean;
 }
 
 /** The ring's label: only an epic gets one (D6). */

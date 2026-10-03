@@ -1,8 +1,9 @@
+import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SECOND_HOP_MAX_LINKS } from '@lib/ticket-links';
 import { BRIDGE_ERROR } from '@lib/utils';
-import { TICKET_DETAIL_CAP, useHiveStore } from '@stores/hive-store';
+import { TICKET_DETAIL_CAP, useHiveStore, useTicketLinks } from '@stores/hive-store';
 import type { JiraComment, JiraIssue, JiraIssueDetail, JiraLink, JiraTransition } from '@shared/jira-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 
@@ -458,6 +459,54 @@ describe("loadTicketDetail(key, 'tab') (HIVE-202)", () => {
     await state().loadTicketDetail('HIVE-9', 'page');
     expect(searchJiraIssues).not.toHaveBeenCalled();
     expect(readJiraLinks).not.toHaveBeenCalledWith({ key: 'HIVE-9' });
+  });
+
+  it('a refresh past the cap clears the earlier second hop', async () => {
+    let mine = [issueLink('HIVE-194', 'Blocks', 'outward')];
+    readJiraLinks.mockImplementation(({ key }: { key: string }) =>
+      Promise.resolve(key === 'HIVE-7' ? ok(mine) : ok([issueLink('HIVE-196', 'Blocks', 'outward')])),
+    );
+    await state().loadTicketDetail('HIVE-7', 'tab');
+    expect(state().ticketDetails['HIVE-7']?.secondHop).toBeDefined();
+    mine = [mine[0]!, ...['A-1', 'A-2', 'A-3', 'A-4', 'A-5'].map((k) => issueLink(k, 'Blocks', 'outward'))];
+    await state().refreshTicketDetail('HIVE-7', 'tab');
+    expect(state().ticketDetails['HIVE-7']?.secondHop).toBeUndefined();
+    const model = renderHook(() => useTicketLinks('HIVE-7')).result.current;
+    expect(model?.blocks).toHaveLength(6);
+    expect(model?.blocks.some((one) => one.next !== undefined)).toBe(false);
+  });
+
+  it('a refresh where nothing is blocked any more clears the earlier second hop', async () => {
+    let mine = [issueLink('HIVE-194', 'Blocks', 'outward')];
+    readJiraLinks.mockImplementation(({ key }: { key: string }) =>
+      Promise.resolve(key === 'HIVE-7' ? ok(mine) : ok([issueLink('HIVE-196', 'Blocks', 'outward')])),
+    );
+    await state().loadTicketDetail('HIVE-7', 'tab');
+    expect(state().ticketDetails['HIVE-7']?.secondHop).toBeDefined();
+    mine = [issueLink('HIVE-188', 'Blocks', 'inward')];
+    await state().refreshTicketDetail('HIVE-7', 'tab');
+    expect(state().ticketDetails['HIVE-7']?.secondHop).toBeUndefined();
+  });
+
+  it('a failed progress read on refresh clears the earlier count', async () => {
+    readJiraDetail.mockResolvedValue(ok(epicDetail));
+    searchJiraIssues.mockResolvedValue(ok({ issues: [issue], capped: false }));
+    await state().loadTicketDetail('HIVE-7', 'tab');
+    expect(state().ticketDetails['HIVE-7']?.epicProgress).toEqual({ done: 0, total: 1, capped: false });
+    searchJiraIssues.mockResolvedValue(fail('no search'));
+    await state().refreshTicketDetail('HIVE-7', 'tab');
+    expect(state().ticketDetails['HIVE-7']?.epicProgress).toBeUndefined();
+  });
+
+  it('no progress read for a key evicted before its detail landed', async () => {
+    const late = deferred<ReturnType<typeof ok<JiraIssueDetail>>>();
+    readJiraDetail.mockReturnValueOnce(late.promise);
+    const pending = state().loadTicketDetail('HIVE-7', 'tab');
+    useHiveStore.setState({ ticketDetails: {} });
+    late.resolve(ok(epicDetail));
+    await pending;
+    expect(searchJiraIssues).not.toHaveBeenCalled();
+    expect(state().ticketDetails['HIVE-7']).toBeUndefined();
   });
 
   it('drops a links answer for a key evicted while it was in flight', async () => {

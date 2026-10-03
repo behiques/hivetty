@@ -1,4 +1,3 @@
-import type { EpicProgress } from '@lib/ticket-links';
 import type {
   JiraComment,
   JiraIssueDetail,
@@ -57,6 +56,14 @@ export interface Ticket {
    * Built in main, because only main knows the site.
    */
   url?: string;
+}
+
+/** The parent epic's children, done of total (HIVE-202). */
+export interface EpicProgress {
+  done: number;
+  total: number;
+  /** The search hit JIRA_MAX_ISSUES: the total is a floor. */
+  capped: boolean;
 }
 
 /** What a reader of a ticket wants beside the common parts (HIVE-202): the page wants its ledger history, the Ticket tab its links. */
