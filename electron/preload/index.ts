@@ -80,6 +80,8 @@ import type {
   PrRecord,
   PrRef,
   PrsSnapshot,
+  PrThreadRequest,
+  PrViewedRequest,
 } from '@shared/github-contract';
 import {
   CH,
@@ -644,6 +646,15 @@ const bridge: HiveBridge = {
     /** A PR-level comment. See `CH.githubPrComment`. */
     prComment: (request: PrCommentRequest): Promise<GhResult<true>> =>
       ipcRenderer.invoke(CH.githubPrComment, request) as Promise<GhResult<true>>,
+    /** One PR's diff. See `CH.githubPrDiff`. */
+    prDiff: (request: PrRef): Promise<GhResult<string>> =>
+      ipcRenderer.invoke(CH.githubPrDiff, request) as Promise<GhResult<string>>,
+    /** A thread write. See `CH.githubPrThread`. */
+    prThread: (request: PrThreadRequest): Promise<GhResult<true>> =>
+      ipcRenderer.invoke(CH.githubPrThread, request) as Promise<GhResult<true>>,
+    /** A viewed write. See `CH.githubPrViewed`. */
+    prViewed: (request: PrViewedRequest): Promise<GhResult<true>> =>
+      ipcRenderer.invoke(CH.githubPrViewed, request) as Promise<GhResult<true>>,
   },
   /*
     HIVE-67. Four verbs, and none of them returns a token — see the contract for

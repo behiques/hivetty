@@ -343,10 +343,12 @@ export function lostToTheLink(cause: unknown): boolean {
 /**
  * Calls a timer makes rather than a person — the PR sweep polls `github:prs`
  * every minute, and the PR page re-reads `github:pr-detail` on its own poll
- * (HIVE-205); grading alone would count both, since shelling out to `gh` is
- * `execute`. Never an action the user has to redo. A comment is.
+ * (HIVE-205), and the Files tab re-reads `github:pr-diff` when that poll sees
+ * the head move (HIVE-207); grading alone would count them, since shelling out
+ * to `gh` is `execute`. Never an action the user has to redo. A comment, a
+ * thread write or a Viewed mark is.
  */
-const BACKGROUND_CALLS: ReadonlySet<string> = new Set([CH.githubPrs, CH.githubPrDetail]);
+const BACKGROUND_CALLS: ReadonlySet<string> = new Set([CH.githubPrs, CH.githubPrDetail, CH.githubPrDiff]);
 
 /**
  * Whether a lost frame on `channel` is something the user did and must redo

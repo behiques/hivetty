@@ -1,4 +1,13 @@
-import type { GhResult, PrCommentRequest, PrDetail, PrRecord, PrRef, PrsSnapshot } from '@shared/github-contract';
+import type {
+  GhResult,
+  PrCommentRequest,
+  PrDetail,
+  PrRecord,
+  PrRef,
+  PrsSnapshot,
+  PrThreadRequest,
+  PrViewedRequest,
+} from '@shared/github-contract';
 
 /**
  * The renderer's half of the GitHub bridge.
@@ -69,6 +78,45 @@ export const postPrComment = async (request: PrCommentRequest): Promise<GhResult
     return await bridge.github.prComment(request);
   } catch (cause) {
     console.error('[hive] github.prComment failed:', cause);
+    return null;
+  }
+};
+
+/** One PR's unified diff (HIVE-207). Same two `null` cases as {@link readPullRequests}. */
+export const readPrDiff = async (request: PrRef): Promise<GhResult<string> | null> => {
+  const bridge = window.hive;
+  if (!bridge) return null;
+
+  try {
+    return await bridge.github.prDiff(request);
+  } catch (cause) {
+    console.error('[hive] github.prDiff failed:', cause);
+    return null;
+  }
+};
+
+/** Reply to, resolve or unresolve a review thread (HIVE-207). Same two `null` cases. */
+export const writePrThread = async (request: PrThreadRequest): Promise<GhResult<true> | null> => {
+  const bridge = window.hive;
+  if (!bridge) return null;
+
+  try {
+    return await bridge.github.prThread(request);
+  } catch (cause) {
+    console.error('[hive] github.prThread failed:', cause);
+    return null;
+  }
+};
+
+/** Mark or unmark a file viewed on GitHub (HIVE-207). Same two `null` cases. */
+export const writePrViewed = async (request: PrViewedRequest): Promise<GhResult<true> | null> => {
+  const bridge = window.hive;
+  if (!bridge) return null;
+
+  try {
+    return await bridge.github.prViewed(request);
+  } catch (cause) {
+    console.error('[hive] github.prViewed failed:', cause);
     return null;
   }
 };

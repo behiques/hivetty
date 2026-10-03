@@ -2188,6 +2188,36 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       });
     }, 60_000);
 
+    it('11d. answers github:pr-diff over an attached socket (HIVE-207)', async () => {
+      const client = await attached();
+      const result = await client.call(CH.githubPrDiff, { owner: 'hive-conformance', repo: 'nowhere', n: 1 });
+
+      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
+        kind: 'result',
+        payload: { ok: false },
+      });
+    }, 60_000);
+
+    it('11e. answers github:pr-thread over an attached socket (HIVE-207)', async () => {
+      const client = await attached();
+      const result = await client.call(CH.githubPrThread, { owner: 'hive-conformance', repo: 'nowhere', n: 1, threadId: 'PRRT_never', op: 'resolve' });
+
+      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
+        kind: 'result',
+        payload: { ok: false },
+      });
+    }, 60_000);
+
+    it('11f. answers github:pr-viewed over an attached socket (HIVE-207)', async () => {
+      const client = await attached();
+      const result = await client.call(CH.githubPrViewed, { owner: 'hive-conformance', repo: 'nowhere', n: 1, path: 'never.ts', viewed: true });
+
+      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
+        kind: 'result',
+        payload: { ok: false },
+      });
+    }, 60_000);
+
     it('12. carries the EOUTSIDE code itself, not a flattened message', async () => {
       const client = await attached();
       const result = await client.call(CH.fsReadFile, {

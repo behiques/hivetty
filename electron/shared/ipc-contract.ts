@@ -91,7 +91,16 @@ import type {
   WriteFileRequest,
   WriteFileResult,
 } from './fs-contract';
-import type { GhResult, PrCommentRequest, PrDetail, PrRecord, PrRef, PrsSnapshot } from './github-contract';
+import type {
+  GhResult,
+  PrCommentRequest,
+  PrDetail,
+  PrRecord,
+  PrRef,
+  PrsSnapshot,
+  PrThreadRequest,
+  PrViewedRequest,
+} from './github-contract';
 import type {
   JiraComment,
   JiraCommentPage,
@@ -595,6 +604,15 @@ export const CH = {
    * renderer, so a write can only land on a PR the check admitted.
    */
   githubPrComment: 'github:pr-comment',
+  /** One PR's unified diff (HIVE-207), under {@link CH.githubPrDetail}'s scope check. `gh pr diff`, argv only. */
+  githubPrDiff: 'github:pr-diff',
+  /**
+   * Reply to, resolve or unresolve one review thread (HIVE-207), under the
+   * same scope check. Main proves the thread is on the scoped PR before writing.
+   */
+  githubPrThread: 'github:pr-thread',
+  /** Mark or unmark a file viewed (HIVE-207). The PR's node id is read by main, never the renderer's. */
+  githubPrViewed: 'github:pr-viewed',
   notificationsActivate: 'notifications:activate', // main → renderer
   /**
    * A notification was raised (HIVE-75). main → renderer.
@@ -2521,6 +2539,12 @@ export interface HiveBridge {
     prDetail(request: PrRef): Promise<GhResult<PrDetail>>;
     /** A PR-level comment (HIVE-205), under the same scope. */
     prComment(request: PrCommentRequest): Promise<GhResult<true>>;
+    /** One PR's unified diff (HIVE-207), under the same scope. */
+    prDiff(request: PrRef): Promise<GhResult<string>>;
+    /** Reply to, resolve or unresolve a review thread (HIVE-207), under the same scope. */
+    prThread(request: PrThreadRequest): Promise<GhResult<true>>;
+    /** Mark or unmark a file viewed (HIVE-207), under the same scope. */
+    prViewed(request: PrViewedRequest): Promise<GhResult<true>>;
   };
   /**
    * Jira (HIVE-67).

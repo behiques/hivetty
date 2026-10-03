@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { postPrComment, readPrDetail, readPullRequests, searchPullRequests } from '@lib/github';
+import {
+  postPrComment,
+  readPrDetail,
+  readPrDiff,
+  readPullRequests,
+  searchPullRequests,
+  writePrThread,
+  writePrViewed,
+} from '@lib/github';
 import type { GhResult, PrsSnapshot } from '@shared/github-contract';
 
 /**
@@ -141,5 +149,45 @@ describe('readPrDetail and postPrComment (HIVE-205)', () => {
     await expect(readPrDetail(ref)).resolves.toBeNull();
     await expect(postPrComment({ ...ref, body: 'hi' })).resolves.toBeNull();
     expect(error).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('readPrDiff, writePrThread and writePrViewed (HIVE-207)', () => {
+  const ref = { owner: 'acme', repo: 'web', n: 7 };
+
+  it('answer null with no bridge', async () => {
+    await expect(readPrDiff(ref)).resolves.toBeNull();
+    await expect(writePrThread({ ...ref, threadId: 'T', op: 'resolve' })).resolves.toBeNull();
+    await expect(writePrViewed({ ...ref, path: 'a', viewed: true })).resolves.toBeNull();
+  });
+
+  it('pass the request through and answer the result', async () => {
+    const github = {
+      prDiff: vi.fn().mockResolvedValue({ ok: true, value: 'diff' }),
+      prThread: vi.fn().mockResolvedValue({ ok: true, value: true }),
+      prViewed: vi.fn().mockResolvedValue({ ok: true, value: true }),
+    };
+    window.hive = { github } as unknown as Window['hive'];
+
+    await expect(readPrDiff(ref)).resolves.toEqual({ ok: true, value: 'diff' });
+    await expect(writePrThread({ ...ref, threadId: 'T', op: 'reply', body: 'x' })).resolves.toEqual({ ok: true, value: true });
+    await expect(writePrViewed({ ...ref, path: 'a', viewed: false })).resolves.toEqual({ ok: true, value: true });
+    expect(github.prDiff).toHaveBeenCalledWith(ref);
+    expect(github.prThread).toHaveBeenCalledWith({ ...ref, threadId: 'T', op: 'reply', body: 'x' });
+    expect(github.prViewed).toHaveBeenCalledWith({ ...ref, path: 'a', viewed: false });
+  });
+
+  it('answer null and log when the channel itself fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    window.hive = { github: {
+      prDiff: vi.fn().mockRejectedValue(new Error('closed')),
+      prThread: vi.fn().mockRejectedValue(new Error('closed')),
+      prViewed: vi.fn().mockRejectedValue(new Error('closed')),
+    } } as unknown as Window['hive'];
+
+    await expect(readPrDiff(ref)).resolves.toBeNull();
+    await expect(writePrThread({ ...ref, threadId: 'T', op: 'resolve' })).resolves.toBeNull();
+    await expect(writePrViewed({ ...ref, path: 'a', viewed: true })).resolves.toBeNull();
+    expect(error).toHaveBeenCalledTimes(3);
   });
 });

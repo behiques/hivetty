@@ -64,8 +64,9 @@ import { isThisMachineAction } from './notification-contract';
  * `mergedAt` and `mine`.
  * 9 → 10 (HIVE-216): `CH` gained `jira:users`; `jira:comments`' comments gained `authorId` and `via`, and their runs `mention`; `jira:add-comment` takes `mentions`.
  * 10 → 11 (HIVE-205): `CH` gained `github:pr-detail` and `github:pr-comment`.
+ * 11 → 12 (HIVE-207): `CH` gained `github:pr-diff`, `github:pr-thread` and `github:pr-viewed`; `PrDetail` gained `files`.
  */
-export const REMOTE_PROTOCOL_VERSION = 11;
+export const REMOTE_PROTOCOL_VERSION = 12;
 
 /**
  * What a frame is for.
@@ -195,6 +196,9 @@ export const FRAME_KIND = {
   [CH.githubSearchPrs]: 'call',
   [CH.githubPrDetail]: 'call',
   [CH.githubPrComment]: 'call',
+  [CH.githubPrDiff]: 'call',
+  [CH.githubPrThread]: 'call',
+  [CH.githubPrViewed]: 'call',
   [CH.notificationsActivate]: 'event',
   [CH.notificationsNew]: 'event',
   /*
@@ -482,6 +486,9 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.githubSearchPrs]: 'execute',
   [CH.githubPrDetail]: 'execute',
   [CH.githubPrComment]: 'execute',
+  [CH.githubPrDiff]: 'execute',
+  [CH.githubPrThread]: 'execute',
+  [CH.githubPrViewed]: 'execute',
   [CH.notificationsActivate]: 'read',
   [CH.notificationsNew]: 'read',
   [CH.notificationsToast]: 'read',

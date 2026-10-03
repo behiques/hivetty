@@ -79,6 +79,9 @@ import {
   parseNotificationAction,
   parsePairDeviceRequest,
   parsePrCommentRequest,
+  parsePrDiffRequest,
+  parsePrThreadRequest,
+  parsePrViewedRequest,
   parsePrDetailRequest,
   parsePromptReport,
   parseReadDirRequest,
@@ -4040,6 +4043,33 @@ export function registerIpcHandlers(
       const request = parsePrCommentRequest(payload);
       await loginEnvStatus();
       return github.prComment(request);
+    },
+  );
+
+  handle(
+    CH.githubPrDiff,
+    async (_event, payload): Promise<GhResult<string>> => {
+      const request = parsePrDiffRequest(payload);
+      await loginEnvStatus();
+      return github.prDiff(request);
+    },
+  );
+
+  handle(
+    CH.githubPrThread,
+    async (_event, payload): Promise<GhResult<true>> => {
+      const request = parsePrThreadRequest(payload);
+      await loginEnvStatus();
+      return github.prThread(request);
+    },
+  );
+
+  handle(
+    CH.githubPrViewed,
+    async (_event, payload): Promise<GhResult<true>> => {
+      const request = parsePrViewedRequest(payload);
+      await loginEnvStatus();
+      return github.prViewed(request);
     },
   );
 
