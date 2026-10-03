@@ -39,7 +39,17 @@ import {
   describeWake,
   runsToday,
 } from '@lib/agents';
-import { postPrComment, readPrDetail, readPullRequests, searchPullRequests } from '@lib/github';
+import { foldPushes } from '@lib/checks-graph';
+import {
+  postPrComment,
+  readJobLog,
+  readPrDetail,
+  readPrRuns,
+  readPullRequests,
+  readRunJobs,
+  rerunFailedJobs,
+  searchPullRequests,
+} from '@lib/github';
 import {
   readJiraComments,
   readJiraDetail,
@@ -104,7 +114,16 @@ import type {
   ChangedFilesSnapshot,
 } from '@shared/changed-files-contract';
 import type { ModeChange } from '@shared/config-contract';
-import type { GhResult, PrDetail, PrRecord, PrsSnapshot } from '@shared/github-contract';
+import type {
+  GhResult,
+  JobLog,
+  PrDetail,
+  PrRecord,
+  PrsSnapshot,
+  RunJob,
+  WorkflowDef,
+  WorkflowRun,
+} from '@shared/github-contract';
 import type { IdleDetail } from '@shared/hook-contract';
 import {
   CH,
@@ -428,6 +447,8 @@ interface HiveState {
   ticketDetails: Record<string, TicketDetail>;
   /** What has been read for each PR a page or tab opened, keyed by {@link prKey} (HIVE-205). At most PR_DETAIL_CAP, the newest last. */
   prDetails: Record<string, PrDetailEntry>;
+  /** The Checks tab's reads per PR, keyed by {@link prKey} (HIVE-206). At most PR_DETAIL_CAP, the newest last. */
+  prChecks: Record<string, PrChecksEntry>;
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
   /**
@@ -522,6 +543,12 @@ interface HiveState {
   loadPrDetail: (owner: string, repo: string, n: number) => Promise<void>;
   /** Comment on a PR, then re-read it; the answer says why a post failed (HIVE-205). */
   commentOnPr: (owner: string, repo: string, n: number, body: string) => Promise<GhResult<true>>;
+  /** Read a PR's runs and workflows, then the jobs of the shown push (`sha`, else the newest) (HIVE-206). */
+  loadPrChecks: (owner: string, repo: string, n: number, branch: string, sha?: string) => Promise<void>;
+  /** Read a failed job's log once per job id; only a failed read reads again (HIVE-206). */
+  loadJobLog: (owner: string, repo: string, n: number, jobId: number) => Promise<void>;
+  /** Re-run a run's failed jobs, then re-read the checks; the answer says why a re-run was refused (HIVE-206). */
+  rerunFailed: (owner: string, repo: string, n: number, runId: number, branch: string, sha?: string) => Promise<GhResult<true>>;
   /** A comment this app just posted, shown without a re-read (HIVE-203). */
   appendTicketComment: (key: string, comment: JiraComment) => void;
   /** Re-read what the open ticket can become, after its status moved (HIVE-203). */
@@ -1950,6 +1977,24 @@ export interface PrDetailEntry {
   readAt?: number;
 }
 
+/** One job's failed log, read once per job id (HIVE-206). */
+export interface PrLogEntry { state: 'loading' | 'ok' | 'failed'; log?: JobLog; problem?: string }
+
+/**
+ * One PR's Checks tab as read (HIVE-206). Its own slice rather than a field of
+ * {@link PrDetailEntry}: `loadPrDetail` replaces that entry whole every minute.
+ * `jobs` is by run id, `logs` by job id; a failed refresh keeps the rest.
+ */
+export interface PrChecksEntry {
+  key: string;
+  state: 'loading' | 'ok' | 'failed';
+  problem?: string;
+  runs?: WorkflowRun[];
+  workflows?: WorkflowDef[];
+  jobs: Record<number, RunJob[]>;
+  logs: Record<number, PrLogEntry>;
+}
+
 /**
  * `map` with `key` moved to the newest end, and only the newest `cap` kept
  * (TICKET_DETAIL_CAP unless told). Issue keys and PR keys are never
@@ -1966,11 +2011,11 @@ function touchDetail<T>(map: Record<string, T>, key: string, entry: T, cap = TIC
  * one (HIVE-205); the same object when none left, so a quiet sweep writes
  * nothing. A detail for a PR never swept (a search result) is the cap's.
  */
-function dropLeftPrs(
-  details: Record<string, PrDetailEntry>,
+function dropLeftPrs<T>(
+  details: Record<string, T>,
   before: readonly PrRecord[],
   after: readonly PrRecord[],
-): Record<string, PrDetailEntry> {
+): Record<string, T> {
   const keyOf = (pr: PrRecord) => prKey(pr.owner, pr.repo, pr.number);
   const still = new Set(after.map(keyOf));
   const gone = new Set(before.map(keyOf).filter((key) => !still.has(key) && key in details));
@@ -2102,6 +2147,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   ticketSource: { kind: 'loading' } as TicketSource,
   ticketDetails: {} as Record<string, TicketDetail>,
   prDetails: {} as Record<string, PrDetailEntry>,
+  prChecks: {} as Record<string, PrChecksEntry>,
 
   /** Loading until the first sweep answers, for the same reason as above. */
   prSource: { kind: 'loading' } as PrSource,
@@ -5236,6 +5282,75 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     return result;
   },
 
+  loadPrChecks: async (owner, repo, n, branch, sha) => {
+    const key = prKey(owner, repo, n);
+    set((state) => ({
+      prChecks: touchDetail(
+        state.prChecks,
+        key,
+        state.prChecks[key] ?? { key, state: 'loading' as const, jobs: {}, logs: {} },
+        PR_DETAIL_CAP,
+      ),
+    }));
+
+    const result = await readPrRuns({ owner, repo, branch });
+    if (result?.ok !== true) {
+      const problem = result === null ? BRIDGE_ERROR : result.error.message;
+      set((state) => {
+        const entry = state.prChecks[key];
+        if (entry === undefined) return state;
+        return { prChecks: { ...state.prChecks, [key]: { ...entry, state: 'failed', problem } } };
+      });
+      return;
+    }
+
+    const { runs, workflows } = result.value;
+    const pushes = foldPushes(runs);
+    const push = pushes.find((p) => p.sha === sha) ?? pushes.at(-1);
+    const read = await Promise.all(
+      (push?.runs ?? []).map(async (one) => ({ id: one.id, answer: await readRunJobs({ owner, repo, id: one.id }) })),
+    );
+
+    set((state) => {
+      const entry = state.prChecks[key];
+      if (entry === undefined) return state;
+      const jobs = { ...entry.jobs };
+      let problem: string | undefined;
+      for (const { id, answer } of read) {
+        if (answer?.ok === true) jobs[id] = answer.value;
+        else problem ??= answer === null ? BRIDGE_ERROR : answer.error.message;
+      }
+      const next: PrChecksEntry = { key, state: 'ok', runs, workflows, jobs, logs: entry.logs, ...(problem === undefined ? {} : { problem }) };
+      return { prChecks: { ...state.prChecks, [key]: next } };
+    });
+  },
+
+  loadJobLog: async (owner, repo, n, jobId) => {
+    const key = prKey(owner, repo, n);
+    const had = get().prChecks[key];
+    if (had === undefined) return;
+    const known = had.logs[jobId];
+    if (known !== undefined && known.state !== 'failed') return;
+
+    const write = (log: PrLogEntry) =>
+      set((state) => {
+        const entry = state.prChecks[key];
+        if (entry === undefined) return state;
+        return { prChecks: { ...state.prChecks, [key]: { ...entry, logs: { ...entry.logs, [jobId]: log } } } };
+      });
+
+    write({ state: 'loading' });
+    const result = await readJobLog({ owner, repo, id: jobId });
+    write(result?.ok === true ? { state: 'ok', log: result.value } : { state: 'failed', problem: result === null ? BRIDGE_ERROR : result.error.message });
+  },
+
+  rerunFailed: async (owner, repo, n, runId, branch, sha) => {
+    const result = await rerunFailedJobs({ owner, repo, id: runId });
+    if (result === null) return { ok: false, error: { kind: 'unknown', message: BRIDGE_ERROR } };
+    if (result.ok) await get().loadPrChecks(owner, repo, n, branch, sha);
+    return result;
+  },
+
   appendTicketComment: (key, comment) =>
     set((state) => {
       const entry = state.ticketDetails[key];
@@ -5431,6 +5546,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         source.kind === 'live' && !source.stale && source.repos === repos;
       const entities = rememberSessionPrs(state.entities, learned);
       const prDetails = dropLeftPrs(state.prDetails, state.prs, prs);
+      const prChecks = dropLeftPrs(state.prChecks, state.prs, prs);
 
       return {
         prs: samePrs(prs, state.prs) ? state.prs : prs,
@@ -5441,6 +5557,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         // of a once-a-minute poller.
         ...(entities === state.entities ? {} : { entities }),
         ...(prDetails === state.prDetails ? {} : { prDetails }),
+        ...(prChecks === state.prChecks ? {} : { prChecks }),
       };
     });
 
@@ -5894,6 +6011,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       ticketSource: { kind: 'loading' },
       ticketDetails: {},
       prDetails: {},
+      prChecks: {},
       /*
         Not "an orphan quietly wasting memory" the way it first read — session
         ids are **not unique across machines**. `nextSpawnId`/`rememberSpawnId`
@@ -5992,6 +6110,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       ticketSource: { kind: 'loading' },
       ticketDetails: {},
       prDetails: {},
+      prChecks: {},
       prSource: { kind: 'loading' },
       prSearch: NO_PR_SEARCH,
       ticketSearch: NO_TICKET_SEARCH,
