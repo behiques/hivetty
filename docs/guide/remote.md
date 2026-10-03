@@ -62,7 +62,7 @@ You cannot attach while sessions are running locally; the refusal lists them.
 
 ## When the connection drops
 
-The header chip turns amber and the laptop redials after 1, 2, 4, 8, 15 and 30 seconds, then
+The header chip (in round two, the connection item at the bar's foot) turns amber and the laptop redials after 1, 2, 4, 8, 15 and 30 seconds, then
 every 30 seconds, forever. Terminals pick up where they left off. **Work locally** is the way
 out. A revoked token or a version mismatch is shown in red and not retried.
 

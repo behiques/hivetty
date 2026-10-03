@@ -25,6 +25,17 @@ that is already selected, or use the shortcut. The terminal never gets squeezed 
 | **New session** | Opens the picker |
 | Chevron beside it | **New terminal in…**: a plain shell in a project, no Claude |
 
+In **round two** (Settings › Appearance › Layout) there is no header. Each of its facts has one
+home: the counts sit on the bar's Sessions and Agents icons (working, grey) and PRs (need you,
+amber); the connection is the item at the bar's foot, above Settings; the model is in the session
+header over the terminal; the bell's job is the Inbox pill; **New session** is the **+** on the
+projects panel and on the Overmind page; light and dark are Settings › Appearance › Mode.
+
+The connection item reads **Local** with a green dot when this Hive runs only here. It turns to
+**Serving** or the server's name (brand) when serving or attached, an amber ring and the server's
+name while reconnecting, red once disconnected, and amber **Exposed** or **Demo**. Click it for
+every state that holds and a link to the Settings pane that turns it off.
+
 ## The left rail
 
 | Tab | Shows |

@@ -434,6 +434,44 @@ test('the header names the address when the app starts exposed', async ({}, test
   await app.close();
 });
 
+/** HIVE-196: round two has no header; the bar's foot carries the exposure. */
+test('round two: the bar foot reads Exposed and its popover names the address', async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeFileSync(
+    configPath,
+    JSON.stringify(
+      {
+        version: 2,
+        shell: '/bin/sh',
+        projects: [],
+        receiver: {
+          hostAlias: 'host.docker.internal',
+          bind: { host: '0.0.0.0', port: 0, allowedOrigins: [] },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  const page = await app.firstWindow();
+  await page.waitForLoadState('domcontentloaded');
+  await page.evaluate(() =>
+    localStorage.setItem('hive.appearance', JSON.stringify({ version: 3, state: { layout: 'round-two' } })),
+  );
+  await page.reload();
+  await page.waitForSelector('nav[aria-label="Places"]');
+
+  await expect(page.locator('header')).toHaveCount(0);
+  const item = page.getByTestId('connection-item');
+  await expect(item).toHaveText('Exposed');
+  await item.click();
+  await expect(page.getByRole('dialog', { name: 'Connection' })).toContainText('0.0.0.0');
+
+  await app.close();
+});
+
 /**
  * The defect HIVE-134's own review found, proven against the **built app**
  * rather than only in unit tests: a receiver reads its bind once, at boot, so

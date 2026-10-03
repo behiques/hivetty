@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Agent, Entity, Session, Terminal } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
 import { LEDGER_MEMORY_CAP, type LedgerEntry } from '@shared/ledger-contract';
+import type { NotificationKind } from '@shared/notification-contract';
 import type { PlanTaskStatus, SessionPlan } from '@shared/plan-contract';
 
 import {
@@ -28,6 +29,7 @@ import {
   useActiveSessions,
   useCurrentRow,
   useAskingAgentCount,
+  useWorkingAgentCount,
   useAgentLive,
   useAgentLiveCount,
   useAgentPr,
@@ -2088,6 +2090,58 @@ describe('hive-store selectors', () => {
     });
   });
 
+  describe('useWorkingAgentCount (HIVE-196)', () => {
+    const agent = (over: Partial<AgentSummary> = {}): AgentSummary => ({
+      name: 'slack-watcher',
+      description: 'Watches.',
+      icon: 'Robot',
+      status: 'sleeping',
+      wake: { on: [] },
+      mcp: [],
+      tools: [],
+      rotateAfter: 50,
+      runs: [],
+      ...over,
+    });
+
+    it('counts only the working agents', () => {
+      act(() => {
+        useHiveStore.getState().hydrateAgents([
+          agent({ name: 'a', status: 'working' }),
+          agent({ name: 'b', status: 'working' }),
+          agent({ name: 'c', status: 'asking' }),
+        ]);
+      });
+
+      const { result } = renderHook(() => useWorkingAgentCount());
+
+      expect(result.current).toBe(2);
+    });
+
+    it('re-renders only when the count changes', () => {
+      act(() => {
+        useHiveStore.getState().hydrateAgents([agent({ name: 'a', status: 'working' })]);
+      });
+      let renders = 0;
+      renderHook(() => {
+        renders += 1;
+        return useWorkingAgentCount();
+      });
+      const before = renders;
+
+      act(() => useHiveStore.getState().appendEntityLines('hero-refresh', [{ text: 'more', color: 'ink' }]));
+      expect(renders).toBe(before);
+
+      act(() => {
+        useHiveStore.getState().hydrateAgents([
+          agent({ name: 'a', status: 'working' }),
+          agent({ name: 'b', status: 'working' }),
+        ]);
+      });
+      expect(renders).toBe(before + 1);
+    });
+  });
+
   /**
    * An agent's pull request comes from the **ledger**, not from a run summary:
    * a `RunSummary` records what a wake cost and how it ended, never what it
@@ -2498,7 +2552,7 @@ describe('comb selectors (HIVE-199)', () => {
 
   it('summarises for the headline', () => {
     const { result } = renderHook(() => useCombSummary());
-    expect(result.current).toEqual({ needs: 2, working: 3, failed: 2, resting: 3, projects: 2, agents: 5 });
+    expect(result.current).toEqual({ working: 3, failed: 2, resting: 3, projects: 2, agents: 5 });
   });
 
   describe('changed-file selectors (HIVE-201)', () => {
@@ -3065,6 +3119,52 @@ describe('Home strip selectors (HIVE-200)', () => {
       expect(result.current.hatched).toEqual({ numbers: [302, 303], by: 'shipper' });
       expect(result.current.goals).toEqual(['pty-resize goal done']);
       expect(result.current.runs).toEqual({ total: 2, failed: 1 });
+    });
+
+    it('counts the Echoes after since and nothing before it', () => {
+      const echo = (kind: NotificationKind, title: string, at: number, body = '') =>
+        notif({ kind, title, body, createdAt: at, action: { type: 'none' } });
+      const notifs = [
+        echo('pr.checks_failed', 'Checks failed on #301', SINCE - 5),
+        echo('pr.checks_failed', 'Checks failed on #305', SINCE + 5),
+        echo('pr.checks_failed', 'Checks failed on #306', SINCE + 6),
+        echo('pr.approved', 'old approval', SINCE - 5),
+        echo('pr.approved', '#305 approved', SINCE + 5),
+        echo('clone.done', 'Clone finished', SINCE - 5, 'The repository is ready.'),
+        echo('clone.done', 'Clone finished', SINCE + 5, 'The repository is ready.'),
+        echo('clone.done', 'Clone failed', SINCE + 6, 'fatal: repository not found'),
+      ];
+      const away = whileAwayOf({ prs: [], notifs, ledger: [], readyKeys: [] }, SINCE);
+      expect(away.checksFailed).toEqual({ total: 2, first: 'Checks failed on #305' });
+      expect(away.approved).toEqual({ total: 1, first: '#305 approved' });
+      expect(away.clones).toEqual([
+        { failed: false, detail: '' },
+        { failed: true, detail: 'fatal: repository not found' },
+      ]);
+    });
+
+    it('draws none of the other Echoes, so a merged PR is counted once', () => {
+      act(() =>
+        useHiveStore.setState((s) => ({
+          notifs: [
+            ...s.notifs,
+            ...(['pr.merged', 'agent.done', 'agent.failed', 'app.update_available', 'app.update_ready'] as const).map(
+              (kind) => notif({ kind, title: '#302 merged', createdAt: SINCE + 5, action: { type: 'none' } }),
+            ),
+          ],
+        })),
+      );
+      const { result } = renderHook(() => useWhileAway(SINCE));
+      expect(result.current.hatched.numbers).toEqual([302, 303]);
+      expect(result.current.goals).toEqual(['pty-resize goal done']);
+      expect(result.current.checksFailed).toEqual({ total: 0 });
+      expect(result.current.approved).toEqual({ total: 0 });
+      expect(result.current.clones).toEqual([]);
+    });
+
+    it('counts a run cut off by its budget or its turns as failed', () => {
+      const ledger = [run('r1', SINCE + 1, 'budget'), run('r2', SINCE + 2, 'turns'), run('r3', SINCE + 3, 'asking')];
+      expect(whileAwayOf({ prs: [], notifs: [], ledger, readyKeys: [] }, SINCE).runs).toEqual({ total: 3, failed: 2 });
     });
 
     it('names no merging party when no closed post covers every PR', () => {
