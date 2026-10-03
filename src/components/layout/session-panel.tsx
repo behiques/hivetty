@@ -1,5 +1,5 @@
 import { CaretRight, Files, ListChecks } from '@phosphor-icons/react';
-import type { ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
 
 import { useNarrowWindow } from '@/hooks/use-narrow-window';
 import { cn } from '@/lib/utils';
@@ -8,16 +8,19 @@ import { isSession, isTerminal, terminalOf, type Session, type Terminal } from '
 import { SessionPanelStrip, type StripTab } from '@components/layout/session-panel-strip';
 import { ExplorerPanel } from '@features/explorer/components/explorer-panel';
 import { PlanTab } from '@features/plan/components/plan-tab';
+import { resolvePaths } from '@lib/explorer/fs-client';
 import type { SessionPlan } from '@shared/plan-contract';
 import {
   type SessionPanelTab,
+  useEditorLayout,
   useSessionPanelOpen,
   useSessionPanelTab,
   useSetSessionPanelOpen,
   useSetSessionPanelTab,
 } from '@stores/appearance-store';
+import { useEditorActions } from '@stores/editor-store';
 import { useActiveEntity, useChangedFileCount, usePlan } from '@stores/hive-store';
-import { usePlace } from '@stores/ui-store';
+import { usePlace, useRevealStage } from '@stores/ui-store';
 
 interface TabContext {
   entity: Session | Terminal;
@@ -96,7 +99,24 @@ export function SessionPanel() {
   const setOpen = useSetSessionPanelOpen();
   const setTab = useSetSessionPanelTab();
   const narrow = useNarrowWindow();
-  const openPlanFile = () => {};
+  const { openFile, closeAll } = useEditorActions();
+  const { nav } = useEditorLayout();
+  const revealStage = useRevealStage();
+
+  /** As terminal file links do (center-stage.tsx): resolve under the session's root, then open. */
+  const openPlanFile = useCallback(
+    (file: string) => {
+      if (owner === null) return;
+      const sessionId = isSession(owner) ? owner.id : undefined;
+      void resolvePaths(owner.project, sessionId, [file]).then(([target]) => {
+        if (target === null || target === undefined) return;
+        if (nav === 'single') closeAll();
+        openFile(owner.project, target.relPath, sessionId, target.rootKey);
+        revealStage();
+      });
+    },
+    [owner, nav, closeAll, openFile, revealStage],
+  );
 
   if (owner === null || place === 'home') return null;
 

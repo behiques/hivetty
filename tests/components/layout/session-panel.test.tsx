@@ -6,9 +6,17 @@ import type { Session, Terminal } from '@/types/entity';
 import { pickTab, SessionPanel } from '@components/layout/session-panel';
 import type { SessionPlan } from '@shared/plan-contract';
 import { useAppearanceStore } from '@stores/appearance-store';
+import { fileKey, useEditorStore } from '@stores/editor-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
+
+const { resolvePaths } = vi.hoisted(() => ({ resolvePaths: vi.fn() }));
+
+vi.mock('@lib/explorer/fs-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@lib/explorer/fs-client')>()),
+  resolvePaths,
+}));
 
 vi.mock('@features/explorer/components/explorer-panel', () => ({
   ExplorerPanel: ({ changesId }: { changesId?: string }) => <div>explorer {changesId ?? 'none'}</div>,
@@ -158,5 +166,38 @@ describe('SessionPanel: a terminal (HIVE-201)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close the session panel' }));
     expect(screen.queryByRole('button', { name: /^Plan/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Files' })).toBeInTheDocument();
+  });
+});
+
+describe('SessionPanel: the plan file (HIVE-201)', () => {
+  beforeEach(() => {
+    resolvePaths.mockReset();
+    useEditorStore.getState().reset();
+    useHiveStore.getState().setPlan('hero-refresh', {
+      ...plan('hero-refresh'),
+      file: '/abs/.hive/plans/x.md',
+      fileAt: 1,
+    });
+  });
+
+  it('resolves it under the session and opens it in the editor', async () => {
+    resolvePaths.mockResolvedValue([{ relPath: '.hive/plans/x.md', rootKey: '' }]);
+    render(<SessionPanel />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /x\.md/ }));
+      await Promise.resolve();
+    });
+    expect(resolvePaths).toHaveBeenCalledWith('nova-web', 'hero-refresh', ['/abs/.hive/plans/x.md']);
+    expect(useEditorStore.getState().activeKey).toBe(fileKey('nova-web', '.hive/plans/x.md', ''));
+  });
+
+  it('opens nothing when main will not serve it', async () => {
+    resolvePaths.mockResolvedValue([null]);
+    render(<SessionPanel />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /x\.md/ }));
+      await Promise.resolve();
+    });
+    expect(useEditorStore.getState().activeKey).toBeNull();
   });
 });
