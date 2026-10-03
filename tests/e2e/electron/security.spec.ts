@@ -323,6 +323,14 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
      */
     'server',
     'session',
+    /*
+      #298 added `shipped` to the preload but not to this list. What a page can
+      now do: read which shipped agents and skills you have edited, and for one
+      named by `{ kind, name }` restore the shipped copy, take the shipped
+      prompt, or keep yours. No path and no credential crosses, and it acts
+      only on agents and skills the app itself shipped.
+    */
+    'shipped',
     'skills',
     /*
       HIVE-123 added the slack namespace to `BRIDGE_KEYS` and to the preload:
@@ -626,6 +634,11 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'applyTransition',
     'clearToken',
     'comments',
+    /*
+      HIVE-203's `detail`: one issue's whole read (description, parent, links),
+      by a pattern-matched key, answered with mapped fields. No token, no host.
+    */
+    'detail',
     // HIVE-68's two reads. Both answer with mapped, named fields; neither
     // returns a token and neither takes a host.
     'issue',
@@ -643,6 +656,11 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'status',
     'test',
     'transitions',
+    /*
+      HIVE-216's `users`: the people an @mention may name, looked up in main
+      against the stored site. It reads names and account ids; it writes nothing.
+    */
+    'users',
   ]);
   expect(surface.pty).toEqual([
     // Story 093 added `ack` — the renderer reporting what it has parsed, which

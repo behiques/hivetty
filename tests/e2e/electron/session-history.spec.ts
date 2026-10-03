@@ -62,10 +62,10 @@ test('start a session, quit, relaunch — it is still listed, under ENDED', asyn
       ENDED was always its oldest row — and the fleet lists sort by recency now,
       so last run's rows land among this run's by when they actually ended.
 
-      `exact` because `getByText` is a case-insensitive substring match by
-      default, and the header's own counts line reads "… · 0 ended".
+      Anchored because the group heading carries its count, "ENDED · 1"
+      (HIVE-197), and the counts line above the table reads "… · 1 ended".
     */
-    await expect(secondWindow.getByText('ENDED', { exact: true })).toBeVisible();
+    await expect(secondWindow.getByText(/^ENDED · \d+$/)).toBeVisible();
     await expect(secondWindow.getByText('PREVIOUS RUN')).toBeHidden();
 
     /*
@@ -115,23 +115,16 @@ test('start a session, quit, relaunch — it is still listed, under ENDED', asyn
     await expect(row).toBeDisabled();
 
     /*
-      And the way back is a control, not the row (HIVE-93).
-
-      Offered only for the `done` half of the race above: an app-closed row kept
-      its uuid, so main reports it resumable, while a `terminated` one is a pty
-      this app watched die and has nothing to continue. Reading the ending
-      rather than assuming it is the same discipline as the two assertions
-      above — this spec refuses to arbitrate that race, so it must hold either
-      way.
+      The way back is a control, not the row (HIVE-93), and neither ending of
+      the quit race offers it here. A uuid is not a conversation: main offers
+      resume only once Claude has written the transcript (#269), and this
+      suite's stub `claude` never writes one. `history.test.ts` pins the
+      resumable half.
     */
     const resume = secondWindow.getByRole('button', {
       name: new RegExp(`^resume ${id}`),
     });
-    if (ending?.includes('done')) {
-      await expect(resume).toBeVisible();
-    } else {
-      await expect(resume).toHaveCount(0);
-    }
+    await expect(resume).toHaveCount(0);
   } finally {
     await second.close();
   }
@@ -153,7 +146,7 @@ test('a fresh profile still boots with an empty fleet', async ({}, testInfo) => 
 
   try {
     await expect(window.getByTestId('session-table-empty')).toBeVisible();
-    await expect(window.getByText('ENDED', { exact: true })).toBeHidden();
+    await expect(window.getByText(/^ENDED · \d+$/)).toBeHidden();
   } finally {
     await app.close();
   }

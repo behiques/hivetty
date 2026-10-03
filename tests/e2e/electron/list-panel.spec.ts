@@ -17,6 +17,8 @@ const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
 
 const bar = (page: Page) => page.getByRole('navigation', { name: 'Places' });
 const sessionsList = (page: Page) => page.getByRole('region', { name: 'Sessions list' });
+const GROUND = { dark: 'rgb(16, 21, 42)', light: 'rgb(253, 253, 251)' } as const;
+const PANEL = { dark: 'rgb(20, 26, 51)', light: 'rgb(255, 255, 255)' } as const;
 
 /** Seed round two before the first frame that matters, as `session-panel.spec.ts` does. */
 async function useRoundTwo(page: Page): Promise<void> {
@@ -134,3 +136,32 @@ test('at 1,100px the session panel is a strip and the list takes no column; wide
     await app.close();
   }
 });
+
+/*
+  The panel on its ground in both themes (HIVE-210). Here rather than in the web
+  light-theme spec: the browser target has nothing to list, so it draws no panel.
+*/
+for (const theme of ['dark', 'light'] as const) {
+  test(`the panel and the ground in ${theme}`, async ({}, testInfo) => {
+    const { app, page } = await open(testInfo);
+    try {
+      await page.evaluate((mode) => {
+        const stored = JSON.parse(localStorage.getItem('hive.appearance') ?? '{"version":3,"state":{}}') as {
+          version: number;
+          state: object;
+        };
+        localStorage.setItem('hive.appearance', JSON.stringify({ ...stored, state: { ...stored.state, theme: mode } }));
+      }, theme);
+      await page.reload();
+      await page.waitForSelector('nav[aria-label="Places"]');
+      await bar(page).getByRole('button', { name: 'Sessions', exact: true }).click();
+      await expect(sessionsList(page)).toBeVisible();
+      await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(GROUND[theme]);
+      await expect
+        .poll(() => sessionsList(page).evaluate((el) => getComputedStyle(el).backgroundColor))
+        .toBe(PANEL[theme]);
+    } finally {
+      await app.close();
+    }
+  });
+}
