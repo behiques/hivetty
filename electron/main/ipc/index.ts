@@ -1664,6 +1664,7 @@ export function registerIpcHandlers(
       if (action.type === 'ask') {
         send(CH.notificationsActivate, {
           type: 'ask',
+          thread: action.thread,
         } satisfies NotificationActivateEvent);
         return;
       }
