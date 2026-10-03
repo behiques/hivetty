@@ -10,6 +10,7 @@ import type { FetchLike } from '../../../../../electron/main/integrations/jira/c
 import {
   toComment,
   toIssueLink,
+  toJiraUser,
   toRemoteLink,
 } from '../../../../../electron/main/integrations/jira/mapping';
 import {
@@ -124,6 +125,7 @@ describe('toComment', () => {
     expect(toComment(rawComment())).toEqual({
       id: '10001',
       author: 'Yunid Bauza',
+      authorId: '712020:9f3c',
       created: '2026-08-07T00:00:00.000-0400',
       body: [
         { kind: 'paragraph', runs: [{ text: 'Looks good to me.', marks: [] }] },
@@ -164,6 +166,37 @@ describe('toComment', () => {
     for (const leaked of ['self', 'avatarUrls', 'private@example.com']) {
       expect(serialised).not.toContain(leaked);
     }
+  });
+
+  it('reads via only from the Hive\'s own property with a valid agent name (HIVE-216)', () => {
+    const via = (properties: unknown) => toComment(rawComment({ properties }))?.via;
+
+    expect(via([{ key: 'hive.via', value: { agent: 'builder' } }])).toEqual({ agent: 'builder' });
+    expect(via([{ key: 'other.via', value: { agent: 'builder' } }])).toBeUndefined();
+    expect(via([{ key: 'hive.via', value: 'builder' }])).toBeUndefined();
+    expect(via([{ key: 'hive.via', value: { agent: 'Builder Bot' } }])).toBeUndefined();
+    expect(via([{ key: 'hive.via', value: { agent: '../etc' } }])).toBeUndefined();
+    expect(via('nope')).toBeUndefined();
+    expect(via(undefined)).toBeUndefined();
+  });
+
+  it('omits authorId when Jira sent none (HIVE-216)', () => {
+    expect(toComment(rawComment({ author: { displayName: 'Ghost' } }))).not.toHaveProperty('authorId');
+  });
+});
+
+describe('toJiraUser (HIVE-216)', () => {
+  it('keeps an active person, as id and name', () => {
+    expect(
+      toJiraUser({ accountId: '712020:dana', displayName: 'Dana Kim', accountType: 'atlassian', active: true, emailAddress: 'x@y' }),
+    ).toEqual({ accountId: '712020:dana', displayName: 'Dana Kim' });
+  });
+
+  it('drops an inactive account, an app, and anything unreadable', () => {
+    expect(toJiraUser({ accountId: 'a', displayName: 'Gone', accountType: 'atlassian', active: false })).toBeNull();
+    expect(toJiraUser({ accountId: 'b', displayName: 'Bot', accountType: 'app', active: true })).toBeNull();
+    expect(toJiraUser({ displayName: 'No id', accountType: 'atlassian', active: true })).toBeNull();
+    expect(toJiraUser('x')).toBeNull();
   });
 });
 
