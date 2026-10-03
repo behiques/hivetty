@@ -21,6 +21,7 @@ import {
   nextRef,
   openAsks,
   resolveRef,
+  shipStage,
   thread,
   ttlOf,
   STAGE_TEXT_MAX,
@@ -135,6 +136,45 @@ describe('isShipping and buildProgressFor (HIVE-171)', () => {
     ];
     expect(buildProgressFor(mixed, 'HIVE-7')).toEqual({ from: 'shipper', stage: 'ci' });
     expect(buildProgressFor(posts, 'HIVE-7')).toEqual({ from: 'builder', stage: 'build', task: 3 });
+  });
+});
+
+describe('shipStage (HIVE-215)', () => {
+  const slug = 'yunidbauza/the-hive';
+  const claim = entry({ id: 'c1', from: 'shipper', kind: 'claim', body: 'claimed', meta: { task: 'yunidbauza/the-hive#214' } });
+  const stage = (id: string, s: string, over: Partial<LedgerEntry> = {}) =>
+    entry({ id, from: 'shipper', body: 'stage', meta: { pr: 214, repo: slug, stage: s }, ...over });
+
+  it('reads intake from the claim before any post', () => {
+    expect(shipStage([claim], slug, 214)).toBe('intake');
+  });
+
+  it('follows the stages forward, newest wins', () => {
+    expect(shipStage([claim, stage('p1', 'self-review'), stage('p2', 'ci'), stage('p3', 'findings')], slug, 214)).toBe('findings');
+  });
+
+  it('follows a step back from approval to findings', () => {
+    expect(shipStage([claim, stage('p1', 'approval'), stage('p2', 'findings')], slug, 214)).toBe('findings');
+  });
+
+  it('is null after the release of the claim', () => {
+    const release = entry({ id: 'r1', from: 'shipper', kind: 'release', body: 'released', meta: { task: 'Yunidbauza/The-Hive#214' } });
+    expect(shipStage([claim, stage('p1', 'merge'), release], slug, 214)).toBeNull();
+  });
+
+  it('is null at closed', () => {
+    expect(shipStage([claim, stage('p1', 'merge'), stage('p2', 'closed', { to: 'sess-a' })], slug, 214)).toBeNull();
+  });
+
+  it('ignores another owner\'s repo with the same name and number', () => {
+    const other = entry({ id: 'o1', from: 'shipper', body: 'stage', meta: { pr: 214, repo: 'acme/the-hive', stage: 'merge' } });
+    expect(shipStage([claim, stage('p1', 'ci'), other], slug, 214)).toBe('ci');
+    expect(shipStage([other], slug, 214)).toBeNull();
+  });
+
+  it('is null for a PR nobody holds, and for an empty slug', () => {
+    expect(shipStage([], slug, 214)).toBeNull();
+    expect(shipStage([claim], '', 214)).toBeNull();
   });
 });
 

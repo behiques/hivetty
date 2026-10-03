@@ -277,6 +277,40 @@ const wholeNumberOf = (value: unknown): number | undefined => {
 };
 
 /**
+ * Which stage the shipper holds one PR at, or `null` when nobody holds it (HIVE-215).
+ *
+ * The same newest-first reading as {@link isShipping}, which is now this
+ * function `!== null`: the newest shipper `post` naming the PR gives its
+ * `meta.stage`; the claim before any post reads `'intake'`; a `release` of
+ * `owner/name#N` or a `closed` post reads `null`. A stage word the skill adds
+ * later comes back as written — the hatch rule decides what an unknown word
+ * means, not this reader.
+ */
+export function shipStage(entries: readonly LedgerEntry[], slug: string, n: number): string | null {
+  const wanted = slug.toLowerCase();
+  if (wanted === '') return null;
+  const claim = `${wanted}#${n}`;
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i]!;
+    if (entry.from !== 'shipper') continue;
+    if (entry.kind === 'release' || entry.kind === 'claim') {
+      if (taskOf(entry)?.toLowerCase() === claim) return entry.kind === 'claim' ? 'intake' : null;
+      continue;
+    }
+    if (entry.kind !== 'post') continue;
+    const meta = entry.meta ?? {};
+    const repo = meta['repo'];
+    const stage = meta['stage'];
+    if (wholeNumberOf(meta['pr']) !== n || typeof repo !== 'string' || typeof stage !== 'string') {
+      continue;
+    }
+    if (repo.toLowerCase() !== wanted) continue;
+    return stage === 'closed' ? null : stage;
+  }
+  return null;
+}
+
+/**
  * Whether the shipper is holding one PR (HIVE-171).
  *
  * A yes or no, not the stage: most stages restate a GitHub badge the card
@@ -302,27 +336,7 @@ const wholeNumberOf = (value: unknown): number | undefined => {
  * release. Read from the log, never stored: one truth per number on screen.
  */
 export function isShipping(entries: readonly LedgerEntry[], slug: string, n: number): boolean {
-  const wanted = slug.toLowerCase();
-  if (wanted === '') return false;
-  const claim = `${wanted}#${n}`;
-  for (let i = entries.length - 1; i >= 0; i -= 1) {
-    const entry = entries[i]!;
-    if (entry.from !== 'shipper') continue;
-    if (entry.kind === 'release' || entry.kind === 'claim') {
-      if (taskOf(entry)?.toLowerCase() === claim) return entry.kind === 'claim';
-      continue;
-    }
-    if (entry.kind !== 'post') continue;
-    const meta = entry.meta ?? {};
-    const repo = meta['repo'];
-    const stage = meta['stage'];
-    if (wholeNumberOf(meta['pr']) !== n || typeof repo !== 'string' || typeof stage !== 'string') {
-      continue;
-    }
-    if (repo.toLowerCase() !== wanted) continue;
-    return stage !== 'closed';
-  }
-  return false;
+  return shipStage(entries, slug, n) !== null;
 }
 
 /** Where an agent is working (HIVE-172). */
