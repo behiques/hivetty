@@ -8,8 +8,8 @@ import { ContainerGroup } from '@features/settings/components/container-group';
 import { EnvDiagnosticView } from '@features/settings/components/env-diagnostic-view';
 import { EnvEditor } from '@features/settings/components/env-editor';
 import { PathSourceGroup } from '@features/settings/components/path-source-group';
-import { SettingsGroup } from '@features/settings/components/settings-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
+import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useProjectConfig } from '@hooks/use-project-config';
 import {
   diagnoseAgentCommand,

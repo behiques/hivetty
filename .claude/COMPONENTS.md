@@ -234,7 +234,7 @@ Contracts worth knowing before reusing them:
   which is never what a card's option row means; pass `type="submit"`
   explicitly on the rare button that really should. Its four variants are
   `primary`, `secondary`, `danger` and `ghost`; `primary` is the class string
-  already hand-copied into eleven settings panes (`agent-editor.tsx`,
+  already hand-copied into eleven panes (`agents/…/agent-editor.tsx`,
   `projects-section.tsx`, `skill-editor.tsx`, `skills-section.tsx`,
   `env-editor.tsx`, `theme-gallery.tsx`, `clone-repo-view.tsx` ×2,
   `agents-section.tsx`, `new-session-picker.tsx`), lifted unchanged. **Landing
@@ -707,7 +707,9 @@ fills the center stage instead. Radix's focus trap, Escape, scroll lock, and
 HIVE-123. Design record:
 https://claude.ai/code/artifact/efe48323-a347-4744-8c00-026f8ff086b8
 
-One `SettingsGroup` — a status row (state pill · identity · actions), a
+One `SettingsGroup` (`src/features/shared/components/settings-group.tsx` since
+HIVE-204, beside `InlineConfirm` and the shipped marker, so the agents slice can
+use them too) — a status row (state pill · identity · actions), a
 hairline, then one caption line and an `Advanced` disclosure closed by
 default. Chosen over the two alternatives considered (mirroring Jira's three
 nested groups, and a connection card), both of which cost roughly three times

@@ -3,7 +3,7 @@ import { Fragment } from 'react';
 import { EmptyState } from '@components/ui/empty-state';
 import { AgentRow } from '@features/agents/components/agent-row';
 import { useAgentsByGroup } from '@stores/hive-store';
-import { useSettingsActions } from '@stores/ui-store';
+import { useAgentPageActions } from '@stores/ui-store';
 
 /**
  * Agents panel — the long-lived background agents, grouped by what they are
@@ -34,14 +34,25 @@ import { useSettingsActions } from '@stores/ui-store';
  */
 export function AgentsPanel() {
   const groups = useAgentsByGroup();
-  const { openSettings } = useSettingsActions();
+  const { openAgentPage } = useAgentPageActions();
+
+  const newAgentButton = (
+    <button
+      type="button"
+      onClick={() => openAgentPage(null, 'definition')}
+      className="mt-1 rounded-lg px-2.5 py-[var(--cc-row-py)] text-left text-[12px] text-brand hover:bg-hover"
+    >
+      + New agent…
+    </button>
+  );
 
   if (groups.length === 0) {
     return (
       <div data-panel="agents" className="flex flex-col gap-0.5">
         <EmptyState phrase="empty.agents" creature="hydralisk">
-          No agents yet — create one in Settings › Agents.
+          No agents yet.
         </EmptyState>
+        {newAgentButton}
       </div>
     );
   }
@@ -62,19 +73,11 @@ export function AgentsPanel() {
       ))}
 
       {/*
-        The empty state's copy names this pane; with rows on screen that copy
-        is gone, and the way to make another agent has to survive somewhere.
-        It navigates rather than opening a form here: Settings › Agents already
-        owns authoring, and a second entry point would be a second thing to
-        keep in step.
+        The way to make another agent: a new agent's page, on Definition
+        (HIVE-204). The page owns authoring now, so the panel opens it here
+        rather than sending the user to Settings and back.
       */}
-      <button
-        type="button"
-        onClick={() => openSettings('agents')}
-        className="mt-1 rounded-lg px-2.5 py-[var(--cc-row-py)] text-left text-[12px] text-brand hover:bg-hover"
-      >
-        + New agent…
-      </button>
+      {newAgentButton}
     </div>
   );
 }

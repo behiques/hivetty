@@ -636,3 +636,62 @@ describe('Work place (HIVE-203)', () => {
     expect(useUiStore.getState().workConversation).toBe('everything');
   });
 });
+
+describe('ui-store — the agent page (HIVE-204)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  it('starts with no agent page', () => {
+    expect(useUiStore.getState().agentPage).toBeNull();
+  });
+
+  it('openAgentPage opens the Agents place on the asked view and dismisses overlays', () => {
+    useUiStore.getState().openSettings('agents');
+    useUiStore.getState().openAgentPage('acr', 'definition');
+    expect(useUiStore.getState()).toMatchObject({
+      agentPage: { name: 'acr', view: 'definition' },
+      place: 'agents',
+      panelOpen: true,
+      picker: false,
+      settings: false,
+    });
+  });
+
+  it('opening a named page also makes it the active tab; a new agent returns the tab to the orchestrator', () => {
+    useUiStore.getState().openAgentPage('acr', 'activity');
+    expect(useUiStore.getState().activeTab).toBe('acr');
+    useUiStore.getState().openAgentPage(null, 'definition');
+    expect(useUiStore.getState().activeTab).toBe('orch');
+    expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
+  });
+
+  it('openTab to the agents place opens that agent on Activity', () => {
+    useUiStore.getState().openTab('shipper', 'agents');
+    expect(useUiStore.getState().agentPage).toEqual({ name: 'shipper', view: 'activity' });
+  });
+
+  it('openTab to another place leaves the agent page as it was', () => {
+    useUiStore.getState().openAgentPage('acr', 'definition');
+    useUiStore.getState().openTab('sess-1', 'sessions');
+    expect(useUiStore.getState().agentPage).toEqual({ name: 'acr', view: 'definition' });
+  });
+
+  it('setAgentPageView changes the view and keeps the agent', () => {
+    useUiStore.getState().openAgentPage('acr', 'activity');
+    useUiStore.getState().setAgentPageView('definition');
+    expect(useUiStore.getState().agentPage).toEqual({ name: 'acr', view: 'definition' });
+  });
+
+  it('setAgentPageView with nothing open does nothing', () => {
+    useUiStore.getState().setAgentPageView('definition');
+    expect(useUiStore.getState().agentPage).toBeNull();
+  });
+
+  it('closeAgentPage leaves nothing open and stays on the place', () => {
+    useUiStore.getState().openAgentPage('acr', 'activity');
+    useUiStore.getState().closeAgentPage();
+    expect(useUiStore.getState().agentPage).toBeNull();
+    expect(useUiStore.getState().place).toBe('agents');
+  });
+});

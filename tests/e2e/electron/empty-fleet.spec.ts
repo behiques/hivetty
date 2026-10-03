@@ -193,10 +193,9 @@ test.describe('with the shipped agents deleted', () => {
     });
     await selectRailTab(rail.getByRole('tab', { name: /^Agents/ }));
 
-    // Since HIVE-114 there is somewhere to point: the copy names the pane that
-    // creates one, rather than reporting that the feature does not exist.
-    await expect(
-      page.getByText(/No agents yet — create one in Settings › Agents/i),
-    ).toBeVisible();
+    // Since HIVE-204 the panel offers New agent itself, rather than pointing
+    // at the pane that used to hold the editor.
+    await expect(page.getByText(/No agents yet\./)).toBeVisible();
+    await expect(page.getByRole('button', { name: '+ New agent…' })).toBeVisible();
   });
 });
