@@ -11,6 +11,7 @@ import { EmptyState } from '@components/ui/empty-state';
 import { PullIndicator } from '@components/ui/pull-indicator';
 import { SwarmLine } from '@components/ui/swarm-line';
 import { SourceProblem } from '@features/shared/components/source-problem';
+import { StaleLine } from '@features/shared/components/stale-line';
 import { TicketCard } from '@features/work/components/ticket-card';
 import { TicketListSkeleton } from '@features/work/components/ticket-card-skeleton';
 import { TicketRow } from '@features/work/components/ticket-row';
@@ -22,6 +23,7 @@ import {
   useTicketSearch,
   useTicketSource,
   useTickets,
+  useTicketsReadAt,
   type TicketSource,
 } from '@stores/hive-store';
 import { useToggleWorkGroup, useWorkFolded, useWorkSearchTerm } from '@stores/ui-store';
@@ -61,6 +63,12 @@ import { useToggleWorkGroup, useWorkFolded, useWorkSearchTerm } from '@stores/ui
  * used.
  */
 
+/** The stale line reads its own time, so only it re-renders on a sweep (HIVE-211, D5). */
+function TicketsStaleLine({ failedAt, onRetry }: { failedAt: number | undefined; onRetry: () => void }) {
+  const readAt = useTicketsReadAt();
+  return <StaleLine service="Jira" failedAt={failedAt} readAt={readAt} onRetry={onRetry} />;
+}
+
 /** The line above the list. `null` when there is nothing worth saying. */
 function SourceNotice({
   source,
@@ -89,12 +97,7 @@ function SourceNotice({
   }
 
   if (source.stale) {
-    return (
-      <SourceProblem
-        message="Could not reach Jira. These may be out of date."
-        onRetry={onRetry}
-      />
-    );
+    return <TicketsStaleLine failedAt={source.failedAt} onRetry={onRetry} />;
   }
 
   if (source.capped) {

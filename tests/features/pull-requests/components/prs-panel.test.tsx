@@ -2,6 +2,7 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { clockTime } from '@lib/format-clock';
 import { PrsPanel } from '@features/pull-requests/components/prs-panel';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
@@ -151,6 +152,20 @@ describe('PrsPanel source states', () => {
     act(() => useHiveStore.setState({ prSource: { kind: 'live', stale: true, repos: 5 } }));
     render(<PrsPanel />);
     expect(screen.getByText('Could not reach GitHub. These may be out of date.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^#10 / })).toBeInTheDocument();
+  });
+
+  it('names when GitHub failed and when the list was read (HIVE-211)', () => {
+    const loaded = new Date('2026-10-03T10:31:00').getTime();
+    const failed = new Date('2026-10-03T10:42:00').getTime();
+    act(() =>
+      useHiveStore.setState({ prSource: { kind: 'live', stale: true, repos: 5, failedAt: failed }, prsReadAt: loaded }),
+    );
+    render(<PrsPanel />);
+    expect(
+      screen.getByText(`Couldn't reach GitHub at ${clockTime(failed)}. Showing what was loaded at ${clockTime(loaded)}.`),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^#10 / })).toBeInTheDocument();
   });
 
