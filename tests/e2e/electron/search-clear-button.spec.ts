@@ -9,8 +9,8 @@ import { launchHive, startSession, writeProjectConfig } from './fixtures/hive-ap
  *
  * ## What this spec exists to catch
  *
- * The Explorer and PRs boxes are `<input type="search">`, and both draw their
- * own themed clear button beside the field so it matches the rest of the rail.
+ * The app's search boxes are `<input type="search">`, and each draws its own
+ * themed clear button beside the field so it matches the rest of the chrome.
  * Chromium draws one *too*: `::-webkit-search-cancel-button`, a blue X painted
  * into the input's user-agent shadow tree the moment a focused search field has
  * content. The result was two X's a few pixels apart, one of them a colour the
