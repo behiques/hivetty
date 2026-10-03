@@ -404,7 +404,7 @@ Components never read a store object directly and never call `getState()`.
 | `useOpenAskCount()` | how many asks are unanswered and not yet TTL-retired |
 | `useThread(id)` | one conversation: the ask, and everything that named it |
 | `useCombEntities()` | Home's comb cells: every live session, live terminal and agent, as raw facts (HIVE-199) |
-| `useCombSummary()` | the headline's counts over the same cells: `{ needs, working, failed, resting, projects, agents }` |
+| `useCombSummary()` | the headline's counts over the same cells: `{ working, failed, resting, projects, agents }` |
 | `useSwarmPalette()` | the swarm canvas's colours for the active theme and mode (appearance store) |
 | `useTicketGroups()` | the Work panel's groups (In progress, To do, Done; empty ones dropped) with `total` and `needYou` (HIVE-203) |
 | `useTicketRowModels(tickets)` | each ticket's row: title without tags, tone, and the one leading fact (`lib/ticket-activity.ts`) |
@@ -434,8 +434,9 @@ transcript line or a cost update re-renders nothing. A session is Morphing when
 when idle; an agent is Failed when `failed` or its definition is `invalid`,
 Summons when `asking`, Morphing when `working`, Burrowed when sleeping or
 paused; a live terminal is Terminal; ended sessions and terminals drop out.
-`summariseComb` / `useCombSummary` count those cells for the headline. `needs`
-is the comb's own Summons count until HIVE-214's `useSummonsCount` lands.
+`summariseComb` / `useCombSummary` count those cells for the headline's summary
+line. Its "N things need you" is not a cell count: it reads
+`useSummonsCount(useOnStage())`, the strip's and the pill's number (HIVE-217).
 `useSwarmPalette` is memoised per theme `ui` object, so an unrelated
 appearance write hands back the same reference; a theme without `creep` and
 `chitin` gets them derived from its own `bg`, `brand` and `ink`.
@@ -503,9 +504,15 @@ unrelated write (a terminal line re-renders none of them).
   ships". At most five.
 - `useWhileAway(since)` (`whileAwayOf`): PRs merged after `since` (and the one
   party whose `closed` post covers them all), `session.goal` notification titles,
-  `run.ended` events in the ledger tail with the failed ones counted, and todo
-  tickets with no live session. Runs are bounded by `LEDGER_MEMORY_CAP`, so a busy
-  day can undercount; the row's tooltip says so.
+  `run.ended` events in the ledger tail with the failed ones counted (`failed`,
+  `budget` or `turns`, the outcomes `notify.ts` raises as `agent.failed`), and
+  todo tickets with no live session. Runs are bounded by `LEDGER_MEMORY_CAP`, so
+  a busy day can undercount; the row's tooltip says so. It also reads the `echo`
+  lane after `since` (HIVE-217): `pr.checks_failed` and `pr.approved` counted
+  with the first title, and each `clone.done`. `pr.merged` is left out because
+  `hatched` already counts it, and so are `agent.*` (each is a run already
+  counted) and `app.update_*` (it has its own surface). The trim drops Echoes
+  first, so a long absence can undercount these too.
 - `usePrFlapCounts()` (`flapCountsOf`): counts per flap over `useHatchery()`, in
   `FLAP_RANK` order, toned by `flapTone`; empty unless `prSource` is live.
 - `ui-store.awaySince`: when this window last lost focus (`useAwayTracker`,
