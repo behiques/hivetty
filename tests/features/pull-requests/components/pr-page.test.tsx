@@ -63,7 +63,7 @@ describe('PrPage', () => {
   });
 
   it('falls back to Conversation for a tab this PR does not have', () => {
-    useUiStore.setState({ prTab: 'files' as never });
+    useUiStore.setState({ prTab: 'timeline' as never });
     render(<PrPage row={row} />);
     expect(screen.getByRole('radio', { name: 'Conversation' })).toBeChecked();
   });
