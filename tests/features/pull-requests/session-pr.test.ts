@@ -18,6 +18,8 @@ const check = (over: Partial<PrCheck>): PrCheck => ({
   startedAt: '2026-10-03T10:00:00Z',
   completedAt: '2026-10-03T10:01:02Z',
   url: null,
+  app: null,
+  jobId: null,
   ...over,
 });
 const NOW = Date.parse('2026-10-03T10:02:30Z');
