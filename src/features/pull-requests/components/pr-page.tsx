@@ -9,8 +9,9 @@ import { cn } from '@/lib/utils';
 import { isSession } from '@/types/entity';
 import type { HatcheryRow, Pr } from '@/types/pull-request';
 
-import { SegmentedControl } from '@components/ui/segmented-control';
+import { SegmentedControl, type SegmentedOption } from '@components/ui/segmented-control';
 import { Flap } from '@features/pull-requests/components/flap';
+import { PrChecks } from '@features/pull-requests/components/pr-checks';
 import { PrCommentBox } from '@features/pull-requests/components/pr-comment-box';
 import { PrConversation } from '@features/pull-requests/components/pr-conversation';
 import { PrFiles } from '@features/pull-requests/components/pr-files';
@@ -33,11 +34,12 @@ import {
 } from '@stores/hive-store';
 import { usePrPageActions, usePrTab, type PrTab } from '@stores/ui-store';
 
-/** The tab strip; Files is HIVE-207's, and HIVE-206 and 208 append Checks and Timeline. */
+/** The tab strip; Files is HIVE-207's, Checks is HIVE-206's, and HIVE-208 appends Timeline. */
 export const PR_TABS = [
   { value: 'conversation', label: 'Conversation' },
   { value: 'files', label: 'Files' },
-] as const satisfies readonly { value: PrTab; label: string }[];
+  { value: 'checks', label: 'Checks' },
+] as const satisfies readonly SegmentedOption<PrTab>[];
 
 /** The open PR's detail re-reads once a minute while it is on stage; the first sweep is the open's read. */
 const usePagePoller = createPoller({ intervalMs: 60_000 });
@@ -90,8 +92,12 @@ export function PrPage({ row }: { row: HatcheryRow }) {
   /* A tab this PR does not have falls back here, not in the store, so the choice survives the next PR (D14). */
   const tab: PrTab = PR_TABS.some((t) => t.value === chosen) ? chosen : 'conversation';
   /* Files carries the changed-file count once the detail is read (HIVE-207). */
-  const tabs: { value: PrTab; label: string }[] = PR_TABS.map((t) =>
-    t.value === 'files' && detail !== undefined ? { ...t, label: `Files ${String(detail.changedFiles)}` } : t,
+  const tabs: SegmentedOption<PrTab>[] = PR_TABS.map((t) =>
+    t.value === 'files' && detail !== undefined
+      ? { ...t, label: `Files ${String(detail.changedFiles)}` }
+      : t.value === 'checks'
+        ? /* The Checks tab carries a red dot while a check fails (HIVE-206). */ { ...t, alert: pr.checks === 'failing' }
+        : t,
   );
   const fixerOnIt = !merged && track.held && track.current?.holder === 'fixer';
 
@@ -175,8 +181,17 @@ export function PrPage({ row }: { row: HatcheryRow }) {
                     <SourceProblem message={entry.problem} onRetry={retry} />
                   </div>
                 )}
-                <PrConversation pr={pr} detail={detail} fixerOnIt={fixerOnIt} onOpenFile={onOpenFile} />
-                {merged ? null : <PrCommentBox pr={pr} />}
+                {tab === 'checks' ? (
+                  /* -mx-8 cancels the column's px-8: the Checks layout carries its own 24px gutters. */
+                  <div className="-mx-8">
+                    <PrChecks pr={pr} detail={detail} />
+                  </div>
+                ) : (
+                  <>
+                    <PrConversation pr={pr} detail={detail} fixerOnIt={fixerOnIt} onOpenFile={onOpenFile} />
+                    {merged ? null : <PrCommentBox pr={pr} />}
+                  </>
+                )}
               </>
             )}
           </div>

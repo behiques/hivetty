@@ -1,0 +1,79 @@
+import { useReducedMotion } from '@/hooks/use-reduced-motion';
+import { NODE_H, NODE_W, type ChecksGraph, type EdgeState, type GraphNode } from '@/lib/checks-graph';
+import { cn } from '@/lib/utils';
+
+import { StateIcon } from '@features/pull-requests/components/state-icon';
+
+const EDGE: Record<EdgeState, string> = {
+  ok: 'stroke-[color-mix(in_srgb,var(--cc-green)_45%,var(--cc-border))]',
+  bad: 'stroke-[color-mix(in_srgb,var(--cc-red)_55%,var(--cc-border))]',
+  wait: 'stroke-border [stroke-dasharray:3_5]',
+  flow: 'stroke-green [stroke-dasharray:6_5]',
+};
+
+const NODE: Record<GraphNode['state'], string> = {
+  passed: 'border-[color-mix(in_srgb,var(--cc-green)_35%,var(--cc-border))]',
+  failed: 'border-red bg-[color-mix(in_srgb,var(--cc-red)_10%,var(--cc-panel))] shadow-[0_0_18px_color-mix(in_srgb,var(--cc-red)_25%,transparent)]',
+  running: 'border-green shadow-[0_0_0_3px_color-mix(in_srgb,var(--cc-green)_12%,transparent)]',
+  waiting: 'border-dashed border-border opacity-60',
+  skipped: 'border-dashed border-border opacity-60',
+};
+
+/**
+ * The Checks graph (HIVE-206): a box per job at the layout's place, its
+ * `needs` as edges in the state of their target, later workflows in a dashed
+ * group. Edges into a running job flow unless motion is reduced; every state
+ * still reads from colour, border and icon.
+ */
+export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph; onJob: (id: number) => void; onExpand: (defId: string) => void }) {
+  const still = useReducedMotion();
+  return (
+    <div className="mx-6 mt-3 max-w-[1028px] overflow-x-auto py-3">
+      <div className="relative" style={{ width: graph.width, height: graph.height }}>
+        {graph.groups.map((group) => (
+          <div key={group.file} className="absolute rounded-[14px] border border-dashed border-border" style={{ left: group.x, top: group.y, width: group.w, height: group.h }}>
+            <span className="absolute -top-[9px] left-3 bg-bg px-1.5 font-mono text-[11px] text-subtle">{group.file}</span>
+          </div>
+        ))}
+        <svg aria-hidden className="absolute inset-0 overflow-visible" width={graph.width} height={graph.height}>
+          {graph.edges.map((edge) => (
+            <path
+              key={edge.key}
+              d={edge.d}
+              data-state={edge.state}
+              className={cn('fill-none [stroke-width:1.6]', EDGE[edge.state], edge.state === 'flow' && !still && 'animate-ccflow')}
+            />
+          ))}
+        </svg>
+        {graph.nodes.map((node) => {
+          const label = node.count > 1 ? `${node.label} × ${String(node.count)}` : node.label;
+          return (
+            <button
+              key={node.key}
+              type="button"
+              data-state={node.state}
+              aria-label={`${label}, ${node.state}, ${node.time}`}
+              onClick={() => {
+                if (node.matrix !== null) onExpand(node.matrix);
+                else if (node.jobId !== null) onJob(node.jobId);
+              }}
+              className={cn('absolute flex items-center gap-2.5 overflow-hidden rounded-[10px] border bg-panel px-3 text-left hover:bg-hover', NODE[node.state])}
+              style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
+            >
+              <StateIcon state={node.state} />
+              <span className="flex min-w-0 flex-col gap-px">
+                <b className="truncate font-mono text-[12.5px] text-ink">{label}</b>
+                <span className="truncate font-mono text-[11px] text-muted">{node.time}</span>
+              </span>
+              {node.progress === null ? null : (
+                <span role="progressbar" aria-label={`${node.label} progress`} aria-valuenow={Math.round(node.progress * 100)} aria-valuemin={0} aria-valuemax={100} className="absolute inset-x-0 bottom-0 h-[3px] bg-border">
+                  <span className="block h-full bg-green" style={{ width: `${String(node.progress * 100)}%` }} />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

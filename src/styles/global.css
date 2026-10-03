@@ -110,6 +110,13 @@ body {
   }
 }
 
+/* HIVE-206: dashes flowing along an edge into a running job. */
+@keyframes ccflow {
+  to {
+    stroke-dashoffset: -22;
+  }
+}
+
 /* The first-run cells (HIVE-200). The global reduced-motion clamp stills them. */
 @keyframes ccbreathe {
   50% {

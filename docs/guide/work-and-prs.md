@@ -166,6 +166,15 @@ Each card links to GitHub and to the session whose branch made it. **Search pull
 filters the list. The Hive stores no GitHub token; `gh` uses its own login, or `GH_TOKEN` /
 `GITHUB_TOKEN` if set.
 
+**Checks.** The PR page's Checks tab shows the branch's latest run without
+opening GitHub: the last eight pushes as squares (click one to see it), every
+job as a box laid out by its `needs`, a failed job glowing red with its steps
+and its log cut to the failing assertion beside them, and **Re-run failed**.
+The tab carries a red dot while a check fails, and clicking a check in the
+right-hand column opens it here. Checks from outside GitHub Actions (a deploy
+preview, a scanner) sit in a row under the graph with a link out. The tab reads
+GitHub only while it is open.
+
 If the tab stays empty, run `gh auth status`. **Settings › Integrations › Command line** shows
 which `gh` The Hive found and who it is signed in as.
 

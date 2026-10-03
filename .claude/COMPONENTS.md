@@ -597,7 +597,7 @@ pull request" while the sweep is not live.
 - **The detail is polled** once a minute through its own `createPoller`; the page
   is keyed on the PR, so opening another is a new mount and a fresh read. A
   failed refresh keeps the last detail with the problem above it.
-- **`PR_TABS` is the tab list** HIVE-206/207/208 append to; a stored tab this
+- **`PR_TABS` is the tab list** (Conversation, Checks) HIVE-207/208 append to; a stored tab this
   page does not have falls back to Conversation in the page, not in the store.
 - **The ship track** is `bandStops()` over PR 1's `shipTrack`: the shipper's
   eight stops while it holds the PR, all eight ticked once merged after it ran,
@@ -635,6 +635,17 @@ entry carries the changed-file count ("Files 9") once the detail is read.
   the thread), Resolve and Unresolve, not optimistic, the reason inline on a
   refusal. `useThreadWrites(pr)` builds it for Conversation and Files, and
   answers none on a merged PR.
+
+**The Checks tab** (`pr-checks.tsx`, HIVE-206). It mounts its own 60s poller,
+so runs and jobs are read only while it is shown.
+- **`RunBar`**: the shown run, its sha and age; the last eight pushes as 9 × 14 squares (a click shows that push); a chip per workflow file.
+- **`ChecksGraphView`**: `layoutGraph`'s boxes (160 × 48) and edges.
+  - Edges take their target's state, and an edge into a running job flows (`animate-ccflow`, still under reduced motion).
+  - A matrix box opens into its legs.
+- **The non-Actions checks** are a row of chips with links out.
+- **`JobSteps`** is the shown job, with Re-run failed, Open the log, and "<holder> has it" (`holderIcon`). **`JobLog`** shows the cut log, toned by `classifyLogLine`.
+- **No runs and no other checks** reads "No checks on <sha>".
+- A tab can carry `SegmentedOption.alert`, a red dot that reads ", failing".
 
 ### `<EmptyHatchery />`
 

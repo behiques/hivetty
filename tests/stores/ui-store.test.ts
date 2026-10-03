@@ -765,6 +765,12 @@ describe('the Checks tab selection (HIVE-206)', () => {
     expect(useUiStore.getState()).toMatchObject({ prTab: 'checks', prJob: 77 });
   });
 
+  it('openPrChecks leaves an older push so the clicked job is looked up in the latest', () => {
+    useUiStore.setState({ prRun: 'oldsha1' });
+    useUiStore.getState().openPrChecks(77);
+    expect(useUiStore.getState()).toMatchObject({ prTab: 'checks', prRun: null, prJob: 77 });
+  });
+
   it('showPrRun shows a push and lets go of the clicked job', () => {
     useUiStore.setState({ prJob: 77 });
     useUiStore.getState().showPrRun('9f3c2ab');
