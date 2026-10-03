@@ -35,6 +35,7 @@ import { PrsStage } from '@features/pull-requests/components/prs-stage';
 import { MessageInput } from '@features/sessions/components/message-input';
 import { NewSessionPicker } from '@features/sessions/components/new-session-picker';
 import { SessionBootCover } from '@features/sessions/components/session-boot-cover';
+import { SessionEndedCover } from '@features/sessions/components/session-ended-cover';
 import { TerminalEndedCover } from '@features/sessions/components/terminal-ended-cover';
 import { useSessionBoot } from '@features/sessions/hooks/use-session-boot';
 import { SettingsOverlay } from '@features/settings/components/settings-overlay';
@@ -632,6 +633,15 @@ export function CenterStage() {
           isTerminal(entity) &&
           entity.ended !== undefined ? (
             <TerminalEndedCover terminal={entity} />
+          ) : null}
+
+          {/*
+            A session's ending, in round two (HIVE-211): the same "over the
+            mounted surface" rule, as a card that closes to a foot strip (D2).
+            Keyed by session, so a dismissal never carries to the next one.
+          */}
+          {roundTwo && isTerminalView(view) && entity !== null && isSession(entity) && isTerminated(entity) ? (
+            <SessionEndedCover key={entity.id} session={entity} />
           ) : null}
 
           {/*

@@ -6,6 +6,7 @@ import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
 import { swarmPaletteOf } from '@lib/theme/colour';
 import { type HiveTheme } from '@lib/theme/contract';
 import { RAIL_MIN, railMaxWidth } from '@lib/rail-width';
+import { useUiStore } from '@stores/ui-store';
 import {
   APPEARANCE_STORAGE_KEY,
   DEFAULT_TEAM_NAME,
@@ -1378,5 +1379,16 @@ describe('appearance-store — session panel (HIVE-201)', () => {
     expect(result.current.open).toBe(true);
     act(() => result.current.setTab('files'));
     expect(result.current.tab).toBe('files');
+  });
+});
+
+describe('a narrow spell (HIVE-211)', () => {
+  afterEach(() => useUiStore.getState().reset());
+
+  it('never writes the session panel preference', () => {
+    useAppearanceStore.getState().setSessionPanelOpen(true);
+    useUiStore.getState().setNarrow(true);
+    useUiStore.getState().setNarrow(false);
+    expect(useAppearanceStore.getState().sessionPanelOpen).toBe(true);
   });
 });

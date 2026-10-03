@@ -141,6 +141,7 @@ describe('hydrateTickets', () => {
       kind: 'live',
       stale: true,
       capped: false,
+      failedAt: expect.any(Number),
     });
 
     state().hydrateTickets([issue()], false);
@@ -198,6 +199,7 @@ describe('reportTicketFailure — staleness over emptiness', () => {
       kind: 'live',
       stale: true,
       capped: false,
+      failedAt: expect.any(Number),
     });
   });
 
@@ -209,6 +211,7 @@ describe('reportTicketFailure — staleness over emptiness', () => {
       kind: 'live',
       stale: true,
       capped: true,
+      failedAt: expect.any(Number),
     });
   });
 
@@ -357,5 +360,38 @@ describe('priority and assignee (HIVE-203)', () => {
 
     state().updateTicket(issue({ priority: 'High', assignee: null }));
     expect(state().tickets[0]).toMatchObject({ priority: 'High', assignee: null });
+  });
+});
+
+describe('read and failure times (HIVE-211, D5)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('hydrate sets the read time; a failure keeps tickets and read time and stamps the failure once', () => {
+    vi.setSystemTime(new Date('2026-10-03T10:31:00'));
+    state().hydrateTickets([issue()], false);
+    const readAt = Date.now();
+    expect(state().ticketsReadAt).toBe(readAt);
+
+    vi.setSystemTime(new Date('2026-10-03T10:42:00'));
+    state().reportTicketFailure('down');
+    const failedAt = Date.now();
+    expect(state().tickets).toHaveLength(1);
+    expect(state().ticketsReadAt).toBe(readAt);
+    expect(state().ticketSource).toEqual({ kind: 'live', stale: true, capped: false, failedAt });
+
+    vi.setSystemTime(new Date('2026-10-03T10:43:00'));
+    const before = state().ticketSource;
+    state().reportTicketFailure('down');
+    expect(state().ticketSource).toBe(before); // the first failure of the outage stands
+
+    state().hydrateTickets([issue()], false);
+    expect(state().ticketSource).toEqual({ kind: 'live', stale: false, capped: false });
+  });
+
+  it('reset clears the read time', () => {
+    state().hydrateTickets([issue()], false);
+    state().reset();
+    expect(state().ticketsReadAt).toBeNull();
   });
 });

@@ -1,0 +1,136 @@
+import { join } from 'node:path';
+
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
+
+import { launchHive, writeProjectConfig } from './fixtures/hive-app';
+
+/**
+ * Round two's list panel in a real window (HIVE-211).
+ *
+ * Electron rather than the web project: with no list without items, the
+ * browser target (no project, no Jira, no gh, no agent) never draws a panel at
+ * all. A configured project is what gives Sessions something to list, and a
+ * real window is the only place a width can cross 1,200px.
+ */
+const PROJECT = 'nova-web';
+const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
+
+const bar = (page: Page) => page.getByRole('navigation', { name: 'Places' });
+const sessionsList = (page: Page) => page.getByRole('region', { name: 'Sessions list' });
+
+/** Seed round two before the first frame that matters, as `session-panel.spec.ts` does. */
+async function useRoundTwo(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const raw = localStorage.getItem('hive.appearance');
+    const stored = raw === null ? { version: 3, state: {} } : (JSON.parse(raw) as { version: number; state: object });
+    localStorage.setItem(
+      'hive.appearance',
+      JSON.stringify({ ...stored, state: { ...stored.state, layout: 'round-two' } }),
+    );
+  });
+  await page.reload();
+  await page.waitForSelector('nav[aria-label="Places"]');
+}
+
+async function resizeTo(app: ElectronApplication, page: Page, width: number): Promise<void> {
+  await app.evaluate(
+    ({ BrowserWindow }, w: number) =>
+      BrowserWindow.getAllWindows()[0]!.setBounds({ x: 0, y: 0, width: w, height: 800 }),
+    width,
+  );
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeLessThanOrEqual(width);
+}
+
+async function open(testInfo: { outputPath: (name: string) => string }) {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  const page = await app.firstWindow();
+  await page.waitForLoadState('domcontentloaded');
+  await useRoundTwo(page);
+  return { app, page };
+}
+
+test('the rail chord toggles the panel', async ({}, testInfo) => {
+  const { app, page } = await open(testInfo);
+  try {
+    await bar(page).getByRole('button', { name: 'Sessions', exact: true }).click();
+    await expect(sessionsList(page)).toBeVisible();
+
+    const chord = process.platform === 'darwin' ? 'Meta+b' : 'Control+Shift+b';
+    await page.keyboard.press(chord);
+    await expect(sessionsList(page)).toHaveCount(0);
+    await page.keyboard.press(chord);
+    await expect(sessionsList(page)).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test('under 1,200px the list panel overlays and closes on a pick; widening restores it', async ({}, testInfo) => {
+  const { app, page } = await open(testInfo);
+  try {
+    await resizeTo(app, page, 1100);
+    await bar(page).getByRole('button', { name: 'Sessions', exact: true }).click();
+    await expect(sessionsList(page)).toBeVisible();
+    await expect(sessionsList(page)).toHaveCSS('position', 'absolute');
+    await expect(page.getByTestId('list-veil')).toBeVisible();
+
+    await sessionsList(page).getByRole('button', { name: new RegExp(`^${PROJECT}`) }).click();
+    await expect(sessionsList(page)).toHaveCount(0);
+    await expect(page.getByTestId('list-veil')).toHaveCount(0);
+
+    // The bar icon opens it again, and Escape closes it.
+    await bar(page).getByRole('button', { name: 'Sessions', exact: true }).click();
+    await expect(sessionsList(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(sessionsList(page)).toHaveCount(0);
+
+    await resizeTo(app, page, 1440);
+    await bar(page).getByRole('button', { name: 'Sessions', exact: true }).click();
+    await expect(sessionsList(page)).toHaveCSS('position', 'static');
+    await expect(page.getByTestId('list-veil')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test('crossing below 1,200px with the panel open closes it', async ({}, testInfo) => {
+  const { app, page } = await open(testInfo);
+  try {
+    await bar(page).getByRole('button', { name: 'Sessions', exact: true }).click();
+    await expect(sessionsList(page)).toHaveCSS('position', 'static');
+
+    await resizeTo(app, page, 1100);
+    await expect(sessionsList(page)).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1, name: 'Overmind' })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test('at 1,100px the session panel is a strip and the list takes no column; widening restores the panel', async ({}, testInfo) => {
+  const { app, page } = await open(testInfo);
+  try {
+    await bar(page).getByRole('button', { name: 'Sessions', exact: true }).click();
+    await sessionsList(page).getByRole('button', { name: new RegExp(`^${PROJECT}`) }).click();
+    await page.getByRole('main').getByRole('button', { name: `New session in ${PROJECT}`, exact: true }).click();
+    await expect(page.locator('[data-terminal-id^="sess-"]').last()).toBeVisible();
+
+    const sessionPanel = page.getByRole('complementary', { name: 'Session panel' });
+    // Open by default while wide: the tabs show.
+    await expect(page.getByRole('tablist')).toBeVisible();
+
+    await resizeTo(app, page, 1100);
+    // The session panel collapses to its strip (HIVE-201), and the list panel, closed by the crossing, takes no column.
+    await expect(page.getByRole('tablist')).toHaveCount(0);
+    await expect(sessionPanel).toBeVisible();
+    await expect(sessionsList(page)).toHaveCount(0);
+
+    await resizeTo(app, page, 1440);
+    await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeGreaterThan(1200);
+    await expect(page.getByRole('tablist')).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});

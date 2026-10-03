@@ -498,3 +498,64 @@ test('the LAST USED column fits its widest label at the minimum window size', as
     await app.close();
   }
 });
+
+/**
+ * The same minimum window in round two (HIVE-211, D8). Under 1,200px the list
+ * panel overlays the stage instead of taking a column, so it starts closed and
+ * the Overmind's table gets the panel's width back. With a Resume column that
+ * width is what keeps `PR` under its header.
+ */
+test('round two at the minimum window: the panel takes no column, and PR stays under its header', async ({}, testInfo) => {
+  const userDataDir = testInfo.outputPath('user-data');
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
+
+  const first = await launchHive({ userDataDir, configPath });
+  const firstWindow = await first.firstWindow();
+  await firstWindow.waitForLoadState('domcontentloaded');
+  await firstWindow.waitForSelector('header');
+  await startSession(firstWindow, PROJECT);
+  await firstWindow.waitForTimeout(700);
+  await first.close();
+
+  const second = await launchHive({ userDataDir, configPath });
+  const page = await second.firstWindow();
+  await page.waitForLoadState('domcontentloaded');
+
+  try {
+    await page.evaluate(() => {
+      const raw = localStorage.getItem('hive.appearance');
+      const stored = raw === null ? { version: 3, state: {} } : (JSON.parse(raw) as { version: number; state: object });
+      localStorage.setItem(
+        'hive.appearance',
+        JSON.stringify({ ...stored, state: { ...stored.state, layout: 'round-two' } }),
+      );
+    });
+    await page.reload();
+    await page.waitForSelector('nav[aria-label="Places"]');
+    await resizeTo(second, page, 1100);
+
+    await page
+      .getByRole('navigation', { name: 'Places' })
+      .getByRole('button', { name: 'Sessions', exact: true })
+      .click();
+    // The bar icon opened the overlay; a pick or Escape closes it, and the table is the whole stage.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('region', { name: 'Sessions list' })).toHaveCount(0);
+
+    await expect(endedHead(page)).toBeVisible();
+    await revealEnded(page);
+    const resume = page.getByRole('button', { name: /^resume / });
+    test.skip(
+      (await resume.count()) === 0,
+      'the quit produced a terminated row — nothing to resume, so no Resume column',
+    );
+
+    alignedAt(await prColumnXs(page));
+    const table = page.getByTestId('session-table');
+    const overflow = await table.evaluate((node) => ({ scroll: node.scrollWidth, client: node.clientWidth }));
+    expect(overflow.scroll).toBeLessThanOrEqual(overflow.client);
+  } finally {
+    await second.close();
+  }
+});

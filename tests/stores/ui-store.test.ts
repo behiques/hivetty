@@ -872,3 +872,63 @@ describe('focusPrEvent (HIVE-208)', () => {
     expect(useUiStore.getState().prFocus).toBeNull();
   });
 });
+
+describe('narrow (HIVE-211)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('crossing below 1,200px closes the panel; widening does not reopen it', () => {
+    useUiStore.setState({ place: 'work', panelOpen: true });
+    useUiStore.getState().setNarrow(true);
+    expect(useUiStore.getState()).toMatchObject({ narrow: true, panelOpen: false });
+    useUiStore.getState().setNarrow(false);
+    expect(useUiStore.getState()).toMatchObject({ narrow: false, panelOpen: false });
+  });
+
+  it('the bar icon still opens the panel while narrow', () => {
+    useUiStore.getState().setNarrow(true);
+    useUiStore.getState().selectPlace('work');
+    expect(useUiStore.getState().panelOpen).toBe(true);
+  });
+
+  it('a repeat is a no-op', () => {
+    useUiStore.getState().setNarrow(false);
+    const before = useUiStore.getState();
+    useUiStore.getState().setNarrow(false);
+    expect(useUiStore.getState()).toBe(before);
+  });
+});
+
+describe('a row pick while narrow (HIVE-211)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  const picks: [string, () => void][] = [
+    ['openWorkTicket', () => useUiStore.getState().openWorkTicket('HIVE-1')],
+    ['openAgentPage', () => useUiStore.getState().openAgentPage('acr', 'activity')],
+    ['openPrPage', () => useUiStore.getState().openPrPage({ owner: 'o', repo: 'r', n: 1 })],
+    ['openTab with a place', () => useUiStore.getState().openTab('s-1', 'sessions')],
+    ['setSessionsProject', () => useUiStore.getState().setSessionsProject('p1')],
+    ['setSessionsProject(null)', () => useUiStore.getState().setSessionsProject(null)],
+  ];
+
+  it.each(picks)('%s closes the overlay', (_name, pick) => {
+    useUiStore.getState().setNarrow(true);
+    useUiStore.setState({ panelOpen: true }); // opened from the bar icon
+    pick();
+    expect(useUiStore.getState().panelOpen).toBe(false);
+  });
+
+  it.each(picks.slice(0, 3))('%s still opens the panel when wide', (_name, pick) => {
+    useUiStore.setState({ panelOpen: false });
+    pick();
+    expect(useUiStore.getState().panelOpen).toBe(true);
+  });
+
+  it.each(picks.slice(3))('%s leaves the panel as it is when wide', (_name, pick) => {
+    useUiStore.setState({ panelOpen: false });
+    pick();
+    expect(useUiStore.getState().panelOpen).toBe(false);
+    useUiStore.setState({ panelOpen: true });
+    pick();
+    expect(useUiStore.getState().panelOpen).toBe(true);
+  });
+});

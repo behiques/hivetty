@@ -35,7 +35,7 @@ describe('InboxCorner (HIVE-198)', () => {
     ]);
     useUiStore.getState().pushArrival('a1', false);
     render(<InboxCorner stage={stage()} viewKey="home" />);
-    expect(screen.getByRole('button', { name: 'Inbox, 1 need you' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Inbox, 1 needs you' })).toBeInTheDocument();
     const live = screen.getByTestId('inbox-live');
     expect(live).toHaveAttribute('aria-live', 'polite');
     expect(live).toHaveTextContent('builder wants to run a command: Run the ledger tests?');

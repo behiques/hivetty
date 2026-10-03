@@ -165,6 +165,8 @@ interface UiState {
   place: Place;
   /** Whether that place's list panel shows beside the stage. */
   panelOpen: boolean;
+  /** The window is under 1,200px (HIVE-211). Fed from `useNarrowWindow` by the shell; never persisted. */
+  narrow: boolean;
   /** The Overmind's project filter (HIVE-197). `null` is All projects. */
   sessionsProject: string | null;
   sessionsFilter: TableFilter;
@@ -252,6 +254,8 @@ interface UiState {
    */
   selectPlace: (place: Place) => void;
   togglePanel: () => void;
+  /** Crossing below 1,200px closes the panel, so the stage is never covered without a click (HIVE-211). */
+  setNarrow: (narrow: boolean) => void;
   setSessionsProject: (id: string | null) => void;
   setSessionsFilter: (filter: TableFilter) => void;
   expandEnded: () => void;
@@ -388,6 +392,7 @@ const initialUiState = {
   showActivityRail: true,
   place: 'home' as Place,
   panelOpen: true,
+  narrow: false,
   sessionsProject: null as string | null,
   sessionsFilter: 'all' as TableFilter,
   endedExpanded: false,
@@ -425,6 +430,10 @@ const returnToOrch = (state: UiState) => ({
   ...(state.activeTab === 'orch' ? {} : { selId: state.activeTab }),
 });
 
+/** A row pick: the panel stays as it is when wide, and a narrow overlay closes on it (HIVE-211). */
+const pickPanel = (state: UiState, open: boolean) =>
+  state.narrow ? { panelOpen: false } : open ? { panelOpen: true } : {};
+
 export const useUiStore = create<UiState>()((set) => ({
   ...initialUiState,
 
@@ -432,14 +441,14 @@ export const useUiStore = create<UiState>()((set) => ({
   // Settings goes with it (story 101) — the rails stay visible behind the
   // overlay, so a rail click that left settings up would look broken.
   openTab: (id, place) =>
-    set({
+    set((state) => ({
       activeTab: id,
       picker: false,
       settings: false,
-      ...(place ? { place } : {}),
+      ...(place ? { place, ...pickPanel(state, false) } : {}),
       // An agent opened through `openEntity` lands on its page's Activity (HIVE-204).
       ...(place === 'agents' ? { agentPage: { name: id, view: 'activity' as const } } : {}),
-    }),
+    })),
 
   /**
    * Return to the orchestrator — the ← pill on the session meta bar, and the
@@ -464,11 +473,20 @@ export const useUiStore = create<UiState>()((set) => ({
 
   togglePanel: () => set((state) => ({ panelOpen: !state.panelOpen })),
 
+  setNarrow: (narrow) =>
+    set((state) =>
+      state.narrow === narrow ? state : { narrow, ...(narrow ? { panelOpen: false } : {}) },
+    ),
+
   setSessionsProject: (id) =>
     set((state) =>
       id === null
-        ? { sessionsProject: null }
-        : { sessionsProject: id, expanded: { ...state.expanded, [id]: true } },
+        ? { sessionsProject: null, ...pickPanel(state, false) }
+        : {
+            sessionsProject: id,
+            expanded: { ...state.expanded, [id]: true },
+            ...pickPanel(state, false),
+          },
     ),
   setSessionsFilter: (filter) => set({ sessionsFilter: filter }),
   expandEnded: () => set({ endedExpanded: true }),
@@ -613,38 +631,37 @@ export const useUiStore = create<UiState>()((set) => ({
     set((state) => ({ fsRevision: state.fsRevision + 1 })),
 
   openWorkTicket: (key) =>
-    set({
+    set((state) => ({
       workTicket: key,
       place: 'work',
-      panelOpen: true,
       workConversation: 'comments',
       picker: false,
       settings: false,
-    }),
+      ...pickPanel(state, true),
+    })),
   toggleWorkGroup: (category) =>
     set((state) => ({ workFolded: { ...state.workFolded, [category]: !state.workFolded[category] } })),
   toggleAgentGroup: (key) =>
     set((state) => ({ agentsFolded: { ...state.agentsFolded, [key]: !state.agentsFolded[key] } })),
   setWorkConversation: (mode) => set({ workConversation: mode }),
   openAgentPage: (name, view) =>
-    set({
+    set((state) => ({
       agentPage: { name, view },
       place: 'agents',
-      panelOpen: true,
       picker: false,
       settings: false,
       // A new agent has no tab: leaving an agent's tab active would let resolveView show that agent's page
       // instead of the blank definition, and Save would overwrite it.
       activeTab: name ?? 'orch',
-    }),
+      ...pickPanel(state, true),
+    })),
   setAgentPageView: (view) =>
     set((state) => (state.agentPage === null ? {} : { agentPage: { ...state.agentPage, view } })),
   closeAgentPage: () => set({ agentPage: null }),
   openPrPage: (ref) =>
-    set({
+    set((state) => ({
       prPage: ref,
       place: 'prs',
-      panelOpen: true,
       prConversation: 'comments',
       prRun: null,
       prJob: null,
@@ -653,7 +670,8 @@ export const useUiStore = create<UiState>()((set) => ({
       prFocus: null,
       picker: false,
       settings: false,
-    }),
+      ...pickPanel(state, true),
+    })),
   setPrTab: (tab) => set({ prTab: tab }),
   showPrRun: (sha) => set({ prRun: sha, prJob: null }),
   showPrJob: (id) => set({ prJob: id }),
@@ -746,6 +764,8 @@ export const usePlace = () => useUiStore((state) => state.place);
 export const usePanelOpen = () => useUiStore((state) => state.panelOpen);
 export const useSelectPlace = () => useUiStore((state) => state.selectPlace);
 export const useTogglePanel = () => useUiStore((state) => state.togglePanel);
+export const useNarrow = () => useUiStore((state) => state.narrow);
+export const useSetNarrow = () => useUiStore((state) => state.setNarrow);
 /** The Work place's open ticket, folds and conversation filter (HIVE-203). */
 export const useWorkTicket = () => useUiStore((state) => state.workTicket);
 export const useWorkFolded = () => useUiStore((state) => state.workFolded);

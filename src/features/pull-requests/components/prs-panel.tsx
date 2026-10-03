@@ -14,6 +14,7 @@ import { PrListSkeleton } from '@features/pull-requests/components/pr-row-skelet
 import { PrSearchRow } from '@features/pull-requests/components/pr-search-row';
 import { useOpenPr } from '@features/pull-requests/open-pr';
 import { SourceProblem } from '@features/shared/components/source-problem';
+import { StaleLine } from '@features/shared/components/stale-line';
 import { useLayout } from '@stores/appearance-store';
 import {
   prKey,
@@ -23,6 +24,7 @@ import {
   usePrNeedsYouCount,
   usePrSearch,
   usePrSource,
+  usePrsReadAt,
   useRefreshPrs,
   type PrSource,
 } from '@stores/hive-store';
@@ -44,6 +46,12 @@ import { useClearPrSearch, usePrPageActions, usePrSearchOpen, usePrSearchTerm, u
  * `usePrs()` here, `useTicketPrs()` on a ticket card — so a PR approved while
  * only one of them is open updates both.
  */
+
+/** The stale line reads its own time, so only it re-renders on a sweep (HIVE-211, D5). */
+function PrsStaleLine({ failedAt, onRetry }: { failedAt: number | undefined; onRetry: () => void }) {
+  const readAt = usePrsReadAt();
+  return <StaleLine service="GitHub" failedAt={failedAt} readAt={readAt} onRetry={onRetry} />;
+}
 
 /** The line above the list. `null` when there is nothing worth saying. */
 function SourceNotice({
@@ -89,12 +97,7 @@ function SourceNotice({
   }
 
   if (source.stale) {
-    return (
-      <SourceProblem
-        message="Could not reach GitHub. These may be out of date."
-        onRetry={onRetry}
-      />
-    );
+    return <PrsStaleLine failedAt={source.failedAt} onRetry={onRetry} />;
   }
 
   return null;

@@ -126,6 +126,34 @@ place either — it replaces the tab already on stage rather than opening one.
 Desktop-width only, by design: no responsive or mobile layout. The rails are
 draggable (`rail-handles.tsx`), and either one collapses to an icon strip.
 
+### No list without items (HIVE-211)
+
+Round two's `ListPanel` draws a place's panel only while the place has
+something to list: `useSessionsListed`, `useWorkListed`, `useAgentsListed`,
+`usePrsListed` in hive-store. Loading counts as listed, because the skeleton is
+the panel's message. Anything else empty (no project, Jira not connected, gh
+signed out, no agent, a quiet Hatchery) draws no panel, and the place's stage
+says why on an `EmptyPlace` page (`components/ui/empty-place.tsx`): a glyph, a
+title, a sentence, and the way to the first item. The PRs search exemption
+stays: an open search still draws the PRs panel.
+
+The four booleans are read unconditionally at the top of `ListPanel` and then
+indexed by place; a hook picked by place would break the rules of hooks the
+first time the place changed.
+
+### The narrow overlay (HIVE-211)
+
+Under 1,200px the list panel stops taking a column. `app-shell.tsx` feeds
+`useNarrowWindow()` into ui-store's `narrow` (never persisted), and while it is
+set `ListPanel` renders `absolute` at the bar's edge, over a veil covering the
+rest of the row. A click on the veil, Escape, or a row pick closes it; the bar
+icons stay clickable above the veil. Crossing below 1,200px closes an open
+panel, so the stage is never covered without a click, and widening does not
+reopen it. The row-pick actions (`openWorkTicket`, `openAgentPage`,
+`openPrPage`, a place-setting `openTab`, `setSessionsProject`) go through one
+helper, `pickPanel`, which closes the overlay while narrow and otherwise
+behaves as before.
+
 ## The session panel (HIVE-201)
 
 Round two's right side is `SessionPanel` (`src/components/layout/session-panel.tsx:90`),

@@ -531,3 +531,46 @@ describe('AgentView', () => {
     });
   });
 });
+
+describe('a paused agent (HIVE-211)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('reads paused in amber, swaps the prompt for the bar, and keeps the draft through resume', async () => {
+    const resume = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('hive', { agents: { resume, pause: vi.fn() }, ledger: {} });
+    const { rerender } = render(<Harness entity={seed({ status: 'sleeping' })} />);
+    await userEvent.type(screen.getByLabelText(/Post to watcher/), 'half a thought');
+
+    rerender(<Harness entity={seed({ status: 'paused' })} />);
+    expect(screen.queryByLabelText(/Post to watcher/)).toBeNull();
+    expect(screen.getByText('watcher is paused.')).toHaveClass('text-amber');
+    expect(
+      screen.getByText(/Nothing wakes it, not the ledger, not a schedule, until you resume it\. Your draft is kept\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/posts to the ledger as the overmind/)).toBeNull();
+    const status = screen.getByText('Status').nextElementSibling;
+    expect(status).toHaveClass('text-amber');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    expect(resume).toHaveBeenCalledWith({ name: 'watcher' });
+
+    rerender(<Harness entity={seed({ status: 'sleeping' })} />);
+    expect(screen.getByLabelText(/Post to watcher/)).toHaveValue('half a thought');
+  });
+
+  it('a refused resume lands in the notice', async () => {
+    const resume = vi.fn().mockRejectedValue(new Error('The agent runtime is not running.'));
+    vi.stubGlobal('hive', { agents: { resume, pause: vi.fn() }, ledger: {} });
+    render(<Harness entity={seed({ status: 'paused' })} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    expect(await screen.findByText('The agent runtime is not running.')).toBeInTheDocument();
+  });
+});
