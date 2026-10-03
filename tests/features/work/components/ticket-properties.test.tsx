@@ -62,11 +62,13 @@ beforeEach(() => {
         meta: { ticket: 'GRAC-3018', stage: 'build', task: 3 },
       },
     ],
-    ticketDetail: {
-      key: 'GRAC-3018',
-      detail: { description: [], parent: { key: 'HIVE-194', summary: 'Epic' } },
-      transitions: [done],
-      problems: {},
+    ticketDetails: {
+      'GRAC-3018': {
+        key: 'GRAC-3018',
+        detail: { description: [], parent: { key: 'HIVE-194', summary: 'Epic' } },
+        transitions: [done],
+        problems: {},
+      },
     },
     prs: state.prs,
   }));

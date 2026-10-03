@@ -1,22 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BRIDGE_ERROR } from '@lib/utils';
-import { useHiveStore } from '@stores/hive-store';
+import { TICKET_DETAIL_CAP, useHiveStore } from '@stores/hive-store';
 import type { JiraComment, JiraIssue, JiraIssueDetail, JiraTransition } from '@shared/jira-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 
 /**
- * The open ticket's detail slice (HIVE-203).
+ * The ticket detail slice (HIVE-203), keyed by issue key (HIVE-202).
  *
  * `lib/jira` is mocked: what is under test is how each answer merges, that one
- * failed read never blanks another, and that a late answer for a ticket no
- * longer open is dropped.
+ * failed read never blanks another, that the map holds at most
+ * TICKET_DETAIL_CAP tickets, and that a late answer for an evicted key is dropped.
  */
 
 const readJiraDetail = vi.fn();
 const readJiraComments = vi.fn();
 const readJiraTransitions = vi.fn();
 const readJiraIssue = vi.fn();
+const readJiraLinks = vi.fn();
 
 vi.mock('@/lib/jira', () => ({
   readJiraStatus: () => Promise.resolve(null),
@@ -25,6 +26,7 @@ vi.mock('@/lib/jira', () => ({
   readJiraComments: (request: unknown) => readJiraComments(request),
   readJiraTransitions: (request: unknown) => readJiraTransitions(request),
   readJiraIssue: (request: unknown) => readJiraIssue(request),
+  readJiraLinks: (request: unknown) => readJiraLinks(request),
 }));
 
 const ok = <T,>(value: T) => ({ ok: true as const, value });
@@ -63,6 +65,7 @@ const allOk = () => {
   readJiraComments.mockResolvedValue(ok({ comments: [comment('1')], total: 3 }));
   readJiraTransitions.mockResolvedValue(ok([transition]));
   readJiraIssue.mockResolvedValue(ok(issue));
+  readJiraLinks.mockResolvedValue(ok([]));
 };
 
 beforeEach(() => {
@@ -84,9 +87,9 @@ afterEach(() => {
 
 describe('loadTicketDetail (HIVE-203)', () => {
   it('merges every part for a listed ticket, without re-reading the issue', async () => {
-    await state().loadTicketDetail('HIVE-7');
+    await state().loadTicketDetail('HIVE-7', 'page');
 
-    expect(state().ticketDetail).toMatchObject({
+    expect(state().ticketDetails['HIVE-7']).toMatchObject({
       key: 'HIVE-7',
       detail,
       comments: [comment('1')],
@@ -95,17 +98,17 @@ describe('loadTicketDetail (HIVE-203)', () => {
       history: [entry],
       problems: {},
     });
-    expect(typeof state().ticketDetail?.readAt).toBe('number');
+    expect(typeof state().ticketDetails['HIVE-7']?.readAt).toBe('number');
     expect(readJiraComments).toHaveBeenCalledWith({ key: 'HIVE-7', newest: true });
     expect(ledgerList).toHaveBeenCalledWith({ ticket: 'HIVE-7' });
     expect(readJiraIssue).not.toHaveBeenCalled();
   });
 
   it('reads the issue when the key is not in the list', async () => {
-    await state().loadTicketDetail('HIVE-8');
+    await state().loadTicketDetail('HIVE-8', 'page');
 
     expect(readJiraIssue).toHaveBeenCalledWith({ key: 'HIVE-8' });
-    expect(state().ticketDetail?.issue).toMatchObject({
+    expect(state().ticketDetails['HIVE-8']?.issue).toMatchObject({
       key: 'HIVE-8',
       title: '[BE] Remote ticket',
       priority: 'High',
@@ -115,165 +118,165 @@ describe('loadTicketDetail (HIVE-203)', () => {
 
   it('records a failed comments read without blanking the detail', async () => {
     readJiraComments.mockResolvedValue(fail('boom'));
-    await state().loadTicketDetail('HIVE-7');
+    await state().loadTicketDetail('HIVE-7', 'page');
 
-    expect(state().ticketDetail?.problems.comments).toBe('boom');
-    expect(state().ticketDetail?.detail).toEqual(detail);
+    expect(state().ticketDetails['HIVE-7']?.problems.comments).toBe('boom');
+    expect(state().ticketDetails['HIVE-7']?.detail).toEqual(detail);
   });
 
   it('names a missing bridge as the problem', async () => {
     readJiraComments.mockResolvedValue(null);
     readJiraDetail.mockResolvedValue(null);
-    await state().loadTicketDetail('HIVE-7');
+    await state().loadTicketDetail('HIVE-7', 'page');
 
-    expect(state().ticketDetail?.problems).toEqual({ comments: BRIDGE_ERROR, detail: BRIDGE_ERROR });
+    expect(state().ticketDetails['HIVE-7']?.problems).toEqual({ comments: BRIDGE_ERROR, detail: BRIDGE_ERROR });
   });
 
   it('keeps what it had when a reload of the same key fails, and clears a problem that recovered', async () => {
     readJiraDetail.mockResolvedValue(fail('first'));
-    await state().loadTicketDetail('HIVE-7');
-    expect(state().ticketDetail?.problems.detail).toBe('first');
+    await state().loadTicketDetail('HIVE-7', 'page');
+    expect(state().ticketDetails['HIVE-7']?.problems.detail).toBe('first');
 
     readJiraDetail.mockResolvedValue(ok(detail));
     readJiraComments.mockResolvedValue(fail('boom'));
-    await state().loadTicketDetail('HIVE-7');
+    await state().loadTicketDetail('HIVE-7', 'page');
 
-    expect(state().ticketDetail?.comments).toEqual([comment('1')]);
-    expect(state().ticketDetail?.problems).toEqual({ comments: 'boom' });
+    expect(state().ticketDetails['HIVE-7']?.comments).toEqual([comment('1')]);
+    expect(state().ticketDetails['HIVE-7']?.problems).toEqual({ comments: 'boom' });
   });
 
-  it('drops late answers for a ticket that is no longer open', async () => {
-    const late = deferred<unknown>();
+  it('keeps two tickets side by side (HIVE-202, D2)', async () => {
+    await state().loadTicketDetail('HIVE-7', 'page');
+    await state().loadTicketDetail('HIVE-8', 'tab');
+    expect(Object.keys(state().ticketDetails)).toEqual(['HIVE-7', 'HIVE-8']);
+    expect(state().ticketDetails['HIVE-7']?.detail).toEqual(detail);
+  });
+
+  it('drops an answer for a key evicted while it was in flight', async () => {
+    const late = deferred<ReturnType<typeof ok<JiraIssueDetail>>>();
     readJiraDetail.mockReturnValueOnce(late.promise);
-    readJiraComments.mockReturnValueOnce(new Promise(() => undefined));
-    const first = state().loadTicketDetail('HIVE-7');
-
-    await state().loadTicketDetail('HIVE-8');
-    late.resolve(fail('late'));
-    await Promise.race([first, Promise.resolve()]);
-    await late.promise;
-
-    expect(state().ticketDetail).toMatchObject({ key: 'HIVE-8', detail });
-    expect(state().ticketDetail?.problems).toEqual({});
+    const pending = state().loadTicketDetail('HIVE-7', 'page');
+    useHiveStore.setState({ ticketDetails: {} });
+    late.resolve(ok(detail));
+    await pending;
+    expect(state().ticketDetails['HIVE-7']).toBeUndefined();
   });
 
-  it('drops a late success for a ticket that is no longer open', async () => {
-    const late = deferred<unknown>();
-    readJiraDetail.mockReturnValueOnce(late.promise);
-    void state().loadTicketDetail('HIVE-7');
-
-    await state().loadTicketDetail('HIVE-8');
-    late.resolve(ok({ description: [], parent: null }));
-    await late.promise;
-    await Promise.resolve();
-
-    expect(state().ticketDetail?.detail).toEqual(detail);
+  it(`holds at most ${String(TICKET_DETAIL_CAP)} tickets; a load or refresh makes one the newest`, async () => {
+    for (let n = 1; n <= TICKET_DETAIL_CAP; n += 1) await state().loadTicketDetail(`HIVE-${String(n)}`, 'tab');
+    await state().refreshTicketDetail('HIVE-1', 'tab');
+    await state().loadTicketDetail('HIVE-99', 'tab');
+    const keys = Object.keys(state().ticketDetails);
+    expect(keys).toHaveLength(TICKET_DETAIL_CAP);
+    expect(keys).toContain('HIVE-1');
+    expect(keys).not.toContain('HIVE-2');
+    expect(keys.at(-1)).toBe('HIVE-99');
   });
 
-  it('resets the slice when another key opens', async () => {
-    await state().loadTicketDetail('HIVE-7');
-    readJiraDetail.mockReturnValue(new Promise(() => undefined));
-    readJiraComments.mockReturnValue(new Promise(() => undefined));
-    readJiraTransitions.mockReturnValue(new Promise(() => undefined));
-    readJiraIssue.mockReturnValue(new Promise(() => undefined));
-    ledgerList.mockReturnValue(new Promise(() => undefined));
+  it('refresh of a key never loaded does nothing (the poller runs before the load)', async () => {
+    await state().refreshTicketDetail('HIVE-7', 'page');
+    expect(state().ticketDetails).toEqual({});
+    expect(readJiraDetail).not.toHaveBeenCalled();
+  });
 
-    void state().loadTicketDetail('HIVE-8');
-
-    expect(state().ticketDetail).toEqual({ key: 'HIVE-8', problems: {} });
+  it("'tab' does not read the ledger history; 'page' does", async () => {
+    await state().loadTicketDetail('HIVE-7', 'tab');
+    expect(ledgerList).not.toHaveBeenCalled();
+    await state().loadTicketDetail('HIVE-8', 'page');
+    expect(ledgerList).toHaveBeenCalledWith({ ticket: 'HIVE-8' });
   });
 
   it('survives a ledger that rejects, and a missing bridge', async () => {
     ledgerList.mockRejectedValue(new Error('down'));
-    await state().loadTicketDetail('HIVE-7');
-    expect(state().ticketDetail?.history).toBeUndefined();
+    await state().loadTicketDetail('HIVE-7', 'page');
+    expect(state().ticketDetails['HIVE-7']?.history).toBeUndefined();
 
     delete (window as { hive?: unknown }).hive;
-    await state().loadTicketDetail('HIVE-7');
-    expect(state().ticketDetail?.detail).toEqual(detail);
+    await state().loadTicketDetail('HIVE-7', 'page');
+    expect(state().ticketDetails['HIVE-7']?.detail).toEqual(detail);
   });
 
   it('is cleared by reset', async () => {
-    await state().loadTicketDetail('HIVE-7');
+    await state().loadTicketDetail('HIVE-7', 'page');
     state().reset();
-    expect(state().ticketDetail).toBeNull();
+    expect(state().ticketDetails).toEqual({});
   });
 });
 
 describe('refreshTicketDetail (HIVE-203)', () => {
   it('re-reads detail, comments and transitions of the open ticket, not its history', async () => {
-    await state().loadTicketDetail('HIVE-7');
+    await state().loadTicketDetail('HIVE-7', 'page');
     vi.clearAllMocks();
     readJiraComments.mockResolvedValue(ok({ comments: [comment('1'), comment('2')], total: 4 }));
 
-    await state().refreshTicketDetail('HIVE-7');
+    await state().refreshTicketDetail('HIVE-7', 'page');
 
     expect(readJiraDetail).toHaveBeenCalledWith({ key: 'HIVE-7' });
     expect(readJiraComments).toHaveBeenCalledWith({ key: 'HIVE-7', newest: true });
     expect(readJiraTransitions).toHaveBeenCalledWith({ key: 'HIVE-7' });
     expect(ledgerList).not.toHaveBeenCalled();
     expect(readJiraIssue).not.toHaveBeenCalled();
-    expect(state().ticketDetail).toMatchObject({ comments: [comment('1'), comment('2')], total: 4, history: [entry] });
+    expect(state().ticketDetails['HIVE-7']).toMatchObject({ comments: [comment('1'), comment('2')], total: 4, history: [entry] });
   });
 
   it('re-reads the issue only when the slice holds one', async () => {
-    await state().loadTicketDetail('HIVE-8');
+    await state().loadTicketDetail('HIVE-8', 'page');
     vi.clearAllMocks();
 
-    await state().refreshTicketDetail('HIVE-8');
+    await state().refreshTicketDetail('HIVE-8', 'page');
 
     expect(readJiraIssue).toHaveBeenCalledWith({ key: 'HIVE-8' });
   });
 
   it('does nothing for a key that is not open', async () => {
-    await state().loadTicketDetail('HIVE-7');
+    await state().loadTicketDetail('HIVE-7', 'page');
     vi.clearAllMocks();
 
-    await state().refreshTicketDetail('HIVE-8');
+    await state().refreshTicketDetail('HIVE-8', 'page');
 
     expect(readJiraDetail).not.toHaveBeenCalled();
-    expect(state().ticketDetail?.key).toBe('HIVE-7');
+    expect(Object.keys(state().ticketDetails)).toEqual(['HIVE-7']);
   });
 });
 
 describe('appendTicketComment (HIVE-203)', () => {
   it('pushes the comment and counts it', async () => {
-    await state().loadTicketDetail('HIVE-7');
+    await state().loadTicketDetail('HIVE-7', 'page');
     state().appendTicketComment('HIVE-7', comment('9'));
 
-    expect(state().ticketDetail?.comments).toEqual([comment('1'), comment('9')]);
-    expect(state().ticketDetail?.total).toBe(4);
+    expect(state().ticketDetails['HIVE-7']?.comments).toEqual([comment('1'), comment('9')]);
+    expect(state().ticketDetails['HIVE-7']?.total).toBe(4);
   });
 
   it('starts from nothing when no comments were read', () => {
-    useHiveStore.setState({ ticketDetail: { key: 'HIVE-7', problems: {} } });
+    useHiveStore.setState({ ticketDetails: { 'HIVE-7': { key: 'HIVE-7', problems: {} } } });
     state().appendTicketComment('HIVE-7', comment('9'));
 
-    expect(state().ticketDetail).toMatchObject({ comments: [comment('9')], total: 1 });
+    expect(state().ticketDetails['HIVE-7']).toMatchObject({ comments: [comment('9')], total: 1 });
   });
 
   it('ignores another key', async () => {
-    await state().loadTicketDetail('HIVE-7');
-    const before = state().ticketDetail;
+    await state().loadTicketDetail('HIVE-7', 'page');
+    const before = state().ticketDetails['HIVE-7'];
     state().appendTicketComment('HIVE-8', comment('9'));
 
-    expect(state().ticketDetail).toBe(before);
+    expect(state().ticketDetails['HIVE-7']).toBe(before);
   });
 });
 
 describe('reloadTicketTransitions (HIVE-203)', () => {
   it('replaces the transitions of the open ticket', async () => {
-    await state().loadTicketDetail('HIVE-7');
+    await state().loadTicketDetail('HIVE-7', 'page');
     const back: JiraTransition = { id: '11', name: 'Reopen', to: { name: 'To Do', statusCategory: 'todo' } };
     readJiraTransitions.mockResolvedValue(ok([back]));
 
     await state().reloadTicketTransitions('HIVE-7');
 
-    expect(state().ticketDetail?.transitions).toEqual([back]);
+    expect(state().ticketDetails['HIVE-7']?.transitions).toEqual([back]);
   });
 
   it('does nothing for a key that is not open', async () => {
-    await state().loadTicketDetail('HIVE-7');
+    await state().loadTicketDetail('HIVE-7', 'page');
     vi.clearAllMocks();
 
     await state().reloadTicketTransitions('HIVE-8');
@@ -284,19 +287,19 @@ describe('reloadTicketTransitions (HIVE-203)', () => {
 
 describe('setTicketDetailIssue (HIVE-203)', () => {
   it('replaces the issue the slice read for itself', async () => {
-    await state().loadTicketDetail('HIVE-8');
+    await state().loadTicketDetail('HIVE-8', 'page');
     state().setTicketDetailIssue({ ...issue, status: 'Done', statusCategory: 'done' });
 
-    expect(state().ticketDetail?.issue).toMatchObject({ key: 'HIVE-8', status: 'Done', statusCategory: 'done' });
+    expect(state().ticketDetails['HIVE-8']?.issue).toMatchObject({ key: 'HIVE-8', status: 'Done', statusCategory: 'done' });
   });
 
   it('leaves a listed ticket to the list, and ignores another key', async () => {
-    await state().loadTicketDetail('HIVE-7');
-    const before = state().ticketDetail;
+    await state().loadTicketDetail('HIVE-7', 'page');
+    const before = state().ticketDetails['HIVE-7'];
 
     state().setTicketDetailIssue({ ...issue, key: 'HIVE-7' });
     state().setTicketDetailIssue(issue);
 
-    expect(state().ticketDetail).toBe(before);
+    expect(state().ticketDetails['HIVE-7']).toBe(before);
   });
 });

@@ -57,8 +57,11 @@ export interface Ticket {
   url?: string;
 }
 
+/** What a reader of a ticket wants beside the common parts (HIVE-202): the page wants its ledger history, the Ticket tab its links. */
+export type TicketDetailWant = 'page' | 'tab';
+
 /**
- * The open ticket's page data (HIVE-203). One ticket at a time; another key replaces it.
+ * One entry per ticket read, keyed by issue key (HIVE-203, HIVE-202).
  *
  * Every part is optional because each read merges on its own as it lands: one
  * failed read never blanks another, and a part read before stays on screen with

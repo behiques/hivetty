@@ -24,12 +24,11 @@ const usePagePoller = createPoller({ intervalMs: 60_000 });
 
 /** The description, its skeleton until the first read, or its problem in its place. */
 function Description({ ticketKey }: { ticketKey: string }) {
-  const detail = useTicketDetail();
+  const mine = useTicketDetail(ticketKey);
   const load = useLoadTicketDetail();
-  const mine = detail?.key === ticketKey ? detail : null;
   const description = mine?.detail?.description;
   const problem = mine?.problems.detail;
-  const retry = () => void load(ticketKey);
+  const retry = () => void load(ticketKey, 'page');
 
   if (description === undefined) {
     return problem === undefined ? (
@@ -105,13 +104,13 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
 
   /*
     The poller before the load: its first sweep runs on mount, and run first it
-    finds another key (or none) in the slice and returns at once, so opening a
+    finds no entry for the key in the map and returns at once, so opening a
     ticket reads each part once rather than twice.
   */
-  usePagePoller(useCallback(() => refresh(ticketKey), [ticketKey, refresh]));
+  usePagePoller(useCallback(() => refresh(ticketKey, 'page'), [ticketKey, refresh]));
 
   useEffect(() => {
-    void load(ticketKey);
+    void load(ticketKey, 'page');
   }, [ticketKey, load]);
 
   /*

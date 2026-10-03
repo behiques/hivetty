@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Ticket } from '@/types/ticket';
+import type { Ticket, TicketDetail } from '@/types/ticket';
 import { TicketPageConversation } from '@features/work/components/ticket-page-conversation';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
@@ -52,11 +52,11 @@ const event = (id: string, ts: number, meta: Record<string, unknown>, body = 'Bu
 });
 const between = event('20261001-110000-0001', Date.parse('2026-10-01T11:00:00.000Z'), { pr: 412 });
 
-const seed = (over: Partial<NonNullable<ReturnType<typeof useHiveStore.getState>['ticketDetail']>> = {}) =>
+const seed = (over: Partial<TicketDetail> = {}) =>
   useHiveStore.setState({
     tickets: [ticket],
     ledger: [],
-    ticketDetail: { key: 'HIVE-7', comments: [dana, acr], total: 2, history: [between], problems: {}, ...over },
+    ticketDetails: { 'HIVE-7': { key: 'HIVE-7', comments: [dana, acr], total: 2, history: [between], problems: {}, ...over } },
   });
 
 const writeText = vi.fn();
@@ -248,7 +248,7 @@ describe('the reply box (HIVE-203)', () => {
     expect(addJiraComment).toHaveBeenCalledWith({ key: 'HIVE-7', markdown: 'Posted words' });
     expect(await screen.findByText('Posted words')).toBeInTheDocument();
     expect(box()).toHaveValue('');
-    expect(useHiveStore.getState().ticketDetail?.total).toBe(3);
+    expect(useHiveStore.getState().ticketDetails['HIVE-7']?.total).toBe(3);
   });
 
   it('shows a refusal and each detail in amber, keeping the draft', async () => {

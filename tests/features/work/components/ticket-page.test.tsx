@@ -137,7 +137,7 @@ describe('TicketPage (HIVE-203)', () => {
     await screen.findByText('The description');
     readJiraDetail.mockResolvedValue(fail('Jira is down'));
 
-    await act(() => useHiveStore.getState().loadTicketDetail('GRAC-3018'));
+    await act(() => useHiveStore.getState().loadTicketDetail('GRAC-3018', 'page'));
 
     expect(screen.getByText('The description')).toBeInTheDocument();
     expect(screen.getByText('Jira is down')).toBeInTheDocument();
