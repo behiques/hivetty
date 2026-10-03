@@ -608,3 +608,31 @@ describe('back to the Overmind (HIVE-197)', () => {
     expect(useUiStore.getState().panelOpen).toBe(true);
   });
 });
+
+describe('Work place (HIVE-203)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('opens a ticket on the Work place, on Comments, closing overlays', () => {
+    useUiStore.setState({ picker: true, settings: true, workConversation: 'everything' });
+    useUiStore.getState().openWorkTicket('HIVE-7');
+    expect(useUiStore.getState()).toMatchObject({
+      workTicket: 'HIVE-7',
+      place: 'work',
+      panelOpen: true,
+      workConversation: 'comments',
+      picker: false,
+      settings: false,
+    });
+  });
+
+  it('starts with Done folded and toggles one group', () => {
+    expect(useUiStore.getState().workFolded).toEqual({ todo: false, 'in-progress': false, done: true });
+    useUiStore.getState().toggleWorkGroup('done');
+    expect(useUiStore.getState().workFolded.done).toBe(false);
+  });
+
+  it('switches the conversation mode', () => {
+    useUiStore.getState().setWorkConversation('everything');
+    expect(useUiStore.getState().workConversation).toBe('everything');
+  });
+});

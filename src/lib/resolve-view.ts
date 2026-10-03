@@ -8,6 +8,7 @@ export type ViewState =
   | 'settings'
   | 'picker'
   | 'home'
+  | 'work'
   | 'editor'
   | 'orchestrator'
   | 'session'
@@ -30,6 +31,11 @@ export interface ViewInput {
    * function decides precedence, not what a layout means.
    */
   home: boolean;
+  /**
+   * Round two's Work place is on stage (HIVE-203): the ticket page, or Pick a
+   * ticket. Never true with `home` — one place is open at a time.
+   */
+  work: boolean;
   /** The entity behind `activeTab`, or null for the orchestrator. */
   entity: Entity | null;
   /**
@@ -65,6 +71,9 @@ export interface ViewInput {
  * 2a. **Home sits below both overlays and above everything else** (HIVE-195).
  *    Like the overlays it never touches `activeTab`, so leaving Home finds the
  *    stage as it was.
+ * 2b. **Work sits where Home does** (HIVE-203). The Work place always owns the
+ *    stage, an open ticket's page or "Pick a ticket", and leaves `activeTab`
+ *    alone for the same reason.
  * 3. **The editor sits below both overlays and above the entity views.** It is
  *    not an overlay — it has no scrim, no focus trap and no dismissal — but it
  *    does fill the stage, so a settings pane opened from behind it must win.
@@ -80,12 +89,14 @@ export function resolveView({
   picker,
   settings,
   home,
+  work,
   entity,
   editorFull,
 }: ViewInput): ViewState {
   if (settings) return 'settings';
   if (picker) return 'picker';
   if (home) return 'home';
+  if (work) return 'work';
   if (editorFull) return 'editor';
   if (activeTab === ORCH_TAB) return 'orchestrator';
   if (!entity) return 'orchestrator';

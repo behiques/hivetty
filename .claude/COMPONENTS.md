@@ -440,6 +440,32 @@ resolution itself is the exported pure function `resolveTicketPrs()`.
 Colour and findings wording live in `src/features/shared/pr-presentation.ts`,
 because the PRs panel (052) is a separate slice that must agree with this one.
 
+### Round two's Work: `<TicketRow />`, `<WorkStage />` / `<TicketPage />`, `<TicketPageConversation />`, `<TicketProperties />`
+
+`src/features/work/components/`, HIVE-203.
+
+- **`WorkPanel variant="rows"`** (`WorkList`, what `ListPanel` mounts for
+  Work) swaps Classic's cards for a header (`N tickets · N need you`, a search
+  toggle) and groups of `TicketRow`s with fold carets. Skeleton, notices, pull
+  to refresh and both pollers are shared with the cards.
+- **`TicketRow`** — a tone dot, the title without its tags, and `KEY · fact`
+  in mono. The fact and tone are `lib/ticket-activity.ts`'s, pure and tested
+  rule by rule. `aria-current` marks the open ticket.
+- **`WorkStage`** — what `CenterStage` renders for the `'work'` view: "Pick a
+  ticket", else `TicketPage` keyed by the ticket so each open starts fresh.
+- **`TicketPage`** — content (header, description, conversation) beside a
+  260px properties column. It loads on open and mounts a 60 s poller; a status
+  change re-reads the transitions. A failed section shows its message and
+  Retry (`ticket-page-parts.tsx`); content already shown stays, "as of HH:MM".
+- **`TicketPageConversation`** — Comments | Everything over the slice's
+  comments and `useTicketEvents`. A comment's time sits in a fixed 120px slot
+  that Reply and Copy link take over on hover or focus, so nothing shifts. The
+  reply box posts through `addJiraComment` and appends; a refusal is amber and
+  keeps the draft.
+- **`TicketProperties`** — `useTicketProperties`' rows (a row without a value is
+  left out), the ticket's sessions and PRs, and New session, Move to the next
+  status, Open in Jira.
+
 ### `<AgentsPanel />` and `<AgentRow />`
 
 `src/features/agents/components/` — stories 033 and HIVE-114, regrouped by

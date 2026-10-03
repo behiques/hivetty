@@ -166,6 +166,17 @@ describe('useForegroundSession', () => {
     expect(calls).toEqual([null]);
   });
 
+  it('reports nothing while Work covers the stage in round two (HIVE-203)', () => {
+    withBridge();
+    seed({ activeTab: 'sess-03' });
+    useAppearanceStore.setState({ layout: 'round-two' });
+    useUiStore.setState({ place: 'work' });
+
+    renderHook(() => useForegroundSession());
+
+    expect(calls).toEqual([null]);
+  });
+
   it('ignores the place in Classic', () => {
     withBridge();
     seed({ activeTab: 'sess-03' });

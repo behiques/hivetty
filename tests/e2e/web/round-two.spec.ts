@@ -48,6 +48,9 @@ test('each place opens its panel, and the active icon closes it', async ({ page 
 test('the rail chord toggles the panel', async ({ page }) => {
   await place(page, 'Work').click();
   await expect(page.getByRole('region', { name: 'Work list' })).toBeVisible();
+  // No Jira in the browser target: the panel says so, and the stage waits for a ticket (HIVE-203).
+  await expect(page.getByText('No Jira connection yet')).toBeVisible();
+  await expect(page.getByText('Pick a ticket')).toBeVisible();
 
   // The app reads the platform off the browser, not the OS (`src/lib/platform.ts`),
   // and the web project emulates Desktop Chrome, so ask the page the same question.

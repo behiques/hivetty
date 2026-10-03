@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 import { AdfBlocks } from '@features/work/components/adf-blocks';
+import { commentTime } from '@features/work/ticket-presentation';
 import { addJiraComment, readJiraComments, readJiraLinks } from '@lib/jira';
 import { BRIDGE_ERROR } from '@lib/utils';
 import type { JiraComment, JiraLink } from '@shared/jira-contract';
@@ -42,18 +43,6 @@ type State =
   | { kind: 'loading' }
   | { kind: 'ready'; loaded: Loaded }
   | { kind: 'problem'; message: string };
-
-/** `2026-08-07T00:41:13.497-0400` → `7 Aug, 00:41`. */
-function when(iso: string): string {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return iso;
-  return at.toLocaleString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export function TicketConversation({ issueKey }: TicketConversationProps) {
   const [state, setState] = useState<State>({ kind: 'closed' });
@@ -203,7 +192,7 @@ export function TicketConversation({ issueKey }: TicketConversationProps) {
                   <p className="text-[11px] text-subtle">
                     <span className="text-muted">{comment.author}</span>
                     {' · '}
-                    {when(comment.created)}
+                    {commentTime(comment.created)}
                     {comment.updated === undefined ? null : ' · edited'}
                   </p>
                   <AdfBlocks blocks={comment.body} />

@@ -39,3 +39,18 @@ export const CATEGORY_TEXT: Record<Ticket['statusCategory'], string> = {
  */
 export const STATUS_PILL =
   'shrink-0 rounded-full bg-chip px-[9px] py-0.5 text-[10px] font-bold uppercase tracking-[0.05em]';
+
+/**
+ * `2026-08-07T00:41:13.497-0400` → `7 Aug, 00:41` (HIVE-71). Shared by the
+ * card's conversation and the ticket page's since HIVE-203.
+ */
+export function commentTime(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  return at.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
