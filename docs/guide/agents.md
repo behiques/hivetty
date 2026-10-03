@@ -179,7 +179,7 @@ and its merge asks as before.
   `done Shipped #303`). Hover or focus it for **▶ Run now** and **⏸ Pause** (**▶ Resume**
   when paused); an answer that is not a start shows in the row for five seconds.
 
-![The Agents place: the lanes in the list panel and an agent's page on the stage](../assets/guide/09-agents-tab.png)
+![The Agents place: the agents' lanes in the list panel](../assets/guide/09-agents-tab.png)
 
 - **Agent page** (click an agent): the agent's name over its description, the
   **Activity | Definition** switch and **Run now**. **Run now** works from both views; with unsaved

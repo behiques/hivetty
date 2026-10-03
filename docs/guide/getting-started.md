@@ -37,7 +37,7 @@ project**, connect your integrations, and **New session**. Click **Sessions** on
 **Overmind**: the fleet table on the stage and your projects in the list panel beside it. It is
 empty until you start a session.
 
-![The Hive on first launch, with two projects mapped and nothing running](../assets/guide/01-empty-overmind.png)
+![The Overmind with two projects mapped and nothing running](../assets/guide/01-empty-overmind.png)
 
 On first launch The Hive writes `~/.hive/config.json` from a commented template. You never
 have to open it; Settings edits it for you. See [The config file](configuration.md).

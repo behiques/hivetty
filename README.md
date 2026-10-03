@@ -18,7 +18,7 @@ editor, custom skills, and background agents.
 
 Built for Claude Code.
 
-<img src="docs/assets/screenshot.png" alt="The Hive: the projects rail, a live Claude Code session on the centre stage, and the inbox" width="100%">
+<img src="docs/assets/screenshot.png" alt="The Hive: the bar and the Sessions panel, a live session on the stage, its Files tab, and the Inbox pill" width="100%">
 
 ## Contents
 
