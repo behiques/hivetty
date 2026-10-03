@@ -531,10 +531,16 @@ test('pauses from the row’s slot, and the row agrees', async ({}, testInfo) =>
     await expect(notice).toBeHidden({ timeout: 7_000 });
 
     await row.click();
-    await expect(page.locator('[data-view="agent"]')).toBeVisible();
-    await expect(
-      page.locator('[data-view="agent"]').getByRole('button', { name: /Pause|Resume/ }),
-    ).toHaveCount(0);
+    const view = page.locator('[data-view="agent"]');
+    await expect(view).toBeVisible();
+    /*
+      The page header has no Pause. A paused agent's prompt row is the pause bar
+      (HIVE-211), and its Resume is the one such control on the page.
+    */
+    await expect(view.getByRole('button', { name: /Pause/ })).toHaveCount(0);
+    const pauseBar = view.getByRole('status').filter({ hasText: 'slack-watcher is paused.' });
+    await expect(pauseBar.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
+    await expect(view.getByRole('button', { name: /Resume/ })).toHaveCount(1);
   } finally {
     await app.close();
   }
