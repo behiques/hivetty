@@ -17,7 +17,9 @@ import {
 } from '@lib/project-config';
 
 import {
+  accountLimitsOf,
   agentWorksIn,
+  flapCountsOf,
   fleetGroupsOf,
   type FleetView,
   repoDirName,
@@ -55,6 +57,7 @@ import {
   useHatchery,
   useHatcherySearch,
   usePrNeedsYouCount,
+  usePrFlapCounts,
   useSessionPr,
   useNextTransition,
   useOpenTicket,
@@ -79,6 +82,10 @@ import {
   usePrOpener,
   useReviewUrls,
   useShipTrack,
+  useAccountLimits,
+  useComingUp,
+  useWhileAway,
+  whileAwayOf,
 } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { notif } from '../support/notifications';
@@ -379,6 +386,33 @@ describe('hive-store selectors', () => {
           ledger: [shipper('l1', 4, 'merge')],
         });
       });
+    });
+
+    it('usePrFlapCounts agrees with useHatchery, in rank order (HIVE-200)', () => {
+      const rows = renderHook(() => useHatchery()).result.current;
+      const { result } = renderHook(() => usePrFlapCounts());
+      expect(result.current).toEqual(flapCountsOf(rows));
+      expect(result.current.map((c) => [c.flap, c.count])).toEqual([
+        ['SUMMONS', 1],
+        ['HATCHING', 1],
+        ['BURROWED', 1],
+        ['LARVA', 1],
+      ]);
+      expect(result.current[0]?.tone).toBe('amber');
+    });
+
+    it('usePrFlapCounts is empty unless the source is live (HIVE-200)', () => {
+      act(() => useHiveStore.setState({ prSource: { kind: 'loading' } }));
+      expect(renderHook(() => usePrFlapCounts()).result.current).toEqual([]);
+    });
+
+    it('usePrFlapCounts holds its identity across terminal output (HIVE-200)', () => {
+      const { result } = renderHook(() => usePrFlapCounts());
+      const first = result.current;
+      act(() =>
+        useHiveStore.getState().appendEntityLines('hero-refresh', [{ text: 'more', color: 'ink' }]),
+      );
+      expect(result.current).toBe(first);
     });
 
     it('lists every swept PR with its status, in the Hatchery\'s order', () => {
@@ -2647,5 +2681,252 @@ describe('usePrsQuiet (HIVE-205)', () => {
       useHiveStore.setState({ prs: [], prSource });
       expect(renderHook(() => usePrsQuiet()).result.current).toBe(false);
     }
+  });
+});
+
+describe('Home strip selectors (HIVE-200)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+  });
+
+  describe('useAccountLimits', () => {
+    const setMetrics = (metrics: Record<string, object>) =>
+      act(() => useHiveStore.setState({ metrics: metrics as never }));
+
+    it('is empty with no metrics', () => {
+      setMetrics({});
+      expect(renderHook(() => useAccountLimits()).result.current).toEqual({});
+    });
+
+    it('carries one window alone', () => {
+      setMetrics({ a: { fiveHourPct: 38, fiveHourResetsAt: 1_900_000_000 } });
+      expect(renderHook(() => useAccountLimits()).result.current).toEqual({
+        fiveHourPct: 38,
+        fiveHourResetsAt: 1_900_000_000,
+      });
+    });
+
+    it('carries both windows', () => {
+      setMetrics({
+        a: {
+          fiveHourPct: 38,
+          fiveHourResetsAt: 1_900_000_000,
+          sevenDayPct: 61,
+          sevenDayResetsAt: 1_900_500_000,
+        },
+      });
+      expect(renderHook(() => useAccountLimits()).result.current).toEqual({
+        fiveHourPct: 38,
+        fiveHourResetsAt: 1_900_000_000,
+        sevenDayPct: 61,
+        sevenDayResetsAt: 1_900_500_000,
+      });
+    });
+
+    it('two sessions: the latest reset wins, then the highest percentage (D7)', () => {
+      setMetrics({
+        old: { fiveHourPct: 90, fiveHourResetsAt: 1_899_000_000 }, // an already-rolled window
+        a: { fiveHourPct: 30, fiveHourResetsAt: 1_900_000_000 },
+        b: { fiveHourPct: 38, fiveHourResetsAt: 1_900_000_000 },
+        c: { fiveHourPct: 99 }, // no reset: ranks below every reading with one
+      });
+      expect(accountLimitsOf(useHiveStore.getState().metrics)).toEqual({
+        fiveHourPct: 38,
+        fiveHourResetsAt: 1_900_000_000,
+      });
+    });
+
+    it('a pct with no reset still shows when nothing better exists', () => {
+      expect(accountLimitsOf({ c: { sevenDayPct: 12 } } as never)).toEqual({ sevenDayPct: 12 });
+    });
+
+    it('holds its identity across terminal output', () => {
+      setMetrics({ a: { fiveHourPct: 38, fiveHourResetsAt: 1_900_000_000 } });
+      const { result } = renderHook(() => useAccountLimits());
+      const before = result.current;
+      act(() =>
+        useHiveStore.getState().appendEntityLines('hero-refresh', [{ text: 'more', color: 'ink' }]),
+      );
+      expect(result.current).toBe(before);
+    });
+  });
+
+  describe('useComingUp', () => {
+    const agent = (id: string, nextRunAt?: number): Agent =>
+      ({
+        kind: 'agent',
+        id,
+        icon: 'Robot',
+        sub: `${id} does its thing`,
+        task: '',
+        status: 'sleeping',
+        wake: { on: [] },
+        mcp: [],
+        ...(nextRunAt === undefined ? {} : { nextRunAt }),
+      }) as unknown as Agent;
+    const held = (id: string, extra: Partial<LedgerEntry> = {}): LedgerEntry => ({
+      id,
+      ts: 1,
+      from: 'sess-1',
+      to: 'builder',
+      kind: 'ask',
+      body: 'Build HIVE-214\nmore',
+      meta: { after: 'acme/nova-web#589', ticket: 'HIVE-214' },
+      ...extra,
+    });
+    const seed = (agents: Agent[], ledger: LedgerEntry[]) =>
+      act(() =>
+        useHiveStore.setState((s) => ({
+          entities: { ...s.entities, ...Object.fromEntries(agents.map((a) => [a.id, a])) },
+          agentOrder: agents.map((a) => a.id),
+          ledger,
+        })),
+      );
+
+    it('orders scheduled agents soonest first, then held asks', () => {
+      seed([agent('slack', 2_000), agent('pr-patrol', 1_000), agent('fixer')], [held('h1')]);
+      expect(renderHook(() => useComingUp()).result.current).toEqual([
+        { id: 'pr-patrol', agent: 'pr-patrol', what: 'pr-patrol does its thing', at: 1_000 },
+        { id: 'slack', agent: 'slack', what: 'slack does its thing', at: 2_000 },
+        { id: 'h1', agent: 'builder', what: 'picks up HIVE-214 when nova-web#589 ships' },
+      ]);
+    });
+
+    it('falls back to the ask body first line without meta.ticket', () => {
+      seed([], [held('h1', { meta: { after: 'acme/nova-web#589' } })]);
+      expect(renderHook(() => useComingUp()).result.current[0]?.what).toBe(
+        'picks up Build HIVE-214 when nova-web#589 ships',
+      );
+    });
+
+    it('drops a released ask', () => {
+      seed(
+        [],
+        [
+          held('h1'),
+          {
+            id: 'c1',
+            ts: 2,
+            from: 'shipper',
+            kind: 'post',
+            body: 'closed',
+            meta: { stage: 'closed', repo: 'acme/nova-web', pr: 589 },
+          },
+        ],
+      );
+      expect(renderHook(() => useComingUp()).result.current).toEqual([]);
+    });
+
+    it('caps at five rows', () => {
+      seed(
+        [1, 2, 3, 4, 5, 6].map((n) => agent(`a${n}`, n)),
+        [],
+      );
+      expect(renderHook(() => useComingUp()).result.current).toHaveLength(5);
+    });
+
+    it('holds its identity across terminal output', () => {
+      seed([agent('slack', 2_000)], []);
+      const { result } = renderHook(() => useComingUp());
+      const before = result.current;
+      act(() =>
+        useHiveStore.getState().appendEntityLines('hero-refresh', [{ text: 'more', color: 'ink' }]),
+      );
+      expect(result.current).toBe(before);
+    });
+  });
+
+  describe('useWhileAway', () => {
+    const SINCE = Date.parse('2026-10-03T13:10:00Z');
+    const before = '2026-10-03T12:00:00Z';
+    const after = '2026-10-03T14:00:00Z';
+    const run = (id: string, ts: number, outcome: string): LedgerEntry => ({
+      id,
+      ts,
+      from: 'acr',
+      kind: 'event',
+      body: `run.ended — ${outcome}`,
+      meta: { run: id, outcome },
+    });
+    const closed = (pr: number): LedgerEntry => ({
+      id: `c${pr}`,
+      ts: SINCE + 1,
+      from: 'shipper',
+      kind: 'post',
+      body: 'closed',
+      meta: { stage: 'closed', repo: 'acme/nova-web', pr },
+    });
+
+    beforeEach(() => {
+      act(() =>
+        useHiveStore.setState({
+          prs: [
+            prRecord({ number: 302, state: 'merged', mergedAt: after, updatedAt: after, branch: 'm1' }),
+            prRecord({ number: 303, state: 'merged', mergedAt: after, updatedAt: after, branch: 'm2' }),
+            prRecord({ number: 290, state: 'merged', mergedAt: before, updatedAt: before, branch: 'm0' }),
+          ],
+          notifs: [
+            notif({ kind: 'session.goal', title: 'pty-resize goal done', createdAt: SINCE + 5 }),
+            notif({ kind: 'session.goal', title: 'old goal', createdAt: SINCE - 5 }),
+          ],
+          ledger: [
+            run('r0', SINCE - 1, 'done'),
+            run('r1', SINCE + 1, 'done'),
+            run('r2', SINCE + 2, 'failed'),
+            closed(302),
+            closed(303),
+          ],
+          tickets: [],
+        }),
+      );
+    });
+
+    it('counts what happened after since and nothing before it', () => {
+      const { result } = renderHook(() => useWhileAway(SINCE));
+      expect(result.current.hatched).toEqual({ numbers: [302, 303], by: 'shipper' });
+      expect(result.current.goals).toEqual(['pty-resize goal done']);
+      expect(result.current.runs).toEqual({ total: 2, failed: 1 });
+    });
+
+    it('names no merging party when no closed post covers every PR', () => {
+      act(() => useHiveStore.setState((s) => ({ ledger: s.ledger.filter((e) => e.id !== 'c303') })));
+      expect(renderHook(() => useWhileAway(SINCE)).result.current.hatched).toEqual({
+        numbers: [302, 303],
+      });
+    });
+
+    it('names ready tickets with no session, the first two keys and the total', () => {
+      expect(
+        whileAwayOf({ prs: [], notifs: [], ledger: [], readyKeys: ['A-1', 'B-2', 'C-3'] }, SINCE).ready,
+      ).toEqual({ keys: ['A-1', 'B-2'], total: 3 });
+    });
+
+    it('reads todo tickets with no live session from the store', () => {
+      const ticket = (key: string) => ({
+        key,
+        status: 'To Do',
+        statusCategory: 'todo' as const,
+        title: key,
+        priority: null,
+        assignee: null,
+      });
+      // GRAC-3018 has a fixture session in seedDemoFleet; a fresh todo key has none.
+      act(() => useHiveStore.setState({ tickets: [ticket('NEW-1'), ticket('GRAC-3018')] }));
+      expect(renderHook(() => useWhileAway(SINCE)).result.current.ready).toEqual({
+        keys: ['NEW-1'],
+        total: 1,
+      });
+    });
+
+    it('holds its identity across terminal output', () => {
+      const { result } = renderHook(() => useWhileAway(SINCE));
+      const first = result.current;
+      act(() =>
+        useHiveStore.getState().appendEntityLines('hero-refresh', [{ text: 'more', color: 'ink' }]),
+      );
+      expect(result.current).toBe(first);
+    });
   });
 });

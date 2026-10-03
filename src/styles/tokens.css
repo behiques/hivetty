@@ -401,6 +401,7 @@ body[data-theme='light'] {
    */
   --font-display: ui-serif, Georgia, 'Times New Roman', serif;
   --animate-ccpulse: ccpulse 1.6s ease-in-out infinite;
+  --animate-ccbreathe: ccbreathe 3.2s ease-in-out infinite;
   --animate-ccblink: ccblink 1s step-end infinite;
   --animate-ccflap: ccflap 360ms ease-in-out 1;
   --animate-cceggrock: cceggrock 7s ease-in-out infinite;

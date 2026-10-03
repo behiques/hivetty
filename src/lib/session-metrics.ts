@@ -181,3 +181,26 @@ export function dayClockLabel(epochSeconds: number | undefined): string | null {
   });
   return `${day} ${clock}`;
 }
+
+const plausible = (epochSeconds: number | undefined): epochSeconds is number =>
+  epochSeconds !== undefined &&
+  Number.isFinite(epochSeconds) &&
+  epochSeconds >= EARLIEST_PLAUSIBLE_RESET;
+
+/** `3h 12m left`, `48m left` — Home's Limits row for the five-hour window (HIVE-200). */
+export function timeLeftLabel(epochSeconds: number | undefined, nowMs: number): string | null {
+  if (!plausible(epochSeconds)) return null;
+  const ms = epochSeconds * 1000 - nowMs;
+  if (ms <= 0) return null;
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return '<1m left';
+  return minutes < 60
+    ? `${minutes}m left`
+    : `${Math.floor(minutes / 60)}h ${minutes % 60}m left`;
+}
+
+/** `resets Mon` — Home's Limits row for the seven-day window (HIVE-200). */
+export function resetsDayLabel(epochSeconds: number | undefined): string | null {
+  if (!plausible(epochSeconds)) return null;
+  return `resets ${new Date(epochSeconds * 1000).toLocaleDateString(undefined, { weekday: 'short' })}`;
+}

@@ -740,3 +740,15 @@ describe('ui-store — the PRs place (HIVE-205)', () => {
     expect(useUiStore.getState().prPage).toBeNull();
   });
 });
+
+describe('awaySince (HIVE-200)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  it('starts at store creation and moves with markAway', () => {
+    expect(typeof useUiStore.getState().awaySince).toBe('number');
+    useUiStore.getState().markAway(1_700_000_000_000);
+    expect(useUiStore.getState().awaySince).toBe(1_700_000_000_000);
+  });
+});

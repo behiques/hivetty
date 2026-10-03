@@ -27,6 +27,17 @@ test('opens on Home with no list panel', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Home', level: 1 })).toBeVisible();
 });
 
+test('Home with no project is the first-run page, and Integrations opens Settings there', async ({ page }) => {
+  const home = page.getByRole('region', { name: 'Home' });
+  await expect(page.getByRole('heading', { name: 'An empty hive' })).toBeVisible();
+  for (const name of ['Add a project', 'Integrations', 'New session']) {
+    await expect(home.getByRole('button', { name, exact: true })).toBeVisible();
+  }
+  await expect(home.getByRole('button', { name: 'New session', exact: true })).toBeDisabled();
+  await home.getByRole('button', { name: 'Integrations', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Integrations', level: 2 })).toBeVisible();
+});
+
 test('each place opens its panel, and the active icon closes it', async ({ page }) => {
   for (const [name, label] of [
     ['Sessions', 'Sessions list'],

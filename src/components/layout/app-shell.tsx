@@ -15,6 +15,7 @@ import { useNotificationActivate } from '@features/settings/hooks/use-notificati
 import { useAgentsSync } from '@features/shared/hooks/use-agents-sync';
 import { useLedgerSync } from '@features/shared/hooks/use-ledger-sync';
 import { useAppChords } from '@hooks/use-app-chords';
+import { useAwayTracker } from '@hooks/use-away-since';
 import { useDockBadge } from '@hooks/use-dock-badge';
 import { useForegroundSession } from '@hooks/use-foreground-session';
 import { useNotificationStream } from '@hooks/use-notification-stream';
@@ -157,6 +158,8 @@ export function AppShell() {
    * racing to ignore each other's chord.
    */
   useAppChords();
+  // Home's "since" (HIVE-200).
+  useAwayTracker();
 
   /**
    * Follow the OS while the app is open (story 105).
