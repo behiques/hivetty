@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentRunLog } from '@features/agents/components/agent-run-log';
@@ -7,7 +7,7 @@ import {
   type LiveRunSummary,
   type RunSummary,
 } from '@shared/agent-contract';
-import { useAppearanceStore } from '@stores/appearance-store';
+import { useAppearanceStore, useTerminalAppearance } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 
 /**
@@ -419,37 +419,56 @@ describe('AgentRunLog', () => {
   });
 
   /*
-    The reason has the only flexible column. It rode in the outcome cell first,
-    which clipped it at every size — measured in Chromium, including the widest
-    the app can render.
+    The outcome in its state's colour, and the reason inline beside it (HIVE-204):
+    one row per run, so the table reads as a table. The cell truncates and its
+    title carries the whole sentence.
   */
-  it('gives a failure its own column, in full', () => {
-    seed({
-      runs: [
-        run(1, {
-          outcome: 'failed',
-          reason: 'killed after the stall watchdog fired',
-        }),
-      ],
+  describe('the outcome cell', () => {
+    const palette = () => renderHook(() => useTerminalAppearance()).result.current.palette;
+    const outcomeCell = (text: string) => within(screen.getByTestId('run-receipts')).getByText(text);
+
+    it('draws a failure in red with its reason inline, on one row', () => {
+      seed({ runs: [run(1, { outcome: 'failed', reason: 'app closed' })] });
+
+      render(<AgentRunLog name="watcher" />);
+
+      const cell = within(screen.getByTestId('run-receipts')).getByTitle('failed · app closed');
+      expect(cell).toHaveTextContent(/^failed · app closed$/);
+      expect(cell).toHaveStyle({ color: palette().red });
+      expect(cell).toHaveClass('truncate');
+      // The reason sits in the row's plain colour, not the outcome's.
+      expect(within(cell).getByText('· app closed')).toHaveStyle({ color: palette().dim });
+      expect(within(screen.getByTestId('run-receipts')).queryByText(/app closed/, { selector: 'p' })).toBeNull();
     });
 
-    const { container } = render(<AgentRunLog name="watcher" />);
+    it('draws an asking run in amber', () => {
+      seed({ runs: [run(1, { outcome: 'asking' })] });
 
-    const receipts = container.querySelector(
-      '[data-region="run-receipts"]',
-    ) as HTMLElement;
+      render(<AgentRunLog name="watcher" />);
 
-    // The outcome cell says only the outcome; the reason is under it, whole.
-    expect(within(receipts).getByText('failed')).toBeInTheDocument();
+      expect(outcomeCell('asking')).toHaveStyle({ color: palette().amber });
+    });
 
-    const reason = within(receipts).getByText(
-      'killed after the stall watchdog fired',
-    );
+    it('leaves a done run plain', () => {
+      seed({ runs: [run(1)] });
 
-    expect(reason).toBeInTheDocument();
-    // A paragraph beneath the row, not a cell inside the grid.
-    expect(reason.tagName).toBe('P');
-    expect(reason.className).not.toContain('truncate');
+      render(<AgentRunLog name="watcher" />);
+
+      expect(outcomeCell('done')).not.toHaveAttribute('style');
+      expect(outcomeCell('done')).toHaveAttribute('title', 'done');
+    });
+  });
+
+  it.each([
+    [13_000, '13s'],
+    [328_000, '5m 28s'],
+    [3_771_000, '1h 2m'],
+  ])('reads a %i ms run as %s in Took', (ms, took) => {
+    seed({ runs: [run(1, { startedAt: 0, endedAt: ms })] });
+
+    render(<AgentRunLog name="watcher" />);
+
+    expect(within(screen.getByTestId('run-receipts')).getByText(took)).toBeInTheDocument();
   });
 
   /*
@@ -931,7 +950,8 @@ describe('AgentRunLog', () => {
       // Turns and cost both unknown; only `Took` carries a number.
       expect(cells[4]).toBe('—');
       expect(cells[6]).toBe('—');
-      expect(cells[5]).toMatch(/^\d+s$/);
+      // `formatDuration`: a fixture started days before the real clock reads in hours.
+      expect(cells[5]).toMatch(/^(\d+s|\d+m \d+s|\d+h \d+m)$/);
     });
 
     it('puts the task’s prompt under its row, where a failure reason goes', () => {
@@ -967,6 +987,13 @@ describe('AgentRunLog', () => {
         });
 
         expect(screen.getByText('43s')).toBeInTheDocument();
+
+        act(() => {
+          vi.advanceTimersByTime(17_000);
+        });
+
+        // Two units past a minute, as a receipt reads (HIVE-204).
+        expect(within(screen.getByTestId('run-receipts')).getByText('1m 0s')).toBeInTheDocument();
       } finally {
         vi.useRealTimers();
       }
