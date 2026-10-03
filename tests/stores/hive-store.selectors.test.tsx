@@ -45,10 +45,8 @@ import {
   useEntity,
   useHasResumable,
   useHiveStore,
-  useIdleDetailCounts,
   useEndedSessions,
   useNavOrder,
-  useNotifs,
   useChangedFileCount,
   useChangedFileMark,
   useChangedFiles,
@@ -70,7 +68,6 @@ import {
   useSessionPrRow,
   useNextTransition,
   useOpenTicket,
-  useTicketCount,
   useTicketEvents,
   useTicketGroups,
   useTicketPrs,
@@ -185,22 +182,6 @@ describe('hive-store selectors', () => {
       const { result } = renderHook(() => useCounts());
 
       expect(result.current).toMatchObject({ working: 4, idle: 2 });
-    });
-
-    /**
-     * The breakdown still keys on the status field, which is what lets the
-     * tooltip say *why* those sessions are counted as working.
-     */
-    it('still reports the detail breakdown against the raw status', () => {
-      act(() => {
-        useHiveStore
-          .getState()
-          .setSessionStatus('rails-upgrade', 'idle', 'agents');
-      });
-
-      const { result } = renderHook(() => useIdleDetailCounts());
-
-      expect(result.current).toEqual({ agents: 1, script: 0 });
     });
 
     it('counts sessions only, never agents', () => {
@@ -1251,41 +1232,7 @@ describe('hive-store selectors', () => {
     });
   });
 
-  describe('useTicketCount', () => {
-    it('counts every fixture ticket, Done ones included', () => {
-      const { result } = renderHook(() => useTicketCount());
-
-      expect(result.current).toBe(8);
-    });
-
-    it('follows the store rather than caching a number', () => {
-      const { result } = renderHook(() => useTicketCount());
-
-      act(() => {
-        useHiveStore.setState({ tickets: [] });
-      });
-
-      expect(result.current).toBe(0);
-    });
-  });
-
-  describe('rail selectors', () => {
-    it('useNotifs returns the inbox newest first', () => {
-      const { result } = renderHook(() => useNotifs());
-      expect(result.current).toHaveLength(0);
-
-      act(() => {
-        useHiveStore
-          .getState()
-          .hydrateNotifs([
-            notif({ id: 'a', title: 'older', createdAt: 1_000 }),
-            notif({ id: 'b', title: 'newer', createdAt: 2_000 }),
-          ]);
-      });
-
-      expect(result.current.map((n) => n.title)).toEqual(['newer', 'older']);
-    });
-
+  describe('list selectors', () => {
     it('usePrs returns the seeded PRs, in order', () => {
       const { result } = renderHook(() => usePrs());
 

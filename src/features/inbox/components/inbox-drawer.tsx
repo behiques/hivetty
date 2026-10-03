@@ -98,7 +98,7 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
           ) : leaving ? (
             <AskLeaving notif={row} thread={row.action.thread} />
           ) : (
-            <AskCard notif={row} thread={row.action.thread} variant="float" openLink />
+            <AskCard notif={row} thread={row.action.thread} openLink />
           )}
         </div>
       ))}

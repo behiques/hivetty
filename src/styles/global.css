@@ -24,9 +24,9 @@ body,
 
 body {
   margin: 0;
-  /* The shell fills the viewport and never scrolls as a page — the left rail,
-     center stage, and activity rail each own their own scrollbar (story 020).
-     Without this, a tall rail would scroll the whole document and drag the
+  /* The shell fills the viewport and never scrolls as a page — the list panel,
+     center stage, and session panel each own their own scrollbar (story 020).
+     Without this, a tall panel would scroll the whole document and drag the
      terminal out of view. */
   overflow: hidden;
   background: var(--cc-bg);
@@ -80,7 +80,7 @@ body {
  *
  * In `@layer base` so a control that genuinely wants the native affordance can
  * ask for it back by naming it. Proven on screen by
- * `tests/e2e/web/search-clear-button.spec.ts`: nothing in the DOM can see this
+ * `tests/e2e/electron/search-clear-button.spec.ts`: nothing in the DOM can see this
  * pseudo element, so only a real browser can say whether it is drawn.
  */
 @layer base {
@@ -285,63 +285,6 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/**
- * The diffused pool behind the header's hive mark (HIVE-100).
- *
- * A class rather than an arbitrary Tailwind value, because the value is a
- * blurred `radial-gradient` inside a `color-mix` — legible here, and a
- * forty-character unreadable string in a `className`.
- *
- * It is `::before` rather than a `background` on the element itself so it can
- * be *larger* than the 40px sprite it sits behind: a glow the same size as the
- * mark is a rectangle behind a creature, not a pool under one. The pseudo
- * element paints before the element's children, so the sprite lands on top
- * without either of them needing a `z-index`.
- *
- * Colour and strength come from `--cc-bloom`, which is the one thing here that
- * differs per theme — see the token.
- */
-.brand-bloom::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 52%;
-  /* Fixed, not an inset percentage of the mark. A pool sized *from* the sprite
-     is always hidden behind it — the sprite covers its own centre, so only what
-     spills past the silhouette is ever seen. These are the splash's proportions
-     at header scale: wider than tall, and sitting slightly low, so it reads as
-     ground under the creature rather than as a halo around it. The width is
-     also bounded by the window — the mark starts at the header's 16px padding,
-     so anything wider than this spills off the left edge of the app. */
-  width: 64px;
-  height: 46px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(closest-side, var(--cc-bloom), transparent);
-  filter: blur(8px);
-  pointer-events: none;
-}
-
-/**
- * And the sprite paints *over* the pool.
- *
- * Not the free win it looks like. An absolutely-positioned `::before` is a
- * **positioned** box, and positioned boxes paint after non-positioned inline
- * content — so the default order puts the pool on top of the very image it is
- * meant to sit behind, washing the creature in blue instead of lifting it off
- * the ground. It is a difference that is easy to miss, because the result still
- * looks like "a faint glow".
- *
- * `z-index: -1` on the pseudo element is the usual fix and the wrong one here:
- * it would drop the pool behind the *header's* own background as well, since
- * neither the header nor this span establishes a stacking context. Promoting
- * the sprite into the same positioned layer keeps both inside this span and
- * settles the order by DOM position, where `::before` is first by definition.
- */
-.brand-bloom img {
-  position: relative;
 }
 
 /* Thin custom scrollbars. */

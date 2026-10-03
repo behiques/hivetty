@@ -16,7 +16,6 @@ import {
 import { InboxCorner } from '@components/layout/inbox-corner';
 import { ReconnectLine } from '@components/layout/reconnect-line';
 import { SessionHeader } from '@components/layout/session-header';
-import { SessionMetaBar } from '@components/layout/session-meta-bar';
 import { TerminalHost } from '@components/terminal/terminal-host';
 import { SplitHandle } from '@components/ui/split-handle';
 import { TerminalHint } from '@components/ui/terminal-hint';
@@ -30,7 +29,6 @@ import { ConsoleInput } from '@features/orchestrator/components/console-input';
 import { ConsolePeek } from '@features/orchestrator/components/console-peek';
 import { FleetPane, TRANSCRIPT_FLOOR } from '@features/orchestrator/components/fleet-pane';
 import { OvermindHead } from '@features/orchestrator/components/overmind-head';
-import { PlanRail } from '@features/plan/components/plan-rail';
 import { PrsStage } from '@features/pull-requests/components/prs-stage';
 import { MessageInput } from '@features/sessions/components/message-input';
 import { NewSessionPicker } from '@features/sessions/components/new-session-picker';
@@ -53,11 +51,7 @@ import { ORCHESTRATOR_ID } from '@lib/terminal/static-transport';
 import type { TerminalTransport } from '@lib/terminal/terminal-transport';
 import {
   useEditorLayout,
-  useLayout,
-  usePlanPinned,
   useSetEditorSplitRatio,
-  useSetPlanPinned,
-  useShowPlanPanel,
   useTerminalAppearance,
 } from '@stores/appearance-store';
 import {
@@ -67,12 +61,10 @@ import {
 import {
   terminalIdFor,
   useActiveEntity,
-  usePlan,
   useTerminalHostIds,
 } from '@stores/hive-store';
 import {
   useActiveTab,
-  useAgentPage,
   useBackToOrch,
   useConsoleShown,
   usePickerState,
@@ -85,11 +77,11 @@ import {
  *
  * `min-w-0` is load-bearing, not defensive: without it this flex child refuses
  * to shrink below its content, a long terminal line widens the column, and
- * xterm's fit addon measures the widened box and grows into it. The rails are
- * fixed-width, so this column is what absorbs every window resize.
+ * xterm's fit addon measures the widened box and grows into it. The panels
+ * beside it are fixed-width, so this column is what absorbs every window resize.
  *
  * `overflow-hidden` enforces the story's rule that **the stage never scrolls as
- * a whole** — only the terminal region does. Without it a wide meta bar would
+ * a whole** — only the terminal region does. Without it a wide header would
  * give the whole column a scrollbar and the terminal would stop filling it.
  *
  * This is the composition root for the stage: it reaches into the stores
@@ -125,7 +117,6 @@ export function CenterStage() {
   const activeFileKey = useActiveFileKey();
   const hasOpenFiles = useHasOpenFiles();
   const { placement, splitAxis, splitRatio, nav } = useEditorLayout();
-  const layout = useLayout();
   const place = usePlace();
   const setSplitRatio = useSetEditorSplitRatio();
 
@@ -168,13 +159,10 @@ export function CenterStage() {
   const editorOpen = activeFileKey !== null;
   const editorFull = editorOpen && placement === 'full';
   const splitting = editorOpen && placement === 'split';
-  const roundTwo = layout === 'round-two';
-  const home = roundTwo && place === 'home';
-  const work = roundTwo && place === 'work';
-  const agentPage = useAgentPage();
-  const agents = place === 'agents' && (roundTwo || agentPage !== null);
-
-  const prs = roundTwo && place === 'prs';
+  const home = place === 'home';
+  const work = place === 'work';
+  const agents = place === 'agents';
+  const prs = place === 'prs';
 
   const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work, agents, prs });
   /**
@@ -200,7 +188,7 @@ export function CenterStage() {
    * `activeId` — and a settings overlay that did not extend it would render on
    * top of thirteen live terminals.
    *
-   * Round two's Home (HIVE-195), Work (HIVE-203), the Agents stage (HIVE-204)
+   * Home (HIVE-195), Work (HIVE-203), the Agents stage (HIVE-204)
    * and PRs (HIVE-205) join them: each covers the stage the same way.
    */
   const showingOverlay =
@@ -225,31 +213,12 @@ export function CenterStage() {
    */
   const showingAgent = view === 'agent';
   /**
-   * Round two folds the Overmind's transcript into the dock (HIVE-197): hidden,
+   * The stage folds the Overmind's transcript into the dock (HIVE-197): hidden,
    * never unmounted, for `showingAgent`'s reason. A read that changes on a click,
    * not on a drag, so the stage may subscribe to it.
    */
   const consoleShown = useConsoleShown();
-  const transcriptFolded = roundTwo && view === 'orchestrator' && !consoleShown;
-
-  /*
-    The plan panel (HIVE-181): a sibling of the terminal region, never inside
-    it, so peeking (an absolute drawer) costs the terminal nothing and pinning
-    (a wider sibling) refits it once through the ResizeObserver it already has.
-    A session's plan only, in a terminal view (the predicate the meta bar uses), and only with a task in it.
-  */
-  const plan = usePlan(
-    isTerminalView(view) && entity !== null && isSession(entity) ? entity.id : undefined,
-  );
-  const planPinned = usePlanPinned();
-  const setPlanPinned = useSetPlanPinned();
-  // Settings › Appearance › Show plan panel (HIVE-182): off hides the rail only.
-  // Classic only (HIVE-201, D3): round two's session panel carries the plan.
-  const showPlanPanel = useShowPlanPanel();
-  const planRail =
-    !roundTwo && showPlanPanel && plan !== undefined && plan.tasks.length > 0 ? (
-      <PlanRail plan={plan} pinned={planPinned} onPinnedChange={setPlanPinned} />
-    ) : null;
+  const transcriptFolded = view === 'orchestrator' && !consoleShown;
 
   /*
     Agents are not in this list any more (HIVE-116).
@@ -283,7 +252,7 @@ export function CenterStage() {
   /**
    * The box the fleet table and the transcript divide between them.
    *
-   * Not the terminal column: the column also holds the meta bar above and the
+   * Not the terminal column: the column also holds the session header above and the
    * console rows below, all fixed height, and a share of *that* is not a share
    * of anything a reader can see. This wrapper holds exactly the two panes (and
    * the agent view, which stands in for both), so the table's `flex-basis`
@@ -421,10 +390,9 @@ export function CenterStage() {
     <main ref={stageRef} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-panel-2">
       {/*
         Lost the server (HIVE-211): first, so it sits above every place and the
-        picker and the stage keeps the rest of the column. Classic's header
-        chip already says it.
+        picker and the stage keeps the rest of the column.
       */}
-      {roundTwo ? <ReconnectLine /> : null}
+      <ReconnectLine />
       {showingPicker ? <NewSessionPicker /> : null}
       {view === 'settings' ? <SettingsOverlay /> : null}
       {view === 'home' ? <HomePage /> : null}
@@ -488,16 +456,13 @@ export function CenterStage() {
           here would be a routing bug worth rendering nothing for rather than
           crashing on a missing `project`.
         */}
-        {/* Round two heads a terminal too (HIVE-197); Classic's bar is sessions only. */}
-        {isTerminalView(view) && entity && roundTwo && (isSession(entity) || isTerminal(entity)) ? (
+        {/* The session header heads a terminal too (HIVE-197). */}
+        {isTerminalView(view) && entity && (isSession(entity) || isTerminal(entity)) ? (
           <SessionHeader entity={entity} />
         ) : null}
-        {isTerminalView(view) && entity && !roundTwo && isSession(entity) ? (
-          <SessionMetaBar entity={entity} />
-        ) : null}
 
-        {/* Round two's page head over the fleet (HIVE-197); Classic has none. */}
-        {roundTwo && view === 'orchestrator' ? <OvermindHead /> : null}
+        {/* The page head over the fleet (HIVE-197). */}
+        {view === 'orchestrator' ? <OvermindHead /> : null}
         {/*
           The fleet table sits above the transcript rather than inside it. The
           concept scrolls them as one region, but the transcript is a real xterm
@@ -521,7 +486,7 @@ export function CenterStage() {
           <FleetPane
             containerRef={paneSplitRef}
             floored={!splitting}
-            split={!roundTwo || consoleShown}
+            split={consoleShown}
           />
         ) : null}
 
@@ -536,8 +501,8 @@ export function CenterStage() {
         ) : null}
 
         {/*
-          The terminal region and the plan rail, side by side (HIVE-181). This
-          row is now the column's flex child, so the fleet table's floor and
+          The terminal region's row (HIVE-181). This row is the column's flex
+          child, so the fleet table's floor and
           the agent view's `hidden` live here rather than on the region.
         */}
         <div
@@ -558,7 +523,7 @@ export function CenterStage() {
           /*
             `relative` for the boot cover alone (HIVE-101), which fills this box
             rather than the stage: the cover stands in for the *terminal*, so it
-            must not reach over the meta bar above it — the branch and status
+            must not reach over the session header above it — the branch and status
             there are worth reading while a session starts, and are the only
             things on screen that say which session it is.
           */
@@ -625,7 +590,7 @@ export function CenterStage() {
             because the scrollback above it is the evidence for what it says.
 
             `isTerminal` as well as the view, for the reason `isSession` is
-            spelled out above the meta bar: the two answer different questions,
+            spelled out above the session header: the two answer different questions,
             and the narrowed entity is what `TerminalEndedCover` takes.
           */}
           {view === 'terminal' &&
@@ -636,11 +601,11 @@ export function CenterStage() {
           ) : null}
 
           {/*
-            A session's ending, in round two (HIVE-211): the same "over the
+            A session's ending (HIVE-211): the same "over the
             mounted surface" rule, as a card that closes to a foot strip (D2).
             Keyed by session, so a dismissal never carries to the next one.
           */}
-          {roundTwo && isTerminalView(view) && entity !== null && isSession(entity) && isTerminated(entity) ? (
+          {isTerminalView(view) && entity !== null && isSession(entity) && isTerminated(entity) ? (
             <SessionEndedCover key={entity.id} session={entity} />
           ) : null}
 
@@ -670,15 +635,14 @@ export function CenterStage() {
             />
           ) : null}
         </div>
-        {planRail}
         </div>
         </div>
 
-        {/* Round two's dock: the peek line and its show/hide over the prompt (HIVE-197). */}
+        {/* The dock: the peek line and its show/hide over the prompt (HIVE-197). */}
         {view === 'orchestrator' ? (
           // `data-stage-input`: the Inbox corner sits above this box (HIVE-198). A plain block, so the layout is unchanged.
           <div data-stage-input="">
-            {roundTwo ? <ConsolePeek /> : null}
+            <ConsolePeek />
             <ConsoleInput />
           </div>
         ) : null}
@@ -739,13 +703,9 @@ export function CenterStage() {
           ) : null}
         </div>
       </div>
-      {/* Round two's Inbox: the corner on the stage, and the drawer, which is fixed and escapes the clip (HIVE-198). */}
-      {roundTwo ? (
-        <>
-          <InboxCorner stage={stageRef} viewKey={`${view}:${activeTab}`} />
-          <InboxDrawer onStage={onStage} />
-        </>
-      ) : null}
+      {/* The Inbox: the corner on the stage, and the drawer, which is fixed and escapes the clip (HIVE-198). */}
+      <InboxCorner stage={stageRef} viewKey={`${view}:${activeTab}`} />
+      <InboxDrawer onStage={onStage} />
     </main>
   );
 }

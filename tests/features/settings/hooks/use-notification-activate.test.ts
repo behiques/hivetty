@@ -36,7 +36,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   useUiStore.getState().openTab('orch');
   useHiveStore.getState().reset();
-  useAppearanceStore.getState().setLayout('classic');
 });
 
 afterEach(() => {
@@ -121,29 +120,6 @@ describe('useNotificationActivate', () => {
     expect(useUiStore.getState().activeTab).not.toBe('sess-successor');
   });
 
-  /**
-   * The finding this closes (HIVE-118 self-review): an ask toast focused the
-   * window and stopped. Main returned early, the renderer heard nothing, and
-   * the rail stayed exactly where it was — which, for a user parked on the
-   * explorer with the rail collapsed, meant clicking a question and landing on
-   * a file tree with no card and no signal on it.
-   *
-   * Both halves are asserted, because the rail has two independent ways to
-   * hide the inbox: the wrong tab, and no rail at all. The starting state is
-   * deliberately the worst one.
-   */
-  it('reveals the inbox when an ask is activated, opening the rail if it was hidden', () => {
-    useUiStore.setState({ railTab: 'explorer', showActivityRail: false });
-
-    (window as { hive?: unknown }).hive = bridge;
-    renderHook(() => useNotificationActivate());
-
-    listeners[0]?.({ type: 'ask', thread: 'a41' });
-
-    expect(useUiStore.getState().railTab).toBe('inbox');
-    expect(useUiStore.getState().showActivityRail).toBe(true);
-  });
-
   /** An ask is answered where it is: nothing opens on the centre stage. */
   it('opens no tab for an ask', () => {
     useUiStore.getState().openTab('orch');
@@ -157,7 +133,7 @@ describe('useNotificationActivate', () => {
   });
 });
 
-describe('useNotificationActivate — round two (HIVE-198)', () => {
+describe('useNotificationActivate — the drawer (HIVE-198)', () => {
   beforeEach(() => {
     useUiStore.getState().reset();
   });
@@ -166,21 +142,10 @@ describe('useNotificationActivate — round two (HIVE-198)', () => {
     useAppearanceStore.getState().reset();
   });
 
-  it('round two: an ask opens the drawer on its thread', () => {
-    useAppearanceStore.getState().setLayout('round-two');
+  it('opens the drawer on the asked thread, with no layout seeded (HIVE-213)', () => {
     (window as { hive?: unknown }).hive = bridge;
     renderHook(() => useNotificationActivate());
     act(() => listeners.at(-1)?.({ type: 'ask', thread: 'a41' }));
     expect(useUiStore.getState().inboxDrawer).toEqual({ open: true, thread: 'a41' });
-  });
-
-  it('classic: an ask still reveals the Inbox tab', () => {
-    useAppearanceStore.getState().setLayout('classic');
-    useUiStore.setState({ railTab: 'explorer' });
-    (window as { hive?: unknown }).hive = bridge;
-    renderHook(() => useNotificationActivate());
-    act(() => listeners.at(-1)?.({ type: 'ask', thread: 'a41' }));
-    expect(useUiStore.getState().railTab).toBe('inbox');
-    expect(useUiStore.getState().inboxDrawer.open).toBe(false);
   });
 });

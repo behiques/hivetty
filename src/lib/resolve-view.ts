@@ -39,8 +39,8 @@ export interface ViewInput {
    */
   work: boolean;
   /**
-   * The Agents place owns the stage (HIVE-204): round two on that place, or Classic with an agent page
-   * open. An agent `activeTab` still resolves to `'agent'`; anything else shows the agents stage.
+   * The Agents place owns the stage (HIVE-204). An agent `activeTab` still resolves to `'agent'`;
+   * anything else shows the agents stage.
    */
   agents: boolean;
   /**

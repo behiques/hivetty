@@ -10,8 +10,7 @@ import { usePickerActions, useSessionsProject, useSetSessionsProject } from '@st
 
 /**
  * Round two's Sessions list panel (HIVE-197): always the projects, folded, with
- * "All projects" on top to widen the Overmind again. Classic's `LeftRail` keeps
- * `ProjectsPanel`.
+ * "All projects" on top to widen the Overmind again.
  */
 export function SessionsPanel() {
   const projects = useProjects();
@@ -20,7 +19,7 @@ export function SessionsPanel() {
   const setFilter = useSetSessionsProject();
   const { openPicker } = usePickerActions();
 
-  // The same empty state `ProjectsPanel` draws, and for its reasons.
+  // No projects yet: say so, and offer the picker.
   if (projects.length === 0) {
     return (
       <div data-panel="sessions">

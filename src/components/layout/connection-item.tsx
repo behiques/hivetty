@@ -65,7 +65,7 @@ export function ConnectionItem() {
   /*
     What the dropped link lost that nobody has cleared (HIVE-140). The
     acknowledgement lives in the store beside the link (HIVE-211), so Clear
-    here, on the Classic chip or on the stage line clears all three.
+    here or on the stage line clears all three.
   */
   const lost = useUnackedLost();
   const acknowledgeLost = useAcknowledgeLost();

@@ -12,12 +12,12 @@ interface SearchBoxProps {
 }
 
 /**
- * The rail tabs' search box: explorer, PRs and Work.
+ * The panels' search box: explorer, PRs and Work.
  *
- * Escape empties it rather than closing anything, because a rail tab is not
- * an overlay and there is nothing to dismiss. `type="search"` keeps the
+ * Escape empties it rather than closing anything, because a panel is not an
+ * overlay and there is nothing to dismiss. `type="search"` keeps the
  * searchbox role; the one clear button drawn is this one
- * (`tests/e2e/web/search-clear-button.spec.ts`).
+ * (`tests/e2e/electron/search-clear-button.spec.ts`).
  */
 export function SearchBox({ label, value, onChange, onClear, focusOnMount }: SearchBoxProps) {
   const input = useRef<HTMLInputElement>(null);

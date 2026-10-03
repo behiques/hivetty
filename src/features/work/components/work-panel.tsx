@@ -12,7 +12,6 @@ import { PullIndicator } from '@components/ui/pull-indicator';
 import { SwarmLine } from '@components/ui/swarm-line';
 import { SourceProblem } from '@features/shared/components/source-problem';
 import { StaleLine } from '@features/shared/components/stale-line';
-import { TicketCard } from '@features/work/components/ticket-card';
 import { TicketListSkeleton } from '@features/work/components/ticket-card-skeleton';
 import { TicketRow } from '@features/work/components/ticket-row';
 import { WorkSearchRow } from '@features/work/components/work-search-row';
@@ -54,7 +53,7 @@ import { useToggleWorkGroup, useWorkFolded, useWorkSearchTerm } from '@stores/ui
  *
  * ## Refreshed on open, and every minute after (HIVE-81)
  *
- * `left-rail.tsx` swaps panels by unmounting them, so mounting *is* the pane
+ * `list-panel.tsx` swaps panels by unmounting them, so mounting *is* the pane
  * opening — the first read is exactly as prompt as the user looking at it. It
  * used to stop there, on the argument that a Jira issue moves when a human
  * moves it, which is roughly never while the panel is open. The premise is
@@ -115,13 +114,10 @@ function SourceNotice({
 /**
  * The panel's frame: a header that stays put, over a list that scrolls.
  *
- * This panel used to have no header at all, which is why it was deliberately
- * left out of the equivalent change to the PRs panel — its cards scrolling in
- * the rail's own container was already right. A search box changes that: the
- * rail's `role="tabpanel"` wrapper scrolls whatever it holds, so the box would
- * travel upward with the results, out of reach of the list it controls.
+ * The list panel's wrapper scrolls whatever it holds, so a header would travel
+ * upward with the results, out of reach of the list it controls.
  *
- * Filling the rail's height exactly is what fixes it — the outer scroller then
+ * Filling the panel's height exactly is what fixes it — the outer scroller then
  * has nothing to scroll and never engages. Duplicated from `prs-panel.tsx`
  * rather than shared: the two slices are fenced from each other by design, and
  * a twenty-line frame in `features/shared` would be a dependency between them
@@ -241,22 +237,14 @@ function TicketRows({ tickets }: { tickets: readonly Ticket[] }) {
   );
 }
 
-/** Round two's Work panel (HIVE-203): grouped rows instead of Classic's cards. */
-export const WorkList = () => <WorkPanel variant="rows" />;
-
-/**
- * Both layouts' Work panel (HIVE-203, D2). `cards` is Classic's; `rows` swaps
- * the header and the list body and shares everything else — the skeleton, the
- * notices, pull to refresh and both pollers.
- */
-export function WorkPanel({ variant = 'cards' }: { variant?: 'cards' | 'rows' }) {
+/** The Work panel (HIVE-203): grouped rows, the skeleton, the notices, pull to refresh and both pollers. */
+export function WorkPanel() {
   const tickets = useTickets();
   const source = useTicketSource();
   const refresh = useRefreshTickets();
   const search = useTicketSearch();
   const term = useWorkSearchTerm();
-  const rows = variant === 'rows';
-  const header = rows ? <WorkHeader /> : <WorkSearchRow />;
+  const header = <WorkHeader />;
 
   /** A search replaces the list rather than filtering it — see `WorkSearchRow`. */
   const searching = term !== '';
@@ -348,10 +336,7 @@ export function WorkPanel({ variant = 'cards' }: { variant?: 'cards' | 'rows' })
           <TicketListSkeleton />
         ) : null}
 
-        {rows && results ? <TicketRows tickets={results} /> : null}
-        {rows
-          ? null
-          : results?.map((ticket) => <TicketCard key={ticket.key} ticket={ticket} />)}
+        {results ? <TicketRows tickets={results} /> : null}
 
         {search.error === null && !search.searching && results?.length === 0 ? (
           <EmptyState phrase="empty.work" creature="spire">
@@ -368,11 +353,7 @@ export function WorkPanel({ variant = 'cards' }: { variant?: 'cards' | 'rows' })
 
       <SourceNotice source={source} onRetry={retry} />
 
-      {rows ? (
-        <TicketGroups />
-      ) : (
-        tickets.map((ticket) => <TicketCard key={ticket.key} ticket={ticket} />)
-      )}
+      <TicketGroups />
 
       {/*
         An empty live result is not a failure and not a misconfiguration — it is

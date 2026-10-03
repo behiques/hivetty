@@ -125,8 +125,8 @@ import { useActiveTab, useExpandEnded, useSelId, useSessionsProject, useSetSelId
  * was measured with round two's list panel taking its column beside the
  * stage. Under 1,200px that panel overlays the stage instead and starts closed,
  * so the 1100px window hands the table `--cc-list-w` more and the 486px floor
- * fits. Classic's rails are unchanged and keep the numbers above.
- * `table-alignment.spec.ts` holds round two at 1100px with a Resume column.
+ * fits. `table-alignment.spec.ts` holds the 1100px window with a Resume
+ * column.
  *
  * **The plan count raised it by 44px**, from 396 (HIVE-182): `STATUS` carries a
  * session's `done/total` beside its label now, and that cell may not truncate.
@@ -148,11 +148,10 @@ import { useActiveTab, useExpandEnded, useSelId, useSessionsProject, useSetSelId
  * and retro D, 486px since HIVE-197). Until HIVE-197 that put every default
  * layout inside it, the 1100px window with a Resume column by 2px; the Plan
  * column spent that margin and 58px more (above). What remains outside is
- * a user's own doing: HIVE-105 made the rails draggable, and
- * `STAGE_MIN_FRACTION` (`lib/rail-width.ts`) promises the stage only 20% of the
- * window, so 1100px can be squeezed to a 220px stage and a ~168px line. No
- * arrangement of these columns survives that; the honest claim is that the
- * table holds together at every width the app *chooses*, and gives way
+ * a user's own doing: the stage keeps its own width and the table never forces
+ * it, so a user who gives the panels most of a 1100px window can squeeze the
+ * stage to a ~168px line. No arrangement of these columns survives that; the
+ * honest claim is that the table holds together at every width the app *chooses*, and gives way
  * gracefully — truncating, in order — for a long way past it.
  *
  * ## What `STATUS` still costs, and why it is fixed

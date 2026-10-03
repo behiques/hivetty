@@ -24,7 +24,7 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
  *
  * The same reason the new-session picker gives (story 044): the vendored
  * `DialogContent` always portals to `document.body` and centres a fixed card.
- * Settings fills the **center stage** — the rails and header stay visible — so
+ * Settings fills the **center stage** — the panels and session header stay visible — so
  * it is composed from the primitive directly and rendered in place. The parts
  * that matter are kept: the focus trap, Escape, and the `aria-modal` semantics
  * that hide the rest of the tree from assistive tech.
@@ -83,7 +83,7 @@ const SECTIONS: readonly { id: SettingsSection; label: string }[] = [
 type SectionId = SettingsSection;
 
 /**
- * Section id → pane, the same shape `left-rail.tsx` uses for its panels.
+ * Section id → pane, the same shape `list-panel.tsx` uses for its panels.
  *
  * A map rather than a chain of ternaries: adding story 104's section should be
  * two lines and no control flow.
@@ -144,7 +144,7 @@ export function SettingsOverlay() {
    * asked, and landing them on Projects would lose it.
    *
    * The request is honoured on arrival, not only at mount. This overlay is
-   * `modal={false}` precisely so the rails stay live underneath it, so
+   * `modal={false}` precisely so the panels stay live underneath it, so
    * `openSettings('agents')` can fire while it is already open — and reading
    * the request once made that click do visibly nothing. The effect below
    * consumes each request exactly once, which is what keeps a stale value from

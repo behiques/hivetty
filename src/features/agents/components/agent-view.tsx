@@ -49,7 +49,7 @@ interface AgentViewProps {
  *
  * The rule the three bands express is that *chrome* touches the edges and
  * *content* never does. The body carries the only inset, and it is `px-4`
- * because `SessionMetaBar` is — the two views are a tab apart and a gutter that
+ * because the session header is — the two views are a tab apart and a gutter that
  * changed as you switched between them would read as the stage moving. The
  * prompt keeps the console's own `px-[18px]` for the same reason, from the
  * other direction: it is the same control, so it is the same row.

@@ -175,7 +175,6 @@ import {
   shipStage,
   shipTrack,
   thread,
-  type BuildProgress,
   type ShipTrack,
 } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
@@ -545,9 +544,9 @@ interface HiveState {
    * one the four-store split exists for. These arrive from Claude Code's status
    * line on every assistant message plus a 30-second timer, per live session —
    * easily the busiest write in the store. Putting them on `Entity` would give
-   * every session row in the left rail a new object identity on each tick, and
-   * a fleet of thirteen would repaint continuously to move a number that only
-   * the header's chip renders.
+   * every session row in the Sessions panel a new object identity on each tick,
+   * and a fleet of thirteen would repaint continuously to move a number that
+   * only one chip renders.
    *
    * Keyed by entity id, and **not pruned when a session ends**. That is a
    * deliberate non-decision rather than an oversight: the map is bounded by the
@@ -2323,7 +2322,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
        * field* with "Ready for instructions", but story 043 wants that prompt in
        * the **transcript** (`· Ready — type below…`) — which is where the user
        * is actually looking. Putting a fake task on the entity would also make
-       * the meta bar and the rails claim a task that nobody set.
+       * the session header and the panels claim a task that nobody set.
        */
       task: task ?? '',
       /**
@@ -3777,7 +3776,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         the guard below let it become an entity, so a definition colliding with
         a live session left a name in the order with nothing behind it. Every
         selector that walks the order narrows with `isAgent` and skipped it, so
-        the lie stayed invisible — until `useAgentCount` turned the array's
+        the lie stayed invisible — until a count over `agentOrder` turned the array's
         length into a number on screen, and the badge started counting an agent
         the panel could not list.
       */
@@ -6551,9 +6550,8 @@ export const useCounts = () =>
          *
          * So the number answers the question the label answers — *is this task
          * progressing* — rather than the one the status field answers. The
-         * distinction is not lost: {@link useIdleDetailCounts} still keys on
-         * `status === 'idle'` and feeds the tooltip's `N with agents`
-         * breakdown, which is where it has room to be spelled out.
+         * distinction is not lost: `idleDetail` stays on the entity, keyed on
+         * `status === 'idle'`.
          *
          * The cost, stated plainly: `counts` is no longer a partition of
          * `SessionStatus` by that field. It is still keyed by it, and the
@@ -6567,30 +6565,6 @@ export const useCounts = () =>
         counts[bucket] += 1;
       }
       return counts;
-    }),
-  );
-
-/**
- * Idle sessions, broken down by what is still running (HIVE-83).
- *
- * A second selector rather than a wider `useCounts()`: the header's visible
- * tally stays five numbers on purpose (widening it was the thing this story
- * deliberately did not do), and this feeds the tooltip only. Computed here,
- * never stored — one source of truth per number on screen, same rule as
- * `useCounts()`.
- */
-export const useIdleDetailCounts = () =>
-  useHiveStore(
-    useShallow((state) => {
-      let agents = 0;
-      let script = 0;
-      for (const id of state.order) {
-        const entity = state.entities[id];
-        if (!entity || !isSession(entity) || entity.status !== 'idle') continue;
-        if (entity.idleDetail === 'agents') agents += 1;
-        else if (entity.idleDetail === 'script') script += 1;
-      }
-      return { agents, script };
     }),
   );
 
@@ -7084,99 +7058,6 @@ export const useAgentFacts = (name: string): AgentFacts | null => {
     };
   }, [entity, ledger, name]);
 };
-
-/**
- * The Agents tab's badge: how many agents you have.
- *
- * An inventory, exactly like Work's ticket count, and deliberately *not* the
- * open-ask count this badge used to carry. That number answered "how many of
- * my tenants are stuck on me?", which is a good question and the wrong one for
- * a badge that is zero almost all day: the rail then said nothing at all about
- * a pane holding five agents. The two facts move on two clocks — what you own
- * changes when you write an `AGENT.md`, what is happening changes minute to
- * minute — so they are now two marks rather than one overloaded number. The
- * second is {@link useAgentFleetStatus}.
- *
- * Reads `agentOrder` rather than filtering `entities`, so the selector never
- * subscribes to a map whose identity changes on every line batch from a running
- * terminal. That is only sound because `hydrateAgents` now records the names it
- * actually wrote: the array once held every summary's name, including one the
- * session guard had refused, and this count is what would have put that phantom
- * on screen.
- */
-export const useAgentCount = (): number =>
-  useHiveStore((state) => state.agentOrder.length);
-
-/**
- * The three states worth interrupting the user for, loudest first.
- *
- * The order is the panel's own, not a new opinion: `useAgentsByGroup` already
- * sorts `asking` ahead of everything in Summons because somebody is blocked on
- * the user, and `useAgentsForFleet` reads the same way. A summary dot that
- * showed green while an agent waited would invert the priority both of those
- * spend code establishing.
- */
-const FLEET_RANK = ['asking', 'failed', 'working'] as const;
-
-/** What a fleet summary can report — the rest of {@link AgentStatus} is rest. */
-export type FleetStatus = (typeof FLEET_RANK)[number];
-
-/**
- * The loudest thing the fleet is doing, or `undefined` when it is all at rest
- * — the dot on the Agents tab's glyph.
- *
- * Paired with {@link useAgentCount} rather than folded into it, so neither has
- * to stand in for the other: the badge says *two agents*, the dot says
- * *one of them is running*. `sleeping` and `paused` return `undefined` and the
- * tab wears no dot, which is the state it sits in most of the day and the one
- * where another mark would be noise.
- *
- * ## An unparseable definition is a failure here
- *
- * `registry.ts` files a folder it could not read as `sleeping`, because a
- * summary needs *some* status and there is no parsed one to use. Taken at face
- * value that would leave a broken agent with no mark at all — and in the
- * collapsed rail the dot is the entire signal, so the one agent that needs a
- * person would be the one the rail never mentions. `invalid` therefore ranks
- * as `failed`.
- *
- * The row keeps the finer distinction: `agent-row.tsx` draws `invalid` in
- * amber beside the word "invalid", so the difference between *broke while
- * running* and *never parsed* survives one click away. This selector answers
- * only "should I look?", where both are yes.
- *
- * Returns a primitive, so the read is cheap despite walking `entities`: an
- * unrelated write recomputes the same string and `Object.is` stops the render.
- */
-export const useAgentFleetStatus = (): FleetStatus | undefined =>
-  useHiveStore((state) => {
-    let best: number | undefined;
-
-    for (const id of state.agentOrder) {
-      const entity = state.entities[id];
-
-      // `entities` holds both kinds and an agent name is a legal session id —
-      // the same narrowing every other agent selector does.
-      if (entity === undefined || !isAgent(entity)) continue;
-
-      /*
-        Widened to `AgentStatus[]` for the lookup, rather than narrowing
-        `entity.status` down to `FleetStatus` — a resting status is a legal
-        input here and must return -1, not be asserted into a rank it has not
-        got.
-      */
-      const rank = (FLEET_RANK as readonly AgentStatus[]).indexOf(
-        entity.invalid === undefined ? entity.status : 'failed',
-      );
-
-      if (rank === -1) continue;
-      if (best === undefined || rank < best) best = rank;
-      // Nothing outranks `asking`; the rest of the walk cannot change it.
-      if (best === 0) break;
-    }
-
-    return best === undefined ? undefined : FLEET_RANK[best];
-  });
 
 /**
  * One agent's side of the log — what it said, and what it was told.
@@ -8090,11 +7971,11 @@ export const useLiveSessionCounts = () =>
  *
  * With no seeded projects there is nothing to merge and no precedence to
  * resolve: a project exists because the user mapped it. An empty config means
- * an empty list, which `projects-panel.tsx` says out loud rather than rendering
+ * an empty list, which the Sessions panel says out loud rather than rendering
  * as a blank column.
  *
  * **Config order is the file's order and is never sorted.** Story 103's
- * drag-reorder works by rewriting that array, and the left rail reads it
+ * drag-reorder works by rewriting that array, and the Sessions panel reads it
  * positionally, so sorting here would silently make 103 unimplementable.
  */
 export const useProjects = (): ProjectRow[] => {
@@ -9038,21 +8919,9 @@ export const useEpicLabel = (ticketKey: string): string | null =>
     return epicLabel(entry?.detail?.parent, entry?.epicProgress);
   });
 
-/**
- * How many work items exist — the left rail's Work tab badge (story 030).
- *
- * Counts every ticket, Done ones included, matching the concept. The badge
- * answers "how much work is tracked here", not "how much is outstanding".
- */
-export const useTicketCount = () =>
-  useHiveStore((state) => state.tickets.length);
-
 /** Inbox unread count (stories 050, 021). */
 export const useUnreadCount = () =>
   useHiveStore((state) => state.notifs.filter((notif) => notif.unread).length);
-
-/** The inbox, newest first (story 051). */
-export const useNotifs = () => useHiveStore((state) => state.notifs);
 
 /** The Summons queue (HIVE-214): what waits on you, split for the pill. */
 export interface Summons {
@@ -9152,7 +9021,7 @@ export const useLedgerEntries = (filter?: LedgerReadQuery): LedgerEntry[] => {
 /**
  * Whether the shipper holds a PR, for its card's badge (HIVE-171).
  *
- * `slug` is `owner/name`. Memoised over the tail like `useBuildProgress`, so
+ * `slug` is `owner/name`. Memoised over the tail, so
  * the scan runs once per ledger change rather than once per store change.
  */
 export const useShipping = (slug: string, n: number): boolean => {
@@ -9226,13 +9095,6 @@ export const useReviewUrls = (): ReadonlySet<string> => {
 export const useHolderPost = (slug: string, n: number, holder: string | null): LedgerEntry | null => {
   const entries = useHiveStore((state) => state.ledger);
   return useMemo(() => (holder === null ? null : holderPost(entries, slug, n, holder)), [entries, slug, n, holder]);
-};
-
-/** The builder's latest progress on a ticket, for its card's line (HIVE-171). */
-export const useBuildProgress = (ticketKey: string): BuildProgress | undefined => {
-  const entries = useHiveStore((state) => state.ledger);
-
-  return useMemo(() => buildProgressFor(entries, ticketKey), [entries, ticketKey]);
 };
 
 /** What an agent last said on the ledger, as its panel row shows it (HIVE-204). */
@@ -9556,8 +9418,6 @@ export const useAnswerAsk = () => useHiveStore((state) => state.answerAsk);
 export const useDismissNotif = () =>
   useHiveStore((state) => state.dismissNotif);
 
-/** Empty the inbox — the panel's Clear all. */
-export const useClearNotifs = () => useHiveStore((state) => state.clearNotifs);
 
 /** Push a notification — the stream's entry point (stories 051, 061, HIVE-75). */
 export const usePushNotif = () => useHiveStore((state) => state.pushNotif);
@@ -9566,7 +9426,7 @@ export const usePushNotif = () => useHiveStore((state) => state.pushNotif);
  * What this window's attachment is doing, or `null` when it has none
  * (HIVE-150).
  *
- * The header chip and the attach pane both read this rather than
+ * The connection item and the attach pane both read this rather than
  * `AppInfo.attachedServerName`. That field is still the runtime truth, but it
  * is read on demand: a socket that dies without a config write leaves it
  * unread and the chip claiming an attachment that is gone. This is pushed.
@@ -9578,8 +9438,8 @@ export const useSetRemoteLink = () => useHiveStore((state) => state.setRemoteLin
 
 /**
  * What the dropped link lost that the user has not cleared yet (HIVE-211).
- * One count for the bar's foot, the Classic chip and the stage line, so Clear
- * anywhere clears everywhere.
+ * One count for the bar's foot and the stage line, so Clear anywhere clears
+ * everywhere.
  */
 export const useUnackedLost = (): number =>
   useHiveStore((state) =>

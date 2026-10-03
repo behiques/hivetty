@@ -232,16 +232,6 @@ describe('the live state', () => {
     expect(screen.queryByText(/Showing the first 200 — your query matched more\. Narrow it in Jira\./)).not.toBeInTheDocument();
   });
 
-  it('links a real ticket out to Jira', () => {
-    state().hydrateTickets([issue()], false);
-    render(<WorkPanel />);
-
-    expect(screen.getByRole('link', { name: 'HIVE-1' })).toHaveAttribute(
-      'href',
-      'https://behiques.atlassian.net/browse/HIVE-1',
-    );
-  });
-
   it('says so when the cap stopped paging', () => {
     state().hydrateTickets([issue()], true);
     render(<WorkPanel />);

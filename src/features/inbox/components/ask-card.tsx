@@ -26,15 +26,9 @@ interface AskCardProps {
   notif: HiveNotification;
   /** Narrowed by the dispatcher, so this component never re-checks the union. */
   thread: string;
-  /**
-   * `rail` is the Classic Inbox's card. `float` is round two's (HIVE-198): the
-   * arrival over the pill and the drawer's card, headed by the asker's glyph,
-   * what it did, and how long it has waited.
-   */
-  variant?: 'rail' | 'float';
-  /** Float only: a ✕ that folds the card into the pill. */
+  /** A ✕ that folds the card into the pill. */
   onClose?: () => void;
-  /** Float only: "Open <asker> ›" under the controls. */
+  /** "Open <asker> ›" under the controls. */
   openLink?: boolean;
 }
 
@@ -113,7 +107,7 @@ const rungsOf = (value: unknown): Rung[] =>
  * showing options that post into a thread this process cannot see would be a
  * control that lies.
  */
-export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = false }: AskCardProps) {
+export function AskCard({ notif, thread, onClose, openLink = false }: AskCardProps) {
   const entries = useThread(thread);
   const answerAsk = useAnswerAsk();
   const markAnsweredHere = useMarkAnsweredHere();
@@ -161,7 +155,6 @@ export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = f
   const age = useRelativeTime(ask?.ts ?? notif.createdAt);
   const askerEntity = useEntity(fromIsAgent ? from : '');
   const openEntity = useOpenEntity();
-  const float = variant === 'float';
 
   const [draft, setDraft] = useState<string | null>(null);
   const [reply, setReply] = useState('');
@@ -357,19 +350,11 @@ export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = f
       submit();
     };
 
-  const shell = (tone: string, children: ReactNode) => (
+  const shell = (children: ReactNode) => (
     <article
       data-notification={notif.id}
       aria-label={`Ask from ${asker}: ${notif.title}`}
-      className={
-        float
-          ? 'flex flex-col gap-[9px] rounded-[10px] border border-border bg-panel-2 px-3.5 py-3 text-left text-[12.5px]'
-          : cn(
-              'mb-[var(--cc-list-gap-sm)] flex flex-col gap-1 rounded-r-xl rounded-l border border-l-2 px-3 py-[var(--cc-card-py)] text-left last:mb-0',
-              'border-border',
-              tone,
-            )
-      }
+      className="flex flex-col gap-[9px] rounded-[10px] border border-border bg-panel-2 px-3.5 py-3 text-left text-[12.5px]"
     >
       {children}
     </article>
@@ -382,8 +367,8 @@ export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = f
   const fresh = Date.now() - (ask?.ts ?? notif.createdAt) < FRESH_MS;
   const verb = isPermission ? 'wants to run a command' : quote !== undefined ? 'drafted a reply' : 'asks';
 
-  // Round two's head row: the asker's glyph, its name, what it did, the wait, and the fold.
-  const floatMeta = () => (
+  // The head row: the asker's glyph, its name, what it did, the wait, and the fold.
+  const meta = () => (
     <div className="flex items-center gap-[7px] text-[12px] text-muted">
       {askerEntity !== undefined && isAgent(askerEntity) ? (
         <AgentTile icon={askerEntity.icon} tone="asking" live={0} size="sm" />
@@ -410,23 +395,7 @@ export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = f
     </div>
   );
 
-  const meta = (trailing?: ReactNode) =>
-    float ? (
-      floatMeta()
-    ) : (
-      <div className="flex items-center gap-1.5 text-[10px] text-subtle">
-        <span className="font-medium text-muted">{asker}</span>
-        {redirectedFrom !== undefined ? (
-          <span data-redirected-from={redirectedFrom}>meant for {redirectedFrom}, which ended</span>
-        ) : null}
-        <span className="opacity-50">·</span>
-        <span>{age}</span>
-        {trailing}
-      </div>
-    );
-
-  // The question: the rail's 12.5px line, or the float card's 14px title.
-  const titleClass = float ? 'text-[14px] font-semibold text-ink' : 'text-[12.5px] font-semibold text-ink';
+  const titleClass = 'text-[14px] font-semibold text-ink';
 
   /**
    * Answered, and checked **before** the missing-entry fallback below.
@@ -447,7 +416,6 @@ export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = f
    */
   if (answer !== undefined) {
     return shell(
-      'border-l-border',
       <div data-answered={answer.body} className="text-[11px] text-subtle">
         <span className="font-medium text-muted">{asker}</span>
         {' · answered '}
@@ -461,7 +429,6 @@ export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = f
   // The entry has aged out of the capped ledger. Say what main said, and stop.
   if (ask === undefined) {
     return shell(
-      'border-l-border',
       <>
         {meta()}
         <span className={titleClass}>{notif.title}</span>
@@ -491,14 +458,8 @@ export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = f
   const detail = rest.join('\n').trim();
 
   return shell(
-    'border-l-amber',
     <>
-      {meta(
-        <>
-          <span className="opacity-50">·</span>
-          <span>ask {ask.id.slice(-4)}</span>
-        </>,
-      )}
+      {meta()}
       <span className={titleClass}>{title}</span>
       {detail === '' ? null : isPermission ? (
         /*
@@ -654,7 +615,7 @@ export function AskCard({ notif, thread, variant = 'rail', onClose, openLink = f
         )}
       </div>
 
-      {float && openLink ? (
+      {openLink ? (
         <button
           type="button"
           onClick={() => openEntity(from)}

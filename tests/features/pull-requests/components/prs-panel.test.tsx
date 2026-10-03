@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clockTime } from '@lib/format-clock';
 import { PrsPanel } from '@features/pull-requests/components/prs-panel';
-import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { prRecord } from '@tests/support/prs';
@@ -84,21 +83,13 @@ describe('PrsPanel (the Hatchery)', () => {
     expect(screen.queryByRole('button', { name: /hatched/i })).toBeNull();
   });
 
-  it('opens the page in round two', async () => {
-    useAppearanceStore.setState({ layout: 'round-two' });
+  it('opens the PR page on a row click, never GitHub (HIVE-213)', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
     render(<PrsPanel />);
     await userEvent.click(screen.getByRole('button', { name: /^#10 / }));
     expect(useUiStore.getState().prPage).toMatchObject({ owner: 'acme', repo: 'nova-web', n: 10 });
     expect(useUiStore.getState().place).toBe('prs');
-  });
-
-  it('opens GitHub in Classic (D17)', async () => {
-    useAppearanceStore.setState({ layout: 'classic' });
-    const open = vi.spyOn(window, 'open').mockReturnValue(null);
-    render(<PrsPanel />);
-    await userEvent.click(screen.getByRole('button', { name: /^#10 / }));
-    expect(open).toHaveBeenCalledWith('https://github.com/acme/nova-web/pull/482', '_blank', 'noopener,noreferrer');
-    expect(useUiStore.getState().prPage).toBeNull();
+    expect(open).not.toHaveBeenCalled();
   });
 
   it('shows the search icon only while the sweep is live (R3)', () => {

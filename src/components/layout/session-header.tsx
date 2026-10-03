@@ -28,9 +28,9 @@ import { useSessionPr, useSpawnTerminalBeside } from '@stores/hive-store';
 import { useBackToOrch } from '@stores/ui-store';
 
 /**
- * Round two's header over a session or a terminal (HIVE-197). Classic keeps
- * `SessionMetaBar`. The model slot holds `ModelChip` (HIVE-196), which reads
- * the active entity: this header only renders over the active session.
+ * Round two's header over a session or a terminal (HIVE-197). The model slot
+ * holds `ModelChip` (HIVE-196), which reads the active entity: this header only
+ * renders over the active session.
  */
 export function SessionHeader({ entity }: { entity: Session | Terminal }) {
   const backToOrch = useBackToOrch();
@@ -87,7 +87,7 @@ function SessionLine({ session }: { session: Session }) {
         </span>
       </span>
       <span data-slot="model" className="shrink-0">
-        <ModelChip clip={false} />
+        <ModelChip />
       </span>
       <SessionMenu session={session} />
     </>

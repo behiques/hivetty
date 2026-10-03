@@ -23,7 +23,7 @@ interface TreeNodeProps {
   rootKey: string;
   /**
    * Main's id for the session whose changed files mark this tree (HIVE-201):
-   * `terminalOf(session)`. Absent in Classic's rail, which shows no marks.
+   * `terminalOf(session)`. Absent when no session is on stage: no marks.
    */
   changesId?: string;
   onOpenFile: (relPath: string) => void;

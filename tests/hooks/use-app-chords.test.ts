@@ -9,7 +9,7 @@ import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
 
 /**
- * The rail-collapse chords, from everywhere the terminal is not (this story).
+ * The panel chords, from everywhere the terminal is not (this story).
  *
  * `tests/lib/terminal/keymap.test.ts` proves `isRailChord`'s own platform
  * matrix; what is only provable here is that the hook actually wires a
@@ -19,7 +19,6 @@ import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet'
 describe('useAppChords', () => {
   beforeEach(() => {
     useAppearanceStore.getState().reset();
-    useAppearanceStore.getState().setLayout('classic');
     useHiveStore.getState().reset();
     seedDemoFleet();
     seedDemoProjectConfig();
@@ -35,20 +34,7 @@ describe('useAppChords', () => {
     vi.unstubAllGlobals();
   });
 
-  it('toggles the left rail on a window keydown', () => {
-    renderHook(() => useAppChords());
-
-    act(() => {
-      window.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'b', metaKey: true, bubbles: true }),
-      );
-    });
-
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(true);
-  });
-
-  it('toggles the list panel instead in round two (HIVE-195)', () => {
-    useAppearanceStore.getState().setLayout('round-two');
+  it('the left chord toggles the list panel (HIVE-213)', () => {
     renderHook(() => useAppChords());
 
     act(() => {
@@ -56,22 +42,9 @@ describe('useAppChords', () => {
     });
 
     expect(useUiStore.getState().panelOpen).toBe(false);
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(false);
   });
 
-  it('follows a layout switch made after mount', () => {
-    renderHook(() => useAppChords());
-    act(() => useAppearanceStore.getState().setLayout('round-two'));
-
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', metaKey: true, bubbles: true }));
-    });
-
-    expect(useUiStore.getState().panelOpen).toBe(false);
-  });
-
-  it('round two: the right chord opens and closes the session panel, not the rail (HIVE-201)', () => {
-    useAppearanceStore.getState().setLayout('round-two');
+  it('the right chord toggles the session panel (HIVE-213)', () => {
     renderHook(() => useAppChords());
 
     act(() => {
@@ -81,37 +54,19 @@ describe('useAppChords', () => {
     });
 
     expect(useAppearanceStore.getState().sessionPanelOpen).toBe(false);
-    expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
   });
 
-  it('toggles the right rail on the alt variant', () => {
-    renderHook(() => useAppChords());
-
-    act(() => {
-      window.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'b', metaKey: true, altKey: true, bubbles: true }),
-      );
-    });
-
-    expect(useAppearanceStore.getState().railCollapsedRight).toBe(true);
-  });
-
-  it('toggles the left rail on the non-mac chord', () => {
+  it('the non-mac left chord toggles the list panel', () => {
     vi.stubGlobal('navigator', { userAgentData: { platform: 'Windows' } });
     renderHook(() => useAppChords());
 
     act(() => {
       window.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'b',
-          ctrlKey: true,
-          shiftKey: true,
-          bubbles: true,
-        }),
+        new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, shiftKey: true, bubbles: true }),
       );
     });
 
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(true);
+    expect(useUiStore.getState().panelOpen).toBe(false);
   });
 
   it('ignores a keydown originating inside a terminal', () => {
@@ -129,7 +84,7 @@ describe('useAppChords', () => {
       );
     });
 
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(false);
+    expect(useUiStore.getState().panelOpen).toBe(true);
   });
 
   it('toggles once on a terminal chord event', () => {
@@ -143,7 +98,7 @@ describe('useAppChords', () => {
       );
     });
 
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(true);
+    expect(useUiStore.getState().panelOpen).toBe(false);
   });
 
   it('ignores a back chord', () => {
@@ -157,7 +112,7 @@ describe('useAppChords', () => {
       );
     });
 
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(false);
+    expect(useUiStore.getState().panelOpen).toBe(true);
   });
 
   it('stops listening when it unmounts', () => {
@@ -174,7 +129,7 @@ describe('useAppChords', () => {
       }),
     );
 
-    expect(useAppearanceStore.getState().railCollapsedLeft).toBe(false);
+    expect(useUiStore.getState().panelOpen).toBe(true);
   });
 
   describe('terminal-here', () => {

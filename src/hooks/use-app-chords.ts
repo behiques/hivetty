@@ -8,7 +8,7 @@ import {
   type KeyEventLike,
   type TerminalChordDetail,
 } from '@lib/terminal/keymap';
-import { useLayout, useToggleRailCollapsed, useToggleSessionPanel } from '@stores/appearance-store';
+import { useToggleSessionPanel } from '@stores/appearance-store';
 import { useSpawnTerminalBeside } from '@stores/hive-store';
 import { useActiveTab, useTogglePanel } from '@stores/ui-store';
 
@@ -33,11 +33,9 @@ interface AppChord {
  * docblock said a third chord is when a table earns itself. The terminal-here
  * chord is the third. What the table shares is the two listeners and the
  * de-duplication between them; what it does not become is a binding registry —
- * `header.tsx` still defers `Cmd+,` to story 060, and nothing here is
- * rebindable.
+ * `Cmd+,` is still deferred to story 060, and nothing here is rebindable.
  */
 export function useAppChords(): void {
-  const toggleRailCollapsed = useToggleRailCollapsed();
   const toggleSessionPanel = useToggleSessionPanel();
   const spawnTerminalBeside = useSpawnTerminalBeside();
   const activeTab = useActiveTab();
@@ -51,13 +49,7 @@ export function useAppChords(): void {
     activeTabRef.current = activeTab;
   }, [activeTab]);
 
-  // Read through a ref for the same reason: a layout switch must not re-bind the chords.
   const togglePanel = useTogglePanel();
-  const layout = useLayout();
-  const layoutRef = useRef(layout);
-  useEffect(() => {
-    layoutRef.current = layout;
-  }, [layout]);
 
   useEffect(() => {
     const isMac = isMacPlatform();
@@ -66,16 +58,14 @@ export function useAppChords(): void {
       {
         matches: (event, mac) => isRailChord(event, mac) === 'left',
         name: 'rail-left',
-        // Round two has no left rail to collapse; the chord closes its list panel (HIVE-195).
-        run: () =>
-          layoutRef.current === 'round-two' ? togglePanel() : toggleRailCollapsed('left'),
+        // The list panel beside the stage (HIVE-195).
+        run: () => togglePanel(),
       },
       {
         matches: (event, mac) => isRailChord(event, mac) === 'right',
         name: 'rail-right',
-        // Round two's right side is the session panel; the chord opens and closes it (HIVE-201).
-        run: () =>
-          layoutRef.current === 'round-two' ? toggleSessionPanel() : toggleRailCollapsed('right'),
+        // The session panel (HIVE-201).
+        run: () => toggleSessionPanel(),
       },
       {
         matches: (event) => isTerminalHereChord(event),
@@ -115,5 +105,5 @@ export function useAppChords(): void {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener(TERMINAL_CHORD_EVENT, onChord);
     };
-  }, [toggleRailCollapsed, toggleSessionPanel, spawnTerminalBeside, togglePanel]);
+  }, [toggleSessionPanel, spawnTerminalBeside, togglePanel]);
 }

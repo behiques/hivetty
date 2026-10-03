@@ -18,16 +18,13 @@ describe('App', () => {
     document.body.removeAttribute('data-theme');
     useUiStore.getState().reset();
     useAppearanceStore.getState().reset();
-    useAppearanceStore.getState().setLayout('classic');
   });
 
   it('mounts the app shell', () => {
     render(<App />);
 
-    expect(screen.getByRole('banner')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Places' })).toBeInTheDocument();
     expect(screen.getByRole('main')).toBeInTheDocument();
-    expect(
-      screen.getByRole('complementary', { name: 'Activity' }),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 });

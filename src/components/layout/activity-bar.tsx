@@ -33,7 +33,7 @@ const ITEM =
  * Picking a place is the whole interaction; the ui-store's `selectPlace` owns
  * what a click on the active one means. The foot holds the connection item
  * (HIVE-196) and Settings; Search is left out until a story says what it
- * searches. The team name the header's `BrandBlock` shows has no room
+ * searches. The team name has no room
  * here, so it is the glyph's tooltip.
  */
 export function ActivityBar() {

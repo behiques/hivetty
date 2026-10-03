@@ -771,14 +771,14 @@ describe('AskCard', () => {
   });
 });
 
-describe('AskCard float variant (HIVE-198)', () => {
+describe('AskCard head (HIVE-198)', () => {
   afterEach(() => {
     Reflect.deleteProperty(window, 'hive');
   });
 
   it('heads the card with the asker, what it did, and the wait', () => {
     seedLedger([{ ...ask, ts: Date.now() }]);
-    render(<AskCard notif={notif} thread="a41" variant="float" />);
+    render(<AskCard notif={notif} thread="a41" />);
     expect(screen.getByText('drone')).toBeInTheDocument();
     expect(screen.getByText('asks')).toBeInTheDocument();
     expect(screen.getByText('now')).toHaveClass('text-amber');
@@ -787,7 +787,7 @@ describe('AskCard float variant (HIVE-198)', () => {
 
   it('says it drafted a reply when the ask carries a quote', () => {
     seedLedger([{ ...ask, meta: { options: ['Send it', 'Edit', 'Discard'], quote: 'Yes, today.' } }]);
-    render(<AskCard notif={notif} thread="a41" variant="float" />);
+    render(<AskCard notif={notif} thread="a41" />);
     expect(screen.getByText('drafted a reply')).toBeInTheDocument();
   });
 
@@ -798,13 +798,13 @@ describe('AskCard float variant (HIVE-198)', () => {
       input: { command: 'pnpm test' },
     });
     seedLedger([{ ...ask, body: honest.body, meta: honest.meta }]);
-    render(<AskCard notif={{ ...notif, kind: 'agent.permission' }} thread="a41" variant="float" />);
+    render(<AskCard notif={{ ...notif, kind: 'agent.permission' }} thread="a41" />);
     expect(screen.getByText('wants to run a command')).toBeInTheDocument();
   });
 
   it('shows the age, not now, once the ask is a minute old', () => {
     seedLedger([{ ...ask, ts: Date.now() - 5 * 60_000 }]);
-    render(<AskCard notif={notif} thread="a41" variant="float" />);
+    render(<AskCard notif={notif} thread="a41" />);
     expect(screen.queryByText('now')).toBeNull();
   });
 
@@ -812,12 +812,12 @@ describe('AskCard float variant (HIVE-198)', () => {
     const agent = { kind: 'agent', id: 'drone', name: 'drone', icon: 'ph-robot' } as unknown as Agent;
     seedLedger([ask]);
     useHiveStore.setState((state) => ({ entities: { ...state.entities, drone: agent }, agentOrder: ['drone'] }));
-    const { container, unmount } = render(<AskCard notif={notif} thread="a41" variant="float" />);
+    const { container, unmount } = render(<AskCard notif={notif} thread="a41" />);
     expect(container.querySelector('polygon')).not.toBeNull();
     unmount();
 
     seedLedger([{ ...ask, from: 'sess-a' }]);
-    const session = render(<AskCard notif={notif} thread="a41" variant="float" />);
+    const session = render(<AskCard notif={notif} thread="a41" />);
     expect(session.container.querySelector('polygon')).toBeNull();
     expect(session.container.querySelector('.bg-amber.rounded-full')).not.toBeNull();
   });
@@ -825,7 +825,7 @@ describe('AskCard float variant (HIVE-198)', () => {
   it('a ✕ folds it when onClose is given', async () => {
     const onClose = vi.fn();
     seedLedger([ask]);
-    render(<AskCard notif={notif} thread="a41" variant="float" onClose={onClose} />);
+    render(<AskCard notif={notif} thread="a41" onClose={onClose} />);
     await userEvent.click(screen.getByRole('button', { name: 'Fold into the pill' }));
     expect(onClose).toHaveBeenCalled();
   });
@@ -834,16 +834,16 @@ describe('AskCard float variant (HIVE-198)', () => {
     seedLedger([ask]);
     const openEntity = vi.fn(() => true);
     useHiveStore.setState({ openEntity });
-    render(<AskCard notif={notif} thread="a41" variant="float" openLink />);
+    render(<AskCard notif={notif} thread="a41" openLink />);
     await userEvent.click(screen.getByRole('button', { name: 'Open drone ›' }));
     expect(openEntity).toHaveBeenCalledWith('drone');
   });
 
-  it('the rail variant is unchanged: no verb, no ✕', () => {
+  it('always draws the float head: glyph, asker, verb and the wait (HIVE-213)', () => {
     seedLedger([ask]);
-    render(<AskCard notif={notif} thread="a41" onClose={() => {}} />);
-    expect(screen.queryByText('asks')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Fold into the pill' })).toBeNull();
+    render(<AskCard notif={notif} thread="a41" />);
+    expect(screen.getByText('asks')).toBeInTheDocument();
+    expect(screen.getByRole('article')).toHaveClass('rounded-[10px]');
   });
 });
 

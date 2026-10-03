@@ -92,21 +92,6 @@
   --cc-brand-fill-strong: #334fa9; /* Serenity — the signature brand blue */
   --cc-on-brand: #ffffff;
 
-  /**
-   * The diffused glow behind the header's hive mark (HIVE-100).
-   *
-   * The splash's `.bloom` at a smaller scale, and for the same reason: the hive
-   * sprite is a dark creature, so on `--cc-bg` it loses its silhouette to the
-   * ground it sits on. A pool of the signature blue behind it gives the outline
-   * something to be dark *against*.
-   *
-   * A token rather than a literal in the utility, because the strength has to
-   * differ per theme even though `--cc-brand-fill-strong` deliberately does
-   * not: on a near-white panel the same 55% reads as a blue smudge around the
-   * logo rather than as depth behind it.
-   */
-  --cc-bloom: color-mix(in srgb, var(--cc-brand-fill-strong) 72%, transparent);
-
   /* Notification badge fill, and darker than `--cc-red` so that the badge text
      above it clears AA. What that text *is* is `--cc-on-danger`, below — this
      comment used to say "white", which was true of every theme until one
@@ -131,18 +116,16 @@
   --cc-chitin: #b9a7f0;
 
   /**
-   * Rail density (story 105) — the comfortable values, which are the numbers
-   * the rails have always used.
+   * Density (story 105) — the comfortable values.
    *
    * Spacing rather than colour, but the same mechanism and the same reason: one
-   * attribute write on <body> re-spaces both rails and every row inside them,
-   * and no component re-renders to do it. Density is a preference, so it has to
+   * attribute write on <body> re-spaces every list row and card, and no
+   * component re-renders to do it. Density is a preference, so it has to
    * survive a reload; a prop threaded through six panels would have to be read
    * from the store by each of them.
    *
-   * These are what actually read as "dense" — rail width, the gap under a
-   * rail's tab bar, the gap between items in a list, and the vertical padding
-   * of a bordered card.
+   * These are what actually read as "dense" — the gap between items in a
+   * list, and the vertical padding of a row and of a bordered card.
    *
    * There are two list scales because the panels already had two: work and the
    * activity feed sit at 10px, the inbox and PRs at 8px. Collapsing them to one
@@ -199,32 +182,12 @@
   --cc-code-active-line: #202b50;
   --cc-code-selection: #2b3768;
 
-  --cc-rail-w-left: 320px;
-  --cc-rail-w-right: 316px;
-  /**
-   * The same two widths, as they are when the rail is **open**.
-   *
-   * A collapsed rail paints the pair above at `RAIL_STRIP` — 44px — which is
-   * the truth for the rail and the wrong number for anything that merely wants
-   * to line up with where the rail's edge lives. `header.tsx` is the caller
-   * that cares: sizing its zones from the plain pair made the whole header
-   * reflow every time a rail was toggled, sliding the chips into the wordmark
-   * and the counts into the theme button.
-   *
-   * These must stay in lockstep with the pair above — `rail-width.test.ts`
-   * asserts it, the same way it already asserts both against `RAIL_MIN`.
-   * `applyRailWidths` overrides them inline only when a rail has been dragged
-   * off its default, so these values are what is painted the rest of the time.
-   */
-  --cc-rail-w-left-open: 320px;
-  --cc-rail-w-right-open: 316px;
   /* Round two's frame (HIVE-195): fixed, not density-dependent. */
   --cc-bar-w: 64px;
   --cc-list-w: 300px;
   /* Round two's session panel (HIVE-201): open, and closed to its strip. */
   --cc-session-panel-w: 320px;
   --cc-session-strip-w: 46px;
-  --cc-rail-gap: 18px;
   --cc-list-gap: 10px;
   --cc-list-gap-sm: 8px;
   --cc-row-py: 7px;
@@ -236,12 +199,6 @@
  * unmodified — the same arrangement `data-theme` uses for dark.
  */
 body[data-density='compact'] {
-  --cc-rail-w-left: 284px;
-  --cc-rail-w-right: 276px;
-  /** In lockstep with the pair above — see the `:root` block. */
-  --cc-rail-w-left-open: 284px;
-  --cc-rail-w-right-open: 276px;
-  --cc-rail-gap: 11px;
   --cc-list-gap: 6px;
   --cc-list-gap-sm: 5px;
   --cc-row-py: 4px;
@@ -272,10 +229,6 @@ body[data-theme='light'] {
   --cc-chip-hover: #e2eaee;
   --cc-creep: #b7a3e6;
   --cc-chitin: #6a54b0;
-
-  /* The mark needs no rescuing from a light ground — it is already the darkest
-     thing on it. What is left is a hint of depth, not a halo. */
-  --cc-bloom: color-mix(in srgb, var(--cc-brand-fill-strong) 14%, transparent);
 
   /**
    * The terminal surface, which **does** follow the theme.
