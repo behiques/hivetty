@@ -5,10 +5,11 @@ import {
   deleteAgent,
   frontmatterName,
   loadAgents,
-  nextAgentName,
+  nameProblem,
   readAgent,
   renameAgent,
   saveAgent,
+  templateFor,
 } from '@/lib/agents';
 import {
   keepShippedMine,
@@ -20,8 +21,8 @@ import {
 import { Icon } from '@components/ui/icon';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { AgentEditor } from '@features/settings/components/agent-editor';
-import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
+import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import {
   HeldBanner,
   ShippedDot,
@@ -29,11 +30,7 @@ import {
 } from '@features/shared/components/shipped-marker';
 import { useAgents } from '@hooks/use-agents';
 import { useShipped } from '@hooks/use-shipped';
-import {
-  AGENT_NAME_PATTERN,
-  isReservedAgentName,
-  type AgentProblem,
-} from '@shared/agent-contract';
+import type { AgentProblem } from '@shared/agent-contract';
 import { agentRunQueued, agentRunRefusal } from '@stores/hive-store';
 
 /**
@@ -58,57 +55,6 @@ import { agentRunQueued, agentRunRefusal } from '@stores/hive-store';
  *    contradicts its own folder — the window that forced `renameSkill` to
  *    report whether the move landed.
  */
-
-/**
- * What a new agent starts as.
- *
- * A template rather than an empty box: the frontmatter is not guessable and a
- * file without it is one main refuses.
- *
- * **`name` is seeded, not blank.** It used to be left empty on the argument
- * that the user must supply it and that seeding invites a tree full of
- * `new-agent`s — but the form had no name control at all, so the only
- * expression that argument found was a red box the form could not clear. A
- * free `agent-n` plus an editable field is the same argument made somewhere
- * the user can act on it, and it is how a session already opens.
- *
- * `icon` is seeded with a name the icon registry can actually draw. `Robot`
- * was not one: `GLYPHS` is keyed `ph-robot`, so every agent created from this
- * template rendered the fallback question mark on its own row.
- *
- * The body is a **stub instruction**, not a sentence about the agent. It used to
- * read "You are … . On every wake, read your ledger inbox first, then do your
- * job" — which is both the self-description shape and the exact "do your job"
- * phrasing that `wakePrompt` dropped for naming no work. A user who kept the
- * seeded body got an agent whose standing instructions said nothing to carry
- * out, one screen after the Source tab told them to write instructions rather
- * than a description.
- */
-const templateFor = (taken: readonly string[]): string => `---
-name: ${nextAgentName(taken)}
-description: What this agent watches, and what it does about it
-icon: ph-robot
-wake:
-  every: 5m
-  on: [ledger]
-autonomy: ask
----
-
-Watch … , and when you find … , do … .
-`;
-
-/** Why this name cannot be saved, or `null`. Mirrors main's own rules. */
-function nameProblem(name: string, taken: readonly string[]): string | null {
-  if (name === '') return 'Give the agent a name in its frontmatter.';
-  if (isReservedAgentName(name)) {
-    return `"${name}" is reserved by The Hive.`;
-  }
-  if (!AGENT_NAME_PATTERN.test(name)) {
-    return 'Lowercase letters, digits and dashes only.';
-  }
-  if (taken.includes(name)) return `You already have an agent called ${name}.`;
-  return null;
-}
 
 export function AgentsSection() {
   const snapshot = useAgents();
