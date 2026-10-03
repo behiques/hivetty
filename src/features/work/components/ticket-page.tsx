@@ -5,6 +5,7 @@ import type { Ticket } from '@/types/ticket';
 
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 import { AdfBlocks } from '@features/work/components/adf-blocks';
+import { JiraSetupPage } from '@features/work/components/jira-setup-page';
 import { TicketPageConversation } from '@features/work/components/ticket-page-conversation';
 import { LinesSkeleton, TicketProblem } from '@features/work/components/ticket-page-parts';
 import { TicketProperties } from '@features/work/components/ticket-properties';
@@ -16,6 +17,7 @@ import {
   useReloadTicketTransitions,
   useTicketDetail,
   useTicketRowModels,
+  useWorkListed,
 } from '@stores/hive-store';
 import { useWorkTicket } from '@stores/ui-store';
 
@@ -149,11 +151,16 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
   );
 }
 
-/** The Work place's stage (HIVE-203, D3): the open ticket's page, or a prompt to pick one. */
+/**
+ * The Work place's stage (HIVE-203, D3): the open ticket's page, or a prompt to
+ * pick one. With nothing to list it says why instead (HIVE-211).
+ */
 export function WorkStage() {
   const key = useWorkTicket();
+  const listed = useWorkListed();
 
   if (key === null) {
+    if (!listed) return <JiraSetupPage />;
     return (
       <section aria-label="Work" className="flex flex-1 items-center justify-center">
         <p className="text-[13px] text-subtle">Pick a ticket</p>

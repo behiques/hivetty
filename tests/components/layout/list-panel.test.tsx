@@ -1,9 +1,12 @@
 import { act, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ListPanel } from '@components/layout/list-panel';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore, type Place } from '@stores/ui-store';
+import { resetProjectConfig } from '@lib/project-config';
+import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
 import { prRecord } from '@tests/support/prs';
 
 vi.mock('@features/projects/components/projects-panel', () => ({ ProjectsPanel: () => <p>projects-panel</p> }));
@@ -18,7 +21,12 @@ vi.mock('@features/pull-requests/components/prs-panel', () => ({ PrsPanel: () =>
 describe('ListPanel (HIVE-195)', () => {
   beforeEach(() => {
     useUiStore.getState().reset();
+    useHiveStore.getState().reset();
+    // Every place listed (HIVE-211): a project, an agent, and Work and PRs still loading.
+    seedDemoFleet();
+    seedDemoProjectConfig();
   });
+  afterEach(() => resetProjectConfig());
 
   it.each<[Place, string, string]>([
     ['sessions', 'Sessions list', 'sessions-panel'],
@@ -75,5 +83,72 @@ describe('ListPanel, the Hatchery (HIVE-205)', () => {
     useHiveStore.setState({ prs: [prRecord()], prSource: { kind: 'live', stale: false, repos: 1 } });
     render(<ListPanel />);
     expect(screen.getByRole('region', { name: 'PRs list' }).className).not.toContain('animate-ccslidein');
+  });
+});
+
+describe('ListPanel, no list without items (HIVE-211)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    useHiveStore.getState().reset();
+  });
+
+  it('draws no Work panel when Jira is not connected', () => {
+    useUiStore.setState({ place: 'work', panelOpen: true });
+    useHiveStore.setState({ ticketSource: { kind: 'unconfigured' } });
+    render(<ListPanel />);
+    expect(screen.queryByRole('region', { name: 'Work list' })).toBeNull();
+  });
+
+  it('draws no Agents panel with no agent defined', () => {
+    useUiStore.setState({ place: 'agents', panelOpen: true });
+    render(<ListPanel />);
+    expect(screen.queryByRole('region', { name: 'Agents list' })).toBeNull();
+  });
+
+  it('draws no Sessions panel with no project', () => {
+    useUiStore.setState({ place: 'sessions', panelOpen: true });
+    render(<ListPanel />);
+    expect(screen.queryByRole('region', { name: 'Sessions list' })).toBeNull();
+  });
+
+  it('draws no PRs panel while gh is signed out', () => {
+    useUiStore.setState({ place: 'prs', panelOpen: true });
+    useHiveStore.setState({ prSource: { kind: 'unconfigured', message: 'm', reason: 'unauthenticated' } });
+    render(<ListPanel />);
+    expect(screen.queryByRole('region', { name: 'PRs list' })).toBeNull();
+  });
+});
+
+describe('ListPanel, the narrow overlay (HIVE-211)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    useHiveStore.getState().reset();
+  });
+
+  it('sits beside the stage when wide', () => {
+    useUiStore.setState({ place: 'work', panelOpen: true });
+    render(<ListPanel />);
+    expect(screen.getByRole('region', { name: 'Work list' })).not.toHaveClass('absolute');
+    expect(screen.queryByTestId('list-veil')).toBeNull();
+  });
+
+  it('overlays the stage while narrow, and the veil or Escape closes it', async () => {
+    useUiStore.setState({ place: 'work', panelOpen: true, narrow: true });
+    render(<ListPanel />);
+    const region = screen.getByRole('region', { name: 'Work list' });
+    expect(region).toHaveClass('absolute', 'shadow-lg');
+    await userEvent.click(screen.getByTestId('list-veil'));
+    expect(useUiStore.getState().panelOpen).toBe(false);
+
+    act(() => useUiStore.setState({ panelOpen: true }));
+    await userEvent.keyboard('{Escape}');
+    expect(useUiStore.getState().panelOpen).toBe(false);
+  });
+
+  it('Escape does nothing when wide', async () => {
+    useUiStore.setState({ place: 'work', panelOpen: true });
+    render(<ListPanel />);
+    await userEvent.keyboard('{Escape}');
+    expect(useUiStore.getState().panelOpen).toBe(true);
   });
 });

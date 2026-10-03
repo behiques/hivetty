@@ -8,7 +8,11 @@ GitHub pull requests. Both refresh every 60 seconds; overscroll either list to r
 
 ## Connect Jira
 
-Until Jira is connected the Work tab says so and points you here.
+Until Jira is connected the Work tab says so and points you here. In round two, Work has
+no list at all until there is something on it: the stage reads **Jira isn't connected**,
+with **Connect Jira** and **Learn what the Hive reads**, both of which open
+**Settings › Integrations**. If the first read fails, the same page shows Jira's error and
+**Retry**. Connected with nothing assigned, it reads **No tickets for you**.
 
 1. Open **Settings › Integrations** and scroll to **JIRA**.
 2. **Site**: the bare hostname, like `your-team.atlassian.net`. A pasted `https://` is trimmed.
@@ -43,6 +47,10 @@ default; it is not added to it.
 On each ticket you can move it through its workflow, read and add comments, and see the PRs
 and sessions linked to it. Type in **Search tickets** to search every ticket, any assignee,
 any status; tick **Mine only** to narrow it.
+
+When a refresh fails after a good read, the list stays and an amber line above it says when:
+"Couldn't reach Jira at 10:42. Showing what was loaded at 10:31." **Try again** re-reads.
+The PRs list does the same for GitHub.
 
 ## The ticket page
 
@@ -177,6 +185,11 @@ GitHub only while it is open.
 
 If the tab stays empty, run `gh auth status`. **Settings › Integrations › Command line** shows
 which `gh` The Hive found and who it is signed in as.
+
+In round two the PRs place says this itself. With `gh` signed out the stage reads **The
+GitHub CLI isn't signed in**, shows `gh auth login`, and offers **Open a terminal** (in the
+project on stage, else the first project) and **Check again**. `gh` not installed and no
+GitHub project get their own titles with the same two buttons.
 
 ## What the agents are doing
 

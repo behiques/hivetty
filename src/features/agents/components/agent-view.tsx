@@ -3,6 +3,7 @@ import { useState, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
 import type { Agent } from '@/types/entity';
 
+import { Button } from '@components/ui/button';
 import { STATUS_TEXT, STATUS_LABEL } from '@components/ui/status-dot';
 import { AgentLedger } from '@features/agents/components/agent-ledger';
 import { AgentRunLog } from '@features/agents/components/agent-run-log';
@@ -145,7 +146,8 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
             */
             className="flex flex-wrap gap-x-7 gap-y-2 border-b border-border-soft pb-3 font-sans text-[12.5px]"
           >
-            <Fact label="Status" tone={STATUS_TEXT[facts.status]}>
+            {/* Paused reads amber here (HIVE-211): the bar below says why nothing happens. `STATUS_TEXT` is shared and stays. */}
+            <Fact label="Status" tone={facts.status === 'paused' ? 'text-amber' : STATUS_TEXT[facts.status]}>
               {STATUS_LABEL[facts.status]}
               {facts.askRef === undefined ? '' : ` ${facts.askRef}`}
             </Fact>
@@ -203,6 +205,9 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
         says `overmind ❯`: the row is addressed to somebody, and which somebody
         is the one thing a prompt should say.
       */}
+      {entity.status === 'paused' ? (
+        <PauseBar id={entity.id} onNotice={onNotice} />
+      ) : (
       <div data-stage-input="" className="flex shrink-0 items-center gap-2.5 border-t border-border-soft bg-term-input px-[18px] py-2.5">
         <span className="shrink-0 font-mono text-[13px] text-green">
           {`${entity.id} ❯`}
@@ -228,6 +233,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
           className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-ink caret-green outline-none placeholder:text-subtle"
         />
       </div>
+      )}
 
       {/*
         The console's hint bar, in the one place it differs: the notice takes
@@ -241,10 +247,12 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
         not exist in the log.
       */}
       {notice === null ? (
+        entity.status === 'paused' ? null : (
         <p className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-subtle">
           ↵ posts to the ledger as the overmind · not a terminal — nothing here
           reaches a process
         </p>
+        )
       ) : (
         <p
           role="status"
@@ -253,6 +261,36 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
           {notice}
         </p>
       )}
+    </div>
+  );
+}
+
+const messageOf = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
+
+/**
+ * A paused agent's prompt row (HIVE-211): nothing it is told will wake it, so
+ * the input gives way to why, and the way back. The draft lives in
+ * `AgentView`, above this, so Resume brings the input back as it was typed.
+ */
+function PauseBar({ id, onNotice }: { id: string; onNotice: (notice: string | null) => void }) {
+  // The same call the row's Pause toggle makes; it rejects when the runtime is not up.
+  const resume = () => {
+    onNotice(null);
+    void window.hive?.agents.resume({ name: id }).catch((cause: unknown) => onNotice(messageOf(cause)));
+  };
+
+  return (
+    <div
+      role="status"
+      className="flex shrink-0 items-center gap-3 border-t border-border-soft bg-[color-mix(in_srgb,var(--cc-amber)_10%,var(--cc-term-input))] px-[18px] py-2.5 text-[12.5px] text-muted"
+    >
+      <span className="flex-1">
+        <b className="text-amber">{`${id} is paused.`}</b> Nothing wakes it, not the ledger, not a schedule, until
+        you resume it. Your draft is kept.
+      </span>
+      <Button variant="primary" onClick={resume}>
+        Resume
+      </Button>
     </div>
   );
 }

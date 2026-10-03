@@ -41,9 +41,16 @@ describe('PrsStage', () => {
     expect(screen.getByRole('heading', { name: 'The Hatchery is quiet' })).toBeInTheDocument();
   });
 
-  it('asks for a pick while the sweep is not live', () => {
-    useHiveStore.setState({ prs: [], prSource: { kind: 'unconfigured', message: 'Pull requests need the desktop app.' } });
+  it('asks for a pick while the sweep is loading', () => {
+    useHiveStore.setState({ prs: [], prSource: { kind: 'loading' } });
     render(<PrsStage />);
     expect(screen.getByText('Pick a pull request')).toBeInTheDocument();
+  });
+
+  it('says why gh gave nothing (HIVE-211)', () => {
+    useHiveStore.setState({ prs: [], prSource: { kind: 'unconfigured', message: 'Pull requests need the desktop app.', reason: null } });
+    render(<PrsStage />);
+    expect(screen.getByRole('heading', { name: "Pull requests aren't available here" })).toBeInTheDocument();
+    expect(screen.queryByText('Pick a pull request')).toBeNull();
   });
 });

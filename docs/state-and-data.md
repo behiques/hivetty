@@ -626,7 +626,7 @@ Every ticket is a real Jira issue. `ticketSource` says where the read has got to
 type TicketSource =
   | { kind: 'loading' }                               // boot, and every refresh
   | { kind: 'unconfigured' }                          // no credential — or a browser
-  | { kind: 'live'; stale: boolean; capped: boolean }
+  | { kind: 'live'; stale: boolean; capped: boolean; failedAt?: number }
   | { kind: 'failed'; message: string };
 ```
 
@@ -658,6 +658,19 @@ Two properties worth not breaking:
 - **`capped` is not a truncation.** Reaching the 200-issue limit sets the flag so
   the panel can say so. A backlog silently cut to 200 is the one failure a read
   path can have that the user cannot detect for themselves.
+
+**The stale line's two times (HIVE-211, D5).** `failedAt` is stamped on `live`
+once, when `stale` flips: the first failure of the outage, never moved by the
+repeats. The time of the last good read is **beside** the source, in
+`ticketsReadAt` (and `prsReadAt` for PRs), written by every successful hydrate
+and read through `useTicketsReadAt()` / `usePrsReadAt()`. Not inside the
+source, because the sweep runs once a minute and `hydrateTickets` keeps the
+source referentially stable on a quiet sweep; a time inside it would re-render
+every reader of the source every minute. Only the stale line reads it.
+
+`PrSource.unconfigured` carries `reason` (HIVE-211, D6): `'not-installed'`,
+`'unauthenticated'`, `'no-repos'`, or `null` for the browser preview, which has
+no `gh` to be wrong about. The PRs stage picks its title by it.
 
 ## The console grammar
 

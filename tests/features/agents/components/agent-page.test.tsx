@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -278,9 +278,12 @@ describe('AgentPage — Pause', () => {
   it.each(['sleeping', 'paused'] as const)('has no Pause or Resume in the header for a %s agent', (status) => {
     seed({ status });
     stub();
-    render(<AgentPage name="watcher" />);
+    const { container } = render(<AgentPage name="watcher" />);
+    const header = container.querySelector('header');
+    if (header === null) throw new Error('the page has a header');
 
-    expect(screen.queryByRole('button', { name: /Pause|Resume/ })).not.toBeInTheDocument();
+    // A paused agent's Resume is the pause bar's, at the foot (HIVE-211), never the header's.
+    expect(within(header).queryByRole('button', { name: /Pause|Resume/ })).not.toBeInTheDocument();
   });
 
   it('offers no Stop, because a run is one bounded turn', () => {

@@ -2,6 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { clockTime } from '@lib/format-clock';
 import { WorkPanel } from '@features/work/components/work-panel';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
@@ -279,11 +280,20 @@ describe('the stale state', () => {
     expect(screen.getByText('HIVE-1')).toBeInTheDocument();
   });
 
-  it('says they may be out of date, and offers a retry', async () => {
+  it('says when it failed and when the list was read, and offers a retry (HIVE-211)', async () => {
     const user = userEvent.setup();
+    const { ticketSource, ticketsReadAt } = state();
+    if (ticketSource.kind !== 'live' || ticketSource.failedAt === undefined || ticketsReadAt === null) {
+      throw new Error('the beforeEach leaves a stale live source');
+    }
     render(<WorkPanel />);
 
-    expect(screen.getByText(/may be out of date/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `Couldn't reach Jira at ${clockTime(ticketSource.failedAt)}. Showing what was loaded at ${clockTime(ticketsReadAt)}.`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/may be out of date/i)).toBeNull();
 
     await user.click(screen.getByRole('button', { name: /Try again/i }));
     expect(refreshTickets).toHaveBeenCalled();

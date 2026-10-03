@@ -4,8 +4,10 @@ import { cn } from '@/lib/utils';
 import {
   branchLabel,
   cwdTail,
+  endedReason,
   entityLabel,
   isTerminal,
+  isTerminated,
   terminalLabel,
   type Session,
   type Terminal,
@@ -56,6 +58,9 @@ export function SessionHeader({ entity }: { entity: Session | Terminal }) {
 
 function SessionLine({ session }: { session: Session }) {
   const tone = statusText(session.status, session.idleDetail);
+  // An ended session says so, and why (HIVE-211); the cover over the terminal says the rest.
+  const ended = isTerminated(session);
+  const reason = ended ? endedReason(session) : undefined;
 
   return (
     <>
@@ -69,9 +74,13 @@ function SessionLine({ session }: { session: Session }) {
         </span>
       </span>
       <span className="flex-1" />
-      <span className={cn('flex shrink-0 items-center gap-1.5 text-[12px]', tone)}>
+      <span
+        className={cn('flex shrink-0 items-center gap-1.5 text-[12px]', ended ? 'text-muted' : tone)}
+        title={reason}
+        aria-label={reason === undefined ? undefined : `Ended: ${reason}`}
+      >
         <StatusDot status={session.status} detail={session.idleDetail} />
-        {statusLabel(session.status, session.idleDetail)}
+        {ended ? 'Ended' : statusLabel(session.status, session.idleDetail)}
       </span>
       <span data-slot="model" className="w-[200px] shrink-0">
         <ModelChip />

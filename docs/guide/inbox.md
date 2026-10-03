@@ -91,7 +91,8 @@ bottom-right corner, just above the page's own input. Classic is unchanged.
 
 - **The pill** counts what needs you: open questions, permission requests,
   review requests and blocked sessions, leaving out the session on stage. It is
-  absent at zero.
+  absent at zero, and reads **99+** past ninety-nine; a screen reader still
+  hears the exact number.
 - **Cards.** A new ask rises above the pill as an answerable card. It stays 5
   seconds, then folds into the pill. Pointing at it, focusing in it, or
   answering it holds it up; ✕ folds it at once. Several at once stack, the

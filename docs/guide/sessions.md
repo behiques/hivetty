@@ -126,6 +126,19 @@ In round two a header sits over a session's terminal instead of the meta bar:
 A terminal gets the same header: its name over `project · folder`, and its state. It has
 no model and no menu.
 
+### When a session ends
+
+The header's status reads **Ended**, with the reason as its tooltip. A card covers the
+terminal: **This session ended**, why, and how long ago. When the conversation can be picked
+up it adds that its transcript is on disk, and **Resume**. **‹ Overmind** is always there.
+✕ closes the card to a strip along the foot, with the reason, Resume and Overmind, so you
+can read the scrollback above it. Closing is per session and forgotten on restart.
+
+### A narrow window
+
+Under 1,200px wide the list panel floats over the stage instead of sitting beside it, and
+starts closed. The bar icon opens it; picking a row, clicking beside it or Esc closes it.
+
 ## Terminals
 
 A terminal is a login shell in a project with no Claude in it: no hooks, no cost, no

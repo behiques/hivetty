@@ -263,7 +263,13 @@ export type TicketSource =
   /** Desktop with nothing configured. The panel explains rather than sits empty. */
   | { kind: 'unconfigured' }
   /** Desktop, at least one successful read. */
-  | { kind: 'live'; stale: boolean; capped: boolean }
+  | {
+      kind: 'live';
+      stale: boolean;
+      capped: boolean;
+      /** First failure of the current outage (HIVE-211); present only while stale. */
+      failedAt?: number;
+    }
   /** Desktop, and the first read failed. There is nothing to keep. */
   | { kind: 'failed'; message: string };
 
@@ -355,6 +361,9 @@ const NO_PR_SEARCH: PrSearchState = {
   error: null,
 };
 
+/** Why the PR sweep has nothing to read from (HIVE-211, D6). `null` is the browser preview. */
+export type GhSetupReason = 'not-installed' | 'unauthenticated' | 'no-repos' | null;
+
 export type PrSource =
   /** A read is in flight and there is nothing yet. The boot state. */
   | { kind: 'loading' }
@@ -364,10 +373,19 @@ export type PrSource =
    * Three ways to get here and the panel says which: no `gh` on this machine,
    * a `gh` that is not logged in, or no configured project that is a GitHub
    * repository. The browser demo lands here too.
+   *
+   * `reason` is which of those it was (HIVE-211, D6), so the stage can pick a
+   * title; `null` is the browser preview, which has no `gh` to be wrong about.
    */
-  | { kind: 'unconfigured'; message: string }
+  | { kind: 'unconfigured'; message: string; reason: GhSetupReason }
   /** At least one successful read. `repos` is how many were swept. */
-  | { kind: 'live'; stale: boolean; repos: number }
+  | {
+      kind: 'live';
+      stale: boolean;
+      repos: number;
+      /** First failure of the current outage (HIVE-211); present only while stale. */
+      failedAt?: number;
+    }
   /** The first read failed, and there is nothing to keep. */
   | { kind: 'failed'; message: string };
 
@@ -466,6 +484,12 @@ interface HiveState {
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
   /**
+   * When the last good ticket read landed (HIVE-211). Beside the source, not in
+   * it (D5): the sweep is once a minute and the source is kept referentially
+   * stable, so a time inside it would re-render every reader every minute.
+   */
+  ticketsReadAt: number | null;
+  /**
    * The PRs GitHub reported, exactly as they crossed IPC.
    *
    * `PrRecord`, not `Pr`: the renderer's type carries an owning session, which
@@ -477,6 +501,8 @@ interface HiveState {
   prs: PrRecord[];
   /** Where {@link HiveState.prs} came from. */
   prSource: PrSource;
+  /** When the last good PR sweep landed (HIVE-211). Beside the source, as {@link HiveState.ticketsReadAt} is (D5). */
+  prsReadAt: number | null;
   notifs: HiveNotification[];
   /**
    * What this window's attachment is doing, or `null` when it has none
@@ -596,7 +622,7 @@ interface HiveState {
   /** A sweep failed. Keeps the PRs it has and marks them stale. */
   reportPrFailure: (message: string) => void;
   /** There is nothing to read from, and that is not a failure. */
-  reportPrsUnconfigured: (message: string) => void;
+  reportPrsUnconfigured: (message: string, reason: GhSetupReason) => void;
   /** Sweep GitHub and install the answer. Never throws. */
   refreshPrs: () => Promise<void>;
 
@@ -2211,6 +2237,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * has no bridge to Jira.
    */
   ticketSource: { kind: 'loading' } as TicketSource,
+  ticketsReadAt: null as number | null,
   ticketDetails: {} as Record<string, TicketDetail>,
   prDetails: {} as Record<string, PrDetailEntry>,
   prDiffs: {} as Record<string, PrDiffEntry>,
@@ -2219,6 +2246,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
   /** Loading until the first sweep answers, for the same reason as above. */
   prSource: { kind: 'loading' } as PrSource,
+  prsReadAt: null as number | null,
   prSearch: NO_PR_SEARCH,
   ticketSearch: NO_TICKET_SEARCH,
 
@@ -5215,6 +5243,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         ticketSource: settled
           ? source
           : { kind: 'live', stale: false, capped },
+        ticketsReadAt: Date.now(),
       };
     }),
 
@@ -5243,7 +5272,9 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       if (source.kind === 'live') {
         // `return state` rather than an empty patch: zippering an unchanged
         // partial still rebuilds the root object and wakes every listener.
-        return source.stale ? state : { ticketSource: { ...source, stale: true } };
+        return source.stale
+          ? state
+          : { ticketSource: { ...source, stale: true, failedAt: Date.now() } };
       }
 
       return source.kind === 'failed' && source.message === message
@@ -5739,6 +5770,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       return {
         prs: samePrs(prs, state.prs) ? state.prs : prs,
         prSource: settled ? source : { kind: 'live', stale: false, repos },
+        prsReadAt: Date.now(),
         // Omitted rather than assigned when nothing was learned — the common
         // case by a wide margin, once a fleet's PRs have settled. Writing an
         // identical map back would wake every entity subscriber on every tick
@@ -5780,7 +5812,9 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         // partial still rebuilds the root object and wakes every listener.
         // Returning the state itself is what `setSessionStatus` does, and
         // zustand short-circuits on it.
-        return source.stale ? state : { prSource: { ...source, stale: true } };
+        return source.stale
+          ? state
+          : { prSource: { ...source, stale: true, failedAt: Date.now() } };
       }
 
       return source.kind === 'failed' && source.message === message
@@ -5800,17 +5834,19 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * sweep, forever. Both slices are held so the panel's explanation renders once
    * rather than once a minute.
    */
-  reportPrsUnconfigured: (message) =>
+  reportPrsUnconfigured: (message, reason) =>
     set((state) => {
       const source = state.prSource;
       const settled =
-        source.kind === 'unconfigured' && source.message === message;
+        source.kind === 'unconfigured' &&
+        source.message === message &&
+        source.reason === reason;
 
       if (settled && state.prs.length === 0) return state;
 
       return {
         prs: state.prs.length === 0 ? state.prs : [],
-        prSource: settled ? source : { kind: 'unconfigured', message },
+        prSource: settled ? source : { kind: 'unconfigured', message, reason },
       };
     }),
 
@@ -5837,6 +5873,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     if (!isDesktop()) {
       get().reportPrsUnconfigured(
         'Pull requests need the desktop app — this is the browser preview.',
+        null,
       );
       return;
     }
@@ -5894,7 +5931,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           kind === 'unauthenticated' ||
           kind === 'no-repos'
         ) {
-          get().reportPrsUnconfigured(message);
+          get().reportPrsUnconfigured(message, kind);
           return;
         }
 
@@ -6179,6 +6216,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       // just emptied. `{ kind: 'loading' }` is the same value `reset()` and
       // this store's own initial state use for "nothing read yet".
       prSource: { kind: 'loading' },
+      prsReadAt: null,
       /*
         **Tickets are the remote machine's too, and this used to be wrong in
         the other direction.**
@@ -6198,6 +6236,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       */
       tickets: [],
       ticketSource: { kind: 'loading' },
+      ticketsReadAt: null,
       ticketDetails: {},
       prDetails: {},
       prDiffs: {},
@@ -6300,12 +6339,14 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       plans: {},
       changedFiles: {},
       ticketSource: { kind: 'loading' },
+      ticketsReadAt: null,
       ticketDetails: {},
       prDetails: {},
       prDiffs: {},
       prChecks: {},
       prTimelines: {},
       prSource: { kind: 'loading' },
+      prsReadAt: null,
       prSearch: NO_PR_SEARCH,
       ticketSearch: NO_TICKET_SEARCH,
     });
@@ -8202,6 +8243,10 @@ export const useTickets = () =>
 export const useTicketSource = (): TicketSource =>
   useHiveStore((state) => state.ticketSource);
 
+/** When the last good ticket read landed (HIVE-211, D5): the stale line's second time. */
+export const useTicketsReadAt = (): number | null =>
+  useHiveStore((state) => state.ticketsReadAt);
+
 /** The refresh action, for the panel's mount effect and its retry (HIVE-69). */
 export const useRefreshTickets = (): (() => Promise<void>) =>
   useHiveStore((state) => state.refreshTickets);
@@ -9457,6 +9502,34 @@ export const usePrSource = () => useHiveStore((state) => state.prSource);
  */
 export const usePrsQuiet = (): boolean =>
   useHiveStore((state) => state.prSource.kind === 'live' && state.prs.length === 0);
+
+/**
+ * No list without items (HIVE-211): each place's panel is drawn only while it
+ * has something to list. Loading keeps the panel, for its skeleton; anything
+ * else empty hands the stage a page that says why.
+ */
+export const useWorkListed = (): boolean =>
+  useHiveStore(
+    (state) =>
+      state.ticketSource.kind === 'loading' ||
+      (state.ticketSource.kind === 'live' && state.tickets.length > 0),
+  );
+
+export const usePrsListed = (): boolean =>
+  useHiveStore(
+    (state) =>
+      state.prSource.kind === 'loading' ||
+      (state.prSource.kind === 'live' && state.prs.length > 0),
+  );
+
+export const useAgentsListed = (): boolean =>
+  useHiveStore((state) => Object.values(state.entities).some(isAgent));
+
+/** Projects come from the config snapshot, not the store, so this reads `useProjects`. */
+export const useSessionsListed = (): boolean => useProjects().length > 0;
+
+/** When the last good PR sweep landed (HIVE-211, D5): the stale line's second time. */
+export const usePrsReadAt = (): number | null => useHiveStore((state) => state.prsReadAt);
 
 /** Sweep GitHub. The poller's entry point — see `hooks/use-pr-refresh.ts`. */
 export const useRefreshPrs = () => useHiveStore((state) => state.refreshPrs);

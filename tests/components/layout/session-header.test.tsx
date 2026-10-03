@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Session, Terminal } from '@/types/entity';
+import { endedReason, type Session, type Terminal } from '@/types/entity';
 
 import { SessionHeader } from '@components/layout/session-header';
 import * as platform from '@lib/platform';
@@ -87,5 +87,34 @@ describe('SessionHeader (HIVE-197)', () => {
       'href',
       expect.stringContaining('482'),
     );
+  });
+});
+
+describe('SessionHeader, an ended session (HIVE-211)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    seedDemoFleet();
+  });
+
+  it('reads Ended, muted, with the reason as its title and in its name', () => {
+    const ended: Session = { ...hero(), status: 'terminated' };
+    render(<SessionHeader entity={ended} />);
+    const status = screen.getByLabelText(`Ended: ${endedReason(ended)}`);
+    expect(status).toHaveTextContent('Ended');
+    expect(status).toHaveAttribute('title', endedReason(ended));
+    expect(status).toHaveClass('text-muted');
+  });
+
+  it('a finished session reads Ended too', () => {
+    const ended: Session = { ...hero(), status: 'done', endedBy: 'finished' };
+    render(<SessionHeader entity={ended} />);
+    expect(screen.getByLabelText(`Ended: ${endedReason(ended)}`)).toHaveTextContent('Ended');
+  });
+
+  it('a cleared row is not ended, and keeps its status word', () => {
+    const cleared: Session = { ...hero(), status: 'done', endedBy: 'cleared' };
+    render(<SessionHeader entity={cleared} />);
+    expect(screen.queryByText('Ended')).toBeNull();
   });
 });
