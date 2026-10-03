@@ -1,5 +1,5 @@
 import { ArrowSquareOut, Binoculars, Check, GitMerge, Hexagon, Minus, X } from '@phosphor-icons/react';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 
 import { formatDuration } from '@/lib/format-duration';
 import { cn } from '@/lib/utils';
@@ -9,6 +9,7 @@ import type { HatcheryRow } from '@/types/pull-request';
 import { statusLabel } from '@components/ui/status-dot';
 import { Flap } from '@features/pull-requests/components/flap';
 import type { PrCheck, PrDetail, PrReview } from '@shared/github-contract';
+import type { LedgerResult } from '@shared/ledger-contract';
 import { useAnswerAsk, useEntity, useMergeAsk, useOpenEntity, useReviewUrls } from '@stores/hive-store';
 
 const HEADING = 'flex items-center pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase';
@@ -173,6 +174,9 @@ export function PrActions({ row }: { row: HatcheryRow }) {
   const answerAsk = useAnswerAsk();
   const openEntity = useOpenEntity();
   const [note, setNote] = useState<{ text: string; tone: 'muted' | 'amber' } | null>(null);
+  const [sending, setSending] = useState(false);
+  /* A ref as well as the state: two clicks inside one frame both read `sending` false. */
+  const inFlight = useRef(false);
   const session = pr.session;
 
   const github = (
@@ -183,22 +187,52 @@ export function PrActions({ row }: { row: HatcheryRow }) {
   );
   if (pr.state === 'merged') return github;
 
-  const merge = () => {
-    if (card === undefined) return;
-    void answerAsk(card.id, 'allow-once').then((result) => {
-      if (result !== undefined && !result.ok) setNote({ text: result.reason, tone: 'amber' });
-    });
+  /**
+   * One ledger write at a time, as the Inbox card does: a second click would
+   * answer the merge card twice (the ledger refuses the second, which reads as
+   * a failure after a merge that worked), and a rejected call is shown as a
+   * refusal rather than left unhandled. `undefined` is the browser target: no
+   * bridge, nothing written, nothing to say.
+   */
+  const run = (call: () => Promise<LedgerResult | undefined> | undefined, done?: string) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSending(true);
+    setNote(null);
+    void (async () => {
+      try {
+        const result = await call();
+        if (result === undefined) return;
+        if (!result.ok) setNote({ text: result.reason, tone: 'amber' });
+        else if (done !== undefined) setNote({ text: done, tone: 'muted' });
+      } catch (error) {
+        setNote({ text: error instanceof Error ? error.message : String(error), tone: 'amber' });
+      } finally {
+        inFlight.current = false;
+        setSending(false);
+      }
+    })();
   };
 
-  const askAcr = () => {
-    void window.hive?.ledger
-      .post({ to: 'acr', kind: 'ask', body: `Review ${pr.url} again`, meta: { pr: pr.n, repo: slug } })
-      .then((result) => setNote(result.ok ? { text: 'Asked acr', tone: 'muted' } : { text: result.reason, tone: 'amber' }));
+  const merge = () => {
+    if (card !== undefined) run(() => answerAsk(card.id, 'allow-once'));
   };
+
+  const askAcr = () =>
+    run(
+      () =>
+        window.hive?.ledger.post({
+          to: 'acr',
+          kind: 'ask',
+          body: `Review ${pr.url} again`,
+          meta: { pr: pr.n, repo: slug },
+        }),
+      'Asked acr',
+    );
 
   return (
     <div className="flex flex-col">
-      <button type="button" className={ACTION} disabled={card === undefined} onClick={merge}>
+      <button type="button" className={ACTION} disabled={card === undefined || sending} onClick={merge}>
         <GitMerge size={13} aria-hidden />
         Merge
         {card === undefined ? <span className="text-subtle">· after approval</span> : null}
@@ -209,7 +243,7 @@ export function PrActions({ row }: { row: HatcheryRow }) {
           Ready for review
         </a>
       ) : null}
-      <button type="button" className={ACTION} onClick={askAcr}>
+      <button type="button" className={ACTION} disabled={sending} onClick={askAcr}>
         <Binoculars size={13} aria-hidden />
         Ask acr to look again
       </button>

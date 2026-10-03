@@ -93,4 +93,28 @@ describe('PrActions', () => {
     expect(screen.queryAllByRole('button')).toHaveLength(0);
     expect(screen.getByRole('link', { name: 'Open on GitHub' })).toBeInTheDocument();
   });
+
+  it('answers the merge card once however often it is clicked', async () => {
+    let settle: (value: unknown) => void = () => {};
+    answerAsk.mockReturnValue(new Promise((resolve) => (settle = resolve)));
+    useHiveStore.setState({ ledger: [mergeCard] });
+    render(<PrActions row={hatchRow()} />);
+    const merge = screen.getByRole('button', { name: 'Merge' });
+    await userEvent.click(merge);
+    await userEvent.click(merge);
+    expect(answerAsk).toHaveBeenCalledTimes(1);
+    settle({ ok: true, id: 'x' });
+  });
+
+  it('shows a failed call as a refusal, not an unhandled rejection', async () => {
+    answerAsk.mockRejectedValue(new Error('IPC gone'));
+    post.mockRejectedValue(new Error('IPC gone'));
+    useHiveStore.setState({ ledger: [mergeCard] });
+    render(<PrActions row={hatchRow()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }));
+    expect(await screen.findByText('IPC gone')).toHaveClass('text-amber');
+    await userEvent.click(screen.getByRole('button', { name: 'Ask acr to look again' }));
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('IPC gone')).toHaveClass('text-amber');
+  });
 });
