@@ -56,6 +56,7 @@ import {
   useHatcherySearch,
   usePrNeedsYouCount,
   useSessionPr,
+  useSessionPrRow,
   useNextTransition,
   useOpenTicket,
   useTicketCount,
@@ -2647,5 +2648,57 @@ describe('usePrsQuiet (HIVE-205)', () => {
       useHiveStore.setState({ prs: [], prSource });
       expect(renderHook(() => usePrsQuiet()).result.current).toBe(false);
     }
+  });
+});
+
+describe('useSessionPrRow (HIVE-209)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+  });
+
+  it("pairs the session's PR with its Hatchery row", () => {
+    const { result } = renderHook(() => useSessionPrRow('hero-refresh'));
+    expect(result.current?.pr.n).toBe(482);
+    expect(result.current?.row?.pr.url).toBe('https://github.com/demo/nova-web/pull/482');
+    expect(result.current?.row?.hatch.flap).toBeDefined();
+  });
+
+  it('is null with no PR, and a remembered PR has no row', () => {
+    act(() => useHiveStore.setState({ prs: [] }));
+    const { result, rerender } = renderHook(() => useSessionPrRow('hero-refresh'));
+    expect(result.current).toBeNull();
+
+    act(() =>
+      useHiveStore.setState((state) => ({
+        entities: {
+          ...state.entities,
+          'hero-refresh': {
+            ...state.entities['hero-refresh'],
+            lastPr: { number: 118, url: 'https://github.com/demo/nova-web/pull/118' },
+          } as never,
+        },
+      })),
+    );
+    rerender();
+    expect(result.current).toEqual({ pr: { n: 118, url: 'https://github.com/demo/nova-web/pull/118' }, row: null });
+  });
+
+  it('matches by URL, so the same number in another repo is not this row', () => {
+    act(() =>
+      useHiveStore.setState((state) => ({
+        prs: [
+          { ...state.prs[0]!, repo: 'other', url: 'https://github.com/demo/other/pull/482', branch: 'x' },
+          ...state.prs,
+        ],
+      })),
+    );
+    const { result } = renderHook(() => useSessionPrRow('hero-refresh'));
+    expect(result.current?.row?.pr.repo).toBe('nova-web');
+  });
+
+  it('is null for an id that is not a session', () => {
+    const { result } = renderHook(() => useSessionPrRow('nope'));
+    expect(result.current).toBeNull();
   });
 });

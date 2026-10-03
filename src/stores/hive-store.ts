@@ -8773,6 +8773,28 @@ export const useSessionPr = (id: string): SessionPr | null => {
   );
 };
 
+/** A session's PR and, when the sweep can see it, its Hatchery row (HIVE-209). */
+export interface SessionPrRow {
+  pr: SessionPr;
+  /** `null` for a remembered PR: no owner, repo or title to read details with. */
+  row: HatcheryRow | null;
+}
+
+/**
+ * The session panel's PR tab and strip dot read this (HIVE-209): `useSessionPr`
+ * for which PR, `useHatchery` for its flap. Matched by URL, which is unique
+ * across repos where the number is not.
+ */
+export const useSessionPrRow = (id: string): SessionPrRow | null => {
+  const pr = useSessionPr(id);
+  const rows = useHatchery();
+
+  return useMemo(
+    () => (pr === null ? null : { pr, row: rows.find((row) => row.pr.url === pr.url) ?? null }),
+    [pr, rows],
+  );
+};
+
 /** Where the PR list came from, and how much to trust it. */
 export const usePrSource = () => useHiveStore((state) => state.prSource);
 
