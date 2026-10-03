@@ -8,12 +8,8 @@ import { useHiveStore } from '@stores/hive-store';
 import { type AgentGroupKey, useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
 
-/** The three fixture agents, in `agentOrder`, with their subtitles. */
-const FIXTURE_AGENTS = [
-  ['slack-agent', '#eng-alerts · #deploys · #ask-eng'],
-  ['pr-reviewer', 'Auto-reviews open PRs'],
-  ['standup-agent', 'Daily summary at 9:05'],
-] as const;
+/** The three fixture agents, in `agentOrder`. */
+const FIXTURE_AGENTS = [['slack-agent'], ['pr-reviewer'], ['standup-agent']] as const;
 
 const agentRow = (id: string) =>
   screen.getByRole('button', { name: new RegExp(`^${id}`) });
@@ -72,17 +68,18 @@ describe('AgentsPanel', () => {
     expect(ids).toEqual(FIXTURE_AGENTS.map(([id]) => id));
   });
 
-  it.each(FIXTURE_AGENTS)('shows %s with its subtitle', (id, sub) => {
+  it.each(FIXTURE_AGENTS)('shows %s by name', (id) => {
     render(<AgentsPanel />);
 
     expect(agentRow(id)).toBeInTheDocument();
-    expect(screen.getByText(sub)).toBeInTheDocument();
+    expect(screen.getByText(id)).toBeInTheDocument();
   });
 
   it('gives each agent its own icon', () => {
     render(<AgentsPanel />);
 
-    const glyphs = agentRows().map((row) => row.querySelector('svg')?.innerHTML);
+    // The first svg is the hexagon every tile shares; the glyph sits inside it.
+    const glyphs = agentRows().map((row) => row.querySelectorAll('svg')[1]?.innerHTML);
 
     expect(new Set(glyphs).size).toBe(3);
     expect(glyphs.every(Boolean)).toBe(true);
@@ -96,24 +93,24 @@ describe('AgentsPanel', () => {
     expect(useUiStore.getState().activeTab).toBe('pr-reviewer');
   });
 
-  it('highlights the agent whose tab is open', () => {
-    useUiStore.getState().openTab('standup-agent');
+  it('highlights the agent whose page is open', () => {
+    useUiStore.getState().openAgentPage('standup-agent', 'activity');
     render(<AgentsPanel />);
 
-    expect(agentRow('standup-agent')).toHaveClass('bg-active');
+    expect(agentRow('standup-agent')).toHaveClass('bg-panel-2');
     expect(agentRow('standup-agent')).toHaveAttribute('aria-current', 'true');
-    expect(agentRow('slack-agent')).not.toHaveClass('bg-active');
+    expect(agentRow('slack-agent')).not.toHaveClass('bg-panel-2');
   });
 
-  it('moves the highlight when another tab opens', async () => {
+  it('moves the highlight when another agent opens', async () => {
     render(<AgentsPanel />);
 
     await userEvent.click(agentRow('slack-agent'));
-    expect(agentRow('slack-agent')).toHaveClass('bg-active');
+    expect(agentRow('slack-agent')).toHaveClass('bg-panel-2');
 
     await userEvent.click(agentRow('pr-reviewer'));
-    expect(agentRow('pr-reviewer')).toHaveClass('bg-active');
-    expect(agentRow('slack-agent')).not.toHaveClass('bg-active');
+    expect(agentRow('pr-reviewer')).toHaveClass('bg-panel-2');
+    expect(agentRow('slack-agent')).not.toHaveClass('bg-panel-2');
   });
 
   it('highlights nothing while a session tab is open', () => {
@@ -121,15 +118,17 @@ describe('AgentsPanel', () => {
     render(<AgentsPanel />);
 
     for (const [id] of FIXTURE_AGENTS) {
-      expect(agentRow(id)).not.toHaveClass('bg-active');
+      expect(agentRow(id)).not.toHaveClass('bg-panel-2');
     }
   });
 
-  /** State is never carried by the dot's colour alone (HIVE-114). */
+  /** State is never carried by the tile's colour alone (HIVE-114, HIVE-204). */
   it('names each state in words as well as colour', () => {
     render(<AgentsPanel />);
 
-    expect(screen.getAllByText('sleeping')).toHaveLength(3);
+    for (const [id] of FIXTURE_AGENTS) {
+      expect(agentRow(id)).toHaveAccessibleName(new RegExp(`^${id}, sleeping`));
+    }
   });
 
   /**

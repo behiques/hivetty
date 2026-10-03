@@ -1,168 +1,118 @@
 import { cn } from '@/lib/utils';
 import { isAgent } from '@/types/entity';
 
-import { Icon } from '@components/ui/icon';
+import { STATUS_LABEL } from '@components/ui/status-dot';
+import { AgentTile, type TileTone } from '@features/agents/components/agent-tile';
+import { useAge } from '@hooks/use-relative-time';
+import type { LedgerKind } from '@shared/ledger-contract';
 import {
-  STATUS_FILL,
-  STATUS_LABEL,
-  STATUS_TEXT,
-} from '@components/ui/status-dot';
-import { describeNextRun, describeSkips, slackSignedOut } from '@lib/agents';
-import {
-  useAgentAskRef,
+  useAgentLastWord,
   useAgentLiveCount,
   useEntity,
   useOpenEntity,
 } from '@stores/hive-store';
-import { useActiveTab } from '@stores/ui-store';
+import { useAgentPage } from '@stores/ui-store';
 
 interface AgentRowProps {
   id: string;
 }
 
+/** Line 2's keyword, in the colour of what the entry was. */
+const KEYWORD_TONE: Partial<Record<LedgerKind, string>> = {
+  ask: 'text-amber',
+  failed: 'text-red',
+  event: 'text-brand',
+  post: 'text-subtle',
+  done: 'text-green',
+};
+
 /**
- * One background agent: avatar tile, id, what it watches, and where it stands.
+ * One background agent in the panel (HIVE-204): a hexagon tile, the name with
+ * the age of its last word, and the last word itself.
  *
- * Renders nothing for an id that is not an agent, matching the session rows in
- * 031/032 — panels stay defensive about a store that other stories mutate
- * underneath them.
+ * Renders nothing for an id that is not an agent, matching the session rows —
+ * panels stay defensive about a store that other stories mutate underneath
+ * them.
  *
- * ## The right-hand meta answers "should I look?"
+ * ## Line 2 is what the agent last said
  *
- * The row used to carry its status in an `sr-only` span alone, because the
- * only state an agent could be in was `sleeping` and saying so on screen would
- * have been noise. Now that a rail can hold four states at once (HIVE-116),
- * the word is visible and the detail beneath it is whatever makes that word
- * actionable: the open ask's ref, the next wake, or nothing.
+ * The row used to carry a status word and a detail column (the next wake, the
+ * skip count). The lane already says the state, so line 2 now answers the next
+ * question, *what is it doing?*, with the agent's newest ledger entry: its kind
+ * as a coloured keyword (an ask by its ref, so it can be answered by name) and
+ * the entry's first line. A definition that does not parse shows `invalid` and
+ * its reason instead, because that is the one thing that helps; a paused agent
+ * that has never written says `paused`.
  *
- * The status word being on screen is also what lets the dot be decoration: it
- * stays `aria-hidden`, and the state is never carried by colour alone.
+ * ## The state in words
+ *
+ * The tile is decoration. The accessible name says the state, the live-run
+ * count and the last word, so the colour is never the only carrier.
  */
 export function AgentRow({ id }: AgentRowProps) {
   const entity = useEntity(id);
-  const activeTab = useActiveTab();
+  const page = useAgentPage();
   const openEntity = useOpenEntity();
-  const askRef = useAgentAskRef(id);
-  const liveCount = useAgentLiveCount(id);
+  const live = useAgentLiveCount(id);
+  const last = useAgentLastWord(id);
+  // `0` when it has never written: a fixed timestamp keeps the ticking clock's
+  // effect from re-arming on every render, and the age is not drawn then.
+  const age = useAge(last?.ts ?? 0);
 
   if (!entity || !isAgent(entity)) return null;
 
-  const active = activeTab === id;
   const broken = entity.invalid !== undefined;
+  const current = page?.name === id;
 
-  /**
-   * The second line of the meta — the fact that makes the status actionable.
-   *
-   * Only a resting row has one. `asking` and `failed` show nothing: the ref is
-   * already beside the word, and a failure's reason belongs in the view rather
-   * than squeezed into a rail row. `working` shows nothing either.
-   *
-   * **The cost is deliberately not here, and this column is why.** The meta is
-   * `shrink-0`, so every character it holds is taken out of the name and
-   * description beside it: `next 04:46 PM · $0.04` is 21 characters, about half
-   * the width of a 320px rail once the avatar and the gaps are paid for, and it
-   * truncated `ultralisk` to `ultrali…`. An agent's name is the only thing in
-   * this row that identifies it, and a number is a poor trade for it.
-   *
-   * Nothing is lost by the omission. `entity.cost` is the *last finished* run's
-   * spend, and the view's Today tile already carries the day's — which is the
-   * figure anyone actually acts on. It was never drawn beside a `working` row
-   * anyway: `pushAgentStatus` reads `runs[last]` and a run is only appended
-   * when it finalizes, so beside a running agent it was the previous run's
-   * money wearing this one's clothes.
-   *
-   * `skipped 3` stays, and only when there have been any (HIVE-121). The rail
-   * is where "why has this done nothing all day?" actually gets asked, so this
-   * is where the answer belongs — in the meta's own subtle colour rather than
-   * amber, because the count reports the scheduler working exactly as its
-   * definition asked, and a warning colour for correct behaviour is a lie the
-   * reader has to spend time disproving.
-   */
-  const detail =
-    entity.status === 'sleeping'
-      ? [`next ${describeNextRun(entity)}`, describeSkips(entity)]
-          .filter((part) => part !== undefined)
-          .join(' · ')
-      : '';
+  let tone: TileTone = 'resting';
+  if (entity.status === 'asking') tone = 'asking';
+  else if (entity.status === 'failed') tone = 'failed';
+  else if (broken) tone = 'invalid';
+  else if (entity.status === 'working') tone = 'working';
 
-  /*
-    The chip's tooltip, alongside `skipped N` rather than in place of it
-    (HIVE-123). `skipped N` already answers "is anything wrong?"; this answers
-    "what, specifically?" for the one reason a hover can name without the row
-    growing another line — undefined leaves the chip with no `title` at all.
-  */
-  const slackReason = slackSignedOut(entity) ? 'slack: not signed in' : undefined;
+  let keyword = '';
+  if (broken) keyword = 'invalid';
+  else if (last !== undefined) keyword = last.kind === 'ask' && last.ref !== undefined ? `ask ${last.ref}` : last.kind;
+  else if (entity.status === 'paused') keyword = 'paused';
+
+  const text = broken ? entity.invalid : (last?.line ?? '');
+  const keywordTone =
+    broken || last === undefined ? 'text-amber' : (KEYWORD_TONE[last.kind] ?? 'text-subtle');
+
+  const state = broken ? 'invalid' : STATUS_LABEL[entity.status];
+  const name =
+    [`${id}, ${state}`, live > 1 ? `${String(live)} runs live` : null].filter(Boolean).join(', ') +
+    (last === undefined ? '' : `. Last: ${last.kind}, ${last.line}, ${age}`);
 
   return (
-    <button
-      type="button"
-      onClick={() => openEntity(id)}
-      aria-current={active ? 'true' : undefined}
-      className={cn(
-        'flex items-center gap-2.5 rounded-lg px-2.5 py-[var(--cc-row-py)]',
-        active ? 'bg-active' : 'hover:bg-hover',
-      )}
-    >
-      <span
-        className="relative flex size-7 shrink-0 items-center justify-center rounded-lg bg-chip"
-        title={slackReason}
-      >
-        <Icon name={entity.icon} size={15} className="text-brand" />
-
-        {/*
-          Not `StatusDot`: that atom is a 7px unringed dot, and this one is 9px
-          with a 2px panel-coloured ring so it reads as lifted off the tile.
-
-          The fill is the agent's real state rather than a hardcoded green
-          (HIVE-114). It used to be green unconditionally, which described a
-          fixture: an agent is a definition on disk, and between two wakes
-          there is no process to be online. An unparseable definition takes
-          amber, matching how the Skills pane marks a file it could not read.
-        */}
-        <span
-          aria-hidden="true"
-          className={cn(
-            'absolute -right-0.5 -bottom-0.5 size-[9px] rounded-full border-2 border-panel',
-            broken ? 'bg-amber' : STATUS_FILL[entity.status],
-            // The same pulse the atom derives, for the one state that earns it.
-            entity.status === 'working' && !broken && 'animate-ccpulse',
-          )}
-        />
-      </span>
-
-      <span className="flex min-w-0 flex-1 flex-col text-left">
-        <span className="truncate font-mono text-[12.5px]">{entity.id}</span>
-        {/*
-          The reason it is broken, in place of the description — a definition
-          that failed to parse has no description to show, and the reason is
-          the one thing that helps.
-        */}
-        <span
-          className={cn(
-            'truncate text-[11px]',
-            broken ? 'text-amber' : 'text-subtle',
-          )}
-        >
-          {broken ? entity.invalid : entity.sub}
-        </span>
-      </span>
-
-      <span className="shrink-0 text-right text-[10.5px] leading-tight">
-        <span
-          className={cn(
-            'block',
-            broken ? 'text-amber' : STATUS_TEXT[entity.status],
-          )}
-        >
-          {broken ? 'invalid' : STATUS_LABEL[entity.status]}
-          {/* `·3` only when there is more than one to count (HIVE-128). */}
-          {!broken && liveCount > 1 ? ` ·${String(liveCount)}` : null}
-          {askRef === undefined || broken ? null : ` ${askRef}`}
-        </span>
-        {detail === '' ? null : (
-          <span className="block text-subtle">{detail}</span>
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={() => openEntity(id)}
+        aria-current={current ? 'true' : undefined}
+        aria-label={name}
+        className={cn(
+          'flex w-full gap-3 rounded-[10px] p-2 text-left',
+          current ? 'bg-panel-2' : 'hover:bg-hover',
         )}
-      </span>
-    </button>
+      >
+        <AgentTile icon={entity.icon} tone={tone} live={live} />
+        <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <span className="flex items-center gap-2">
+            <b className="truncate font-mono text-[14.5px] font-semibold">{id}</b>
+            <span className="flex-1" />
+            <span className="w-[44px] shrink-0 text-right font-mono text-[11.5px] text-subtle group-focus-within:invisible group-hover:invisible">
+              {last === undefined ? '' : age}
+            </span>
+          </span>
+          <span className="truncate text-[12.5px] text-muted">
+            {keyword === '' ? null : (
+              <i className={cn('mr-1 font-mono text-[12px] not-italic', keywordTone)}>{keyword}</i>
+            )}
+            {text}
+          </span>
+        </span>
+      </button>
+    </div>
   );
 }
