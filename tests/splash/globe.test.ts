@@ -1,9 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { describe, expect, it, vi } from 'vitest';
+
+import type { SwarmPalette } from '@lib/swarm/palette';
+import { drawMutalisk } from '@lib/swarm/mutalisk';
+import { coloursUsed, recordingContext } from '@tests/support/canvas-2d';
 
 import { LOG_SCHEDULE } from '@/splash/chamber';
 import {
   cellAt,
   cellLight,
+  drawGlobe,
   FLYER_COUNT,
   flyerAt,
   flyerStart,
@@ -15,6 +23,11 @@ import {
   ORBIT_AT,
   orbitPoint,
 } from '@/splash/globe';
+
+vi.mock('@lib/swarm/mutalisk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@lib/swarm/mutalisk')>()),
+  drawMutalisk: vi.fn(),
+}));
 
 describe('the globe cells', () => {
   it('are ninety points on the unit sphere', () => {
@@ -121,5 +134,74 @@ describe('the heart', () => {
     expect(heartAt(3.5)).toBeGreaterThan(0.99);
     expect(heartAt(4.95)).toBe(0);
     expect(heartAt(6)).toBe(0);
+  });
+});
+
+const PALETTE: SwarmPalette = {
+  bg: 'c-bg',
+  panel2: 'c-panel2',
+  ink: 'c-ink',
+  muted: 'c-muted',
+  subtle: 'c-subtle',
+  brand: 'c-brand',
+  green: 'c-green',
+  amber: 'c-amber',
+  red: 'c-red',
+  creep: 'c-creep',
+  creepClear: 'c-creep-clear',
+  chitin: 'c-chitin',
+  carapace: 'c-carapace',
+};
+
+describe('drawGlobe', () => {
+  const draw = (t: number) => {
+    vi.mocked(drawMutalisk).mockClear();
+    const { ctx, calls } = recordingContext();
+    drawGlobe(ctx, t, PALETTE);
+    return { ctx, calls, count: (op: string) => calls.filter((c) => c.op === op).length };
+  };
+
+  it('draws all ninety cells, and no creature, while the globe forms', () => {
+    const { count } = draw(0.2);
+    expect(count('closePath')).toBe(90);
+    expect(count('ellipse')).toBe(0);
+    expect(drawMutalisk).not.toHaveBeenCalled();
+  });
+
+  it('draws both halves of the orbit once it is online', () => {
+    expect(draw(2.2).count('ellipse')).toBe(0);
+    expect(draw(3).count('ellipse')).toBe(2);
+  });
+
+  it('draws all seven flyers at the still', () => {
+    draw(GLOBE_STILL_T);
+    expect(drawMutalisk).toHaveBeenCalledTimes(7);
+    for (const call of vi.mocked(drawMutalisk).mock.calls) {
+      const [, , , vx, vy, , scale, motion, palette] = call;
+      expect(Math.hypot(vx, vy)).toBeCloseTo(1, 9);
+      expect(scale).toBeGreaterThanOrEqual(0.17 - 1e-9);
+      expect(scale).toBeLessThanOrEqual(0.23 + 1e-9);
+      expect(Number.isFinite(motion.turn)).toBe(true);
+      expect(palette).toBe(PALETTE);
+    }
+  });
+
+  it('releases the flyers one at a time', () => {
+    draw(flyerStart(2) + 0.01);
+    expect(drawMutalisk).toHaveBeenCalledTimes(3);
+  });
+
+  it('paints only with palette colours, and puts the context back', () => {
+    const { calls, ctx, count } = draw(3.2);
+    const allowed = new Set(Object.values(PALETTE));
+    for (const colour of coloursUsed(calls)) expect(allowed.has(colour as string)).toBe(true);
+    for (const stop of calls.filter((c) => c.op === 'addColorStop')) expect(allowed.has(stop.args[1] as string)).toBe(true);
+    expect(count('save')).toBe(count('restore'));
+    expect(ctx.globalAlpha).toBe(1);
+  });
+
+  it('holds no colour literal', () => {
+    const source = readFileSync(join(import.meta.dirname, '../../src/splash/globe.ts'), 'utf8');
+    expect(source).not.toMatch(/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|color-mix)\(/i);
   });
 });

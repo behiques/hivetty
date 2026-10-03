@@ -1,3 +1,8 @@
+import { hexPath } from '@lib/swarm/comb';
+import { drawMutalisk, REAL, withAlpha } from '@lib/swarm/mutalisk';
+import type { SwarmPalette } from '@lib/swarm/palette';
+import { clearColour } from '@lib/theme/colour';
+
 import { LOG_SCHEDULE } from './chamber';
 
 /**
@@ -128,6 +133,7 @@ export const cellLight = (cell: GlobeCell, t: number): number =>
 const RO = GLOBE_R * 1.22;
 const FLAT = 0.24;
 const ROLL = -0.42;
+const HEART_R = 70;
 
 /** "hive cluster online": the orbit draws itself, and the swarm follows 0.35s later. */
 export const ORBIT_AT = LOG_SCHEDULE[4]!;
@@ -190,3 +196,111 @@ export const heartAt = (t: number): number =>
  * heart has faded.
  */
 export const GLOBE_STILL_T = 4.95;
+
+type Ctx = CanvasRenderingContext2D;
+
+/** The violet "repository" cells take the chitin rim. */
+const COLOUR: Record<CellKind, keyof SwarmPalette> = { green: 'green', violet: 'chitin', amber: 'amber' };
+
+/** Half the orbit: the far half faint behind the globe, the near half bright in front. */
+function drawOrbit(ctx: Ctx, t: number, p: SwarmPalette, near: boolean): void {
+  const on = easeO(after(t, ORBIT_AT, 0.5));
+  if (on <= 0) return;
+  const sweep = Math.PI * easeIO(after(t, ORBIT_AT, 0.7));
+  const mid = near ? Math.PI / 2 : Math.PI * 1.5;
+  ctx.save();
+  ctx.strokeStyle = p.amber;
+  ctx.lineWidth = near ? 2 : 1.4;
+  ctx.shadowColor = p.amber;
+  ctx.shadowBlur = (near ? 14 : 6) * on;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, RO, RO * FLAT, ROLL, mid - sweep / 2, mid + sweep / 2);
+  withAlpha(ctx, (near ? 0.85 : 0.35) * on, () => ctx.stroke());
+  ctx.restore();
+}
+
+/** The creature at Home's size, larger in front of the globe; heading and turn read off its own path. */
+function drawFlyer(ctx: Ctx, i: number, t: number, p: SwarmPalette): void {
+  const at = flyerAt(i, t);
+  const was = flyerAt(i, t - 0.03);
+  const before = flyerAt(i, t - 0.09);
+  const a1 = Math.atan2(at.y - was.y, at.x - was.x);
+  const a0 = Math.atan2(was.y - before.y, was.x - before.x);
+  const turn = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)) / 0.06;
+  withAlpha(ctx, at.alpha * (0.7 + (0.3 * (at.z + 1)) / 2), () =>
+    drawMutalisk(ctx, at.x, at.y, Math.cos(a1), Math.sin(a1), t, REAL * (0.85 + 0.15 * (at.z + 1)), { k: i * 1.3, turn }, p),
+  );
+}
+
+/** A hex stroke growing from the cell and fading; `d` runs 0 to 1. */
+function ripple(ctx: Ctx, x: number, y: number, s: number, d: number, colour: string): void {
+  if (d < 0 || d > 1) return;
+  hexPath(ctx, x, y, s * (1 + 1.2 * d));
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = 1.6;
+  withAlpha(ctx, 0.8 * (1 - d), () => ctx.stroke());
+}
+
+/** One cell: near ones larger and brighter; lit ones in their colour, with a ripple as they light. */
+function drawCell(ctx: Ctx, placed: PlacedCell, t: number, p: SwarmPalette): void {
+  const { cell, X, Y, depth, formed } = placed;
+  const s = 7 + 9 * depth;
+  const k = cellLight(cell, t);
+  withAlpha(ctx, (0.25 + 0.75 * depth) * Math.min(1, formed * 1.5), () => {
+    hexPath(ctx, X, Y, s);
+    if (!cell.kind || k <= 0) {
+      ctx.fillStyle = p.panel2;
+      withAlpha(ctx, 0.8, () => ctx.fill());
+      ctx.strokeStyle = p.chitin;
+      ctx.lineWidth = 1.1;
+      withAlpha(ctx, 0.45, () => ctx.stroke());
+      return;
+    }
+    const colour = p[COLOUR[cell.kind]];
+    const breath = cell.kind === 'green' ? 0.15 * Math.sin(t * 2.4 + X) : 0;
+    ctx.fillStyle = colour;
+    withAlpha(ctx, (cell.kind === 'violet' ? 0.18 : 0.32 + breath) * k, () => ctx.fill());
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = 1.6;
+    withAlpha(ctx, 0.95 * k, () => ctx.stroke());
+    ripple(ctx, X, Y, s, (t - LIGHT_AT[cell.kind]) / 0.8, colour);
+    // The two awaiting you keep rippling while the splash idles.
+    if (cell.kind === 'amber' && t > 3) ripple(ctx, X, Y, s, ((t - 3) % 1.6) / 0.9, colour);
+  });
+}
+
+/** The heart: a soft amber glow at the centre as the flyers rise out of it. */
+function drawHeart(ctx: Ctx, t: number, p: SwarmPalette): void {
+  const glow = heartAt(t);
+  if (glow <= 0) return;
+  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, HEART_R);
+  gradient.addColorStop(0, p.amber);
+  gradient.addColorStop(1, clearColour(p.amber));
+  ctx.fillStyle = gradient;
+  withAlpha(ctx, 0.35 * glow, () => {
+    ctx.beginPath();
+    ctx.arc(0, 0, HEART_R, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+/**
+ * One frame at `t`, centred on the origin. The order is the depth: the orbit's
+ * far half, flyers behind the globe, the heart, the cells back to front, the
+ * orbit's near half, flyers in front or still climbing.
+ */
+export function drawGlobe(ctx: Ctx, t: number, palette: SwarmPalette): void {
+  const cells = GLOBE_CELLS.map((cell) => cellAt(cell, t)).sort((a, b) => a.depth - b.depth);
+  const out = Array.from({ length: FLYER_COUNT }, (_, i) => i).filter((i) => t >= flyerStart(i));
+  const behind = (i: number): boolean => {
+    const at = flyerAt(i, t);
+    return !at.climbing && at.z < 0;
+  };
+
+  drawOrbit(ctx, t, palette, false);
+  for (const i of out) if (behind(i)) drawFlyer(ctx, i, t, palette);
+  drawHeart(ctx, t, palette);
+  for (const placed of cells) drawCell(ctx, placed, t, palette);
+  drawOrbit(ctx, t, palette, true);
+  for (const i of out) if (!behind(i)) drawFlyer(ctx, i, t, palette);
+}
