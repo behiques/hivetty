@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useDeclinedBack } from '@/hooks/use-declined-back';
+import { useOpenFileAt } from '@/hooks/use-open-file-at';
 import { isTerminalView, resolveView } from '@/lib/resolve-view';
 import { cn } from '@/lib/utils';
 import {
@@ -55,7 +56,6 @@ import {
 } from '@stores/appearance-store';
 import {
   useActiveFileKey,
-  useEditorActions,
   useHasOpenFiles,
 } from '@stores/editor-store';
 import {
@@ -71,7 +71,6 @@ import {
   useConsoleShown,
   usePickerState,
   usePlace,
-  useRevealStage,
   useSettingsOpen,
 } from '@stores/ui-store';
 
@@ -145,31 +144,19 @@ export function CenterStage() {
     [linkProjectId, linkSessionId],
   );
 
-  const { openFile, closeAll } = useEditorActions();
-  const revealStage = useRevealStage();
+  const { openResolved } = useOpenFileAt();
 
   const onOpenFile = useCallback(
     (target: FileLinkTarget) => {
       if (linkProjectId === null) return;
-      /*
-        Single-file mode is applied here, not in the store, for the reason
-        `explorer-panel.tsx` gives: no store subscribes to another, so the
-        policy lives where the setting is read.
-      */
-      if (nav === 'single') closeAll();
-      openFile(
+      openResolved(
         linkProjectId,
-        target.relPath,
         linkSessionId ?? undefined,
-        target.rootKey,
-        target.line === undefined
-          ? undefined
-          : { line: target.line, col: target.col ?? 1 },
+        target,
+        target.line === undefined ? undefined : { line: target.line, col: target.col ?? 1 },
       );
-      // Opening a file is a request to look at it, so an overlay steps aside.
-      revealStage();
     },
-    [linkProjectId, linkSessionId, nav, closeAll, openFile, revealStage],
+    [linkProjectId, linkSessionId, openResolved],
   );
 
   const editorOpen = activeFileKey !== null;
