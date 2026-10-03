@@ -255,6 +255,10 @@ const PR_VARIABLES = 'query($owner: String!, $name: String!, $number: Int!) {';
 /**
  * One PR's page (HIVE-205). A constant like {@link buildPrQuery}'s: the
  * repository and the number travel as bound variables, never in the text.
+ *
+ * Comments, reviews and threads read the **newest** page (`last`), which
+ * GitHub still returns oldest first: past one page, the entries a reader opens
+ * the page for are the recent ones. A thread's own replies read from its start.
  */
 export const PR_DETAIL_QUERY = [
   PR_VARIABLES,
@@ -263,10 +267,10 @@ export const PR_DETAIL_QUERY = [
   '      id number title url state isDraft body createdAt mergedAt',
   '      baseRefName headRefName headRefOid additions deletions changedFiles',
   '      author { login } reviewDecision mergeStateStatus',
-  `      comments(first: ${PAGE}) { nodes { author { login } body createdAt url } }`,
-  `      reviews(first: ${PAGE}) { nodes { author { login } state body submittedAt url } }`,
+  `      comments(last: ${PAGE}) { nodes { author { login } body createdAt url } }`,
+  `      reviews(last: ${PAGE}) { nodes { author { login } state body submittedAt url } }`,
   `      reviewRequests(first: ${PAGE}) { nodes { requestedReviewer { ... on User { login } ... on Team { name } } } }`,
-  `      reviewThreads(first: ${PAGE}) { nodes { id isResolved isOutdated path line originalLine diffSide`,
+  `      reviewThreads(last: ${PAGE}) { nodes { id isResolved isOutdated path line originalLine diffSide`,
   `        comments(first: ${PAGE}) { nodes { author { login } body createdAt url diffHunk } } } }`,
   `      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: ${PAGE}) { nodes {`,
   '        __typename',
