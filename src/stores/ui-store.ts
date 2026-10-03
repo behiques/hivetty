@@ -5,6 +5,7 @@ import type { Effort, Model } from '@/types/entity';
 import type { SettingsSection } from '@/types/settings';
 
 import type { FsSearchMode } from '@shared/fs-contract';
+import type { JiraStatusCategory } from '@shared/jira-contract';
 
 
 export type LeftTab = 'projects' | 'work' | 'agents';
@@ -13,6 +14,8 @@ export type RailTab = 'inbox' | 'prs' | 'explorer';
 export type Place = 'home' | 'sessions' | 'work' | 'agents' | 'prs';
 /** The Overmind table's segmented filter (HIVE-197). */
 export type TableFilter = 'all' | 'live' | 'ended';
+/** The ticket page's Comments | Everything switch (HIVE-203). */
+export type WorkConversation = 'comments' | 'everything';
 
 /**
  * View state — what the user is looking at, as opposed to what the system knows
@@ -171,6 +174,12 @@ interface UiState {
    * the Inbox.
    */
   fsRevision: number;
+  /** The ticket open on the Work place's stage (HIVE-203). View state, not persisted. */
+  workTicket: string | null;
+  /** Which Work panel groups are folded; Done starts folded (HIVE-203). View state, not persisted. */
+  workFolded: Record<JiraStatusCategory, boolean>;
+  /** The ticket page's conversation filter (HIVE-203). View state, not persisted; each open resets it. */
+  workConversation: WorkConversation;
 
   /** Open a tab; `place`, when the caller knows the entity's owner, moves the bar with it. */
   openTab: (id: 'orch' | string, place?: Place) => void;
@@ -238,6 +247,13 @@ interface UiState {
   toggleExplorerDir: (projectId: string, relPath: string) => void;
   collapseExplorer: () => void;
   bumpFsRevision: () => void;
+  /**
+   * Open a ticket's page on the Work place (HIVE-203): moves the bar there, shows its
+   * panel, starts the conversation on Comments and dismisses the overlays, as `openTab` does.
+   */
+  openWorkTicket: (key: string) => void;
+  toggleWorkGroup: (category: JiraStatusCategory) => void;
+  setWorkConversation: (mode: WorkConversation) => void;
   reset: () => void;
 }
 
@@ -276,6 +292,9 @@ const initialUiState = {
   expanded: {} as Record<string, boolean>,
   explorerExpanded: {} as Record<string, boolean>,
   fsRevision: 0,
+  workTicket: null as string | null,
+  workFolded: { todo: false, 'in-progress': false, done: true } as Record<JiraStatusCategory, boolean>,
+  workConversation: 'comments' as WorkConversation,
 };
 
 /** Back to the Overmind with the row left behind under the caret (HIVE-197). */
@@ -466,6 +485,18 @@ export const useUiStore = create<UiState>()((set) => ({
   bumpFsRevision: () =>
     set((state) => ({ fsRevision: state.fsRevision + 1 })),
 
+  openWorkTicket: (key) =>
+    set({
+      workTicket: key,
+      place: 'work',
+      panelOpen: true,
+      workConversation: 'comments',
+      picker: false,
+      settings: false,
+    }),
+  toggleWorkGroup: (category) =>
+    set((state) => ({ workFolded: { ...state.workFolded, [category]: !state.workFolded[category] } })),
+  setWorkConversation: (mode) => set({ workConversation: mode }),
   reset: () => set(initialUiState),
 }));
 
@@ -528,6 +559,13 @@ export const usePlace = () => useUiStore((state) => state.place);
 export const usePanelOpen = () => useUiStore((state) => state.panelOpen);
 export const useSelectPlace = () => useUiStore((state) => state.selectPlace);
 export const useTogglePanel = () => useUiStore((state) => state.togglePanel);
+/** The Work place's open ticket, folds and conversation filter (HIVE-203). */
+export const useWorkTicket = () => useUiStore((state) => state.workTicket);
+export const useWorkFolded = () => useUiStore((state) => state.workFolded);
+export const useWorkConversation = () => useUiStore((state) => state.workConversation);
+export const useOpenWorkTicket = () => useUiStore((state) => state.openWorkTicket);
+export const useToggleWorkGroup = () => useUiStore((state) => state.toggleWorkGroup);
+export const useSetWorkConversation = () => useUiStore((state) => state.setWorkConversation);
 
 const fleetViewSelector = (state: UiState) => ({
   project: state.sessionsProject,
