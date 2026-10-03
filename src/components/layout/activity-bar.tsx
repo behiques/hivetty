@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip';
 import { useTeamName } from '@stores/appearance-store';
+import { usePrNeedsYouCount } from '@stores/hive-store';
 import { usePlace, useSelectPlace, useSettingsActions, type Place } from '@stores/ui-store';
 
 const PLACES: readonly { id: Place; label: string; icon: Icon }[] = [
@@ -23,7 +24,7 @@ const PLACES: readonly { id: Place; label: string; icon: Icon }[] = [
 ];
 
 const ITEM =
-  'grid w-[52px] justify-items-center gap-[3px] rounded-[9px] pt-[7px] pb-[5px] text-[9.5px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
+  'relative grid w-[52px] justify-items-center gap-[3px] rounded-[9px] pt-[7px] pb-[5px] text-[9.5px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 
 /**
  * Round two's activity bar (HIVE-195): the brand, the five places, Settings.
@@ -39,6 +40,7 @@ export function ActivityBar() {
   const selectPlace = useSelectPlace();
   const { openSettings } = useSettingsActions();
   const brand = useTeamName() || 'The Hive';
+  const prsNeedYou = usePrNeedsYouCount();
 
   return (
     <nav
@@ -56,16 +58,27 @@ export function ActivityBar() {
 
       {PLACES.map(({ id, label, icon: PlaceIcon }) => {
         const active = id === place;
+        const count = id === 'prs' ? prsNeedYou : 0;
         return (
           <button
             key={id}
             type="button"
             aria-current={active ? 'page' : undefined}
+            aria-label={count > 0 ? `${label}, ${String(count)} need you` : undefined}
             onClick={() => selectPlace(id)}
             className={cn(ITEM, active ? 'bg-panel-2 text-ink' : 'text-muted hover:bg-hover')}
           >
             <PlaceIcon size={19} aria-hidden />
             {label}
+            {/* HIVE-196 deferred the PRs count to the flap rule; HIVE-215 derives it, this draws it. Amber text, not an amber fill: no token is ink on amber (R2). */}
+            {count > 0 ? (
+              <span
+                aria-hidden
+                className="absolute top-0.5 right-1.5 rounded-lg bg-chip px-1 font-mono text-[9px] font-semibold text-amber"
+              >
+                {count}
+              </span>
+            ) : null}
           </button>
         );
       })}

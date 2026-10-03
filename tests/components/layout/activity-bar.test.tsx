@@ -1,11 +1,13 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ActivityBar } from '@components/layout/activity-bar';
 import { TooltipProvider } from '@components/ui/tooltip';
 import { useAppearanceStore } from '@stores/appearance-store';
+import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
+import { prRecord } from '@tests/support/prs';
 
 const renderBar = () =>
   render(
@@ -69,5 +71,34 @@ describe('ActivityBar (HIVE-195)', () => {
     await userEvent.hover(screen.getByRole('img', { name: 'Platform' }));
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Platform');
+  });
+});
+
+describe('the PRs count (HIVE-205)', () => {
+  const live = { kind: 'live', stale: false, repos: 1 } as const;
+
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    useHiveStore.getState().reset();
+  });
+
+  it('shows how many PRs need you, in amber', () => {
+    useHiveStore.setState({
+      prSource: live,
+      prs: [prRecord({ number: 1, checks: 'failing', mine: true }), prRecord({ number: 2, checks: 'failing', mine: true })],
+    });
+    renderBar();
+    const item = screen.getByRole('button', { name: 'PRs, 2 need you' });
+    expect(within(item).getByText('2')).toHaveClass('text-amber');
+  });
+
+  it('shows nothing at zero, or while the first read is out', () => {
+    useHiveStore.setState({ prSource: live, prs: [prRecord({ checks: 'passing', findings: 0 })] });
+    const { unmount } = renderBar();
+    expect(within(screen.getByRole('button', { name: 'PRs' })).queryByText(/^\d+$/)).toBeNull();
+    unmount();
+    useHiveStore.setState({ prSource: { kind: 'loading' }, prs: [prRecord({ checks: 'failing', mine: true })] });
+    renderBar();
+    expect(within(screen.getByRole('button', { name: 'PRs' })).queryByText(/^\d+$/)).toBeNull();
   });
 });
