@@ -1,6 +1,5 @@
 import { SegmentedControl, type SegmentedOption } from '@components/ui/segmented-control';
 import { SelectField, type SelectFieldOption } from '@components/ui/select-field';
-import { Switch } from '@components/ui/switch';
 import { TextField } from '@components/ui/text-field';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { ThemeGallery } from '@features/settings/components/theme-gallery';
@@ -16,10 +15,7 @@ import {
   DEFAULT_TEAM_NAME,
   useAppearanceActions,
   useAppearanceSettings,
-  useLayout,
-  useSetLayout,
   type Density,
-  type Layout,
   type ThemePreference,
 } from '@stores/appearance-store';
 
@@ -44,11 +40,6 @@ const DENSITY_OPTIONS: readonly SegmentedOption<Density>[] = [
   { value: 'compact', label: 'Compact' },
 ];
 
-const LAYOUT_OPTIONS: readonly SegmentedOption<Layout>[] = [
-  { value: 'classic', label: 'Classic' },
-  { value: 'round-two', label: 'Round two' },
-];
-
 const FONT_OPTIONS: readonly SelectFieldOption[] = TERMINAL_FONTS.map((font) => ({
   value: font.id,
   label: font.label,
@@ -64,8 +55,6 @@ const SCROLLBACK_OPTIONS: readonly SelectFieldOption[] = TERMINAL_SCROLLBACKS.ma
 
 export function AppearanceSection() {
   const settings = useAppearanceSettings();
-  const layout = useLayout();
-  const setLayout = useSetLayout();
   const {
     setTheme,
     setTerminalFont,
@@ -73,7 +62,6 @@ export function AppearanceSection() {
     setTerminalScrollback,
     setDensity,
     setTeamName,
-    setShowPlanPanel,
   } = useAppearanceActions();
 
   return (
@@ -129,18 +117,6 @@ export function AppearanceSection() {
       </SettingsGroup>
 
       <SettingsGroup
-        title="Plan panel"
-        description="Beside the terminal while a session works a plan."
-      >
-        <Switch
-          label="Show plan panel"
-          description="A slim task list beside the terminal. Off keeps the count on the session row, which costs no terminal columns. Classic layout only."
-          checked={settings.showPlanPanel}
-          onCheckedChange={setShowPlanPanel}
-        />
-      </SettingsGroup>
-
-      <SettingsGroup
         title="Team"
         description="Your team's name — “Assimilation Team”, “Zergling Battalion”."
       >
@@ -150,38 +126,26 @@ export function AppearanceSection() {
           placeholder={DEFAULT_TEAM_NAME}
           onChange={setTeamName}
           /*
-           * Written on every keystroke so the header reads back what is being
-           * typed — this store persists to `localStorage`, so there is no cost
-           * to pay for that. The commit only tidies the trailing space, which
+           * Written on every keystroke so the bar's brand tooltip reads back
+           * what is being typed — this store persists to `localStorage`, so
+           * there is no cost to pay for that. The commit only tidies the trailing space, which
            * is why the field cannot trim as it goes.
            */
           onCommit={() => setTeamName(settings.teamName.trim())}
-          hint="Leave it empty to drop the line and show the wordmark alone."
+          hint="Shown on the bar's brand mark. Leave it empty for “The Hive”."
           className="max-w-[280px]"
         />
       </SettingsGroup>
 
       <SettingsGroup
         title="Density"
-        description="Compact narrows both rails and tightens the rows inside them."
+        description="Compact tightens the rows in the list and session panels."
       >
         <SegmentedControl
           label="Density"
           options={DENSITY_OPTIONS}
           value={settings.density}
           onChange={setDensity}
-        />
-      </SettingsGroup>
-
-      <SettingsGroup
-        title="Layout"
-        description="Round two puts the places on a bar at the left, with one list beside the stage."
-      >
-        <SegmentedControl
-          label="Layout"
-          options={LAYOUT_OPTIONS}
-          value={layout}
-          onChange={setLayout}
         />
       </SettingsGroup>
     </div>

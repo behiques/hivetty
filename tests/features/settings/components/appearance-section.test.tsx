@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -30,7 +30,6 @@ describe('AppearanceSection', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('radiogroup', { name: 'Mode' })).toBeInTheDocument();
     expect(screen.getByRole('radiogroup', { name: 'Density' })).toBeInTheDocument();
-    expect(screen.getByRole('radiogroup', { name: 'Layout' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Font' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Size' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Scrollback' })).toBeInTheDocument();
@@ -136,28 +135,6 @@ describe('AppearanceSection', () => {
     expect(useAppearanceStore.getState().teamName).toBe('');
   });
 
-  /**
-   * HIVE-182. On by default; off hides the glyph rail only — the count on the
-   * session row stays, and costs no terminal columns.
-   */
-  it('says Show plan panel is Classic only (HIVE-201, D12)', () => {
-    render(<AppearanceSection />);
-    expect(screen.getByText(/Classic layout only\./)).toBeInTheDocument();
-  });
-
-  it('offers Show plan panel, on by default, and writes it when switched', async () => {
-    const user = userEvent.setup();
-    render(<AppearanceSection />);
-
-    const toggle = screen.getByRole('switch', { name: 'Show plan panel' });
-    expect(toggle).toBeChecked();
-
-    await user.click(toggle);
-
-    expect(useAppearanceStore.getState().showPlanPanel).toBe(false);
-    expect(toggle).not.toBeChecked();
-  });
-
   it('puts Themes first and calls the switch Mode', () => {
     render(<AppearanceSection />);
     // Level 3: the group headings (Themes, Mode, Terminal, Team, Density) —
@@ -171,15 +148,10 @@ describe('AppearanceSection', () => {
     expect(headings).not.toContain('Theme');
   });
 
-  it('switches the layout (HIVE-195)', async () => {
-    useAppearanceStore.getState().setLayout('classic');
+  it('has no Layout control and no plan panel switch (HIVE-213)', () => {
     render(<AppearanceSection />);
-    const group = screen.getByRole('radiogroup', { name: 'Layout' });
-    expect(within(group).getByRole('radio', { name: 'Classic' })).toBeChecked();
-
-    await userEvent.click(within(group).getByRole('radio', { name: 'Round two' }));
-
-    expect(useAppearanceStore.getState().layout).toBe('round-two');
-    expect(within(group).getByRole('radio', { name: 'Round two' })).toBeChecked();
+    expect(screen.queryByRole('radiogroup', { name: 'Layout' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Show plan panel' })).not.toBeInTheDocument();
+    expect(screen.getByText('Compact tightens the rows in the list and session panels.')).toBeInTheDocument();
   });
 });
