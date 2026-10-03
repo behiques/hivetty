@@ -611,6 +611,31 @@ pull request" while the sweep is not live.
   (`src/features/shared/components/markdown.tsx`): `marked`'s lexer to React
   elements, raw HTML as text, links only for `http(s):` and `mailto:`.
 
+### The Files tab: `<PrFiles />`, `<PrFileTree />`, `<PrDiff />`, and `<ThreadCard />`'s writes
+
+`src/features/pull-requests/components/` — HIVE-207, built. The tab strip's Files
+entry carries the changed-file count ("Files 9") once the detail is read.
+
+- **`<PrFiles pr detail fixerOnIt onOpenFile? />`** (`pr-files.tsx`) lays the tree
+  beside the selected file's diff and reads the diff at `detail.headSha`, so the
+  page's 60s detail poll moving the head re-reads it. A stored `prFile` no longer
+  in the list falls back to the first file with an open thread, in render. A
+  missing `prDiffs` entry reads as loading; a failed re-read keeps the old text
+  under the problem.
+- **`<PrFileTree detail selected onSelect />`** (`pr-file-tree.tsx`): "Filter
+  files", the "9 files · 2 open threads · viewed 3 of 9" summary (plus a GitHub
+  link when GitHub sent fewer files than changed), folders by their directory, and
+  a row per file with its thread mark, viewed check or "changed", and +/−.
+- **`<PrDiff file diff threads problem? loading? prUrl readOnly onViewed onOpenFile? writes? fixerOnIt />`**
+  (`pr-diff.tsx`): the header (path, +/−, Viewed, Unified | Split, Open in the
+  editor) and plain mono rows with no highlighting, each thread under the line it
+  is about and outdated ones on top. Viewed is optimistic through the store and
+  disabled while its write is pending and on a merged PR.
+- **`<ThreadCard writes? />`** gains `writes?: ThreadWrites`: Reply (a box under
+  the thread), Resolve and Unresolve, not optimistic, the reason inline on a
+  refusal. `useThreadWrites(pr)` builds it for Conversation and Files, and
+  answers none on a merged PR.
+
 ### `<EmptyHatchery />`
 
 `src/features/pull-requests/components/empty-hatchery.tsx` — HIVE-205, built.

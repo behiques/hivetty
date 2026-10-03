@@ -320,6 +320,20 @@ to plain text. Rebuilds are not rare — the watcher's silent reload changes
 the first time an agent touched the open file. An extension with no entry opens as plain text with line numbers,
 wrapping and search intact — a supported outcome, not a gap.
 
+### A PR's file in the editor (HIVE-207)
+
+The PR page's "Open in the editor" (Files) and "Open the file" (a thread card)
+both go through `useOpenFileAt().openPath(projectId, sessionId, path, { line })`,
+built once in `pr-page.tsx`. `projectId` is the PR's live session's project, else
+the configured project whose folder name is the repository. `sessionId` is that
+session (`pr.session`) when it is live, so main roots the read at its worktree
+(`electron/main/fs/session-roots.ts` proves it a linked worktree of the project).
+With no session it is the project checkout as it is on disk, which may be on
+another branch than the PR, so the line can point elsewhere. A builder or fixer
+worktree under `~/.hive/work` is outside every project and unreachable unless a
+session works there. The line is the diff's selected line, else the first changed
+line.
+
 ## Placement, and the one rule that unifies it
 
 Two independent settings produce four layouts:
