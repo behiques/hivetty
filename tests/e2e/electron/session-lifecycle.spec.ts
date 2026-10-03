@@ -1,8 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
+
+import { openProject } from '../fixtures/places';
 
 import { launchHive, startSession } from './fixtures/hive-app';
 
@@ -315,7 +317,10 @@ test('opening a session twice attaches to the same process', async ({}, testInfo
      * would sail straight through.
      */
     await startSession(page, PROJECT);
-    await page.getByRole('button', { name: new RegExp(SESSION) }).first().click();
+    // The config names no project, so the list labels it by its directory.
+    await (await openProject(page, basename(REAL_DIRECTORY)))
+      .getByRole('button', { name: new RegExp(`^${SESSION}\\b`) })
+      .click();
     await expect(page.locator(`[data-terminal-id="${SESSION}"]`)).toBeVisible();
 
     const second = testInfo.outputPath('pid-2.txt');

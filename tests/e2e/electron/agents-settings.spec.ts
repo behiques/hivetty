@@ -115,8 +115,9 @@ test('authors an agent through the pane and writes it to disk', async ({}, testI
 
     // The row appears without a reload — the write is followed by a re-list.
     await openAgents(page);
+    // Scoped to Settings: round two's Agents panel lists the same row beside it.
     await expect(
-      page.getByRole('button', { name: /slack-watcher/ }),
+      page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: /slack-watcher/ }),
     ).toBeVisible();
 
     const written = readFileSync(
@@ -538,7 +539,7 @@ test('opening an agent from Settings shows its page on Definition', async ({}, t
     await expectSavedAs(page, 'slack-watcher');
 
     await openAgents(page);
-    await page.getByRole('button', { name: /slack-watcher/ }).click();
+    await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: /slack-watcher/ }).click();
 
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeHidden();
     await expect(page.locator('[data-view="agent"]')).toBeVisible();
