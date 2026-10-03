@@ -64,6 +64,16 @@ describe('useNotificationStream — arrivals (HIVE-198)', () => {
     expect(useUiStore.getState().arrivals).toEqual([]);
   });
 
+  it('after a hydrate, only the live arrival rises', async () => {
+    renderHook(() => useNotificationStream());
+    const old = ask();
+    resolveList([old]);
+    await vi.waitFor(() => expect(useHiveStore.getState().notifs).toHaveLength(1));
+    const live = notif({ kind: 'agent.ask', action: { type: 'ask', thread: 't2' } });
+    onNew(live);
+    expect(useUiStore.getState().arrivals).toEqual([live.id]);
+  });
+
   it('with the keyboard in a terminal it pulses instead of rising', () => {
     document.body.innerHTML = '<div data-terminal-id="t"><textarea></textarea></div>';
     document.querySelector('textarea')?.focus();
