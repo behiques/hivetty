@@ -30,7 +30,7 @@ import {
 import type { HiveNotification } from '@/types/notification';
 import type { Pr, SessionPr, TicketPr } from '@/types/pull-request';
 import type { TermLine } from '@/types/terminal';
-import type { Ticket } from '@/types/ticket';
+import type { Ticket, TicketDetail } from '@/types/ticket';
 
 import { isDesktop } from '@config/runtime';
 import {
@@ -40,7 +40,14 @@ import {
   runsToday,
 } from '@lib/agents';
 import { readPullRequests, searchPullRequests } from '@lib/github';
-import { readJiraStatus, searchJiraIssues } from '@lib/jira';
+import {
+  readJiraComments,
+  readJiraDetail,
+  readJiraIssue,
+  readJiraStatus,
+  readJiraTransitions,
+  searchJiraIssues,
+} from '@lib/jira';
 import { buildTicketSearchJql } from '@lib/jira-search';
 import { ledgerRows } from '@lib/ledger/console-rows';
 import {
@@ -369,6 +376,8 @@ interface HiveState {
    * a project through `entity.project` — that string needs no table here.
    */
   tickets: Ticket[];
+  /** The ticket open on the Work page, and what has been read for it (HIVE-203). */
+  ticketDetail: TicketDetail | null;
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
   /**
@@ -441,6 +450,12 @@ interface HiveState {
   reportTicketsUnconfigured: () => void;
   /** Replace one ticket after a transition moved it (HIVE-70). */
   updateTicket: (issue: JiraIssue) => void;
+  /**
+   * Read everything the ticket page shows for `key` (HIVE-203): its detail, the
+   * newest comments, its transitions, its ledger history, and the issue itself
+   * when the list does not hold it. Each part merges as it lands.
+   */
+  loadTicketDetail: (key: string) => Promise<void>;
   /** Read the configured query and install the answer (HIVE-69). */
   refreshTickets: () => Promise<void>;
 
@@ -1846,6 +1861,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * has no bridge to Jira.
    */
   ticketSource: { kind: 'loading' } as TicketSource,
+  ticketDetail: null as TicketDetail | null,
 
   /** Loading until the first sweep answers, for the same reason as above. */
   prSource: { kind: 'loading' } as PrSource,
@@ -4888,6 +4904,62 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     }),
 
   /**
+   * Read the open ticket's page (HIVE-203).
+   *
+   * The parts merge separately, each as its answer lands, so one failed read
+   * never blanks another: a comments outage leaves the description standing,
+   * and a reload that fails keeps what the last one read with the problem
+   * beside it. Another key resets the slice first; an answer that arrives for
+   * a key no longer open is dropped rather than written over the new one.
+   */
+  loadTicketDetail: async (key) => {
+    if (get().ticketDetail?.key !== key) set({ ticketDetail: { key, problems: {} } });
+    const open = () => get().ticketDetail?.key === key;
+    const merge = (patch: Partial<TicketDetail>) => {
+      if (!open()) return;
+      set((state) => ({ ticketDetail: { ...state.ticketDetail!, ...patch } }));
+    };
+    const problem = (part: 'detail' | 'comments', message: string | undefined) => {
+      if (!open()) return;
+      set((state) => {
+        const problems = { ...state.ticketDetail!.problems };
+        if (message === undefined) delete problems[part];
+        else problems[part] = message;
+        return { ticketDetail: { ...state.ticketDetail!, problems } };
+      });
+    };
+    const inList = get().tickets.some((ticket) => ticket.key === key);
+
+    await Promise.all([
+      readJiraDetail({ key }).then((result) => {
+        if (result === null) return problem('detail', BRIDGE_ERROR);
+        if (!result.ok) return problem('detail', result.error.message);
+        merge({ detail: result.value, readAt: Date.now() });
+        problem('detail', undefined);
+      }),
+      readJiraComments({ key, newest: true }).then((result) => {
+        if (result === null) return problem('comments', BRIDGE_ERROR);
+        if (!result.ok) return problem('comments', result.error.message);
+        merge({ comments: result.value.comments, total: result.value.total, readAt: Date.now() });
+        problem('comments', undefined);
+      }),
+      readJiraTransitions({ key }).then((result) => {
+        if (result?.ok) merge({ transitions: result.value });
+      }),
+      inList
+        ? Promise.resolve()
+        : readJiraIssue({ key }).then((result) => {
+            if (result?.ok) merge({ issue: toTicket(result.value) });
+          }),
+      (window.hive?.ledger.list({ ticket: key }) ?? Promise.resolve(undefined))
+        .then((snapshot) => {
+          if (snapshot) merge({ history: snapshot.entries });
+        })
+        .catch(() => undefined),
+    ]);
+  },
+
+  /**
    * Read the configured query and install the answer (HIVE-69).
    *
    * Lives on the store rather than in a hook for the same reason `sendToEntity`
@@ -5506,6 +5578,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       */
       tickets: [],
       ticketSource: { kind: 'loading' },
+      ticketDetail: null,
       /*
         Not "an orphan quietly wasting memory" the way it first read — session
         ids are **not unique across machines**. `nextSpawnId`/`rememberSpawnId`
@@ -5599,6 +5672,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       metrics: {},
       plans: {},
       ticketSource: { kind: 'loading' },
+      ticketDetail: null,
       prSource: { kind: 'loading' },
       prSearch: NO_PR_SEARCH,
       ticketSearch: NO_TICKET_SEARCH,
@@ -7230,6 +7304,14 @@ export const useRefreshTickets = (): (() => Promise<void>) =>
 /** Install one re-read issue after a transition (HIVE-70). */
 export const useUpdateTicket = (): ((issue: JiraIssue) => void) =>
   useHiveStore((state) => state.updateTicket);
+
+/** The open ticket's page data, or null before one opens (HIVE-203). */
+export const useTicketDetail = (): TicketDetail | null =>
+  useHiveStore((state) => state.ticketDetail);
+
+/** Read the open ticket's page (HIVE-203). */
+export const useLoadTicketDetail = (): ((key: string) => Promise<void>) =>
+  useHiveStore((state) => state.loadTicketDetail);
 
 /**
  * The five things the fleet-derived selectors below actually read off a session.

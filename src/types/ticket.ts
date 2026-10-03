@@ -1,4 +1,10 @@
-import type { JiraStatusCategory } from '@shared/jira-contract';
+import type {
+  JiraComment,
+  JiraIssueDetail,
+  JiraStatusCategory,
+  JiraTransition,
+} from '@shared/jira-contract';
+import type { LedgerEntry } from '@shared/ledger-contract';
 
 /**
  * One work item.
@@ -47,4 +53,28 @@ export interface Ticket {
    * Built in main, because only main knows the site.
    */
   url?: string;
+}
+
+/**
+ * The open ticket's page data (HIVE-203). One ticket at a time; another key replaces it.
+ *
+ * Every part is optional because each read merges on its own as it lands: one
+ * failed read never blanks another, and a part read before stays on screen with
+ * its problem beside it rather than vanishing.
+ */
+export interface TicketDetail {
+  key: string;
+  /** Read with jira:issue only when the key is not in the list. */
+  issue?: Ticket;
+  detail?: JiraIssueDetail;
+  /** The newest JIRA_MAX_COMMENTS, oldest first. */
+  comments?: JiraComment[];
+  /** How many comments the thread holds, read or not. */
+  total?: number;
+  transitions?: JiraTransition[];
+  /** ledger:list { ticket } on open; the tail covers what arrives after. */
+  history?: LedgerEntry[];
+  /** When the detail or comments last read successfully (ms). */
+  readAt?: number;
+  problems: { detail?: string; comments?: string };
 }
