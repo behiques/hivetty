@@ -8,6 +8,7 @@ import {
 } from '../../../electron/shared/ledger-contract';
 import {
   agentSiteFor,
+  asksMeAbout,
   INBOUND_NAME_MAX,
   INBOUND_TEXT_MAX,
   asInbound,
@@ -18,6 +19,7 @@ import {
   keepNewest,
   laneOfRun,
   matches,
+  mergeWaiting,
   nextRef,
   openAsks,
   resolveRef,
@@ -175,6 +177,59 @@ describe('shipStage (HIVE-215)', () => {
   it('is null for a PR nobody holds, and for an empty slug', () => {
     expect(shipStage([], slug, 214)).toBeNull();
     expect(shipStage([claim], '', 214)).toBeNull();
+  });
+});
+
+describe('the two ask readings (HIVE-215)', () => {
+  const slug = 'owner/name';
+  const sessions = new Set(['sess-a']);
+  const toMe = (to: string) => to === OVERMIND || sessions.has(to);
+  const ask = (id: string, over: Partial<LedgerEntry>) =>
+    entry({ id, ts: NOW - 1_000, from: 'shipper', kind: 'ask', body: 'PR #214 waits on a review', ...over });
+  const open = (entries: LedgerEntry[]) => openAsks(entries, NOW);
+
+  describe('asksMeAbout', () => {
+    it('reads an ask to the overmind and to a session naming the PR', () => {
+      expect(asksMeAbout(open([ask('a1', { to: OVERMIND, meta: { pr: 214, repo: 'Owner/Name' } })]), slug, 214, toMe)).toBe(true);
+      expect(asksMeAbout(open([ask('a2', { to: 'sess-a', meta: { pr: '214', repo: slug } })]), slug, 214, toMe)).toBe(true);
+    });
+
+    it('ignores an ask naming another repo, another number, or sent to an agent', () => {
+      expect(asksMeAbout(open([ask('a1', { to: OVERMIND, meta: { pr: 214, repo: 'acme/name' } })]), slug, 214, toMe)).toBe(false);
+      expect(asksMeAbout(open([ask('a2', { to: OVERMIND, meta: { pr: 215, repo: slug } })]), slug, 214, toMe)).toBe(false);
+      expect(asksMeAbout(open([ask('a3', { to: 'fixer', meta: { pr: 214, repo: slug } })]), slug, 214, toMe)).toBe(false);
+    });
+
+    it('ignores an answered ask and one past its ttl', () => {
+      const answered = [
+        ask('a1', { to: OVERMIND, meta: { pr: 214, repo: slug } }),
+        entry({ id: 'x1', kind: 'answer', thread: 'a1', body: 'merge now' }),
+      ];
+      expect(asksMeAbout(open(answered), slug, 214, toMe)).toBe(false);
+      const stale = ask('a2', { ts: NOW - LEDGER_ASK_TTL_MS - 1, to: OVERMIND, meta: { pr: 214, repo: slug } });
+      expect(asksMeAbout(open([stale]), slug, 214, toMe)).toBe(false);
+    });
+  });
+
+  describe('mergeWaiting', () => {
+    const merge = (id: string, command: string, over: Partial<LedgerEntry> = {}) =>
+      ask(id, { to: OVERMIND, meta: { kind: 'permission', tool: 'Bash', input: { command } }, ...over });
+
+    it('reads the shipper\'s gh pr merge permission ask for this PR', () => {
+      const one = merge('m1', 'gh pr merge 214 --squash --match-head-commit 3f2a9c1 --repo owner/name');
+      expect(mergeWaiting(open([one]), slug, 214)).toBe(true);
+    });
+
+    it('ignores another number, a command without --repo, and another asker', () => {
+      expect(mergeWaiting(open([merge('m1', 'gh pr merge 215 --squash --repo owner/name')]), slug, 214)).toBe(false);
+      expect(mergeWaiting(open([merge('m2', 'gh pr merge 214 --squash')]), slug, 214)).toBe(false);
+      expect(mergeWaiting(open([merge('m3', 'gh pr merge 214 --repo owner/name', { from: 'builder' })]), slug, 214)).toBe(false);
+    });
+
+    it('reads --repo=owner/name and ignores another repo', () => {
+      expect(mergeWaiting(open([merge('m1', 'gh pr merge 214 --squash --repo=Owner/Name')]), slug, 214)).toBe(true);
+      expect(mergeWaiting(open([merge('m2', 'gh pr merge 214 --squash --repo acme/name')]), slug, 214)).toBe(false);
+    });
   });
 });
 

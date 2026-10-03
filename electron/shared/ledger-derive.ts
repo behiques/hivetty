@@ -339,6 +339,58 @@ export function isShipping(entries: readonly LedgerEntry[], slug: string, n: num
   return shipStage(entries, slug, n) !== null;
 }
 
+/** `meta.pr` + `meta.repo` name this PR, compared as {@link shipStage} compares. */
+const namesPr = (meta: Record<string, unknown> | undefined, slug: string, n: number): boolean => {
+  const repo = meta?.['repo'];
+  return wholeNumberOf(meta?.['pr']) === n && typeof repo === 'string' && repo.toLowerCase() === slug.toLowerCase();
+};
+
+/**
+ * Whether an open ask to you names one PR (HIVE-215, the hatch rule's rule 2).
+ *
+ * "To you" is the caller's `toMe`: the overmind, or a session id in the fleet.
+ * It is passed in because this file knows no fleet. An ask between agents (the
+ * shipper asking the fixer) is never yours. The PR is named by
+ * `meta: { pr, repo }`, which the ship skill puts on every ask to `reply-to`.
+ */
+export function asksMeAbout(
+  open: readonly OpenAsk[],
+  slug: string,
+  n: number,
+  toMe: (to: string) => boolean,
+): boolean {
+  if (slug === '') return false;
+  return open.some((ask) => ask.to !== undefined && toMe(ask.to) && namesPr(ask.meta, slug, n));
+}
+
+/** `gh pr merge <N> … --repo <owner>/<repo>`, the shape `merge-pr` runs; `--repo` is required. */
+const MERGE_COMMAND = /^\s*gh\s+pr\s+merge\s+(\d+)\b/;
+const REPO_FLAG = /\s--repo(?:=|\s+)(\S+)/;
+
+/**
+ * Whether the shipper's merge waits on your card (HIVE-215, rule 2).
+ *
+ * The card is a permission ask from `shipper`: `meta.kind: 'permission'`,
+ * `meta.tool: 'Bash'`, `meta.input.command` the merge. N and the repo are
+ * read from the command itself; a command with no `--repo` cannot say which
+ * repo it merges, so it matches nothing.
+ */
+export function mergeWaiting(open: readonly OpenAsk[], slug: string, n: number): boolean {
+  const wanted = slug.toLowerCase();
+  if (wanted === '') return false;
+  return open.some((ask) => {
+    if (ask.from !== 'shipper') return false;
+    const meta = ask.meta ?? {};
+    if (meta['kind'] !== 'permission' || meta['tool'] !== 'Bash') return false;
+    const input = meta['input'];
+    const command = typeof input === 'object' && input !== null ? (input as Record<string, unknown>)['command'] : undefined;
+    if (typeof command !== 'string') return false;
+    const number = MERGE_COMMAND.exec(command)?.[1];
+    const repo = REPO_FLAG.exec(command)?.[1];
+    return number !== undefined && Number(number) === n && repo?.toLowerCase() === wanted;
+  });
+}
+
 /** Where an agent is working (HIVE-172). */
 interface AgentSite {
   /** The worktree the agent's newest post named, absolute. */
