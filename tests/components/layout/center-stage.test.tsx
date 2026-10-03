@@ -1100,6 +1100,51 @@ describe('CenterStage — Home in round two (HIVE-195)', () => {
   });
 });
 
+describe('CenterStage — Work in round two (HIVE-203)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
+    useAppearanceStore.getState().setLayout('round-two');
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+  });
+
+  afterEach(() => {
+    useAppearanceStore.getState().reset();
+  });
+
+  it('owns the stage on the Work place and hides the terminal region', () => {
+    render(<CenterStage />);
+    act(() => useUiStore.getState().openTab('hero-refresh', 'sessions'));
+    expect(visibleSurfaces()).toHaveLength(1);
+
+    act(() => useUiStore.getState().selectPlace('work'));
+
+    expect(screen.getByText('Pick a ticket')).toBeInTheDocument();
+    expect(visibleSurfaces()).toHaveLength(0);
+  });
+
+  it('gives way to the picker', () => {
+    useUiStore.setState({ place: 'work' });
+    render(<CenterStage />);
+
+    act(() => useUiStore.getState().openPicker());
+
+    expect(screen.queryByText('Pick a ticket')).not.toBeInTheDocument();
+  });
+
+  it('draws no Work page in Classic', () => {
+    useAppearanceStore.getState().setLayout('classic');
+    useUiStore.setState({ place: 'work' });
+    render(<CenterStage />);
+
+    expect(screen.queryByText('Pick a ticket')).not.toBeInTheDocument();
+  });
+});
+
 describe('CenterStage — the Overmind head (HIVE-197)', () => {
   beforeEach(() => {
     useHiveStore.getState().reset();

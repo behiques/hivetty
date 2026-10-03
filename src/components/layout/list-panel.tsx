@@ -3,19 +3,20 @@ import type { ComponentType } from 'react';
 import { AgentsPanel } from '@features/agents/components/agents-panel';
 import { SessionsPanel } from '@features/projects/components/sessions-panel';
 import { PrsPanel } from '@features/pull-requests/components/prs-panel';
-import { WorkPanel } from '@features/work/components/work-panel';
+import { WorkList } from '@features/work/components/work-panel';
 import { usePanelOpen, usePlace, type Place } from '@stores/ui-store';
 
 /**
  * Each place's panel (HIVE-195). Home has none. Sessions has its own since
- * HIVE-197; the rest are still `left-rail.tsx`'s and are replaced in their own
- * stories (HIVE-203, 204, 205). PRs also still shows in the ActivityRail until
- * HIVE-201 retires it — accepted while round two is opt-in.
+ * HIVE-197 and Work its grouped rows since HIVE-203; the rest are still
+ * `left-rail.tsx`'s and are replaced in their own stories (HIVE-204, 205). PRs
+ * also still shows in the ActivityRail until HIVE-201 retires it — accepted
+ * while round two is opt-in.
  */
 const PANELS: Record<Place, ComponentType | null> = {
   home: null,
   sessions: SessionsPanel,
-  work: WorkPanel,
+  work: WorkList,
   agents: AgentsPanel,
   prs: PrsPanel,
 };

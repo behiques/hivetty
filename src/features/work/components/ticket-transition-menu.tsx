@@ -49,6 +49,8 @@ interface TicketTransitionMenuProps {
   status: string;
   /** Which of Jira's three buckets colours it. */
   statusCategory: Ticket['statusCategory'];
+  /** `amber` when the ticket needs you, overriding the category's colour (HIVE-203). */
+  tone?: 'amber';
 }
 
 type MenuState =
@@ -72,6 +74,7 @@ export function TicketTransitionMenu({
   issueKey,
   status,
   statusCategory,
+  tone,
 }: TicketTransitionMenuProps) {
   const updateTicket = useUpdateTicket();
   const readingPhrase = useSwarmPhrase('loading.transitions');
@@ -207,7 +210,7 @@ export function TicketTransitionMenu({
         aria-label={`${status} — move ${issueKey}`}
         className={cn(
           STATUS_PILL,
-          CATEGORY_TEXT[statusCategory],
+          tone === 'amber' ? 'text-amber' : CATEGORY_TEXT[statusCategory],
           'flex items-center gap-1 hover:bg-chip-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
         )}
       >

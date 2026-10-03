@@ -30,7 +30,7 @@ import {
 import type { HiveNotification } from '@/types/notification';
 import type { Pr, SessionPr, TicketPr } from '@/types/pull-request';
 import type { TermLine } from '@/types/terminal';
-import type { Ticket } from '@/types/ticket';
+import type { Ticket, TicketDetail, TicketProperties } from '@/types/ticket';
 
 import { isDesktop } from '@config/runtime';
 import {
@@ -40,7 +40,14 @@ import {
   runsToday,
 } from '@lib/agents';
 import { readPullRequests, searchPullRequests } from '@lib/github';
-import { readJiraStatus, searchJiraIssues } from '@lib/jira';
+import {
+  readJiraComments,
+  readJiraDetail,
+  readJiraIssue,
+  readJiraStatus,
+  readJiraTransitions,
+  searchJiraIssues,
+} from '@lib/jira';
 import { buildTicketSearchJql } from '@lib/jira-search';
 import { ledgerRows } from '@lib/ledger/console-rows';
 import {
@@ -61,6 +68,13 @@ import {
   requestSpawnTerminal,
 } from '@lib/terminal/pty-transport';
 import { sendToSession } from '@lib/terminal/session-input';
+import {
+  groupTickets,
+  ticketRow,
+  type TicketGroup,
+  type TicketRowModel,
+} from '@lib/ticket-activity';
+import { parseTitleTags } from '@lib/ticket-tags';
 import { BRIDGE_ERROR } from '@lib/utils';
 import {
   SESSION_ID_PREFIX_PATTERN,
@@ -82,7 +96,12 @@ import {
   type RemoteLinkStatus,
   type SessionNameReport,
 } from '@shared/ipc-contract';
-import type { JiraIssue } from '@shared/jira-contract';
+import {
+  nextTransition,
+  type JiraComment,
+  type JiraIssue,
+  type JiraTransition,
+} from '@shared/jira-contract';
 import {
   LEDGER_MEMORY_CAP,
   type LedgerEntry,
@@ -369,6 +388,8 @@ interface HiveState {
    * a project through `entity.project` — that string needs no table here.
    */
   tickets: Ticket[];
+  /** The ticket open on the Work page, and what has been read for it (HIVE-203). */
+  ticketDetail: TicketDetail | null;
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
   /**
@@ -441,6 +462,23 @@ interface HiveState {
   reportTicketsUnconfigured: () => void;
   /** Replace one ticket after a transition moved it (HIVE-70). */
   updateTicket: (issue: JiraIssue) => void;
+  /**
+   * Read everything the ticket page shows for `key` (HIVE-203): its detail, the
+   * newest comments, its transitions, its ledger history, and the issue itself
+   * when the list does not hold it. Each part merges as it lands.
+   */
+  loadTicketDetail: (key: string) => Promise<void>;
+  /** Re-read the open ticket's page; a key that is not open does nothing (HIVE-203). */
+  refreshTicketDetail: (key: string) => Promise<void>;
+  /** A comment this app just posted, shown without a re-read (HIVE-203). */
+  appendTicketComment: (key: string, comment: JiraComment) => void;
+  /** Re-read what the open ticket can become, after its status moved (HIVE-203). */
+  reloadTicketTransitions: (key: string) => Promise<void>;
+  /**
+   * Install a re-read issue for a ticket the list does not hold (HIVE-203).
+   * A listed ticket is `updateTicket`'s; this leaves it alone.
+   */
+  setTicketDetailIssue: (issue: JiraIssue) => void;
   /** Read the configured query and install the answer (HIVE-69). */
   refreshTickets: () => Promise<void>;
 
@@ -1829,6 +1867,72 @@ const ATTACH_SNAPSHOT_HANDLERS: Partial<
   },
 };
 
+/** The store's own `set`, as the helpers outside the creator take it. */
+type SetHive = (
+  partial: Partial<HiveState> | ((state: HiveState) => Partial<HiveState> | HiveState),
+) => void;
+
+/**
+ * Read the open ticket's parts and merge each as it lands (HIVE-203).
+ *
+ * The parts merge separately so one failed read never blanks another: a
+ * comments outage leaves the description standing, and a read that fails
+ * keeps what the last one found with the problem beside it. An answer that
+ * arrives for a key no longer open is dropped rather than written over the
+ * ticket that replaced it.
+ */
+async function readTicketParts(
+  get: () => HiveState,
+  set: SetHive,
+  key: string,
+  read: { ledger: boolean; issue: boolean },
+): Promise<void> {
+  const open = () => get().ticketDetail?.key === key;
+  const merge = (patch: Partial<TicketDetail>) => {
+    if (!open()) return;
+    set((state) => ({ ticketDetail: { ...state.ticketDetail!, ...patch } }));
+  };
+  const problem = (part: 'detail' | 'comments', message: string | undefined) => {
+    if (!open()) return;
+    set((state) => {
+      const problems = { ...state.ticketDetail!.problems };
+      if (message === undefined) delete problems[part];
+      else problems[part] = message;
+      return { ticketDetail: { ...state.ticketDetail!, problems } };
+    });
+  };
+
+  await Promise.all([
+    readJiraDetail({ key }).then((result) => {
+      if (result === null) return problem('detail', BRIDGE_ERROR);
+      if (!result.ok) return problem('detail', result.error.message);
+      merge({ detail: result.value, readAt: Date.now() });
+      problem('detail', undefined);
+    }),
+    readJiraComments({ key, newest: true }).then((result) => {
+      if (result === null) return problem('comments', BRIDGE_ERROR);
+      if (!result.ok) return problem('comments', result.error.message);
+      merge({ comments: result.value.comments, total: result.value.total, readAt: Date.now() });
+      problem('comments', undefined);
+    }),
+    readJiraTransitions({ key }).then((result) => {
+      if (result?.ok) merge({ transitions: result.value });
+    }),
+    read.issue
+      ? readJiraIssue({ key }).then((result) => {
+          if (result?.ok) merge({ issue: toTicket(result.value) });
+        })
+      : Promise.resolve(),
+    read.ledger
+      ? (window.hive?.ledger.list({ ticket: key }) ?? Promise.resolve(undefined))
+          .then((snapshot) => {
+            if (snapshot) merge({ history: snapshot.entries });
+          })
+          .catch(() => undefined)
+      : Promise.resolve(),
+  ]);
+}
+
 export const useHiveStore = create<HiveState>()((set, get) => ({
   ...emptySeeds(),
   notifs: [],
@@ -1846,6 +1950,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * has no bridge to Jira.
    */
   ticketSource: { kind: 'loading' } as TicketSource,
+  ticketDetail: null as TicketDetail | null,
 
   /** Loading until the first sweep answers, for the same reason as above. */
   prSource: { kind: 'loading' } as PrSource,
@@ -4888,6 +4993,59 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     }),
 
   /**
+   * Read the open ticket's page (HIVE-203).
+   *
+   * The parts merge separately, each as its answer lands, so one failed read
+   * never blanks another: a comments outage leaves the description standing,
+   * and a reload that fails keeps what the last one read with the problem
+   * beside it. Another key resets the slice first; an answer that arrives for
+   * a key no longer open is dropped rather than written over the new one.
+   */
+  loadTicketDetail: async (key) => {
+    if (get().ticketDetail?.key !== key) set({ ticketDetail: { key, problems: {} } });
+    const inList = get().tickets.some((ticket) => ticket.key === key);
+    await readTicketParts(get, set, key, { ledger: true, issue: !inList });
+  },
+
+  /**
+   * The page poller's call (HIVE-203): detail, comments and transitions again.
+   * Not the ledger history — the tail carries what is appended after the open —
+   * and the issue only when the slice read one for itself.
+   */
+  refreshTicketDetail: async (key) => {
+    const open = get().ticketDetail;
+    if (open?.key !== key) return;
+    await readTicketParts(get, set, key, { ledger: false, issue: open.issue !== undefined });
+  },
+
+  appendTicketComment: (key, comment) =>
+    set((state) => {
+      const open = state.ticketDetail;
+      if (open?.key !== key) return state;
+      return {
+        ticketDetail: {
+          ...open,
+          comments: [...(open.comments ?? []), comment],
+          total: (open.total ?? open.comments?.length ?? 0) + 1,
+        },
+      };
+    }),
+
+  reloadTicketTransitions: async (key) => {
+    if (get().ticketDetail?.key !== key) return;
+    const result = await readJiraTransitions({ key });
+    if (!result?.ok || get().ticketDetail?.key !== key) return;
+    set((state) => ({ ticketDetail: { ...state.ticketDetail!, transitions: result.value } }));
+  },
+
+  setTicketDetailIssue: (issue) =>
+    set((state) => {
+      const open = state.ticketDetail;
+      if (open?.key !== issue.key || open.issue === undefined) return state;
+      return { ticketDetail: { ...open, issue: toTicket(issue) } };
+    }),
+
+  /**
    * Read the configured query and install the answer (HIVE-69).
    *
    * Lives on the store rather than in a hook for the same reason `sendToEntity`
@@ -5506,6 +5664,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       */
       tickets: [],
       ticketSource: { kind: 'loading' },
+      ticketDetail: null,
       /*
         Not "an orphan quietly wasting memory" the way it first read — session
         ids are **not unique across machines**. `nextSpawnId`/`rememberSpawnId`
@@ -5599,6 +5758,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       metrics: {},
       plans: {},
       ticketSource: { kind: 'loading' },
+      ticketDetail: null,
       prSource: { kind: 'loading' },
       prSearch: NO_PR_SEARCH,
       ticketSearch: NO_TICKET_SEARCH,
@@ -7231,6 +7391,30 @@ export const useRefreshTickets = (): (() => Promise<void>) =>
 export const useUpdateTicket = (): ((issue: JiraIssue) => void) =>
   useHiveStore((state) => state.updateTicket);
 
+/** The open ticket's page data, or null before one opens (HIVE-203). */
+export const useTicketDetail = (): TicketDetail | null =>
+  useHiveStore((state) => state.ticketDetail);
+
+/** Read the open ticket's page (HIVE-203). */
+export const useLoadTicketDetail = (): ((key: string) => Promise<void>) =>
+  useHiveStore((state) => state.loadTicketDetail);
+
+/** The page poller's re-read of the open ticket (HIVE-203). */
+export const useRefreshTicketDetail = (): ((key: string) => Promise<void>) =>
+  useHiveStore((state) => state.refreshTicketDetail);
+
+/** Show a just-posted comment on the open ticket (HIVE-203). */
+export const useAppendTicketComment = (): ((key: string, comment: JiraComment) => void) =>
+  useHiveStore((state) => state.appendTicketComment);
+
+/** Re-read the open ticket's transitions (HIVE-203). */
+export const useReloadTicketTransitions = (): ((key: string) => Promise<void>) =>
+  useHiveStore((state) => state.reloadTicketTransitions);
+
+/** Install a re-read issue for an open ticket the list does not hold (HIVE-203). */
+export const useSetTicketDetailIssue = (): ((issue: JiraIssue) => void) =>
+  useHiveStore((state) => state.setTicketDetailIssue);
+
 /**
  * The five things the fleet-derived selectors below actually read off a session.
  *
@@ -7780,6 +7964,122 @@ export const useTicket = (ticketKey: string | null): Ticket | undefined =>
       ? undefined
       : state.tickets.find((ticket) => ticket.key === ticketKey),
   );
+
+/**
+ * The Work panel's row for each ticket in `tickets` (HIVE-203): the title with
+ * its tags dropped, the tone of its dot, and the one fact that leads.
+ *
+ * Takes the list rather than reading it so search results get the same rows
+ * as the standing list.
+ */
+export const useTicketRowModels = (tickets: readonly Ticket[]): TicketRowModel[] => {
+  const all = useHiveStore((state) => state.tickets);
+  const fleet = useHiveStore(selectSessionFacets);
+  const entities = useHiveStore((state) => state.entities);
+  const prs = useHiveStore((state) => state.prs);
+  const ledger = useHiveStore((state) => state.ledger);
+
+  // ponytail: recomputes every row on any entity write; the panel is one component, not the terminals.
+  return useMemo(
+    () =>
+      tickets.map((ticket) => {
+        const sessions = liveSessionsForTicket(ticket.key, fleet).flatMap((id) => {
+          const entity = entities[id];
+          return entity && isSession(entity) ? [entity.status] : [];
+        });
+        return ticketRow({
+          ticket,
+          sessions,
+          prs: resolveTicketPrs(ticket.key, all, fleet, prs),
+          progress: buildProgressFor(ledger, ticket.key),
+        });
+      }),
+    [tickets, all, fleet, entities, prs, ledger],
+  );
+};
+
+/** The Work panel's groups, In progress then To do then Done, with its counts (HIVE-203). */
+export const useTicketGroups = (): { groups: TicketGroup[]; total: number; needYou: number } => {
+  const rows = useTicketRowModels(useTickets());
+
+  return useMemo(() => groupTickets(rows), [rows]);
+};
+
+/**
+ * The ticket the Work page shows (HIVE-203): the list's, else the issue the
+ * detail slice read for itself because the list does not hold it.
+ */
+export const useOpenTicket = (ticketKey: string | null): Ticket | undefined =>
+  useHiveStore((state) => {
+    if (ticketKey === null) return undefined;
+    const listed = state.tickets.find((ticket) => ticket.key === ticketKey);
+    if (listed) return listed;
+    const open = state.ticketDetail;
+    return open?.key === ticketKey ? open.issue : undefined;
+  });
+
+/** The ticket page's key/value column (HIVE-203). */
+export const useTicketProperties = (ticketKey: string): TicketProperties | undefined => {
+  const ticket = useOpenTicket(ticketKey);
+  const fleet = useHiveStore(selectSessionFacets);
+  const entities = useHiveStore((state) => state.entities);
+  const ledger = useHiveStore((state) => state.ledger);
+  const parent = useHiveStore((state) =>
+    state.ticketDetail?.key === ticketKey ? state.ticketDetail.detail?.parent : undefined,
+  );
+
+  return useMemo(() => {
+    if (ticket === undefined) return undefined;
+    const tags = parseTitleTags(ticket.title);
+    const priority = tags.priority ?? ticket.priority ?? undefined;
+    const live = liveSessionsForTicket(ticketKey, fleet)
+      .map((id) => entities[id])
+      .find((entity) => entity !== undefined && isSession(entity));
+    const agent = buildProgressFor(ledger, ticketKey)?.from;
+    return {
+      status: ticket.status,
+      ...(priority ? { priority } : {}),
+      ...(tags.side ? { side: tags.side } : {}),
+      ...(live ? { project: live.project } : {}),
+      assignee: ticket.assignee ?? 'Unassigned',
+      ...(agent ? { agent } : {}),
+      ...(parent ? { epic: parent.key } : {}),
+    };
+  }, [ticket, ticketKey, fleet, entities, ledger, parent]);
+};
+
+/**
+ * The ticket's ledger events (HIVE-203): what `ledger:list` answered on open,
+ * plus what the tail has appended since, deduped by id and in id order — ids
+ * sort in write order.
+ */
+export const useTicketEvents = (ticketKey: string): LedgerEntry[] => {
+  const history = useHiveStore((state) =>
+    state.ticketDetail?.key === ticketKey ? state.ticketDetail.history : undefined,
+  );
+  const ledger = useHiveStore((state) => state.ledger);
+  const query = useMemo<LedgerReadQuery>(() => ({ ticket: ticketKey }), [ticketKey]);
+
+  return useMemo(() => {
+    const byId = new Map<string, LedgerEntry>();
+    for (const entry of history ?? []) byId.set(entry.id, entry);
+    for (const entry of ledger) if (matches(entry, query)) byId.set(entry.id, entry);
+    return [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }, [history, ledger, query]);
+};
+
+/** The one step forward from the ticket's status, from its cached transitions (HIVE-203, D6). */
+export const useNextTransition = (ticketKey: string): JiraTransition | undefined => {
+  const ticket = useOpenTicket(ticketKey);
+  const transitions = useHiveStore((state) =>
+    state.ticketDetail?.key === ticketKey ? state.ticketDetail.transitions : undefined,
+  );
+
+  return useMemo(
+    () => (ticket === undefined ? undefined : nextTransition(transitions ?? [], ticket.statusCategory)),
+    [ticket, transitions],
+  );
+};
 
 /**
  * How many work items exist — the left rail's Work tab badge (story 030).

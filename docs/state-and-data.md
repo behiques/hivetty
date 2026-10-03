@@ -46,6 +46,12 @@ the picker from re-rendering thirteen live terminals.
   `consoleShown` (`false`) is the overmind's transcript in round two's dock,
   flipped by `toggleConsole`; folded, the stage hides the transcript and the
   table takes the page.
+  The Work place adds (HIVE-203), none persisted: `workTicket` (the ticket
+  open on the stage, `null` for "Pick a ticket"), `workFolded` (per status
+  category, Done folded by default) and `workConversation`
+  (`'comments' | 'everything'`). `openWorkTicket(key)` opens the page: it
+  moves the bar to Work, shows the panel, resets the conversation to Comments
+  and dismisses the overlays.
 - `src/stores/appearance-store.ts` — durable preferences: `theme`, the terminal
   and editor typography, `editorPlacement`, `editorNav`, `editorEditable`,
   `density`, `layout` (`'classic' | 'round-two'`, HIVE-195), the rail widths,
@@ -150,6 +156,30 @@ nothing that asked about another. `clearModeEntities` clears the slice on a
 mode switch for the reason it clears `metrics`: session ids are minted the same
 way on every machine, and a stale plan would draw the departed session's tasks
 against the newly attached one wearing the same id.
+
+### The open ticket's detail slice
+
+`hive-store.state.ticketDetail` is the Work page's data for **one** ticket
+(HIVE-203): `{ key, issue?, detail?, comments?, total?, transitions?,
+history?, readAt?, problems }`. Opening another key replaces it.
+
+- `loadTicketDetail(key)` reads in parallel: `jira:detail`, the newest
+  comments (`jira:comments { newest: true }`), `jira:transitions`,
+  `ledger:list { ticket }`, and `jira:issue` only when the list does not hold
+  the key. **Each part merges as it lands**, so one failed read never blanks
+  another: a failure sets `problems.detail` or `problems.comments` and keeps
+  what the last read found. An answer for a key no longer open is dropped.
+- `refreshTicketDetail(key)` is the page's 60 s poller: detail, comments and
+  transitions again, not the ledger history (the tail carries what is appended
+  after the open).
+- `appendTicketComment(key, comment)` shows a just-posted comment and counts it.
+- `reloadTicketTransitions(key)` re-reads the transitions after the status
+  moves. They are cached here for the open ticket only; the pill's menu still
+  reads its own on open.
+- `setTicketDetailIssue(issue)` installs a re-read issue for a ticket the list
+  does not hold; a listed one is `updateTicket`'s.
+
+Every reset path clears it.
 
 ### The freshness rule
 
@@ -284,6 +314,12 @@ Components never read a store object directly and never call `getState()`.
 | `useCombEntities()` | Home's comb cells: every live session, live terminal and agent, as raw facts (HIVE-199) |
 | `useCombSummary()` | the headline's counts over the same cells: `{ needs, working, failed, resting, projects, agents }` |
 | `useSwarmPalette()` | the swarm canvas's colours for the active theme and mode (appearance store) |
+| `useTicketGroups()` | the Work panel's groups (In progress, To do, Done; empty ones dropped) with `total` and `needYou` (HIVE-203) |
+| `useTicketRowModels(tickets)` | each ticket's row: title without tags, tone, and the one leading fact (`lib/ticket-activity.ts`) |
+| `useOpenTicket(key)` | the list's ticket, else the issue `ticketDetail` read for itself |
+| `useTicketProperties(key)` | the page's key/values: status, priority (tag, else Jira), side, project, assignee, agent, epic |
+| `useTicketEvents(key)` | the ticket's ledger events: `ticketDetail.history` plus the tail, deduped and in id order |
+| `useNextTransition(key)` | the first transition exactly one status category forward, or nothing |
 
 Derived values are computed in selectors and **never stored** — one source of
 truth for every number on screen.

@@ -1,8 +1,11 @@
-import { type ReactNode } from 'react';
+import { CaretRight, MagnifyingGlass } from '@phosphor-icons/react';
+import { type ReactNode, useState } from 'react';
 
 import { usePrRefresh } from '@/hooks/use-pr-refresh';
 import { usePullToRefresh } from '@/hooks/use-pull-to-refresh';
 import { useTicketRefresh } from '@/hooks/use-ticket-refresh';
+import { cn } from '@/lib/utils';
+import type { Ticket } from '@/types/ticket';
 
 import { EmptyState } from '@components/ui/empty-state';
 import { PullIndicator } from '@components/ui/pull-indicator';
@@ -10,15 +13,18 @@ import { SwarmLine } from '@components/ui/swarm-line';
 import { SourceProblem } from '@features/shared/components/source-problem';
 import { TicketCard } from '@features/work/components/ticket-card';
 import { TicketListSkeleton } from '@features/work/components/ticket-card-skeleton';
+import { TicketRow } from '@features/work/components/ticket-row';
 import { WorkSearchRow } from '@features/work/components/work-search-row';
 import {
   useRefreshTickets,
+  useTicketGroups,
+  useTicketRowModels,
   useTicketSearch,
   useTicketSource,
   useTickets,
   type TicketSource,
 } from '@stores/hive-store';
-import { useWorkSearchTerm } from '@stores/ui-store';
+import { useToggleWorkGroup, useWorkFolded, useWorkSearchTerm } from '@stores/ui-store';
 
 /**
  * Work panel — one card per ticket, with its linked sessions and PRs.
@@ -143,12 +149,110 @@ function WorkLayout({
   );
 }
 
-export function WorkPanel() {
+/**
+ * Round two's header (HIVE-203): the place's name, how many tickets and how
+ * many need you, and a button that shows the search box. The box stays shown
+ * while a term is in it, so a search never hides its own control.
+ */
+function WorkHeader() {
+  const term = useWorkSearchTerm();
+  const { total, needYou } = useTicketGroups();
+  const [searchShown, setSearchShown] = useState(term !== '');
+
+  return (
+    <>
+      <div className="flex items-baseline gap-2.5 px-2 pt-2.5 pb-2">
+        <b className="text-[14px] text-ink">Work</b>
+        <span className="text-[12px] text-muted">
+          {total} tickets
+          {needYou > 0 ? (
+            <>
+              {' · '}
+              <span className="text-amber">{needYou} need you</span>
+            </>
+          ) : null}
+        </span>
+        <span className="flex-1" />
+        <button
+          type="button"
+          aria-label="Search tickets"
+          aria-pressed={searchShown}
+          onClick={() => setSearchShown((shown) => !shown)}
+          className="self-center rounded-md p-1 text-muted hover:bg-hover hover:text-ink"
+        >
+          <MagnifyingGlass size={15} />
+        </button>
+      </div>
+      {searchShown || term !== '' ? <WorkSearchRow /> : null}
+    </>
+  );
+}
+
+/** The standing list in its groups, each with a fold caret; Done starts folded (HIVE-203). */
+function TicketGroups() {
+  const { groups } = useTicketGroups();
+  const folded = useWorkFolded();
+  const toggle = useToggleWorkGroup();
+
+  return (
+    <>
+      {groups.map((group) => {
+        const open = !folded[group.category];
+        return (
+          <div key={group.category} className="flex flex-col gap-0.5">
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => toggle(group.category)}
+              className="flex items-center gap-1.5 px-2 pt-2 pb-1 text-left"
+            >
+              <CaretRight
+                size={10}
+                aria-hidden
+                className={cn('text-subtle transition-transform', open && 'rotate-90')}
+              />
+              <span className="font-sans text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase">
+                {group.label}
+              </span>
+              <span className="font-mono text-[10.5px] text-subtle">{group.rows.length}</span>
+            </button>
+            {open ? group.rows.map((row) => <TicketRow key={row.ticket.key} row={row} />) : null}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** Search results as rows, ungrouped: a search replaces the list rather than filtering it. */
+function TicketRows({ tickets }: { tickets: readonly Ticket[] }) {
+  const rows = useTicketRowModels(tickets);
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      {rows.map((row) => (
+        <TicketRow key={row.ticket.key} row={row} />
+      ))}
+    </div>
+  );
+}
+
+/** Round two's Work panel (HIVE-203): grouped rows instead of Classic's cards. */
+export const WorkList = () => <WorkPanel variant="rows" />;
+
+/**
+ * Both layouts' Work panel (HIVE-203, D2). `cards` is Classic's; `rows` swaps
+ * the header and the list body and shares everything else — the skeleton, the
+ * notices, pull to refresh and both pollers.
+ */
+export function WorkPanel({ variant = 'cards' }: { variant?: 'cards' | 'rows' }) {
   const tickets = useTickets();
   const source = useTicketSource();
   const refresh = useRefreshTickets();
   const search = useTicketSearch();
   const term = useWorkSearchTerm();
+  const rows = variant === 'rows';
+  const header = rows ? <WorkHeader /> : <WorkSearchRow />;
 
   /** A search replaces the list rather than filtering it — see `WorkSearchRow`. */
   const searching = term !== '';
@@ -201,7 +305,7 @@ export function WorkPanel() {
   */
   if (source.kind === 'loading' && !searching) {
     return (
-      <WorkLayout header={<WorkSearchRow />}>
+      <WorkLayout header={header}>
         <TicketListSkeleton />
       </WorkLayout>
     );
@@ -217,7 +321,7 @@ export function WorkPanel() {
     const results = search.results;
 
     return (
-      <WorkLayout header={<WorkSearchRow />}>
+      <WorkLayout header={header}>
         {search.error !== null ? (
           <p className="px-1 pb-1 text-[11.5px] leading-[1.45] text-amber">
             {search.error}
@@ -240,9 +344,10 @@ export function WorkPanel() {
           <TicketListSkeleton />
         ) : null}
 
-        {results?.map((ticket) => (
-          <TicketCard key={ticket.key} ticket={ticket} />
-        ))}
+        {rows && results ? <TicketRows tickets={results} /> : null}
+        {rows
+          ? null
+          : results?.map((ticket) => <TicketCard key={ticket.key} ticket={ticket} />)}
 
         {search.error === null && !search.searching && results?.length === 0 ? (
           <EmptyState phrase="empty.work" creature="spire">
@@ -254,14 +359,16 @@ export function WorkPanel() {
   }
 
   return (
-    <WorkLayout header={<WorkSearchRow />} listRef={pull.ref}>
+    <WorkLayout header={header} listRef={pull.ref}>
       <PullIndicator distance={pull.distance} phase={pull.phase} />
 
       <SourceNotice source={source} onRetry={retry} />
 
-      {tickets.map((ticket) => (
-        <TicketCard key={ticket.key} ticket={ticket} />
-      ))}
+      {rows ? (
+        <TicketGroups />
+      ) : (
+        tickets.map((ticket) => <TicketCard key={ticket.key} ticket={ticket} />)
+      )}
 
       {/*
         An empty live result is not a failure and not a misconfiguration — it is

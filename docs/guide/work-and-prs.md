@@ -44,6 +44,41 @@ On each ticket you can move it through its workflow, read and add comments, and 
 and sessions linked to it. Type in **Search tickets** to search every ticket, any assignee,
 any status; tick **Mine only** to narrow it.
 
+## The ticket page
+
+In the round-two layout, **Work** is a place of its own. The panel lists your tickets in
+three groups, **In progress**, **To do** and **Done** (Done starts folded; click a group's
+header to fold or unfold it). The header counts the tickets and how many **need you**.
+
+Each row is one line of title and one line of facts: the key, then the one thing that
+matters most about the ticket right now, first match wins:
+
+- `waiting on you`: a session on it is asking you something.
+- `2 findings on #412`: a review left findings on its pull request.
+- `builder · task 3 done`: an agent's latest progress on it.
+- `session working`, `1 idle session`, or `no session`.
+
+A status that differs from its group, like `In Review` inside In progress, leads the line.
+The dot is amber when the ticket needs you, green while a session or an agent works it, and
+an empty ring otherwise. The magnifier shows **Search tickets**; a search replaces the list.
+
+Click a row and the ticket's page fills the stage:
+
+- **The header**: the key (it opens Jira), the status pill (click it to move the ticket),
+  the title, then the description.
+- **Conversation**: Jira's newest 50 comments, oldest first. **Comments | Everything**
+  switches between the comments alone and the comments with what the agents and sessions
+  posted about the ticket, in time order. Hover a comment for **Reply** and **Copy link**.
+  Reply addresses the box below to its author; Escape in an empty box forgets it. The box
+  posts to Jira, where everyone on the ticket sees it.
+- **Properties**, on the right: status, priority and side (read off a title's `[P4]` and
+  `[BE]` tags when it has them), project, assignee, the agent on it and its epic; the
+  sessions and pull requests on it; and the actions: **New session**, **Move to** the next
+  status when there is one, and **Open in Jira**.
+
+The page re-reads the ticket every minute while it is open. A read that fails says so in
+its section with **Retry**, and what was already on screen stays, marked with its time.
+
 ## Start a session from a ticket
 
 Click **new session** on a ticket. The picker opens with the ticket key filled in, because a
