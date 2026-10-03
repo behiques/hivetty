@@ -19,6 +19,7 @@ import { TerminalHint } from '@components/ui/terminal-hint';
 import { AgentView } from '@features/agents/components/agent-view';
 import { EditorPane } from '@features/editor/components/editor-pane';
 import { EditorTabStrip } from '@features/editor/components/editor-tab-strip';
+import { HomePage } from '@features/home/components/home-page';
 import { ConsoleInput } from '@features/orchestrator/components/console-input';
 import { ConsolePeek } from '@features/orchestrator/components/console-peek';
 import { FleetPane, TRANSCRIPT_FLOOR } from '@features/orchestrator/components/fleet-pane';
@@ -408,14 +409,7 @@ export function CenterStage() {
     <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-panel-2">
       {showingPicker ? <NewSessionPicker /> : null}
       {view === 'settings' ? <SettingsOverlay /> : null}
-      {/* Placeholder until HIVE-199's comb: the page head and nothing else. */}
-      {view === 'home' ? (
-        <section aria-label="Home" className="flex min-h-0 flex-1 flex-col">
-          <h1 className="px-7 pt-[18px] pb-2.5 text-[22px] font-semibold tracking-tight text-ink">
-            Home
-          </h1>
-        </section>
-      ) : null}
+      {view === 'home' ? <HomePage /> : null}
 
       {/*
         Hidden, never unmounted. Tearing the terminal region down for the

@@ -1,0 +1,210 @@
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { expect, test, type Page } from '@playwright/test';
+
+import {
+  HOOK_ENV_RECEIVER_URL,
+  HOOK_ENV_SESSION,
+  HOOK_ENV_TOKEN,
+  HOOK_HEADER_SESSION,
+  HOOK_HEADER_TOKEN,
+  HOOK_PATH,
+} from '../../../electron/shared/hook-contract';
+import { launchHive } from './fixtures/hive-app';
+
+/**
+ * Home's comb in the real app (HIVE-199).
+ *
+ * Three sessions on one project, each driven into a state by hook posts from
+ * its own shell, the way `plan-rail.spec.ts` posts its task tools: one
+ * working, one waiting, one idle. What only a real window can show is the
+ * canvas itself — that it lays the patch out where the layout says, that a
+ * hover over it finds the cell, and what it looks like in both themes, which
+ * the screenshots keep as artifacts.
+ *
+ * Unseeded, so no shipped agents: the swarm is empty and the project's patch
+ * is the only one. Reduced motion is emulated, so the canvas holds one still
+ * frame and the screenshots are of a picture, not of a moment in a loop.
+ */
+
+const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
+const PROJECT = 'nova-web';
+
+function writeConfig(path: string, bootDir: string): void {
+  writeFileSync(
+    path,
+    JSON.stringify({
+      version: 2,
+      shell: '/bin/sh',
+      claudeCommand: `printf bootstrapped > '${bootDir}/boot-'"$${HOOK_ENV_SESSION}"; false`,
+      projects: [{ id: PROJECT, name: PROJECT, path: REAL_DIRECTORY, icon: 'ph-cube' }],
+    }),
+  );
+}
+
+const readMarker = (path: string): string | null =>
+  existsSync(path) ? readFileSync(path, 'utf8').trim() : null;
+
+async function expectMarker(path: string, contents: string): Promise<void> {
+  await expect.poll(() => readMarker(path), { timeout: 15_000 }).toBe(contents);
+}
+
+async function shell(page: Page, sessionId: string, command: string): Promise<void> {
+  await page.evaluate(
+    ([id, data]) => {
+      window.hive!.pty.write({ sessionId: id!, data: data! });
+    },
+    [sessionId, `${command}\n`],
+  );
+}
+
+/** One hook event, posted from the session's own shell with its own credentials. */
+function postHookCommand(
+  event: string,
+  body: Record<string, unknown>,
+  statusMarker: string,
+): string {
+  const payload = JSON.stringify({ hook_event_name: event, ...body });
+  return (
+    `curl -sS -m 5 -o /dev/null -w '%{http_code}' -X POST "$${HOOK_ENV_RECEIVER_URL}${HOOK_PATH}"` +
+    ` -H "${HOOK_HEADER_SESSION}: $${HOOK_ENV_SESSION}"` +
+    ` -H "${HOOK_HEADER_TOKEN}: $${HOOK_ENV_TOKEN}"` +
+    ` -H "content-type: application/json"` +
+    ` --data-binary '${payload}'` +
+    ` > '${statusMarker}'`
+  );
+}
+
+/** Seed round two before the first frame that matters, as `sessions-place.spec.ts` does. */
+async function useRoundTwo(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'hive.appearance',
+      JSON.stringify({ version: 3, state: { layout: 'round-two', theme: 'dark' } }),
+    ),
+  );
+  await page.reload();
+  await page.waitForSelector('nav[aria-label="Places"]');
+}
+
+const places = (page: Page) => page.getByRole('navigation', { name: 'Places' });
+
+const terminalIds = (page: Page): Promise<string[]> =>
+  page
+    .locator('[data-terminal-id^="sess-"]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-terminal-id') ?? ''));
+
+/**
+ * Start one session on the project through the title bar's picker; answers its
+ * id. Scoped to the `header`, since round two also draws a "New session" "+"
+ * in the panel head.
+ */
+async function startSession(page: Page, bootDir: string): Promise<string> {
+  const before = await terminalIds(page);
+  await page.locator('header').getByRole('button', { name: 'New session', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Search all projects' })).toBeFocused();
+  await page.keyboard.type(PROJECT);
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await terminalIds(page)).length).toBe(before.length + 1);
+  const id = (await terminalIds(page)).find((each) => !before.includes(each));
+  if (id === undefined) throw new Error('the spawned session has no terminal id');
+  await expect(page.locator(`[data-terminal-id="${id}"]`)).toBeVisible();
+  await expectMarker(join(bootDir, `boot-${id}`), 'bootstrapped');
+  return id;
+}
+
+/** Two animation frames: the canvas has painted whatever the last change asked for. */
+const settle = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+
+test('Home draws the comb: one cell per session, the headline, a hover, both themes', async ({}, testInfo) => {
+  // Three sessions booted and a dozen hook posts: more than the default 30 s.
+  test.setTimeout(120_000);
+  const configPath = testInfo.outputPath('hive-config.json');
+  const bootDir = testInfo.outputPath('.');
+  writeConfig(configPath, bootDir);
+
+  const app = await launchHive({
+    userDataDir: testInfo.outputPath('user-data'),
+    configPath,
+    unseeded: true,
+  });
+  const page = await app.firstWindow();
+  let posts = 0;
+  const post = async (sessionId: string, event: string, body: Record<string, unknown> = {}) => {
+    posts += 1;
+    const marker = testInfo.outputPath(`posted-${String(posts)}.txt`);
+    await shell(page, sessionId, postHookCommand(event, body, marker));
+    await expectMarker(marker, '204');
+  };
+  const goHome = () => places(page).getByRole('button', { name: 'Home', exact: true }).click();
+
+  try {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.waitForLoadState('domcontentloaded');
+    await useRoundTwo(page);
+
+    const working = await startSession(page, bootDir);
+    await goHome();
+    const waiting = await startSession(page, bootDir);
+    await goHome();
+    const idle = await startSession(page, bootDir);
+    await goHome();
+
+    await post(working, 'SessionStart');
+    await post(working, 'UserPromptSubmit');
+    await post(waiting, 'SessionStart');
+    await post(waiting, 'UserPromptSubmit');
+    await post(waiting, 'Notification', { notification_type: 'permission_prompt' });
+    await post(idle, 'SessionStart');
+    await post(idle, 'Stop');
+
+    await goHome();
+    await expect(page.getByRole('heading', { level: 2, name: '1 thing needs you' })).toBeVisible();
+    const cells = page.getByRole('list', { name: "The comb's cells" }).getByRole('button');
+    await expect(cells).toHaveCount(3);
+    await expect(cells.filter({ hasText: /Morphing · nova-web/ })).toHaveCount(1);
+    await expect(cells.filter({ hasText: /Summons · nova-web/ })).toHaveCount(1);
+    await expect(cells.filter({ hasText: /Burrowed · nova-web/ })).toHaveCount(1);
+
+    // The patch's first cell: column 2, row 7 at R 36, in the comb's logical space.
+    const canvas = page.getByRole('img', { name: /need/ });
+    const box = await canvas.boundingBox();
+    if (box === null) throw new Error('the comb has no box');
+    const k = box.width / 1376;
+    const R = 36;
+    const w = Math.sqrt(3) * R;
+    await page.mouse.move(box.x + (2 * w + w / 2) * k, box.y + (7 * 1.5 * R + 14) * k);
+    const tooltip = page.getByRole('tooltip');
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toContainText('nova-web');
+    await page.mouse.move(0, 0);
+    await expect(tooltip).toHaveCount(0);
+
+    // The palette comes from the appearance store, so the theme is switched
+    // the way a person does it, not by editing the body attribute.
+    const shoot = async (name: string) => {
+      await settle(page);
+      await page.screenshot({ path: testInfo.outputPath(`${name}-dark.png`) });
+      await page.getByRole('button', { name: 'Switch to light theme' }).click();
+      await settle(page);
+      await page.screenshot({ path: testInfo.outputPath(`${name}-light.png`) });
+      await page.getByRole('button', { name: 'Switch to dark theme' }).click();
+    };
+    await shoot('home-comb-needs');
+
+    // A new prompt answers the block; the turn's Stop leaves it idle.
+    await post(waiting, 'UserPromptSubmit');
+    await post(waiting, 'Stop');
+    await expect(page.getByRole('heading', { level: 2, name: 'Nothing needs you' })).toBeVisible();
+    await shoot('home-comb-calm');
+  } finally {
+    await app.close();
+  }
+});

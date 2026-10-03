@@ -281,6 +281,9 @@ Components never read a store object directly and never call `getState()`.
 | `useLedgerEntries(filter?)` | the ledger tail, by the shared query rules |
 | `useOpenAskCount()` | how many asks are unanswered and not yet TTL-retired |
 | `useThread(id)` | one conversation: the ask, and everything that named it |
+| `useCombEntities()` | Home's comb cells: every live session, live terminal and agent, as raw facts (HIVE-199) |
+| `useCombSummary()` | the headline's counts over the same cells: `{ needs, working, failed, resting, projects, agents }` |
+| `useSwarmPalette()` | the swarm canvas's colours for the active theme and mode (appearance store) |
 
 Derived values are computed in selectors and **never stored** — one source of
 truth for every number on screen.
@@ -291,6 +294,19 @@ project's folder name and the time, and returns the three groups plus
 `endedMore`. The table draws `useFleetGroup`'s groups and the caret walks
 `useFleetNavOrder`, both from it, so the rows and `↑↓` cannot disagree.
 `useNavOrder` stays the whole fleet, for the terminal host.
+
+**The comb selectors** (HIVE-199). `useCombEntities` flattens each cell to a
+NUL-separated string under `useShallow` and parses them in `useMemo`, so a
+transcript line or a cost update re-renders nothing. A session is Morphing when
+`working` (or `idle` with an `idleDetail`), Summons when `waiting`, Burrowed
+when idle; an agent is Failed when `failed` or its definition is `invalid`,
+Summons when `asking`, Morphing when `working`, Burrowed when sleeping or
+paused; a live terminal is Terminal; ended sessions and terminals drop out.
+`summariseComb` / `useCombSummary` count those cells for the headline. `needs`
+is the comb's own Summons count until HIVE-214's `useSummonsCount` lands.
+`useSwarmPalette` is memoised per theme `ui` object, so an unrelated
+appearance write hands back the same reference; a theme without `creep` and
+`chitin` gets them derived from its own `bg`, `brand` and `ink`.
 
 ## Caps
 

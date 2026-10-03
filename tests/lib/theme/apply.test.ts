@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { BUILT_IN_THEME } from '@lib/theme/built-in';
+import { swarmPaletteOf } from '@lib/theme/colour';
 import { THEME_STYLE_ID, applyThemeColors, themeCss } from '@lib/theme/apply';
 import type { HiveTheme } from '@lib/theme/contract';
 import {
@@ -63,6 +64,14 @@ describe('themeCss', () => {
     expect(css).toContain(
       `--cc-code-active-line: ${BUILT_IN_THEME.modes.dark.syntax.activeLine}`,
     );
+  });
+
+  it('writes the creature tokens: the theme value, else the derived fallback', () => {
+    const theme = structuredClone(BUILT_IN_THEME);
+    delete theme.modes.dark.ui.creep;
+    const out = themeCss(theme);
+    expect(out).toContain(`--cc-creep: ${swarmPaletteOf(theme.modes.dark.ui).creep};`);
+    expect(out).toContain('--cc-chitin: #b9a7f0;');
   });
 
   it('emits no spacing tokens — a theme is colour', () => {

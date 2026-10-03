@@ -122,6 +122,11 @@
    */
   --cc-on-danger: #ffffff;
 
+  /* The creature (HIVE-199): the ground under a busy comb patch, and the
+     mutalisk's wings, bones and claws. Themeable, optional keys. */
+  --cc-creep: #5b3d8f;
+  --cc-chitin: #b9a7f0;
+
   /**
    * Rail density (story 105) — the comfortable values, which are the numbers
    * the rails have always used.
@@ -256,6 +261,8 @@ body[data-theme='light'] {
   /* Light lifts by *deepening*: the chip already sits below a white panel, so
      its hover continues down rather than back up toward the panel. */
   --cc-chip-hover: #e2eaee;
+  --cc-creep: #b7a3e6;
+  --cc-chitin: #6a54b0;
 
   /* The mark needs no rescuing from a light ground — it is already the darkest
      thing on it. What is left is a hint of depth, not a halo. */

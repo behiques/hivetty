@@ -13,6 +13,7 @@ import type {
   Session,
   SessionStatus,
   Terminal,
+  TerminalStatus,
 } from '@/types/entity';
 import {
   branchLabel,
@@ -51,6 +52,7 @@ import {
   subscribeProjectConfig,
 } from '@lib/project-config';
 import { noteSessionPr, noteSessionTicket } from '@lib/session-history';
+import { type CellState, SWARM } from '@lib/swarm/comb';
 import { pickPhrase } from '@lib/swarm/phrases';
 import {
   closeChannel,
@@ -87,6 +89,7 @@ import {
   type LedgerReadQuery,
   type LedgerResult,
   type LedgerSnapshot,
+  type OpenAsk,
 } from '@shared/ledger-contract';
 import {
   agentSiteFor,
@@ -6741,6 +6744,133 @@ export const usePlanProgress = (id: string | undefined) =>
           };
     }),
   );
+
+/** One cell of Home's comb (HIVE-199): raw facts, worded by `features/home/cell-text`. */
+export interface CombEntity {
+  id: string;
+  name: string;
+  kind: 'session' | 'terminal' | 'agent';
+  /** A project id, or `swarm` for an agent. */
+  project: string;
+  state: CellState;
+  status: SessionStatus | AgentStatus | TerminalStatus;
+  idleDetail?: IdleDetail;
+  done?: number;
+  total?: number;
+  /** An asking agent's open ask, its first line. */
+  ask?: string;
+  askedAt?: number;
+  /** A failed agent's last run reason, or why its definition is invalid. */
+  reason?: string;
+  /** A resting agent's next wake, as `describeNextRun` words it. */
+  nextRun?: string;
+}
+
+const COMB_SEP = '\u0000';
+
+/**
+ * Every live session, live terminal and agent, flattened to strings.
+ *
+ * Strings under `useShallow` for the reason `useAgentsByGroup` records: a
+ * transcript line or a cost update changes the entity map's identity and
+ * nothing here, so it re-renders nothing. The open asks are computed only when
+ * some agent is asking, because this runs on every store write.
+ */
+const combRowsSelector = (state: HiveState): string[] => {
+  const rows: string[] = [];
+  const row = (fields: (string | number | undefined)[]): string =>
+    fields.map((f) => String(f ?? '').replaceAll(COMB_SEP, '')).join(COMB_SEP);
+
+  for (const id of state.order) {
+    const e = state.entities[id];
+    if (e === undefined) continue;
+    if (isTerminal(e)) {
+      if (e.ended === undefined) rows.push(row([id, 'terminal', id, e.project, 'terminal', e.status]));
+      continue;
+    }
+    if (!isSession(e) || isEnded(e.status)) continue;
+    const combState: CellState =
+      e.status === 'waiting' ? 'summons' : e.status === 'working' || e.idleDetail !== undefined ? 'morphing' : 'burrowed';
+    const tasks = state.plans[id]?.tasks;
+    rows.push(row([
+      id, 'session', e.name ?? id, e.project, combState, e.status, e.idleDetail,
+      tasks?.filter((t) => t.status === 'completed').length, tasks?.length,
+    ]));
+  }
+
+  let asks: OpenAsk[] | undefined;
+  for (const id of state.agentOrder) {
+    const a = state.entities[id];
+    if (a === undefined || !isAgent(a)) continue;
+    const combState: CellState =
+      a.invalid !== undefined || a.status === 'failed' ? 'failed'
+        : a.status === 'asking' ? 'summons'
+          : a.status === 'working' ? 'morphing'
+            : 'burrowed';
+    const ask = combState === 'summons'
+      ? (asks ??= openAsks(state.ledger, Date.now())).find((x) => x.from === id)
+      : undefined;
+    rows.push(row([
+      id, 'agent', id, SWARM, combState, a.status, undefined, undefined, undefined,
+      ask?.body.split('\n')[0]?.slice(0, 80), ask?.ts,
+      combState === 'failed' ? (a.invalid ?? a.runs.at(-1)?.reason ?? 'failed') : undefined,
+      combState === 'burrowed' ? describeNextRun(a) : undefined,
+    ]));
+  }
+  return rows;
+};
+
+function parseCombRow(text: string): CombEntity {
+  const [id = '', kind, name = '', project = '', state, status, idleDetail, done, total, ask, askedAt, reason, nextRun] =
+    text.split(COMB_SEP);
+  const opt = (v: string | undefined): string | undefined => (v ? v : undefined);
+  const num = (v: string | undefined): number | undefined => (v ? Number(v) : undefined);
+  return {
+    id, name, project,
+    kind: kind as CombEntity['kind'],
+    state: state as CellState,
+    status: status as CombEntity['status'],
+    idleDetail: opt(idleDetail) as IdleDetail | undefined,
+    done: num(done), total: num(total),
+    ask: opt(ask), askedAt: num(askedAt), reason: opt(reason), nextRun: opt(nextRun),
+  };
+}
+
+/** Home's comb: every live session, live terminal and agent (HIVE-199). Derived, never stored. */
+export const useCombEntities = (): CombEntity[] => {
+  const rows = useHiveStore(useShallow(combRowsSelector));
+  return useMemo(() => rows.map(parseCombRow), [rows]);
+};
+
+export interface CombSummary {
+  /** Summons cells: waiting sessions and asking agents. */
+  needs: number;
+  working: number;
+  failed: number;
+  /** Burrowed cells and terminals. */
+  resting: number;
+  /** Projects with a patch. */
+  projects: number;
+  agents: number;
+}
+
+export function summariseComb(entities: CombEntity[]): CombSummary {
+  const count = (state: CellState): number => entities.filter((e) => e.state === state).length;
+  return {
+    needs: count('summons'),
+    working: count('morphing'),
+    failed: count('failed'),
+    resting: count('burrowed') + count('terminal'),
+    projects: new Set(entities.filter((e) => e.project !== SWARM).map((e) => e.project)).size,
+    agents: entities.filter((e) => e.kind === 'agent').length,
+  };
+}
+
+/** The headline's counts, over the same cells the comb draws. */
+export const useCombSummary = (): CombSummary => {
+  const entities = useCombEntities();
+  return useMemo(() => summariseComb(entities), [entities]);
+};
 
 /** One session's plan changed, or went (HIVE-179). */
 export const useSetPlan = () => useHiveStore((state) => state.setPlan);
