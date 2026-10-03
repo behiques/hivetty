@@ -742,6 +742,10 @@ export const CH = {
   plansList: 'plans:list',
   /** Push: one session's plan changed, or went (`plan: null`). main → renderer. */
   planChanged: 'plan:changed',
+  /** Every session's changed files (HIVE-201). Boot hydration and the attach snapshot. */
+  changedFilesList: 'changed-files:list',
+  /** Push: one session's changed files, whole (`files: []` = none). main → renderer. */
+  changedFilesChanged: 'changed-files:changed',
   /** What the app knows about a newer version of itself. */
   updatesStatus: 'updates:status',
   /**

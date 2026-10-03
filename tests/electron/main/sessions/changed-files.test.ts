@@ -1,6 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { foldTranscriptLines, type FileTally } from '../../../../electron/main/sessions/changed-files';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  createChangedFiles,
+  foldTranscriptLines,
+  type FileTally,
+} from '../../../../electron/main/sessions/changed-files';
+import { claudeProjectDir } from '../../../../electron/main/sessions/title-origin';
+import { CH } from '../../../../electron/shared/ipc-contract';
 
 const editLine = (filePath: string, lines: string[], extra: Record<string, unknown> = {}) =>
   JSON.stringify({
@@ -58,5 +68,100 @@ describe('foldTranscriptLines (HIVE-201)', () => {
       '/r/z.ts',
       '/r/a.ts',
     ]);
+  });
+});
+
+describe('createChangedFiles (HIVE-201)', () => {
+  const CWD = '/repo';
+  let home: string;
+  let transcript: { cwd: string; sessionUuid: string } | undefined;
+  const fileOf = (uuid: string) => join(home, '.claude', 'projects', claudeProjectDir(CWD), `${uuid}.jsonl`);
+  const stage = (uuid: string, text: string) => {
+    mkdirSync(join(fileOf(uuid), '..'), { recursive: true });
+    writeFileSync(fileOf(uuid), text);
+  };
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), 'hive-changed-'));
+    transcript = { cwd: CWD, sessionUuid: 'u1' };
+  });
+
+  const make = (send = vi.fn()) => ({
+    send,
+    files: createChangedFiles({
+      send,
+      home,
+      transcriptOf: () => transcript,
+      rootOf: () => Promise.resolve('/repo'),
+    }),
+  });
+
+  it('publishes the session list relative to the root', async () => {
+    stage('u1', editLine('/repo/src/a.ts', ['-x', '+y', '+z']) + '\n');
+    const { send, files } = make();
+    await files.onFileTool('sess-01');
+    expect(send).toHaveBeenLastCalledWith(CH.changedFilesChanged, {
+      entityId: 'sess-01',
+      files: [{ path: 'src/a.ts', mark: 'M', added: 2, removed: 1 }],
+    });
+  });
+
+  it('a second read starts at the last offset, so nothing is counted twice', async () => {
+    stage('u1', editLine('/repo/a.ts', ['+1']) + '\n');
+    const { send, files } = make();
+    await files.onFileTool('sess-01');
+    appendFileSync(fileOf('u1'), editLine('/repo/a.ts', ['+2']) + '\n');
+    await files.onFileTool('sess-01');
+    expect(send.mock.lastCall?.[1]).toMatchObject({ files: [{ path: 'a.ts', added: 2 }] });
+  });
+
+  it('a torn last line is not a record until its newline lands', async () => {
+    const whole = editLine('/repo/a.ts', ['+1']);
+    stage('u1', whole.slice(0, 40));
+    const { send, files } = make();
+    await files.onFileTool('sess-01');
+    expect(send).not.toHaveBeenCalled();
+    appendFileSync(fileOf('u1'), whole.slice(40) + '\n');
+    await files.onFileTool('sess-01');
+    expect(send.mock.lastCall?.[1]).toMatchObject({ files: [{ path: 'a.ts', added: 1 }] });
+  });
+
+  it('a new transcript uuid (/clear) reads the new file from 0 and keeps the list (D9)', async () => {
+    stage('u1', editLine('/repo/a.ts', ['+1']) + '\n');
+    const { send, files } = make();
+    await files.onFileTool('sess-01');
+    transcript = { cwd: CWD, sessionUuid: 'u2' };
+    stage('u2', editLine('/repo/b.ts', ['+1']) + '\n');
+    await files.onFileTool('sess-01');
+    expect(send.mock.lastCall?.[1]).toMatchObject({ files: [{ path: 'a.ts' }, { path: 'b.ts' }] });
+  });
+
+  it('serialises overlapping triggers, so one append is never read twice', async () => {
+    stage('u1', editLine('/repo/a.ts', ['+1']) + '\n');
+    const { send, files } = make();
+    await Promise.all([files.onFileTool('sess-01'), files.onFileTool('sess-01'), files.onFileTool('sess-01')]);
+    expect(send.mock.lastCall?.[1]).toMatchObject({ files: [{ added: 1 }] });
+  });
+
+  it('no transcript yet, or no known session: publishes nothing and does not throw', async () => {
+    const { send, files } = make();
+    await files.onFileTool('sess-01');
+    transcript = undefined;
+    await files.onFileTool('sess-02');
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('lists every session and drops one with files: []', async () => {
+    stage('u1', editLine('/repo/a.ts', ['+1']) + '\n');
+    const { send, files } = make();
+    await files.onFileTool('sess-01');
+    expect(files.list().sessions).toEqual([
+      { entityId: 'sess-01', files: [{ path: 'a.ts', mark: 'M', added: 1, removed: 0 }] },
+    ]);
+    files.drop('sess-01');
+    expect(send).toHaveBeenLastCalledWith(CH.changedFilesChanged, { entityId: 'sess-01', files: [] });
+    expect(files.list().sessions).toEqual([]);
+    files.drop('sess-01');
+    expect(send).toHaveBeenCalledTimes(2);
   });
 });
