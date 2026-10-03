@@ -6,6 +6,8 @@ import {
   collectSearchPrs,
   commentAdded,
   countFindings,
+  echoedId,
+  echoedResolved,
   mutated,
   readPrId,
   readThreadPr,
@@ -675,5 +677,14 @@ describe('readThreadPr and mutated (HIVE-207)', () => {
     expect(mutated({ resolveReviewThread: { thread: { id: 'T' } } }, 'resolveReviewThread')).toBe(true);
     expect(mutated({ resolveReviewThread: null }, 'resolveReviewThread')).toBe(false);
     expect(mutated(undefined, 'resolveReviewThread')).toBe(false);
+  });
+  it('reads success from the echo, never from a hollow answer', () => {
+    const resolvedTo = (to: boolean) => (answer: Record<string, unknown>) => echoedResolved(answer, to);
+    expect(mutated({ resolveReviewThread: { thread: { id: 'T', isResolved: true } } }, 'resolveReviewThread', resolvedTo(true))).toBe(true);
+    expect(mutated({ resolveReviewThread: { thread: { id: 'T', isResolved: false } } }, 'resolveReviewThread', resolvedTo(true))).toBe(false);
+    expect(mutated({ resolveReviewThread: { thread: null } }, 'resolveReviewThread', resolvedTo(true))).toBe(false);
+    expect(echoedId({ comment: { id: 'C' } }, 'comment')).toBe(true);
+    expect(echoedId({ comment: null }, 'comment')).toBe(false);
+    expect(echoedId({ comment: { id: 7 } }, 'comment')).toBe(false);
   });
 });

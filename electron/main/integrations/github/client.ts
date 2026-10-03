@@ -5,6 +5,8 @@ import {
   collectPrs,
   collectSearchPrs,
   commentAdded,
+  echoedId,
+  echoedResolved,
   hasAnyConnection,
   mutated,
   readPrId,
@@ -252,11 +254,16 @@ export function createGithubClient(
     return same ? { ok: true, value: true } : { ok: false, error: ghError('unknown', 'That thread is not on this pull request.') };
   };
 
-  /** One mutation whose success is its field in `data`. */
-  const write = async (query: string, field: string, strings: Record<string, string>): Promise<GhResult<true>> => {
+  /** One mutation whose success is its field in `data`, echoing what was written. */
+  const write = async (
+    query: string,
+    field: string,
+    strings: Record<string, string>,
+    echoed: (answer: Record<string, unknown>) => boolean,
+  ): Promise<GhResult<true>> => {
     const answer = await graphql(query, strings);
     if (answer === null) return NOT_RUN;
-    if (!mutated(answer.data, field)) return { ok: false, error: classifyGhFailure(answer.stderr, answer.timedOut) };
+    if (!mutated(answer.data, field, echoed)) return { ok: false, error: classifyGhFailure(answer.stderr, answer.timedOut) };
     return { ok: true, value: true };
   };
 
@@ -335,15 +342,18 @@ export function createGithubClient(
     async threadReply(repo, n, threadId, body) {
       const on = await threadOnPr(repo, n, threadId);
       if (!on.ok) return on;
-      return write(THREAD_REPLY_MUTATION, 'addPullRequestReviewThreadReply', { threadId, body });
+      return write(THREAD_REPLY_MUTATION, 'addPullRequestReviewThreadReply', { threadId, body }, (answer) =>
+        echoedId(answer, 'comment'),
+      );
     },
 
     async threadResolved(repo, n, threadId, resolved) {
       const on = await threadOnPr(repo, n, threadId);
       if (!on.ok) return on;
+      const echoed = (answer: Record<string, unknown>) => echoedResolved(answer, resolved);
       return resolved
-        ? write(THREAD_RESOLVE_MUTATION, 'resolveReviewThread', { threadId })
-        : write(THREAD_UNRESOLVE_MUTATION, 'unresolveReviewThread', { threadId });
+        ? write(THREAD_RESOLVE_MUTATION, 'resolveReviewThread', { threadId }, echoed)
+        : write(THREAD_UNRESOLVE_MUTATION, 'unresolveReviewThread', { threadId }, echoed);
     },
 
     async fileViewed(repo, n, path, viewed) {
@@ -352,9 +362,10 @@ export function createGithubClient(
       // The PR is GitHub's own id for the scoped PR, never a renderer value.
       const id = readPrId(found.data);
       if (id === null) return { ok: false, error: classifyGhFailure(found.stderr, found.timedOut) };
+      const echoed = (answer: Record<string, unknown>) => echoedId(answer, 'pullRequest');
       return viewed
-        ? write(FILE_VIEWED_MUTATION, 'markFileAsViewed', { pullRequestId: id, path })
-        : write(FILE_UNVIEWED_MUTATION, 'unmarkFileAsViewed', { pullRequestId: id, path });
+        ? write(FILE_VIEWED_MUTATION, 'markFileAsViewed', { pullRequestId: id, path }, echoed)
+        : write(FILE_UNVIEWED_MUTATION, 'unmarkFileAsViewed', { pullRequestId: id, path }, echoed);
     },
   };
 }

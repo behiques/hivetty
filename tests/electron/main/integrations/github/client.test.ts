@@ -399,7 +399,7 @@ describe('thread writes (HIVE-207)', () => {
     [false, THREAD_UNRESOLVE_MUTATION, 'unresolveReviewThread'],
   ])('resolved=%s sends its own mutation', async (resolved, doc, field) => {
     const calls: string[][] = [];
-    const client = createGithubClient('/usr/bin/gh', answering(ON(), JSON.stringify({ data: { [field]: { thread: { id: 'PRRT_1' } } } }), calls));
+    const client = createGithubClient('/usr/bin/gh', answering(ON(), JSON.stringify({ data: { [field]: { thread: { id: 'PRRT_1', isResolved: resolved } } } }), calls));
     await expect(client.threadResolved(REF, 482, 'PRRT_1', resolved)).resolves.toEqual({ ok: true, value: true });
     expect(calls[1]).toEqual(['api', 'graphql', '-f', `query=${doc}`, '-f', 'threadId=PRRT_1']);
   });
@@ -432,6 +432,16 @@ describe('thread writes (HIVE-207)', () => {
       timedOut: false,
     }));
     await expect(client.threadResolved(REF, 482, 'PRRT_1', true)).resolves.toMatchObject({ ok: false, error: { kind: 'rate-limited' } });
+  });
+
+  it.each([
+    ['a reply with no comment', (c: ReturnType<typeof createGithubClient>) => c.threadReply(REF, 482, 'PRRT_1', 'hi'), { addPullRequestReviewThreadReply: { comment: null } }],
+    ['a resolve still unresolved', (c: ReturnType<typeof createGithubClient>) => c.threadResolved(REF, 482, 'PRRT_1', true), { resolveReviewThread: { thread: { id: 'PRRT_1', isResolved: false } } }],
+    ['an unresolve still resolved', (c: ReturnType<typeof createGithubClient>) => c.threadResolved(REF, 482, 'PRRT_1', false), { unresolveReviewThread: { thread: { id: 'PRRT_1', isResolved: true } } }],
+    ['no data at all', (c: ReturnType<typeof createGithubClient>) => c.threadResolved(REF, 482, 'PRRT_1', true), null],
+  ])('refuses a hollow echo: %s', async (_name, act, data) => {
+    const client = createGithubClient('/usr/bin/gh', answering(ON(), JSON.stringify({ data }), []));
+    await expect(act(client)).resolves.toMatchObject({ ok: false });
   });
 
   it('answers not-installed when gh will not run', async () => {
@@ -474,6 +484,11 @@ describe('fileViewed (HIVE-207)', () => {
   it('reports a refused write', async () => {
     const client = createGithubClient('/usr/bin/gh', recording(JSON.stringify({ data: { markFileAsViewed: null } }), []));
     await expect(client.fileViewed(REF, 482, 'src/a.ts', true)).resolves.toMatchObject({ ok: false });
+  });
+
+  it('refuses a write that echoes no pull request', async () => {
+    const client = createGithubClient('/usr/bin/gh', recording(JSON.stringify({ data: { unmarkFileAsViewed: { pullRequest: null } } }), []));
+    await expect(client.fileViewed(REF, 482, 'src/a.ts', false)).resolves.toMatchObject({ ok: false });
   });
 
   it('answers not-installed when gh will not run', async () => {

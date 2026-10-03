@@ -513,9 +513,30 @@ export function readThreadPr(payload: unknown): { owner: string; name: string; n
   return number === null || owner === null || name === null ? null : { owner, name, number };
 }
 
-/** Whether a mutation answered with its own field (HIVE-207); an empty `errors` proves nothing. */
-export function mutated(payload: unknown, field: string): boolean {
-  return isRecord(payload) && isRecord(payload[field]);
+/**
+ * Whether a mutation answered with its own field (HIVE-207), and that field
+ * echoes what the write was for (`echoed`); an empty `errors` proves nothing.
+ */
+export function mutated(
+  payload: unknown,
+  field: string,
+  echoed: (answer: Record<string, unknown>) => boolean = () => true,
+): boolean {
+  if (!isRecord(payload)) return false;
+  const answer = payload[field];
+  return isRecord(answer) && echoed(answer);
+}
+
+/** A mutation's answer echoes `{ [key]: { id } }`: the comment posted, the PR marked (HIVE-207). */
+export function echoedId(answer: Record<string, unknown>, key: string): boolean {
+  const inner = answer[key];
+  return isRecord(inner) && text(inner.id) !== null;
+}
+
+/** A resolve or unresolve echoes the thread at the state it was asked for (HIVE-207). */
+export function echoedResolved(answer: Record<string, unknown>, resolved: boolean): boolean {
+  const thread = answer.thread;
+  return isRecord(thread) && thread.isResolved === resolved;
 }
 
 /** Whether `PR_COMMENT_MUTATION` answered with the comment added. */
