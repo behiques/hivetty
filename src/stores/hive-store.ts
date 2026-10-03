@@ -7127,6 +7127,56 @@ export const useSetSessionMetrics = () =>
 export const useSessionMetrics = (id: string | undefined) =>
   useHiveStore((state) => (id === undefined ? undefined : state.metrics[id]));
 
+/** The account's rate limits (HIVE-200): account-global, so any session's reading is the account's. */
+export interface AccountLimits {
+  fiveHourPct?: number;
+  fiveHourResetsAt?: number;
+  sevenDayPct?: number;
+  sevenDayResetsAt?: number;
+}
+
+const LIMIT_WINDOWS = {
+  fiveHour: ['fiveHourPct', 'fiveHourResetsAt'],
+  sevenDay: ['sevenDayPct', 'sevenDayResetsAt'],
+} as const;
+
+/**
+ * One window across every session's reading (D7): the latest `resetsAt` wins,
+ * since an older one belongs to a window that already rolled; within it, the
+ * highest percentage, since usage only grows inside a window. A reading with no
+ * reset ranks below every reading with one. An unreported window stays absent.
+ */
+function bestWindow(
+  metrics: Record<string, SessionMetrics>,
+  window: keyof typeof LIMIT_WINDOWS,
+): AccountLimits {
+  const [pctKey, resetKey] = LIMIT_WINDOWS[window];
+  let pct: number | undefined;
+  let at: number | undefined;
+  for (const m of Object.values(metrics)) {
+    const p = m[pctKey];
+    if (p === undefined) continue;
+    const r = m[resetKey];
+    const better =
+      pct === undefined || (r ?? -1) > (at ?? -1) || ((r ?? -1) === (at ?? -1) && p > pct);
+    if (better) {
+      pct = p;
+      at = r;
+    }
+  }
+  if (pct === undefined) return {};
+  return at === undefined ? { [pctKey]: pct } : { [pctKey]: pct, [resetKey]: at };
+}
+
+export const accountLimitsOf = (metrics: Record<string, SessionMetrics>): AccountLimits => ({
+  ...bestWindow(metrics, 'fiveHour'),
+  ...bestWindow(metrics, 'sevenDay'),
+});
+
+/** Home's Limits (HIVE-200). Four primitives under `useShallow`, so only a moved number re-renders. */
+export const useAccountLimits = (): AccountLimits =>
+  useHiveStore(useShallow((state) => accountLimitsOf(state.metrics)));
+
 /**
  * The session's plan, or undefined (HIVE-179). Stable identity: main
  * publishes a new object only on a change, so this re-renders only then.

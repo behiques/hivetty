@@ -17,6 +17,7 @@ import {
 } from '@lib/project-config';
 
 import {
+  accountLimitsOf,
   agentWorksIn,
   fleetGroupsOf,
   type FleetView,
@@ -79,6 +80,7 @@ import {
   usePrOpener,
   useReviewUrls,
   useShipTrack,
+  useAccountLimits,
 } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { notif } from '../support/notifications';
@@ -2647,5 +2649,75 @@ describe('usePrsQuiet (HIVE-205)', () => {
       useHiveStore.setState({ prs: [], prSource });
       expect(renderHook(() => usePrsQuiet()).result.current).toBe(false);
     }
+  });
+});
+
+describe('Home strip selectors (HIVE-200)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+  });
+
+  describe('useAccountLimits', () => {
+    const setMetrics = (metrics: Record<string, object>) =>
+      act(() => useHiveStore.setState({ metrics: metrics as never }));
+
+    it('is empty with no metrics', () => {
+      setMetrics({});
+      expect(renderHook(() => useAccountLimits()).result.current).toEqual({});
+    });
+
+    it('carries one window alone', () => {
+      setMetrics({ a: { fiveHourPct: 38, fiveHourResetsAt: 1_900_000_000 } });
+      expect(renderHook(() => useAccountLimits()).result.current).toEqual({
+        fiveHourPct: 38,
+        fiveHourResetsAt: 1_900_000_000,
+      });
+    });
+
+    it('carries both windows', () => {
+      setMetrics({
+        a: {
+          fiveHourPct: 38,
+          fiveHourResetsAt: 1_900_000_000,
+          sevenDayPct: 61,
+          sevenDayResetsAt: 1_900_500_000,
+        },
+      });
+      expect(renderHook(() => useAccountLimits()).result.current).toEqual({
+        fiveHourPct: 38,
+        fiveHourResetsAt: 1_900_000_000,
+        sevenDayPct: 61,
+        sevenDayResetsAt: 1_900_500_000,
+      });
+    });
+
+    it('two sessions: the latest reset wins, then the highest percentage (D7)', () => {
+      setMetrics({
+        old: { fiveHourPct: 90, fiveHourResetsAt: 1_899_000_000 }, // an already-rolled window
+        a: { fiveHourPct: 30, fiveHourResetsAt: 1_900_000_000 },
+        b: { fiveHourPct: 38, fiveHourResetsAt: 1_900_000_000 },
+        c: { fiveHourPct: 99 }, // no reset: ranks below every reading with one
+      });
+      expect(accountLimitsOf(useHiveStore.getState().metrics)).toEqual({
+        fiveHourPct: 38,
+        fiveHourResetsAt: 1_900_000_000,
+      });
+    });
+
+    it('a pct with no reset still shows when nothing better exists', () => {
+      expect(accountLimitsOf({ c: { sevenDayPct: 12 } } as never)).toEqual({ sevenDayPct: 12 });
+    });
+
+    it('holds its identity across terminal output', () => {
+      setMetrics({ a: { fiveHourPct: 38, fiveHourResetsAt: 1_900_000_000 } });
+      const { result } = renderHook(() => useAccountLimits());
+      const before = result.current;
+      act(() =>
+        useHiveStore.getState().appendEntityLines('hero-refresh', [{ text: 'more', color: 'ink' }]),
+      );
+      expect(result.current).toBe(before);
+    });
   });
 });
