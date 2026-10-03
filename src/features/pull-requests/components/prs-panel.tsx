@@ -47,13 +47,13 @@ import { useClearPrSearch, usePrPageActions, usePrSearchOpen, usePrSearchTerm, u
  * only one of them is open updates both.
  */
 
-/** The line above the list. `null` when there is nothing worth saying. */
 /** The stale line reads its own time, so only it re-renders on a sweep (HIVE-211, D5). */
 function PrsStaleLine({ failedAt, onRetry }: { failedAt: number | undefined; onRetry: () => void }) {
   const readAt = usePrsReadAt();
   return <StaleLine service="GitHub" failedAt={failedAt} readAt={readAt} onRetry={onRetry} />;
 }
 
+/** The line above the list. `null` when there is nothing worth saying. */
 function SourceNotice({
   source,
   onRetry,
