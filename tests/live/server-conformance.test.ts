@@ -2193,7 +2193,10 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       ['11e', CH.githubRunJobs, { owner: 'hive-conformance', repo: 'nowhere', id: 1 }],
       ['11f', CH.githubJobLog, { owner: 'hive-conformance', repo: 'nowhere', id: 1 }],
       ['11g', CH.githubRerunFailed, { owner: 'hive-conformance', repo: 'nowhere', id: 1 }],
-    ] as const)('%s. answers %s over an attached socket (HIVE-206)', async (_n, channel, payload) => {
+      ['11h', CH.githubPrDiff, { owner: 'hive-conformance', repo: 'nowhere', n: 1 }],
+      ['11i', CH.githubPrThread, { owner: 'hive-conformance', repo: 'nowhere', n: 1, threadId: 'PRRT_never', op: 'resolve' }],
+      ['11j', CH.githubPrViewed, { owner: 'hive-conformance', repo: 'nowhere', n: 1, path: 'never.ts', viewed: true }],
+    ] as const)('%s. answers %s over an attached socket (HIVE-206, HIVE-207)', async (_n, channel, payload) => {
       const client = await attached();
       const result = await client.call(channel, payload);
 

@@ -386,6 +386,11 @@ Components never read a store object directly and never call `getState()`.
 | `usePrNeedsYouCount()` | how many swept PRs read SUMMONS; 0 unless `prSource` is live |
 | `usePrsQuiet()` | the sweep is live and empty: the empty Hatchery, and no PRs panel (HIVE-205) |
 | `usePrDetail(prKey(owner, repo, n))` | one PR's detail as read, `{ state, detail?, problem?, readAt? }` (HIVE-205) |
+| `usePrDiff(key)` | one PR's diff entry, `{ sha, state, text?, problem? }` (HIVE-207) |
+| `useParsedPrDiff(key)` | that diff parsed into files and hunks, memoised on the text; `null` before the first text (HIVE-207) |
+| `useLoadPrDiff()` | read one PR's diff at a head sha (HIVE-207) |
+| `usePrThreadActions()` | `{ reply, setResolved }` for a review thread; both re-read the detail (HIVE-207) |
+| `useSetPrFileViewed()` | mark or unmark a file viewed, optimistically (HIVE-207) |
 | `useShipTrack(slug, n)` | the shipper's eight stops for one PR, with time and holder (HIVE-205) |
 | `useMergeAsk(slug, n)` | the shipper's open merge card for one PR, the ask the PR page's Merge answers (HIVE-205) |
 | `useSessionPr(id)` | one row's PR, matched on its branch |
@@ -459,6 +464,7 @@ the ledger: `useShipTrack`, `usePrEvents` (Everything), `usePrOpener` ("opened
 by"), `useReviewUrls` ("via the Hive"), `useHolderPost` (the track's now line)
 and `useMergeAsk`. `usePrsQuiet()` is the empty Hatchery.
 
+**The Files tab (HIVE-207).** `PrDetail.files` holds the first 100 changed files: path, +/−, change type and GitHub's `viewerViewedState` as `viewed`/`unviewed`/`dismissed`. `changedFiles` is the true total. The diff text lives in its own PR-keyed slice, `prDiffs`, read at the detail's `headSha`: once per sha, and again when the 60s detail poll sees the head move. It has its own slice because `loadPrDetail` replaces a detail wholesale. The same cap applies, and it is dropped with the PR. Parsing (`src/lib/unified-diff.ts`), the tree, counts and thread placement (`src/lib/pr-files.ts`) are computed on render, never stored. **Viewed state lives on GitHub, not in a store.** `setPrFileViewed` patches the one file at once, rolls it back on a refusal, and re-reads the detail either way. Thread writes (`replyToPrThread`, `setPrThreadResolved`) are not optimistic; the reload shows them.
 The Checks tab (HIVE-206) reads a fifth PR slice, `prChecks`, keyed by `prKey`
 and capped and dropped with `prDetails` (`PR_DETAIL_CAP`, `dropLeftPrs`). An
 entry holds the head branch's runs (`gh run list`, 40, folded into the last

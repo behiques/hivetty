@@ -5,10 +5,16 @@ import {
   buildPrQuery,
   buildPrVariables,
   buildSearchVariables,
+  FILE_UNVIEWED_MUTATION,
+  FILE_VIEWED_MUTATION,
   PR_COMMENT_MUTATION,
   PR_DETAIL_QUERY,
   PR_ID_QUERY,
+  PR_THREAD_OWNER_QUERY,
   repoQualifiers,
+  THREAD_REPLY_MUTATION,
+  THREAD_RESOLVE_MUTATION,
+  THREAD_UNRESOLVE_MUTATION,
   safeSearchTerm,
   type RepoRef,
 } from '../../../../../electron/main/integrations/github/query';
@@ -332,5 +338,23 @@ describe('the PR page documents (HIVE-205)', () => {
     ]) {
       expect(PR_DETAIL_QUERY).toContain(field);
     }
+  });
+});
+
+describe('HIVE-207 documents', () => {
+  it('reads the changed files with their viewed state', () => {
+    expect(PR_DETAIL_QUERY).toContain('files(first: 100) { nodes { path additions deletions changeType viewerViewedState } }');
+  });
+
+  it.each([
+    ['PR_THREAD_OWNER_QUERY', PR_THREAD_OWNER_QUERY, ['$id: ID!']],
+    ['THREAD_REPLY_MUTATION', THREAD_REPLY_MUTATION, ['$threadId: ID!', '$body: String!', 'addPullRequestReviewThreadReply']],
+    ['THREAD_RESOLVE_MUTATION', THREAD_RESOLVE_MUTATION, ['$threadId: ID!', 'resolveReviewThread']],
+    ['THREAD_UNRESOLVE_MUTATION', THREAD_UNRESOLVE_MUTATION, ['$threadId: ID!', 'unresolveReviewThread']],
+    ['FILE_VIEWED_MUTATION', FILE_VIEWED_MUTATION, ['$pullRequestId: ID!', '$path: String!', 'markFileAsViewed']],
+    ['FILE_UNVIEWED_MUTATION', FILE_UNVIEWED_MUTATION, ['$pullRequestId: ID!', '$path: String!', 'unmarkFileAsViewed']],
+  ])('%s declares its variables and binds nothing else', (_name, doc, parts) => {
+    for (const part of parts) expect(doc).toContain(part);
+    expect(doc).not.toMatch(/\$\{/);
   });
 });

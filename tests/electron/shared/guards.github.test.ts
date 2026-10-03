@@ -5,6 +5,9 @@ import {
   IpcValidationError,
   parsePrCommentRequest,
   parsePrDetailRequest,
+  parsePrDiffRequest,
+  parsePrThreadRequest,
+  parsePrViewedRequest,
   parsePrRunsRequest,
   parseRunRef,
 } from '../../../electron/shared/guards';
@@ -50,6 +53,55 @@ describe('parsePrCommentRequest', () => {
     ['an unmapped number', { ...ref, n: -1, body: 'hi' }],
   ])('refuses %s', (_name, input) => {
     expect(() => parsePrCommentRequest(input)).toThrow(IpcValidationError);
+  });
+});
+
+describe('parsePrDiffRequest (HIVE-207)', () => {
+  it('is a PR reference', () => {
+    expect(parsePrDiffRequest({ owner: 'acme', repo: 'web', n: 7 })).toEqual({ owner: 'acme', repo: 'web', n: 7 });
+  });
+  it.each([[{ owner: 'acme', repo: 'web', n: 0 }], [{ owner: 'acme', repo: 'web', n: 1, path: 'x' }]])('refuses %j', (input) => {
+    expect(() => parsePrDiffRequest(input)).toThrow(IpcValidationError);
+  });
+});
+
+describe('parsePrThreadRequest (HIVE-207)', () => {
+  const ref = { owner: 'acme', repo: 'web', n: 7 };
+  it('accepts a reply with its body, and resolve and unresolve without one', () => {
+    expect(parsePrThreadRequest({ ...ref, threadId: 'PRRT_kwDO-x_1=', op: 'reply', body: 'On it\n\tnow' }))
+      .toEqual({ ...ref, threadId: 'PRRT_kwDO-x_1=', op: 'reply', body: 'On it\n\tnow' });
+    expect(parsePrThreadRequest({ ...ref, threadId: 'T', op: 'resolve' })).toEqual({ ...ref, threadId: 'T', op: 'resolve' });
+    expect(parsePrThreadRequest({ ...ref, threadId: 'T', op: 'unresolve' })).toEqual({ ...ref, threadId: 'T', op: 'unresolve' });
+  });
+  it.each([
+    ['an empty thread id', { ...ref, threadId: '', op: 'resolve' }],
+    ['a thread id with a space', { ...ref, threadId: 'a b', op: 'resolve' }],
+    ['a thread id past 200', { ...ref, threadId: 'x'.repeat(201), op: 'resolve' }],
+    ['an unknown op', { ...ref, threadId: 'T', op: 'delete' }],
+    ['a reply with no body', { ...ref, threadId: 'T', op: 'reply' }],
+    ['a blank reply', { ...ref, threadId: 'T', op: 'reply', body: '  \n' }],
+    ['an oversized reply', { ...ref, threadId: 'T', op: 'reply', body: 'x'.repeat(65_537) }],
+    ['a reply with a control character', { ...ref, threadId: 'T', op: 'reply', body: 'a\u0007b' }],
+    ['a body on resolve', { ...ref, threadId: 'T', op: 'resolve', body: 'x' }],
+    ['a bad number', { ...ref, n: -1, threadId: 'T', op: 'resolve' }],
+  ])('refuses %s', (_name, input) => {
+    expect(() => parsePrThreadRequest(input)).toThrow(IpcValidationError);
+  });
+});
+
+describe('parsePrViewedRequest (HIVE-207)', () => {
+  const ref = { owner: 'acme', repo: 'web', n: 7 };
+  it('accepts a path and a boolean', () => {
+    expect(parsePrViewedRequest({ ...ref, path: 'src/a b.ts', viewed: false })).toEqual({ ...ref, path: 'src/a b.ts', viewed: false });
+  });
+  it.each([
+    ['an empty path', { ...ref, path: '', viewed: true }],
+    ['a path past 4096', { ...ref, path: 'x'.repeat(4097), viewed: true }],
+    ['a path with a NUL', { ...ref, path: 'a\u0000b', viewed: true }],
+    ['a path with a newline', { ...ref, path: 'a\nb', viewed: true }],
+    ['a non-boolean viewed', { ...ref, path: 'a', viewed: 'yes' }],
+  ])('refuses %s', (_name, input) => {
+    expect(() => parsePrViewedRequest(input)).toThrow(IpcValidationError);
   });
 });
 
