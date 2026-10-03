@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { readPullRequests, searchPullRequests } from '@lib/github';
+import { postPrComment, readPrDetail, readPullRequests, searchPullRequests } from '@lib/github';
 import type { GhResult, PrsSnapshot } from '@shared/github-contract';
 
 /**
@@ -108,5 +108,38 @@ describe('searchPullRequests', () => {
 
     await expect(searchPullRequests('carapace')).resolves.toBeNull();
     expect(error).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('readPrDetail and postPrComment (HIVE-205)', () => {
+  const ref = { owner: 'acme', repo: 'web', n: 7 };
+
+  it('answer null with no bridge', async () => {
+    await expect(readPrDetail(ref)).resolves.toBeNull();
+    await expect(postPrComment({ ...ref, body: 'hi' })).resolves.toBeNull();
+  });
+
+  it('pass the request and the answer straight through', async () => {
+    const answer = { ok: false, error: { kind: 'no-repos', message: 'acme/web is not a configured project’s repository.' } };
+    const prDetail = vi.fn().mockResolvedValue(answer);
+    const prComment = vi.fn().mockResolvedValue({ ok: true, value: true });
+    window.hive = { github: { prDetail, prComment } } as unknown as Window['hive'];
+
+    await expect(readPrDetail(ref)).resolves.toEqual(answer);
+    await expect(postPrComment({ ...ref, body: 'hi' })).resolves.toEqual({ ok: true, value: true });
+    expect(prDetail).toHaveBeenCalledWith(ref);
+    expect(prComment).toHaveBeenCalledWith({ ...ref, body: 'hi' });
+  });
+
+  it('answer null and log once when the channel itself fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    window.hive = { github: {
+      prDetail: vi.fn().mockRejectedValue(new Error('closed')),
+      prComment: vi.fn().mockRejectedValue(new Error('closed')),
+    } } as unknown as Window['hive'];
+
+    await expect(readPrDetail(ref)).resolves.toBeNull();
+    await expect(postPrComment({ ...ref, body: 'hi' })).resolves.toBeNull();
+    expect(error).toHaveBeenCalledTimes(2);
   });
 });

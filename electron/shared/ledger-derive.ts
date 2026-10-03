@@ -412,6 +412,181 @@ export function mergeWaiting(open: readonly OpenAsk[], slug: string, n: number):
   });
 }
 
+/** The shipper's stops, in the order `resources/skills/ship/SKILL.md` walks them (HIVE-205). */
+export const SHIP_STOPS = ['intake', 'self-review', 'fix-self', 'ready', 'ci', 'findings', 'approval', 'merge'] as const;
+export type ShipStopName = (typeof SHIP_STOPS)[number];
+
+/** One stop on a PR's ship track (HIVE-205). */
+export interface ShipStop {
+  stage: ShipStopName;
+  /** When the PR first reached it; `null` for a stop never reached. */
+  firstAt: number | null;
+  /** Every visit summed; the open one runs to `now`. */
+  spentMs: number;
+  /** `acr` or `fixer` when the shipper asked one at its latest visit that asked anyone, else `shipper`; `null` never reached. */
+  holder: string | null;
+}
+
+export interface ShipTrack {
+  /** The shipper holds the PR now, as {@link shipStage} reads it. */
+  held: boolean;
+  /** The stop it is at while held; `null` for an unknown stage word or when not held. */
+  current: ShipStop | null;
+  /** All eight, in {@link SHIP_STOPS} order. */
+  stops: ShipStop[];
+}
+
+const isShipStop = (stage: unknown): stage is ShipStopName =>
+  typeof stage === 'string' && (SHIP_STOPS as readonly string[]).includes(stage);
+
+/** `needle` in `text` as a whole name: no name character glued before it, no digit after it. */
+function mentions(text: string, needle: string): boolean {
+  for (let at = text.indexOf(needle); at !== -1; at = text.indexOf(needle, at + 1)) {
+    const before = at === 0 ? '' : (text[at - 1] ?? '');
+    const after = text[at + needle.length] ?? '';
+    if (!/[\w.-]/.test(before) && !/\d/.test(after)) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether an entry names one PR (HIVE-205): `meta: { pr, repo }`, a task
+ * `owner/name#N` (a claim, or the fixer's `owner/name#N findings`), or — since
+ * the ship skill's asks to acr and fixer carry the PR only in their words —
+ * `owner/name#N` or `owner/name/pull/N` in the body. Case-insensitive, the
+ * number bounded so `#118` never matches `#1182`.
+ */
+function namesPrAnywhere(entry: LedgerEntry, slug: string, n: number): boolean {
+  if (namesPr(entry.meta, slug, n)) return true;
+  const wanted = `${slug.toLowerCase()}#${n}`;
+  const task = taskOf(entry)?.toLowerCase();
+  if (task === wanted || task?.startsWith(`${wanted} `) === true) return true;
+  const body = entry.body.toLowerCase();
+  return mentions(body, wanted) || mentions(body, `${slug.toLowerCase()}/pull/${n}`);
+}
+
+interface ShipVisit {
+  stage: ShipStopName;
+  from: number;
+  to: number | null;
+  holder: string | null;
+}
+
+/**
+ * Every stop of one PR's ship track (HIVE-205): when it was first reached, the
+ * time spent there over every visit, and who held it. The same shipper entries
+ * {@link shipStage} reads, walked oldest first: the claim opens `intake`, each
+ * stage post closes the open visit and opens its own (approval → findings moves
+ * the current stop back), a release or a `closed` post ends it. The holder is
+ * the first shipper ask to `acr` or `fixer` naming the PR after a visit opens;
+ * with none, the shipper itself. `now` closes the open visit. Pure.
+ */
+export function shipTrack(entries: readonly LedgerEntry[], slug: string, n: number, now: number): ShipTrack {
+  const wanted = slug.toLowerCase();
+  const claim = `${wanted}#${n}`;
+  const visits: ShipVisit[] = [];
+  let open = -1;
+  let held = false;
+
+  const close = (at: number) => {
+    const visit = visits[open];
+    if (visit !== undefined) visit.to = at;
+    open = -1;
+  };
+  const enter = (stage: ShipStopName, at: number) => {
+    if (visits[open]?.stage === stage) return;
+    close(at);
+    open = visits.push({ stage, from: at, to: null, holder: null }) - 1;
+  };
+
+  for (const entry of wanted === '' ? [] : entries) {
+    if (entry.from !== 'shipper') continue;
+    if (entry.kind === 'claim' || entry.kind === 'release') {
+      if (taskOf(entry)?.toLowerCase() !== claim) continue;
+      if (entry.kind === 'release') {
+        close(entry.ts);
+        held = false;
+      } else if (!held) {
+        held = true;
+        enter('intake', entry.ts);
+      }
+      continue;
+    }
+    if (entry.kind === 'ask') {
+      const visit = visits[open];
+      if (visit !== undefined && visit.holder === null && (entry.to === 'acr' || entry.to === 'fixer') && namesPrAnywhere(entry, slug, n)) {
+        visit.holder = entry.to;
+      }
+      continue;
+    }
+    if (entry.kind !== 'post' || !namesPr(entry.meta, slug, n)) continue;
+    const stage = entry.meta?.['stage'];
+    if (stage === 'closed') {
+      close(entry.ts);
+      held = false;
+      continue;
+    }
+    if (typeof stage !== 'string') continue;
+    held = true;
+    // A word that is no stop (`sync`, a sub-step of approval and merge, or one
+    // the skill adds later) keeps the PR held and leaves the open stop running.
+    if (isShipStop(stage)) enter(stage, entry.ts);
+  }
+
+  const stops = SHIP_STOPS.map((stage): ShipStop => {
+    const mine = visits.filter((visit) => visit.stage === stage);
+    const first = mine[0];
+    if (first === undefined) return { stage, firstAt: null, spentMs: 0, holder: null };
+    return {
+      stage,
+      firstAt: first.from,
+      spentMs: mine.reduce((sum, visit) => sum + Math.max(0, (visit.to ?? now) - visit.from), 0),
+      holder: mine.findLast((visit) => visit.holder !== null)?.holder ?? 'shipper',
+    };
+  });
+  const at = held ? visits[open] : undefined;
+  return { held, current: at === undefined ? null : (stops.find((stop) => stop.stage === at.stage) ?? null), stops };
+}
+
+/** Every entry naming one PR, oldest first: the PR page's Everything filter (HIVE-205). */
+export function prEvents(entries: readonly LedgerEntry[], slug: string, n: number): LedgerEntry[] {
+  if (slug === '') return [];
+  return entries.filter((entry) => namesPrAnywhere(entry, slug, n));
+}
+
+/** acr's `meta.review_url`s: a GitHub review whose URL is here came through the Hive (HIVE-205). */
+export function reviewUrls(entries: readonly LedgerEntry[]): ReadonlySet<string> {
+  const urls = new Set<string>();
+  for (const entry of entries) {
+    const url = entry.meta?.['review_url'];
+    if (entry.from === 'acr' && typeof url === 'string' && url !== '') urls.add(url);
+  }
+  return urls;
+}
+
+/**
+ * Who handed a PR to the shipper (HIVE-205): the `from` of the oldest intake
+ * ask to `shipper` naming it — `builder` for a PR the builder opened, a session
+ * id for one a session handed over — or `null`.
+ */
+export function prOpener(entries: readonly LedgerEntry[], slug: string, n: number): string | null {
+  if (slug === '') return null;
+  const intake = entries.find(
+    (entry) => entry.kind === 'ask' && entry.to === 'shipper' && entry.meta?.['stage'] === 'intake' && namesPr(entry.meta, slug, n),
+  );
+  return intake?.from ?? null;
+}
+
+/** The holder's newest entry naming the PR, for the ship track's "now" line (HIVE-205, D11). */
+export function holderPost(entries: readonly LedgerEntry[], slug: string, n: number, holder: string): LedgerEntry | null {
+  if (slug === '') return null;
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i]!;
+    if (entry.from === holder && namesPrAnywhere(entry, slug, n)) return entry;
+  }
+  return null;
+}
+
 /** Where an agent is working (HIVE-172). */
 interface AgentSite {
   /** The worktree the agent's newest post named, absolute. */

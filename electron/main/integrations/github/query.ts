@@ -1,4 +1,5 @@
 import {
+  GH_DETAIL_PAGE,
   GH_MERGED_PAGE,
   GH_OPEN_PAGE,
   GH_THREAD_PAGE,
@@ -247,3 +248,46 @@ export function buildSearchVariables(
     merged: `is:pr is:merged ${scope} ${safe} sort:updated-desc`,
   };
 }
+
+const PAGE = String(GH_DETAIL_PAGE);
+const PR_VARIABLES = 'query($owner: String!, $name: String!, $number: Int!) {';
+
+/**
+ * One PR's page (HIVE-205). A constant like {@link buildPrQuery}'s: the
+ * repository and the number travel as bound variables, never in the text.
+ */
+export const PR_DETAIL_QUERY = [
+  PR_VARIABLES,
+  '  repository(owner: $owner, name: $name) {',
+  '    pullRequest(number: $number) {',
+  '      id number title url state isDraft body createdAt mergedAt',
+  '      baseRefName headRefName headRefOid additions deletions changedFiles',
+  '      author { login } reviewDecision mergeStateStatus',
+  `      comments(first: ${PAGE}) { nodes { author { login } body createdAt url } }`,
+  `      reviews(first: ${PAGE}) { nodes { author { login } state body submittedAt url } }`,
+  `      reviewRequests(first: ${PAGE}) { nodes { requestedReviewer { ... on User { login } ... on Team { name } } } }`,
+  `      reviewThreads(first: ${PAGE}) { nodes { id isResolved isOutdated path line originalLine diffSide`,
+  `        comments(first: ${PAGE}) { nodes { author { login } body createdAt url diffHunk } } } }`,
+  `      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: ${PAGE}) { nodes {`,
+  '        __typename',
+  '        ... on CheckRun { name status conclusion startedAt completedAt detailsUrl }',
+  '        ... on StatusContext { context state targetUrl createdAt }',
+  '      } } } } } }',
+  '    }',
+  '  }',
+  '}',
+].join('\n');
+
+/** The PR's node id, which `addComment` takes as its subject (HIVE-205). */
+export const PR_ID_QUERY = [
+  PR_VARIABLES,
+  '  repository(owner: $owner, name: $name) { pullRequest(number: $number) { id } }',
+  '}',
+].join('\n');
+
+/** A PR-level comment. The subject is the id {@link PR_ID_QUERY} read, never a renderer value. */
+export const PR_COMMENT_MUTATION = [
+  'mutation($subjectId: ID!, $body: String!) {',
+  '  addComment(input: { subjectId: $subjectId, body: $body }) { subject { id } }',
+  '}',
+].join('\n');

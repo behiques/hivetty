@@ -91,7 +91,7 @@ import type {
   WriteFileRequest,
   WriteFileResult,
 } from './fs-contract';
-import type { GhResult, PrRecord, PrsSnapshot } from './github-contract';
+import type { GhResult, PrCommentRequest, PrDetail, PrRecord, PrRef, PrsSnapshot } from './github-contract';
 import type {
   JiraComment,
   JiraCommentPage,
@@ -578,6 +578,23 @@ export const CH = {
    * *which of the user's own projects* to look in, and what to look for.
    */
   githubSearchPrs: 'github:search-prs',
+  /**
+   * One PR's page (HIVE-205): its body, conversation, threads and checks.
+   *
+   * **The first `github:` channel that names a repository**, so the invariant
+   * above is restated once more rather than quietly dropped. The payload is an
+   * owner, a repository and a number; main looks the repository up among the
+   * configured projects and refuses one it does not map, and what reaches the
+   * argv is the resolver's spelling inside a constant document's bound
+   * variables. A renderer can still reach only the user's own projects.
+   */
+  githubPrDetail: 'github:pr-detail',
+  /**
+   * A PR-level comment (HIVE-205), under {@link CH.githubPrDetail}'s scope
+   * check. The PR's node id is read from GitHub by main, never taken from the
+   * renderer, so a write can only land on a PR the check admitted.
+   */
+  githubPrComment: 'github:pr-comment',
   notificationsActivate: 'notifications:activate', // main → renderer
   /**
    * A notification was raised (HIVE-75). main → renderer.
@@ -2500,6 +2517,10 @@ export interface HiveBridge {
      * There is no third, wider option — see {@link CH.githubSearchPrs}.
      */
     searchPrs(term: string, projectId?: string): Promise<GhResult<PrRecord[]>>;
+    /** One PR's page (HIVE-205). Refused unless a configured project maps the repository. */
+    prDetail(request: PrRef): Promise<GhResult<PrDetail>>;
+    /** A PR-level comment (HIVE-205), under the same scope. */
+    prComment(request: PrCommentRequest): Promise<GhResult<true>>;
   };
   /**
    * Jira (HIVE-67).

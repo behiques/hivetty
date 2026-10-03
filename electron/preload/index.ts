@@ -73,7 +73,14 @@ import type {
   WriteFileRequest,
   WriteFileResult,
 } from '@shared/fs-contract';
-import type { GhResult, PrRecord, PrsSnapshot } from '@shared/github-contract';
+import type {
+  GhResult,
+  PrCommentRequest,
+  PrDetail,
+  PrRecord,
+  PrRef,
+  PrsSnapshot,
+} from '@shared/github-contract';
 import {
   CH,
   type AckRequest,
@@ -623,8 +630,7 @@ const bridge: HiveBridge = {
     loginEnv: (): Promise<LoginEnvStatus> =>
       ipcRenderer.invoke(CH.integrationsLoginEnv),
   },
-  // One verb, no argument. Like `integrations.status`, the absent parameter
-  // list is what makes a handler that executes a binary safe to expose.
+  // `prs` takes no argument; `searchPrs`, `prDetail` and `prComment` take payloads main validates and scopes to the configured repositories before anything reaches `gh`.
   github: {
     prs: (): Promise<GhResult<PrsSnapshot>> => ipcRenderer.invoke(CH.githubPrs),
     /** PRs matching a term, whoever wrote them. See `CH.githubSearchPrs`. */
@@ -632,6 +638,12 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.githubSearchPrs, { term, projectId }) as Promise<
         GhResult<PrRecord[]>
       >,
+    /** One PR's page. See `CH.githubPrDetail`. */
+    prDetail: (request: PrRef): Promise<GhResult<PrDetail>> =>
+      ipcRenderer.invoke(CH.githubPrDetail, request) as Promise<GhResult<PrDetail>>,
+    /** A PR-level comment. See `CH.githubPrComment`. */
+    prComment: (request: PrCommentRequest): Promise<GhResult<true>> =>
+      ipcRenderer.invoke(CH.githubPrComment, request) as Promise<GhResult<true>>,
   },
   /*
     HIVE-67. Four verbs, and none of them returns a token — see the contract for

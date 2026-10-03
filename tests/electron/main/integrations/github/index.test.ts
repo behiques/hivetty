@@ -373,3 +373,60 @@ describe('createGithub', () => {
     expect(repoViews).toHaveLength(1);
   });
 });
+
+describe('prDetail and prComment (HIVE-205)', () => {
+  const DETAIL = JSON.stringify({ data: { repository: { pullRequest: {
+    id: 'PR_1', number: 482, title: 'Hero', url: 'https://github.com/acme/nova-web/pull/482',
+    state: 'OPEN', isDraft: false, body: '', createdAt: '2026-08-09T10:00:00Z',
+  } } } });
+  const recording = (calls: string[][]): RunAsync => (_file, args) => {
+    calls.push([...args]);
+    const stdout = args[0] === 'repo'
+      ? JSON.stringify({ nameWithOwner: 'acme/nova-web' })
+      : args[3]?.includes('addComment') === true
+        ? JSON.stringify({ data: { addComment: { subject: { id: 'PR_1' } } } })
+        : DETAIL;
+    return Promise.resolve({ code: 0, stdout, stderr: '', timedOut: false });
+  };
+  const github = (calls: string[][]) => createGithub({
+    config: () => config([project()]),
+    env: () => ({ PATH: withGh() }),
+    run: recording(calls),
+    now: () => 0,
+  });
+  const graphqlCalls = (calls: string[][]) => calls.filter((args) => args[0] === 'api');
+
+  it('reads a mapped repository with the resolver’s spelling, whatever case was asked', async () => {
+    const calls: string[][] = [];
+    await expect(github(calls).prDetail({ owner: 'ACME', repo: 'Nova-Web', n: 482 }))
+      .resolves.toMatchObject({ ok: true, value: { owner: 'acme', repo: 'nova-web', number: 482 } });
+    expect(graphqlCalls(calls)[0]).toEqual(expect.arrayContaining(['owner=acme', 'name=nova-web', 'number=482']));
+  });
+
+  it('refuses a repository no configured project maps, before any GraphQL call', async () => {
+    const calls: string[][] = [];
+    const gh = github(calls);
+
+    await expect(gh.prDetail({ owner: 'someone', repo: 'else', n: 1 })).resolves.toEqual({
+      ok: false,
+      error: { kind: 'no-repos', message: "someone/else is not a configured project's repository." },
+    });
+    await expect(gh.prComment({ owner: 'someone', repo: 'else', n: 1, body: 'hi' })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'no-repos' },
+    });
+    expect(graphqlCalls(calls)).toEqual([]);
+  });
+
+  it('comments on a mapped repository', async () => {
+    const calls: string[][] = [];
+    await expect(github(calls).prComment({ owner: 'acme', repo: 'nova-web', n: 482, body: 'LGTM' }))
+      .resolves.toEqual({ ok: true, value: true });
+    expect(graphqlCalls(calls)).toHaveLength(2);
+  });
+
+  it('answers not-installed without gh', async () => {
+    const gh = createGithub({ config: () => config([project()]), env: () => ({ PATH: '/nowhere' }), run: recording([]), now: () => 0 });
+    await expect(gh.prDetail({ owner: 'acme', repo: 'nova-web', n: 482 })).resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
+  });
+});

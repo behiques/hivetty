@@ -443,10 +443,13 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * `safeSearchTerm` removing the one character that could turn a term into a
    * qualifier. The widest reach it grants is the user's own mapped projects.
    *
-   * A verb that took a repository *name* is still the one this list exists to
-   * make impossible to add quietly.
+   * HIVE-205 added the two verbs that do take a repository name, `prDetail`
+   * and `prComment`, and adds them here rather than quietly: main refuses any
+   * owner/repo no configured project maps, before `gh` runs, and hands `gh`
+   * the resolver's spelling (`tests/electron/main/integrations/github/index.test.ts`).
+   * The widest reach is still the user's own mapped projects.
    */
-  expect(surface.github).toEqual(['prs', 'searchPrs']);
+  expect(surface.github).toEqual(['prComment', 'prDetail', 'prs', 'searchPrs']);
   /**
    * `root` is the only verb on this bridge that **answers** with a path.
    *

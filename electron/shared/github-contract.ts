@@ -175,3 +175,90 @@ export interface PrLookupReply {
   pr: PrRecord | null;
   reason?: string;
 }
+
+/** How many comments, reviews, threads, requests and checks one PR page reads (HIVE-205). */
+export const GH_DETAIL_PAGE = 100;
+
+/** One PR by repository and number, as the renderer names it (HIVE-205). Main maps it to a configured repo or refuses. */
+export interface PrRef {
+  owner: string;
+  repo: string;
+  n: number;
+}
+
+/** A comment to post on {@link PrRef}'s PR (HIVE-205). */
+export interface PrCommentRequest extends PrRef {
+  body: string;
+}
+
+/** A PR-level comment. `author` is `null` for a deleted ("ghost") account. */
+export interface PrComment {
+  author: string | null;
+  body: string;
+  createdAt: string;
+  url: string;
+}
+
+/** A submitted review; `state` is GitHub's (`APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`). */
+export interface PrReview {
+  author: string | null;
+  state: string;
+  body: string;
+  submittedAt: string | null;
+  url: string;
+}
+
+export type PrThreadComment = PrComment & { diffHunk: string };
+
+/** A review thread; `line` is `null` once outdated, `originalLine` is where it was left. */
+export interface PrThread {
+  id: string;
+  isResolved: boolean;
+  isOutdated: boolean;
+  path: string;
+  line: number | null;
+  originalLine: number | null;
+  diffSide: string | null;
+  comments: PrThreadComment[];
+}
+
+export type PrCheckStatus = 'success' | 'failure' | 'running' | 'queued' | 'neutral';
+
+/** A check run or a commit status on the head commit, read as one shape. */
+export interface PrCheck {
+  name: string;
+  status: PrCheckStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  url: string | null;
+}
+
+/** One PR, read for its page (HIVE-205). `owner`/`repo` are the configured repository's spelling. */
+export interface PrDetail {
+  id: string;
+  owner: string;
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  state: 'open' | 'closed' | 'merged';
+  isDraft: boolean;
+  body: string;
+  createdAt: string;
+  mergedAt: string | null;
+  baseRef: string | null;
+  headRef: string | null;
+  headSha: string | null;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  author: string | null;
+  reviewDecision: string | null;
+  mergeStateStatus: string | null;
+  comments: PrComment[];
+  reviews: PrReview[];
+  /** A requested user's login or team's name. */
+  reviewRequests: string[];
+  threads: PrThread[];
+  checks: PrCheck[];
+}

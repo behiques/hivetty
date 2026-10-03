@@ -2160,6 +2160,34 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       expect(result.kind).toBe('result');
     }, 60_000);
 
+    it('11b. answers github:pr-detail over an attached socket (HIVE-205)', async () => {
+      const client = await attached();
+      const result = await client.call(CH.githubPrDetail, { owner: 'hive-conformance', repo: 'nowhere', n: 1 });
+
+      // No configured project maps this repository (and `gh` may be absent):
+      // what is proved is that the execute-graded read crosses the socket and
+      // answers with a GhResult refusal, never a throw.
+      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
+        kind: 'result',
+        payload: { ok: false },
+      });
+    }, 60_000);
+
+    it('11c. answers github:pr-comment over an attached socket (HIVE-205)', async () => {
+      const client = await attached();
+      const result = await client.call(CH.githubPrComment, {
+        owner: 'hive-conformance',
+        repo: 'nowhere',
+        n: 1,
+        body: 'never posted: the scope check refuses an unmapped repository first',
+      });
+
+      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
+        kind: 'result',
+        payload: { ok: false },
+      });
+    }, 60_000);
+
     it('12. carries the EOUTSIDE code itself, not a flattened message', async () => {
       const client = await attached();
       const result = await client.call(CH.fsReadFile, {
