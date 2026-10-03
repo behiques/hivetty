@@ -1,8 +1,8 @@
 import {
   JIRA_MAX_COMMENTS,
+  STATUS_CATEGORY_RANK,
   type JiraIssue,
   type JiraResult,
-  type JiraStatusCategory,
   type JiraToolHandlers,
   type JiraToolIssue,
   type JiraToolTransitionReply,
@@ -17,9 +17,6 @@ export type JiraToolSource = Pick<
   Jira,
   'issue' | 'detail' | 'transitions' | 'applyTransition' | 'comments' | 'links' | 'addComment' | 'assignToMe'
 >;
-
-/** Forward is up this ladder; a move down it is refused (HIVE-174). */
-const RANK: Record<JiraStatusCategory, number> = { todo: 0, 'in-progress': 1, done: 2 };
 
 const same = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
 
@@ -90,7 +87,7 @@ export function jiraToolsFor(jira: JiraToolSource): JiraToolHandlers {
         },
       };
     }
-    if (RANK[match.to.statusCategory] < RANK[issue.statusCategory]) {
+    if (STATUS_CATEGORY_RANK[match.to.statusCategory] < STATUS_CATEGORY_RANK[issue.statusCategory]) {
       return skip(`moving from ${issue.status} to ${match.to.name} would be backwards; nothing was changed`);
     }
 
