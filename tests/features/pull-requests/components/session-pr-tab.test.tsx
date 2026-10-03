@@ -73,15 +73,17 @@ describe('SessionPrTab (HIVE-209)', () => {
     vi.useFakeTimers({ now: Date.parse('2026-10-03T10:02:10Z') });
     stage({
       checks: [
-        { name: 'lint', status: 'success', startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:00:41Z', url: null },
-        { name: 'unit', status: 'running', startedAt: '2026-10-03T10:00:00Z', completedAt: null, url: null },
-        { name: 'e2e', status: 'queued', startedAt: null, completedAt: null, url: null },
+        { name: 'lint', status: 'success', startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:00:41Z', url: null, app: null, jobId: null },
+        { name: 'unit', status: 'running', startedAt: '2026-10-03T10:00:00Z', completedAt: null, url: null, app: null, jobId: null },
+        { name: 'e2e', status: 'queued', startedAt: null, completedAt: null, url: null, app: null, jobId: null },
         {
           name: 'type-check',
           status: 'failure',
           startedAt: '2026-10-03T10:00:00Z',
           completedAt: '2026-10-03T10:01:02Z',
           url: null,
+          app: null,
+          jobId: null,
         },
       ],
     });

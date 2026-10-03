@@ -32,8 +32,8 @@ export interface AgentPage {
   view: AgentPageView;
 }
 
-/** The PR page's tabs (HIVE-205); HIVE-206, 207 and 208 add Checks, Files and Timeline. */
-export type PrTab = 'conversation';
+/** The PR page's tabs (HIVE-205); Checks is HIVE-206's, and HIVE-207 and 208 add Files and Timeline. */
+export type PrTab = 'conversation' | 'checks';
 /** Which PR the PRs place last opened (HIVE-205). */
 export interface PrPageRef {
   owner: string;
@@ -221,6 +221,10 @@ interface UiState {
   prPage: PrPageRef | null;
   /** The PR page's tab; kept across PRs, so Checks stays Checks (HIVE-205). */
   prTab: PrTab;
+  /** The Checks tab's shown push, by head sha; null shows the newest (HIVE-206). Not persisted. */
+  prRun: string | null;
+  /** The job clicked in the Checks graph; null shows the failed one (HIVE-206). Not persisted. */
+  prJob: number | null;
   /** Whether the Hatched group is folded; it starts folded (HIVE-205). */
   prsFolded: boolean;
   /** The PR page's Comments | Everything filter; each open resets it (HIVE-205). */
@@ -309,9 +313,12 @@ interface UiState {
   openAgentPage: (name: string | null, view: AgentPageView) => void;
   setAgentPageView: (view: AgentPageView) => void;
   closeAgentPage: () => void;
-  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab. */
+  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab; forgets the Checks tab's shown push and job (HIVE-206). */
   openPrPage: (ref: PrPageRef) => void;
   setPrTab: (tab: PrTab) => void;
+  showPrRun: (sha: string) => void;
+  showPrJob: (id: number | null) => void;
+  openPrChecks: (jobId: number | null) => void;
   togglePrsFolded: () => void;
   setPrConversation: (mode: WorkConversation) => void;
   setPrSearchOpen: (open: boolean) => void;
@@ -379,6 +386,8 @@ const initialUiState = {
   agentPage: null as AgentPage | null,
   prPage: null as PrPageRef | null,
   prTab: 'conversation' as PrTab,
+  prRun: null as string | null,
+  prJob: null as number | null,
   prsFolded: true,
   prConversation: 'comments' as WorkConversation,
   prSearchOpen: false,
@@ -617,10 +626,15 @@ export const useUiStore = create<UiState>()((set) => ({
       place: 'prs',
       panelOpen: true,
       prConversation: 'comments',
+      prRun: null,
+      prJob: null,
       picker: false,
       settings: false,
     }),
   setPrTab: (tab) => set({ prTab: tab }),
+  showPrRun: (sha) => set({ prRun: sha, prJob: null }),
+  showPrJob: (id) => set({ prJob: id }),
+  openPrChecks: (jobId) => set({ prTab: 'checks', prJob: jobId }),
   togglePrsFolded: () => set((state) => ({ prsFolded: !state.prsFolded })),
   setPrConversation: (mode) => set({ prConversation: mode }),
   setPrSearchOpen: (open) => set({ prSearchOpen: open }),
@@ -727,6 +741,9 @@ export const useAgentPageActions = () =>
 /** The PRs place's open PR, tab, fold, filter and search (HIVE-205). */
 export const usePrPage = () => useUiStore((state) => state.prPage);
 export const usePrTab = () => useUiStore((state) => state.prTab);
+/** The Checks tab's shown push and clicked job (HIVE-206). */
+export const usePrRun = () => useUiStore((state) => state.prRun);
+export const usePrJob = () => useUiStore((state) => state.prJob);
 export const usePrsFolded = () => useUiStore((state) => state.prsFolded);
 export const usePrConversation = () => useUiStore((state) => state.prConversation);
 export const usePrSearchOpen = () => useUiStore((state) => state.prSearchOpen);
@@ -735,6 +752,9 @@ export const usePrPageActions = () =>
     useShallow((state) => ({
       openPrPage: state.openPrPage,
       setPrTab: state.setPrTab,
+      showPrRun: state.showPrRun,
+      showPrJob: state.showPrJob,
+      openPrChecks: state.openPrChecks,
       togglePrsFolded: state.togglePrsFolded,
       setPrConversation: state.setPrConversation,
       setPrSearchOpen: state.setPrSearchOpen,

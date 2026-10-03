@@ -75,11 +75,16 @@ import type {
 } from '@shared/fs-contract';
 import type {
   GhResult,
+  JobLog,
   PrCommentRequest,
   PrDetail,
   PrRecord,
   PrRef,
+  PrRuns,
+  PrRunsRequest,
   PrsSnapshot,
+  RunJob,
+  RunRef,
 } from '@shared/github-contract';
 import {
   CH,
@@ -644,6 +649,15 @@ const bridge: HiveBridge = {
     /** A PR-level comment. See `CH.githubPrComment`. */
     prComment: (request: PrCommentRequest): Promise<GhResult<true>> =>
       ipcRenderer.invoke(CH.githubPrComment, request) as Promise<GhResult<true>>,
+    /** The Checks tab's reads and re-run failed (HIVE-206). See `CH.githubPrRuns`. */
+    prRuns: (request: PrRunsRequest): Promise<GhResult<PrRuns>> =>
+      ipcRenderer.invoke(CH.githubPrRuns, request) as Promise<GhResult<PrRuns>>,
+    runJobs: (request: RunRef): Promise<GhResult<RunJob[]>> =>
+      ipcRenderer.invoke(CH.githubRunJobs, request) as Promise<GhResult<RunJob[]>>,
+    jobLog: (request: RunRef): Promise<GhResult<JobLog>> =>
+      ipcRenderer.invoke(CH.githubJobLog, request) as Promise<GhResult<JobLog>>,
+    rerunFailed: (request: RunRef): Promise<GhResult<true>> =>
+      ipcRenderer.invoke(CH.githubRerunFailed, request) as Promise<GhResult<true>>,
   },
   /*
     HIVE-67. Four verbs, and none of them returns a token — see the contract for

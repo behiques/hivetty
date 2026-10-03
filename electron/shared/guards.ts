@@ -69,7 +69,7 @@ import type {
   WriteFileRequest,
 } from './fs-contract';
 import { MAX_FILE_BYTES, MAX_RESOLVE_CANDIDATES } from './fs-contract';
-import type { PrCommentRequest, PrLookup, PrRef } from './github-contract';
+import type { PrCommentRequest, PrLookup, PrRef, PrRunsRequest, RunRef } from './github-contract';
 import type {
   AckRequest,
   PromptReport,
@@ -1855,16 +1855,43 @@ const GH_REPO = /^(?!\.\.?$)[A-Za-z0-9_.-]{1,100}$/;
 /** GitHub's own limit on a comment body, in characters. */
 const MAX_PR_COMMENT = 65_536;
 
-function assertPrRef(raw: Record<string, unknown>, label: string): PrRef {
+function assertRepo(raw: Record<string, unknown>, label: string): { owner: string; repo: string } {
   const owner = assertString(raw.owner, `${label}.owner`);
   if (!GH_OWNER.test(owner)) return fail(`${label}.owner: not a GitHub owner`);
   const repo = assertString(raw.repo, `${label}.repo`);
   if (!GH_REPO.test(repo)) return fail(`${label}.repo: not a GitHub repository name`);
-  const n = raw.n;
-  if (typeof n !== 'number' || !Number.isSafeInteger(n) || n < 1) {
-    return fail(`${label}.n: expected a positive whole number`);
+  return { owner, repo };
+}
+
+function assertWholeId(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
+    return fail(`${label}: expected a positive whole number`);
   }
-  return { owner, repo, n };
+  return value;
+}
+
+function assertPrRef(raw: Record<string, unknown>, label: string): PrRef {
+  return { ...assertRepo(raw, label), n: assertWholeId(raw.n, `${label}.n`) };
+}
+
+/**
+ * `github:pr-runs` (HIVE-206): a configured repository and a head branch. The
+ * branch reaches `gh` as one `--branch=<b>` token, so it cannot become a flag;
+ * this refuses a leading `-`, whitespace and control characters anyway.
+ */
+export function parsePrRunsRequest(input: unknown): PrRunsRequest {
+  const raw = assertShape(input, ['owner', 'repo', 'branch'], 'prRuns');
+  const branch = assertString(raw.branch, 'prRuns.branch');
+  if (branch === '' || branch.length > 255 || branch.startsWith('-') || /\s/.test(branch) || hasControlCharactersOutsideWhitespace(branch)) {
+    return fail('prRuns.branch: not a branch name');
+  }
+  return { ...assertRepo(raw, 'prRuns'), branch };
+}
+
+/** `github:run-jobs`, `github:job-log`, `github:rerun-failed` (HIVE-206): a run or job id in a repository. */
+export function parseRunRef(input: unknown, label: string): RunRef {
+  const raw = assertShape(input, ['owner', 'repo', 'id'], label);
+  return { ...assertRepo(raw, label), id: assertWholeId(raw.id, `${label}.id`) };
 }
 
 /**

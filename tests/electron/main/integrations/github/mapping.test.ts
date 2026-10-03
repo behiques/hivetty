@@ -610,18 +610,39 @@ describe('toPrDetail (HIVE-205)', () => {
     const detail = toPrDetail(payload(pr({ commits: { nodes: [{ commit: { statusCheckRollup: { contexts } } }] } })), 'acme', 'server');
 
     expect(detail?.checks).toEqual([
-      { name: 'lint', status: 'success', startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:01:00Z', url: 'https://ci/1' },
-      { name: 'integration', status: 'failure', startedAt: null, completedAt: null, url: null },
-      { name: 'e2e', status: 'running', startedAt: '2026-10-03T10:02:00Z', completedAt: null, url: 'https://ci/3' },
-      { name: 'build', status: 'queued', startedAt: null, completedAt: null, url: null },
-      { name: 'docs', status: 'neutral', startedAt: null, completedAt: null, url: null },
-      { name: 'vercel', status: 'running', startedAt: '2026-10-03T10:03:00Z', completedAt: null, url: 'https://v/1' },
-      { name: 'legacy', status: 'failure', startedAt: null, completedAt: null, url: null },
+      { name: 'lint', status: 'success', startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:01:00Z', url: 'https://ci/1', app: null, jobId: null },
+      { name: 'integration', status: 'failure', startedAt: null, completedAt: null, url: null, app: null, jobId: null },
+      { name: 'e2e', status: 'running', startedAt: '2026-10-03T10:02:00Z', completedAt: null, url: 'https://ci/3', app: null, jobId: null },
+      { name: 'build', status: 'queued', startedAt: null, completedAt: null, url: null, app: null, jobId: null },
+      { name: 'docs', status: 'neutral', startedAt: null, completedAt: null, url: null, app: null, jobId: null },
+      { name: 'vercel', status: 'running', startedAt: '2026-10-03T10:03:00Z', completedAt: null, url: 'https://v/1', app: null, jobId: null },
+      { name: 'legacy', status: 'failure', startedAt: null, completedAt: null, url: null, app: null, jobId: null },
     ]);
   });
 
   it('has no checks when the head commit has no rollup', () => {
     expect(toPrDetail(payload(pr({ commits: { nodes: [{ commit: { statusCheckRollup: null } }] } })), 'acme', 'server')?.checks).toEqual([]);
+  });
+
+  describe('check app and job id (HIVE-206)', () => {
+    const rollup = (nodes: unknown[]) => payload(pr({ commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes } } } }] } }));
+
+    it('reads an Actions check run’s job id and app', () => {
+      const detail = toPrDetail(rollup([{ __typename: 'CheckRun', name: 'unit', status: 'COMPLETED', conclusion: 'SUCCESS',
+        startedAt: null, completedAt: null, detailsUrl: 'https://x', databaseId: 991, checkSuite: { app: { slug: 'github-actions' } } }]), 'acme', 'nova');
+      expect(detail?.checks[0]).toMatchObject({ app: 'github-actions', jobId: 991 });
+    });
+
+    it('keeps a third-party check run’s app and gives it no job id', () => {
+      const detail = toPrDetail(rollup([{ __typename: 'CheckRun', name: 'netlify', status: 'COMPLETED', conclusion: 'SUCCESS',
+        databaseId: 5, checkSuite: { app: { slug: 'netlify' } } }]), 'acme', 'nova');
+      expect(detail?.checks[0]).toMatchObject({ app: 'netlify', jobId: null });
+    });
+
+    it('gives a commit status neither', () => {
+      const detail = toPrDetail(rollup([{ __typename: 'StatusContext', context: 'ci/legacy', state: 'SUCCESS', targetUrl: null, createdAt: null }]), 'acme', 'nova');
+      expect(detail?.checks[0]).toMatchObject({ app: null, jobId: null });
+    });
   });
 
   it('names requested users by login and teams by name', () => {
