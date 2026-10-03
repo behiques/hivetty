@@ -740,3 +740,54 @@ describe('ui-store — the PRs place (HIVE-205)', () => {
     expect(useUiStore.getState().prPage).toBeNull();
   });
 });
+
+describe('ui-store — the inbox arrival queue (HIVE-198)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('starts empty with the drawer shut', () => {
+    const s = useUiStore.getState();
+    expect(s.arrivals).toEqual([]);
+    expect(s.arrivalPulse).toBeNull();
+    expect(s.inboxDrawer).toEqual({ open: false, thread: null });
+  });
+
+  it('pushes newest first and never twice', () => {
+    const { pushArrival } = useUiStore.getState();
+    pushArrival('a', false);
+    pushArrival('b', false);
+    pushArrival('a', false);
+    expect(useUiStore.getState().arrivals).toEqual(['a', 'b']);
+  });
+
+  it('a quiet arrival pulses instead of rising', () => {
+    useUiStore.getState().pushArrival('a', true);
+    expect(useUiStore.getState().arrivals).toEqual([]);
+    expect(useUiStore.getState().arrivalPulse).toBe('a');
+  });
+
+  it('nothing rises while the drawer is open', () => {
+    useUiStore.getState().openInboxDrawer();
+    useUiStore.getState().pushArrival('a', false);
+    expect(useUiStore.getState().arrivals).toEqual([]);
+  });
+
+  it('folds the queue', () => {
+    useUiStore.getState().pushArrival('a', false);
+    useUiStore.getState().foldArrivals();
+    expect(useUiStore.getState().arrivals).toEqual([]);
+  });
+
+  it('opens the drawer on a thread, folding what was up, and closes it', () => {
+    useUiStore.getState().pushArrival('a', false);
+    useUiStore.getState().openInboxDrawer('t1');
+    expect(useUiStore.getState().inboxDrawer).toEqual({ open: true, thread: 't1' });
+    expect(useUiStore.getState().arrivals).toEqual([]);
+    useUiStore.getState().closeInboxDrawer();
+    expect(useUiStore.getState().inboxDrawer).toEqual({ open: false, thread: null });
+  });
+
+  it('opens without a thread', () => {
+    useUiStore.getState().openInboxDrawer();
+    expect(useUiStore.getState().inboxDrawer).toEqual({ open: true, thread: null });
+  });
+});
