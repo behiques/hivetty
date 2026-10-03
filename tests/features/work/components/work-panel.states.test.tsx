@@ -229,7 +229,7 @@ describe('the live state', () => {
     expect(screen.getByText('HIVE-1')).toBeInTheDocument();
     expect(screen.getByText('HIVE-2')).toBeInTheDocument();
     expect(screen.queryByText(/out of date/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/first 200/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Showing the first 200 — your query matched more\. Narrow it in Jira\./)).not.toBeInTheDocument();
   });
 
   it('links a real ticket out to Jira', () => {
@@ -246,7 +246,7 @@ describe('the live state', () => {
     state().hydrateTickets([issue()], true);
     render(<WorkPanel />);
 
-    expect(screen.getByText(/first 200/i)).toBeInTheDocument();
+    expect(screen.getByText(/Showing the first 200 — your query matched more\. Narrow it in Jira\./)).toBeInTheDocument();
   });
 
   it('says a query matched nothing rather than rendering a blank column', () => {
