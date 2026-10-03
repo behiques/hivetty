@@ -1,4 +1,5 @@
-import { selectRailTab } from '../fixtures/rail-tabs';
+import { bar, goToOvermind, goToPlace } from '../fixtures/places';
+
 import { expect, test } from './fixtures/hive-app';
 
 /**
@@ -16,47 +17,37 @@ import { expect, test } from './fixtures/hive-app';
  *
  * Unit tests can prove the store is empty. Only the built app can prove nothing
  * *paints* it, which is what this file does — and it screenshots each surface,
- * because "the header reads all zeros" is a claim worth being able to look at.
+ * because "the bar counts nothing" is a claim worth being able to look at.
  *
  * The shared fixture launches with an empty profile and no config, which is
  * exactly the state under test: a first run, before the user has mapped
  * anything.
  */
 
-test('the header counts nothing', async ({ page }) => {
+test('the bar counts nothing', async ({ page }) => {
   await page.waitForSelector('nav[aria-label="Places"]');
-  const header = page.getByRole('banner');
 
-  await expect(header.getByText('0 working')).toBeVisible();
-  await expect(header.getByText('0 waiting')).toBeVisible();
-  await expect(header.getByText(/0 idle · 0 ended/)).toBeVisible();
+  // A count renames its place's button (`Sessions, 2 working`), so the exact names prove there is none.
+  for (const name of ['Sessions', 'Agents', 'PRs']) {
+    await expect(bar(page).getByRole('button', { name, exact: true })).toBeVisible();
+  }
 
-  await header.screenshot({ path: 'test-results/evidence/header-zero.png' });
+  await bar(page).screenshot({ path: 'test-results/evidence/bar-zero.png' });
 });
 
-test('the projects tab explains that nothing is mapped', async ({ page }) => {
+test('Home explains that nothing is mapped', async ({ page }) => {
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  const rail = page.getByRole('navigation', {
-    name: 'Projects, work, and agents',
-  });
+  const home = page.getByRole('region', { name: 'Home' });
+  await expect(home.getByRole('heading', { name: 'An empty hive' })).toBeVisible();
+  await expect(home.getByRole('button', { name: 'Add a project' })).toBeVisible();
 
-  /*
-    The prose restatement of the flavour line is gone, so what proves the panel
-    explained itself is the block it leaves: a drawn line, the control that
-    fixes the emptiness, and the one destination the rail cannot route to.
-  */
-  await expect(rail.locator('[data-swarm-line]').first()).toBeVisible();
-  await expect(
-    rail.getByRole('button', { name: 'Add a new project' }),
-  ).toBeVisible();
-  await expect(page.getByText('Settings → Projects')).toBeVisible();
-
-  await rail.screenshot({ path: 'test-results/evidence/projects-empty.png' });
+  await home.screenshot({ path: 'test-results/evidence/projects-empty.png' });
 });
 
 test('the orchestrator says its fleet is empty', async ({ page }) => {
   await page.waitForSelector('nav[aria-label="Places"]');
+  await goToOvermind(page);
 
   /**
    * `toContainText`, not `toHaveText`: the block leads with a drawn flavour
@@ -90,12 +81,9 @@ test('the orchestrator says its fleet is empty', async ({ page }) => {
 test('the work tab shows no ticket it did not get from Jira', async ({ page }) => {
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  const rail = page.getByRole('navigation', {
-    name: 'Projects, work, and agents',
-  });
-  await selectRailTab(rail.getByRole('tab', { name: /^Work/ }));
+  await goToPlace(page, 'Work');
 
-  const work = page.locator('[data-panel="work"]');
+  const work = page.getByRole('main');
   await expect(work).toBeVisible();
 
   await expect(page.getByText(/GRAC-\d+/)).toHaveCount(0);
@@ -103,7 +91,7 @@ test('the work tab shows no ticket it did not get from Jira', async ({ page }) =
     work.getByText('Hero refresh: migrate to semantic tokens'),
   ).toHaveCount(0);
 
-  await rail.screenshot({ path: 'test-results/evidence/work-tab.png' });
+  await work.screenshot({ path: 'test-results/evidence/work-tab.png' });
 });
 
 /**
@@ -118,10 +106,7 @@ test('the work tab shows no ticket it did not get from Jira', async ({ page }) =
 test('the work tab opens on a skeleton, not on data', async ({ page }) => {
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  const rail = page.getByRole('navigation', {
-    name: 'Projects, work, and agents',
-  });
-  await selectRailTab(rail.getByRole('tab', { name: /^Work/ }));
+  await goToPlace(page, 'Work');
 
   const skeleton = page.getByRole('status', { name: 'Loading tickets' });
 
@@ -166,7 +151,7 @@ test('the work tab opens on a skeleton, not on data', async ({ page }) => {
      */
     const [seededKeys, cards, stillLoading] = await Promise.all([
       page.getByText(/GRAC-\d+/).count(),
-      page.locator('[data-panel="work"] article').count(),
+      page.locator('main article').count(),
       skeleton.isVisible(),
     ]);
 
@@ -188,14 +173,12 @@ test.describe('with the shipped agents deleted', () => {
   test('the agents tab is empty and says why', async ({ page }) => {
     await page.waitForSelector('nav[aria-label="Places"]');
 
-    const rail = page.getByRole('navigation', {
-      name: 'Projects, work, and agents',
-    });
-    await selectRailTab(rail.getByRole('tab', { name: /^Agents/ }));
+    await goToPlace(page, 'Agents');
 
-    // Since HIVE-204 the panel offers New agent itself, rather than pointing
-    // at the pane that used to hold the editor.
-    await expect(page.getByText(/No agents yet\./)).toBeVisible();
-    await expect(page.getByRole('button', { name: '+ New agent…' })).toBeVisible();
+    // The stage offers New agent itself (HIVE-204).
+    await expect(page.getByRole('heading', { name: 'No agents yet' })).toBeVisible();
+    await expect(
+      page.getByRole('main').getByRole('button', { name: 'New agent', exact: true }),
+    ).toBeVisible();
   });
 });
