@@ -66,6 +66,17 @@ The header chip (in round two, the connection item at the bar's foot) turns ambe
 every 30 seconds, forever. Terminals pick up where they left off. **Work locally** is the way
 out. A revoked token or a version mismatch is shown in red and not retried.
 
+In round two, a line across the top of every stage says so too: **Lost the Hive on mini.
+Reconnecting in 4s. The sessions keep running there.** It counts down to the next redial, and
+**Try now** dials at once and starts the backoff again from its first step. Once the laptop is
+back the line goes; when the link is given up it turns red and gives the reason, with no Try now.
+
+Nothing typed or clicked while the link is down is queued. Each one is counted instead: "3
+actions (clicks or keystrokes) did not reach mini; redo them once it is back." The count stays
+through the reattach, because that is when you redo them. **Clear** dismisses it, and the count is
+shared: Clear on the stage line, at the bar's foot or on the Classic header chip clears all three.
+Going local resets it.
+
 ## What a remote device cannot do
 
 Pairing grants everything a local user can do, except things tied to one machine's window or
