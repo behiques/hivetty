@@ -1032,7 +1032,6 @@ function RunHeader({ run, dim, brand, first, selected, amber, red, onJump }: Run
       </span>
       <span className="truncate text-right tabular-nums">{cost ?? '—'}</span>
       </div>
-
     </div>
   );
 }

@@ -466,33 +466,41 @@ because the PRs panel (052) is a separate slice that must agree with this one.
   left out), the ticket's sessions and PRs, and New session, Move to the next
   status, Open in Jira.
 
-### `<AgentsPanel />` and `<AgentRow />`
+### `<AgentsPanel />`, `<AgentRow />` and `<AgentTile />`
 
 `src/features/agents/components/` — stories 033 and HIVE-114, regrouped by
-HIVE-116.
+HIVE-116, into lanes by HIVE-204.
 
-`AgentsPanel` → a header per group → `AgentRow`. The grouping is **state**, not
-name: a rail is read to answer "what needs me", and the state is what changes
-minute to minute. Every ordering rule lives in `useAgentsByGroup` — asking first
-inside Awake, ties broken on the most recent run, `failed` filed under Awake
-because a broken agent is the loudest yes on the panel, empty groups omitted —
-so the panel renders a decision rather than making one.
+`AgentsPanel` → a header ("Agents", then `N summons` in amber and `N morphing`
+in green, each omitted at zero, then a + button labelled "New agent") → one
+`section` per lane, named by `aria-label` → a lane header (a chevron button
+with `aria-expanded`, a 9px square in the lane's colour, the label and the
+count) → `AgentRow`. The lanes are **Summons** (asking, failed or invalid),
+**Morphing** (working) and **Burrowed** (sleeping, then paused). Every ordering
+rule lives in `useAgentsByGroup` — asking first inside Summons, then the most
+recent run; sleeping before paused; empty lanes omitted — so the panel renders a
+decision rather than making one. Folds are `agentsFolded` in ui-store, all open
+by default. In code a lane is a `group`: `lane:` is an agent frontmatter key.
 
-`+ New agent…` at the foot calls `openSettings('agents')`. The empty state names
-the same pane in prose and draws no button, because the copy already is one.
+`+ New agent…` at the foot and the header's + both open a never-saved agent page
+on Definition (`openAgentPage(null, 'definition')`).
 
-**The status dot is not `StatusDot`.** That atom is a 7px unringed dot; this one
-is 9px with a 2px `--cc-panel` ring so it reads as lifted off the avatar tile.
-Deliberately built inline rather than bending the atom to fit two shapes. It
-takes its fill from `STATUS_FILL` and pulses for `working`, the same rules the
-atom applies.
+`AgentTile` is the row's 38×40 hexagon: an inline SVG polygon stroked in the
+state's colour (asking amber with a 22% fill and a soft glow, failed red with a
+14% fill, working green, resting subtle, invalid amber outline), the agent's
+`Icon` inside, and a live-run badge only past one. Fills go through
+`color-mix` on the `--cc-*` token. It is `aria-hidden`.
 
-The status **word** is visible in the right-hand meta rather than `sr-only`,
-which is what changed with HIVE-116: while `sleeping` was the only state an
-agent could be in, saying so on screen was noise. With four possible at once it
-is the point of the row. Beneath it sits whatever makes that word actionable —
-the open ask's ref, the run's cost, the next wake — and `invalid` beats all of
-them, because a file that will not parse is not running.
+`AgentRow` is the tile and two lines. Line 1 is the name and a fixed 44px slot
+showing the age (`ageLabel`, through `useAge`) of line 2's entry. Line 2 is the
+agent's last word on the ledger (`useAgentLastWord`): the kind as a coloured
+mono keyword (`ask a3` amber, `failed` red, `event` brand, `post` subtle, `done`
+green) and the entry's first line; `invalid` and its reason beat it, and a
+paused agent that never wrote says `paused`. On hover or focus Run now and
+Pause (Resume) show over the slot, as siblings of the row button so each keeps
+its own tab stop. An answer that is not a start takes line 2 for five seconds,
+amber, `role="status"`. The row button's accessible name says the state, the
+live runs and the last word, so the tile's colour is never the only carrier.
 
 ### `<AgentView />`, `<AgentRunLog />` and `<AgentLedger />`
 
