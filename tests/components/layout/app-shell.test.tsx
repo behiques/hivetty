@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from '@components/layout/app-shell';
 import { TooltipProvider } from '@components/ui/tooltip';
 import { useAppearanceStore } from '@stores/appearance-store';
+import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
+import { seedDemoFleet } from '@tests/support/demo-fleet';
 
 vi.mock('@xterm/xterm');
 vi.mock('@xterm/addon-fit');
@@ -147,7 +149,7 @@ describe('AppShell — Layout (HIVE-195)', () => {
     expect(screen.queryByRole('navigation', { name: 'Places' })).not.toBeInTheDocument();
   });
 
-  it('draws the bar, the panel and the activity rail in round two', () => {
+  it('draws the bar and the list panel in round two, and no activity rail (HIVE-201)', () => {
     useAppearanceStore.getState().setLayout('round-two');
     useUiStore.setState({ place: 'work' });
 
@@ -156,7 +158,7 @@ describe('AppShell — Layout (HIVE-195)', () => {
     expect(screen.getByRole('banner')).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Places' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Work list' })).toBeInTheDocument();
-    expect(screen.getByRole('complementary', { name: 'Activity' })).toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('navigation', { name: 'Projects, work, and agents' }),
     ).not.toBeInTheDocument();
@@ -173,5 +175,23 @@ describe('AppShell — Layout (HIVE-195)', () => {
     act(() => useAppearanceStore.getState().setLayout('classic'));
     expect(screen.getByRole('navigation', { name: 'Projects, work, and agents' })).toBeInTheDocument();
     expect(screen.getByRole('main')).toBe(stage);
+  });
+
+  it('round two mounts the session panel for a session on stage; Classic keeps the rail (HIVE-201)', () => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useAppearanceStore.getState().setLayout('round-two');
+    useUiStore.getState().openTab('hero-refresh', 'sessions');
+
+    const { unmount } = renderShell();
+
+    expect(screen.getByRole('complementary', { name: 'Session panel' })).toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument();
+    unmount();
+
+    act(() => useAppearanceStore.getState().setLayout('classic'));
+    renderShell();
+    expect(screen.getByRole('complementary', { name: 'Activity' })).toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Session panel' })).not.toBeInTheDocument();
   });
 });

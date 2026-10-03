@@ -8,7 +8,7 @@ import {
   type KeyEventLike,
   type TerminalChordDetail,
 } from '@lib/terminal/keymap';
-import { useLayout, useToggleRailCollapsed } from '@stores/appearance-store';
+import { useLayout, useToggleRailCollapsed, useToggleSessionPanel } from '@stores/appearance-store';
 import { useSpawnTerminalBeside } from '@stores/hive-store';
 import { useActiveTab, useTogglePanel } from '@stores/ui-store';
 
@@ -38,6 +38,7 @@ interface AppChord {
  */
 export function useAppChords(): void {
   const toggleRailCollapsed = useToggleRailCollapsed();
+  const toggleSessionPanel = useToggleSessionPanel();
   const spawnTerminalBeside = useSpawnTerminalBeside();
   const activeTab = useActiveTab();
   /*
@@ -72,7 +73,9 @@ export function useAppChords(): void {
       {
         matches: (event, mac) => isRailChord(event, mac) === 'right',
         name: 'rail-right',
-        run: () => toggleRailCollapsed('right'),
+        // Round two's right side is the session panel; the chord opens and closes it (HIVE-201).
+        run: () =>
+          layoutRef.current === 'round-two' ? toggleSessionPanel() : toggleRailCollapsed('right'),
       },
       {
         matches: (event) => isTerminalHereChord(event),
@@ -112,5 +115,5 @@ export function useAppChords(): void {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener(TERMINAL_CHORD_EVENT, onChord);
     };
-  }, [toggleRailCollapsed, spawnTerminalBeside, togglePanel]);
+  }, [toggleRailCollapsed, toggleSessionPanel, spawnTerminalBeside, togglePanel]);
 }

@@ -33,4 +33,11 @@ describe('useNarrowWindow (HIVE-201)', () => {
     expect(mql.removeEventListener).toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
+
+  it('reads as wide where there is no matchMedia', () => {
+    vi.stubGlobal('matchMedia', undefined);
+    const { result } = renderHook(() => useNarrowWindow());
+    expect(result.current).toBe(false);
+    vi.unstubAllGlobals();
+  });
 });

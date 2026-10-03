@@ -140,6 +140,11 @@ describe('AppearanceSection', () => {
    * HIVE-182. On by default; off hides the glyph rail only — the count on the
    * session row stays, and costs no terminal columns.
    */
+  it('says Show plan panel is Classic only (HIVE-201, D12)', () => {
+    render(<AppearanceSection />);
+    expect(screen.getByText(/Classic layout only\./)).toBeInTheDocument();
+  });
+
   it('offers Show plan panel, on by default, and writes it when switched', async () => {
     const user = userEvent.setup();
     render(<AppearanceSection />);
