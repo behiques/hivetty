@@ -64,8 +64,9 @@ import { isThisMachineAction } from './notification-contract';
  * `mergedAt` and `mine`.
  * 9 → 10 (HIVE-216): `CH` gained `jira:users`; `jira:comments`' comments gained `authorId` and `via`, and their runs `mention`; `jira:add-comment` takes `mentions`.
  * 10 → 11 (HIVE-205): `CH` gained `github:pr-detail` and `github:pr-comment`.
+ * 11 → 12 (HIVE-206): `CH` gained `github:pr-runs`, `github:run-jobs`, `github:job-log` and `github:rerun-failed`; `PrCheck` gained `app` and `jobId`.
  */
-export const REMOTE_PROTOCOL_VERSION = 11;
+export const REMOTE_PROTOCOL_VERSION = 12;
 
 /**
  * What a frame is for.
@@ -195,6 +196,10 @@ export const FRAME_KIND = {
   [CH.githubSearchPrs]: 'call',
   [CH.githubPrDetail]: 'call',
   [CH.githubPrComment]: 'call',
+  [CH.githubPrRuns]: 'call',
+  [CH.githubRunJobs]: 'call',
+  [CH.githubJobLog]: 'call',
+  [CH.githubRerunFailed]: 'call',
   [CH.notificationsActivate]: 'event',
   [CH.notificationsNew]: 'event',
   /*
@@ -482,6 +487,11 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.githubSearchPrs]: 'execute',
   [CH.githubPrDetail]: 'execute',
   [CH.githubPrComment]: 'execute',
+  // Each spawns `gh run` on the server (HIVE-206).
+  [CH.githubPrRuns]: 'execute',
+  [CH.githubRunJobs]: 'execute',
+  [CH.githubJobLog]: 'execute',
+  [CH.githubRerunFailed]: 'execute',
   [CH.notificationsActivate]: 'read',
   [CH.notificationsNew]: 'read',
   [CH.notificationsToast]: 'read',

@@ -741,6 +741,32 @@ describe('ui-store — the PRs place (HIVE-205)', () => {
   });
 });
 
+describe('the Checks tab selection (HIVE-206)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('openPrChecks shows the Checks tab on a job', () => {
+    useUiStore.getState().openPrChecks(77);
+    expect(useUiStore.getState()).toMatchObject({ prTab: 'checks', prJob: 77 });
+  });
+
+  it('showPrRun shows a push and lets go of the clicked job', () => {
+    useUiStore.setState({ prJob: 77 });
+    useUiStore.getState().showPrRun('9f3c2ab');
+    expect(useUiStore.getState()).toMatchObject({ prRun: '9f3c2ab', prJob: null });
+  });
+
+  it('showPrJob picks a job', () => {
+    useUiStore.getState().showPrJob(12);
+    expect(useUiStore.getState().prJob).toBe(12);
+  });
+
+  it('openPrPage forgets the shown push and job, and keeps the tab', () => {
+    useUiStore.setState({ prTab: 'checks', prRun: 'abc', prJob: 3 });
+    useUiStore.getState().openPrPage({ owner: 'acme', repo: 'server', n: 1 });
+    expect(useUiStore.getState()).toMatchObject({ prTab: 'checks', prRun: null, prJob: null });
+  });
+});
+
 describe('ui-store — the inbox arrival queue (HIVE-198)', () => {
   beforeEach(() => useUiStore.getState().reset());
 

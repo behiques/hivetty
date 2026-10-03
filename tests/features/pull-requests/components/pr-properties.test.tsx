@@ -9,10 +9,10 @@ import { hatchRow } from '@tests/support/hatchery';
 import { prDetail } from '@tests/support/pr-detail';
 
 const checks = [
-  { name: 'lint', status: 'success' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:00:41Z', url: 'https://ci/lint' },
-  { name: 'integration', status: 'failure' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:03:10Z', url: 'https://ci/int' },
-  { name: 'e2e', status: 'running' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: null, url: 'https://ci/e2e' },
-  { name: 'build', status: 'queued' as const, startedAt: null, completedAt: null, url: 'https://ci/build' },
+  { name: 'lint', status: 'success' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:00:41Z', url: 'https://ci/lint', app: 'github-actions', jobId: null },
+  { name: 'integration', status: 'failure' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: '2026-10-03T10:03:10Z', url: 'https://ci/int', app: 'github-actions', jobId: null },
+  { name: 'e2e', status: 'running' as const, startedAt: '2026-10-03T10:00:00Z', completedAt: null, url: 'https://ci/e2e', app: 'github-actions', jobId: null },
+  { name: 'build', status: 'queued' as const, startedAt: null, completedAt: null, url: 'https://ci/build', app: 'github-actions', jobId: null },
 ];
 const row = hatchRow({ session: 'fee-rule' }, { flap: 'MUTATING', tone: 'green', github: 'Open · 2 open findings, fixer on it' });
 

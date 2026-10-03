@@ -1,4 +1,16 @@
-import type { GhResult, PrCommentRequest, PrDetail, PrRecord, PrRef, PrsSnapshot } from '@shared/github-contract';
+import type {
+  GhResult,
+  JobLog,
+  PrCommentRequest,
+  PrDetail,
+  PrRecord,
+  PrRef,
+  PrRuns,
+  PrRunsRequest,
+  PrsSnapshot,
+  RunJob,
+  RunRef,
+} from '@shared/github-contract';
 
 /**
  * The renderer's half of the GitHub bridge.
@@ -69,6 +81,54 @@ export const postPrComment = async (request: PrCommentRequest): Promise<GhResult
     return await bridge.github.prComment(request);
   } catch (cause) {
     console.error('[hive] github.prComment failed:', cause);
+    return null;
+  }
+};
+
+/** The head branch's runs and the workflow graph (HIVE-206). Same two `null` cases as {@link readPullRequests}. */
+export const readPrRuns = async (request: PrRunsRequest): Promise<GhResult<PrRuns> | null> => {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.github.prRuns(request);
+  } catch (cause) {
+    console.error('[hive] github.prRuns failed:', cause);
+    return null;
+  }
+};
+
+/** One run's jobs and steps (HIVE-206). Same two `null` cases. */
+export const readRunJobs = async (request: RunRef): Promise<GhResult<RunJob[]> | null> => {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.github.runJobs(request);
+  } catch (cause) {
+    console.error('[hive] github.runJobs failed:', cause);
+    return null;
+  }
+};
+
+/** One job's failed log (HIVE-206). Same two `null` cases. */
+export const readJobLog = async (request: RunRef): Promise<GhResult<JobLog> | null> => {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.github.jobLog(request);
+  } catch (cause) {
+    console.error('[hive] github.jobLog failed:', cause);
+    return null;
+  }
+};
+
+/** Re-run a run's failed jobs (HIVE-206). Same two `null` cases. */
+export const rerunFailedJobs = async (request: RunRef): Promise<GhResult<true> | null> => {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.github.rerunFailed(request);
+  } catch (cause) {
+    console.error('[hive] github.rerunFailed failed:', cause);
     return null;
   }
 };

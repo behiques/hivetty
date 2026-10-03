@@ -231,6 +231,10 @@ export interface PrCheck {
   startedAt: string | null;
   completedAt: string | null;
   url: string | null;
+  /** The check suite's app slug (`github-actions`, `netlify`, …); null for a commit status (HIVE-206). */
+  app: string | null;
+  /** The Actions job id (the CheckRun's `databaseId`) when `app` is `github-actions`, else null (HIVE-206). */
+  jobId: number | null;
 }
 
 /** One PR, read for its page (HIVE-205). `owner`/`repo` are the configured repository's spelling. */
@@ -262,3 +266,33 @@ export interface PrDetail {
   threads: PrThread[];
   checks: PrCheck[];
 }
+
+/** `github:pr-runs` (HIVE-206): the runs of one PR's head branch. */
+export interface PrRunsRequest { owner: string; repo: string; branch: string }
+/** A run or a job, by id, in a configured repository (HIVE-206). */
+export interface RunRef { owner: string; repo: string; id: number }
+
+/** One workflow run, as `gh run list` names it. Status and conclusion are gh's lowercase words. */
+export interface WorkflowRun {
+  id: number; number: number; attempt: number;
+  status: string; conclusion: string | null;
+  headSha: string; event: string; workflowName: string;
+  createdAt: string; updatedAt: string; url: string;
+}
+/** A job as a workflow file declares it: its id, its `name:` and its `needs`. */
+export interface WorkflowJobDef { id: string; name: string | null; needs: string[] }
+/** One `.github/workflows/*.yml`: its file name, top-level `name:`, and jobs in file order. */
+export interface WorkflowDef { file: string; name: string | null; jobs: WorkflowJobDef[] }
+/** Runs newest first (at most 40) and the checkout's workflow files. */
+export interface PrRuns { runs: WorkflowRun[]; workflows: WorkflowDef[] }
+
+export interface RunStep {
+  number: number; name: string; status: string; conclusion: string | null;
+  startedAt: string | null; completedAt: string | null;
+}
+export interface RunJob {
+  id: number; runId: number; name: string; status: string; conclusion: string | null;
+  startedAt: string | null; completedAt: string | null; url: string; steps: RunStep[];
+}
+/** A failed job's log, cut to the failure in main (HIVE-206). `truncated`: lines were dropped. */
+export interface JobLog { lines: string[]; truncated: boolean }

@@ -2188,6 +2188,23 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       });
     }, 60_000);
 
+    it.each([
+      ['11d', CH.githubPrRuns, { owner: 'hive-conformance', repo: 'nowhere', branch: 'main' }],
+      ['11e', CH.githubRunJobs, { owner: 'hive-conformance', repo: 'nowhere', id: 1 }],
+      ['11f', CH.githubJobLog, { owner: 'hive-conformance', repo: 'nowhere', id: 1 }],
+      ['11g', CH.githubRerunFailed, { owner: 'hive-conformance', repo: 'nowhere', id: 1 }],
+    ] as const)('%s. answers %s over an attached socket (HIVE-206)', async (_n, channel, payload) => {
+      const client = await attached();
+      const result = await client.call(channel, payload);
+
+      // Unmapped (and `gh` may be absent): the execute-graded call crosses the
+      // socket and answers with a GhResult refusal, never a throw.
+      expect(result, `served app's stderr so far:\n${appRecord?.stderr || '(empty)'}`).toMatchObject({
+        kind: 'result',
+        payload: { ok: false },
+      });
+    }, 60_000);
+
     it('12. carries the EOUTSIDE code itself, not a flattened message', async () => {
       const client = await attached();
       const result = await client.call(CH.fsReadFile, {

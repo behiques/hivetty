@@ -91,7 +91,19 @@ import type {
   WriteFileRequest,
   WriteFileResult,
 } from './fs-contract';
-import type { GhResult, PrCommentRequest, PrDetail, PrRecord, PrRef, PrsSnapshot } from './github-contract';
+import type {
+  GhResult,
+  JobLog,
+  PrCommentRequest,
+  PrDetail,
+  PrRecord,
+  PrRef,
+  PrRuns,
+  PrRunsRequest,
+  PrsSnapshot,
+  RunJob,
+  RunRef,
+} from './github-contract';
 import type {
   JiraComment,
   JiraCommentPage,
@@ -595,6 +607,15 @@ export const CH = {
    * renderer, so a write can only land on a PR the check admitted.
    */
   githubPrComment: 'github:pr-comment',
+  /**
+   * The Checks tab (HIVE-206): the head branch's runs and the checkout's
+   * workflow graph, one run's jobs, one job's failed log, and re-run failed.
+   * Each names a repository, so each passes main's scope check first.
+   */
+  githubPrRuns: 'github:pr-runs',
+  githubRunJobs: 'github:run-jobs',
+  githubJobLog: 'github:job-log',
+  githubRerunFailed: 'github:rerun-failed',
   notificationsActivate: 'notifications:activate', // main → renderer
   /**
    * A notification was raised (HIVE-75). main → renderer.
@@ -2521,6 +2542,14 @@ export interface HiveBridge {
     prDetail(request: PrRef): Promise<GhResult<PrDetail>>;
     /** A PR-level comment (HIVE-205), under the same scope. */
     prComment(request: PrCommentRequest): Promise<GhResult<true>>;
+    /** The head branch's runs and the workflow graph (HIVE-206). Refused unless a configured project maps the repository. */
+    prRuns(request: PrRunsRequest): Promise<GhResult<PrRuns>>;
+    /** One run's jobs and steps (HIVE-206), under the same scope. */
+    runJobs(request: RunRef): Promise<GhResult<RunJob[]>>;
+    /** One job's failed log, cut to the failure (HIVE-206), under the same scope. */
+    jobLog(request: RunRef): Promise<GhResult<JobLog>>;
+    /** Re-run a run's failed jobs (HIVE-206), under the same scope. */
+    rerunFailed(request: RunRef): Promise<GhResult<true>>;
   };
   /**
    * Jira (HIVE-67).

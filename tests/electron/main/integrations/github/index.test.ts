@@ -430,3 +430,52 @@ describe('prDetail and prComment (HIVE-205)', () => {
     await expect(gh.prDetail({ owner: 'acme', repo: 'nova-web', n: 482 })).resolves.toMatchObject({ ok: false, error: { kind: 'not-installed' } });
   });
 });
+
+describe('the Checks verbs (HIVE-206)', () => {
+  const RUNS = JSON.stringify([{ databaseId: 9, number: 9, attempt: 1, status: 'completed', conclusion: 'success',
+    headSha: 'abc', event: 'push', workflowName: 'CI', createdAt: 'c', updatedAt: 'u', url: 'x' }]);
+  const recording = (calls: string[][]): RunAsync => (_file, args) => {
+    calls.push([...args]);
+    const stdout = args[0] === 'repo' ? JSON.stringify({ nameWithOwner: 'acme/nova-web' }) : args[1] === 'list' ? RUNS : JSON.stringify({ jobs: [] });
+    return Promise.resolve({ code: 0, stdout, stderr: '', timedOut: false });
+  };
+  const github = (calls: string[][], path = '/repos/nova-web') => createGithub({
+    config: () => config([project({ path })]), env: () => ({ PATH: withGh() }), run: recording(calls), now: () => 0,
+  });
+  const ghRunCalls = (calls: string[][]) => calls.filter((args) => args[0] === 'run');
+
+  it('reads runs with the resolver’s spelling and the checkout’s workflows', async () => {
+    const checkout = join(dir, 'checkout');
+    mkdirSync(join(checkout, '.github/workflows'), { recursive: true });
+    writeFileSync(join(checkout, '.github/workflows/ci.yml'), 'name: CI\njobs:\n  lint:\n    needs: install\n');
+    const calls: string[][] = [];
+    const result = await github(calls, checkout).prRuns({ owner: 'ACME', repo: 'Nova-Web', branch: 'feat/x' });
+    expect(ghRunCalls(calls)[0]).toContain('acme/nova-web');
+    expect(result).toMatchObject({ ok: true, value: { runs: [{ id: 9 }], workflows: [{ file: 'ci.yml', jobs: [{ id: 'lint', needs: ['install'] }] }] } });
+  });
+
+  it('answers runs with no workflows when the checkout has none', async () => {
+    const result = await github([], join(dir, 'missing')).prRuns({ owner: 'acme', repo: 'nova-web', branch: 'main' });
+    expect(result).toMatchObject({ ok: true, value: { workflows: [] } });
+  });
+
+  it.each([
+    ['prRuns', (g: ReturnType<typeof github>) => g.prRuns({ owner: 'someone', repo: 'else', branch: 'main' })],
+    ['runJobs', (g: ReturnType<typeof github>) => g.runJobs({ owner: 'someone', repo: 'else', id: 1 })],
+    ['jobLog', (g: ReturnType<typeof github>) => g.jobLog({ owner: 'someone', repo: 'else', id: 1 })],
+    ['rerunFailed', (g: ReturnType<typeof github>) => g.rerunFailed({ owner: 'someone', repo: 'else', id: 1 })],
+  ])('%s refuses an unmapped repository before any gh run', async (_name, verb) => {
+    const calls: string[][] = [];
+    await expect(verb(github(calls))).resolves.toMatchObject({ ok: false, error: { kind: 'no-repos' } });
+    expect(ghRunCalls(calls)).toEqual([]);
+  });
+
+  it('routes jobs, log and rerun to gh run with the mapped repository', async () => {
+    const calls: string[][] = [];
+    const gh = github(calls);
+    await gh.runJobs({ owner: 'acme', repo: 'nova-web', id: 5 });
+    await gh.jobLog({ owner: 'acme', repo: 'nova-web', id: 6 });
+    await gh.rerunFailed({ owner: 'acme', repo: 'nova-web', id: 7 });
+    expect(ghRunCalls(calls).map((args) => args.slice(0, 3))).toEqual([['run', 'view', '5'], ['run', 'view', '--job'], ['run', 'rerun', '7']]);
+  });
+});

@@ -274,7 +274,7 @@ export const PR_DETAIL_QUERY = [
   `        comments(first: ${PAGE}) { nodes { author { login } body createdAt url diffHunk } } } }`,
   `      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: ${PAGE}) { nodes {`,
   '        __typename',
-  '        ... on CheckRun { name status conclusion startedAt completedAt detailsUrl }',
+  '        ... on CheckRun { name status conclusion startedAt completedAt detailsUrl databaseId checkSuite { app { slug } } }',
   '        ... on StatusContext { context state targetUrl createdAt }',
   '      } } } } } }',
   '    }',

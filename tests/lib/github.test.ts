@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { postPrComment, readPrDetail, readPullRequests, searchPullRequests } from '@lib/github';
+import {
+  postPrComment,
+  readJobLog,
+  readPrDetail,
+  readPrRuns,
+  readPullRequests,
+  readRunJobs,
+  rerunFailedJobs,
+  searchPullRequests,
+} from '@lib/github';
 import type { GhResult, PrsSnapshot } from '@shared/github-contract';
 
 /**
@@ -141,5 +150,32 @@ describe('readPrDetail and postPrComment (HIVE-205)', () => {
     await expect(readPrDetail(ref)).resolves.toBeNull();
     await expect(postPrComment({ ...ref, body: 'hi' })).resolves.toBeNull();
     expect(error).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the Checks wrappers (HIVE-206)', () => {
+  const wrappers = { readPrRuns, readRunJobs, readJobLog, rerunFailedJobs } as const;
+
+  it.each([
+    ['readPrRuns', 'prRuns', { owner: 'a', repo: 'b', branch: 'main' }],
+    ['readRunJobs', 'runJobs', { owner: 'a', repo: 'b', id: 1 }],
+    ['readJobLog', 'jobLog', { owner: 'a', repo: 'b', id: 1 }],
+    ['rerunFailedJobs', 'rerunFailed', { owner: 'a', repo: 'b', id: 1 }],
+  ] as const)('%s calls the bridge’s %s and answers null when it rejects', async (wrapper, verb, request) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const answer = { ok: true, value: true };
+    const call = vi.fn().mockResolvedValueOnce(answer).mockRejectedValueOnce(new Error('ipc'));
+    window.hive = { github: { [verb]: call } } as unknown as Window['hive'];
+    const fn = wrappers[wrapper] as (r: typeof request) => Promise<unknown>;
+    await expect(fn(request)).resolves.toBe(answer);
+    await expect(fn(request)).resolves.toBeNull();
+    expect(call).toHaveBeenCalledWith(request);
+  });
+
+  it('answer null with no bridge', async () => {
+    await expect(readPrRuns({ owner: 'a', repo: 'b', branch: 'main' })).resolves.toBeNull();
+    await expect(readRunJobs({ owner: 'a', repo: 'b', id: 1 })).resolves.toBeNull();
+    await expect(readJobLog({ owner: 'a', repo: 'b', id: 1 })).resolves.toBeNull();
+    await expect(rerunFailedJobs({ owner: 'a', repo: 'b', id: 1 })).resolves.toBeNull();
   });
 });
