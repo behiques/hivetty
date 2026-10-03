@@ -6,7 +6,7 @@ import type { JobLog } from '../../../shared/github-contract';
  * The log is the whole job, from the REST endpoint (`actions.ts` says why), so
  * it is first narrowed to the failed step: the output between its
  * `##[group]Run …` header's `##[endgroup]` (past the echoed script) and its
- * `##[error]`. Within that, the first failure marker with 5 lines above and 60
+ * last `##[error]`. Within that, the first failure marker with 5 lines above and 60
  * below; else the last 80.
  * A summary line (`Tests: …`) outside the window is kept after an ellipsis.
  * Never more than 64 KB, dropped from the front.
@@ -23,9 +23,9 @@ const BELOW = 60;
 const TAIL = 80;
 const CAP = 64 * 1024;
 
-/** The failed step's output as `[from, to)`: past its header's `##[endgroup]`, through its first `##[error]`. Null without one. */
+/** The failed step's output as `[from, to)`: past its header's `##[endgroup]`, through its last `##[error]`: an earlier one is a continue-on-error step, and steps after the real failure only run under `if: always()`. Null without one. */
 function failedStep(lines: readonly string[]): [number, number] | null {
-  const error = lines.findIndex((line) => line.startsWith('##[error]'));
+  const error = lines.findLastIndex((line) => line.startsWith('##[error]'));
   if (error === -1) return null;
   let open = -1;
   for (let i = error - 1; i >= 0 && open === -1; i -= 1) if (lines[i]?.startsWith('##[group]Run ') === true) open = i;

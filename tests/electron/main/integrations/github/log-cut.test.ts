@@ -71,6 +71,24 @@ describe('cutLog', () => {
       });
     });
 
+    it('cuts to the last failed step when an earlier continue-on-error step also errored', () => {
+      const cut = cutLog(
+        rest([
+          '##[group]Run pnpm audit',
+          'pnpm audit',
+          '##[endgroup]',
+          'Error: advisory noise (continue-on-error)',
+          '##[error]Process completed with exit code 1.',
+          '##[group]Run pnpm test',
+          'pnpm test',
+          '##[endgroup]',
+          '  ✕ the real failure (2 ms)',
+          '##[error]Process completed with exit code 1.',
+        ]),
+      );
+      expect(cut.lines).toEqual(['  ✕ the real failure (2 ms)', '##[error]Process completed with exit code 1.']);
+    });
+
     it('keeps the whole job when nothing failed by name', () => {
       expect(cutLog(rest(['##[group]Run true', 'true', '##[endgroup]', 'ok'])).lines).toEqual(['##[group]Run true', 'true', '##[endgroup]', 'ok']);
     });
