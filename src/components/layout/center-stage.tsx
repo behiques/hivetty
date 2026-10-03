@@ -175,7 +175,7 @@ export function CenterStage() {
   const roundTwo = layout === 'round-two';
   const home = roundTwo && place === 'home';
 
-  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home });
+  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work: false });
   /**
    * Whether the session on screen is still starting (HIVE-101).
    *

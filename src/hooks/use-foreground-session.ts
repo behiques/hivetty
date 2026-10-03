@@ -65,7 +65,7 @@ export function useForegroundSession(): void {
 
   const editorFull = activeFileKey !== null && placement === 'full';
   const home = layout === 'round-two' && place === 'home';
-  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home });
+  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work: false });
   /*
     `entity` is non-null whenever the view is an entity view — `resolveView`
     falls back to the orchestrator without one — so the null check is a type
