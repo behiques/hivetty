@@ -44,6 +44,7 @@ import {
   readJiraComments,
   readJiraDetail,
   readJiraIssue,
+  readJiraLinks,
   readJiraStatus,
   readJiraTransitions,
   searchJiraIssues,
@@ -74,6 +75,7 @@ import {
   type TicketGroup,
   type TicketRowModel,
 } from '@lib/ticket-activity';
+import { isBlocks, SECOND_HOP_MAX_LINKS } from '@lib/ticket-links';
 import { parseTitleTags } from '@lib/ticket-tags';
 import { BRIDGE_ERROR } from '@lib/utils';
 import {
@@ -102,6 +104,7 @@ import {
   type SessionNameReport,
 } from '@shared/ipc-contract';
 import {
+  ISSUE_KEY_PATTERN,
   nextTransition,
   type JiraComment,
   type JiraIssue,
@@ -1945,11 +1948,20 @@ async function readTicketParts(
   };
 
   await Promise.all([
-    readJiraDetail({ key }).then((result) => {
+    readJiraDetail({ key }).then(async (result) => {
       if (result === null) return problem('detail', BRIDGE_ERROR);
       if (!result.ok) return problem('detail', result.error.message);
       merge({ detail: result.value, readAt: Date.now() });
       problem('detail', undefined);
+      const epic = result.value.parent;
+      if (read.links && epic?.issueType?.toLowerCase() === 'epic' && ISSUE_KEY_PATTERN.test(epic.key)) {
+        // The key is checked before it is put in the JQL: it came from a server.
+        const found = await searchJiraIssues({ jql: `parent = ${epic.key}` });
+        if (found?.ok) {
+          const done = found.value.issues.filter((one) => one.statusCategory === 'done').length;
+          merge({ epicProgress: { done, total: found.value.issues.length, capped: found.value.capped } });
+        }
+      }
     }),
     readJiraComments({ key, newest: true }).then((result) => {
       if (result === null) return problem('comments', BRIDGE_ERROR);
@@ -1971,6 +1983,30 @@ async function readTicketParts(
             if (snapshot) merge({ history: snapshot.entries });
           })
           .catch(() => undefined)
+      : Promise.resolve(),
+    read.links
+      ? readJiraLinks({ key }).then(async (result) => {
+          if (result === null) return problem('links', BRIDGE_ERROR);
+          if (!result.ok) return problem('links', result.error.message);
+          merge({ links: result.value });
+          problem('links', undefined);
+          const issues = result.value.filter((link) => link.kind === 'issue');
+          if (issues.length > SECOND_HOP_MAX_LINKS) return;
+          const blocked = issues.flatMap((link) =>
+            isBlocks(link) && link.direction !== 'inward' && link.key !== undefined ? [link.key] : [],
+          );
+          if (blocked.length === 0 || !open()) return;
+          const hops = await Promise.all(
+            blocked.map(async (next) => {
+              const answer = await readJiraLinks({ key: next });
+              const onward = answer?.ok
+                ? answer.value.filter((link) => link.kind === 'issue' && isBlocks(link) && link.direction === 'outward')
+                : [];
+              return [next, onward] as const;
+            }),
+          );
+          merge({ secondHop: Object.fromEntries(hops) });
+        })
       : Promise.resolve(),
   ]);
 }

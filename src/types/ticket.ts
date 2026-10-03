@@ -1,6 +1,8 @@
+import type { EpicProgress } from '@lib/ticket-links';
 import type {
   JiraComment,
   JiraIssueDetail,
+  JiraLink,
   JiraStatusCategory,
   JiraTransition,
 } from '@shared/jira-contract';
@@ -81,7 +83,13 @@ export interface TicketDetail {
   history?: LedgerEntry[];
   /** When the detail or comments last read successfully (ms). */
   readAt?: number;
-  problems: { detail?: string; comments?: string };
+  /** jira:links, for the Ticket tab (HIVE-202). */
+  links?: JiraLink[];
+  /** For each ticket this one blocks: its own outward Blocks links. Read only at ≤ SECOND_HOP_MAX_LINKS issue links. */
+  secondHop?: Record<string, JiraLink[]>;
+  /** The parent epic's children, done of total (HIVE-202). */
+  epicProgress?: EpicProgress;
+  problems: { detail?: string; comments?: string; links?: string };
 }
 
 /** The ticket page's key/value column, derived (HIVE-203). Absent keys have no row. */
