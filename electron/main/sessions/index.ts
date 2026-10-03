@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { AgentsDirectory } from '@shared/agent-contract';
+import type { ChangedFilesSnapshot } from '@shared/changed-files-contract';
 import type { ProjectAutoMergeRequest, ProjectsDirectory } from '@shared/config-contract';
 import {
   AUTH_ENV_KEYS,
@@ -56,6 +58,7 @@ import {
   CONTAINER_SETTINGS_FILE,
   removeSessionContainerFiles,
 } from '../container/generated';
+import { sessionRoot } from '../fs/session-roots';
 import type { HookRuntime } from '../hooks';
 import { withHostAlias } from '../hooks/container-origin';
 import { ticketKeysFromBranch } from '../hooks/ticket-intent';
@@ -69,6 +72,7 @@ import type { SkillsRuntime } from '../skills';
 
 import { createActivityTracker, type ActivityTracker } from './activity';
 import { createBootstrap, sessionCommand, type Bootstrap } from './bootstrap';
+import { createChangedFiles } from './changed-files';
 import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
 import type { SessionHistory } from './history';
 import { createPathMap } from './path-map';
@@ -493,6 +497,8 @@ export interface Sessions {
   plans(): PlansSnapshot;
   /** The plans store itself, for the builder-progress fan-out (HIVE-180). */
   planStore(): Plans;
+  /** Every session's changed files (HIVE-201), for `CH.changedFilesList` and the attach snapshot. */
+  changedFiles(): ChangedFilesSnapshot;
   dispose(): void;
 }
 
@@ -779,6 +785,26 @@ export function createSessions(options: SessionsOptions): Sessions {
    * build that has none.
    */
   const transcripts = new Map<string, { cwd: string; sessionUuid: string }>();
+
+  /**
+   * The Files tree's root for a session: its proved worktree, else its
+   * project, realpath'd (HIVE-201). The transcript's `cwd` is the project
+   * path the session was opened with, so it serves as the project here.
+   */
+  async function changedFilesRoot(entityId: string): Promise<string | null> {
+    const projectPath = transcripts.get(entityId)?.cwd;
+    if (projectPath === undefined) return null;
+    const projectReal = await realpath(projectPath).catch(() => null);
+    if (projectReal === null) return null;
+    return (await sessionRoot(projectReal, entityId)) ?? projectReal;
+  }
+
+  /** Every session's changed files, from its own transcript (HIVE-201). */
+  const changedFiles = createChangedFiles({
+    send,
+    transcriptOf: (entityId) => transcripts.get(entityId),
+    rootOf: changedFilesRoot,
+  });
 
   /**
    * The last title classified for each session, and what it was classified as.
@@ -1134,6 +1160,8 @@ export function createSessions(options: SessionsOptions): Sessions {
       } satisfies SessionTicketIntentEvent),
     // The plan panel's source 1 (HIVE-179); the receiver already filtered.
     onPlanTool: (call) => plans.onTool(call),
+    // Changed files (HIVE-201): a main-agent edit re-reads the transcript.
+    onFileTool: (entityId) => void changedFiles.onFileTool(entityId),
     /**
      * The first prompt named the session (first-prompt naming).
      *
@@ -1380,7 +1408,8 @@ export function createSessions(options: SessionsOptions): Sessions {
   }
 
   function publishFinished(entityId: string): void {
-    plans.drop(entityId);
+    plans.forget(entityId);
+    changedFiles.drop(entityId);
     /*
       Asked rather than assumed. `history.resumable` is the only thing that knows
       whether a uuid still names this terminal's conversation — a `/clear`
@@ -1403,7 +1432,8 @@ export function createSessions(options: SessionsOptions): Sessions {
    * said into one of the two kinds this function forwards untouched.
    */
   function publishTerminalEnded(entityId: string, ending: TerminalEnding): void {
-    plans.drop(entityId);
+    plans.forget(entityId);
+    changedFiles.drop(entityId);
     send(CH.sessionTerminalEnded, { entityId, ending } satisfies SessionTerminalEndedEvent);
   }
 
@@ -1800,8 +1830,10 @@ export function createSessions(options: SessionsOptions): Sessions {
       Dropped on every ending, not only `/done`'s: a kill, a plain `/exit` or
       a crash never reaches `publishFinished`, and a restart reuses the entity
       id, so a plan left standing would take the next conversation's tasks.
+      The plan file and the changed files go with it (HIVE-201).
     */
-    plans.drop(entityId);
+    plans.forget(entityId);
+    changedFiles.drop(entityId);
     /**
      * Per-generation too, and for a sharper reason than the other two: a
      * restarted session reuses the entity id, and a retained entry would make
@@ -2857,6 +2889,8 @@ export function createSessions(options: SessionsOptions): Sessions {
     plans: () => ({ plans: plans.list() }),
 
     planStore: () => plans,
+
+    changedFiles: () => changedFiles.list(),
 
     dispose() {
       bootstrap.dispose();

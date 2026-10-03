@@ -187,6 +187,12 @@ export interface ReceiverOptions {
    */
   onPlanTool: (call: PlanToolCall) => void;
   /**
+   * A main-agent PostToolUse of a file-editing tool (HIVE-201), whole or
+   * truncated: `tool_name` survives the cut, and main re-reads the transcript
+   * itself. Optional, so a host without changed files ignores edits.
+   */
+  onFileTool?: (entityId: string) => void;
+  /**
    * A session reported its context and rate-limit usage (HIVE-79).
    *
    * Arrives on a second path from Claude Code's status line rather than from a
@@ -630,6 +636,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     onPromptName,
     onCleared,
     onPlanTool,
+    onFileTool,
     onMetrics,
     onDone,
     onReady,
@@ -826,6 +833,8 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * `mcp__server__tool` — so word characters and underscores, same
    * conservatism as the other prefix regexes here.
    */
+  /** The tools whose edits the changed-files reader counts (HIVE-201). */
+  const FILE_TOOL_NAMES: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
   const TOOL_NAME_IN_PREFIX = /"tool_name"\s*:\s*"([A-Za-z0-9_]+)"/;
 
   /**
@@ -1922,6 +1931,13 @@ export function createReceiver(options: ReceiverOptions): Receiver {
           onPlanTool(call);
         } catch (cause) {
           console.error('[hive] onPlanTool threw; the plan missed one call:', cause);
+        }
+      }
+      if (callerAgent === undefined && FILE_TOOL_NAMES.has(toolName)) {
+        try {
+          onFileTool?.(entityId);
+        } catch (cause) {
+          console.error('[hive] onFileTool threw; changed files missed one edit:', cause);
         }
       }
     }
