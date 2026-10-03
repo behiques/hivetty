@@ -5,6 +5,9 @@ import {
   buildPrQuery,
   buildPrVariables,
   buildSearchVariables,
+  PR_COMMENT_MUTATION,
+  PR_DETAIL_QUERY,
+  PR_ID_QUERY,
   repoQualifiers,
   safeSearchTerm,
   type RepoRef,
@@ -291,5 +294,32 @@ describe('buildSearchVariables', () => {
     expect(variables.open.indexOf('repo:behiques/the-hive')).toBeLessThan(
       variables.open.indexOf('a OR b'),
     );
+  });
+});
+
+describe('the PR page documents (HIVE-205)', () => {
+  it.each([
+    ['detail', PR_DETAIL_QUERY],
+    ['id', PR_ID_QUERY],
+  ])('the %s query binds owner, name and number as variables', (_name, doc) => {
+    expect(doc).toContain('query($owner: String!, $name: String!, $number: Int!)');
+    expect(doc).toContain('repository(owner: $owner, name: $name)');
+    expect(doc).toContain('pullRequest(number: $number)');
+  });
+
+  it('adds a comment through bound variables only', () => {
+    expect(PR_COMMENT_MUTATION).toContain('mutation($subjectId: ID!, $body: String!)');
+    expect(PR_COMMENT_MUTATION).toContain('addComment(input: { subjectId: $subjectId, body: $body })');
+  });
+
+  it('reads every field the page draws', () => {
+    for (const field of [
+      'body', 'createdAt', 'mergedAt', 'baseRefName', 'headRefName', 'headRefOid',
+      'additions', 'deletions', 'changedFiles', 'author { login }', 'reviewDecision',
+      'mergeStateStatus', 'reviewRequests', 'reviewThreads', 'isOutdated', 'originalLine',
+      'diffSide', 'diffHunk', 'statusCheckRollup', '... on CheckRun', '... on StatusContext',
+    ]) {
+      expect(PR_DETAIL_QUERY).toContain(field);
+    }
   });
 });
