@@ -897,3 +897,38 @@ describe('narrow (HIVE-211)', () => {
     expect(useUiStore.getState()).toBe(before);
   });
 });
+
+describe('a row pick while narrow (HIVE-211)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  const picks: [string, () => void][] = [
+    ['openWorkTicket', () => useUiStore.getState().openWorkTicket('HIVE-1')],
+    ['openAgentPage', () => useUiStore.getState().openAgentPage('acr', 'activity')],
+    ['openPrPage', () => useUiStore.getState().openPrPage({ owner: 'o', repo: 'r', n: 1 })],
+    ['openTab with a place', () => useUiStore.getState().openTab('s-1', 'sessions')],
+    ['setSessionsProject', () => useUiStore.getState().setSessionsProject('p1')],
+    ['setSessionsProject(null)', () => useUiStore.getState().setSessionsProject(null)],
+  ];
+
+  it.each(picks)('%s closes the overlay', (_name, pick) => {
+    useUiStore.getState().setNarrow(true);
+    useUiStore.setState({ panelOpen: true }); // opened from the bar icon
+    pick();
+    expect(useUiStore.getState().panelOpen).toBe(false);
+  });
+
+  it.each(picks.slice(0, 3))('%s still opens the panel when wide', (_name, pick) => {
+    useUiStore.setState({ panelOpen: false });
+    pick();
+    expect(useUiStore.getState().panelOpen).toBe(true);
+  });
+
+  it.each(picks.slice(3))('%s leaves the panel as it is when wide', (_name, pick) => {
+    useUiStore.setState({ panelOpen: false });
+    pick();
+    expect(useUiStore.getState().panelOpen).toBe(false);
+    useUiStore.setState({ panelOpen: true });
+    pick();
+    expect(useUiStore.getState().panelOpen).toBe(true);
+  });
+});
