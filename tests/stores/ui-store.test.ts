@@ -932,3 +932,21 @@ describe('a row pick while narrow (HIVE-211)', () => {
     expect(useUiStore.getState().panelOpen).toBe(true);
   });
 });
+
+describe('answeredHere (HIVE-218)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('remembers a thread answered in this window, and reset forgets it', () => {
+    useUiStore.getState().markAnsweredHere('q1');
+    expect(useUiStore.getState().answeredHere.has('q1')).toBe(true);
+    useUiStore.getState().reset();
+    expect(useUiStore.getState().answeredHere.has('q1')).toBe(false);
+  });
+
+  it('keeps the same set when the thread is already there', () => {
+    useUiStore.getState().markAnsweredHere('q1');
+    const before = useUiStore.getState().answeredHere;
+    useUiStore.getState().markAnsweredHere('q1');
+    expect(useUiStore.getState().answeredHere).toBe(before);
+  });
+});

@@ -336,7 +336,7 @@ import {
   createFanOutBroadcaster,
   createSocketBroadcaster,
 } from './socket-broadcaster';
-import { createSurfaceRegistry, type SurfaceId } from './surfaces';
+import { createSurfaceRegistry, deviceNameOf, type SurfaceId } from './surfaces';
 
 /**
  * Channel handlers (story 082).
@@ -2297,9 +2297,19 @@ export function registerIpcHandlers(
     */
     ledger.append({ ...parseLedgerPostBody(payload), from: OVERMIND }),
   );
-  handle(CH.ledgerAnswer, (_event, payload) =>
-    ledger.answer(parseLedgerAnswerRequest(payload), OVERMIND),
-  );
+  /*
+    Where an answer was given (HIVE-218), stamped here and never taken from the
+    caller: the paired device for a socket, this machine's name for a local
+    window while it serves, else nothing, so a machine on its own never names
+    itself.
+  */
+  handle(CH.ledgerAnswer, (event, payload) => {
+    const { meta, ...request } = parseLedgerAnswerRequest(payload);
+    const { answeredOn: _claimed, ...rest } = meta ?? {};
+    const answeredOn = deviceNameOf(event.sender) ?? (isServerMode() ? hostname() : undefined);
+    const stamped = answeredOn === undefined ? rest : { ...rest, answeredOn };
+    return ledger.answer(Object.keys(stamped).length === 0 ? request : { ...request, meta: stamped }, OVERMIND);
+  });
 
   /*
     Constructed before the session layer, which takes it as an option and syncs

@@ -137,6 +137,14 @@ test('an ask rises without taking the keyboard, folds into the pill, and is answ
     await page.screenshot({ path: testInfo.outputPath('inbox-drawer.png') });
     await drawer.getByRole('button', { name: 'Merge' }).click();
     await expect(drawer.getByText('1 ask · 0 sessions')).toBeVisible();
+
+    // The answered card leaves with its reason for one beat, then goes (HIVE-218).
+    // Answered in this window, on a machine that is not serving: plain "answered".
+    const leaving = drawer.locator('[data-leaving="answered"]');
+    await expect(leaving).toBeVisible();
+    await expect(leaving).not.toContainText(' on ');
+    await page.screenshot({ path: testInfo.outputPath('inbox-drawer-leaving.png') });
+    await expect(leaving).toBeHidden({ timeout: 4000 });
   } finally {
     await app.close();
   }

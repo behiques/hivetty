@@ -358,6 +358,13 @@ interface UiState {
   /** Open the drawer, on an ask's thread when one is named, folding what was up. */
   openInboxDrawer: (thread?: string) => void;
   closeInboxDrawer: () => void;
+  /**
+   * Ask threads this window answered (HIVE-218), so a leaving card names another device only
+   * when it was another device. View state, not persisted. ponytail: never trimmed; one id per
+   * human answer.
+   */
+  answeredHere: ReadonlySet<string>;
+  markAnsweredHere: (thread: string) => void;
   /** When this window last lost focus, else when it launched (HIVE-200's "since"). View state, not persisted. */
   awaySince: number;
   markAway: (at: number) => void;
@@ -419,6 +426,7 @@ const initialUiState = {
   arrivals: [] as string[],
   arrivalPulse: null as string | null,
   inboxDrawer: { open: false, thread: null } as { open: boolean; thread: string | null },
+  answeredHere: new Set<string>() as ReadonlySet<string>,
   awaySince: Date.now(),
 };
 
@@ -694,8 +702,10 @@ export const useUiStore = create<UiState>()((set) => ({
   foldArrivals: () => set({ arrivals: [] }),
   openInboxDrawer: (thread) => set({ inboxDrawer: { open: true, thread: thread ?? null }, arrivals: [] }),
   closeInboxDrawer: () => set({ inboxDrawer: { open: false, thread: null } }),
+  markAnsweredHere: (thread) =>
+    set((state) => (state.answeredHere.has(thread) ? {} : { answeredHere: new Set([...state.answeredHere, thread]) })),
   markAway: (at) => set({ awaySince: at }),
-  reset: () => set(initialUiState),
+  reset: () => set({ ...initialUiState, answeredHere: new Set<string>() }),
 }));
 
 /**
@@ -926,6 +936,9 @@ export const useArrivalPulse = () => useUiStore((state) => state.arrivalPulse);
 
 /** The Inbox drawer: open, and the thread it was opened on. */
 export const useInboxDrawer = () => useUiStore((state) => state.inboxDrawer);
+/** Did this window answer `thread`? (HIVE-218) */
+export const useAnsweredHere = (thread: string) => useUiStore((state) => state.answeredHere.has(thread));
+export const useMarkAnsweredHere = () => useUiStore((state) => state.markAnsweredHere);
 
 /** Inbox arrival and drawer actions, referentially stable. */
 export const useInboxActions = () => useUiStore(useShallow(inboxActionsSelector));

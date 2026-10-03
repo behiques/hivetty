@@ -14,6 +14,7 @@ import {
   useProjectExpanded,
   useSessionsProject,
   useSetSessionsProject,
+  useSettingsActions,
   useToggleProjectFold,
 } from '@stores/ui-store';
 
@@ -37,6 +38,7 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
   const filter = useSessionsProject();
   const setFilter = useSetSessionsProject();
   const access = useProjectAccess(project.id);
+  const { openSettings } = useSettingsActions();
   const selected = filter === project.id;
 
   return (
@@ -71,6 +73,19 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
           ) : null}
         </button>
       </div>
+      {/* The way out of "unmapped", once the row is the filter (HIVE-218); a sibling, never inside the row's buttons. */}
+      {selected && access.reason ? (
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 pr-2.5 pb-1.5 pl-[30px] text-[11.5px] text-muted">
+          <span className="min-w-0 break-words">{access.reason}</span>
+          <button
+            type="button"
+            onClick={() => openSettings('projects')}
+            className="text-brand underline underline-offset-2 hover:text-ink"
+          >
+            {access.invalid ? 'Fix it in Settings' : 'Map it in Settings'}
+          </button>
+        </div>
+      ) : null}
       {expanded ? (
         <>
           {ids.map((id) => (

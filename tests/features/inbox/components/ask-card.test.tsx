@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Agent } from '@/types/entity';
 
@@ -8,6 +8,7 @@ import { honestPermissionAsk } from '@shared/permission-rules';
 
 import { AskCard } from '@features/inbox/components/ask-card';
 import { useHiveStore } from '@stores/hive-store';
+import { useUiStore } from '@stores/ui-store';
 
 import { seedLedger } from '@tests/support/ledger';
 
@@ -843,5 +844,27 @@ describe('AskCard float variant (HIVE-198)', () => {
     render(<AskCard notif={notif} thread="a41" onClose={() => {}} />);
     expect(screen.queryByText('asks')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Fold into the pill' })).toBeNull();
+  });
+});
+
+describe('answered here (HIVE-218)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('remembers the thread as answered here once the answer lands', async () => {
+    const answerAsk = vi.fn().mockResolvedValue({ ok: true });
+    seedLedger([ask], { answerAsk });
+    render(<AskCard notif={notif} thread="a41" />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'yes' }));
+    expect(useUiStore.getState().answeredHere.has('a41')).toBe(true);
+  });
+
+  it('does not remember a refused answer', async () => {
+    const answerAsk = vi.fn().mockResolvedValue({ ok: false, status: 409, reason: 'This ask is no longer open.' });
+    seedLedger([ask], { answerAsk });
+    render(<AskCard notif={notif} thread="a41" />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'yes' }));
+    expect(useUiStore.getState().answeredHere.has('a41')).toBe(false);
   });
 });

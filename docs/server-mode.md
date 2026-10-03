@@ -348,6 +348,14 @@ the error frame, never a silent change on the server:
 - **`notifications:act` carrying `url`, `update.download` or `update.install`.**
   The fleet actions (`ask`, `session`, `agent`, `none`) still cross.
 
+**Where an answer was given (HIVE-218).** `ledger:answer` stamps
+`meta.answeredOn` in main. An answer that arrives over a socket gets the paired
+device's name (`--pair "<name>"`). An answer from the serving machine's own
+window gets its `hostname()`, the name clients already show for the server. A
+machine that is not serving stamps nothing. Any `answeredOn` the caller sent is
+dropped first. The Inbox uses it to say "answered on mac-mini" when a card
+leaves.
+
 ## Reaching it from anywhere
 
 **Tailscale is the tunnel.** Nothing else is needed to attach from outside the

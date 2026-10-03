@@ -8,7 +8,7 @@ import { SettingsGroup } from '@features/shared/components/settings-group';
 import { searchJiraIssues } from '@lib/jira';
 import { setJiraConnection } from '@lib/project-config';
 import { BRIDGE_ERROR } from '@lib/utils';
-import { JIRA_DEFAULT_JQL } from '@shared/jira-contract';
+import { JIRA_DEFAULT_JQL, JIRA_MAX_ISSUES } from '@shared/jira-contract';
 
 /**
  * Which issues the WORK tab shows (HIVE-69).
@@ -119,7 +119,7 @@ export function JiraQueryGroup({ jql, canTest }: JiraQueryGroupProps) {
               {verdict.count === 0
                 ? 'Ran, and matched no issues.'
                 : `Matched ${verdict.count} issue${verdict.count === 1 ? '' : 's'}.`}
-              {verdict.capped ? ' The first 200 — there were more.' : ''}
+              {verdict.capped ? ` The first ${String(JIRA_MAX_ISSUES)} — there were more.` : ''}
             </span>
           </p>
         ) : (
