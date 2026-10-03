@@ -50,7 +50,7 @@ import type {
   SearchResults,
   WriteFileResult,
 } from '@shared/fs-contract';
-import type { GhResult, PrDetail, PrRecord, PrsSnapshot } from '@shared/github-contract';
+import type { GhResult, JobLog, PrDetail, PrRecord, PrRuns, PrsSnapshot, RunJob } from '@shared/github-contract';
 import {
   isRecord,
   parseAckRequest,
@@ -80,6 +80,7 @@ import {
   parsePairDeviceRequest,
   parsePrCommentRequest,
   parsePrDetailRequest,
+  parsePrRunsRequest,
   parsePromptReport,
   parseReadDirRequest,
   parseReadFileRequest,
@@ -88,6 +89,7 @@ import {
   parseReorderProjectsRequest,
   parseRepointProjectRequest,
   parseResizeRequest,
+  parseRunRef,
   parseResolveRequest,
   parseRevokeDeviceRequest,
   parseRootRequest,
@@ -4042,6 +4044,30 @@ export function registerIpcHandlers(
       return github.prComment(request);
     },
   );
+
+  handle(CH.githubPrRuns, async (_event, payload): Promise<GhResult<PrRuns>> => {
+    const request = parsePrRunsRequest(payload);
+    await loginEnvStatus();
+    return github.prRuns(request);
+  });
+
+  handle(CH.githubRunJobs, async (_event, payload): Promise<GhResult<RunJob[]>> => {
+    const request = parseRunRef(payload, 'runJobs');
+    await loginEnvStatus();
+    return github.runJobs(request);
+  });
+
+  handle(CH.githubJobLog, async (_event, payload): Promise<GhResult<JobLog>> => {
+    const request = parseRunRef(payload, 'jobLog');
+    await loginEnvStatus();
+    return github.jobLog(request);
+  });
+
+  handle(CH.githubRerunFailed, async (_event, payload): Promise<GhResult<true>> => {
+    const request = parseRunRef(payload, 'rerunFailed');
+    await loginEnvStatus();
+    return github.rerunFailed(request);
+  });
 
   handle(CH.jiraStatus, (): JiraStatus => jira.status());
   handle(CH.jiraSetToken, (_event, payload): JiraStatus =>
