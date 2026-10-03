@@ -159,6 +159,17 @@ body {
   }
 }
 
+/* The flap turning over a changed word (HIVE-205): the word swaps at half way, edge-on. */
+@keyframes ccflap {
+  0%,
+  100% {
+    transform: rotateX(0deg);
+  }
+  50% {
+    transform: rotateX(90deg);
+  }
+}
+
 /* Respect a user's reduced-motion preference — a pulsing dot is decoration,
    not information; the status is also carried by colour and by label text. */
 @media (prefers-reduced-motion: reduce) {
