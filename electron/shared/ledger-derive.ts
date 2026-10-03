@@ -125,6 +125,27 @@ export const CLOSING_KINDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Every ask thread that no longer waits on anyone (HIVE-214): closed by an
+ * entry in {@link CLOSING_KINDS}, or retired by the overmind's expiry event.
+ *
+ * Not {@link openAsks}: that needs the ask entry itself, which the renderer's
+ * 500-entry mirror can lose while the ask's row and question are still live,
+ * and it retires by clock rather than by main's sweep. A closing entry is
+ * always newer than its ask, so it is in the mirror when it matters. Both the
+ * hub's dock count and the renderer's Summons read this, so they agree.
+ */
+export function closedAskThreads(entries: readonly LedgerEntry[]): Set<string> {
+  const closed = new Set<string>();
+  for (const entry of entries) {
+    if (entry.thread !== undefined && CLOSING_KINDS.has(entry.kind)) closed.add(entry.thread);
+    // Only main's own marker counts — the forgery `expiredAsks` guards against.
+    const expired = entry.meta?.expired;
+    if (typeof expired === 'string' && entry.from === OVERMIND) closed.add(expired);
+  }
+  return closed;
+}
+
+/**
  * How long this ask lives before time retires it.
  *
  * `meta.ttlMs` lets an asker say its question is only worth asking for the next

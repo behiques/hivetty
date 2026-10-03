@@ -2628,18 +2628,20 @@ describe('hive-store', () => {
       });
 
       /**
-       * `null` means the whole buffer went — the echo of a Clear all, which the
+       * `null` means the news went — the echo of a Clear all, which the
        * renderer that issued it has already applied locally. This is what makes
-       * a *second* window agree with the first.
+       * a *second* window agree with the first. What waits on you stays, as it
+       * does in the hub (HIVE-214).
        */
-      it('empties the list for a null id', () => {
-        useHiveStore
-          .getState()
-          .hydrateNotifs([notif2({ id: 'a' }), notif2({ id: 'b' })]);
+      it('drops the news for a null id, keeping what waits on you', () => {
+        useHiveStore.getState().hydrateNotifs([
+          notif2({ id: 'a', kind: 'pr.merged', action: { type: 'none' } }),
+          notif2({ id: 'b' }),
+        ]);
 
         useHiveStore.getState().applyDismiss(null);
 
-        expect(useHiveStore.getState().notifs).toEqual([]);
+        expect(useHiveStore.getState().notifs.map((n) => n.id)).toEqual(['b']);
       });
     });
 
@@ -2663,9 +2665,9 @@ describe('hive-store', () => {
         useHiveStore
           .getState()
           .hydrateNotifs([
-            notif2({ id: 'a' }),
-            notif2({ id: 'b' }),
-            notif2({ id: 'c' }),
+            notif2({ id: 'a', kind: 'pr.merged', action: { type: 'none' } }),
+            notif2({ id: 'b', kind: 'pr.merged', action: { type: 'none' } }),
+            notif2({ id: 'c', kind: 'pr.merged', action: { type: 'none' } }),
           ]);
 
         useHiveStore.getState().clearNotifs();
@@ -2678,12 +2680,26 @@ describe('hive-store', () => {
 
       it('survives a browser build with no bridge', () => {
         delete window.hive;
-        useHiveStore.getState().hydrateNotifs([notif2({ id: 'a' })]);
+        useHiveStore
+          .getState()
+          .hydrateNotifs([notif2({ id: 'a', kind: 'pr.merged', action: { type: 'none' } })]);
 
         expect(() => {
           useHiveStore.getState().clearNotifs();
         }).not.toThrow();
         expect(useHiveStore.getState().notifs).toEqual([]);
+      });
+
+      it('keeps an open ask', () => {
+        delete window.hive;
+        useHiveStore.getState().hydrateNotifs([
+          notif2({ id: 'q1', kind: 'agent.ask', action: { type: 'ask', thread: 'q1' } }),
+          notif2({ id: 'm', kind: 'pr.merged', action: { type: 'none' } }),
+        ]);
+
+        useHiveStore.getState().clearNotifs();
+
+        expect(useHiveStore.getState().notifs.map((n) => n.id)).toEqual(['q1']);
       });
     });
   });
@@ -2737,7 +2753,7 @@ describe('hive-store', () => {
     let seq = 0;
     const notif = (title: string) => {
       seq += 1;
-      return notif2({ id: `local-${seq}`, title, createdAt: seq });
+      return notif2({ id: `local-${seq}`, title, createdAt: seq, kind: 'pr.merged', action: { type: 'none' } });
     };
 
     it('prepends, so the newest notification is first', () => {
@@ -2756,6 +2772,30 @@ describe('hive-store', () => {
       const after = useHiveStore.getState().notifs;
       expect(after).toHaveLength(NOTIFICATION_CAP);
       expect(after.map((n) => n.title)).not.toContain('oldest');
+    });
+
+    it('keeps open asks under a burst of news (HIVE-214)', () => {
+      for (let i = 0; i < 6; i += 1) {
+        useHiveStore.getState().pushNotif(
+          notif2({ id: `q${i}`, kind: 'agent.ask', action: { type: 'ask', thread: `q${i}` }, createdAt: i }),
+        );
+      }
+      for (let i = 0; i < 60; i += 1) useHiveStore.getState().pushNotif(notif(`echo ${i}`));
+
+      expect(useHiveStore.getState().notifs.filter((n) => n.kind === 'agent.ask')).toHaveLength(6);
+    });
+
+    it('hydrates a burst without dropping an open ask (HIVE-214)', () => {
+      useHiveStore.getState().hydrateNotifs([
+        notif2({ id: 'q0', kind: 'agent.ask', action: { type: 'ask', thread: 'q0' }, createdAt: 0 }),
+        ...Array.from({ length: 60 }, (_, i) =>
+          notif2({ id: `m${i}`, kind: 'pr.merged', action: { type: 'none' }, createdAt: i + 1 }),
+        ),
+      ]);
+
+      const ids = useHiveStore.getState().notifs.map((n) => n.id);
+      expect(ids).toContain('q0');
+      expect(ids).toHaveLength(NOTIFICATION_CAP + 1);
     });
 
     it('counts as unread the moment it lands', () => {

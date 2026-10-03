@@ -432,7 +432,7 @@ describe('notifications:act — an ask focuses the window and reveals the card (
 
     act({ type: 'ask', thread: 'a41' });
 
-    expect(send).toHaveBeenCalledWith(CH.notificationsActivate, { type: 'ask' });
+    expect(send).toHaveBeenCalledWith(CH.notificationsActivate, { type: 'ask', thread: 'a41' });
   });
 
   /** The session path still says which entity, and still says it the same way. */

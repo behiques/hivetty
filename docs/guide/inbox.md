@@ -78,7 +78,8 @@ Or in the config file:
 - Opening the session or agent it is about.
 - The session leaving "needs input": you approved, answered, or typed a refusal.
   Pressing Escape on a prompt sends no hook, so that card stays until the next prompt.
-- **Clear all** at the top of the tab.
+- **Clear all** at the top of the tab. It leaves open questions and blocked sessions: they go when they are answered.
 
-The inbox keeps the latest 50 cards and does not survive a restart. The dock icon shows
-the unread count.
+The inbox keeps the latest 50 cards of news, and every card still waiting on you however
+many there are. It does not survive a restart. The dock icon counts what waits on you:
+open questions, permission requests and blocked sessions, not unread cards.
