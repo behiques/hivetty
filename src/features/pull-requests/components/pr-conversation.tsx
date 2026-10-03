@@ -6,6 +6,7 @@ import type { Pr } from '@/types/pull-request';
 
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { ThreadCard } from '@features/pull-requests/components/thread-card';
+import { useThreadWrites } from '@features/pull-requests/use-thread-writes';
 import { Markdown } from '@features/shared/components/markdown';
 import type { PrComment, PrDetail, PrReview, PrThread } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
@@ -138,6 +139,7 @@ export function PrConversation({
   onOpenFile?: (path: string, line: number) => void;
 }) {
   const events = usePrEvents(`${pr.owner}/${pr.repo}`, pr.n);
+  const writes = useThreadWrites(pr);
   const viaHive = useReviewUrls();
   const mode = usePrConversation();
   const { setPrConversation } = usePrPageActions();
@@ -210,6 +212,7 @@ export function PrConversation({
                     thread={item.thread}
                     fixerOnIt={fixerOnIt && !item.thread.isResolved}
                     onOpenFile={onOpenFile}
+                    writes={writes}
                   />
                 </div>
               ) : (

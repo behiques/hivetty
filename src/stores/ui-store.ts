@@ -32,8 +32,10 @@ export interface AgentPage {
   view: AgentPageView;
 }
 
-/** The PR page's tabs (HIVE-205); Checks is HIVE-206's, and HIVE-207 and 208 add Files and Timeline. */
-export type PrTab = 'conversation' | 'checks';
+/** The PR page's tabs (HIVE-205); Checks is HIVE-206's, Files HIVE-207's, and HIVE-208 adds Timeline. */
+export type PrTab = 'conversation' | 'checks' | 'files';
+/** The Files tab's diff layout (HIVE-207). */
+export type PrDiffView = 'unified' | 'split';
 /** Which PR the PRs place last opened (HIVE-205). */
 export interface PrPageRef {
   owner: string;
@@ -231,6 +233,12 @@ interface UiState {
   prConversation: WorkConversation;
   /** The PRs panel's search row is open, which also draws the panel over the empty Hatchery (HIVE-205). */
   prSearchOpen: boolean;
+  /** The Files tab's selected path; each open resets it, and the tab falls back to its first file (HIVE-207). */
+  prFile: string | null;
+  /** The Files tab's "Filter files" text; each open resets it (HIVE-207). */
+  prFileFilter: string;
+  /** Unified or Split; kept across PRs, as the tab is (HIVE-207). */
+  prDiffView: PrDiffView;
 
   /** Open a tab; `place`, when the caller knows the entity's owner, moves the bar with it. */
   openTab: (id: 'orch' | string, place?: Place) => void;
@@ -313,7 +321,7 @@ interface UiState {
   openAgentPage: (name: string | null, view: AgentPageView) => void;
   setAgentPageView: (view: AgentPageView) => void;
   closeAgentPage: () => void;
-  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab; forgets the Checks tab's shown push and job (HIVE-206). */
+  /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab; forgets the Checks tab's shown push and job (HIVE-206) and the Files tab's file and filter (HIVE-207). */
   openPrPage: (ref: PrPageRef) => void;
   setPrTab: (tab: PrTab) => void;
   showPrRun: (sha: string) => void;
@@ -322,6 +330,9 @@ interface UiState {
   togglePrsFolded: () => void;
   setPrConversation: (mode: WorkConversation) => void;
   setPrSearchOpen: (open: boolean) => void;
+  setPrFile: (path: string | null) => void;
+  setPrFileFilter: (text: string) => void;
+  setPrDiffView: (view: PrDiffView) => void;
   /** Notification ids up as a card or note, newest first (HIVE-198). Not persisted. */
   arrivals: string[];
   /** The latest arrival that came in while the keyboard was in a terminal: the pill pulses once for it. */
@@ -391,6 +402,9 @@ const initialUiState = {
   prsFolded: true,
   prConversation: 'comments' as WorkConversation,
   prSearchOpen: false,
+  prFile: null as string | null,
+  prFileFilter: '',
+  prDiffView: 'unified' as PrDiffView,
   arrivals: [] as string[],
   arrivalPulse: null as string | null,
   inboxDrawer: { open: false, thread: null } as { open: boolean; thread: string | null },
@@ -628,6 +642,8 @@ export const useUiStore = create<UiState>()((set) => ({
       prConversation: 'comments',
       prRun: null,
       prJob: null,
+      prFile: null,
+      prFileFilter: '',
       picker: false,
       settings: false,
     }),
@@ -638,6 +654,9 @@ export const useUiStore = create<UiState>()((set) => ({
   togglePrsFolded: () => set((state) => ({ prsFolded: !state.prsFolded })),
   setPrConversation: (mode) => set({ prConversation: mode }),
   setPrSearchOpen: (open) => set({ prSearchOpen: open }),
+  setPrFile: (path) => set({ prFile: path }),
+  setPrFileFilter: (text) => set({ prFileFilter: text }),
+  setPrDiffView: (view) => set({ prDiffView: view }),
   pushArrival: (id, quiet) =>
     set((state) => {
       if (quiet) return { arrivalPulse: id };
@@ -747,6 +766,10 @@ export const usePrJob = () => useUiStore((state) => state.prJob);
 export const usePrsFolded = () => useUiStore((state) => state.prsFolded);
 export const usePrConversation = () => useUiStore((state) => state.prConversation);
 export const usePrSearchOpen = () => useUiStore((state) => state.prSearchOpen);
+/** The Files tab's selected path, filter and Unified | Split (HIVE-207). */
+export const usePrFile = () => useUiStore((state) => state.prFile);
+export const usePrFileFilter = () => useUiStore((state) => state.prFileFilter);
+export const usePrDiffView = () => useUiStore((state) => state.prDiffView);
 export const usePrPageActions = () =>
   useUiStore(
     useShallow((state) => ({
@@ -758,6 +781,9 @@ export const usePrPageActions = () =>
       togglePrsFolded: state.togglePrsFolded,
       setPrConversation: state.setPrConversation,
       setPrSearchOpen: state.setPrSearchOpen,
+      setPrFile: state.setPrFile,
+      setPrFileFilter: state.setPrFileFilter,
+      setPrDiffView: state.setPrDiffView,
     })),
   );
 

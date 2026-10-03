@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PrConversation } from '@features/pull-requests/components/pr-conversation';
 import { useHiveStore } from '@stores/hive-store';
@@ -81,5 +81,15 @@ describe('PrConversation', () => {
   it('says so when the description is empty', () => {
     render(<PrConversation pr={fixturePr()} detail={prDetail({ body: '' })} fixerOnIt={false} />);
     expect(screen.getByText('No description.')).toBeInTheDocument();
+  });
+
+  it('offers Reply on its threads, and none on a merged PR (HIVE-207)', () => {
+    useHiveStore.setState({ replyToPrThread: vi.fn(), setPrThreadResolved: vi.fn() });
+    const one = prDetail({ threads: [prThread()] });
+    const { unmount } = render(<PrConversation pr={fixturePr()} detail={one} fixerOnIt={false} />);
+    expect(screen.getByRole('button', { name: 'Reply' })).toBeInTheDocument();
+    unmount();
+    render(<PrConversation pr={fixturePr({ state: 'merged' })} detail={one} fixerOnIt={false} />);
+    expect(screen.queryByRole('button', { name: 'Reply' })).toBeNull();
   });
 });

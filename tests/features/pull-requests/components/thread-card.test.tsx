@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ThreadCard, hunkTail } from '@features/pull-requests/components/thread-card';
+import { ThreadCard, hunkTail, type ThreadWrites } from '@features/pull-requests/components/thread-card';
 import { prThread } from '@tests/support/pr-detail';
 
 describe('hunkTail', () => {
@@ -55,5 +55,66 @@ describe('ThreadCard', () => {
   it('hides Open the file with nowhere to open it', () => {
     render(<ThreadCard thread={prThread()} fixerOnIt={false} />);
     expect(screen.queryByRole('button', { name: 'Open the file' })).toBeNull();
+  });
+});
+
+describe('ThreadCard writes (HIVE-207)', () => {
+  const ok = { ok: true as const, value: true as const };
+  const no = (message: string) => ({ ok: false as const, error: { kind: 'unknown' as const, message } });
+  const writes = (over: Partial<ThreadWrites> = {}): ThreadWrites => ({
+    reply: vi.fn().mockResolvedValue(ok),
+    setResolved: vi.fn().mockResolvedValue(ok),
+    ...over,
+  });
+
+  it('has no Reply or Resolve without writes', () => {
+    render(<ThreadCard thread={prThread()} fixerOnIt={false} />);
+    expect(screen.queryByRole('button', { name: 'Reply' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Resolve' })).toBeNull();
+  });
+
+  it('replies from a box under the thread, and closes it on success', async () => {
+    const w = writes();
+    render(<ThreadCard thread={prThread()} fixerOnIt={false} writes={w} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Reply to src/fees/validator.ts:118' }), 'On it');
+    await userEvent.click(screen.getByRole('button', { name: 'Post reply' }));
+    expect(w.reply).toHaveBeenCalledWith('PRRT_1', 'On it');
+    expect(screen.queryByRole('textbox', { name: /Reply to/ })).toBeNull();
+  });
+
+  it('keeps the text and shows the reason when the reply fails', async () => {
+    const w = writes({ reply: vi.fn().mockResolvedValue(no('rate limited')) });
+    render(<ThreadCard thread={prThread()} fixerOnIt={false} writes={w} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    await userEvent.type(screen.getByRole('textbox', { name: /Reply to/ }), 'On it');
+    await userEvent.click(screen.getByRole('button', { name: 'Post reply' }));
+    expect(screen.getByRole('textbox', { name: /Reply to/ })).toHaveValue('On it');
+    expect(screen.getByText('rate limited')).toBeInTheDocument();
+  });
+
+  it('resolves an open thread and unresolves a resolved one', async () => {
+    const w = writes();
+    const { rerender } = render(<ThreadCard thread={prThread()} fixerOnIt={false} writes={w} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+    expect(w.setResolved).toHaveBeenCalledWith('PRRT_1', true);
+    rerender(<ThreadCard thread={prThread({ isResolved: true })} fixerOnIt={false} writes={w} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Unresolve' }));
+    expect(w.setResolved).toHaveBeenCalledWith('PRRT_1', false);
+  });
+
+  it('shows the reason when resolving fails', async () => {
+    render(<ThreadCard thread={prThread()} fixerOnIt={false} writes={writes({ setResolved: vi.fn().mockResolvedValue(no('not on this PR')) })} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+    expect(await screen.findByText('not on this PR')).toBeInTheDocument();
+  });
+
+  it('cancels a reply without posting', async () => {
+    const w = writes();
+    render(<ThreadCard thread={prThread()} fixerOnIt={false} writes={w} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('textbox', { name: /Reply to/ })).toBeNull();
+    expect(w.reply).not.toHaveBeenCalled();
   });
 });
