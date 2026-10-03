@@ -1,20 +1,46 @@
+import { Robot } from '@phosphor-icons/react';
 import { useCallback } from 'react';
 
 import { createPoller } from '@/hooks/create-poller';
+import { useOpenFileAt } from '@/hooks/use-open-file-at';
+import { isSession } from '@/types/entity';
 import type { HatcheryRow, SessionPr } from '@/types/pull-request';
 
 import { Flap } from '@features/pull-requests/components/flap';
-import { CheckRow, Section } from '@features/pull-requests/components/pr-properties';
-import { checkCount } from '@features/pull-requests/session-pr';
+import { CheckRow, reviewers, Section } from '@features/pull-requests/components/pr-properties';
+import { checkCount, firstLine, shipperWords, threadLine, threadPlace } from '@features/pull-requests/session-pr';
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 import { SourceProblem } from '@features/shared/components/source-problem';
-import { prKey, type SessionPrRow, useLoadPrDetail, usePrDetail } from '@stores/hive-store';
+import {
+  prKey,
+  type SessionPrRow,
+  useEntity,
+  useIsAgentId,
+  useLoadPrDetail,
+  usePrDetail,
+  useReviewUrls,
+  useShipping,
+} from '@stores/hive-store';
 import { usePrPageActions } from '@stores/ui-store';
 
 /** The tab's detail re-reads once a minute while it is shown; mounting is the first read (PrPage's rule). */
 const useTabPoller = createPoller({ intervalMs: 60_000 });
 
 const LINK = 'px-1 py-1 text-left text-[12.5px] text-brand hover:underline';
+const ROW = 'flex items-baseline gap-2 px-1 py-1 text-[12.5px]';
+
+/** One holder: robot glyph for an agent (the Hive's shipper and acr always are). */
+function Holder({ who, words, amber = false }: { who: string; words: string; amber?: boolean }) {
+  const agentId = useIsAgentId(who);
+  const agent = agentId || who === 'shipper' || who === 'acr';
+  return (
+    <div data-testid="holder" className={ROW}>
+      {agent ? <Robot size={13} aria-hidden className="shrink-0 self-center text-muted" /> : null}
+      <span className="font-semibold text-ink">{who}</span>{' '}
+      <span className={amber ? 'text-amber' : 'text-muted'}>{words}</span>
+    </div>
+  );
+}
 
 function Foot({ url, onShow }: { url: string; onShow?: () => void }) {
   return (
@@ -42,12 +68,20 @@ function Remembered({ pr }: { pr: SessionPr }) {
   );
 }
 
-function LivePr({ row }: { sessionId: string; row: HatcheryRow }) {
+function LivePr({ sessionId, row }: { sessionId: string; row: HatcheryRow }) {
   const { pr, hatch } = row;
   const entry = usePrDetail(prKey(pr.owner, pr.repo, pr.n));
   const load = useLoadPrDetail();
   const { openPrPage } = usePrPageActions();
   const detail = entry?.detail;
+  const shipping = useShipping(`${pr.owner}/${pr.repo}`, pr.n);
+  const viaHive = useReviewUrls();
+  const entity = useEntity(sessionId);
+  const session = entity !== undefined && isSession(entity) ? entity : null;
+  const { openPath } = useOpenFileAt();
+  const people = detail === undefined ? [] : reviewers(detail, viaHive);
+  const threads = detail?.threads.filter((thread) => !thread.isResolved) ?? [];
+  const acrAsked = people.some((person) => person.who === 'acr');
 
   useTabPoller(useCallback(() => load(pr.owner, pr.repo, pr.n), [load, pr.owner, pr.repo, pr.n]));
 
@@ -90,13 +124,59 @@ function LivePr({ row }: { sessionId: string; row: HatcheryRow }) {
           </div>
         )
       ) : (
-        <Section title={count === null || count.total === 0 ? 'Checks' : `Checks ${String(count.done)} of ${String(count.total)}`}>
-          {detail.checks.length === 0 ? (
-            <p className="px-1 py-1 text-muted">No checks yet</p>
-          ) : (
-            detail.checks.map((check, i) => <CheckRow key={`${check.name}-${String(i)}`} check={check} />)
-          )}
-        </Section>
+        <>
+          <Section title={count === null || count.total === 0 ? 'Checks' : `Checks ${String(count.done)} of ${String(count.total)}`}>
+            {detail.checks.length === 0 ? (
+              <p className="px-1 py-1 text-muted">No checks yet</p>
+            ) : (
+              detail.checks.map((check, i) => <CheckRow key={`${check.name}-${String(i)}`} check={check} />)
+            )}
+          </Section>
+          {shipping || people.length > 0 ? (
+            <Section title="Review">
+              {shipping ? <Holder who="shipper" words={shipperWords(hatch.github)} amber /> : null}
+              {people.map(({ who, verdict }) => (
+                <Holder key={who} who={who} words={verdict === 'requested' ? 'review requested' : verdict} />
+              ))}
+            </Section>
+          ) : null}
+          <Section title={`Open threads ${String(threads.length)}`}>
+            {threads.length === 0 ? (
+              <p className="px-1 py-1 text-muted">
+                {acrAsked ? "None yet. acr's findings land here, each with its file and line." : 'None yet.'}
+              </p>
+            ) : (
+              threads.map((thread) => {
+                const first = thread.comments[0];
+                const line = threadLine(thread);
+                return (
+                  <button
+                    key={thread.id}
+                    type="button"
+                    disabled={session === null}
+                    onClick={() => {
+                      if (session !== null) {
+                        void openPath(session.project, session.id, thread.path, line === undefined ? undefined : { line });
+                      }
+                    }}
+                    className="flex min-w-0 flex-col gap-0.5 rounded px-1 py-[5px] text-left hover:bg-hover disabled:hover:bg-transparent"
+                  >
+                    {/* RTL clips the start, so the file name and line stay in view; the inner span keeps the text LTR. */}
+                    <span dir="rtl" className="truncate text-left font-mono text-[11.5px] text-brand">
+                      <span dir="ltr">{threadPlace(thread)}</span>
+                    </span>
+                    {first === undefined ? null : (
+                      <span className="truncate">
+                        <span className="font-semibold text-ink">{first.author ?? 'ghost'}</span>{' '}
+                        <span className="text-muted">{firstLine(first.body)}</span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </Section>
+        </>
       )}
 
       <Foot url={pr.url} onShow={() => openPrPage({ owner: pr.owner, repo: pr.repo, n: pr.n, row })} />
