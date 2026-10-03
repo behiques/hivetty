@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentRunLog } from '@features/agents/components/agent-run-log';
 import {
@@ -7,7 +7,7 @@ import {
   type LiveRunSummary,
   type RunSummary,
 } from '@shared/agent-contract';
-import { useAppearanceStore } from '@stores/appearance-store';
+import { useAppearanceStore, useTerminalAppearance } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 
 /**
@@ -69,6 +69,9 @@ const summary = (over: Partial<AgentSummary> = {}): AgentSummary => ({
   runs: [],
   ...over,
 });
+
+/** The output's heading: the line that names the selected run (HIVE-204). */
+const heading = (): HTMLElement => screen.getByTestId('run-output-heading');
 
 const seed = (over: Partial<AgentSummary> = {}): void => {
   useHiveStore.getState().hydrateAgents([summary(over)]);
@@ -416,37 +419,56 @@ describe('AgentRunLog', () => {
   });
 
   /*
-    The reason has the only flexible column. It rode in the outcome cell first,
-    which clipped it at every size — measured in Chromium, including the widest
-    the app can render.
+    The outcome in its state's colour, and the reason inline beside it (HIVE-204):
+    one row per run, so the table reads as a table. The cell truncates and its
+    title carries the whole sentence.
   */
-  it('gives a failure its own column, in full', () => {
-    seed({
-      runs: [
-        run(1, {
-          outcome: 'failed',
-          reason: 'killed after the stall watchdog fired',
-        }),
-      ],
+  describe('the outcome cell', () => {
+    const palette = () => renderHook(() => useTerminalAppearance()).result.current.palette;
+    const outcomeCell = (text: string) => within(screen.getByTestId('run-receipts')).getByText(text);
+
+    it('draws a failure in red with its reason inline, on one row', () => {
+      seed({ runs: [run(1, { outcome: 'failed', reason: 'app closed' })] });
+
+      render(<AgentRunLog name="watcher" />);
+
+      const cell = within(screen.getByTestId('run-receipts')).getByTitle('failed · app closed');
+      expect(cell).toHaveTextContent(/^failed · app closed$/);
+      expect(cell).toHaveStyle({ color: palette().red });
+      expect(cell).toHaveClass('truncate');
+      // The reason sits in the row's plain colour, not the outcome's.
+      expect(within(cell).getByText('· app closed')).toHaveStyle({ color: palette().dim });
+      expect(within(screen.getByTestId('run-receipts')).queryByText(/app closed/, { selector: 'p' })).toBeNull();
     });
 
-    const { container } = render(<AgentRunLog name="watcher" />);
+    it('draws an asking run in amber', () => {
+      seed({ runs: [run(1, { outcome: 'asking' })] });
 
-    const receipts = container.querySelector(
-      '[data-region="run-receipts"]',
-    ) as HTMLElement;
+      render(<AgentRunLog name="watcher" />);
 
-    // The outcome cell says only the outcome; the reason is under it, whole.
-    expect(within(receipts).getByText('failed')).toBeInTheDocument();
+      expect(outcomeCell('asking')).toHaveStyle({ color: palette().amber });
+    });
 
-    const reason = within(receipts).getByText(
-      'killed after the stall watchdog fired',
-    );
+    it('leaves a done run plain', () => {
+      seed({ runs: [run(1)] });
 
-    expect(reason).toBeInTheDocument();
-    // A paragraph beneath the row, not a cell inside the grid.
-    expect(reason.tagName).toBe('P');
-    expect(reason.className).not.toContain('truncate');
+      render(<AgentRunLog name="watcher" />);
+
+      expect(outcomeCell('done')).not.toHaveAttribute('style');
+      expect(outcomeCell('done')).toHaveAttribute('title', 'done');
+    });
+  });
+
+  it.each([
+    [13_000, '13s'],
+    [328_000, '5m 28s'],
+    [3_771_000, '1h 2m'],
+  ])('reads a %i ms run as %s in Took', (ms, took) => {
+    seed({ runs: [run(1, { startedAt: 0, endedAt: ms })] });
+
+    render(<AgentRunLog name="watcher" />);
+
+    expect(within(screen.getByTestId('run-receipts')).getByText(took)).toBeInTheDocument();
   });
 
   /*
@@ -766,22 +788,107 @@ describe('AgentRunLog', () => {
       The heading names the output below it, so it must not appear while a run
       is live — that output is this run's, not the last one's.
     */
-    it('withholds the Latest output heading while a run is live', () => {
+    it('heads a live run as running, never as the last one', () => {
       seed({ status: 'working', runs: [run(1)], live: [standing()] });
-      lines(['mid-flight']);
+      lines(['mid-flight'], 'live-standing');
 
       render(<AgentRunLog name="watcher" />);
 
       expect(screen.queryByText('Latest output')).toBeNull();
+      expect(heading()).toHaveTextContent(/^Output#live-starunning · /);
     });
 
     it('heads the output once the run has ended', () => {
       seed({ status: 'sleeping', runs: [run(1)] });
-      lines(['it finished']);
+      lines(['it finished'], 'r1');
 
       render(<AgentRunLog name="watcher" />);
 
-      expect(screen.getByText('Latest output')).toBeInTheDocument();
+      expect(heading()).toHaveTextContent('Output#r1done · 2 turns · 4s · $0.01newest run first');
+    });
+  });
+
+  /**
+   * The table drives the output (HIVE-204): one run is selected, the heading
+   * names it, and a new run takes the selection only from a reader who was
+   * already on the latest (decision 2).
+   */
+  describe('the selected run', () => {
+    const LATEST = '4d7d5c5e-2b1a-4c3d-9e8f-001122334455';
+    const latest = run(9, {
+      run: LATEST,
+      turns: 5,
+      startedAt: Date.UTC(2026, 8, 1, 13, 0, 0),
+      endedAt: Date.UTC(2026, 8, 1, 13, 0, 13),
+      costUsd: 0.12,
+    });
+    const rowOf = (text: string): HTMLElement =>
+      within(screen.getByTestId('run-receipts')).getByText(text).closest('[role="button"]') as HTMLElement;
+
+    beforeEach(() => {
+      vi.spyOn(window.HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('opens on the latest run, and the heading names it', () => {
+      seed({ runs: [run(1), latest] });
+      lines(['old'], 'r1');
+      lines(['new'], LATEST);
+
+      render(<AgentRunLog name="watcher" />);
+
+      expect(rowOf('#4d7d5c5e')).toHaveAttribute('aria-current', 'true');
+      expect(rowOf('#4d7d5c5e')).toHaveClass('bg-panel-2');
+      expect(rowOf('#r1')).not.toHaveAttribute('aria-current');
+      expect(heading()).toHaveTextContent('Output#4d7d5c5edone · 5 turns · 13s · $0.12newest run first');
+      expect(screen.queryByText('Latest output')).toBeNull();
+    });
+
+    it('selects an older run on click, and scrolls the output to it', () => {
+      seed({ runs: [run(1), latest] });
+      lines(['old'], 'r1');
+      lines(['new'], LATEST);
+
+      render(<AgentRunLog name="watcher" />);
+      fireEvent.click(rowOf('#r1'));
+
+      expect(rowOf('#r1')).toHaveAttribute('aria-current', 'true');
+      expect(rowOf('#4d7d5c5e')).not.toHaveAttribute('aria-current');
+      expect(vi.mocked(window.HTMLElement.prototype.scrollIntoView).mock.contexts.at(-1)).toBe(
+        screen.getByTestId('run-output').querySelector('[data-run-group="r1"]'),
+      );
+      expect(heading()).toHaveTextContent(/^Output#r1done/);
+    });
+
+    it.each(['Enter', ' '])('selects a run with %j', (key) => {
+      seed({ runs: [run(1), latest] });
+
+      render(<AgentRunLog name="watcher" />);
+      fireEvent.keyDown(rowOf('#r1'), { key });
+
+      expect(rowOf('#r1')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('follows a new run while the latest was selected', () => {
+      seed({ runs: [run(1)] });
+
+      render(<AgentRunLog name="watcher" />);
+      act(() => seed({ runs: [run(1), latest] }));
+
+      expect(rowOf('#4d7d5c5e')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('keeps an older run pinned when a new one arrives', () => {
+      seed({ runs: [run(1), run(2)] });
+
+      render(<AgentRunLog name="watcher" />);
+      fireEvent.click(rowOf('#r1'));
+      act(() => seed({ runs: [run(1), run(2), latest] }));
+
+      expect(rowOf('#r1')).toHaveAttribute('aria-current', 'true');
+      expect(rowOf('#4d7d5c5e')).not.toHaveAttribute('aria-current');
     });
   });
 
@@ -843,7 +950,8 @@ describe('AgentRunLog', () => {
       // Turns and cost both unknown; only `Took` carries a number.
       expect(cells[4]).toBe('—');
       expect(cells[6]).toBe('—');
-      expect(cells[5]).toMatch(/^\d+s$/);
+      // `formatDuration`: a fixture started days before the real clock reads in hours.
+      expect(cells[5]).toMatch(/^(\d+s|\d+m \d+s|\d+h \d+m)$/);
     });
 
     it('puts the task’s prompt under its row, where a failure reason goes', () => {
@@ -879,6 +987,13 @@ describe('AgentRunLog', () => {
         });
 
         expect(screen.getByText('43s')).toBeInTheDocument();
+
+        act(() => {
+          vi.advanceTimersByTime(17_000);
+        });
+
+        // Two units past a minute, as a receipt reads (HIVE-204).
+        expect(within(screen.getByTestId('run-receipts')).getByText('1m 0s')).toBeInTheDocument();
       } finally {
         vi.useRealTimers();
       }

@@ -24,8 +24,8 @@ const VIEWS = [
  * Definition.
  *
  * The header is the agent's identity — its glyph, its name over its
- * description — then the Activity | Definition switch and Run now. Pause stays
- * here until the lanes panel's row takes it, so it is never unreachable. In
+ * description — then the Activity | Definition switch and Run now. Pause and
+ * Resume live in the panel row's slot (HIVE-204, PR 2), beside Run now. In
  * round two there is no back button: the page belongs to the Agents place, and
  * the bar and the panels are the navigation. Classic has no bar, so there the
  * button stays — without it an agent page is entered from three places and
@@ -81,28 +81,6 @@ export function AgentPage({ name }: { name: string | null }) {
       .catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : String(cause)));
   };
 
-  /**
-   * Stop this agent waking, and let it wake again (HIVE-117).
-   *
-   * One control rather than two, because the states are exclusive and the
-   * button's job is to name what pressing it does. Both channels **reject**
-   * when the runtime is not up — answering a status they never wrote is what
-   * their contract calls the one outcome worth a rejected promise — so both
-   * need the catch.
-   */
-  const togglePause = () => {
-    if (agent === undefined) return;
-    setNotice(null);
-
-    const bridge = window.hive?.agents;
-
-    if (bridge === undefined) return;
-
-    void (agent.status === 'paused' ? bridge.resume({ name: agent.id }) : bridge.pause({ name: agent.id })).catch(
-      (cause: unknown) => setNotice(cause instanceof Error ? cause.message : String(cause)),
-    );
-  };
-
   return (
     <div className="@container flex min-h-0 flex-1 flex-col" data-view="agent">
       <header className="flex shrink-0 items-center gap-3 border-b border-border-soft bg-panel px-5 py-3">
@@ -142,20 +120,6 @@ export function AgentPage({ name }: { name: string | null }) {
         >
           Run now
         </button>
-        {agent === undefined ? null : (
-          <button
-            type="button"
-            onClick={togglePause}
-            title={
-              agent.status === 'paused'
-                ? 'Let this agent wake again'
-                : 'Stop this agent waking. A turn already running finishes.'
-            }
-            className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink"
-          >
-            {agent.status === 'paused' ? '▶ Resume' : '⏸ Pause'}
-          </button>
-        )}
       </header>
       {view === 'activity' && agent !== undefined ? (
         <AgentView entity={agent} notice={notice} onNotice={setNotice} />
