@@ -9,6 +9,8 @@ import {
   type Page,
 } from '@playwright/test';
 
+import { goToPlace, openProject } from '../fixtures/places';
+
 import { launchHive } from './fixtures/hive-app';
 
 /**
@@ -17,7 +19,7 @@ import { launchHive } from './fixtures/hive-app';
  * The only proof the whole slice works. The unit suite proves the pieces
  * against fakes; none of it says whether a drag in a real Chromium reaches
  * `reorderProjects`, whether the file main writes is one the reader accepts, or
- * whether the left rail — which reads the merged list positionally — actually
+ * whether the Sessions list — which reads the merged list positionally — actually
  * follows the new order.
  *
  * Drag is driven with real, stepped mouse movement (see `dragRow`), which is
@@ -144,11 +146,13 @@ test('drag reorders the file and the left rail follows', async ({}, testInfo) =>
       'a comment the UI must not eat',
     );
 
-    // The rail reads the merged list positionally, so this is the acceptance
-    // criterion the story is named for: the order the user dragged is the order
-    // the rail shows, with no reload.
+    // The Sessions list reads the merged list positionally, so this is the
+    // acceptance criterion the story is named for: the order the user dragged
+    // is the order the list shows, with no reload.
     await page.getByRole('button', { name: 'Close settings' }).click();
+    await goToPlace(page, 'Sessions');
     const railNames = await page
+      .getByRole('region', { name: 'Sessions list' })
       .getByRole('button', { name: /^(alpha|bravo|charlie)/ })
       .allInnerTexts();
     expect(railNames.map((text) => text.split('\n')[0])).toEqual([
@@ -217,8 +221,8 @@ test('renaming writes the file and never touches the id', async ({}, testInfo) =
     ).toBeVisible();
 
     /*
-      And so does the left rail, in the same frame and with no restart
-      (HIVE-104). The rail's row drew `project.id`, which a rename deliberately
+      And so does the Sessions list, in the same frame and with no restart
+      (HIVE-104). The row drew `project.id`, which a rename deliberately
       never touches, so this label used to read `alpha` forever — the config
       file and the Settings row were both already correct.
 
@@ -226,7 +230,8 @@ test('renaming writes the file and never touches the id', async ({}, testInfo) =
       place a rename is *performed* end to end: a real menu, a real write by
       main, and the snapshot it returns landing in the renderer.
     */
-    const tree = page.locator('[data-panel="projects"]');
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    const tree = await openProject(page, 'Alpha Renamed');
     await expect(tree.getByText('Alpha Renamed')).toBeVisible();
     await expect(tree.getByText('alpha', { exact: true })).toHaveCount(0);
 
