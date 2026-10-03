@@ -6,7 +6,7 @@ import { isSession, terminalOf } from '@/types/entity';
 import { useEditorLayout, useLayout } from '@stores/appearance-store';
 import { useActiveFileKey } from '@stores/editor-store';
 import { useActiveEntity, useReattachEpoch } from '@stores/hive-store';
-import { useActiveTab, usePickerState, usePlace, useSettingsOpen } from '@stores/ui-store';
+import { useActiveTab, useAgentPage, usePickerState, usePlace, useSettingsOpen } from '@stores/ui-store';
 
 /**
  * Tell main which session's terminal is on the centre stage (HIVE-81).
@@ -66,7 +66,9 @@ export function useForegroundSession(): void {
   const editorFull = activeFileKey !== null && placement === 'full';
   const home = layout === 'round-two' && place === 'home';
   const work = layout === 'round-two' && place === 'work';
-  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work });
+  const agentPage = useAgentPage();
+  const agents = place === 'agents' && (layout === 'round-two' || agentPage !== null);
+  const view = resolveView({ activeTab, picker, settings, entity, editorFull, home, work, agents });
   /*
     `entity` is non-null whenever the view is an entity view — `resolveView`
     falls back to the orchestrator without one — so the null check is a type

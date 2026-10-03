@@ -9,6 +9,7 @@ export type ViewState =
   | 'picker'
   | 'home'
   | 'work'
+  | 'agents'
   | 'editor'
   | 'orchestrator'
   | 'session'
@@ -36,6 +37,11 @@ export interface ViewInput {
    * ticket. Never true with `home` — one place is open at a time.
    */
   work: boolean;
+  /**
+   * The Agents place owns the stage (HIVE-204): round two on that place, or Classic with an agent page
+   * open. An agent `activeTab` still resolves to `'agent'`; anything else shows the agents stage.
+   */
+  agents: boolean;
   /** The entity behind `activeTab`, or null for the orchestrator. */
   entity: Entity | null;
   /**
@@ -74,6 +80,9 @@ export interface ViewInput {
  * 2b. **Work sits where Home does** (HIVE-203). The Work place always owns the
  *    stage, an open ticket's page or "Pick a ticket", and leaves `activeTab`
  *    alone for the same reason.
+ * 2c. **Agents sits just below Work** (HIVE-204). The place owns the stage
+ *    with an agent's page or "Pick an agent", except that an agent
+ *    `activeTab` still resolves to `'agent'` so the page shows for it.
  * 3. **The editor sits below both overlays and above the entity views.** It is
  *    not an overlay — it has no scrim, no focus trap and no dismissal — but it
  *    does fill the stage, so a settings pane opened from behind it must win.
@@ -90,6 +99,7 @@ export function resolveView({
   settings,
   home,
   work,
+  agents,
   entity,
   editorFull,
 }: ViewInput): ViewState {
@@ -97,6 +107,7 @@ export function resolveView({
   if (picker) return 'picker';
   if (home) return 'home';
   if (work) return 'work';
+  if (agents && !(entity !== null && entity.kind === 'agent')) return 'agents';
   if (editorFull) return 'editor';
   if (activeTab === ORCH_TAB) return 'orchestrator';
   if (!entity) return 'orchestrator';
