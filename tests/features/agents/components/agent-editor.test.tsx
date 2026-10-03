@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AgentEditor } from '@features/agents/components/agent-editor';
+import { AgentEditor, runRefusal } from '@features/agents/components/agent-editor';
 import { surfaceText } from '@tests/support/editor-surface';
 
 import type { AgentProblem } from '@shared/agent-contract';
@@ -77,10 +77,34 @@ describe('AgentEditor', () => {
     ).toBeInTheDocument();
   });
 
-  it('calls it a new agent before it has a path', () => {
+  it('says "not saved yet" before it has a path', () => {
     setup({ path: null });
 
-    expect(screen.getByText('New agent')).toBeInTheDocument();
+    expect(screen.getByText('not saved yet')).toBeInTheDocument();
+  });
+
+  /*
+    happy-dom does not evaluate container queries, so this asserts the classes
+    that do the work and that both panes are mounted.
+  */
+  it('shows Form and Source together, with the tabs hidden by the 900px container query', () => {
+    setup();
+
+    expect(screen.getByRole('textbox', { name: 'description' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Agent source' })).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: 'Agent editor view' })).toHaveClass('@min-[900px]:hidden');
+  });
+
+  it('reads unsaved in amber while dirty', () => {
+    setup({ dirty: true });
+
+    expect(screen.getByText('unsaved')).toHaveClass('text-amber');
+  });
+
+  it("runRefusal gives today's sentences", () => {
+    expect(runRefusal(null, false)).toBe('Save it first — there is no definition on disk yet.');
+    expect(runRefusal('/a/AGENT.md', true)).toBe('Save first — a wake reads the file, not this buffer.');
+    expect(runRefusal('/a/AGENT.md', false)).toBeNull();
   });
 
   describe('the form patches the file', () => {
@@ -193,10 +217,13 @@ describe('AgentEditor', () => {
       expect(screen.getByText(/carried out on every wake/)).toBeInTheDocument();
     });
 
-    it('says it nowhere on the Form tab, where there is no body to explain', () => {
+    it('hides it on the narrow Form tab, where there is no body to explain', () => {
       setup();
 
-      expect(screen.queryByText(/carried out on every wake/)).toBeNull();
+      const pane = screen.getByText(/carried out on every wake/).parentElement;
+
+      expect(pane).toHaveClass('hidden');
+      expect(pane).toHaveClass('@min-[900px]:flex');
     });
   });
 

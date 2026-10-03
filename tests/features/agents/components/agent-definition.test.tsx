@@ -242,7 +242,6 @@ describe('AgentDefinition', () => {
       const bridge = stub([agent('slack-watcher')]);
       useUiStore.getState().openAgentPage('slack-watcher', 'definition');
       await open();
-      await userEvent.click(screen.getByRole('tab', { name: 'Source' }));
 
       const renamed = GOOD.replace('slack-watcher', 'slack-bot');
       setSurfaceText('Agent source', renamed);
@@ -265,7 +264,6 @@ describe('AgentDefinition', () => {
         })),
       });
       await open();
-      await userEvent.click(screen.getByRole('tab', { name: 'Source' }));
 
       setSurfaceText('Agent source', GOOD.replace('slack-watcher', 'slack-bot'));
       await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -277,7 +275,6 @@ describe('AgentDefinition', () => {
     it('refuses a name that collides with another agent', async () => {
       stub([agent('slack-watcher'), agent('taken')]);
       await open();
-      await userEvent.click(screen.getByRole('tab', { name: 'Source' }));
 
       setSurfaceText('Agent source', GOOD.replace('slack-watcher', 'taken'));
 
@@ -287,7 +284,6 @@ describe('AgentDefinition', () => {
     it('refuses a reserved name before asking main', async () => {
       const bridge = stub([agent('slack-watcher')]);
       await open();
-      await userEvent.click(screen.getByRole('tab', { name: 'Source' }));
 
       setSurfaceText('Agent source', GOOD.replace('slack-watcher', 'overmind'));
       await userEvent.click(screen.getByRole('button', { name: 'Save' }));
