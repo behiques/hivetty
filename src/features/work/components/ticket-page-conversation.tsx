@@ -8,9 +8,15 @@ import { isAgent } from '@/types/entity';
 import { Icon } from '@components/ui/icon';
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { AdfBlocks } from '@features/work/components/adf-blocks';
+import {
+  activeMention,
+  initials,
+  MentionList,
+  useMentionPicker,
+} from '@features/work/components/mention-picker';
 import { LinesSkeleton, TicketProblem } from '@features/work/components/ticket-page-parts';
 import { commentTime } from '@features/work/ticket-presentation';
-import type { JiraComment, JiraMention } from '@shared/jira-contract';
+import type { JiraComment, JiraMention, JiraUser } from '@shared/jira-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import {
   useAppendTicketComment,
@@ -33,12 +39,7 @@ type Item =
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** `Dana Kim` → `DK`; a one-word name gives its first two letters, `acr` → `AC`. */
-export function initials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  const letters = words.length >= 2 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? '').slice(0, 2);
-  return letters.toUpperCase();
-}
+export { initials } from '@features/work/components/mention-picker';
 
 /**
  * The gutter of a comment the Hive posted for an agent (HIVE-216): the agent's
@@ -167,6 +168,20 @@ function ReplyBox({
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
   const [problem, setProblem] = useState<string[] | null>(null);
+  const [caret, setCaret] = useState(0);
+  const mention = activeMention(draft, caret);
+  const picker = useMentionPicker(mention?.query ?? null);
+  const listId = `${ticketKey}-mentions`;
+  const highlighted = picker.open ? picker.users[picker.active] : undefined;
+
+  const pick = (user: JiraUser) => {
+    if (mention === null) return;
+    setDraft(draft.slice(0, mention.start) + draft.slice(caret));
+    setCaret(mention.start);
+    if (!mentions.some((m) => m.accountId === user.accountId)) {
+      setMentions([...mentions, { accountId: user.accountId, name: user.displayName }]);
+    }
+  };
 
   const post = () => {
     const markdown = draft.trim();
@@ -206,18 +221,56 @@ function ReplyBox({
           ))}
         </div>
       )}
-      <textarea
-        ref={box}
-        rows={3}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape' && draft === '') onForget();
-        }}
-        aria-label={`Comment on ${ticketKey}`}
-        placeholder={replyTo === null ? 'Add a comment — markdown works' : `Reply to ${replyTo}…`}
-        className="resize-y bg-transparent text-[13px] text-ink outline-none placeholder:text-subtle"
-      />
+      <div className="relative">
+        <textarea
+          ref={box}
+          rows={3}
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setCaret(event.target.selectionStart);
+          }}
+          onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+          onKeyDown={(event) => {
+            if (picker.open) {
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                picker.move(event.key === 'ArrowDown' ? 1 : -1);
+                return;
+              }
+              const chosen = picker.current();
+              if (event.key === 'Enter' && chosen !== undefined) {
+                event.preventDefault();
+                pick(chosen);
+                return;
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                picker.dismiss();
+                return;
+              }
+            }
+            if (event.key === 'Escape' && draft === '') onForget();
+          }}
+          aria-label={`Comment on ${ticketKey}`}
+          role="combobox"
+          aria-expanded={picker.open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={highlighted === undefined ? undefined : `${listId}-${highlighted.accountId}`}
+          placeholder={replyTo === null ? 'Add a comment — markdown works' : `Reply to ${replyTo}…`}
+          className="w-full resize-y bg-transparent text-[13px] text-ink outline-none placeholder:text-subtle"
+        />
+        {picker.open ? (
+          <MentionList
+            id={listId}
+            users={picker.users}
+            failed={picker.failed}
+            active={picker.active}
+            onPick={pick}
+          />
+        ) : null}
+      </div>
       <div className="flex items-center gap-2 text-[12px]">
         <span className="rounded-md border border-border-soft px-2 py-0.5 text-ink">Comment on Jira</span>
         <span className="text-muted">everyone on the ticket sees it</span>

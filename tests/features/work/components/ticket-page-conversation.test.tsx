@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -195,7 +195,7 @@ describe('TicketPageConversation (HIVE-203)', () => {
 });
 
 describe('the reply box (HIVE-203)', () => {
-  const box = () => screen.getByRole('textbox', { name: 'Comment on HIVE-7' });
+  const box = () => screen.getByRole('combobox', { name: 'Comment on HIVE-7' });
 
   it('replies to a comment, and Escape in an empty box forgets whom', async () => {
     render(<TicketPageConversation ticketKey="HIVE-7" />);
@@ -316,7 +316,7 @@ describe('comments posted for an agent (HIVE-216)', () => {
 });
 
 describe('mentions in the reply box (HIVE-216)', () => {
-  const box = () => screen.getByRole('textbox', { name: 'Comment on HIVE-7' });
+  const box = () => screen.getByRole('combobox', { name: 'Comment on HIVE-7' });
 
   it('Reply adds the author as a chip, and the post carries it', async () => {
     addJiraComment.mockResolvedValue({ ok: true, value: comment('105', 'Me', '2026-10-01T15:00:00.000Z', 'ok') });
@@ -388,5 +388,82 @@ describe('mentions in the reply box (HIVE-216)', () => {
     expect(await screen.findByText('Jira refused it')).toBeInTheDocument();
     expect(screen.getByText('@Dana Kim')).toBeInTheDocument();
     expect(box()).toHaveValue('draft');
+  });
+});
+
+describe('the @ picker (HIVE-216)', () => {
+  const box = () => screen.getByRole('combobox', { name: 'Comment on HIVE-7' });
+  /*
+    `shouldAdvanceTime`, as notification-card.test.tsx does: Testing Library's
+    async wrapper waits on a zero timeout, which a frozen clock never fires.
+    The debounce restarts on every keystroke, so the few real milliseconds a
+    typed string takes never reach 250; the test advances those by hand.
+  */
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  afterEach(() => vi.useRealTimers());
+
+  const people = [
+    { accountId: '712020:carla', displayName: 'Carla Ruiz' },
+    { accountId: '712020:cam', displayName: 'Cam Mendes' },
+  ];
+
+  it('searches 250ms after @ and two characters, and Enter picks into a chip without sending', async () => {
+    searchJiraUsers.mockResolvedValue({ ok: true, value: people });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await user().type(box(), 'thanks @ca');
+    expect(searchJiraUsers).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(searchJiraUsers).toHaveBeenCalledTimes(1);
+    expect(searchJiraUsers).toHaveBeenCalledWith({ query: 'ca' });
+
+    const list = await screen.findByRole('listbox', { name: 'Mention someone' });
+    expect(within(list).getAllByRole('option')).toHaveLength(2);
+    expect(box()).toHaveAttribute('aria-expanded', 'true');
+
+    await user().keyboard('{ArrowDown}{Enter}');
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(screen.getByText('@Cam Mendes')).toBeInTheDocument();
+    expect(box()).toHaveValue('thanks ');
+    expect(addJiraComment).not.toHaveBeenCalled();
+  });
+
+  it('asks once for the newest query while typing fast', async () => {
+    searchJiraUsers.mockResolvedValue({ ok: true, value: people });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await user().type(box(), '@car');
+    await act(() => vi.advanceTimersByTimeAsync(250));
+
+    expect(searchJiraUsers).toHaveBeenCalledTimes(1);
+    expect(searchJiraUsers).toHaveBeenCalledWith({ query: 'car' });
+  });
+
+  it('Escape closes the list and keeps the text', async () => {
+    searchJiraUsers.mockResolvedValue({ ok: true, value: people });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await user().type(box(), '@ca');
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    await screen.findByRole('listbox');
+    await user().keyboard('{Escape}');
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(box()).toHaveValue('@ca');
+  });
+
+  it('says it could not search, in one line, and the box keeps working', async () => {
+    searchJiraUsers.mockResolvedValue({ ok: false, error: { kind: 'timeout', message: 'slow' } });
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+
+    await user().type(box(), '@ca');
+    await act(() => vi.advanceTimersByTimeAsync(250));
+
+    expect(await screen.findByText('Could not search Jira')).toBeInTheDocument();
+    await user().type(box(), 'rl');
+    expect(box()).toHaveValue('@carl');
   });
 });
