@@ -59,6 +59,7 @@ import {
   useProjectSessions,
   useReattachEpoch,
   useRemoteLink,
+  useAgentLastWord,
   useBuildProgress,
   useIsAgentId,
   useLedgerEntries,
@@ -5417,6 +5418,24 @@ describe('the ledger slice', () => {
 
     const { result } = renderHook(() => useLedgerEntries({ from: 'sess-b' }));
     expect(result.current.map((found) => found.id)).toEqual(['2']);
+  });
+
+  it("returns the agent's newest entry, first line only (HIVE-204)", () => {
+    useHiveStore.getState().hydrateLedger([
+      entry({ id: '20261002-100000-0001', from: 'acr', kind: 'done', body: 'old', ts: 1 }),
+      entry({ id: '20261002-100100-0002', from: 'shipper', kind: 'post', body: 'not mine', ts: 3 }),
+      entry({ id: '20261002-100050-0003', from: 'acr', kind: 'ask', ref: 'a3', body: 'Reply?\nmore', ts: 2 }),
+    ]);
+
+    const { result } = renderHook(() => useAgentLastWord('acr'));
+    expect(result.current).toEqual({ kind: 'ask', ref: 'a3', line: 'Reply?', ts: 2 });
+  });
+
+  it('has no last word for an agent that never wrote', () => {
+    useHiveStore.getState().hydrateLedger([entry({ id: '1', from: 'acr' })]);
+
+    const { result } = renderHook(() => useAgentLastWord('ghost'));
+    expect(result.current).toBeUndefined();
   });
 
   it('returns a thread in order', () => {

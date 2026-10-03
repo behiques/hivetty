@@ -110,6 +110,7 @@ import {
 import {
   LEDGER_MEMORY_CAP,
   type LedgerEntry,
+  type LedgerKind,
   type LedgerReadQuery,
   type LedgerResult,
   type LedgerSnapshot,
@@ -8236,6 +8237,36 @@ export const useBuildProgress = (ticketKey: string): BuildProgress | undefined =
   const entries = useHiveStore((state) => state.ledger);
 
   return useMemo(() => buildProgressFor(entries, ticketKey), [entries, ticketKey]);
+};
+
+/** What an agent last said on the ledger, as its panel row shows it (HIVE-204). */
+export interface AgentLastWord {
+  kind: LedgerKind;
+  ref?: string;
+  line: string;
+  ts: number;
+}
+
+/** The agent's last word on the ledger (HIVE-204): newest by id (ids sort in write order), first line. */
+export const useAgentLastWord = (name: string): AgentLastWord | undefined => {
+  const entries = useHiveStore((state) => state.ledger);
+
+  return useMemo(() => {
+    let newest: LedgerEntry | undefined;
+
+    for (const entry of entries) {
+      if (entry.from === name && (newest === undefined || entry.id > newest.id)) newest = entry;
+    }
+
+    if (newest === undefined) return undefined;
+
+    return {
+      kind: newest.kind,
+      ...(newest.ref === undefined ? {} : { ref: newest.ref }),
+      line: newest.body.split('\n', 1)[0] ?? '',
+      ts: newest.ts,
+    };
+  }, [entries, name]);
 };
 
 /** One conversation: the ask, and everything that named it. */
