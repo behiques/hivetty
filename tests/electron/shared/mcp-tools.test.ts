@@ -42,7 +42,7 @@ describe('createToolHandlers — listing', () => {
     `agents` (HIVE-127), then `approve` last — the tools a model is meant to
     call ahead of the one only the CLI ever reaches, on its behalf.
   */
-  it('lists the seventeen shared definitions unchanged', () => {
+  it('lists the eighteen shared definitions unchanged', () => {
     const handlers = createToolHandlers(stub());
     expect(handlers.listTools().map((tool) => tool.name)).toEqual([
       'ledger_read',
@@ -60,6 +60,7 @@ describe('createToolHandlers — listing', () => {
       'jira_get',
       'jira_transition',
       'jira_comment',
+      'jira_users',
       'project_auto_merge',
       'approve',
     ]);
