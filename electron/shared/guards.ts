@@ -78,7 +78,7 @@ import type {
   SpawnTerminalRequest,
   WriteRequest,
 } from './ipc-contract';
-import { ISSUE_KEY_PATTERN, type JiraTransitionByName } from './jira-contract';
+import { ISSUE_KEY_PATTERN, type JiraMention, type JiraTransitionByName } from './jira-contract';
 import {
   LEDGER_KINDS,
   type LedgerAnswerRequest,
@@ -1910,13 +1910,41 @@ export function parseJiraConversationRequest(
  */
 const MAX_COMMENT = 32_768;
 
+const MAX_MENTIONS = 10;
+const MAX_MENTION_NAME = 128;
+/** Atlassian account ids: `712020:9f3c-…` or a 24-hex legacy id. Letters, digits, `:` and `-`. */
+const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9:-]{1,128}$/;
+
+/** `mentions` (HIVE-216): bounded, each id pattern-matched, each name printable; duplicates dropped. */
+function assertMentions(value: unknown, label: string): JiraMention[] {
+  if (!Array.isArray(value)) return fail(`${label}: expected an array, got ${describe(value)}`);
+  if (value.length > MAX_MENTIONS) return fail(`${label}: at most ${MAX_MENTIONS}`);
+  const seen = new Set<string>();
+  const mentions: JiraMention[] = [];
+  for (const [index, entry] of value.entries()) {
+    const raw = assertShape(entry, ['accountId', 'name'], `${label}[${index}]`);
+    const accountId = assertString(raw.accountId, `${label}[${index}].accountId`);
+    if (!ACCOUNT_ID_PATTERN.test(accountId)) return fail(`${label}[${index}].accountId: not an account id`);
+    const name = assertString(raw.name, `${label}[${index}].name`);
+    if (name.trim() === '' || name.length > MAX_MENTION_NAME || hasControlCharacters(name)) {
+      return fail(`${label}[${index}].name: must be 1-${MAX_MENTION_NAME} printable characters`);
+    }
+    if (seen.has(accountId)) continue;
+    seen.add(accountId);
+    mentions.push({ accountId, name });
+  }
+  return mentions;
+}
+
 export function parseAddJiraCommentRequest(
   input: unknown,
 ): AddJiraCommentRequest {
-  const raw = assertShape(input, ['key', 'markdown'], 'addJiraComment');
+  const raw = assertShape(input, ['key', 'markdown'], 'addJiraComment', ['mentions']);
   const markdown = assertString(raw.markdown, 'addJiraComment.markdown');
+  const mentions = raw.mentions === undefined ? [] : assertMentions(raw.mentions, 'addJiraComment.mentions');
 
-  if (markdown.trim() === '') {
+  // A mention-only comment is a comment (HIVE-216); an empty one with nobody named is not.
+  if (markdown.trim() === '' && mentions.length === 0) {
     return fail('addJiraComment.markdown: must not be empty');
   }
   if (markdown.length > MAX_COMMENT) {
@@ -1931,6 +1959,7 @@ export function parseAddJiraCommentRequest(
   return {
     key: assertJiraIssueKey(raw.key, 'addJiraComment.key'),
     markdown,
+    ...(mentions.length === 0 ? {} : { mentions }),
   };
 }
 

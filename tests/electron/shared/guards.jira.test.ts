@@ -438,4 +438,61 @@ describe('parseAddJiraCommentRequest', () => {
       /unexpected key/,
     );
   });
+
+  it('accepts mentions, deduped by account id, in order (HIVE-216)', () => {
+    expect(
+      parseAddJiraCommentRequest({
+        key: 'HIVE-71',
+        markdown: 'hi',
+        mentions: [
+          { accountId: '712020:9f3c-ab', name: 'Dana Kim' },
+          { accountId: '5b10a2844c20165700ede21g', name: 'Cam' },
+          { accountId: '712020:9f3c-ab', name: 'Dana again' },
+        ],
+      }),
+    ).toEqual({
+      key: 'HIVE-71',
+      markdown: 'hi',
+      mentions: [
+        { accountId: '712020:9f3c-ab', name: 'Dana Kim' },
+        { accountId: '5b10a2844c20165700ede21g', name: 'Cam' },
+      ],
+    });
+  });
+
+  it('accepts an empty comment that mentions someone, and still refuses one that does not (HIVE-216)', () => {
+    expect(
+      parseAddJiraCommentRequest({ key: 'HIVE-71', markdown: '', mentions: [{ accountId: 'a1', name: 'A' }] }),
+    ).toEqual({ key: 'HIVE-71', markdown: '', mentions: [{ accountId: 'a1', name: 'A' }] });
+    refuses(() => parseAddJiraCommentRequest({ key: 'HIVE-71', markdown: ' ', mentions: [] }), /empty/);
+  });
+
+  it('bounds the mentions: at most ten, each a well-formed account id and a printable name (HIVE-216)', () => {
+    const many = Array.from({ length: 11 }, (_, i) => ({ accountId: `a${String(i)}`, name: 'N' }));
+    refuses(() => parseAddJiraCommentRequest({ key: 'HIVE-71', markdown: 'x', mentions: many }), /mentions: at most 10/);
+    refuses(() => parseAddJiraCommentRequest({ key: 'HIVE-71', markdown: 'x', mentions: 'Dana' }), /mentions: expected an array/);
+    for (const accountId of ['', 'a/b', 'a b', 'x'.repeat(129), '../me']) {
+      refuses(
+        () => parseAddJiraCommentRequest({ key: 'HIVE-71', markdown: 'x', mentions: [{ accountId, name: 'N' }] }),
+        /accountId/,
+      );
+    }
+    for (const name of ['', 'a\u0000b', 'a\u001bb', 'x'.repeat(129)]) {
+      refuses(
+        () => parseAddJiraCommentRequest({ key: 'HIVE-71', markdown: 'x', mentions: [{ accountId: 'a1', name }] }),
+        /name/,
+      );
+    }
+    refuses(
+      () => parseAddJiraCommentRequest({ key: 'HIVE-71', markdown: 'x', mentions: [{ accountId: 'a1', name: 'N', via: 'x' }] }),
+      /unexpected key "via"/,
+    );
+  });
+
+  it('never takes a via field: the renderer cannot mark a comment as an agent\'s (HIVE-216)', () => {
+    refuses(
+      () => parseAddJiraCommentRequest({ key: 'HIVE-71', markdown: 'x', via: { agent: 'builder' } }),
+      /unexpected key "via"/,
+    );
+  });
 });
