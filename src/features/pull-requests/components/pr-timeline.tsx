@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { createPoller } from '@/hooks/create-poller';
 import { fraction, ticks, type CiBar, type TimelineModel } from '@/lib/pr-timeline';

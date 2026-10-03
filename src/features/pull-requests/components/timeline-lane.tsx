@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useLayoutEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
