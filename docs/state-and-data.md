@@ -373,6 +373,7 @@ Components never read a store object directly and never call `getState()`.
 | `useShipTrack(slug, n)` | the shipper's eight stops for one PR, with time and holder (HIVE-205) |
 | `useMergeAsk(slug, n)` | the shipper's open merge card for one PR, the ask the PR page's Merge answers (HIVE-205) |
 | `useSessionPr(id)` | one row's PR, matched on its branch |
+| `useSessionPrRow(id)` | the session's PR with its Hatchery row, matched by URL; `row: null` for a remembered PR. The session panel's PR tab and dot (HIVE-209) |
 | `useHasResumable()` | whether the fleet table reserves its Resume column |
 | `useMarkRead()` | mark one notification read, by index |
 
