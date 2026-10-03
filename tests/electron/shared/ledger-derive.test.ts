@@ -129,6 +129,20 @@ describe('isShipping and buildProgressFor (HIVE-171)', () => {
   });
 });
 
+describe('matches: ticket (HIVE-203)', () => {
+  it('keeps entries whose meta.ticket names the key, case-insensitively', () => {
+    const a = entry({ id: 'a', meta: { ticket: 'hive-7' } });
+    const b = entry({ id: 'b', meta: { ticket: 'HIVE-8' } });
+    const c = entry({ id: 'c' });
+    const d = entry({ id: 'd', meta: { ticket: 7 } });
+    expect([a, b, c, d].filter((e) => matches(e, { ticket: 'HIVE-7' })).map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('ignores ticket when the query has none', () => {
+    expect(matches(entry({ id: 'x' }), {})).toBe(true);
+  });
+});
+
 describe('agentSiteFor (HIVE-172)', () => {
   const HIVE_6 = '/home/x/.hive/work/builder/hive-6';
   const HIVE_7 = '/home/x/.hive/work/builder/hive-7';

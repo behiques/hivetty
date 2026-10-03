@@ -1018,6 +1018,11 @@ describe('parseLedgerReadQuery', () => {
     expect(parseLedgerReadQuery({})).toEqual({});
   });
 
+  it('admits a ticket key and refuses a non-string one (HIVE-203)', () => {
+    expect(parseLedgerReadQuery({ ticket: 'HIVE-7' })).toEqual({ ticket: 'HIVE-7' });
+    expect(() => parseLedgerReadQuery({ ticket: 7 })).toThrow();
+  });
+
   it('keeps only the fields it knows', () => {
     expect(
       parseLedgerReadQuery({ to: 'sess-a', kind: 'ask', limit: 5, bogus: 'x' }),

@@ -442,6 +442,10 @@ export function matches(entry: LedgerEntry, query: LedgerReadQuery): boolean {
   }
   if (query.to !== undefined && entry.to !== undefined && entry.to !== query.to) return false;
   if (query.since !== undefined && entry.id <= query.since) return false;
+  if (query.ticket !== undefined) {
+    const ticket = entry.meta?.['ticket'];
+    if (typeof ticket !== 'string' || ticket.toUpperCase() !== query.ticket.toUpperCase()) return false;
+  }
   return true;
 }
 

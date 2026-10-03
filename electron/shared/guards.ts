@@ -2768,6 +2768,8 @@ export function parseLedgerReadQuery(input: unknown): LedgerReadQuery {
   if (thread !== undefined) query.thread = thread;
   const since = optionalString(source, 'since', 'ledger query');
   if (since !== undefined) query.since = since;
+  const ticket = optionalString(source, 'ticket', 'ledger query');
+  if (ticket !== undefined) query.ticket = ticket;
 
   const limit = source.limit;
   if (limit !== undefined) {
