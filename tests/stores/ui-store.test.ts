@@ -872,3 +872,28 @@ describe('focusPrEvent (HIVE-208)', () => {
     expect(useUiStore.getState().prFocus).toBeNull();
   });
 });
+
+describe('narrow (HIVE-211)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('crossing below 1,200px closes the panel; widening does not reopen it', () => {
+    useUiStore.setState({ place: 'work', panelOpen: true });
+    useUiStore.getState().setNarrow(true);
+    expect(useUiStore.getState()).toMatchObject({ narrow: true, panelOpen: false });
+    useUiStore.getState().setNarrow(false);
+    expect(useUiStore.getState()).toMatchObject({ narrow: false, panelOpen: false });
+  });
+
+  it('the bar icon still opens the panel while narrow', () => {
+    useUiStore.getState().setNarrow(true);
+    useUiStore.getState().selectPlace('work');
+    expect(useUiStore.getState().panelOpen).toBe(true);
+  });
+
+  it('a repeat is a no-op', () => {
+    useUiStore.getState().setNarrow(false);
+    const before = useUiStore.getState();
+    useUiStore.getState().setNarrow(false);
+    expect(useUiStore.getState()).toBe(before);
+  });
+});

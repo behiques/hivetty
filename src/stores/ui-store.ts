@@ -165,6 +165,8 @@ interface UiState {
   place: Place;
   /** Whether that place's list panel shows beside the stage. */
   panelOpen: boolean;
+  /** The window is under 1,200px (HIVE-211). Fed from `useNarrowWindow` by the shell; never persisted. */
+  narrow: boolean;
   /** The Overmind's project filter (HIVE-197). `null` is All projects. */
   sessionsProject: string | null;
   sessionsFilter: TableFilter;
@@ -252,6 +254,8 @@ interface UiState {
    */
   selectPlace: (place: Place) => void;
   togglePanel: () => void;
+  /** Crossing below 1,200px closes the panel, so the stage is never covered without a click (HIVE-211). */
+  setNarrow: (narrow: boolean) => void;
   setSessionsProject: (id: string | null) => void;
   setSessionsFilter: (filter: TableFilter) => void;
   expandEnded: () => void;
@@ -388,6 +392,7 @@ const initialUiState = {
   showActivityRail: true,
   place: 'home' as Place,
   panelOpen: true,
+  narrow: false,
   sessionsProject: null as string | null,
   sessionsFilter: 'all' as TableFilter,
   endedExpanded: false,
@@ -463,6 +468,11 @@ export const useUiStore = create<UiState>()((set) => ({
     }),
 
   togglePanel: () => set((state) => ({ panelOpen: !state.panelOpen })),
+
+  setNarrow: (narrow) =>
+    set((state) =>
+      state.narrow === narrow ? state : { narrow, ...(narrow ? { panelOpen: false } : {}) },
+    ),
 
   setSessionsProject: (id) =>
     set((state) =>
@@ -746,6 +756,8 @@ export const usePlace = () => useUiStore((state) => state.place);
 export const usePanelOpen = () => useUiStore((state) => state.panelOpen);
 export const useSelectPlace = () => useUiStore((state) => state.selectPlace);
 export const useTogglePanel = () => useUiStore((state) => state.togglePanel);
+export const useNarrow = () => useUiStore((state) => state.narrow);
+export const useSetNarrow = () => useUiStore((state) => state.setNarrow);
 /** The Work place's open ticket, folds and conversation filter (HIVE-203). */
 export const useWorkTicket = () => useUiStore((state) => state.workTicket);
 export const useWorkFolded = () => useUiStore((state) => state.workFolded);
