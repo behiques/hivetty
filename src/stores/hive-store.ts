@@ -720,8 +720,10 @@ interface HiveState {
    * A union rather than a replacement, for the reason `hydrateNotifs` above
    * gives — and see the note at the implementation for why a dropped entry
    * here would never come back.
+   *
+   * `closed` is the snapshot's `closedAsks` (HIVE-198), merged into the
+   * closed set the same way.
    */
-  /** `closed`: the snapshot's `closedAsks` (HIVE-198), merged into the closed set. */
   hydrateLedger: (entries: LedgerEntry[], closed?: readonly string[]) => void;
   /** One entry landed — append it to the tail. */
   ledgerAppend: (entry: LedgerEntry) => void;
