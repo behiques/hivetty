@@ -45,10 +45,9 @@ export function SessionHeader({ entity }: { entity: Session | Terminal }) {
         onClick={backToOrch}
         aria-label="Back to overmind"
         title={`Back to overmind (${backChordLabel(isMacPlatform())})`}
-        className="flex shrink-0 items-center gap-1 rounded-md py-1 pr-2 pl-0.5 text-[12.5px] text-brand hover:bg-hover"
+        className="grid size-7 shrink-0 place-items-center rounded-md text-brand hover:bg-hover"
       >
         <CaretLeft size={14} weight="bold" aria-hidden="true" />
-        Overmind
       </button>
       <span aria-hidden="true" className="h-[22px] w-px shrink-0 bg-border-soft" />
       {isTerminal(entity) ? <TerminalLine terminal={entity} /> : <SessionLine session={entity} />}
