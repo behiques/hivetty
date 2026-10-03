@@ -115,3 +115,8 @@ test('PRs on the bar opens the place: its panel, and a stage waiting for a PR', 
   await expect(page.getByText(/need the desktop app/i)).toBeVisible();
   await expect(page.getByText('Pick a pull request')).toBeVisible();
 });
+
+test('no inbox pill with nothing waiting (HIVE-198)', async ({ page }) => {
+  await expect(bar(page)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Inbox, / })).toHaveCount(0);
+});

@@ -14,12 +14,14 @@ import { StatusCounts } from '@components/layout/status-counts';
 import { Badge } from '@components/ui/badge';
 import { isDesktop } from '@config/runtime';
 import {
+  useLayout,
   useSetRailCollapsed,
   useTheme,
   useThemeActions,
 } from '@stores/appearance-store';
 import { useUnreadCount } from '@stores/hive-store';
 import {
+  useInboxActions,
   usePickerActions,
   useRevealRailTab,
   useSettingsActions,
@@ -81,7 +83,14 @@ export function Header() {
     that wants both says both. Without the second call the bell would select the
     Inbox tab on a rail showing three icons: visibly nothing happening.
   */
+  const roundTwo = useLayout() === 'round-two';
+  const { openInboxDrawer } = useInboxActions();
   const showInbox = () => {
+    // Round two mounts no activity rail, so the tab would be nowhere: the drawer is the Inbox (HIVE-198).
+    if (roundTwo) {
+      openInboxDrawer();
+      return;
+    }
     revealRailTab('inbox');
     setRailCollapsed('right', false);
   };

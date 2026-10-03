@@ -1,10 +1,11 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Agent, Session } from '@/types/entity';
 
 import { useNotificationActivate } from '@features/settings/hooks/use-notification-activate';
 import type { NotificationActivateEvent } from '@shared/ipc-contract';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 
@@ -152,5 +153,33 @@ describe('useNotificationActivate', () => {
     listeners[0]?.({ type: 'ask', thread: 'a41' });
 
     expect(useUiStore.getState().activeTab).toBe('orch');
+  });
+});
+
+describe('useNotificationActivate — round two (HIVE-198)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  afterEach(() => {
+    useAppearanceStore.getState().reset();
+  });
+
+  it('round two: an ask opens the drawer on its thread', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    (window as { hive?: unknown }).hive = bridge;
+    renderHook(() => useNotificationActivate());
+    act(() => listeners.at(-1)?.({ type: 'ask', thread: 'a41' }));
+    expect(useUiStore.getState().inboxDrawer).toEqual({ open: true, thread: 'a41' });
+  });
+
+  it('classic: an ask still reveals the Inbox tab', () => {
+    useAppearanceStore.getState().setLayout('classic');
+    useUiStore.setState({ railTab: 'explorer' });
+    (window as { hive?: unknown }).hive = bridge;
+    renderHook(() => useNotificationActivate());
+    act(() => listeners.at(-1)?.({ type: 'ask', thread: 'a41' }));
+    expect(useUiStore.getState().railTab).toBe('inbox');
+    expect(useUiStore.getState().inboxDrawer.open).toBe(false);
   });
 });

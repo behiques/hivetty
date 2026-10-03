@@ -83,3 +83,32 @@ Or in the config file:
 The inbox keeps the latest 50 cards of news, and every card still waiting on you however
 many there are. It does not survive a restart. The dock icon counts what waits on you:
 open questions, permission requests and blocked sessions, not unread cards.
+
+## Round two: the pill and the drawer
+
+Round two has no Inbox tab. The Inbox comes to you instead, in the stage's
+bottom-right corner, just above the page's own input. Classic is unchanged.
+
+- **The pill** counts what needs you: open questions, permission requests,
+  review requests and blocked sessions, leaving out the session on stage. It is
+  absent at zero.
+- **Cards.** A new ask rises above the pill as an answerable card. It stays 5
+  seconds, then folds into the pill. Pointing at it, focusing in it, or
+  answering it holds it up; ✕ folds it at once. Several at once stack, the
+  newest on top, under "N arrived just now · newest first". Each arrival
+  restarts the 5 seconds. A card never takes the keyboard.
+- **Notes.** A session off stage that asks a question rises as a note:
+  **Open the session** takes you there, **Later** folds it.
+- **The quiet rules.** With the keyboard in a terminal, nothing rises; the
+  pill pulses once instead. With Settings open, arrivals wait and rise when it
+  closes. The session on stage never shows.
+- **The drawer.** The pill opens a 400px panel on the right, "Needs you", with
+  every ask whole and the sessions off stage under it. Esc or ✕ closes it.
+  Clicking an ask's desktop notification opens the drawer on that ask, and so
+  does the header's bell.
+- **Yours again.** A session in the Sessions panel that finished and is
+  waiting for you reads "yours again" until you open it.
+
+Echoes (news cards) show nowhere in round two yet; Home's strip brings them
+back (HIVE-200).
+

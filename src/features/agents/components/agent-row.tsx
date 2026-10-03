@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { isAgent } from '@/types/entity';
 
 import { STATUS_LABEL } from '@components/ui/status-dot';
-import { AgentTile, type TileTone } from '@features/agents/components/agent-tile';
+import { AgentTile, type TileTone } from '@features/shared/components/agent-tile';
 import { useAge } from '@hooks/use-relative-time';
 import type { LedgerKind } from '@shared/ledger-contract';
 import {

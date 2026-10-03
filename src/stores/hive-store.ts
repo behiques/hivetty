@@ -722,8 +722,11 @@ interface HiveState {
    * A union rather than a replacement, for the reason `hydrateNotifs` above
    * gives — and see the note at the implementation for why a dropped entry
    * here would never come back.
+   *
+   * `closed` is the snapshot's `closedAsks` (HIVE-198), merged into the
+   * closed set the same way.
    */
-  hydrateLedger: (entries: LedgerEntry[]) => void;
+  hydrateLedger: (entries: LedgerEntry[], closed?: readonly string[]) => void;
   /** One entry landed — append it to the tail. */
   ledgerAppend: (entry: LedgerEntry) => void;
   /** One session's plan changed; `null` means it has none any more (HIVE-179). */
@@ -1911,7 +1914,7 @@ const ATTACH_SNAPSHOT_HANDLERS: Partial<
   [CH.agentsList]: (value, store) =>
     store.hydrateAgents((value as AgentsSnapshot).agents),
   [CH.ledgerList]: (value, store) =>
-    store.hydrateLedger((value as LedgerSnapshot).entries),
+    store.hydrateLedger((value as LedgerSnapshot).entries, (value as LedgerSnapshot).closedAsks),
   [CH.plansList]: (value, store) => store.hydratePlans((value as PlansSnapshot).plans),
   [CH.changedFilesList]: (value, store) =>
     store.hydrateChangedFiles((value as ChangedFilesSnapshot).sessions),
@@ -3815,7 +3818,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       },
     })),
 
-  hydrateLedger: (entries) =>
+  hydrateLedger: (entries, closed = []) =>
     set((state) => {
       /**
        * Union, not replacement — `hydrateNotifs`' reason, with one difference
@@ -3839,7 +3842,17 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
       return {
         ledger: merged.slice(-LEDGER_MEMORY_CAP),
-        closedAsks: withClosed(state.closedAsks, entries),
+        /*
+          The snapshot's own closed threads first (HIVE-198): a close older
+          than main's tail is in neither `entries` nor the mirror, and a
+          window opened after it would otherwise count the ask as open.
+        */
+        closedAsks: withClosed(
+          closed.every((thread) => state.closedAsks.has(thread))
+            ? state.closedAsks
+            : new Set([...state.closedAsks, ...closed]),
+          entries,
+        ),
       };
     }),
 
@@ -7575,6 +7588,10 @@ export const useSessionBooting = (id: string): boolean =>
 export function currentRowFor(id: string): string {
   return currentSessionIn(useHiveStore.getState(), id);
 }
+
+/** {@link currentRowFor} for a render path (HIVE-198): re-resolves when the row behind a terminal changes. */
+export const useCurrentRow = (terminalId: string): string =>
+  useHiveStore((state) => currentSessionIn(state, terminalId));
 
 /**
  * True when `id` currently names an agent, not a terminal (HIVE-118).

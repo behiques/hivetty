@@ -19,12 +19,14 @@ import {
 import {
   accountLimitsOf,
   agentWorksIn,
+  currentRowFor,
   flapCountsOf,
   fleetGroupsOf,
   type FleetView,
   repoDirName,
   useActiveEntity,
   useActiveSessions,
+  useCurrentRow,
   useAskingAgentCount,
   useAgentLive,
   useAgentLiveCount,
@@ -974,6 +976,25 @@ describe('hive-store selectors', () => {
       expect(renderHook(() => useSummonsCount(null)).result.current).toBe(0);
     });
 
+    it('a close older than the mirror still closes the ask, via the snapshot (HIVE-198)', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([ask('a1')]);
+        // The entries lack both the ask and its answer: they rolled out of main's tail.
+        useHiveStore.getState().hydrateLedger([], ['a1']);
+      });
+
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(0);
+    });
+
+    it('merges closed threads from the snapshot rather than replacing them (HIVE-198)', () => {
+      act(() => {
+        useHiveStore.getState().hydrateLedger([], ['a1']);
+        useHiveStore.getState().hydrateLedger([], ['a2']);
+      });
+
+      expect([...useHiveStore.getState().closedAsks].sort()).toEqual(['a1', 'a2']);
+    });
+
     it('leaves out the session on stage, and counts it for the dock', () => {
       act(() => {
         useHiveStore.getState().hydrateNotifs([blocked('b1', 'term-1'), blocked('b2', 'term-2')]);
@@ -982,6 +1003,25 @@ describe('hive-store selectors', () => {
       expect(renderHook(() => useSummons('term-1')).result.current.sessions.map((n) => n.id)).toEqual(['b2']);
       expect(renderHook(() => useSummonsCount('term-1')).result.current).toBe(1);
       expect(renderHook(() => useSummonsCount(null)).result.current).toBe(2);
+    });
+  });
+
+  describe('useCurrentRow (HIVE-198)', () => {
+    it('resolves a terminal to the row currentRowFor names', () => {
+      const row: Session = {
+        kind: 'session',
+        id: 'sess-row',
+        terminalId: 'term-row',
+        project: 'the-hive',
+        status: 'idle',
+        task: 'x',
+        cost: '$0.00',
+        lines: [],
+      };
+      act(() => useHiveStore.setState({ entities: { 'sess-row': row }, order: ['sess-row'] }));
+
+      expect(currentRowFor('term-row')).toBe('sess-row');
+      expect(renderHook(() => useCurrentRow('term-row')).result.current).toBe('sess-row');
     });
   });
 

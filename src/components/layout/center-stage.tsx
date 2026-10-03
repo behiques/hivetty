@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useDeclinedBack } from '@/hooks/use-declined-back';
+import { useOnStage } from '@/hooks/use-on-stage';
 import { useOpenFileAt } from '@/hooks/use-open-file-at';
 import { isTerminalView, resolveView } from '@/lib/resolve-view';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,7 @@ import {
   isTerminated,
 } from '@/types/entity';
 
+import { InboxCorner } from '@components/layout/inbox-corner';
 import { SessionHeader } from '@components/layout/session-header';
 import { SessionMetaBar } from '@components/layout/session-meta-bar';
 import { TerminalHost } from '@components/terminal/terminal-host';
@@ -22,6 +24,7 @@ import { AgentsStage } from '@features/agents/components/agents-stage';
 import { EditorPane } from '@features/editor/components/editor-pane';
 import { EditorTabStrip } from '@features/editor/components/editor-tab-strip';
 import { HomePage } from '@features/home/components/home-page';
+import { InboxDrawer } from '@features/inbox/components/inbox-drawer';
 import { ConsoleInput } from '@features/orchestrator/components/console-input';
 import { ConsolePeek } from '@features/orchestrator/components/console-peek';
 import { FleetPane, TRANSCRIPT_FLOOR } from '@features/orchestrator/components/fleet-pane';
@@ -180,6 +183,9 @@ export function CenterStage() {
    * whatever is on screen, which is this component's subject.
    */
   const terminalRegion = useRef<HTMLDivElement>(null);
+  /** `<main>`: the Inbox corner measures the page's input against it (HIVE-198). */
+  const stageRef = useRef<HTMLElement>(null);
+  const onStage = useOnStage();
   const booting = useSessionBoot(
     isTerminalView(view) ? activeTab : null,
     terminalRegion,
@@ -410,7 +416,7 @@ export function CenterStage() {
   }, [backToOrch]);
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-panel-2">
+    <main ref={stageRef} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-panel-2">
       {showingPicker ? <NewSessionPicker /> : null}
       {view === 'settings' ? <SettingsOverlay /> : null}
       {view === 'home' ? <HomePage /> : null}
@@ -653,10 +659,11 @@ export function CenterStage() {
 
         {/* Round two's dock: the peek line and its show/hide over the prompt (HIVE-197). */}
         {view === 'orchestrator' ? (
-          <>
+          // `data-stage-input`: the Inbox corner sits above this box (HIVE-198). A plain block, so the layout is unchanged.
+          <div data-stage-input="">
             {roundTwo ? <ConsolePeek /> : null}
             <ConsoleInput />
-          </>
+          </div>
         ) : null}
 
         {/*
@@ -715,6 +722,13 @@ export function CenterStage() {
           ) : null}
         </div>
       </div>
+      {/* Round two's Inbox: the corner on the stage, and the drawer, which is fixed and escapes the clip (HIVE-198). */}
+      {roundTwo ? (
+        <>
+          <InboxCorner stage={stageRef} viewKey={`${view}:${activeTab}`} />
+          <InboxDrawer onStage={onStage} />
+        </>
+      ) : null}
     </main>
   );
 }

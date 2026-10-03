@@ -113,7 +113,7 @@ export function MessageInput({ entityId, inputRef }: MessageInputProps) {
       `items-start`, as in the overmind console: a centred prompt glyph slides
       down the side of a grown message and stops reading as a prompt.
     */
-    <div className="flex shrink-0 items-start gap-2.5 border-t border-border-soft bg-term-input px-[18px] py-2.5">
+    <div data-stage-input="" className="flex shrink-0 items-start gap-2.5 border-t border-border-soft bg-term-input px-[18px] py-2.5">
       <span className="shrink-0 font-mono text-[13px] text-green">
         {`${entityId} ❯`}
       </span>

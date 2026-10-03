@@ -1324,3 +1324,58 @@ describe('CenterStage — the session header (HIVE-197)', () => {
     expect(screen.queryByTestId('session-header')).not.toBeInTheDocument();
   });
 });
+
+describe('CenterStage — the inbox corner (HIVE-198)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+    useHiveStore.setState({
+      notifs: [
+        {
+          id: 'q1',
+          kind: 'agent.ask',
+          title: 'ship it?',
+          body: '',
+          unread: true,
+          createdAt: 1,
+          action: { type: 'ask', thread: 'q1' },
+        },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    useAppearanceStore.getState().reset();
+  });
+
+  it('mounts the pill in round two', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    useUiStore.setState({ place: 'sessions', activeTab: 'orch' });
+    render(<CenterStage />);
+    expect(screen.getByRole('button', { name: 'Inbox, 1 need you' })).toBeInTheDocument();
+  });
+
+  it('mounts the drawer in round two once it is opened', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    useUiStore.setState({ place: 'sessions', activeTab: 'orch' });
+    useUiStore.getState().openInboxDrawer();
+    render(<CenterStage />);
+    expect(screen.getByRole('dialog', { name: 'Needs you' })).toBeInTheDocument();
+  });
+
+  it('marks the Overmind dock as the stage input', () => {
+    useAppearanceStore.getState().setLayout('round-two');
+    useUiStore.setState({ place: 'sessions', activeTab: 'orch' });
+    render(<CenterStage />);
+    expect(document.querySelector('[data-stage-input]')).not.toBeNull();
+  });
+
+  it('mounts neither in Classic', () => {
+    useAppearanceStore.getState().setLayout('classic');
+    useUiStore.getState().openInboxDrawer();
+    render(<CenterStage />);
+    expect(screen.queryByRole('button', { name: /^Inbox, / })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Needs you' })).not.toBeInTheDocument();
+  });
+});

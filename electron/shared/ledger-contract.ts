@@ -98,6 +98,12 @@ export interface LedgerSnapshot {
   openAsks: OpenAsk[];
   /** task → party holding it. */
   claims: Record<string, string>;
+  /**
+   * Ask threads closed anywhere in the log (HIVE-198). Optional so an older
+   * server or client over the socket still speaks the same shape; missing
+   * means "nothing beyond what `entries` shows".
+   */
+  closedAsks?: string[];
 }
 
 export interface LedgerReadQuery {
