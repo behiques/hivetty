@@ -134,3 +134,33 @@ export function parseUnifiedDiff(text: string): DiffFile[] {
   }
   return files;
 }
+
+export interface SplitRow {
+  left: DiffLine | null;
+  right: DiffLine | null;
+}
+
+/** Split's rows: context with itself, a deletion run beside the addition run that follows it. */
+export function splitRows(hunk: DiffHunk): SplitRow[] {
+  const rows: SplitRow[] = [];
+  let dels: DiffLine[] = [];
+  let adds: DiffLine[] = [];
+  const flush = () => {
+    for (let i = 0; i < Math.max(dels.length, adds.length); i += 1) rows.push({ left: dels[i] ?? null, right: adds[i] ?? null });
+    dels = [];
+    adds = [];
+  };
+  for (const line of hunk.lines) {
+    if (line.kind === 'del') {
+      if (adds.length > 0) flush();
+      dels.push(line);
+    } else if (line.kind === 'add') {
+      adds.push(line);
+    } else {
+      flush();
+      rows.push({ left: line, right: line });
+    }
+  }
+  flush();
+  return rows;
+}

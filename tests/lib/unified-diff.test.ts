@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseUnifiedDiff } from '@lib/unified-diff';
+import { type DiffLine, parseUnifiedDiff, splitRows } from '@lib/unified-diff';
 
 const MODIFIED = [
   'diff --git a/src/fees/validator.ts b/src/fees/validator.ts',
@@ -95,5 +95,32 @@ describe('parseUnifiedDiff', () => {
 
   it('is empty for an empty diff', () => {
     expect(parseUnifiedDiff('')).toEqual([]);
+  });
+});
+
+describe('splitRows', () => {
+  const c = (n: number) => ({ kind: 'context' as const, oldN: n, newN: n, text: `c${n}` });
+  const d = (n: number) => ({ kind: 'del' as const, oldN: n, newN: null, text: `d${n}` });
+  const a = (n: number) => ({ kind: 'add' as const, oldN: null, newN: n, text: `a${n}` });
+  const hunk = (lines: DiffLine[]) => ({ header: '@@', oldStart: 1, newStart: 1, lines });
+
+  it('pairs a context line with itself', () => {
+    expect(splitRows(hunk([c(1)]))).toEqual([{ left: c(1), right: c(1) }]);
+  });
+  it('pairs equal runs of deletions and additions index by index', () => {
+    expect(splitRows(hunk([d(2), d(3), a(2), a(3)]))).toEqual([{ left: d(2), right: a(2) }, { left: d(3), right: a(3) }]);
+  });
+  it('pads the shorter side of unequal runs with null', () => {
+    expect(splitRows(hunk([d(2), a(2), a(3), c(4)]))).toEqual([
+      { left: d(2), right: a(2) }, { left: null, right: a(3) }, { left: c(4), right: c(4) },
+    ]);
+  });
+  it('leaves a deletion-only run and an addition-only run alone', () => {
+    expect(splitRows(hunk([d(2), c(3), a(4)]))).toEqual([
+      { left: d(2), right: null }, { left: c(3), right: c(3) }, { left: null, right: a(4) },
+    ]);
+  });
+  it('starts a new pair when a deletion follows additions', () => {
+    expect(splitRows(hunk([a(1), d(1)]))).toEqual([{ left: null, right: a(1) }, { left: d(1), right: null }]);
   });
 });
