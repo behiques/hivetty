@@ -14,6 +14,7 @@ import {
   readViewerLogin,
   toChecks,
   toPrDetail,
+  toPrTimeline,
   toPrRecord,
   toState,
 } from '../../../../../electron/main/integrations/github/mapping';
@@ -707,5 +708,48 @@ describe('readThreadPr and mutated (HIVE-207)', () => {
     expect(echoedId({ comment: { id: 'C' } }, 'comment')).toBe(true);
     expect(echoedId({ comment: null }, 'comment')).toBe(false);
     expect(echoedId({ comment: { id: 7 } }, 'comment')).toBe(false);
+  });
+});
+
+describe('toPrTimeline (HIVE-208)', () => {
+  const suite = (over: Record<string, unknown>) => ({
+    status: 'COMPLETED', conclusion: 'SUCCESS', createdAt: '2026-10-03T12:01:00Z', updatedAt: '2026-10-03T12:12:00Z',
+    workflowRun: { runNumber: 2198, url: 'https://github.com/acme/server/actions/runs/9', databaseId: 9, workflow: { name: 'CI' } },
+    checkRuns: { nodes: [] }, ...over,
+  });
+  const payload = (nodes: unknown[], over: Record<string, unknown> = {}) => ({ repository: { pullRequest: {
+    createdAt: '2026-10-03T11:00:00Z', mergedAt: null, isDraft: false, timelineItems: { nodes }, ...over } } });
+
+  it('maps commits, their workflow suites to runs, reviews, comments and events', () => {
+    const timeline = toPrTimeline(payload([
+      { __typename: 'PullRequestCommit', url: 'https://github.com/acme/server/pull/1182/commits/7c21e0f', commit: { oid: '7c21e0f', committedDate: '2026-10-03T12:00:00Z', checkSuites: { nodes: [
+        suite({}),
+        suite({ conclusion: 'FAILURE', workflowRun: { runNumber: 2204, url: 'u2', databaseId: 10, workflow: { name: 'CI' } }, checkRuns: { nodes: [{ name: 'integration' }] } }),
+        suite({ status: 'IN_PROGRESS', conclusion: null, workflowRun: { runNumber: 2210, url: 'u3', databaseId: 11, workflow: { name: 'CI' } } }),
+        suite({ workflowRun: null }),
+      ] } } },
+      { __typename: 'ReadyForReviewEvent', createdAt: '2026-10-03T12:00:00Z', actor: { login: 'shipper-bot' } },
+      { __typename: 'PullRequestReview', submittedAt: '2026-10-03T12:38:00Z', author: { login: 'acr-bot' }, state: 'CHANGES_REQUESTED', url: 'https://github.com/acme/server/pull/1182#pullrequestreview-1' },
+      { __typename: 'IssueComment', createdAt: '2026-10-03T13:31:00Z', author: { login: 'maria' }, url: 'https://github.com/acme/server/pull/1182#issuecomment-1' },
+      { __typename: 'MergedEvent', createdAt: '2026-10-03T14:00:00Z', actor: null },
+    ]));
+    expect(timeline).toMatchObject({
+      createdAt: '2026-10-03T11:00:00Z', mergedAt: null, isDraft: false,
+      commits: [{ oid: '7c21e0f', at: '2026-10-03T12:00:00Z', url: 'https://github.com/acme/server/pull/1182/commits/7c21e0f' }],
+      reviews: [{ at: '2026-10-03T12:38:00Z', author: 'acr-bot', state: 'CHANGES_REQUESTED' }],
+      comments: [{ at: '2026-10-03T13:31:00Z', author: 'maria' }],
+      events: [{ kind: 'ready', actor: 'shipper-bot' }, { kind: 'merged', actor: null }],
+    });
+    expect(timeline?.runs).toEqual([
+      { id: 9, number: 2198, url: 'https://github.com/acme/server/actions/runs/9', sha: '7c21e0f', workflow: 'CI', startedAt: '2026-10-03T12:01:00Z', endedAt: '2026-10-03T12:12:00Z', state: 'passed', failedJobs: [] },
+      { id: 10, number: 2204, url: 'u2', sha: '7c21e0f', workflow: 'CI', startedAt: '2026-10-03T12:01:00Z', endedAt: '2026-10-03T12:12:00Z', state: 'failed', failedJobs: ['integration'] },
+      { id: 11, number: 2210, url: 'u3', sha: '7c21e0f', workflow: 'CI', startedAt: '2026-10-03T12:01:00Z', endedAt: null, state: 'running', failedJobs: [] },
+    ]);
+  });
+
+  it('is null without a pull request or its createdAt, and drops unreadable items', () => {
+    expect(toPrTimeline({ repository: null })).toBeNull();
+    expect(toPrTimeline(payload([], { createdAt: null }))).toBeNull();
+    expect(toPrTimeline(payload([{ __typename: 'IssueComment' }, { __typename: 'Mystery' }, null]))).toMatchObject({ comments: [], commits: [], events: [] });
   });
 });
