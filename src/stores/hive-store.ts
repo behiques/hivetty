@@ -130,11 +130,13 @@ import {
   type OpenAsk,
 } from '@shared/ledger-contract';
 import {
+  afterTarget,
   agentSiteFor,
   asksMeAbout,
   buildProgressFor,
   closedAskThreads,
   holderPost,
+  isHeld,
   isShipping,
   matches,
   mergeAsk,
@@ -7176,6 +7178,58 @@ export const accountLimitsOf = (metrics: Record<string, SessionMetrics>): Accoun
 /** Home's Limits (HIVE-200). Four primitives under `useShallow`, so only a moved number re-renders. */
 export const useAccountLimits = (): AccountLimits =>
   useHiveStore(useShallow((state) => accountLimitsOf(state.metrics)));
+
+/** One Coming up row (HIVE-200): a scheduled wake (`at`, ms) or a held pickup (no `at`). */
+export interface ComingUpRow {
+  id: string;
+  agent: string;
+  what: string;
+  at?: number;
+}
+
+const COMING_UP_MAX = 5;
+
+export function comingUpOf(
+  agents: readonly { id: string; sub: string; nextRunAt: number }[],
+  ledger: readonly LedgerEntry[],
+): ComingUpRow[] {
+  const scheduled = [...agents]
+    .sort((a, b) => a.nextRunAt - b.nextRunAt)
+    .map((a) => ({ id: a.id, agent: a.id, what: a.sub, at: a.nextRunAt }));
+  const heldRows = ledger.flatMap((entry) => {
+    const target = afterTarget(entry);
+    if (target === undefined || entry.to === undefined || !isHeld(entry, ledger)) return [];
+    const ticket = entry.meta?.['ticket'];
+    const work = typeof ticket === 'string' ? ticket : (entry.body.split('\n')[0] ?? '');
+    const repo = target.repo.split('/').pop() ?? target.repo;
+    return [{ id: entry.id, agent: entry.to, what: `picks up ${work} when ${repo}#${target.pr} ships` }];
+  });
+  return [...scheduled, ...heldRows].slice(0, COMING_UP_MAX);
+}
+
+const COMING_UP_SEP = '\u0000';
+
+/** Scheduled agents as strings, so `useShallow` sees no change on a terminal write. */
+const scheduledKeys = (state: HiveState): string[] =>
+  state.agentOrder.flatMap((id) => {
+    const entity = state.entities[id];
+    return entity !== undefined && isAgent(entity) && entity.nextRunAt !== undefined
+      ? [[entity.id, entity.nextRunAt, entity.sub].join(COMING_UP_SEP)]
+      : [];
+  });
+
+/** Home's Coming up (HIVE-200): scheduled wakes soonest first, then held pickups. At most five. */
+export const useComingUp = (): ComingUpRow[] => {
+  const keys = useHiveStore(useShallow(scheduledKeys));
+  const ledger = useHiveStore((state) => state.ledger);
+  return useMemo(() => {
+    const agents = keys.map((key) => {
+      const [id = '', at = '0', sub = ''] = key.split(COMING_UP_SEP);
+      return { id, sub, nextRunAt: Number(at) };
+    });
+    return comingUpOf(agents, ledger);
+  }, [keys, ledger]);
+};
 
 /**
  * The session's plan, or undefined (HIVE-179). Stable identity: main
