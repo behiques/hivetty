@@ -1,0 +1,8 @@
+# Throwaway (HIVE-206 demo). Never merged.
+name: Preview
+on: pull_request
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 10 && echo deployed

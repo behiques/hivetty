@@ -1,0 +1,60 @@
+# Throwaway (HIVE-206 demo): every Checks-tab state in one run. Never merged.
+name: CI
+on: pull_request
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo installed
+  lint:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 20 && echo clean
+  unit:
+    needs: install
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - run: sleep 15 && echo "shard ${{ matrix.shard }} passed"
+  integration:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start postgres
+        run: sleep 5
+      - name: Migrate
+        run: sleep 3
+      - name: Run integration tests
+        run: |
+          echo " RUN  v3.2.4 /home/runner/work/app"
+          echo "  ✓ FeeRuleValidator › accepts a corporation with the 2026 minimum (41 ms)"
+          echo "  ✓ FeeRuleValidator › reads the minimum from the fee table (12 ms)"
+          echo "  ✕ FeeRuleValidator › rejects a Delaware LLC without a registered agent (88 ms)"
+          echo ""
+          echo "    expect(received).toBe(expected)"
+          echo "    Expected: 422"
+          echo "    Received: 200"
+          echo ""
+          echo "      82 |   const res = await validate(llcWithoutAgent);"
+          echo "      83 |   expect(res.status)"
+          echo "    > 84 |     .toBe(422);"
+          echo "         at test/integration/fee-rule.spec.ts:84:8"
+          echo ""
+          echo "Tests: 1 failed, 46 passed, 47 total"
+          exit 1
+      - name: Upload coverage
+        run: echo uploaded
+  e2e:
+    needs: [lint, unit]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run e2e
+        run: sleep 420
+  build:
+    needs: [integration, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo built
