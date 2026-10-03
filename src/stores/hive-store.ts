@@ -134,13 +134,19 @@ import {
   asksMeAbout,
   buildProgressFor,
   closedAskThreads,
+  holderPost,
   isShipping,
   matches,
   mergeWaiting,
   openAsks,
+  prEvents,
+  prOpener,
+  reviewUrls,
   shipStage,
+  shipTrack,
   thread,
   type BuildProgress,
+  type ShipTrack,
 } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
 import { trimNotifications, waitsOnYou, type AskOpen } from '@shared/notification-lanes';
@@ -7673,6 +7679,18 @@ export const useLoadTicketDetail = (): ((key: string, want: TicketDetailWant) =>
 export const useRefreshTicketDetail = (): ((key: string, want: TicketDetailWant) => Promise<void>) =>
   useHiveStore((state) => state.refreshTicketDetail);
 
+/** One PR's detail, or undefined before its first load (HIVE-205). `key` is {@link prKey}'s. */
+export const usePrDetail = (key: string): PrDetailEntry | undefined =>
+  useHiveStore((state) => state.prDetails[key]);
+
+/** Read, or re-read, one PR's detail (HIVE-205). */
+export const useLoadPrDetail = (): ((owner: string, repo: string, n: number) => Promise<void>) =>
+  useHiveStore((state) => state.loadPrDetail);
+
+/** Comment on a PR, then re-read it (HIVE-205). */
+export const useCommentOnPr = (): ((owner: string, repo: string, n: number, body: string) => Promise<GhResult<true>>) =>
+  useHiveStore((state) => state.commentOnPr);
+
 /** Show a just-posted comment on the open ticket (HIVE-203). */
 export const useAppendTicketComment = (): ((key: string, comment: JiraComment) => void) =>
   useHiveStore((state) => state.appendTicketComment);
@@ -8489,6 +8507,40 @@ export const useShipping = (slug: string, n: number): boolean => {
   const entries = useHiveStore((state) => state.ledger);
 
   return useMemo(() => isShipping(entries, slug, n), [entries, slug, n]);
+};
+
+/**
+ * One PR's ship track (HIVE-205), memoised over the tail like {@link useShipping}.
+ * `Date.now()` is read inside the memo, as the `openAsks` selectors do: the open
+ * stop's time moves on the next ledger change or page poll, not by the second.
+ */
+export const useShipTrack = (slug: string, n: number): ShipTrack => {
+  const entries = useHiveStore((state) => state.ledger);
+  return useMemo(() => shipTrack(entries, slug, n, Date.now()), [entries, slug, n]);
+};
+
+/** Every ledger entry naming one PR, oldest first: the Everything filter (HIVE-205). */
+export const usePrEvents = (slug: string, n: number): LedgerEntry[] => {
+  const entries = useHiveStore((state) => state.ledger);
+  return useMemo(() => prEvents(entries, slug, n), [entries, slug, n]);
+};
+
+/** Who handed a PR to the shipper, for the header's "opened by" (HIVE-205). */
+export const usePrOpener = (slug: string, n: number): string | null => {
+  const entries = useHiveStore((state) => state.ledger);
+  return useMemo(() => prOpener(entries, slug, n), [entries, slug, n]);
+};
+
+/** acr's review URLs, for "via the Hive" (HIVE-205). */
+export const useReviewUrls = (): ReadonlySet<string> => {
+  const entries = useHiveStore((state) => state.ledger);
+  return useMemo(() => reviewUrls(entries), [entries]);
+};
+
+/** The holder's newest entry naming a PR, for the ship track's "now" line (HIVE-205). */
+export const useHolderPost = (slug: string, n: number, holder: string | null): LedgerEntry | null => {
+  const entries = useHiveStore((state) => state.ledger);
+  return useMemo(() => (holder === null ? null : holderPost(entries, slug, n, holder)), [entries, slug, n, holder]);
 };
 
 /** The builder's latest progress on a ticket, for its card's line (HIVE-171). */
