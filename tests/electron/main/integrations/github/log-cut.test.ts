@@ -41,4 +41,56 @@ describe('cutLog', () => {
   it('keeps a short log whole', () => {
     expect(cutLog(log(['a', 'b']))).toEqual({ lines: ['a', 'b'], truncated: false });
   });
+
+  describe('a whole-job log from the REST endpoint', () => {
+    const T = '2026-10-03T16:41:35.2964790Z ';
+    const rest = (lines: string[]) => `\uFEFF${lines.map((line) => T + line).join('\n')}\n`;
+    const LOG = rest([
+      'Current runner version: 2.337.0',
+      '##[group]Run pnpm install',
+      'pnpm install',
+      '##[endgroup]',
+      'npm warn Error-ish noise from an earlier step',
+      '##[group]Run pnpm test',
+      '\u001b[36;1mecho "  ✕ the echoed script, not the output"\u001b[0m',
+      'shell: /usr/bin/bash -e {0}',
+      '##[endgroup]',
+      '  ✓ passes (1 ms)',
+      '  ✕ fails (2 ms)',
+      'Tests: 1 failed, 1 passed, 2 total',
+      '##[error]Process completed with exit code 1.',
+      '##[group]Run actions/upload-artifact',
+      'a later step',
+      '##[endgroup]',
+    ]);
+
+    it('strips the BOM and timestamps, and cuts to the failed step’s output past its echoed script', () => {
+      expect(cutLog(LOG)).toEqual({
+        lines: ['  ✓ passes (1 ms)', '  ✕ fails (2 ms)', 'Tests: 1 failed, 1 passed, 2 total', '##[error]Process completed with exit code 1.'],
+        truncated: true,
+      });
+    });
+
+    it('cuts to the last failed step when an earlier continue-on-error step also errored', () => {
+      const cut = cutLog(
+        rest([
+          '##[group]Run pnpm audit',
+          'pnpm audit',
+          '##[endgroup]',
+          'Error: advisory noise (continue-on-error)',
+          '##[error]Process completed with exit code 1.',
+          '##[group]Run pnpm test',
+          'pnpm test',
+          '##[endgroup]',
+          '  ✕ the real failure (2 ms)',
+          '##[error]Process completed with exit code 1.',
+        ]),
+      );
+      expect(cut.lines).toEqual(['  ✕ the real failure (2 ms)', '##[error]Process completed with exit code 1.']);
+    });
+
+    it('keeps the whole job when nothing failed by name', () => {
+      expect(cutLog(rest(['##[group]Run true', 'true', '##[endgroup]', 'ok'])).lines).toEqual(['##[group]Run true', 'true', '##[endgroup]', 'ok']);
+    });
+  });
 });

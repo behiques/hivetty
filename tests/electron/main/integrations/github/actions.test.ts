@@ -40,11 +40,12 @@ describe('createActionsClient (HIVE-206)', () => {
     expect(result.ok && result.value[0]?.steps[1]).toMatchObject({ conclusion: 'skipped', startedAt: null, completedAt: null });
   });
 
-  it('reads one job’s failed log and cuts it', async () => {
+  it('reads one job’s log from the REST endpoint, which serves it before the run ends, and cuts it', async () => {
     const calls: string[][] = [];
-    const client = createActionsClient('/bin/gh', answering({ stdout: 'j\ts\t2026-10-03T14:00:00.1Z Error: boom\n' }, calls));
+    const client = createActionsClient('/bin/gh', answering({ stdout: '\uFEFF2026-10-03T14:00:00.1Z Error: boom\n' }, calls));
     await expect(client.log(REF, 77)).resolves.toEqual({ ok: true, value: { lines: ['Error: boom'], truncated: false } });
-    expect(calls[0]).toEqual(['run', 'view', '--job', '77', '--repo', 'acme/nova-web', '--log-failed']);
+    // Not `gh run view --log-failed`: it refuses every log until the whole run completes.
+    expect(calls[0]).toEqual(['api', '--allow-escape-sequences', 'repos/acme/nova-web/actions/jobs/77/logs']);
   });
 
   it('re-runs the failed jobs of a run', async () => {
