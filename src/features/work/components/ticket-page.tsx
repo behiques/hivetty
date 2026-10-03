@@ -5,6 +5,7 @@ import type { Ticket } from '@/types/ticket';
 
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 import { AdfBlocks } from '@features/work/components/adf-blocks';
+import { TicketProperties } from '@features/work/components/ticket-properties';
 import { TicketTransitionMenu } from '@features/work/components/ticket-transition-menu';
 import {
   useLoadTicketDetail,
@@ -172,7 +173,9 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
         <Header ticketKey={ticketKey} ticket={ticket} />
         <Description ticketKey={ticketKey} />
       </div>
-      <aside className="w-[260px] shrink-0 border-l border-border-soft px-4 py-[18px]" />
+      <aside className="w-[260px] shrink-0 overflow-y-auto border-l border-border-soft px-4 py-[18px]">
+        <TicketProperties ticketKey={ticketKey} />
+      </aside>
     </section>
   );
 }
