@@ -368,6 +368,10 @@ Components never read a store object directly and never call `getState()`.
 | `useHatchery()` | every swept PR with its hatch status, in the Hatchery's order (HIVE-215) |
 | `useHatcherySearch()` | the same over the PR search; `null` with no search |
 | `usePrNeedsYouCount()` | how many swept PRs read SUMMONS; 0 unless `prSource` is live |
+| `usePrsQuiet()` | the sweep is live and empty: the empty Hatchery, and no PRs panel (HIVE-205) |
+| `usePrDetail(prKey(owner, repo, n))` | one PR's detail as read, `{ state, detail?, problem?, readAt? }` (HIVE-205) |
+| `useShipTrack(slug, n)` | the shipper's eight stops for one PR, with time and holder (HIVE-205) |
+| `useMergeAsk(slug, n)` | the shipper's open merge card for one PR, the ask the PR page's Merge answers (HIVE-205) |
 | `useSessionPr(id)` | one row's PR, matched on its branch |
 | `useHasResumable()` | whether the fleet table reserves its Resume column |
 | `useMarkRead()` | mark one notification read, by index |
@@ -428,6 +432,22 @@ and `needsYou` (SUMMONS, only ever on your own PR). It is in `lib`, not
   counts and the session panel's PR tab read.
 - `useHatcherySearch()`: the same over the search; `null` with no search.
 - `usePrNeedsYouCount()`: SUMMONS in the sweep; 0 unless `prSource` is live.
+
+The PR page (HIVE-205) reads one more slice and four ledger readings. `prDetails`,
+keyed by `prKey(owner, repo, n)` lowercased, holds each opened PR's detail
+(`loadPrDetail` is the first read and every refresh; capped at
+`PR_DETAIL_CAP`; a PR leaving the sweep drops its detail). `commentOnPr`
+answers the `GhResult` and re-reads on success. The readings, all memoised over
+the ledger: `useShipTrack`, `usePrEvents` (Everything), `usePrOpener` ("opened
+by"), `useReviewUrls` ("via the Hive"), `useHolderPost` (the track's now line)
+and `useMergeAsk`. `usePrsQuiet()` is the empty Hatchery.
+
+The ui-store's PRs fields are flat, as `workTicket` and `agentPage` are, and none
+is persisted: `prPage` (the last PR opened, which `useOpenPr()` keeps while it is
+still a row), `prTab`, `prsFolded` (the HATCHED fold, folded by default),
+`prConversation` (Comments or Everything) and `prSearchOpen` (the panel's search
+row; also what lets a quiet Hatchery draw its panel). The stage resolves to a
+`prs` view in round two on the PRs place, just below Agents.
 
 `Pr` (and `PrRecord`) carry `mergedAt` and `mine`; `Pr` also carries `updatedAt`.
 
