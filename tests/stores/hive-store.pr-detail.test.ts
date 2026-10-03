@@ -20,6 +20,9 @@ vi.mock('@lib/github', () => ({
   searchPullRequests: () => Promise.resolve(null),
   readPrDetail: (request: unknown) => readPrDetail(request),
   postPrComment: (request: unknown) => postPrComment(request),
+  readPrDiff: () => Promise.resolve(null),
+  writePrThread: () => Promise.resolve(null),
+  writePrViewed: () => Promise.resolve(null),
 }));
 
 const state = () => useHiveStore.getState();
