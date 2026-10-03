@@ -7,6 +7,7 @@ import { emptySnapshot } from '@shared/config-contract';
 import { HomePage } from '@features/home/components/home-page';
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 import { useHiveStore } from '@stores/hive-store';
+import { notif } from '@tests/support/notifications';
 import { testProjectKey } from '@tests/support/project-key';
 
 const sess = (id: string, status: Session['status']): Session => ({
@@ -40,8 +41,21 @@ describe('HomePage', () => {
     render(<HomePage />);
     expect(screen.getByRole('region', { name: 'Home' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toHaveClass('sr-only');
-    expect(screen.getByRole('heading', { level: 2, name: '1 thing needs you' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: '1 thing needs you. 1 working · 0 resting · 1 projects · 0 agents' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Nothing needs you' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Nothing needs you. 1 working · 0 resting · 1 projects · 0 agents' })).toBeInTheDocument();
+  });
+
+  it('counts the Summons queue, not the comb', () => {
+    // The comb's own count is 1 (session b waiting); the queue holds b's block and an ask from an agent not in the comb.
+    useHiveStore.setState({
+      notifs: [
+        notif({ action: { type: 'session', entityId: 'b' } }),
+        notif({ kind: 'agent.ask', subject: 'ghost', action: { type: 'ask', thread: 't1' } }),
+      ],
+    });
+    render(<HomePage />);
+    expect(screen.getByRole('heading', { level: 2, name: '2 things need you' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /^2 things need you\. / })).toBeInTheDocument();
   });
 
   it('mounts the strip under the comb', () => {

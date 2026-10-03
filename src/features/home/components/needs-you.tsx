@@ -5,13 +5,8 @@ import type { HiveNotification } from '@/types/notification';
 import { waitText } from '@features/home/cell-text';
 import { StripHead, StripRow } from '@features/home/components/strip-row';
 import { useOnStage } from '@hooks/use-on-stage';
-import {
-  currentRowFor,
-  isAgentId,
-  useDisplayName,
-  useOpenEntity,
-  useSummons,
-} from '@stores/hive-store';
+import { useDisplayName, useSummons } from '@stores/hive-store';
+import { useInboxActions } from '@stores/ui-store';
 
 export const NEEDS_YOU_MAX = 5;
 
@@ -22,7 +17,8 @@ const askerOf = (n: HiveNotification): string =>
 function NeedsYouRow({ notif, now }: { notif: HiveNotification; now: number }) {
   const who = askerOf(notif);
   const name = useDisplayName(who);
-  const openEntity = useOpenEntity();
+  const { openInboxDrawer } = useInboxActions();
+  const { action } = notif;
   return (
     <StripRow
       icon={<Circle size={9} weight="fill" className="text-amber" aria-hidden="true" />}
@@ -30,17 +26,19 @@ function NeedsYouRow({ notif, now }: { notif: HiveNotification; now: number }) {
       detail={who === '' ? (notif.body.split('\n')[0] ?? '') : notif.title}
       value={waitText(notif.createdAt, now)}
       valueClass="text-amber"
-      // Until HIVE-198's drawer: open the asker. HIVE-198 swaps this for its drawer-on-an-ask action.
-      onClick={
-        who === '' ? undefined : () => openEntity(isAgentId(who) ? who : currentRowFor(who))
-      }
+      onClick={() => openInboxDrawer(action.type === 'ask' ? action.thread : undefined)}
     />
   );
 }
 
-/** Home's Needs you (HIVE-200): HIVE-214's queue, the pill's count, oldest wait first, at most five rows. */
+/**
+ * Home's Needs you (HIVE-200): HIVE-214's queue, the pill's count, oldest wait
+ * first, at most five rows. Every row opens HIVE-198's drawer, on its thread for
+ * an ask (HIVE-217); nothing is answered from Home.
+ */
 export function NeedsYou() {
   const { asks, sessions } = useSummons(useOnStage());
+  const { openInboxDrawer } = useInboxActions();
   const queue = [...asks, ...sessions].sort((a, b) => a.createdAt - b.createdAt);
   const now = Date.now();
   const more = queue.length - NEEDS_YOU_MAX;
@@ -54,7 +52,15 @@ export function NeedsYou() {
       {queue.slice(0, NEEDS_YOU_MAX).map((n) => (
         <NeedsYouRow key={n.id} notif={n} now={now} />
       ))}
-      {more > 0 && <p className="px-1 py-[5px] text-[12px] text-muted">{more} more in the Inbox ›</p>}
+      {more > 0 && (
+        <button
+          type="button"
+          className="px-1 py-[5px] text-left text-[12px] text-muted hover:text-ink"
+          onClick={() => openInboxDrawer()}
+        >
+          {more} more in the Inbox ›
+        </button>
+      )}
     </section>
   );
 }

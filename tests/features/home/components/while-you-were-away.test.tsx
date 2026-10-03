@@ -70,6 +70,47 @@ describe('WhileYouWereAway', () => {
     expect(screen.getByText('A-1, B-2 and 1 more have no session')).toBeInTheDocument();
   });
 
+  it('draws each Echo row only when non-zero, after the first four, in order', () => {
+    const echo = (kind: 'pr.checks_failed' | 'pr.approved' | 'clone.done', title: string, body = '') =>
+      notif({ kind, title, body, createdAt: SINCE + 1, action: { type: 'none' } });
+    useHiveStore.setState({
+      notifs: [notif({ kind: 'session.goal', title: 'pty-resize goal done', createdAt: SINCE + 1 })],
+    });
+    const { rerender } = render(<WhileYouWereAway />);
+    expect(screen.queryByText(/checks? failed|approved|^Clone/)).toBeNull();
+
+    useHiveStore.setState((s) => ({
+      notifs: [
+        ...s.notifs,
+        echo('clone.done', 'Clone failed', 'fatal: repository not found'),
+        echo('pr.approved', '#305 approved'),
+        echo('pr.checks_failed', 'Checks failed on #305'),
+        echo('pr.checks_failed', 'Checks failed on #306'),
+        echo('clone.done', 'Clone finished', 'The repository is ready.'),
+      ],
+    }));
+    rerender(<WhileYouWereAway />);
+    const text = screen.getByRole('region', { name: /while you were away/i }).textContent ?? '';
+    const order = ['pty-resize goal done', '2 checks failed', '1 PR approved', 'Clone failed', 'Clone finished'];
+    expect(order.map((t) => text.indexOf(t))).toEqual([...order.map((t) => text.indexOf(t))].sort((a, b) => a - b));
+    expect(order.every((t) => text.includes(t))).toBe(true);
+    expect(screen.getByText('Checks failed on #305')).toBeInTheDocument();
+    expect(screen.getByText('#305 approved')).toBeInTheDocument();
+    expect(screen.getByText('fatal: repository not found')).toBeInTheDocument();
+  });
+
+  it('caps at six rows with a more line', () => {
+    useHiveStore.setState({
+      notifs: [1, 2, 3, 4, 5, 6, 7, 8].map((n) =>
+        notif({ kind: 'session.goal', title: `goal ${n}`, createdAt: SINCE + n }),
+      ),
+    });
+    render(<WhileYouWereAway />);
+    expect(screen.getByText('goal 6')).toBeInTheDocument();
+    expect(screen.queryByText('goal 7')).toBeNull();
+    expect(screen.getByText('2 more')).toBeInTheDocument();
+  });
+
   it('words the hatched PRs', () => {
     expect(hatchedLine([302])).toBe('#302 hatched');
     expect(hatchedLine([302, 303])).toBe('#302 and #303 hatched');

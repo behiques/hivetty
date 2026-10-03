@@ -109,6 +109,7 @@ bottom-right corner, just above the page's own input. Classic is unchanged.
 - **Yours again.** A session in the Sessions panel that finished and is
   waiting for you reads "yours again" until you open it.
 
-Echoes (news cards) show nowhere in round two yet; Home's strip brings them
-back (HIVE-200).
+Echoes (news cards) are not in the Inbox in round two: they show on Home,
+under **While you were away**, once nothing needs you. On Home, a **Needs you**
+row opens the drawer on that ask.
 

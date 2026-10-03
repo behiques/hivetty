@@ -2,8 +2,9 @@ import { CombHeadline, headlineText, summaryText } from '@features/home/componen
 import { FirstRun } from '@features/home/components/first-run';
 import { HomeStrip } from '@features/home/components/home-strip';
 import { TheComb } from '@features/home/components/the-comb';
+import { useOnStage } from '@hooks/use-on-stage';
 import { useProjectConfig } from '@hooks/use-project-config';
-import { useCombSummary, useProjects } from '@stores/hive-store';
+import { useCombSummary, useProjects, useSummonsCount } from '@stores/hive-store';
 
 /**
  * Home under the Round two layout: the headline over The Comb (HIVE-199), the
@@ -14,6 +15,7 @@ import { useCombSummary, useProjects } from '@stores/hive-store';
  */
 export function HomePage() {
   const summary = useCombSummary();
+  const needs = useSummonsCount(useOnStage());
   const projects = useProjects();
   // `null` is the config not having landed yet; with no bridge (the browser
   // target) it never will, and that absence is the answer, so it is first run.
@@ -27,8 +29,8 @@ export function HomePage() {
       ) : (
         <>
           <div className="relative">
-            <TheComb label={`${headlineText(summary.needs)}. ${summaryText(summary)}`} />
-            <CombHeadline summary={summary} />
+            <TheComb label={`${headlineText(needs)}. ${summaryText(summary)}`} />
+            <CombHeadline needs={needs} summary={summary} />
           </div>
           <HomeStrip />
         </>
