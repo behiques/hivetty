@@ -283,7 +283,7 @@ describe('AgentsPanel', () => {
       const counts = heading.nextElementSibling as HTMLElement;
 
       expect(counts).toHaveTextContent('2 summons · 2 morphing');
-      expect(screen.getByText('2 summons')).toHaveClass('text-amber');
+      expect(screen.getByText('2 summons')).toHaveClass('text-amber-count');
       expect(screen.getByText('2 morphing')).toHaveClass('text-green');
     });
 

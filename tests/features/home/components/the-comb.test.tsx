@@ -118,6 +118,27 @@ describe('TheComb — the loop', () => {
     expect(fills()).toBeGreaterThan(0);
   });
 
+  it('stops the loop when reduced motion turns on, and starts it when it turns off', () => {
+    const { rerender } = render(<TheComb label="x" />);
+    const running = FakeIntersectionObserver.last!;
+    running.fire(true);
+    expect(raf).toHaveBeenCalled();
+
+    motion.reduced = true;
+    rerender(<TheComb label="x" />);
+    expect(caf).toHaveBeenCalledWith(1);
+    // No new loop is wired up: nothing observes the canvas for a frame to start.
+    expect(FakeIntersectionObserver.last).toBe(running);
+    raf.mockClear();
+    rerender(<TheComb label="x" />);
+    expect(raf).not.toHaveBeenCalled();
+
+    motion.reduced = false;
+    rerender(<TheComb label="x" />);
+    FakeIntersectionObserver.last?.fire(true);
+    expect(raf).toHaveBeenCalled();
+  });
+
   it('repaints the still frame at once on a theme switch', () => {
     motion.reduced = true;
     act(() => useAppearanceStore.getState().setTheme('dark'));

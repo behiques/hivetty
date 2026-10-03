@@ -74,6 +74,24 @@ describe('themeCss', () => {
     expect(out).toContain('--cc-chitin: #b9a7f0;');
   });
 
+  it.each(['dark', 'light'] as const)(
+    'derives both creature tokens in %s when the theme leaves both out',
+    (mode) => {
+      const theme = structuredClone(BUILT_IN_THEME);
+      delete theme.modes[mode].ui.creep;
+      delete theme.modes[mode].ui.chitin;
+      const derived = swarmPaletteOf(theme.modes[mode].ui);
+      const out = themeCss(theme);
+      // apply.ts's own selectors: `:root:root` for dark, the light one nested under it.
+      const opener = mode === 'dark' ? ':root:root {' : ":root:root body[data-theme='light'] {";
+      const start = out.indexOf(opener);
+      expect(start).toBeGreaterThan(-1);
+      const section = out.slice(start, out.indexOf('}', start));
+      expect(section).toContain(`--cc-creep: ${derived.creep};`);
+      expect(section).toContain(`--cc-chitin: ${derived.chitin};`);
+    },
+  );
+
   it('emits no spacing tokens — a theme is colour', () => {
     expect(css).not.toContain('--cc-rail-');
     expect(css).not.toContain('--cc-row-py');

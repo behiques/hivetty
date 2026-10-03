@@ -1,12 +1,14 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PrFiles } from '@features/pull-requests/components/pr-files';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { prKey, useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { hatchRow } from '@tests/support/hatchery';
 import { prDetail, prFile, prThread } from '@tests/support/pr-detail';
+import { expectNoHexColour, inLight } from '@tests/support/light';
 
 const loadPrDiff = vi.fn(() => Promise.resolve());
 const setPrFileViewed = vi.fn(() => Promise.resolve({ ok: true as const, value: true as const }));
@@ -30,6 +32,10 @@ beforeEach(() => {
   useHiveStore.setState({ loadPrDiff, setPrFileViewed, prDiffs: { [key]: { key, sha: 'abc', state: 'ok', text: TEXT } } });
 });
 
+afterEach(() => {
+  act(() => useAppearanceStore.getState().setTheme('dark'));
+});
+
 describe('PrFiles', () => {
   it('reads the diff at the head sha, and again when the head moves', () => {
     const { rerender } = render(<PrFiles pr={pr} detail={detail} fixerOnIt={false} />);
@@ -37,6 +43,13 @@ describe('PrFiles', () => {
     rerender(<PrFiles pr={pr} detail={{ ...detail, headSha: 'def' }} fixerOnIt={false} />);
     expect(loadPrDiff).toHaveBeenLastCalledWith(pr.owner, pr.repo, pr.n, 'def');
     expect(loadPrDiff).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders in light on tokens alone (HIVE-210)', () => {
+    inLight();
+    const { container } = render(<PrFiles pr={pr} detail={detail} fixerOnIt={false} />);
+    expect(screen.getByRole('heading', { name: 'src/fees/validator.ts' })).toBeInTheDocument();
+    expectNoHexColour(container);
   });
 
   it('opens on the first file with an open thread', () => {
