@@ -198,9 +198,9 @@ body {
   }
 }
 
-/* The empty Hatchery's dormant egg (HIVE-205): one 7s loop. It rocks, a crack
-   of light opens half way and closes, the yolk glows, spores drift, the creep
-   breathes. Nothing emerges. `useReducedMotion` drops every class. */
+/* The empty Hatchery's dormant egg (HIVE-205): one 7s loop. It rocks, the yolk
+   glows, spores drift, the creep breathes. Nothing emerges. `useReducedMotion`
+   drops every class. */
 @keyframes cceggrock {
   0%,
   30%,
@@ -221,26 +221,6 @@ body {
   }
   60% {
     transform: rotate(0deg);
-  }
-}
-
-@keyframes cceggcrack {
-  0%,
-  38% {
-    stroke-dashoffset: 100;
-    opacity: 1;
-  }
-  52% {
-    stroke-dashoffset: 55;
-  }
-  62% {
-    stroke-dashoffset: 55;
-    opacity: 1;
-  }
-  78%,
-  100% {
-    stroke-dashoffset: 100;
-    opacity: 0;
   }
 }
 

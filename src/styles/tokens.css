@@ -380,7 +380,6 @@ body[data-theme='light'] {
   --animate-ccblink: ccblink 1s step-end infinite;
   --animate-ccflap: ccflap 360ms ease-in-out 1;
   --animate-cceggrock: cceggrock 7s ease-in-out infinite;
-  --animate-cceggcrack: cceggcrack 7s ease-in-out infinite;
   --animate-cceggglow: cceggglow 7s ease-in-out infinite;
   --animate-cceggspeck: cceggspeck 7s ease-in-out infinite;
   --animate-cceggocc: cceggocc 7s ease-in-out infinite;
