@@ -8,12 +8,22 @@ import type { Tone } from '@lib/swarm/tone';
  * and `box` the `[x, y, w, h]` the drawing occupies in its own units. `draw`
  * takes the loop time, the drawing scale (the artifact's `det` threshold reads
  * it) and the active tone.
+ *
+ * `o` carries the artifact's per-creature options: `field` for the hover
+ * mutalisk, `G` (the ground line) and `layer` for the overlord. The app
+ * passes none of them.
  */
+export interface BroodOptions {
+  field?: boolean;
+  G?: number;
+  layer?: 'air' | 'ground';
+}
+
 export interface BroodCreature {
   readonly dur: number;
   readonly rest: number;
   readonly box: readonly [number, number, number, number];
-  draw(ctx: CanvasRenderingContext2D, t: number, s: number, T: Tone, o?: { field?: boolean }): void;
+  draw(ctx: CanvasRenderingContext2D, t: number, s: number, T: Tone, o?: BroodOptions): void;
 }
 
 /**
