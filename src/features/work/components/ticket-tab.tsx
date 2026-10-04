@@ -35,7 +35,7 @@ function Section({ title, count, children }: { title: string; count?: number; ch
     <section className="flex flex-col gap-1.5">
       <h3 className="flex items-baseline gap-1.5 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase">
         {title}
-        {count === undefined ? null : <span className="font-mono text-muted">{count}</span>}
+        {count === undefined ? null : <span className="tabular-nums text-muted">{count}</span>}
       </h3>
       {children}
     </section>
@@ -140,10 +140,10 @@ function TicketLinks({ ticketKey, sessionId }: { ticketKey: string; sessionId: s
                   className="flex items-center gap-2 rounded-md px-1.5 py-1 text-[12px] text-muted hover:bg-hover"
                 >
                   <span>{ARC_LABEL[arc]}</span>
-                  <b className="font-mono text-ink">{tickets.length}</b>
+                  <b className="tabular-nums text-ink">{tickets.length}</b>
                   <span className="flex-1" />
                   {GLYPH.filter(([category]) => model.counts[arc][category] > 0).map(([category, glyph]) => (
-                    <span key={category} className="font-mono text-[11px]">
+                    <span key={category} className="tabular-nums text-[11px]">
                       {`${glyph}${String(model.counts[arc][category])}`}
                     </span>
                   ))}
@@ -158,7 +158,7 @@ function TicketLinks({ ticketKey, sessionId }: { ticketKey: string; sessionId: s
                           onClick={() => openOnWork(ticket.key)}
                           className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left text-[12px] hover:bg-hover"
                         >
-                          <span className="font-mono text-brand">{ticket.key}</span>
+                          <span className="tabular-nums text-brand">{ticket.key}</span>
                           <span className="min-w-0 flex-1 text-ink">{ticket.summary}</span>
                           <span className={cn('shrink-0', CATEGORY_TEXT[ticket.statusCategory])}>{ticket.status}</span>
                         </button>
@@ -218,7 +218,7 @@ export function TicketTab({ ticketKey, sessionId }: { ticketKey: string; session
     <div className="flex flex-col gap-4 px-1 pt-1 pb-3">
       <header className="flex flex-col gap-1">
         <p className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted">
-          <span className="font-mono font-bold text-brand">{ticketKey}</span>
+          <span className="tabular-nums font-bold text-brand">{ticketKey}</span>
           {ticket?.issueType ? <span>{`· ${ticket.issueType} ·`}</span> : <span>·</span>}
           {ticket ? (
             <span className={cn(STATUS_PILL, CATEGORY_TEXT[ticket.statusCategory])}>{ticket.status}</span>

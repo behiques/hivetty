@@ -74,13 +74,13 @@ function Said({
       <span className="font-medium text-ink">{author}</span>
       {via ? <span className="text-[11px] text-subtle">via the Hive</span> : null}
       {verdict === undefined ? null : (
-        <span className={cn('rounded-[5px] px-[7px] py-0.5 font-mono text-[10.5px] font-semibold', verdict[1])}>
+        <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-[10.5px] font-semibold', verdict[1])}>
           {verdict[0]}
         </span>
       )}
       <span className="flex-1" />
       {at === null ? null : (
-        <time dateTime={at} className="font-mono text-[11px] text-subtle">
+        <time dateTime={at} className="tabular-nums text-[11px] text-subtle">
           {clock(at)}
         </time>
       )}

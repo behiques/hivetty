@@ -145,9 +145,9 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <div className="flex items-center gap-2.5 border-b border-border-soft px-[18px] py-2.5 text-[12.5px]">
-        <h2 className="truncate font-mono text-ink">{file.path}</h2>
-        <span className="font-mono text-green">{`+${String(file.additions)}`}</span>
-        <span className="font-mono text-red">{`−${String(file.deletions)}`}</span>
+        <h2 className="truncate tabular-nums text-ink">{file.path}</h2>
+        <span className="tabular-nums text-green">{`+${String(file.additions)}`}</span>
+        <span className="tabular-nums text-red">{`−${String(file.deletions)}`}</span>
         <span className="flex-1" />
         <label className="flex items-center gap-1.5 text-[12px] text-muted">
           <input

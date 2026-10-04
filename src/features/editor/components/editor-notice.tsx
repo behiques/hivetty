@@ -52,7 +52,7 @@ export function NoticeAction({
     <button
       type="button"
       onClick={onClick}
-      className="shrink-0 rounded px-1.5 py-0.5 font-mono text-[11.5px] text-muted underline underline-offset-2 hover:bg-hover hover:text-ink"
+      className="shrink-0 rounded px-1.5 py-0.5 tabular-nums text-[11.5px] text-muted underline underline-offset-2 hover:bg-hover hover:text-ink"
     >
       {children}
     </button>

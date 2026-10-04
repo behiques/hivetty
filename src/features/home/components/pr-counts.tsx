@@ -15,7 +15,7 @@ export function PrCounts() {
   return (
     <div className="mt-3">
       <StripHead>Pull requests</StripHead>
-      <div className="flex flex-wrap gap-x-3 gap-y-1.5 font-mono text-[9.5px] font-semibold tracking-[0.06em]">
+      <div className="flex flex-wrap gap-x-3 gap-y-1.5 tabular-nums text-[9.5px] font-semibold tracking-[0.06em]">
         {shown.map(({ flap, count, tone }) => (
           <span
             key={flap}

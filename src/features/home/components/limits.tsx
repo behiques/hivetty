@@ -12,7 +12,7 @@ function LimitRow({ label, pct, rest }: { label: string; pct: number; rest: stri
           style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
         />
       </span>
-      <span className="font-mono text-ink">{Math.round(pct)}%</span>
+      <span className="tabular-nums text-ink">{Math.round(pct)}%</span>
       <span className="truncate">{rest ?? ''}</span>
     </div>
   );

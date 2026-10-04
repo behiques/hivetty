@@ -13,7 +13,7 @@ export function PlanRings({ plan }: { plan: SessionPlan }) {
 
   return (
     <>
-      <span className="flex h-[30px] items-center font-mono text-[10px] text-green tabular-nums">
+      <span className="flex h-[30px] items-center text-[10px] text-green tabular-nums">
         {plan.allDone ? '✓' : `${String(done)}/${String(total)}`}
       </span>
       <span aria-hidden className="flex flex-col items-center">

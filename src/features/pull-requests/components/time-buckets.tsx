@@ -29,7 +29,7 @@ export function TimeBuckets({ age, buckets, sentence }: { age: number; buckets: 
             className={`flex min-w-0 items-center gap-1.5 overflow-hidden rounded-[5px] px-2.5 text-[12px] whitespace-nowrap text-ink ${TONE[bucket.name]}`}
             style={{ flex: Math.max(bucket.ms / 60_000, 24) }}
           >
-            <span className="truncate">{bucket.name}</span> <b className="font-mono">{dur(bucket.ms)}</b>
+            <span className="truncate">{bucket.name}</span> <b className="tabular-nums">{dur(bucket.ms)}</b>
           </li>
         ))}
       </ol>

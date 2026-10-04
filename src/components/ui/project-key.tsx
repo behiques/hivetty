@@ -32,7 +32,7 @@ export function ProjectKey({ value, title }: ProjectKeyProps) {
     <Tag
       tone="brand"
       title={title}
-      className="w-11 shrink-0 justify-center font-mono lowercase"
+      className="w-11 shrink-0 justify-center tabular-nums lowercase"
     >
       {value}
     </Tag>

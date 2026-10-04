@@ -32,7 +32,7 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
       <div className="relative" style={{ width: graph.width, height: graph.height }}>
         {graph.groups.map((group) => (
           <div key={group.file} className="absolute rounded-[14px] border border-dashed border-border" style={{ left: group.x, top: group.y, width: group.w, height: group.h }}>
-            <span className="absolute -top-[9px] left-3 bg-bg px-1.5 font-mono text-[11px] text-subtle">{group.file}</span>
+            <span className="absolute -top-[9px] left-3 bg-bg px-1.5 tabular-nums text-[11px] text-subtle">{group.file}</span>
           </div>
         ))}
         <svg aria-hidden className="absolute inset-0 overflow-visible" width={graph.width} height={graph.height}>
@@ -63,8 +63,8 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
             >
               <StateIcon state={node.state} />
               <span className="flex min-w-0 flex-col gap-px">
-                <b className="truncate font-mono text-[12.5px] text-ink">{label}</b>
-                <span className="truncate font-mono text-[11px] text-muted">{node.time}</span>
+                <b className="truncate tabular-nums text-[12.5px] text-ink">{label}</b>
+                <span className="truncate tabular-nums text-[11px] text-muted">{node.time}</span>
               </span>
               {node.progress === null ? null : (
                 <span role="progressbar" aria-label={`${node.label} progress`} aria-valuenow={Math.round(node.progress * 100)} aria-valuemin={0} aria-valuemax={100} className="absolute inset-x-0 bottom-0 h-[3px] bg-border">

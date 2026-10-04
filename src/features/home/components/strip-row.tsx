@@ -31,7 +31,7 @@ export function StripRow({ icon, name, detail, value, valueClass, title, onClick
         <b className="font-semibold text-ink">{name}</b> <span className="text-muted">{detail}</span>
       </span>
       {value !== undefined && (
-        <span className={cn('shrink-0 font-mono text-[11.5px]', valueClass ?? 'text-muted')}>
+        <span className={cn('shrink-0 tabular-nums text-[11.5px]', valueClass ?? 'text-muted')}>
           {value}
         </span>
       )}

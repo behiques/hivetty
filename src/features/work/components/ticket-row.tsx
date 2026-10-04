@@ -37,7 +37,7 @@ export function TicketRow({ row }: { row: TicketRowModel }) {
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-ui text-ink">{row.title}</span>
         <span className="truncate text-ui-sm text-muted">
-          <span className="font-mono text-brand">{row.ticket.key}</span> · {row.fact}
+          <span className="tabular-nums text-brand">{row.ticket.key}</span> · {row.fact}
         </span>
       </span>
     </button>

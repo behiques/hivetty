@@ -67,7 +67,7 @@ function Node({
 }
 
 const Label = ({ at, text, className }: { at: Point; text: string; className?: string }) => (
-  <text x={at.x} y={at.y} textAnchor="middle" className={cn('fill-current font-mono text-[9.5px]', className)}>
+  <text x={at.x} y={at.y} textAnchor="middle" className={cn('fill-current tabular-nums text-[9.5px]', className)}>
     {text}
   </text>
 );
@@ -214,7 +214,7 @@ export function TicketConstellation({
             fill="none"
             strokeDasharray={hop.state === 'todo' ? '2 2' : undefined}
           />
-          <text x={hop.labelAt.x} y={hop.labelAt.y} className="fill-current font-mono text-[9.5px] text-muted">
+          <text x={hop.labelAt.x} y={hop.labelAt.y} className="fill-current tabular-nums text-[9.5px] text-muted">
             {hop.label}
           </text>
         </Node>
@@ -232,7 +232,7 @@ export function TicketConstellation({
             strokeDasharray={bead.state === 'todo' ? '2 2' : undefined}
           />
           {bead.label && bead.labelAt ? (
-            <text x={bead.labelAt.x} y={bead.labelAt.y} className="fill-current font-mono text-[9.5px] text-muted">
+            <text x={bead.labelAt.x} y={bead.labelAt.y} className="fill-current tabular-nums text-[9.5px] text-muted">
               {bead.label}
             </text>
           ) : null}

@@ -189,7 +189,7 @@ export function SkillEditor({
           never engages and a long path pushes the state badge off the panel
           instead of ellipsising. Every path here is absolute and most are long.
         */}
-        <span className="min-w-0 truncate font-mono text-[11px] text-subtle">
+        <span className="min-w-0 truncate tabular-nums text-[11px] text-subtle">
           {path ?? 'New skill'}
         </span>
         <span
