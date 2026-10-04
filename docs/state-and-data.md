@@ -54,11 +54,18 @@ the picker from re-rendering thirteen live terminals.
   flipped by `toggleConsole`; folded, the stage hides the transcript and the
   table takes the page.
   The Work place adds (HIVE-203), none persisted: `workTicket` (the ticket
-  open on the stage, `null` for "Pick a ticket"), `workFolded` (per status
+  last shown on the stage) and `workTicketAt` (where it sat in the list, `-1`
+  when opened from outside it), `workFolded` (per status
   category, Done folded by default) and `workConversation`
   (`'comments' | 'everything'`). `openWorkTicket(key)` opens the page: it
   moves the bar to Work, shows the panel, resets the conversation to Comments
-  and dismisses the overlays.
+  and dismisses the overlays. The stage shows `useShownTicket()`: that ticket
+  while listed, else the one after it, else the first (`lib/open-row.ts`), and
+  writes what it shows back through `rememberWorkTicket`. Agents
+  (`agentPage`/`agentPageAt`) and PRs (`prPage`/`prPageAt`) follow the same
+  rule. `sessionsTab` is what the Sessions place returns to — the tab last
+  opened there, or `'orch'` — kept apart from `activeTab` because the Agents
+  place writes an agent into that.
 - `src/stores/appearance-store.ts` — durable preferences: `theme`, the terminal
   and editor typography, `editorPlacement`, `editorNav`, `editorEditable`,
   `density`, `teamName`, the theme library (`themes`, `activeThemeId`), the

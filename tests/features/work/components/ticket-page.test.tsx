@@ -71,10 +71,32 @@ afterEach(() => {
 });
 
 describe('WorkStage (HIVE-203)', () => {
-  it('asks for a ticket when none is open', () => {
+  it('opens the first ticket when none was opened', async () => {
+    render(<WorkStage />);
+
+    expect(await screen.findByRole('region', { name: 'Ticket GRAC-3018' })).toBeInTheDocument();
+    expect(useUiStore.getState().workTicket).toBe('GRAC-3018');
+  });
+
+  it('asks for a ticket while the list is still empty', () => {
+    useHiveStore.setState({ ticketSource: { kind: 'loading' }, tickets: [] });
     render(<WorkStage />);
 
     expect(screen.getByText('Pick a ticket')).toBeInTheDocument();
+  });
+
+  it('opens the next ticket when the shown one leaves the list, the first when it was the last', async () => {
+    const third = { ...ticket, key: 'GRAC-3030', title: 'Third' };
+    useHiveStore.setState({ tickets: [ticket, { ...ticket, key: 'GRAC-3022', title: 'Other' }, third] });
+    useUiStore.getState().openWorkTicket('GRAC-3022');
+    render(<WorkStage />);
+    expect(await screen.findByRole('region', { name: 'Ticket GRAC-3022' })).toBeInTheDocument();
+
+    act(() => useHiveStore.setState({ tickets: [ticket, third] }));
+    expect(await screen.findByRole('region', { name: 'Ticket GRAC-3030' })).toBeInTheDocument();
+
+    act(() => useHiveStore.setState({ tickets: [ticket] }));
+    expect(await screen.findByRole('region', { name: 'Ticket GRAC-3018' })).toBeInTheDocument();
   });
 
   it('shows the open ticket', async () => {
