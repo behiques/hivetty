@@ -47,7 +47,7 @@ export function PrFileTree({ detail, selected, onSelect }: { detail: PrDetail; s
           {group.dir === '' ? null : (
             <div className="flex items-center gap-2 px-1.5 py-[5px] text-muted">
               <Folder size={13} aria-hidden className="text-subtle" />
-              <span className="font-mono">{group.dir}</span>
+              <span className="tabular-nums">{group.dir}</span>
             </div>
           )}
           {group.files.map((file) => {
@@ -64,7 +64,7 @@ export function PrFileTree({ detail, selected, onSelect }: { detail: PrDetail; s
                   file.path === selected && 'bg-panel-2',
                 )}
               >
-                <span className="truncate font-mono text-ink">{baseName(file.path)}</span>
+                <span className="truncate tabular-nums text-ink">{baseName(file.path)}</span>
                 <span className="flex-1" />
                 {mark === null ? null : (
                   <ChatCircle
@@ -75,7 +75,7 @@ export function PrFileTree({ detail, selected, onSelect }: { detail: PrDetail; s
                 )}
                 {file.viewed === 'viewed' ? <Check size={11} aria-label="viewed" className="text-subtle" /> : null}
                 {file.viewed === 'dismissed' ? <span className="text-[10.5px] text-amber">changed</span> : null}
-                <span className="font-mono text-[10.5px] whitespace-nowrap text-muted">
+                <span className="tabular-nums text-[10.5px] whitespace-nowrap text-muted">
                   {file.deletions === 0 ? `+${String(file.additions)}` : `+${String(file.additions)} −${String(file.deletions)}`}
                 </span>
               </button>

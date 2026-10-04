@@ -14,7 +14,7 @@ export function NextTry({ at, prefix }: { at: number; prefix: string }) {
   const seconds = Math.max(0, Math.ceil((at - now) / 1_000));
   return (
     <>
-      {prefix} <span className="font-mono text-ink">{seconds}s</span>
+      {prefix} <span className="tabular-nums text-ink">{seconds}s</span>
     </>
   );
 }

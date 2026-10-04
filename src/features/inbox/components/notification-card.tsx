@@ -255,7 +255,7 @@ export function NotificationCard({ notif }: NotificationCardProps) {
         {notif.unread ? <span className="sr-only">unread</span> : null}
       </span>
 
-      <span className="shrink-0 font-mono text-[10px] text-subtle">{time}</span>
+      <span className="shrink-0 tabular-nums text-[10px] text-subtle">{time}</span>
     </button>
   );
 

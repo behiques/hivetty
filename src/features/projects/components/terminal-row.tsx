@@ -55,7 +55,7 @@ export function TerminalRow({ id }: TerminalRowProps) {
           aria-hidden="true"
           className={cn('shrink-0', tone)}
         />
-        <span className="flex-1 truncate text-left font-mono text-ui">
+        <span className="flex-1 truncate text-left tabular-nums text-ui">
           {entity.id}
         </span>
         <span className={cn('shrink-0 text-ui-sm', tone)}>
@@ -63,7 +63,7 @@ export function TerminalRow({ id }: TerminalRowProps) {
         </span>
       </span>
 
-      <span className="w-full truncate pl-[15px] text-left font-mono text-ui-sm text-subtle">
+      <span className="w-full truncate pl-[15px] text-left tabular-nums text-ui-sm text-subtle">
         {cwdTail(entity.cwd)}
       </span>
     </button>

@@ -54,7 +54,7 @@ function Facts({ pr, detail }: { pr: Pr; detail: PrDetail | undefined }) {
   const age = useRelativeTime(detail === undefined ? Date.now() : Date.parse(detail.createdAt));
 
   if (detail === undefined) {
-    return <span className="truncate font-mono text-[11.5px] text-muted">{`${pr.repo} · ${pr.branch}`}</span>;
+    return <span className="truncate tabular-nums text-[11.5px] text-muted">{`${pr.repo} · ${pr.branch}`}</span>;
   }
 
   /* D12: an agent opened it ("builder for you" when it is yours), a session by its name, else GitHub's author. */
@@ -67,10 +67,10 @@ function Facts({ pr, detail }: { pr: Pr; detail: PrDetail | undefined }) {
 
   return (
     <span data-testid="pr-facts" className="truncate text-[11.5px] whitespace-nowrap text-muted">
-      <span className="font-mono">{`${pr.repo} · ${detail.headRef} → ${detail.baseRef}`}</span>
+      <span className="tabular-nums">{`${pr.repo} · ${detail.headRef} → ${detail.baseRef}`}</span>
       {' · '}
-      <span className="font-mono text-green">{`+${String(detail.additions)}`}</span>{' '}
-      <span className="font-mono text-red">{`−${String(detail.deletions)}`}</span>
+      <span className="tabular-nums text-green">{`+${String(detail.additions)}`}</span>{' '}
+      <span className="tabular-nums text-red">{`−${String(detail.deletions)}`}</span>
       {` · ${String(detail.changedFiles)} files · opened by ${by}, ${age}`}
     </span>
   );
@@ -127,7 +127,7 @@ export function PrPage({ row }: { row: HatcheryRow }) {
         <GitPullRequest size={20} aria-hidden className={cn('shrink-0', FLAP_TEXT[hatch.tone])} />
         <div className="flex min-w-0 flex-col gap-[3px]">
           <div className="flex items-center gap-2.5">
-            <span className="font-mono text-[15px] font-bold text-ink">{`#${String(pr.n)}`}</span>
+            <span className="tabular-nums text-[15px] font-bold text-ink">{`#${String(pr.n)}`}</span>
             <h1 className="truncate text-[15px] text-ink">{pr.title}</h1>
             <Flap hatch={hatch} />
           </div>

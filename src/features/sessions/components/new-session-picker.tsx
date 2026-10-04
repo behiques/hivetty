@@ -201,10 +201,10 @@ export function NewSessionPicker() {
         {config?.templateWritten ? (
           <div className="flex max-w-[560px] flex-col items-center gap-2.5">
             <SwarmCreature creature="hive" size={120} />
-            <p className="text-center font-mono text-[11.5px] text-muted">
+            <p className="text-center tabular-nums text-[11.5px] text-muted">
               {firstRunPhrase}
             </p>
-            <p className="text-center font-mono text-[11.5px] text-subtle">
+            <p className="text-center tabular-nums text-[11.5px] text-subtle">
               no projects yet — add one of your repositories to open a session in it
             </p>
             <button
@@ -279,15 +279,15 @@ export function NewSessionPicker() {
               placeholder="search all projects…"
               spellCheck={false}
               aria-label="Search all projects"
-              className="min-w-0 flex-1 border-none bg-transparent font-mono text-[12.5px] text-ink caret-green outline-none placeholder:text-subtle"
+              className="min-w-0 flex-1 border-none bg-transparent tabular-nums text-[12.5px] text-ink caret-green outline-none placeholder:text-subtle"
             />
           </div>
 
           <div className="max-h-[220px] overflow-y-auto">
             {matches.length === 0 ? (
               <div className="flex flex-col gap-[3px] px-1 py-2">
-                <p className="font-mono text-xs text-muted">{noMatchPhrase}</p>
-                <p className="font-mono text-xs text-subtle">
+                <p className="tabular-nums text-xs text-muted">{noMatchPhrase}</p>
+                <p className="tabular-nums text-xs text-subtle">
                   {`no projects match "${pickerQuery.trim()}"`}
                 </p>
               </div>
@@ -306,7 +306,7 @@ export function NewSessionPicker() {
         <button
           type="button"
           onClick={closePicker}
-          className="font-mono text-xs text-subtle hover:text-ink"
+          className="tabular-nums text-xs text-subtle hover:text-ink"
         >
           esc · cancel
         </button>
@@ -339,7 +339,7 @@ function PinnedProject({
       onClick={() => onSelect(id)}
       disabled={!access.spawnable}
       title={access.reason ?? undefined}
-      className="flex items-center gap-2 rounded-full border border-border bg-chip px-3.5 py-2 font-mono text-[13px] text-ink hover:border-brand hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:border-border disabled:hover:bg-chip"
+      className="flex items-center gap-2 rounded-full border border-border bg-chip px-3.5 py-2 tabular-nums text-[13px] text-ink hover:border-brand hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:border-border disabled:hover:bg-chip"
     >
       <Icon
         name={icon}
@@ -399,7 +399,7 @@ function ProjectRow({
       */}
       <span
         className={cn(
-          'min-w-0 flex-1 truncate font-mono text-[12.5px]',
+          'min-w-0 flex-1 truncate tabular-nums text-[12.5px]',
           access.spawnable ? 'text-ink' : 'text-subtle',
         )}
       >
@@ -410,7 +410,7 @@ function ProjectRow({
         that cannot be started has nothing useful to say about how many
         sessions it is running (story 090).
       */}
-      <span className="shrink-0 font-mono text-[11px] text-subtle">
+      <span className="shrink-0 tabular-nums text-[11px] text-subtle">
         {access.spawnable ? `${live} active` : 'unmapped'}
       </span>
     </button>

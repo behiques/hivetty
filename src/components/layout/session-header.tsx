@@ -74,7 +74,7 @@ function SessionLine({ session }: { session: Session }) {
         <span className="truncate text-[13px] font-semibold text-ink" title={session.task}>
           {entityLabel(session)}
         </span>
-        <span className="truncate font-mono text-[11.5px] text-muted">
+        <span className="truncate tabular-nums text-[11.5px] text-muted">
           {session.project} · {branchLabel(session)}
         </span>
       </span>
@@ -108,10 +108,10 @@ function TerminalLine({ terminal }: { terminal: Terminal }) {
     <>
       <TerminalGlyph size={20} aria-hidden="true" className="shrink-0 text-muted" />
       <span className="flex min-w-0 flex-col">
-        <span className="truncate font-mono text-[13px] font-semibold text-ink" title={entityLabel(terminal)}>
+        <span className="truncate tabular-nums text-[13px] font-semibold text-ink" title={entityLabel(terminal)}>
           {entityLabel(terminal)}
         </span>
-        <span className="truncate font-mono text-[11.5px] text-muted">
+        <span className="truncate tabular-nums text-[11.5px] text-muted">
           {terminal.project} · {cwdTail(terminal.cwd)}
         </span>
       </span>
@@ -148,7 +148,7 @@ function SessionMenu({ session }: { session: Session }) {
           className="flex cursor-default items-center justify-between gap-4 rounded px-2 py-1.5 text-[12.5px] outline-none data-[highlighted]:bg-hover"
         >
           Terminal here
-          <span className="font-mono text-[11px] text-subtle">⌃`</span>
+          <span className="tabular-nums text-[11px] text-subtle">⌃`</span>
         </DropdownMenuItem>
         {pr ? (
           <DropdownMenuItem

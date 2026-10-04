@@ -8,11 +8,11 @@ import { hatchRow } from '@tests/support/hatchery';
 describe('PrRow', () => {
   const row = hatchRow({}, { flap: 'MUTATING', tone: 'green', github: 'Open · 2 open findings, fixer on it' });
 
-  it('leads with the title and the flap, then the number and repo in mono', () => {
+  it('leads with the title and the flap, then the number and repo, small', () => {
     render(<PrRow row={row} open={false} onOpen={() => {}} />);
     expect(screen.getByText('Fee rule validator for Delaware filings')).toHaveClass('truncate', 'text-ui');
     expect(screen.getByText('MUTATING')).toBeInTheDocument();
-    expect(screen.getByText('#1182 · incorpx-server')).toHaveClass('font-mono', 'text-ui-sm');
+    expect(screen.getByText('#1182 · incorpx-server')).toHaveClass('text-ui-sm');
   });
 
   it("carries GitHub's words in its name and tooltip", () => {

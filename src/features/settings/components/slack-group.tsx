@@ -151,7 +151,7 @@ function StatePill({ kind, label }: { kind: PillKind; label?: string }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10.5px] font-semibold uppercase tracking-wide',
+        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 tabular-nums text-[10.5px] font-semibold uppercase tracking-wide',
         PILL_TONE[kind],
       )}
     >
@@ -220,7 +220,7 @@ function usedBySummary(agents: SlackGroupAgent[]): ReactNode {
     <>
       Used by{' '}
       {agents.map((agent, index) => (
-        <span key={agent.name} className="font-mono text-ink">
+        <span key={agent.name} className="tabular-nums text-ink">
           {agent.name}
           {index < agents.length - 1 ? ', ' : ''}
         </span>
@@ -437,8 +437,8 @@ function SocketTestVerdict({ result }: { result: SlackSocketTestResult }) {
   if (result.kind === 'ok') {
     return (
       <p className="text-[11.5px] text-green">
-        Reached <span className="font-mono text-ink">{result.workspace}</span>{' '}
-        as <span className="font-mono text-ink">{result.bot}</span>.
+        Reached <span className="tabular-nums text-ink">{result.workspace}</span>{' '}
+        as <span className="tabular-nums text-ink">{result.bot}</span>.
       </p>
     );
   }
@@ -567,7 +567,7 @@ function RealTimeFields({
       <div className="flex flex-wrap items-center gap-2">
         <StatePill kind={pill.kind} label={pill.label} />
         {socket.kind === 'connected' && (
-          <span className="font-mono text-[11.5px] text-subtle">
+          <span className="tabular-nums text-[11.5px] text-subtle">
             {socket.workspace ?? '—'} · {socket.bot ?? '—'}
           </span>
         )}
@@ -631,18 +631,18 @@ function RealTimeFields({
       />
 
       <div className="flex flex-col gap-1">
-        <h5 className="font-mono text-[10.5px] font-semibold uppercase tracking-wide text-subtle">
+        <h5 className="tabular-nums text-[10.5px] font-semibold uppercase tracking-wide text-subtle">
           Wakes on
         </h5>
         <div className="flex flex-wrap gap-1.5">
-          <span className="rounded-[4px] bg-chip px-1.5 py-0.5 font-mono text-[11px] text-muted">
+          <span className="rounded-[4px] bg-chip px-1.5 py-0.5 tabular-nums text-[11px] text-muted">
             {commanderSummary(slack.commanders)}
           </span>
           {socket.kind === 'connected' &&
             socket.unresolved.map((name) => (
               <span
                 key={name}
-                className="rounded-[4px] bg-chip px-1.5 py-0.5 font-mono text-[11px] text-amber"
+                className="rounded-[4px] bg-chip px-1.5 py-0.5 tabular-nums text-[11px] text-amber"
                 title="Named in wake.on, but Slack could not resolve it to a channel."
               >
                 {name} → unresolved
@@ -712,24 +712,24 @@ function AdvancedFields({
   return (
     <div className="flex flex-col gap-4 pt-1" data-testid="advanced-drawer">
       <div className="flex flex-col gap-2">
-        <h5 className="font-mono text-[11px] font-semibold uppercase tracking-wide text-subtle">
+        <h5 className="tabular-nums text-[11px] font-semibold uppercase tracking-wide text-subtle">
           Slack app
         </h5>
         <p className="text-[11.5px] text-subtle">
           Only if your org runs its own. Changing either signs you out.
         </p>
-        <div className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-bg px-2.5 py-1.5 font-mono text-[12px] text-subtle">
+        <div className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-bg px-2.5 py-1.5 tabular-nums text-[12px] text-subtle">
           <span>{SLACK_MCP_URL}</span>
           <span className="text-subtle">server</span>
         </div>
-        <div className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-bg px-2.5 py-1.5 font-mono text-[12px] text-muted">
+        <div className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-bg px-2.5 py-1.5 tabular-nums text-[12px] text-muted">
           <span>{SLACK_CLIENT_ID}</span>
           <span className="text-subtle">client ID</span>
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
-        <h5 className="font-mono text-[11px] font-semibold uppercase tracking-wide text-subtle">
+        <h5 className="tabular-nums text-[11px] font-semibold uppercase tracking-wide text-subtle">
           Real-time events
         </h5>
 
@@ -746,7 +746,7 @@ function AdvancedFields({
         {!slack.socketMode ? (
           <p className="text-[11.5px] text-subtle">
             Off, agents reach Slack on their own schedule. On, they wake within
-            seconds and <span className="font-mono">@hive</span> can command one.
+            seconds and <span className="tabular-nums">@hive</span> can command one.
             Needs a Slack app of your own, and two tokens the Hive stores.
           </p>
         ) : (

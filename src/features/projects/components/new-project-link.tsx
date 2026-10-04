@@ -26,7 +26,7 @@ const CLASSES: Record<NewProjectVariant, string> = {
     what 2px above `nova-web` made it look like.
   */
   line: 'mt-1 mb-2.5 flex items-center gap-2 rounded-lg px-2.5 py-[3px] text-left text-ui-sm text-subtle hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-subtle',
-  cta: 'inline-flex items-center gap-[7px] rounded-lg border border-border px-3 py-[5px] font-mono text-[11.5px] text-ink hover:bg-hover disabled:cursor-not-allowed disabled:hover:bg-transparent',
+  cta: 'inline-flex items-center gap-[7px] rounded-lg border border-border px-3 py-[5px] tabular-nums text-[11.5px] text-ink hover:bg-hover disabled:cursor-not-allowed disabled:hover:bg-transparent',
 };
 
 /**

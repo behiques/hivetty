@@ -106,7 +106,7 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
         <>
           <div className="flex gap-1.5 px-2 pt-3.5 pb-1 text-[10.5px] font-semibold tracking-[.06em] text-subtle uppercase">
             <span>Sessions off stage</span>
-            <span className="font-mono tracking-normal">{sessions.length}</span>
+            <span className="tabular-nums tracking-normal">{sessions.length}</span>
           </div>
           {sessions.map((row) => (
             <SessionNote key={row.id} notif={row} variant="row" />

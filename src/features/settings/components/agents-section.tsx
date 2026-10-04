@@ -127,7 +127,7 @@ export function AgentsSection() {
                 five names.
               */}
               <Icon name={agent.icon} size={14} className="shrink-0 text-brand" />
-              <span className="truncate font-mono">{agent.name}</span>
+              <span className="truncate tabular-nums">{agent.name}</span>
               <ShippedDot status={shipped.get(agent.name)} />
               {broken ? (
                 <span className="ml-auto shrink-0 text-[11px] text-amber">invalid</span>
@@ -150,7 +150,7 @@ export function AgentsSection() {
         <button
           type="button"
           onClick={newAgent}
-          className="border-t border-border-soft px-2.5 py-1.5 text-left font-mono text-[12.5px] text-brand hover:bg-hover"
+          className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-[12.5px] text-brand hover:bg-hover"
         >
           + New agent
         </button>

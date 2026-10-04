@@ -65,7 +65,7 @@ export function ShipTrack({ pr }: { pr: Pr }) {
               </span>
               <span>{stop.label}</span>
               {stop.state === 'now' && stop.spentMs !== null ? (
-                <span className="font-mono text-[11px] font-normal text-muted">{formatDuration(stop.spentMs)}</span>
+                <span className="tabular-nums text-[11px] font-normal text-muted">{formatDuration(stop.spentMs)}</span>
               ) : null}
             </li>
           </Fragment>
