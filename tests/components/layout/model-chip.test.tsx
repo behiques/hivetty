@@ -287,6 +287,59 @@ describe('ModelChip', () => {
     expect(chip.getAttribute('title')).toMatch(/session limit 12%, resets .+ · weekly limit 46%, resets /);
   });
 
+  describe('the steps with both panels open (HIVE-220)', () => {
+    beforeEach(() => {
+      useUiStore.setState({ activeTab: 'hero-refresh' });
+      act(() =>
+        useHiveStore.getState().setSessionMetrics('hero-refresh', {
+          model: 'Opus 4.5',
+          effort: 'high',
+          contextPct: 46,
+          contextWindow: 1_000_000,
+          fiveHourPct: 12,
+          sevenDayPct: 63,
+          fiveHourResetsAt: new Date(2026, 7, 11, 14, 30).getTime() / 1000,
+          sevenDayResetsAt: new Date(2026, 7, 13, 17, 0).getTime() / 1000,
+        }),
+      );
+    });
+
+    it('shortens the label to the model name, then drops it for the icon alone', () => {
+      render(<ModelChip />);
+      const chip = screen.getByTestId('model-chip');
+      const full = chip.querySelector('[data-label="full"]')!;
+      const model = chip.querySelector('[data-label="model"]')!;
+      expect(full).toHaveTextContent('Opus 4.5 (1M) · high');
+      expect(full.className).toContain('@max-[700px]:hidden');
+      expect(model.textContent).toBe('Opus 4.5');
+      expect(model.className).toMatch(/(^| )hidden( |$)/);
+      expect(model.className).toContain('@max-[700px]:inline');
+      expect(model.className).toContain('@max-[560px]:hidden');
+    });
+
+    it('drops the detail words, keeping every ring and percentage', () => {
+      render(<ModelChip />);
+      const chip = screen.getByTestId('model-chip');
+      const words = [...chip.querySelectorAll('[data-detail]')];
+      // ctx, plus long and short for each window.
+      expect(words).toHaveLength(5);
+      const narrowest = words.filter((n) => n.getAttribute('data-detail') !== 'long');
+      for (const word of narrowest) expect(word.className).toContain('@max-[620px]:hidden');
+      for (const pct of ['46%', '12%', '63%']) {
+        expect(screen.getByText(pct).className).not.toMatch(/hidden/);
+      }
+    });
+
+    it('keeps model, window, effort, every stat and both resets in the tooltip', () => {
+      render(<ModelChip />);
+      const title = screen.getByTestId('model-chip').getAttribute('title')!;
+      expect(title).toContain('Opus 4.5 (1M) · high');
+      expect(title).toContain('context 46%');
+      expect(title).toContain('session limit 12%, resets 2:30p');
+      expect(title).toContain('weekly limit 63%, resets Thu 5p');
+    });
+  });
+
   it('never clips its stats row: the session header gives way instead (HIVE-213)', () => {
     useUiStore.setState({ activeTab: 'hero-refresh' });
     act(() => useHiveStore.getState().setSessionMetrics('hero-refresh', { contextPct: 46 }));

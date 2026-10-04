@@ -92,6 +92,20 @@ export function chipLabel(
   model: Model | undefined,
   effort: string | undefined,
 ): string {
+  const { name, window, level } = chipParts(metrics, model, effort);
+  return `${name}${window} · ${level}`;
+}
+
+/**
+ * {@link chipLabel}'s three parts, apart: the narrow header shows the model
+ * name alone and leaves the window and the effort to the tooltip (HIVE-220).
+ * `window` is empty, or carries its leading space: ` (1M)`.
+ */
+export function chipParts(
+  metrics: SessionMetrics | undefined,
+  model: Model | undefined,
+  effort: string | undefined,
+): { name: string; window: string; level: string } {
   const name = metrics?.model ?? modelLabel(model);
   const level = metrics?.effort ?? effort ?? DEFAULT_EFFORT;
   /*
@@ -106,7 +120,7 @@ export function chipLabel(
     size !== undefined && size >= EXTENDED_WINDOW_TOKENS
       ? ` (${Math.round(size / 1_000_000)}M)`
       : '';
-  return `${name}${window} · ${level}`;
+  return { name, window, level };
 }
 
 /**

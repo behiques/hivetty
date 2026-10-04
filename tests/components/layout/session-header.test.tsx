@@ -61,8 +61,27 @@ describe('SessionHeader (HIVE-197)', () => {
   it('moves the status word to the dot title for the narrowest step (HIVE-213)', () => {
     render(<SessionHeader entity={hero()} />);
     const status = screen.getByTestId('session-status');
-    expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[700px]:sr-only');
+    expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[748px]:sr-only');
     expect(status.getAttribute('title')).not.toBeNull();
+  });
+
+  it('lets the model slot clip at its end rather than push the menu out (HIVE-220)', () => {
+    render(<SessionHeader entity={hero()} />);
+    const slot = screen.getByTestId('session-header').querySelector('[data-slot="model"]')!;
+    expect(slot).toHaveClass('min-w-0', 'shrink', 'overflow-hidden');
+    expect(slot).not.toHaveClass('shrink-0');
+  });
+
+  it('lowers the title column floor at the narrowest step (HIVE-220)', () => {
+    render(<SessionHeader entity={hero()} />);
+    const column = screen.getByText('hero-refresh').parentElement!;
+    expect(column).toHaveClass('min-w-[140px]', '@max-[500px]:min-w-[110px]');
+  });
+
+  it('gives the row’s spare width to the title alone, so only the slot clips (HIVE-220)', () => {
+    render(<SessionHeader entity={hero()} />);
+    const column = screen.getByText('hero-refresh').parentElement!;
+    expect(column).toHaveClass('flex-1', 'basis-0');
   });
 
   it('names the back chord for the platform in the button title', () => {
