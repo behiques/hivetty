@@ -160,12 +160,12 @@ import { useActiveTab, useExpandEnded, useSelId, useSessionsProject, useSetSelId
  * hold while a quiet session with subagents running was called `idle (agents)`
  * and was allowed to clip. Renaming that to `working (agents)` and
  * `working (scripts)` made the longest value 17 characters, which the browser
- * measures at 127.9px in this face at 12.5px. A clipped status is worse than a
+ * measured 127.9px in the old mono face at 12.5px; the sans face at 13px is narrower. A clipped status is worse than a
  * clipped branch: a branch truncates to a prefix that is still recognisably
  * itself, while `working (scr…` is a word the table has stopped saying. So it
  * is `w-[132px] shrink-0` and stays that width — four pixels of margin over a
  * measurement taken on one machine's font stack, because the fallback chain
- * ends in a generic `monospace` whose metrics are the operating system's
+ * ends in a generic `sans-serif` whose metrics are the operating system's
  * business.
  *
  * HIVE-182 widened it to `w-[176px]` so the cell could carry a session's plan
@@ -234,7 +234,7 @@ const COL = {
     for the column overflows it — visibly, on one line, without disturbing the
     row — which is the honest failure and the one an e2e can measure. That
     matters because the 132px is measured against *one* machine's font stack and
-    the fallback chain ends in a generic `monospace`.
+    the fallback chain ends in a generic `sans-serif`.
   */
   status: 'w-[132px] shrink-0 whitespace-nowrap',
   /** Plan progress (HIVE-197): a 44px bar and `done/total` — `17/17` is the widest. */
@@ -257,7 +257,7 @@ const COL = {
     `6 days ago`, ten characters, 75.2px in this face at 12.5px — plus the same
     few pixels of margin `STATUS` carries, and for the same reason: that
     measurement is one machine's font stack, and the fallback chain ends in a
-    generic `monospace`.
+    generic `sans-serif`.
 
     That a longest value *exists* is the formatter's doing, not this column's.
     Plain day-counting has no ceiling — a session-history row from last spring
@@ -300,7 +300,7 @@ const COL = {
  * This table used to open showing ten seeded sessions, so the orchestrator
  * always looked busy on a machine where nothing was running. With the seed gone
  * a fresh launch has no sessions at all, and the table says so in its own
- * register — monospace, `text-term-head`, inside the terminal surface — rather
+ * register — `text-term-head`, inside the terminal surface — rather
  * than borrowing the rail's empty-state styling, which would read as a panel
  * dropped into a console.
  *
@@ -378,7 +378,7 @@ export function SessionTable() {
   return (
     <div
       data-testid="session-table"
-      className="min-h-0 overflow-y-auto bg-term-bg px-[18px] pt-4 font-mono text-[12.5px]"
+      className="min-h-0 overflow-y-auto bg-term-bg px-[18px] pt-4 font-sans text-ui"
     >
       <div className="flex items-center gap-2 px-2 pb-1.5 text-[11px] tracking-[0.06em] text-term-head">
         {/*
@@ -758,7 +758,7 @@ function SessionTableRow({
         {entity.project}
       </span>
       <span
-        className={cn(COL.branch, 'text-subtle')}
+        className={cn(COL.branch, 'font-mono text-ui-sm text-subtle')}
         title={branchLabel(entity)}
       >
         {branchLabel(entity)}
