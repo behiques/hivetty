@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   chipLabel,
+  chipParts,
   clockLabel,
   dayClockLabel,
   DEFAULT_EFFORT,
@@ -129,6 +130,20 @@ describe('dayClockLabel', () => {
 
   it('answers null when the five-hour label would', () => {
     expect(dayClockLabel(undefined)).toBeNull();
+  });
+});
+
+describe('chipParts (HIVE-220)', () => {
+  it('splits the label into the model, the window and the effort', () => {
+    expect(
+      chipParts({ model: 'Sonnet 4.5', effort: 'low', contextWindow: 1_000_000 }, 'opus', 'high'),
+    ).toEqual({ name: 'Sonnet 4.5', window: ' (1M)', level: 'low' });
+    expect(chipParts(undefined, 'haiku', 'low')).toEqual({ name: 'Haiku 4.5', window: '', level: 'low' });
+  });
+
+  it('is what chipLabel joins', () => {
+    const { name, window, level } = chipParts({ contextWindow: 1_000_000 }, 'opus', 'high');
+    expect(chipLabel({ contextWindow: 1_000_000 }, 'opus', 'high')).toBe(`${name}${window} · ${level}`);
   });
 });
 

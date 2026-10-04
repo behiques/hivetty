@@ -65,7 +65,12 @@ function SessionLine({ session }: { session: Session }) {
   return (
     <>
       <Hexagon size={20} aria-hidden="true" className={cn('shrink-0', tone)} />
-      <span className="flex min-w-[140px] shrink flex-col">
+      {/*
+        Basis 0 and the row's only grower: the title takes what the rest leaves,
+        and below its floor it is frozen, so a row that still does not fit is
+        taken from the model slot alone (HIVE-220).
+      */}
+      <span className="flex min-w-[140px] flex-1 basis-0 flex-col @max-[500px]:min-w-[110px]">
         <span className="truncate text-[13px] font-semibold text-ink" title={session.task}>
           {entityLabel(session)}
         </span>
@@ -73,20 +78,23 @@ function SessionLine({ session }: { session: Session }) {
           {session.project} · {branchLabel(session)}
         </span>
       </span>
-      <span className="flex-1" />
       <span
         data-testid="session-status"
         className={cn('flex shrink-0 items-center gap-1.5 text-[12px]', ended ? 'text-muted' : tone)}
-        // The narrowest step hides the word (HIVE-213); the title keeps it for the dot.
+        // A narrow header hides the word (HIVE-213, measured in HIVE-220); the title keeps it for the dot.
         title={reason ?? word}
         aria-label={reason === undefined ? undefined : `Ended: ${reason}`}
       >
         <StatusDot status={session.status} detail={session.idleDetail} />
-        <span data-word className="@max-[700px]:sr-only">
+        <span data-word className="@max-[748px]:sr-only">
           {word}
         </span>
       </span>
-      <span data-slot="model" className="shrink-0">
+      {/*
+        The chip's own steps should keep it whole (HIVE-220). If they ever miss,
+        the stats clip at their end here, and the menu stays in the header.
+      */}
+      <span data-slot="model" className="min-w-0 shrink overflow-hidden">
         <ModelChip />
       </span>
       <SessionMenu session={session} />
