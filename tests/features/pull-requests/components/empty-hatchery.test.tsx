@@ -54,17 +54,38 @@ describe('EmptyHatchery', () => {
     expect(useUiStore.getState().picker).toBe(true);
   });
 
-  it('rocks, cracks and drifts with motion', () => {
+  it('rocks, beats and drifts with motion (HIVE-221)', () => {
     const { container } = render(<EmptyHatchery />);
     expect(container.querySelector('[data-part="egg"]')).toHaveClass('animate-cceggrock');
     expect(container.querySelectorAll('[data-part="spore"]')).toHaveLength(5);
+    expect(container.querySelector('[data-part="heart"]')).toHaveClass('animate-cceggheart');
+    expect(container.querySelector('[data-part="crack"]')).toBeNull();
   });
 
-  it('holds still under reduced motion: crack closed, no spores', () => {
+  it('holds still under reduced motion: no animation, no spores', () => {
     motion.reduced = true;
     const { container } = render(<EmptyHatchery />);
     expect(container.querySelector('[class*="animate-"]')).toBeNull();
-    expect(container.querySelector('[data-part="crack"]')).toHaveAttribute('stroke-dashoffset', '100');
     expect(container.querySelectorAll('[data-part="spore"]')).toHaveLength(0);
+  });
+
+  it('gives each mount its own SVG ids, so two eggs never share a gradient', () => {
+    const { container } = render(
+      <>
+        <EmptyHatchery />
+        <EmptyHatchery />
+      </>,
+    );
+    const ids = [...container.querySelectorAll('[id]')].map((el) => el.id);
+    expect(ids).toHaveLength(20);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const ref of container.innerHTML.matchAll(/url\(#([^)]+)\)/g)) {
+      expect(ids).toContain(ref[1]);
+    }
+  });
+
+  it('paints in dark on tokens alone', () => {
+    const { container } = render(<EmptyHatchery />);
+    expectNoHexColour(container);
   });
 });
