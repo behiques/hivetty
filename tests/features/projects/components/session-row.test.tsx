@@ -115,17 +115,34 @@ describe('SessionRow', () => {
    * HIVE-83: a quiet session is not necessarily an empty one — the label says
    * what is still running, and the dot goes hollow to match.
    */
-  it('names what a quiet session is still running, and hollows the dot', () => {
+  it('names what a quiet session is still running, and hollows the comb', () => {
     act(() => {
       useHiveStore.getState().setSessionStatus('rails-upgrade', 'idle', 'agents');
     });
 
-    render(<SessionRow id="rails-upgrade" />);
+    render(
+      <>
+        <SessionRow id="rails-upgrade" />
+        <SessionRow id="hero-refresh" />
+      </>,
+    );
 
     expect(screen.getByText('working (agents)')).toBeInTheDocument();
-    const dot = row().querySelector('span[aria-hidden]');
-    expect(dot?.className).toContain('border-green');
-    expect(dot?.className).not.toContain('bg-subtle');
+    const [quiet, busy] = screen.getAllByRole('button').map((b) => b.querySelector('svg'));
+    // Both green — the label says working — and only the shape tells them apart.
+    expect(quiet).toHaveClass('text-green');
+    expect(busy).toHaveClass('text-green', 'animate-ccpulse');
+    expect(quiet).not.toHaveClass('animate-ccpulse');
+    expect(quiet?.innerHTML).not.toBe(busy?.innerHTML);
+  });
+
+  it('draws a plain idle session as a hollow grey comb', () => {
+    act(() => {
+      useHiveStore.getState().setSessionStatus('rails-upgrade', 'idle');
+    });
+    render(<SessionRow id="rails-upgrade" />);
+
+    expect(row().querySelector('svg')).toHaveClass('text-subtle');
   });
 
   it('follows the store when the session’s status changes', () => {

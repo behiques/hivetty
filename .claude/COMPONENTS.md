@@ -352,9 +352,13 @@ Overmind again), then one `SessionsProjectRow` per project, folded, and
   simulation (061) and the spawn flow (044) both mutate entities underneath open
   panels, so a row that assumes its entity exists is a race waiting to throw.
   `TerminalRow` does the same, and also for a row of the wrong kind.
-- **An unfolded project ends in a split row.** `NewSessionLink` on the left,
-  `NewTerminalLink` on the right; the terminal link is named `Terminal in
-  <project>` on purpose, so no locator that begins `New session` matches it.
+- **The project line carries the actions.** `NewSessionLink` (`+`) and
+  `NewTerminalLink` (`>_`) sit at its right end, folded or not, and show on
+  hover or focus while the counts give way. The terminal link is named
+  `Terminal in <project>` on purpose, so no locator that begins `New session`
+  matches it.
+- **A session's mark is a comb**, a hexagon in its status colour: filled while
+  the main agent is busy, hollow once it is idle.
 
 Folds and the project filter live in the ui-store rather than in the row because
 the panel unmounts on every place switch; component state would forget them.
