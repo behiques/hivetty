@@ -44,6 +44,31 @@ describe('PrProperties', () => {
     expect(within(section('Status')).getByText('Open · 2 open findings, fixer on it')).toBeInTheDocument();
   });
 
+  it('says HATCHED alone for a merged PR, with no "Merged" line under it', () => {
+    const hatched = hatchRow({ state: 'merged' }, { flap: 'HATCHED', at: '00:21', tone: 'brand', github: 'Merged 00:21' });
+    render(<PrProperties row={hatched} detail={prDetail()} />);
+    expect(within(section('Status')).getByText('HATCHED 00:21')).toBeInTheDocument();
+    expect(within(section('Status')).queryByText(/Merged/)).toBeNull();
+  });
+
+  it('keeps the merge line when the flap shows only the time but the merge was yesterday', () => {
+    const hatched = hatchRow({ state: 'merged' }, { flap: 'HATCHED', at: '18:10', tone: 'brand', github: 'Merged yesterday 18:10' });
+    render(<PrProperties row={hatched} detail={prDetail()} />);
+    expect(within(section('Status')).getByText('Merged yesterday 18:10')).toBeInTheDocument();
+  });
+
+  it('keeps the merge line for an older merge', () => {
+    const hatched = hatchRow({ state: 'merged' }, { flap: 'HATCHED', at: '09:05', tone: 'brand', github: 'Merged 12 Aug' });
+    render(<PrProperties row={hatched} detail={prDetail()} />);
+    expect(within(section('Status')).getByText('Merged 12 Aug')).toBeInTheDocument();
+  });
+
+  it('keeps the merge line when mergedAt is null, so HATCHED is not bare', () => {
+    const hatched = hatchRow({ state: 'merged' }, { flap: 'HATCHED', tone: 'brand', github: 'Merged' });
+    render(<PrProperties row={hatched} detail={prDetail()} />);
+    expect(within(section('Status')).getByText('Merged')).toBeInTheDocument();
+  });
+
   it('lists every check with its state and the failing count in red', () => {
     render(<PrProperties row={row} detail={prDetail({ checks })} />);
     expect(screen.getByText('1 failing')).toHaveClass('text-red');

@@ -118,7 +118,10 @@ export function PrProperties({
       <Section title="Status">
         <div className="flex flex-col items-start gap-1.5 px-1 pt-0.5 pb-1.5 text-[12px]">
           <Flap hatch={hatch} />
-          <span className="text-muted">{hatch.github}</span>
+          {/* The flap says merged and the time; the line stays when it adds the day, or when there is no time. */}
+          {hatch.flap === 'HATCHED' && hatch.at !== undefined && hatch.github === `Merged ${hatch.at}` ? null : (
+            <span className="text-muted">{hatch.github}</span>
+          )}
         </div>
       </Section>
 
