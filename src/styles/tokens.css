@@ -115,6 +115,14 @@
   --cc-creep: #5b3d8f;
   --cc-chitin: #b9a7f0;
 
+  /* The Brood's tissue ramp (HIVE-221): shadowed, mid and lit flesh, the glow's
+     core and the ground. Themeable, optional keys; the canvas reads them. */
+  --cc-tissue-deep: #0b0816;
+  --cc-tissue: #2c2346;
+  --cc-tissue-lit: #8474c0;
+  --cc-glow-core: #e2ffee;
+  --cc-ground: #141128;
+
   /**
    * Density (story 105) — the comfortable values.
    *
@@ -229,6 +237,11 @@ body[data-theme='light'] {
   --cc-chip-hover: #e2eaee;
   --cc-creep: #b7a3e6;
   --cc-chitin: #6a54b0;
+  --cc-tissue-deep: #7a68b6;
+  --cc-tissue: #d4ccee;
+  --cc-tissue-lit: #fbf9ff;
+  --cc-glow-core: #96deb8;
+  --cc-ground: #eeeafa;
 
   /**
    * The terminal surface, which **does** follow the theme.

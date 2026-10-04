@@ -24,6 +24,11 @@ const TOKENS: Record<string, string> = {
   '--cc-red': ' #ff8d85',
   '--cc-creep': ' #5b3d8f',
   '--cc-chitin': ' #b9a7f0',
+  '--cc-tissue-deep': ' #0b0816',
+  '--cc-tissue': ' #2c2346',
+  '--cc-tissue-lit': ' #8474c0',
+  '--cc-glow-core': ' #e2ffee',
+  '--cc-ground': ' #141128',
 };
 
 describe('paletteFrom', () => {
@@ -34,6 +39,8 @@ describe('paletteFrom', () => {
     expect(palette.chitin).toBe('#b9a7f0');
     expect(palette.carapace).toBe(mixColour('#10152a', '#b9a7f0', 0.18));
     expect(palette.creepClear).toBe(clearColour('#5b3d8f'));
+    expect(palette.tissueDeep).toBe('#0b0816');
+    expect(palette.ground).toBe('#141128');
   });
 });
 

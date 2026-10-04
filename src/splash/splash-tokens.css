@@ -43,6 +43,12 @@
   --cc-red: #ff8d85;
   --cc-creep: #5b3d8f;
   --cc-chitin: #b9a7f0;
+  /* The Brood's tissue ramp (HIVE-221), for the globe's mutalisks. */
+  --cc-tissue-deep: #0b0816;
+  --cc-tissue: #2c2346;
+  --cc-tissue-lit: #8474c0;
+  --cc-glow-core: #e2ffee;
+  --cc-ground: #141128;
 
   /**
    * The one face the app uses, copied from `--font-mono` in `tokens.css` and

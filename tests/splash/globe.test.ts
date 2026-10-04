@@ -151,6 +151,11 @@ const PALETTE: SwarmPalette = {
   creepClear: 'c-creep-clear',
   chitin: 'c-chitin',
   carapace: 'c-carapace',
+  tissueDeep: 'c-tissue-deep',
+  tissue: 'c-tissue',
+  tissueLit: 'c-tissue-lit',
+  glowCore: 'c-glow-core',
+  ground: 'c-ground',
 };
 
 describe('drawGlobe', () => {

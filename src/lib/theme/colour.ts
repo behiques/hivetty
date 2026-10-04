@@ -117,11 +117,15 @@ export function clearColour(value: string): string {
  *
  * `creep` and `chitin` are the theme's when it carries them (the built-in
  * does) and derived from its own colours when it does not, so an imported
- * theme's creatures match it. `carapace` is always derived.
+ * theme's creatures match it. `carapace` is always derived. The Brood's
+ * tissue ramp (HIVE-221) follows the same rule: the theme's when present,
+ * otherwise mixed from its own colours.
  */
 export function swarmPaletteOf(ui: UiColors): SwarmPalette {
   const creep = ui.creep ?? mixColour(ui.bg, ui.brand, 0.4);
   const chitin = ui.chitin ?? mixColour(ui.brand, ui.ink, 0.35);
+  const tissueDeep = ui.tissueDeep ?? mixColour(ui.bg, chitin, 0.04);
+  const tissue = ui.tissue ?? mixColour(ui.bg, chitin, 0.22);
   return {
     bg: ui.bg,
     panel2: ui.panel2,
@@ -136,5 +140,10 @@ export function swarmPaletteOf(ui: UiColors): SwarmPalette {
     creepClear: clearColour(creep),
     chitin,
     carapace: mixColour(ui.bg, chitin, 0.18),
+    tissueDeep,
+    tissue,
+    tissueLit: ui.tissueLit ?? mixColour(chitin, ui.ink, 0.2),
+    glowCore: ui.glowCore ?? mixColour(ui.green, ui.ink, 0.7),
+    ground: ui.ground ?? mixColour(ui.bg, creep, 0.15),
   };
 }

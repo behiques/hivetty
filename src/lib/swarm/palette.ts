@@ -22,4 +22,14 @@ export interface SwarmPalette {
   chitin: string;
   /** The creature's body fill. Derived from chitin and bg; HIVE-210 settles it. */
   carapace: string;
+  /** The Brood's tissue ramp (HIVE-221): shadowed flesh, `SP_T.lo`. */
+  tissueDeep: string;
+  /** Mid flesh, `SP_T.mid`. */
+  tissue: string;
+  /** Lit flesh, `SP_T.hi`. */
+  tissueLit: string;
+  /** The hot centre of the green glow, `SP_T.core`. */
+  glowCore: string;
+  /** The ground the creatures stand on, `SP_T.ground`. */
+  ground: string;
 }

@@ -83,4 +83,26 @@ describe('swarmPaletteOf', () => {
       red: ui.red,
     });
   });
+
+  it('carries the Brood tissue ramp from the built-in', () => {
+    const p = swarmPaletteOf(BUILT_IN_THEME.modes.dark.ui);
+    expect([p.tissueDeep, p.tissue, p.tissueLit, p.glowCore, p.ground]).toEqual([
+      '#0b0816', '#2c2346', '#8474c0', '#e2ffee', '#141128',
+    ]);
+    const l = swarmPaletteOf(BUILT_IN_THEME.modes.light.ui);
+    expect([l.tissueDeep, l.tissue, l.tissueLit, l.glowCore, l.ground]).toEqual([
+      '#7a68b6', '#d4ccee', '#fbf9ff', '#96deb8', '#eeeafa',
+    ]);
+  });
+
+  it('derives the tissue ramp for a theme that lacks it', () => {
+    const {
+      tissueDeep: _a, tissue: _b, tissueLit: _c, glowCore: _d, ground: _e, ...bareTissue
+    } = BUILT_IN_THEME.modes.dark.ui;
+    const p = swarmPaletteOf(bareTissue);
+    for (const c of [p.tissueDeep, p.tissue, p.tissueLit, p.glowCore, p.ground]) {
+      expect(parseColour(c)).not.toBeNull();
+      expect(c).toMatch(/^rgb\(/);
+    }
+  });
 });

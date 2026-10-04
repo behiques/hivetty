@@ -24,6 +24,11 @@ const TOKENS = {
   red: '--cc-red',
   creep: '--cc-creep',
   chitin: '--cc-chitin',
+  tissueDeep: '--cc-tissue-deep',
+  tissue: '--cc-tissue',
+  tissueLit: '--cc-tissue-lit',
+  glowCore: '--cc-glow-core',
+  ground: '--cc-ground',
 } as const;
 
 /**

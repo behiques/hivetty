@@ -8,6 +8,8 @@ const PALETTE: SwarmPalette = {
   bg: 'c-bg', panel2: 'c-panel2', ink: 'c-ink', muted: 'c-muted', subtle: 'c-subtle',
   brand: 'c-brand', green: 'c-green', amber: 'c-amber', red: 'c-red', creep: 'c-creep',
   creepClear: 'c-creep-clear', chitin: 'c-chitin', carapace: 'c-carapace',
+  tissueDeep: 'c-tissue-deep', tissue: 'c-tissue', tissueLit: 'c-tissue-lit',
+  glowCore: 'c-glow-core', ground: 'c-ground',
 };
 
 describe('tailSpine', () => {
