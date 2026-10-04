@@ -1,7 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { spRng } from '@lib/swarm/kit';
-import { createSpine, spineNodes, SPINE_L, SPINE_NODES, stepSpine, warmSpine } from '@lib/swarm/muta';
+import {
+  createSpine,
+  drawMuta,
+  spineNodes,
+  SPINE_L,
+  SPINE_NODES,
+  stepSpine,
+  warmSpine,
+  type Spine,
+} from '@lib/swarm/muta';
+import { toneOf } from '@lib/swarm/tone';
+import { BUILT_IN_THEME } from '@lib/theme/built-in';
+import { swarmPaletteOf } from '@lib/theme/colour';
+import { coloursUsed, recordingContext, type Recorded } from '@tests/support/canvas-2d';
 
 const segments = (nodes: [number, number][]): number[] =>
   nodes.slice(1).map((n, i) => Math.hypot(n[0] - nodes[i]![0], n[1] - nodes[i]![1]));
@@ -67,5 +80,79 @@ describe('the live spine', () => {
     warmSpine(b, path, 2);
     expect(spineNodes(a)).toEqual(spineNodes(b));
     expect(spineNodes(a)[0]![0]).toBeCloseTo(path(2)[0]);
+  });
+});
+
+/** A Path2D that records like the context does; happy-dom may not have one. */
+const pathCalls: Recorded[] = [];
+class RecordingPath {
+  constructor() {
+    return new Proxy(this, {
+      get: (_t, name: string) => (...args: unknown[]) => pathCalls.push({ op: name, args }),
+    });
+  }
+}
+
+describe('drawMuta', () => {
+  const T = toneOf(swarmPaletteOf(BUILT_IN_THEME.modes.dark.ui));
+  const flown = (): Spine => {
+    const s = createSpine(0, 0, 0);
+    warmSpine(s, (t) => [60 * t, 0], 2);
+    return s;
+  };
+
+  beforeEach(() => {
+    pathCalls.length = 0;
+    vi.stubGlobal('Path2D', RecordingPath);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const draw = (turn: number, scale: number, ps = 1, shadow?: [number, number]) => {
+    pathCalls.length = 0;
+    const { ctx, calls } = recordingContext();
+    drawMuta(ctx, flown(), 3, 0.5, turn, scale, ps, T, shadow);
+    return calls;
+  };
+
+  it('balances save and restore', () => {
+    const calls = draw(0, 0.108, 1, [6, 9]);
+    expect(calls.filter((c) => c.op === 'save')).toHaveLength(calls.filter((c) => c.op === 'restore').length);
+  });
+
+  it('paints only rgba() colours, gradients included', () => {
+    const calls = draw(0, 1.2, 1, [6, 9]);
+    const colours = [
+      ...coloursUsed(calls),
+      ...calls.filter((c) => c.op === 'addColorStop').map((c) => c.args[1]),
+    ];
+    expect(colours.length).toBeGreaterThan(10);
+    for (const c of colours) expect(c).toMatch(/^rgba\(/);
+  });
+
+  it('switches detail on above ps * scale 1.1', () => {
+    const strokes = (calls: Recorded[]) => calls.filter((c) => c.op === 'stroke').length;
+    expect(strokes(draw(0, 1.2))).toBeGreaterThan(strokes(draw(0, 0.5)));
+  });
+
+  it('banks: a hard turn moves the wing tips', () => {
+    const tips = (turn: number): number[] => {
+      draw(turn, 1);
+      return pathCalls.filter((c) => c.op === 'quadraticCurveTo').map((c) => c.args[2] as number);
+    };
+    const level = tips(0);
+    const banked = tips(3);
+    expect(level.length).toBeGreaterThan(0);
+    expect(banked).not.toEqual(level);
+  });
+
+  it('translates to the head and scales by scale', () => {
+    const s = flown();
+    const [hx, hy] = spineNodes(s)[0]!;
+    const { ctx, calls } = recordingContext();
+    drawMuta(ctx, s, 0, 0, 0, 0.108, 2, T);
+    expect(calls.find((c) => c.op === 'translate')?.args).toEqual([hx, hy]);
+    expect(calls.find((c) => c.op === 'scale')?.args).toEqual([0.108, 0.108]);
   });
 });
