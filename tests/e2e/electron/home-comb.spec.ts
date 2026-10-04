@@ -182,7 +182,8 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
     await expect.poll(running).toBe(0);
 
     // The patch's first cell: column 2, row 7 at R 36, in the comb's logical space.
-    const canvas = page.getByRole('img', { name: /need/ });
+    // Named by the headline (#43): the mood, then the counts.
+    const canvas = page.getByRole('img', { name: /^The hive is calling · 1 summons\. / });
     const box = await canvas.boundingBox();
     if (box === null) throw new Error('the comb has no box');
     const k = box.width / 1376;
@@ -214,7 +215,7 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
     await shoot('home-comb-calm');
 
     // Held still: two reads half a second apart are the same picture (HIVE-210).
-    const comb = page.getByRole('img', { name: /need/ });
+    const comb = page.getByRole('img', { name: /^The hive is humming\. / });
     const frame = () => comb.evaluate((el) => (el as HTMLCanvasElement).toDataURL());
     const first = await frame();
     await page.waitForTimeout(500);
