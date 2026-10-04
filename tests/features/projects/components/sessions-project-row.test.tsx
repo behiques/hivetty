@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -35,11 +35,25 @@ describe('SessionsProjectRow (HIVE-197)', () => {
   });
   afterEach(() => resetProjectConfig());
 
-  it('starts folded, with amber needs-you and green other counts', () => {
+  it('starts folded, with an amber needs-you badge on the icon', () => {
     render(<SessionsProjectRow project={nova} />);
     expect(screen.getByRole('button', { name: 'Unfold nova-web' })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByTitle('need you')).toHaveClass('text-amber-count');
-    expect(screen.getByTitle('other live')).toHaveClass('text-green');
+    // Needs-you wins the badge; the live count waits behind it.
+    expect(screen.getByTitle('1 need you')).toHaveClass('bg-amber');
+    expect(screen.queryByTitle(/live$/)).toBeNull();
+  });
+
+  it('badges a folded project green with its live count when nothing needs you', () => {
+    act(() => useHiveStore.getState().appendEntityLines('lead-form', [], 'working'));
+    render(<SessionsProjectRow project={nova} />);
+    expect(screen.getByTitle('3 live')).toHaveClass('bg-green');
+    expect(screen.queryByTitle(/need you$/)).toBeNull();
+  });
+
+  it('drops the badge once unfolded, where the sessions speak for themselves', () => {
+    useUiStore.getState().expandProject('nova-web');
+    render(<SessionsProjectRow project={nova} />);
+    expect(screen.queryByTitle(/need you$|live$/)).toBeNull();
   });
 
   it('clicking the name filters the Overmind and unfolds the project', async () => {
@@ -60,8 +74,6 @@ describe('SessionsProjectRow (HIVE-197)', () => {
     // Never plain focus-within: a mouse click focuses a button and would pin the actions open.
     expect(session.parentElement).not.toHaveClass('group-focus-within:opacity-100');
     expect(terminal.parentElement).toBe(session.parentElement);
-    expect(screen.getByTitle('need you').parentElement).toHaveClass('group-hover:invisible', 'group-has-[:focus-visible]:invisible');
-    expect(screen.getByTitle('need you').parentElement).not.toHaveClass('group-focus-within:invisible');
   });
 
   it('the caret folds without touching the filter', async () => {
@@ -81,9 +93,11 @@ describe('SessionsProjectRow (HIVE-197)', () => {
 
   it('says "no sessions" when nothing is live', () => {
     render(<SessionsProjectRow project={empty} />);
-    expect(
-      within(screen.getByRole('button', { name: /^infra-terraform/ })).getByText('no sessions'),
-    ).toBeInTheDocument();
+    const none = within(screen.getByRole('button', { name: /^infra-terraform/ })).getByText('no sessions');
+    // It gives way to the hover actions.
+    expect(none.parentElement).toHaveClass('group-hover:invisible', 'group-has-[:focus-visible]:invisible');
+    expect(none.parentElement).not.toHaveClass('group-focus-within:invisible');
+    expect(screen.queryByTitle(/live$/)).toBeNull();
   });
 });
 

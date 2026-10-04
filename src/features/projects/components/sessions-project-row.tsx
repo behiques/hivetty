@@ -39,6 +39,14 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
   const access = useProjectAccess(project.id);
   const { openSettings } = useSettingsActions();
   const selected = filter === project.id;
+  // Folded, the icon carries what is inside: amber for needs-you, else green for live.
+  const badge = expanded
+    ? null
+    : needs > 0
+      ? { n: needs, fill: 'bg-amber', label: 'need you' }
+      : other > 0
+        ? { n: other, fill: 'bg-green', label: 'live' }
+        : null;
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -63,8 +71,16 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
           aria-current={selected ? 'true' : undefined}
           className="flex min-w-0 flex-1 items-center gap-2 py-[var(--cc-row-py)] text-left"
         >
-          <Icon name={project.icon} size={15} className="shrink-0 text-brand" />
-          <span className="flex-1 truncate text-ui font-semibold text-brand">{project.name}</span>
+          <span className="relative mr-1 shrink-0">
+            <Icon name={project.icon} size={15} className="text-brand" />
+            {/* Folded, the icon carries what is inside: amber for needs-you, else green for live. */}
+            {badge ? <LiveBadge {...badge} /> : null}
+          </span>
+          <span className="flex-1 truncate text-ui font-semibold text-brand">
+            {project.name}
+            {/* After the name, so the button still announces the project first. */}
+            {badge ? <span className="sr-only">{`, ${String(badge.n)} ${badge.label}`}</span> : null}
+          </span>
           {/* Gives way to the actions on hover or keyboard focus (focus-visible, so a mouse click does not pin them). */}
           <span className="flex shrink-0 items-center gap-2 group-has-[:focus-visible]:invisible group-hover:invisible">
             {access.reason ? (
@@ -72,8 +88,6 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
                 unmapped
               </Tag>
             ) : null}
-            {needs > 0 ? <Count tone="text-amber-count" dot="bg-amber" n={needs} title="need you" /> : null}
-            {other > 0 ? <Count tone="text-green" dot="bg-green" n={other} title="other live" /> : null}
             {needs + other === 0 ? <span className="shrink-0 text-ui-sm text-subtle">no sessions</span> : null}
           </span>
         </button>
@@ -104,13 +118,18 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
   );
 }
 
-/** A coloured dot and a number; the word rides along for screen readers. */
-function Count({ n, tone, dot, title }: { n: number; tone: string; dot: string; title: string }) {
+/** A count over the project icon. Decoration: the name's sr-only text says it. */
+function LiveBadge({ n, fill, label }: { n: number; fill: string; label: string }) {
   return (
-    <span title={title} className={cn('flex shrink-0 items-center gap-1 text-ui-sm', tone)}>
-      <span aria-hidden="true" className={cn('size-1.5 rounded-full', dot)} />
+    <span
+      aria-hidden="true"
+      title={`${String(n)} ${label}`}
+      className={cn(
+        'absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-[9px] leading-none font-bold text-panel ring-2 ring-panel',
+        fill,
+      )}
+    >
       {n}
-      <span className="sr-only"> {title}</span>
     </span>
   );
 }
