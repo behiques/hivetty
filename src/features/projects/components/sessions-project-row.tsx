@@ -65,8 +65,8 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
         >
           <Icon name={project.icon} size={15} className="shrink-0 text-brand" />
           <span className="flex-1 truncate text-ui font-semibold text-brand">{project.name}</span>
-          {/* Gives way to the actions on hover or focus. */}
-          <span className="flex shrink-0 items-center gap-2 group-focus-within:invisible group-hover:invisible">
+          {/* Gives way to the actions on hover or keyboard focus (focus-visible, so a mouse click does not pin them). */}
+          <span className="flex shrink-0 items-center gap-2 group-has-[:focus-visible]:invisible group-hover:invisible">
             {access.reason ? (
               <Tag tone={access.invalid ? 'amber' : 'subtle'} title={access.reason} className="shrink-0">
                 unmapped
@@ -81,7 +81,7 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
           Siblings of the name, never inside it. Opacity rather than visibility,
           so they stay focusable and in the tab order while hidden.
         */}
-        <span className="absolute right-1.5 flex items-center gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+        <span className="absolute right-1.5 flex items-center gap-0.5 opacity-0 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100">
           <NewSessionLink projectId={project.id} projectName={project.name} />
           <NewTerminalLink projectId={project.id} projectName={project.name} />
         </span>

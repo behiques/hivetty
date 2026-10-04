@@ -56,9 +56,12 @@ describe('SessionsProjectRow (HIVE-197)', () => {
     const session = screen.getByRole('button', { name: 'New session in nova-web' });
     const terminal = screen.getByRole('button', { name: 'Terminal in nova-web' });
     // Shown on hover or focus, and the counts give way to them.
-    expect(session.parentElement).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
+    expect(session.parentElement).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-has-[:focus-visible]:opacity-100');
+    // Never plain focus-within: a mouse click focuses a button and would pin the actions open.
+    expect(session.parentElement).not.toHaveClass('group-focus-within:opacity-100');
     expect(terminal.parentElement).toBe(session.parentElement);
-    expect(screen.getByTitle('need you').parentElement).toHaveClass('group-hover:invisible');
+    expect(screen.getByTitle('need you').parentElement).toHaveClass('group-hover:invisible', 'group-has-[:focus-visible]:invisible');
+    expect(screen.getByTitle('need you').parentElement).not.toHaveClass('group-focus-within:invisible');
   });
 
   it('the caret folds without touching the filter', async () => {
