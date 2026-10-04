@@ -124,21 +124,34 @@ export function luminance(value: string): number {
 }
 
 /**
- * The hover mutalisk's accents (HIVE-221), which no theme key names.
+ * The Brood creatures' accents (HIVE-221), which no theme key names: the
+ * hover mutalisk's membrane, mouth and glints, and the hive's mineral ramp
+ * and the mat it spreads over the ground.
  *
  * The artifact picks different literals for its dark and light stages, so the
  * mixes do too, keyed on the luminance of `bg` as `tone.ts` keys `T.dark`.
  * Each is tuned to land within 12 per channel of the artifact on the built-in
  * theme, and is made only of the theme's own colours, so an imported theme's
- * mutalisk matches it.
+ * creatures match it.
  */
 export function accentsOf(
   ui: Pick<UiColors, 'bg' | 'ink' | 'red' | 'onBrand'>,
   { creep, chitin, tissueDeep, tissue }: Pick<SwarmPalette, 'creep' | 'chitin' | 'tissueDeep' | 'tissue'>,
-): Pick<SwarmPalette, 'membrane' | 'maw' | 'gum' | 'stain' | 'glint'> {
+): Pick<
+  SwarmPalette,
+  'membrane' | 'maw' | 'gum' | 'stain' | 'glint' | 'mineralDeep' | 'mineral' | 'mineralLit' | 'mat'
+> {
   const dark = luminance(ui.bg) < 0.5;
   const [deepest, lightest] = luminance(ui.bg) < luminance(ui.ink) ? [ui.bg, ui.ink] : [ui.ink, ui.bg];
+  const mineralDeep = dark ? mixColour(tissueDeep, ui.ink, 0.08) : mixColour(creep, ui.ink, 0.54);
+  const mineralLit = dark
+    ? mixColour(mixColour(ui.ink, ui.red, 0.12), tissue, 0.35)
+    : mixColour(ui.bg, chitin, 0.12);
   return {
+    mineralDeep,
+    mineral: mixColour(mineralDeep, mineralLit, 0.5),
+    mineralLit,
+    mat: dark ? mixColour(creep, tissueDeep, 0.26) : creep,
     membrane: dark
       ? mixColour(creep, ui.red, 0.3)
       : mixColour(mixColour(tissue, ui.red, 0.8), creep, 0.8),
