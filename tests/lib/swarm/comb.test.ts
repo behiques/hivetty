@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   type CellState,
@@ -18,8 +18,14 @@ import {
   SWARM,
   syncFlyers,
 } from '@lib/swarm/comb';
+import { createSpine, drawMuta, spineNodes } from '@lib/swarm/muta';
 import type { SwarmPalette } from '@lib/swarm/palette';
 import { coloursUsed, recordingContext } from '@tests/support/canvas-2d';
+
+vi.mock('@lib/swarm/muta', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@lib/swarm/muta')>();
+  return { ...actual, drawMuta: vi.fn(actual.drawMuta) };
+});
 
 const agent = (id: string, state: CellState): CombInput => ({ id, name: id, project: SWARM, state });
 const cell = (id: string, project: string, state: CellState): CombInput => ({ id, name: id, project, state });
@@ -181,7 +187,9 @@ describe('layoutComb — at scale', () => {
 });
 
 const fixed = (...values: number[]) => { let i = 0; return () => values[i++ % values.length]!; };
-const flyer = (over: Partial<Flyer> = {}): Flyer => ({ x: 100, y: 100, a: 0, k: 0, leg: 1, target: null, turn: 0, ...over });
+const flyer = (over: Partial<Flyer> = {}): Flyer => ({
+  x: 100, y: 100, a: 0, k: 0, leg: 1, target: null, turn: 0, spine: createSpine(100, 100, 0), ...over,
+});
 
 describe('flyers', () => {
   const busy = layoutComb(BUSY, PROJECTS);
@@ -240,6 +248,26 @@ describe('flyers', () => {
     expect(newFlyer(2, fixed(0)).k).toBeCloseTo(3.4);
   });
 
+  it('carries each spine along: after 0.5s its head is the flyer', () => {
+    let flock = syncFlyers([], 3, seededRng(2));
+    for (let i = 0; i < 30; i++) flock = stepFlyers(flock, busy, 1 / 60, seededRng(i), false);
+    for (const f of flock) {
+      const [hx, hy] = spineNodes(f.spine)[0]!;
+      expect(hx).toBeCloseTo(f.x, 6);
+      expect(hy).toBeCloseTo(f.y, 6);
+    }
+  });
+
+  it('warms each still spine straight in behind its flyer', () => {
+    for (const f of stillFlyers(busy, 5)) {
+      const nodes = spineNodes(f.spine);
+      expect(nodes[0]![0]).toBeCloseTo(f.x, 6);
+      expect(nodes[0]![1]).toBeCloseTo(f.y, 6);
+      const back = Math.atan2(nodes[0]![1] - nodes[10]![1], nodes[0]![0] - nodes[10]![0]);
+      expect(Math.abs(Math.atan2(Math.sin(back - f.a), Math.cos(back - f.a)))).toBeLessThan(0.05);
+    }
+  });
+
   it('places a still frame deterministically', () => {
     expect(stillFlyers(busy, 5)).toEqual(stillFlyers(busy, 5));
     expect(stillFlyers(busy, 5)).toHaveLength(9);
@@ -255,6 +283,9 @@ const PALETTE: SwarmPalette = {
   bg: 'c-bg', panel2: 'c-panel2', ink: 'c-ink', muted: 'c-muted', subtle: 'c-subtle',
   brand: 'c-brand', green: 'c-green', amber: 'c-amber', red: 'c-red', creep: 'c-creep',
   creepClear: 'c-creep-clear', chitin: 'c-chitin', carapace: 'c-carapace',
+  tissueDeep: 'c-tissue-deep', tissue: 'c-tissue', tissueLit: 'c-tissue-lit',
+  glowCore: 'c-glow-core', ground: 'c-ground', membrane: 'c-membrane', maw: 'c-maw',
+  gum: 'c-gum', stain: 'c-stain', glint: 'c-glint',
 };
 
 describe('drawComb', () => {
@@ -271,10 +302,12 @@ describe('drawComb', () => {
     expect(ctx.globalAlpha).toBe(1);
   });
 
-  it('paints only with palette colours', () => {
+  it('paints only with palette colours, or the tone formatted from them', () => {
     const allowed = new Set(Object.values(PALETTE));
     const { calls } = draw(layoutComb(BUSY, PROJECTS), stillFlyers(layoutComb(BUSY, PROJECTS), 5));
-    for (const colour of coloursUsed(calls)) expect(allowed.has(colour as string), String(colour)).toBe(true);
+    for (const colour of coloursUsed(calls)) {
+      expect(allowed.has(colour as string) || /^rgba\(/.test(colour as string), String(colour)).toBe(true);
+    }
   });
 
   it('names every cell under it, truncated to 14, in the normal layout', () => {
@@ -291,10 +324,33 @@ describe('drawComb', () => {
     expect(texts).not.toContain('agent-2'); // morphing
   });
 
-  it('draws one creature per flyer', () => {
-    const l = layoutComb(BUSY, PROJECTS);
-    const { calls } = draw(l, stillFlyers(l, 5));
-    // drawMutalisk opens with save → translate; the comb itself never translates.
-    expect(calls.filter((c) => c.op === 'translate')).toHaveLength(9);
+  describe('the flyers', () => {
+    beforeEach(() => {
+      vi.mocked(drawMuta).mockClear();
+    });
+
+    it('draws one Brood mutalisk per flyer, on its own spine and clock', () => {
+      const l = layoutComb(BUSY, PROJECTS);
+      const flyers = stillFlyers(l, 5);
+      draw(l, flyers);
+      const placed = vi.mocked(drawMuta).mock.calls;
+      expect(placed).toHaveLength(9);
+      placed.forEach(([, spine, t, k, turn, scale], i) => {
+        expect(spine).toBe(flyers[i]!.spine);
+        expect(t).toBe(2.5);
+        expect(k).toBeCloseTo(flyers[i]!.k * 3.7);
+        expect(turn).toBe(flyers[i]!.turn);
+        expect(scale).toBeCloseTo(0.108);
+      });
+    });
+
+    it('keeps the small-screen ratio at scale, and passes the device scale through', () => {
+      const l = layoutComb(heavy(HEAVY_COUNTS).entities, heavy(HEAVY_COUNTS).projects);
+      const { ctx } = recordingContext();
+      drawComb(ctx, l, stillFlyers(l, 5), 1, PALETTE, 2);
+      const [, , , , , scale, ps] = vi.mocked(drawMuta).mock.calls[0]!;
+      expect(scale).toBeCloseTo(0.108 * 0.7);
+      expect(ps).toBe(2);
+    });
   });
 });

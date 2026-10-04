@@ -1,25 +1,17 @@
-import { type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent, useCallback, useMemo, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
 import { cellLabel, cellText, type CellText } from '@features/home/cell-text';
+import { type CanvasPaint, useCanvasLoop } from '@hooks/use-canvas-loop';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
 import {
-  ALL_PROJECTS, type CellState, type CombCell, COMB_H, COMB_W, type CombInput, type CombLayout, drawComb,
+  ALL_PROJECTS, type CellState, type CombCell, COMB_W, type CombInput, drawComb,
   type Flyer, flyerCount, hitTest, isCalm, layoutComb, stepFlyers, stillFlyers, SWARM, syncFlyers,
 } from '@lib/swarm/comb';
-import type { SwarmPalette } from '@lib/swarm/palette';
 import { useSwarmPalette } from '@stores/appearance-store';
 import { type CombEntity, useCombEntities, useOpenEntity, useProjects } from '@stores/hive-store';
 import { useSelectPlace, useSetSessionsProject } from '@stores/ui-store';
-
-interface Scene {
-  layout: CombLayout;
-  palette: SwarmPalette;
-  needs: number;
-  flyers: Flyer[];
-  t: number;
-}
 
 export const toCombInput = (e: CombEntity): CombInput => ({
   id: e.id, name: e.name, project: e.project, state: e.state,
@@ -46,24 +38,18 @@ function CombTooltip({ text, left, top }: { text: CellText; left: number; top: n
   );
 }
 
-/** Draw the scene at the canvas's current backing size. */
-function paint(canvas: HTMLCanvasElement, scene: Scene): void {
-  const ctx = canvas.getContext('2d');
-  if (!ctx || canvas.width === 0) return;
-  const k = canvas.width / COMB_W;
-  ctx.setTransform(k, 0, 0, k, 0, 0);
-  drawComb(ctx, scene.layout, scene.flyers, scene.t, scene.palette);
-}
+/** Under reduced motion the comb holds the frame after four seconds of flight. */
+const STILL_T = 4;
 
 /**
  * The comb's canvas host (HIVE-199).
  *
- * Owns the animation loop, and runs it only while the canvas is on screen, the
- * document is visible and Home is mounted. Data and the palette reach the loop
- * through a ref, so a session changing state or a theme switch repaints the
- * next frame without restarting anything. Under reduced motion there is no
- * loop at all: one still frame, the flyers placed as after four seconds of
- * flight, redrawn when the data or the palette changes.
+ * The loop is {@link useCanvasLoop}'s: it runs only while the canvas is on
+ * screen, the document is visible and Home is mounted, and a session changing
+ * state or a theme switch reaches the next frame without restarting anything.
+ * Under reduced motion there is no loop at all: one still frame, the flyers
+ * placed as after four seconds of flight, redrawn when the data or the
+ * palette changes.
  */
 export function TheComb({ label }: { label: string }) {
   const entities = useCombEntities();
@@ -112,83 +98,24 @@ export function TheComb({ label }: { label: string }) {
   const now = Date.now();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const scene = useRef<Scene>({ layout, palette, needs, flyers: [], t: 0 });
+  const flock = useRef<Flyer[]>([]);
+  const still = useMemo(() => (reduced ? stillFlyers(layout, needs) : null), [reduced, layout, needs]);
 
-  useLayoutEffect(() => {
-    Object.assign(scene.current, { layout, palette, needs });
-    const canvas = canvasRef.current;
-    if (!reduced || !canvas) return;
-    scene.current.flyers = stillFlyers(layout, needs);
-    scene.current.t = 4;
-    paint(canvas, scene.current);
-  }, [layout, palette, needs, reduced]);
-
-  // The backing store follows the element; device pixel ratio capped at 2.
-  useLayoutEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return undefined;
-    const resize = (): void => {
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      canvas.width = Math.round(canvas.clientWidth * dpr);
-      canvas.height = Math.round(((canvas.clientWidth * COMB_H) / COMB_W) * dpr);
-      paint(canvas, scene.current);
-    };
-    resize();
-    if (typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || reduced) return undefined;
-    let frame = 0;
-    let last: number | null = null;
-    let onScreen = typeof IntersectionObserver === 'undefined';
-    let visible = !document.hidden;
-
-    function tick(now: number): void {
-      frame = 0;
-      const s = scene.current;
-      const dt = last === null ? 0 : (now - last) / 1000;
-      last = now;
-      s.t += Math.min(dt, 1 / 15);
-      const flyers = syncFlyers(s.flyers, flyerCount(s.layout, s.needs), Math.random);
-      s.flyers = stepFlyers(flyers, s.layout, dt, Math.random, isCalm(s.layout, s.needs));
-      paint(canvas!, s);
-      schedule();
-    }
-    function schedule(): void {
-      if (frame === 0 && onScreen && visible) frame = requestAnimationFrame(tick);
-    }
-    function stop(): void {
-      if (frame !== 0) cancelAnimationFrame(frame);
-      frame = 0;
-      last = null;
-    }
-    const onVisibility = (): void => {
-      visible = !document.hidden;
-      if (visible) schedule();
-      else stop();
-    };
-    const observer =
-      typeof IntersectionObserver === 'undefined'
-        ? null
-        : new IntersectionObserver((entries) => {
-            onScreen = entries.some((entry) => entry.isIntersecting);
-            if (onScreen) schedule();
-            else stop();
-          });
-    observer?.observe(canvas);
-    document.addEventListener('visibilitychange', onVisibility);
-    schedule();
-    return () => {
-      stop();
-      observer?.disconnect();
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [reduced]);
+  const paint = useCallback<CanvasPaint>(
+    (ctx, t, dt, { w, dpr }) => {
+      let flyers = still;
+      if (!flyers) {
+        const synced = syncFlyers(flock.current, flyerCount(layout, needs), Math.random);
+        flyers = stepFlyers(synced, layout, dt, Math.random, isCalm(layout, needs));
+        flock.current = flyers;
+      }
+      const k = (w * dpr) / COMB_W;
+      ctx.setTransform(k, 0, 0, k, 0, 0);
+      drawComb(ctx, layout, flyers, t, palette, k);
+    },
+    [layout, needs, palette, still],
+  );
+  useCanvasLoop(canvasRef, paint, { still: reduced ? STILL_T : null });
 
   return (
     <div className="relative">

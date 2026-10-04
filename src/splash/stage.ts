@@ -1,5 +1,5 @@
 import type { SwarmPalette } from '@lib/swarm/palette';
-import { clearColour, mixColour } from '@lib/theme/colour';
+import { accentsOf, clearColour, mixColour } from '@lib/theme/colour';
 
 import { drawGlobe, GLOBE_STILL_T } from './globe';
 
@@ -24,18 +24,29 @@ const TOKENS = {
   red: '--cc-red',
   creep: '--cc-creep',
   chitin: '--cc-chitin',
+  tissueDeep: '--cc-tissue-deep',
+  tissue: '--cc-tissue',
+  tissueLit: '--cc-tissue-lit',
+  glowCore: '--cc-glow-core',
+  ground: '--cc-ground',
+  onBrand: '--cc-on-brand',
 } as const;
 
 /**
- * A SwarmPalette from the document's tokens (`splash-tokens.css`). The two
- * derived colours are `swarmPaletteOf`'s rule, applied to the same values, so
+ * A SwarmPalette from the document's tokens (`splash-tokens.css`). The
+ * derived colours are `swarmPaletteOf`'s rules, applied to the same values, so
  * the creature here is the creature on Home.
  */
 export function paletteFrom(read: (token: string) => string): SwarmPalette {
-  const c = Object.fromEntries(
+  const { onBrand, ...c } = Object.fromEntries(
     Object.entries(TOKENS).map(([key, token]) => [key, read(token).trim()]),
   ) as Record<keyof typeof TOKENS, string>;
-  return { ...c, creepClear: clearColour(c.creep), carapace: mixColour(c.bg, c.chitin, 0.18) };
+  return {
+    ...c,
+    creepClear: clearColour(c.creep),
+    carapace: mixColour(c.bg, c.chitin, 0.18),
+    ...accentsOf({ ...c, onBrand }, c),
+  };
 }
 
 export interface GlobeStage {
@@ -66,7 +77,7 @@ export function startGlobe(canvas: HTMLCanvasElement, palette: SwarmPalette, sta
     ctx.clearRect(0, 0, stage.width, stage.height);
     ctx.translate(stage.cx, stage.cy);
     ctx.scale(stage.scale, stage.scale);
-    drawGlobe(ctx, t, palette);
+    drawGlobe(ctx, t, palette, dpr * stage.scale);
   };
 
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

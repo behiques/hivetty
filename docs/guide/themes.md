@@ -50,13 +50,18 @@ template is easiest.
 
 | Group | Keys | Colours |
 | --- | --- | --- |
-| `ui` | 28 (+2 optional) | the app chrome: backgrounds, borders, ink, brand, status colours |
+| `ui` | 28 (+7 optional) | the app chrome: backgrounds, borders, ink, brand, status colours |
 | `syntax` | 11 | the editor: keyword, string, number, comment, selection… |
 | `terminal` | 11 (+2 optional) | xterm: background, ink and the ANSI colours |
 
 `ui.creep` and `ui.chitin` colour Home's comb creatures. They are optional: a theme without them
 imports with no warning, and the app derives both from the theme's own background, brand and ink,
 so its creatures match it rather than the Hive's violet.
+
+`ui.tissueDeep`, `ui.tissue` and `ui.tissueLit` are the Brood creatures' flesh in shadow, mid tone
+and light; `ui.glowCore` is the hot centre of their green glow (the glow itself is `ui.green`); and
+`ui.ground` is the ground they stand on. They are optional too: without them the app mixes each from
+the theme's background, chitin, creep, green and ink.
 
 The importer refuses a file over 256 KB, a version other than 1, a missing mode, a bad
 colour (naming the key), or a `terminal.bg` that differs from `ui.termBg`.

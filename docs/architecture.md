@@ -44,10 +44,14 @@ src/
   features/<slice>/      agents, editor, explorer, home, inbox, orchestrator,
                          projects, pull-requests, sessions, settings, work, shared
   lib/swarm/             pure canvas modules (HIVE-199): the palette type, the
-                         mutalisk, the comb's layout, motion and drawing. No
-                         colour literals and no imports outside the folder. The
-                         splash's one exception to its fence (HIVE-212): it may
-                         import mutalisk, palette, comb (hexPath) and
+                         comb's layout, motion and drawing, and the Brood
+                         (HIVE-221): tone (the palette as numeric RGB, the one
+                         colour formatter), kit (the shared math and drawing
+                         helpers) and muta (the top-down mutalisk, its spine
+                         simulated live per flyer). No colour literals outside
+                         tone and no imports outside the folder. The splash's
+                         one exception to its fence (HIVE-212): it may import
+                         muta, tone, kit, palette, comb (hexPath) and
                          lib/theme/colour, and nothing else from lib/
   stores/                hive, ui, appearance, editor
 electron/

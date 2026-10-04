@@ -83,4 +83,66 @@ describe('swarmPaletteOf', () => {
       red: ui.red,
     });
   });
+
+  it('carries the Brood tissue ramp from the built-in', () => {
+    const p = swarmPaletteOf(BUILT_IN_THEME.modes.dark.ui);
+    expect([p.tissueDeep, p.tissue, p.tissueLit, p.glowCore, p.ground]).toEqual([
+      '#0b0816', '#2c2346', '#8474c0', '#e2ffee', '#141128',
+    ]);
+    const l = swarmPaletteOf(BUILT_IN_THEME.modes.light.ui);
+    expect([l.tissueDeep, l.tissue, l.tissueLit, l.glowCore, l.ground]).toEqual([
+      '#7a68b6', '#d4ccee', '#fbf9ff', '#96deb8', '#eeeafa',
+    ]);
+  });
+
+  it('derives the tissue ramp for a theme that lacks it', () => {
+    const {
+      tissueDeep: _a, tissue: _b, tissueLit: _c, glowCore: _d, ground: _e, ...bareTissue
+    } = BUILT_IN_THEME.modes.dark.ui;
+    const p = swarmPaletteOf(bareTissue);
+    for (const c of [p.tissueDeep, p.tissue, p.tissueLit, p.glowCore, p.ground]) {
+      expect(parseColour(c)).not.toBeNull();
+      expect(c).toMatch(/^rgb\(/);
+    }
+  });
+});
+
+describe('the creature accents (HIVE-221)', () => {
+  /** Every channel of `a` within `tolerance` of the artifact's literal `b`. */
+  const near = (a: string, b: readonly number[], tolerance: number): boolean => {
+    const parsed = parseColour(a);
+    return parsed !== null && b.every((v, i) => Math.abs(parsed[i]! - v) <= tolerance);
+  };
+
+  // The Brood v15's literals: dark, then light. The maw on light is the
+  // artifact's `spTone(T, 0.04)`.
+  const ARTIFACT = {
+    membrane: [[150, 80, 150], [196, 140, 206]],
+    maw: [[9, 3, 13], [129, 112, 186]],
+    gum: [[40, 10, 32], [120, 70, 110]],
+    stain: [[96, 60, 70], [96, 60, 70]],
+    glint: [[255, 255, 255], [255, 255, 255]],
+  } as const;
+
+  it.each([
+    ['dark', 0],
+    ['light', 1],
+  ] as const)('derives each accent within 12 of the artifact in %s', (mode, at) => {
+    const p = swarmPaletteOf(BUILT_IN_THEME.modes[mode].ui);
+    for (const [key, literals] of Object.entries(ARTIFACT)) {
+      const value = p[key as keyof typeof ARTIFACT];
+      expect(near(value, literals[at], 12), `${mode} ${key}: ${value}`).toBe(true);
+    }
+  });
+
+  it('derives every accent as a colour for a theme with no creature keys', () => {
+    const {
+      creep: _c, chitin: _h, tissueDeep: _a, tissue: _b, tissueLit: _d, glowCore: _e,
+      ground: _f, ...bare
+    } = BUILT_IN_THEME.modes.light.ui;
+    const p = swarmPaletteOf(bare);
+    for (const c of [p.membrane, p.maw, p.gum, p.stain, p.glint]) {
+      expect(parseColour(c)).not.toBeNull();
+    }
+  });
 });

@@ -264,6 +264,21 @@ describe('the creature colours (HIVE-199)', () => {
     expect(result.notes.join('\n')).not.toMatch(/creep|chitin/);
   });
 
+  it('imports a theme without the Brood tissue ramp with no warning about it', () => {
+    const theme = structuredClone(BUILT_IN_THEME);
+    for (const mode of THEME_MODES) {
+      for (const key of ['tissueDeep', 'tissue', 'tissueLit', 'glowCore', 'ground'] as const) {
+        delete theme.modes[mode].ui[key];
+      }
+    }
+    const result = importTheme(JSON.stringify(theme), 'old.json');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.theme.modes.dark.ui.tissue).toBeUndefined();
+    expect(result.inherited).toBe(0);
+    expect(result.notes.join('\n')).not.toMatch(/tissue|glowCore|ground/);
+  });
+
   it('round-trips a theme that carries them', () => {
     const result = importTheme(JSON.stringify(BUILT_IN_THEME), 'hive.json');
     expect(result.ok && result.theme.modes.light.ui.chitin).toBe('#6a54b0');

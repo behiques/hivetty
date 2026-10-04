@@ -45,7 +45,12 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | `--cc-danger-solid` | `#d3372f` | *(unchanged)* | notification badge fill |
 | `--cc-on-danger` | `#ffffff` | *(unchanged)* | text/icons on a danger fill |
 | `--cc-creep` | `#5b3d8f` | `#b7a3e6` | the ground under a busy comb patch; the flyers' trace (HIVE-199) |
-| `--cc-chitin` | `#b9a7f0` | `#6a54b0` | the mutalisk's wings, bones and claws (HIVE-199) |
+| `--cc-chitin` | `#b9a7f0` | `#6a54b0` | the mutalisk's wings, bones and claws (HIVE-199); the Brood creatures' chitin (HIVE-221) |
+| `--cc-tissue-deep` | `#0b0816` | `#7a68b6` | the Brood creatures' shadowed tissue (HIVE-221) |
+| `--cc-tissue` | `#2c2346` | `#d4ccee` | the Brood creatures' mid tissue (HIVE-221) |
+| `--cc-tissue-lit` | `#8474c0` | `#fbf9ff` | the Brood creatures' lit tissue (HIVE-221) |
+| `--cc-glow-core` | `#e2ffee` | `#96deb8` | the hot centre of the Brood's green glow (HIVE-221) |
+| `--cc-ground` | `#141128` | `#eeeafa` | the ground under a Brood creature (HIVE-221) |
 | `--cc-code-keyword` | `#b39ff0` | `#6f42c1` | editor: keywords |
 | `--cc-code-string` | `#74b79c` | `#2e6b52` | editor: strings, regexps |
 | `--cc-code-number` | `#ffac47` | `#a1541a` | editor: numbers, booleans, null |
@@ -76,6 +81,12 @@ Being a mix, an imported theme derives it from its own amber and ink.
   name in `text-ink`; the "Before the shipper" bucket is chitin 18% into panel.
 
 Creep and chitin are bound as utilities too: `bg-creep`, `text-chitin` and the rest.
+
+**The Brood creatures (HIVE-221)** paint on canvas from the tissue ramp
+(`--cc-tissue-deep`, `--cc-tissue`, `--cc-tissue-lit`), the glow (`--cc-green`
+with `--cc-glow-core` at its centre), `--cc-ground`, `--cc-creep` and
+`--cc-chitin`. The hover mutalisk's membrane, maw, gums, tusk stain and glints
+have no token: `swarmPaletteOf` mixes them from the theme's own colours.
 
 **The editor and the terminal both follow the theme.** They did not always. The
 terminal was pinned dark in both themes on the reasoning that a terminal is a
