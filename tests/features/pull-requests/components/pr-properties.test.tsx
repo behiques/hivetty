@@ -44,6 +44,13 @@ describe('PrProperties', () => {
     expect(within(section('Status')).getByText('Open · 2 open findings, fixer on it')).toBeInTheDocument();
   });
 
+  it('says HATCHED alone for a merged PR, with no "Merged" line under it', () => {
+    const hatched = hatchRow({ state: 'merged' }, { flap: 'HATCHED', at: '00:21', tone: 'brand', github: 'Merged 00:21' });
+    render(<PrProperties row={hatched} detail={prDetail()} />);
+    expect(within(section('Status')).getByText('HATCHED 00:21')).toBeInTheDocument();
+    expect(within(section('Status')).queryByText(/Merged/)).toBeNull();
+  });
+
   it('lists every check with its state and the failing count in red', () => {
     render(<PrProperties row={row} detail={prDetail({ checks })} />);
     expect(screen.getByText('1 failing')).toHaveClass('text-red');

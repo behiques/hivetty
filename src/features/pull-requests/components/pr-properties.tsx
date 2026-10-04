@@ -118,7 +118,8 @@ export function PrProperties({
       <Section title="Status">
         <div className="flex flex-col items-start gap-1.5 px-1 pt-0.5 pb-1.5 text-[12px]">
           <Flap hatch={hatch} />
-          <span className="text-muted">{hatch.github}</span>
+          {/* HATCHED already says merged, and when. */}
+          {hatch.flap === 'HATCHED' ? null : <span className="text-muted">{hatch.github}</span>}
         </div>
       </Section>
 
