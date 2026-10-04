@@ -77,9 +77,17 @@ describe('blocks', () => {
       />,
     );
 
-    expect(screen.getByText('deep').closest('p')).toHaveStyle({
-      paddingLeft: '34px',
-    });
+    // happy-dom resolves `em` in computed style, so read the inline value.
+    expect(screen.getByText('deep').closest('p')?.style.paddingLeft).toBe('3.25em');
+  });
+
+  it("takes the caller's size in place of its own", () => {
+    const { container } = render(
+      <AdfBlocks blocks={[{ kind: 'paragraph', runs: [{ text: 'p', marks: [] }] }]} className="text-[13.5px]" />,
+    );
+
+    expect(container.firstElementChild).toHaveClass('text-[13.5px]');
+    expect(container.firstElementChild).not.toHaveClass('text-[12px]');
   });
 });
 
