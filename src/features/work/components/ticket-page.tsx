@@ -45,7 +45,7 @@ function Description({ ticketKey }: { ticketKey: string }) {
       {description.length === 0 ? (
         <p className="text-subtle">No description.</p>
       ) : (
-        <AdfBlocks blocks={description} />
+        <AdfBlocks blocks={description} className="text-[13.5px] leading-[1.7]" />
       )}
       {problem === undefined ? null : <TicketProblem message={problem} onRetry={retry} readAt={mine?.readAt} />}
     </div>

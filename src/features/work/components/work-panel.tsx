@@ -84,7 +84,7 @@ function SourceNotice({
     return (
       <div className="flex flex-col gap-[3px] pb-1">
         <SwarmLine phraseKey="empty.workUnconfigured" />
-        <p className="px-1 text-[11.5px] leading-[1.45] text-subtle">
+        <p className="px-1 text-ui-sm leading-[1.45] text-subtle">
           No Jira connection yet. Add your site and an API token in{' '}
           <span className="text-muted">Settings → Integrations</span>.
         </p>
@@ -102,7 +102,7 @@ function SourceNotice({
 
   if (source.capped) {
     return (
-      <p className="px-1 pb-1 text-[11.5px] leading-[1.45] text-subtle">
+      <p className="px-1 pb-1 text-ui-sm leading-[1.45] text-subtle">
         {`Showing the first ${String(JIRA_MAX_ISSUES)} — your query matched more. Narrow it in Jira.`}
       </p>
     );
@@ -162,8 +162,8 @@ function WorkHeader() {
   return (
     <>
       <div className="flex items-baseline gap-2.5 px-2 pt-2.5 pb-2">
-        <b className="text-[14px] text-ink">Work</b>
-        <span className="text-[12px] text-muted">
+        <h2 className="text-ui-lg font-semibold text-ink">Work</h2>
+        <span className="text-ui-sm text-muted">
           {total} tickets
           {needYou > 0 ? (
             <>
@@ -211,10 +211,10 @@ function TicketGroups() {
                 aria-hidden
                 className={cn('text-subtle transition-transform', open && 'rotate-90')}
               />
-              <span className="font-sans text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase">
+              <span className="text-ui-sm font-semibold tracking-[0.06em] text-subtle uppercase">
                 {group.label}
               </span>
-              <span className="font-mono text-[10.5px] text-subtle">{group.rows.length}</span>
+              <span className="text-ui-sm text-subtle">{group.rows.length}</span>
             </button>
             {open ? group.rows.map((row) => <TicketRow key={row.ticket.key} row={row} />) : null}
           </div>
@@ -315,7 +315,7 @@ export function WorkPanel() {
     return (
       <WorkLayout header={header}>
         {search.error !== null ? (
-          <p className="px-1 pb-1 text-[11.5px] leading-[1.45] text-amber">
+          <p className="px-1 pb-1 text-ui-sm leading-[1.45] text-amber">
             {search.error}
           </p>
         ) : null}

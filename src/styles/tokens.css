@@ -350,6 +350,13 @@ body[data-theme='light'] {
 
   --font-mono: ui-monospace, Menlo, 'SF Mono', monospace;
   /**
+   * The list type scale: panel titles, a row's name, everything else. Three
+   * steps, set in sans; mono stays for identifiers at the size around them.
+   */
+  --text-ui-lg: 15px;
+  --text-ui: 13px;
+  --text-ui-sm: 11.5px;
+  /**
    * Words, beside the mono that machine strings keep (HIVE-204): the agent
    * page's descriptions, form labels and footers. The system's own text face,
    * for the reason `--font-display` gives — no webfont round-trip.

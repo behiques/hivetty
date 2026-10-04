@@ -35,9 +35,9 @@ export function TicketRow({ row }: { row: TicketRowModel }) {
         className={cn('mt-[5px] size-2 shrink-0 rounded-full', DOT[row.tone])}
       />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-[13px] text-ink">{row.title}</span>
-        <span className="truncate font-mono text-[11.5px] text-muted">
-          <span className="text-brand">{row.ticket.key}</span> · {row.fact}
+        <span className="truncate text-ui text-ink">{row.title}</span>
+        <span className="truncate text-ui-sm text-muted">
+          <span className="font-mono text-brand">{row.ticket.key}</span> · {row.fact}
         </span>
       </span>
     </button>

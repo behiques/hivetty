@@ -152,28 +152,28 @@ export function AgentRow({ id }: AgentRowProps) {
         aria-current={current ? 'true' : undefined}
         aria-label={name}
         className={cn(
-          'flex w-full gap-3 rounded-[10px] p-2 text-left',
+          'flex w-full gap-2.5 rounded-[10px] p-2 text-left',
           current ? 'bg-panel-2' : 'hover:bg-hover',
         )}
       >
-        <AgentTile icon={entity.icon} tone={tone} live={live} />
+        <AgentTile icon={entity.icon} tone={tone} live={live} size="sm" />
         <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
           <span className="flex items-center gap-2">
-            <b className="truncate font-mono text-[14.5px] font-semibold">{id}</b>
+            <b className="truncate text-ui font-normal text-ink">{id}</b>
             <span className="flex-1" />
-            <span className="w-[44px] shrink-0 text-right font-mono text-[11.5px] text-subtle group-focus-within:invisible group-hover:invisible">
+            <span className="w-[44px] shrink-0 text-right text-ui-sm text-subtle group-focus-within:invisible group-hover:invisible">
               {last === undefined ? '' : age}
             </span>
           </span>
           {notice === null ? (
-            <span className="truncate text-[12.5px] text-muted">
+            <span className="truncate text-ui-sm text-muted">
               {keyword === '' ? null : (
-                <i className={cn('mr-1 font-mono text-[12px] not-italic', keywordTone)}>{keyword}</i>
+                <i className={cn('mr-1 not-italic', keywordTone)}>{keyword}</i>
               )}
               {text}
             </span>
           ) : (
-            <span role="status" className="truncate text-[12.5px] text-amber">
+            <span role="status" className="truncate text-ui-sm text-amber">
               {notice}
             </span>
           )}

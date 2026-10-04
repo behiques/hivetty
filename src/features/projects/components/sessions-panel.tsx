@@ -40,8 +40,8 @@ export function SessionsPanel() {
   return (
     <div data-panel="sessions" className="flex flex-col gap-0.5">
       <div className="flex items-baseline gap-2.5 px-2 pt-1 pb-2">
-        <h2 className="text-[14px] font-semibold text-ink">Projects</h2>
-        <span className="text-[12px] text-muted">
+        <h2 className="text-ui-lg font-semibold text-ink">Projects</h2>
+        <span className="text-ui-sm text-muted">
           <span className="text-green">{live} live</span> ·{' '}
           <span className="text-amber-count">{needs} needs you</span>
         </span>
@@ -64,8 +64,8 @@ export function SessionsPanel() {
         )}
       >
         <Eye size={15} aria-hidden="true" className="shrink-0 text-brand" />
-        <span className="flex-1 text-[13px] font-medium text-ink">All projects</span>
-        <span className="font-mono text-[11px] text-muted">{live}</span>
+        <span className="flex-1 text-ui font-medium text-ink">All projects</span>
+        <span className="text-ui-sm text-muted">{live}</span>
       </button>
       {projects.map((project) => (
         <SessionsProjectRow key={project.id} project={project} />

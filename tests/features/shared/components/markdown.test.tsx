@@ -40,4 +40,14 @@ describe('Markdown', () => {
     expect(container.querySelectorAll('ol li')).toHaveLength(2);
     expect(container.querySelector('pre')).toHaveTextContent('const a = 1;');
   });
+
+  it('draws a GFM table with inline marks in its cells, and keeps HTML in a cell as text', () => {
+    render(<Markdown source={'| ≤ | Step |\n|---:|---|\n| **748** | `5h` <b>x</b> |'} />);
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '≤' })).toHaveClass('text-right');
+    const cells = screen.getAllByRole('cell');
+    expect(cells[0]?.querySelector('strong')).toHaveTextContent('748');
+    expect(cells[1]?.querySelector('code')).toHaveTextContent('5h');
+    expect(cells[1]?.querySelector('b')).toBeNull();
+  });
 });

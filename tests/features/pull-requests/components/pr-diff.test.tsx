@@ -131,6 +131,15 @@ describe('PrDiff — Split and threads (HIVE-207)', () => {
     expect(pair.querySelector('[data-side="right"] [data-kind="add"]')).toHaveTextContent('115+');
   });
 
+  it('wraps a long line inside its own column in Split, and never in Unified', async () => {
+    render(<PrDiff {...props()} />);
+    expect(document.querySelector('[data-kind="del"]')).toHaveClass('whitespace-pre');
+    await userEvent.click(screen.getByRole('radio', { name: 'Split' }));
+    const left = screen.getByTestId('split-row-1').querySelector('[data-side="left"] [data-kind="del"]');
+    expect(left).toHaveClass('whitespace-pre-wrap');
+    expect(left?.lastElementChild).toHaveClass('min-w-0', 'wrap-anywhere');
+  });
+
   it('puts a RIGHT thread under its new line and a LEFT thread under its old line', () => {
     const right = prThread({ id: 'R', line: 116, diffSide: 'RIGHT', comments: [{ ...prThread().comments[0]!, body: 'right side' }] });
     const left = prThread({ id: 'L', line: 115, diffSide: 'LEFT', comments: [{ ...prThread().comments[0]!, body: 'left side' }] });

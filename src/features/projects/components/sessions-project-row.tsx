@@ -59,7 +59,7 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
           className="flex min-w-0 flex-1 items-center gap-2 py-[var(--cc-row-py)] text-left"
         >
           <Icon name={project.icon} size={15} className="shrink-0 text-brand" />
-          <span className="flex-1 truncate font-mono text-[12.5px] text-brand">{project.name}</span>
+          <span className="flex-1 truncate text-ui font-semibold text-brand">{project.name}</span>
           {access.reason ? (
             <Tag tone={access.invalid ? 'amber' : 'subtle'} title={access.reason} className="shrink-0">
               unmapped
@@ -68,13 +68,13 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
           {needs > 0 ? <Count tone="text-amber-count" dot="bg-amber" n={needs} title="need you" /> : null}
           {other > 0 ? <Count tone="text-green" dot="bg-green" n={other} title="other live" /> : null}
           {needs + other === 0 ? (
-            <span className="shrink-0 font-mono text-[11px] text-subtle">no sessions</span>
+            <span className="shrink-0 text-ui-sm text-subtle">no sessions</span>
           ) : null}
         </button>
       </div>
       {/* The way out of "unmapped", once the row is the filter (HIVE-218); a sibling, never inside the row's buttons. */}
       {selected && access.reason ? (
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 pr-2.5 pb-1.5 pl-[30px] text-[11.5px] text-muted">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 pr-2.5 pb-1.5 pl-[30px] text-ui-sm text-muted">
           <span className="min-w-0 break-words">{access.reason}</span>
           <button
             type="button"
@@ -104,7 +104,7 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
 /** A coloured dot and a number; the word rides along for screen readers. */
 function Count({ n, tone, dot, title }: { n: number; tone: string; dot: string; title: string }) {
   return (
-    <span title={title} className={cn('flex shrink-0 items-center gap-1 font-mono text-[11px]', tone)}>
+    <span title={title} className={cn('flex shrink-0 items-center gap-1 text-ui-sm', tone)}>
       <span aria-hidden="true" className={cn('size-1.5 rounded-full', dot)} />
       {n}
       <span className="sr-only"> {title}</span>

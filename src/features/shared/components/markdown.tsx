@@ -64,7 +64,7 @@ function inlineOne(token: Token): ReactNode {
 /** A task list is the PR's test plan: GitHub's tick, or an empty box. */
 function TestPlan({ items }: { items: Tokens.ListItem[] }) {
   return (
-    <ul className="mb-2 grid gap-1 text-[12.5px] text-muted">
+    <ul className="mb-[0.75em] grid gap-[0.35em] text-[12.5px] text-muted">
       {items.map((item, i) => (
         <li key={i} className="flex items-center gap-2">
           {item.checked ? (
@@ -79,6 +79,37 @@ function TestPlan({ items }: { items: Tokens.ListItem[] }) {
   );
 }
 
+/** A GFM table, scrolling sideways rather than squeezing a wide one. */
+function Table({ table }: { table: Tokens.Table }) {
+  const align = (a: Tokens.TableCell['align']) => (a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left');
+  return (
+    <div className="mb-[0.75em] overflow-x-auto">
+      <table className="border-collapse text-[0.92em]">
+        <thead>
+          <tr>
+            {table.header.map((cell, j) => (
+              <th key={j} className={`border-b border-border px-2.5 py-1.5 font-semibold text-ink ${align(cell.align)}`}>
+                {inline(cell.tokens)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((row, r) => (
+            <tr key={r}>
+              {row.map((cell, j) => (
+                <td key={j} className={`border-b border-border-soft px-2.5 py-1.5 align-top ${align(cell.align)}`}>
+                  {inline(cell.tokens)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 const itemBody = (item: Tokens.ListItem): ReactNode =>
   item.tokens.map((token, j) =>
     token.type === 'text' ? <Fragment key={j}>{inlineOne(token)}</Fragment> : block(token, j),
@@ -90,45 +121,49 @@ function block(token: Token, i: number): ReactNode {
       return null;
     case 'paragraph':
       return (
-        <p key={i} className="mb-2">
+        <p key={i} className="mb-[0.75em]">
           {inline((token as Tokens.Paragraph).tokens)}
         </p>
       );
     case 'heading':
       return (
-        <p key={i} className="mt-3 mb-1.5 font-semibold text-ink">
+        <p key={i} className="mt-[1.5em] mb-[0.5em] text-[1.05em] font-semibold text-ink first:mt-0">
           {inline((token as Tokens.Heading).tokens)}
         </p>
       );
     case 'code':
       return (
-        <pre key={i} className="mb-2 overflow-x-auto rounded-md bg-term-bg p-2.5 font-mono text-[12px] text-muted">
+        <pre key={i} className="mb-[0.75em] overflow-x-auto rounded-md bg-term-bg p-2.5 font-mono text-[12px] text-muted">
           {(token as Tokens.Code).text}
         </pre>
       );
     case 'blockquote':
       return (
-        <blockquote key={i} className="mb-2 border-l-2 border-border pl-3 text-muted">
+        <blockquote key={i} className="mb-[0.75em] border-l-2 border-border pl-3 text-muted">
           {(token as Tokens.Blockquote).tokens.map(block)}
         </blockquote>
       );
     case 'hr':
-      return <hr key={i} className="my-3 border-border-soft" />;
+      return <hr key={i} className="my-[1.25em] border-border-soft" />;
     case 'list': {
       const list = token as Tokens.List;
       if (list.items.some((item) => item.task)) return <TestPlan key={i} items={list.items} />;
       const Tag = list.ordered ? 'ol' : 'ul';
       return (
-        <Tag key={i} className={list.ordered ? 'mb-2 list-decimal pl-5' : 'mb-2 list-disc pl-5'}>
+        <Tag key={i} className={list.ordered ? 'mb-[0.75em] list-decimal pl-5' : 'mb-[0.75em] list-disc pl-5'}>
           {list.items.map((item, j) => (
-            <li key={j}>{itemBody(item)}</li>
+            <li key={j} className="mb-[0.35em] [&>p]:mb-[0.35em]">
+              {itemBody(item)}
+            </li>
           ))}
         </Tag>
       );
     }
+    case 'table':
+      return <Table key={i} table={token as Tokens.Table} />;
     default:
       return (
-        <p key={i} className="mb-2 whitespace-pre-wrap">
+        <p key={i} className="mb-[0.75em] whitespace-pre-wrap">
           {token.raw}
         </p>
       );
@@ -137,5 +172,5 @@ function block(token: Token, i: number): ReactNode {
 
 export function Markdown({ source }: { source: string }) {
   const tokens = useMemo(() => marked.lexer(source, { gfm: true }), [source]);
-  return <div className="text-[13.5px] leading-[1.6]">{tokens.map(block)}</div>;
+  return <div className="text-[13.5px] leading-[1.7]">{tokens.map(block)}</div>;
 }

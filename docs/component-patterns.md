@@ -232,7 +232,7 @@ Two precedence rules carry the weight:
 ### Home: The Comb (HIVE-199)
 
 Home is `features/home`'s `HomePage`: a visually hidden `<h1>Home</h1>`, then
-`CombHeadline` ("N things need you" over the counts) laid over `TheComb`, a hex
+`CombHeadline` (the hive's mood — calling, wounded, humming, quiet, dormant — over the counts) laid over `TheComb`, a hex
 canvas of every live session, terminal and agent. HIVE-200's strip mounts
 under the comb.
 

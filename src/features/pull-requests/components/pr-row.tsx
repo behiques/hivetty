@@ -42,12 +42,12 @@ function Row({ row, open, onOpen }: PrRowProps) {
       />
       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <span className="flex items-center gap-2.5">
-          <span className="font-mono text-[12.5px] font-bold text-ink">{pr.n}</span>
-          <span className="font-mono text-[11px] tracking-[0.04em] text-muted uppercase">{pr.repo}</span>
-          <span className="flex-1" />
+          <span className="min-w-0 flex-1 truncate text-ui text-ink">{pr.title}</span>
           <Flap hatch={hatch} />
         </span>
-        <span className="truncate text-[12.5px] text-muted">{pr.title}</span>
+        <span className="truncate font-mono text-ui-sm text-muted">
+          #{pr.n} · {pr.repo}
+        </span>
       </span>
     </button>
   );

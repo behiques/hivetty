@@ -96,7 +96,7 @@ export function ListPanel() {
     <section
       aria-label={`${LABELS[place]} list`}
       className={cn(
-        'flex w-[var(--cc-list-w)] shrink-0 flex-col border-r border-border-soft bg-panel px-2.5 pt-3.5 pb-5',
+        'flex w-[var(--cc-list-w)] shrink-0 flex-col border-r border-border-soft bg-panel px-2.5 pt-3.5 pb-5 font-sans',
         narrow && 'absolute inset-y-0 left-[var(--cc-bar-w)] z-30 shadow-lg',
         arriving && 'motion-safe:animate-ccslidein',
       )}

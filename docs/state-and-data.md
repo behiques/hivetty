@@ -434,7 +434,7 @@ when idle; an agent is Failed when `failed` or its definition is `invalid`,
 Summons when `asking`, Morphing when `working`, Burrowed when sleeping or
 paused; a live terminal is Terminal; ended sessions and terminals drop out.
 `summariseComb` / `useCombSummary` count those cells for the headline's summary
-line. Its "N things need you" is not a cell count: it reads
+line. Its "calling · N summons" is not a cell count: it reads
 `useSummonsCount(useOnStage())`, the strip's and the pill's number (HIVE-217).
 `useSwarmPalette` is memoised per theme `ui` object, so an unrelated
 appearance write hands back the same reference; a theme without `creep` and
