@@ -1,7 +1,7 @@
 # The overmind console
 
-The **overmind** is the home screen: a fleet table of every session and agent, a transcript,
-and a command line. Press `⌘[` (or `←` at an empty Claude prompt) from any session to come
+The **overmind** is the Sessions place's page: a fleet table of every session and agent, a
+transcript, and a command line. Press `⌘[` (or `←` at an empty Claude prompt) from any session to come
 back here.
 
 **On this page:** [The fleet table](#the-fleet-table) · [Commands](#commands) ·
@@ -22,13 +22,11 @@ The rows come in three groups, each under a head with its count:
 - **ENDED · N**, plus **· TODAY N**. Only today's endings are drawn; the rest wait behind
   **N more ›**, which shows them all.
 
-Drag the handle under the table to give the transcript more room. The table is the same in
-both layouts.
+Drag the handle under the table to give the transcript more room.
 
-### Round two: the page head and filters
+### The page head and filters
 
-With **Settings › Appearance › Layout** on round two, the overmind is the **Sessions**
-place's page, and a head sits above the table:
+A head sits above the table:
 
 - **Overmind**, then a line counting the fleet: `N live across M projects · N needs you ·
   N ended`.
@@ -47,9 +45,9 @@ checkout whose folder is named differently from its repository never matches.
 
 `↑` `↓` walk only the rows on screen, in the order the table draws them.
 
-### Round two: the console dock
+### The console dock
 
-In round two the transcript starts folded, and the table takes the page. The prompt stays
+The transcript starts folded, and the table takes the page. The prompt stays
 at the foot, with one line above it:
 
 - Folded, the line shows the console's last line, and **Show the console ⌃** opens the

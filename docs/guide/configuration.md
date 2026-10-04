@@ -73,8 +73,8 @@ Any key not in this list makes the whole file invalid, and Settings says which.
 | `receiver` | `hostAlias`, `bind` for containers | [Containers](containers.md) |
 | `server` | serve this machine | [Remote](remote.md#serve-from-an-always-on-mac) |
 | `remote` | attach to a server | [Remote](remote.md#attach-from-a-laptop) |
-| `subscriptionAuth` | sessions drop `ANTHROPIC_API_KEY` so `claude` uses your Claude plan; default on | [Tour › header](tour.md#the-header) |
-| `sessionMetrics` | read context and usage from each session's status line; default on | [Tour › header](tour.md#the-header) |
+| `subscriptionAuth` | sessions drop `ANTHROPIC_API_KEY` so `claude` uses your Claude plan; default on | [Tour › The stage](tour.md#the-stage) |
+| `sessionMetrics` | read context and usage from each session's status line; default on | [Tour › The stage](tour.md#the-stage) |
 | `disabledSessionPlugins` | plugin names a Hive session does not load; default `["workstream", "superpowers"]`, and `[]` loads them all | [Skills › How skills reach a session](skills.md#how-skills-reach-a-session) |
 
 ## Project keys
@@ -91,7 +91,7 @@ Any key not in this list makes the whole file invalid, and Settings says which.
 | `container` | run sessions in a container ([Containers](containers.md)) |
 | `autoMerge` | `true` lets the shipper agent merge this project's pull requests without asking ([Agents › The tools fence](agents.md#the-tools-fence)) |
 
-A project whose path does not exist shows **unmapped** in the rail, with the reason, and
+A project whose path does not exist shows **unmapped** in the Sessions panel, with the reason, and
 cannot start sessions.
 
 ## What is not in this file

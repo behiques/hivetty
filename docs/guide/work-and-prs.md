@@ -1,15 +1,14 @@
 # Jira and pull requests
 
-The **Work** tab (left rail) lists your Jira tickets. The **PRs** tab (right rail) lists your
-GitHub pull requests. Both refresh every 60 seconds; overscroll either list to refresh now.
+**Work** on the bar lists your Jira tickets. **PRs** on the bar lists your GitHub pull
+requests. Both refresh every 60 seconds; overscroll either list to refresh now.
 
-**On this page:** [Connect Jira](#connect-jira) · [The Work tab](#the-work-tab) ·
-[Start a session from a ticket](#start-a-session-from-a-ticket) · [The PRs tab](#the-prs-tab)
+**On this page:** [Connect Jira](#connect-jira) · [The Work list](#the-work-list) ·
+[Start a session from a ticket](#start-a-session-from-a-ticket) · [The PRs list](#the-prs-list)
 
 ## Connect Jira
 
-Until Jira is connected the Work tab says so and points you here. In round two, Work has
-no list at all until there is something on it: the stage reads **Jira isn't connected**,
+Until Jira is connected, Work has no list at all: the stage reads **Jira isn't connected**,
 with **Connect Jira** and **Learn what the Hive reads**, both of which open
 **Settings › Integrations**. If the first read fails, the same page shows Jira's error and
 **Retry**. Connected with nothing assigned, it reads **No tickets for you**.
@@ -31,9 +30,7 @@ the macOS Keychain and never leaves the main process.
 }
 ```
 
-## The Work tab
-
-<img src="../assets/guide/06-work-tab.png" alt="The Work tab: Jira tickets, each with its status, a new session link and its conversation" width="340">
+## The Work list
 
 By default it shows:
 
@@ -54,9 +51,9 @@ The PRs list does the same for GitHub.
 
 ## The ticket page
 
-In the round-two layout, **Work** is a place of its own. The panel lists your tickets in
-three groups, **In progress**, **To do** and **Done** (Done starts folded; click a group's
-header to fold or unfold it). The header counts the tickets and how many **need you**.
+**Work** is a place of its own. The list panel lists your tickets in three groups,
+**In progress**, **To do** and **Done** (Done starts folded; click a group's name to fold
+or unfold it). The panel's head counts the tickets and how many **need you**.
 
 Each row is one line of title and one line of facts: the key, then the one thing that
 matters most about the ticket right now, first match wins:
@@ -72,7 +69,7 @@ an empty ring otherwise. The magnifier shows **Search tickets**; a search replac
 
 Click a row and the ticket's page fills the stage:
 
-- **The header**: the key (it opens Jira), the status pill (click it to move the ticket),
+- **The top**: the key (it opens Jira), the status pill (click it to move the ticket),
   the title, then the description.
 - **Conversation**: Jira's newest 50 comments, oldest first. **Comments | Everything**
   switches between the comments alone and the comments with what the agents and sessions
@@ -96,10 +93,10 @@ its section with **Retry**, and what was already on screen stays, marked with it
 
 ## The Ticket tab
 
-In round two, a session started from a ticket has a **Ticket** tab in the session panel,
+A session started from a ticket has a **Ticket** tab in the session panel,
 so what was asked for sits beside what the session says it did. Top to bottom:
 
-- **The header**: the key, the type and the status pill, then the title.
+- **The top**: the key, the type and the status pill, then the title.
 - **Acceptance criteria**: the list items under the description's "Acceptance" or
   "Acceptance criteria" heading. With no such list it shows the **Description** instead.
 - **Latest comment**: the newest one, with its author and time.
@@ -148,7 +145,7 @@ parked or remembered PR, brand once merged. A PR the sweep can no longer see
 
 ## Start a session from a ticket
 
-Click **new session** on a ticket. The picker opens with the ticket key filled in, because a
+Click **New session** under a ticket page's Actions. The picker opens with the ticket key filled in, because a
 ticket does not say which repository it belongs to. Pick the project and press Enter.
 
 <picture>
@@ -159,9 +156,7 @@ ticket does not say which repository it belongs to. Pick the project and press E
 The session is named for the ticket, and names stay unique: `ABC-123`, then `ABC-123-2`.
 From here, [Working a ticket](workflow.md) walks the rest of the way to Done.
 
-## The PRs tab
-
-<img src="../assets/guide/07-prs-tab.png" alt="The PRs tab: an open pull request and two recent merges" width="340">
+## The PRs list
 
 The list comes from the GitHub CLI, run as you, with two searches:
 
@@ -170,8 +165,8 @@ is:pr author:@me is:open   sort:updated-desc
 is:pr author:@me is:merged sort:updated-desc    (kept for 24 hours)
 ```
 
-Each card links to GitHub and to the session whose branch made it. **Search pull requests**
-filters the list. The Hive stores no GitHub token; `gh` uses its own login, or `GH_TOKEN` /
+Each row opens the pull request's page on the stage, with its conversation, files, checks
+and the session whose branch made it. **Search pull requests** filters the list. The Hive stores no GitHub token; `gh` uses its own login, or `GH_TOKEN` /
 `GITHUB_TOKEN` if set.
 
 **Checks.** The PR page's Checks tab shows the branch's latest run without
@@ -183,17 +178,17 @@ right-hand column opens it here. Checks from outside GitHub Actions (a deploy
 preview, a scanner) sit in a row under the graph with a link out. The tab reads
 GitHub only while it is open.
 
-If the tab stays empty, run `gh auth status`. **Settings › Integrations › Command line** shows
+If the list stays empty, run `gh auth status`. **Settings › Integrations › Command line** shows
 which `gh` The Hive found and who it is signed in as.
 
-In round two the PRs place says this itself. With `gh` signed out the stage reads **The
+The PRs place says this itself. With `gh` signed out the stage reads **The
 GitHub CLI isn't signed in**, shows `gh auth login`, and offers **Open a terminal** (in the
 project on stage, else the first project) and **Check again**. `gh` not installed and no
 GitHub project get their own titles with the same two buttons.
 
 ## What the agents are doing
 
-When the workflow agents are on a piece of work, the cards say so. A ticket an agent is
+When the workflow agents are on a piece of work, the rows say so. A ticket an agent is
 working shows its newest progress under its title, named by the agent: `builder · task N done`,
 `shipper · ci`, `fixer · fix`; a PR the shipper is shipping shows one
 more badge, `shipping`, beside the GitHub ones. A draft without it is one nobody is driving.

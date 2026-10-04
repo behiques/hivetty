@@ -1,18 +1,23 @@
 # The plan panel
 
-While a session works through a plan, a slim rail beside its terminal shows the
+While a session works through a plan, the session panel's **Plan** tab shows the
 tasks and how far along they are. Its session row carries the same count.
 
 **On this page:** [What it shows](#what-it-shows) ·
 [Where the tasks come from](#where-the-tasks-come-from) ·
 [When it appears and leaves](#when-it-appears-and-leaves) ·
 [The count on the session row](#the-count-on-the-session-row) ·
-[In round two](#in-round-two) ·
-[Turn it off](#turn-it-off)
+[Open and close it](#open-and-close-it)
 
 ## What it shows
 
-A 34px rail at the terminal's right edge:
+The **Plan** tab is the first tab of the [session panel](tour.md#the-session-panel), at the
+window's right edge. It lists every task by name. The one Claude is on shows its present-tense
+wording ("Pushing the branch") under the title. Each task shows how long it ran, or has been
+running, and the tab's head adds up the total. Times start when a task first goes in progress,
+so rewriting the list does not reset them.
+
+Closed, the session panel is a 46px strip with the plan on top:
 
 | Part | Means |
 | --- | --- |
@@ -22,13 +27,14 @@ A 34px rail at the terminal's right edge:
 | A filled green check | a task that is done |
 | `✓` at the top | every task is done |
 
-**Peek:** hover over the rail, or tab to it, and a drawer slides out over the
-terminal with every task by name. A long name is cut short; hover it to read the
-whole thing. Peeking never resizes the terminal, so nothing in it reflows.
+**Where it came from** appears when the session has written a `hive:plan` file.
+It names the file and the time it was written; click it to open the plan in the
+editor. The file stays there after the tasks move on to Claude's own list, and
+goes when the session ends.
 
-**Pin:** the pin button in the drawer's header docks the drawer beside the
-terminal for good. The terminal narrows once to make room. Unpin with the same
-button. The choice is remembered.
+A session started from a ticket also has a **Ticket** tab, between Plan and Files: the
+ticket's criteria, its latest comment and its links. See [The Ticket
+tab](work-and-prs.md#the-ticket-tab).
 
 ## Where the tasks come from
 
@@ -50,42 +56,18 @@ higher one in this list wins:
 
 ## When it appears and leaves
 
-The rail appears as soon as the session's plan has a task, and only in that
-session's terminal view. When every task is done the count turns to `✓`, and a
-few seconds later the rail leaves. It also leaves whenever the conversation ends:
-`/clear`, `/done`, a plain `/exit`, a crash or a kill, a restart, or the terminal
-closing.
+The Plan tab appears as soon as the session's plan has a task. It leaves whenever
+the conversation ends: `/clear`, `/done`, a plain `/exit`, a crash or a kill, a
+restart, or the terminal closing.
 
 ## The count on the session row
 
 The same `done/total` sits in green after the session's status, both in the
-Projects rail and in the overmind's fleet table. You can see how far a
+Sessions panel and in the overmind's fleet table. You can see how far a
 background session has got without opening it.
 
-## In round two
+## Open and close it
 
-With **Settings › Appearance › Layout** on round two, the rail is replaced by the
-session panel at the window's right edge. Closed, it is a 46px strip: the same
-rings and `3/7` on top, then an icon for each other tab. Click any of them, or
-press the right-rail chord, to open the panel. Under 1,200px wide it stays a strip.
-
-The **Plan** tab lists every task. The one Claude is on shows its present-tense
-wording ("Pushing the branch") under the title. Each task shows how long it ran,
-or has been running, and the header adds up the total. Times start when a task
-first goes in progress, so rewriting the list does not reset them.
-
-A session started from a ticket also has a **Ticket** tab, between Plan and Files: the
-ticket's criteria, its latest comment and its links. See [The Ticket
-tab](work-and-prs.md#the-ticket-tab).
-
-**Where it came from** appears when the session has written a `hive:plan` file.
-It names the file and the time it was written; click it to open the plan in the
-editor. The file stays there after the tasks move on to Claude's own list, and
-goes when the session ends.
-
-## Turn it off
-
-**Settings › Appearance › Plan panel › Show plan panel.** Off hides the rail
-beside the terminal. The count on the session row stays, since it takes no
-room from the terminal. The setting applies to Classic only: round two's panel
-is closed with its own button, and remembers whether it was open.
+Click **›** at the end of the tabs, or press `⌘⌥B`, to close the session panel to its
+strip; click the plan's rings or any icon on the strip, or press `⌘⌥B` again, to open it.
+It remembers whether it was open. Under 1,200px wide it stays a strip.

@@ -47,7 +47,7 @@ Add a `container` block to the project. Its presence is the switch.
 | `freshness` | `exec-env` (default, no secret on disk) or `rewrite` |
 | `hostAlias` | overrides the global alias for this project |
 
-The rail's terminal link reads **terminal · host**: a plain terminal still opens on your Mac.
+The Sessions panel's terminal link reads **Terminal · host**: a plain terminal still opens on your Mac.
 
 ## A containerised agent
 

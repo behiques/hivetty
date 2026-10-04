@@ -14,9 +14,9 @@ Four ways, same result:
 
 | From | Do this |
 | --- | --- |
-| The header | **New session**, type a project, **Enter** |
-| The Projects rail | **+ new session** under a project (uses the picker's last model and effort) |
-| A Jira ticket | **new session** on the ticket card; the session is named for the ticket |
+| The Overmind | **New session**, type a project, **Enter** (filtered to a project: **New session in** it, straight away) |
+| The Sessions panel | **+ Session** under an unfolded project (uses the picker's last model and effort) |
+| A Jira ticket | **New session** under the ticket page's Actions; the session is named for the ticket |
 | The console | `spawn <project> <task>` |
 
 ![The picker: pinned projects, model and effort steppers, search](../assets/guide/02-new-session-picker.png)
@@ -67,7 +67,7 @@ Status comes from Claude Code's own hooks, so "needs input" is exact rather than
 - A ticket key always leads the name. Typing `work on ABC-123` links the session to
   that Jira issue once Jira confirms it exists:
   `back key interception abc-123` becomes `ABC-123-back-key-interception`.
-- The console and rails accept either the id or the name, in any case.
+- The console and the lists accept either the id or the name, in any case.
 - The branch is whatever git reports in the session's folder. A dash means none has been
   seen yet.
 
@@ -91,10 +91,9 @@ ended by `/clear` cannot be resumed: its terminal already carried on as a new se
 The 20 most recent ended sessions survive a restart. They come back under ENDED, newest
 first. The column **LAST USED** is when each one ended or last resumed.
 
-## Round two: the Sessions place
+## The Sessions place
 
-With **Settings › Appearance › Layout** on round two, the **Sessions** icon opens the
-projects panel beside the overmind.
+The **Sessions** icon on the bar opens the Sessions panel beside the overmind.
 
 - The head reads **Projects**, then how many sessions and terminals are live and how many
   need you. **+** opens the new-session picker.
@@ -104,7 +103,7 @@ projects panel beside the overmind.
 - Click a project's **name** to filter the overmind to it; that also unfolds it. The
   caret beside it only folds and unfolds.
 - Unfolded, each session is one line, then the project's terminals, then **+ Session**
-  and **+ Terminal**.
+  and **Terminal**.
 - Opening a session unfolds its project. Coming back with the back button, `⌘[` or the
   Sessions icon keeps the filter you left and puts the selection on the session you were
   in.
@@ -115,7 +114,7 @@ projects panel beside the overmind.
 
 ### The session header
 
-In round two a header sits over a session's terminal instead of the meta bar:
+The session header sits over a session's terminal:
 
 - **‹ Overmind** goes back to the overmind, as `⌘[` does, with the selection on this
   session.
@@ -128,7 +127,7 @@ no model and no menu.
 
 ### When a session ends
 
-The header's status reads **Ended**, with the reason as its tooltip. A card covers the
+The session header's status reads **Ended**, with the reason as its tooltip. A card covers the
 terminal: **This session ended**, why, and how long ago. When the conversation can be picked
 up it adds that its transcript is on disk, and **Resume**. **‹ Overmind** is always there.
 ✕ closes the card to a strip along the foot, with the reason, Resume and Overmind, so you
@@ -147,9 +146,8 @@ like `vitest` or `vim`.
 
 | Open one from | How |
 | --- | --- |
-| The Projects rail | **Terminal** under a project |
-| The header | chevron beside **New session** › **New terminal in…** |
-| A session | **terminal here** in its bar, or ``Ctrl+` `` |
+| The Sessions panel | **Terminal** under an unfolded project |
+| A session | **Terminal here** in its session header's **⋯** menu, or ``Ctrl+` `` |
 | The console | `term hive`, or `term` for beside the selected row |
 
 A shell that exits normally disappears. One that dies shows why, with a **Close** button.

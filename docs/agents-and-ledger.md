@@ -9,7 +9,7 @@ Load this when working on `electron/main/ledger/`, `electron/main/agents/`,
 two ledger routes, the renderer's mirrors of either (`use-ledger-sync.ts`,
 `use-agents-sync.ts`, the `useLedger*` and `useAgent*` selectors in
 `hive-store.ts`), the `ledger` / `ask` / `answer` console verbs, Settings ›
-Agents, or the agents rail and `src/features/agents/`.
+Agents, or the Agents panel and `src/features/agents/`.
 
 > **TL;DR**
 > - The ledger is one append-only log, `~/.hive/ledger/YYYY-MM-DD.jsonl`, one file per day.
@@ -572,7 +572,7 @@ touches `runsSinceRotate`, `pendingSession` or `sessionUuid`; the row stays
 status — from the closing run **and** from any ask the agent still has open,
 because a sibling that closed while this one was live left its question behind,
 and a resting status must never hide it. A task close also touches neither
-`lastRunAt` — the `onchange` watermark and the rail's "last used" — nor
+`lastRunAt` — the `onchange` watermark and the Agents panel's "last used" — nor
 `skipsSinceRun`, because a task run reads no inbox and is not a scheduled wake:
 moving either would hide an ask that arrived before the close, or erase the skip
 signal. `kill` stops every run under the name. The scheduler's flush, for an
@@ -590,7 +590,7 @@ row in the receipt columns — `●` standing, `○` task, `running`, `Took` cou
 up, the prompt on the reason line — and groups its output by `RunLine.run`,
 because three processes write into one buffer. `Turns` reads `—` on a live row
 rather than `0`: the fold marks a turn only at the CLI's `result` event, so the
-count is not knowable until the receipt. The rail and the fleet say `working ·3`.
+count is not knowable until the receipt. The Agents panel and the fleet say `working ·3`.
 
 **Two limits, gone.** Since HIVE-187 a permission answer resumes the lane whose
 run asked, carrying the one-time grant, and a sibling lane never receives it.
@@ -836,8 +836,8 @@ from a rewrite and can still match the body against the closed set it offered.
 A click on an ask's **toast** does not answer it and does not dismiss its row:
 it reveals the card. Main sends `{ type: 'ask', thread }` on `notifications:activate`
 — the same channel a session's click uses, widened into a union — and the
-renderer answers it with `revealRailTab('inbox')`, because main may not touch
-the rail and the rail can be sitting on another tab or collapsed outright.
+renderer answers it with `openInboxDrawer(thread)`, because main may not touch
+the renderer's view and the drawer is the one place an ask's card is drawn.
 
 ## The console verbs
 
@@ -884,7 +884,7 @@ functions in `electron/shared/ledger-derive.ts`:
   `done` and `failed` are the same rule as `answer` on purpose, and
   `ledger/notify.ts` dismisses the card for all three symmetrically. Left
   apart, the two halves disagreed on screen: a `done` dismissed the card while
-  the ask stayed open, so the left rail's Agents badge — counted off the
+  the ask stayed open, so the old Agents badge — counted off the
   ledger, immune to notification state — stayed lit with nothing behind it;
   and a `failed` closed nothing at all, so the user kept a live card whose
   buttons `append` would refuse.
@@ -2397,8 +2397,8 @@ line is derived rather than chosen:
   (`TERMINAL_FONT_SIZES`); the ledger is chrome at a fixed size showing short
   correspondence. Giving the moving one the remainder is what keeps both right
   at every size.
-- **280px** is the activity rail's own text measure — 316px less 14px of padding
-  either side. A ledger entry and an Inbox card show the same thing, and
+- **280px** is the Inbox card's text measure from the first frame — 316px less
+  14px of padding either side. A ledger entry and an Inbox card show the same thing, and
   one turns into the other.
 - **380px** because a tool line is `<name> <arg>` with `ARG_LIMIT = 60` in
   `run-log.ts`, so the longest line main can emit is ~95 characters. Past ~110
@@ -2412,8 +2412,8 @@ unbreakable 95-character tool line would push the grid past the stage and give
 the whole app a horizontal scrollbar.
 
 **A container query, not a media query**, and the first in this codebase. The
-rails drag from their floors (320px and 316px) up to 520px each, so a 1920px
-window can hold a 700px stage — the viewport width simply is not the question
+panels open and close beside the stage (and the list panel overlays it under
+1,200px), so the same window can hold very different stages — the viewport width simply is not the question
 being asked. The stack point is 720px: the default window leaves the stage
 804px, and the 800px it opened at was four pixels from flipping.
 

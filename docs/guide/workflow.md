@@ -29,7 +29,7 @@ session puts it to you. If that session is gone, the ask is redirected to your
 
 ## Start
 
-Open a session from the ticket in the [Work tab](work-and-prs.md#start-a-session-from-a-ticket),
+Open a session from the ticket in [Work](work-and-prs.md#start-a-session-from-a-ticket),
 or type the key in any session:
 
 ```text

@@ -163,3 +163,57 @@ describe('the connection item (HIVE-196)', () => {
     expect(item.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
+
+describe('the theme toggle (HIVE-213)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    useAppearanceStore.getState().reset();
+  });
+
+  it('is named for the theme it switches to', () => {
+    useAppearanceStore.setState({ theme: 'dark' });
+    const { unmount } = renderBar();
+    expect(screen.getByRole('button', { name: 'Switch to light theme' })).toHaveAttribute(
+      'title',
+      'Switch to light theme',
+    );
+    unmount();
+
+    useAppearanceStore.setState({ theme: 'light' });
+    renderBar();
+    expect(screen.getByRole('button', { name: 'Switch to dark theme' })).toBeInTheDocument();
+  });
+
+  it('a click flips dark to light and back', async () => {
+    useAppearanceStore.setState({ theme: 'dark' });
+    renderBar();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Switch to light theme' }));
+    expect(useAppearanceStore.getState().theme).toBe('light');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Switch to dark theme' }));
+    expect(useAppearanceStore.getState().theme).toBe('dark');
+  });
+
+  it('from system, lands on the opposite of what the OS shows', async () => {
+    useAppearanceStore.setState({ theme: 'system', systemDark: true });
+    const { unmount } = renderBar();
+    await userEvent.click(screen.getByRole('button', { name: 'Switch to light theme' }));
+    expect(useAppearanceStore.getState().theme).toBe('light');
+    unmount();
+
+    useAppearanceStore.setState({ theme: 'system', systemDark: false });
+    renderBar();
+    await userEvent.click(screen.getByRole('button', { name: 'Switch to dark theme' }));
+    expect(useAppearanceStore.getState().theme).toBe('dark');
+  });
+
+  it('sits between the connection item and Settings', () => {
+    renderBar();
+    const item = screen.getByTestId('connection-item');
+    const toggle = screen.getByRole('button', { name: /^Switch to (light|dark) theme$/ });
+    const settings = screen.getByRole('button', { name: 'Settings' });
+    expect(item.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(toggle.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

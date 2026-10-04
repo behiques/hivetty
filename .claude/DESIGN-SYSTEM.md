@@ -17,7 +17,7 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | Token | Dark | Light | Used for |
 | --- | --- | --- | --- |
 | `--cc-bg` | `#10152a` | `#fdfdfb` | app background |
-| `--cc-panel` | `#141a33` | `#ffffff` | rails, cards, panels |
+| `--cc-panel` | `#141a33` | `#ffffff` | panels, cards |
 | `--cc-panel-2` | `#121731` | `#f7fafb` | nested/recessed panels |
 | `--cc-hover` | `#1b2344` | `#f4f9ff` | hover state |
 | `--cc-active` | `#222c55` | `#e9f3fc` | active/selected row |
@@ -109,7 +109,7 @@ Note what they are *not*: terminal **text** colours. Those live only in
 rule with a test behind it. A DOM element sitting on the terminal background
 takes its text colour from the ordinary UI tokens (`text-green`, `text-amber`,
 `text-subtle`, `text-brand`), which is why the session table's status column
-matches the rails rather than the transcript.
+matches the panels rather than the transcript.
 
 **Brand fills are surfaces, and do not flip with the theme.** `--cc-brand` is a
 *text* colour and changes between themes so it stays legible on a panel. The
@@ -251,11 +251,11 @@ One rule, applied wherever a thing on screen contains other things:
 
 | Role | Token | Where |
 | --- | --- | --- |
-| the name of a **container** | `--cc-brand` | a project in the rail, a provider band in Integrations |
+| the name of a **container** | `--cc-brand` | a project in the Sessions panel, a provider band in Integrations |
 | a thing **inside** it | `--cc-ink` | a session, a settings group, a file |
 | that thing's **metadata** | `--cc-subtle` | a branch, a description, a probe result |
 
-Before this, a project row and a session row in the rail were the same size, the
+Before this, a project row and a session row in the list were the same size, the
 same weight and the same colour, and the folder icon beside the project was
 painted *quieter* than the sessions it contained — so the only thing marking a
 project was its indent, and the tree read as one flat column of names. Settings
@@ -284,7 +284,7 @@ uses over the file tree. A group inside such a band draws no rule of its own.
 
 Because `brand` is now body text rather than an accent, `validate.ts` measures
 it: **`brand` below 4.5:1 is a note at import time**, alongside the `ink` checks.
-Against *both* grounds brand text actually sits on — `panel` for the rail,
+Against *both* grounds brand text actually sits on — `panel` for the list panel,
 `panel-2` for the settings dialog — for the same reason `ink` is checked against
 `panel` and `bg`. All seven built-ins clear both: 5.15:1 at worst on `panel`
 (Graphite light), 4.80:1 at worst on `panel-2` (Graphite light again).
@@ -359,11 +359,11 @@ Canvas loops, rAF work and SVG SMIL are out of its reach and must read
 
 ## Chrome
 
-- Header height **56px**; left rail **320px**; activity rail **316px**.
-- Round two (HIVE-195): activity bar `--cc-bar-w: 64px`, list panel
-  `--cc-list-w: 300px` — fixed, not density-dependent. A bar item is 52px wide,
-  a 19px icon over a 9.5px/500 label; active is `text-ink` on `bg-panel-2`,
-  the rest `text-muted`.
+- The bar `--cc-bar-w: 64px`, the list panel `--cc-list-w: 300px` (HIVE-195);
+  the session panel `--cc-session-panel-w: 320px`, closed to its strip
+  `--cc-session-strip-w: 46px` (HIVE-201) — all fixed, not density-dependent.
+  A bar item is 52px wide, a 19px icon over a 9.5px/500 label; active is
+  `text-ink` on `bg-panel-2`, the rest `text-muted`.
 - Scrollbars are thin (10px), thumb `--cc-border`, transparent track, rounded.
 - Interactive controls show a pointer cursor — a base rule in `global.css`, since
   Tailwind v4 dropped the one that used to provide this. Do not add

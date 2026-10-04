@@ -1,11 +1,12 @@
 # The inbox
 
-The inbox is the right rail's first tab. A card lands there when a session or agent needs
-you, so you never have to watch every tab.
+The inbox comes to you: a pill in the stage's corner counts what needs you, a card rises
+above it when something new arrives, and the drawer holds the whole queue. You never have
+to watch every session.
 
 **On this page:** [How a notification is born](#how-a-notification-is-born) ·
 [Card types](#card-types) · [Choosing what reaches you](#choosing-what-reaches-you) ·
-[What clears a card](#what-clears-a-card)
+[What clears a card](#what-clears-a-card) · [The pill and the drawer](#the-pill-and-the-drawer)
 
 <img src="../assets/guide/05-inbox-asks.png" alt="Two cards: a permission ask with a scope ladder, and a question with two options" width="360">
 
@@ -78,16 +79,15 @@ Or in the config file:
 - Opening the session or agent it is about.
 - The session leaving "needs input": you approved, answered, or typed a refusal.
   Pressing Escape on a prompt sends no hook, so that card stays until the next prompt.
-- **Clear all** at the top of the tab. It leaves open questions and blocked sessions: they go when they are answered.
 
 The inbox keeps the latest 50 cards of news, and every card still waiting on you however
 many there are. It does not survive a restart. The dock icon counts what waits on you:
 open questions, permission requests and blocked sessions, not unread cards.
 
-## Round two: the pill and the drawer
+## The pill and the drawer
 
-Round two has no Inbox tab. The Inbox comes to you instead, in the stage's
-bottom-right corner, just above the page's own input. Classic is unchanged.
+The Inbox sits in the stage's bottom-right corner, just above the page's own
+input.
 
 - **The pill** counts what needs you: open questions, permission requests,
   review requests and blocked sessions, leaving out the session on stage. It is
@@ -105,12 +105,11 @@ bottom-right corner, just above the page's own input. Classic is unchanged.
   closes. The session on stage never shows.
 - **The drawer.** The pill opens a 400px panel on the right, "Needs you", with
   every ask whole and the sessions off stage under it. Esc or ✕ closes it.
-  Clicking an ask's desktop notification opens the drawer on that ask, and so
-  does the header's bell.
+  Clicking an ask's desktop notification opens the drawer on that ask.
 - **Yours again.** A session in the Sessions panel that finished and is
   waiting for you reads "yours again" until you open it.
 
-Echoes (news cards) are not in the Inbox in round two: they show on Home,
+Echoes (news cards) are not in the Inbox: they show on Home,
 under **While you were away**, once nothing needs you. On Home, a **Needs you**
 row opens the drawer on that ask.
 

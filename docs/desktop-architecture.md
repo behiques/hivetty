@@ -148,7 +148,7 @@ rather than `node:crypto`.
 ## The workspace config
 
 `~/.hive/config.json` — overridable by `HIVE_CONFIG_PATH` — maps a project id
-shown in the left rail to a real directory on this machine. It is the only thing
+shown in the Sessions panel to a real directory on this machine. It is the only thing
 that makes a PTY's `cwd` real; everything else about a project is still fixtures.
 
 `~/.hive/skills/<name>/SKILL.md` is its sibling: the custom slash
@@ -264,7 +264,7 @@ launch restored the id.
 **Nothing is named on the command line, and that is the feature.**
 
 Sessions used to be spawned as `claude --name sess-07` so the agent's prompt
-box, its `/resume` picker and its terminal title agreed with the rail. The cost
+box, its `/resume` picker and its terminal title agreed with the Sessions list. The cost
 of that agreement turned out to be the name itself: **`--name` suppresses Claude
 Code's own titling entirely.** Two arms of a real `claude`, same prompt, same
 moment, differing in nothing else:
@@ -282,7 +282,7 @@ stopping Claude from inferring them.
 So a session now opens unnamed, Claude titles it from the conversation, and the
 title arrives on the OSC-0 stream `readTitle` already parses — no new
 transport and no second inference engine. `hiveNameFromTitle`
-(`electron/shared/session-contract.ts`) spells it the way the rail spells names:
+(`electron/shared/session-contract.ts`) spells it the way the Sessions list spells names:
 lower-cased, hyphenated, at most four words, with any ticket key upper-cased and
 hoisted to the front (`back key interception abc-123` →
 `ABC-123-back-key-interception`).
@@ -316,7 +316,7 @@ is the *terminal title* an unnamed session writes, and the splash banner
 the session. Neither is the box label.
 
 The row is untouched either way: `nameFromTitle` maps that title to the
-*absence* of a name, so the rail keeps `sess-07`, and two unnamed sessions stay
+*absence* of a name, so the list keeps `sess-07`, and two unnamed sessions stay
 distinct because they keep their distinct ids rather than sharing a title.
 
 Three properties are worth knowing before changing it:
@@ -681,7 +681,7 @@ A socket that dies after a successful attach is dialled again, on 1s, 2s, 4s,
 on its own: the sessions are running on the far machine, so a local surface
 would show an empty fleet and read as data loss, and a budget that expires
 strands whoever's server took longer to come back than the budget allowed. What
-makes indefinite retrying honest is that it says so — the header chip goes amber,
+makes indefinite retrying honest is that it says so — the connection item at the bar's foot goes amber,
 the attach pane names the attempt and the wait, and **Work locally** is the exit.
 Waking from sleep restarts the schedule and dials at once.
 
