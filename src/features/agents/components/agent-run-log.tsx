@@ -428,7 +428,7 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
 
   return (
     <div
-      className="flex min-h-0 flex-col rounded-lg bg-term-bg p-2.5"
+      className="flex min-h-0 flex-col rounded-lg bg-term-bg p-2.5 font-mono"
       style={{ fontFamily, fontSize }}
       data-region="run-log"
     >

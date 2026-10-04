@@ -313,13 +313,14 @@ model survives colour-blindness and reduced-motion.
 
 ## Type
 
-- **Family:** `ui-mono` stack — `ui-monospace, Menlo, 'SF Mono', monospace`,
-  registered as `--font-mono` and available as `font-mono`. The terminal, the
-  editor, code and identifiers are monospace; so is the rest of the chrome,
-  except the list panel below.
-- **The list panel is sans.** Projects, Work, Pull requests and Agents set words
-  in `font-sans` (on the list panel's root) and keep `font-mono` only for
-  identifiers: ticket keys, branches, PR numbers, terminal ids, paths.
+- **Family:** sans by default — `body` sets `--font-sans`, the system text
+  face. Every content area (tickets, PRs, agents, Home, Settings, the list
+  panel) sets words in it.
+- **Mono is opt-in.** `--font-mono` (`ui-monospace, Menlo, 'SF Mono',
+  monospace`, the `font-mono` utility) for code and machine output — diffs,
+  code blocks, run logs, the consoles — and identifiers: ticket keys, branches,
+  PR numbers, terminal ids, paths. The terminal and the editor set their own
+  face from Appearance.
 - **List type scale:** three sizes in `tokens.css`, nothing between them.
   `text-ui-lg` 15px for panel titles (600), `text-ui` 13px for a row's name,
   `text-ui-sm` 11.5px for everything else: second lines, counts, ages, status

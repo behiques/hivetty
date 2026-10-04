@@ -54,7 +54,7 @@ function openLineOf(lines: DiffLine[], index: number): number {
 export function DiffRow({ line, n, side, selected, onSelect, wrap = false }: { line: DiffLine; n: number | null; side: 'L' | 'R'; selected: boolean; onSelect: () => void; wrap?: boolean }) {
   const sign = SIGN[line.kind];
   return (
-    <div data-kind={line.kind} className={cn('flex h-full pr-4', wrap ? 'whitespace-pre-wrap' : 'whitespace-pre', WASH[line.kind], selected && 'shadow-[inset_2px_0_var(--cc-amber)]')}>
+    <div data-kind={line.kind} className={cn('flex h-full pr-4 font-mono', wrap ? 'whitespace-pre-wrap' : 'whitespace-pre', WASH[line.kind], selected && 'shadow-[inset_2px_0_var(--cc-amber)]')}>
       {n === null ? (
         <span className="w-[46px] shrink-0" />
       ) : (
