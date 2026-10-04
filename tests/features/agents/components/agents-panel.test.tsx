@@ -15,7 +15,7 @@ const agentRow = (id: string) =>
   screen.getByRole('button', { name: new RegExp(`^${id}`) });
 
 /**
- * Every row, and never the `+ New agent…` footer, the header's +, a lane
+ * Every row, and never the header's +, a lane
  * header or a row's slot actions (HIVE-116, HIVE-204).
  *
  * Those are buttons in the same panel, so a bare `getAllByRole('button')`
@@ -27,7 +27,6 @@ const agentRows = () =>
     .getAllByRole('button')
     .filter(
       (button) =>
-        !button.textContent?.startsWith('+ New agent') &&
         button.getAttribute('aria-label') !== 'New agent' &&
         !/^(Run .* now|Pause .*|Resume .*)$/.test(button.getAttribute('aria-label') ?? '') &&
         !button.hasAttribute('aria-expanded'),
@@ -54,8 +53,8 @@ describe('AgentsPanel', () => {
     render(<AgentsPanel />);
 
     expect(screen.getByText(/No agents yet\./)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ New agent…' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New agent' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ New agent…' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region')).not.toBeInTheDocument();
   });
 
@@ -320,24 +319,27 @@ describe('AgentsPanel', () => {
   });
 
   describe('the way to make another one', () => {
-    it.each(['+ New agent…', 'New agent'])(
-      '%s opens a never-saved agent page on Definition (HIVE-204)',
-      async (name) => {
-        render(<AgentsPanel />);
+    it('the head’s + opens a never-saved agent page on Definition (HIVE-204)', async () => {
+      render(<AgentsPanel />);
 
-        await userEvent.click(screen.getByRole('button', { name }));
+      await userEvent.click(screen.getByRole('button', { name: 'New agent' }));
 
-        expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
-        expect(useUiStore.getState().settings).toBe(false);
-      },
-    );
+      expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
+      expect(useUiStore.getState().settings).toBe(false);
+    });
+
+    it('draws no footer line beside it', () => {
+      render(<AgentsPanel />);
+
+      expect(screen.queryByRole('button', { name: '+ New agent…' })).not.toBeInTheDocument();
+    });
 
     it('does the same from the empty state', async () => {
       useHiveStore.getState().reset();
 
       render(<AgentsPanel />);
 
-      await userEvent.click(screen.getByRole('button', { name: '+ New agent…' }));
+      await userEvent.click(screen.getByRole('button', { name: 'New agent' }));
 
       expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
     });

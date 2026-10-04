@@ -113,7 +113,7 @@ The **Sessions** icon on the bar opens the Sessions panel beside the overmind.
 - The session header over the terminal carries the model and its usage gauges; a plain
   terminal's has none.
 
-**new project** sits at the foot of the panel.
+The **+** in the panel head adds a project.
 
 ### The session header
 

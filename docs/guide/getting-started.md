@@ -46,7 +46,7 @@ have to open it; Settings edits it for you. See [The config file](configuration.
 
 A **project** is a folder The Hive can start sessions in, usually a git repository.
 
-1. Click **Add a project** on Home, or **new project** at the foot of the Sessions panel.
+1. Click **Add a project** on Home, or the **+** in the Sessions panel head.
 2. Choose the repository folder.
 3. The project appears in the Sessions panel with a short **key** (two to four letters, like `hive`).
    You can type the key anywhere a project is asked for.
