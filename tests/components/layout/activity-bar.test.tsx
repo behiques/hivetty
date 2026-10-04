@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -46,6 +46,22 @@ describe('ActivityBar (HIVE-195)', () => {
     expect(screen.getByRole('button', { name: 'Work' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: 'Work' })).toHaveClass('text-ink', 'bg-panel-2');
     expect(screen.getByRole('button', { name: 'Home' })).toHaveClass('text-muted');
+  });
+
+  it('Sessions returns to the session opened there, or the Overmind once it has ended', async () => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().openTab('hero-refresh', 'sessions');
+    renderBar();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Work' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Sessions/ }));
+    expect(useUiStore.getState().activeTab).toBe('hero-refresh');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Work' }));
+    act(() => useHiveStore.getState().setSessionStatus('hero-refresh', 'terminated'));
+    await userEvent.click(screen.getByRole('button', { name: /^Sessions/ }));
+    expect(useUiStore.getState().activeTab).toBe('orch');
   });
 
   it('Settings opens settings', async () => {

@@ -157,6 +157,12 @@ interface UiState {
   newEffort: Effort;
   /** Which place the round-two bar has open (HIVE-195). Every launch starts on Home. */
   place: Place;
+  /**
+   * What the Sessions place shows when the bar returns to it: the session last
+   * opened there, or the Overmind. `activeTab` cannot hold this alone, because
+   * the Agents place writes an agent into it. View state, not persisted.
+   */
+  sessionsTab: 'orch' | string;
   /** Whether that place's list panel shows beside the stage. */
   panelOpen: boolean;
   /** The window is under 1,200px (HIVE-211). Fed from `useNarrowWindow` by the shell; never persisted. */
@@ -196,6 +202,8 @@ interface UiState {
   fsRevision: number;
   /** The ticket open on the Work place's stage (HIVE-203). View state, not persisted. */
   workTicket: string | null;
+  /** Where `workTicket` last sat in the list, `-1` when opened from outside it (`openRowIndex`). */
+  workTicketAt: number;
   /** Which Work panel groups are folded; Done starts folded (HIVE-203). View state, not persisted. */
   workFolded: Record<JiraStatusCategory, boolean>;
   /** The ticket page's conversation filter (HIVE-203). View state, not persisted; each open resets it. */
@@ -207,12 +215,16 @@ interface UiState {
    * new agent never saved. View state, not persisted.
    */
   agentPage: AgentPage | null;
+  /** Where the page's agent last sat in the panel, `-1` when opened from outside it (`openRowIndex`). */
+  agentPageAt: number;
   /**
    * The PR the PRs place last opened (HIVE-205). The page shows it while it is
    * still in the list; the opening rule (`features/pull-requests/open-pr.ts`)
    * falls back otherwise. View state, not persisted.
    */
   prPage: PrPageRef | null;
+  /** Where `prPage` last sat in the Hatchery, `-1` when opened from outside it (`openRowIndex`). */
+  prPageAt: number;
   /** The PR page's tab; kept across PRs, so Checks stays Checks (HIVE-205). */
   prTab: PrTab;
   /** The Checks tab's shown push, by head sha; null shows the newest (HIVE-206). Not persisted. */
@@ -241,8 +253,10 @@ interface UiState {
    * Pick a place on the bar. A new place opens its panel and dismisses the
    * overlays, as `openTab` does; the active one toggles its panel — except
    * Sessions with a session on stage, which goes back to the Overmind first.
+   * Entering Sessions puts back `sessionsTab`, or the Overmind when `overmind`
+   * says so: that session has ended or gone, or the caller wants the list.
    */
-  selectPlace: (place: Place) => void;
+  selectPlace: (place: Place, overmind?: boolean) => void;
   togglePanel: () => void;
   /** Crossing below 1,200px closes the panel, so the stage is never covered without a click (HIVE-211). */
   setNarrow: (narrow: boolean) => void;
@@ -290,6 +304,8 @@ interface UiState {
    * panel, starts the conversation on Comments and dismisses the overlays, as `openTab` does.
    */
   openWorkTicket: (key: string) => void;
+  /** The ticket the Work stage is showing, and where it sits in the list; quiet: no place, panel or overlay moves. */
+  rememberWorkTicket: (key: string, at: number) => void;
   toggleWorkGroup: (category: JiraStatusCategory) => void;
   toggleAgentGroup: (key: AgentGroupKey) => void;
   setWorkConversation: (mode: WorkConversation) => void;
@@ -298,10 +314,14 @@ interface UiState {
    * overlays. A named agent also becomes the active tab; a new one leaves the tab alone.
    */
   openAgentPage: (name: string | null, view: AgentPageView) => void;
+  /** The agent the Agents stage is showing, and where it sits in the panel; a new name opens on Activity. */
+  rememberAgentPage: (name: string, at: number) => void;
   setAgentPageView: (view: AgentPageView) => void;
   closeAgentPage: () => void;
   /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab; forgets the Checks tab's shown push and job (HIVE-206), the Files tab's file and filter (HIVE-207), and the Timeline's focus (HIVE-208). */
   openPrPage: (ref: PrPageRef) => void;
+  /** The PR the PRs stage is showing, and where it sits in the Hatchery; another PR forgets what `openPrPage` does. */
+  rememberPrPage: (ref: PrPageRef, at: number) => void;
   setPrTab: (tab: PrTab) => void;
   showPrRun: (sha: string) => void;
   showPrJob: (id: number | null) => void;
@@ -367,6 +387,7 @@ const initialUiState = {
   newModel: 'opus' as Model,
   newEffort: 'high' as Effort,
   place: 'home' as Place,
+  sessionsTab: 'orch' as 'orch' | string,
   panelOpen: true,
   narrow: false,
   sessionsProject: null as string | null,
@@ -377,11 +398,14 @@ const initialUiState = {
   explorerExpanded: {} as Record<string, boolean>,
   fsRevision: 0,
   workTicket: null as string | null,
+  workTicketAt: -1,
   workFolded: { todo: false, 'in-progress': false, done: true } as Record<JiraStatusCategory, boolean>,
   workConversation: 'comments' as WorkConversation,
   agentsFolded: { summons: false, morphing: false, burrowed: false } as Record<AgentGroupKey, boolean>,
   agentPage: null as AgentPage | null,
+  agentPageAt: -1,
   prPage: null as PrPageRef | null,
+  prPageAt: -1,
   prTab: 'conversation' as PrTab,
   prRun: null as string | null,
   prJob: null as number | null,
@@ -402,9 +426,26 @@ const initialUiState = {
 /** Back to the Overmind with the row left behind under the caret (HIVE-197). */
 const returnToOrch = (state: UiState) => ({
   activeTab: 'orch' as const,
+  sessionsTab: 'orch' as const,
   picker: false,
   settings: false,
   ...(state.activeTab === 'orch' ? {} : { selId: state.activeTab }),
+});
+
+/** One PR, whatever case its owner and repo were written in. */
+const samePr = (a: PrPageRef, b: PrPageRef): boolean =>
+  a.n === b.n && a.owner.toLowerCase() === b.owner.toLowerCase() && a.repo.toLowerCase() === b.repo.toLowerCase();
+
+/** A PR page shown afresh: Comments, and nothing of the last PR's push, job, file or focus. */
+const freshPr = (ref: PrPageRef, at: number) => ({
+  prPage: ref,
+  prPageAt: at,
+  prConversation: 'comments' as const,
+  prRun: null,
+  prJob: null,
+  prFile: null,
+  prFileFilter: '',
+  prFocus: null,
 });
 
 /** A row pick: the panel stays as it is when wide, and a narrow overlay closes on it (HIVE-211). */
@@ -423,8 +464,12 @@ export const useUiStore = create<UiState>()((set) => ({
       picker: false,
       settings: false,
       ...(place ? { place, ...pickPanel(state, false) } : {}),
+      // What the Sessions place returns to: a tab opened there.
+      ...((place ?? state.place) === 'sessions' ? { sessionsTab: id } : {}),
       // An agent opened through `openEntity` lands on its page's Activity (HIVE-204).
-      ...(place === 'agents' ? { agentPage: { name: id, view: 'activity' as const } } : {}),
+      ...(place === 'agents'
+        ? { agentPage: { name: id, view: 'activity' as const }, agentPageAt: -1 }
+        : {}),
     })),
 
   /**
@@ -441,9 +486,14 @@ export const useUiStore = create<UiState>()((set) => ({
    */
   backToOrch: () => set((state) => ({ ...returnToOrch(state), place: 'sessions' })),
 
-  selectPlace: (place) =>
+  selectPlace: (place, overmind = false) =>
     set((state) => {
-      if (place !== state.place) return { place, panelOpen: true, picker: false, settings: false };
+      if (place !== state.place) {
+        const moved = { place, panelOpen: true, picker: false, settings: false };
+        if (place !== 'sessions') return moved;
+        const tab = overmind ? 'orch' : state.sessionsTab;
+        return { ...moved, activeTab: tab, sessionsTab: tab };
+      }
       if (place === 'sessions' && state.activeTab !== 'orch') return returnToOrch(state);
       return { panelOpen: !state.panelOpen };
     }),
@@ -596,12 +646,21 @@ export const useUiStore = create<UiState>()((set) => ({
   openWorkTicket: (key) =>
     set((state) => ({
       workTicket: key,
+      workTicketAt: -1,
       place: 'work',
       workConversation: 'comments',
       picker: false,
       settings: false,
       ...pickPanel(state, true),
     })),
+  rememberWorkTicket: (key, at) =>
+    set((state) =>
+      state.workTicket === key
+        ? state.workTicketAt === at
+          ? state
+          : { workTicketAt: at }
+        : { workTicket: key, workTicketAt: at, workConversation: 'comments' },
+    ),
   toggleWorkGroup: (category) =>
     set((state) => ({ workFolded: { ...state.workFolded, [category]: !state.workFolded[category] } })),
   toggleAgentGroup: (key) =>
@@ -610,6 +669,7 @@ export const useUiStore = create<UiState>()((set) => ({
   openAgentPage: (name, view) =>
     set((state) => ({
       agentPage: { name, view },
+      agentPageAt: -1,
       place: 'agents',
       picker: false,
       settings: false,
@@ -618,23 +678,33 @@ export const useUiStore = create<UiState>()((set) => ({
       activeTab: name ?? 'orch',
       ...pickPanel(state, true),
     })),
+  rememberAgentPage: (name, at) =>
+    set((state) =>
+      state.agentPage?.name === name
+        ? state.agentPageAt === at
+          ? state
+          : { agentPageAt: at }
+        : { agentPage: { name, view: 'activity' }, agentPageAt: at },
+    ),
   setAgentPageView: (view) =>
     set((state) => (state.agentPage === null ? {} : { agentPage: { ...state.agentPage, view } })),
   closeAgentPage: () => set({ agentPage: null }),
   openPrPage: (ref) =>
     set((state) => ({
-      prPage: ref,
+      ...freshPr(ref, -1),
       place: 'prs',
-      prConversation: 'comments',
-      prRun: null,
-      prJob: null,
-      prFile: null,
-      prFileFilter: '',
-      prFocus: null,
       picker: false,
       settings: false,
       ...pickPanel(state, true),
     })),
+  rememberPrPage: (ref, at) =>
+    set((state) =>
+      state.prPage !== null && samePr(state.prPage, ref)
+        ? state.prPageAt === at
+          ? state
+          : { prPageAt: at }
+        : freshPr(ref, at),
+    ),
   setPrTab: (tab) => set({ prTab: tab }),
   showPrRun: (sha) => set({ prRun: sha, prJob: null }),
   showPrJob: (id) => set({ prJob: id }),
@@ -717,6 +787,7 @@ export const useOpenTab = () => useUiStore((state) => state.openTab);
 export const useBackToOrch = () => useUiStore((state) => state.backToOrch);
 /** The round-two place, and whether its panel shows (HIVE-195). */
 export const usePlace = () => useUiStore((state) => state.place);
+export const useSessionsTab = () => useUiStore((state) => state.sessionsTab);
 export const usePanelOpen = () => useUiStore((state) => state.panelOpen);
 export const useSelectPlace = () => useUiStore((state) => state.selectPlace);
 export const useTogglePanel = () => useUiStore((state) => state.togglePanel);
@@ -724,6 +795,8 @@ export const useNarrow = () => useUiStore((state) => state.narrow);
 export const useSetNarrow = () => useUiStore((state) => state.setNarrow);
 /** The Work place's open ticket, folds and conversation filter (HIVE-203). */
 export const useWorkTicket = () => useUiStore((state) => state.workTicket);
+export const useWorkTicketAt = () => useUiStore((state) => state.workTicketAt);
+export const useRememberWorkTicket = () => useUiStore((state) => state.rememberWorkTicket);
 export const useWorkFolded = () => useUiStore((state) => state.workFolded);
 export const useWorkConversation = () => useUiStore((state) => state.workConversation);
 export const useOpenWorkTicket = () => useUiStore((state) => state.openWorkTicket);
@@ -734,6 +807,8 @@ export const useAgentsFolded = () => useUiStore((state) => state.agentsFolded);
 export const useToggleAgentGroup = () => useUiStore((state) => state.toggleAgentGroup);
 /** The Agents place's open page and its actions (HIVE-204). */
 export const useAgentPage = () => useUiStore((state) => state.agentPage);
+export const useAgentPageAt = () => useUiStore((state) => state.agentPageAt);
+export const useRememberAgentPage = () => useUiStore((state) => state.rememberAgentPage);
 export const useAgentPageActions = () =>
   useUiStore(
     useShallow((state) => ({
@@ -745,6 +820,8 @@ export const useAgentPageActions = () =>
 
 /** The PRs place's open PR, tab, fold, filter and search (HIVE-205). */
 export const usePrPage = () => useUiStore((state) => state.prPage);
+export const usePrPageAt = () => useUiStore((state) => state.prPageAt);
+export const useRememberPrPage = () => useUiStore((state) => state.rememberPrPage);
 export const usePrTab = () => useUiStore((state) => state.prTab);
 /** The Checks tab's shown push and clicked job (HIVE-206). */
 export const usePrRun = () => useUiStore((state) => state.prRun);

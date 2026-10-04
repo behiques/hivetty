@@ -96,7 +96,7 @@ first. The column **LAST USED** is when each one ended or last resumed.
 The **Sessions** icon on the bar opens the Sessions panel beside the overmind.
 
 - The head reads **Projects**, then how many sessions and terminals are live and how many
-  need you. **+** opens the new-session picker.
+  need you. **+** adds a project.
 - **All projects** shows the whole fleet in the overmind.
 - Each project starts folded. Folded, a badge on its icon counts what is inside: amber for
   sessions waiting on you, else green for everything live. With nothing live it reads
@@ -110,10 +110,10 @@ The **Sessions** icon on the bar opens the Sessions panel beside the overmind.
 - Opening a session unfolds its project. Coming back with the back button, `⌘[` or the
   Sessions icon keeps the filter you left and puts the selection on the session you were
   in.
+- Leave Sessions for another place and the Sessions icon brings you back to the session
+  you had open, or to the overmind if you had none or it has since ended.
 - The session header over the terminal carries the model and its usage gauges; a plain
   terminal's has none.
-
-The **+** in the panel head adds a project.
 
 ### The session header
 

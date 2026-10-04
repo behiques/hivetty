@@ -10,6 +10,7 @@ import { TicketPageConversation } from '@features/work/components/ticket-page-co
 import { LinesSkeleton, TicketProblem } from '@features/work/components/ticket-page-parts';
 import { TicketProperties } from '@features/work/components/ticket-properties';
 import { TicketTransitionMenu } from '@features/work/components/ticket-transition-menu';
+import { useShownTicket } from '@features/work/shown-ticket';
 import {
   useLoadTicketDetail,
   useOpenTicket,
@@ -19,7 +20,6 @@ import {
   useTicketRowModels,
   useWorkListed,
 } from '@stores/hive-store';
-import { useWorkTicket } from '@stores/ui-store';
 
 /** The open ticket's page re-reads once a minute while it is on stage (HIVE-203, D9). */
 const usePagePoller = createPoller({ intervalMs: 60_000 });
@@ -152,11 +152,12 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
 }
 
 /**
- * The Work place's stage (HIVE-203, D3): the open ticket's page, or a prompt to
- * pick one. With nothing to list it says why instead (HIVE-211).
+ * The Work place's stage (HIVE-203, D3): the shown ticket's page
+ * (`useShownTicket`: the last one, else the next, else the first), or a prompt
+ * to pick one while the list is still loading. With nothing to list it says why instead (HIVE-211).
  */
 export function WorkStage() {
-  const key = useWorkTicket();
+  const key = useShownTicket();
   const listed = useWorkListed();
 
   if (key === null) {

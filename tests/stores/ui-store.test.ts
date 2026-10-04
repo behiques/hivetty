@@ -427,6 +427,56 @@ describe('ui-store — the place machine (HIVE-195)', () => {
     expect(ui().panelOpen).toBe(true);
   });
 
+  it('returning to Sessions puts back the session opened there, though Agents wrote the tab', () => {
+    ui().openTab('hero-refresh', 'sessions');
+    ui().openAgentPage('slack-agent', 'activity');
+    expect(ui().activeTab).toBe('slack-agent');
+
+    ui().selectPlace('sessions');
+    expect(ui()).toMatchObject({ place: 'sessions', activeTab: 'hero-refresh' });
+  });
+
+  it('returning to Sessions lands on the Overmind when asked to, and forgets the session', () => {
+    ui().openTab('hero-refresh', 'sessions');
+    ui().selectPlace('work');
+
+    ui().selectPlace('sessions', true);
+    expect(ui()).toMatchObject({ activeTab: 'orch', sessionsTab: 'orch' });
+  });
+
+  it('a first visit to Sessions, and one after the Overmind was chosen, show the Overmind', () => {
+    ui().selectPlace('sessions');
+    expect(ui().activeTab).toBe('orch');
+
+    ui().openTab('hero-refresh');
+    ui().backToOrch();
+    ui().selectPlace('work');
+    ui().selectPlace('sessions');
+    expect(ui().activeTab).toBe('orch');
+  });
+
+  it('remembering what a place shows keeps its page state until the row changes', () => {
+    ui().openWorkTicket('A-1');
+    ui().setWorkConversation('everything');
+    ui().rememberWorkTicket('A-1', 3);
+    expect(ui()).toMatchObject({ workTicket: 'A-1', workTicketAt: 3, workConversation: 'everything' });
+    ui().rememberWorkTicket('A-2', 3);
+    expect(ui()).toMatchObject({ workTicket: 'A-2', workConversation: 'comments' });
+
+    ui().openAgentPage('a', 'definition');
+    ui().rememberAgentPage('a', 1);
+    expect(ui()).toMatchObject({ agentPage: { name: 'a', view: 'definition' }, agentPageAt: 1 });
+    ui().rememberAgentPage('b', 1);
+    expect(ui().agentPage).toEqual({ name: 'b', view: 'activity' });
+
+    ui().openPrPage({ owner: 'Acme', repo: 'Server', n: 1 });
+    ui().setPrFile('a.ts');
+    ui().rememberPrPage({ owner: 'acme', repo: 'server', n: 1 }, 0);
+    expect(ui()).toMatchObject({ prFile: 'a.ts', prPageAt: 0 });
+    ui().rememberPrPage({ owner: 'acme', repo: 'server', n: 2 }, 0);
+    expect(ui()).toMatchObject({ prPage: { n: 2 }, prFile: null });
+  });
+
   it('togglePanel flips panelOpen', () => {
     ui().togglePanel();
     expect(ui().panelOpen).toBe(false);

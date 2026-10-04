@@ -48,6 +48,14 @@ describe('openPrRow', () => {
   });
 });
 
+describe('openPrRow, when the last PR leaves the sweep', () => {
+  it('shows the row that came after it, or the top row when it was the last', () => {
+    const gone = { owner: 'acme', repo: 'server', n: 1182 };
+    expect(openPrRow([row(871), row(305)], gone, 1)?.pr.n).toBe(305);
+    expect(openPrRow([row(871), row(305)], gone, 2)?.pr.n).toBe(871);
+  });
+});
+
 describe('useOpenPr', () => {
   beforeEach(() => {
     useHiveStore.getState().reset();

@@ -95,8 +95,9 @@ export function TheComb({ label }: { label: string }) {
     } else if (cell.project === SWARM) {
       selectPlace('agents');
     } else {
+      // A project's cell is its list, so the Overmind rather than the last session.
       setSessionsProject(cell.project === ALL_PROJECTS ? null : cell.project);
-      selectPlace('sessions');
+      selectPlace('sessions', true);
     }
   };
 

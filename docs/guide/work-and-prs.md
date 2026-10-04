@@ -67,7 +67,9 @@ A status that differs from its group, like `In Review` inside In progress, leads
 The dot is amber when the ticket needs you, green while a session or an agent works it, and
 an empty ring otherwise. The magnifier shows **Search tickets**; a search replaces the list.
 
-Click a row and the ticket's page fills the stage:
+Click a row and the ticket's page fills the stage. Work opens on the first ticket, and
+afterwards on the one you last opened; if that one leaves the list, the ticket after it
+takes its place (the first, when it was the last). PRs and Agents do the same.
 
 - **The top**: the key (it opens Jira), the status pill (click it to move the ticket),
   the title, then the description.

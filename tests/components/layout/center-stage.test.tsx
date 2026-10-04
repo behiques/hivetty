@@ -1018,7 +1018,7 @@ describe('CenterStage — Work (HIVE-203)', () => {
 
     act(() => useUiStore.getState().selectPlace('work'));
 
-    expect(screen.getByText('Pick a ticket')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /^(Work|Ticket )/ })).toBeInTheDocument();
     expect(visibleSurfaces()).toHaveLength(0);
   });
 
