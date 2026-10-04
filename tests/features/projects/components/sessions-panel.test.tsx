@@ -34,18 +34,21 @@ describe('SessionsPanel (HIVE-197)', () => {
     expect(all).toHaveAttribute('aria-current', 'true');
   });
 
-  it('lists every project folded, and New project at the foot', () => {
+  it('lists every project folded, with nothing at the foot', () => {
     render(<SessionsPanel />);
     const folds = screen.getAllByRole('button', { name: /^Unfold / });
     expect(folds.length).toBe(5);
     const buttons = screen.getAllByRole('button');
-    expect(buttons.at(-1)).toHaveAccessibleName(/new project/i);
+    expect(buttons.at(-1)).not.toHaveAccessibleName(/new project/i);
   });
 
-  it('the head’s + opens the picker', async () => {
+  it('the head’s + is the one way to add a project, not New session', () => {
     render(<SessionsPanel />);
-    await userEvent.click(screen.getByRole('button', { name: 'New session' }));
-    expect(useUiStore.getState().picker).toBe(true);
+    const heading = screen.getByRole('heading', { name: 'Projects' });
+    const add = screen.getByRole('button', { name: 'Add a new project' });
+    expect(heading.parentElement).toContainElement(add);
+    expect(screen.getAllByRole('button', { name: /new project/i })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'New session' })).not.toBeInTheDocument();
   });
 
   it('with no projects, draws the empty state', () => {

@@ -42,7 +42,7 @@ export async function goToOvermind(page: Page): Promise<void> {
   }
 }
 
-/** The unfiltered Overmind's New session, scoped to the stage: the Sessions panel head has a "+" of the same name. */
+/** The unfiltered Overmind's New session, scoped to the stage. */
 export const overmindNewSession = (page: Page): Locator =>
   page.getByRole('main').getByRole('button', { name: 'New session', exact: true });
 

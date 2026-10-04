@@ -36,8 +36,7 @@ you choose **Compare**, **Take shipped prompt** or **Keep mine**. An agent you d
 
 ## Create an agent
 
-**+ New agent…** at the foot of the Agents panel, or its head's **+** (or **+ New agent** in
-**Settings › Agents**), opens a new
+The Agents panel head's **+** (or **+ New agent** in **Settings › Agents**), opens a new
 agent's page on **Definition**. The form sits on the left and the file's source on the
 right; both edit the same text. When the stage is narrower than 900px they become
 **Form | Source** tabs. The bar above them names the file, or says *not saved yet*, and

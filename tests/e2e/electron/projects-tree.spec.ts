@@ -62,16 +62,16 @@ test('the tree starts a session from the project line', async ({}, testInfo) => 
      * `fixtures/hive-app.ts`'s `startSession` clicks the Overmind's button by
      * accessible name to open the picker. Playwright matches names as a
      * case-insensitive **substring**, so `New session` alone finds the
-     * Overmind's button, the panel head's "+" and every list link — hence
+     * Overmind's button and every list link — hence
      * `exact` and the stage scope there and here. Pinned as an assertion
      * rather than left implicit: if a later change renames the Overmind's
      * button, this fails loudly instead of silently clicking a link.
      */
     await expect(overmindNewSession(page)).toHaveCount(1);
-    // Scoped to the list rather than counted page-wide. Two loose matches in
-    // round two: the panel head's "+" (named New session) and the project's link.
+    // Scoped to the list rather than counted page-wide. One loose match: the
+    // project's link (the panel head's "+" adds a project now).
     await expect(tree.getByRole('button', { name: 'New session' })).toHaveCount(
-      2,
+      1,
     );
 
     // Shown on hover, the counts giving way.

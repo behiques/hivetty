@@ -40,10 +40,9 @@ test('⌘[ from a session returns to the Overmind with the filter kept and the r
     await page.getByRole('radio', { name: 'Live' }).click();
 
     /*
-      The filtered head's direct spawn, not `startSession`: round two draws two
-      exact "New session" buttons (the title bar's and the panel head's "+"),
-      and the filtered Overmind is where this story starts one anyway. Scoped
-      to the stage, since the panel's project row has a link of the same name.
+      The filtered head's direct spawn, not `startSession`: the filtered
+      Overmind is where this story starts one anyway. Scoped to the stage,
+      since the panel's project row has a link of the same name.
     */
     await page
       .getByRole('main')

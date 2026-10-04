@@ -11,6 +11,7 @@ import {
   HOOK_HEADER_TOKEN,
   HOOK_PATH,
 } from '../../../electron/shared/hook-contract';
+import { goToOvermind, overmindNewSession } from '../fixtures/places';
 import { launchHive } from './fixtures/hive-app';
 
 /**
@@ -84,13 +85,13 @@ const terminalIds = (page: Page): Promise<string[]> =>
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-terminal-id') ?? ''));
 
 /**
- * Start one session on the project through the projects panel's "+" (round
- * two's New session, HIVE-197); answers its id.
+ * Start one session on the project through the unfiltered Overmind's New
+ * session (the Sessions panel head's "+" adds a project now); answers its id.
  */
 async function startSession(page: Page, bootDir: string): Promise<string> {
   const before = await terminalIds(page);
-  await places(page).getByRole('button', { name: 'Sessions', exact: true }).click();
-  await page.locator('[data-panel="sessions"]').getByRole('button', { name: 'New session', exact: true }).click();
+  await goToOvermind(page);
+  await overmindNewSession(page).click();
   await expect(page.getByRole('textbox', { name: 'Search all projects' })).toBeFocused();
   await page.keyboard.type(PROJECT);
   await page.keyboard.press('Enter');

@@ -1,4 +1,4 @@
-import { Eye, Plus } from '@phosphor-icons/react';
+import { Eye } from '@phosphor-icons/react';
 
 import { cn } from '@/lib/utils';
 
@@ -6,7 +6,7 @@ import { EmptyState, EmptyStatePath } from '@components/ui/empty-state';
 import { NewProjectLink } from '@features/projects/components/new-project-link';
 import { SessionsProjectRow } from '@features/projects/components/sessions-project-row';
 import { useProjects, useSessionsHeadCounts } from '@stores/hive-store';
-import { usePickerActions, useSessionsProject, useSetSessionsProject } from '@stores/ui-store';
+import { useSessionsProject, useSetSessionsProject } from '@stores/ui-store';
 
 /**
  * Round two's Sessions list panel (HIVE-197): always the projects, folded, with
@@ -17,7 +17,6 @@ export function SessionsPanel() {
   const { live, needs } = useSessionsHeadCounts();
   const filter = useSessionsProject();
   const setFilter = useSetSessionsProject();
-  const { openPicker } = usePickerActions();
 
   // No projects yet: say so, and offer the picker.
   if (projects.length === 0) {
@@ -45,14 +44,7 @@ export function SessionsPanel() {
           <span className="text-green">{live} live</span> ·{' '}
           <span className="text-amber-count">{needs} needs you</span>
         </span>
-        <button
-          type="button"
-          onClick={() => openPicker()}
-          aria-label="New session"
-          className="ml-auto self-center rounded p-1 text-muted hover:bg-hover hover:text-ink"
-        >
-          <Plus size={14} weight="bold" aria-hidden="true" />
-        </button>
+        <NewProjectLink />
       </div>
       <button
         type="button"
@@ -70,9 +62,6 @@ export function SessionsPanel() {
       {projects.map((project) => (
         <SessionsProjectRow key={project.id} project={project} />
       ))}
-      <div className="mt-1.5">
-        <NewProjectLink />
-      </div>
     </div>
   );
 }
