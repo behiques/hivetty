@@ -620,7 +620,7 @@ export const useAppearanceStore = create<AppearanceState>()(
        * Commit to the opposite of what is on screen.
        *
        * From `system` this *leaves* system rather than cycling three ways: the
-       * header's button is a two-state control the user pressed to change what
+       * bar's toggle is a two-state control the user pressed to change what
        * they are looking at, and landing them in a third state they never chose
        * is not what that press meant. Choosing `system` again is a deliberate
        * act, and the appearance section is where it is made.
@@ -941,6 +941,11 @@ export const useSwarmPalette = (): SwarmPalette =>
  */
 export const useTeamName = (): string =>
   useAppearanceStore((state) => state.teamName.trim());
+
+/** What is on screen, `system` resolved against the OS (HIVE-213, the bar's toggle). */
+export const useResolvedTheme = (): ResolvedTheme =>
+  useAppearanceStore((state) => resolveTheme(state.theme, state.systemDark));
+export const useToggleTheme = () => useAppearanceStore((state) => state.toggleTheme);
 
 /** The appearance section's current values and its setters. */
 export const useAppearanceSettings = () =>

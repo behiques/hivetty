@@ -149,7 +149,6 @@ contract for their owning story, not existing code.
 | `Chip` | `ui/chip.tsx` | 021 (also 040) | `children: ReactNode`, `tone?: Tone`, `title?: string`, `className?: string` | **built** |
 | `Badge` | `ui/badge.tsx` | **021** (also 030, 050, HIVE-182) | `count: number`, `tone?: BadgeTone` (`danger` \| `brand` \| `muted` \| `green`), `text?: string`, `label?: string`, `className?: string` | **built** |
 | `Tag` | `ui/tag.tsx` | **052** | `children: ReactNode`, `tone: 'brand' \| 'green' \| 'amber' \| 'red' \| 'subtle'`, `surface?: 'panel' \| 'raised'`, `title?: string`, `className?: string` | **built** |
-| `TabBar` | `ui/tab-bar.tsx` | **030** (reused by 050) | generic over `Id extends string`: `tabs: { id: Id; label: string; badgeCount?: number; badgeLabel?: string; badgeTone?: BadgeTone }[]`, `active: Id`, `onSelect(id: Id): void`, `label: string`, `className?: string` | **built** |
 | `StatusDot` | `ui/status-dot.tsx` | **030** (used by 031, 032, 041) | `status: SessionStatus \| 'online'`, `pulse?: boolean`, `label?: string`, `className?: string` | **built** |
 | `Icon` | `ui/icon.tsx` | **031** (also 033, 051, 053) | `name: string`, `size?: number`, `weight?: IconWeight`, `className?: string` | **built** |
 | `KeyHint` | `ui/key-hint.tsx` | 041 (also 043) | `keys: string[]`, `label: string` | planned |
@@ -157,9 +156,6 @@ contract for their owning story, not existing code.
 | `SplitHandle` | `ui/split-handle.tsx` | **explorer** | `axis: 'horizontal' \| 'vertical'`, `containerRef: RefObject<HTMLElement>`, `ratio: number`, `onRatio(ratio: number): void` | **built** |
 | `Button` | `ui/button.tsx` | **HIVE-118** | `variant?: 'primary' \| 'secondary' \| 'danger' \| 'ghost'`, `size?: 'sm' \| 'md'`, plus `ButtonHTMLAttributes<HTMLButtonElement>` | **built** |
 | `SearchBox` | `ui/search-box.tsx` | **HIVE-192** | `label: string`, `value: string`, `onChange(value: string): void`, `onClear(): void` | **built** |
-
-`Badge` moved from story 030 to 021: the header's bell needs an unread count,
-and 021 lands first. 030's tab-bar badges reuse it rather than building a second.
 
 Rules for all of them:
 
@@ -178,7 +174,7 @@ Contracts worth knowing before reusing them:
   it announces `"3 unread notifications"`; without one it is `aria-hidden`
   decoration. Omit it inside an already-labelled control — an ancestor
   `aria-label` replaces its descendants' text outright, so a label there would
-  never be announced. The header's bell does exactly this.
+  never be announced.
 - **`StatusDot` follows the same label contract.** With a `label` it announces
   `"lead-form status: needs input"`; without one it is `aria-hidden` decoration.
 - **`SecretField` is not a masked `TextField`, and must not become one.** It is
@@ -194,13 +190,9 @@ Contracts worth knowing before reusing them:
   `pulse` is an override for the rare caller that needs otherwise.
 - **`STATUS_LABEL` is exported from `ui/status-dot.tsx`** and owns the
   `waiting → "needs input"` rename. Import it rather than re-deriving it.
-- **`TabBar`'s badge reuses `Badge` at `Badge`'s geometry**, not the concept's
-  15px/9.5px. One badge geometry with three tones beats a second near-identical
-  atom; the 1px difference is deliberate.
 - **`Tag` is the third pill, and the three do not overlap.** `Badge` takes a
   `count` and renders nothing at zero, so it cannot carry a word. `Chip` is a
-  larger mono pill for dense status text (the header's model chip, the meta
-  bar's branch) and has no `subtle` tone. `Tag` is proportional text at badge
+  larger mono pill for dense status text (the session header's model chip) and has no `subtle` tone. `Tag` is proportional text at badge
   scale, used for the PRs panel's `merged` / `2 open findings` / `checks
   running` row. Reach for a fourth only when none of those three fits — and say
   why here.
@@ -210,20 +202,6 @@ Contracts worth knowing before reusing them:
   default) is `bg-chip`, and `surface="raised"` inverts to `bg-panel` for a card
   that is itself chip-filled — the PRs panel's live cards, where a chip pill on a
   chip card would leave only floating coloured text.
-- **`TabBar`'s `badgeTone` defaults to `muted`.** The left rail's work count is
-  an inventory and stays quiet; the activity rail passes `danger` because its
-  unread count means the user is what an agent is blocked on (050).
-- **`BadgeTone` is exported from `ui/badge.tsx`** and reused by `TabBar`, so the
-  two atoms cannot drift to different tone vocabularies.
-- **`TabBar` is generic over its id type.** Pass `Tab<LeftTab>[]` and `onSelect`
-  hands back a `LeftTab`, not a `string` — no `as` cast at the call site, and an
-  id outside the union stops compiling.
-- **Set `badgeLabel` whenever you set `badgeCount`.** This is the one place the
-  usual "omit the label" advice inverts: a tab is named by its *content*, not by
-  an `aria-label`, so an unlabelled badge is `aria-hidden` and its number reaches
-  nobody using a screen reader. With it, the tab announces `"Work 8 work items"`.
-- **Use the exported `tabId(id)` helper** for a panel's `aria-labelledby` rather
-  than re-spelling the `tab-${id}` convention; the atom owns that format.
 - **`Icon` bridges the fixtures' icon strings to the React package.** The
   fixtures carry `'ph-slack-logo'` because the concept used the phosphor
   *webfont*; this app ships the React components and no webfont, so `Icon` owns
@@ -257,105 +235,58 @@ Contracts worth knowing before reusing them:
 
 ### `<AppShell />`
 
-`src/components/layout/app-shell.tsx` — story 020, built.
+`src/components/layout/app-shell.tsx` — story 020, one tree since HIVE-213.
 
 ```ts
 function AppShell(): JSX.Element
 ```
 
-The fixed three-column chrome: `<Header />` on top, then a row of `<LeftRail />`,
-`<CenterStage />`, and `<ActivityRail />`. Takes no props; reads
-`useShowActivityRail()` to decide whether the activity rail is mounted at all.
+The frame: `<TitleBar />` (the macOS drag strip; nothing off macOS or in the
+browser), then one row of `<ActivityBar />` (the bar), `<ListPanel />` (the list
+panel), `<CenterStage />` (the stage) and `<SessionPanel />` (the session panel).
+Takes no props. It is also the composition root for the app's one-per-channel
+subscriptions (session status, the ledger, agents, notifications, the remote
+link, the project watcher, the panel chords).
 
 `src/app.tsx` renders `<AppShell />` and nothing else.
 
-The four regions are landmark elements — `<header>`, `<nav>`, `<main>`,
-`<aside>` — so tests address them by role. The flexbox contract that holds the
-layout together is documented in
-[`../docs/component-patterns.md`](../docs/component-patterns.md); do not touch
-the `min-h-0` / `min-w-0` / `shrink-0` classes without reading it.
+The regions are landmark elements — `<nav aria-label="Places">`, `<section
+aria-label="<Place> list">`, `<main>`, `<aside aria-label="Session panel">` — so
+tests address them by role. The flexbox contract that holds the layout together
+is documented in [`../docs/component-patterns.md`](../docs/component-patterns.md);
+do not touch the `min-h-0` / `min-w-0` / `shrink-0` classes without reading it.
 
-### `<Header />`
+### `<SessionHeader />` and `<ModelChip />`
 
-`src/components/layout/header.tsx` — story 021, built.
+`src/components/layout/session-header.tsx` — HIVE-197, built.
 
-Seven zones, left to right: brand block, model chip (sessions only), spacer,
-fleet status counts, theme toggle, inbox bell, New session. 56px tall, `gap-14px`,
-`px-4`.
+The strip over a session or a terminal on the stage, `data-testid="session-header"`:
+Back to overmind (its chord in the title), the session's status, task and
+branch (or a terminal's label and cwd), the model chip, and the Session menu
+with Terminal here. `ModelChip` (`layout/model-chip.tsx`) reads
+`useActiveEntity()` and renders `null` unless the active tab is a **session**.
 
-**New session is a split pill** (terminals). The button keeps its exact name
-and opens the picker; the chevron beside it is `HeaderTerminalMenu`
-(`layout/header-terminal-menu.tsx`), a radix `DropdownMenu` headed
-`New terminal in…` that lists every project in config order — never a hand-off
-to the picker, which is a session surface. Its trigger is named `Terminal in a project` —
-never beginning with "new" — so a locator that finds `New session` by name
-still finds exactly one control. Both halves carry `no-drag`.
+**The model chip's numbers are *observed*, and an unobserved one renders
+nothing at all.** They arrive from Claude Code's own status line payload — see
+`src/lib/session-metrics.ts` and `electron/main/hooks/settings.ts` — and each
+stat carries its own gauge, percentage and separator, so a value nobody has
+reported takes all three away with it rather than holding an em dash in a
+labelled slot. That absence is routine, not exceptional: `rate_limits` is
+missing until a session's first API response and for the whole life of an
+API-key session, and the context percentage is null until the first assistant
+turn. The chip grows as the session reports.
 
-**The header composes and nothing else.** Every zone that reads domain state owns
-its own subscription, so a session changing status repaints one span rather than
-the whole bar. Its three sub-components are tested independently; the header's own
-tests cover only the wiring.
+### `<SessionPanel />` and `<SessionPanelStrip />`
 
-| Sub-component | File | Reads | Notes |
-| --- | --- | --- | --- |
-| `BrandBlock` | `layout/brand-block.tsx` | — | pure; 30px tile + `/hive-mark.png` |
-| `ModelChip` | `layout/model-chip.tsx` | `useActiveEntity()` | renders `null` unless the active tab is a **session** |
-| `StatusCounts` | `layout/status-counts.tsx` | `useCounts()` | derived in the selector, never stored |
+`src/components/layout/session-panel.tsx` — HIVE-201, built. No props.
 
-Two things here are easy to get wrong:
-
-- **The brand tile uses `bg-brand-fill-strong`, not `bg-brand`.** `--cc-brand` is
-  a text colour that flips per theme; using it would repaint the logo tile pale
-  blue in dark mode. See the brand-fill note in
-  [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md).
-- **The model chip's numbers are *observed*, and an unobserved one renders
-  nothing at all.** They arrive from Claude Code's own status line payload — see
-  `src/lib/session-metrics.ts` and `electron/main/hooks/settings.ts` — and each
-  stat carries its own gauge, percentage and separator, so a value nobody has
-  reported takes all three away with it rather than holding an em dash in a
-  labelled slot. That absence is routine, not exceptional:
-  `rate_limits` is missing until a session's first API response and for the whole
-  life of an API-key session, and the context percentage is null until the first
-  assistant turn. The chip grows as the session reports.
-
-The bell marks everything read rather than opening a dropdown — the inbox lives in
-the activity rail (story 051), and two places to read the same list is one too
-many.
-
-### `<LeftRail />`
-
-`src/components/layout/left-rail.tsx` — story 030, built.
-
-320px fixed. A flex column of two children: a pinned `<TabBar />` and a scrolling
-tab panel that mounts exactly one of `ProjectsPanel` (031), `WorkPanel` (032), or
-`AgentsPanel` (033). Reads `useLeftTab()` / `useSetLeftTab()`, plus
-`useTicketCount()` for the Work tab's badge.
-
-**The tab bar does not scroll — the panel below it does.** Scrolling the rail as a
-whole would push the tabs off-screen as soon as a project tree grew, taking away
-the one control the user needs to get back out of it.
-
-Panel state lives in the stores, never in the panels: `collapsed` in the ui-store
-is why a collapsed project survives a round trip through the Agents tab even
-though the panel unmounts on every switch.
-
-### `<ActivityRail />`
-
-`src/components/layout/activity-rail.tsx` — story 050, built.
-
-316px fixed, and the only region the shell can hide (`showActivityRail`, 020).
-Structurally a twin of `<LeftRail />`: a pinned `<TabBar />` over a scrolling tab
-panel that mounts exactly one of `InboxPanel` (051), `PrsPanel` (052), or
-`ExplorerPanel`. Reads `useRailState()` / `useSetRailTab()`, plus
-`useUnreadCount()` for the Inbox badge.
-
-- **The Inbox badge is `danger`, not `muted`.** It is the one count in the app
-  that means *you are the blocker*; the left rail's work count is an inventory.
-- **Scroll position resets on tab switch.** Story 050 asks for an explicit
-  choice. Preserving it per panel means keeping all three mounted or mirroring
-  `scrollTop` into the ui-store, and for three short lists neither earns the
-  complexity — a stale offset into a list the simulation just prepended to is
-  worse than starting at the top.
+The right of the frame while the stage shows a session or a terminal (never on
+Home, the Overmind or an agent): open at `--cc-session-panel-w` with a tab per
+thing the session has — Plan, Ticket, PR, Files, each drawn only when it
+exists — or closed (⌘⌥B, or always under 1,200px) to `SessionPanelStrip`, a
+`--cc-session-strip-w` column of the plan's glyphs and one icon per other tab
+carrying its fact. The open tab and open state live in `appearance-store`
+(`sessionPanelTab`, `sessionPanelOpen`), so they survive a relaunch.
 
 ### `<ActivityBar />`
 
@@ -366,7 +297,10 @@ glyph on top (Phosphor `Hexagon`, `weight="fill"`, `text-amber`, 22px) carries
 the team name as its accessible name and its tooltip, "The Hive" when the name
 is empty. Below it the five places — Home, Sessions, Work, Agents, PRs — each a
 52px button calling `selectPlace`; the active one has `aria-current="page"`.
-The foot holds `ConnectionItem` and Settings (`openSettings()`); no Search.
+The foot holds `ConnectionItem`, the theme toggle (HIVE-213: Phosphor `Sun` while the
+resolved theme is dark, `Moon` while light, named and titled "Switch to light theme" /
+"Switch to dark theme", calling `toggleTheme` through `useToggleTheme` and reading
+`useResolvedTheme`) and Settings (`openSettings()`); no Search.
 Sessions and Agents carry working counts in grey, PRs its needs-you count in
 amber; a zero draws nothing (HIVE-196).
 
@@ -387,7 +321,7 @@ attached now (`useReceiverExposure`, `useServerExposure`, `useServingDeviceCount
 `src/components/layout/list-panel.tsx` — HIVE-195, built. No props.
 
 Today's panel for the current place, at `--cc-list-w`, in a
-`<section aria-label="<Place> list">`: `ProjectsPanel` for Sessions,
+`<section aria-label="<Place> list">`: `SessionsPanel` for Sessions,
 `WorkPanel`, `AgentsPanel`, `PrsPanel` (the Hatchery). Home has none, and nothing
 renders when `panelOpen` is false, or for PRs while the Hatchery is quiet and no
 search is open. Not resizable and no collapsed strip. Each place's own
@@ -396,50 +330,47 @@ story replaces its entry.
 ### `components/layout/` is the composition root
 
 It is the one place under `src/components/` allowed to import `src/features/**` —
-the rails and the center stage exist to mount feature panels. `components/ui/` and
+the list panel, the stage and the session panel exist to mount feature panels. `components/ui/` and
 `components/terminal/` stay fully fenced. See AGENTS.md → Import zones;
 `pnpm verify:boundaries` proves both halves.
 
 ## Feature panels
 
-### `<ProjectsPanel />`
+### `<SessionsPanel />`
 
-`src/features/projects/components/projects-panel.tsx` — story 031, built.
+`src/features/projects/components/sessions-panel.tsx` — HIVE-197, built.
 
-A collapsible tree: `ProjectsPanel` → `ProjectRow` → `SessionRow | TerminalRow`
-(per live entity, by kind). The panel itself holds no state and reads no
-session data — **each row owns its own subscription**, so one session changing
-status repaints that row rather than the whole tree.
+The Sessions list panel: a `Projects` head with `N live · N needs you` and a +
+named "New session" (opens the picker), then "All projects" (widens the
+Overmind again), then one `SessionsProjectRow` per project, folded, and
+`NewProjectLink` at the foot. No projects yet: the empty state and the picker.
 
-Four things here are easy to get wrong:
-
-- **The count pill is a plain span, not `Badge`.** `Badge` renders nothing at
-  zero, and a project with no live sessions must still show its `0` — that is the
-  story's empty state, and losing the pill would read as a rendering bug.
-- **Both rows are `<button>`s, not divs with `onClick`.** The project row carries
-  `aria-expanded`; the session row carries `aria-current` when its tab is open.
-  Keyboard reachability comes free that way.
+- **A project row is two buttons.** The caret folds (`aria-expanded`, named
+  `Fold <project>` / `Unfold <project>`); the name narrows the Overmind to that
+  project (`aria-current`). Keyboard reachability comes free that way.
 - **`SessionRow` renders `null` for an id the store does not know.** The
   simulation (061) and the spawn flow (044) both mutate entities underneath open
   panels, so a row that assumes its entity exists is a race waiting to throw.
   `TerminalRow` does the same, and also for a row of the wrong kind.
-- **The last child is a split row.** `NewSessionLink` on the left,
+- **An unfolded project ends in a split row.** `NewSessionLink` on the left,
   `NewTerminalLink` on the right; the terminal link is named `Terminal in
   <project>` on purpose, so no locator that begins `New session` matches it.
 
-`collapsed` lives in the ui-store rather than in `ProjectRow` because the panel
-unmounts on every left-rail tab switch; component state would forget the tree.
+Folds and the project filter live in the ui-store rather than in the row because
+the panel unmounts on every place switch; component state would forget them.
 
 ### `<WorkPanel />`
 
 `src/features/work/components/work-panel.tsx` — story 032, built.
 
-`WorkPanel` → `TicketCard` → `TicketSessionRow` / `TicketPrRow`. The same fleet the
-projects panel groups by repo, grouped by work item instead.
+`WorkPanel` is the Work list panel: groups of `TicketRow`s (see *Round two's
+Work* below). `TicketSessionRow` / `TicketPrRow` are the rows of a ticket page's
+properties column (`TicketProperties`): the same fleet the Sessions panel groups
+by repo, grouped by work item instead.
 
 - **The PR section — divider included — is omitted when no linked session has a
   PR.** A rule with nothing under it reads as a rendering bug.
-- **`TicketSessionRow` passes `StatusDot` a `label`**, unlike the projects panel:
+- **`TicketSessionRow` passes `StatusDot` a `label`**, unlike the Sessions panel:
   these rows carry no visible status text, so without one the dot would convey
   status by colour alone.
 - **A PR row opens the owning session's terminal when there is a live one, and
@@ -452,7 +383,7 @@ sessions are on. It used to walk `Session.pr` instead, with the global list as a
 fallback; nothing ever wrote that field, so the section was permanently empty and
 only the fixtures made it look otherwise. (The field itself is gone as of
 HIVE-100, which found the last two surfaces still reading it — the fleet table's
-`PR` column and the meta bar's chip, both empty for the same reason.) It **cannot use
+`PR` column and the old session bar's chip, both empty for the same reason.) It **cannot use
 `useShallow`** — it builds new objects, and `useShallow` compares an array's
 elements by identity, so every render would produce a new snapshot and React
 would loop. It subscribes to the stable slices and memoises instead; the
@@ -466,9 +397,9 @@ because the PRs panel (052) is a separate slice that must agree with this one.
 `src/features/work/components/`, HIVE-203.
 
 - **`WorkPanel variant="rows"`** (`WorkList`, what `ListPanel` mounts for
-  Work) swaps Classic's cards for a header (`N tickets · N need you`, a search
+  Work) is the rows: a head (`N tickets · N need you`, a search
   toggle) and groups of `TicketRow`s with fold carets. Skeleton, notices, pull
-  to refresh and both pollers are shared with the cards.
+  to refresh and both pollers live in `WorkPanel`.
 - **`TicketRow`** — a tone dot, the title without its tags, and `KEY · fact`
   in mono. The fact and tone are `lib/ticket-activity.ts`'s, pure and tested
   rule by rule. `aria-current` marks the open ticket.
@@ -543,8 +474,8 @@ split is `minmax(0, 1fr) clamp(280px, 22%, 380px)` under a **container query**
 that stacks below an 800px stage. Both halves of that are load-bearing and both
 are argued in `docs/agents-and-ledger.md`; the short version is that the log is
 elastic because it renders at the user's terminal type scale, `1fr` alone would
-give the app a horizontal scrollbar, and the rails drag so only the container
-knows how wide the stage is.
+give the app a horizontal scrollbar, and the panels open and close so only the
+container knows how wide the stage is.
 
 `AgentRunLog` takes its colours from the theme's terminal palette in JS, the way
 the xterm surface does — those four values already exist and are already
@@ -605,8 +536,7 @@ under a header that says `N open · M need you`.
 - **The flap turns only when its word changes** between two renders of the same
   row: never on mount, so never on first render, a fold or a search. SUMMONS
   pulses. Under `useReducedMotion` it neither turns nor pulses.
-- **Round two opens the page** (`openPrPage`); **Classic opens GitHub**, since the
-  Classic rail has no page.
+- **A row opens the PR page** (`openPrPage`).
 
 ### The PR page: `<PrPage />`, `<ShipTrack />`, `<PrConversation />`, `<ThreadCard />`, `<PrProperties />`, `<PrCommentBox />`
 
@@ -722,10 +652,10 @@ which rendered fixture rows narrating events the app already shows elsewhere.
   rooted at.
 - **A collapsed directory is never read.** Each expanded node owns its own
   `useDirectory()` call, which is what makes opening a repository cheap.
-- **The whole row is a `<button>`**, like `ProjectRow` — reachable by keyboard,
+- **The whole row is a `<button>`**, like `SessionRow` — reachable by keyboard,
   with `aria-expanded` on directories and `aria-current` on the open file.
   Indentation is *padding on the button*, not a nested container, so the hover
-  and selection backgrounds run the full width of the rail rather than being
+  and selection backgrounds run the full width of the panel rather than being
   inset one level per depth.
 - **Not a `role="tree"`.** A real ARIA tree needs roving tabindex, typeahead and
   arrow-key navigation across the whole widget to be correct; a half-built one
@@ -733,7 +663,7 @@ which rendered fixture rows narrating events the app already shows elsewhere.
   work, and full tree semantics are a deliberate follow-up.
 - **It does not own the filesystem watcher.** That is `useProjectWatcher` at the
   composition root: an open editor buffer reconciles against the same events and
-  outlives the rail tab. The panel reads the revision counter the watcher bumps.
+  outlives the session panel's Files tab. The panel reads the revision counter the watcher bumps.
 
 ### `<EditorPane />`, `<EditorTabStrip />` and `<EditorNotice />`
 
@@ -750,28 +680,21 @@ the disk and the buffer disagree, and the CodeMirror surface itself.
 - **Notices are amber, never red.** An agent rewriting a file under you is the
   entire point of the app, not a failure.
 
-### `<PlanRail />` and `<PlanGlyph />`
+### `<PlanTab />` and `<PlanGlyph />`
 
-`src/features/plan/components/` — HIVE-181, built. The plan panel: a 34px glyph
-rail mounted by `center-stage.tsx` beside the terminal region (a sibling, never
-inside `components/terminal/`). Props only — `plan`, `pinned`,
-`onPinnedChange` — so the slice reads no store; the composition root passes
-`usePlan` and `appearance-store`'s pin. `PlanGlyph` is one task's 16px ring:
-numbered on `border-term-track` while pending, green and `ccpulse` while in
-progress, a filled `bg-green` check when done, "proposed" for a plan-mode task.
-The drawer peeks over the terminal by CSS (`group-hover`, `group-focus-within`)
-and docks at 232px when pinned. See `docs/component-patterns.md`, *The plan
-rail*.
+`src/features/plan/components/` — HIVE-181, the session panel's Plan tab since
+HIVE-201. Props only — `plan`, `onOpenFile` — so the slice reads no store; the
+session panel passes `usePlan`. `PlanTab` is the plan opened: where it is, what
+it is doing now, and for how long (the clock ticks only while a task is in
+progress and the tab is shown). `PlanGlyph` is one task's 16px ring: numbered on
+`border-term-track` while pending, green and `ccpulse` while in progress, a
+filled `bg-green` check when done, "proposed" for a plan-mode task. The closed
+panel's strip stacks the glyphs on top. See `docs/component-patterns.md`, *The
+session panel*.
 
-### Region placeholders
+### `<CenterStage />`
 
-Still bare panels, owned by the story that fills each in.
-
-| Region | File | Filled in by |
-| --- | --- | --- |
-| `CenterStage` | `layout/center-stage.tsx` | 040 — view-state machine, session meta bar |
-
-`ActivityRail` is no longer a placeholder — story 050 filled it in; see below.
+`src/components/layout/center-stage.tsx` — story 040, built.
 
 `CenterStage` mounts `<TerminalHost />` and builds one `StaticTransport` per
 entity, cached for the life of the app — transport identity matters, because a
@@ -784,47 +707,6 @@ while a session's agent is starting, and `TerminalEndedCover` — a strip along
 the foot, because the transcript above it is the evidence — when a terminal's
 shell died unasked. A terminal the user exited is removed outright and has
 nothing to cover.
-
-### `<SessionMetaBar />`
-
-`src/components/layout/session-meta-bar.tsx`
-
-```ts
-function SessionMetaBar(props: { entity: Session }): JSX.Element
-```
-
-The bar above the terminal in the **session** view (040): a back pill, the
-entity id, its one-line task, status chips — branch, status, and PR — and, at
-the right end, `terminal here` (terminals): a shell at the session's observed
-`cwd`, not the project root. Named `Terminal here in <id>`; its chord `⌃\``
-is one of the three in `hooks/use-app-chords.ts`, a small table that shares the
-window-keydown and terminal-chord-event entry points across the rail-collapse
-chords and this one. On a terminal tab, which has no bar, the chord opens a
-sibling.
-
-It took an `Entity` and rendered a `dedicated agent` chip for the other kind
-until HIVE-116, which gave agents a view of their own. The prop narrowed to
-`Session` with the branch that drew those chips: a type that admits what the
-component can no longer draw is an invitation to reach it again.
-
-Everything is derived from the entity, so a status change reaches this bar the
-same moment it reaches the rails — including the `waiting → "needs input"`
-rename, which comes from `STATUS_LABEL` rather than being spelled again here.
-PR colour comes from `features/shared/pr-presentation`, shared with the work and
-PRs panels.
-
-**The PR chip is resolved, not read off the entity, and it is a link** (HIVE-100).
-It used to render `entity.pr` — a field nothing has ever written, so the chip had
-never once appeared outside a fixture and the "derived from the entity" sentence
-above was describing something that could not happen. `useSessionPr()` matches
-the session's branch against the live `prs` list, the same resolution
-`useTicketPrs()` and `usePrs()` perform; `Session.pr` is gone, along with the
-`PrState` type that existed only to type it.
-
-The back pill uses a native `title` rather than the Radix tooltip: this predates
-`TooltipProvider`, now mounted in `app.tsx` for the rail strips' hover labels,
-and a title still does everything this one affordance needs. The label names
-the shortcut story 060 will bind.
 
 ### Feature components (epic HIVE-4)
 

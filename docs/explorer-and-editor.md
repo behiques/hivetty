@@ -1,6 +1,6 @@
 # The project explorer and the editor
 
-**Scope:** the right rail's tree, the CodeMirror editor on the centre stage, and
+**Scope:** the session panel's Files tree, the CodeMirror editor on the centre stage, and
 the filesystem IPC surface underneath both.
 
 This is the first feature in the app that reads the user's source tree. Most of
@@ -159,9 +159,9 @@ argument — there is only ever one thing to stop. A watcher per visited project
 would be a file-descriptor leak with a long fuse.
 
 **The renderer subscribes at the composition root**, in `useProjectWatcher`, not
-in `ExplorerPanel`. It started in the panel and that was a bug: the rail swaps
-panels and the shell can unmount the rail entirely, so freshness died the moment
-the user looked at the Inbox with a file open — no silent reload, no
+in `ExplorerPanel`. It started in the panel and that was a bug: the session panel
+swaps tabs and closes to its strip, so freshness died the moment the user
+looked at another tab with a file open — no silent reload, no
 `staleOnDisk`, and the next save refused with a conflict they were never warned
 about. The tree is only one consumer; the editor is the other, and it outlives
 the panel.
@@ -211,10 +211,9 @@ already names its project, and a second selector would be one more thing to keep
 in sync with the first. The orchestrator tab — which names no session — falls
 back to the last project the tree was rooted at, then to the first mapped one.
 
-**Where it lives.** Classic keeps the tree in the activity rail's Explorer tab.
-Round two puts it in the session panel's **Files** tab (HIVE-201), which hands
-`ExplorerPanel` the session's main id as `changesId`
-(`src/components/layout/session-panel.tsx:72`). A terminal on stage gets Files
+**Where it lives.** The tree is the session panel's **Files** tab (HIVE-201),
+which hands `ExplorerPanel` the session's main id as `changesId`
+(`src/components/layout/session-panel.tsx:109`). A terminal on stage gets Files
 too: `use-explorer-project.ts` resolves a terminal's project and cwd as it does
 a session's, with no session to act for.
 
@@ -222,8 +221,8 @@ a session's, with no session to act for.
 
 With a `changesId`, the panel shows "Changed in this session" above the tree
 (`src/features/explorer/components/changed-files.tsx:18`) and an `M` or `A`
-beside each changed file in it (`tree-node.tsx:73`). Classic's rail passes no
-`changesId` and shows neither.
+beside each changed file in it (`tree-node.tsx:73`). A terminal has no main id,
+passes no `changesId`, and shows neither.
 
 The list is not git's. It comes from the session's transcript:
 `electron/main/sessions/changed-files.ts` folds each `toolUseResult`'s

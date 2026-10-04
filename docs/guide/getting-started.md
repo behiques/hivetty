@@ -32,10 +32,12 @@ Homebrew is found even when you open the app from Finder.
 
 ## First launch
 
-The window opens on the **overmind**: the fleet table in the middle, your projects on the
-left, the inbox on the right. It is empty until you map a project.
+The window opens on **Home**. With no project mapped yet, Home is the first-run page: **Add a
+project**, connect your integrations, and **New session**. Click **Sessions** on the bar for the
+**Overmind**: the fleet table on the stage and your projects in the list panel beside it. It is
+empty until you start a session.
 
-![The Hive on first launch, with two projects mapped and nothing running](../assets/guide/01-empty-overmind.png)
+![The Overmind with two projects mapped and nothing running](../assets/guide/01-empty-overmind.png)
 
 On first launch The Hive writes `~/.hive/config.json` from a commented template. You never
 have to open it; Settings edits it for you. See [The config file](configuration.md).
@@ -44,9 +46,9 @@ have to open it; Settings edits it for you. See [The config file](configuration.
 
 A **project** is a folder The Hive can start sessions in, usually a git repository.
 
-1. Click **+ new project** at the top of the left rail.
+1. Click **Add a project** on Home, or **new project** at the foot of the Sessions panel.
 2. Choose the repository folder.
-3. The project appears in the rail with a short **key** (two to four letters, like `hive`).
+3. The project appears in the Sessions panel with a short **key** (two to four letters, like `hive`).
    You can type the key anywhere a project is asked for.
 
 You can also add, rename, re-key or clone projects in **Settings › Projects**.
@@ -55,13 +57,14 @@ You can also add, rename, re-key or clone projects in **Settings › Projects**.
 
 ## Start your first session
 
-1. Click **New session** in the header (in round two, the **+** beside **Projects** in the Sessions place).
+1. Click **New session** on the Overmind (or on Home's first-run page, or the **+** beside
+   **Projects** in the Sessions panel).
 2. Type part of the project name and press **Enter**.
 3. Pick a model and effort first if you want. The defaults are `opus` and `high`.
 
 ![The new-session picker with project pills, model and effort steppers](../assets/guide/02-new-session-picker.png)
 
-A terminal opens on the centre stage with `claude` running in your project. Type to it
+A terminal opens on the stage with `claude` running in your project. Type to it
 exactly as you would in any terminal.
 
 **Example.** The same thing from the overmind console, in one line:
