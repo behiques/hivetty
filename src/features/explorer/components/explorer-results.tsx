@@ -154,7 +154,8 @@ function LineRow({
       <span className="w-6 shrink-0 text-right text-[10px] text-subtle tabular-nums">
         {line.line}
       </span>
-      <span className="min-w-0 flex-1 truncate tabular-nums text-[10.5px] text-muted">
+      {/* A line of the file: code, so mono. */}
+      <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-muted">
         <Marked text={line.text} query={query} at={line.column} />
       </span>
     </button>

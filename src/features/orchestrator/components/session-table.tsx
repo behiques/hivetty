@@ -160,8 +160,9 @@ import { useActiveTab, useExpandEnded, useSelId, useSessionsProject, useSetSelId
  * hold while a quiet session with subagents running was called `idle (agents)`
  * and was allowed to clip. Renaming that to `working (agents)` and
  * `working (scripts)` made the longest value 17 characters, which the browser
- * measured 127.9px in the old mono face at 12.5px; the sans face at 13px is narrower. A clipped status is worse than a
- * clipped branch: a branch truncates to a prefix that is still recognisably
+ * measured at 127.9px in the old mono face at 12.5px; the sans face at 13px
+ * is narrower, so the width now carries more margin. A clipped status is worse
+ * than a clipped branch: a branch truncates to a prefix that is still recognisably
  * itself, while `working (scr…` is a word the table has stopped saying. So it
  * is `w-[132px] shrink-0` and stays that width — four pixels of margin over a
  * measurement taken on one machine's font stack, because the fallback chain
@@ -254,7 +255,8 @@ const COL = {
     would double the row's height and take every other row's alignment with it.
 
     80px is the longest value `formatLastUsed` can produce — `59 min ago` and
-    `6 days ago`, ten characters, 75.2px in this face at 12.5px — plus the same
+    `6 days ago`, ten characters, 75.2px in the old mono face at 12.5px and
+    narrower in today's sans at 13px — plus the same
     few pixels of margin `STATUS` carries, and for the same reason: that
     measurement is one machine's font stack, and the fallback chain ends in a
     generic `sans-serif`.
@@ -840,7 +842,7 @@ function SessionTableRow({
           target="_blank"
           rel="noreferrer"
           /*
-            Underlined at rest, not on hover. In a monospace table `#123` is
+            Underlined at rest, not on hover. In a plain table `#123` is
             otherwise just the cell's value — the same weight and shape as the
             branch beside it — and nothing would suggest it leaves the app.
             `pr-card` can afford `hover:underline` because its `#123` sits next
@@ -1041,7 +1043,7 @@ function AgentTableRow({
           Deliberate, and the reason is the column rather than the vocabulary: a
           9px dot and its gap would push the status word ~14px right on agent
           rows only, so `STATUS` would stop lining up between this group and the
-          two around it. In a monospace table that misalignment is the first
+          two around it. In a column of words that misalignment is the first
           thing the eye finds. The colour comes from the same `STATUS_TEXT` the
           dot is filled from, so the two surfaces still agree about what the
           state *means*; only the glyph is spent differently.
