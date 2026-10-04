@@ -198,9 +198,9 @@ body {
   }
 }
 
-/* The empty Hatchery's dormant egg (HIVE-205): one 7s loop. It rocks, a crack
-   of light opens half way and closes, the yolk glows, spores drift, the creep
-   breathes. Nothing emerges. `useReducedMotion` drops every class. */
+/* The empty Hatchery's dormant egg (HIVE-205): one 7s loop. It rocks, the yolk
+   glows, spores drift, the creep breathes. Nothing emerges. `useReducedMotion`
+   drops every class. */
 @keyframes cceggrock {
   0%,
   30%,
@@ -221,26 +221,6 @@ body {
   }
   60% {
     transform: rotate(0deg);
-  }
-}
-
-@keyframes cceggcrack {
-  0%,
-  38% {
-    stroke-dashoffset: 100;
-    opacity: 1;
-  }
-  52% {
-    stroke-dashoffset: 55;
-  }
-  62% {
-    stroke-dashoffset: 55;
-    opacity: 1;
-  }
-  78%,
-  100% {
-    stroke-dashoffset: 100;
-    opacity: 0;
   }
 }
 
@@ -274,6 +254,111 @@ body {
 @keyframes cccreep {
   50% {
     transform: scale(1.06, 1.1);
+  }
+}
+
+/* The Brood's egg (HIVE-221): what lives under the shell. Specks drift by their
+   own `--dx`/`--dy`, the occupant darkens and twitches at the swell, a
+   heartbeat thumps, the veins silhouette and pulse in bands, the blisters catch
+   the light. */
+@keyframes cceggspeck {
+  50% {
+    transform: translate(var(--dx), var(--dy));
+  }
+}
+
+@keyframes cceggocc {
+  0%,
+  22% {
+    opacity: 0.05;
+  }
+  30% {
+    opacity: 0.09;
+  }
+  45% {
+    opacity: 0.72;
+  }
+  53% {
+    opacity: 0.4;
+  }
+  68%,
+  100% {
+    opacity: 0.05;
+  }
+}
+
+@keyframes cceggtwitch {
+  0%,
+  23% {
+    transform: none;
+  }
+  25.5% {
+    transform: rotate(-7deg) translate(1px, -1.5px);
+  }
+  27.5% {
+    transform: rotate(3deg) translate(-0.5px, 0.5px);
+  }
+  29.5%,
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes cceggheart {
+  0%,
+  40%,
+  100% {
+    opacity: 0.05;
+    transform: scale(1);
+  }
+  8% {
+    opacity: 0.2;
+    transform: scale(1.18);
+  }
+  16% {
+    opacity: 0.07;
+    transform: scale(1);
+  }
+  24% {
+    opacity: 0.15;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes cceggveinsil {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  45% {
+    opacity: 0.85;
+  }
+  70% {
+    opacity: 0;
+  }
+}
+
+@keyframes cceggveinpulse {
+  0%,
+  40%,
+  100% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.14;
+  }
+}
+
+@keyframes cceggcatch {
+  0%,
+  100% {
+    opacity: 0.03;
+  }
+  45% {
+    opacity: 0.4;
+  }
+  70% {
+    opacity: 0.03;
   }
 }
 
