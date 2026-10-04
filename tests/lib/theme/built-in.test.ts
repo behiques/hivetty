@@ -21,7 +21,9 @@ describe('the format', () => {
     expect(UI_KEYS).toHaveLength(28);
     expect(SYNTAX_KEYS).toHaveLength(11);
     expect(TERMINAL_KEYS).toHaveLength(11);
-    expect(UI_OPTIONAL_KEYS).toEqual(['creep', 'chitin']);
+    expect(UI_OPTIONAL_KEYS).toEqual([
+      'creep', 'chitin', 'tissueDeep', 'tissue', 'tissueLit', 'glowCore', 'ground',
+    ]);
   });
 });
 

@@ -11,9 +11,9 @@ import './splash.css';
  * the wiring a unit test cannot reach anyway: this document's elements and its
  * computed tokens.
  *
- * No store, no IPC, and from `src/` outside this directory only the four pure
- * `lib/` modules the globe draws with — the mutalisk, its palette type,
- * `hexPath` and the colour helpers. The splash exists to be on screen before
+ * No store, no IPC, and from `src/` outside this directory only the pure `lib/`
+ * modules the globe draws with — the Brood mutalisk (`swarm/muta`, with its
+ * `tone` and `kit`), the palette, `hexPath` and the colour helpers. The splash exists to be on screen before
  * the app has loaded, and the ESLint zones in `eslint.config.mjs` make that a
  * build failure rather than a convention.
  *

@@ -217,24 +217,26 @@ export default tseslint.config(
             },
 
             /**
-             * The splash and `lib/` (HIVE-212): banned, except the four pure
-             * modules the comb globe draws with — the mutalisk, its palette
-             * type, `hexPath` from the comb, and the colour helpers that
-             * derive the creature's carapace. Each imports types only, so the
-             * chunk they share with the app holds them and nothing behind them.
+             * The splash and `lib/` (HIVE-212): banned, except the six pure
+             * modules the comb globe draws with — the Brood mutalisk
+             * (`swarm/muta`, HIVE-221) with its tone and kit, the palette,
+             * `hexPath` from the comb, and the colour helpers that derive the
+             * creature's colours. They import nothing outside `lib/swarm/`
+             * and `lib/theme/colour`, so the chunk they share with the app
+             * holds them and nothing behind them.
              *
              * A zone of its own because `except` must be ABSOLUTE (see the
              * note above `featureIsolationZones`); a relative one silently
              * never matches. It must also be a GLOB: the rule refuses a plain
-             * file path when `from` is a glob, so the four files are one brace
+             * file path when `from` is a glob, so the six files are one brace
              * pattern. `scripts/verify-boundaries.mjs` proves both halves.
              */
             {
               target: './src/splash/**/*',
               from: './src/lib/**/*',
-              except: [`${appRoot}/src/lib/{swarm/comb,swarm/mutalisk,swarm/palette,theme/colour}.ts`],
+              except: [`${appRoot}/src/lib/{swarm/comb,swarm/muta,swarm/tone,swarm/kit,swarm/palette,theme/colour}.ts`],
               message:
-                'splash/ may import from lib/ only the mutalisk, its palette type, hexPath and the colour helpers (HIVE-212).',
+                'splash/ may import from lib/ only the mutalisk (muta, tone, kit), the palette, hexPath and the colour helpers (HIVE-212, HIVE-221).',
             },
 
             /**

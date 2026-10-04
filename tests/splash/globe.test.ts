@@ -3,8 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { drawMuta, spineNodes } from '@lib/swarm/muta';
 import type { SwarmPalette } from '@lib/swarm/palette';
-import { drawMutalisk } from '@lib/swarm/mutalisk';
 import { coloursUsed, recordingContext } from '@tests/support/canvas-2d';
 
 import { LOG_SCHEDULE } from '@/splash/chamber';
@@ -24,9 +24,9 @@ import {
   orbitPoint,
 } from '@/splash/globe';
 
-vi.mock('@lib/swarm/mutalisk', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@lib/swarm/mutalisk')>()),
-  drawMutalisk: vi.fn(),
+vi.mock('@lib/swarm/muta', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@lib/swarm/muta')>()),
+  drawMuta: vi.fn(),
 }));
 
 describe('the globe cells', () => {
@@ -151,11 +151,21 @@ const PALETTE: SwarmPalette = {
   creepClear: 'c-creep-clear',
   chitin: 'c-chitin',
   carapace: 'c-carapace',
+  tissueDeep: 'c-tissue-deep',
+  tissue: 'c-tissue',
+  tissueLit: 'c-tissue-lit',
+  glowCore: 'c-glow-core',
+  ground: 'c-ground',
+  membrane: 'c-membrane',
+  maw: 'c-maw',
+  gum: 'c-gum',
+  stain: 'c-stain',
+  glint: 'c-glint',
 };
 
 describe('drawGlobe', () => {
   const draw = (t: number) => {
-    vi.mocked(drawMutalisk).mockClear();
+    vi.mocked(drawMuta).mockClear();
     const { ctx, calls } = recordingContext();
     drawGlobe(ctx, t, PALETTE);
     return { ctx, calls, count: (op: string) => calls.filter((c) => c.op === op).length };
@@ -165,7 +175,7 @@ describe('drawGlobe', () => {
     const { count } = draw(0.2);
     expect(count('closePath')).toBe(90);
     expect(count('ellipse')).toBe(0);
-    expect(drawMutalisk).not.toHaveBeenCalled();
+    expect(drawMuta).not.toHaveBeenCalled();
   });
 
   it('draws both halves of the orbit once it is online', () => {
@@ -173,22 +183,41 @@ describe('drawGlobe', () => {
     expect(draw(3).count('ellipse')).toBe(2);
   });
 
-  it('draws all seven flyers at the still', () => {
+  it('draws all seven flyers at the still, each on its own warmed spine', () => {
     draw(GLOBE_STILL_T);
-    expect(drawMutalisk).toHaveBeenCalledTimes(7);
-    for (const call of vi.mocked(drawMutalisk).mock.calls) {
-      const [, , , vx, vy, , scale, motion, palette] = call;
-      expect(Math.hypot(vx, vy)).toBeCloseTo(1, 9);
-      expect(scale).toBeGreaterThanOrEqual(0.17 - 1e-9);
-      expect(scale).toBeLessThanOrEqual(0.23 + 1e-9);
-      expect(Number.isFinite(motion.turn)).toBe(true);
-      expect(palette).toBe(PALETTE);
+    expect(drawMuta).toHaveBeenCalledTimes(7);
+    for (const call of vi.mocked(drawMuta).mock.calls) {
+      const [, spine, t, , turn, scale, , tone] = call;
+      const [x, y] = spineNodes(spine)[0]!;
+      expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
+      expect(t).toBe(GLOBE_STILL_T);
+      expect(scale).toBeGreaterThanOrEqual(0.08);
+      expect(scale).toBeLessThanOrEqual(0.13);
+      expect(Number.isFinite(turn)).toBe(true);
+      expect(tone).toMatchObject({ dark: expect.any(Boolean), lo: expect.any(Array) });
     }
+  });
+
+  it('puts each spine head where its flyer is', () => {
+    draw(GLOBE_STILL_T);
+    const heads = vi.mocked(drawMuta).mock.calls.map(([, spine]) => spineNodes(spine)[0]!);
+    const flyers = Array.from({ length: FLYER_COUNT }, (_, i) => flyerAt(i, GLOBE_STILL_T));
+    for (const [x, y] of heads) {
+      expect(flyers.some((f) => Math.hypot(f.x - x, f.y - y) < 1e-6)).toBe(true);
+    }
+  });
+
+  it('holds the same still frame on every read', () => {
+    draw(GLOBE_STILL_T);
+    const first = vi.mocked(drawMuta).mock.calls.map(([, spine]) => spineNodes(spine));
+    draw(3.2);
+    draw(GLOBE_STILL_T);
+    expect(vi.mocked(drawMuta).mock.calls.map(([, spine]) => spineNodes(spine))).toEqual(first);
   });
 
   it('releases the flyers one at a time', () => {
     draw(flyerStart(2) + 0.01);
-    expect(drawMutalisk).toHaveBeenCalledTimes(3);
+    expect(drawMuta).toHaveBeenCalledTimes(3);
   });
 
   it('paints only with palette colours, and puts the context back', () => {

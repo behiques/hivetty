@@ -1,5 +1,6 @@
-import { drawMutalisk, REAL, withAlpha } from '@lib/swarm/mutalisk';
-import type { SwarmPalette } from '@lib/swarm/palette';
+import { createSpine, drawMuta, type Spine, stepSpine, warmSpine } from '@lib/swarm/muta';
+import { type SwarmPalette, withAlpha } from '@lib/swarm/palette';
+import { toneOf } from '@lib/swarm/tone';
 
 /**
  * The Comb (HIVE-199; design §2): one hex cell per live session, terminal and
@@ -251,14 +252,18 @@ export interface Flyer {
   leg: 0 | 1;
   /** A cell id on a handoff, a point while wandering, null before the first pick. */
   target: string | { x: number; y: number } | null;
-  /** Angular rate, rad/s: the tail lags it. */
+  /** Angular rate, rad/s: the bank, and what the tail lags. */
   turn: number;
+  /** The body, simulated live behind the head (HIVE-221). Stepped in place. */
+  spine: Spine;
 }
 
-export const newFlyer = (index: number, rng: Rng): Flyer => ({
-  x: rng() * COMB_W, y: 60 + rng() * (COMB_H - 120), a: rng() * 6, k: index * 1.7,
-  leg: (index % 2) as 0 | 1, target: null, turn: 0,
-});
+export const newFlyer = (index: number, rng: Rng): Flyer => {
+  const x = rng() * COMB_W;
+  const y = 60 + rng() * (COMB_H - 120);
+  const a = rng() * 6;
+  return { x, y, a, k: index * 1.7, leg: (index % 2) as 0 | 1, target: null, turn: 0, spine: createSpine(x, y, a) };
+};
 
 export function syncFlyers(flyers: Flyer[], count: number, rng: Rng): Flyer[] {
   if (flyers.length === count) return flyers;
@@ -276,6 +281,8 @@ export const flyerCount = (layout: CombLayout, needs: number): number =>
   isCalm(layout, needs) ? 5 : layout.mode === 'scale' ? 14 : 9;
 
 const MAX_DT = 1 / 15;
+/** Logical px/s. */
+const flightSpeed = (calm: boolean): number => (calm ? 1.1 : 1.8) * 60;
 const ARRIVED = 26;
 /** The flyer steers to a point this far above its target cell. */
 const ABOVE = 18;
@@ -289,7 +296,7 @@ export function stepFlyers(flyers: Flyer[], layout: CombLayout, rawDt: number, r
   const dt = Math.min(Math.max(rawDt, 0), MAX_DT);
   const targets = targetsOf(layout);
   const byId = new Map(targets.map((c) => [c.id, c]));
-  const speed = (calm ? 1.1 : 1.8) * 60;
+  const speed = flightSpeed(calm);
   const steer = 1 - (1 - 0.035) ** (60 * dt);
 
   return flyers.map((f) => {
@@ -314,22 +321,36 @@ export function stepFlyers(flyers: Flyer[], layout: CombLayout, rawDt: number, r
     da = Math.atan2(Math.sin(da), Math.cos(da));
     const turned = da * steer;
     const a = f.a + turned;
-    return {
-      ...f, leg, target, a,
-      x: f.x + Math.cos(a) * speed * dt,
-      y: f.y + Math.sin(a) * speed * dt,
-      turn: dt > 0 ? turned / dt : 0,
-    };
+    const x = f.x + Math.cos(a) * speed * dt;
+    const y = f.y + Math.sin(a) * speed * dt;
+    stepSpine(f.spine, x, y, dt);
+    return { ...f, leg, target, a, x, y, turn: dt > 0 ? turned / dt : 0 };
   });
 }
 
-/** Where the flock would be after about four seconds of flight: the reduced-motion frame. */
+/** Seconds of straight flight a still frame's spine is warmed over. */
+const STILL_WARM = 2;
+
+/**
+ * Where the flock would be after about four seconds of flight: the
+ * reduced-motion frame. Each body is then warmed on a short straight approach
+ * to where its flyer is, so the still is the same frame every time.
+ */
 export function stillFlyers(layout: CombLayout, needs: number): Flyer[] {
   const rng = seededRng(7);
   const calm = isCalm(layout, needs);
   let flyers = syncFlyers([], flyerCount(layout, needs), rng);
   for (let i = 0; i < 240; i++) flyers = stepFlyers(flyers, layout, 1 / 60, rng, calm);
-  return flyers;
+  const speed = flightSpeed(calm);
+  return flyers.map((f) => {
+    const back = (t: number): [number, number] => [
+      f.x - Math.cos(f.a) * speed * (STILL_WARM - t),
+      f.y - Math.sin(f.a) * speed * (STILL_WARM - t),
+    ];
+    const spine = createSpine(...back(0), f.a);
+    warmSpine(spine, back, STILL_WARM);
+    return { ...f, spine };
+  });
 }
 
 /** The cell under a logical point, within 24 units of its centre. */
@@ -492,9 +513,20 @@ function drawTag(ctx: CanvasRenderingContext2D, c: CombCell, R: number, p: Swarm
   ctx.textAlign = 'center';
 }
 
-/** One frame of the comb, in logical units. */
+/**
+ * The Brood mutalisk's scale on the comb (HIVE-221): its wings span about 130
+ * units, so this keeps them about 14 logical px across, as the round-two
+ * flyer's 70 at 0.2 did. At scale it shrinks by the same 0.7 that one did.
+ */
+export const MUTA_SCALE = 0.108;
+const MUTA_SCALE_SMALL = MUTA_SCALE * 0.7;
+
+/**
+ * One frame of the comb, in logical units. `ps` is device pixels per logical
+ * unit, which sets the flyers' detail and line widths.
+ */
 export function drawComb(
-  ctx: CanvasRenderingContext2D, layout: CombLayout, flyers: Flyer[], t: number, palette: SwarmPalette,
+  ctx: CanvasRenderingContext2D, layout: CombLayout, flyers: Flyer[], t: number, palette: SwarmPalette, ps = 1,
 ): void {
   const sc = layout.mode === 'scale';
   ctx.globalAlpha = 1;
@@ -512,9 +544,10 @@ export function drawComb(
   for (const cell of layout.cells) drawCell(ctx, cell, layout, t, palette);
 
   // The mutalisks, small and dim: atmosphere, not information.
-  const scale = sc ? 0.14 : REAL;
+  const scale = sc ? MUTA_SCALE_SMALL : MUTA_SCALE;
+  const tone = toneOf(palette);
   withAlpha(ctx, 0.55, () => {
-    for (const f of flyers) drawMutalisk(ctx, f.x, f.y, Math.cos(f.a), Math.sin(f.a), t, scale, { k: f.k, turn: f.turn }, palette);
+    for (const f of flyers) drawMuta(ctx, f.spine, t, f.k * 3.7, f.turn, scale, ps, tone);
   });
 
   if (sc) for (const cell of layout.cells) if (cell.state === 'summons' || cell.state === 'failed') drawTag(ctx, cell, layout.R, palette);

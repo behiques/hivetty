@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GLOBE_STILL_T } from '@/splash/globe';
 import { paletteFrom, startGlobe, type GlobeStage } from '@/splash/stage';
 import type { SwarmPalette } from '@lib/swarm/palette';
-import { clearColour, mixColour } from '@lib/theme/colour';
+import { BUILT_IN_THEME } from '@lib/theme/built-in';
+import { clearColour, mixColour, swarmPaletteOf } from '@lib/theme/colour';
 import { recordingContext } from '@tests/support/canvas-2d';
 
 const drawGlobe = vi.hoisted(() => vi.fn());
@@ -24,6 +25,12 @@ const TOKENS: Record<string, string> = {
   '--cc-red': ' #ff8d85',
   '--cc-creep': ' #5b3d8f',
   '--cc-chitin': ' #b9a7f0',
+  '--cc-tissue-deep': ' #0b0816',
+  '--cc-tissue': ' #2c2346',
+  '--cc-tissue-lit': ' #8474c0',
+  '--cc-glow-core': ' #e2ffee',
+  '--cc-ground': ' #141128',
+  '--cc-on-brand': ' #ffffff',
 };
 
 describe('paletteFrom', () => {
@@ -34,6 +41,10 @@ describe('paletteFrom', () => {
     expect(palette.chitin).toBe('#b9a7f0');
     expect(palette.carapace).toBe(mixColour('#10152a', '#b9a7f0', 0.18));
     expect(palette.creepClear).toBe(clearColour('#5b3d8f'));
+    expect(palette.tissueDeep).toBe('#0b0816');
+    expect(palette.ground).toBe('#141128');
+    expect(palette).not.toHaveProperty('onBrand');
+    expect(palette.glint).toBe(swarmPaletteOf(BUILT_IN_THEME.modes.dark.ui).glint);
   });
 });
 

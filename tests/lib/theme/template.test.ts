@@ -25,9 +25,10 @@ describe('the downloaded template', () => {
 
   it('is fully populated, not a skeleton', () => {
     const parsed = JSON.parse(themeTemplateJson());
-    // Thirty since HIVE-199: the 28 required ui colours plus the optional
-    // creature pair, offered for the same reason as the terminal surfaces below.
-    expect(Object.keys(parsed.modes.dark.ui)).toHaveLength(30);
+    // Thirty-five since HIVE-221: the 28 required ui colours plus the optional
+    // creature pair (HIVE-199) and the Brood's five-key tissue ramp, offered for
+    // the same reason as the terminal surfaces below.
+    expect(Object.keys(parsed.modes.dark.ui)).toHaveLength(35);
     /*
       Thirteen since HIVE-82: the eleven required terminal colours plus the two
       surfaces. The template offers them even though the format does not require

@@ -112,16 +112,59 @@ export function clearColour(value: string): string {
   return parsed ? rgb(parsed, 0) : value;
 }
 
+/** WCAG relative luminance, 0 to 1; unreadable input reads as black. */
+export function luminance(value: string): number {
+  const parsed = parseColour(value);
+  if (!parsed) return 0;
+  const linear = (c: number): number => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * linear(parsed[0]) + 0.7152 * linear(parsed[1]) + 0.0722 * linear(parsed[2]);
+}
+
+/**
+ * The hover mutalisk's accents (HIVE-221), which no theme key names.
+ *
+ * The artifact picks different literals for its dark and light stages, so the
+ * mixes do too, keyed on the luminance of `bg` as `tone.ts` keys `T.dark`.
+ * Each is tuned to land within 12 per channel of the artifact on the built-in
+ * theme, and is made only of the theme's own colours, so an imported theme's
+ * mutalisk matches it.
+ */
+export function accentsOf(
+  ui: Pick<UiColors, 'bg' | 'ink' | 'red' | 'onBrand'>,
+  { creep, chitin, tissueDeep, tissue }: Pick<SwarmPalette, 'creep' | 'chitin' | 'tissueDeep' | 'tissue'>,
+): Pick<SwarmPalette, 'membrane' | 'maw' | 'gum' | 'stain' | 'glint'> {
+  const dark = luminance(ui.bg) < 0.5;
+  const [deepest, lightest] = luminance(ui.bg) < luminance(ui.ink) ? [ui.bg, ui.ink] : [ui.ink, ui.bg];
+  return {
+    membrane: dark
+      ? mixColour(creep, ui.red, 0.3)
+      : mixColour(mixColour(tissue, ui.red, 0.8), creep, 0.8),
+    maw: tissueDeep,
+    gum: dark
+      ? mixColour(tissueDeep, ui.red, 0.1)
+      : mixColour(mixColour(ui.ink, ui.red, 0.55), chitin, 0.5),
+    stain: mixColour(mixColour(deepest, ui.red, 0.3), creep, 0.1),
+    glint: mixColour(lightest, ui.onBrand, 0.9),
+  };
+}
+
 /**
  * The swarm canvas's palette for one theme mode.
  *
  * `creep` and `chitin` are the theme's when it carries them (the built-in
  * does) and derived from its own colours when it does not, so an imported
- * theme's creatures match it. `carapace` is always derived.
+ * theme's creatures match it. `carapace` is always derived. The Brood's
+ * tissue ramp (HIVE-221) follows the same rule: the theme's when present,
+ * otherwise mixed from its own colours.
  */
 export function swarmPaletteOf(ui: UiColors): SwarmPalette {
   const creep = ui.creep ?? mixColour(ui.bg, ui.brand, 0.4);
   const chitin = ui.chitin ?? mixColour(ui.brand, ui.ink, 0.35);
+  const tissueDeep = ui.tissueDeep ?? mixColour(ui.bg, chitin, 0.04);
+  const tissue = ui.tissue ?? mixColour(ui.bg, chitin, 0.22);
   return {
     bg: ui.bg,
     panel2: ui.panel2,
@@ -136,5 +179,11 @@ export function swarmPaletteOf(ui: UiColors): SwarmPalette {
     creepClear: clearColour(creep),
     chitin,
     carapace: mixColour(ui.bg, chitin, 0.18),
+    tissueDeep,
+    tissue,
+    tissueLit: ui.tissueLit ?? mixColour(chitin, ui.ink, 0.2),
+    glowCore: ui.glowCore ?? mixColour(ui.green, ui.ink, 0.7),
+    ground: ui.ground ?? mixColour(ui.bg, creep, 0.15),
+    ...accentsOf(ui, { creep, chitin, tissueDeep, tissue }),
   };
 }

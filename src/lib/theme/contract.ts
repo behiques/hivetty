@@ -63,8 +63,15 @@ export const TERMINAL_SURFACE_KEYS = ['surface', 'surfaceAlt'] as const;
  * derives both from the theme's own `bg`, `brand` and `ink` when they are
  * absent, so an imported theme's creatures match its palette, not the
  * built-in's violet.
+ *
+ * `tissueDeep`, `tissue`, `tissueLit`, `glowCore` and `ground` (HIVE-221) are
+ * the Brood creatures' tissue ramp: the shadowed, mid and lit flesh, the core
+ * of their green glow, and the ground they stand on. Optional for the same
+ * reason, and derived the same way when absent.
  */
-export const UI_OPTIONAL_KEYS = ['creep', 'chitin'] as const;
+export const UI_OPTIONAL_KEYS = [
+  'creep', 'chitin', 'tissueDeep', 'tissue', 'tissueLit', 'glowCore', 'ground',
+] as const;
 
 type UiKey = (typeof UI_KEYS)[number];
 type UiOptionalKey = (typeof UI_OPTIONAL_KEYS)[number];
