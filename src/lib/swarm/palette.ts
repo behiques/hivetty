@@ -32,4 +32,14 @@ export interface SwarmPalette {
   glowCore: string;
   /** The ground the creatures stand on, `SP_T.ground`. */
   ground: string;
+  /** The hover mutalisk's wing membrane, a bruised magenta (`MEM`). */
+  membrane: string;
+  /** The inside of its mouth: the deepest tissue. */
+  maw: string;
+  /** Its gums. */
+  gum: string;
+  /** The stain on its tusks. */
+  stain: string;
+  /** Wet glints on eyes and teeth: the brightest colour the theme has. */
+  glint: string;
 }

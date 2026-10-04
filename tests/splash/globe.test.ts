@@ -156,6 +156,11 @@ const PALETTE: SwarmPalette = {
   tissueLit: 'c-tissue-lit',
   glowCore: 'c-glow-core',
   ground: 'c-ground',
+  membrane: 'c-membrane',
+  maw: 'c-maw',
+  gum: 'c-gum',
+  stain: 'c-stain',
+  glint: 'c-glint',
 };
 
 describe('drawGlobe', () => {

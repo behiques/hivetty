@@ -49,6 +49,8 @@
   --cc-tissue-lit: #8474c0;
   --cc-glow-core: #e2ffee;
   --cc-ground: #141128;
+  /* Only for the mutalisk's glints, `accentsOf`'s brightest colour. */
+  --cc-on-brand: #ffffff;
 
   /**
    * The one face the app uses, copied from `--font-mono` in `tokens.css` and
