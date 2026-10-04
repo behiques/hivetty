@@ -23,6 +23,12 @@ describe('cn', () => {
     expect(cn('text-ink', 'text-muted')).toBe('text-muted');
   });
 
+  it('treats the list type scale as sizes, not colours', () => {
+    expect(cn('text-ui', 'text-muted')).toBe('text-ui text-muted');
+    expect(cn('text-ui-sm', 'text-ui-lg')).toBe('text-ui-lg');
+    expect(cn('text-ui', 'text-[12px]')).toBe('text-[12px]');
+  });
+
   it('flattens arrays and objects', () => {
     expect(cn(['flex', 'gap-2'], { 'text-brand': true, hidden: false })).toBe(
       'flex gap-2 text-brand',

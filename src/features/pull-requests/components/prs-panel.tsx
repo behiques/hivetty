@@ -163,8 +163,8 @@ function Header({
 }) {
   return (
     <div className="flex items-baseline gap-2.5 px-2 pt-2.5 pb-2">
-      <h2 className="text-[14px] font-semibold text-ink">Pull requests</h2>
-      <span className="text-[12px] text-muted">
+      <h2 className="text-ui-lg font-semibold text-ink">Pull requests</h2>
+      <span className="text-ui-sm text-muted">
         {`${String(open)} open`}
         {needYou > 0 ? (
           <>
@@ -287,7 +287,7 @@ export function PrsPanel() {
     return (
       <PrsLayout header={header}>
         {search.error !== null ? (
-          <p className="px-1 pb-1 text-[11.5px] leading-[1.45] text-amber">{search.error}</p>
+          <p className="px-1 pb-1 text-ui-sm leading-[1.45] text-amber">{search.error}</p>
         ) : null}
         {/* The skeleton stands in only for the first answer; a re-search keeps the rows it has. */}
         {results === null && search.error === null ? <PrListSkeleton /> : null}
@@ -312,7 +312,7 @@ export function PrsPanel() {
             type="button"
             aria-expanded={!folded}
             onClick={togglePrsFolded}
-            className="mt-1.5 flex items-center gap-2 border-t border-border-soft px-2 pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase"
+            className="mt-1.5 flex items-center gap-2 border-t border-border-soft px-2 pt-3 pb-1 text-ui-sm font-semibold tracking-[0.06em] text-subtle uppercase"
           >
             <CaretRight size={12} aria-hidden className={cn(!folded && 'rotate-90')} />
             {`Hatched · ${String(hatched.length)} · last 24h`}

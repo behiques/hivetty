@@ -168,7 +168,7 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
     await post(idle, 'Stop');
 
     await goHome();
-    await expect(page.getByRole('heading', { level: 2, name: '1 thing needs you' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'The hive is calling · 1 summons' })).toBeVisible();
     const cells = page.getByRole('list', { name: "The comb's cells" }).getByRole('button');
     await expect(cells).toHaveCount(3);
     await expect(cells.filter({ hasText: /Morphing · nova-web/ })).toHaveCount(1);
@@ -210,7 +210,7 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
     // A new prompt answers the block; the turn's Stop leaves it idle.
     await post(waiting, 'UserPromptSubmit');
     await post(waiting, 'Stop');
-    await expect(page.getByRole('heading', { level: 2, name: 'Nothing needs you' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'The hive is humming' })).toBeVisible();
     await shoot('home-comb-calm');
 
     // Held still: two reads half a second apart are the same picture (HIVE-210).

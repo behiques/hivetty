@@ -47,11 +47,14 @@ function openLineOf(lines: DiffLine[], index: number): number {
   return before ?? 1;
 }
 
-/** One diff row: a 46px number gutter (a button, selecting the line), a 16px sign, the text. */
-export function DiffRow({ line, n, side, selected, onSelect }: { line: DiffLine; n: number | null; side: 'L' | 'R'; selected: boolean; onSelect: () => void }) {
+/**
+ * One diff row: a 46px number gutter (a button, selecting the line), a 16px sign, the text.
+ * `wrap` is Split's: a half-width column wraps a long line instead of running into its neighbour.
+ */
+export function DiffRow({ line, n, side, selected, onSelect, wrap = false }: { line: DiffLine; n: number | null; side: 'L' | 'R'; selected: boolean; onSelect: () => void; wrap?: boolean }) {
   const sign = SIGN[line.kind];
   return (
-    <div data-kind={line.kind} className={cn('flex pr-4 whitespace-pre', WASH[line.kind], selected && 'shadow-[inset_2px_0_var(--cc-amber)]')}>
+    <div data-kind={line.kind} className={cn('flex h-full pr-4', wrap ? 'whitespace-pre-wrap' : 'whitespace-pre', WASH[line.kind], selected && 'shadow-[inset_2px_0_var(--cc-amber)]')}>
       {n === null ? (
         <span className="w-[46px] shrink-0" />
       ) : (
@@ -60,7 +63,7 @@ export function DiffRow({ line, n, side, selected, onSelect }: { line: DiffLine;
         </button>
       )}
       <span className={cn('w-4 shrink-0', sign.tone)}>{sign.text}</span>
-      <span className="text-ink">{line.text === '' ? ' ' : line.text}</span>
+      <span className={cn('text-ink', wrap && 'min-w-0 wrap-anywhere')}>{line.text === '' ? ' ' : line.text}</span>
     </div>
   );
 }
@@ -209,6 +212,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                                 line={row.left}
                                 n={row.left.oldN}
                                 side="L"
+                                wrap
                                 selected={selected?.side === 'L' && selected.n === row.left.oldN}
                                 onSelect={() => {
                                   const left = row.left;
@@ -225,6 +229,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                                 line={row.right}
                                 n={row.right.newN}
                                 side="R"
+                                wrap
                                 selected={selected?.side === 'R' && selected.n === row.right.newN}
                                 onSelect={() => {
                                   const right = row.right;

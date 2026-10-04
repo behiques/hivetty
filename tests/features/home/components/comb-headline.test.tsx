@@ -1,26 +1,30 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { CombHeadline, headlineText, summaryText } from '@features/home/components/comb-headline';
+import { CombHeadline, headline, summaryText } from '@features/home/components/comb-headline';
 
 const BUSY = { working: 4, failed: 1, resting: 3, projects: 3, agents: 6 };
 const CALM = { working: 4, failed: 0, resting: 3, projects: 3, agents: 6 };
 
 describe('CombHeadline', () => {
-  it('says how many things need you, in amber', () => {
+  it('is calling, in amber, with the summons count', () => {
     render(<CombHeadline needs={5} summary={BUSY} />);
-    expect(screen.getByRole('heading', { level: 2, name: '5 things need you' })).toHaveClass('text-amber');
+    expect(screen.getByRole('heading', { level: 2, name: 'The hive is calling · 5 summons' })).toHaveClass('text-amber');
     expect(screen.getByText('4 working · 1 failed · 3 resting · 3 projects · 6 agents')).toBeInTheDocument();
-    expect(screen.getByText('The Comb')).toBeInTheDocument();
+    expect(screen.queryByText('The Comb')).not.toBeInTheDocument();
   });
 
-  it('turns green when nothing needs you, and leaves out failed at zero', () => {
+  it('is humming in grey when nothing needs you, and leaves out failed at zero', () => {
     render(<CombHeadline needs={0} summary={CALM} />);
-    expect(screen.getByRole('heading', { level: 2, name: 'Nothing needs you' })).toHaveClass('text-green');
+    expect(screen.getByRole('heading', { level: 2, name: 'The hive is humming' })).toHaveClass('text-muted');
     expect(summaryText(CALM)).toBe('4 working · 3 resting · 3 projects · 6 agents');
   });
 
-  it('is singular for one', () => {
-    expect(headlineText(1)).toBe('1 thing needs you');
+  it('takes the first mood that fits', () => {
+    const none = { working: 0, failed: 0, resting: 0, projects: 1, agents: 0 };
+    expect(headline(1, BUSY).text).toBe('The hive is calling · 1 summons');
+    expect(headline(0, BUSY)).toEqual({ text: 'The hive is wounded', tone: 'text-red' });
+    expect(headline(0, { ...none, resting: 2 }).text).toBe('The hive is quiet');
+    expect(headline(0, none).text).toBe('The hive is dormant');
   });
 });

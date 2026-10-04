@@ -314,8 +314,18 @@ model survives colour-blindness and reduced-motion.
 ## Type
 
 - **Family:** `ui-mono` stack — `ui-monospace, Menlo, 'SF Mono', monospace`,
-  registered as `--font-mono` and available as `font-mono`. All terminal and UI
-  text is monospace; the command center is a terminal tool and reads as one.
+  registered as `--font-mono` and available as `font-mono`. The terminal, the
+  editor, code and identifiers are monospace; so is the rest of the chrome,
+  except the list panel below.
+- **The list panel is sans.** Projects, Work, Pull requests and Agents set words
+  in `font-sans` (on the list panel's root) and keep `font-mono` only for
+  identifiers: ticket keys, branches, PR numbers, terminal ids, paths.
+- **List type scale:** three sizes in `tokens.css`, nothing between them.
+  `text-ui-lg` 15px for panel titles (600), `text-ui` 13px for a row's name,
+  `text-ui-sm` 11.5px for everything else: second lines, counts, ages, status
+  words, group heads (600, caps, 0.06em) and add links. Weight and colour carry
+  the rest. Flaps and badges keep their own sizes. `cn()` knows the three as
+  sizes, so `text-ui text-muted` keeps both.
 - **Base size:** 13px / 1.5 on `body`.
 - **Terminal:** 12px inside xterm.
 
