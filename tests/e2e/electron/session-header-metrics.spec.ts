@@ -20,10 +20,15 @@ import { launchHive, writeProjectConfig } from './fixtures/hive-app';
  * the status word stay; with the session panel open beside it, the word goes too.
  *
  * Measured here with this label, the header's content box needs about 861px
- * for the resets, hence 880px. The word's breakpoint is 700px of content box,
- * below the ~750px a 790px stage leaves after `px-5`: at 760px the word was
- * already hidden at 1200px, and the assertion here could not see it, because
- * Playwright counts `sr-only`'s 1px box as visible (HIVE-219).
+ * for the resets, hence 880px. The word's breakpoint is 748px of content box:
+ * the row needs 747px with the word and the full label, and a 790px stage
+ * leaves 750px after `px-5`, where the word must stay drawn. At 760px the word
+ * was already hidden at 1200px, and the assertion here could not see it,
+ * because Playwright counts `sr-only`'s 1px box as visible (HIVE-219).
+ *
+ * With the session panel open as well (HIVE-220), the header is 716px of
+ * content at 1440 and 476px at 1200, and the chip's own steps take it down to
+ * the brain icon and three percentages.
  */
 const PROJECT = 'nova-web';
 /** Long enough that `nova-web · <branch>` overflows the title column at 790px of stage. */
@@ -179,6 +184,48 @@ test('at 1440px the stats row is whole; at 1200px resets give way and the title 
     await expect(page.getByRole('tablist')).toBeVisible();
     await expect.poll(() => wordDrawn(header)).toBe(false);
     await expect(header.getByTestId('session-status')).toHaveAttribute('title', /\S/);
+  } finally {
+    await app.close();
+  }
+});
+
+/** Whether the element's content is wider than its box: the row, or the slot it clips in. */
+async function overflows(locator: Locator): Promise<boolean> {
+  return locator.evaluate((el) => el.scrollWidth > el.clientWidth);
+}
+
+test('with both panels open the header gives way and keeps the menu, down to 1100px (HIVE-220)', async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeProjectConfig(configPath, { id: PROJECT, path: longBranchRepo(testInfo.outputPath('repo')) });
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  try {
+    const page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    await resizeTo(app, page, 1440);
+
+    const id = await startRoundTwoSession(page);
+    const header = page.getByTestId('session-header');
+    await expect(header).toBeVisible();
+    // Round two opens the session panel by default: both panels, beside the stage.
+    await expect(page.getByRole('tablist')).toBeVisible();
+    await stageMetrics(app, id);
+
+    const chip = header.getByTestId('model-chip');
+    const slot = header.locator('[data-slot="model"]');
+    const menu = header.getByRole('button', { name: 'Session menu' });
+    await expect(chip.getByText(/%$/)).toHaveCount(3);
+
+    // Widest first: below 1200px the list panel folds (HIVE-211) and stays folded.
+    for (const width of [1440, 1300, 1200, 1100]) {
+      await resizeTo(app, page, width);
+      await expect.poll(() => overflows(header), { message: `header overflows at ${width}px` }).toBe(false);
+      await expect.poll(() => overflows(slot), { message: `model slot clips at ${width}px` }).toBe(false);
+      const row = (await header.boundingBox())!;
+      const button = (await menu.boundingBox())!;
+      expect(button.x + button.width, `menu inside the header at ${width}px`).toBeLessThanOrEqual(row.x + row.width);
+      for (const pct of await chip.getByText(/%$/).all()) await expect(pct).toBeVisible();
+      await expect(chip).toHaveAttribute('title', /Opus 4\.5 \(1M\) · high · context 46% · session limit 12%, resets .+ · weekly limit 63%, resets /);
+    }
   } finally {
     await app.close();
   }

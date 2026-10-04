@@ -61,7 +61,7 @@ describe('SessionHeader (HIVE-197)', () => {
   it('moves the status word to the dot title for the narrowest step (HIVE-213)', () => {
     render(<SessionHeader entity={hero()} />);
     const status = screen.getByTestId('session-status');
-    expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[700px]:sr-only');
+    expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[748px]:sr-only');
     expect(status.getAttribute('title')).not.toBeNull();
   });
 
@@ -76,6 +76,12 @@ describe('SessionHeader (HIVE-197)', () => {
     render(<SessionHeader entity={hero()} />);
     const column = screen.getByText('hero-refresh').parentElement!;
     expect(column).toHaveClass('min-w-[140px]', '@max-[500px]:min-w-[110px]');
+  });
+
+  it('gives the row’s spare width to the title alone, so only the slot clips (HIVE-220)', () => {
+    render(<SessionHeader entity={hero()} />);
+    const column = screen.getByText('hero-refresh').parentElement!;
+    expect(column).toHaveClass('flex-1', 'basis-0');
   });
 
   it('names the back chord for the platform in the button title', () => {
