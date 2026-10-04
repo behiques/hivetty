@@ -405,7 +405,7 @@ export function frontmatterName(source: string): string {
  * The names a new agent is drawn from.
  *
  * Zerg units, because the app is already speaking this language: it ships a
- * `hydralisk` sprite, and the agents empty state reads "The brood sleeps. No
+ * mutalisk that holds the air, and the agents empty state reads "The brood sleeps. No
  * drones assigned. Ready to spawn." A default of `agent-1` was the thing out of
  * place in that room.
  *

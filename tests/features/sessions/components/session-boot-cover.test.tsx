@@ -29,13 +29,13 @@ afterEach(() => {
 });
 
 describe('SessionBootCover', () => {
-  it('shows the hydralisk — the unit that does the work', () => {
+  it('shows the mutalisk — the unit that does the work', () => {
     stubMatchMedia(false);
     const { container } = render(<SessionBootCover />);
 
     expect(container.querySelector('[data-creature]')).toHaveAttribute(
       'data-creature',
-      'hydralisk',
+      'mutalisk',
     );
   });
 

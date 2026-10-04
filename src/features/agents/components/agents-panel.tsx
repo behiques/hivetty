@@ -89,7 +89,7 @@ export function AgentsPanel() {
       </div>
 
       {groups.length === 0 ? (
-        <EmptyState phrase="empty.agents" creature="hydralisk">
+        <EmptyState phrase="empty.agents" creature="mutalisk">
           No agents yet.
         </EmptyState>
       ) : (

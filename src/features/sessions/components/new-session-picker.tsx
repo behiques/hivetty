@@ -167,7 +167,7 @@ export function NewSessionPicker() {
           hive hero a few lines down, and two creatures stacked in one dialog
           reads as a bug rather than as atmosphere. So this is the ordinary
           picker's mark and the hive stays the first-run hero — the surface has
-          two states and each gets exactly one sprite.
+          two states and each gets exactly one creature.
 
           96px, not the hero's 120: it sits *above* a title rather than standing
           in for missing content, so it is the quieter end of the 72–120
