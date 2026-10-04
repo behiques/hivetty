@@ -49,12 +49,12 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
       <span className="flex w-full items-center gap-2">
         {/* No `label`: the status label sits right beside it. */}
         <StatusDot status={entity.status} detail={entity.idleDetail} />
-        <span className="flex-1 truncate text-left font-mono text-[12.5px]">
+        <span className="flex-1 truncate text-left text-ui">
           {entityLabel(entity)}
         </span>
         <span
           className={cn(
-            'shrink-0 text-[10.5px] font-semibold',
+            'shrink-0 text-ui-sm',
             statusText(entity.status, entity.idleDetail),
           )}
         >
@@ -82,7 +82,7 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
       </span>
 
       {compact ? null : (
-        <span className="w-full truncate pl-[15px] text-left font-mono text-[10.5px] text-subtle">
+        <span className="w-full truncate pl-[15px] text-left font-mono text-ui-sm text-subtle">
           {branchLabel(entity)}
         </span>
       )}

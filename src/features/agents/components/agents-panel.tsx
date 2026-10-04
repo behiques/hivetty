@@ -68,17 +68,17 @@ export function AgentsPanel() {
     <button
       type="button"
       onClick={newAgent}
-      className="mt-1 rounded-lg px-2.5 py-[var(--cc-row-py)] text-left text-[12px] text-brand hover:bg-hover"
+      className="mt-1 rounded-lg px-2.5 py-[var(--cc-row-py)] text-left text-ui-sm text-subtle hover:bg-hover hover:text-ink"
     >
       + New agent…
     </button>
   );
 
   return (
-    <div data-panel="agents" className="flex flex-col gap-0.5 font-sans">
+    <div data-panel="agents" className="flex flex-col gap-0.5">
       <div className="flex items-baseline gap-2.5 px-2 pt-2.5 pb-2 text-muted">
-        <h2 className="text-[14px] font-semibold text-ink">Agents</h2>
-        <span className="text-[12px]">
+        <h2 className="text-ui-lg font-semibold text-ink">Agents</h2>
+        <span className="text-ui-sm">
           {summons > 0 ? (
             <span className="text-amber-count">{`${String(summons)} summons`}</span>
           ) : null}
@@ -112,7 +112,7 @@ export function AgentsPanel() {
               type="button"
               aria-expanded={!folded[group.key]}
               onClick={() => toggle(group.key)}
-              className="flex items-center gap-2 px-1.5 pt-2.5 pb-1.5 text-[13px] font-semibold text-muted"
+              className="flex items-center gap-2 px-1.5 pt-2.5 pb-1.5 text-ui-sm font-semibold tracking-[0.06em] text-subtle uppercase"
             >
               <CaretRight
                 size={12}

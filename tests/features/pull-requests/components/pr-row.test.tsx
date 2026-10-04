@@ -8,12 +8,11 @@ import { hatchRow } from '@tests/support/hatchery';
 describe('PrRow', () => {
   const row = hatchRow({}, { flap: 'MUTATING', tone: 'green', github: 'Open · 2 open findings, fixer on it' });
 
-  it('draws the number, the repo, the flap and the title', () => {
+  it('leads with the title and the flap, then the number and repo in mono', () => {
     render(<PrRow row={row} open={false} onOpen={() => {}} />);
-    expect(screen.getByText('1182')).toBeInTheDocument();
-    expect(screen.getByText('incorpx-server')).toHaveClass('uppercase');
+    expect(screen.getByText('Fee rule validator for Delaware filings')).toHaveClass('truncate', 'text-ui');
     expect(screen.getByText('MUTATING')).toBeInTheDocument();
-    expect(screen.getByText('Fee rule validator for Delaware filings')).toHaveClass('truncate');
+    expect(screen.getByText('#1182 · incorpx-server')).toHaveClass('font-mono', 'text-ui-sm');
   });
 
   it("carries GitHub's words in its name and tooltip", () => {

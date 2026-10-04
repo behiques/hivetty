@@ -1,10 +1,13 @@
 import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { extendTailwindMerge } from 'tailwind-merge';
 
 /**
  * Merge conditional class names, resolving conflicting Tailwind utilities in
  * favour of the last one supplied.
  */
+/** The list type scale's sizes (`tokens.css`), so `text-ui` merges as a size, not a colour. */
+const twMerge = extendTailwindMerge({ extend: { theme: { text: ['ui-lg', 'ui', 'ui-sm'] } } });
+
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
