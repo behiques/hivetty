@@ -65,6 +65,19 @@ describe('SessionHeader (HIVE-197)', () => {
     expect(status.getAttribute('title')).not.toBeNull();
   });
 
+  it('lets the model slot clip at its end rather than push the menu out (HIVE-220)', () => {
+    render(<SessionHeader entity={hero()} />);
+    const slot = screen.getByTestId('session-header').querySelector('[data-slot="model"]')!;
+    expect(slot).toHaveClass('min-w-0', 'shrink', 'overflow-hidden');
+    expect(slot).not.toHaveClass('shrink-0');
+  });
+
+  it('lowers the title column floor at the narrowest step (HIVE-220)', () => {
+    render(<SessionHeader entity={hero()} />);
+    const column = screen.getByText('hero-refresh').parentElement!;
+    expect(column).toHaveClass('min-w-[140px]', '@max-[500px]:min-w-[110px]');
+  });
+
   it('names the back chord for the platform in the button title', () => {
     const spy = vi.spyOn(platform, 'isMacPlatform');
     spy.mockReturnValue(false);

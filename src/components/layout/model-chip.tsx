@@ -2,6 +2,7 @@ import { Brain } from '@phosphor-icons/react';
 
 import {
   chipLabel,
+  chipParts,
   clockLabel,
   dayClockLabel,
   pctLabel,
@@ -39,13 +40,18 @@ function Stat({ pct, detail, short, label }: StatProps) {
       <GaugeRing pct={pct} label={label} />
       <span className={TONE_TEXT[gaugeTone(pct)]}>{pctLabel(pct)}</span>
       {short === undefined ? (
-        <span className="text-subtle">{detail}</span>
+        <span data-detail="only" className="text-subtle @max-[620px]:hidden">
+          {detail}
+        </span>
       ) : (
         <>
           <span data-detail="long" className="text-subtle @max-[880px]:hidden">
             {detail}
           </span>
-          <span data-detail="short" className="hidden text-subtle @max-[880px]:inline">
+          <span
+            data-detail="short"
+            className="hidden text-subtle @max-[880px]:inline @max-[620px]:hidden"
+          >
             {short}
           </span>
         </>
@@ -130,11 +136,22 @@ function Stat({ pct, detail, short, label }: StatProps) {
  *
  * ## Width, and what gives way
  *
- * The chip sizes to its content and never clips. The session header is a size
- * container and gives way in order: as the stage narrows the title truncates
- * first, then the resets give way to `5h` / `wk` (both spans render; the
- * container picks one), then the status word hides. The model label and the three percentages never go,
- * and nothing clips. The full string, both resets included, stays in `title`.
+ * The chip sizes to its content. The session header is a size container and
+ * gives way in order as the stage narrows (HIVE-213, HIVE-220; widths are the
+ * header's):
+ *
+ * 1. the title truncates;
+ * 2. ≤ 880px, the resets give way to `5h` / `wk` (both spans render; the
+ *    container picks one);
+ * 3. ≤ 700px, the label shortens to the model name, window and effort left to
+ *    the tooltip, as the status word hides;
+ * 4. ≤ 620px, the detail words go: each stat is its ring and percentage;
+ * 5. ≤ 560px, the label goes: the brain icon alone;
+ * 6. ≤ 500px, the title column's floor drops from 140px to 110px.
+ *
+ * The three percentages never go. The full string, model, window, effort and
+ * both resets included, stays in `title` at every step. The header's model slot
+ * clips at its end only if these steps ever miss, so the menu stays reachable.
  *
  * The separators are hairline borders rather than `│` glyphs so they do not
  * change width with the font.
@@ -149,6 +166,7 @@ export function ModelChip() {
   const fiveHour = pctOrNull(metrics?.fiveHourPct);
   const sevenDay = pctOrNull(metrics?.sevenDayPct);
 
+  const parts = chipParts(metrics, entity.model, entity.effort);
   const label = chipLabel(metrics, entity.model, entity.effort);
   const fiveHourReset = clockLabel(metrics?.fiveHourResetsAt);
   const sevenDayReset = dayClockLabel(metrics?.sevenDayResetsAt);
@@ -202,7 +220,16 @@ export function ModelChip() {
     >
       <Brain size={13} weight="regular" className="shrink-0 text-brand" />
       <span className="flex items-center gap-2">
-        <span className="shrink-0">{label}</span>
+        {/* Both render; the header's width picks one, or neither (HIVE-220). */}
+        <span data-label="full" className="shrink-0 @max-[700px]:hidden">
+          {label}
+        </span>
+        <span
+          data-label="model"
+          className="hidden shrink-0 @max-[700px]:inline @max-[560px]:hidden"
+        >
+          {parts.name}
+        </span>
 
         {context === null ? null : (
           <Stat pct={context} detail="ctx" label="context" />

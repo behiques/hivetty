@@ -65,7 +65,7 @@ function SessionLine({ session }: { session: Session }) {
   return (
     <>
       <Hexagon size={20} aria-hidden="true" className={cn('shrink-0', tone)} />
-      <span className="flex min-w-[140px] shrink flex-col">
+      <span className="flex min-w-[140px] shrink flex-col @max-[500px]:min-w-[110px]">
         <span className="truncate text-[13px] font-semibold text-ink" title={session.task}>
           {entityLabel(session)}
         </span>
@@ -86,7 +86,11 @@ function SessionLine({ session }: { session: Session }) {
           {word}
         </span>
       </span>
-      <span data-slot="model" className="shrink-0">
+      {/*
+        The chip's own steps should keep it whole (HIVE-220). If they ever miss,
+        the stats clip at their end here, and the menu stays in the header.
+      */}
+      <span data-slot="model" className="min-w-0 shrink overflow-hidden">
         <ModelChip />
       </span>
       <SessionMenu session={session} />
