@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
@@ -22,7 +23,29 @@ import { launchHive, writeProjectConfig } from './fixtures/hive-app';
  * for the resets and 759px for the status word, hence 880px and 760px.
  */
 const PROJECT = 'nova-web';
-const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
+/** Long enough that `nova-web · <branch>` overflows the title column at 790px of stage. */
+const LONG_BRANCH = 'feat/a-branch-name-long-enough-to-truncate-the-title-column';
+
+/**
+ * A scratch repository on {@link LONG_BRANCH}, mapped as the project.
+ *
+ * Not this checkout: the subtitle reads the session's live branch, so mapping
+ * the repository the suite runs from made the truncation pass on a long
+ * feature branch and fail on `main` or a detached HEAD (HIVE-219).
+ */
+function longBranchRepo(dir: string): string {
+  execFileSync('git', ['init', '-q', '-b', LONG_BRANCH, dir]);
+  execFileSync('git', ['-C', dir, 'commit', '-q', '--allow-empty', '--no-verify', '-m', 'init'], {
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 'Hive',
+      GIT_AUTHOR_EMAIL: 'hive@example.com',
+      GIT_COMMITTER_NAME: 'Hive',
+      GIT_COMMITTER_EMAIL: 'hive@example.com',
+    },
+  });
+  return dir;
+}
 
 /**
  * Seed the session panel closed before the first frame that matters: the
@@ -97,7 +120,7 @@ async function stageMetrics(app: ElectronApplication, entityId: string): Promise
 
 test('at 1440px the stats row is whole; at 1200px resets give way and the title truncates', async ({}, testInfo) => {
   const configPath = testInfo.outputPath('hive-config.json');
-  writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
+  writeProjectConfig(configPath, { id: PROJECT, path: longBranchRepo(testInfo.outputPath('repo')) });
   const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
   try {
     const page = await app.firstWindow();
