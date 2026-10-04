@@ -1,9 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import * as brood from '@lib/swarm/brood';
+import { HIVE } from '@lib/swarm/hive';
 import { HOVER } from '@lib/swarm/hover';
+import { OVERLORD } from '@lib/swarm/overlord';
 import { SPIRE } from '@lib/swarm/spire';
 import { recordingContext } from '@tests/support/canvas-2d';
 import { expectNoHexColour } from '@tests/support/light';
@@ -49,6 +51,8 @@ beforeEach(() => {
   vi.stubGlobal('cancelAnimationFrame', vi.fn());
   vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
   const rec = recordingContext();
+  // The hive draws its window on a layer sized to the canvas it paints into.
+  Object.defineProperty(rec.ctx, 'canvas', { value: document.createElement('canvas') });
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => rec.ctx as never);
   Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { configurable: true, get: () => 104 });
   Object.defineProperty(HTMLCanvasElement.prototype, 'clientHeight', { configurable: true, get: () => 96 });
@@ -62,48 +66,53 @@ afterEach(() => {
 describe('SwarmCreature', () => {
   it('is hidden from assistive technology', () => {
     stubMatchMedia(false);
-    render(<SwarmCreature creature="overlord" />);
+    const { container } = render(<SwarmCreature creature="overlord" />);
 
-    const img = screen.getByRole('presentation', { hidden: true });
-
-    expect(img).toHaveAttribute('aria-hidden', 'true');
-    expect(img).toHaveAttribute('alt', '');
+    expect(container.querySelector('[data-creature]')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('renders at the height it was given', () => {
     stubMatchMedia(false);
-    render(<SwarmCreature creature="hive" size={120} />);
+    const { container } = render(<SwarmCreature creature="hive" size={120} />);
 
-    expect(screen.getByRole('presentation', { hidden: true })).toHaveStyle({
-      height: '120px',
-    });
+    expect(container.querySelector('[data-creature]')).toHaveStyle({ height: '120px' });
   });
 
   it('names which creature it is, so casting stays reviewable', () => {
     stubMatchMedia(false);
-    render(<SwarmCreature creature="hive" />);
+    const { container } = render(<SwarmCreature creature="hive" />);
 
-    expect(screen.getByRole('presentation', { hidden: true })).toHaveAttribute(
-      'data-creature',
-      'hive',
-    );
+    expect(container.querySelector('[data-creature]')).toHaveAttribute('data-creature', 'hive');
   });
 
-  /** The hive and the overlord keep their sprite until they are ported too. */
-  it('still draws the hive as an image', () => {
+  /** Every creature is the Brood's now; no sprite, no `<img>`. */
+  it.each([
+    ['hive', HIVE],
+    ['overlord', OVERLORD],
+    ['spire', SPIRE],
+    ['mutalisk', HOVER],
+  ] as const)('draws the %s on a canvas, as wide as its box', (creature, drawing) => {
     stubMatchMedia(false);
-    render(<SwarmCreature creature="hive" />);
+    const { container } = render(<SwarmCreature creature={creature} size={72} />);
 
-    const img = screen.getByRole('presentation', { hidden: true });
-    expect(img.tagName).toBe('IMG');
-    expect(img.getAttribute('src')).not.toContain('still');
+    const canvas = container.querySelector('[data-creature]')!;
+    expect(canvas.tagName).toBe('CANVAS');
+    expect(container.querySelector('img')).toBeNull();
+    expect(canvas).toHaveStyle({ height: '72px', width: `${(72 * drawing.box[2]) / drawing.box[3]}px` });
   });
 
-  it('holds a sprite still when the user asked for less motion', () => {
+  it.each([
+    ['hive', HIVE],
+    ['overlord', OVERLORD],
+  ] as const)('holds the %s at its rest frame when the user asked for less motion', (creature, drawing) => {
     stubMatchMedia(true);
-    render(<SwarmCreature creature="overlord" />);
+    const paint = vi.spyOn(brood, 'paintCreature');
+    render(<SwarmCreature creature={creature} />);
 
-    expect(screen.getByRole('presentation', { hidden: true }).getAttribute('src')).toContain('still');
+    expect(paint).toHaveBeenCalledTimes(1);
+    expect(paint.mock.calls[0]![1]).toBe(drawing);
+    expect(paint.mock.calls[0]![2]).toBe(drawing.rest);
+    expect(raf).not.toHaveBeenCalled();
   });
 
   describe('a Brood creature', () => {

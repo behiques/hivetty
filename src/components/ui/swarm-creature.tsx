@@ -3,15 +3,12 @@ import { useCallback, useRef } from 'react';
 import { type CanvasPaint, useCanvasLoop } from '@hooks/use-canvas-loop';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
 import { type BroodCreature, paintCreature } from '@lib/swarm/brood';
+import { HIVE } from '@lib/swarm/hive';
 import { HOVER } from '@lib/swarm/hover';
+import { OVERLORD } from '@lib/swarm/overlord';
 import { SPIRE } from '@lib/swarm/spire';
 import { toneOf } from '@lib/swarm/tone';
 import { useSwarmPalette } from '@stores/appearance-store';
-
-import hiveStill from './swarm/hive-still.webp';
-import hiveAnim from './swarm/hive.webp';
-import overlordStill from './swarm/overlord-still.webp';
-import overlordAnim from './swarm/overlord.webp';
 
 /**
  * A small breathing creature, for the surfaces that have nothing else on them.
@@ -45,27 +42,20 @@ import overlordAnim from './swarm/overlord.webp';
  * own colours, so a light theme or an imported one gets a creature that belongs
  * to it, where a sprite was painted once in one palette. Each is a pure drawing
  * in `src/lib/swarm/` on its own loop; this component only sizes the canvas to
- * the creature's box and clocks it. The hive and the overlord are still WebP
- * sprites in a plain `<img>` until they are ported.
+ * the creature's box and clocks it.
  *
  * ## Motion
  *
  * The canvas animates only while it is on screen and the document is visible
  * (`useCanvasLoop`), so a creature in a hidden pane costs nothing. Under
  * `prefers-reduced-motion` it paints the creature's `rest` frame once and
- * schedules no frame at all; a sprite, which ignores the preference (see
- * `use-reduced-motion`), is handed a single-frame file instead. Either way the
- * creature is still there and simply holds still.
+ * schedules no frame at all. The creature is still there and simply holds
+ * still.
  */
 
-const SPRITES = {
-  hive: { animated: hiveAnim, still: hiveStill },
-  overlord: { animated: overlordAnim, still: overlordStill },
-} as const;
-
-const CANVAS: Partial<Record<Creature, BroodCreature>> = { spire: SPIRE, mutalisk: HOVER };
-
 export type Creature = 'hive' | 'overlord' | 'spire' | 'mutalisk';
+
+const CANVAS: Record<Creature, BroodCreature> = { hive: HIVE, overlord: OVERLORD, spire: SPIRE, mutalisk: HOVER };
 
 /** A Brood creature on its own canvas, `size` tall and as wide as its box. */
 function BroodCanvas({
@@ -92,9 +82,11 @@ function BroodCanvas({
     <canvas
       ref={ref}
       /**
-       * Decorative, as the sprite below: the flavour line beneath it says the
-       * same thing. `aria-hidden` alone hides it; a canvas has no implicit role
-       * to strip, and jsx-a11y refuses `presentation` on one.
+       * Decorative in the strict sense: the flavour line beneath it is real
+       * text and says the same thing, and announcing the creature too would
+       * make a screen reader read the state twice. `aria-hidden` alone hides
+       * it; a canvas has no implicit role to strip, and jsx-a11y refuses
+       * `presentation` on one.
        */
       aria-hidden="true"
       data-creature={creature}
@@ -135,7 +127,7 @@ export function SwarmCreature({
    * projects and nothing to do, so the hive stands in for the missing content as
    * territory — the app's face on a screen that is otherwise empty. Once
    * projects exist, the picker is a *lifecycle* surface: you are about to bring a
-   * session into being, which is the spire's register, and the sprite is a mark
+   * session into being, which is the spire's register, and the creature is a mark
    * above a title rather than a substitute for content. Only ever one of the two
    * renders; see the condition in `new-session-picker.tsx`.
    *
@@ -158,27 +150,10 @@ export function SwarmCreature({
    * a fixed prop and not a random draw like the phrase beneath it.
    */
   creature: Creature;
-  /** Rendered height in px. The width follows the sprite's own ratio. */
+  /** Rendered height in px. The width follows the creature's own box. */
   size?: number;
 }) {
   const reduced = useReducedMotion();
-  const brood = CANVAS[creature];
-  if (brood) return <BroodCanvas creature={creature} brood={brood} size={size} reduced={reduced} />;
-  const sprite = SPRITES[creature as keyof typeof SPRITES];
 
-  return (
-    <img
-      /**
-       * Decorative in the strict sense: the flavour line beneath it is real
-       * text and says the same thing. Announcing the creature too would make a
-       * screen reader read the state twice.
-       */
-      aria-hidden="true"
-      alt=""
-      data-creature={creature}
-      src={reduced ? sprite.still : sprite.animated}
-      style={{ height: size }}
-      className="w-auto select-none"
-    />
-  );
+  return <BroodCanvas creature={creature} brood={CANVAS[creature]} size={size} reduced={reduced} />;
 }
