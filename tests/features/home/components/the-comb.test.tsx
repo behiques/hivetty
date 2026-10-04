@@ -62,18 +62,13 @@ afterEach(() => {
   setHidden(false);
 });
 
+// The loop's own rules (on screen, visible, unmount) are useCanvasLoop's, and
+// tested there; these hold the comb's use of it.
 describe('TheComb — the loop', () => {
   it('labels the canvas and sizes it to the logical aspect', () => {
     const { getByRole } = render(<TheComb label="1 thing needs you" />);
     const canvas = getByRole('img', { name: '1 thing needs you' }) as HTMLCanvasElement;
     expect(canvas.width).toBe(COMB_W * Math.min(2, window.devicePixelRatio || 1));
-  });
-
-  it('starts only once the canvas is on screen', () => {
-    render(<TheComb label="x" />);
-    expect(raf).not.toHaveBeenCalled();
-    FakeIntersectionObserver.last!.fire(true);
-    expect(raf).toHaveBeenCalledTimes(1);
   });
 
   it('paints a frame and asks for the next', () => {
@@ -83,31 +78,6 @@ describe('TheComb — the loop', () => {
     act(() => raf.mock.calls[0]![0](16));
     expect(fills()).toBe(before + 1);
     expect(raf).toHaveBeenCalledTimes(2);
-  });
-
-  it('pauses while the document is hidden and resumes when shown', () => {
-    render(<TheComb label="x" />);
-    FakeIntersectionObserver.last!.fire(true);
-    setHidden(true);
-    expect(caf).toHaveBeenCalledWith(1);
-    raf.mockClear();
-    setHidden(false);
-    expect(raf).toHaveBeenCalledTimes(1);
-  });
-
-  it('stops when it leaves the viewport', () => {
-    render(<TheComb label="x" />);
-    FakeIntersectionObserver.last!.fire(true);
-    FakeIntersectionObserver.last!.fire(false);
-    expect(caf).toHaveBeenCalledWith(1);
-  });
-
-  it('stops on unmount', () => {
-    const { unmount } = render(<TheComb label="x" />);
-    FakeIntersectionObserver.last!.fire(true);
-    unmount();
-    expect(caf).toHaveBeenCalledWith(1);
-    expect(FakeIntersectionObserver.last!.disconnect).toHaveBeenCalled();
   });
 
   it('draws one still frame under reduced motion and schedules nothing', () => {
