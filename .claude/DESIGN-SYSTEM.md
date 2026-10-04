@@ -82,6 +82,12 @@ Being a mix, an imported theme derives it from its own amber and ink.
 
 Creep and chitin are bound as utilities too: `bg-creep`, `text-chitin` and the rest.
 
+**The Brood creatures (HIVE-221)** paint on canvas from the tissue ramp
+(`--cc-tissue-deep`, `--cc-tissue`, `--cc-tissue-lit`), the glow (`--cc-green`
+with `--cc-glow-core` at its centre), `--cc-ground`, `--cc-creep` and
+`--cc-chitin`. The hover mutalisk's membrane, maw, gums, tusk stain and glints
+have no token: `swarmPaletteOf` mixes them from the theme's own colours.
+
 **The editor and the terminal both follow the theme.** They did not always. The
 terminal was pinned dark in both themes on the reasoning that a terminal is a
 terminal in every theme — true of a terminal *emulator*, whose window is the
