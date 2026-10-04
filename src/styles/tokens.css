@@ -114,6 +114,10 @@
      mutalisk's wings, bones and claws. Themeable, optional keys. */
   --cc-creep: #5b3d8f;
   --cc-chitin: #b9a7f0;
+  /* The Hatchery egg's shell (HIVE-221): a mix, not a hex, so an imported theme
+     derives it. Repeated in the light block: a custom property resolves where it
+     is declared, and light overrides `--cc-bg` on `body`, below `:root`. */
+  --cc-shell: color-mix(in srgb, var(--cc-bg) 91%, var(--cc-chitin));
 
   /**
    * Density (story 105) — the comfortable values.
@@ -229,6 +233,7 @@ body[data-theme='light'] {
   --cc-chip-hover: #e2eaee;
   --cc-creep: #b7a3e6;
   --cc-chitin: #6a54b0;
+  --cc-shell: color-mix(in srgb, var(--cc-bg) 91%, var(--cc-chitin));
 
   /**
    * The terminal surface, which **does** follow the theme.
@@ -377,6 +382,13 @@ body[data-theme='light'] {
   --animate-cceggrock: cceggrock 7s ease-in-out infinite;
   --animate-cceggcrack: cceggcrack 7s ease-in-out infinite;
   --animate-cceggglow: cceggglow 7s ease-in-out infinite;
+  --animate-cceggspeck: cceggspeck 7s ease-in-out infinite;
+  --animate-cceggocc: cceggocc 7s ease-in-out infinite;
+  --animate-cceggtwitch: cceggtwitch 7s ease-in-out infinite;
+  --animate-cceggheart: cceggheart 1.4s ease-in-out infinite;
+  --animate-cceggveinsil: cceggveinsil 7s ease-in-out infinite;
+  --animate-cceggveinpulse: cceggveinpulse 2.333333s ease-in-out infinite;
+  --animate-cceggcatch: cceggcatch 7s ease-in-out infinite;
   --animate-ccspore: ccspore 7s ease-out infinite;
   --animate-cccreep: cccreep 7s ease-in-out infinite;
   /*
