@@ -42,7 +42,12 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
 
   return (
     <div className="flex flex-col gap-0.5">
-      <div className={cn('flex items-center gap-1 rounded-lg pr-2.5', selected ? 'bg-active' : 'hover:bg-hover')}>
+      <div
+        className={cn(
+          'group relative flex items-center gap-1 rounded-lg pr-2.5',
+          selected ? 'bg-active' : 'hover:bg-hover',
+        )}
+      >
         <button
           type="button"
           onClick={() => toggleFold(project.id)}
@@ -60,17 +65,26 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
         >
           <Icon name={project.icon} size={15} className="shrink-0 text-brand" />
           <span className="flex-1 truncate text-ui font-semibold text-brand">{project.name}</span>
-          {access.reason ? (
-            <Tag tone={access.invalid ? 'amber' : 'subtle'} title={access.reason} className="shrink-0">
-              unmapped
-            </Tag>
-          ) : null}
-          {needs > 0 ? <Count tone="text-amber-count" dot="bg-amber" n={needs} title="need you" /> : null}
-          {other > 0 ? <Count tone="text-green" dot="bg-green" n={other} title="other live" /> : null}
-          {needs + other === 0 ? (
-            <span className="shrink-0 text-ui-sm text-subtle">no sessions</span>
-          ) : null}
+          {/* Gives way to the actions on hover or focus. */}
+          <span className="flex shrink-0 items-center gap-2 group-focus-within:invisible group-hover:invisible">
+            {access.reason ? (
+              <Tag tone={access.invalid ? 'amber' : 'subtle'} title={access.reason} className="shrink-0">
+                unmapped
+              </Tag>
+            ) : null}
+            {needs > 0 ? <Count tone="text-amber-count" dot="bg-amber" n={needs} title="need you" /> : null}
+            {other > 0 ? <Count tone="text-green" dot="bg-green" n={other} title="other live" /> : null}
+            {needs + other === 0 ? <span className="shrink-0 text-ui-sm text-subtle">no sessions</span> : null}
+          </span>
         </button>
+        {/*
+          Siblings of the name, never inside it. Opacity rather than visibility,
+          so they stay focusable and in the tab order while hidden.
+        */}
+        <span className="absolute right-1.5 flex items-center gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+          <NewSessionLink projectId={project.id} projectName={project.name} />
+          <NewTerminalLink projectId={project.id} projectName={project.name} />
+        </span>
       </div>
       {/* The way out of "unmapped", once the row is the filter (HIVE-218); a sibling, never inside the row's buttons. */}
       {selected && access.reason ? (
@@ -85,18 +99,7 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
           </button>
         </div>
       ) : null}
-      {expanded ? (
-        <>
-          {ids.map((id) => (
-            <Entry key={id} id={id} />
-          ))}
-          <div className="flex items-center">
-            <NewSessionLink projectId={project.id} projectName={project.name} />
-            <span aria-hidden="true" className="mx-1 h-3 w-px shrink-0 bg-border-soft" />
-            <NewTerminalLink projectId={project.id} projectName={project.name} />
-          </div>
-        </>
-      ) : null}
+      {expanded ? ids.map((id) => <Entry key={id} id={id} />) : null}
     </div>
   );
 }
