@@ -34,7 +34,7 @@ import { SwarmCreature } from '@components/ui/swarm-creature';
  * the explanation is in the terminal *underneath this*. The timeout in
  * `useSessionBoot` is the backstop, but a minute is a long time to withhold an
  * error — so the way out is written on the cover, where somebody staring at a
- * hydralisk for longer than they expected will read it.
+ * mutalisk for longer than they expected will read it.
  */
 export function SessionBootCover() {
   const phrase = useRotatingPhrase('loading.session');
@@ -60,7 +60,7 @@ export function SessionBootCover() {
       className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-term-bg"
     >
       {/*
-        The hydralisk: the unit that does the work, which is `SwarmCreature`'s
+        The mutalisk: the unit that does the work, which is `SwarmCreature`'s
         casting for agents and exactly right for a session about to become one.
         At 120px this is the full-stage register — this surface owns the whole
         centre and has nothing to compete with, which is the condition that

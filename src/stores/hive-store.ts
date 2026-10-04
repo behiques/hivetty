@@ -4233,7 +4233,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
        * prompt on the shell's own screen and waits. No `SessionStart` fires,
        * because Claude never gets that far, so the only way out was the
        * sixty-second timeout or a keystroke — and the user's first symptom was
-       * a hydralisk that would not go away, with the question hidden behind it.
+       * a mutalisk that would not go away, with the question hidden behind it.
        *
        * Nothing new observes this. Main's activity tracker already derives
        * `idle` from two seconds of pty silence, and a boot that has stopped
