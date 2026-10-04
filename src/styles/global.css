@@ -31,7 +31,9 @@ body {
   overflow: hidden;
   background: var(--cc-bg);
   color: var(--cc-ink);
-  font-family: var(--font-mono);
+  /* Words are sans everywhere; mono is opt-in (`font-mono`) for code, logs and
+     identifiers. The terminal and the editor set their own face. */
+  font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
