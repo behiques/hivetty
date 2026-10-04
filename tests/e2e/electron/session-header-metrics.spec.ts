@@ -1,7 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
 
-import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
 import { launchHive, writeProjectConfig } from './fixtures/hive-app';
 
@@ -17,10 +16,14 @@ import { launchHive, writeProjectConfig } from './fixtures/hive-app';
  *
  * happy-dom does no layout, so this is where the container queries are proved:
  * at 1440px everything fits; at 1200px (a ~790px stage) the resets give way to
- * `5h` / `wk` and the title column truncates, and the three percentages stay.
+ * `5h` / `wk` and the title column truncates, and the three percentages and
+ * the status word stay; with the session panel open beside it, the word goes too.
  *
  * Measured here with this label, the header's content box needs about 861px
- * for the resets and 759px for the status word, hence 880px and 760px.
+ * for the resets, hence 880px. The word's breakpoint is 700px of content box,
+ * below the ~750px a 790px stage leaves after `px-5`: at 760px the word was
+ * already hidden at 1200px, and the assertion here could not see it, because
+ * Playwright counts `sr-only`'s 1px box as visible (HIVE-219).
  */
 const PROJECT = 'nova-web';
 /** Long enough that `nova-web · <branch>` overflows the title column at 790px of stage. */
@@ -95,6 +98,17 @@ async function resizeTo(app: ElectronApplication, page: Page, width: number): Pr
   await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeLessThanOrEqual(width);
 }
 
+/**
+ * Whether the status word is drawn, rather than kept for a screen reader.
+ * Not `toBeVisible()`: `sr-only` leaves a 1px box, which Playwright calls visible.
+ */
+async function wordDrawn(header: Locator): Promise<boolean> {
+  return header
+    .getByTestId('session-status')
+    .locator('[data-word]')
+    .evaluate((el) => getComputedStyle(el).position !== 'absolute' && el.getBoundingClientRect().width > 1);
+}
+
 /** What the receiver would forward for a session that has reported every number. */
 async function stageMetrics(app: ElectronApplication, entityId: string): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -145,11 +159,24 @@ test('at 1440px the stats row is whole; at 1200px resets give way and the title 
     await expect(chip.getByText(/%$/)).toHaveCount(3);
     for (const pct of await chip.getByText(/%$/).all()) await expect(pct).toBeVisible();
     // The status word is the last to go, and 1200px is not that narrow.
-    await expect(header.getByTestId('session-status').locator('[data-word]')).toBeVisible();
+    expect(await wordDrawn(header)).toBe(true);
     const truncated = await header
       .locator('.truncate')
       .evaluateAll((els) => els.some((el) => el.scrollWidth > el.clientWidth));
     expect(truncated).toBe(true);
+
+    /*
+      Narrower than the word's breakpoint: the session panel open beside it.
+      Not a narrower window: below 1200px the list panel folds away and the
+      stage grows. The dot stays and keeps the word in its title.
+    */
+    await page
+      .getByRole('complementary', { name: 'Session panel' })
+      .getByRole('button', { name: 'Files' })
+      .click();
+    await expect(page.getByRole('tablist')).toBeVisible();
+    await expect.poll(() => wordDrawn(header)).toBe(false);
+    await expect(header.getByTestId('session-status')).toHaveAttribute('title', /\S/);
   } finally {
     await app.close();
   }
