@@ -38,7 +38,7 @@ const LONG_BRANCH = 'feat/a-branch-name-long-enough-to-truncate-the-title-column
  */
 function longBranchRepo(dir: string): string {
   execFileSync('git', ['init', '-q', '-b', LONG_BRANCH, dir]);
-  execFileSync('git', ['-C', dir, 'commit', '-q', '--allow-empty', '--no-verify', '-m', 'init'], {
+  execFileSync('git', ['-C', dir, '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '--no-verify', '-m', 'init'], {
     env: {
       ...process.env,
       GIT_AUTHOR_NAME: 'Hive',
@@ -159,7 +159,7 @@ test('at 1440px the stats row is whole; at 1200px resets give way and the title 
     await expect(chip.getByText(/%$/)).toHaveCount(3);
     for (const pct of await chip.getByText(/%$/).all()) await expect(pct).toBeVisible();
     // The status word is the last to go, and 1200px is not that narrow.
-    expect(await wordDrawn(header)).toBe(true);
+    await expect.poll(() => wordDrawn(header)).toBe(true);
     const truncated = await header
       .locator('.truncate')
       .evaluateAll((els) => els.some((el) => el.scrollWidth > el.clientWidth));
@@ -168,7 +168,9 @@ test('at 1440px the stats row is whole; at 1200px resets give way and the title 
     /*
       Narrower than the word's breakpoint: the session panel open beside it.
       Not a narrower window: below 1200px the list panel folds away and the
-      stage grows. The dot stays and keeps the word in its title.
+      stage grows. HIVE-220 owns how that layout gives way; the word is hidden
+      in it today and stays hidden under its order. The dot stays and keeps
+      the word in its title.
     */
     await page
       .getByRole('complementary', { name: 'Session panel' })
