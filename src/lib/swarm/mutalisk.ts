@@ -1,4 +1,4 @@
-import type { SwarmPalette } from '@lib/swarm/palette';
+import { type SwarmPalette, withAlpha } from '@lib/swarm/palette';
 
 /**
  * The mutalisk, from above (HIVE-199; design §11.1).
@@ -33,14 +33,6 @@ type Point = [number, number];
 const FULL = Math.PI * 2;
 const mixv = (a: number, b: number, k: number): number => a + (b - a) * k;
 const clamp = (value: number, limit: number): number => Math.max(-limit, Math.min(limit, value));
-
-/** Draw at `alpha` times the current alpha, then put it back. */
-export function withAlpha(ctx: CanvasRenderingContext2D, alpha: number, draw: () => void): void {
-  const base = ctx.globalAlpha;
-  ctx.globalAlpha = base * alpha;
-  draw();
-  ctx.globalAlpha = base;
-}
 
 function segment(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number): void {
   ctx.beginPath();

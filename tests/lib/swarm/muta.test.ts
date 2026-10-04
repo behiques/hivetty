@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { spRng } from '@lib/swarm/kit';
 import {
@@ -83,16 +83,6 @@ describe('the live spine', () => {
   });
 });
 
-/** A Path2D that records like the context does; happy-dom may not have one. */
-const pathCalls: Recorded[] = [];
-class RecordingPath {
-  constructor() {
-    return new Proxy(this, {
-      get: (_t, name: string) => (...args: unknown[]) => pathCalls.push({ op: name, args }),
-    });
-  }
-}
-
 describe('drawMuta', () => {
   const T = toneOf(swarmPaletteOf(BUILT_IN_THEME.modes.dark.ui));
   const flown = (): Spine => {
@@ -101,16 +91,7 @@ describe('drawMuta', () => {
     return s;
   };
 
-  beforeEach(() => {
-    pathCalls.length = 0;
-    vi.stubGlobal('Path2D', RecordingPath);
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   const draw = (turn: number, scale: number, ps = 1, shadow?: [number, number]) => {
-    pathCalls.length = 0;
     const { ctx, calls } = recordingContext();
     drawMuta(ctx, flown(), 3, 0.5, turn, scale, ps, T, shadow);
     return calls;
@@ -137,10 +118,9 @@ describe('drawMuta', () => {
   });
 
   it('banks: a hard turn moves the wing tips', () => {
-    const tips = (turn: number): number[] => {
-      draw(turn, 1);
-      return pathCalls.filter((c) => c.op === 'quadraticCurveTo').map((c) => c.args[2] as number);
-    };
+    // The wing outline's curves end at the finger tips; args[2] is the end x.
+    const tips = (turn: number): number[] =>
+      draw(turn, 1).filter((c) => c.op === 'quadraticCurveTo').map((c) => c.args[2] as number);
     const level = tips(0);
     const banked = tips(3);
     expect(level.length).toBeGreaterThan(0);

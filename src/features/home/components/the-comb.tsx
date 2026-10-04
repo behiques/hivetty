@@ -52,7 +52,7 @@ function paint(canvas: HTMLCanvasElement, scene: Scene): void {
   if (!ctx || canvas.width === 0) return;
   const k = canvas.width / COMB_W;
   ctx.setTransform(k, 0, 0, k, 0, 0);
-  drawComb(ctx, scene.layout, scene.flyers, scene.t, scene.palette);
+  drawComb(ctx, scene.layout, scene.flyers, scene.t, scene.palette, k);
 }
 
 /**

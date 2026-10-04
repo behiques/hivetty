@@ -43,3 +43,11 @@ export interface SwarmPalette {
   /** Wet glints on eyes and teeth: the brightest colour the theme has. */
   glint: string;
 }
+
+/** Draw at `alpha` times the current alpha, then put it back. */
+export function withAlpha(ctx: CanvasRenderingContext2D, alpha: number, draw: () => void): void {
+  const base = ctx.globalAlpha;
+  ctx.globalAlpha = base * alpha;
+  draw();
+  ctx.globalAlpha = base;
+}

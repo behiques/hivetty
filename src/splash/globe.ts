@@ -1,6 +1,6 @@
 import { hexPath } from '@lib/swarm/comb';
-import { drawMutalisk, REAL, withAlpha } from '@lib/swarm/mutalisk';
-import type { SwarmPalette } from '@lib/swarm/palette';
+import { drawMutalisk, REAL } from '@lib/swarm/mutalisk';
+import { type SwarmPalette, withAlpha } from '@lib/swarm/palette';
 import { clearColour } from '@lib/theme/colour';
 
 import { LOG_SCHEDULE } from './chamber';

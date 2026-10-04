@@ -329,20 +329,21 @@ function muCreature(
     return { st, o, b, WP, E, W: Wp, tips, S0: edge(7, side), Bp: edge(14, side), mid: edge(11, side), rip };
   };
   type WingGeo = ReturnType<typeof wingGeo>;
-  const wingPath = (g: WingGeo): Path2D => {
-    const p = new Path2D();
+  // Traced on the context rather than kept in a Path2D: the same outline, and
+  // the flyer draws wherever a 2D context does, test doubles included.
+  const wingPath = (g: WingGeo): void => {
+    ctx.beginPath();
     const [F1, F2, F3, F4] = g.tips as [Pt, Pt, Pt, Pt];
-    p.moveTo(g.S0[0], g.S0[1]);
-    p.lineTo(g.E[0], g.E[1]);
-    p.lineTo(g.W[0], g.W[1]);
-    p.quadraticCurveTo((g.W[0] + F1[0]) / 2 - g.b[0] * 5, (g.W[1] + F1[1]) / 2 - g.b[1] * 5, F1[0], F1[1]);
+    ctx.moveTo(g.S0[0], g.S0[1]);
+    ctx.lineTo(g.E[0], g.E[1]);
+    ctx.lineTo(g.W[0], g.W[1]);
+    ctx.quadraticCurveTo((g.W[0] + F1[0]) / 2 - g.b[0] * 5, (g.W[1] + F1[1]) / 2 - g.b[1] * 5, F1[0], F1[1]);
     for (const [a, c] of [[F1, F2], [F2, F3], [F3, F4], [F4, g.Bp]] as const) {
       const m = [(a[0] + c[0]) / 2, (a[1] + c[1]) / 2] as const;
-      p.quadraticCurveTo(mix(m[0], g.W[0], 0.26), mix(m[1], g.W[1], 0.26), c[0], c[1]);
+      ctx.quadraticCurveTo(mix(m[0], g.W[0], 0.26), mix(m[1], g.W[1], 0.26), c[0], c[1]);
     }
-    p.lineTo(g.mid[0], g.mid[1]);
-    p.closePath();
-    return p;
+    ctx.lineTo(g.mid[0], g.mid[1]);
+    ctx.closePath();
   };
   const WG = MU.wings.map(wingGeo);
 
@@ -352,7 +353,10 @@ function muCreature(
     ctx.translate(opt.shadow[0], opt.shadow[1]);
     if (det && 'filter' in ctx) ctx.filter = 'blur(2.5px)';
     ctx.fillStyle = spRgb(T.lo, 0.38);
-    WG.forEach((g) => ctx.fill(wingPath(g)));
+    for (const g of WG) {
+      wingPath(g);
+      ctx.fill();
+    }
     ctx.beginPath();
     for (let i = 1; i < M; i++) {
       const q = edge(i, 1);
@@ -370,7 +374,6 @@ function muCreature(
 
   for (const g of WG) {
     const wd = MU.wings[g === WG[0] ? 0 : 1];
-    const path = wingPath(g);
     const lit = g.st.lit;
     const [F1, F2, F3, F4] = g.tips as [Pt, Pt, Pt, Pt];
     /* the membrane: leathery, cambered, letting the ground through */
@@ -379,9 +382,11 @@ function muCreature(
     gr.addColorStop(0.55, spRgb(spTone(T, lit * 0.7), 0.8));
     gr.addColorStop(1, spRgb(spTone(T, lit * 0.52), 0.72));
     ctx.fillStyle = gr;
-    ctx.fill(path);
+    wingPath(g);
+    ctx.fill();
     ctx.save();
-    ctx.clip(path);
+    wingPath(g);
+    ctx.clip();
     for (const tp of g.tips) {
       ctx.beginPath();
       ctx.moveTo(g.W[0], g.W[1]);
@@ -424,7 +429,8 @@ function muCreature(
     ctx.save();
     ctx.strokeStyle = spRgb(T.lo, 0.5);
     ctx.lineWidth = 0.6;
-    ctx.stroke(path);
+    wingPath(g);
+    ctx.stroke();
     ctx.restore();
     /* the spars: a strong leading edge, thinner fingers, knuckled joints */
     const spar = (a: Pt, c: Pt, w0: number, w1: number, bend: number): void => {
