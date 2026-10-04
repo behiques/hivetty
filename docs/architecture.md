@@ -47,8 +47,14 @@ src/
                          comb's layout, motion and drawing, and the Brood
                          (HIVE-221): tone (the palette as numeric RGB, the one
                          colour formatter), kit (the shared math and drawing
-                         helpers) and muta (the top-down mutalisk, its spine
-                         simulated live per flyer). No colour literals outside
+                         helpers), muta (the top-down mutalisk, its spine
+                         simulated live per flyer), brood (the creature
+                         contract and paintCreature, which fits one into a
+                         canvas) and the four SwarmCreature drawings: spire,
+                         hover (the hovering mutalisk), overlord and hive.
+                         Each is a pure draw(ctx, t, s, tone) on its own loop,
+                         its seeded anatomy grown on first draw. No colour
+                         literals outside
                          tone and no imports outside the folder. The splash's
                          one exception to its fence (HIVE-212): it may import
                          muta, tone, kit, palette, comb (hexPath) and

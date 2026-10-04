@@ -15,23 +15,22 @@ import { useSwarmPalette } from '@stores/appearance-store';
  *
  * ## Where this is allowed, and at what size
  *
- * Three registers, and the size is what separates them:
+ * Two registers, and the size is what separates them:
  *
  * - **Full-stage surfaces at 72–120 px** — the picker's first run, the dormant
  *   orchestrator, the editor with no file, the settings card. Those own the
  *   whole centre and have nothing to compete with.
  * - **Rails at 44 px** — small enough to read as a mark rather than an
  *   illustration.
- * - **The header at 40 px** (HIVE-100) — the brand mark beside the wordmark,
- *   and the only call site that is *never* an empty state. It is the one place
- *   the sprite is given a lit ground rather than the app's: at this size on
- *   `--cc-bg` the creature still loses its silhouette, so the splash's
- *   blurred pool goes behind it.
+ *
+ * The header's 40 px brand mark (HIVE-100) was a third, and the only one that
+ * was never an empty state; the header went in HIVE-213 and the brand is the
+ * Phosphor hexagon now.
  *
  * The rails were text-only when this shipped, on the argument that a decorative
  * empty state in a 320 px column beside a live terminal takes more attention
  * than the thing it is apologising for. That argument is about *size*, not about
- * whether an image may appear at all: at 44 px the creature occupies less height
+ * whether a creature may appear at all: at 44 px the creature occupies less height
  * than the two lines of copy beneath it, and the copy is still what the eye
  * lands on. Anything larger in a rail is the thing the original argument
  * correctly rules out.
@@ -40,7 +39,7 @@ import { useSwarmPalette } from '@stores/appearance-store';
  *
  * The creatures are the Brood's (HIVE-221): drawn every frame from the theme's
  * own colours, so a light theme or an imported one gets a creature that belongs
- * to it, where a sprite was painted once in one palette. Each is a pure drawing
+ * to it, where the WebP sprites they replaced were painted once in one palette. Each is a pure drawing
  * in `src/lib/swarm/` on its own loop; this component only sizes the canvas to
  * the creature's box and clocks it.
  *
