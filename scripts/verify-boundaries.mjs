@@ -171,7 +171,7 @@ const CASES = [
     rule: null,
     files: {
       'src/splash/probe-allowed.ts':
-        "import { hexPath } from '@lib/swarm/comb';\nimport { drawMutalisk } from '@lib/swarm/mutalisk';\nimport { mixColour } from '@lib/theme/colour';\n\nexport const probe = [hexPath, drawMutalisk, mixColour];\n",
+        "import { hexPath } from '@lib/swarm/comb';\nimport { drawMuta } from '@lib/swarm/muta';\nimport { toneOf } from '@lib/swarm/tone';\nimport { mixColour } from '@lib/theme/colour';\n\nexport const probe = [hexPath, drawMuta, toneOf, mixColour];\n",
     },
   },
   /**

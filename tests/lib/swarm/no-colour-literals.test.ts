@@ -25,7 +25,7 @@ describe('src/lib/swarm', () => {
   });
 
   it('covers the canvas modules', () => {
-    expect(files).toEqual(expect.arrayContaining(['comb.ts', 'kit.ts', 'mutalisk.ts', 'palette.ts']));
+    expect(files).toEqual(expect.arrayContaining(['comb.ts', 'kit.ts', 'muta.ts', 'palette.ts']));
   });
 
   /**

@@ -77,7 +77,7 @@ export function startGlobe(canvas: HTMLCanvasElement, palette: SwarmPalette, sta
     ctx.clearRect(0, 0, stage.width, stage.height);
     ctx.translate(stage.cx, stage.cy);
     ctx.scale(stage.scale, stage.scale);
-    drawGlobe(ctx, t, palette);
+    drawGlobe(ctx, t, palette, dpr * stage.scale);
   };
 
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

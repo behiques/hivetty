@@ -1,6 +1,7 @@
-import { hexPath } from '@lib/swarm/comb';
-import { drawMutalisk, REAL } from '@lib/swarm/mutalisk';
+import { hexPath, MUTA_SCALE } from '@lib/swarm/comb';
+import { createSpine, drawMuta, type Spine, stepSpine, warmSpine } from '@lib/swarm/muta';
 import { type SwarmPalette, withAlpha } from '@lib/swarm/palette';
+import { toneOf } from '@lib/swarm/tone';
 import { clearColour } from '@lib/theme/colour';
 
 import { LOG_SCHEDULE } from './chamber';
@@ -219,8 +220,47 @@ function drawOrbit(ctx: Ctx, t: number, p: SwarmPalette, near: boolean): void {
   ctx.restore();
 }
 
-/** The creature at Home's size, larger in front of the globe; heading and turn read off its own path. */
-function drawFlyer(ctx: Ctx, i: number, t: number, p: SwarmPalette): void {
+/** Seconds of orbit a fresh spine is warmed over, ending at the frame. */
+const WARM = 2;
+/** A frame further than this from the last one warms afresh rather than stepping. */
+const MAX_STEP = 0.25;
+
+/**
+ * Each orbit flyer's body (HIVE-221), simulated along {@link flyerAt}. A frame
+ * just after the last one steps the spines on; any other (the first, the
+ * reduced-motion still, a scrub back) warms them along the last two seconds
+ * of each flyer's own path, so a given `t` read cold is always the same frame.
+ */
+const flight: { t: number; spines: Spine[] } = { t: Number.NaN, spines: [] };
+
+function spinesAt(t: number): Spine[] {
+  const dt = t - flight.t;
+  if (dt >= 0 && dt <= MAX_STEP) {
+    if (dt > 0) {
+      flight.spines.forEach((spine, i) => {
+        const at = flyerAt(i, t);
+        stepSpine(spine, at.x, at.y, dt);
+      });
+    }
+  } else {
+    flight.spines = Array.from({ length: FLYER_COUNT }, (_, i) => {
+      const path = (u: number): [number, number] => {
+        const at = flyerAt(i, t - WARM + u);
+        return [at.x, at.y];
+      };
+      const [x0, y0] = path(0);
+      const [x1, y1] = path(1 / 120);
+      const spine = createSpine(x0, y0, Math.atan2(y1 - y0, x1 - x0));
+      warmSpine(spine, path, WARM);
+      return spine;
+    });
+  }
+  flight.t = t;
+  return flight.spines;
+}
+
+/** The creature at Home's size, larger in front of the globe; its turn read off its own path. */
+function drawFlyer(ctx: Ctx, i: number, t: number, p: SwarmPalette, spine: Spine, ps: number): void {
   const at = flyerAt(i, t);
   const was = flyerAt(i, t - 0.03);
   const before = flyerAt(i, t - 0.09);
@@ -228,7 +268,7 @@ function drawFlyer(ctx: Ctx, i: number, t: number, p: SwarmPalette): void {
   const a0 = Math.atan2(was.y - before.y, was.x - before.x);
   const turn = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)) / 0.06;
   withAlpha(ctx, at.alpha * (0.7 + (0.3 * (at.z + 1)) / 2), () =>
-    drawMutalisk(ctx, at.x, at.y, Math.cos(a1), Math.sin(a1), t, REAL * (0.85 + 0.15 * (at.z + 1)), { k: i * 1.3, turn }, p),
+    drawMuta(ctx, spine, t, i * 1.3, turn, MUTA_SCALE * (0.85 + 0.15 * (at.z + 1)), ps, toneOf(p)),
   );
 }
 
@@ -287,9 +327,11 @@ function drawHeart(ctx: Ctx, t: number, p: SwarmPalette): void {
 /**
  * One frame at `t`, centred on the origin. The order is the depth: the orbit's
  * far half, flyers behind the globe, the heart, the cells back to front, the
- * orbit's near half, flyers in front or still climbing.
+ * orbit's near half, flyers in front or still climbing. `ps` is device pixels
+ * per unit, which sets the flyers' detail.
  */
-export function drawGlobe(ctx: Ctx, t: number, palette: SwarmPalette): void {
+export function drawGlobe(ctx: Ctx, t: number, palette: SwarmPalette, ps = 1): void {
+  const spines = spinesAt(t);
   const cells = GLOBE_CELLS.map((cell) => cellAt(cell, t)).sort((a, b) => a.depth - b.depth);
   const out = Array.from({ length: FLYER_COUNT }, (_, i) => i).filter((i) => t >= flyerStart(i));
   const behind = (i: number): boolean => {
@@ -298,9 +340,9 @@ export function drawGlobe(ctx: Ctx, t: number, palette: SwarmPalette): void {
   };
 
   drawOrbit(ctx, t, palette, false);
-  for (const i of out) if (behind(i)) drawFlyer(ctx, i, t, palette);
+  for (const i of out) if (behind(i)) drawFlyer(ctx, i, t, palette, spines[i]!, ps);
   drawHeart(ctx, t, palette);
   for (const placed of cells) drawCell(ctx, placed, t, palette);
   drawOrbit(ctx, t, palette, true);
-  for (const i of out) if (!behind(i)) drawFlyer(ctx, i, t, palette);
+  for (const i of out) if (!behind(i)) drawFlyer(ctx, i, t, palette, spines[i]!, ps);
 }
