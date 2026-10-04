@@ -23,8 +23,8 @@ export async function openSettingsAgents(page: Page): Promise<void> {
 /**
  * Open a new agent's page from Settings › Agents.
  *
- * `exact`, because the agents panel's own "+ New agent…" can be on screen
- * beside the overlay and contains the same words.
+ * `exact`, because the agents panel's own "New agent" + can be on screen
+ * beside the overlay and shares the words.
  */
 export async function newAgentPage(page: Page): Promise<void> {
   await openSettingsAgents(page);

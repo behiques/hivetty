@@ -57,22 +57,13 @@ export function AgentsPanel() {
     groups.find((group) => group.key === key)?.ids.length ?? 0;
   const summons = count('summons');
   const morphing = count('morphing');
-  const newAgent = () => openAgentPage(null, 'definition');
-
   /*
     The way to make another agent: a new agent's page, on Definition
     (HIVE-204). The page owns authoring now, so the panel opens it here
-    rather than sending the user to Settings and back.
+    rather than sending the user to Settings and back. The head's + is the
+    only entry; a footer line beside it was the same act twice.
   */
-  const newAgentButton = (
-    <button
-      type="button"
-      onClick={newAgent}
-      className="mt-1 rounded-lg px-2.5 py-[var(--cc-row-py)] text-left text-ui-sm text-subtle hover:bg-hover hover:text-ink"
-    >
-      + New agent…
-    </button>
-  );
+  const newAgent = () => openAgentPage(null, 'definition');
 
   return (
     <div data-panel="agents" className="flex flex-col gap-0.5">
@@ -134,7 +125,6 @@ export function AgentsPanel() {
         ))
       )}
 
-      {newAgentButton}
     </div>
   );
 }
