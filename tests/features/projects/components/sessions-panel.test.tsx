@@ -20,7 +20,7 @@ describe('SessionsPanel (HIVE-197)', () => {
   it('heads the list with Projects and the live and needs-you words', () => {
     render(<SessionsPanel />);
     expect(screen.getByRole('heading', { name: 'Projects' })).toBeInTheDocument();
-    expect(screen.getByText(/\d+ live/)).toHaveClass('text-green');
+    expect(screen.getByText(/^\d+ live$/)).toHaveClass('text-green');
     expect(screen.getByText(/\d+ needs you/)).toHaveClass('text-amber-count');
   });
 

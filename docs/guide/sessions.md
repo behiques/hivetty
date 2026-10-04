@@ -98,8 +98,9 @@ The **Sessions** icon on the bar opens the Sessions panel beside the overmind.
 - The head reads **Projects**, then how many sessions and terminals are live and how many
   need you. **+** opens the new-session picker.
 - **All projects** shows the whole fleet in the overmind.
-- Each project starts folded. Its counts are an amber dot for sessions waiting on you, a
-  green dot for everything else live, or **no sessions**.
+- Each project starts folded. Folded, a badge on its icon counts what is inside: amber for
+  sessions waiting on you, else green for everything live. With nothing live it reads
+  **no sessions**.
 - Click a project's **name** to filter the overmind to it; that also unfolds it. The
   caret beside it only folds and unfolds.
 - Unfolded, each session is one line under a comb — filled while it works, hollow when
