@@ -41,8 +41,8 @@ describe('HomePage', () => {
     render(<HomePage />);
     expect(screen.getByRole('region', { name: 'Home' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toHaveClass('sr-only');
-    expect(screen.getByRole('heading', { level: 2, name: 'Nothing needs you' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Nothing needs you. 1 working · 0 resting · 1 projects · 0 agents' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'The hive is humming' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'The hive is humming. 1 working · 0 resting · 1 projects · 0 agents' })).toBeInTheDocument();
   });
 
   it('counts the Summons queue, not the comb', () => {
@@ -54,8 +54,8 @@ describe('HomePage', () => {
       ],
     });
     render(<HomePage />);
-    expect(screen.getByRole('heading', { level: 2, name: '2 things need you' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: /^2 things need you\. / })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'The hive is calling · 2 summons' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /^The hive is calling · 2 summons\. / })).toBeInTheDocument();
   });
 
   it('mounts the strip under the comb', () => {

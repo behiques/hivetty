@@ -1,4 +1,4 @@
-import { CombHeadline, headlineText, summaryText } from '@features/home/components/comb-headline';
+import { CombHeadline, headline, summaryText } from '@features/home/components/comb-headline';
 import { FirstRun } from '@features/home/components/first-run';
 import { HomeStrip } from '@features/home/components/home-strip';
 import { TheComb } from '@features/home/components/the-comb';
@@ -29,7 +29,7 @@ export function HomePage() {
       ) : (
         <>
           <div className="relative">
-            <TheComb label={`${headlineText(needs)}. ${summaryText(summary)}`} />
+            <TheComb label={`${headline(needs, summary).text}. ${summaryText(summary)}`} />
             <CombHeadline needs={needs} summary={summary} />
           </div>
           <HomeStrip />
