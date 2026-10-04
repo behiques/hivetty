@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,11 +7,11 @@ import { resetShippedState } from '@/lib/shipped';
 
 import { AgentsStage } from '@features/agents/components/agents-stage';
 import { useEditorStore } from '@stores/editor-store';
-import { useHiveStore } from '@stores/hive-store';
+import { useAgentsByGroup, useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
 
-/** The Agents place's stage (HIVE-204): the open page, or "Pick an agent". */
+/** The Agents place's stage (HIVE-204): the shown agent's page — the last, else the next, else the first. */
 
 beforeEach(() => {
   useHiveStore.getState().reset();
@@ -33,11 +33,34 @@ afterEach(() => {
 });
 
 describe('AgentsStage', () => {
-  it('asks for an agent when none is open', () => {
+  it('opens the first agent in the panel when none was opened', () => {
     seedDemoFleet();
+    const first = renderHook(() => useAgentsByGroup()).result.current[0].ids[0];
     render(<AgentsStage />);
 
-    expect(screen.getByRole('region', { name: 'Agents' })).toHaveTextContent('Pick an agent');
+    expect(screen.queryByText('Pick an agent')).toBeNull();
+    expect(useUiStore.getState().agentPage).toEqual({ name: first, view: 'activity' });
+  });
+
+  it('opens the next agent when the shown one is deleted, the first when it was the last', () => {
+    seedDemoFleet();
+    const ids = renderHook(() => useAgentsByGroup()).result.current.flatMap((group) => group.ids);
+    const remove = (id: string) =>
+      act(() =>
+        useHiveStore.setState((state) => {
+          const entities = { ...state.entities };
+          delete entities[id];
+          return { entities, agentOrder: state.agentOrder.filter((each) => each !== id) };
+        }),
+      );
+    useUiStore.getState().openAgentPage(ids[1], 'activity');
+    render(<AgentsStage />);
+
+    remove(ids[1]);
+    expect(useUiStore.getState().agentPage?.name).toBe(ids[2]);
+
+    remove(ids[2]);
+    expect(useUiStore.getState().agentPage?.name).toBe(ids[0]);
   });
 
   it('shows a never-saved page for a new agent', async () => {
@@ -49,7 +72,7 @@ describe('AgentsStage', () => {
     expect(await screen.findByRole('textbox', { name: 'name' })).toBeInTheDocument();
   });
 
-  it('goes back to Pick an agent when the page closes', () => {
+  it('goes back to an agent from the list when the page closes', () => {
     seedDemoFleet();
     useUiStore.getState().openAgentPage(null, 'definition');
     render(<AgentsStage />);
@@ -58,7 +81,8 @@ describe('AgentsStage', () => {
       useUiStore.getState().closeAgentPage();
     });
 
-    expect(screen.getByText('Pick an agent')).toBeInTheDocument();
+    expect(screen.queryByText('Pick an agent')).toBeNull();
+    expect(useUiStore.getState().agentPage?.name).toEqual(expect.any(String));
   });
 });
 

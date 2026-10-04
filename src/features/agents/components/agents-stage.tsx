@@ -3,12 +3,13 @@ import { Robot } from '@phosphor-icons/react';
 import { Button } from '@components/ui/button';
 import { EmptyPlace } from '@components/ui/empty-place';
 import { AgentPage } from '@features/agents/components/agent-page';
+import { useShownAgent } from '@features/agents/shown-agent';
 import { useAgentsListed } from '@stores/hive-store';
-import { useAgentPage, useAgentPageActions } from '@stores/ui-store';
+import { useAgentPageActions } from '@stores/ui-store';
 
 /**
- * The Agents place's stage (HIVE-204): the open agent's page, or "Pick an
- * agent" when none is — Work's empty shape, for the same reason: the place
+ * The Agents place's stage (HIVE-204): the shown agent's page (`useShownAgent`:
+ * the last one, else the next, else the first), or "Pick an agent" when none is — Work's empty shape, for the same reason: the place
  * owns the stage either way, and an empty stage that says what to do beats
  * the Overmind showing through. With no agent defined it says how to make
  * the first one (HIVE-211).
@@ -17,11 +18,11 @@ import { useAgentPage, useAgentPageActions } from '@stores/ui-store';
  * and the editor's per-field state, belong to the agent they were about.
  */
 export function AgentsStage() {
-  const page = useAgentPage();
+  const name = useShownAgent();
   const listed = useAgentsListed();
   const { openAgentPage } = useAgentPageActions();
 
-  if (page === null) {
+  if (name === undefined) {
     if (!listed) {
       return (
         <EmptyPlace
@@ -45,5 +46,5 @@ export function AgentsStage() {
     );
   }
 
-  return <AgentPage key={page.name ?? 'new'} name={page.name} />;
+  return <AgentPage key={name ?? 'new'} name={name} />;
 }

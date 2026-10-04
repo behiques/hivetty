@@ -6365,6 +6365,18 @@ export const useEntity = (id: string) =>
   useHiveStore((state) => state.entities[id]);
 
 /**
+ * Whether a tab the Sessions place would return to has nothing left to show:
+ * its row is gone, or its session ended. The bar then lands on the Overmind
+ * (ui-store `selectPlace`). `'orch'` is never gone.
+ */
+export const useTabGone = (id: string): boolean =>
+  useHiveStore((state) => {
+    if (id === 'orch') return false;
+    const entity = state.entities[id];
+    return entity === undefined || (isSession(entity) && isEnded(entity.status));
+  });
+
+/**
  * NUL, because it is the one byte neither an entity id nor a
  * `hiveNameFromTitle` output can contain — so it can never appear inside either
  * half of an encoded pair.

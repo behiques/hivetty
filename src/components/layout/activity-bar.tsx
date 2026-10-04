@@ -15,8 +15,14 @@ import { cn } from '@/lib/utils';
 import { ConnectionItem } from '@components/layout/connection-item';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip';
 import { useResolvedTheme, useTeamName, useToggleTheme } from '@stores/appearance-store';
-import { useCounts, usePrNeedsYouCount, useWorkingAgentCount } from '@stores/hive-store';
-import { usePlace, useSelectPlace, useSettingsActions, type Place } from '@stores/ui-store';
+import { useCounts, usePrNeedsYouCount, useTabGone, useWorkingAgentCount } from '@stores/hive-store';
+import {
+  usePlace,
+  useSelectPlace,
+  useSessionsTab,
+  useSettingsActions,
+  type Place,
+} from '@stores/ui-store';
 
 const PLACES: readonly { id: Place; label: string; icon: Icon }[] = [
   { id: 'home', label: 'Home', icon: House },
@@ -41,6 +47,7 @@ const ITEM =
 export function ActivityBar() {
   const place = usePlace();
   const selectPlace = useSelectPlace();
+  const sessionGone = useTabGone(useSessionsTab());
   const { openSettings } = useSettingsActions();
   const brand = useTeamName() || 'The Hive';
   const prsNeedYou = usePrNeedsYouCount();
@@ -76,7 +83,7 @@ export function ActivityBar() {
             type="button"
             aria-current={active ? 'page' : undefined}
             aria-label={count > 0 ? `${label}, ${String(count)} ${needsYou ? 'need you' : 'working'}` : undefined}
-            onClick={() => selectPlace(id)}
+            onClick={() => selectPlace(id, sessionGone)}
             className={cn(ITEM, active ? 'bg-panel-2 text-ink' : 'text-muted hover:bg-hover')}
           >
             <PlaceIcon size={19} aria-hidden />
