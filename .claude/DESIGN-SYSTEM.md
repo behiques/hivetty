@@ -318,7 +318,7 @@ model survives colour-blindness and reduced-motion.
   panel) sets words in it.
 - **Mono is only for code and consoles.** `--font-mono` (`ui-monospace, Menlo,
   'SF Mono', monospace`, the `font-mono` utility) for what displays code or
-  machine output — `<pre>` and `<code>`, diff lines, run logs, command output
+  machine output — `<pre>` and `<code>`, diff lines, matched lines in a file search, run logs, command output
   in Settings — and for the consoles: the Overmind and agent consoles, the
   message input under a terminal, and the covers over it. The terminal and the
   editor set their own face from Appearance. Everything else is sans,
