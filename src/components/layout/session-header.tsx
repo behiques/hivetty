@@ -82,7 +82,7 @@ function SessionLine({ session }: { session: Session }) {
         aria-label={reason === undefined ? undefined : `Ended: ${reason}`}
       >
         <StatusDot status={session.status} detail={session.idleDetail} />
-        <span data-word className="@max-[760px]:sr-only">
+        <span data-word className="@max-[700px]:sr-only">
           {word}
         </span>
       </span>
