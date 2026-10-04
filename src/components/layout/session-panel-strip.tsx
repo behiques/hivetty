@@ -70,7 +70,7 @@ export function SessionPanelStrip({ plan, tabs, onOpen }: SessionPanelStripProps
         >
           <TabIcon size={16} aria-hidden />
           {count === undefined || count === 0 ? null : (
-            <b className="absolute right-0 bottom-0 font-mono text-[10px] font-semibold text-muted">
+            <b className="absolute right-0 bottom-0 tabular-nums text-[10px] font-semibold text-muted">
               {count}
             </b>
           )}

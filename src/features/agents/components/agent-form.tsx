@@ -1042,7 +1042,7 @@ export function AgentForm({
             key path to find it — and a test asserting on the sentence should
             not have to know how the prefix is punctuated.
           */}
-          <span className="font-mono text-subtle">{problem.field}:</span>
+          <span className="tabular-nums text-subtle">{problem.field}:</span>
           <span>{problem.reason}</span>
         </p>
       ))}

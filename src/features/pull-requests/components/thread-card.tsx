@@ -21,7 +21,7 @@ function Chip({ thread, fixerOnIt }: { thread: PrThread; fixerOnIt: boolean }) {
     : fixerOnIt
       ? ['fixer on it', 'text-amber bg-[color-mix(in_srgb,var(--cc-amber)_14%,transparent)]']
       : ['open', 'text-muted bg-chip'];
-  return <span className={cn('rounded-[5px] px-[7px] py-0.5 font-mono text-[10.5px] font-semibold', tone)}>{text}</span>;
+  return <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-[10.5px] font-semibold', tone)}>{text}</span>;
 }
 
 /** The thread's writes (HIVE-207); absent on a read-only page. */
@@ -84,7 +84,7 @@ export function ThreadCard({
   return (
     <div className="overflow-hidden rounded-[9px] border border-border-soft bg-panel text-[12.5px]">
       <div className="flex items-center gap-2 border-b border-border-soft px-2.5 py-[7px] text-[12px]">
-        <span className="font-mono text-ink">
+        <span className="tabular-nums text-ink">
           <span>{thread.path}</span>
           {line === null ? null : <span className="text-muted">{`:${String(line)}`}</span>}
         </span>

@@ -24,7 +24,7 @@ export function ChangedFiles({ changesId, subRoot, onOpenFile }: ChangedFilesPro
     <section aria-label="Changed in this session" className="mb-1">
       <h3 className="flex gap-1.5 px-2 pt-2 pb-1 text-[10.5px] font-semibold tracking-[.06em] text-subtle uppercase">
         Changed in this session
-        <span className="font-mono tracking-normal">{files.length}</span>
+        <span className="tabular-nums tracking-normal">{files.length}</span>
       </h3>
       {files.map((file) => (
         <button
@@ -38,16 +38,16 @@ export function ChangedFiles({ changesId, subRoot, onOpenFile }: ChangedFilesPro
         >
           <i
             className={cn(
-              'w-3.5 shrink-0 text-center font-mono text-[10px] font-semibold not-italic',
+              'w-3.5 shrink-0 text-center tabular-nums text-[10px] font-semibold not-italic',
               file.mark === 'A' ? 'text-green' : 'text-brand',
             )}
           >
             {file.mark}
           </i>
-          <span className="min-w-0 flex-1 truncate font-mono text-muted">
+          <span className="min-w-0 flex-1 truncate tabular-nums text-muted">
             {file.path.startsWith(prefix) ? file.path.slice(prefix.length) : file.path}
           </span>
-          <span className="shrink-0 font-mono text-[11px] whitespace-nowrap text-muted">
+          <span className="shrink-0 tabular-nums text-[11px] whitespace-nowrap text-muted">
             {file.mark === 'A' && file.removed === 0
               ? `+${String(file.added)}`
               : `+${String(file.added)} −${String(file.removed)}`}

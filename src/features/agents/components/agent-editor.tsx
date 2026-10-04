@@ -242,7 +242,7 @@ export function AgentEditor({
         without it `truncate` never engages and a long path widens the page.
       */}
       <div className="flex items-center gap-3 border-b border-border-soft px-5 py-2 text-[12px]">
-        <span className="min-w-0 flex-1 truncate font-mono text-subtle">{path ?? 'not saved yet'}</span>
+        <span className="min-w-0 flex-1 truncate tabular-nums text-subtle">{path ?? 'not saved yet'}</span>
         <span className={dirty ? 'shrink-0 font-sans text-amber' : 'shrink-0 font-sans text-subtle'}>
           {dirty ? 'unsaved' : 'saved'}
         </span>

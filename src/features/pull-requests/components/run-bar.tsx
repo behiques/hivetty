@@ -21,7 +21,7 @@ export function RunBar({ pushes, shown, files, onShow }: { pushes: Push[]; shown
   const started = age === 'now' ? 'just now' : `${age} ago`;
   return (
     <div className="flex items-center gap-3 border-b border-border-soft px-6 py-3 text-[12.5px]">
-      <span className="font-mono text-ink">{`Run #${String(shown.number)}`}</span>
+      <span className="tabular-nums text-ink">{`Run #${String(shown.number)}`}</span>
       <span className="text-muted">{`on ${shown.sha.slice(0, 7)} · started ${started}`}</span>
       <span className="flex gap-[3px]">
         {pushes.map((push) => (
@@ -39,7 +39,7 @@ export function RunBar({ pushes, shown, files, onShow }: { pushes: Push[]; shown
       <span className="text-muted">last 8 runs</span>
       <span className="flex-1" />
       {files.map((file) => (
-        <span key={file} className="flex items-center gap-[5px] font-mono text-[12px] text-muted">
+        <span key={file} className="flex items-center gap-[5px] tabular-nums text-[12px] text-muted">
           <FlowArrow size={13} aria-hidden />
           {file}
         </span>

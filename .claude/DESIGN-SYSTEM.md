@@ -316,11 +316,14 @@ model survives colour-blindness and reduced-motion.
 - **Family:** sans by default — `body` sets `--font-sans`, the system text
   face. Every content area (tickets, PRs, agents, Home, Settings, the list
   panel) sets words in it.
-- **Mono is opt-in.** `--font-mono` (`ui-monospace, Menlo, 'SF Mono',
-  monospace`, the `font-mono` utility) for code and machine output — diffs,
-  code blocks, run logs, the consoles — and identifiers: ticket keys, branches,
-  PR numbers, terminal ids, paths. The terminal and the editor set their own
-  face from Appearance.
+- **Mono is only for code and consoles.** `--font-mono` (`ui-monospace, Menlo,
+  'SF Mono', monospace`, the `font-mono` utility) for what displays code or
+  machine output — `<pre>` and `<code>`, diff lines, run logs, command output
+  in Settings — and for the consoles: the Overmind and agent consoles, the
+  message input under a terminal, and the covers over it. The terminal and the
+  editor set their own face from Appearance. Everything else is sans,
+  identifiers included (ticket keys, branches, PR numbers, paths, file names);
+  numbers that line up in a column take `tabular-nums` instead.
 - **List type scale:** three sizes in `tokens.css`, nothing between them.
   `text-ui-lg` 15px for panel titles (600), `text-ui` 13px for a row's name,
   `text-ui-sm` 11.5px for everything else: second lines, counts, ages, status

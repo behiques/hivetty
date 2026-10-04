@@ -193,7 +193,7 @@ export function PrTimeline({ pr }: { pr: Pr }) {
           {ticks(model.start, model.end, width - GUTTER).map((tick) => (
             <span
               key={tick.at}
-              className="absolute top-1.5 -translate-x-1/2 font-mono text-[11px] whitespace-nowrap text-subtle"
+              className="absolute top-1.5 -translate-x-1/2 tabular-nums text-[11px] whitespace-nowrap text-subtle"
               style={{ left: axisLeft(tick.f) }}
             >
               {tick.label}
@@ -206,7 +206,7 @@ export function PrTimeline({ pr }: { pr: Pr }) {
             className="pointer-events-none absolute top-0 bottom-0 border-l-[1.5px] border-green"
             style={{ left: axisLeft(fraction(now, model.start, model.end)) }}
           >
-            <span className="absolute -bottom-5 -translate-x-1/2 font-mono text-[11px] text-green">now</span>
+            <span className="absolute -bottom-5 -translate-x-1/2 tabular-nums text-[11px] text-green">now</span>
           </div>
         )}
       </div>

@@ -57,7 +57,7 @@ export function AskLeaving({ notif, thread }: { notif: HiveNotification; thread:
           {reason.on === undefined ? null : (
             <>
               {' on '}
-              <span className="font-mono text-ink">{reason.on}</span>
+              <span className="tabular-nums text-ink">{reason.on}</span>
             </>
           )}
         </>

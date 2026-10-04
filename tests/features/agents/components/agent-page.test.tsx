@@ -94,7 +94,7 @@ describe('AgentPage — the header', () => {
     stub();
     render(<AgentPage name="watcher" />);
 
-    expect(screen.getByText('watcher')).toHaveClass('font-mono');
+    expect(screen.getByText('watcher')).not.toHaveClass('font-mono');
     expect(screen.getByText('Watches #incorp-dev and my mentions.')).toBeInTheDocument();
     expect(screen.getByRole('radiogroup', { name: 'View' })).toBeInTheDocument();
     expect(runNow()).toBeEnabled();

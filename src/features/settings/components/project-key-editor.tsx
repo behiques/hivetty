@@ -129,7 +129,7 @@ export function ProjectKeyEditor({
             onCancel();
           }
         }}
-        className={`w-14 rounded-[5px] border bg-bg px-1.5 py-0.5 text-center font-mono text-[12px] lowercase text-ink ${
+        className={`w-14 rounded-[5px] border bg-bg px-1.5 py-0.5 text-center tabular-nums text-[12px] lowercase text-ink ${
           problem === null ? 'border-brand-fill' : 'border-red'
         }`}
       />

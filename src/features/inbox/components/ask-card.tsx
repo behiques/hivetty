@@ -381,7 +381,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
         <span data-redirected-from={redirectedFrom}>meant for {redirectedFrom}, which ended</span>
       ) : null}
       <span className="flex-1" />
-      <span className={cn('font-mono', fresh ? 'text-amber' : 'text-subtle')}>{fresh ? 'now' : age}</span>
+      <span className={cn('tabular-nums', fresh ? 'text-amber' : 'text-subtle')}>{fresh ? 'now' : age}</span>
       {onClose === undefined ? null : (
         <button
           type="button"

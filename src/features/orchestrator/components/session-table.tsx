@@ -758,7 +758,7 @@ function SessionTableRow({
         {entity.project}
       </span>
       <span
-        className={cn(COL.branch, 'font-mono text-ui-sm text-subtle')}
+        className={cn(COL.branch, 'text-ui-sm text-subtle')}
         title={branchLabel(entity)}
       >
         {branchLabel(entity)}

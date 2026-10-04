@@ -32,7 +32,7 @@ export function JobSteps({ job, canRerun, onRerun, holder }: { job: RunJob; canR
     <div className="flex flex-col">
       <div className="flex items-center gap-2 pt-3 pb-1.5 text-[10.5px] font-semibold tracking-[.06em] text-subtle">
         <span>{job.name.toUpperCase()}</span>
-        <b className={cn('ml-auto font-mono font-semibold', state === 'failed' ? 'text-red' : 'text-muted')}>
+        <b className={cn('ml-auto tabular-nums font-semibold', state === 'failed' ? 'text-red' : 'text-muted')}>
           {timeText(state, job.startedAt, job.completedAt, now).toUpperCase()}
         </b>
       </div>
@@ -48,7 +48,7 @@ export function JobSteps({ job, canRerun, onRerun, holder }: { job: RunJob; canR
               <StateIcon state={stepState} />
               <span className="truncate text-ink">{step.name}</span>
               <span className="flex-1" />
-              <span className="font-mono text-[11.5px] text-muted">{timeText(stepState === 'failed' ? 'passed' : stepState, step.startedAt, step.completedAt, now)}</span>
+              <span className="tabular-nums text-[11.5px] text-muted">{timeText(stepState === 'failed' ? 'passed' : stepState, step.startedAt, step.completedAt, now)}</span>
             </li>
           );
         })}

@@ -76,7 +76,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
       <span className="text-[12px] text-subtle">{label}</span>
-      <span className="truncate font-mono text-[11.5px] text-ink">{value}</span>
+      <span className="truncate tabular-nums text-[11.5px] text-ink">{value}</span>
     </div>
   );
 }
@@ -117,7 +117,7 @@ function PtyCounters({ rows }: { rows: readonly PtyDiagnostics[] }) {
           className="flex flex-col gap-1 rounded-[7px] border border-border-soft p-2.5"
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate font-mono text-[11.5px] text-ink">
+            <span className="truncate tabular-nums text-[11.5px] text-ink">
               {row.sessionId}
             </span>
             {row.paused ? (
@@ -128,7 +128,7 @@ function PtyCounters({ rows }: { rows: readonly PtyDiagnostics[] }) {
             {COUNTERS.map((counter) => (
               <div key={counter.key} className="flex items-baseline gap-1">
                 <dt className="text-[11px] text-subtle">{counter.label}</dt>
-                <dd className="font-mono text-[11px] text-muted">
+                <dd className="tabular-nums text-[11px] text-muted">
                   {/*
                     Raw numbers, deliberately not humanised. The *ratio* between
                     them is what diagnoses a flow-control bug — `bytesIn /
@@ -378,7 +378,7 @@ export function AdvancedSection() {
         title="Config file"
         description="Everything Settings writes goes in this one file, and it is meant to stay hand-editable."
       >
-        <p className="break-all font-mono text-[11.5px] text-muted">
+        <p className="break-all tabular-nums text-[11.5px] text-muted">
           {snapshot.configPath}
         </p>
         <div className="flex items-center gap-2">
@@ -573,7 +573,7 @@ export function AdvancedSection() {
         {info === null ? null : (
           <div className="flex flex-col gap-0.5 border-t border-border-soft pt-2">
             <p className="text-[12px] text-subtle">Log location</p>
-            <p className="break-all font-mono text-[11.5px] text-muted">
+            <p className="break-all tabular-nums text-[11.5px] text-muted">
               {info.logPath}
             </p>
             <p className="text-[11.5px] text-subtle">

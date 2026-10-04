@@ -62,7 +62,7 @@ function Header({ ticketKey, ticket }: { ticketKey: string; ticket: Ticket | und
       <div className="flex items-center gap-2.5">
         {ticket?.url ? (
           <a
-            className="font-mono text-[12px] font-bold text-brand hover:underline"
+            className="tabular-nums text-[12px] font-bold text-brand hover:underline"
             href={ticket.url}
             target="_blank"
             rel="noreferrer"
@@ -70,7 +70,7 @@ function Header({ ticketKey, ticket }: { ticketKey: string; ticket: Ticket | und
             {ticketKey}
           </a>
         ) : (
-          <span className="font-mono text-[12px] font-bold text-brand">{ticketKey}</span>
+          <span className="tabular-nums text-[12px] font-bold text-brand">{ticketKey}</span>
         )}
         {ticket ? (
           <TicketTransitionMenu

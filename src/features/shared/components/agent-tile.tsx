@@ -63,7 +63,7 @@ export function AgentTile({ icon, tone, live, size = 'md' }: AgentTileProps) {
       </svg>
       <Icon name={icon} size={small ? 11 : 15} className="relative" />
       {live > 1 ? (
-        <b className="absolute -top-1 -right-1.5 grid size-[17px] place-items-center rounded-full bg-[color-mix(in_srgb,var(--cc-green)_45%,transparent)] font-mono text-[10px] text-ink">
+        <b className="absolute -top-1 -right-1.5 grid size-[17px] place-items-center rounded-full bg-[color-mix(in_srgb,var(--cc-green)_45%,transparent)] tabular-nums text-[10px] text-ink">
           {live}
         </b>
       ) : null}

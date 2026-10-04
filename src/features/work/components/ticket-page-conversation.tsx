@@ -102,7 +102,7 @@ function CommentItem({
           <span className="relative w-[120px] shrink-0 text-right">
             <time
               dateTime={comment.created}
-              className="font-mono text-[11px] text-subtle group-focus-within:invisible group-hover:invisible"
+              className="tabular-nums text-[11px] text-subtle group-focus-within:invisible group-hover:invisible"
             >
               {commentTime(comment.created)}
             </time>

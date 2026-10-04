@@ -985,7 +985,7 @@ export function SkillsSection() {
               >
                 {/* Name and its dot as one group, so `justify-between` floats only the flags. */}
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate font-mono">
+                  <span className="truncate tabular-nums">
                     {broken ? row.name : `/${row.name}`}
                   </span>
                   <ShippedDot status={shipped.get(row.name)} />
@@ -1003,7 +1003,7 @@ export function SkillsSection() {
           <button
             type="button"
             onClick={newSkill}
-            className="border-t border-border-soft px-2.5 py-1.5 text-left font-mono text-[12.5px] text-brand hover:bg-hover"
+            className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-[12.5px] text-brand hover:bg-hover"
           >
             + New skill
           </button>

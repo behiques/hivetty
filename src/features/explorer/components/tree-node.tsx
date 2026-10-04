@@ -122,7 +122,7 @@ export function TreeNode({
 
         <span
           className={cn(
-            'truncate font-mono text-[12px]',
+            'truncate tabular-nums text-[12px]',
             isActive ? 'text-ink' : 'text-muted',
           )}
         >
@@ -134,7 +134,7 @@ export function TreeNode({
             role="img"
             aria-label={mark === 'A' ? 'added this session' : 'modified this session'}
             className={cn(
-              'ml-auto w-3.5 shrink-0 text-center font-mono text-[10px] font-semibold not-italic',
+              'ml-auto w-3.5 shrink-0 text-center tabular-nums text-[10px] font-semibold not-italic',
               mark === 'A' ? 'text-green' : 'text-brand',
             )}
           >

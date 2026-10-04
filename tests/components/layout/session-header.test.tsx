@@ -127,7 +127,8 @@ describe('SessionHeader (HIVE-197)', () => {
       lines: [],
     };
     render(<SessionHeader entity={t} />);
-    expect(screen.getByText('term-5')).toHaveClass('font-mono');
+    // Sans like every other name: mono is for code and consoles only.
+    expect(screen.getByText('term-5')).not.toHaveClass('font-mono');
     expect(screen.getByText(/^ai-sdk · /)).toBeInTheDocument();
     expect(screen.getByText('at prompt')).toBeInTheDocument();
     expect(screen.getByTestId('session-header').querySelector('[data-slot="model"]')).toBeNull();

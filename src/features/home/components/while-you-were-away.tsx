@@ -96,7 +96,7 @@ export function WhileYouWereAway() {
     <section aria-labelledby="away-head" className="grid min-w-0 content-start gap-px">
       <StripHead
         aside={
-          <span className="ml-auto font-mono font-normal tracking-normal text-muted normal-case">
+          <span className="ml-auto tabular-nums font-normal tracking-normal text-muted normal-case">
             since {hhmm(since)}
           </span>
         }

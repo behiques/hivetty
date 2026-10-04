@@ -70,9 +70,9 @@ export function CheckRow({ check, onOpen }: { check: PrCheck; onOpen?: (check: P
   const body = (
     <>
       <CheckIcon status={check.status} />
-      <span data-testid="check-name" className="font-mono text-ink">{check.name}</span>
+      <span data-testid="check-name" className="tabular-nums text-ink">{check.name}</span>
       <span className="flex-1" />
-      <span className="font-mono text-[11.5px] text-muted">{checkTime(check, Date.now())}</span>
+      <span className="tabular-nums text-[11.5px] text-muted">{checkTime(check, Date.now())}</span>
     </>
   );
   if (onOpen !== undefined) {
@@ -130,7 +130,7 @@ export function PrProperties({
           title="Checks"
           aside={
             failing > 0 ? (
-              <span className="font-mono text-[12px] font-semibold text-red">{`${String(failing)} failing`}</span>
+              <span className="tabular-nums text-[12px] font-semibold text-red">{`${String(failing)} failing`}</span>
             ) : undefined
           }
         >
@@ -154,7 +154,7 @@ export function PrProperties({
       {session !== null ? (
         <Section title="Linked">
           <div className="flex items-baseline gap-2 px-1 py-1 text-[12.5px]">
-            {session.ticket === undefined ? null : <span className="font-mono text-brand">{session.ticket}</span>}
+            {session.ticket === undefined ? null : <span className="tabular-nums text-brand">{session.ticket}</span>}
             <span className="text-muted">{`session ${statusLabel(session.status, session.idleDetail)}`}</span>
           </div>
         </Section>

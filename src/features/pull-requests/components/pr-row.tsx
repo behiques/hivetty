@@ -45,7 +45,7 @@ function Row({ row, open, onOpen }: PrRowProps) {
           <span className="min-w-0 flex-1 truncate text-ui text-ink">{pr.title}</span>
           <Flap hatch={hatch} />
         </span>
-        <span className="truncate font-mono text-ui-sm text-muted">
+        <span className="truncate tabular-nums text-ui-sm text-muted">
           #{pr.n} · {pr.repo}
         </span>
       </span>

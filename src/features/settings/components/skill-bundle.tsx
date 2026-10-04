@@ -334,7 +334,7 @@ export function SkillBundle({
                   size={12}
                   className="shrink-0"
                 />
-                <span className="truncate font-mono">{name}</span>
+                <span className="truncate tabular-nums">{name}</span>
               </span>
               {excluded === null ? null : (
                 <span className="shrink-0 text-[11px] text-subtle">
@@ -406,7 +406,7 @@ export function SkillBundle({
           onClick={() => {
             setAdding(true);
           }}
-          className="border-t border-border-soft px-2.5 py-1.5 text-left font-mono text-[12.5px] text-brand hover:bg-hover"
+          className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-[12.5px] text-brand hover:bg-hover"
         >
           + Add
         </button>

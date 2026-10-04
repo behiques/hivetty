@@ -122,7 +122,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
             placeholder="NAME"
             disabled={disabled}
             onChange={(event) => update(index, { key: event.target.value })}
-            className="w-[168px] rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 font-mono text-[12px] text-ink outline-none placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
+            className="w-[168px] rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 tabular-nums text-[12px] text-ink outline-none placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
           />
           <input
             type="text"
@@ -131,7 +131,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
             placeholder="value"
             disabled={disabled}
             onChange={(event) => update(index, { value: event.target.value })}
-            className="min-w-0 flex-1 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 font-mono text-[12px] text-ink outline-none placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
+            className="min-w-0 flex-1 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 tabular-nums text-[12px] text-ink outline-none placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
           />
           <button
             type="button"

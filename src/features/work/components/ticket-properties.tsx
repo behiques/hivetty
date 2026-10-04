@@ -37,7 +37,7 @@ export function TicketProperties({ ticketKey }: { ticketKey: string }) {
     ['Project', properties.project],
     ['Assignee', properties.assignee],
     ['Agent', properties.agent],
-    ['Epic', properties.epic, 'font-mono'],
+    ['Epic', properties.epic, 'tabular-nums'],
   ];
 
   return (

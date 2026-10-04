@@ -278,7 +278,7 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
           prefix is the renderer's own and main honours it by construction.
         */}
         <span
-          className="flex-1 truncate font-mono text-[11.5px] tracking-wide text-subtle uppercase"
+          className="flex-1 truncate tabular-nums text-[11.5px] tracking-wide text-subtle uppercase"
           title={
             explorerRoot?.widened === true
               ? explorerRoot.path
@@ -302,7 +302,7 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
         */}
         {branch === undefined ? null : (
           <span
-            className="max-w-[110px] shrink-0 truncate rounded-full border border-border bg-chip px-1.5 py-px font-mono text-[9.5px] text-brand"
+            className="max-w-[110px] shrink-0 truncate rounded-full border border-border bg-chip px-1.5 py-px tabular-nums text-[9.5px] text-brand"
             title={`On branch ${branch}`}
           >
             {branch}

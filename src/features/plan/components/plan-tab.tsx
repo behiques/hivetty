@@ -85,7 +85,7 @@ export function PlanTab({
                 ) : null}
               </span>
               {ms === undefined ? null : (
-                <span className="font-mono text-[12px] text-muted tabular-nums">
+                <span className=" text-[12px] text-muted tabular-nums">
                   {formatDuration(ms)}
                 </span>
               )}
@@ -107,7 +107,7 @@ export function PlanTab({
             className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1.5 text-left text-[12px] text-brand hover:bg-hover"
           >
             <FileText size={14} aria-hidden className="shrink-0" />
-            <span className="truncate font-mono">{planFileLabel(file)}</span>
+            <span className="truncate tabular-nums">{planFileLabel(file)}</span>
           </button>
           <p className="px-1 text-[12px] text-muted">
             {plan.fileAt === undefined ? '' : `Written by hive:plan at ${clock(plan.fileAt)} · `}

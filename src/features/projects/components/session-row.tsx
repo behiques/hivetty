@@ -96,7 +96,7 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
       </span>
 
       {compact ? null : (
-        <span className="w-full truncate pl-[15px] text-left font-mono text-ui-sm text-subtle">
+        <span className="w-full truncate pl-[15px] text-left tabular-nums text-ui-sm text-subtle">
           {branchLabel(entity)}
         </span>
       )}

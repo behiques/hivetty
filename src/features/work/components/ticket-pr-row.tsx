@@ -48,9 +48,9 @@ export function TicketPrRow({ pr }: TicketPrRowProps) {
         className={cn('shrink-0', stateText)}
       />
 
-      <span className="shrink-0 font-mono text-[11px] text-brand">#{pr.n}</span>
+      <span className="shrink-0 tabular-nums text-[11px] text-brand">#{pr.n}</span>
 
-      <span className="flex-1 truncate text-left font-mono text-[11px] text-subtle">
+      <span className="flex-1 truncate text-left tabular-nums text-[11px] text-subtle">
         {pr.repo}
       </span>
 
