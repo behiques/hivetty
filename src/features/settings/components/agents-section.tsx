@@ -75,7 +75,7 @@ export function AgentsSection() {
         <SettingsSectionHeader title="Agents" description={description} />
 
         <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
-          <SwarmCreature creature="hydralisk" size={72} />
+          <SwarmCreature creature="mutalisk" size={72} />
           <span className="text-[11.5px] text-muted">{phrase}</span>
           <span className="text-[11.5px] text-subtle">
             Write one and it will be listed here, asleep until the waker lands.

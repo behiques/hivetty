@@ -127,7 +127,7 @@ describe('PrsPanel source states', () => {
       }),
     );
     render(<PrsPanel />);
-    expect(screen.getByRole('presentation', { hidden: true })).toHaveAttribute('data-creature', 'spire');
+    expect(document.querySelector('[data-creature]')).toHaveAttribute('data-creature', 'spire');
     expect(screen.getByText('No configured project is a GitHub repository.')).toBeInTheDocument();
   });
 
@@ -164,7 +164,7 @@ describe('PrsPanel source states', () => {
     act(() => useHiveStore.setState({ prs: [], prSource: { kind: 'live', stale: false, repos: 4 } }));
     render(<PrsPanel />);
     expect(screen.getByText('No open pull requests of yours across 4 repositories.')).toBeInTheDocument();
-    const img = screen.getByRole('presentation', { hidden: true });
+    const img = document.querySelector('[data-creature]');
     expect(img).toHaveAttribute('data-creature', 'spire');
     expect(img).toHaveStyle({ height: '44px' });
   });

@@ -7,7 +7,7 @@ import type { PhraseKey } from '@lib/swarm/phrases';
 /**
  * The rail size, named once.
  *
- * It is the number the whole "a rail may have a sprite" argument rests on, so
+ * It is the number the whole "a rail may have a creature" argument rests on, so
  * it is a constant rather than six call sites that could drift apart — and one
  * that drifts upward stops being a mark and becomes the illustration this
  * component's doc rules out.
@@ -35,7 +35,7 @@ type EmptyStateProps = {
   | {
       /** Which pool to draw a flavour line from. */
       phrase: PhraseKey;
-      /** The sprite above the flavour line. 44px — see the note above. */
+      /** The creature above the flavour line. 44px — see the note above. */
       creature?: Creature;
       /**
        * The way out this panel can take *itself* — a control, not a sentence.
@@ -90,7 +90,7 @@ type EmptyStateProps = {
  * the way out, exactly as before. Nothing became decorative instead of useful,
  * which is the only reading under which the paragraph above stays true.
  *
- * `creature` adds the sprite that goes with it, at **44px** — a size chosen so
+ * `creature` adds the creature that goes with it, at **44px** — a size chosen so
  * the paragraph above stays true rather than in spite of it. It is shorter than
  * the two lines of copy beneath it and reads as a mark, not an illustration.
  * The centred 96–120px block the full-stage surfaces use is exactly what a rail

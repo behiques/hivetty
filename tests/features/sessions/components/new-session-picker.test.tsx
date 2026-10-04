@@ -71,7 +71,7 @@ describe('NewSessionPicker', () => {
   it('leads with a spire at the full-stage size', () => {
     render(<NewSessionPicker />);
 
-    const img = screen.getByRole('presentation', { hidden: true });
+    const img = document.querySelector('[data-creature]');
 
     expect(img).toHaveAttribute('data-creature', 'spire');
     // The quieter end of the documented 72–120 full-stage register: it sits above
@@ -643,7 +643,7 @@ describe('NewSessionPicker · unmapped projects', () => {
     setProjectConfigForTest(snapshot([], { templateWritten: true }));
     render(<NewSessionPicker />);
 
-    const creatures = screen.getAllByRole('presentation', { hidden: true });
+    const creatures = [...document.querySelectorAll('[data-creature]')];
 
     expect(creatures).toHaveLength(1);
     expect(creatures[0]).toHaveAttribute('data-creature', 'hive');
