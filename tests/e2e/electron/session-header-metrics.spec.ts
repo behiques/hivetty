@@ -1,6 +1,6 @@
-import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
-import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
 import { launchHive, writeProjectConfig } from './fixtures/hive-app';
 
@@ -16,13 +16,39 @@ import { launchHive, writeProjectConfig } from './fixtures/hive-app';
  *
  * happy-dom does no layout, so this is where the container queries are proved:
  * at 1440px everything fits; at 1200px (a ~790px stage) the resets give way to
- * `5h` / `wk` and the title column truncates, and the three percentages stay.
+ * `5h` / `wk` and the title column truncates, and the three percentages and
+ * the status word stay; with the session panel open beside it, the word goes too.
  *
  * Measured here with this label, the header's content box needs about 861px
- * for the resets and 759px for the status word, hence 880px and 760px.
+ * for the resets, hence 880px. The word's breakpoint is 700px of content box,
+ * below the ~750px a 790px stage leaves after `px-5`: at 760px the word was
+ * already hidden at 1200px, and the assertion here could not see it, because
+ * Playwright counts `sr-only`'s 1px box as visible (HIVE-219).
  */
 const PROJECT = 'nova-web';
-const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
+/** Long enough that `nova-web · <branch>` overflows the title column at 790px of stage. */
+const LONG_BRANCH = 'feat/a-branch-name-long-enough-to-truncate-the-title-column';
+
+/**
+ * A scratch repository on {@link LONG_BRANCH}, mapped as the project.
+ *
+ * Not this checkout: the subtitle reads the session's live branch, so mapping
+ * the repository the suite runs from made the truncation pass on a long
+ * feature branch and fail on `main` or a detached HEAD (HIVE-219).
+ */
+function longBranchRepo(dir: string): string {
+  execFileSync('git', ['init', '-q', '-b', LONG_BRANCH, dir]);
+  execFileSync('git', ['-C', dir, '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '--no-verify', '-m', 'init'], {
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 'Hive',
+      GIT_AUTHOR_EMAIL: 'hive@example.com',
+      GIT_COMMITTER_NAME: 'Hive',
+      GIT_COMMITTER_EMAIL: 'hive@example.com',
+    },
+  });
+  return dir;
+}
 
 /**
  * Seed the session panel closed before the first frame that matters: the
@@ -72,6 +98,17 @@ async function resizeTo(app: ElectronApplication, page: Page, width: number): Pr
   await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeLessThanOrEqual(width);
 }
 
+/**
+ * Whether the status word is drawn, rather than kept for a screen reader.
+ * Not `toBeVisible()`: `sr-only` leaves a 1px box, which Playwright calls visible.
+ */
+async function wordDrawn(header: Locator): Promise<boolean> {
+  return header
+    .getByTestId('session-status')
+    .locator('[data-word]')
+    .evaluate((el) => getComputedStyle(el).position !== 'absolute' && el.getBoundingClientRect().width > 1);
+}
+
 /** What the receiver would forward for a session that has reported every number. */
 async function stageMetrics(app: ElectronApplication, entityId: string): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -97,7 +134,7 @@ async function stageMetrics(app: ElectronApplication, entityId: string): Promise
 
 test('at 1440px the stats row is whole; at 1200px resets give way and the title truncates', async ({}, testInfo) => {
   const configPath = testInfo.outputPath('hive-config.json');
-  writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
+  writeProjectConfig(configPath, { id: PROJECT, path: longBranchRepo(testInfo.outputPath('repo')) });
   const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
   try {
     const page = await app.firstWindow();
@@ -122,11 +159,26 @@ test('at 1440px the stats row is whole; at 1200px resets give way and the title 
     await expect(chip.getByText(/%$/)).toHaveCount(3);
     for (const pct of await chip.getByText(/%$/).all()) await expect(pct).toBeVisible();
     // The status word is the last to go, and 1200px is not that narrow.
-    await expect(header.getByTestId('session-status').locator('[data-word]')).toBeVisible();
+    await expect.poll(() => wordDrawn(header)).toBe(true);
     const truncated = await header
       .locator('.truncate')
       .evaluateAll((els) => els.some((el) => el.scrollWidth > el.clientWidth));
     expect(truncated).toBe(true);
+
+    /*
+      Narrower than the word's breakpoint: the session panel open beside it.
+      Not a narrower window: below 1200px the list panel folds away and the
+      stage grows. HIVE-220 owns how that layout gives way; the word is hidden
+      in it today and stays hidden under its order. The dot stays and keeps
+      the word in its title.
+    */
+    await page
+      .getByRole('complementary', { name: 'Session panel' })
+      .getByRole('button', { name: 'Files' })
+      .click();
+    await expect(page.getByRole('tablist')).toBeVisible();
+    await expect.poll(() => wordDrawn(header)).toBe(false);
+    await expect(header.getByTestId('session-status')).toHaveAttribute('title', /\S/);
   } finally {
     await app.close();
   }
