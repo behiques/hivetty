@@ -15,7 +15,7 @@ Four ways, same result:
 | From | Do this |
 | --- | --- |
 | The Overmind | **New session**, type a project, **Enter** (filtered to a project: **New session in** it, straight away) |
-| The Sessions panel | **+ Session** under an unfolded project (uses the picker's last model and effort) |
+| The Sessions panel | **+** on the project's line, shown on hover (uses the picker's last model and effort) |
 | A Jira ticket | **New session** under the ticket page's Actions; the session is named for the ticket |
 | The console | `spawn <project> <task>` |
 
@@ -102,8 +102,10 @@ The **Sessions** icon on the bar opens the Sessions panel beside the overmind.
   green dot for everything else live, or **no sessions**.
 - Click a project's **name** to filter the overmind to it; that also unfolds it. The
   caret beside it only folds and unfolds.
-- Unfolded, each session is one line, then the project's terminals, then **+ Session**
-  and **Terminal**.
+- Unfolded, each session is one line under a comb — filled while it works, hollow when
+  idle — then the project's terminals.
+- Hover a project's line for **+** (new session) and **>_** (terminal); the counts give
+  way to them.
 - Opening a session unfolds its project. Coming back with the back button, `⌘[` or the
   Sessions icon keeps the filter you left and puts the selection on the session you were
   in.

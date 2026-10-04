@@ -1,8 +1,10 @@
+import { Hexagon } from '@phosphor-icons/react';
+
 import { cn } from '@/lib/utils';
 import { branchLabel, entityLabel, isSession, terminalOf } from '@/types/entity';
 
 import { Badge } from '@components/ui/badge';
-import { StatusDot, statusLabel, statusText } from '@components/ui/status-dot';
+import { statusLabel, statusText } from '@components/ui/status-dot';
 import { useEntity, useOpenEntity, usePlanProgress, useYoursAgain } from '@stores/hive-store';
 import { useActiveTab } from '@stores/ui-store';
 
@@ -15,8 +17,11 @@ interface SessionRowProps {
 /**
  * One session beneath its project.
  *
- * Two lines: status dot + id + status label, then the branch indented under it.
- * The 26px left padding aligns the dot with the project name above rather than
+ * Two lines: status comb + id + status label, then the branch indented under it.
+ * The comb is a hexagon in the status colour: filled while the main agent is
+ * busy, hollow once it is idle — so `working (agents)` is still a hollow green
+ * comb beside a solid one (HIVE-83's distinction, carried by the glyph).
+ * The 26px left padding aligns the comb with the project name above rather than
  * with its caret, so the tree reads as one column of names.
  *
  * Renders nothing for an id the store does not know. The simulation (061) and
@@ -47,8 +52,17 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
       )}
     >
       <span className="flex w-full items-center gap-2">
-        {/* No `label`: the status label sits right beside it. */}
-        <StatusDot status={entity.status} detail={entity.idleDetail} />
+        {/* Decoration: the status label sits right beside it. */}
+        <Hexagon
+          size={11}
+          weight={entity.status === 'idle' ? 'bold' : 'fill'}
+          aria-hidden="true"
+          className={cn(
+            'shrink-0',
+            statusText(entity.status, entity.idleDetail),
+            entity.status === 'working' && 'animate-ccpulse',
+          )}
+        />
         <span className="flex-1 truncate text-left text-ui">
           {entityLabel(entity)}
         </span>

@@ -72,8 +72,8 @@ describe('NewTerminalLink', () => {
     const link = screen.getByRole('button', {
       name: `Terminal in ${PROJECT_NAME}`,
     });
-    // The visible text is still inside the name — Label in Name.
-    expect(link).toHaveTextContent('Terminal');
+    // An icon: the name carries the words.
+    expect(link).toHaveTextContent('');
     expect(link.getAttribute('aria-label')?.toLowerCase().startsWith('new')).toBe(
       false,
     );
@@ -127,16 +127,8 @@ describe('NewTerminalLink', () => {
     const link = screen.getByRole('button');
     // The trap is adjacency: an unlabelled terminal beside containerised
     // sessions reads as the container and lands on the Mac.
-    expect(link).toHaveTextContent('Terminal · host');
+    expect(link).toHaveAccessibleName(`Terminal in ${PROJECT_NAME} · host`);
     expect(link).toHaveAttribute('title', expect.stringMatching(/container/i));
     expect(link).toBeEnabled();
-  });
-});
-
-describe('NewTerminalLink — label (HIVE-197)', () => {
-  it('reads "Terminal" (HIVE-197)', () => {
-    setProjectConfigForTest(snapshot([{ id: PROJECT, status: 'ok' }]));
-    render(<NewTerminalLink projectId={PROJECT} projectName={PROJECT_NAME} />);
-    expect(screen.getByRole('button', { name: `Terminal in ${PROJECT_NAME}` })).toHaveTextContent(/^Terminal$/);
   });
 });

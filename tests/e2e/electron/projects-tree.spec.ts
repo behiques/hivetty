@@ -38,7 +38,7 @@ async function launch(outputPath: (name: string) => string) {
   return { app, page };
 }
 
-test('the tree starts a session, and the link stays below the last one', async ({}, testInfo) => {
+test('the tree starts a session from the project line', async ({}, testInfo) => {
   writeProjectConfig(testInfo.outputPath('hive-config.json'), {
     id: 'nova-web',
     path: REAL_DIRECTORY,
@@ -48,19 +48,13 @@ test('the tree starts a session, and the link stays below the last one', async (
 
   try {
     const tree = await openProject(page, 'nova-web');
-    // The project's own group: its folder row, then a row per session, then the split row.
+    // The project's own group: its folder row, then a row per session.
     const rows = tree.locator('[data-panel="sessions"] > div:has([aria-label="Fold nova-web"]) > *');
     const link = tree.getByRole('button', { name: 'New session in nova-web' });
 
-    // Nothing is running, so the link sits directly under the folder row.
-    //
-    // The last row is the *split* row now (terminals) — a session link, a
-    // rule, and a terminal link — so the claim is that the session link is
-    // inside it rather than that it is the row.
-    await expect(rows).toHaveCount(2);
-    await expect(
-      rows.last().getByRole('button', { name: 'New session in nova-web' }),
-    ).toBeVisible();
+    // Nothing is running: only the project line, which carries the link.
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first().getByRole('button', { name: 'New session in nova-web' })).toBeVisible();
 
     /**
      * The regression this whole arrangement is guarding.
@@ -80,6 +74,8 @@ test('the tree starts a session, and the link stays below the last one', async (
       2,
     );
 
+    // Shown on hover, the counts giving way.
+    await rows.first().hover();
     await tree.screenshot({
       path: 'test-results/evidence/projects-new-session-empty.png',
     });
@@ -92,11 +88,9 @@ test('the tree starts a session, and the link stays below the last one', async (
     // The stage is a session now, so the Overmind's button is gone.
     await expect(overmindNewSession(page)).toHaveCount(0);
 
-    // And the tree grew a session row *above* the split row, which stays last.
-    await expect(rows).toHaveCount(3);
-    await expect(
-      rows.last().getByRole('button', { name: 'New session in nova-web' }),
-    ).toBeVisible();
+    // And the tree grew a session row under the project line, which keeps the link.
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first().getByRole('button', { name: 'New session in nova-web' })).toBeVisible();
 
     await tree.screenshot({
       path: 'test-results/evidence/projects-new-session-running.png',
