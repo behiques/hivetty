@@ -66,7 +66,7 @@ export function SessionBootCover() {
         centre and has nothing to compete with, which is the condition that
         register is for.
       */}
-      <SwarmCreature creature="hydralisk" size={120} />
+      <SwarmCreature creature="mutalisk" size={120} />
 
       <p
         /*

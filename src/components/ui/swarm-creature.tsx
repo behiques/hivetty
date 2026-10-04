@@ -1,13 +1,17 @@
+import { useCallback, useRef } from 'react';
+
+import { type CanvasPaint, useCanvasLoop } from '@hooks/use-canvas-loop';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
+import { type BroodCreature, paintCreature } from '@lib/swarm/brood';
+import { HOVER } from '@lib/swarm/hover';
+import { SPIRE } from '@lib/swarm/spire';
+import { toneOf } from '@lib/swarm/tone';
+import { useSwarmPalette } from '@stores/appearance-store';
 
 import hiveStill from './swarm/hive-still.webp';
 import hiveAnim from './swarm/hive.webp';
-import hydraliskStill from './swarm/hydralisk-still.webp';
-import hydraliskAnim from './swarm/hydralisk.webp';
 import overlordStill from './swarm/overlord-still.webp';
 import overlordAnim from './swarm/overlord.webp';
-import spireStill from './swarm/spire-still.webp';
-import spireAnim from './swarm/spire.webp';
 
 /**
  * A small breathing creature, for the surfaces that have nothing else on them.
@@ -35,27 +39,70 @@ import spireAnim from './swarm/spire.webp';
  * lands on. Anything larger in a rail is the thing the original argument
  * correctly rules out.
  *
- * ## Why an <img> and not CSS
+ * ## Why a canvas
  *
- * Animated WebP plays in a plain `<img>` with no library and no canvas. The
- * splash sprite needs a canvas because it keys a white background out per frame;
- * these are already transparent, so there is nothing to do.
+ * The creatures are the Brood's (HIVE-221): drawn every frame from the theme's
+ * own colours, so a light theme or an imported one gets a creature that belongs
+ * to it, where a sprite was painted once in one palette. Each is a pure drawing
+ * in `src/lib/swarm/` on its own loop; this component only sizes the canvas to
+ * the creature's box and clocks it. The hive and the overlord are still WebP
+ * sprites in a plain `<img>` until they are ported.
  *
  * ## Motion
  *
- * The animated file ignores `prefers-reduced-motion` — see `use-reduced-motion`.
- * Under the preference the element is handed a single-frame file instead, so the
+ * The canvas animates only while it is on screen and the document is visible
+ * (`useCanvasLoop`), so a creature in a hidden pane costs nothing. Under
+ * `prefers-reduced-motion` it paints the creature's `rest` frame once and
+ * schedules no frame at all; a sprite, which ignores the preference (see
+ * `use-reduced-motion`), is handed a single-frame file instead. Either way the
  * creature is still there and simply holds still.
  */
 
 const SPRITES = {
   hive: { animated: hiveAnim, still: hiveStill },
-  hydralisk: { animated: hydraliskAnim, still: hydraliskStill },
   overlord: { animated: overlordAnim, still: overlordStill },
-  spire: { animated: spireAnim, still: spireStill },
 } as const;
 
-export type Creature = keyof typeof SPRITES;
+const CANVAS: Partial<Record<Creature, BroodCreature>> = { spire: SPIRE, mutalisk: HOVER };
+
+export type Creature = 'hive' | 'overlord' | 'spire' | 'mutalisk';
+
+/** A Brood creature on its own canvas, `size` tall and as wide as its box. */
+function BroodCanvas({
+  creature,
+  brood,
+  size,
+  reduced,
+}: {
+  creature: Creature;
+  brood: BroodCreature;
+  size: number;
+  reduced: boolean;
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const palette = useSwarmPalette();
+  const paint = useCallback<CanvasPaint>(
+    (ctx, t, _dt, { w, h, dpr }) => paintCreature(ctx, brood, t % brood.dur, w, h, dpr, toneOf(palette)),
+    [brood, palette],
+  );
+  useCanvasLoop(ref, paint, { still: reduced ? brood.rest : null });
+  const [, , bw, bh] = brood.box;
+
+  return (
+    <canvas
+      ref={ref}
+      /**
+       * Decorative, as the sprite below: the flavour line beneath it says the
+       * same thing. `aria-hidden` alone hides it; a canvas has no implicit role
+       * to strip, and jsx-a11y refuses `presentation` on one.
+       */
+      aria-hidden="true"
+      data-creature={creature}
+      style={{ height: size, width: (size * bw) / bh }}
+      className="select-none"
+    />
+  );
+}
 
 export function SwarmCreature({
   creature,
@@ -75,7 +122,9 @@ export function SwarmCreature({
    *   without acting, which is what both of those states are.
    * - **Spire** — work, pull requests, the editor with no file, and the
    *   **ordinary picker**. Things with a lifecycle, caught mid-morph.
-   * - **Hydralisk** — agents. The unit that does the work.
+   * - **Mutalisk** — agents, and a session booting. The unit that does the work,
+   *   holding the air until it is sent. It took the hydralisk's place when the
+   *   creatures became the Brood's (HIVE-221).
    *
    * That is every call site; a reviewer should be able to check any one of them
    * against this list and find it here.
@@ -94,10 +143,10 @@ export function SwarmCreature({
    * assigned the picker to Hive outright and said so here, which stopped being
    * true the moment the ordinary picker got its own sprite.
    *
-   * ## Skills is a hive, not a hydralisk (HIVE-96)
+   * ## Skills is a hive, not a mutalisk (HIVE-96)
    *
    * The tempting reading is that a skill belongs to the agent that runs it, and
-   * agents are the hydralisk's. But the casting is per **surface**, not per
+   * agents are the mutalisk's. But the casting is per **surface**, not per
    * subject: Skills is a settings card, its only neighbour in that state is the
    * projects card, and the two are looked at in the same breath. Casting it for
    * its subject would put two different creatures side by side in one pane and
@@ -113,7 +162,9 @@ export function SwarmCreature({
   size?: number;
 }) {
   const reduced = useReducedMotion();
-  const sprite = SPRITES[creature];
+  const brood = CANVAS[creature];
+  if (brood) return <BroodCanvas creature={creature} brood={brood} size={size} reduced={reduced} />;
+  const sprite = SPRITES[creature as keyof typeof SPRITES];
 
   return (
     <img

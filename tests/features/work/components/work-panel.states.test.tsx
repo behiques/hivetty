@@ -250,7 +250,7 @@ describe('the live state', () => {
     state().hydrateTickets([], false);
     render(<WorkPanel />);
 
-    const img = screen.getByRole('presentation', { hidden: true });
+    const img = document.querySelector('[data-creature]');
 
     expect(img).toHaveAttribute('data-creature', 'spire');
     expect(img).toHaveStyle({ height: '44px' });
