@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChecksGraph, GraphNode } from '@/lib/checks-graph';
@@ -100,5 +100,34 @@ describe('ChecksGraphView', () => {
     expect(zoomed(container).style.transform).toBe('scale(0.5)');
     rerender(<ChecksGraphView graph={{ ...graph, width: 300 }} onJob={() => {}} onExpand={() => {}} />);
     expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('100%');
+  });
+
+  it('zooms on a pinch or a ⌘/Ctrl wheel, holding the point under the pointer, and leaves a plain wheel to scroll', () => {
+    const { container } = render(<ChecksGraphView graph={graph} onJob={() => {}} onExpand={() => {}} />);
+    const scroller = zoomed(container).parentElement!.parentElement!;
+    const reset = screen.getByRole('button', { name: 'Reset zoom' });
+    const wheel = ({ ctrlKey = false, metaKey = false, ...init }: WheelEventInit) => {
+      const event = createEvent.wheel(scroller, init);
+      // happy-dom's WheelEvent drops the MouseEvent fields from its init.
+      Object.defineProperties(event, { ctrlKey: { value: ctrlKey }, metaKey: { value: metaKey }, clientX: { value: 100 } });
+      fireEvent(scroller, event);
+      return event;
+    };
+
+    expect(wheel({ deltaY: -10 }).defaultPrevented).toBe(false);
+    expect(reset).toHaveTextContent('100%');
+
+    // A pinch out: ctrlKey, negative delta. e^0.1 ≈ 1.105.
+    scroller.scrollLeft = 200;
+    expect(wheel({ deltaY: -10, ctrlKey: true }).defaultPrevented).toBe(true);
+    expect(reset).toHaveTextContent('111%');
+    // Graph x 300 was under the pointer at 100px; it still is.
+    expect(scroller.scrollLeft).toBeCloseTo(300 * Math.exp(0.1) - 100, 0);
+
+    // A mouse notch is held to the same ±10px, so ⌘ and a 100px delta zoom out one step, not off the scale.
+    wheel({ deltaY: 100, metaKey: true });
+    expect(reset).toHaveTextContent('100%');
+    for (let i = 0; i < 30; i += 1) wheel({ deltaY: 100, ctrlKey: true });
+    expect(reset).toHaveTextContent('25%');
   });
 });

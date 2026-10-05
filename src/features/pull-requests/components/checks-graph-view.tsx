@@ -1,5 +1,5 @@
 import { ArrowsIn, MagnifyingGlassMinus, MagnifyingGlassPlus } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { NODE_H, NODE_W, type ChecksGraph, type EdgeState, type GraphNode } from '@/lib/checks-graph';
@@ -26,6 +26,10 @@ const NODE: Record<GraphNode['state'], string> = {
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.25;
+/** A wheel event's zoom, per pixel of delta; one event is held to ±10px, so a mouse notch is ~10%. */
+const WHEEL_RATE = 0.01;
+
+const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
 
 const ZOOM_BUTTON = 'grid size-7 place-items-center rounded-[6px] text-muted hover:bg-hover hover:text-ink aria-pressed:bg-hover aria-pressed:text-ink disabled:opacity-40 disabled:hover:bg-transparent';
 
@@ -35,16 +39,49 @@ const ZOOM_BUTTON = 'grid size-7 place-items-center rounded-[6px] text-muted hov
  * group. Edges into a running job flow unless motion is reduced; every state
  * still reads from colour, border and icon. It takes the stage's whole width;
  * a graph wider still scrolls, or zooms out: −, +, Fit (to the width), and the
- * percentage back to 100%.
+ * percentage back to 100%. A trackpad pinch, or the wheel with ⌘ or Ctrl
+ * held, zooms smoothly about the pointer.
  */
 export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph; onJob: (id: number) => void; onExpand: (defId: string) => void }) {
   const still = useReducedMotion();
-  const [ref, viewport] = useMeasuredWidth();
+  const [measure, viewport] = useMeasuredWidth();
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const ref = useCallback((el: HTMLDivElement | null) => {
+    measure(el);
+    scroller.current = el;
+  }, [measure]);
   const [zoom, setZoom] = useState<number | 'fit'>(1);
   // Unmeasured (happy-dom, the first frame) fits at 100%.
   const fit = viewport > 0 ? Math.min(1, viewport / graph.width) : 1;
   const scale = zoom === 'fit' ? fit : zoom;
-  const step = (by: number) => setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((scale + by) / ZOOM_STEP) * ZOOM_STEP)));
+  const step = (by: number) => setZoom(clampZoom(Math.round((scale + by) / ZOOM_STEP) * ZOOM_STEP));
+
+  // The wheel handler is bound once; it reads the scale the last render drew.
+  const drawn = useRef(scale);
+  // The graph x under the pointer, and where the pointer sits in the scroller, to hold it there across the zoom.
+  const anchor = useRef<{ x: number; at: number } | null>(null);
+  useLayoutEffect(() => {
+    drawn.current = scale;
+    const el = scroller.current;
+    if (anchor.current !== null && el !== null) el.scrollLeft = anchor.current.x * scale - anchor.current.at;
+    anchor.current = null;
+  }, [scale]);
+  useEffect(() => {
+    const el = scroller.current;
+    if (el === null) return undefined;
+    const onWheel = (event: WheelEvent) => {
+      // A pinch reaches the page as a wheel event with ctrlKey set; ⌘ or Ctrl and a mouse wheel read the same.
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const at = event.clientX - el.getBoundingClientRect().left;
+      anchor.current = { x: (el.scrollLeft + at) / drawn.current, at };
+      const delta = Math.max(-10, Math.min(10, event.deltaY));
+      setZoom(clampZoom(drawn.current * Math.exp(-delta * WHEEL_RATE)));
+    };
+    // Not passive: preventDefault is what keeps the page itself from scrolling or zooming.
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
   return (
     <div className="mx-6 mt-3">
       <div role="group" aria-label="Zoom" className="ml-auto flex w-fit items-center gap-0.5 rounded-[8px] border border-border-soft bg-panel p-0.5">
