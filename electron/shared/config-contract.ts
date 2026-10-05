@@ -6,6 +6,7 @@ import {
   type NotificationKind,
   type NotificationPrefs,
 } from './notification-contract';
+import type { TicketWorkflow } from './ticket-workflow';
 
 /**
  * The workspace config contract (story 090).
@@ -497,6 +498,11 @@ export interface JiraConfig {
    * their query to be the query.
    */
   jql: string | null;
+  /**
+   * What a session started from a ticket does first (`ticket-workflow.ts`).
+   * `null` just opens it, at an empty prompt.
+   */
+  workflow: TicketWorkflow | null;
 }
 
 /** Nothing configured. Both halves are needed before a request can be made. */
@@ -504,6 +510,7 @@ export const DEFAULT_JIRA: JiraConfig = {
   site: null,
   email: null,
   jql: null,
+  workflow: null,
 };
 
 /** The block's keys, for the parser's exact-key check. */
@@ -511,6 +518,7 @@ export const JIRA_KEYS: readonly (keyof JiraConfig)[] = [
   'site',
   'email',
   'jql',
+  'workflow',
 ];
 
 /**
@@ -2047,6 +2055,8 @@ export interface SetJiraRequest {
   email?: string | null;
   /** HIVE-69's override. `null` restores the default query. */
   jql?: string | null;
+  /** The ticket workflow. `null` goes back to just opening the session. */
+  workflow?: TicketWorkflow | null;
 }
 
 /** Payload of `config:set-receiver` (HIVE-131). */

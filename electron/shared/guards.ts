@@ -128,6 +128,7 @@ import type {
   SkillRenameRequest,
   SkillWriteRequest,
 } from './skills-contract';
+import { ticketWorkflowOf, type TicketWorkflow } from './ticket-workflow';
 
 /**
  * Payload guards (story 082).
@@ -1318,6 +1319,12 @@ export function assertJiraToken(value: unknown, label: string): string {
   return token;
 }
 
+/** A ticket workflow, or a throw naming what is wrong with it. */
+function assertTicketWorkflow(value: unknown): TicketWorkflow {
+  const workflow = ticketWorkflowOf(value);
+  return typeof workflow === 'string' ? fail(`setJira.workflow: ${workflow}`) : workflow;
+}
+
 /**
  * The Jira connection settings (HIVE-67).
  *
@@ -1328,7 +1335,7 @@ export function assertJiraToken(value: unknown, label: string): string {
  * the config write path.
  */
 export function parseSetJiraRequest(input: unknown): SetJiraRequest {
-  const raw = assertShape(input, [], 'setJira', ['site', 'email', 'jql']);
+  const raw = assertShape(input, [], 'setJira', ['site', 'email', 'jql', 'workflow']);
 
   const request: SetJiraRequest = {
     ...(raw.site !== undefined
@@ -1350,6 +1357,7 @@ export function parseSetJiraRequest(input: unknown): SetJiraRequest {
     ...(raw.jql !== undefined
       ? { jql: raw.jql === null ? null : assertText(raw.jql, 'setJira.jql') }
       : {}),
+    ...(raw.workflow !== undefined ? { workflow: raw.workflow === null ? null : assertTicketWorkflow(raw.workflow) } : {}),
   };
 
   if (Object.keys(request).length === 0) {

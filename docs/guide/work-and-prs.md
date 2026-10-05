@@ -158,6 +158,31 @@ ticket does not say which repository it belongs to. Pick the project and press E
 The session is named for the ticket, and names stay unique: `ABC-123`, then `ABC-123-2`.
 From here, [Working a ticket](workflow.md) walks the rest of the way to Done.
 
+### The ticket workflow
+
+**Settings › Integrations › Jira › Ticket workflow** decides what a session started from a ticket does first:
+
+- **Just open** (the default): the session opens at an empty prompt.
+- **Run a skill**: the skill runs on the ticket as the session's first message, `/hive:work-on ABC-123`.
+  Pick one of your skills, or **Type one…** for another plugin's, like `workstream:work-on`.
+- **Hand to an agent**: either **The session asks it** (the session's first message has it `ledger_ask` the
+  agent with the ticket), or **Instead of a session** (no terminal opens; the picker's **Wake builder** asks
+  the agent and takes you to its page).
+
+An **Extra prompt** goes after the ticket key every time, and can use `{key}`, `{title}`, `{type}` and `{url}`.
+The setting shows what it will send for an example ticket.
+
+The picker shows the result as its **First message** line. Change it there for one session; ⌥↵ starts at an
+empty prompt whatever the setting says. In `config.json` the setting is `jira.workflow`:
+
+```json
+"jira": {
+  "workflow": { "kind": "skill", "skill": "hive:work-on", "prompt": "keep it to one PR" }
+}
+```
+
+or `{ "kind": "agent", "agent": "builder", "via": "session" }` (`via` is `session` or `wake`).
+
 ## The PRs list
 
 The list comes from the GitHub CLI, run as you, with two searches:
