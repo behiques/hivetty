@@ -240,6 +240,14 @@ describe('the reply box (HIVE-203)', () => {
     finish(null);
   });
 
+  it('keeps the disabled Comment label legible: on-brand text, dimmed by opacity', () => {
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+    const button = screen.getByRole('button', { name: 'Comment' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveClass('text-on-brand', 'disabled:opacity-60');
+    expect(button.className).not.toMatch(/disabled:text-subtle|\btext-ink\b/);
+  });
+
   it('posts the trimmed draft, clears the box and shows the comment', async () => {
     const posted = comment('102', 'Me Myself', '2026-10-01T13:00:00.000Z', 'Posted words');
     addJiraComment.mockResolvedValue({ ok: true, value: posted });
