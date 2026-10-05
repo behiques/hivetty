@@ -1878,6 +1878,13 @@ export interface AppInfo {
    */
   serving: boolean;
   /**
+   * Whether this launch showed the splash (`splashEnabled`). What's new (1.0)
+   * opens only after one, so a launch without it — the Playwright suite's
+   * `HIVE_E2E` — never has a card over its specs. Optional so an older peer's
+   * answer still reads; absent counts as shown.
+   */
+  splash?: boolean;
+  /**
    * Per-session flow-control counters (story 093).
    *
    * Flow-control bugs are otherwise diagnosed by staring at a slow terminal

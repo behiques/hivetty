@@ -151,6 +151,8 @@ interface UiState {
    */
   pickerTicket: string | null;
   settings: boolean; // full-stage settings overlay open (story 101)
+  /** The What's new card is up (1.0): at launch for a release that has one, or from Settings. */
+  whatsNewOpen: boolean;
   /** The pane `openSettings` was asked for, or `null` for the default. */
   settingsSection: SettingsSection | null;
   newModel: Model;
@@ -293,6 +295,8 @@ interface UiState {
    */
   clearSettingsSection: () => void;
   closeSettings: () => void;
+  /** Opening closes Settings, so the card never sits under the overlay it was opened from. */
+  setWhatsNewOpen: (open: boolean) => void;
   setPickerQuery: (query: string) => void;
   setNewModel: (model: Model) => void;
   setNewEffort: (effort: Effort) => void;
@@ -377,6 +381,7 @@ const initialUiState = {
   pickerQuery: '',
   pickerTicket: null as string | null,
   settings: false,
+  whatsNewOpen: false,
   /**
    * Which pane the *next* open should land on, or `null` for the default.
    *
@@ -613,6 +618,7 @@ export const useUiStore = create<UiState>()((set) => ({
    */
   openSettings: (section) =>
     set({ settings: true, picker: false, settingsSection: section ?? null }),
+  setWhatsNewOpen: (open) => set(open ? { whatsNewOpen: true, settings: false } : { whatsNewOpen: false }),
   closeSettings: () => set({ settings: false, settingsSection: null }),
   clearSettingsSection: () => set({ settingsSection: null }),
   setPickerQuery: (query) => set({ pickerQuery: query }),
@@ -926,6 +932,11 @@ export const useNewSessionDefaults = () =>
 
 /** Whether the settings overlay is open (story 101). */
 export const useSettingsOpen = () => useUiStore((state) => state.settings);
+/** The picker or Settings covers the stage: What's new waits for both to close. */
+export const useOverlayOpen = () => useUiStore((state) => state.picker || state.settings);
+/** Whether the What's new card is up, and its one setter. */
+export const useWhatsNewOpen = () => useUiStore((state) => state.whatsNewOpen);
+export const useSetWhatsNewOpen = () => useUiStore((state) => state.setWhatsNewOpen);
 
 /** The inbox arrival queue, newest first (HIVE-198). */
 export const useArrivals = () => useUiStore((state) => state.arrivals);

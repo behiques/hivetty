@@ -68,7 +68,8 @@ the picker from re-rendering thirteen live terminals.
   place writes an agent into that.
 - `src/stores/appearance-store.ts` — durable preferences: `theme`, the terminal
   and editor typography, `editorPlacement`, `editorNav`, `editorEditable`,
-  `density`, `teamName`, the theme library (`themes`, `activeThemeId`), the
+  `density`, `teamName`, What's new's `whatsNewSeen` (the `major.minor` last
+  shown) and `whatsNewOff` (its opt-out), the theme library (`themes`, `activeThemeId`), the
   session panel — `sessionPanelOpen` (default `true`) and `sessionPanelTab`
   (`'plan' | 'ticket' | 'pr' | 'files'`, default `'plan'`, HIVE-201) — the
   two rail widths in px, `listPanelWidth` and `sessionPanelWidth` (clamped by

@@ -331,6 +331,8 @@ describe('appearance-store — persistence', () => {
       editorTabWidth: 2,
       themes: {},
       activeThemeId: 'hive',
+      whatsNewSeen: null,
+      whatsNewOff: false,
     });
     // The environment is not a preference: persisting it would restore a stale
     // answer on a machine whose OS theme has since changed.
@@ -1147,5 +1149,28 @@ describe('a narrow spell (HIVE-211)', () => {
     useUiStore.getState().setNarrow(true);
     useUiStore.getState().setNarrow(false);
     expect(useAppearanceStore.getState().sessionPanelOpen).toBe(true);
+  });
+});
+
+/** What's new (1.0): the version last shown and the opt-out, persisted with the rest. */
+describe('appearance-store — What’s new', () => {
+  it('starts with nothing seen and the screen on', () => {
+    expect(useAppearanceStore.getState().whatsNewSeen).toBeNull();
+    expect(useAppearanceStore.getState().whatsNewOff).toBe(false);
+  });
+
+  it('records the version shown and the opt-out', () => {
+    useAppearanceStore.getState().setWhatsNewSeen('1.0');
+    useAppearanceStore.getState().setWhatsNewOff(true);
+    expect(useAppearanceStore.getState()).toMatchObject({ whatsNewSeen: '1.0', whatsNewOff: true });
+    useAppearanceStore.getState().setWhatsNewOff(false);
+    expect(useAppearanceStore.getState().whatsNewOff).toBe(false);
+  });
+
+  it('persists both', () => {
+    useAppearanceStore.getState().setWhatsNewSeen('1.0');
+    useAppearanceStore.getState().setWhatsNewOff(true);
+    const stored = JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) ?? '{}') as { state?: Record<string, unknown> };
+    expect(stored.state).toMatchObject({ whatsNewSeen: '1.0', whatsNewOff: true });
   });
 });
