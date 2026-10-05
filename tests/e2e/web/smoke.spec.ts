@@ -36,8 +36,7 @@ test('renders the round-two frame', async ({ page }) => {
 });
 
 test('renders the bar', async ({ page }) => {
-  // The brand is the team name; a fresh profile shows the store's default.
-  await expect(bar(page).getByRole('img', { name: 'Swarm Command' })).toBeVisible();
+  await expect(bar(page).getByRole('img', { name: 'The Hive' })).toBeVisible();
   for (const name of ['Home', 'Sessions', 'Work', 'Agents', 'PRs'] as const) {
     await expect(placeButton(page, name)).toBeVisible();
   }
