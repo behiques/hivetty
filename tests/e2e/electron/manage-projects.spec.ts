@@ -151,15 +151,15 @@ test('drag reorders the file and the left rail follows', async ({}, testInfo) =>
     // is the order the list shows, with no reload.
     await page.getByRole('button', { name: 'Close settings' }).click();
     await goToPlace(page, 'Sessions');
-    const railNames = await page
+    // By accessible name: the row's text now opens with its project key chip,
+    // which is aria-hidden so the button still announces the project first.
+    const railRows = page
       .getByRole('region', { name: 'Sessions list' })
-      .getByRole('button', { name: /^(alpha|bravo|charlie)/ })
-      .allInnerTexts();
-    expect(railNames.map((text) => text.split('\n')[0])).toEqual([
-      'bravo',
-      'charlie',
-      'alpha',
-    ]);
+      .getByRole('button', { name: /^(alpha|bravo|charlie)$/ });
+    await expect(railRows).toHaveCount(3);
+    for (const [i, name] of ['bravo', 'charlie', 'alpha'].entries()) {
+      await expect(railRows.nth(i)).toHaveAccessibleName(name);
+    }
   } finally {
     await app.close();
   }
