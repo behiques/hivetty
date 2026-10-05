@@ -15,8 +15,8 @@ const pr = (n: number, over: Partial<Pr> = {}): Pr => ({
   url: `https://github.com/acme/server/pull/${n}`, branch: `b${n}`, session: null,
   mergedAt: null, mine: true, updatedAt: '2026-10-03T08:00:00Z', ...over,
 });
-const row = (n: number, needsYou = false): HatcheryRow => ({
-  pr: pr(n),
+const row = (n: number, needsYou = false, state: Pr['state'] = 'open'): HatcheryRow => ({
+  pr: pr(n, { state }),
   hatch: { flap: needsYou ? 'SUMMONS' : 'BURROWED', tone: needsYou ? 'amber' : 'muted', github: 'Open', rank: needsYou ? 0 : 5, needsYou },
 });
 
@@ -53,6 +53,27 @@ describe('openPrRow, when the last PR leaves the sweep', () => {
     const gone = { owner: 'acme', repo: 'server', n: 1182 };
     expect(openPrRow([row(871), row(305)], gone, 1)?.pr.n).toBe(305);
     expect(openPrRow([row(871), row(305)], gone, 2)?.pr.n).toBe(871);
+  });
+});
+
+describe('openPrRow, with hatched PRs in the sweep', () => {
+  const merged = row(900, false, 'merged');
+
+  it('preloads the first draft or open PR, never a merged one', () => {
+    expect(openPrRow([merged, row(305, false, 'draft'), row(306)], null)?.pr.n).toBe(305);
+  });
+
+  it('is null with only merged PRs, so the stage shows the egg', () => {
+    expect(openPrRow([merged], null)).toBeNull();
+  });
+
+  it('drops a remembered PR once it merges and preloads the next open one', () => {
+    expect(openPrRow([merged, row(306)], { owner: 'acme', repo: 'server', n: 900 }, 0)?.pr.n).toBe(306);
+    expect(openPrRow([merged], { owner: 'acme', repo: 'server', n: 900 }, 0)).toBeNull();
+  });
+
+  it('still opens a merged PR the user clicked, from its sweep row', () => {
+    expect(openPrRow([merged, row(306)], { owner: 'acme', repo: 'server', n: 900 })).toBe(merged);
   });
 });
 

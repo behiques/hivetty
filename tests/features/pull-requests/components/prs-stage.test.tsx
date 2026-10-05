@@ -41,6 +41,12 @@ describe('PrsStage', () => {
     expect(screen.getByRole('heading', { name: 'The Hatchery is quiet' })).toBeInTheDocument();
   });
 
+  it('shows the empty Hatchery when only hatched (merged) PRs are left', () => {
+    useHiveStore.setState({ prs: [prRecord({ number: 12, state: 'merged', mergedAt: '2026-10-05T08:00:00Z' })] });
+    render(<PrsStage />);
+    expect(screen.getByRole('heading', { name: 'The Hatchery is quiet' })).toBeInTheDocument();
+  });
+
   it('asks for a pick while the sweep is loading', () => {
     useHiveStore.setState({ prs: [], prSource: { kind: 'loading' } });
     render(<PrsStage />);
