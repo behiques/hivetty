@@ -97,7 +97,7 @@ function CommentItem({
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex items-baseline gap-2 text-[12.5px]">
           <span className="font-medium text-ink">{comment.via?.agent ?? comment.author}</span>
-          {comment.via === undefined ? null : <span className="text-[11px] text-subtle">via the Hive</span>}
+          {comment.via === undefined ? null : <span className="text-[11px] text-subtle">via Hive TTY</span>}
           <span className="flex-1" />
           <span className="relative w-[120px] shrink-0 text-right">
             <time

@@ -67,9 +67,9 @@ describe('PrConversation', () => {
     expect(screen.getByText('2 comments · 1 review · 1 open thread')).toBeInTheDocument();
   });
 
-  it('shows a review acr wrote through the Hive as acr, with its verdict', () => {
+  it('shows a review acr wrote through Hive TTY as acr, with its verdict', () => {
     render(<PrConversation pr={fixturePr()} detail={detail} fixerOnIt={false} />);
-    expect(screen.getByText('via the Hive')).toBeInTheDocument();
+    expect(screen.getByText('via Hive TTY')).toBeInTheDocument();
     expect(screen.getByText('acr')).toBeInTheDocument();
     expect(screen.getByText('changes requested')).toHaveClass('text-amber');
   });
@@ -83,7 +83,7 @@ describe('PrConversation', () => {
     expect(items).toEqual(['review', 'thread', 'thread', 'comment', 'comment']);
   });
 
-  it("adds the Hive's events naming the PR on Everything", async () => {
+  it("adds Hive TTY's events naming the PR on Everything", async () => {
     render(<PrConversation pr={fixturePr()} detail={detail} fixerOnIt={false} />);
     expect(screen.queryByText(/pushed 2 commits/)).toBeNull();
     await userEvent.click(screen.getByRole('radio', { name: 'Everything' }));

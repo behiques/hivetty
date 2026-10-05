@@ -160,7 +160,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
         }
         description={
           phase === 'compose'
-            ? 'The Hive runs git in a terminal, so it can ask you for credentials'
+            ? 'Hive TTY runs git in a terminal, so it can ask you for credentials'
             : (targetPath ?? '')
         }
       />

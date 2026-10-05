@@ -60,7 +60,7 @@ export function ActivityBar() {
       aria-label="Places"
       className="flex w-[var(--cc-bar-w)] shrink-0 flex-col items-center gap-1 border-r border-border-soft bg-bg py-3"
     >
-      <span role="img" aria-label="The Hive" className="mb-2.5 text-amber">
+      <span role="img" aria-label="Hive TTY" className="mb-2.5 text-amber">
         <Hexagon size={22} weight="fill" aria-hidden />
       </span>
 

@@ -36,7 +36,7 @@ test('renders the round-two frame', async ({ page }) => {
 });
 
 test('renders the bar', async ({ page }) => {
-  await expect(bar(page).getByRole('img', { name: 'The Hive' })).toBeVisible();
+  await expect(bar(page).getByRole('img', { name: 'Hive TTY' })).toBeVisible();
   for (const name of ['Home', 'Sessions', 'Work', 'Agents', 'PRs'] as const) {
     await expect(placeButton(page, name)).toBeVisible();
   }

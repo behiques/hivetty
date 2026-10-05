@@ -72,10 +72,10 @@ describe('ActivityBar (HIVE-195)', () => {
     expect(useUiStore.getState().settings).toBe(true);
   });
 
-  it('names the glyph The Hive whatever the team is called', () => {
+  it('names the glyph Hive TTY whatever the team is called', () => {
     useAppearanceStore.setState({ teamName: 'Platform' });
     renderBar();
-    expect(screen.getByRole('img', { name: 'The Hive' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Hive TTY' })).toBeInTheDocument();
     expect(screen.queryByText('Platform')).not.toBeInTheDocument();
   });
 });

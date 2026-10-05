@@ -532,7 +532,7 @@ export const NOTIFICATION_KIND_SPECS: Record<
     source: 'app',
     label: 'When a new version is available',
     description:
-      'A newer release of The Hive has been published. Nothing happens until you say so.',
+      'A newer release of Hive TTY has been published. Nothing happens until you say so.',
     icon: 'ph-arrow-circle-up',
     tone: 'brand',
     lane: 'echo',
