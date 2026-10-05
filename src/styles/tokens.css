@@ -395,6 +395,9 @@ body[data-theme='light'] {
   --animate-cceggveinpulse: cceggveinpulse 2.333333s ease-in-out infinite;
   --animate-cceggcatch: cceggcatch 7s ease-in-out infinite;
   --animate-ccspore: ccspore 7s ease-out infinite;
+  --animate-cccombrim: cccombrim 9s ease-in-out infinite;
+  --animate-cccombfail: cccombfail 9s linear infinite;
+  --animate-cccombicon: cccombicon 9s ease-in-out infinite;
   --animate-cccreep: cccreep 7s ease-in-out infinite;
   /*
     An acted-on inbox card leaving the list (HIVE-93).

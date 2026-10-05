@@ -91,6 +91,7 @@ describe('AgentsStage with no agent (HIVE-211)', () => {
     render(<AgentsStage />);
 
     expect(screen.getByRole('heading', { name: 'No agents yet' })).toBeInTheDocument();
+    expect(document.querySelector('[data-glyph="comb"]')).not.toBeNull();
     expect(screen.getByText(/An agent is a headless Claude that Hive TTY wakes on the ledger or a schedule\./)).toBeInTheDocument();
     expect(screen.queryByText('Pick an agent')).toBeNull();
 

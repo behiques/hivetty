@@ -92,6 +92,7 @@ describe('GhSetupPage (HIVE-211)', () => {
     useHiveStore.setState({ prSource: { kind: 'failed', message: 'gh timed out' } });
     render(<GhSetupPage />);
     expect(screen.getByRole('heading', { name: "Couldn't read GitHub" })).toBeInTheDocument();
+    expect(document.querySelector('[data-glyph="comb"]')).not.toBeNull();
     expect(screen.getByText('gh timed out')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(refreshPrs).toHaveBeenCalled();

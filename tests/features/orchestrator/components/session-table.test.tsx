@@ -70,6 +70,13 @@ describe('SessionTable', () => {
       );
     });
 
+    it('centres the empty notice in the space below the header', () => {
+      render(<SessionTable />);
+
+      expect(screen.getByTestId('session-table')).toHaveClass('flex', 'flex-1', 'flex-col');
+      expect(screen.getByTestId('session-table-empty')).toHaveClass('flex-1', 'justify-center');
+    });
+
     it('keeps the column header, so the empty area reads as a table', () => {
       render(<SessionTable />);
 

@@ -362,6 +362,79 @@ body {
   }
 }
 
+/* The not-wired places' comb cell (`CombGlyph`): one 9s loop. The rim lights
+   green round the cell, stalls at two thirds, sputters red and goes dark; the
+   icon brightens with the charge and dims at the failure. */
+@keyframes cccombrim {
+  0%,
+  24% {
+    stroke-dasharray: 0 100;
+    opacity: 0;
+  }
+  26% {
+    opacity: 0.9;
+  }
+  48%,
+  52% {
+    stroke-dasharray: 68 100;
+    opacity: 0.9;
+  }
+  56% {
+    opacity: 0;
+  }
+  58% {
+    opacity: 0.6;
+  }
+  60%,
+  100% {
+    stroke-dasharray: 68 100;
+    opacity: 0;
+  }
+}
+
+@keyframes cccombfail {
+  0%,
+  53% {
+    opacity: 0;
+  }
+  54% {
+    opacity: 0.95;
+  }
+  56% {
+    opacity: 0.15;
+  }
+  58% {
+    opacity: 0.85;
+  }
+  61% {
+    opacity: 0.1;
+  }
+  63% {
+    opacity: 0.6;
+  }
+  75%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cccombicon {
+  0%,
+  25%,
+  100% {
+    opacity: 0.75;
+  }
+  48% {
+    opacity: 1;
+  }
+  56% {
+    opacity: 0.6;
+  }
+  75% {
+    opacity: 0.75;
+  }
+}
+
 /* Respect a user's reduced-motion preference — a pulsing dot is decoration,
    not information; the status is also carried by colour and by label text. */
 @media (prefers-reduced-motion: reduce) {
