@@ -14,8 +14,9 @@
  *   so the stored Jira and remote credentials are only readable under it.
  * - `productName` in `electron-builder.yml` matches it, and that names the
  *   bundle (`The Hive.app`), its executable, the dmg and zip the updater
- *   fetches, and the path a server's LaunchAgent runs. The Dock and Finder show
- *   the bundle's file name, so they keep saying "The Hive" until it changes.
+ *   fetches, and the path a server's LaunchAgent runs. Finder shows the bundle's
+ *   file name, so it keeps saying "The Hive" until it changes (the Dock and
+ *   Launchpad read `CFBundleName`/`CFBundleDisplayName`, so they say Hive TTY).
  *
  * See `docs/packaging-and-updates.md` ("The app's name") for what moving the
  * identity would take.

@@ -15,8 +15,8 @@
 appId: com.behiques.the-hive
 
 # The app's identity, not its display name: it names the bundle (`The Hive.app`),
-# its executable, the dmg and zip the updater fetches, and so the Dock and
-# Finder labels and the path a server's LaunchAgent runs. The name people read,
+# its executable, the dmg and zip the updater fetches, and so the Finder
+# label and the path a server's LaunchAgent runs. The name people read,
 # "Hive TTY", is set over it below as `CFBundleName` (`mac.extendInfo`) and in
 # `electron/shared/app-name.ts`. Changing this one is a migration, not a rename:
 # see "The app's name" in `docs/packaging-and-updates.md`.
@@ -77,8 +77,8 @@ mac:
   icon: resources/icon.icns
   # The name people read, over the identity `productName` keeps
   # (`electron/shared/app-name.ts`). `CFBundleName` is the menu bar's leftmost
-  # title, and the one place macOS takes a name from `Info.plist` rather than
-  # from the bundle's file name: the Dock and Finder still say "The Hive".
+  # title, and the Dock, Cmd-Tab and Launchpad read these keys too, so they are
+  # expected to say "Hive TTY"; Finder still says "The Hive" (the file name).
   # Neither key is part of the code signature's designated requirement, so
   # in-place updates are unaffected.
   extendInfo:

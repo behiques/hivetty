@@ -57,7 +57,7 @@ import { createWindow } from './window';
  * takes that from `CFBundleName` in the running bundle's `Info.plist`, and
  * under `pnpm desktop:dev` the running bundle is Electron's own — so dev shows
  * `Electron` no matter what any API says. The packaged app sets `CFBundleName`
- * properly through `productName` in `electron-builder.yml`, which is the real
+ * properly through `mac.extendInfo` in `electron-builder.yml`, which is the real
  * fix and the only honest one. Patching Electron's `Info.plist` in
  * `node_modules` would make dev *look* right while changing nothing about what
  * ships. See `docs/packaging-and-updates.md`.

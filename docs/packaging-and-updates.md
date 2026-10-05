@@ -206,7 +206,8 @@ submenu read **About the-hive**. Those are two different bugs.
 | Leftmost menu title | `CFBundleName` in the **running bundle's** `Info.plist` | `mac.extendInfo` in `electron-builder.yml`: **Hive TTY** |
 | `About …`, `Hide …`, `Quit …` | the menu template's labels | `APP_DISPLAY_NAME` (`electron/shared/app-name.ts`): **Hive TTY** |
 | About window, update dialogs, the server's tray | their own strings | `APP_DISPLAY_NAME`: **Hive TTY** |
-| Dock, Finder, Launchpad, the Applications folder | the bundle's **file name** | `productName`: **The Hive** |
+| Dock and Cmd-Tab while running, Launchpad | `CFBundleName` and `CFBundleDisplayName` (macOS prefers the display name where it has one) | `mac.extendInfo`: **Hive TTY**, not verified on hardware |
+| Finder, the Applications folder, the file on disk | the bundle's **file name** | `productName`: **The Hive** |
 
 The app has two names on purpose. **Hive TTY is what people read; The Hive is
 what the app is.** The identity is load-bearing:
@@ -219,14 +220,16 @@ what the app is.** The identity is load-bearing:
 - `productName` names the bundle, its executable, the `.dmg` and `.zip`, and
   the path a server's LaunchAgent runs (`/Applications/The Hive.app/Contents/MacOS/The Hive`).
 
-That is why the Dock still says The Hive: it reads the file name, and the file
-name is the identity. Putting Hive TTY in the Dock means changing `productName`,
-which is a migration rather than a rename:
+Finder and the Applications folder still say The Hive: they read the file name,
+and the file name is the identity. (The Dock and Launchpad read the `Info.plist`
+keys above, so they are expected to say Hive TTY; that has not been seen on a
+machine yet.) Putting Hive TTY in Finder means changing `productName`, which is
+a migration rather than a rename:
 
 - **Data.** Keep `app.setName` and pin `userData` to `The Hive`, or the app opens
   empty and every stored credential has to be entered again.
 - **Updates.** Squirrel.Mac installs a new version in place, at the old path, so
-  an existing install stays `The Hive.app` on disk (and in the Dock) until it is
+  an existing install stays `The Hive.app` on disk (and in Finder) until it is
   reinstalled; only fresh installs are `Hive TTY.app`. The `.zip` and `.dmg` names
   change, which `latest-mac.yml` carries, so the updater follows; the `appId`
   must not change, or in-place updating breaks (see the note on it in
