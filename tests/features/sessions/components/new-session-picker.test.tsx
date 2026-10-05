@@ -60,23 +60,25 @@ describe('NewSessionPicker', () => {
   });
 
   /**
-   * The ordinary picker leads with a spire (HIVE-93).
-   *
-   * The surface is cast twice on purpose, and this is the half that had no creature
-   * at all: the **first run** keeps its 120px hive as territory on a screen with
-   * nothing on it, and once projects exist the picker is a *lifecycle* surface —
-   * you are about to bring a session into being — which is the spire's register.
-   * `swarm-creature.tsx` documents both.
+   * The ordinary picker leads with the hive (HIVE-93; the spire until the Brood
+   * placement fix). The first run keeps its own 120px hive further down, so the
+   * surface still shows exactly one creature in either state.
    */
-  it('leads with a spire at the full-stage size', () => {
+  it('leads with the hive at the full-stage size', () => {
     render(<NewSessionPicker />);
 
     const img = document.querySelector('[data-creature]');
 
-    expect(img).toHaveAttribute('data-creature', 'spire');
+    expect(img).toHaveAttribute('data-creature', 'hive');
     // The quieter end of the documented 72–120 full-stage register: it sits above
     // a title rather than standing in for missing content.
     expect(img).toHaveStyle({ height: '96px' });
+  });
+
+  it('sets its title in the sans face, not a serif', () => {
+    render(<NewSessionPicker />);
+
+    expect(screen.getByRole('heading', { name: 'Start a new session' })).toHaveClass('font-sans');
   });
 
   it('focuses the search box on open', () => {

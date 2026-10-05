@@ -14,19 +14,23 @@ function openPr(
   last: PrPageRef | null,
   at: number,
 ): { row: HatcheryRow; index: number } | null {
-  const index = openRowIndex(rows.map(rowKey), last === null ? null : prKey(last.owner, last.repo, last.n), at);
+  // Only a draft or open PR preloads; a hatched one is shown only when clicked (`at` -1).
+  const live = rows.filter((row) => row.pr.state !== 'merged');
+  const lastKey = last === null ? null : prKey(last.owner, last.repo, last.n);
+  const index = openRowIndex(live.map(rowKey), lastKey, at);
   if (index === null) return null;
-  if (index >= 0) return { row: rows[index], index };
-  const kept = last?.row ?? rows[0];
-  return kept === undefined ? null : { row: kept, index: kept === rows[0] ? 0 : -1 };
+  if (index >= 0) return { row: live[index], index };
+  const kept = rows.find((row) => rowKey(row) === lastKey) ?? last?.row ?? live[0];
+  return kept === undefined ? null : { row: kept, index: kept === live[0] ? 0 : -1 };
 }
 
 /**
  * Which PR the PRs place shows (HIVE-205, spec D14): the one last opened while
- * it is still a row (or came from a search, carried on the ref), else the row
- * that came after it (`openRowIndex`), else the top row. SUMMONS sorts first in
+ * it is still a draft or open row (or was clicked, from the sweep or a search),
+ * else the open row that came after it (`openRowIndex`), else the top open row.
+ * Merged PRs never preload, so a sweep of only hatched PRs shows the egg. SUMMONS sorts first in
  * `useHatchery()`, so the top row is the first PR that needs you when one does.
- * `null` with no rows: the empty Hatchery. Derived on every read, so a PR
+ * `null` with no open rows: the empty Hatchery. Derived on every read, so a PR
  * leaving the list falls back with no action.
  */
 export function openPrRow(rows: readonly HatcheryRow[], last: PrPageRef | null, at = -1): HatcheryRow | null {
