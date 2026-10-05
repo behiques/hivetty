@@ -153,7 +153,7 @@ export function AgentRow({ id }: AgentRowProps) {
         aria-label={name}
         className={cn(
           'flex w-full gap-2.5 rounded-[10px] p-2 text-left',
-          current ? 'bg-panel-2' : 'hover:bg-hover',
+          current ? 'bg-active' : 'hover:bg-hover',
         )}
       >
         <AgentTile icon={entity.icon} tone={tone} live={live} size="sm" />

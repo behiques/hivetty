@@ -186,6 +186,7 @@ describe('AgentRow', () => {
     render(<AgentRow id="watcher" />);
 
     expect(screen.getByRole('button', { name: /^watcher/ })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: /^watcher/ })).toHaveClass('bg-active');
   });
 
   it('marks nothing while another agent’s page is open', () => {
