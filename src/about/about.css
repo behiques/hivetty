@@ -146,6 +146,9 @@ body {
 
 .wordmark .tty i {
   font-style: normal;
+  /* No room until typed: the cursor follows the keys, and would float right of HIVE. */
+  max-width: 0;
+  overflow: hidden;
   opacity: 0;
   animation: key-in 0s linear both;
 }
@@ -292,6 +295,7 @@ body {
 
 @keyframes key-in {
   to {
+    max-width: 1em;
     opacity: 1;
   }
 }
@@ -335,6 +339,7 @@ body {
   .build,
   .wordmark .tty i {
     animation: none;
+    max-width: none;
     opacity: 1;
   }
 
