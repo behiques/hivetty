@@ -849,7 +849,7 @@ export function SkillsSection() {
           button reads as a broken render.
         */}
         <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
-          <SwarmCreature creature="spire" size={120} />
+          <SwarmCreature creature="spire" size={120} className="mb-9" />
           <span className="text-[11.5px] text-muted">{phrase}</span>
           <span className="text-[11.5px] text-subtle">
             Write one and every session you start will have it.

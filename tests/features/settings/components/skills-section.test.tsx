@@ -204,6 +204,7 @@ describe('SkillsSection', () => {
     const creature = document.querySelector('[data-creature]');
     expect(creature).toHaveAttribute('data-creature', 'spire');
     expect(creature).toHaveStyle({ height: '120px' });
+    expect(creature).toHaveClass('mb-9');
   });
 
   it('imports a whole skill from the empty state, and shows why it could not', async () => {
