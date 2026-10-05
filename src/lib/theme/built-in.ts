@@ -37,8 +37,10 @@ export const BUILT_IN_THEME: HiveTheme = {
         brandFill: '#5e76d0', brandFillHover: '#4f6ac5',
         brandFillStrong: '#334fa9', onBrand: '#ffffff', dangerSolid: '#d3372f',
         onDanger: '#ffffff',
+        // No tissue ramp: like every other dark theme it is derived from `bg`,
+        // `chitin` and `ink` (`swarmPaletteOf`). The hand-picked one sat almost
+        // on the ground (body 1.23:1, lit 4.5:1) and the creatures disappeared.
         creep: '#5b3d8f', chitin: '#b9a7f0',
-        tissueDeep: '#0b0816', tissue: '#2c2346', tissueLit: '#8474c0',
         glowCore: '#e2ffee', ground: '#141128',
       },
       syntax: {
