@@ -1,11 +1,13 @@
-import { useEffect, useRef, type ComponentType } from 'react';
+import { useEffect, useRef, type ComponentType, type RefObject } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { RailHandle } from '@components/layout/rail-handle';
 import { AgentsPanel } from '@features/agents/components/agents-panel';
 import { SessionsPanel } from '@features/projects/components/sessions-panel';
 import { PrsPanel } from '@features/pull-requests/components/prs-panel';
 import { WorkPanel } from '@features/work/components/work-panel';
+import { useListPanelWidth, useSetListPanelWidth } from '@stores/appearance-store';
 import {
   useAgentsListed,
   usePrsListed,
@@ -44,8 +46,8 @@ const LABELS: Record<Place, string> = {
 };
 
 /**
- * Round two's one list panel: fixed at `--cc-list-w`, beside the stage, never
- * instead of it. Not resizable and no collapsed strip — closing is
+ * Round two's one list panel: `--cc-list-w` wide, beside the stage, never
+ * instead of it. Its seam drags the width; no collapsed strip — closing is
  * `panelOpen`.
  *
  * No list without items (HIVE-211): a place with nothing to list draws no
@@ -55,7 +57,7 @@ const LABELS: Record<Place, string> = {
  * Under 1,200px (HIVE-211) it overlays the stage instead of taking a column:
  * at the bar's edge, over a veil, and a click on the veil or Escape closes it.
  */
-export function ListPanel() {
+export function ListPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null> }) {
   const place = usePlace();
   const panelOpen = usePanelOpen();
   const Panel = PANELS[place];
@@ -79,6 +81,8 @@ export function ListPanel() {
 
   const narrow = useNarrow();
   const togglePanel = useTogglePanel();
+  const width = useListPanelWidth();
+  const setWidth = useSetListPanelWidth();
   useEffect(() => {
     if (!narrow || !panelOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -106,7 +110,14 @@ export function ListPanel() {
       </div>
     </section>
   );
-  if (!narrow) return panel;
+  if (!narrow) {
+    return (
+      <>
+        {panel}
+        <RailHandle rowRef={rowRef} rail="list" label="Resize the list panel" width={width} onWidth={setWidth} />
+      </>
+    );
+  }
 
   return (
     <>
