@@ -25,7 +25,7 @@ test('opens exactly one window, titled and visible', async ({ hive, page }) => {
   // One window by design (story 000).
   expect(window.count).toBe(1);
   expect(window.visible).toBe(true);
-  expect(window.title).toBe('The Hive');
+  expect(window.title).toBe('Hive');
 });
 
 test('renders the real app, not an empty shell', async ({ page }) => {
