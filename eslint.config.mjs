@@ -30,6 +30,7 @@ const FEATURE_SLICES = [
   'pull-requests',
   'sessions',
   'settings',
+  'whats-new',
   'work',
 ];
 

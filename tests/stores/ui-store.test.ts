@@ -950,3 +950,23 @@ describe('answeredHere (HIVE-218)', () => {
     expect(useUiStore.getState().answeredHere).toBe(before);
   });
 });
+
+describe('ui-store — What’s new', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  it('opens and closes the dialog', () => {
+    expect(useUiStore.getState().whatsNewOpen).toBe(false);
+    useUiStore.getState().setWhatsNewOpen(true);
+    expect(useUiStore.getState().whatsNewOpen).toBe(true);
+    useUiStore.getState().setWhatsNewOpen(false);
+    expect(useUiStore.getState().whatsNewOpen).toBe(false);
+  });
+
+  it('opening it from Settings closes Settings, so the card is not stacked under the overlay', () => {
+    useUiStore.getState().openSettings();
+    useUiStore.getState().setWhatsNewOpen(true);
+    expect(useUiStore.getState()).toMatchObject({ whatsNewOpen: true, settings: false });
+  });
+});

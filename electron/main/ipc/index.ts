@@ -318,6 +318,7 @@ import { onShutdown } from '../shutdown';
 import { createSkillsRuntime, type SkillsRuntime } from '../skills';
 import { readSessionPluginOverrides } from '../skills/available';
 import { installedPluginsFile, PLUGIN_DIR } from '../skills/paths';
+import { splashEnabled } from '../splash';
 import {
   checkForUpdatesInteractively,
   setUpdateNotificationSink,
@@ -3541,6 +3542,8 @@ export function registerIpcHandlers(
       // leaf that imports nothing and closes no cycle, and because the fact
       // it holds is the *process's*, not any one registration's.
       serving: isServerMode(),
+      // The process's own launch fact, like `serving`: no splash, no What's new.
+      splash: splashEnabled(),
       // Omitted rather than empty when nothing has run, so the field's presence
       // means something.
       ...(diagnostics.length > 0 ? { pty: diagnostics } : {}),
