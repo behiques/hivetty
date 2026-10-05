@@ -485,7 +485,7 @@ export function AdvancedSection() {
           <p className="text-[12.5px] text-subtle">Reading…</p>
         ) : (
           <div className="flex flex-col gap-1 rounded-[7px] border border-border-soft p-3">
-            <Fact label="The Hive" value={info.version} />
+            <Fact label="Hive TTY" value={info.version} />
             <Fact label="Electron" value={info.electron} />
             <Fact label="Chromium" value={info.chrome} />
             <Fact label="Node" value={info.node} />

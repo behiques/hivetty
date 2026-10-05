@@ -39,7 +39,7 @@ export function JiraSetupPage() {
           {failed ? (
             <Button onClick={() => void refresh()}>Retry</Button>
           ) : (
-            <Button onClick={connect}>Learn what the Hive reads</Button>
+            <Button onClick={connect}>Learn what Hive TTY reads</Button>
           )}
         </>
       }
