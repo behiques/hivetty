@@ -119,36 +119,29 @@ export function SwarmCreature({
    * Which one. The casting is a second channel, not decoration, so it is fixed
    * per surface rather than chosen per render:
    *
-   * - **Hive** — the header's brand mark, the overmind's empty fleet, the
-   *   picker's **first run**, the settings projects **and skills** cards, and
-   *   the explorer's empty repository. The app's own face, territory, and the
-   *   thing that leads the main screen. The header is the one that is not an
-   *   empty state at all, and it is cast this way for the plainest reason on
-   *   the list: it *is* the app's face (HIVE-100).
-   * - **Overlord** — the projects rail, and the inbox. It hovers and watches
-   *   without acting, which is what both of those states are.
-   * - **Spire** — work, pull requests, the editor with no file, and the
-   *   **ordinary picker**. Things with a lifecycle, caught mid-morph.
-   * - **Mutalisk** — agents, and a session booting. The unit that does the work,
-   *   holding the air until it is sent. It took the hydralisk's place when the
-   *   creatures became the Brood's (HIVE-221).
+   * - **Hive** — the overmind's empty fleet, the new-session picker (both
+   *   states), the settings projects **and skills** cards, and the explorer's
+   *   empty states. The app's own face, and territory.
+   * - **Overlord** — the projects rail. It hovers and watches without acting,
+   *   which is what that state is.
+   * - **Spire** — work, pull requests, and the editor with no file. Things with
+   *   a lifecycle, caught mid-morph.
+   * - **Mutalisk** — agents. The unit that does the work, holding the air until
+   *   it is sent. It took the hydralisk's place when the creatures became the
+   *   Brood's (HIVE-221).
+   * - **A session booting** is the one surface that draws, not casts: the boot
+   *   cover picks the overlord, the mutalisk or the spire once per mount. It
+   *   has no neighbour in that state for a different creature to clash with.
    *
    * That is every call site; a reviewer should be able to check any one of them
    * against this list and find it here.
    *
-   * ## The picker is cast twice, on purpose (HIVE-93)
+   * ## The picker's two states share one creature
    *
-   * Its two states are genuinely different surfaces. **First run** has no
-   * projects and nothing to do, so the hive stands in for the missing content as
-   * territory — the app's face on a screen that is otherwise empty. Once
-   * projects exist, the picker is a *lifecycle* surface: you are about to bring a
-   * session into being, which is the spire's register, and the creature is a mark
-   * above a title rather than a substitute for content. Only ever one of the two
-   * renders; see the condition in `new-session-picker.tsx`.
-   *
-   * This was a deliberate revision, not drift. An earlier version of this list
-   * assigned the picker to Hive outright and said so here, which stopped being
-   * true the moment the ordinary picker got its own sprite.
+   * **First run** has no projects, so a 120px hive stands in for the missing
+   * content. Once projects exist, a 96px hive sits above the title as a mark.
+   * Only ever one of the two renders; see the condition in
+   * `new-session-picker.tsx`.
    *
    * ## Skills is a hive, not a mutalisk (HIVE-96)
    *
@@ -162,7 +155,8 @@ export function SwarmCreature({
    *
    * A surface that picks a different creature than its neighbours in the same
    * state turns the channel back into noise, which is the whole reason this is
-   * a fixed prop and not a random draw like the phrase beneath it.
+   * a fixed prop and not a random draw like the phrase beneath it. The boot
+   * cover's draw happens at its call site, not here.
    */
   creature: Creature;
   /** Rendered height in px. The width follows the creature's own box. */
