@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -98,12 +98,9 @@ describe('SessionsProjectRow (HIVE-197)', () => {
     expect(screen.getByRole('button', { name: /^nova-web/ })).toContainElement(key);
   });
 
-  it('says "no sessions" when nothing is live', () => {
+  it('shows no label and no badge when nothing is live', () => {
     render(<SessionsProjectRow project={empty} />);
-    const none = within(screen.getByRole('button', { name: /^infra-terraform/ })).getByText('no sessions');
-    // It gives way to the hover actions.
-    expect(none.parentElement).toHaveClass('group-hover:invisible', 'group-has-[:focus-visible]:invisible');
-    expect(none.parentElement).not.toHaveClass('group-focus-within:invisible');
+    expect(screen.queryByText('no sessions')).toBeNull();
     expect(screen.queryByTitle(/live$/)).toBeNull();
   });
 });
@@ -122,6 +119,9 @@ describe('SessionsProjectRow, an unmapped project (HIVE-211 sweep, HIVE-197 row)
     render(<SessionsProjectRow project={ghost} />);
     const tag = screen.getByText('unmapped');
     expect(tag.getAttribute('title') ?? '').not.toBe('');
+    // It gives way to the hover actions.
+    expect(tag.parentElement).toHaveClass('group-hover:invisible', 'group-has-[:focus-visible]:invisible');
+    expect(tag.parentElement).not.toHaveClass('group-focus-within:invisible');
   });
 
   it('does not mark a mapped project', () => {
