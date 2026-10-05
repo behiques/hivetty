@@ -11,7 +11,10 @@ export interface LaneMark {
   shape: 'flap' | 'commit' | 'ci' | 'review' | 'comment' | 'hold';
   /** Utility classes for the mark's colour: from a fixed table in this file, never built from data. */
   tone: string;
-  /** Drawn inside a span only when it fits; beside a point mark always. */
+  /**
+   * Drawn inside a span only when it fits; beside a point mark only when it
+   * fits before the next one. Either way the tooltip still says it.
+   */
   word?: string;
   /** Tooltip lines: the first bold. Also the accessible name. */
   tip: string[];
@@ -61,6 +64,9 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
   const [ref, measured] = useMeasuredWidth();
   const laneWidth = Math.max(0, measured - GUTTER);
   const [hover, setHover] = useState<{ key: string; tip: string[]; left: string } | null>(null);
+  // Where each point's word has to end: the next mark along, or the lane's end.
+  const starts = marks.map((m) => m.from).sort((a, b) => a - b);
+  const room = (from: number) => ((starts.find((s) => s > from) ?? 1) - from) * laneWidth;
 
   return (
     <div ref={ref} className={cn('relative border-b border-border-soft', height === 40 ? 'h-10' : 'h-[52px]')}>
@@ -95,7 +101,7 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
           >
             {fits ? mark.word : null}
           </button>,
-          !span && mark.word !== undefined ? (
+          !span && mark.word !== undefined && room(mark.from) >= mark.word.length * 6.5 + 14 ? (
             <span
               key={`${mark.key}-word`}
               aria-hidden

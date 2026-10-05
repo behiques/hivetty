@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TimelineLane, type LaneMark } from '@features/pull-requests/components/timeline-lane';
 
@@ -10,11 +10,31 @@ const marks: LaneMark[] = [
 ];
 
 describe('TimelineLane', () => {
-  it('renders every mark as a labelled button and its point label', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('renders every mark as a labelled button', () => {
     render(<TimelineLane label="CI" marks={marks} />);
     expect(screen.getByRole('button', { name: 'Run #2204 · failed, integration, 9 min · on 7c21e0f' })).toBeTruthy();
-    expect(screen.getByText('Maria')).toBeTruthy();
     expect(screen.getByText('CI')).toBeTruthy();
+  });
+
+  it('draws a point\'s word only when it fits before the next mark; the tooltip carries it otherwise', () => {
+    // A 1130px lane: 1000px of axis past the 130px label column.
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1130);
+    const point = (key: string, from: number, word: string): LaneMark => ({
+      key, from, shape: 'review', tone: 'bg-subtle', word, tip: [word, '13:00'], onOpen: vi.fn(),
+    });
+    render(<TimelineLane label="Reviews" marks={[point('a', 0.01, 'tatre · commented'), point('b', 0.02, 'gru · commented'), point('c', 0.5, 'Shachee · approved')]} />);
+    expect(screen.queryByText('tatre · commented')).toBeNull();
+    expect(screen.getByText('gru · commented')).toBeTruthy();
+    expect(screen.getByText('Shachee · approved')).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /^tatre · commented/ }));
+    expect(screen.getByRole('tooltip').textContent).toContain('tatre · commented');
+  });
+
+  it('draws no point word before the lane is measured (happy-dom measures 0)', () => {
+    render(<TimelineLane label="Comments" marks={marks} />);
+    expect(screen.queryByText('Maria')).toBeNull();
   });
 
   it('carries a span\'s word for the fit check (happy-dom measures 0, so it is not drawn)', () => {
