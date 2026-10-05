@@ -140,7 +140,7 @@ export function ThreadCard({
         </div>
       ) : null}
       {replying ? (
-        <div className="flex flex-col gap-2 border-t border-border-soft px-2.5 py-2">
+        <div className="flex flex-col gap-2 border border-transparent border-t-border-soft px-2.5 py-2 focus-within:border-brand">
           <textarea
             rows={2}
             value={draft}

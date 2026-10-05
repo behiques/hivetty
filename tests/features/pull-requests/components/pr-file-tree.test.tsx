@@ -61,4 +61,9 @@ describe('PrFileTree', () => {
     render(<PrFileTree detail={{ ...detail, changedFiles: 240 }} selected={null} onSelect={vi.fn()} />);
     expect(screen.getByRole('link', { name: 'showing 4 · all on GitHub' })).toHaveAttribute('href', `${detail.url}/files`);
   });
+
+  it('shows focus on the filter with the brand border (HIVE-223)', () => {
+    render(<PrFileTree detail={detail} selected={null} onSelect={vi.fn()} />);
+    expect(screen.getByRole('textbox', { name: 'Filter files' })).toHaveClass('focus:border-brand');
+  });
 });

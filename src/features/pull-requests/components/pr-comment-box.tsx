@@ -33,7 +33,7 @@ export function PrCommentBox({ pr }: { pr: Pr }) {
   };
 
   return (
-    <div className="mt-2.5 flex flex-col gap-3 rounded-xl border border-border-soft bg-panel px-3.5 py-3">
+    <div className="mt-2.5 flex flex-col gap-3 rounded-xl border border-border-soft bg-panel px-3.5 py-3 focus-within:border-brand">
       <textarea
         rows={3}
         value={draft}

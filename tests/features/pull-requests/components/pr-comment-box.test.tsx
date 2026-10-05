@@ -53,4 +53,9 @@ describe('PrCommentBox', () => {
     expect(button).toHaveClass('text-on-brand', 'disabled:opacity-60');
     expect(button.className).not.toMatch(/disabled:text-subtle|\btext-ink\b/);
   });
+
+  it('shows focus on the comment box with the brand border (HIVE-223)', () => {
+    render(<PrCommentBox pr={fixturePr()} />);
+    expect(screen.getByRole('textbox').parentElement).toHaveClass('focus-within:border-brand');
+  });
 });

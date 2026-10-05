@@ -126,4 +126,10 @@ describe('ThreadCard writes (HIVE-207)', () => {
     expect(screen.queryByRole('textbox', { name: /Reply to/ })).toBeNull();
     expect(w.reply).not.toHaveBeenCalled();
   });
+
+  it('shows focus on the reply box with the brand border (HIVE-223)', async () => {
+    render(<ThreadCard thread={prThread()} fixerOnIt={false} writes={writes()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    expect(screen.getByRole('textbox', { name: /^Reply to / }).parentElement).toHaveClass('focus-within:border-brand');
+  });
 });
