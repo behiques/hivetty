@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChecksGraph, GraphNode } from '@/lib/checks-graph';
 import { ChecksGraphView } from '@features/pull-requests/components/checks-graph-view';
@@ -27,6 +27,9 @@ const graph: ChecksGraph = {
 };
 
 beforeEach(() => { reduced.value = false; });
+afterEach(() => vi.restoreAllMocks());
+
+const zoomed = (container: HTMLElement) => container.querySelector<HTMLElement>('.origin-top-left')!;
 
 describe('ChecksGraphView', () => {
   it('draws every node state with its name and time', () => {
@@ -66,5 +69,36 @@ describe('ChecksGraphView', () => {
     expect(onJob).toHaveBeenCalledWith(12);
     expect(onJob).toHaveBeenCalledTimes(1);
     expect(onExpand).toHaveBeenCalledWith('unit');
+  });
+
+  it('opens at 100%, steps in and out by a quarter within 25–200%, and the percentage resets', () => {
+    const { container } = render(<ChecksGraphView graph={graph} onJob={() => {}} onExpand={() => {}} />);
+    const reset = screen.getByRole('button', { name: 'Reset zoom' });
+    expect(reset).toHaveTextContent('100%');
+    expect(zoomed(container).style.transform).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(reset).toHaveTextContent('75%');
+    expect(zoomed(container).style.transform).toBe('scale(0.75)');
+    // The sizer shrinks with it, so the scroller scrolls only what is drawn.
+    expect(zoomed(container).parentElement!.style.width).toBe('720px');
+    for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(reset).toHaveTextContent('25%');
+    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeDisabled();
+    fireEvent.click(reset);
+    for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(reset).toHaveTextContent('200%');
+    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeDisabled();
+  });
+
+  it('fits a wide graph to the width it has, and never blows a narrow one up', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(480);
+    const { container, rerender } = render(<ChecksGraphView graph={graph} onJob={() => {}} onExpand={() => {}} />);
+    const fit = screen.getByRole('button', { name: 'Fit to width' });
+    fireEvent.click(fit);
+    expect(fit).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('50%');
+    expect(zoomed(container).style.transform).toBe('scale(0.5)');
+    rerender(<ChecksGraphView graph={{ ...graph, width: 300 }} onJob={() => {}} onExpand={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('100%');
   });
 });

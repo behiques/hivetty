@@ -48,7 +48,9 @@ describe('ShipTrack', () => {
     expect(now).toHaveTextContent('1h 20m');
     expect(within(band).getByText('Self review').closest('li')).toHaveAttribute('data-state', 'done');
     expect(within(band).getByText('Approval').closest('li')).toHaveAttribute('data-state', 'next');
-    expect(within(band).getByText(/fixer · 1h 20m · On it: adding the registered-agent check/)).toBeInTheDocument();
+    const note = within(band).getByText(/fixer · 1h 20m · On it: adding the registered-agent check/);
+    // It truncates on a narrow stage, so its whole line is on hover.
+    expect(note).toHaveAttribute('title', note.textContent);
   });
 
   it('draws the short track for a PR nobody holds, with no now line', () => {
