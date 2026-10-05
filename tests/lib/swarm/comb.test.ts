@@ -285,8 +285,7 @@ const PALETTE: SwarmPalette = {
   creepClear: 'c-creep-clear', chitin: 'c-chitin', carapace: 'c-carapace',
   tissueDeep: 'c-tissue-deep', tissue: 'c-tissue', tissueLit: 'c-tissue-lit',
   glowCore: 'c-glow-core', ground: 'c-ground', membrane: 'c-membrane', maw: 'c-maw',
-  gum: 'c-gum', stain: 'c-stain', glint: 'c-glint', mineralDeep: 'c-mineral-deep',
-  mineral: 'c-mineral', mineralLit: 'c-mineral-lit', mat: 'c-mat',
+  gum: 'c-gum', stain: 'c-stain', glint: 'c-glint',
 };
 
 describe('drawComb', () => {

@@ -1,9 +1,9 @@
 import { useCallback, useRef } from 'react';
 
+import { BroodEgg } from '@components/ui/brood-egg';
 import { type CanvasPaint, useCanvasLoop } from '@hooks/use-canvas-loop';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
 import { BLEED, type BroodCreature, paintCreature } from '@lib/swarm/brood';
-import { HIVE } from '@lib/swarm/hive';
 import { HOVER } from '@lib/swarm/hover';
 import { OVERLORD } from '@lib/swarm/overlord';
 import { SPIRE } from '@lib/swarm/spire';
@@ -52,9 +52,12 @@ import { useSwarmPalette } from '@stores/appearance-store';
  * still.
  */
 
-export type Creature = 'hive' | 'overlord' | 'spire' | 'mutalisk';
+export type Creature = 'egg' | 'overlord' | 'spire' | 'mutalisk';
 
-const CANVAS: Record<Creature, BroodCreature> = { hive: HIVE, overlord: OVERLORD, spire: SPIRE, mutalisk: HOVER };
+const CANVAS: Record<Exclude<Creature, 'egg'>, BroodCreature> = { overlord: OVERLORD, spire: SPIRE, mutalisk: HOVER };
+
+/** The egg's crop of the Hatchery's viewBox: the shell and its pool, so it fills a creature's box. */
+const EGG_BOX = [-80, -96, 160, 150] as const;
 
 /** A Brood creature on its own canvas, `size` tall and as wide as its box. */
 function BroodCanvas({
@@ -63,7 +66,7 @@ function BroodCanvas({
   size,
   reduced,
 }: {
-  creature: Creature;
+  creature: Exclude<Creature, 'egg'>;
   brood: BroodCreature;
   size: number;
   reduced: boolean;
@@ -119,40 +122,28 @@ export function SwarmCreature({
    * Which one. The casting is a second channel, not decoration, so it is fixed
    * per surface rather than chosen per render:
    *
-   * - **Hive** — the overmind's empty fleet, the new-session picker (both
-   *   states), the settings projects card, and the explorer's empty states.
-   *   The app's own face, and territory.
-   * - **Overlord** — the projects rail, and the settings skills card at 120px.
-   *   It hovers and watches without acting, which is what both states are.
-   * - **Spire** — work, pull requests, and the editor with no file. Things with
-   *   a lifecycle, caught mid-morph.
-   * - **Mutalisk** — agents. The unit that does the work, holding the air until
-   *   it is sent. It took the hydralisk's place when the creatures became the
-   *   Brood's (HIVE-221).
-   * - **A session booting** is the one surface that draws, not casts: the boot
-   *   cover picks the overlord, the mutalisk or the spire once per mount. It
-   *   has no neighbour in that state for a different creature to clash with.
+   * - **Overlord** — the overmind's empty fleet and the settings projects card
+   *   at 120px, the projects rail, and the explorer with no session open. It
+   *   hovers and watches without acting, which is what those states are.
+   * - **Spire** — work, pull requests, the editor with no file, and the settings
+   *   skills card at 120px. Things with a lifecycle, caught mid-morph.
+   * - **Mutalisk** — agents, and the settings agents card at 120px. The unit
+   *   that does the work, holding the air until it is sent.
+   * - **Egg** — an empty repository in the explorer: nothing has hatched there
+   *   yet. The Hatchery's own SVG egg (`BroodEgg`), cropped to a creature's box.
+   * - **Drawn, not cast**: the boot cover picks the overlord, the mutalisk or the
+   *   spire once per mount, and the new-session picker picks the egg, the spire,
+   *   the overlord or the mutalisk once per opening, at 120px. Neither has a
+   *   neighbour in that state for a different creature to clash with.
    *
    * That is every call site; a reviewer should be able to check any one of them
-   * against this list and find it here.
-   *
-   * ## The picker's two states share one creature
-   *
-   * With **no project yet** (first run, or after the last is removed), a 120px
-   * hive stands in for the missing content, with no title above it. Once projects exist, a 96px hive sits above the title as a mark.
-   * Only ever one of the two renders; see the condition in
-   * `new-session-picker.tsx`.
-   *
-   * ## Skills is an overlord
-   *
-   * HIVE-96 cast it as a hive, to match the projects card beside it. It is the
-   * overlord now, at the boot cover's 120px, by the user's call: a skill is
-   * knowledge the swarm watches over, not territory.
+   * against this list and find it here. The hive left the casting when every
+   * surface it held moved to one of these four.
    *
    * A surface that picks a different creature than its neighbours in the same
    * state turns the channel back into noise, which is the whole reason this is
    * a fixed prop and not a random draw like the phrase beneath it. The boot
-   * cover's draw happens at its call site, not here.
+   * cover's and the picker's draws happen at their call sites, not here.
    */
   creature: Creature;
   /** Rendered height in px. The width follows the creature's own box. */
@@ -160,5 +151,18 @@ export function SwarmCreature({
 }) {
   const reduced = useReducedMotion();
 
+  if (creature === 'egg') {
+    // The Hatchery's own SVG egg; it handles reduced motion itself.
+    return (
+      <span
+        aria-hidden="true"
+        data-creature="egg"
+        style={{ display: 'inline-block', height: size, width: (size * EGG_BOX[2]) / EGG_BOX[3] }}
+        className="select-none"
+      >
+        <BroodEgg className="block h-full w-full" viewBox={EGG_BOX.join(' ')} />
+      </span>
+    );
+  }
   return <BroodCanvas creature={creature} brood={CANVAS[creature]} size={size} reduced={reduced} />;
 }

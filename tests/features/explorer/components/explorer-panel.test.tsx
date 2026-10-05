@@ -129,6 +129,7 @@ describe('ExplorerPanel — degraded states', () => {
     render(<ExplorerPanel />);
 
     expect(screen.getByText(/No session open/i)).toBeInTheDocument();
+    expect(document.querySelector('[data-creature]')).toHaveAttribute('data-creature', 'overlord');
     // The distinction that matters: projects *are* mapped, so this must not be
     // the setup message that sends the user to Settings.
     expect(screen.queryByText(/No projects mapped/i)).not.toBeInTheDocument();
@@ -195,14 +196,14 @@ describe('ExplorerPanel — degraded states', () => {
    * The browser e2e cannot reach this state — the explorer needs the desktop
    * fs bridge — so the creature is pinned here instead.
    */
-  it('leads the empty repository with a hive at rail size', async () => {
+  it('leads the empty repository with an egg at rail size', async () => {
     readDir.mockResolvedValue({ ok: true, value: [] });
     render(<ExplorerPanel />);
 
     await screen.findByText(/This repository is empty/);
     const creature = document.querySelector('[data-creature]');
 
-    expect(creature).toHaveAttribute('data-creature', 'hive');
+    expect(creature).toHaveAttribute('data-creature', 'egg');
     expect(creature).toHaveStyle({ height: '44px' });
   });
 });

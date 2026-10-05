@@ -187,10 +187,6 @@ const PALETTE: SwarmPalette = {
   gum: '#3a1b33',
   stain: '#4a3b2a',
   glint: '#ffffff',
-  mineralDeep: '#1e1b2a',
-  mineral: '#5c546c',
-  mineralLit: '#a8a0b4',
-  mat: '#2a1f44',
 };
 
 describe('drawGlobe', () => {

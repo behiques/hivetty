@@ -196,13 +196,13 @@ describe('SkillsSection', () => {
     ).toBeInTheDocument();
   });
 
-  it('holds the overlord at 120px in the empty state', () => {
+  it('holds the spire at 120px in the empty state', () => {
     setSkillsForTest(snapshot());
 
     render(<SkillsSection />);
 
     const creature = document.querySelector('[data-creature]');
-    expect(creature).toHaveAttribute('data-creature', 'overlord');
+    expect(creature).toHaveAttribute('data-creature', 'spire');
     expect(creature).toHaveStyle({ height: '120px' });
   });
 
