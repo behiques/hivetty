@@ -9,19 +9,19 @@ import { coloursUsed, recordingContext } from '@tests/support/canvas-2d';
 
 import { LOG_SCHEDULE } from '@/splash/chamber';
 import {
-  cellAt,
-  cellLight,
+  beatsNear,
+  chamberAt,
   drawGlobe,
   FLYER_COUNT,
   flyerAt,
   flyerStart,
-  GLOBE_CELLS,
-  GLOBE_R,
+  GLOBE_CHAMBERS,
   GLOBE_STILL_T,
-  heartAt,
-  LIGHT_AT,
+  lightAt,
   ORBIT_AT,
   orbitPoint,
+  pulseAt,
+  seedAt,
 } from '@/splash/globe';
 
 vi.mock('@lib/swarm/muta', async (importOriginal) => ({
@@ -29,66 +29,94 @@ vi.mock('@lib/swarm/muta', async (importOriginal) => ({
   drawMuta: vi.fn(),
 }));
 
-describe('the globe cells', () => {
-  it('are ninety points on the unit sphere', () => {
-    expect(GLOBE_CELLS).toHaveLength(90);
-    for (const { x, y, z } of GLOBE_CELLS) expect(Math.hypot(x, y, z)).toBeCloseTo(1, 9);
-  });
+const gap = (a: readonly number[], b: readonly number[]): number => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
 
-  it('scatter within ±1.2 and start within half a second of each other', () => {
-    for (const { sx, sy, d } of GLOBE_CELLS) {
-      expect(Math.abs(sx)).toBeLessThanOrEqual(1.2);
-      expect(Math.abs(sy)).toBeLessThanOrEqual(1.2);
-      expect(d).toBeGreaterThanOrEqual(0);
-      expect(d).toBeLessThan(0.5);
+describe('the chambers', () => {
+  it('are a hundred, spread through a shell of the volume rather than laid on a sphere', () => {
+    expect(GLOBE_CHAMBERS).toHaveLength(100);
+    const depths = GLOBE_CHAMBERS.map((c) => Math.hypot(...c.p));
+    for (const d of depths) {
+      expect(d).toBeGreaterThanOrEqual(0.62);
+      expect(d).toBeLessThanOrEqual(0.98);
     }
+    expect(Math.max(...depths) - Math.min(...depths)).toBeGreaterThan(0.25);
   });
 
-  it('light 4 green, 3 violet and 2 amber, as the log lines say', () => {
-    const count = (kind: string) => GLOBE_CELLS.filter((c) => c.kind === kind).length;
-    expect([count('green'), count('violet'), count('amber')]).toEqual([4, 3, 2]);
+  it('keep a gap between every two, so the volume reads through empty space', () => {
+    GLOBE_CHAMBERS.forEach((a, i) =>
+      GLOBE_CHAMBERS.slice(i + 1).forEach((b) => expect(gap(a.p, b.p)).toBeGreaterThanOrEqual(0.25)),
+    );
   });
 
-  it('light each colour at its log line', () => {
-    expect(LIGHT_AT).toEqual({ green: LOG_SCHEDULE[0], violet: LOG_SCHEDULE[2], amber: LOG_SCHEDULE[3] });
-    for (const cell of GLOBE_CELLS.filter((c) => c.kind !== null)) {
-      const at = LIGHT_AT[cell.kind!];
-      expect(cellLight(cell, at - 0.01)).toBe(0);
-      expect(cellLight(cell, at + 0.4)).toBe(1);
+  it('turn at more than one pace, the inner layers faster', () => {
+    const inner = GLOBE_CHAMBERS.filter((c) => Math.hypot(...c.p) < 0.74).map((c) => c.w);
+    const outer = GLOBE_CHAMBERS.filter((c) => Math.hypot(...c.p) >= 0.86).map((c) => c.w);
+    expect(Math.min(...inner)).toBeGreaterThan(Math.max(...outer));
+    const c = GLOBE_CHAMBERS[20]!;
+    expect(chamberAt(c, 4).v[0]).not.toBeCloseTo(chamberAt(c, 5).v[0], 3);
+  });
+
+  it('light 4 green and 2 amber, as the log lines say, each on its line or once grown', () => {
+    const of = (kind: string) => GLOBE_CHAMBERS.filter((c) => c.kind === kind);
+    expect(of('green')).toHaveLength(4);
+    expect(of('amber')).toHaveLength(2);
+    for (const c of of('green')) expect(c.lit).toBeGreaterThanOrEqual(LOG_SCHEDULE[0]!);
+    for (const c of of('amber')) expect(c.lit).toBeGreaterThanOrEqual(LOG_SCHEDULE[3]!);
+    for (const c of [...of('green'), ...of('amber')]) expect(c.sealed && c.lit > c.grow).toBe(true);
+  });
+
+  it('give each flyer its own sealed chamber, none of them a log line’s', () => {
+    const hatcheries = GLOBE_CHAMBERS.filter((c) => c.hatch !== null);
+    expect(hatcheries).toHaveLength(FLYER_COUNT);
+    for (const c of hatcheries) expect(c.kind === null && c.sealed).toBe(true);
+  });
+
+  it('all grow out of the seed by 2.2s, and the heartbeat reaches every one', () => {
+    for (const c of GLOBE_CHAMBERS) {
+      expect(c.grow).toBeGreaterThanOrEqual(0.5);
+      expect(c.grow + 0.55).toBeLessThanOrEqual(2.4);
+      expect(Number.isFinite(c.arrives)).toBe(true);
     }
-  });
-
-  it('never lights an unlit cell', () => {
-    expect(cellLight(GLOBE_CELLS.find((c) => c.kind === null)!, 10)).toBe(0);
-  });
-
-  it('drift in from the scatter and close into the globe', () => {
-    const cell = GLOBE_CELLS[45]!;
-    expect(cellAt(cell, 0.3).formed).toBe(0);
-    expect(cellAt(cell, 0.3).X).toBeCloseTo(cell.sx * 2.2 * GLOBE_R, 9);
-    const formed = cellAt(cell, 2.2);
-    expect(formed.formed).toBe(1);
-    for (const c of GLOBE_CELLS) {
-      const p = cellAt(c, 3);
-      expect(Math.hypot(p.X, p.Y)).toBeLessThanOrEqual(GLOBE_R + 1e-9);
-      expect(p.depth).toBeGreaterThanOrEqual(0);
-      expect(p.depth).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it('turns: the same cell is somewhere else a second later', () => {
-    const cell = GLOBE_CELLS[20]!;
-    expect(cellAt(cell, 4).X).not.toBeCloseTo(cellAt(cell, 5).X, 3);
   });
 });
 
-describe('the orbit', () => {
+describe('the seed', () => {
+  it('rises out of the creep to the centre, swells, and is used up', () => {
+    expect(seedAt(0).alpha).toBe(0);
+    expect(seedAt(0.35).y).toBeGreaterThan(1);
+    expect(seedAt(1.1).y).toBeCloseTo(0, 9);
+    expect(seedAt(1.4).r).toBeGreaterThan(seedAt(0.5).r);
+    expect(seedAt(2.6).alpha).toBe(0);
+  });
+});
+
+describe('the heartbeat', () => {
+  it('first beats when the cluster comes online, strongest then', () => {
+    expect(pulseAt(ORBIT_AT - 0.3)).toBeLessThan(0.01);
+    expect(pulseAt(ORBIT_AT + 0.02)).toBeGreaterThan(0.9);
+    expect(lightAt(ORBIT_AT - 0.1, 0)).toBe(0);
+    expect(lightAt(ORBIT_AT + 0.14, 0)).toBeGreaterThan(lightAt(ORBIT_AT + 0.14 + 0.5, 0.5));
+  });
+
+  it('keeps beating softly for as long as About stays open', () => {
+    const late = 4.75 + 2.45 * 200;
+    expect(beatsNear(late).some(([tb]) => tb === late)).toBe(true);
+    expect(pulseAt(late)).toBeCloseTo(0.45, 2);
+    expect(pulseAt(late + 1.2)).toBeLessThan(0.01);
+  });
+
+  it('reaches a chamber later the further it is from the active ones', () => {
+    expect(lightAt(ORBIT_AT + 0.14, 0)).toBeGreaterThan(lightAt(ORBIT_AT + 0.14, 0.3));
+  });
+});
+
+describe('the ring', () => {
   it('is in front at π/2 and behind at 3π/2', () => {
     expect(orbitPoint(Math.PI / 2)[2]).toBeGreaterThan(0);
     expect(orbitPoint((3 * Math.PI) / 2)[2]).toBeLessThan(0);
   });
 
-  it('draws at "hive cluster online"', () => {
+  it('lights at "hive cluster online"', () => {
     expect(ORBIT_AT).toBe(LOG_SCHEDULE[4]);
   });
 });
@@ -99,12 +127,16 @@ describe('the flyers', () => {
     for (let i = 0; i < FLYER_COUNT; i++) expect(flyerStart(i)).toBeCloseTo(2.63 + 0.16 * i, 9);
   });
 
-  it('appear at the centre and climb to their slot in 0.75s', () => {
+  it('tear out of their own chamber and climb to their slot in 0.75s', () => {
     for (let i = 0; i < FLYER_COUNT; i++) {
+      const home = GLOBE_CHAMBERS.find((c) => c.hatch === flyerStart(i))!;
+      const { v } = chamberAt(home, flyerStart(i));
+      const k = 1 / (1 - v[2] * 0.16);
       const born = flyerAt(i, flyerStart(i));
-      expect(born.x).toBeCloseTo(0, 9);
-      expect(born.y).toBeCloseTo(0, 9);
+      expect(born.x).toBeCloseTo(v[0] * 136 * k, 6);
+      expect(born.y).toBeCloseTo(v[1] * 136 * k, 6);
       expect(born.alpha).toBe(0);
+      expect(born.grown).toBe(0);
       expect(born.climbing).toBe(true);
 
       const slot = orbitPoint(-Math.PI / 2 + (i * 2 * Math.PI) / 7);
@@ -116,10 +148,13 @@ describe('the flyers', () => {
     }
   });
 
-  it('circle the orbit once landed', () => {
+  it('circle the ring once landed, behind the comb on its far half', () => {
     const a = flyerAt(0, 4);
     const b = flyerAt(0, 5);
     expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(1);
+    const far = flyerAt(0, flyerStart(0) + 0.75);
+    expect(far.z).toBeLessThan(0);
+    expect(far.depth).toBeLessThan(-1);
   });
 
   it('are all out by the still the splash holds under reduced motion', () => {
@@ -128,63 +163,62 @@ describe('the flyers', () => {
   });
 });
 
-describe('the heart', () => {
-  it('is dark before 2.43s and after 4.95s, and glows between', () => {
-    expect(heartAt(2.42)).toBe(0);
-    expect(heartAt(3.5)).toBeGreaterThan(0.99);
-    expect(heartAt(4.95)).toBe(0);
-    expect(heartAt(6)).toBe(0);
-  });
-});
-
 const PALETTE: SwarmPalette = {
-  bg: 'c-bg',
-  panel2: 'c-panel2',
-  ink: 'c-ink',
-  muted: 'c-muted',
-  subtle: 'c-subtle',
-  brand: 'c-brand',
-  green: 'c-green',
-  amber: 'c-amber',
-  red: 'c-red',
-  creep: 'c-creep',
-  creepClear: 'c-creep-clear',
-  chitin: 'c-chitin',
-  carapace: 'c-carapace',
-  tissueDeep: 'c-tissue-deep',
-  tissue: 'c-tissue',
-  tissueLit: 'c-tissue-lit',
-  glowCore: 'c-glow-core',
-  ground: 'c-ground',
-  membrane: 'c-membrane',
-  maw: 'c-maw',
-  gum: 'c-gum',
-  stain: 'c-stain',
-  glint: 'c-glint',
-  mineralDeep: 'c-mineral-deep',
-  mineral: 'c-mineral',
-  mineralLit: 'c-mineral-lit',
-  mat: 'c-mat',
+  bg: '#10152a',
+  panel2: '#121731',
+  ink: '#e9effc',
+  muted: '#98a3cc',
+  subtle: '#6b779f',
+  brand: '#8fa7f2',
+  green: '#74b79c',
+  amber: '#ffac47',
+  red: '#ff8d85',
+  creep: '#5b3d8f',
+  creepClear: '#5b3d8f00',
+  chitin: '#b9a7f0',
+  carapace: '#2c2347',
+  tissueDeep: '#0b0816',
+  tissue: '#2c2346',
+  tissueLit: '#8474c0',
+  glowCore: '#e2ffee',
+  ground: '#141128',
+  membrane: '#6b2d5c',
+  maw: '#0b0816',
+  gum: '#3a1b33',
+  stain: '#4a3b2a',
+  glint: '#ffffff',
+  mineralDeep: '#1e1b2a',
+  mineral: '#5c546c',
+  mineralLit: '#a8a0b4',
+  mat: '#2a1f44',
 };
 
 describe('drawGlobe', () => {
-  const draw = (t: number) => {
+  const draw = (t: number, palette = PALETTE) => {
     vi.mocked(drawMuta).mockClear();
     const { ctx, calls } = recordingContext();
-    drawGlobe(ctx, t, PALETTE);
+    drawGlobe(ctx, t, palette);
     return { ctx, calls, count: (op: string) => calls.filter((c) => c.op === op).length };
   };
 
-  it('draws all ninety cells, and no creature, while the globe forms', () => {
+  it('draws no chamber and no creature before the seed has budded', () => {
     const { count } = draw(0.2);
-    expect(count('closePath')).toBe(90);
-    expect(count('ellipse')).toBe(0);
+    expect(count('closePath')).toBe(0);
     expect(drawMuta).not.toHaveBeenCalled();
   });
 
-  it('draws both halves of the orbit once it is online', () => {
+  it('draws every chamber once the colony has formed, and strokes nothing round the volume', () => {
+    const { calls } = draw(3.2);
+    expect(calls.filter((c) => c.op === 'closePath').length).toBeGreaterThanOrEqual(GLOBE_CHAMBERS.length * 2);
+    // Every arc stroked is a spore or a pore; the volume itself is never outlined.
+    calls.forEach((c, i) => {
+      if (c.op === 'arc' && calls[i + 1]?.op === 'stroke') expect(c.args[2] as number).toBeLessThan(30);
+    });
+  });
+
+  it('lights the ring of spores only once it is online', () => {
     expect(draw(2.2).count('ellipse')).toBe(0);
-    expect(draw(3).count('ellipse')).toBe(2);
+    expect(draw(3).count('ellipse')).toBeGreaterThan(0);
   });
 
   it('draws all seven flyers at the still, each on its own warmed spine', () => {
@@ -198,7 +232,7 @@ describe('drawGlobe', () => {
       expect(scale).toBeGreaterThanOrEqual(0.08);
       expect(scale).toBeLessThanOrEqual(0.13);
       expect(Number.isFinite(turn)).toBe(true);
-      expect(tone).toMatchObject({ dark: expect.any(Boolean), lo: expect.any(Array) });
+      expect(tone).toMatchObject({ dark: true, lo: expect.any(Array) });
     }
   });
 
@@ -219,18 +253,29 @@ describe('drawGlobe', () => {
     expect(vi.mocked(drawMuta).mock.calls.map(([, spine]) => spineNodes(spine))).toEqual(first);
   });
 
-  it('releases the flyers one at a time', () => {
+  it('releases the flyers one at a time, small as they leave their chamber', () => {
     draw(flyerStart(2) + 0.01);
     expect(drawMuta).toHaveBeenCalledTimes(3);
+    const scales = vi.mocked(drawMuta).mock.calls.map((call) => call[5]);
+    expect(Math.min(...scales)).toBeLessThan(0.03);
   });
 
-  it('paints only with palette colours, and puts the context back', () => {
-    const { calls, ctx, count } = draw(3.2);
-    const allowed = new Set(Object.values(PALETTE));
-    for (const colour of coloursUsed(calls)) expect(allowed.has(colour as string)).toBe(true);
-    for (const stop of calls.filter((c) => c.op === 'addColorStop')) expect(allowed.has(stop.args[1] as string)).toBe(true);
-    expect(count('save')).toBe(count('restore'));
-    expect(ctx.globalAlpha).toBe(1);
+  it('glows additively on the dark stage and lays its glow over a light one', () => {
+    const modes = (palette: SwarmPalette) =>
+      draw(3.2, palette).calls.filter((c) => c.op === 'set:globalCompositeOperation').map((c) => c.args[0]);
+    expect(modes(PALETTE)).toContain('lighter');
+    expect(modes({ ...PALETTE, bg: '#fdfdfb' })).not.toContain('lighter');
+  });
+
+  it('paints every colour from the tone, as rgba strings, and puts the context back', () => {
+    for (const t of [0.8, 2.4, 3.2, GLOBE_STILL_T]) {
+      const { calls, count } = draw(t);
+      const colours = [...coloursUsed(calls), ...calls.filter((c) => c.op === 'addColorStop').map((c) => c.args[1])];
+      expect(colours.length).toBeGreaterThan(0);
+      for (const c of colours) expect(c).toMatch(/^rgba\(\d+,\d+,\d+,[-\d.e]+\)$/);
+      // Every alpha and composite change is made inside a save, so the restore puts it back.
+      expect(count('save')).toBe(count('restore'));
+    }
   });
 
   it('holds no colour literal', () => {

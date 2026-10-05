@@ -48,7 +48,7 @@ test.describe('the cold-start splash', () => {
 
       await test.step('it is the chamber, at the size both processes agree on', async () => {
         await expect(splash.locator('.chamber')).toBeVisible();
-        await expect(splash.locator('.wordmark')).toHaveText(/THE\s*HIVE/);
+        await expect(splash.locator('.wordmark')).toHaveText(/HIVE\s*tty/);
         await expect(splash.locator('.log li')).toHaveCount(5);
         await expect(splash.locator('.log li.online')).toHaveText('hive cluster online');
 

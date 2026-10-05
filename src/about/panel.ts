@@ -26,8 +26,18 @@ export const WORDMARK_STEP = 0.042;
  * a letter added to the markup would then animate at zero and arrive first.
  */
 export function scheduleWordmark(root: ParentNode): void {
-  root.querySelectorAll<HTMLElement>('.wordmark span').forEach((glyph, i) => {
+  const glyphs = root.querySelectorAll<HTMLElement>('.wordmark span');
+  glyphs.forEach((glyph, i) => {
     glyph.style.animationDelay = `${WORDMARK_START + i * WORDMARK_STEP}s`;
+  });
+  // "Hive TTY", as on the splash: a cursor after HIVE, then `tty` typed in. About
+  // has no log to wait for, so it types as soon as the cursor has shown.
+  const cursorAt = WORDMARK_START + (glyphs.length - 1) * WORDMARK_STEP + 0.3;
+  root.querySelectorAll<HTMLElement>('.wordmark .cursor').forEach((cursor) => {
+    cursor.style.animationDelay = `${cursorAt}s, ${cursorAt}s`;
+  });
+  root.querySelectorAll<HTMLElement>('.wordmark .tty i').forEach((key, i) => {
+    key.style.animationDelay = `${cursorAt + 0.45 + i * 0.09}s`;
   });
 }
 

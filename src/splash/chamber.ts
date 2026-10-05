@@ -18,6 +18,15 @@ export const WORDMARK_STEP = 0.045;
 export const LOG_SCHEDULE = [1.05, 1.35, 1.62, 1.92, 2.28];
 
 /**
+ * The wordmark is "Hive TTY": HIVE assembles, a cursor waits after it, and on
+ * "hive cluster online" `tty` types itself in, a key every `TYPE_STEP`. The
+ * hive wakes, then the terminal attaches.
+ */
+export const TYPE_STEP = 0.09;
+/** How long after HIVE's last letter lands the cursor shows. */
+const CURSOR_AFTER = 0.35;
+
+/**
  * Stagger the wordmark and the log off one clock, so they cannot drift.
  *
  * In script rather than in the stylesheet because the alternative is ten
@@ -25,8 +34,17 @@ export const LOG_SCHEDULE = [1.05, 1.35, 1.62, 1.92, 2.28];
  * markup would then animate at zero and arrive first.
  */
 export function scheduleCopy(root: ParentNode): void {
-  root.querySelectorAll<HTMLElement>('.wordmark span').forEach((glyph, i) => {
+  const glyphs = root.querySelectorAll<HTMLElement>('.wordmark span');
+  glyphs.forEach((glyph, i) => {
     glyph.style.animationDelay = `${WORDMARK_START + i * WORDMARK_STEP}s`;
+  });
+  root.querySelectorAll<HTMLElement>('.wordmark .tty i').forEach((key, i) => {
+    key.style.animationDelay = `${LOG_SCHEDULE[4]! + i * TYPE_STEP}s`;
+  });
+  // Two animations, one delay each: it appears, then blinks from the same moment.
+  const cursorAt = WORDMARK_START + (glyphs.length - 1) * WORDMARK_STEP + CURSOR_AFTER;
+  root.querySelectorAll<HTMLElement>('.wordmark .cursor').forEach((cursor) => {
+    cursor.style.animationDelay = `${cursorAt}s, ${cursorAt}s`;
   });
   root.querySelectorAll<HTMLElement>('.log li').forEach((line, i) => {
     // A line past the end of the schedule holds with the last one rather than
