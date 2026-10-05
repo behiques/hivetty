@@ -200,10 +200,10 @@ describe('ExplorerPanel — degraded states', () => {
     render(<ExplorerPanel />);
 
     await screen.findByText(/This repository is empty/);
-    const img = screen.getByRole('presentation', { hidden: true });
+    const creature = document.querySelector('[data-creature]');
 
-    expect(img).toHaveAttribute('data-creature', 'hive');
-    expect(img).toHaveStyle({ height: '44px' });
+    expect(creature).toHaveAttribute('data-creature', 'hive');
+    expect(creature).toHaveStyle({ height: '44px' });
   });
 });
 

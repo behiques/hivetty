@@ -73,14 +73,14 @@ describe('EmptyState', () => {
       </EmptyState>,
     );
 
-    const img = screen.getByRole('presentation', { hidden: true });
+    const creature = document.querySelector('[data-creature]');
 
-    expect(img).toHaveAttribute('data-creature', 'overlord');
+    expect(creature).toHaveAttribute('data-creature', 'overlord');
     /**
-     * The size is the whole argument for allowing a sprite in a 320px rail at
-     * all, so it is asserted rather than left to a call site.
+     * The size is the whole argument for allowing a creature in a 320px rail
+     * at all, so it is asserted rather than left to a call site.
      */
-    expect(img).toHaveStyle({ height: '44px' });
+    expect(creature).toHaveStyle({ height: '44px' });
   });
 
   it('takes the flavour line without a creature', () => {

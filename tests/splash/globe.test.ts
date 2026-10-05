@@ -161,6 +161,10 @@ const PALETTE: SwarmPalette = {
   gum: 'c-gum',
   stain: 'c-stain',
   glint: 'c-glint',
+  mineralDeep: 'c-mineral-deep',
+  mineral: 'c-mineral',
+  mineralLit: 'c-mineral-lit',
+  mat: 'c-mat',
 };
 
 describe('drawGlobe', () => {

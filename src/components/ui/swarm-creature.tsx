@@ -3,38 +3,34 @@ import { useCallback, useRef } from 'react';
 import { type CanvasPaint, useCanvasLoop } from '@hooks/use-canvas-loop';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
 import { type BroodCreature, paintCreature } from '@lib/swarm/brood';
+import { HIVE } from '@lib/swarm/hive';
 import { HOVER } from '@lib/swarm/hover';
+import { OVERLORD } from '@lib/swarm/overlord';
 import { SPIRE } from '@lib/swarm/spire';
 import { toneOf } from '@lib/swarm/tone';
 import { useSwarmPalette } from '@stores/appearance-store';
-
-import hiveStill from './swarm/hive-still.webp';
-import hiveAnim from './swarm/hive.webp';
-import overlordStill from './swarm/overlord-still.webp';
-import overlordAnim from './swarm/overlord.webp';
 
 /**
  * A small breathing creature, for the surfaces that have nothing else on them.
  *
  * ## Where this is allowed, and at what size
  *
- * Three registers, and the size is what separates them:
+ * Two registers, and the size is what separates them:
  *
  * - **Full-stage surfaces at 72–120 px** — the picker's first run, the dormant
  *   orchestrator, the editor with no file, the settings card. Those own the
  *   whole centre and have nothing to compete with.
  * - **Rails at 44 px** — small enough to read as a mark rather than an
  *   illustration.
- * - **The header at 40 px** (HIVE-100) — the brand mark beside the wordmark,
- *   and the only call site that is *never* an empty state. It is the one place
- *   the sprite is given a lit ground rather than the app's: at this size on
- *   `--cc-bg` the creature still loses its silhouette, so the splash's
- *   blurred pool goes behind it.
+ *
+ * The header's 40 px brand mark (HIVE-100) was a third, and the only one that
+ * was never an empty state; the header went in HIVE-213 and the brand is the
+ * Phosphor hexagon now.
  *
  * The rails were text-only when this shipped, on the argument that a decorative
  * empty state in a 320 px column beside a live terminal takes more attention
  * than the thing it is apologising for. That argument is about *size*, not about
- * whether an image may appear at all: at 44 px the creature occupies less height
+ * whether a creature may appear at all: at 44 px the creature occupies less height
  * than the two lines of copy beneath it, and the copy is still what the eye
  * lands on. Anything larger in a rail is the thing the original argument
  * correctly rules out.
@@ -43,29 +39,22 @@ import overlordAnim from './swarm/overlord.webp';
  *
  * The creatures are the Brood's (HIVE-221): drawn every frame from the theme's
  * own colours, so a light theme or an imported one gets a creature that belongs
- * to it, where a sprite was painted once in one palette. Each is a pure drawing
+ * to it, where the WebP sprites they replaced were painted once in one palette. Each is a pure drawing
  * in `src/lib/swarm/` on its own loop; this component only sizes the canvas to
- * the creature's box and clocks it. The hive and the overlord are still WebP
- * sprites in a plain `<img>` until they are ported.
+ * the creature's box and clocks it.
  *
  * ## Motion
  *
  * The canvas animates only while it is on screen and the document is visible
  * (`useCanvasLoop`), so a creature in a hidden pane costs nothing. Under
  * `prefers-reduced-motion` it paints the creature's `rest` frame once and
- * schedules no frame at all; a sprite, which ignores the preference (see
- * `use-reduced-motion`), is handed a single-frame file instead. Either way the
- * creature is still there and simply holds still.
+ * schedules no frame at all. The creature is still there and simply holds
+ * still.
  */
 
-const SPRITES = {
-  hive: { animated: hiveAnim, still: hiveStill },
-  overlord: { animated: overlordAnim, still: overlordStill },
-} as const;
-
-const CANVAS: Partial<Record<Creature, BroodCreature>> = { spire: SPIRE, mutalisk: HOVER };
-
 export type Creature = 'hive' | 'overlord' | 'spire' | 'mutalisk';
+
+const CANVAS: Record<Creature, BroodCreature> = { hive: HIVE, overlord: OVERLORD, spire: SPIRE, mutalisk: HOVER };
 
 /** A Brood creature on its own canvas, `size` tall and as wide as its box. */
 function BroodCanvas({
@@ -92,9 +81,11 @@ function BroodCanvas({
     <canvas
       ref={ref}
       /**
-       * Decorative, as the sprite below: the flavour line beneath it says the
-       * same thing. `aria-hidden` alone hides it; a canvas has no implicit role
-       * to strip, and jsx-a11y refuses `presentation` on one.
+       * Decorative in the strict sense: the flavour line beneath it is real
+       * text and says the same thing, and announcing the creature too would
+       * make a screen reader read the state twice. `aria-hidden` alone hides
+       * it; a canvas has no implicit role to strip, and jsx-a11y refuses
+       * `presentation` on one.
        */
       aria-hidden="true"
       data-creature={creature}
@@ -135,7 +126,7 @@ export function SwarmCreature({
    * projects and nothing to do, so the hive stands in for the missing content as
    * territory — the app's face on a screen that is otherwise empty. Once
    * projects exist, the picker is a *lifecycle* surface: you are about to bring a
-   * session into being, which is the spire's register, and the sprite is a mark
+   * session into being, which is the spire's register, and the creature is a mark
    * above a title rather than a substitute for content. Only ever one of the two
    * renders; see the condition in `new-session-picker.tsx`.
    *
@@ -158,27 +149,10 @@ export function SwarmCreature({
    * a fixed prop and not a random draw like the phrase beneath it.
    */
   creature: Creature;
-  /** Rendered height in px. The width follows the sprite's own ratio. */
+  /** Rendered height in px. The width follows the creature's own box. */
   size?: number;
 }) {
   const reduced = useReducedMotion();
-  const brood = CANVAS[creature];
-  if (brood) return <BroodCanvas creature={creature} brood={brood} size={size} reduced={reduced} />;
-  const sprite = SPRITES[creature as keyof typeof SPRITES];
 
-  return (
-    <img
-      /**
-       * Decorative in the strict sense: the flavour line beneath it is real
-       * text and says the same thing. Announcing the creature too would make a
-       * screen reader read the state twice.
-       */
-      aria-hidden="true"
-      alt=""
-      data-creature={creature}
-      src={reduced ? sprite.still : sprite.animated}
-      style={{ height: size }}
-      className="w-auto select-none"
-    />
-  );
+  return <BroodCanvas creature={creature} brood={CANVAS[creature]} size={size} reduced={reduced} />;
 }
