@@ -157,7 +157,13 @@ export function EmptyState({
       }
     >
       {creature === undefined ? null : (
-        <div className="px-1 pb-0.5">
+        /*
+          Room for what the creature draws past its box (HIVE-222): the rail's
+          scroller clips at its own edge, and at 44px a mutalisk's wingtips
+          reach about 8px past the box at the sides and a spire's ring about
+          4px above it. The canvas's bleed beyond that is transparent.
+        */
+        <div className="pt-1 pr-1 pb-0.5 pl-2">
           <SwarmCreature creature={creature} size={RAIL_CREATURE_SIZE} />
         </div>
       )}

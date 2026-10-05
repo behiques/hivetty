@@ -27,8 +27,19 @@ export interface BroodCreature {
 }
 
 /**
+ * How far a creature's canvas reaches past its box, as a share of the box on
+ * each side (HIVE-222). Rings, glow, creep and wingtips are drawn up to 15% past
+ * the box; on a canvas cut to the box they ended in a hard edge and the haze
+ * showed the canvas as a square. At 0.3 no creature has a pixel above 1/255
+ * alpha at the canvas edge over its whole loop, so nothing is ever clipped.
+ */
+export const BLEED = 0.3;
+
+/**
  * Clear the canvas and draw `c` fitted, centred, into `w`×`h` css pixels at
- * `dpr` device pixels each. The artifact's `paint()`, lines 1821–1828.
+ * `dpr` device pixels each. The artifact's `paint()`, lines 1821–1828. With
+ * `pad`, the box is fitted to the canvas less `pad` of the box on every side,
+ * so the creature keeps the scale of its laid-out box and has air around it.
  */
 export function paintCreature(
   ctx: CanvasRenderingContext2D,
@@ -38,10 +49,11 @@ export function paintCreature(
   h: number,
   dpr: number,
   T: Tone,
+  pad = 0,
 ): void {
   if (!w || !h) return;
   const [bx, by, bw, bh] = c.box;
-  const s = Math.min(w / bw, h / bh);
+  const s = Math.min(w / (bw * (1 + 2 * pad)), h / (bh * (1 + 2 * pad)));
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, Math.round(w * dpr), Math.round(h * dpr));
   ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * ((w - bw * s) / 2 - bx * s), dpr * ((h - bh * s) / 2 - by * s));

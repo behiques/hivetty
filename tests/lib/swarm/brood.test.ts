@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { paintCreature, type BroodCreature } from '@lib/swarm/brood';
+import { BLEED, paintCreature, type BroodCreature } from '@lib/swarm/brood';
 import { toneOf } from '@lib/swarm/tone';
 import { BUILT_IN_THEME } from '@lib/theme/built-in';
 import { swarmPaletteOf } from '@lib/theme/colour';
@@ -43,6 +43,18 @@ describe('paintCreature', () => {
     const c = fake();
     paintCreature(ctx, c, 0, 50, 200, 1, T);
     expect(c.draw.mock.calls[0]![2]).toBe(0.5);
+  });
+
+  it('leaves room on every side when asked to, at the scale of the box alone (HIVE-222)', () => {
+    const { ctx, calls } = recordingContext();
+    const c = fake();
+    // The box gets 1/(1 + 2 * pad) of the canvas, centred: glow and creep drawn past it have air to fade in.
+    paintCreature(ctx, c, 0, 160, 64, 1, T, BLEED);
+    const s = Math.min(160 / (100 * (1 + 2 * BLEED)), 64 / (40 * (1 + 2 * BLEED)));
+    expect(c.draw.mock.calls[0]![2]).toBeCloseTo(s);
+    const [, , , , ex, ey] = calls[2]!.args as number[];
+    expect(ex).toBeCloseTo(80);
+    expect(ey).toBeCloseTo(32);
   });
 
   it('draws nothing on a canvas with no size', () => {

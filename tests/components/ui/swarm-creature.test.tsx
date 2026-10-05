@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import * as brood from '@lib/swarm/brood';
+import { BLEED } from '@lib/swarm/brood';
 import { HIVE } from '@lib/swarm/hive';
 import { HOVER } from '@lib/swarm/hover';
 import { OVERLORD } from '@lib/swarm/overlord';
@@ -95,10 +96,17 @@ describe('SwarmCreature', () => {
     stubMatchMedia(false);
     const { container } = render(<SwarmCreature creature={creature} size={72} />);
 
-    const canvas = container.querySelector('[data-creature]')!;
-    expect(canvas.tagName).toBe('CANVAS');
+    const width = (72 * drawing.box[2]) / drawing.box[3];
+    expect(container.querySelector('[data-creature]')).toHaveStyle({ height: '72px', width: `${width}px` });
     expect(container.querySelector('img')).toBeNull();
-    expect(canvas).toHaveStyle({ height: '72px', width: `${(72 * drawing.box[2]) / drawing.box[3]}px` });
+    // The canvas bleeds past the laid-out box so nothing drawn past it is cut off (HIVE-222).
+    expect(container.querySelector('[data-creature] canvas')).toHaveStyle({
+      height: `${72 * (1 + 2 * BLEED)}px`,
+      width: `${width * (1 + 2 * BLEED)}px`,
+      left: `${-width * BLEED}px`,
+      top: `${-72 * BLEED}px`,
+      pointerEvents: 'none',
+    });
   });
 
   it.each([
@@ -120,20 +128,20 @@ describe('SwarmCreature', () => {
       stubMatchMedia(false);
       const { container } = render(<SwarmCreature creature="spire" size={96} />);
 
-      const canvas = container.querySelector('[data-creature]')!;
-      expect(canvas.tagName).toBe('CANVAS');
-      expect(canvas).toHaveAttribute('data-creature', 'spire');
-      expect(canvas).toHaveAttribute('aria-hidden', 'true');
-      expect(canvas).toHaveStyle({ height: '96px', width: `${(96 * SPIRE.box[2]) / SPIRE.box[3]}px` });
+      const creature = container.querySelector('[data-creature]')!;
+      expect(creature).toHaveAttribute('data-creature', 'spire');
+      expect(creature).toHaveAttribute('aria-hidden', 'true');
+      expect(creature).toHaveStyle({ height: '96px', width: `${(96 * SPIRE.box[2]) / SPIRE.box[3]}px` });
+      expect(creature.querySelector('canvas')).not.toBeNull();
     });
 
     it('draws the mutalisk on a canvas at its own aspect', () => {
       stubMatchMedia(false);
       const { container } = render(<SwarmCreature creature="mutalisk" size={120} />);
 
-      const canvas = container.querySelector('[data-creature]')!;
-      expect(canvas).toHaveAttribute('data-creature', 'mutalisk');
-      expect(canvas).toHaveStyle({ height: '120px', width: `${(120 * HOVER.box[2]) / HOVER.box[3]}px` });
+      const creature = container.querySelector('[data-creature]')!;
+      expect(creature).toHaveAttribute('data-creature', 'mutalisk');
+      expect(creature).toHaveStyle({ height: '120px', width: `${(120 * HOVER.box[2]) / HOVER.box[3]}px` });
     });
 
     it('animates only once it is on screen', () => {
