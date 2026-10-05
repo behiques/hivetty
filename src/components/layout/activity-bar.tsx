@@ -60,13 +60,13 @@ export function ActivityBar() {
       aria-label="Places"
       className="flex w-[var(--cc-bar-w)] shrink-0 flex-col items-center gap-1 border-r border-border-soft bg-bg py-3"
     >
-      {/* The dock icon, from `public/` (its script writes it off the same master); `BASE_URL` because the app is served from `./` under file://. */}
+      {/* The dock icon's plates without its tile (`public/app-mark.png`, from the icon script); `BASE_URL` because the app is served from `./` under file://. */}
       <img
-        src={`${import.meta.env.BASE_URL}apple-touch-icon.png`}
+        src={`${import.meta.env.BASE_URL}app-mark.png`}
         alt="Hive TTY"
         width={28}
         height={28}
-        className="mb-2.5 size-7 rounded-[7px]"
+        className="mb-2.5 size-7"
       />
 
       {PLACES.map(({ id, label, icon: PlaceIcon }) => {
