@@ -104,15 +104,16 @@ describe('AgentEditor', () => {
     expect(screen.getByRole('textbox', { name: 'Agent source' })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: 'Agent editor view' })).toHaveClass('@min-[900px]:hidden');
     expect(screen.getByRole('slider', { name: 'Resize the form and the source' }).parentElement).toHaveClass(
-      '@min-[900px]:grid-cols-[minmax(460px,var(--agent-form-w))_1px_minmax(320px,1fr)]',
+      '@min-[900px]:grid-cols-[minmax(460px,var(--agent-form-w))_12px_minmax(320px,1fr)]',
     );
   });
 
-  it('puts a resize seam between Form and Source, wide only', () => {
+  it('puts a resize seam between Form and Source, wide only, drawn as the rails’ grip gutter', () => {
     setup();
 
     const seam = screen.getByRole('slider', { name: 'Resize the form and the source' });
-    expect(seam).toHaveClass('hidden', '@min-[900px]:block');
+    expect(seam).toHaveClass('hidden', '@min-[900px]:block', 'w-3', 'bg-bg');
+    expect(seam.querySelectorAll('.rounded-full')).toHaveLength(3);
   });
 
   it('in tabs layout, always shows Form | Source and never the seam', async () => {
@@ -136,12 +137,12 @@ describe('AgentEditor', () => {
     fireEvent.pointerDown(seam);
     fireEvent.pointerMove(window, { clientX: 100 });
     fireEvent.pointerUp(window);
-    expect(useAppearanceStore.getState().agentSplitRatio).toBeCloseTo(FORM_MIN_PX / 1000);
+    expect(useAppearanceStore.getState().agentSplitRatio).toBeCloseTo((FORM_MIN_PX + 6) / 1000);
 
     fireEvent.pointerDown(seam);
     fireEvent.pointerMove(window, { clientX: 950 });
     fireEvent.pointerUp(window);
-    expect(useAppearanceStore.getState().agentSplitRatio).toBeCloseTo(1 - SOURCE_MIN_PX / 1000);
+    expect(useAppearanceStore.getState().agentSplitRatio).toBeCloseTo(1 - (SOURCE_MIN_PX + 6) / 1000);
 
     fireEvent.doubleClick(seam);
     expect(useAppearanceStore.getState().agentSplitRatio).toBe(DEFAULT_AGENT_SPLIT_RATIO);
