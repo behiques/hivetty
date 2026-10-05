@@ -62,7 +62,7 @@ describe('NewSessionPicker', () => {
   /**
    * The ordinary picker leads with a spire (HIVE-93).
    *
-   * The surface is cast twice on purpose, and this is the half that had no sprite
+   * The surface is cast twice on purpose, and this is the half that had no creature
    * at all: the **first run** keeps its 120px hive as territory on a screen with
    * nothing on it, and once projects exist the picker is a *lifecycle* surface —
    * you are about to bring a session into being — which is the spire's register.
@@ -636,7 +636,7 @@ describe('NewSessionPicker · unmapped projects', () => {
    *
    * The condition guarding the header spire is the whole of this: two creatures
    * stacked in one dialog reads as a bug rather than as atmosphere. The surface
-   * has two states and each gets exactly one sprite — hive as territory when
+   * has two states and each gets exactly one creature — hive as territory when
    * there is nothing to pick, spire as lifecycle once there is.
    */
   it('shows the hive hero alone on first run, with no second creature', () => {

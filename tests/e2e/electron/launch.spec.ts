@@ -1,3 +1,4 @@
+import { expectCreatureDrawn } from '../fixtures/creature';
 import { goToOvermind } from '../fixtures/places';
 
 import { expect, test } from './fixtures/hive-app';
@@ -49,16 +50,12 @@ test('shows no white flash — the window paints the app background', async ({
   expect(background.toLowerCase()).toBe('#10152a');
 });
 
-test('loads its assets from disk — no broken images', async ({ page }) => {
-  // A root-relative asset URL resolves against the FILESYSTEM root under
-  // file://, which 404s silently as a broken image (story 083).
-  // The creature is the asset round two shows on an empty fleet.
+test('draws the empty fleet\'s creature on its canvas', async ({ page }) => {
+  // The creature is what round two shows on an empty fleet. It was a WebP,
+  // where a root-relative URL 404s silently under file:// (story 083); it is
+  // drawn now (HIVE-221), so what can break is a canvas that never paints.
   await goToOvermind(page);
-  const mark = page.getByTestId('session-table-empty').locator('[data-creature]').first();
-  await expect(mark).toBeVisible();
-
-  const width = await mark.evaluate((img: HTMLImageElement) => img.naturalWidth);
-  expect(width).toBeGreaterThan(0);
+  await expectCreatureDrawn(page.getByTestId('session-table-empty').locator('[data-creature]').first());
 });
 
 test('is the desktop target, so it shows no demo chip', async ({ page }) => {
