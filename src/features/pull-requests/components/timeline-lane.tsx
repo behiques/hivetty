@@ -63,7 +63,7 @@ export function useMeasuredWidth(): [(el: HTMLElement | null) => void, number] {
 export function TimelineLane({ label, marks, height = 52 }: { label: string; marks: LaneMark[]; height?: 40 | 52 }) {
   const [ref, measured] = useMeasuredWidth();
   const laneWidth = Math.max(0, measured - GUTTER);
-  const [hover, setHover] = useState<{ key: string; tip: string[]; left: string } | null>(null);
+  const [hover, setHover] = useState<{ key: string; tip: string[]; left: string; from: number } | null>(null);
   // Where each point's word has to end: the next mark along, or the lane's end.
   const starts = marks.map((m) => m.from).sort((a, b) => a - b);
   const room = (from: number) => ((starts.find((s) => s > from) ?? 1) - from) * laneWidth;
@@ -76,7 +76,7 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
         const left = axisLeft(mark.from);
         const fits =
           span && mark.word !== undefined && ((mark.to ?? mark.from) - mark.from) * laneWidth >= mark.word.length * 7 + 16;
-        const show = () => setHover({ key: mark.key, tip: mark.tip, left });
+        const show = () => setHover({ key: mark.key, tip: mark.tip, left, from: mark.from });
         const hide = () => setHover(null);
         return [
           <button
@@ -113,10 +113,19 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
           ) : null,
         ];
       })}
+      {/*
+        Below the lane, never above: the first lane (the flap band) sits at the
+        top of the stage's scroller, which clips anything above it under the
+        ship track. A mark in the right half anchors the tip's right edge, so
+        it does not run off the stage's side either.
+      */}
       {hover === null ? null : (
         <div
           role="tooltip"
-          className="pointer-events-none absolute bottom-full z-10 mb-1 flex flex-col gap-0.5 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 text-[11.5px] whitespace-nowrap text-muted shadow-lg"
+          className={cn(
+            'pointer-events-none absolute top-full z-10 -mt-2 flex flex-col gap-0.5 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 text-[11.5px] whitespace-nowrap text-muted shadow-lg',
+            hover.from > 0.5 && '-translate-x-full',
+          )}
           style={{ left: hover.left }}
         >
           {hover.tip.map((line, i) => (

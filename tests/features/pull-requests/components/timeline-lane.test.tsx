@@ -58,4 +58,13 @@ describe('TimelineLane', () => {
     fireEvent.click(run);
     expect(marks[0]!.onOpen).toHaveBeenCalledTimes(1);
   });
+
+  it('opens the tip below the lane, so the top lane\'s is not clipped under the ship track; past the middle it hangs left', () => {
+    render(<TimelineLane label="Flap" marks={[...marks, { key: 'f1', from: 0.8, to: 0.9, shape: 'flap', tone: 'bg-amber', word: 'SUMMONS', tip: ['Summons'], onOpen: vi.fn() }]} />);
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /^Comment · Maria/ }));
+    expect(screen.getByRole('tooltip')).toHaveClass('top-full');
+    expect(screen.getByRole('tooltip')).not.toHaveClass('-translate-x-full');
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Summons' }));
+    expect(screen.getByRole('tooltip')).toHaveClass('top-full', '-translate-x-full');
+  });
 });
