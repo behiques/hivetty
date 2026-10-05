@@ -186,6 +186,19 @@ describe('AgentsSection', () => {
       expect(useUiStore.getState().agentPage).toBeNull();
     });
 
+    it('remounts for New agent even from an agent named new', async () => {
+      stub([agent('new')]);
+      render(<AgentsSection />);
+
+      await userEvent.click(await screen.findByRole('button', { name: /^new/ }));
+      await userEvent.click(await screen.findByRole('tab', { name: 'Source' }));
+      await userEvent.click(screen.getByRole('button', { name: '+ New agent' }));
+
+      // A fresh editor opens on Form; one reused from the agent named new would stay on Source.
+      expect(await screen.findByText('not saved yet')).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Form' })).toHaveAttribute('aria-selected', 'true');
+    });
+
     it('New agent from the empty state does the same', async () => {
       stub([]);
       render(<AgentsSection />);

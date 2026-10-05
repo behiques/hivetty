@@ -178,7 +178,7 @@ export function AgentsSection() {
         ) : (
           <div className="flex min-h-0 flex-col overflow-hidden rounded-[7px] border border-border">
             <AgentDefinition
-              key={open.name ?? 'new'}
+              key={open.name ?? '+new'}
               name={open.name}
               notice={null}
               layout="tabs"
