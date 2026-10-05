@@ -30,7 +30,7 @@ describe('EmptyHatchery', () => {
   it('says the Hatchery is quiet and what comes next', () => {
     render(<EmptyHatchery />);
     expect(screen.getByRole('heading', { name: 'The Hatchery is quiet' })).toBeInTheDocument();
-    expect(screen.getByText(/No pull request is open, in draft, or merged in the last 24 hours\./)).toBeInTheDocument();
+    expect(screen.getByText(/No pull request is open or in draft\./)).toBeInTheDocument();
     expect(screen.getByText(/The next one hatches here when a session or the builder opens it\./)).toBeInTheDocument();
   });
 

@@ -339,7 +339,7 @@ export function EmptyHatchery() {
       </svg>
       <h2 className="mt-1.5 text-[20px] text-ink">The Hatchery is quiet</h2>
       <p className="mb-3 text-[13.5px] leading-[1.6] text-muted">
-        No pull request is open, in draft, or merged in the last 24 hours.
+        No pull request is open or in draft.
         <br />
         The next one hatches here when a session or the builder opens it.
       </p>
