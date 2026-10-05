@@ -3,6 +3,7 @@ import type { ProjectRow as ProjectRowData } from '@/types/entity';
 import { isTerminal } from '@/types/entity';
 
 import { Icon } from '@components/ui/icon';
+import { ProjectKey } from '@components/ui/project-key';
 import { Tag } from '@components/ui/tag';
 import { NewSessionLink } from '@features/projects/components/new-session-link';
 import { NewTerminalLink } from '@features/projects/components/new-terminal-link';
@@ -75,6 +76,10 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
             <Icon name={project.icon} size={15} className="text-brand" />
             {/* Folded, the icon carries what is inside: amber for needs-you, else green for live. */}
             {badge ? <LiveBadge {...badge} /> : null}
+          </span>
+          {/* Hidden from the name, so the button still announces the project first. */}
+          <span aria-hidden="true" className="flex shrink-0">
+            <ProjectKey value={project.key} />
           </span>
           <span className="flex-1 truncate text-ui font-semibold text-brand">
             {project.name}
