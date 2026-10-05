@@ -1,3 +1,4 @@
+import { APP_DISPLAY_NAME } from '@shared/app-name';
 import type { AppInfo } from '@shared/ipc-contract';
 import type { UpdateStatus } from '@shared/update-contract';
 
@@ -140,8 +141,8 @@ export function updateCopy(status: UpdateStatus): UpdateCopy {
         label: null,
         note:
           availableVersion === null
-            ? 'An update is ready — restart the Hive to install it.'
-            : `Version ${availableVersion} is ready — restart the Hive to install it.`,
+            ? `An update is ready — restart ${APP_DISPLAY_NAME} to install it.`
+            : `Version ${availableVersion} is ready — restart ${APP_DISPLAY_NAME} to install it.`,
         enabled: false,
       };
 
@@ -155,7 +156,7 @@ export function updateCopy(status: UpdateStatus): UpdateCopy {
     case 'idle':
     default:
       return checked
-        ? { label: null, note: 'The Hive is up to date.', enabled: false }
+        ? { label: null, note: `${APP_DISPLAY_NAME} is up to date.`, enabled: false }
         : { label: 'Check for updates', note: '', enabled: true };
   }
 }
