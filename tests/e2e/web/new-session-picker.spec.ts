@@ -38,15 +38,15 @@ test.beforeEach(async ({ page }) => {
 test('the Overmind opens a picker with no ticket on it', async ({ page }) => {
   await overmindNewSession(page).click();
 
-  const picker = page.getByRole('dialog');
+  /*
+    The browser target has no config, so no project: the picker leads with its
+    first-run block and no visible title (#77). Its screen-reader title names
+    that state, and no ticket key appears anywhere in it.
+  */
+  const picker = page.getByRole('dialog', { name: 'No projects yet' });
   await expect(picker).toBeVisible();
-
-  await expect(
-    picker.getByText('Start a new session', { exact: true }),
-  ).toBeVisible();
-  await expect(
-    picker.getByText('Pick a project — a Claude Code terminal will open for it'),
-  ).toBeVisible();
+  await expect(picker.getByRole('button', { name: 'Add project' })).toBeVisible();
+  await expect(picker.getByText(/Start a session for/)).toHaveCount(0);
 });
 
 /**

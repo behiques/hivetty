@@ -31,7 +31,8 @@ test('has no native title bar stacked above the app', async ({
 test('the New session button actually responds to a click', async ({ page }) => {
   await goToOvermind(page);
   await overmindNewSession(page).click();
-  await expect(page.getByText('Start a new session')).toBeVisible();
+  // The search box, not the title: with no project mapped the picker has no visible title (#77).
+  await expect(page.getByRole('textbox', { name: 'Search all projects' })).toBeVisible();
 });
 
 test('the traffic lights get their own row above the bar', async ({ page }) => {
