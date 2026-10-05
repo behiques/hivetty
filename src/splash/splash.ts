@@ -13,11 +13,11 @@ import './splash.css';
  *
  * No store, no IPC, and from `src/` outside this directory only the pure `lib/`
  * modules the globe draws with — the Brood mutalisk (`swarm/muta`, with its
- * `tone` and `kit`), the palette, `hexPath` and the colour helpers. The splash exists to be on screen before
+ * `tone` and `kit`), the palette, `MUTA_SCALE` from the comb and the colour helpers. The splash exists to be on screen before
  * the app has loaded, and the ESLint zones in `eslint.config.mjs` make that a
  * build failure rather than a convention.
  *
- * The globe is centred on the rings (660, 276 in `splash.css`) and runs on the
+ * The brood world is centred on the bloom (660, 276 in `splash.css`) and runs on the
  * document's clock, the one the CSS animations and `scheduleCopy` share, so a
  * cell and its log line cannot drift apart.
  */

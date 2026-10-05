@@ -242,6 +242,25 @@ describe('scheduleWordmark', () => {
     ]);
   });
 
+  it('types tty after HIVE, a key at a time, with the cursor there first', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<h1 class="wordmark"><span>H</span><span>I</span><span>V</span><span>E</span><em class="tty"><i>t</i><i>t</i><i>y</i><b class="cursor"></b></em></h1>';
+    scheduleWordmark(root);
+
+    const lastGlyph = WORDMARK_START + WORDMARK_STEP * 3;
+    const keys = [...root.querySelectorAll<HTMLElement>('.tty i')].map((key) => parseFloat(key.style.animationDelay));
+    expect(keys).toHaveLength(3);
+    expect(keys[0]!).toBeGreaterThan(lastGlyph);
+    expect(keys[1]! - keys[0]!).toBeCloseTo(keys[2]! - keys[1]!, 9);
+    const cursor = root.querySelector<HTMLElement>('.cursor')!.style.animationDelay.split(',').map((d) => parseFloat(d));
+    expect(cursor).toHaveLength(2);
+    for (const at of cursor) {
+      expect(at).toBeGreaterThan(lastGlyph);
+      expect(at).toBeLessThan(keys[0]!);
+    }
+  });
+
   it('does nothing to a document with no wordmark', () => {
     expect(() => scheduleWordmark(document.createElement('div'))).not.toThrow();
   });

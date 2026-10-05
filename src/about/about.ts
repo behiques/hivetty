@@ -23,7 +23,7 @@ import './about.css';
  *
  * ## What it shares with the splash, and why that is an import rather than a copy
  *
- * The hero is the splash's comb globe (HIVE-212), drawn by the same
+ * The hero is the splash's brood world, drawn by the same
  * `startGlobe` and `drawGlobe` from `src/splash/`: a second copy would be wrong
  * within a release. About opens long after the splash's story has played, so
  * its clock starts at the formed globe (`GLOBE_STILL_T`) rather than at the
