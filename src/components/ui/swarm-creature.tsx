@@ -120,10 +120,10 @@ export function SwarmCreature({
    * per surface rather than chosen per render:
    *
    * - **Hive** — the overmind's empty fleet, the new-session picker (both
-   *   states), the settings projects **and skills** cards, and the explorer's
-   *   empty states. The app's own face, and territory.
-   * - **Overlord** — the projects rail. It hovers and watches without acting,
-   *   which is what that state is.
+   *   states), the settings projects card, and the explorer's empty states.
+   *   The app's own face, and territory.
+   * - **Overlord** — the projects rail, and the settings skills card at 120px.
+   *   It hovers and watches without acting, which is what both states are.
    * - **Spire** — work, pull requests, and the editor with no file. Things with
    *   a lifecycle, caught mid-morph.
    * - **Mutalisk** — agents. The unit that does the work, holding the air until
@@ -138,20 +138,16 @@ export function SwarmCreature({
    *
    * ## The picker's two states share one creature
    *
-   * **First run** has no projects, so a 120px hive stands in for the missing
-   * content. Once projects exist, a 96px hive sits above the title as a mark.
+   * With **no project yet** (first run, or after the last is removed), a 120px
+   * hive stands in for the missing content, with no title above it. Once projects exist, a 96px hive sits above the title as a mark.
    * Only ever one of the two renders; see the condition in
    * `new-session-picker.tsx`.
    *
-   * ## Skills is a hive, not a mutalisk (HIVE-96)
+   * ## Skills is an overlord
    *
-   * The tempting reading is that a skill belongs to the agent that runs it, and
-   * agents are the mutalisk's. But the casting is per **surface**, not per
-   * subject: Skills is a settings card, its only neighbour in that state is the
-   * projects card, and the two are looked at in the same breath. Casting it for
-   * its subject would put two different creatures side by side in one pane and
-   * make the channel mean nothing — which is precisely what the rule below
-   * forbids.
+   * HIVE-96 cast it as a hive, to match the projects card beside it. It is the
+   * overlord now, at the boot cover's 120px, by the user's call: a skill is
+   * knowledge the swarm watches over, not territory.
    *
    * A surface that picks a different creature than its neighbours in the same
    * state turns the channel back into noise, which is the whole reason this is

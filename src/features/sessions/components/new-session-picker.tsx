@@ -16,7 +16,7 @@ import { ProjectKey } from '@components/ui/project-key';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { can } from '@config/runtime';
 import { OptionStepper } from '@features/sessions/components/option-stepper';
-import { useProjectAccess, useProjectConfig } from '@hooks/use-project-config';
+import { useProjectAccess } from '@hooks/use-project-config';
 import {
   useProjectLiveCount,
   useProjects,
@@ -63,8 +63,9 @@ const PINNED_COUNT = 4;
  */
 export function NewSessionPicker() {
   const projects = useProjects();
+  /** No project yet: the first-run hive stands alone, with no title above it. */
+  const noProjects = projects.length === 0;
   const spawnSession = useSpawnSession();
-  const config = useProjectConfig();
   const { pickerQuery, pickerTicket, newModel, newEffort } = usePickerState();
   const ticket = useTicket(pickerTicket);
   const { closePicker, setPickerQuery, setNewModel, setNewEffort } =
@@ -160,44 +161,46 @@ export function NewSessionPicker() {
           picker — it simply has no summary line to add.
         */}
         {/*
-          The hive leads the picker (HIVE-93; it was the spire), and **only
-          when the first-run block below is not showing**.
+          The hive and the title lead the picker (HIVE-93) **only once a
+          project exists**. With none, the first-run block below is the whole
+          top of the surface: a title saying "pick a project" over nothing to
+          pick reads as a broken render, and two hives stacked reads as a bug.
 
-          That condition is the whole of it: `templateWritten` renders a 120px
-          hive hero a few lines down, and two creatures stacked in one dialog
-          reads as a bug rather than as atmosphere. So the surface has two
-          states and each gets exactly one creature.
-
-          96px, not the hero's 120: it sits *above* a title rather than standing
-          in for missing content, so it is the quieter end of the 72–120
-          full-stage register `SwarmCreature` documents.
+          96px, not the first run's 120: it sits *above* a title rather than
+          standing in for missing content, so it is the quieter end of the
+          72–120 full-stage register `SwarmCreature` documents.
         */}
-        {config?.templateWritten ? null : (
-          <SwarmCreature creature="hive" size={96} />
+        {noProjects ? (
+          // Radix names the dialog by its Title; the first-run block is what is seen.
+          <DialogPrimitive.Title className="sr-only">No projects yet</DialogPrimitive.Title>
+        ) : (
+          <>
+            <SwarmCreature creature="hive" size={96} />
+
+            <div className="flex flex-col gap-1.5 text-center">
+              <DialogPrimitive.Title className="font-sans text-[22px] tracking-[-0.02em] text-ink">
+                {pickerTicket === null
+                  ? 'Start a new session'
+                  : `Start a session for ${pickerTicket}`}
+              </DialogPrimitive.Title>
+              <span className="text-[13px] text-subtle">
+                {ticket?.title ??
+                  'Pick a project — a Claude Code terminal will open for it'}
+              </span>
+            </div>
+          </>
         )}
 
-        <div className="flex flex-col gap-1.5 text-center">
-          <DialogPrimitive.Title className="font-sans text-[22px] tracking-[-0.02em] text-ink">
-            {pickerTicket === null
-              ? 'Start a new session'
-              : `Start a session for ${pickerTicket}`}
-          </DialogPrimitive.Title>
-          <span className="text-[13px] text-subtle">
-            {ticket?.title ??
-              'Pick a project — a Claude Code terminal will open for it'}
-          </span>
-        </div>
-
         {/*
-          First run: the config file did not exist and was just written, so
-          there is nothing to be unmapped *from* yet.
+          No project yet: on the first run (the config was just written) and
+          after the last one is removed alike, so there is nothing to pick.
 
           Story 090 printed the file path here, which is the failure story 101
           exists to end: a user who has never seen that file cannot edit it, and
           naming it is not an instruction. The button opens settings, which is
           the place they can actually do something.
         */}
-        {config?.templateWritten ? (
+        {noProjects ? (
           <div className="flex max-w-[560px] flex-col items-center gap-2.5">
             <SwarmCreature creature="hive" size={120} />
             <p className="text-center tabular-nums text-[11.5px] text-muted">

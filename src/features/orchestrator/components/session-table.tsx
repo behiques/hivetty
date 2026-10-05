@@ -380,7 +380,8 @@ export function SessionTable() {
   return (
     <div
       data-testid="session-table"
-      className="min-h-0 overflow-y-auto bg-term-bg px-[18px] pt-4 font-sans text-ui"
+      /* Empty, it fills the pane so its notice can centre in the space below the header. */
+      className={`${empty ? 'flex flex-1 flex-col ' : ''}min-h-0 overflow-y-auto bg-term-bg px-[18px] pt-4 font-sans text-ui`}
     >
       <div className="flex items-center gap-2 px-2 pb-1.5 text-[11px] tracking-[0.06em] text-term-head">
         {/*
@@ -469,7 +470,7 @@ export function SessionTable() {
         */
         <div
           data-testid="session-table-empty"
-          className="flex flex-col items-center gap-2 px-2 py-4"
+          className="flex flex-1 flex-col items-center justify-center gap-2 px-2 py-4"
         >
           <SwarmCreature creature="hive" size={96} />
           <p className="text-muted">{phrase}</p>

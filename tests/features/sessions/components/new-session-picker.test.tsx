@@ -652,6 +652,23 @@ describe('NewSessionPicker · unmapped projects', () => {
     expect(creatures[0]).toHaveStyle({ height: '120px' });
   });
 
+  it('drops the title and subtitle while no project exists', () => {
+    setProjectConfigForTest(snapshot([], { templateWritten: true }));
+    render(<NewSessionPicker />);
+
+    expect(screen.queryByRole('heading', { name: 'Start a new session' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Pick a project — a Claude Code terminal will open for it')).not.toBeInTheDocument();
+  });
+
+  it('shows the first-run hive whenever no project exists, not only on the first launch', () => {
+    setProjectConfigForTest(snapshot([]));
+    render(<NewSessionPicker />);
+
+    expect(screen.getByRole('button', { name: /add project/i })).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-creature]')).toHaveLength(1);
+    expect(screen.queryByRole('heading', { name: 'Start a new session' })).not.toBeInTheDocument();
+  });
+
   it('opens settings when the first-run button is pressed', async () => {
     const user = userEvent.setup();
     setProjectConfigForTest(snapshot([], { templateWritten: true }));
