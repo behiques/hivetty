@@ -297,9 +297,10 @@ export function AgentDefinition({ name, notice, onRename, onClose, layout = 'spl
         Keyed by the agent, so moving to another agent remounts the editor
         rather than re-rendering it with a different buffer. The form holds
         per-field state that is only meaningful for the agent it was typed into.
+        `+new` is no agent's name (names are lowercase, digits and dashes), so an agent called `new` gets its own.
       */}
       <AgentEditor
-        key={name ?? 'new'}
+        key={name ?? '+new'}
         path={name === null ? null : `${snapshot.agentsRoot}/${name}/AGENT.md`}
         source={text ?? ''}
         dirty={dirty}
