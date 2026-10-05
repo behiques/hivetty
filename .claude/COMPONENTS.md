@@ -153,7 +153,7 @@ contract for their owning story, not existing code.
 | `Icon` | `ui/icon.tsx` | **031** (also 033, 051, 053) | `name: string`, `size?: number`, `weight?: IconWeight`, `className?: string` | **built** |
 | `KeyHint` | `ui/key-hint.tsx` | 041 (also 043) | `keys: string[]`, `label: string` | planned |
 | `SecretField` | `ui/secret-field.tsx` | **HIVE-67** | `label: string`, `value: string`, `onChange(value: string): void`, `onCommit?(): void`, `placeholder?: string`, `hint?: string`, `className?: string` | **built** |
-| `SplitHandle` | `ui/split-handle.tsx` | **explorer** | `axis: 'horizontal' \| 'vertical'`, `containerRef: RefObject<HTMLElement>`, `ratio: number`, `onRatio(ratio: number): void` | **built** |
+| `SplitHandle` | `ui/split-handle.tsx` | **explorer** | `axis: 'horizontal' \| 'vertical'`, `containerRef: RefObject<HTMLElement>`, `label: string`, `value: number`, `onValue(value: number): void`, `min?`, `max?`, `step?`, `onReset?(): void`, `grip?: boolean`, `className?: string` | **built** |
 | `Button` | `ui/button.tsx` | **HIVE-118** | `variant?: 'primary' \| 'secondary' \| 'danger' \| 'ghost'`, `size?: 'sm' \| 'md'`, plus `ButtonHTMLAttributes<HTMLButtonElement>` | **built** |
 | `SearchBox` | `ui/search-box.tsx` | **HIVE-192** | `label: string`, `value: string`, `onChange(value: string): void`, `onClear(): void` | **built** |
 
@@ -278,24 +278,24 @@ turn. The chip grows as the session reports.
 
 ### `<SessionPanel />` and `<SessionPanelStrip />`
 
-`src/components/layout/session-panel.tsx` — HIVE-201, built. No props.
+`src/components/layout/session-panel.tsx` — HIVE-201, built. `rowRef: RefObject<HTMLElement | null>`, the row its seam measures against.
 
 The right of the frame while the stage shows a session or a terminal (never on
 Home, the Overmind or an agent): open at `--cc-session-panel-w` with a tab per
 thing the session has — Plan, Ticket, PR, Files, each drawn only when it
 exists — or closed (⌘⌥B, or always under 1,200px) to `SessionPanelStrip`, a
 `--cc-session-strip-w` column of the plan's glyphs and one icon per other tab
-carrying its fact. The open tab and open state live in `appearance-store`
-(`sessionPanelTab`, `sessionPanelOpen`), so they survive a relaunch.
+carrying its fact. Open, a `RailHandle` on its left seam drags the width.
+The open tab, open state and width live in `appearance-store`
+(`sessionPanelTab`, `sessionPanelOpen`, `sessionPanelWidth`), so they survive a relaunch.
 
 ### `<ActivityBar />`
 
 `src/components/layout/activity-bar.tsx` — HIVE-195, built. No props.
 
 Round two's left edge: a `<nav aria-label="Places">` at `--cc-bar-w`. The brand
-glyph on top (Phosphor `Hexagon`, `weight="fill"`, `text-amber`, 22px) carries
-the team name as its accessible name and its tooltip, "The Hive" when the name
-is empty. Below it the five places — Home, Sessions, Work, Agents, PRs — each a
+glyph on top (Phosphor `Hexagon`, `weight="fill"`, `text-amber`, 22px) is
+named "The Hive"; the team name lives on Home's headline. Below it the five places — Home, Sessions, Work, Agents, PRs — each a
 52px button calling `selectPlace`; the active one has `aria-current="page"`.
 The foot holds `ConnectionItem`, the theme toggle (HIVE-213: Phosphor `Sun` while the
 resolved theme is dark, `Moon` while light, named and titled "Switch to light theme" /
@@ -318,14 +318,26 @@ attached now (`useReceiverExposure`, `useServerExposure`, `useServingDeviceCount
 
 ### `<ListPanel />`
 
-`src/components/layout/list-panel.tsx` — HIVE-195, built. No props.
+`src/components/layout/list-panel.tsx` — HIVE-195, built. `rowRef: RefObject<HTMLElement | null>`, the row its seam measures against.
 
 Today's panel for the current place, at `--cc-list-w`, in a
 `<section aria-label="<Place> list">`: `SessionsPanel` for Sessions,
 `WorkPanel`, `AgentsPanel`, `PrsPanel` (the Hatchery). Home has none, and nothing
 renders when `panelOpen` is false, or for PRs while the Hatchery is quiet and no
-search is open. Not resizable and no collapsed strip. Each place's own
-story replaces its entry.
+search is open. A `RailHandle` on its right seam drags the width
+(`listPanelWidth`); there is no collapsed strip, and the narrow overlay has no
+seam. Each place's own story replaces its entry.
+
+### `<RailHandle />`
+
+`src/components/layout/rail-handle.tsx` — built. `rowRef`, `rail: 'list' | 'session'`,
+`label: string`, `width: number`, `onWidth(px: number): void`.
+
+The seam between a rail and the stage: a vertical `SplitHandle` with `grip`,
+12px wide. The store keeps pixels and `SplitHandle` speaks ratios of the row, so
+it converts both ways, measuring the row with a `ResizeObserver`. The ratio is
+the seam's centre, so a drag keeps the grip under the cursor. Bounds come from
+`PANEL_WIDTHS`; a double-click resets to the initial width.
 
 ### `components/layout/` is the composition root
 

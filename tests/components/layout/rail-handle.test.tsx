@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -39,7 +39,7 @@ describe('RailHandle', () => {
     render(<RailHandle rowRef={measuredRow()} rail="list" label="Resize" width={300} onWidth={onWidth} />);
     act(() => observed?.());
     const handle = screen.getByRole('slider', { name: 'Resize' });
-    expect(handle).toHaveAttribute('aria-valuenow', '30');
+    expect(handle).toHaveAttribute('aria-valuenow', '31');
 
     handle.focus();
     await userEvent.keyboard('{ArrowRight}');
@@ -50,7 +50,7 @@ describe('RailHandle', () => {
     const onWidth = vi.fn();
     render(<RailHandle rowRef={measuredRow()} rail="session" label="Resize" width={320} onWidth={onWidth} />);
     const handle = screen.getByRole('slider', { name: 'Resize' });
-    expect(handle).toHaveAttribute('aria-valuenow', '68');
+    expect(handle).toHaveAttribute('aria-valuenow', '67');
 
     handle.focus();
     await userEvent.keyboard('{ArrowLeft}');
@@ -58,5 +58,23 @@ describe('RailHandle', () => {
 
     await userEvent.dblClick(handle);
     expect(onWidth).toHaveBeenLastCalledWith(320);
+  });
+
+  it('puts the seam’s centre under the cursor on a drag, on either rail', () => {
+    const onList = vi.fn();
+    const onSession = vi.fn();
+    render(<RailHandle rowRef={measuredRow()} rail="list" label="List" width={300} onWidth={onList} />);
+    render(<RailHandle rowRef={measuredRow()} rail="session" label="Session" width={320} onWidth={onSession} />);
+
+    fireEvent.pointerDown(screen.getByRole('slider', { name: 'List' }));
+    fireEvent.pointerMove(window, { clientX: 400 });
+    fireEvent.pointerUp(window);
+    fireEvent.pointerDown(screen.getByRole('slider', { name: 'Session' }));
+    fireEvent.pointerMove(window, { clientX: 600 });
+    fireEvent.pointerUp(window);
+
+    // The handle is 12px: its centre at 400 leaves 394 of list, at 600 leaves 394 of session.
+    expect(onList.mock.calls[0]?.[0]).toBeCloseTo(394);
+    expect(onSession.mock.calls[0]?.[0]).toBeCloseTo(394);
   });
 });
