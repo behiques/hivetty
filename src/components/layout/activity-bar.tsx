@@ -13,8 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 
 import { ConnectionItem } from '@components/layout/connection-item';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip';
-import { useResolvedTheme, useTeamName, useToggleTheme } from '@stores/appearance-store';
+import { useResolvedTheme, useToggleTheme } from '@stores/appearance-store';
 import { useCounts, usePrNeedsYouCount, useTabGone, useWorkingAgentCount } from '@stores/hive-store';
 import {
   usePlace,
@@ -41,15 +40,13 @@ const ITEM =
  * Picking a place is the whole interaction; the ui-store's `selectPlace` owns
  * what a click on the active one means. The foot holds the connection item
  * (HIVE-196), the theme toggle (HIVE-213) and Settings; Search is left out until a story says what it
- * searches. The team name has no room
- * here, so it is the glyph's tooltip.
+ * searches. The team name lives on Home's headline, not here.
  */
 export function ActivityBar() {
   const place = usePlace();
   const selectPlace = useSelectPlace();
   const sessionGone = useTabGone(useSessionsTab());
   const { openSettings } = useSettingsActions();
-  const brand = useTeamName() || 'The Hive';
   const prsNeedYou = usePrNeedsYouCount();
   const sessionsWorking = useCounts().working;
   const agentsWorking = useWorkingAgentCount();
@@ -63,14 +60,9 @@ export function ActivityBar() {
       aria-label="Places"
       className="flex w-[var(--cc-bar-w)] shrink-0 flex-col items-center gap-1 border-r border-border-soft bg-bg py-3"
     >
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span role="img" aria-label={brand} className="mb-2.5 text-amber">
-            <Hexagon size={22} weight="fill" aria-hidden />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="right">{brand}</TooltipContent>
-      </Tooltip>
+      <span role="img" aria-label="The Hive" className="mb-2.5 text-amber">
+        <Hexagon size={22} weight="fill" aria-hidden />
+      </span>
 
       {PLACES.map(({ id, label, icon: PlaceIcon }) => {
         const active = id === place;
