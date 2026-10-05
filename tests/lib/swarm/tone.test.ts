@@ -26,9 +26,10 @@ describe('toneOf', () => {
   it('turns the built-in dark palette into the artifact T', () => {
     const T = toneOf(dark);
     expect(T.dark).toBe(true);
-    expect(T.lo).toEqual([11, 8, 22]);
-    expect(T.mid).toEqual([44, 35, 70]);
-    expect(T.hi).toEqual([132, 116, 192]);
+    // The derived ramp: Hive dark carries none of its own.
+    expect(T.lo).toEqual([23, 27, 50]);
+    expect(T.mid).toEqual([53, 53, 86]);
+    expect(T.hi).toEqual([195, 181, 242]);
     expect(T.core).toEqual([226, 255, 238]);
     expect(T.ground).toEqual([20, 17, 40]);
   });

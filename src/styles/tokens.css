@@ -121,9 +121,9 @@
 
   /* The Brood's tissue ramp (HIVE-221): shadowed, mid and lit flesh, the glow's
      core and the ground. Themeable, optional keys; the canvas reads them. */
-  --cc-tissue-deep: #0b0816;
-  --cc-tissue: #2c2346;
-  --cc-tissue-lit: #8474c0;
+  --cc-tissue-deep: #171b32;
+  --cc-tissue: #353556;
+  --cc-tissue-lit: #c3b5f2;
   --cc-glow-core: #e2ffee;
   --cc-ground: #141128;
 

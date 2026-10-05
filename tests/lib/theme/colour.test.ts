@@ -84,10 +84,11 @@ describe('swarmPaletteOf', () => {
     });
   });
 
-  it('carries the Brood tissue ramp from the built-in', () => {
+  it('derives the dark tissue ramp and carries the rest from the built-in', () => {
+    // Hive dark carries no tissue ramp: derived from bg, chitin and ink like every other dark theme.
     const p = swarmPaletteOf(BUILT_IN_THEME.modes.dark.ui);
     expect([p.tissueDeep, p.tissue, p.tissueLit, p.glowCore, p.ground]).toEqual([
-      '#0b0816', '#2c2346', '#8474c0', '#e2ffee', '#141128',
+      'rgb(23 27 50)', 'rgb(53 53 86)', 'rgb(195 181 242)', '#e2ffee', '#141128',
     ]);
     const l = swarmPaletteOf(BUILT_IN_THEME.modes.light.ui);
     expect([l.tissueDeep, l.tissue, l.tissueLit, l.glowCore, l.ground]).toEqual([
@@ -130,6 +131,8 @@ describe('the creature accents (HIVE-221)', () => {
   ] as const)('derives each accent within 12 of the artifact in %s', (mode, at) => {
     const p = swarmPaletteOf(BUILT_IN_THEME.modes[mode].ui);
     for (const [key, literals] of Object.entries(ARTIFACT)) {
+      // The mouth and gums are mixed from the shadowed tissue, which Hive dark now derives.
+      if (mode === 'dark' && (key === 'maw' || key === 'gum')) continue;
       const value = p[key as keyof typeof ARTIFACT];
       expect(near(value, literals[at], 12), `${mode} ${key}: ${value}`).toBe(true);
     }

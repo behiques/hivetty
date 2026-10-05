@@ -46,9 +46,9 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | `--cc-on-danger` | `#ffffff` | *(unchanged)* | text/icons on a danger fill |
 | `--cc-creep` | `#5b3d8f` | `#b7a3e6` | the ground under a busy comb patch; the flyers' trace (HIVE-199) |
 | `--cc-chitin` | `#b9a7f0` | `#6a54b0` | the mutalisk's wings, bones and claws (HIVE-199); the Brood creatures' chitin (HIVE-221) |
-| `--cc-tissue-deep` | `#0b0816` | `#7a68b6` | the Brood creatures' shadowed tissue (HIVE-221) |
-| `--cc-tissue` | `#2c2346` | `#d4ccee` | the Brood creatures' mid tissue (HIVE-221) |
-| `--cc-tissue-lit` | `#8474c0` | `#fbf9ff` | the Brood creatures' lit tissue (HIVE-221) |
+| `--cc-tissue-deep` | `#171b32` | `#7a68b6` | the Brood creatures' shadowed tissue (HIVE-221); dark is derived from `bg`, `chitin` and `ink`, as every dark theme's is |
+| `--cc-tissue` | `#353556` | `#d4ccee` | the Brood creatures' mid tissue (HIVE-221); dark is derived from `bg`, `chitin` and `ink`, as every dark theme's is |
+| `--cc-tissue-lit` | `#c3b5f2` | `#fbf9ff` | the Brood creatures' lit tissue (HIVE-221); dark is derived from `bg`, `chitin` and `ink`, as every dark theme's is |
 | `--cc-glow-core` | `#e2ffee` | `#96deb8` | the hot centre of the Brood's green glow (HIVE-221) |
 | `--cc-ground` | `#141128` | `#eeeafa` | the ground under a Brood creature (HIVE-221) |
 | `--cc-code-keyword` | `#b39ff0` | `#6f42c1` | editor: keywords |
