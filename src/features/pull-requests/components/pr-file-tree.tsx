@@ -21,7 +21,7 @@ export function PrFileTree({ detail, selected, onSelect }: { detail: PrDetail; s
   const sum = filesSummary(detail.files, detail.changedFiles, detail.threads);
 
   return (
-    <aside aria-label="Changed files" className="flex w-[250px] shrink-0 flex-col gap-px overflow-y-auto border-r border-border-soft p-2.5 text-[12px]">
+    <aside aria-label="Changed files" className="flex w-[200px] shrink-0 flex-col gap-px @min-[640px]:w-[250px] overflow-y-auto border-r border-border-soft p-2.5 text-[12px]">
       <input
         type="text"
         aria-label="Filter files"

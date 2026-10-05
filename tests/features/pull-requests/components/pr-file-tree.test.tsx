@@ -25,6 +25,11 @@ describe('PrFileTree', () => {
     expect(screen.getByText('4 files · 1 open thread · viewed 1 of 4')).toBeInTheDocument();
   });
 
+  it('narrows to 200px on a page under 640px (HIVE-223)', () => {
+    render(<PrFileTree detail={detail} selected={null} onSelect={vi.fn()} />);
+    expect(screen.getByRole('complementary', { name: 'Changed files' })).toHaveClass('w-[200px]', '@min-[640px]:w-[250px]');
+  });
+
   it('draws folders with their compressed path and files under them with +/−', () => {
     render(<PrFileTree detail={detail} selected={null} onSelect={vi.fn()} />);
     expect(screen.getByText('src/fees')).toBeInTheDocument();
