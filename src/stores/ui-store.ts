@@ -494,6 +494,8 @@ export const useUiStore = create<UiState>()((set) => ({
         const tab = overmind ? 'orch' : state.sessionsTab;
         return { ...moved, activeTab: tab, sessionsTab: tab };
       }
+      // Under settings or the picker, the place you are on is a way back to it, not a panel toggle.
+      if (state.settings || state.picker) return { settings: false, picker: false };
       if (place === 'sessions' && state.activeTab !== 'orch') return returnToOrch(state);
       return { panelOpen: !state.panelOpen };
     }),

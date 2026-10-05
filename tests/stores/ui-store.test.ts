@@ -405,6 +405,16 @@ describe('ui-store — the place machine (HIVE-195)', () => {
     expect(ui()).toMatchObject({ place: 'work', panelOpen: true, picker: false, settings: false });
   });
 
+  it('the active place, under settings or the picker, dismisses them and leaves everything else', () => {
+    ui().selectPlace('sessions');
+    ui().openTab('hero-refresh');
+    useUiStore.setState({ settings: true, picker: true, panelOpen: true });
+
+    ui().selectPlace('sessions');
+
+    expect(ui()).toMatchObject({ place: 'sessions', settings: false, picker: false, panelOpen: true, activeTab: 'hero-refresh' });
+  });
+
   it('the active place toggles its panel', () => {
     ui().selectPlace('work');
 

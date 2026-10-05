@@ -231,6 +231,15 @@ describe('AgentRow — the slot', () => {
 
   const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
+  it('offers only Resume for a paused agent: one play icon, no Run now', () => {
+    stub();
+    useHiveStore.getState().hydrateAgents([summary({ name: 'acr', status: 'paused' })]);
+    render(<AgentRow id="acr" />);
+
+    expect(screen.queryByRole('button', { name: 'Run acr now' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Resume acr' })).toBeInTheDocument();
+  });
+
   it('labels its actions and shows them only on hover or focus, over a fixed slot', () => {
     stub();
     render(<AgentRow id="acr" />);
