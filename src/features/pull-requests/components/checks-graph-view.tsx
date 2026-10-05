@@ -73,10 +73,13 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
       // A pinch reaches the page as a wheel event with ctrlKey set; ⌘ or Ctrl and a mouse wheel read the same.
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
+      const delta = Math.max(-10, Math.min(10, event.deltaY));
+      const next = clampZoom(drawn.current * Math.exp(-delta * WHEEL_RATE));
+      // At a limit nothing redraws, so the layout effect would never clear an anchor set here.
+      if (next === drawn.current) return;
       const at = event.clientX - el.getBoundingClientRect().left;
       anchor.current = { x: (el.scrollLeft + at) / drawn.current, at };
-      const delta = Math.max(-10, Math.min(10, event.deltaY));
-      setZoom(clampZoom(drawn.current * Math.exp(-delta * WHEEL_RATE)));
+      setZoom(next);
     };
     // Not passive: preventDefault is what keeps the page itself from scrolling or zooming.
     el.addEventListener('wheel', onWheel, { passive: false });

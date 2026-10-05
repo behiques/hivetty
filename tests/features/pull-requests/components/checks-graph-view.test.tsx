@@ -130,4 +130,24 @@ describe('ChecksGraphView', () => {
     for (let i = 0; i < 30; i += 1) wheel({ deltaY: 100, ctrlKey: true });
     expect(reset).toHaveTextContent('25%');
   });
+
+  it('does not leave a pinch at the zoom limit to jump the scroll on the next button click', () => {
+    const { container } = render(<ChecksGraphView graph={graph} onJob={() => {}} onExpand={() => {}} />);
+    const scroller = zoomed(container).parentElement!.parentElement!;
+    const wheel = (deltaY: number) => {
+      const event = createEvent.wheel(scroller, { deltaY });
+      Object.defineProperties(event, { ctrlKey: { value: true }, metaKey: { value: false }, clientX: { value: 100 } });
+      fireEvent(scroller, event);
+    };
+    for (let i = 0; i < 30; i += 1) wheel(100);
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('25%');
+
+    // Pinching further in at 25% changes nothing, so it must not arm an anchor either.
+    scroller.scrollLeft = 40;
+    wheel(100);
+    scroller.scrollLeft = 7;
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('50%');
+    expect(scroller.scrollLeft).toBe(7);
+  });
 });
