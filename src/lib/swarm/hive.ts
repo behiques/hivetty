@@ -360,13 +360,18 @@ export function hiveAnatomy(): Anatomy {
 type Layer = OffscreenCanvas | HTMLCanvasElement;
 
 /** The window's own layer, one per canvas size (the artifact's `HIVE._off`). */
+const LAYER_CAP = 8;
+/** Insertion order is recency order; a resize drag evicts its stale sizes. */
 const layers = new Map<string, Layer>();
 
 function layerFor(ctx: CanvasRenderingContext2D): Layer {
   const { width, height } = ctx.canvas;
   const key = `${width}x${height}`;
   let off = layers.get(key);
-  if (!off) {
+  if (off) {
+    layers.delete(key);
+    layers.set(key, off);
+  } else {
     if (typeof OffscreenCanvas !== 'undefined') {
       off = new OffscreenCanvas(width, height);
     } else {
@@ -375,6 +380,7 @@ function layerFor(ctx: CanvasRenderingContext2D): Layer {
       off.height = height;
     }
     layers.set(key, off);
+    if (layers.size > LAYER_CAP) layers.delete(layers.keys().next().value!);
   }
   return off;
 }

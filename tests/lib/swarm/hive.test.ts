@@ -126,6 +126,17 @@ describe('the hive', () => {
     expect(made).toHaveBeenCalledTimes(2);
   });
 
+  it('bounds the layer cache, so a resize drag does not keep a bitmap per size', () => {
+    const { made } = stubOffscreen();
+    const at = (n: number): void => void record(5, 2.4, DARK, { width: 900 + n, height: 700 });
+    for (let n = 0; n < 20; n++) at(n);
+    expect(made).toHaveBeenCalledTimes(20);
+    at(0); // long gone, so it is made again
+    expect(made).toHaveBeenCalledTimes(21);
+    at(0); // the most recent stays cached
+    expect(made).toHaveBeenCalledTimes(21);
+  });
+
   it('falls back to a document canvas where there is no OffscreenCanvas', () => {
     vi.stubGlobal('OffscreenCanvas', undefined);
     const { ctx: layer, calls: layerCalls } = recordingContext();
