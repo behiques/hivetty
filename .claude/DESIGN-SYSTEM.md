@@ -24,8 +24,8 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | `--cc-border` | `#273159` | `#d4dee3` | dividers, outlines |
 | `--cc-border-soft` | `#1e2747` | `#edf2f4` | quieter dividers |
 | `--cc-ink` | `#e9effc` | `#2c2f34` | primary text |
-| `--cc-muted` | `#98a3cc` | `#73767c` | secondary text |
-| `--cc-subtle` | `#6b779f` | `#8e949c` | tertiary text, idle status |
+| `--cc-muted` | `#9faad0` | `#5a5d63` | secondary text |
+| `--cc-subtle` | `#8d97b8` | `#686d73` | tertiary text, idle status |
 | `--cc-brand` | `#8fa7f2` | `#334fa9` | brand, done status |
 | `--cc-green` | `#74b79c` | `#2e6b52` | working / online status |
 | `--cc-amber` | `#ffac47` | `#c77414` | needs-input status |
@@ -36,9 +36,9 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | `--cc-term-input` | `#0e1430` | `#ffffff` | terminal input bar |
 | `--cc-term-row-hover` | `#161f45` | `#eef4f9` | session-table row hover |
 | `--cc-term-row-active` | `#1a2450` | `#e4edf5` | session-table selected row |
-| `--cc-term-head` | `#4d5a86` | `#6b6e74` | session-table column headers |
+| `--cc-term-head` | `#8590b0` | `#686b71` | session-table column headers |
 | `--cc-term-track` | `#3a4674` | `#d4dee3` | picker stepper track and dots |
-| `--cc-brand-fill` | `#5e76d0` | *(unchanged)* | primary button |
+| `--cc-brand-fill` | `#5470cb` | *(unchanged)* | primary button |
 | `--cc-brand-fill-hover` | `#4f6ac5` | *(unchanged)* | primary button hover |
 | `--cc-brand-fill-strong` | `#334fa9` | *(unchanged)* | hive-mark tile (Serenity) |
 | `--cc-on-brand` | `#ffffff` | *(unchanged)* | text/icons on a brand fill |

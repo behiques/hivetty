@@ -35,8 +35,8 @@
   --cc-border: #273159;
   --cc-border-soft: #1e2747;
   --cc-ink: #e9effc;
-  --cc-muted: #98a3cc;
-  --cc-subtle: #6b779f;
+  --cc-muted: #9faad0;
+  --cc-subtle: #8d97b8;
   --cc-brand: #8fa7f2;
   --cc-green: #74b79c;
   --cc-amber: #ffac47;
@@ -74,7 +74,7 @@
    */
   --cc-term-row-hover: #161f45;
   --cc-term-row-active: #1a2450;
-  --cc-term-head: #4d5a86;
+  --cc-term-head: #8590b0;
   /* Unselected track and dot outline in the picker's steppers (story 044). */
   --cc-term-track: #3a4674;
 
@@ -87,7 +87,7 @@
    * (`var(--blue-600/700/800)`, which its light theme leaves alone). Reusing
    * `--cc-brand` here would repaint the logo tile pale blue in dark mode.
    */
-  --cc-brand-fill: #5e76d0;
+  --cc-brand-fill: #5470cb;
   --cc-brand-fill-hover: #4f6ac5;
   --cc-brand-fill-strong: #334fa9; /* Serenity — the signature brand blue */
   --cc-on-brand: #ffffff;
@@ -226,8 +226,8 @@ body[data-theme='light'] {
   --cc-border: #d4dee3;
   --cc-border-soft: #edf2f4;
   --cc-ink: #2c2f34;
-  --cc-muted: #73767c;
-  --cc-subtle: #8e949c;
+  --cc-muted: #5a5d63;
+  --cc-subtle: #686d73;
   --cc-brand: #334fa9;
   --cc-green: #2e6b52;
   --cc-amber: #c77414;
@@ -279,7 +279,7 @@ body[data-theme='light'] {
    */
   --cc-term-row-hover: #eef4f9;
   --cc-term-row-active: #e4edf5;
-  --cc-term-head: #6b6e74;
+  --cc-term-head: #686b71;
   --cc-term-track: #d4dee3;
 
   /**
