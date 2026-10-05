@@ -51,6 +51,8 @@ describe('ShipTrack', () => {
     const note = within(band).getByText(/fixer · 1h 20m · On it: adding the registered-agent check/);
     // It truncates on a narrow stage, so its whole line is on hover.
     expect(note).toHaveAttribute('title', note.textContent);
+    // Its own line under the stops, however wide the stage.
+    expect(note.closest('[data-note]')).toHaveClass('basis-full');
   });
 
   it('draws the short track for a PR nobody holds, with no now line', () => {

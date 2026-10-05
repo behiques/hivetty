@@ -20,8 +20,7 @@ const DOT: Record<BandStop['state'], string> = {
  * header, on every tab. Ticked before the stop it is at, that one glowing with
  * its time, dashed after. The green line on the right is the holder, the time
  * at the stop and the holder's newest post naming the PR (D11). No flyer.
- * The stops never give up their width: the note goes to its own line below
- * when the two do not fit side by side, and truncates there.
+ * The note always takes its own line under the stops, and truncates there.
  */
 export function ShipTrack({ pr }: { pr: Pr }) {
   const slug = `${pr.owner}/${pr.repo}`;
@@ -75,7 +74,7 @@ export function ShipTrack({ pr }: { pr: Pr }) {
         ))}
       </ol>
       {current !== null && holder !== null && HolderIcon !== null ? (
-        <span className="flex max-w-full min-w-0 items-center gap-1.5 text-green">
+        <span data-note className="flex min-w-0 basis-full items-center gap-1.5 text-green">
           <HolderIcon size={13} aria-hidden className="shrink-0" />
           <span className="truncate" title={note}>
             {note}
