@@ -57,7 +57,7 @@ const messageOf = (cause: unknown) => (cause instanceof Error ? cause.message : 
  * ## The slot
  *
  * At rest the slot at the end of line 1 shows the last word's age. On hover or
- * focus Run now and Pause (Resume, for a paused agent) show over it, through
+ * focus Run now and Pause (Resume alone, for a paused agent) show over it, through
  * the bridge calls the page used. They sit beside the row's button rather than
  * inside it, so each keeps its own tab stop, and the slot's width is fixed so
  * the name never moves. An answer that is not a start (a refusal, a queued
@@ -180,15 +180,18 @@ export function AgentRow({ id }: AgentRowProps) {
         </span>
       </button>
       <span className="invisible absolute top-2 right-2 flex gap-2.5 group-focus-within:visible group-hover:visible">
-        <button
-          type="button"
-          aria-label={`Run ${id} now`}
-          title="Wake this agent once, now."
-          onClick={runNow}
-          className="rounded p-0.5 text-muted hover:text-ink"
-        >
-          <Play size={13} aria-hidden="true" />
-        </button>
+        {/* A paused agent refuses a run, and its Resume is a play icon too: one ▶, not two. */}
+        {paused ? null : (
+          <button
+            type="button"
+            aria-label={`Run ${id} now`}
+            title="Wake this agent once, now."
+            onClick={runNow}
+            className="rounded p-0.5 text-muted hover:text-ink"
+          >
+            <Play size={13} aria-hidden="true" />
+          </button>
+        )}
         <button
           type="button"
           aria-label={paused ? `Resume ${id}` : `Pause ${id}`}
