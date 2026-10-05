@@ -1065,7 +1065,7 @@ describe('CenterStage — the reconnect line (HIVE-211)', () => {
       useUiStore.setState({ place });
       render(<CenterStage />);
 
-      const line = screen.getByText('Lost the Hive on mini.').closest('[role="status"]');
+      const line = screen.getByText('Lost Hive TTY on mini.').closest('[role="status"]');
       expect(line).not.toBeNull();
       // First in the stage, above whatever the place draws.
       expect(screen.getByRole('main').firstElementChild).toBe(line);
@@ -1076,7 +1076,7 @@ describe('CenterStage — the reconnect line (HIVE-211)', () => {
     render(<CenterStage />);
     act(() => useHiveStore.getState().setRemoteLink({ ...reconnecting, state: 'attached' }));
 
-    expect(screen.queryByText('Lost the Hive on mini.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Lost Hive TTY on mini.')).not.toBeInTheDocument();
   });
 
 });

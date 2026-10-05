@@ -283,7 +283,7 @@ describe('the reply box (HIVE-203)', () => {
 describe('comments posted for an agent (HIVE-216)', () => {
   const viaBuilder: JiraComment = { ...comment('103', 'Yunid Bauza', '2026-10-01T13:00:00.000Z', 'Task 3 done'), via: { agent: 'builder' } };
 
-  it('draws the agent: its glyph in a rounded square, its name, and "via the Hive"', () => {
+  it('draws the agent: its glyph in a rounded square, its name, and "via Hive TTY"', () => {
     seed({ comments: [dana, viaBuilder], total: 2 });
     useHiveStore.setState({
       entities: { builder: { kind: 'agent', id: 'builder', icon: 'ph-robot' } as unknown as Agent },
@@ -292,7 +292,7 @@ describe('comments posted for an agent (HIVE-216)', () => {
 
     const row = items()[1]!;
     expect(within(row).getByText('builder')).toBeInTheDocument();
-    expect(within(row).getByText('via the Hive')).toHaveClass('text-subtle');
+    expect(within(row).getByText('via Hive TTY')).toHaveClass('text-subtle');
     expect(within(row).queryByText('Yunid Bauza')).toBeNull();
     expect(row.querySelector('[data-gutter="agent"]')).not.toBeNull();
     expect(within(items()[0]!).getByText('DK')).toBeInTheDocument();
@@ -302,7 +302,7 @@ describe('comments posted for an agent (HIVE-216)', () => {
     seed({ comments: [viaBuilder], total: 1 });
     render(<TicketPageConversation ticketKey="HIVE-7" />);
 
-    expect(within(items()[0]!).getByText('via the Hive')).toBeInTheDocument();
+    expect(within(items()[0]!).getByText('via Hive TTY')).toBeInTheDocument();
     expect(items()[0]!.querySelector('[data-gutter="agent"] svg')).not.toBeNull();
   });
 
@@ -311,7 +311,7 @@ describe('comments posted for an agent (HIVE-216)', () => {
     render(<TicketPageConversation ticketKey="HIVE-7" />);
 
     expect(within(items()[0]!).getByText('YB')).toBeInTheDocument();
-    expect(screen.queryByText('via the Hive')).toBeNull();
+    expect(screen.queryByText('via Hive TTY')).toBeNull();
   });
 });
 
