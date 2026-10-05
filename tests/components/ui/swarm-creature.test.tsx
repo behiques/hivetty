@@ -89,6 +89,13 @@ describe('SwarmCreature', () => {
     expect(container.querySelector('canvas')).toBeNull();
   });
 
+  it.each(['overlord', 'egg'] as const)('passes a caller’s class to the %s box', (creature) => {
+    stubMatchMedia(false);
+    const { container } = render(<SwarmCreature creature={creature} className="mb-9" />);
+
+    expect(container.querySelector('[data-creature]')).toHaveClass('select-none', 'mb-9');
+  });
+
   it('names which creature it is, so casting stays reviewable', () => {
     stubMatchMedia(false);
     const { container } = render(<SwarmCreature creature="spire" />);

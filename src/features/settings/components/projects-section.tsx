@@ -73,7 +73,7 @@ export function ProjectsSection() {
 
       {declared.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
-          <SwarmCreature creature="overlord" size={120} />
+          <SwarmCreature creature="overlord" size={120} className="mb-9" />
           <span className="text-[11.5px] text-muted">{phrase}</span>
           <span className="text-[11.5px] text-subtle">
             Add a folder to start a session in it.
