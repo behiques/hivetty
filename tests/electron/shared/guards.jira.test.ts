@@ -511,3 +511,17 @@ describe('parseJiraUsersRequest (HIVE-216)', () => {
     refuses(() => parseJiraUsersRequest({}), /missing key "query"/);
   });
 });
+
+describe('parseSetJiraRequest — workflow', () => {
+  it('accepts a workflow, and null, which goes back to just opening', () => {
+    expect(parseSetJiraRequest({ workflow: { kind: 'skill', skill: '/hive:work-on' } })).toEqual({
+      workflow: { kind: 'skill', skill: 'hive:work-on' },
+    });
+    expect(parseSetJiraRequest({ workflow: null })).toEqual({ workflow: null });
+  });
+
+  it('refuses a malformed one, naming the field', () => {
+    refuses(() => parseSetJiraRequest({ workflow: { kind: 'skill', skill: 'a; b' } }), /setJira\.workflow: skill/);
+    refuses(() => parseSetJiraRequest({ workflow: { kind: 'skill', skill: 'x', prompt: 'a\nb' } }), /one line/);
+  });
+});

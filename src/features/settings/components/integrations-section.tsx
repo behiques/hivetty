@@ -10,6 +10,7 @@ import { PathProbes } from '@features/settings/components/path-probes';
 import { SettingsProviderGroup } from '@features/settings/components/settings-provider-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SlackGroup } from '@features/settings/components/slack-group';
+import { TicketWorkflowGroup } from '@features/settings/components/ticket-workflow-group';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useAgents } from '@hooks/use-agents';
 import { useProjectConfig } from '@hooks/use-project-config';
@@ -361,6 +362,7 @@ export function IntegrationsSection() {
                   jira.credential.kind === 'env')
               }
             />
+            <TicketWorkflowGroup workflow={snapshot.jira.workflow} />
           </>
         )}
       </SettingsProviderGroup>

@@ -809,3 +809,137 @@ describe('NewSessionPicker · opened for a ticket', () => {
     expect(linkedCount()).toBe(before);
   });
 });
+
+/**
+ * Settings › Jira › Ticket workflow, as the picker carries it out: the first
+ * message filled from the setting and editable for one start, ⌥↵ to start
+ * empty, and an agent woken instead of a session.
+ */
+describe('NewSessionPicker — the ticket workflow', () => {
+  const spawnSession = vi.fn();
+  const post = vi.fn();
+  const original = window.hive;
+
+  const withWorkflow = (workflow: ConfigSnapshot['jira']['workflow']) => {
+    const current = projectConfigSnapshot()!;
+    setProjectConfigForTest({ ...current, jira: { ...current.jira, workflow } });
+  };
+  const firstMessage = () => screen.getByRole('textbox', { name: 'First message' });
+  const taskOf = () => spawnSession.mock.lastCall?.[1] as string | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useHiveStore.setState({ spawnSession });
+    useUiStore.getState().reset();
+    resetProjectConfig();
+    seedDemoProjectConfig();
+    post.mockResolvedValue({ ok: true, id: 'a1', ref: 'a1' });
+    window.hive = { ledger: { post } } as unknown as typeof window.hive;
+    useHiveStore.getState().hydrateTickets(
+      [
+        {
+          key: 'HIVE-226',
+          summary: 'Ticket workflow',
+          status: 'To Do',
+          statusCategory: 'todo',
+          issueType: 'Story',
+          priority: null,
+          assignee: null,
+          updated: '2026-10-05T00:00:00.000+0000',
+          url: 'https://example.test/HIVE-226',
+        },
+      ],
+      false,
+    );
+    useUiStore.getState().openPicker('HIVE-226');
+  });
+
+  afterEach(() => {
+    window.hive = original;
+    resetProjectConfig();
+  });
+
+  it('has no first-message line when not started from a ticket', () => {
+    useUiStore.getState().openPicker();
+    render(<NewSessionPicker />);
+    expect(screen.queryByRole('textbox', { name: 'First message' })).toBeNull();
+  });
+
+  it('with no workflow, offers an empty line and starts the session at an empty prompt', async () => {
+    render(<NewSessionPicker />);
+    expect(firstMessage()).toHaveValue('');
+    await userEvent.click(rowsFor(/^nova-web/)[0]);
+    expect(taskOf()).toBe('');
+    expect(spawnSession.mock.lastCall?.[4]).toBe('HIVE-226');
+  });
+
+  it('types the skill on the ticket as the session’s first message', async () => {
+    withWorkflow({ kind: 'skill', skill: 'hive:work-on', prompt: 'one PR' });
+    render(<NewSessionPicker />);
+    expect(firstMessage()).toHaveValue('/hive:work-on HIVE-226 one PR');
+    await userEvent.click(rowsFor(/^nova-web/)[0]);
+    expect(taskOf()).toBe('/hive:work-on HIVE-226 one PR');
+  });
+
+  it('an edit here is what is sent, and Enter in the line starts the first match', async () => {
+    withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
+    render(<NewSessionPicker />);
+    await userEvent.clear(firstMessage());
+    await userEvent.type(firstMessage(), '/hive:debug HIVE-226{Enter}');
+    expect(taskOf()).toBe('/hive:debug HIVE-226');
+  });
+
+  it('⌥↵ starts at an empty prompt, from the search box or the line', async () => {
+    withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
+    render(<NewSessionPicker />);
+    await userEvent.type(search(), '{Alt>}{Enter}{/Alt}');
+    expect(taskOf()).toBe('');
+    await userEvent.type(firstMessage(), '{Alt>}{Enter}{/Alt}');
+    expect(taskOf()).toBe('');
+  });
+
+  it('wakes the agent with the ticket instead of a session, and opens its page', async () => {
+    withWorkflow({ kind: 'agent', agent: 'builder', via: 'wake' });
+    render(<NewSessionPicker />);
+    expect(screen.queryByRole('textbox', { name: 'First message' })).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Wake builder' }));
+
+    expect(post).toHaveBeenCalledWith({
+      to: 'builder',
+      kind: 'ask',
+      body: 'Work HIVE-226: Ticket workflow. https://example.test/HIVE-226',
+      meta: { ticket: 'HIVE-226' },
+    });
+    expect(spawnSession).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(useUiStore.getState().place).toBe('agents'));
+    expect(useUiStore.getState().agentPage).toEqual({ name: 'builder', view: 'activity' });
+  });
+
+  it('says why when the ledger refuses the ask, and stays open', async () => {
+    withWorkflow({ kind: 'agent', agent: 'builder', via: 'wake' });
+    post.mockResolvedValue({ ok: false, reason: 'unknown party' });
+    render(<NewSessionPicker />);
+    await userEvent.click(screen.getByRole('button', { name: 'Wake builder' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not ask builder: unknown party');
+    expect(useUiStore.getState().picker).toBe(true);
+  });
+
+  it('can open a session instead, which starts empty', async () => {
+    withWorkflow({ kind: 'agent', agent: 'builder', via: 'wake' });
+    render(<NewSessionPicker />);
+    await userEvent.click(screen.getByRole('button', { name: 'Open a session instead' }));
+    expect(firstMessage()).toHaveValue('');
+    await userEvent.click(rowsFor(/^nova-web/)[0]);
+    expect(taskOf()).toBe('');
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('has the session ask the agent itself when the workflow says so', () => {
+    withWorkflow({ kind: 'agent', agent: 'builder', via: 'session' });
+    render(<NewSessionPicker />);
+    expect((firstMessage() as HTMLInputElement).value).toMatch(/^Hand HIVE-226 to the builder agent: call ledger_ask/);
+  });
+});

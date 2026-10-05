@@ -34,6 +34,7 @@ const CONFIGURED: JiraConfig = {
   site: SITE,
   email: 'me@example.com',
   jql: null,
+  workflow: null,
 };
 
 function store(): SecretStore {
@@ -363,7 +364,7 @@ describe('comments', () => {
 
   it('refuses before configuration, without asking', async () => {
     const result = await build({
-      jira: { site: null, email: null, jql: null },
+      jira: { site: null, email: null, jql: null, workflow: null },
     }).comments({ key: 'HIVE-71' });
     expect(result.ok).toBe(false);
   });
@@ -485,7 +486,7 @@ describe('addComment', () => {
   it('refuses before configuration, without posting', async () => {
     const seen: { url: string; method: string }[] = [];
     const result = await build({
-      jira: { site: null, email: null, jql: null },
+      jira: { site: null, email: null, jql: null, workflow: null },
       fetch: replies([[201, rawComment()]], seen),
     }).addComment({ key: 'HIVE-71', markdown: 'hi' });
 
@@ -577,7 +578,7 @@ describe('searchUsers (HIVE-216)', () => {
   it('reports a failure, and refuses before configuration without asking', async () => {
     expect((await build({ fetch: replies([[403, {}]]) }).searchUsers({ query: 'da' })).ok).toBe(false);
     const seen: { url: string; method: string }[] = [];
-    const bare = await build({ jira: { site: null, email: null, jql: null }, fetch: replies([[200, []]], seen) }).searchUsers({ query: 'da' });
+    const bare = await build({ jira: { site: null, email: null, jql: null, workflow: null }, fetch: replies([[200, []]], seen) }).searchUsers({ query: 'da' });
     expect(bare.ok).toBe(false);
     expect(seen).toHaveLength(0);
   });
