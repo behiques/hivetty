@@ -139,12 +139,12 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
         {facts === null ? null : (
           <div
             /*
-              One row that wraps, labels above values and no boxes (HIVE-204):
-              the facts are read as a line of the page, not as five widgets. It
-              wraps rather than switching columns at a breakpoint, so a narrow
-              stage (both rails dragged wide) loses nothing to truncation.
+              Five even tiles, labels above values, as the agent page had before
+              HIVE-204 took the boxes away. Columns of at least 150px that share
+              the width evenly, and wrap onto a second row on a narrow stage
+              (both rails dragged wide) rather than truncate.
             */
-            className="flex flex-wrap gap-x-7 gap-y-2 border-b border-border-soft pb-3 font-sans text-[12.5px]"
+            className="grid gap-2.5 font-sans text-[12.5px] [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]"
           >
             {/* Paused reads amber here (HIVE-211): the bar below says why nothing happens. `STATUS_TEXT` is shared and stays. */}
             <Fact label="Status" tone={facts.status === 'paused' ? 'text-amber' : STATUS_TEXT[facts.status]}>
@@ -303,7 +303,7 @@ interface FactProps {
 
 function Fact({ label, tone, children }: FactProps) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-[7px] border border-border-soft bg-panel px-3 py-2.5">
       <span className="text-[10.5px] tracking-[0.06em] text-subtle uppercase">{label}</span>
       <span className={cn('truncate', tone)}>{children}</span>
     </div>

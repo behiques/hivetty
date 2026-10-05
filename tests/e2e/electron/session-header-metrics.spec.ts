@@ -20,15 +20,16 @@ import { launchHive, writeProjectConfig } from './fixtures/hive-app';
  * the status word stay; with the session panel open beside it, the word goes too.
  *
  * Measured here with this label, the header's content box needs about 861px
- * for the resets, hence 880px. The word's breakpoint is 748px of content box:
- * the row needs 747px with the word and the full label, and a 790px stage
- * leaves 750px after `px-5`, where the word must stay drawn. At 760px the word
- * was already hidden at 1200px, and the assertion here could not see it,
- * because Playwright counts `sr-only`'s 1px box as visible (HIVE-219).
+ * for the resets, hence 880px. The word's breakpoint is 720px of content box:
+ * each open rail's grip gutter (#71) takes 12px, so at 1200px the stage is
+ * 778px and leaves 738px after `px-5`, where the word must stay drawn; the
+ * row needs about 705px with it. Playwright counts `sr-only`'s 1px box as
+ * visible (HIVE-219), hence `wordDrawn` below.
  *
- * With the session panel open as well (HIVE-220), the header is 716px of
- * content at 1440 and 476px at 1200, and the chip's own steps take it down to
- * the brain icon and three percentages.
+ * With the session panel open as well (HIVE-220), the header is 692px of
+ * content at 1440 and 452px at 1200. There the chip's own steps take it down
+ * to the brain icon and three percentages (195px), and below 500px the title's
+ * floor drops to 96px so the model slot has room for them.
  */
 const PROJECT = 'nova-web';
 /** Long enough that `nova-web · <branch>` overflows the title column at 790px of stage. */
@@ -57,8 +58,8 @@ function longBranchRepo(dir: string): string {
 
 /**
  * Seed the session panel closed before the first frame that matters: the
- * widths below are the stage beside the list panel alone (about 1,030px at
- * 1440 and 790px at 1200). Round two is the default layout (HIVE-213).
+ * widths below are the stage beside the list panel alone (about 1,018px at
+ * 1440 and 778px at 1200). Round two is the default layout (HIVE-213).
  */
 async function closeSessionPanel(page: Page): Promise<void> {
   await page.evaluate(() => {

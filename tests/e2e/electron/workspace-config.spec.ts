@@ -91,11 +91,13 @@ test('a valid mapping makes its project spawnable and an unresolvable one unmapp
     // it also carries a count ("nova-web 3 active").
     await goToOvermind(page);
     await overmindNewSession(page).click();
+    // In the picker: it is not modal, so the Sessions rail's rows stay on the page under the same names.
+    const picker = page.getByRole('dialog', { name: 'Start a new session' });
     await expect(
-      page.getByRole('button', { name: 'nova-web', exact: true }),
+      picker.getByRole('button', { name: 'nova-web', exact: true }),
     ).toBeEnabled();
     await expect(
-      page.getByRole('button', { name: 'referral-api', exact: true }),
+      picker.getByRole('button', { name: 'referral-api', exact: true }),
     ).toBeDisabled();
   } finally {
     await app.close();
@@ -118,6 +120,8 @@ test('an invalid entry surfaces its reason without blocking launch', async ({}, 
 
     const row = (await openProject(page, 'nova-web')).getByRole('button', { name: /^nova-web/ });
     await expect(row).toContainText('unmapped');
+    // Off the row first: hovered, a row hides its tags so its actions can show.
+    await page.mouse.move(0, 0);
     // The status reason travels all the way to the tooltip, verbatim.
     await expect(row.getByTitle(/missing/)).toBeVisible();
   } finally {

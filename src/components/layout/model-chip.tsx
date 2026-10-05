@@ -143,17 +143,17 @@ function Stat({ pct, detail, short, label }: StatProps) {
  * 1. the title truncates;
  * 2. ≤ 880px, the resets give way to `5h` / `wk` (both spans render; the
  *    container picks one);
- * 3. ≤ 748px, the header's status word hides (its dot keeps it as a title);
- *    measured, the row needs 747px with the word and this label, and the list
- *    panel alone at 1200px leaves 750px, where the word stays (HIVE-219);
+ * 3. ≤ 720px, the header's status word hides (its dot keeps it as a title);
+ *    measured, the row needs ~705px with the word and this label (HIVE-219;
+ *    retuned to 720px for the rails' grip gutters, #71);
  * 4. ≤ 700px, the label shortens to the model name, window and effort left to
  *    the tooltip;
  * 5. ≤ 620px, the detail words go: each stat is its ring and percentage;
  * 6. ≤ 560px, the label goes: the brain icon alone;
- * 7. ≤ 500px, the title column's floor drops from 140px to 110px.
+ * 7. ≤ 500px, the title column's floor drops from 140px to 96px.
  *
  * Each breakpoint sits above the width its row needs with the steps before it
- * (690, 603, 541, 475px), so the header at 1200px with both panels open (476px)
+ * (690, 603, 541, 475px), so the header at 1200px with both panels open (452px, the rails' grip gutters included)
  * fits with the icon alone and room to spare.
  *
  * The three percentages never go. The full string, model, window, effort and
