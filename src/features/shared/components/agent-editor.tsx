@@ -1,14 +1,29 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 import { cn } from '@/lib/utils';
 
 import { EditorSurface } from '@components/editor/editor-surface';
-import { AgentForm } from '@features/agents/components/agent-form';
+import { SplitHandle } from '@components/ui/split-handle';
+import { AgentForm } from '@features/shared/components/agent-form';
 import { languageFor } from '@lib/explorer/language';
 import type { AgentProblem } from '@shared/agent-contract';
-import { useEditorAppearance } from '@stores/appearance-store';
+import {
+  DEFAULT_AGENT_SPLIT_RATIO,
+  useAgentSplitRatio,
+  useEditorAppearance,
+  useSetAgentSplitRatio,
+} from '@stores/appearance-store';
 
 type Tab = 'form' | 'source';
+
+/**
+ * The narrowest each pane may be dragged to, px: the form's fields and their
+ * inline problems stop wrapping at 460, and 320 keeps a frontmatter line such
+ * as `slack.channel:#incorp-dev` on one row. The grid's class repeats both
+ * numbers, since Tailwind cannot read a constant.
+ */
+export const FORM_MIN_PX = 460;
+export const SOURCE_MIN_PX = 320;
 
 /**
  * Why Run now would refuse, or `null` when it would not — the page header's
@@ -75,20 +90,28 @@ interface AgentEditorProps {
    * offer — `skill-editor.tsx`'s prop, for the same four-answers problem.
    */
   actionsHidden?: boolean;
+  /**
+   * `split`: Form and Source side by side from 900px of container, with the
+   * draggable seam (the agent page). `tabs`: Form | Source tabs at every width
+   * (Settings, whose detail pane is too narrow for two panes).
+   */
+  layout?: 'split' | 'tabs';
 }
 
 /**
- * An agent's `AGENT.md`, on the agent page's Definition view (HIVE-114, moved
- * from Settings › Agents in HIVE-204).
+ * An agent's `AGENT.md`: side by side on the agent page's Definition view, and
+ * behind tabs in Settings › Agents (HIVE-114, HIVE-204).
  *
- * ## Side by side, with tabs below 900px
+ * ## Side by side on the page, tabs in Settings
  *
- * In Settings this was tabs only: the editor column was roughly 450–650px after
- * the list, and a split there landed each half near 300px, where
- * `slack.channel:#incorp-dev` wraps. The page gives it the whole stage, so at
- * 900px of container and up the form takes a 520px column and the source the
- * rest, and you can watch the frontmatter change as you edit the form. Below
- * that the Form | Source tabs come back, each with the full height.
+ * Settings' editor column is roughly 450–650px after the list, and a split
+ * there lands each half near 300px, where `slack.channel:#incorp-dev` wraps, so
+ * Settings asks for `layout="tabs"`. The page gives it the whole stage, so at
+ * 900px of container and up the form and the source sit side by side and you
+ * can watch the frontmatter change as you edit the form. The seam between them
+ * drags, the split is kept in appearance-store, and neither pane goes below
+ * its minimum width. Below 900px of a split the Form | Source tabs come back,
+ * each with the full height.
  *
  * ## Why the real editor, and not a `<textarea>`
  *
@@ -121,9 +144,20 @@ export function AgentEditor({
   onRevert,
   notice,
   actionsHidden = false,
+  layout = 'split',
 }: AgentEditorProps) {
+  const split = layout === 'split';
   const [tab, setTab] = useState<Tab>('form');
   const appearance = useEditorAppearance();
+  const ratio = useAgentSplitRatio();
+  const setRatio = useSetAgentSplitRatio();
+  const grid = useRef<HTMLDivElement>(null);
+
+  // Both panes keep a width the form and the editor can draw in; the CSS minmax holds them on a resize too.
+  const onRatio = (next: number) => {
+    const width = grid.current?.getBoundingClientRect().width ?? 0;
+    if (width > 0) setRatio(Math.min(Math.max(next, FORM_MIN_PX / width), 1 - SOURCE_MIN_PX / width));
+  };
 
   /**
    * The live `onSave`, for a listener bound once on mount.
@@ -252,12 +286,13 @@ export function AgentEditor({
         Below 900px of stage, today's Form | Source tabs; at or above, both
         panes side by side and the tabs go. A container query rather than a
         viewport one: the stage's width is what the panes share, and the rails
-        beside it take a different share of the window on every layout.
+        beside it take a different share of the window on every layout. In
+        the tabs layout the tabs stay at every width.
       */}
       <div
         role="tablist"
         aria-label="Agent editor view"
-        className="flex gap-1 border-b border-border-soft px-2.5 py-1.5 @min-[900px]:hidden"
+        className={cn('flex gap-1 border-b border-border-soft px-2.5 py-1.5', split && '@min-[900px]:hidden')}
       >
         <button
           type="button"
@@ -283,10 +318,18 @@ export function AgentEditor({
         Both panes edit the one buffer, so in wide mode the source is mounted
         even while the narrow tab says Form: there is nothing to keep in step.
       */}
-      <div className="grid min-h-0 flex-1 @min-[900px]:grid-cols-[520px_minmax(0,1fr)]">
+      <div
+        ref={grid}
+        style={{ '--agent-form-w': `${String(ratio * 100)}%` } as CSSProperties}
+        className={cn(
+          'grid min-h-0 flex-1',
+          split && '@min-[900px]:grid-cols-[minmax(460px,var(--agent-form-w))_1px_minmax(320px,1fr)]',
+        )}
+      >
         <div
           className={cn(
-            'min-h-0 overflow-y-auto font-sans @min-[900px]:block @min-[900px]:border-r @min-[900px]:border-border-soft',
+            'min-h-0 overflow-y-auto font-sans',
+            split && '@min-[900px]:block',
             tab === 'form' ? 'block' : 'hidden',
           )}
         >
@@ -297,7 +340,18 @@ export function AgentEditor({
             onChange={onChange}
           />
         </div>
-        <div className={cn('min-h-0 flex-col @min-[900px]:flex', tab === 'source' ? 'flex' : 'hidden')}>
+        {split ? (
+          <SplitHandle
+            axis="vertical"
+            containerRef={grid}
+            label="Resize the form and the source"
+            value={ratio}
+            onValue={onRatio}
+            onReset={() => setRatio(DEFAULT_AGENT_SPLIT_RATIO)}
+            className="hidden @min-[900px]:block"
+          />
+        ) : null}
+        <div className={cn('min-h-0 flex-col', split && '@min-[900px]:flex', tab === 'source' ? 'flex' : 'hidden')}>
           {/*
             The one thing the source could not say for itself, and the one users
             got wrong: the text under the frontmatter is the agent's job, re-read

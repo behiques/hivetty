@@ -10,7 +10,7 @@ import {
   AgentForm,
   FIELD_HELP,
   RENDERED_PATHS,
-} from '@features/agents/components/agent-form';
+} from '@features/shared/components/agent-form';
 import { readFrontmatter } from '@shared/agent-contract';
 
 const SOURCE = `---

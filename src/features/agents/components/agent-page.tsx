@@ -4,9 +4,9 @@ import { isAgent } from '@/types/entity';
 
 import { Icon } from '@components/ui/icon';
 import { SegmentedControl } from '@components/ui/segmented-control';
-import { AgentDefinition } from '@features/agents/components/agent-definition';
-import { runRefusal } from '@features/agents/components/agent-editor';
 import { AgentView } from '@features/agents/components/agent-view';
+import { AgentDefinition } from '@features/shared/components/agent-definition';
+import { runRefusal } from '@features/shared/components/agent-editor';
 import { useAgents } from '@hooks/use-agents';
 import { useAgentDraft } from '@stores/editor-store';
 import { agentRunQueued, agentRunRefusal, useEntity } from '@stores/hive-store';
@@ -34,7 +34,7 @@ const VIEWS = [
  */
 export function AgentPage({ name }: { name: string | null }) {
   const page = useAgentPage();
-  const { setAgentPageView } = useAgentPageActions();
+  const { setAgentPageView, openAgentPage, closeAgentPage } = useAgentPageActions();
   const entity = useEntity(name ?? '');
   const agent = entity !== undefined && isAgent(entity) ? entity : undefined;
   const snapshot = useAgents();
@@ -107,7 +107,12 @@ export function AgentPage({ name }: { name: string | null }) {
       {view === 'activity' && agent !== undefined ? (
         <AgentView entity={agent} notice={notice} onNotice={setNotice} />
       ) : (
-        <AgentDefinition name={name} notice={notice} />
+        <AgentDefinition
+          name={name}
+          notice={notice}
+          onRename={(next) => openAgentPage(next, 'definition')}
+          onClose={closeAgentPage}
+        />
       )}
     </div>
   );

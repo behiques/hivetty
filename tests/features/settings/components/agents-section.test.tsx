@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,6 +6,7 @@ import { resetAgents } from '@/lib/agents';
 import { resetShippedState } from '@/lib/shipped';
 
 import { AgentsSection } from '@features/settings/components/agents-section';
+import { useEditorStore } from '@stores/editor-store';
 import { useUiStore } from '@stores/ui-store';
 
 import type { AgentSummary } from '@shared/agent-contract';
@@ -55,6 +56,7 @@ beforeEach(() => {
   delete (window as unknown as { hive?: unknown }).hive;
   resetAgents();
   resetShippedState();
+  useEditorStore.getState().reset();
   useUiStore.getState().reset();
   vi.restoreAllMocks();
 });
@@ -114,7 +116,8 @@ describe('AgentsSection', () => {
 
       await userEvent.click(target);
 
-      expect(useUiStore.getState().agentPage).toEqual({ name: 'broken', view: 'definition' });
+      expect(await screen.findByText('/root/agents/broken/AGENT.md')).toBeInTheDocument();
+      expect(useUiStore.getState().agentPage).toBeNull();
     });
   });
 
@@ -144,39 +147,43 @@ describe('AgentsSection', () => {
       ).not.toBeInTheDocument();
     });
 
-    it('holds no editor of its own', async () => {
+    it('says what to do while nothing is open', async () => {
       stub([agent('slack-watcher')]);
       render(<AgentsSection />);
 
-      await screen.findByRole('button', { name: /slack-watcher/ });
-
+      expect(await screen.findByText('Select an agent, or write a new one.')).toBeInTheDocument();
       expect(screen.queryByRole('tab', { name: 'Source' })).toBeNull();
     });
   });
 
   /*
-    The editor moved to the agent's page (HIVE-204). Settings opens it there on
-    Definition, through ui-store, and closes itself on the way.
+    Settings edits in place again, with Form | Source tabs: the agent page shows
+    the same editor side by side, and both share the editor-store draft.
   */
-  describe('opening the agent page', () => {
-    it('opening an agent opens its page on Definition', async () => {
+  describe('editing in place', () => {
+    it('opens an agent beside the list, with Settings still open and no page', async () => {
       stub([agent('slack-watcher')]);
       useUiStore.getState().openSettings('agents');
       render(<AgentsSection />);
 
       await userEvent.click(await screen.findByRole('button', { name: /slack-watcher/ }));
 
-      expect(useUiStore.getState().agentPage).toEqual({ name: 'slack-watcher', view: 'definition' });
-      expect(useUiStore.getState().settings).toBe(false);
+      expect(await screen.findByText('/root/agents/slack-watcher/AGENT.md')).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Form' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Source' })).toBeInTheDocument();
+      expect(row('slack-watcher')).toHaveAttribute('aria-current', 'true');
+      expect(useUiStore.getState().settings).toBe(true);
+      expect(useUiStore.getState().agentPage).toBeNull();
     });
 
-    it('New agent opens a never-saved page on Definition', async () => {
+    it('New agent writes a never-saved agent in Settings', async () => {
       stub([agent('slack-watcher')]);
       render(<AgentsSection />);
 
       await userEvent.click(await screen.findByRole('button', { name: '+ New agent' }));
 
-      expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
+      expect(await screen.findByText('not saved yet')).toBeInTheDocument();
+      expect(useUiStore.getState().agentPage).toBeNull();
     });
 
     it('New agent from the empty state does the same', async () => {
@@ -185,7 +192,26 @@ describe('AgentsSection', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: '+ New agent' }));
 
-      expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
+      expect(await screen.findByText('not saved yet')).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Source' })).toBeInTheDocument();
+      expect(useUiStore.getState().agentPage).toBeNull();
+    });
+
+    it('goes back to the placeholder after a delete', async () => {
+      const bridge = stub([agent('slack-watcher')]);
+      render(<AgentsSection />);
+
+      await userEvent.click(await screen.findByRole('button', { name: /slack-watcher/ }));
+      await waitFor(() => expect(useEditorStore.getState().agentDrafts['slack-watcher']).toBeDefined());
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      await userEvent.click(
+        within(screen.getByRole('alertdialog', { name: 'Delete slack-watcher?' })).getByRole('button', {
+          name: 'Delete',
+        }),
+      );
+
+      await waitFor(() => expect(bridge.remove).toHaveBeenCalledWith({ name: 'slack-watcher' }));
+      expect(await screen.findByText('Select an agent, or write a new one.')).toBeInTheDocument();
     });
   });
 });

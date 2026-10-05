@@ -401,7 +401,16 @@ a head, then the body the switch picks. The head carries the identity, the
 `SegmentedControl` for **Activity | Definition**, and Run now. Pause and Resume live in the
 panel row's slot. Activity is `AgentView`;
 Definition is `AgentDefinition`, which owns read, save, rename, delete, revert and the
-shipped strip for one agent and renders `AgentEditor`.
+shipped strip for one agent and renders `AgentEditor`. Both, with `AgentForm`, live in
+`features/shared/components/` so Settings can mount them too. The caller says what a
+rename and a delete open (`onRename`, `onClose`): the page moves to the new name or
+closes; Settings selects the new name or empties its detail pane.
+
+- **Layout.** `AgentEditor`'s `layout` is `'split'` on the page: from 900px of container
+  Form and Source sit side by side across a `SplitHandle` whose ratio is
+  `agentSplitRatio` in appearance-store, each pane held to a minimum width
+  (`FORM_MIN_PX` 460, `SOURCE_MIN_PX` 320) by the drag and by the grid's `minmax`.
+  Settings passes `'tabs'`: Form | Source tabs at every width, no seam.
 
 - **Which agent, which view** is `agentPage` in ui-store (`openAgentPage`,
   `setAgentPageView`, `closeAgentPage`); `name: null` is a new agent never saved.
@@ -421,9 +430,10 @@ shipped strip for one agent and renders `AgentEditor`.
   `jumpTo`s; the selected row gets `bg-panel-2` and an inset brand bar; the heading names
   it. Outcomes take `failed` red and `asking` amber from the terminal palette, the reason
   rides inline, and Took is `formatDuration` (`@lib/format-duration`).
-- **Settings stays fenced.** Settings › Agents opens the page through ui-store and
-  imports nothing from the agents slice; the atoms both use (`SettingsGroup`,
-  `InlineConfirm`, the shipped marker) live in `features/shared/components/`.
+- **Settings stays fenced.** Settings › Agents edits in place with `AgentDefinition`
+  from `features/shared` and imports nothing from the agents slice; the atoms both use
+  (`SettingsGroup`, `InlineConfirm`, the shipped marker) live there too. Both surfaces
+  edit the one `agentDrafts` entry, so an edit in one shows in the other.
 
 ## The agent row
 
