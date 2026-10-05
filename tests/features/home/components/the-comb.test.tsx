@@ -147,6 +147,16 @@ describe('TheComb — hover, click and the hidden list', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
+  it('shows the focused cell: its tooltip, and a ring on the canvas (HIVE-223)', () => {
+    seed(2);
+    render(<TheComb label="x" />);
+    const button = screen.getAllByRole('button')[0]!;
+    act(() => button.focus());
+    expect(screen.getByRole('tooltip')).toHaveTextContent('s0');
+    act(() => button.blur());
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
   it('opens a session cell on click', () => {
     const layout = seed(2);
     const openEntity = vi.fn(() => true);
