@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 
 import { ActivityBar } from '@components/layout/activity-bar';
 import { CenterStage } from '@components/layout/center-stage';
@@ -18,7 +18,7 @@ import { useNarrowWindow } from '@hooks/use-narrow-window';
 import { useNotificationStream } from '@hooks/use-notification-stream';
 import { useRemoteLinkStream } from '@hooks/use-remote-link';
 import { useSessionNames } from '@hooks/use-session-names';
-import { watchSystemTheme } from '@stores/appearance-store';
+import { useListPanelWidth, useSessionPanelWidth, watchSystemTheme } from '@stores/appearance-store';
 import { useSetNarrow } from '@stores/ui-store';
 
 /**
@@ -147,15 +147,27 @@ export function AppShell() {
    */
   useEffect(() => watchSystemTheme(), []);
 
+  // The rails' dragged widths, as the tokens they already size by; the row is what their seams measure against.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const listWidth = useListPanelWidth();
+  const sessionWidth = useSessionPanelWidth();
+  const widths = {
+    '--cc-list-w': `${String(listWidth)}px`,
+    '--cc-session-panel-w': `${String(sessionWidth)}px`,
+  } as CSSProperties;
+
   return (
     <div className="flex h-full flex-col bg-bg text-ink">
       {/* The window-controls row; renders nothing off macOS and in the browser. */}
       <TitleBar />
       <div className="relative flex min-h-0 flex-1">
         <ActivityBar />
-        <ListPanel />
-        <CenterStage />
-        <SessionPanel />
+        {/* Not `relative`: the narrow list overlay still positions against the row above. */}
+        <div ref={rowRef} className="flex min-w-0 flex-1" style={widths}>
+          <ListPanel rowRef={rowRef} />
+          <CenterStage />
+          <SessionPanel rowRef={rowRef} />
+        </div>
       </div>
     </div>
   );

@@ -9,6 +9,11 @@ import { useUiStore } from '@stores/ui-store';
 import {
   APPEARANCE_STORAGE_KEY,
   DEFAULT_TEAM_NAME,
+  PANEL_WIDTHS,
+  useListPanelWidth,
+  useSessionPanelWidth,
+  useSetListPanelWidth,
+  useSetSessionPanelWidth,
   activeThemeOf,
   migrateAppearance,
   resolveTheme,
@@ -307,6 +312,8 @@ describe('appearance-store — persistence', () => {
       density: 'compact',
       sessionPanelOpen: true,
       sessionPanelTab: 'plan',
+      listPanelWidth: 300,
+      sessionPanelWidth: 320,
       teamName: 'Swarm Command',
       editorPlacement: 'full',
       editorSplitAxis: 'vertical',
@@ -1074,6 +1081,50 @@ describe('appearance-store — session panel (HIVE-201)', () => {
     expect(result.current.open).toBe(true);
     act(() => result.current.setTab('files'));
     expect(result.current.tab).toBe('files');
+  });
+});
+
+describe('appearance-store — rail widths', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useAppearanceStore.getState().reset();
+  });
+
+  it('clamps a drag to the rail bounds, in whole pixels', () => {
+    const s = useAppearanceStore.getState();
+    expect([s.listPanelWidth, s.sessionPanelWidth]).toEqual([300, 320]);
+    s.setListPanelWidth(10);
+    s.setSessionPanelWidth(9000);
+    expect([useAppearanceStore.getState().listPanelWidth, useAppearanceStore.getState().sessionPanelWidth]).toEqual([
+      PANEL_WIDTHS.list.min,
+      PANEL_WIDTHS.session.max,
+    ]);
+    s.setListPanelWidth(333.6);
+    s.setSessionPanelWidth(Number.NaN);
+    expect([useAppearanceStore.getState().listPanelWidth, useAppearanceStore.getState().sessionPanelWidth]).toEqual([
+      334, 320,
+    ]);
+  });
+
+  it('rehydrates a stored width held to its bounds, and a bad one as the initial', async () => {
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ state: { listPanelWidth: 9000, sessionPanelWidth: 'wide' }, version: 4 }),
+    );
+    await useAppearanceStore.persist.rehydrate();
+    expect(useAppearanceStore.getState()).toMatchObject({ listPanelWidth: 400, sessionPanelWidth: 320 });
+  });
+
+  it('the hooks read and write them', () => {
+    const { result } = renderHook(() => ({
+      list: useListPanelWidth(),
+      session: useSessionPanelWidth(),
+      setList: useSetListPanelWidth(),
+      setSession: useSetSessionPanelWidth(),
+    }));
+    act(() => result.current.setList(250));
+    act(() => result.current.setSession(400));
+    expect([result.current.list, result.current.session]).toEqual([250, 400]);
   });
 });
 

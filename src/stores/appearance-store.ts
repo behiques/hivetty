@@ -91,6 +91,9 @@ interface AppearanceState {
    */
   sessionPanelOpen: boolean;
   sessionPanelTab: SessionPanelTab;
+  /** The list and session panels' widths in px, dragged from their seams; see {@link PANEL_WIDTHS}. */
+  listPanelWidth: number;
+  sessionPanelWidth: number;
 
   /**
    * The line under the wordmark — whose hive this is. The activity bar's brand
@@ -220,6 +223,8 @@ interface AppearanceState {
   setEditorSplitRatio: (ratio: number) => void;
   setConsoleSplitRatio: (ratio: number) => void;
   setRunLogSplitRatio: (ratio: number) => void;
+  setListPanelWidth: (px: number) => void;
+  setSessionPanelWidth: (px: number) => void;
   setEditorNav: (nav: EditorNav) => void;
   setEditorEditable: (editable: boolean) => void;
   setEditorFont: (font: TerminalFontId) => void;
@@ -279,6 +284,24 @@ export const MAX_SPLIT_RATIO = 0.8;
 export const clampSplitRatio = (ratio: number): number => {
   if (!Number.isFinite(ratio)) return 0.5;
   return Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, ratio));
+};
+
+/**
+ * The two rails' drag bounds, px. The maxima leave a 1,200px window — the
+ * narrowest that draws both rails — about 200px of stage with both at full.
+ */
+export const PANEL_WIDTHS = {
+  list: { min: 220, max: 400, initial: 300 },
+  session: { min: 260, max: 480, initial: 320 },
+} as const;
+
+export type PanelRail = keyof typeof PANEL_WIDTHS;
+
+/** Whole pixels inside the rail's bounds; anything that is not a number reads as the initial width. */
+export const clampPanelWidth = (rail: PanelRail, px: unknown): number => {
+  const { min, max, initial } = PANEL_WIDTHS[rail];
+  if (typeof px !== 'number' || !Number.isFinite(px)) return initial;
+  return Math.round(Math.min(max, Math.max(min, px)));
 };
 
 const MEDIA_QUERY = '(prefers-color-scheme: dark)';
@@ -404,6 +427,8 @@ const initialAppearanceState = {
   /** Open, on Plan: Files is where the Explorer lived, so open shows the user what moved (D14). */
   sessionPanelOpen: true,
   sessionPanelTab: 'plan' as SessionPanelTab,
+  listPanelWidth: PANEL_WIDTHS.list.initial,
+  sessionPanelWidth: PANEL_WIDTHS.session.initial,
   teamName: DEFAULT_TEAM_NAME,
 
   /** Full stage: the editor is a place you go, not a permanent tax on the terminal. */
@@ -444,6 +469,8 @@ interface PersistedAppearanceState {
   density: Density;
   sessionPanelOpen: boolean;
   sessionPanelTab: SessionPanelTab;
+  listPanelWidth: number;
+  sessionPanelWidth: number;
   teamName: string;
   editorPlacement: EditorPlacement;
   editorSplitAxis: EditorSplitAxis;
@@ -686,6 +713,8 @@ export const useAppearanceStore = create<AppearanceState>()(
         set({ consoleSplitRatio: clampSplitRatio(ratio) }),
       setRunLogSplitRatio: (ratio) =>
         set({ runLogSplitRatio: clampSplitRatio(ratio) }),
+      setListPanelWidth: (px) => set({ listPanelWidth: clampPanelWidth('list', px) }),
+      setSessionPanelWidth: (px) => set({ sessionPanelWidth: clampPanelWidth('session', px) }),
       setEditorNav: (editorNav) => set({ editorNav }),
       setEditorEditable: (editorEditable) => set({ editorEditable }),
       setEditorFont: (editorFont) => set({ editorFont }),
@@ -757,6 +786,9 @@ export const useAppearanceStore = create<AppearanceState>()(
           sessionPanelTab: SESSION_PANEL_TABS.includes(persisted.sessionPanelTab as SessionPanelTab)
             ? (persisted.sessionPanelTab as SessionPanelTab)
             : 'plan',
+          // No version bump for the rails either: absent or bad reads as the initial width.
+          listPanelWidth: clampPanelWidth('list', persisted.listPanelWidth),
+          sessionPanelWidth: clampPanelWidth('session', persisted.sessionPanelWidth),
         } as AppearanceState;
       },
       storage: createJSONStorage(() => localStorage),
@@ -772,6 +804,8 @@ export const useAppearanceStore = create<AppearanceState>()(
         density: state.density,
         sessionPanelOpen: state.sessionPanelOpen,
         sessionPanelTab: state.sessionPanelTab,
+        listPanelWidth: state.listPanelWidth,
+        sessionPanelWidth: state.sessionPanelWidth,
         teamName: state.teamName,
         editorPlacement: state.editorPlacement,
         editorSplitAxis: state.editorSplitAxis,
@@ -960,6 +994,11 @@ export const useSessionPanelTab = () => useAppearanceStore((state) => state.sess
 export const useSetSessionPanelOpen = () => useAppearanceStore((state) => state.setSessionPanelOpen);
 export const useToggleSessionPanel = () => useAppearanceStore((state) => state.toggleSessionPanel);
 export const useSetSessionPanelTab = () => useAppearanceStore((state) => state.setSessionPanelTab);
+/** A rail's width in px, and its setter. */
+export const useListPanelWidth = () => useAppearanceStore((state) => state.listPanelWidth);
+export const useSessionPanelWidth = () => useAppearanceStore((state) => state.sessionPanelWidth);
+export const useSetListPanelWidth = () => useAppearanceStore((state) => state.setListPanelWidth);
+export const useSetSessionPanelWidth = () => useAppearanceStore((state) => state.setSessionPanelWidth);
 
 /**
  * Everything the CodeMirror surface needs, resolved.
