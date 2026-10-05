@@ -115,18 +115,13 @@ describe('the creature accents (HIVE-221)', () => {
   };
 
   // The Brood v15's literals: dark, then light. The maw on light is the
-  // artifact's `spTone(T, 0.04)`. The hive's mineral ramp is its `M`, and
-  // its mat the `[70, 46, 112]`/`[183, 163, 230]` it mixes into the ground.
+  // artifact's `spTone(T, 0.04)`.
   const ARTIFACT = {
     membrane: [[150, 80, 150], [196, 140, 206]],
     maw: [[9, 3, 13], [129, 112, 186]],
     gum: [[40, 10, 32], [120, 70, 110]],
     stain: [[96, 60, 70], [96, 60, 70]],
     glint: [[255, 255, 255], [255, 255, 255]],
-    mineralDeep: [[30, 25, 42], [110, 98, 132]],
-    mineral: [[92, 84, 108], [176, 168, 192]],
-    mineralLit: [[168, 160, 180], [236, 232, 242]],
-    mat: [[70, 46, 112], [183, 163, 230]],
   } as const;
 
   it.each([
@@ -146,7 +141,7 @@ describe('the creature accents (HIVE-221)', () => {
       ground: _f, ...bare
     } = BUILT_IN_THEME.modes.light.ui;
     const p = swarmPaletteOf(bare);
-    for (const c of [p.membrane, p.maw, p.gum, p.stain, p.glint, p.mineralDeep, p.mineral, p.mineralLit, p.mat]) {
+    for (const c of [p.membrane, p.maw, p.gum, p.stain, p.glint]) {
       expect(parseColour(c)).not.toBeNull();
     }
   });

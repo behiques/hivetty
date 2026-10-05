@@ -42,14 +42,6 @@ export interface SwarmPalette {
   stain: string;
   /** Wet glints on eyes and teeth: the brightest colour the theme has. */
   glint: string;
-  /** The hive's mineral growths, shadowed (`M.lo`). */
-  mineralDeep: string;
-  /** Mid mineral, `M.mid`. */
-  mineral: string;
-  /** Lit mineral, `M.hi`. */
-  mineralLit: string;
-  /** The mat the hive spreads over its ground. */
-  mat: string;
 }
 
 /** Draw at `alpha` times the current alpha, then put it back. */

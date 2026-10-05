@@ -86,8 +86,8 @@ Creep and chitin are bound as utilities too: `bg-creep`, `text-chitin` and the r
 (`--cc-tissue-deep`, `--cc-tissue`, `--cc-tissue-lit`), the glow (`--cc-green`
 with `--cc-glow-core` at its centre), `--cc-ground`, `--cc-creep` and
 `--cc-chitin`; the overlord's beam is `--cc-brand`. The hover mutalisk's
-membrane, maw, gums, tusk stain and glints, and the hive's mineral ramp and
-ground mat, have no token: `swarmPaletteOf` mixes them from the theme's own
+membrane, maw, gums, tusk stain and glints have no token:
+`swarmPaletteOf` mixes them from the theme's own
 colours. Every `SwarmCreature` is one of these canvases; the WebP sprites and
 their generator are gone, so an empty state's creature follows the theme,
 light, dark or imported.

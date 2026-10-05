@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import * as egg from '@features/pull-requests/components/hatchery-egg-data';
+import * as egg from '@lib/swarm/egg-data';
 import {
   BLISTERS,
   CREASES,
@@ -18,7 +18,7 @@ import {
   VEIN_BANDS,
   VEINS,
   WET,
-} from '@features/pull-requests/components/hatchery-egg-data';
+} from '@lib/swarm/egg-data';
 
 describe('hatchery egg data (HIVE-221)', () => {
   it('carries the design\'s counts', () => {

@@ -27,10 +27,6 @@ export interface Tone {
   gum: Rgb;
   stain: Rgb;
   glint: Rgb;
-  mineralDeep: Rgb;
-  mineral: Rgb;
-  mineralLit: Rgb;
-  mat: Rgb;
   brand: Rgb;
   creep: Rgb;
   chitin: Rgb;
@@ -147,10 +143,6 @@ export function toneOf(p: SwarmPalette): Tone {
     gum: rgbOf(p.gum),
     stain: rgbOf(p.stain),
     glint: rgbOf(p.glint),
-    mineralDeep: rgbOf(p.mineralDeep),
-    mineral: rgbOf(p.mineral),
-    mineralLit: rgbOf(p.mineralLit),
-    mat: rgbOf(p.mat),
     brand: rgbOf(p.brand),
     creep: rgbOf(p.creep),
     chitin: rgbOf(p.chitin),

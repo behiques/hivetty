@@ -228,7 +228,7 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
         ) : (
           <EmptyState
             phrase="empty.explorer"
-            creature="hive"
+            creature="overlord"
             action="Open one from the fleet, or start a new session."
           >
             No session open — the explorer follows the session you are watching.
@@ -358,7 +358,7 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
       ) : null}
 
       {usable && !searching && !root.error && root.entries?.length === 0 ? (
-        <EmptyState phrase="empty.explorer" creature="hive">This repository is empty.</EmptyState>
+        <EmptyState phrase="empty.explorer" creature="egg">This repository is empty.</EmptyState>
       ) : null}
 
       {usable && !searching

@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import * as brood from '@lib/swarm/brood';
 import { BLEED } from '@lib/swarm/brood';
-import { HIVE } from '@lib/swarm/hive';
 import { HOVER } from '@lib/swarm/hover';
 import { OVERLORD } from '@lib/swarm/overlord';
 import { SPIRE } from '@lib/swarm/spire';
@@ -74,21 +73,31 @@ describe('SwarmCreature', () => {
 
   it('renders at the height it was given', () => {
     stubMatchMedia(false);
-    const { container } = render(<SwarmCreature creature="hive" size={120} />);
+    const { container } = render(<SwarmCreature creature="overlord" size={120} />);
 
     expect(container.querySelector('[data-creature]')).toHaveStyle({ height: '120px' });
   });
 
+  it('draws the egg as the Hatchery does, in a box its height tall', () => {
+    stubMatchMedia(false);
+    const { container } = render(<SwarmCreature creature="egg" size={120} />);
+
+    const egg = container.querySelector('[data-creature="egg"]');
+    expect(egg).toHaveStyle({ height: '120px' });
+    expect(egg).toHaveAttribute('aria-hidden', 'true');
+    expect(egg?.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('canvas')).toBeNull();
+  });
+
   it('names which creature it is, so casting stays reviewable', () => {
     stubMatchMedia(false);
-    const { container } = render(<SwarmCreature creature="hive" />);
+    const { container } = render(<SwarmCreature creature="spire" />);
 
-    expect(container.querySelector('[data-creature]')).toHaveAttribute('data-creature', 'hive');
+    expect(container.querySelector('[data-creature]')).toHaveAttribute('data-creature', 'spire');
   });
 
   /** Every creature is the Brood's now; no sprite, no `<img>`. */
   it.each([
-    ['hive', HIVE],
     ['overlord', OVERLORD],
     ['spire', SPIRE],
     ['mutalisk', HOVER],
@@ -110,7 +119,7 @@ describe('SwarmCreature', () => {
   });
 
   it.each([
-    ['hive', HIVE],
+    ['spire', SPIRE],
     ['overlord', OVERLORD],
   ] as const)('holds the %s at its rest frame when the user asked for less motion', (creature, drawing) => {
     stubMatchMedia(true);

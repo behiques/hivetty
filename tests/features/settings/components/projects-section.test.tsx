@@ -206,6 +206,9 @@ describe('ProjectsSection', () => {
       // the label was the one of the four that said nothing the others did.
       expect(screen.getByText(/add a folder to start a session/i)).toBeInTheDocument();
       expect(screen.queryByText(/no projects yet/i)).not.toBeInTheDocument();
+      const creature = document.querySelector('[data-creature]');
+      expect(creature).toHaveAttribute('data-creature', 'overlord');
+      expect(creature).toHaveStyle({ height: '120px' });
     });
 
     it('still offers Add project when empty', () => {
