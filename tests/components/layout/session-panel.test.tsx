@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { act } from 'react';
+import { act, createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session, Terminal } from '@/types/entity';
@@ -101,7 +101,7 @@ describe('SessionPanel (HIVE-201)', () => {
   });
 
   it('open on a session with a plan: Plan and Files 2, and the Plan body', () => {
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     const tabs = within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent);
     expect(tabs).toEqual(['Plan', 'Files 2']);
     expect(
@@ -110,14 +110,14 @@ describe('SessionPanel (HIVE-201)', () => {
   });
 
   it('a tab click picks it, and Files shows the explorer for main’s id', () => {
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Files 2' }));
     expect(useAppearanceStore.getState().sessionPanelTab).toBe('files');
     expect(screen.getByText('explorer hero-refresh')).toBeInTheDocument();
   });
 
   it('the chevron closes it to the strip, and a strip icon opens that tab', () => {
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Close the session panel' }));
     expect(useAppearanceStore.getState().sessionPanelOpen).toBe(false);
     expect(screen.queryByRole('tablist')).toBeNull();
@@ -129,14 +129,14 @@ describe('SessionPanel (HIVE-201)', () => {
 
   it('with no plan, the persisted Plan tab falls back to Files', () => {
     useHiveStore.getState().setPlan('hero-refresh', null);
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     expect(within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Files 2']);
     expect(screen.getByText('explorer hero-refresh')).toBeInTheDocument();
   });
 
   it('a narrow window keeps the strip even when open', () => {
     narrow = true;
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     expect(screen.queryByRole('tablist')).toBeNull();
     expect(screen.getByRole('complementary', { name: 'Session panel' })).toBeInTheDocument();
   });
@@ -145,13 +145,13 @@ describe('SessionPanel (HIVE-201)', () => {
     act(() => {
       useUiStore.getState().selectPlace('home');
     });
-    const { container, unmount } = render(<SessionPanel />);
+    const { container, unmount } = render(<SessionPanel rowRef={createRef()} />);
     expect(container).toBeEmptyDOMElement();
     unmount();
     act(() => {
       useUiStore.getState().openTab('orch');
     });
-    expect(render(<SessionPanel />).container).toBeEmptyDOMElement();
+    expect(render(<SessionPanel rowRef={createRef()} />).container).toBeEmptyDOMElement();
   });
 
   it('after /clear, reads the plan and files main published under the terminal id (R2)', () => {
@@ -161,7 +161,7 @@ describe('SessionPanel (HIVE-201)', () => {
       useHiveStore.setState((state) => ({ entities: { ...state.entities, 'hero-2': successor } }));
       useUiStore.getState().openTab('hero-2', 'sessions');
     });
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     expect(within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Plan', 'Files 2']);
   });
 });
@@ -184,7 +184,7 @@ describe('SessionPanel: the Ticket tab (HIVE-202)', () => {
   });
 
   it('sits between Plan and Files, and shows the tab for the session’s key', () => {
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     expect(within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Plan', 'Ticket', 'Files 2']);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Ticket' }));
@@ -197,7 +197,7 @@ describe('SessionPanel: the Ticket tab (HIVE-202)', () => {
     act(() => {
       useAppearanceStore.getState().setSessionPanelOpen(false);
     });
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     const fact = screen.getByRole('button', { name: 'HIVE-193 · In Progress' });
     expect(fact).toHaveAttribute('title', 'HIVE-193 · In Progress');
 
@@ -212,14 +212,14 @@ describe('SessionPanel: the Ticket tab (HIVE-202)', () => {
     act(() => {
       useAppearanceStore.getState().setSessionPanelOpen(false);
     });
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
 
     expect(screen.getByRole('button', { name: 'HIVE-193' })).toHaveAttribute('title', 'HIVE-193');
   });
 
   it('a session on no ticket has no Ticket tab', () => {
     workOn(undefined);
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
 
     expect(within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Plan', 'Files 2']);
   });
@@ -243,7 +243,7 @@ describe('SessionPanel: a terminal (HIVE-201)', () => {
   });
 
   it('gets Files only, open and closed', () => {
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     expect(within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Files']);
     expect(screen.getByText('explorer none')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close the session panel' }));
@@ -265,7 +265,7 @@ describe('SessionPanel: the plan file (HIVE-201)', () => {
 
   it('resolves it under the session and opens it in the editor', async () => {
     resolvePaths.mockResolvedValue([{ relPath: '.hive/plans/x.md', rootKey: '' }]);
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /x\.md/ }));
       await Promise.resolve();
@@ -276,7 +276,7 @@ describe('SessionPanel: the plan file (HIVE-201)', () => {
 
   it('opens nothing when main will not serve it', async () => {
     resolvePaths.mockResolvedValue([null]);
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /x\.md/ }));
       await Promise.resolve();
@@ -298,7 +298,7 @@ describe('the PR tab (HIVE-209)', () => {
       .find((tab) => tab.getAttribute('aria-selected') === 'true')?.textContent;
 
   it('exists only with a session PR, between Ticket and Files, with its dot', () => {
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     expect(screen.queryByRole('tab', { name: /^PR/ })).toBeNull();
     withPr();
     const labels = within(tabRow()).getAllByRole('tab').map((tab) => tab.textContent);
@@ -308,7 +308,7 @@ describe('the PR tab (HIVE-209)', () => {
   });
 
   it('appearing does not switch the tab; choosing it draws the PR tab', () => {
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     const before = selected();
     withPr();
     expect(selected()).toBe(before);
@@ -321,7 +321,7 @@ describe('the PR tab (HIVE-209)', () => {
       useAppearanceStore.getState().setSessionPanelOpen(false);
     });
     withPr();
-    render(<SessionPanel />);
+    render(<SessionPanel rowRef={createRef()} />);
     const icon = screen.getByRole('button', { name: /^#482 · / });
     expect(within(icon).getByTestId('pr-dot')).toBeInTheDocument();
   });

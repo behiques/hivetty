@@ -1,5 +1,6 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ListPanel } from '@components/layout/list-panel';
@@ -34,7 +35,7 @@ describe('ListPanel (HIVE-195)', () => {
   ])('mounts %s’s panel', (place, label, marker) => {
     useUiStore.setState({ place });
 
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
 
     const region = screen.getByRole('region', { name: label });
     expect(region).toHaveClass('w-[var(--cc-list-w)]', 'shrink-0', 'bg-panel');
@@ -42,13 +43,13 @@ describe('ListPanel (HIVE-195)', () => {
   });
 
   it('draws nothing on Home', () => {
-    const { container } = render(<ListPanel />);
+    const { container } = render(<ListPanel rowRef={createRef()} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('draws nothing when the panel is closed', () => {
     useUiStore.setState({ place: 'work', panelOpen: false });
-    const { container } = render(<ListPanel />);
+    const { container } = render(<ListPanel rowRef={createRef()} />);
     expect(container).toBeEmptyDOMElement();
   });
 });
@@ -62,7 +63,7 @@ describe('ListPanel, the Hatchery (HIVE-205)', () => {
   it('draws no PRs panel for a quiet Hatchery, unless a search is open (D15)', () => {
     useUiStore.setState({ place: 'prs', panelOpen: true });
     useHiveStore.setState({ prs: [], prSource: { kind: 'live', stale: false, repos: 1 } });
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
     expect(screen.queryByRole('region', { name: 'PRs list' })).toBeNull();
     act(() => useUiStore.setState({ prSearchOpen: true }));
     expect(screen.getByRole('region', { name: 'PRs list' })).toBeInTheDocument();
@@ -71,7 +72,7 @@ describe('ListPanel, the Hatchery (HIVE-205)', () => {
   it('slides the Hatchery in when the first PR appears, never on mount (R4)', () => {
     useUiStore.setState({ place: 'prs', panelOpen: true, prSearchOpen: false });
     useHiveStore.setState({ prs: [], prSource: { kind: 'live', stale: false, repos: 1 } });
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
     act(() => useHiveStore.setState({ prs: [prRecord()] }));
     expect(screen.getByRole('region', { name: 'PRs list' }).className).toContain('animate-ccslidein');
   });
@@ -79,7 +80,7 @@ describe('ListPanel, the Hatchery (HIVE-205)', () => {
   it('does not slide a Hatchery that was never quiet (R4)', () => {
     useUiStore.setState({ place: 'prs', panelOpen: true });
     useHiveStore.setState({ prs: [prRecord()], prSource: { kind: 'live', stale: false, repos: 1 } });
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
     expect(screen.getByRole('region', { name: 'PRs list' }).className).not.toContain('animate-ccslidein');
   });
 });
@@ -93,26 +94,26 @@ describe('ListPanel, no list without items (HIVE-211)', () => {
   it('draws no Work panel when Jira is not connected', () => {
     useUiStore.setState({ place: 'work', panelOpen: true });
     useHiveStore.setState({ ticketSource: { kind: 'unconfigured' } });
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
     expect(screen.queryByRole('region', { name: 'Work list' })).toBeNull();
   });
 
   it('draws no Agents panel with no agent defined', () => {
     useUiStore.setState({ place: 'agents', panelOpen: true });
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
     expect(screen.queryByRole('region', { name: 'Agents list' })).toBeNull();
   });
 
   it('draws no Sessions panel with no project', () => {
     useUiStore.setState({ place: 'sessions', panelOpen: true });
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
     expect(screen.queryByRole('region', { name: 'Sessions list' })).toBeNull();
   });
 
   it('draws no PRs panel while gh is signed out', () => {
     useUiStore.setState({ place: 'prs', panelOpen: true });
     useHiveStore.setState({ prSource: { kind: 'unconfigured', message: 'm', reason: 'unauthenticated' } });
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
     expect(screen.queryByRole('region', { name: 'PRs list' })).toBeNull();
   });
 });
@@ -125,14 +126,14 @@ describe('ListPanel, the narrow overlay (HIVE-211)', () => {
 
   it('sits beside the stage when wide', () => {
     useUiStore.setState({ place: 'work', panelOpen: true });
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
     expect(screen.getByRole('region', { name: 'Work list' })).not.toHaveClass('absolute');
     expect(screen.queryByTestId('list-veil')).toBeNull();
   });
 
   it('overlays the stage while narrow, and the veil or Escape closes it', async () => {
     useUiStore.setState({ place: 'work', panelOpen: true, narrow: true });
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
     const region = screen.getByRole('region', { name: 'Work list' });
     expect(region).toHaveClass('absolute', 'shadow-lg');
     await userEvent.click(screen.getByTestId('list-veil'));
@@ -145,7 +146,7 @@ describe('ListPanel, the narrow overlay (HIVE-211)', () => {
 
   it('Escape does nothing when wide', async () => {
     useUiStore.setState({ place: 'work', panelOpen: true });
-    render(<ListPanel />);
+    render(<ListPanel rowRef={createRef()} />);
     await userEvent.keyboard('{Escape}');
     expect(useUiStore.getState().panelOpen).toBe(true);
   });

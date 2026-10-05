@@ -339,6 +339,9 @@ model survives colour-blindness and reduced-motion.
   editor set their own face from Appearance. Everything else is sans,
   identifiers included (ticket keys, branches, PR numbers, paths, file names);
   numbers that line up in a column take `tabular-nums` instead.
+  One deliberate exception: the team name at the right of Home's headline is
+  a small mono label (11px, caps, 0.12em, `text-subtle`), set like the comb's
+  own mono patch labels such as THE SWARM.
 - **List type scale:** three sizes in `tokens.css`, nothing between them.
   `text-ui-lg` 15px for panel titles (600), `text-ui` 13px for a row's name,
   `text-ui-sm` 11.5px for everything else: second lines, counts, ages, status

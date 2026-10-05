@@ -21,6 +21,17 @@ describe('SessionRow', () => {
     useUiStore.getState().reset();
   });
 
+  it('pills the id after a session that has a name of its own', () => {
+    const { rerender } = render(<SessionRow id="hero-refresh" />);
+    // Unnamed, the label already is the id: one of it, not two.
+    expect(screen.getAllByText('hero-refresh')).toHaveLength(1);
+
+    act(() => useHiveStore.getState().renameSession('hero-refresh', 'hero-tokens'));
+    rerender(<SessionRow id="hero-refresh" />);
+    expect(screen.getByText('hero-tokens')).toBeInTheDocument();
+    expect(screen.getByText('hero-refresh')).toHaveClass('rounded-full');
+  });
+
   it('shows the session id, its status label, and its branch', () => {
     render(<SessionRow id="hero-refresh" />);
 

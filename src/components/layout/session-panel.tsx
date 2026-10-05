@@ -1,5 +1,5 @@
 import { CaretRight, Files, GitPullRequest, ListChecks, Ticket } from '@phosphor-icons/react';
-import { useCallback, type ReactNode } from 'react';
+import { useCallback, type ReactNode, type RefObject } from 'react';
 
 import { useNarrowWindow } from '@/hooks/use-narrow-window';
 import { useOpenFileAt } from '@/hooks/use-open-file-at';
@@ -8,6 +8,7 @@ import { isSession, isTerminal, terminalOf, type Session, type Terminal } from '
 import type { FlapTone } from '@/types/pull-request';
 import type { Ticket as TicketModel } from '@/types/ticket';
 
+import { RailHandle } from '@components/layout/rail-handle';
 import { SessionPanelStrip, type StripTab } from '@components/layout/session-panel-strip';
 import { ExplorerPanel } from '@features/explorer/components/explorer-panel';
 import { PlanTab } from '@features/plan/components/plan-tab';
@@ -20,8 +21,10 @@ import {
   type SessionPanelTab,
   useSessionPanelOpen,
   useSessionPanelTab,
+  useSessionPanelWidth,
   useSetSessionPanelOpen,
   useSetSessionPanelTab,
+  useSetSessionPanelWidth,
 } from '@stores/appearance-store';
 import {
   type SessionPrRow,
@@ -117,14 +120,14 @@ export function pickTab(existing: readonly SessionPanelTab[], persisted: Session
 }
 
 /**
- * Round two's right side (HIVE-201): the session panel, open at 320px with a
+ * Round two's right side (HIVE-201): the session panel, open at `--cc-session-panel-w` (its seam drags it) with a
  * tab per thing a session has, or closed to a 46px strip of their facts.
  *
  * Drawn while the stage shows a session or terminal (R1), not gated on the
  * view: a file opened full-stage from the Files tab must not make the panel
  * vanish under the click. The Overmind and agents have no such entity.
  */
-export function SessionPanel() {
+export function SessionPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null> }) {
   const entity = useActiveEntity();
   const place = usePlace();
   const owner = entity && (isSession(entity) || isTerminal(entity)) ? entity : null;
@@ -138,6 +141,8 @@ export function SessionPanel() {
   const tab = useSessionPanelTab();
   const setOpen = useSetSessionPanelOpen();
   const setTab = useSetSessionPanelTab();
+  const width = useSessionPanelWidth();
+  const setWidth = useSetSessionPanelWidth();
   const narrow = useNarrowWindow();
   const { openPath } = useOpenFileAt();
 
@@ -183,6 +188,8 @@ export function SessionPanel() {
   }
 
   return (
+    <>
+    <RailHandle rowRef={rowRef} rail="session" label="Resize the session panel" width={width} onWidth={setWidth} />
     <aside
       aria-label="Session panel"
       className="flex w-[var(--cc-session-panel-w)] shrink-0 flex-col overflow-hidden border-l border-border bg-panel px-3 py-1.5"
@@ -225,5 +232,6 @@ export function SessionPanel() {
         {existing.find((spec) => spec.id === shown)?.body(ctx)}
       </div>
     </aside>
+    </>
   );
 }

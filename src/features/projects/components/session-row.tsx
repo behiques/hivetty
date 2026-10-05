@@ -5,6 +5,7 @@ import { branchLabel, entityLabel, isSession, terminalOf } from '@/types/entity'
 
 import { Badge } from '@components/ui/badge';
 import { statusLabel, statusText } from '@components/ui/status-dot';
+import { Tag } from '@components/ui/tag';
 import { useEntity, useOpenEntity, usePlanProgress, useYoursAgain } from '@stores/hive-store';
 import { useActiveTab } from '@stores/ui-store';
 
@@ -40,6 +41,7 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
   if (!entity || !isSession(entity)) return null;
 
   const active = activeTab === id;
+  const label = entityLabel(entity);
 
   return (
     <button
@@ -63,9 +65,14 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
             entity.status === 'working' && 'animate-ccpulse',
           )}
         />
-        <span className="flex-1 truncate text-left text-ui">
-          {entityLabel(entity)}
-        </span>
+        <span className="min-w-0 truncate text-left text-ui">{label}</span>
+        {/* The id after the name; an unnamed session already reads as its id. */}
+        {label === entity.id ? null : (
+          <Tag tone="subtle" className="shrink-0 tabular-nums">
+            {entity.id}
+          </Tag>
+        )}
+        <span className="flex-1" />
         <span
           className={cn(
             'shrink-0 text-ui-sm',

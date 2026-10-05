@@ -91,6 +91,13 @@ describe('SessionsProjectRow (HIVE-197)', () => {
     expect(screen.queryByText('feat/hero-refresh')).not.toBeInTheDocument();
   });
 
+  it('pills the project key before the name, out of the accessible name', () => {
+    render(<SessionsProjectRow project={nova} />);
+    const key = screen.getByText(nova.key);
+    expect(key.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /^nova-web/ })).toContainElement(key);
+  });
+
   it('says "no sessions" when nothing is live', () => {
     render(<SessionsProjectRow project={empty} />);
     const none = within(screen.getByRole('button', { name: /^infra-terraform/ })).getByText('no sessions');
