@@ -1,14 +1,29 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 import { cn } from '@/lib/utils';
 
 import { EditorSurface } from '@components/editor/editor-surface';
+import { SplitHandle } from '@components/ui/split-handle';
 import { AgentForm } from '@features/shared/components/agent-form';
 import { languageFor } from '@lib/explorer/language';
 import type { AgentProblem } from '@shared/agent-contract';
-import { useEditorAppearance } from '@stores/appearance-store';
+import {
+  DEFAULT_AGENT_SPLIT_RATIO,
+  useAgentSplitRatio,
+  useEditorAppearance,
+  useSetAgentSplitRatio,
+} from '@stores/appearance-store';
 
 type Tab = 'form' | 'source';
+
+/**
+ * The narrowest each pane may be dragged to, px: the form's fields and their
+ * inline problems stop wrapping at 460, and 320 keeps a frontmatter line such
+ * as `slack.channel:#incorp-dev` on one row. The grid's class repeats both
+ * numbers, since Tailwind cannot read a constant.
+ */
+export const FORM_MIN_PX = 460;
+export const SOURCE_MIN_PX = 320;
 
 /**
  * Why Run now would refuse, or `null` when it would not — the page header's
@@ -86,9 +101,11 @@ interface AgentEditorProps {
  * In Settings this was tabs only: the editor column was roughly 450–650px after
  * the list, and a split there landed each half near 300px, where
  * `slack.channel:#incorp-dev` wraps. The page gives it the whole stage, so at
- * 900px of container and up the form takes a 520px column and the source the
- * rest, and you can watch the frontmatter change as you edit the form. Below
- * that the Form | Source tabs come back, each with the full height.
+ * 900px of container and up the form and the source share the width, the
+ * rest, and you can watch the frontmatter change as you edit the form. The
+ * seam between them drags, and the split is kept in appearance-store; neither
+ * pane goes below its minimum width. Below that the Form | Source tabs come
+ * back, each with the full height.
  *
  * ## Why the real editor, and not a `<textarea>`
  *
@@ -124,6 +141,15 @@ export function AgentEditor({
 }: AgentEditorProps) {
   const [tab, setTab] = useState<Tab>('form');
   const appearance = useEditorAppearance();
+  const ratio = useAgentSplitRatio();
+  const setRatio = useSetAgentSplitRatio();
+  const grid = useRef<HTMLDivElement>(null);
+
+  // Both panes keep a width the form and the editor can draw in; the CSS minmax holds them on a resize too.
+  const onRatio = (next: number) => {
+    const width = grid.current?.getBoundingClientRect().width ?? 0;
+    if (width > 0) setRatio(Math.min(Math.max(next, FORM_MIN_PX / width), 1 - SOURCE_MIN_PX / width));
+  };
 
   /**
    * The live `onSave`, for a listener bound once on mount.
@@ -283,10 +309,14 @@ export function AgentEditor({
         Both panes edit the one buffer, so in wide mode the source is mounted
         even while the narrow tab says Form: there is nothing to keep in step.
       */}
-      <div className="grid min-h-0 flex-1 @min-[900px]:grid-cols-[520px_minmax(0,1fr)]">
+      <div
+        ref={grid}
+        style={{ '--agent-form-w': `${String(ratio * 100)}%` } as CSSProperties}
+        className="grid min-h-0 flex-1 @min-[900px]:grid-cols-[minmax(460px,var(--agent-form-w))_1px_minmax(320px,1fr)]"
+      >
         <div
           className={cn(
-            'min-h-0 overflow-y-auto font-sans @min-[900px]:block @min-[900px]:border-r @min-[900px]:border-border-soft',
+            'min-h-0 overflow-y-auto font-sans @min-[900px]:block',
             tab === 'form' ? 'block' : 'hidden',
           )}
         >
@@ -297,6 +327,15 @@ export function AgentEditor({
             onChange={onChange}
           />
         </div>
+        <SplitHandle
+          axis="vertical"
+          containerRef={grid}
+          label="Resize the form and the source"
+          value={ratio}
+          onValue={onRatio}
+          onReset={() => setRatio(DEFAULT_AGENT_SPLIT_RATIO)}
+          className="hidden @min-[900px]:block"
+        />
         <div className={cn('min-h-0 flex-col @min-[900px]:flex', tab === 'source' ? 'flex' : 'hidden')}>
           {/*
             The one thing the source could not say for itself, and the one users

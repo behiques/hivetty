@@ -1,8 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentEditor, runRefusal } from '@features/shared/components/agent-editor';
+import {
+  AgentEditor,
+  FORM_MIN_PX,
+  SOURCE_MIN_PX,
+  runRefusal,
+} from '@features/shared/components/agent-editor';
+import { DEFAULT_AGENT_SPLIT_RATIO, useAppearanceStore } from '@stores/appearance-store';
 import { surfaceText } from '@tests/support/editor-surface';
 
 import type { AgentProblem } from '@shared/agent-contract';
@@ -56,6 +62,10 @@ const setup = (over: Partial<Props> = {}) => {
   return { ...merged, onChange: merged.onChange as ReturnType<typeof vi.fn> };
 };
 
+beforeEach(() => {
+  useAppearanceStore.getState().reset();
+});
+
 describe('AgentEditor', () => {
   it('opens on the Form tab', () => {
     setup();
@@ -93,6 +103,37 @@ describe('AgentEditor', () => {
     expect(screen.getByRole('textbox', { name: 'description' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Agent source' })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: 'Agent editor view' })).toHaveClass('@min-[900px]:hidden');
+    expect(screen.getByRole('slider', { name: 'Resize the form and the source' }).parentElement).toHaveClass(
+      '@min-[900px]:grid-cols-[minmax(460px,var(--agent-form-w))_1px_minmax(320px,1fr)]',
+    );
+  });
+
+  it('puts a resize seam between Form and Source, wide only', () => {
+    setup();
+
+    const seam = screen.getByRole('slider', { name: 'Resize the form and the source' });
+    expect(seam).toHaveClass('hidden', '@min-[900px]:block');
+  });
+
+  it('holds both panes to their minimum widths while dragging, and double-click resets', () => {
+    setup();
+
+    const seam = screen.getByRole('slider', { name: 'Resize the form and the source' });
+    (seam.parentElement as HTMLElement).getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 1000, height: 600 }) as DOMRect;
+
+    fireEvent.pointerDown(seam);
+    fireEvent.pointerMove(window, { clientX: 100 });
+    fireEvent.pointerUp(window);
+    expect(useAppearanceStore.getState().agentSplitRatio).toBeCloseTo(FORM_MIN_PX / 1000);
+
+    fireEvent.pointerDown(seam);
+    fireEvent.pointerMove(window, { clientX: 950 });
+    fireEvent.pointerUp(window);
+    expect(useAppearanceStore.getState().agentSplitRatio).toBeCloseTo(1 - SOURCE_MIN_PX / 1000);
+
+    fireEvent.doubleClick(seam);
+    expect(useAppearanceStore.getState().agentSplitRatio).toBe(DEFAULT_AGENT_SPLIT_RATIO);
   });
 
   it('reads unsaved in amber while dirty', () => {
