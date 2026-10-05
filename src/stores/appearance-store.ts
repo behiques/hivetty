@@ -288,7 +288,7 @@ export const clampSplitRatio = (ratio: number): number => {
 
 /**
  * The two rails' drag bounds, px. The maxima leave a 1,200px window — the
- * narrowest that draws both rails — about 200px of stage with both at full.
+ * narrowest that draws both rails — about 230px of stage with both at full.
  */
 export const PANEL_WIDTHS = {
   list: { min: 220, max: 400, initial: 300 },

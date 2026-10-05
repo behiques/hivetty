@@ -4,7 +4,7 @@
 
 > **TL;DR**
 > - `src/components/layout/` is the composition root; feature slices never import each other.
-> - The page never scrolls; panels never flex; `min-h-0` and `min-w-0` are load-bearing.
+> - The page never scrolls; panels never flex (the rails drag, the stage absorbs); `min-h-0` and `min-w-0` are load-bearing.
 > - A pure `resolveView` picks the one thing on stage: settings, picker, editor, then a tab.
 > - Terminals are hidden, never unmounted. The editor unmounts when nothing is open.
 > - The session panel is a table of tabs: Plan, Ticket, PR, Files.
@@ -49,11 +49,13 @@ HIVE-213 retired Classic. `src/app.tsx` renders it and nothing else.
     ├── TitleBar            the macOS drag strip; nothing off macOS or in the browser
     └── Row                 flex-1, min-h-0, flex
         ├── ActivityBar     <nav aria-label="Places">   --cc-bar-w (64px), fixed
-        ├── ListPanel       <section aria-label="<Place> list">   --cc-list-w (300px),
-        │                   own vertical scroll, absent when closed or empty
-        ├── CenterStage     <main>    flex-1, min-w-0, flex column
-        └── SessionPanel    <aside aria-label="Session panel">   --cc-session-panel-w
-                            (320px) open, a 46px strip closed, absent off a session
+        └── Rails row       flex-1, min-w-0, flex; sets --cc-list-w / --cc-session-panel-w
+            ├── ListPanel   <section aria-label="<Place> list">   --cc-list-w (300px, 220–400),
+            │               own vertical scroll, absent when closed or empty; RailHandle after it
+            ├── CenterStage <main>    flex-1, min-w-0, flex column
+            └── SessionPanel  RailHandle, then <aside aria-label="Session panel">
+                            --cc-session-panel-w (320px, 260–480) open, a 46px strip closed,
+                            absent off a session
 ```
 
 Each region is a landmark element, so tests address them by role and name
@@ -95,9 +97,11 @@ place either — it replaces the tab already on stage rather than opening one.
   which xterm's fit addon then measures and grows into. Both are load-bearing,
   not defensive.
 - **The panels never flex** (`w-[var(--cc-bar-w)]`, `w-[var(--cc-list-w)]`,
-  `w-[var(--cc-session-panel-w)]` + `shrink-0`, fixed tokens), so the center
-  column absorbs every width change and the document never gains a horizontal
-  scrollbar.
+  `w-[var(--cc-session-panel-w)]` + `shrink-0`), so the center column absorbs
+  every width change and the document never gains a horizontal scrollbar. The
+  two rails are not fixed, though: each has a `RailHandle` on its stage seam,
+  and `AppShell` sets the two tokens on the rails row from `listPanelWidth` and
+  `sessionPanelWidth` in `appearance-store`, clamped by `PANEL_WIDTHS`.
 - **The overmind splits its column.** On the orchestrator view the fleet table
   sits in a pane with `flex: 0 1 <ratio>%` of the box it shares with the
   transcript, behind a horizontal `SplitHandle` (`FleetPane`, in
@@ -152,8 +156,8 @@ behaves as before.
 
 ## The session panel
 
-The right of the row is `SessionPanel` (`src/components/layout/session-panel.tsx:127`),
-the last child of `app-shell.tsx`'s row: 320px open, or a 46px strip closed. It
+The right of the row is `SessionPanel` (`src/components/layout/session-panel.tsx:130`),
+the last child of `app-shell.tsx`'s row: `--cc-session-panel-w` open (320px, dragged from its seam), or a 46px strip closed. It
 is where a session's plan, ticket, PR and files live; nothing is drawn beside
 the terminal inside the stage.
 
