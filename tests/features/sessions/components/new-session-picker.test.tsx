@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   emptySnapshot,
@@ -60,19 +60,23 @@ describe('NewSessionPicker', () => {
   });
 
   /**
-   * The ordinary picker leads with the hive (HIVE-93; the spire until the Brood
-   * placement fix). The first run keeps its own 120px hive further down, so the
-   * surface still shows exactly one creature in either state.
+   * The picker casts one creature at random per opening, from the egg, the
+   * spire, the overlord and the hovering mutalisk, always at 120px.
    */
-  it('leads with the hive at the full-stage size', () => {
+  it.each([
+    [0, 'egg'],
+    [0.3, 'spire'],
+    [0.6, 'overlord'],
+    [0.99, 'mutalisk'],
+  ])('leads with a random creature at 120px (Math.random %s → %s)', (roll, creature) => {
+    vi.spyOn(Math, 'random').mockReturnValue(roll);
     render(<NewSessionPicker />);
 
     const img = document.querySelector('[data-creature]');
 
-    expect(img).toHaveAttribute('data-creature', 'hive');
-    // The quieter end of the documented 72–120 full-stage register: it sits above
-    // a title rather than standing in for missing content.
-    expect(img).toHaveStyle({ height: '96px' });
+    expect(img).toHaveAttribute('data-creature', creature);
+    expect(img).toHaveStyle({ height: '120px' });
+    vi.restoreAllMocks();
   });
 
   it('sets its title in the sans face, not a serif', () => {
@@ -633,23 +637,17 @@ describe('NewSessionPicker · unmapped projects', () => {
     expect(screen.queryByText(new RegExp(CONFIG_PATH))).not.toBeInTheDocument();
   });
 
-  /**
-   * First run keeps the hive, and gets **only** the hive (HIVE-93).
-   *
-   * The condition guarding the header spire is the whole of this: two creatures
-   * stacked in one dialog reads as a bug rather than as atmosphere. The surface
-   * has two states and each gets exactly one creature — hive as territory when
-   * there is nothing to pick, spire as lifecycle once there is.
-   */
-  it('shows the hive hero alone on first run, with no second creature', () => {
+  it('casts one random creature on first run too, at 120px, and only one', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     setProjectConfigForTest(snapshot([], { templateWritten: true }));
     render(<NewSessionPicker />);
 
     const creatures = [...document.querySelectorAll('[data-creature]')];
 
     expect(creatures).toHaveLength(1);
-    expect(creatures[0]).toHaveAttribute('data-creature', 'hive');
+    expect(creatures[0]).toHaveAttribute('data-creature', 'egg');
     expect(creatures[0]).toHaveStyle({ height: '120px' });
+    vi.restoreAllMocks();
   });
 
   it('drops the title and subtitle while no project exists', () => {

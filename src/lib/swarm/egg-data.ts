@@ -1,7 +1,7 @@
 /**
  * The Brood's Hatchery egg (HIVE-221), transcribed number for number from the
  * design source's SVG (brood-v15, lines 133–162). Shapes only: every colour is
- * a token, chosen where `EmptyHatchery` draws these. Coordinates are in the
+ * a token, chosen where `BroodEgg` draws these. Coordinates are in the
  * egg's viewBox, `-160 -150 320 230`, centred on the shell's base.
  */
 

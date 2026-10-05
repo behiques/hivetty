@@ -70,6 +70,14 @@ describe('SessionTable', () => {
       );
     });
 
+    it('holds the overlord at 120px over the empty fleet', () => {
+      render(<SessionTable />);
+
+      const creature = screen.getByTestId('session-table-empty').querySelector('[data-creature]');
+      expect(creature).toHaveAttribute('data-creature', 'overlord');
+      expect(creature).toHaveStyle({ height: '120px' });
+    });
+
     it('centres the empty notice in the space below the header', () => {
       render(<SessionTable />);
 

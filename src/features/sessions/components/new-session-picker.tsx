@@ -1,6 +1,6 @@
 import { MagnifyingGlass } from '@phosphor-icons/react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ import type {
 
 import { Icon } from '@components/ui/icon';
 import { ProjectKey } from '@components/ui/project-key';
-import { SwarmCreature } from '@components/ui/swarm-creature';
+import { SwarmCreature, type Creature } from '@components/ui/swarm-creature';
 import { can } from '@config/runtime';
 import { OptionStepper } from '@features/sessions/components/option-stepper';
 import { useProjectAccess } from '@hooks/use-project-config';
@@ -34,6 +34,9 @@ const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'max'];
 
 /** The concept pins the first four projects as one-click starts. */
 const PINNED_COUNT = 4;
+
+/** The picker draws one of these at random each time it opens. */
+const PICKER_CREATURES: readonly Creature[] = ['egg', 'spire', 'overlord', 'mutalisk'];
 
 /**
  * The new-session picker (story 044).
@@ -63,8 +66,10 @@ const PINNED_COUNT = 4;
  */
 export function NewSessionPicker() {
   const projects = useProjects();
-  /** No project yet: the first-run hive stands alone, with no title above it. */
+  /** No project yet: the first-run block stands alone, with no title above it. */
   const noProjects = projects.length === 0;
+  /** One creature per opening, drawn at random from the picker's four. */
+  const [creature] = useState(() => PICKER_CREATURES[Math.floor(Math.random() * PICKER_CREATURES.length)]!);
   const spawnSession = useSpawnSession();
   const { pickerQuery, pickerTicket, newModel, newEffort } = usePickerState();
   const ticket = useTicket(pickerTicket);
@@ -161,21 +166,18 @@ export function NewSessionPicker() {
           picker — it simply has no summary line to add.
         */}
         {/*
-          The hive and the title lead the picker (HIVE-93) **only once a
+          The creature and the title lead the picker (HIVE-93) **only once a
           project exists**. With none, the first-run block below is the whole
           top of the surface: a title saying "pick a project" over nothing to
-          pick reads as a broken render, and two hives stacked reads as a bug.
-
-          96px, not the first run's 120: it sits *above* a title rather than
-          standing in for missing content, so it is the quieter end of the
-          72–120 full-stage register `SwarmCreature` documents.
+          pick reads as a broken render, and two creatures stacked reads as a
+          bug. Either way it is the one random creature, at 120px.
         */}
         {noProjects ? (
           // Radix names the dialog by its Title; the first-run block is what is seen.
           <DialogPrimitive.Title className="sr-only">No projects yet</DialogPrimitive.Title>
         ) : (
           <>
-            <SwarmCreature creature="hive" size={96} />
+            <SwarmCreature creature={creature} size={120} />
 
             <div className="flex flex-col gap-1.5 text-center">
               <DialogPrimitive.Title className="font-sans text-[22px] tracking-[-0.02em] text-ink">
@@ -202,7 +204,7 @@ export function NewSessionPicker() {
         */}
         {noProjects ? (
           <div className="flex max-w-[560px] flex-col items-center gap-2.5">
-            <SwarmCreature creature="hive" size={120} />
+            <SwarmCreature creature={creature} size={120} />
             <p className="text-center tabular-nums text-[11.5px] text-muted">
               {firstRunPhrase}
             </p>
