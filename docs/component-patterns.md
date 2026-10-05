@@ -76,8 +76,10 @@ the bar's whole interaction:
 
 - **A new place** opens its panel and dismisses the picker and settings, as
   `openTab` does.
-- **The active place** toggles its panel — except **Sessions with a session on
-  stage**, which goes back to the Overmind first and leaves the panel alone.
+- **The active place** under settings or the picker dismisses them and changes
+  nothing else, so Home from Settings goes Home. Otherwise it toggles its panel —
+  except **Sessions with a session on stage**, which goes back to the Overmind
+  first and leaves the panel alone.
 
 Openers move the bar with what they open: `hive-store` calls
 `openTab(id, place)` from `spawnSession`, `spawnTerminal`, `resumeSession` and

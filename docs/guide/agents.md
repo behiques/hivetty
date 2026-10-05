@@ -178,8 +178,8 @@ and its merge asks as before.
 - **A row** is the agent's hexagon (amber when it asks, red when it failed, green while it
   works, a count when more than one run is live), its name with the age of its last word,
   and that last word: what it last put on the ledger (`ask a3 Reply to Marcos?`,
-  `done Shipped #303`). Hover or focus it for **▶ Run now** and **⏸ Pause** (**▶ Resume**
-  when paused); an answer that is not a start shows in the row for five seconds.
+  `done Shipped #303`). Hover or focus it for **▶ Run now** and **⏸ Pause**; a paused
+  agent offers only **▶ Resume**, since it would refuse a run; an answer that is not a start shows in the row for five seconds.
 
 ![The Agents place: the agents' lanes in the list panel](../assets/guide/09-agents-tab.png)
 
