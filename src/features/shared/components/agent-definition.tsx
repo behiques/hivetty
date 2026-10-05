@@ -34,7 +34,7 @@ interface AgentDefinitionProps {
   onRename: (name: string) => void;
   /** The agent was deleted, or a never-saved one discarded: nothing is left to show. */
   onClose: () => void;
-  /** Form and Source side by side (the agent page) or behind tabs (Settings). Wired to the editor in Task 5. */
+  /** Form and Source side by side (the agent page) or behind tabs (Settings). */
   layout?: 'split' | 'tabs';
 }
 
@@ -60,7 +60,7 @@ interface AgentDefinitionProps {
  * rename is one call carrying the buffer, so the definition validated is the
  * one about to be written.
  */
-export function AgentDefinition({ name, notice, onRename, onClose }: AgentDefinitionProps) {
+export function AgentDefinition({ name, notice, onRename, onClose, layout = 'split' }: AgentDefinitionProps) {
   const snapshot = useAgents();
   const key = name ?? '';
   const draft = useAgentDraft(key);
@@ -311,6 +311,7 @@ export function AgentDefinition({ name, notice, onRename, onClose }: AgentDefini
         onRevert={revert}
         notice={notice ?? ownNotice}
         actionsHidden={pending !== null}
+        layout={layout}
       />
 
       {pending === null ? null : (

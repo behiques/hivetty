@@ -115,6 +115,17 @@ describe('AgentEditor', () => {
     expect(seam).toHaveClass('hidden', '@min-[900px]:block');
   });
 
+  it('in tabs layout, always shows Form | Source and never the seam', async () => {
+    render(<AgentEditor {...props} layout="tabs" />);
+
+    const tabs = screen.getByRole('tablist', { name: 'Agent editor view' });
+    expect(tabs).not.toHaveClass('@min-[900px]:hidden');
+    expect(screen.queryByRole('slider', { name: 'Resize the form and the source' })).toBeNull();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Source' }));
+    expect(screen.getByRole('textbox', { name: 'Agent source' }).closest('.hidden')).toBeNull();
+  });
+
   it('holds both panes to their minimum widths while dragging, and double-click resets', () => {
     setup();
 
