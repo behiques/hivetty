@@ -78,6 +78,13 @@ describe('ActivityBar (HIVE-195)', () => {
     expect(screen.getByRole('img', { name: 'Hive TTY' })).toBeInTheDocument();
     expect(screen.queryByText('Platform')).not.toBeInTheDocument();
   });
+
+  it('draws the dock icon as the brand, from the base the app is served at', () => {
+    renderBar();
+    const brand = screen.getByRole('img', { name: 'Hive TTY' });
+    expect(brand.tagName).toBe('IMG');
+    expect(brand).toHaveAttribute('src', `${import.meta.env.BASE_URL}apple-touch-icon.png`);
+  });
 });
 
 describe('the PRs count (HIVE-205)', () => {
