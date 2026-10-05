@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 
+import { useTeamName } from '@stores/appearance-store';
 import type { CombSummary } from '@stores/hive-store';
 
 /** The hive's mood, first match wins. Only the two that ask something of you take a colour. */
@@ -28,13 +29,16 @@ export const summaryText = (s: CombSummary): string =>
  * `needs` is the Summons queue's count (`useSummonsCount`, HIVE-217), the one
  * the strip and the pill read, with the session on stage left out, so the three
  * can never show two numbers for one fact. The rest of the line is the comb's.
+ * The team name, when there is one, sits at the far right.
  */
 export function CombHeadline({ needs, summary }: { needs: number; summary: CombSummary }) {
   const { text, tone } = headline(needs, summary);
+  const team = useTeamName();
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 flex items-baseline gap-3.5 bg-linear-to-b from-bg to-transparent px-7 py-[18px]">
       <h2 className={cn('text-[15px] font-semibold', tone)}>{text}</h2>
       <span className="text-muted">{summaryText(summary)}</span>
+      {team ? <span className="ml-auto font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-subtle">{team}</span> : null}
     </div>
   );
 }

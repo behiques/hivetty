@@ -126,13 +126,13 @@ export function AppearanceSection() {
           placeholder={DEFAULT_TEAM_NAME}
           onChange={setTeamName}
           /*
-           * Written on every keystroke so the bar's brand tooltip reads back
-           * what is being typed — this store persists to `localStorage`, so
+           * Written on every keystroke so the name on Home's headline reads
+           * back what is being typed — this store persists to `localStorage`, so
            * there is no cost to pay for that. The commit only tidies the trailing space, which
            * is why the field cannot trim as it goes.
            */
           onCommit={() => setTeamName(settings.teamName.trim())}
-          hint="Shown on the bar's brand mark. Leave it empty for “The Hive”."
+          hint="Shown at the right of Home's headline. Leave it empty for “The Hive”."
           className="max-w-[280px]"
         />
       </SettingsGroup>
