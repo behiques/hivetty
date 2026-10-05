@@ -3,6 +3,9 @@ import { useLayoutEffect, useState, type RefObject } from 'react';
 import { SplitHandle } from '@components/ui/split-handle';
 import { PANEL_WIDTHS, type PanelRail } from '@stores/appearance-store';
 
+/** Half the handle's `w-3`: the ratio is the seam's centre, the stored width stops at its near edge. */
+const HALF_HANDLE = 6;
+
 interface RailHandleProps {
   /** The row the rails and the stage share: the handle's ratio is measured against it. */
   rowRef: RefObject<HTMLElement | null>;
@@ -38,7 +41,7 @@ export function RailHandle({ rowRef, rail, label, width, onWidth }: RailHandlePr
 
   // The session rail grows leftwards, so its ratio runs the other way.
   const left = rail === 'list';
-  const toRatio = (px: number) => (left ? px / rowWidth : 1 - px / rowWidth);
+  const toRatio = (px: number) => (left ? px + HALF_HANDLE : rowWidth - px - HALF_HANDLE) / rowWidth;
   const { min, max, initial } = PANEL_WIDTHS[rail];
   const bounds = rowWidth > 0 ? { min: toRatio(left ? min : max), max: toRatio(left ? max : min) } : {};
 
@@ -53,7 +56,7 @@ export function RailHandle({ rowRef, rail, label, width, onWidth }: RailHandlePr
       onValue={(ratio) => {
         // The live width, not the measured state: a drag's ratio is against the rect it read at pointerdown.
         const row = rowRef.current?.getBoundingClientRect().width ?? 0;
-        if (row > 0) onWidth(left ? ratio * row : (1 - ratio) * row);
+        if (row > 0) onWidth((left ? ratio * row : (1 - ratio) * row) - HALF_HANDLE);
       }}
       {...bounds}
       onReset={() => onWidth(initial)}
