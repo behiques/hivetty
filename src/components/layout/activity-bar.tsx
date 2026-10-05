@@ -60,9 +60,14 @@ export function ActivityBar() {
       aria-label="Places"
       className="flex w-[var(--cc-bar-w)] shrink-0 flex-col items-center gap-1 border-r border-border-soft bg-bg py-3"
     >
-      <span role="img" aria-label="Hive TTY" className="mb-2.5 text-amber">
-        <Hexagon size={22} weight="fill" aria-hidden />
-      </span>
+      {/* The dock icon, from `public/` (its script writes it off the same master); `BASE_URL` because the app is served from `./` under file://. */}
+      <img
+        src={`${import.meta.env.BASE_URL}apple-touch-icon.png`}
+        alt="Hive TTY"
+        width={28}
+        height={28}
+        className="mb-2.5 size-7 rounded-[7px]"
+      />
 
       {PLACES.map(({ id, label, icon: PlaceIcon }) => {
         const active = id === place;
