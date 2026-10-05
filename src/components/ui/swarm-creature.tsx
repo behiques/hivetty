@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react';
 
 import { type CanvasPaint, useCanvasLoop } from '@hooks/use-canvas-loop';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
-import { type BroodCreature, paintCreature } from '@lib/swarm/brood';
+import { BLEED, type BroodCreature, paintCreature } from '@lib/swarm/brood';
 import { HIVE } from '@lib/swarm/hive';
 import { HOVER } from '@lib/swarm/hover';
 import { OVERLORD } from '@lib/swarm/overlord';
@@ -71,27 +71,43 @@ function BroodCanvas({
   const ref = useRef<HTMLCanvasElement>(null);
   const palette = useSwarmPalette();
   const paint = useCallback<CanvasPaint>(
-    (ctx, t, _dt, { w, h, dpr }) => paintCreature(ctx, brood, t % brood.dur, w, h, dpr, toneOf(palette)),
+    (ctx, t, _dt, { w, h, dpr }) => paintCreature(ctx, brood, t % brood.dur, w, h, dpr, toneOf(palette), BLEED),
     [brood, palette],
   );
   useCanvasLoop(ref, paint, { still: reduced ? brood.rest : null });
   const [, , bw, bh] = brood.box;
+  const width = (size * bw) / bh;
 
   return (
-    <canvas
-      ref={ref}
+    <span
       /**
        * Decorative in the strict sense: the flavour line beneath it is real
        * text and says the same thing, and announcing the creature too would
-       * make a screen reader read the state twice. `aria-hidden` alone hides
-       * it; a canvas has no implicit role to strip, and jsx-a11y refuses
-       * `presentation` on one.
+       * make a screen reader read the state twice.
        */
       aria-hidden="true"
       data-creature={creature}
-      style={{ height: size, width: (size * bw) / bh }}
+      style={{ display: 'inline-block', position: 'relative', height: size, width }}
       className="select-none"
-    />
+    >
+      {/*
+        The layout keeps `size`; the canvas bleeds BLEED past it on every side
+        (HIVE-222), so a ring, a glow or a wingtip drawn past the box fades out
+        instead of ending in a hard edge. It takes no pointer events, so the air
+        around the creature never covers what sits beside it.
+      */}
+      <canvas
+        ref={ref}
+        style={{
+          position: 'absolute',
+          left: -width * BLEED,
+          top: -size * BLEED,
+          width: width * (1 + 2 * BLEED),
+          height: size * (1 + 2 * BLEED),
+          pointerEvents: 'none',
+        }}
+      />
+    </span>
   );
 }
 
