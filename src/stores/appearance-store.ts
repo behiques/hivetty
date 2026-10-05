@@ -109,6 +109,14 @@ interface AppearanceState {
   teamName: string;
 
   /**
+   * What's new (1.0): the `major.minor` whose screen was last shown, closed any
+   * way, and the "Don't show What's new again" box. Persisted here, with every
+   * other per-install preference, so neither replays on the next launch.
+   */
+  whatsNewSeen: string | null;
+  whatsNewOff: boolean;
+
+  /**
    * The editor block.
    *
    * Here rather than in a store of its own for the reason this store exists at
@@ -221,6 +229,8 @@ interface AppearanceState {
   /** The tab the session panel shows (HIVE-201). */
   setSessionPanelTab: (tab: SessionPanelTab) => void;
   setTeamName: (name: string) => void;
+  setWhatsNewSeen: (version: string) => void;
+  setWhatsNewOff: (off: boolean) => void;
   setSystemDark: (dark: boolean) => void;
 
   setEditorPlacement: (placement: EditorPlacement) => void;
@@ -439,6 +449,8 @@ const initialAppearanceState = {
   listPanelWidth: PANEL_WIDTHS.list.initial,
   sessionPanelWidth: PANEL_WIDTHS.session.initial,
   teamName: DEFAULT_TEAM_NAME,
+  whatsNewSeen: null as string | null,
+  whatsNewOff: false,
 
   /** Full stage: the editor is a place you go, not a permanent tax on the terminal. */
   editorPlacement: 'full' as EditorPlacement,
@@ -482,6 +494,8 @@ interface PersistedAppearanceState {
   listPanelWidth: number;
   sessionPanelWidth: number;
   teamName: string;
+  whatsNewSeen: string | null;
+  whatsNewOff: boolean;
   editorPlacement: EditorPlacement;
   editorSplitAxis: EditorSplitAxis;
   editorSplitRatio: number;
@@ -694,6 +708,8 @@ export const useAppearanceStore = create<AppearanceState>()(
        * impossible.
        */
       setTeamName: (teamName) => set({ teamName }),
+      setWhatsNewSeen: (whatsNewSeen) => set({ whatsNewSeen }),
+      setWhatsNewOff: (whatsNewOff) => set({ whatsNewOff }),
 
       /**
        * The OS changed its mind while the app was open.
@@ -835,6 +851,8 @@ export const useAppearanceStore = create<AppearanceState>()(
         editorTabWidth: state.editorTabWidth,
         themes: state.themes,
         activeThemeId: state.activeThemeId,
+        whatsNewSeen: state.whatsNewSeen,
+        whatsNewOff: state.whatsNewOff,
       }),
       /**
        * `localStorage` is synchronous, so this runs during module evaluation —
@@ -989,6 +1007,16 @@ export const useSwarmPalette = (): SwarmPalette =>
  */
 export const useTeamName = (): string =>
   useAppearanceStore((state) => state.teamName.trim());
+
+const whatsNewSelector = (state: AppearanceState) => ({
+  seen: state.whatsNewSeen,
+  off: state.whatsNewOff,
+  setSeen: state.setWhatsNewSeen,
+  setOff: state.setWhatsNewOff,
+});
+
+/** What's new's persisted state and its two setters (1.0). */
+export const useWhatsNewPrefs = () => useAppearanceStore(useShallow(whatsNewSelector));
 
 /** What is on screen, `system` resolved against the OS (HIVE-213, the bar's toggle). */
 export const useResolvedTheme = (): ResolvedTheme =>

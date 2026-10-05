@@ -10,6 +10,7 @@ import { useSessionStatus } from '@features/sessions/hooks/use-session-status';
 import { useNotificationActivate } from '@features/settings/hooks/use-notification-activate';
 import { useAgentsSync } from '@features/shared/hooks/use-agents-sync';
 import { useLedgerSync } from '@features/shared/hooks/use-ledger-sync';
+import { WhatsNew } from '@features/whats-new/components/whats-new';
 import { useAppChords } from '@hooks/use-app-chords';
 import { useAwayTracker } from '@hooks/use-away-since';
 import { useDockBadge } from '@hooks/use-dock-badge';
@@ -169,6 +170,8 @@ export function AppShell() {
           <SessionPanel rowRef={rowRef} />
         </div>
       </div>
+      {/* Portalled; draws nothing until a release's card is due or Settings asks for it (1.0). */}
+      <WhatsNew />
     </div>
   );
 }

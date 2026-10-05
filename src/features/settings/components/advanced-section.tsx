@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
+import { Switch } from '@components/ui/switch';
 import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { ConfigResetConfirm } from '@features/settings/components/config-reset-confirm';
 import { ContainerAliasGroup } from '@features/settings/components/container-alias-group';
@@ -29,7 +30,9 @@ import {
 import { checkForUpdates, readUpdateStatus } from '@lib/updates';
 import type { AppInfo, PtyDiagnostics } from '@shared/ipc-contract';
 import type { UpdateStatus } from '@shared/update-contract';
+import { useWhatsNewPrefs } from '@stores/appearance-store';
 import { useRemoteLink } from '@stores/hive-store';
+import { useSetWhatsNewOpen } from '@stores/ui-store';
 
 /**
  * Advanced & diagnostics (story 107).
@@ -194,6 +197,8 @@ function updateLine(
 
 export function AdvancedSection() {
   const snapshot = useProjectConfig();
+  const whatsNew = useWhatsNewPrefs();
+  const setWhatsNewOpen = useSetWhatsNewOpen();
   const { revealConfig } = useRemoteCapabilities();
   /*
     The runtime half of the attach half's state (Ruling 29). Read through the
@@ -527,6 +532,26 @@ export function AdvancedSection() {
             </p>
           </>
         )}
+      </SettingsGroup>
+
+      <SettingsGroup
+        title="What’s new"
+        description="The three-slide card a new major version opens with."
+      >
+        <Switch
+          label="Show What’s new after an update"
+          checked={!whatsNew.off}
+          onCheckedChange={(on) => whatsNew.setOff(!on)}
+        />
+        <div>
+          <button
+            type="button"
+            onClick={() => setWhatsNewOpen(true)}
+            className="rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink"
+          >
+            Open What’s new
+          </button>
+        </div>
       </SettingsGroup>
 
       <SettingsGroup
