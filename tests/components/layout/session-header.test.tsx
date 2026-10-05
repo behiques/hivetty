@@ -61,7 +61,8 @@ describe('SessionHeader (HIVE-197)', () => {
   it('moves the status word to the dot title for the narrowest step (HIVE-213)', () => {
     render(<SessionHeader entity={hero()} />);
     const status = screen.getByTestId('session-status');
-    expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[748px]:sr-only');
+    // 720px of content: the row needs ~705 with the word, and 1200px with one rail open leaves 738 (the rails' grip gutters, #71).
+    expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[720px]:sr-only');
     expect(status.getAttribute('title')).not.toBeNull();
   });
 
@@ -75,7 +76,8 @@ describe('SessionHeader (HIVE-197)', () => {
   it('lowers the title column floor at the narrowest step (HIVE-220)', () => {
     render(<SessionHeader entity={hero()} />);
     const column = screen.getByText('hero-refresh').parentElement!;
-    expect(column).toHaveClass('min-w-[140px]', '@max-[500px]:min-w-[110px]');
+    // 96px: beside both rails at 1200px the chip's last step (icon and three percentages) needs the room.
+    expect(column).toHaveClass('min-w-[140px]', '@max-[500px]:min-w-[96px]');
   });
 
   it('gives the row’s spare width to the title alone, so only the slot clips (HIVE-220)', () => {

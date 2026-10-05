@@ -113,13 +113,14 @@ describe('AgentView', () => {
       }
     });
 
-    it('lays them in one row, in order, labels above values and no boxes (HIVE-204)', () => {
+    it('lays them out as five even tiles, in order, labels above values', () => {
       render(<Harness entity={seed()} />);
 
       const labels = ['Status', 'Wake', 'Next', 'Today', 'Session'].map((label) => screen.getByText(label));
       const row = labels[0]?.parentElement?.parentElement as HTMLElement;
 
-      expect(row).toHaveClass('flex', 'flex-wrap');
+      // Even columns that wrap on a narrow stage rather than squeeze.
+      expect(row).toHaveClass('grid', '[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]');
       expect(Array.from(row.children).map((fact) => fact.firstElementChild?.textContent)).toEqual([
         'Status',
         'Wake',
@@ -130,8 +131,7 @@ describe('AgentView', () => {
 
       for (const label of labels) {
         expect(label).toHaveClass('text-[10.5px]', 'uppercase');
-        expect(label.parentElement).not.toHaveClass('border');
-        expect(label.parentElement).not.toHaveClass('rounded-md');
+        expect(label.parentElement).toHaveClass('rounded-[7px]', 'border', 'border-border-soft', 'bg-panel');
       }
     });
 

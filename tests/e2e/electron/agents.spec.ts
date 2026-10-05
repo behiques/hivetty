@@ -519,18 +519,8 @@ test('pauses from the row’s slot, and the row agrees', async ({}, testInfo) =>
     // The control names the move, not the state — one button, not two.
     await row.hover();
     await expect(panel.getByRole('button', { name: 'Resume slack-watcher' })).toBeVisible();
-
-    /*
-      Run now on a paused agent is answered, not swallowed: the sentence takes
-      line 2 for five seconds, then the row's own line comes back.
-    */
-    await panel.getByRole('button', { name: 'Run slack-watcher now' }).click();
-
-    const notice = panel.getByRole('status');
-
-    await expect(notice).toContainText('slack-watcher');
-    await expect(notice).toContainText(/paused|resume/);
-    await expect(notice).toBeHidden({ timeout: 7_000 });
+    // One play icon (#74): a paused agent refuses a run, so its row offers Resume and no Run now.
+    await expect(panel.getByRole('button', { name: 'Run slack-watcher now' })).toHaveCount(0);
 
     await row.click();
     const view = page.locator('[data-view="agent"]');

@@ -70,7 +70,8 @@ function SessionLine({ session }: { session: Session }) {
         and below its floor it is frozen, so a row that still does not fit is
         taken from the model slot alone (HIVE-220).
       */}
-      <span className="flex min-w-[140px] flex-1 basis-0 flex-col @max-[500px]:min-w-[110px]">
+      {/* 96px at the narrowest step: beside both rails at 1200px the content box is 452px (the rails' grip gutters, #71), and the chip's last step needs 195. */}
+      <span className="flex min-w-[140px] flex-1 basis-0 flex-col @max-[500px]:min-w-[96px]">
         <span className="truncate text-[13px] font-semibold text-ink" title={session.task}>
           {entityLabel(session)}
         </span>
@@ -81,12 +82,12 @@ function SessionLine({ session }: { session: Session }) {
       <span
         data-testid="session-status"
         className={cn('flex shrink-0 items-center gap-1.5 text-[12px]', ended ? 'text-muted' : tone)}
-        // A narrow header hides the word (HIVE-213, measured in HIVE-220); the title keeps it for the dot.
+        // A narrow header hides the word (HIVE-213; 720px since the rails' gutters, #71, where the row needs ~705); the title keeps it for the dot.
         title={reason ?? word}
         aria-label={reason === undefined ? undefined : `Ended: ${reason}`}
       >
         <StatusDot status={session.status} detail={session.idleDetail} />
-        <span data-word className="@max-[748px]:sr-only">
+        <span data-word className="@max-[720px]:sr-only">
           {word}
         </span>
       </span>
