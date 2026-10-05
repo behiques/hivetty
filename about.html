@@ -20,24 +20,23 @@
       the Advanced pane uses — the interface whose own docblock says it exists
       "for the About box and bug reports".
 
-      The hero is the splash's comb globe, not a second copy: `startGlobe`
+      The hero is the splash's brood world, not a second copy: `startGlobe`
       from `src/splash/stage.ts`.
     -->
     <main class="panel">
       <div class="hero">
         <div class="bloom"></div>
-        <div class="pool"></div>
 
-        <!-- The splash's comb globe, formed and turning (`about.ts`). -->
+        <!-- The splash's brood world, formed and turning (`about.ts`). -->
         <canvas class="globe" id="globe" aria-hidden="true"></canvas>
 
         <div class="vignette"></div>
       </div>
 
       <section class="copy">
-        <h1 class="wordmark" aria-label="The Hive">
-          <span>T</span><span>H</span><span>E</span><span>&nbsp;</span><span>H</span
-          ><span>I</span><span>V</span><span>E</span>
+        <h1 class="wordmark" aria-label="Hive TTY">
+          <span>H</span><span>I</span><span>V</span><span>E</span
+          ><em class="tty" aria-hidden="true"><i>t</i><i>t</i><i>y</i><b class="cursor"></b></em>
         </h1>
 
         <!-- Filled by `about.ts` from `appInfo()`; the markup ships no version. -->

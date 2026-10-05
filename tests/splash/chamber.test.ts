@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { LOG_SCHEDULE, scheduleCopy, WORDMARK_START, WORDMARK_STEP } from '@/splash/chamber';
+import { LOG_SCHEDULE, scheduleCopy, TYPE_STEP, WORDMARK_START, WORDMARK_STEP } from '@/splash/chamber';
 
 /**
  * The chamber's copy schedule, away from the document that runs it.
@@ -36,6 +36,24 @@ describe('scheduleCopy', () => {
       `${WORDMARK_START + WORDMARK_STEP}s`,
       `${WORDMARK_START + WORDMARK_STEP * 2}s`,
     ]);
+  });
+
+  it('types tty on "hive cluster online", and shows the cursor once HIVE has assembled', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<p class="wordmark"><span>H</span><span>I</span><span>V</span><span>E</span><em class="tty"><i>t</i><i>t</i><i>y</i><b class="cursor"></b></em></p>';
+    scheduleCopy(root);
+
+    // The tty is not a glyph of the wordmark: HIVE's four letters keep the old clock.
+    expect(root.querySelectorAll<HTMLElement>('.wordmark span')[3]!.style.animationDelay).toBe(`${WORDMARK_START + WORDMARK_STEP * 3}s`);
+    const keys = [...root.querySelectorAll<HTMLElement>('.tty i')].map((key) => parseFloat(key.style.animationDelay));
+    keys.forEach((at, i) => expect(at).toBeCloseTo(LOG_SCHEDULE[4]! + i * TYPE_STEP, 9));
+    const cursor = root.querySelector<HTMLElement>('.cursor')!.style.animationDelay.split(',').map((d) => parseFloat(d));
+    expect(cursor).toHaveLength(2);
+    for (const at of cursor) {
+      expect(at).toBeGreaterThan(WORDMARK_START + WORDMARK_STEP * 3);
+      expect(at).toBeLessThan(LOG_SCHEDULE[4]!);
+    }
   });
 
   it('lands every log line on its scheduled second', () => {
