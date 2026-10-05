@@ -647,6 +647,7 @@ describe('NewSessionPicker · unmapped projects', () => {
     expect(creatures).toHaveLength(1);
     expect(creatures[0]).toHaveAttribute('data-creature', 'egg');
     expect(creatures[0]).toHaveStyle({ height: '120px' });
+    expect(creatures[0]).toHaveClass('mb-8');
     vi.restoreAllMocks();
   });
 

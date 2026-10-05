@@ -204,7 +204,7 @@ export function NewSessionPicker() {
         */}
         {noProjects ? (
           <div className="flex max-w-[560px] flex-col items-center gap-2.5">
-            <SwarmCreature creature={creature} size={120} />
+            <SwarmCreature creature={creature} size={120} className="mb-8" />
             <p className="text-center tabular-nums text-[11.5px] text-muted">
               {firstRunPhrase}
             </p>

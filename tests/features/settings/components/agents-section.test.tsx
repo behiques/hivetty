@@ -80,6 +80,7 @@ describe('AgentsSection', () => {
     const creature = document.querySelector('[data-creature]');
     expect(creature).toHaveAttribute('data-creature', 'mutalisk');
     expect(creature).toHaveStyle({ height: '120px' });
+    expect(creature).toHaveClass('mb-9');
   });
 
   it('lists an agent with its state', async () => {

@@ -65,11 +65,13 @@ function BroodCanvas({
   brood,
   size,
   reduced,
+  className,
 }: {
   creature: Exclude<Creature, 'egg'>;
   brood: BroodCreature;
   size: number;
   reduced: boolean;
+  className: string;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const palette = useSwarmPalette();
@@ -91,7 +93,7 @@ function BroodCanvas({
       aria-hidden="true"
       data-creature={creature}
       style={{ display: 'inline-block', position: 'relative', height: size, width }}
-      className="select-none"
+      className={className}
     >
       {/*
         The layout keeps `size`; the canvas bleeds BLEED past it on every side
@@ -117,6 +119,7 @@ function BroodCanvas({
 export function SwarmCreature({
   creature,
   size = 96,
+  className,
 }: {
   /**
    * Which one. The casting is a second channel, not decoration, so it is fixed
@@ -148,8 +151,11 @@ export function SwarmCreature({
   creature: Creature;
   /** Rendered height in px. The width follows the creature's own box. */
   size?: number;
+  /** Layout classes for the creature's box, such as the room below it. */
+  className?: string;
 }) {
   const reduced = useReducedMotion();
+  const cls = className === undefined ? 'select-none' : `select-none ${className}`;
 
   if (creature === 'egg') {
     // The Hatchery's own SVG egg; it handles reduced motion itself.
@@ -158,11 +164,11 @@ export function SwarmCreature({
         aria-hidden="true"
         data-creature="egg"
         style={{ display: 'inline-block', height: size, width: (size * EGG_BOX[2]) / EGG_BOX[3] }}
-        className="select-none"
+        className={cls}
       >
         <BroodEgg className="block h-full w-full" viewBox={EGG_BOX.join(' ')} />
       </span>
     );
   }
-  return <BroodCanvas creature={creature} brood={CANVAS[creature]} size={size} reduced={reduced} />;
+  return <BroodCanvas creature={creature} brood={CANVAS[creature]} size={size} reduced={reduced} className={cls} />;
 }
