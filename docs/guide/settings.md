@@ -53,7 +53,7 @@ Create and edit [agents](agents.md) with a form or as source.
 ## Appearance
 
 Mode (System, Dark or Light; the bar's sun or moon flips it too), [themes](themes.md), terminal font, size and scrollback, team name
-(the bar's hexagon shows it on hover), density.
+(shown at the right of Home's headline), density.
 
 ## Editor
 

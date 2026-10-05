@@ -50,6 +50,13 @@ test('shows no white flash — the window paints the app background', async ({
   expect(background.toLowerCase()).toBe('#10152a');
 });
 
+test('loads the dock icon as the bar\'s brand under file://', async ({ page }) => {
+  // A root-relative src 404s silently under file:// (story 083); a loaded image has a natural width.
+  const brand = page.getByRole('navigation', { name: 'Places' }).getByRole('img', { name: 'Hive TTY' });
+  await expect(brand).toBeVisible();
+  await expect.poll(() => brand.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+});
+
 test('draws the empty fleet\'s creature on its canvas', async ({ page }) => {
   // The creature is what round two shows on an empty fleet. It was a WebP,
   // where a root-relative URL 404s silently under file:// (story 083); it is
