@@ -25,6 +25,10 @@ const plural = (n: number, one: string): string => `${String(n)} ${one}${n === 1
  * Focus moves in because the user asked for it (the pill, the bell, a toast),
  * onto the card for `thread` when one was named, and goes back where it was
  * on close. Emptied by answering, it says so and stays until closed.
+ *
+ * It runs the window's full height, over the title bar's drag strip (macOS):
+ * `no-drag` hands that strip back to the drawer, or its header, the close
+ * button with it, would move the window instead of taking the click.
  */
 export function InboxDrawer({ onStage }: InboxDrawerProps) {
   const { open, thread } = useInboxDrawer();
@@ -68,7 +72,7 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
       aria-modal="false"
       aria-label="Needs you"
       tabIndex={-1}
-      className="fixed inset-y-0 right-0 z-40 flex w-[400px] flex-col gap-2.5 overflow-y-auto border-l border-border bg-panel px-3.5 py-3 shadow-2xl outline-none"
+      className="fixed inset-y-0 right-0 z-40 flex w-[400px] flex-col gap-2.5 overflow-y-auto border-l border-border bg-panel px-3.5 py-3 shadow-2xl outline-none [-webkit-app-region:no-drag]"
     >
       <div className="flex items-baseline gap-2.5 px-0.5 pb-1.5 text-[12px]">
         <b className="text-[14px] text-ink">Needs you</b>
