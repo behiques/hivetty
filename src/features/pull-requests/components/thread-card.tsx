@@ -158,7 +158,7 @@ export function ThreadCard({
               onClick={post}
               disabled={busy || draft.trim() === ''}
               aria-label="Post reply"
-              className="rounded-md bg-brand-fill px-3 py-1 text-ink hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:text-subtle"
+              className="rounded-md bg-brand-fill px-3 py-1 text-on-brand hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy ? 'Posting…' : 'Reply'}
             </button>

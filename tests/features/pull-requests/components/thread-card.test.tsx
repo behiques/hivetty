@@ -83,6 +83,15 @@ describe('ThreadCard writes (HIVE-207)', () => {
     expect(screen.queryByRole('textbox', { name: /Reply to/ })).toBeNull();
   });
 
+  it('keeps the disabled reply label legible: on-brand text, dimmed by opacity', async () => {
+    render(<ThreadCard thread={prThread()} fixerOnIt={false} writes={writes()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    const button = screen.getByRole('button', { name: 'Post reply' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveClass('text-on-brand', 'disabled:opacity-60');
+    expect(button.className).not.toMatch(/disabled:text-subtle|\btext-ink\b/);
+  });
+
   it('keeps the text and shows the reason when the reply fails', async () => {
     const w = writes({ reply: vi.fn().mockResolvedValue(no('rate limited')) });
     render(<ThreadCard thread={prThread()} fixerOnIt={false} writes={w} />);

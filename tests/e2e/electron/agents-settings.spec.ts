@@ -9,6 +9,7 @@ import {
 } from './fixtures/agent-source';
 import {
   expectSavedAs,
+  newAgentInSettings,
   newAgentPage,
   openSettingsAgents,
   showForm,
@@ -17,8 +18,8 @@ import {
 import { launchHive } from './fixtures/hive-app';
 
 /**
- * Settings › Agents against the built app (HIVE-114), and the agent page it
- * opens for authoring since HIVE-204.
+ * Settings › Agents against the built app (HIVE-114): the list, and the editor
+ * beside it, Form | Source tabs, which edits in place.
  *
  * The unit suites prove each half against fakes — a stubbed snapshot renders a
  * row, a mocked bridge routes a verb, a temp directory accepts a write — and
@@ -114,7 +115,6 @@ test('authors an agent through the pane and writes it to disk', async ({}, testI
     await expectSavedAs(page, 'slack-watcher');
 
     // The row appears without a reload — the write is followed by a re-list.
-    await openAgents(page);
     // Scoped to Settings: round two's Agents panel lists the same row beside it.
     await expect(
       page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: /slack-watcher/ }),
@@ -147,7 +147,7 @@ test('adds a schedule time the presets do not offer, and saves it', async ({}, t
   );
 
   try {
-    await newAgentPage(page);
+    await newAgentInSettings(page);
     await showSource(page);
     await fillAgentSource(page, DEFINITION);
     await showForm(page);
@@ -191,7 +191,7 @@ test('refuses a sub-minute wake interval and writes nothing', async ({}, testInf
   const target = join(dirname(configPath), 'agents', 'slack-watcher', 'AGENT.md');
 
   try {
-    await newAgentPage(page);
+    await newAgentInSettings(page);
     await showSource(page);
     await fillAgentSource(page, DEFINITION.replace('every: 5m', 'every: 30s'));
     await page.getByRole('button', { name: 'Save' }).click();
@@ -248,7 +248,7 @@ test('an agent authored in the pane survives a restart', async ({}, testInfo) =>
   const first = await launchWithConfig(outputPath);
 
   try {
-    await newAgentPage(first.page);
+    await newAgentInSettings(first.page);
     await showSource(first.page);
     await fillAgentSource(first.page, DEFINITION);
     await first.page.getByRole('button', { name: 'Save' }).click();
@@ -293,7 +293,7 @@ test('authors an agent through the form controls', async ({}, testInfo) => {
   );
 
   try {
-    await newAgentPage(page);
+    await newAgentInSettings(page);
 
     // The template seeds a roster name, so the form opens valid rather than
     // opening on a refusal the form itself cannot answer.
@@ -349,7 +349,7 @@ test('writes check and a daily cap, and hides check on a schedule', async ({}, t
   );
 
   try {
-    await newAgentPage(page);
+    await newAgentInSettings(page);
 
     const name = page.getByRole('textbox', { name: 'name' });
     await expect(name).toBeVisible();
@@ -423,7 +423,7 @@ test('every wake interval stays inside the control, and daily is clickable', asy
   );
 
   try {
-    await newAgentPage(page);
+    await newAgentInSettings(page);
 
     const name = page.getByRole('textbox', { name: 'name' });
     await expect(name).toBeVisible();
@@ -473,7 +473,7 @@ test('seeds a new agent with an icon the registry can draw', async ({}, testInfo
   );
 
   try {
-    await newAgentPage(page);
+    await newAgentInSettings(page);
     await showSource(page);
 
     await expectAgentSource(page, /icon: ph-[a-z-]+/);
@@ -495,7 +495,7 @@ test('switches an agent into a container and writes the block to disk (HIVE-137)
   );
 
   try {
-    await newAgentPage(page);
+    await newAgentInSettings(page);
     await showSource(page);
     await fillAgentSource(page, DEFINITION);
     await showForm(page);
@@ -525,10 +525,11 @@ test('switches an agent into a container and writes the block to disk (HIVE-137)
 });
 
 /**
- * Settings opens the page now, rather than holding an editor of its own
- * (HIVE-204): a row closes Settings and lands on that agent's Definition.
+ * Settings edits in place again: a row keeps Settings open and shows its
+ * agent beside the list, behind Form | Source tabs, without opening the page.
+ * The agent page shows the same editor side by side.
  */
-test('opening an agent from Settings shows its page on Definition', async ({}, testInfo) => {
+test('opening an agent from Settings edits it in place, with Settings still open', async ({}, testInfo) => {
   const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
 
   try {
@@ -539,12 +540,15 @@ test('opening an agent from Settings shows its page on Definition', async ({}, t
     await expectSavedAs(page, 'slack-watcher');
 
     await openAgents(page);
-    await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: /slack-watcher/ }).click();
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await settings.getByRole('button', { name: /slack-watcher/ }).click();
 
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeHidden();
-    await expect(page.locator('[data-view="agent"]')).toBeVisible();
-    await expect(page.getByRole('radio', { name: 'Definition', checked: true })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'name' })).toHaveValue('slack-watcher');
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    await expect(settings.getByRole('button', { name: /slack-watcher/ })).toHaveAttribute('aria-current', 'true');
+    await expect(settings.getByRole('tab', { name: 'Form' })).toBeVisible();
+    await expect(settings.getByRole('tab', { name: 'Source' })).toBeVisible();
+    await expect(settings.getByRole('textbox', { name: 'name' })).toHaveValue('slack-watcher');
+    await expect(settings.getByText(/\/slack-watcher\/AGENT\.md$/)).toBeVisible();
   } finally {
     await app.close();
   }

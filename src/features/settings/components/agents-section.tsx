@@ -1,25 +1,29 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 import { loadAgents } from '@/lib/agents';
 import { loadShipped } from '@/lib/shipped';
+import { cn } from '@/lib/utils';
 
 import { Icon } from '@components/ui/icon';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
+import { AgentDefinition } from '@features/shared/components/agent-definition';
 import { ShippedDot } from '@features/shared/components/shipped-marker';
 import { useAgents } from '@hooks/use-agents';
 import { useShipped } from '@hooks/use-shipped';
-import { useAgentPageActions } from '@stores/ui-store';
 
 /**
- * The Agents section of settings (HIVE-114): the list, and New agent.
+ * The Agents section of settings (HIVE-114): the list, New agent, and the
+ * editor beside them.
  *
- * The editor this section used to hold beside the list moved to the agent's
- * own page (HIVE-204). A row opens that page on Definition and New agent opens
- * a never-saved one — both through ui-store, so Settings imports nothing from
- * the agents slice. The list keeps what it always said about each agent: its
- * glyph, its name, the shipped dot and its state.
+ * Settings edits in place, with Form | Source tabs: its detail pane is too
+ * narrow for the two side by side. The agent page shows the same editor
+ * (`features/shared`) side by side, and both edit the one editor-store draft,
+ * so an edit made in one shows in the other. A row opens its agent here and New
+ * agent a never-saved one; neither leaves Settings. The list keeps what it
+ * always said about each agent: its glyph, its name, the shipped dot and its
+ * state.
  *
  * A broken definition's row is not disabled — unlike an invalid skill's. The
  * folder names it, so there is always a file to open, and the user has to be
@@ -29,7 +33,8 @@ export function AgentsSection() {
   const snapshot = useAgents();
   const phrase = useSwarmPhrase('empty.settingsSkills');
 
-  const { openAgentPage } = useAgentPageActions();
+  /** The agent open beside the list: a name, `null` for a never-saved one, or nothing open. */
+  const [open, setOpen] = useState<{ name: string | null } | null>(null);
 
   useEffect(() => {
     void loadAgents();
@@ -48,7 +53,7 @@ export function AgentsSection() {
   const agents = snapshot?.agents ?? [];
   const empty = agents.length === 0;
 
-  const newAgent = (): void => openAgentPage(null, 'definition');
+  const newAgent = (): void => setOpen({ name: null });
 
   const description =
     'Background agents that wake on a schedule or a message and correspond through the ledger. Saved as AGENT.md under ~/.hive/agents.';
@@ -69,7 +74,11 @@ export function AgentsSection() {
     );
   }
 
-  if (empty) {
+  /*
+    Once something is open the list-and-editor layout draws even with no
+    agents, so a first agent can be written here.
+  */
+  if (empty && open === null) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 py-4">
         <SettingsSectionHeader title="Agents" description={description} />
@@ -104,56 +113,80 @@ export function AgentsSection() {
     <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-hidden px-5 py-4">
       <SettingsSectionHeader title="Agents" description={description} />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[7px] border border-border">
-        {agents.map((agent) => {
-          const broken = agent.invalid !== undefined;
+      <div className="grid min-h-0 flex-1 grid-cols-[190px_minmax(0,1fr)] gap-3">
+        <div className="flex min-h-0 flex-col overflow-y-auto rounded-[7px] border border-border">
+          {agents.map((agent) => {
+            const broken = agent.invalid !== undefined;
+            const active = open?.name === agent.name;
 
-          return (
-            <button
-              key={agent.name}
-              type="button"
-              onClick={() => openAgentPage(agent.name, 'definition')}
-              title={broken ? agent.invalid : undefined}
-              /*
-                Not `justify-between`. The identity is one group pinned left —
-                glyph then name — and the status is what floats to the far edge.
-              */
-              className="flex items-center gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-[12.5px] text-muted last:border-b-0 hover:bg-hover hover:text-ink"
-            >
-              {/*
-                The agent's own glyph, from `icon:` in its frontmatter, already
-                on `AgentSummary`. It is what makes the list scannable rather
-                than read: a fleet of five agents is five shapes before it is
-                five names.
-              */}
-              <Icon name={agent.icon} size={14} className="shrink-0 text-brand" />
-              <span className="truncate tabular-nums">{agent.name}</span>
-              <ShippedDot status={shipped.get(agent.name)} />
-              {broken ? (
-                <span className="ml-auto shrink-0 text-[11px] text-amber">invalid</span>
-              ) : (
-                <span
-                  className="ml-auto shrink-0 text-[11px] text-subtle"
-                  title={
-                    agent.wake.everyMs === undefined && agent.wake.on.length === 0
-                      ? 'Manual only — no schedule and no triggers.'
-                      : undefined
-                  }
-                >
-                  {agent.status}
-                </span>
-              )}
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={agent.name}
+                type="button"
+                onClick={() => setOpen({ name: agent.name })}
+                aria-current={active ? 'true' : undefined}
+                title={broken ? agent.invalid : undefined}
+                /*
+                  Not `justify-between`. The identity is one group pinned left —
+                  glyph then name — and the status is what floats to the far edge.
+                */
+                className={cn(
+                  'flex items-center gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-[12.5px] last:border-b-0 hover:bg-hover hover:text-ink',
+                  active ? 'bg-hover text-ink' : 'text-muted',
+                )}
+              >
+                {/*
+                  The agent's own glyph, from `icon:` in its frontmatter, already
+                  on `AgentSummary`. It is what makes the list scannable rather
+                  than read: a fleet of five agents is five shapes before it is
+                  five names.
+                */}
+                <Icon name={agent.icon} size={14} className="shrink-0 text-brand" />
+                <span className="truncate tabular-nums">{agent.name}</span>
+                <ShippedDot status={shipped.get(agent.name)} />
+                {broken ? (
+                  <span className="ml-auto shrink-0 text-[11px] text-amber">invalid</span>
+                ) : (
+                  <span
+                    className="ml-auto shrink-0 text-[11px] text-subtle"
+                    title={
+                      agent.wake.everyMs === undefined && agent.wake.on.length === 0
+                        ? 'Manual only — no schedule and no triggers.'
+                        : undefined
+                    }
+                  >
+                    {agent.status}
+                  </span>
+                )}
+              </button>
+            );
+          })}
 
-        <button
-          type="button"
-          onClick={newAgent}
-          className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-[12.5px] text-brand hover:bg-hover"
-        >
-          + New agent
-        </button>
+          <button
+            type="button"
+            onClick={newAgent}
+            className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-[12.5px] text-brand hover:bg-hover"
+          >
+            + New agent
+          </button>
+        </div>
+
+        {open === null ? (
+          <div className="flex items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-[11.5px] text-subtle">
+            Select an agent, or write a new one.
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-[7px] border border-border">
+            <AgentDefinition
+              key={open.name ?? 'new'}
+              name={open.name}
+              notice={null}
+              layout="tabs"
+              onRename={(name) => setOpen({ name })}
+              onClose={() => setOpen(null)}
+            />
+          </div>
+        )}
       </div>
 
       <p className="text-[11px] text-subtle">

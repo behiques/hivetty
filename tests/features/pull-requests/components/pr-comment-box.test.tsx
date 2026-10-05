@@ -45,4 +45,12 @@ describe('PrCommentBox', () => {
     render(<PrCommentBox pr={fixturePr()} />);
     expect(screen.getByRole('button', { name: 'Comment' })).toBeDisabled();
   });
+
+  it('keeps the disabled Comment label legible: on-brand text, dimmed by opacity', () => {
+    render(<PrCommentBox pr={fixturePr()} />);
+    const button = screen.getByRole('button', { name: 'Comment' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveClass('text-on-brand', 'disabled:opacity-60');
+    expect(button.className).not.toMatch(/disabled:text-subtle|\btext-ink\b/);
+  });
 });

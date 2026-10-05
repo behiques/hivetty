@@ -36,19 +36,22 @@ you choose **Compare**, **Take shipped prompt** or **Keep mine**. An agent you d
 
 ## Create an agent
 
-The Agents panel head's **+** (or **+ New agent** in **Settings › Agents**), opens a new
-agent's page on **Definition**. The form sits on the left and the file's source on the
-right; both edit the same text. When the stage is narrower than 900px they become
-**Form | Source** tabs. The bar above them names the file, or says *not saved yet*, and
+The Agents panel head's **+** opens a new agent's page on **Definition**. The form sits
+on the left and the file's source on the right; both edit the same text. Drag the line
+between them to give either more room (each keeps a minimum width; double-click the line
+to put it back). When the stage is narrower than 900px they become **Form | Source**
+tabs. The bar above them names the file, or says *not saved yet*, and
 reads **unsaved** in amber until you **Save**.
 
 Your edits are kept: go to another agent or another place and come back, and the unsaved
 text is still there. **Revert** puts it back to what is on disk. **Delete** asks first,
 then removes the folder and closes the page.
 
-**Settings › Agents** lists your agents. Clicking one opens its page on Definition. A
-file you write by hand shows up without a restart, and a broken one is listed with its
-problem.
+**Settings › Agents** lists your agents and edits them in place: click one, or
+**+ New agent**, and the same editor opens beside the list behind **Form | Source** tabs,
+with Settings still open. It shares the page's unsaved text, so an edit made in one shows
+in the other. A file you write by hand shows up without a restart, and a broken one is
+listed with its problem.
 
 ![Settings › Agents with the form for standup-bot](../assets/guide/21-agent-form.png)
 

@@ -279,7 +279,7 @@ function ReplyBox({
           type="button"
           onClick={post}
           disabled={posting || (draft.trim() === '' && mentions.length === 0)}
-          className="rounded-md bg-brand-fill px-3 py-1 text-ink hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-brand-fill"
+          className="rounded-md bg-brand-fill px-3 py-1 text-on-brand hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-brand-fill"
         >
           {posting ? 'Posting…' : 'Comment'}
         </button>

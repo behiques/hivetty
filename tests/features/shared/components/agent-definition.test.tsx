@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AGENT_NAME_POOL, resetAgents } from '@/lib/agents';
 import { resetShippedState } from '@/lib/shipped';
 
-import { AgentDefinition } from '@features/agents/components/agent-definition';
+import { AgentDefinition } from '@features/shared/components/agent-definition';
 import { useEditorStore } from '@stores/editor-store';
 import { useUiStore } from '@stores/ui-store';
 import { setSurfaceText, surfaceText } from '@tests/support/editor-surface';
@@ -57,9 +57,18 @@ const stub = (agents: AgentSummary[], over: Record<string, unknown> = {}) => {
   return bridge;
 };
 
+/**
+ * What the agent page means by rename and delete: move the page to the new
+ * name, close it. The tests that pass these prove the page follows.
+ */
+const page = {
+  onRename: (name: string) => useUiStore.getState().openAgentPage(name, 'definition'),
+  onClose: () => useUiStore.getState().closeAgentPage(),
+};
+
 /** Render one agent's definition and wait for its file to land. */
 const open = async (name: string | null = 'slack-watcher') => {
-  const view = render(<AgentDefinition name={name} notice={null} />);
+  const view = render(<AgentDefinition {...page} name={name} notice={null} />);
   await screen.findByRole('textbox', { name: 'name' });
   if (name !== null) await waitFor(() => expect(useEditorStore.getState().agentDrafts[name]).toBeDefined());
   return view;
@@ -78,7 +87,7 @@ beforeEach(() => {
 
 describe('AgentDefinition', () => {
   it('says agents are desktop-only without a bridge', () => {
-    render(<AgentDefinition name="slack-watcher" notice={null} />);
+    render(<AgentDefinition {...page} name="slack-watcher" notice={null} />);
 
     expect(screen.getByText(/only available in the desktop app/i)).toBeInTheDocument();
   });
@@ -110,7 +119,7 @@ describe('AgentDefinition', () => {
 
   it('names an unreadable folder in the footer', async () => {
     stub([agent('Upper')], { read: vi.fn(async () => null) });
-    render(<AgentDefinition name="Upper" notice={null} />);
+    render(<AgentDefinition {...page} name="Upper" notice={null} />);
 
     expect(await screen.findByText(/This folder cannot be opened/)).toBeInTheDocument();
   });
@@ -131,7 +140,7 @@ describe('AgentDefinition', () => {
 
   it('draws the page notice in the footer', async () => {
     stub([agent('slack-watcher')]);
-    render(<AgentDefinition name="slack-watcher" notice="slack-watcher is paused" />);
+    render(<AgentDefinition {...page} name="slack-watcher" notice="slack-watcher is paused" />);
 
     expect(await screen.findByRole('status')).toHaveTextContent('slack-watcher is paused');
   });
@@ -302,6 +311,37 @@ describe('AgentDefinition', () => {
 
     expect(screen.getByText('saved')).toBeInTheDocument();
     expect(description()).toHaveValue('Watches things.');
+  });
+
+  describe('its caller decides what rename and delete open', () => {
+    it('hands a saved rename to onRename', async () => {
+      stub([agent('slack-watcher')]);
+      const rename = vi.fn();
+      render(<AgentDefinition name="slack-watcher" notice={null} onRename={rename} onClose={vi.fn()} />);
+      await waitFor(() => expect(useEditorStore.getState().agentDrafts['slack-watcher']).toBeDefined());
+
+      setSurfaceText('Agent source', GOOD.replace('slack-watcher', 'slack-bot'));
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(rename).toHaveBeenCalledWith('slack-bot'));
+      expect(useUiStore.getState().agentPage).toBeNull();
+    });
+
+    it('hands a delete to onClose', async () => {
+      stub([agent('slack-watcher')]);
+      const close = vi.fn();
+      render(<AgentDefinition name="slack-watcher" notice={null} onRename={vi.fn()} onClose={close} />);
+      await waitFor(() => expect(useEditorStore.getState().agentDrafts['slack-watcher']).toBeDefined());
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      await userEvent.click(
+        within(screen.getByRole('alertdialog', { name: 'Delete slack-watcher?' })).getByRole('button', {
+          name: 'Delete',
+        }),
+      );
+
+      await waitFor(() => expect(close).toHaveBeenCalled());
+    });
   });
 
   describe('deleting', () => {
