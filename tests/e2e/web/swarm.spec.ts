@@ -29,7 +29,7 @@ test('the dormant orchestrator holds a creature and a line', async ({ page }) =>
   await expect(empty).toBeVisible();
 
   // Painted, laid out at the size it was asked for, not collapsed.
-  await expectCreatureDrawn(empty.locator('[data-creature="hive"]'));
+  await expectCreatureDrawn(empty.locator('[data-creature="overlord"]'));
 
   await expect(empty).toContainText('No sessions running — start one with New session.');
 
@@ -42,7 +42,7 @@ test('holds the creature still when the user asked for less motion', async ({ pa
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(APP_URL);
   await goToOvermind(page);
-  const creature = page.getByTestId('session-table-empty').locator('[data-creature="hive"]');
+  const creature = page.getByTestId('session-table-empty').locator('[data-creature="overlord"]');
   await expectCreatureDrawn(creature);
 
   const first = await readCreature(creature);
