@@ -158,3 +158,45 @@ describe('the Timeline tab (HIVE-208)', () => {
     expect(screen.queryByRole('list', { name: 'Conversation' })).toBeNull();
   });
 });
+
+describe('PrPage on a narrow stage (HIVE-223)', () => {
+  it('is a size container whose sidebar shows inline only from 760px', () => {
+    render(<PrPage row={row} />);
+    expect(screen.getByRole('region', { name: 'Pull request #1182' })).toHaveClass('@container');
+    expect(screen.getByRole('complementary', { name: 'Pull request properties' })).toHaveClass(
+      'hidden',
+      '@min-[760px]:block',
+    );
+    expect(screen.getByRole('button', { name: 'Details' })).toHaveClass('@min-[760px]:hidden');
+  });
+
+  it('opens the properties as an overlay from Details, and Escape closes it and returns focus', async () => {
+    render(<PrPage row={row} />);
+    const details = screen.getByRole('button', { name: 'Details' });
+    expect(details).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.click(details);
+    const dialog = screen.getByRole('dialog', { name: 'Pull request details' });
+    expect(details).toHaveAttribute('aria-expanded', 'true');
+    expect(dialog).toHaveClass('@min-[760px]:hidden');
+    expect(dialog).toHaveFocus();
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Pull request details' })).not.toBeInTheDocument();
+    expect(details).toHaveFocus();
+  });
+
+  it('closes from a click outside it, or from Details again', async () => {
+    render(<PrPage row={row} />);
+    const details = screen.getByRole('button', { name: 'Details' });
+    await userEvent.click(details);
+    await userEvent.click(screen.getByTestId('pr-details-veil'));
+    expect(screen.queryByRole('dialog', { name: 'Pull request details' })).not.toBeInTheDocument();
+
+    await userEvent.click(details);
+    expect(screen.getByRole('dialog', { name: 'Pull request details' })).toBeInTheDocument();
+    await userEvent.click(details);
+    expect(screen.queryByRole('dialog', { name: 'Pull request details' })).not.toBeInTheDocument();
+    expect(details).toHaveFocus();
+  });
+});

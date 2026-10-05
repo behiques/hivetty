@@ -1,5 +1,5 @@
 import { GithubLogo, GitPullRequest } from '@phosphor-icons/react';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { createPoller } from '@/hooks/create-poller';
 import { useOpenFileAt } from '@/hooks/use-open-file-at';
@@ -121,8 +121,26 @@ export function PrPage({ row }: { row: HatcheryRow }) {
 
   const retry = () => void load(pr.owner, pr.repo, pr.n);
 
+  // The properties sidebar folds into this below a 760px page (HIVE-223); above it the state is moot.
+  const [details, setDetails] = useState(false);
+  const detailsButton = useRef<HTMLButtonElement>(null);
+  const detailsPanel = useRef<HTMLDivElement>(null);
+  const closeDetails = useCallback(() => {
+    setDetails(false);
+    detailsButton.current?.focus();
+  }, []);
+  useEffect(() => {
+    if (!details) return undefined;
+    detailsPanel.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeDetails();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [details, closeDetails]);
+
   return (
-    <section aria-label={`Pull request #${String(pr.n)}`} className="flex min-h-0 flex-1 flex-col">
+    <section aria-label={`Pull request #${String(pr.n)}`} className="@container flex min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-border-soft px-5 pt-3.5 pb-3">
         <GitPullRequest size={20} aria-hidden className={cn('shrink-0', FLAP_TEXT[hatch.tone])} />
         <div className="flex min-w-0 flex-col gap-[3px]">
@@ -135,6 +153,16 @@ export function PrPage({ row }: { row: HatcheryRow }) {
         </div>
         <span className="flex-1" />
         <SegmentedControl label="Tab" options={tabs} value={tab} onChange={setPrTab} />
+        <button
+          ref={detailsButton}
+          type="button"
+          aria-expanded={details}
+          aria-controls="pr-details"
+          onClick={() => (details ? closeDetails() : setDetails(true))}
+          className="flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-[12px] text-ink hover:bg-hover @min-[760px]:hidden"
+        >
+          Details
+        </button>
         <a
           href={pr.url}
           target="_blank"
@@ -146,7 +174,7 @@ export function PrPage({ row }: { row: HatcheryRow }) {
         </a>
       </header>
       <ShipTrack pr={pr} />
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         {/* The Files tab scrolls its tree and its diff on its own, so it sits outside the padded column. */}
         {detail !== undefined && tab === 'files' ? (
           <div className="flex min-w-0 flex-1 flex-col">
@@ -203,9 +231,32 @@ export function PrPage({ row }: { row: HatcheryRow }) {
             )}
           </div>
         )}
-        <aside className="w-[260px] shrink-0 overflow-y-auto border-l border-border-soft px-4 py-[18px]">
+        <aside
+          aria-label="Pull request properties"
+          className="hidden w-[260px] shrink-0 overflow-y-auto border-l border-border-soft px-4 py-[18px] @min-[760px]:block"
+        >
           <PrProperties row={row} detail={detail} actions={<PrActions row={row} />} />
         </aside>
+        {details ? (
+          <>
+            <div
+              data-testid="pr-details-veil"
+              aria-hidden
+              className="absolute inset-0 z-10 @min-[760px]:hidden"
+              onClick={closeDetails}
+            />
+            <div
+              ref={detailsPanel}
+              id="pr-details"
+              role="dialog"
+              aria-label="Pull request details"
+              tabIndex={-1}
+              className="absolute inset-y-0 right-0 z-20 w-[260px] overflow-y-auto border-l border-border bg-panel px-4 py-[18px] shadow-lg outline-none @min-[760px]:hidden"
+            >
+              <PrProperties row={row} detail={detail} actions={<PrActions row={row} />} />
+            </div>
+          </>
+        ) : null}
       </div>
     </section>
   );
