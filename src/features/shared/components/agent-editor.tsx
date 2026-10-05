@@ -24,6 +24,8 @@ type Tab = 'form' | 'source';
  */
 export const FORM_MIN_PX = 460;
 export const SOURCE_MIN_PX = 320;
+/** Half the seam's `w-3` gutter: the ratio is the grip's centre, so the form stops 6px short of it. */
+const HALF_SEAM_PX = 6;
 
 /**
  * Why Run now would refuse, or `null` when it would not — the page header's
@@ -156,7 +158,9 @@ export function AgentEditor({
   // Both panes keep a width the form and the editor can draw in; the CSS minmax holds them on a resize too.
   const onRatio = (next: number) => {
     const width = grid.current?.getBoundingClientRect().width ?? 0;
-    if (width > 0) setRatio(Math.min(Math.max(next, FORM_MIN_PX / width), 1 - SOURCE_MIN_PX / width));
+    if (width > 0) {
+      setRatio(Math.min(Math.max(next, (FORM_MIN_PX + HALF_SEAM_PX) / width), 1 - (SOURCE_MIN_PX + HALF_SEAM_PX) / width));
+    }
   };
 
   /**
@@ -320,10 +324,10 @@ export function AgentEditor({
       */}
       <div
         ref={grid}
-        style={{ '--agent-form-w': `${String(ratio * 100)}%` } as CSSProperties}
+        style={{ '--agent-form-w': `calc(${String(ratio * 100)}% - ${String(HALF_SEAM_PX)}px)` } as CSSProperties}
         className={cn(
           'grid min-h-0 flex-1',
-          split && '@min-[900px]:grid-cols-[minmax(460px,var(--agent-form-w))_1px_minmax(320px,1fr)]',
+          split && '@min-[900px]:grid-cols-[minmax(460px,var(--agent-form-w))_12px_minmax(320px,1fr)]',
         )}
       >
         <div
@@ -348,7 +352,8 @@ export function AgentEditor({
             value={ratio}
             onValue={onRatio}
             onReset={() => setRatio(DEFAULT_AGENT_SPLIT_RATIO)}
-            className="hidden @min-[900px]:block"
+            grip
+            className="hidden w-3 bg-bg @min-[900px]:block"
           />
         ) : null}
         <div className={cn('min-h-0 flex-col', split && '@min-[900px]:flex', tab === 'source' ? 'flex' : 'hidden')}>

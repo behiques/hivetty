@@ -407,9 +407,11 @@ rename and a delete open (`onRename`, `onClose`): the page moves to the new name
 closes; Settings selects the new name or empties its detail pane.
 
 - **Layout.** `AgentEditor`'s `layout` is `'split'` on the page: from 900px of container
-  Form and Source sit side by side across a `SplitHandle` whose ratio is
-  `agentSplitRatio` in appearance-store, each pane held to a minimum width
-  (`FORM_MIN_PX` 460, `SOURCE_MIN_PX` 320) by the drag and by the grid's `minmax`.
+  Form and Source sit side by side across a `SplitHandle`, the rails' 12px grip gutter
+  (`grip`, `w-3 bg-bg`). The stored ratio (`agentSplitRatio` in appearance-store) is where
+  the grip's centre sits, so each pane's edge is half the gutter (6px) off it. Each pane is
+  held to a minimum width (`FORM_MIN_PX` 460, `SOURCE_MIN_PX` 320) by the drag, which clamps
+  the ratio with that half gutter added, and by the grid's `minmax`.
   Settings passes `'tabs'`: Form | Source tabs at every width, no seam.
 
 - **Which agent, which view** is `agentPage` in ui-store (`openAgentPage`,
