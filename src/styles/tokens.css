@@ -376,17 +376,10 @@ body[data-theme='light'] {
   --text-ui-sm: 11.5px;
   /**
    * Words, beside the mono that machine strings keep (HIVE-204): the agent
-   * page's descriptions, form labels and footers. The system's own text face,
-   * for the reason `--font-display` gives — no webfont round-trip.
+   * page's descriptions, form labels and footers, and the picker's title. The
+   * system's own text face — no webfont round-trip.
    */
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
-  /**
-   * The one non-mono face in the app: the picker's title (story 044) and
-   * anything else the concept sets in a serif. System stack rather than a
-   * webfont — this is a prototype, and a network round-trip for one heading is
-   * a poor trade.
-   */
-  --font-display: ui-serif, Georgia, 'Times New Roman', serif;
   --animate-ccpulse: ccpulse 1.6s ease-in-out infinite;
   --animate-ccflow: ccflow 1s linear infinite;
   --animate-ccbreathe: ccbreathe 3.2s ease-in-out infinite;

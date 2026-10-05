@@ -1,6 +1,11 @@
+import { useState } from 'react';
+
 import { useRotatingPhrase } from '@/hooks/use-rotating-phrase';
 
-import { SwarmCreature } from '@components/ui/swarm-creature';
+import { SwarmCreature, type Creature } from '@components/ui/swarm-creature';
+
+/** Who may hold the cover while a session boots; one is cast per mount. */
+const BOOT_CREATURES: readonly Creature[] = ['overlord', 'mutalisk', 'spire'];
 
 /**
  * What a session shows while its shell is still booting (HIVE-101).
@@ -34,10 +39,11 @@ import { SwarmCreature } from '@components/ui/swarm-creature';
  * the explanation is in the terminal *underneath this*. The timeout in
  * `useSessionBoot` is the backstop, but a minute is a long time to withhold an
  * error — so the way out is written on the cover, where somebody staring at a
- * mutalisk for longer than they expected will read it.
+ * creature for longer than they expected will read it.
  */
 export function SessionBootCover() {
   const phrase = useRotatingPhrase('loading.session');
+  const [creature] = useState(() => BOOT_CREATURES[Math.floor(Math.random() * BOOT_CREATURES.length)]);
 
   return (
     <div
@@ -60,13 +66,12 @@ export function SessionBootCover() {
       className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-term-bg"
     >
       {/*
-        The mutalisk: the unit that does the work, which is `SwarmCreature`'s
-        casting for agents and exactly right for a session about to become one.
-        At 120px this is the full-stage register — this surface owns the whole
-        centre and has nothing to compete with, which is the condition that
-        register is for.
+        One of three, cast at random per boot: the overlord, the hovering
+        mutalisk or the spire. At 120px this is the full-stage register — this
+        surface owns the whole centre and has nothing to compete with, which is
+        the condition that register is for.
       */}
-      <SwarmCreature creature="mutalisk" size={120} />
+      <SwarmCreature creature={creature} size={120} />
 
       <p
         /*

@@ -160,25 +160,24 @@ export function NewSessionPicker() {
           picker — it simply has no summary line to add.
         */}
         {/*
-          The spire leads the picker (HIVE-93), and **only when the first-run
-          block below is not showing**.
+          The hive leads the picker (HIVE-93; it was the spire), and **only
+          when the first-run block below is not showing**.
 
           That condition is the whole of it: `templateWritten` renders a 120px
           hive hero a few lines down, and two creatures stacked in one dialog
-          reads as a bug rather than as atmosphere. So this is the ordinary
-          picker's mark and the hive stays the first-run hero — the surface has
-          two states and each gets exactly one creature.
+          reads as a bug rather than as atmosphere. So the surface has two
+          states and each gets exactly one creature.
 
           96px, not the hero's 120: it sits *above* a title rather than standing
           in for missing content, so it is the quieter end of the 72–120
           full-stage register `SwarmCreature` documents.
         */}
         {config?.templateWritten ? null : (
-          <SwarmCreature creature="spire" size={96} />
+          <SwarmCreature creature="hive" size={96} />
         )}
 
         <div className="flex flex-col gap-1.5 text-center">
-          <DialogPrimitive.Title className="font-display text-[22px] tracking-[-0.02em] text-ink">
+          <DialogPrimitive.Title className="font-sans text-[22px] tracking-[-0.02em] text-ink">
             {pickerTicket === null
               ? 'Start a new session'
               : `Start a session for ${pickerTicket}`}
