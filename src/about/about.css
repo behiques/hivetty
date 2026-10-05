@@ -73,29 +73,12 @@ body {
   border-radius: 50%;
   background: radial-gradient(
     50% 50%,
-    color-mix(in srgb, var(--cc-brand-fill-strong) 55%, transparent),
+    color-mix(in srgb, var(--cc-creep) 70%, transparent),
     transparent 70%
   );
   filter: blur(6px);
   opacity: 0;
   animation: fade-in 0.7s ease-out 0.1s both;
-}
-
-.pool {
-  position: absolute;
-  left: 210px;
-  top: 231px;
-  width: 264px;
-  height: 46px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(
-    50% 50%,
-    color-mix(in srgb, var(--cc-brand-fill) 42%, transparent),
-    transparent 72%
-  );
-  opacity: 0;
-  animation: pool-in 0.9s ease-out 0.2s both;
 }
 
 /* ---------------------------------------------------------------- the globe */
@@ -132,9 +115,10 @@ body {
 
 .wordmark {
   display: flex;
+  align-items: baseline;
   gap: 0.14em;
   margin: 0 0 10px;
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0.14em;
@@ -147,6 +131,35 @@ body {
   display: inline-block;
   opacity: 0;
   animation: glyph-in 0.45s cubic-bezier(0.16, 0.9, 0.3, 1) both;
+}
+
+/* "Hive TTY", as on the splash: `tty` typed after HIVE, small and blue, behind a cursor. */
+.wordmark .tty {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 15px;
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  color: var(--cc-brand);
+}
+
+.wordmark .tty i {
+  font-style: normal;
+  opacity: 0;
+  animation: key-in 0s linear both;
+}
+
+.wordmark .cursor {
+  display: inline-block;
+  width: 8px;
+  height: 13px;
+  margin-left: 2px;
+  background: var(--cc-green);
+  opacity: 0;
+  animation:
+    cursor-in 0s linear both,
+    blink 0.9s steps(1, end) infinite;
 }
 
 .version {
@@ -277,14 +290,21 @@ body {
   }
 }
 
-@keyframes pool-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scaleX(0.4);
-  }
+@keyframes key-in {
   to {
     opacity: 1;
-    transform: translate(-50%, -50%) scaleX(1);
+  }
+}
+
+@keyframes cursor-in {
+  to {
+    opacity: 0.85;
+  }
+}
+
+@keyframes blink {
+  60% {
+    visibility: hidden;
   }
 }
 
@@ -308,13 +328,18 @@ body {
  */
 @media (prefers-reduced-motion: reduce) {
   .bloom,
-  .pool,
   .wordmark span,
   .version,
   .phrase,
   .update,
-  .build {
+  .build,
+  .wordmark .tty i {
     animation: none;
     opacity: 1;
+  }
+
+  .wordmark .cursor {
+    animation: none;
+    opacity: 0.85;
   }
 }
