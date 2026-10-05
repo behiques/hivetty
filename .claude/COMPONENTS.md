@@ -219,7 +219,7 @@ Contracts worth knowing before reusing them:
   which is never what a card's option row means; pass `type="submit"`
   explicitly on the rare button that really should. Its four variants are
   `primary`, `secondary`, `danger` and `ghost`; `primary` is the class string
-  already hand-copied into eleven panes (`agents/…/agent-editor.tsx`,
+  already hand-copied into eleven panes (`shared/…/agent-editor.tsx`,
   `projects-section.tsx`, `skill-editor.tsx`, `skills-section.tsx`,
   `env-editor.tsx`, `theme-gallery.tsx`, `clone-repo-view.tsx` ×2,
   `agents-section.tsx`, `new-session-picker.tsx`), lifted unchanged. **Landing
@@ -457,7 +457,9 @@ decision rather than making one. Folds are `agentsFolded` in ui-store, all open
 by default. In code a lane is a `group`: `lane:` is an agent frontmatter key.
 
 `+ New agent…` at the foot and the header's + both open a never-saved agent page
-on Definition (`openAgentPage(null, 'definition')`).
+on Definition (`openAgentPage(null, 'definition')`). Settings › Agents'
+`+ New agent` does not: Settings edits in place, beside its list, with
+`AgentDefinition layout="tabs"` from `features/shared/components/`.
 
 `AgentTile` is the row's 38×40 hexagon: an inline SVG polygon stroked in the
 state's colour (asking amber with a 22% fill and a soft glow, failed red with a

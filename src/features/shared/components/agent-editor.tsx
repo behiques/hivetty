@@ -110,8 +110,8 @@ interface AgentEditorProps {
  * 900px of container and up the form and the source sit side by side and you
  * can watch the frontmatter change as you edit the form. The seam between them
  * drags, the split is kept in appearance-store, and neither pane goes below
- * its minimum width. Below 900px the Form | Source tabs come back, each with
- * the full height.
+ * its minimum width. Below 900px of a split the Form | Source tabs come back,
+ * each with the full height.
  *
  * ## Why the real editor, and not a `<textarea>`
  *
