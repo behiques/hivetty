@@ -49,7 +49,9 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
   // By namespace, not by the list: the skills snapshot may not have arrived on the first render.
   const [skillChoice, setSkillChoice] = useState(savedSkill.startsWith('hive:') ? savedSkill : TYPED);
   const [typed, setTyped] = useState(skillChoice === TYPED ? savedSkill : '');
-  const [agent, setAgent] = useState(workflow?.kind === 'agent' ? workflow.agent : (agentNames[0] ?? ''));
+  const [pickedAgent, setAgent] = useState(workflow?.kind === 'agent' ? workflow.agent : '');
+  // Until one is picked, the first listed: the agents snapshot may arrive after the first render.
+  const agent = pickedAgent || (agentNames[0] ?? '');
   const [via, setVia] = useState<Via>(workflow?.kind === 'agent' ? workflow.via : 'session');
   const [prompt, setPrompt] = useState(workflow?.prompt ?? '');
 

@@ -88,6 +88,16 @@ describe('TicketWorkflowGroup', () => {
     expect(setJiraConnection).toHaveBeenLastCalledWith({ workflow: { kind: 'agent', agent: 'shipper', via: 'wake' } });
   });
 
+  it('hands to the first agent when the agents arrive after the group mounted', async () => {
+    agents.names = [];
+    const { rerender } = render(<TicketWorkflowGroup workflow={null} />);
+    agents.names = ['builder', 'shipper'];
+    rerender(<TicketWorkflowGroup workflow={null} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Hand to an agent' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(setJiraConnection).toHaveBeenLastCalledWith({ workflow: { kind: 'agent', agent: 'builder', via: 'session' } });
+  });
+
   it('cannot hand to an agent when there is none', () => {
     agents.names = [];
     render(<TicketWorkflowGroup workflow={null} />);
