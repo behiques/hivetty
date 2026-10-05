@@ -295,7 +295,7 @@ The open tab, open state and width live in `appearance-store`
 
 Round two's left edge: a `<nav aria-label="Places">` at `--cc-bar-w`. The brand
 glyph on top (Phosphor `Hexagon`, `weight="fill"`, `text-amber`, 22px) is
-named "The Hive"; the team name lives on Home's headline. Below it the five places — Home, Sessions, Work, Agents, PRs — each a
+named "Hive TTY"; the team name lives on Home's headline. Below it the five places — Home, Sessions, Work, Agents, PRs — each a
 52px button calling `selectPlace`; the active one has `aria-current="page"`.
 The foot holds `ConnectionItem`, the theme toggle (HIVE-213: Phosphor `Sun` while the
 resolved theme is dark, `Moon` while light, named and titled "Switch to light theme" /

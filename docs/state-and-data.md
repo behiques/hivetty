@@ -73,10 +73,11 @@ the picker from re-rendering thirteen live terminals.
   (`'plan' | 'ticket' | 'pr' | 'files'`, default `'plan'`, HIVE-201) — the
   two rail widths in px, `listPanelWidth` and `sessionPanelWidth` (clamped by
   `PANEL_WIDTHS`; absent or bad rehydrates as the initial width) — and the
-  three draggable splits — `editorSplitRatio`
+  four draggable splits — `editorSplitRatio`
   (terminal against editor), `consoleSplitRatio` (fleet table against
-  transcript, on the overmind) and `runLogSplitRatio` (receipts against output,
-  in an agent's run log).
+  transcript, on the overmind), `runLogSplitRatio` (receipts against output,
+  in an agent's run log) and `agentSplitRatio` (Form against Source on the
+  agent page's Definition, default 0.45, each pane held to a minimum width).
 - `src/stores/editor-store.ts` — open file buffers: `openFiles`, `activeKey`,
   and the actions over them (`openFile`, `edit`, `save`, `reload`,
   `reconcile`).
