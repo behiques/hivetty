@@ -1,6 +1,7 @@
 import { Kanban, PlugsConnected } from '@phosphor-icons/react';
 
 import { Button } from '@components/ui/button';
+import { CombGlyph } from '@components/ui/comb-glyph';
 import { EmptyPlace } from '@components/ui/empty-place';
 import { useRefreshTickets, useTicketSource } from '@stores/hive-store';
 import { useSettingsActions } from '@stores/ui-store';
@@ -29,7 +30,7 @@ export function JiraSetupPage() {
   return (
     <EmptyPlace
       label="Work"
-      glyph={<PlugsConnected size={40} />}
+      glyph={<CombGlyph icon={PlugsConnected} />}
       title={failed ? "Couldn't read Jira" : "Jira isn't connected"}
       actions={
         <>

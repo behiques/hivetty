@@ -3,6 +3,7 @@ import { GithubLogo } from '@phosphor-icons/react';
 import { isAgent } from '@/types/entity';
 
 import { Button } from '@components/ui/button';
+import { CombGlyph } from '@components/ui/comb-glyph';
 import { EmptyPlace } from '@components/ui/empty-place';
 import {
   useActiveEntity,
@@ -49,7 +50,7 @@ export function GhSetupPage() {
       </Button>
     </>
   );
-  const glyph = <GithubLogo size={40} />;
+  const glyph = <CombGlyph icon={GithubLogo} />;
 
   if (reason === 'unauthenticated') {
     return (
