@@ -150,4 +150,22 @@ describe('ChecksGraphView', () => {
     expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('50%');
     expect(scroller.scrollLeft).toBe(7);
   });
+
+  it('does not zoom in on a zoom-out pinch when Fit is already below the 25% floor', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(160);
+    const { container } = render(<ChecksGraphView graph={graph} onJob={() => {}} onExpand={() => {}} />);
+    const scroller = zoomed(container).parentElement!.parentElement!;
+    fireEvent.click(screen.getByRole('button', { name: 'Fit to width' }));
+    const reset = screen.getByRole('button', { name: 'Reset zoom' });
+    expect(reset).toHaveTextContent('17%');
+    const wheel = (deltaY: number) => {
+      const event = createEvent.wheel(scroller, { deltaY });
+      Object.defineProperties(event, { ctrlKey: { value: true }, metaKey: { value: false }, clientX: { value: 100 } });
+      fireEvent(scroller, event);
+    };
+    wheel(100);
+    expect(reset).toHaveTextContent('17%');
+    wheel(-100);
+    expect(Number.parseInt(reset.textContent ?? '', 10)).toBeGreaterThan(17);
+  });
 });

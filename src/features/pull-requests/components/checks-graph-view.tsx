@@ -74,7 +74,8 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       const delta = Math.max(-10, Math.min(10, event.deltaY));
-      const next = clampZoom(drawn.current * Math.exp(-delta * WHEEL_RATE));
+      // Fit can sit below the floor (a graph over 4x the viewport); zooming out there holds, it never snaps up.
+      const next = Math.min(ZOOM_MAX, Math.max(Math.min(ZOOM_MIN, drawn.current), drawn.current * Math.exp(-delta * WHEEL_RATE)));
       // At a limit nothing redraws, so the layout effect would never clear an anchor set here.
       if (next === drawn.current) return;
       const at = event.clientX - el.getBoundingClientRect().left;
