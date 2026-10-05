@@ -57,7 +57,7 @@ src/
                          literals outside
                          tone and no imports outside the folder. The splash's
                          one exception to its fence (HIVE-212): it may import
-                         muta, tone, kit, palette, comb (hexPath) and
+                         muta, tone, kit, palette, the comb (MUTA_SCALE) and
                          lib/theme/colour, and nothing else from lib/
   stores/                hive, ui, appearance, editor
 electron/

@@ -34,3 +34,13 @@ describe.each(['src/splash/splash.css', 'src/about/about.css'])('%s', (path) => 
     expect(rule).toMatch(/max-width:\s*none/);
   });
 });
+
+describe('src/about/about.css', () => {
+  const css = strip(readFileSync(join(appRoot, 'src/about/about.css'), 'utf8'));
+
+  it('holds the centred lockup still while tty types: the box is its finished width from the start', () => {
+    // About centres the wordmark, so a tty that grew key by key would slide HIVE left with each key.
+    const rule = /\.wordmark \.tty \{([^}]*)\}/.exec(css)![1];
+    expect(rule).toMatch(/width:\s*calc\(3ch \+ [^)]*\)/);
+  });
+});
