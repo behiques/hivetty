@@ -93,7 +93,6 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
                 unmapped
               </Tag>
             ) : null}
-            {needs + other === 0 ? <span className="shrink-0 text-ui-sm text-subtle">no sessions</span> : null}
           </span>
         </button>
         {/*
