@@ -16,6 +16,7 @@ describe('JiraSetupPage (HIVE-211)', () => {
     useHiveStore.setState({ ticketSource: { kind: 'unconfigured' } });
     render(<JiraSetupPage />);
     expect(screen.getByRole('heading', { name: "Jira isn't connected" })).toBeInTheDocument();
+    expect(document.querySelector('[data-glyph="comb"]')).not.toBeNull();
     expect(
       screen.getByText(
         'Work lists your Jira tickets. Add your site and an API token, and the list fills on the next sweep.',
@@ -49,5 +50,7 @@ describe('JiraSetupPage (HIVE-211)', () => {
     expect(screen.getByRole('heading', { name: 'No tickets for you' })).toBeInTheDocument();
     expect(screen.getByText(/Work lists the Jira tickets assigned to you that are not done\./)).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
+    // Empty, not unwired: the plain Kanban glyph stays.
+    expect(document.querySelector('[data-glyph="comb"]')).toBeNull();
   });
 });

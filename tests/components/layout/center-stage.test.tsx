@@ -41,7 +41,8 @@ const headerFor = (branch: string) => {
   const header = screen.queryByTestId('session-header');
   return header ? within(header).queryByText(new RegExp(branch)) : null;
 };
-const pickerTitle = () => screen.queryByText('Start a new session');
+// The search box, not the title: with no project configured the picker has no title.
+const picker = () => screen.queryByLabelText('Search all projects');
 const visibleSurfaces = () =>
   screen
     .queryAllByTestId('terminal-surface')
@@ -69,7 +70,7 @@ describe('CenterStage', () => {
 
     // The orchestrator is not an entity and has nothing to describe.
     expect(headerFor('feat/hero-refresh')).not.toBeInTheDocument();
-    expect(pickerTitle()).not.toBeInTheDocument();
+    expect(picker()).not.toBeInTheDocument();
     expect(visibleSurfaces()).toHaveLength(1);
   });
 
@@ -213,7 +214,7 @@ describe('CenterStage', () => {
       act(() => useUiStore.getState().openSettings());
 
       expect(settingsTitle()).toBeInTheDocument();
-      expect(pickerTitle()).not.toBeInTheDocument();
+      expect(picker()).not.toBeInTheDocument();
     });
   });
 
@@ -225,7 +226,7 @@ describe('CenterStage', () => {
 
       act(() => useUiStore.getState().openPicker());
 
-      expect(pickerTitle()).toBeInTheDocument();
+      expect(picker()).toBeInTheDocument();
       // Exactly one state on screen: no terminal, no session header.
       expect(visibleSurfaces()).toHaveLength(0);
       expect(headerFor('feat/hero-refresh')).not.toBeInTheDocument();
@@ -244,7 +245,7 @@ describe('CenterStage', () => {
       await user.click(screen.getByRole('button', { name: 'esc · cancel' }));
 
       // The picker never changed `activeTab`, which is what makes this work.
-      expect(pickerTitle()).not.toBeInTheDocument();
+      expect(picker()).not.toBeInTheDocument();
       expect(headerFor('feat/hero-refresh')).toBeInTheDocument();
     });
 
@@ -257,7 +258,7 @@ describe('CenterStage', () => {
 
       // Without this the only exit is the mouse, on a picker whose whole point
       // is being keyboard-first.
-      expect(pickerTitle()).not.toBeInTheDocument();
+      expect(picker()).not.toBeInTheDocument();
     });
   });
 
@@ -665,7 +666,7 @@ describe('CenterStage — text fields keep their native bindings', () => {
     await user.keyboard('{Meta>}{ArrowLeft}{/Meta}');
     await user.keyboard('{Control>}{Shift>}{ArrowLeft}{/Shift}{/Control}');
 
-    expect(pickerTitle()).toBeInTheDocument();
+    expect(picker()).toBeInTheDocument();
     expect(search).toHaveValue('hero');
   });
 });

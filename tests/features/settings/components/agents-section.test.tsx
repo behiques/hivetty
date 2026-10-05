@@ -77,6 +77,9 @@ describe('AgentsSection', () => {
     await screen.findByRole('button', { name: '+ New agent' });
 
     expect(screen.getByText(/Agents folder: \/root\/agents/)).toBeInTheDocument();
+    const creature = document.querySelector('[data-creature]');
+    expect(creature).toHaveAttribute('data-creature', 'mutalisk');
+    expect(creature).toHaveStyle({ height: '120px' });
   });
 
   it('lists an agent with its state', async () => {

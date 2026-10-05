@@ -136,7 +136,10 @@ something to list: `useSessionsListed`, `useWorkListed`, `useAgentsListed`,
 the panel's message. Anything else empty (no project, Jira not connected, gh
 signed out, no agent, a quiet Hatchery) draws no panel, and the place's stage
 says why on an `EmptyPlace` page (`components/ui/empty-place.tsx`): a glyph, a
-title, a sentence, and the way to the first item. The PRs search exemption
+title, a sentence, and the way to the first item. A place with nothing wired
+yet (Jira, agents, GitHub) passes `CombGlyph` (`components/ui/comb-glyph.tsx`)
+as its glyph: the icon in a comb cell that tries to light and fails, on one 9s
+loop. The PRs search exemption
 stays: an open search still draws the PRs panel.
 
 The four booleans are read unconditionally at the top of `ListPanel` and then

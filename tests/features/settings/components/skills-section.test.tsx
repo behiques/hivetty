@@ -196,6 +196,16 @@ describe('SkillsSection', () => {
     ).toBeInTheDocument();
   });
 
+  it('holds the overlord at 120px in the empty state', () => {
+    setSkillsForTest(snapshot());
+
+    render(<SkillsSection />);
+
+    const creature = document.querySelector('[data-creature]');
+    expect(creature).toHaveAttribute('data-creature', 'overlord');
+    expect(creature).toHaveStyle({ height: '120px' });
+  });
+
   it('imports a whole skill from the empty state, and shows why it could not', async () => {
     setSkillsForTest(snapshot());
     importNewSkill.mockResolvedValue('"x.zip" has no SKILL.md at its root — nothing was imported.');

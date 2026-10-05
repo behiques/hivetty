@@ -1,6 +1,7 @@
 import { Robot } from '@phosphor-icons/react';
 
 import { Button } from '@components/ui/button';
+import { CombGlyph } from '@components/ui/comb-glyph';
 import { EmptyPlace } from '@components/ui/empty-place';
 import { AgentPage } from '@features/agents/components/agent-page';
 import { useShownAgent } from '@features/agents/shown-agent';
@@ -27,7 +28,7 @@ export function AgentsStage() {
       return (
         <EmptyPlace
           label="Agents"
-          glyph={<Robot size={40} />}
+          glyph={<CombGlyph icon={Robot} />}
           title="No agents yet"
           actions={
             <Button variant="primary" onClick={() => openAgentPage(null, 'definition')}>
