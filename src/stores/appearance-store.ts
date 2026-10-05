@@ -150,6 +150,11 @@ interface AppearanceState {
    * of scrolling a box eight rows tall.
    */
   runLogSplitRatio: number;
+  /**
+   * The Form pane's share of the agent page's Definition, beside its Source.
+   * The editor holds both panes to a minimum px width on top of this clamp.
+   */
+  agentSplitRatio: number;
   editorNav: EditorNav;
   /**
    * Whether the editor accepts keystrokes and offers a save. **On by default.**
@@ -223,6 +228,7 @@ interface AppearanceState {
   setEditorSplitRatio: (ratio: number) => void;
   setConsoleSplitRatio: (ratio: number) => void;
   setRunLogSplitRatio: (ratio: number) => void;
+  setAgentSplitRatio: (ratio: number) => void;
   setListPanelWidth: (px: number) => void;
   setSessionPanelWidth: (px: number) => void;
   setEditorNav: (nav: EditorNav) => void;
@@ -280,6 +286,9 @@ export const DEFAULT_TEAM_NAME = 'Swarm Command';
 /** The terminal's share of a split stage, clamped to something usable. */
 export const MIN_SPLIT_RATIO = 0.2;
 export const MAX_SPLIT_RATIO = 0.8;
+
+/** The agent editor's Form share before anyone drags its seam. */
+export const DEFAULT_AGENT_SPLIT_RATIO = 0.45;
 
 export const clampSplitRatio = (ratio: number): number => {
   if (!Number.isFinite(ratio)) return 0.5;
@@ -448,6 +457,7 @@ const initialAppearanceState = {
   editorSplitRatio: 0.5,
   consoleSplitRatio: 0.5,
   runLogSplitRatio: 0.4,
+  agentSplitRatio: DEFAULT_AGENT_SPLIT_RATIO,
   editorNav: 'tabs' as EditorNav,
   editorEditable: true,
   editorFont: DEFAULT_TERMINAL_FONT,
@@ -477,6 +487,7 @@ interface PersistedAppearanceState {
   editorSplitRatio: number;
   consoleSplitRatio: number;
   runLogSplitRatio: number;
+  agentSplitRatio: number;
   editorNav: EditorNav;
   editorEditable: boolean;
   editorFont: TerminalFontId;
@@ -713,6 +724,8 @@ export const useAppearanceStore = create<AppearanceState>()(
         set({ consoleSplitRatio: clampSplitRatio(ratio) }),
       setRunLogSplitRatio: (ratio) =>
         set({ runLogSplitRatio: clampSplitRatio(ratio) }),
+      setAgentSplitRatio: (ratio) =>
+        set({ agentSplitRatio: clampSplitRatio(ratio) }),
       setListPanelWidth: (px) => set({ listPanelWidth: clampPanelWidth('list', px) }),
       setSessionPanelWidth: (px) => set({ sessionPanelWidth: clampPanelWidth('session', px) }),
       setEditorNav: (editorNav) => set({ editorNav }),
@@ -812,6 +825,7 @@ export const useAppearanceStore = create<AppearanceState>()(
         editorSplitRatio: state.editorSplitRatio,
         consoleSplitRatio: state.consoleSplitRatio,
         runLogSplitRatio: state.runLogSplitRatio,
+        agentSplitRatio: state.agentSplitRatio,
         editorNav: state.editorNav,
         editorEditable: state.editorEditable,
         editorFont: state.editorFont,
@@ -1088,6 +1102,13 @@ export const useRunLogSplitRatio = () =>
 
 export const useSetRunLogSplitRatio = () =>
   useAppearanceStore((state) => state.setRunLogSplitRatio);
+
+/** The Form pane's share of the agent page's Definition, and its setter. */
+export const useAgentSplitRatio = () =>
+  useAppearanceStore((state) => state.agentSplitRatio);
+
+export const useSetAgentSplitRatio = () =>
+  useAppearanceStore((state) => state.setAgentSplitRatio);
 
 /** The editor section's current values and its setters. */
 export const useEditorSettings = () =>

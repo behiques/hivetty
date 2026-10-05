@@ -8,6 +8,7 @@ import { type HiveTheme } from '@lib/theme/contract';
 import { useUiStore } from '@stores/ui-store';
 import {
   APPEARANCE_STORAGE_KEY,
+  DEFAULT_AGENT_SPLIT_RATIO,
   DEFAULT_TEAM_NAME,
   PANEL_WIDTHS,
   useListPanelWidth,
@@ -320,6 +321,7 @@ describe('appearance-store — persistence', () => {
       editorSplitRatio: 0.5,
       consoleSplitRatio: 0.5,
       runLogSplitRatio: 0.4,
+      agentSplitRatio: 0.45,
       editorNav: 'tabs',
       editorEditable: true,
       editorFont: 'system',
@@ -525,6 +527,15 @@ describe('appearance-store — the editor', () => {
     store.setRunLogSplitRatio(0.6);
     expect(useAppearanceStore.getState().runLogSplitRatio).toBe(0.6);
     expect(useAppearanceStore.getState().consoleSplitRatio).toBe(0.5);
+  });
+
+  it('keeps the agent editor split, clamped, persisted', () => {
+    const store = useAppearanceStore.getState();
+    expect(store.agentSplitRatio).toBe(DEFAULT_AGENT_SPLIT_RATIO);
+    store.setAgentSplitRatio(0.01);
+    expect(useAppearanceStore.getState().agentSplitRatio).toBe(0.2);
+    store.setAgentSplitRatio(0.6);
+    expect(useAppearanceStore.getState().agentSplitRatio).toBe(0.6);
   });
 
   it('puts every editor preference back on reset', () => {
