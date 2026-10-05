@@ -47,6 +47,13 @@ describe('InboxDrawer (HIVE-198)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('takes the title bar\'s drag strip back, so ✕ under it gets the click instead of moving the window', () => {
+    // happy-dom keeps no app-region, so the class is the only witness; the drag itself is Electron's native hit test.
+    useUiStore.getState().openInboxDrawer();
+    render(<InboxDrawer onStage={null} />);
+    expect(screen.getByRole('dialog', { name: 'Needs you' })).toHaveClass('[-webkit-app-region:no-drag]');
+  });
+
   it('renders in light on tokens alone (HIVE-210)', () => {
     useUiStore.getState().openInboxDrawer();
     inLight();
