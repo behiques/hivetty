@@ -132,7 +132,7 @@ export function AppearanceSection() {
            * is why the field cannot trim as it goes.
            */
           onCommit={() => setTeamName(settings.teamName.trim())}
-          hint="Shown at the right of Home's headline. Leave it empty for “The Hive”."
+          hint="Shown at the right of Home's headline. Leave it empty to show none."
           className="max-w-[280px]"
         />
       </SettingsGroup>

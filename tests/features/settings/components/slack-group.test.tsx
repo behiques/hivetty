@@ -136,7 +136,7 @@ describe('SlackGroup', () => {
     expect(await screen.findByText('Signed in')).toBeInTheDocument();
     expect(screen.getByText(/slack-watcher/)).toBeInTheDocument();
     expect(
-      screen.getByText(/token held by Claude Code, not the Hive/),
+      screen.getByText(/token held by Claude Code, not Hive TTY/),
     ).toBeInTheDocument();
   });
 
@@ -149,7 +149,7 @@ describe('SlackGroup', () => {
     render(<SlackGroup agents={[]} />);
 
     expect(
-      await screen.findByText('Opens your browser once. The Hive never sees the token.'),
+      await screen.findByText('Opens your browser once. Hive TTY never sees the token.'),
     ).toBeInTheDocument();
     // The Used-by summary is the *fallback*, and must not pre-empt it.
     expect(screen.queryByText(/No agent names Slack yet/)).not.toBeInTheDocument();
