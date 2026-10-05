@@ -137,12 +137,26 @@ describe('TicketPageConversation (HIVE-203)', () => {
     const first = items()[0]!;
 
     const time = within(first).getByText(/\d/, { selector: 'time' });
-    expect(time).toHaveClass('group-hover:invisible', 'group-focus-within:invisible');
+    expect(time).toHaveClass('group-hover:invisible', 'group-has-[:focus-visible]:invisible');
     const actions = within(first).getByRole('button', { name: 'Reply' }).parentElement!;
-    expect(actions).toHaveClass('invisible', 'group-hover:visible', 'group-focus-within:visible');
+    // Opacity, not visibility: `invisible` would take the buttons out of the tab order (HIVE-223).
+    expect(actions).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-has-[:focus-visible]:opacity-100');
+    expect(actions).not.toHaveClass('invisible');
     expect(within(actions).getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
     expect(actions.parentElement).toBe(time.parentElement);
     expect(time.parentElement).toHaveClass('w-[120px]', 'shrink-0');
+  });
+
+  it('reaches Reply and Copy link with Tab (HIVE-223)', async () => {
+    render(<TicketPageConversation ticketKey="HIVE-7" />);
+    const first = items()[0]!;
+    const reply = within(first).getByRole('button', { name: 'Reply' });
+    const copy = within(first).getByRole('button', { name: 'Copy link' });
+
+    for (let i = 0; i < 20 && document.activeElement !== reply; i += 1) await userEvent.tab();
+    expect(reply).toHaveFocus();
+    await userEvent.tab();
+    expect(copy).toHaveFocus();
   });
 
   it('says when only the latest comments are shown', () => {

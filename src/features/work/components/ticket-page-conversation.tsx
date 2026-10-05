@@ -102,11 +102,12 @@ function CommentItem({
           <span className="relative w-[120px] shrink-0 text-right">
             <time
               dateTime={comment.created}
-              className="tabular-nums text-[11px] text-subtle group-focus-within:invisible group-hover:invisible"
+              className="tabular-nums text-[11px] text-subtle group-has-[:focus-visible]:invisible group-hover:invisible"
             >
               {commentTime(comment.created)}
             </time>
-            <span className="invisible absolute inset-0 flex justify-end gap-3 group-focus-within:visible group-hover:visible">
+            {/* Opacity, not `invisible`: visibility:hidden leaves the tab order, and nothing else in the row takes focus. */}
+            <span className="absolute inset-0 flex justify-end gap-3 opacity-0 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100">
               <button type="button" className={ACTION} onClick={() => onReply(comment)}>
                 Reply
               </button>
