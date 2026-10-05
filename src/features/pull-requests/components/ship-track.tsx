@@ -20,6 +20,8 @@ const DOT: Record<BandStop['state'], string> = {
  * header, on every tab. Ticked before the stop it is at, that one glowing with
  * its time, dashed after. The green line on the right is the holder, the time
  * at the stop and the holder's newest post naming the PR (D11). No flyer.
+ * The stops never give up their width: the note goes to its own line below
+ * when the two do not fit side by side, and truncates there.
  */
 export function ShipTrack({ pr }: { pr: Pr }) {
   const slug = `${pr.owner}/${pr.repo}`;
@@ -30,15 +32,16 @@ export function ShipTrack({ pr }: { pr: Pr }) {
   const post = useHolderPost(slug, pr.n, holder);
   const HolderIcon = holder === null ? null : holderIcon(holder);
   const nowIndex = stops.findIndex((s) => s.state === 'now');
+  const note = current === null ? '' : [holder, formatDuration(current.spentMs), post?.body.split('\n')[0]].filter(Boolean).join(' · ');
 
   return (
     <div
       role="group"
       aria-label="Ship track"
-      className="flex items-center gap-3.5 border-b border-border-soft bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--cc-green)_5%,transparent)_70%,transparent)] px-5 py-[9px] text-[12px]"
+      className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 border-b border-border-soft bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--cc-green)_5%,transparent)_70%,transparent)] px-5 py-[9px] text-[12px]"
     >
       <span className="text-[10.5px] font-semibold tracking-[0.06em] whitespace-nowrap text-subtle uppercase">Ship track</span>
-      <ol className="flex min-w-0 flex-1 items-center">
+      <ol className="flex flex-1 items-center">
         {stops.map((stop, i) => (
           <Fragment key={stop.key}>
             {i === 0 ? null : (
@@ -72,10 +75,10 @@ export function ShipTrack({ pr }: { pr: Pr }) {
         ))}
       </ol>
       {current !== null && holder !== null && HolderIcon !== null ? (
-        <span className="ml-1.5 flex max-w-[40%] min-w-0 items-center gap-1.5 text-green">
+        <span className="flex max-w-full min-w-0 items-center gap-1.5 text-green">
           <HolderIcon size={13} aria-hidden className="shrink-0" />
-          <span className="truncate">
-            {[holder, formatDuration(current.spentMs), post?.body.split('\n')[0]].filter(Boolean).join(' · ')}
+          <span className="truncate" title={note}>
+            {note}
           </span>
         </span>
       ) : null}
