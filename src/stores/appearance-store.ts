@@ -306,13 +306,17 @@ export const clampSplitRatio = (ratio: number): number => {
 };
 
 /**
- * The two rails' drag bounds, px. The maxima leave a 1,200px window — the
- * narrowest that draws both rails — about 230px of stage with both at full.
+ * The two rails' drag bounds, px. Their minimums are also their CSS
+ * `min-width`: when a window cannot hold both rails at their saved widths
+ * beside {@link STAGE_MIN}, flexbox pulls them in toward these (HIVE-223).
  */
 export const PANEL_WIDTHS = {
   list: { min: 220, max: 400, initial: 300 },
   session: { min: 260, max: 480, initial: 320 },
 } as const;
+
+/** The narrowest the centre stage may be drawn while both rails sit beside it (HIVE-223). */
+export const STAGE_MIN = 520;
 
 export type PanelRail = keyof typeof PANEL_WIDTHS;
 
