@@ -72,24 +72,11 @@ describe('ActivityBar (HIVE-195)', () => {
     expect(useUiStore.getState().settings).toBe(true);
   });
 
-  it('names the glyph after the team, or The Hive without one', () => {
+  it('names the glyph The Hive whatever the team is called', () => {
     useAppearanceStore.setState({ teamName: 'Platform' });
-    const { unmount } = renderBar();
-    expect(screen.getByRole('img', { name: 'Platform' })).toBeInTheDocument();
-    unmount();
-
-    useAppearanceStore.setState({ teamName: '  ' });
     renderBar();
     expect(screen.getByRole('img', { name: 'The Hive' })).toBeInTheDocument();
-  });
-
-  it('shows the team name in a tooltip', async () => {
-    useAppearanceStore.setState({ teamName: 'Platform' });
-    renderBar();
-
-    await userEvent.hover(screen.getByRole('img', { name: 'Platform' }));
-
-    expect(await screen.findByRole('tooltip')).toHaveTextContent('Platform');
+    expect(screen.queryByText('Platform')).not.toBeInTheDocument();
   });
 });
 
