@@ -12,7 +12,7 @@ import {
 } from '../../../__mocks__/@xterm/xterm';
 
 import { CenterStage } from '@components/layout/center-stage';
-import { useAppearanceStore } from '@stores/appearance-store';
+import { STAGE_MIN, useAppearanceStore } from '@stores/appearance-store';
 import { fileKey, useEditorStore } from '@stores/editor-store';
 import { useHiveStore } from '@stores/hive-store';
 import { DECLINED_BACK_MS } from '@/hooks/use-declined-back';
@@ -72,6 +72,11 @@ describe('CenterStage', () => {
     expect(headerFor('feat/hero-refresh')).not.toBeInTheDocument();
     expect(picker()).not.toBeInTheDocument();
     expect(visibleSurfaces()).toHaveLength(1);
+  });
+
+  it('keeps a floor the rails cannot crush (HIVE-223)', () => {
+    render(<CenterStage />);
+    expect(screen.getByRole('main').style.minWidth).toBe(`${String(STAGE_MIN)}px`);
   });
 
   it('shows the session header above the terminal for a session', () => {
