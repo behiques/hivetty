@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 import { EditorSurface } from '@components/editor/editor-surface';
-import { AgentForm } from '@features/agents/components/agent-form';
+import { AgentForm } from '@features/shared/components/agent-form';
 import { languageFor } from '@lib/explorer/language';
 import type { AgentProblem } from '@shared/agent-contract';
 import { useEditorAppearance } from '@stores/appearance-store';

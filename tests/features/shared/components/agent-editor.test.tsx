@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AgentEditor, runRefusal } from '@features/agents/components/agent-editor';
+import { AgentEditor, runRefusal } from '@features/shared/components/agent-editor';
 import { surfaceText } from '@tests/support/editor-surface';
 
 import type { AgentProblem } from '@shared/agent-contract';

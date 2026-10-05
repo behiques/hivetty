@@ -17,24 +17,30 @@ import {
   takeShippedPrompt,
 } from '@/lib/shipped';
 
-import { AgentEditor } from '@features/agents/components/agent-editor';
+import { AgentEditor } from '@features/shared/components/agent-editor';
 import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import { HeldBanner, ShippedStrip } from '@features/shared/components/shipped-marker';
 import { useAgents } from '@hooks/use-agents';
 import { useShipped } from '@hooks/use-shipped';
 import type { AgentProblem } from '@shared/agent-contract';
 import { useAgentDraft, useAgentDraftActions } from '@stores/editor-store';
-import { useAgentPageActions } from '@stores/ui-store';
 
 interface AgentDefinitionProps {
   /** The agent, or `null` for a new one never saved. */
   name: string | null;
   /** The page's run notice (the header owns Run now); drawn in the footer. */
   notice: string | null;
+  /** A save that renamed landed: show the agent under its new name. */
+  onRename: (name: string) => void;
+  /** The agent was deleted, or a never-saved one discarded: nothing is left to show. */
+  onClose: () => void;
+  /** Form and Source side by side (the agent page) or behind tabs (Settings). Wired to the editor in Task 5. */
+  layout?: 'split' | 'tabs';
 }
 
 /**
- * One agent's `AGENT.md`, on the agent page's Definition view (HIVE-204).
+ * One agent's `AGENT.md`, on the agent page's Definition view (HIVE-204) and
+ * in Settings › Agents. What rename and delete open is the caller's to say.
  *
  * What Settings › Agents did for the agent it had open, moved here when the
  * editor left Settings: the read on open, the name check, save, rename, delete,
@@ -46,19 +52,19 @@ interface AgentDefinitionProps {
  *    discard guard Settings carried is gone.
  * 2. **Run now is the page header's**, in both views, so this component only
  *    draws the notice it is handed.
- * 3. **Delete closes the page** rather than emptying a detail pane.
+ * 3. **Delete hands back to the caller** (`onClose`): the page closes, Settings
+ *    empties its detail pane.
  *
  * The rules each step keeps are the ones `agents-section.tsx` spelled out:
  * refusals are structured (`AgentWriteResult` names a field per problem), and a
  * rename is one call carrying the buffer, so the definition validated is the
  * one about to be written.
  */
-export function AgentDefinition({ name, notice }: AgentDefinitionProps) {
+export function AgentDefinition({ name, notice, onRename, onClose }: AgentDefinitionProps) {
   const snapshot = useAgents();
   const key = name ?? '';
   const draft = useAgentDraft(key);
   const { loadAgentDraft, editAgentDraft, moveAgentDraft, dropAgentDraft } = useAgentDraftActions();
-  const { openAgentPage, closeAgentPage } = useAgentPageActions();
 
   const [pending, setPending] = useState<{
     question: string;
@@ -196,7 +202,7 @@ export function AgentDefinition({ name, notice }: AgentDefinitionProps) {
       if (name !== typed) {
         moveAgentDraft(key, typed);
         loadAgentDraft(typed, text);
-        openAgentPage(typed, 'definition');
+        onRename(typed);
         return;
       }
       loadAgentDraft(typed, text);
@@ -228,7 +234,7 @@ export function AgentDefinition({ name, notice }: AgentDefinitionProps) {
     if (name === null) {
       // Never written, so there is nothing to delete — just close it.
       dropAgentDraft('');
-      closeAgentPage();
+      onClose();
       return;
     }
 
@@ -243,7 +249,7 @@ export function AgentDefinition({ name, notice }: AgentDefinitionProps) {
             return;
           }
           dropAgentDraft(name);
-          closeAgentPage();
+          onClose();
         });
       },
     });
