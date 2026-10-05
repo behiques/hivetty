@@ -177,7 +177,8 @@ job as a box laid out by its `needs`, a failed job glowing red with its steps
 and its log cut to the failing assertion beside them, and **Re-run failed**.
 The graph takes the stage's whole width; the zoom bar above it steps from 25%
 to 200%, **Fit to width** shows all of a wide one, and the percentage goes back
-to 100%. The tab carries a red dot while a check fails, and clicking a check in the
+to 100%. A trackpad pinch, or the scroll wheel with ⌘ or Ctrl held, zooms
+about the pointer. The tab carries a red dot while a check fails, and clicking a check in the
 right-hand column opens it here. Checks from outside GitHub Actions (a deploy
 preview, a scanner) sit in a row under the graph with a link out. The tab reads
 GitHub only while it is open.
