@@ -133,6 +133,38 @@ test('a typed site reaches the config file and survives a reopen', async ({}, te
   await app.close();
 });
 
+test('a ticket workflow reaches the config file, and the reader takes it back on a relaunch', async ({}, testInfo) => {
+  const configPath = seed((name) => testInfo.outputPath(name));
+  const launch = () => launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath, env: CLEAN });
+  let app = await launch();
+  let page = await app.firstWindow();
+  await page.waitForSelector('nav[aria-label="Places"]');
+  await openIntegrations(page);
+
+  const group = page.getByRole('radiogroup', { name: 'When a session starts from a ticket' });
+  await group.getByRole('radio', { name: 'Run a skill' }).click();
+  await page.getByLabel('Extra prompt (optional)').fill('keep {key} to one PR');
+  await page.getByLabel('Extra prompt (optional)').press('Enter');
+
+  await expect
+    .poll(() => read(configPath).jira, { timeout: 5_000 })
+    .toEqual({ workflow: { kind: 'skill', skill: 'hive:work-on', prompt: 'keep {key} to one PR' } });
+  await expect(page.getByTestId('ticket-workflow-preview')).toHaveText('/hive:work-on PROJ-123 keep PROJ-123 to one PR');
+
+  // A relaunch reads it back through parse.ts, not out of renderer state.
+  await app.close();
+  app = await launch();
+  page = await app.firstWindow();
+  await page.waitForSelector('nav[aria-label="Places"]');
+  await openIntegrations(page);
+  await expect(page.getByRole('radio', { name: 'Run a skill' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByLabel('Extra prompt (optional)')).toHaveValue('keep {key} to one PR');
+  await page.getByTestId('ticket-workflow-preview').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('ticket-workflow.png') });
+
+  await app.close();
+});
+
 test('an emptied field clears the key rather than storing an empty string', async ({}, testInfo) => {
   const configPath = testInfo.outputPath('hive-config.json');
   writeFileSync(

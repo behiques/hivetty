@@ -68,7 +68,7 @@ Any key not in this list makes the whole file invalid, and Settings says which.
 | `importLoginEnv` | adopt your login shell's `PATH` at startup; default on | [Settings › Runtime](settings.md#runtime) |
 | `projects` | the project list | below |
 | `notifications` | kind → `off`, `inbox`, `both` | [The inbox](inbox.md#choosing-what-reaches-you) |
-| `jira` | `site`, `email`, `jql` | [Jira and pull requests](work-and-prs.md#connect-jira) |
+| `jira` | `site`, `email`, `jql`, `workflow` | [Jira and pull requests](work-and-prs.md#connect-jira) · [Ticket workflow](work-and-prs.md#the-ticket-workflow) |
 | `slack` | `socketMode`, `commanders` | [Slack](slack.md) |
 | `receiver` | `hostAlias`, `bind` for containers | [Containers](containers.md) |
 | `server` | serve this machine | [Remote](remote.md#serve-from-an-always-on-mac) |
