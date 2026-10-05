@@ -79,11 +79,11 @@ describe('ActivityBar (HIVE-195)', () => {
     expect(screen.queryByText('Platform')).not.toBeInTheDocument();
   });
 
-  it('draws the dock icon as the brand, from the base the app is served at', () => {
+  it('draws the app mark, tile-less, as the brand, from the base the app is served at', () => {
     renderBar();
     const brand = screen.getByRole('img', { name: 'Hive TTY' });
     expect(brand.tagName).toBe('IMG');
-    expect(brand).toHaveAttribute('src', `${import.meta.env.BASE_URL}apple-touch-icon.png`);
+    expect(brand).toHaveAttribute('src', `${import.meta.env.BASE_URL}app-mark.png`);
   });
 });
 
