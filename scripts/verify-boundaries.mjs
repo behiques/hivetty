@@ -167,11 +167,11 @@ const CASES = [
     },
   },
   {
-    name: 'ALLOWED: splash/ may import the creature, hexPath and the colour helpers',
+    name: 'ALLOWED: splash/ may import the creature, the comb and the colour helpers',
     rule: null,
     files: {
       'src/splash/probe-allowed.ts':
-        "import { hexPath } from '@lib/swarm/comb';\nimport { drawMuta } from '@lib/swarm/muta';\nimport { toneOf } from '@lib/swarm/tone';\nimport { mixColour } from '@lib/theme/colour';\n\nexport const probe = [hexPath, drawMuta, toneOf, mixColour];\n",
+        "import { MUTA_SCALE } from '@lib/swarm/comb';\nimport { drawMuta } from '@lib/swarm/muta';\nimport { toneOf } from '@lib/swarm/tone';\nimport { mixColour } from '@lib/theme/colour';\n\nexport const probe = [MUTA_SCALE, drawMuta, toneOf, mixColour];\n",
     },
   },
   /**

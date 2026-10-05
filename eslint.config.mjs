@@ -218,10 +218,10 @@ export default tseslint.config(
 
             /**
              * The splash and `lib/` (HIVE-212): banned, except the six pure
-             * modules the comb globe draws with — the Brood mutalisk
+             * modules the brood world draws with — the Brood mutalisk
              * (`swarm/muta`, HIVE-221) with its tone and kit, the palette,
-             * `hexPath` from the comb, and the colour helpers that derive the
-             * creature's colours. They import nothing outside `lib/swarm/`
+             * `MUTA_SCALE` from the comb, and the colour helpers that derive
+             * the creature's colours. They import nothing outside `lib/swarm/`
              * and `lib/theme/colour`, so the chunk they share with the app
              * holds them and nothing behind them.
              *
@@ -236,7 +236,7 @@ export default tseslint.config(
               from: './src/lib/**/*',
               except: [`${appRoot}/src/lib/{swarm/comb,swarm/muta,swarm/tone,swarm/kit,swarm/palette,theme/colour}.ts`],
               message:
-                'splash/ may import from lib/ only the mutalisk (muta, tone, kit), the palette, hexPath and the colour helpers (HIVE-212, HIVE-221).',
+                'splash/ may import from lib/ only the mutalisk (muta, tone, kit), the palette, the comb (for MUTA_SCALE) and the colour helpers (HIVE-212, HIVE-221).',
             },
 
             /**

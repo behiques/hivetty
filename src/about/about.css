@@ -142,6 +142,10 @@ body {
   font-style: normal;
   letter-spacing: 0.02em;
   color: var(--cc-brand);
+  /* Its finished width from the start: three keys (a `ch` each, plus their
+     spacing) and the cursor's 8px and 2px gap. The wordmark is centred, so a
+     box that grew key by key would slide HIVE left with every key typed. */
+  width: calc(3ch + 0.06em + 10px);
 }
 
 .wordmark .tty i {
