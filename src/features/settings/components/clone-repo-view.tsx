@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TerminalSurface } from '@/components/terminal/terminal-surface';
 import { cancelClone, onCloneDone, startClone } from '@/lib/clone-repo';
 
+import { Button } from '@components/ui/button';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { DirectoryPicker } from '@features/shared/components/directory-picker';
 import { useChooseDirectory } from '@hooks/use-choose-directory';
@@ -191,15 +192,15 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
                   <span className="text-subtle">Choose a folder…</span>
                 )}
               </span>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
                 onClick={onChoose}
-                disabled={choosing}
-                className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink disabled:opacity-60"
+                pending={choosing}
+                className="flex items-center gap-1.5 rounded-md border-border px-3 py-1.5 text-[12.5px] leading-normal text-muted hover:bg-hover hover:text-ink aria-disabled:opacity-60"
               >
                 <FolderOpen size={12} weight="bold" />
                 Choose…
-              </button>
+              </Button>
             </div>
           </div>
 
