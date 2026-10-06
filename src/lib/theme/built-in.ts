@@ -64,7 +64,7 @@ export const BUILT_IN_THEME: HiveTheme = {
         hover: '#f4f9ff', active: '#e9f3fc',
         border: '#d4dee3', borderSoft: '#edf2f4',
         ink: '#2c2f34', muted: '#5a5d63', subtle: '#686d73',
-        brand: '#334fa9', green: '#2e6b52', amber: '#c77414', red: '#d3372f',
+        brand: '#334fa9', green: '#2e6b52', amber: '#c77414', red: '#cd332b',
         chip: '#edf2f4', chipHover: '#e2eaee',
         termBg: '#f7fafb', termInput: '#ffffff',
         termRowHover: '#eef4f9', termRowActive: '#e4edf5',

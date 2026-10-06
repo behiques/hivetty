@@ -86,6 +86,17 @@ describe('AskCard', () => {
     expect(answerAsk).toHaveBeenCalledWith('a41', 'yes');
   });
 
+  it('keeps focus on the option it sent while the answer is in flight (HIVE-225)', async () => {
+    const user = userEvent.setup();
+    const answerAsk = vi.fn().mockReturnValue(new Promise(() => {}));
+    seedLedger([ask], { answerAsk });
+    render(<AskCard notif={notif} thread="a41" />);
+    const option = screen.getByRole('button', { name: 'yes' });
+    await user.click(option);
+    expect(option).toHaveFocus();
+    expect(option).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('offers a text input and Send when the ask carries no options', async () => {
     const answerAsk = vi.fn().mockResolvedValue(undefined);
     seedLedger([{ ...ask, meta: {} }], { answerAsk });

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { Button } from '@components/ui/button';
 import { ThemeCard } from '@features/settings/components/theme-card';
 import { ThemeImportResult } from '@features/settings/components/theme-import-result';
 import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
@@ -201,14 +202,14 @@ export function ThemeGallery() {
           >
             Download template
           </button>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onClick={() => void onImport()}
-            disabled={importing}
-            className="flex w-fit items-center gap-1.5 rounded-md bg-brand-fill px-3 py-1.5 text-[12.5px] text-on-brand hover:bg-brand-fill-hover disabled:opacity-60"
+            pending={importing}
+            className="flex w-fit items-center gap-1.5 rounded-md border-0 bg-brand-fill px-3 py-1.5 text-[12.5px] leading-normal text-on-brand hover:bg-brand-fill-hover hover:text-on-brand aria-disabled:opacity-60"
           >
             Import theme…
-          </button>
+          </Button>
         </div>
       </div>
 

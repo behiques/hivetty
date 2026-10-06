@@ -5,6 +5,7 @@ import { addJiraComment } from '@/lib/jira';
 import { BRIDGE_ERROR } from '@/lib/utils';
 import { isAgent } from '@/types/entity';
 
+import { Button } from '@components/ui/button';
 import { Icon } from '@components/ui/icon';
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { AdfBlocks } from '@features/work/components/adf-blocks';
@@ -276,20 +277,24 @@ function ReplyBox({
         <span className="rounded-md border border-border-soft px-2 py-0.5 text-ink">Comment on Jira</span>
         <span className="text-muted">everyone on the ticket sees it</span>
         <span className="flex-1" />
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={post}
-          disabled={posting || (draft.trim() === '' && mentions.length === 0)}
-          className="rounded-md bg-brand-fill px-3 py-1 text-on-brand hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-brand-fill"
+          disabled={draft.trim() === '' && mentions.length === 0}
+          pending={posting}
+          className="rounded-md border-0 bg-brand-fill px-3 py-1 text-[length:inherit] leading-normal text-on-brand hover:bg-brand-fill-hover hover:text-on-brand disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-brand-fill aria-disabled:opacity-60 aria-disabled:hover:bg-brand-fill"
         >
           {posting ? 'Posting…' : 'Comment'}
-        </button>
+        </Button>
       </div>
-      {problem?.map((line) => (
-        <p key={line} className="text-[12px] text-amber-text">
-          {line}
-        </p>
-      ))}
+      {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
+      <div role="status" className="flex flex-col gap-3 empty:-mt-3">
+        {problem?.map((line) => (
+          <p key={line} className="text-[12px] text-amber-text">
+            {line}
+          </p>
+        ))}
+      </div>
     </div>
   );
 }

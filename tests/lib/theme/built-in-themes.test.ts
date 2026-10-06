@@ -175,6 +175,12 @@ describe('text tokens clear AA (HIVE-223)', () => {
         expect(worst(ui.muted, ui, UI_GROUNDS)).toBeGreaterThanOrEqual(4.5);
       });
 
+      it('status text (red, green, brand) clears 4.5:1 on panel and on active (HIVE-225)', () => {
+        for (const key of ['red', 'green', 'brand'] as const) {
+          expect(worst(ui[key], ui, ['panel', 'active']), key).toBeGreaterThanOrEqual(4.5);
+        }
+      });
+
       it('keeps the ladder: muted sits 1.25x further from active than subtle', () => {
         expect(contrastRatio(ui.muted, ui.active)!).toBeGreaterThanOrEqual(contrastRatio(ui.subtle, ui.active)! * 1.25);
       });

@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Button } from '@components/ui/button';
 
@@ -53,5 +53,28 @@ describe('Button', () => {
   it('lets the caller override type for a submit button', () => {
     render(<Button type="submit">Go</Button>);
     expect(screen.getByRole('button')).toHaveAttribute('type', 'submit');
+  });
+
+  it('stays focusable and inert while pending, and says so (HIVE-225)', () => {
+    const onClick = vi.fn();
+    render(<Button pending onClick={onClick}>Test</Button>);
+    const el = screen.getByRole('button', { name: 'Test' });
+    expect(el).not.toBeDisabled();
+    expect(el).toHaveAttribute('aria-disabled', 'true');
+    expect(el).toHaveAttribute('aria-busy', 'true');
+    el.focus();
+    fireEvent.click(el);
+    expect(onClick).not.toHaveBeenCalled();
+    expect(el).toHaveFocus();
+  });
+
+  it('carries no pending state when idle', () => {
+    const onClick = vi.fn();
+    render(<Button onClick={onClick}>Go</Button>);
+    const el = screen.getByRole('button', { name: 'Go' });
+    expect(el).not.toHaveAttribute('aria-disabled');
+    expect(el).not.toHaveAttribute('aria-busy');
+    fireEvent.click(el);
+    expect(onClick).toHaveBeenCalledOnce();
   });
 });

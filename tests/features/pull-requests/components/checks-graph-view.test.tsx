@@ -40,6 +40,13 @@ describe('ChecksGraphView', () => {
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50');
   });
 
+  it('dims a waiting job by its icon and text token, never the label’s opacity (HIVE-225)', () => {
+    render(<ChecksGraphView graph={graph} onJob={() => {}} onExpand={() => {}} />);
+    const job = screen.getByRole('button', { name: /build, waiting/ });
+    expect(job.className).not.toMatch(/opacity-/);
+    expect(job.querySelector('b')).toHaveClass('text-muted');
+  });
+
   it('draws each edge in its state, and the group box with its file', () => {
     const { container } = render(<ChecksGraphView graph={graph} onJob={() => {}} onExpand={() => {}} />);
     expect([...container.querySelectorAll('path[data-state]')].map((p) => p.getAttribute('data-state'))).toEqual(['ok', 'bad', 'wait', 'flow']);

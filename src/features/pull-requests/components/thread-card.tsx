@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { Button } from '@components/ui/button';
 import { Markdown } from '@features/shared/components/markdown';
 import type { GhResult, PrThread } from '@shared/github-contract';
 
@@ -122,14 +123,14 @@ export function ThreadCard({
               <button type="button" onClick={() => setReplying(true)} className="text-brand hover:underline">
                 Reply
               </button>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
                 onClick={toggle}
-                disabled={busy}
-                className="text-brand hover:underline disabled:text-subtle"
+                pending={busy}
+                className="rounded-none border-0 p-0 text-[length:inherit] leading-normal text-brand hover:bg-transparent hover:text-brand hover:underline aria-disabled:text-subtle"
               >
                 {thread.isResolved ? 'Unresolve' : 'Resolve'}
-              </button>
+              </Button>
             </>
           )}
           {onOpenFile !== undefined && line !== null ? (
@@ -153,19 +154,23 @@ export function ThreadCard({
             <button type="button" onClick={() => setReplying(false)} className="text-muted hover:underline">
               Cancel
             </button>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               onClick={post}
-              disabled={busy || draft.trim() === ''}
+              disabled={draft.trim() === ''}
+              pending={busy}
               aria-label="Post reply"
-              className="rounded-md bg-brand-fill px-3 py-1 text-on-brand hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md border-0 bg-brand-fill px-3 py-1 text-[length:inherit] leading-normal text-on-brand hover:bg-brand-fill-hover hover:text-on-brand disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:opacity-60"
             >
               {busy ? 'Posting…' : 'Reply'}
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
-      {problem === null ? null : <p className="px-2.5 pb-2 text-[12px] text-amber-text">{problem}</p>}
+      {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
+      <div role="status">
+        {problem === null ? null : <p className="px-2.5 pb-2 text-[12px] text-amber-text">{problem}</p>}
+      </div>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
 } from '../../../__mocks__/@xterm/xterm';
 
 import { CenterStage } from '@components/layout/center-stage';
+import { EDITOR_FILE_PANEL, editorTabId } from '@features/editor/components/editor-tab-strip';
 import { STAGE_MIN, useAppearanceStore } from '@stores/appearance-store';
 import { fileKey, useEditorStore } from '@stores/editor-store';
 import { useHiveStore } from '@stores/hive-store';
@@ -726,6 +727,16 @@ describe('CenterStage — the editor', () => {
 
     expect(screen.getByRole('tablist', { name: 'Open files' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Terminal/ })).toBeInTheDocument();
+  });
+
+  it('full + tabs: the editor pane is the strip’s tabpanel (HIVE-225)', async () => {
+    render(<CenterStage />);
+    await openAFile();
+    // jsdom applies no Tailwind, so the `hidden` terminal column is still in its tree; look the pane up by id.
+    const panel = document.getElementById(EDITOR_FILE_PANEL);
+    expect(panel).toHaveAttribute('role', 'tabpanel');
+    expect(panel).toHaveAttribute('aria-labelledby', editorTabId(useEditorStore.getState().activeKey));
+    expect(screen.getByRole('tab', { name: /app\.ts/ })).toHaveAttribute('aria-controls', EDITOR_FILE_PANEL);
   });
 
   /**

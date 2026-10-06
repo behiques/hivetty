@@ -2,8 +2,9 @@ import { CaretRight } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { applyJiraTransition } from '@/lib/jira';
-import { BRIDGE_ERROR } from '@/lib/utils';
+import { BRIDGE_ERROR, cn } from '@/lib/utils';
 
+import { Button } from '@components/ui/button';
 import {
   useNextTransition,
   useReloadTicketTransitions,
@@ -43,11 +44,20 @@ export function TicketNextAction({ ticketKey, className }: { ticketKey: string; 
 
   return (
     <div className="flex flex-col">
-      <button type="button" className={className} onClick={apply} disabled={busy}>
+      {/* The resets undo the ghost Button's chrome; the callers pass a brand text link (HIVE-225). */}
+      <Button
+        variant="ghost"
+        className={cn('rounded-none border-0 p-0 leading-normal hover:bg-transparent hover:text-brand aria-disabled:opacity-60', className)}
+        onClick={apply}
+        pending={busy}
+      >
         <CaretRight size={13} aria-hidden />
         {`Move to ${next.to.name}`}
-      </button>
-      {problem === null ? null : <p className="py-1 text-[12px] text-amber-text">{problem}</p>}
+      </Button>
+      {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
+      <div role="status">
+        {problem === null ? null : <p className="py-1 text-[12px] text-amber-text">{problem}</p>}
+      </div>
     </div>
   );
 }

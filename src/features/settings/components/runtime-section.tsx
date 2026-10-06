@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { Button } from '@components/ui/button';
 import { SelectField } from '@components/ui/select-field';
 import { Switch } from '@components/ui/switch';
 import { TextField } from '@components/ui/text-field';
@@ -371,21 +372,23 @@ export function RuntimeSection() {
         title="Environment diagnostic"
         description="Which variables survived the shell’s rc file."
       >
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={() => void runEnvDiagnostic()}
-          disabled={envDiagnosticPending}
-          aria-busy={envDiagnosticPending}
-          className="w-fit rounded-[6px] border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink disabled:opacity-60"
+          pending={envDiagnosticPending}
+          className="w-fit rounded-[6px] border-border px-2.5 py-1 text-[12px] leading-normal text-muted hover:bg-hover hover:text-ink aria-disabled:opacity-60"
         >
           {envDiagnosticPending
             ? 'Checking…'
             : selectedId === ''
               ? 'Check the default environment'
               : 'Check this project’s environment'}
-        </button>
+        </Button>
 
-        {envDiagnostic ? <EnvDiagnosticView diagnostic={envDiagnostic} /> : null}
+        {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
+        <div role="status" className="empty:-mt-2">
+          {envDiagnostic ? <EnvDiagnosticView diagnostic={envDiagnostic} /> : null}
+        </div>
       </SettingsGroup>
     </div>
   );

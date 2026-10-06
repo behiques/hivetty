@@ -234,7 +234,7 @@ body[data-theme='light'] {
      built-in theme, the terminal rows included (HIVE-210, HIVE-223). A mix, not a hex: an imported
      theme derives it from its own colours. */
   --cc-amber-text: color-mix(in srgb, var(--cc-amber) 65%, var(--cc-ink));
-  --cc-red: #d3372f;
+  --cc-red: #cd332b;
   --cc-chip: #edf2f4;
   /* Light lifts by *deepening*: the chip already sits below a white panel, so
      its hover continues down rather than back up toward the panel. */

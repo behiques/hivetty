@@ -740,7 +740,6 @@ function SessionTableRow({
       aria-current={activeTab === id ? 'true' : undefined}
       className={cn(
         'flex min-w-0 flex-1 items-center gap-2 py-[3px] text-left',
-        ended && 'opacity-60',
       )}
     >
       <span
@@ -754,7 +753,7 @@ function SessionTableRow({
         still readable on hover. Without it the ellipsis is a dead end — the
         agent picks these names and they can be longer than any column.
       */}
-      <span className={cn(COL.session, 'text-ink')} title={entityLabel(entity)}>
+      <span className={cn(COL.session, ended ? 'text-subtle' : 'text-ink')} title={entityLabel(entity)}>
         {entityLabel(entity)}
       </span>
       <span className={cn(COL.project, 'text-subtle')} title={entity.project}>
@@ -785,7 +784,7 @@ function SessionTableRow({
               aria-valuemin={0}
               aria-valuemax={progress.total}
               aria-valuenow={progress.done}
-              className="h-1 w-11 shrink-0 overflow-hidden rounded-full bg-chip"
+              className={cn('h-1 w-11 shrink-0 overflow-hidden rounded-full bg-chip', ended && 'opacity-60')}
             >
               <span
                 className="block h-full rounded-full bg-green"
@@ -832,11 +831,12 @@ function SessionTableRow({
       a hue is no signal to a colour-blind user, and none at all to a screen
       reader — so the state rides along as a title and an sr-only word.
 
-      `opacity-60` is repeated from the button rather than lifted to the row,
-      because Resume is the one thing on an ended row that is *not* spent:
-      dimming it would say the opposite of what it does.
+      An ended row is dimmed by text token, not opacity (HIVE-225): the session
+      label and the PR number step down to `text-subtle`, and only the plan bar,
+      which is not text, takes `opacity-60`. Resume keeps full strength, because
+      it is the one thing on an ended row that is *not* spent.
     */}
-    <span className={cn(COL.pr, ended && 'opacity-60')} data-col="pr">
+    <span className={COL.pr} data-col="pr">
       {pr ? (
         <a
           href={pr.url}
@@ -862,6 +862,7 @@ function SessionTableRow({
             */
             pr.state === undefined ? 'text-subtle' : prStateText(pr.state),
             'hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
+            ended && 'text-subtle',
           )}
           title={
             pr.state === undefined

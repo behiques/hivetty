@@ -71,7 +71,7 @@ export function PermissionControls({
         <Button
           size="sm"
           variant="primary"
-          disabled={sending}
+          pending={sending}
           onClick={() => onAnswer(scope)}
         >
           Allow
@@ -79,7 +79,7 @@ export function PermissionControls({
         <Button
           size="sm"
           variant="danger"
-          disabled={sending}
+          pending={sending}
           onClick={() => onAnswer('deny')}
         >
           Deny

@@ -8,6 +8,13 @@ type ButtonSize = 'sm' | 'md';
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  /**
+   * A call this button started is in flight (HIVE-225). Not `disabled`: a
+   * focused button that becomes disabled drops focus to `<body>`, and the
+   * keyboard user loses their place. It stays focusable, says it is busy, and
+   * ignores clicks.
+   */
+  pending?: boolean;
 }
 
 /**
@@ -45,14 +52,19 @@ export function Button({
   variant = 'secondary',
   size = 'md',
   type = 'button',
+  pending = false,
   className,
+  onClick,
   ...rest
 }: ButtonProps) {
   return (
     <button
       type={type}
+      aria-disabled={pending || undefined}
+      aria-busy={pending || undefined}
+      onClick={pending ? (event) => event.preventDefault() : onClick}
       className={cn(
-        'shrink-0 leading-none disabled:opacity-60',
+        'shrink-0 leading-none disabled:opacity-60 aria-disabled:cursor-default aria-disabled:opacity-60',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
         VARIANT[variant],
         SIZE[size],

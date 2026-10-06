@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -6,6 +6,7 @@ import { EditorSurface } from '@components/editor/editor-surface';
 import { SplitHandle } from '@components/ui/split-handle';
 import { AgentForm } from '@features/shared/components/agent-form';
 import { languageFor } from '@lib/explorer/language';
+import { onTablistKeyDown } from '@lib/tablist';
 import type { AgentProblem } from '@shared/agent-contract';
 import {
   DEFAULT_AGENT_SPLIT_RATIO,
@@ -150,6 +151,7 @@ export function AgentEditor({
 }: AgentEditorProps) {
   const split = layout === 'split';
   const [tab, setTab] = useState<Tab>('form');
+  const uid = useId();
   const appearance = useEditorAppearance();
   const ratio = useAgentSplitRatio();
   const setRatio = useSetAgentSplitRatio();
@@ -301,7 +303,11 @@ export function AgentEditor({
         <button
           type="button"
           role="tab"
+          id={`${uid}-tab-form`}
           aria-selected={tab === 'form'}
+          aria-controls={`${uid}-panel-form`}
+          tabIndex={tab === 'form' ? 0 : -1}
+          onKeyDown={onTablistKeyDown}
           onClick={() => setTab('form')}
           className={tabClass('form')}
         >
@@ -310,7 +316,11 @@ export function AgentEditor({
         <button
           type="button"
           role="tab"
+          id={`${uid}-tab-source`}
           aria-selected={tab === 'source'}
+          aria-controls={`${uid}-panel-source`}
+          tabIndex={tab === 'source' ? 0 : -1}
+          onKeyDown={onTablistKeyDown}
           onClick={() => setTab('source')}
           className={tabClass('source')}
         >
@@ -331,6 +341,9 @@ export function AgentEditor({
         )}
       >
         <div
+          role="tabpanel"
+          id={`${uid}-panel-form`}
+          aria-labelledby={`${uid}-tab-form`}
           className={cn(
             'min-h-0 overflow-y-auto font-sans',
             split && '@min-[900px]:block',
@@ -356,7 +369,12 @@ export function AgentEditor({
             className="hidden w-3 bg-bg @min-[900px]:block"
           />
         ) : null}
-        <div className={cn('min-h-0 flex-col', split && '@min-[900px]:flex', tab === 'source' ? 'flex' : 'hidden')}>
+        <div
+          role="tabpanel"
+          id={`${uid}-panel-source`}
+          aria-labelledby={`${uid}-tab-source`}
+          className={cn('min-h-0 flex-col', split && '@min-[900px]:flex', tab === 'source' ? 'flex' : 'hidden')}
+        >
           {/*
             The one thing the source could not say for itself, and the one users
             got wrong: the text under the frontmatter is the agent's job, re-read

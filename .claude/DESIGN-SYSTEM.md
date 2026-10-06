@@ -29,7 +29,7 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | `--cc-brand` | `#8fa7f2` | `#334fa9` | brand, done status |
 | `--cc-green` | `#74b79c` | `#2e6b52` | working / online status |
 | `--cc-amber` | `#ffac47` | `#c77414` | needs-input status |
-| `--cc-red` | `#ff8d85` | `#d3372f` | errors, failing checks |
+| `--cc-red` | `#ff8d85` | `#cd332b` | errors, failing checks |
 | `--cc-chip` | `#1c2648` | `#edf2f4` | chips, pills, raised cards |
 | `--cc-chip-hover` | `#232e57` | `#e2eaee` | hover on a chip-filled card |
 | `--cc-term-bg` | `#0b1023` | `#f7fafb` | terminal background |

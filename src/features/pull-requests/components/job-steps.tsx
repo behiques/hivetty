@@ -4,11 +4,12 @@ import { useState } from 'react';
 import { jobState, timeText } from '@/lib/checks-graph';
 import { cn } from '@/lib/utils';
 
+import { Button } from '@components/ui/button';
 import { StateIcon } from '@features/pull-requests/components/state-icon';
 import { holderIcon } from '@features/pull-requests/holder-icon';
 import type { RunJob } from '@shared/github-contract';
 
-const BUTTON = 'flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-[12px] text-ink hover:bg-hover disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent';
+const BUTTON = 'flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-[12px] leading-normal text-ink hover:bg-hover hover:text-ink disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-transparent';
 
 /**
  * The shown job (HIVE-206): its name and state, its steps with their times
@@ -54,9 +55,9 @@ export function JobSteps({ job, canRerun, onRerun, holder }: { job: RunJob; canR
         })}
       </ol>
       <div className="mt-3 flex gap-1.5">
-        <button type="button" className={BUTTON} disabled={!canRerun || busy} onClick={() => void rerun()}>
+        <Button variant="ghost" className={BUTTON} disabled={!canRerun} pending={busy} onClick={() => void rerun()}>
           Re-run failed
-        </button>
+        </Button>
         <a href={job.url} target="_blank" rel="noreferrer" className={BUTTON}>
           <ArrowSquareOut size={13} aria-hidden />
           Open the log

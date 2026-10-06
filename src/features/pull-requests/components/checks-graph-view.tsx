@@ -19,8 +19,8 @@ const NODE: Record<GraphNode['state'], string> = {
   passed: 'border-[color-mix(in_srgb,var(--cc-green)_35%,var(--cc-border))]',
   failed: 'border-red bg-[color-mix(in_srgb,var(--cc-red)_10%,var(--cc-panel))] shadow-[0_0_18px_color-mix(in_srgb,var(--cc-red)_25%,transparent)]',
   running: 'border-green shadow-[0_0_0_3px_color-mix(in_srgb,var(--cc-green)_12%,transparent)]',
-  waiting: 'border-dashed border-border opacity-60',
-  skipped: 'border-dashed border-border opacity-60',
+  waiting: 'border-dashed border-border',
+  skipped: 'border-dashed border-border',
 };
 
 const ZOOM_MIN = 0.25;
@@ -122,6 +122,8 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
             </svg>
             {graph.nodes.map((node) => {
               const label = node.count > 1 ? `${node.label} × ${String(node.count)}` : node.label;
+              /** Waiting and skipped dim the icon, and step the text down a token; opacity never touches text (HIVE-225). */
+              const dim = node.state === 'waiting' || node.state === 'skipped';
               return (
                 <button
                   key={node.key}
@@ -136,10 +138,10 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
                   className={cn('absolute flex items-center gap-2.5 overflow-hidden rounded-[10px] border bg-panel px-3 text-left hover:bg-hover', NODE[node.state])}
                   style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
                 >
-                  <StateIcon state={node.state} />
+                  <span className={cn('grid shrink-0', dim && 'opacity-60')}><StateIcon state={node.state} /></span>
                   <span className="flex min-w-0 flex-col gap-px">
-                    <b className="truncate tabular-nums text-[12.5px] text-ink">{label}</b>
-                    <span className="truncate tabular-nums text-[11px] text-muted">{node.time}</span>
+                    <b className={cn('truncate tabular-nums text-[12.5px]', dim ? 'text-muted' : 'text-ink')}>{label}</b>
+                    <span className={cn('truncate tabular-nums text-[11px]', dim ? 'text-subtle' : 'text-muted')}>{node.time}</span>
                   </span>
                   {node.progress === null ? null : (
                     <span role="progressbar" aria-label={`${node.label} progress`} aria-valuenow={Math.round(node.progress * 100)} aria-valuemin={0} aria-valuemax={100} className="absolute inset-x-0 bottom-0 h-[3px] bg-border">

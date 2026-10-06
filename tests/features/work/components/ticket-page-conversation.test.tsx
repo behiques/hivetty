@@ -250,7 +250,7 @@ describe('the reply box (HIVE-203)', () => {
     await userEvent.type(box(), 'hello');
     await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
 
-    expect(screen.getByRole('button', { name: 'Posting…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Posting…' })).toHaveAttribute('aria-disabled', 'true');
     finish(null);
   });
 

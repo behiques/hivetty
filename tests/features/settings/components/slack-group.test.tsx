@@ -227,6 +227,26 @@ describe('SlackGroup', () => {
     expect(signIn).not.toHaveBeenCalled();
   });
 
+  it('keeps focus on the action while its call runs, and announces the result (HIVE-225)', async () => {
+    const user = userEvent.setup();
+    let settle: (result: { kind: string; message: string }) => void = () => {};
+    testSlack.mockReturnValueOnce(
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    );
+    renderGroup();
+    const button = await screen.findByRole('button', { name: 'Test' });
+    await user.click(button);
+    expect(button).toHaveFocus();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    await act(async () => {
+      settle({ kind: 'error', message: 'claude did not answer in time. Try again.' });
+    });
+    expect(button).toHaveFocus();
+    expect(screen.getByRole('status')).toHaveTextContent(/did not answer in time/);
+  });
+
   /** A probe that reports a real credential problem still moves the pill. */
   it('does move the pill when the Test reports the credential itself is the problem', async () => {
     status.mockResolvedValue({ kind: 'connected' });
@@ -275,7 +295,7 @@ describe('SlackGroup', () => {
     await userEvent.click(button);
 
     const pending = await screen.findByRole('button', { name: 'Signing in…' });
-    expect(pending).toBeDisabled();
+    expect(pending).toHaveAttribute('aria-disabled', 'true');
 
     await userEvent.click(pending);
     expect(signIn).toHaveBeenCalledTimes(1);

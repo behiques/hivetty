@@ -100,7 +100,9 @@ describe('NewProjectLink', () => {
 
     const icon = screen.getByRole('button', { name: 'Add a new project' });
     expect(icon).toHaveTextContent('');
-    expect(icon.className).not.toContain('border');
+    // The atom's ghost border is reset: the icon draws none (HIVE-225).
+    expect(icon).toHaveClass('border-0');
+    expect(icon.className).not.toContain('border-border');
 
     unmount();
     render(<NewProjectLink variant="cta" />);
@@ -118,7 +120,7 @@ describe('NewProjectLink', () => {
     const button = screen.getByRole('button', { name: /new project/i });
     await user.click(button);
 
-    await waitFor(() => expect(button).toBeDisabled());
+    await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'true'));
     expect(chooseProjectDirectory).toHaveBeenCalledTimes(1);
   });
 
