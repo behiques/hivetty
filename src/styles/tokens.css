@@ -7,7 +7,7 @@
  * `data-theme` flip on <body> recolours the whole app.
  *
  * Components use the resulting utilities (`bg-panel`, `text-muted`,
- * `border-soft`). Raw hex literals in component code are banned.
+ * `border-border-soft`). Raw hex literals in component code are banned.
  *
  * The terminal text palette is deliberately NOT here — it never reaches CSS.
  * It lives in `src/lib/terminal/ansi.ts` and is consumed as JS by xterm's
@@ -310,6 +310,12 @@ body[data-theme='light'] {
   --cc-code-selection: #cfe3f7;
 }
 
+/*
+ * Deliberately unbound: `--cc-shell`, `--cc-tissue*`, `--cc-glow-core` and
+ * `--cc-ground` are the creatures' and the splash's, read raw by canvas code
+ * (`src/splash/stage.ts`) and by inline `var()`; no component should paint
+ * with them, so they get no utility. A `bg-ground` would silently not exist.
+ */
 /**
  * `inline` matters: it makes the utilities emit `var(--cc-*)` rather than
  * resolving the value at build time, which is what lets the `data-theme`

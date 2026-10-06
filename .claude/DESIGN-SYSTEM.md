@@ -181,7 +181,12 @@ whole app.
 `bg-active`.
 
 **Raw hex literals in component code are banned.** If a colour is missing, add a
-token.
+token. The same goes for `rgb()`/`rgba()`, a `white`/`black` utility, and
+`white` or `black` inside a `color-mix(` or a gradient (HIVE-224). A literal that
+must not follow the theme carries a `colour-literal-exempt: <why>` comment on its
+line or the line above. The brood egg's shading toward black is the one today:
+it is the egg's depth, the same in every theme. `tests/design-system.test.ts`
+fails on an unmarked one.
 
 ## Terminal text palette
 
@@ -331,6 +336,24 @@ distinction that decides whether the user goes and looks.
 Status is never carried by colour alone — every status also has a label, so the
 model survives colour-blindness and reduced-motion.
 
+**Status tints** (HIVE-224). A tinted surface or border in one of the four status
+hues (`green`, `amber`, `red`, `brand`) comes from one map in `tokens.css`, three
+steps per hue:
+
+| Step | Utility | Mix | For |
+| --- | --- | --- | --- |
+| `soft` | `bg-green-soft` | 10% over transparent | line and banner washes |
+| `strong` | `bg-green-strong`, `ring-amber-strong` | 16% over transparent | pills and badges |
+| `edge` | `border-green-edge`, `stroke-red-edge` | 50% into `--cc-border` | tinted borders and strokes |
+
+All twelve mix in srgb, one space everywhere, so the same percentage reads the
+same on every surface; each stays a `var(--cc-*)` expression, so a theme
+recolours it. What stays local: data-viz fills (the PR timeline's CI bars, the
+time-buckets heatmap), glows (`shadow-[…]`), gradients, and hues outside the
+four (subtle, chitin, creep). A site that fits no step keeps its mix and carries
+a `tint-exempt: <why>` comment on its line or the line above, which the scan in
+`tests/design-system.test.ts` honours; it fails on any other hand-mixed tint.
+
 ## Type
 
 - **Family:** sans by default — `body` sets `--font-sans`, the system text
@@ -368,6 +391,21 @@ model survives colour-blindness and reduced-motion.
 
 - **Base size:** 13px / 1.5 on `body`.
 - **Terminal:** 12px inside xterm.
+
+## Radius
+
+Tailwind's own scale, no radius tokens (HIVE-224):
+
+| Role | Utility | px |
+| --- | --- | --- |
+| marks | `rounded-xs` | 2 |
+| chips, small controls, menu items | `rounded` | 4 |
+| buttons, inputs | `rounded-md` | 6 |
+| cards, menus, popovers | `rounded-lg` | 8 |
+| dialogs | `rounded-xl` | 12 |
+
+`rounded-full` is for pills and dots. Arbitrary radii (`rounded-[7px]`) are
+banned, and `tests/design-system.test.ts` fails on one.
 
 ## Motion
 
@@ -418,6 +456,11 @@ Canvas loops, rAF work and SVG SMIL are out of its reach and must read
   A bar item is 52px wide, a 19px icon over a 9.5px/500 label; active is
   `text-ink` on `bg-panel-2`, the rest `text-muted`.
 - Scrollbars are thin (10px), thumb `--cc-border`, transparent track, rounded.
+- **Shadows** are Tailwind's defaults (`shadow-lg`, `shadow-xl`, `shadow-2xl`).
+  Every surface that casts one — a menu, a dialog, a popover, a card — also
+  carries `border-border`, which does the separation on dark panels, where a
+  black shadow cannot be seen and is harmless. There is deliberately no shadow
+  token.
 - Interactive controls show a pointer cursor — a base rule in `global.css`, since
   Tailwind v4 dropped the one that used to provide this. Do not add
   `cursor-pointer` per component.

@@ -438,3 +438,16 @@ describe('colour literals — none unannotated in components (HIVE-224)', () => 
     ).toEqual([]);
   });
 });
+
+describe('DESIGN-SYSTEM.md records the scales (HIVE-224)', () => {
+  const doc = readFileSync(resolve(process.cwd(), '.claude/DESIGN-SYSTEM.md'), 'utf8');
+  it('has a radius scale and the tint map, with their exemption markers', () => {
+    expect(doc).toMatch(/^## Radius$/m);
+    for (const name of ['rounded-xs', 'rounded-md', 'rounded-lg', 'rounded-xl', 'green-soft', 'green-strong', 'green-edge', 'tint-exempt:', 'colour-literal-exempt:']) {
+      expect(doc).toContain(name);
+    }
+  });
+  it('names no utility that does not exist', () => {
+    expect(readFileSync(resolve(process.cwd(), 'src/styles/tokens.css'), 'utf8')).not.toMatch(/`border-soft`/);
+  });
+});

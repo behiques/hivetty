@@ -534,7 +534,7 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
         has nothing on either side of a seam.
 
         **A gutter, not a hairline**, and the reason is that both sides of this
-        particular seam are the same black. A 1px rule in `border-soft` is
+        particular seam are the same black. A 1px rule in `border-border-soft` is
         exactly what separates one receipt row from the next a few pixels above,
         so the divider between two *documents* read as one more row of the
         table. A 12px band of the panel ground cuts the black in two, which is
