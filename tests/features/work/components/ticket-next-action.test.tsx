@@ -60,6 +60,12 @@ describe('TicketNextAction (HIVE-202)', () => {
     expect(screen.getByRole('button', { name: 'Move to Done' })).toHaveClass('action');
   });
 
+  it('draws the destination as the header status pill, coloured by its category', () => {
+    render(<TicketNextAction ticketKey="GRAC-3018" />);
+
+    expect(screen.getByText('Done')).toHaveClass('rounded-full', 'bg-chip', 'uppercase', 'text-green');
+  });
+
   it('draws nothing when there is no step forward', () => {
     seed([]);
     render(<TicketNextAction ticketKey="GRAC-3018" />);
