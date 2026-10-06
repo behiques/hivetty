@@ -35,7 +35,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // neighbours.
 const VARIANT: Record<ButtonVariant, string> = {
   primary:
-    'bg-brand-fill text-on-brand hover:bg-brand-fill-hover border border-transparent',
+    'bg-brand-fill text-on-brand hover:bg-brand-fill-hover disabled:hover:bg-brand-fill aria-disabled:hover:bg-brand-fill border border-transparent',
   secondary:
     'border border-border text-muted hover:bg-hover hover:text-ink',
   danger:

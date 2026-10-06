@@ -321,3 +321,18 @@ describe('native controls follow the mode (HIVE-225)', () => {
     expect(globalCss).toMatch(/body\[data-theme='light'\]\s*\{[^}]*color-scheme:\s*light;/);
   });
 });
+
+describe('primary buttons — one atom (HIVE-225)', () => {
+  /** A quoted class string carrying the brand fill and a horizontal padding is a hand-rolled button. */
+  const HAND_ROLLED = /['"`][^'"`]*\bbg-brand-fill[^'"`]*['"`]/g;
+  const files = sourceFiles().filter((f) => !f.endsWith('components/ui/button.tsx'));
+
+  it('no file outside button.tsx hand-rolls a primary button', () => {
+    const offenders = files.flatMap((f) =>
+      [...readFileSync(f, 'utf8').matchAll(HAND_ROLLED)]
+        .filter((m) => /\bpx-/.test(m[0]))
+        .map(() => relative(f)),
+    );
+    expect([...new Set(offenders)]).toEqual([]);
+  });
+});

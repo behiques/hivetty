@@ -1,6 +1,7 @@
 import { Plus, Trash } from '@phosphor-icons/react';
 import { useState } from 'react';
 
+import { Button } from '@components/ui/button';
 import { unsafeEnvReason } from '@shared/config-contract';
 
 /**
@@ -167,17 +168,17 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
           Add variable
         </button>
 
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           // Blocked on a real error, never on "nothing changed": comparing
           // against the saved map would make the button lie after an
           // out-of-band edit to the config file.
           disabled={disabled || errors.length > 0}
           onClick={save}
-          className="rounded-[6px] bg-brand-fill px-2.5 py-1 text-[12px] text-on-brand hover:bg-brand-fill-hover disabled:opacity-50"
         >
           Save variables
-        </button>
+        </Button>
       </div>
     </div>
   );

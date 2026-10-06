@@ -101,10 +101,10 @@ export function ProjectsSection() {
 
       <div className="flex items-center gap-2">
         <Button
-          variant="ghost"
+          variant="primary"
           onClick={addProject}
           pending={choosing}
-          className="flex w-fit items-center gap-1.5 rounded-md border-0 bg-brand-fill px-3 py-1.5 text-[12.5px] leading-normal text-on-brand hover:bg-brand-fill-hover hover:text-on-brand aria-disabled:opacity-60"
+          className="flex w-fit items-center gap-1.5"
         >
           <Plus size={12} weight="bold" />
           Add project

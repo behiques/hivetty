@@ -224,14 +224,14 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
       ) : null}
 
       {phase === 'compose' ? (
-        <button
-          type="button"
+        <Button
+          variant="primary"
           onClick={() => void onClone()}
           disabled={!ready}
-          className="flex w-fit items-center gap-1.5 rounded-md bg-brand-fill px-3 py-1.5 text-[12.5px] text-on-brand hover:bg-brand-fill-hover disabled:opacity-60"
+          className="flex w-fit items-center gap-1.5"
         >
           Clone
-        </button>
+        </Button>
       ) : null}
 
       {phase === 'cloning' ? (
@@ -258,16 +258,16 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
 
       {phase === 'failed' ? (
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={() => {
               setPhase('compose');
               setError(null);
             }}
-            className="flex w-fit items-center gap-1.5 rounded-md bg-brand-fill px-3 py-1.5 text-[12.5px] text-on-brand hover:bg-brand-fill-hover"
+            className="flex w-fit items-center gap-1.5"
           >
             Retry
-          </button>
+          </Button>
           <button
             type="button"
             onClick={onDone}
