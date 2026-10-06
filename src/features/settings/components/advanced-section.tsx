@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
+import { Button } from '@components/ui/button';
 import { Switch } from '@components/ui/switch';
 import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { ConfigResetConfirm } from '@features/settings/components/config-reset-confirm';
@@ -510,16 +511,18 @@ export function AdvancedSection() {
         ) : (
           <>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[12.5px] text-muted">{updateLine(update, { downloading: downloadingPhrase, ready: readyPhrase })}</p>
-              <button
-                type="button"
-                disabled={checking || !update.capability.canCheck}
+              {/* The check's result lands in this line; always mounted, so it is announced (HIVE-225). */}
+              <p role="status" className="text-[12.5px] text-muted">{updateLine(update, { downloading: downloadingPhrase, ready: readyPhrase })}</p>
+              <Button
+                variant="ghost"
+                disabled={!update.capability.canCheck}
+                pending={checking}
                 onClick={() => void onCheck()}
-                className="flex shrink-0 items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
+                className="flex shrink-0 items-center gap-1.5 rounded-md border-border px-3 py-1.5 text-[12.5px] leading-normal text-muted hover:bg-hover hover:text-ink disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted"
               >
                 <ArrowCircleUp size={12} weight="bold" />
                 {checking ? 'Checking…' : 'Check now'}
-              </button>
+              </Button>
             </div>
             {/*
               The capability sentence, always, not only when something is
