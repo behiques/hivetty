@@ -33,14 +33,14 @@ Set `HIVE_CONFIG_PATH` to use another file. Skills, agents and the ledger move w
 
 ```json
 {
-  "//": "The Hive workspace config. Keys starting with // are comments.",
+  "//": "Hive TTY workspace config. Keys starting with // are comments.",
   "version": 2,
   "shell": "/bin/zsh",
   "claudeCommand": "claude",
   "env": { "NODE_ENV": "development" },
   "importLoginEnv": true,
   "projects": [
-    { "id": "the-hive", "key": "hive", "name": "The Hive", "path": "~/Projects/the-hive" },
+    { "id": "the-hive", "key": "hive", "name": "Hive TTY", "path": "~/Projects/the-hive" },
     {
       "id": "nova-web",
       "key": "nw",

@@ -1,6 +1,6 @@
 # Packaging and updates
 
-How The Hive becomes something you install, how a new version gets published,
+How Hive TTY becomes something you install, how a new version gets published,
 and how a running copy finds out about it.
 
 Load this when working on `electron-builder.yml`, `.github/workflows/release.yml`,

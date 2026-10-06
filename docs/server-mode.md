@@ -1,6 +1,6 @@
 # Server mode
 
-The Hive can run on an always-on Mac and hold the sessions, the agents, the
+Hive TTY can run on an always-on Mac and hold the sessions, the agents, the
 ledger and the hook receiver there. The desktop app on any other machine
 attaches to it and becomes a window onto it, from home or from a hotel four
 time zones away.
@@ -72,7 +72,7 @@ digest of each, in the config file, and needs no keychain to check one.
 
 ## 1. Prepare the server
 
-1. **Install The Hive** from the dmg into `/Applications`, and open it once from
+1. **Install Hive TTY** from the dmg into `/Applications`, and open it once from
    Finder so Gatekeeper records it. Quit it again; launchd starts it from step 4
    on. Use a Developer ID signed build if you want the server to update itself
    (see [Updates](#updates)).
@@ -210,7 +210,7 @@ What each part is for:
   Tailscale a head start, though nothing depends on that: a bind that fails
   because the tailnet address is not up yet is retried, after 5 s and then
   doubling to once a minute, until it lands.
-- **Do not also add The Hive to Login Items.** Two copies at login means one
+- **Do not also add Hive TTY to Login Items.** Two copies at login means one
   loses the single-instance lock and quits, and launchd relaunches it every
   twenty seconds forever.
 
@@ -224,9 +224,9 @@ launchctl bootout gui/$(id -u)/com.behiques.the-hive.server             # stop
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.the-hive.server.plist  # start
 ```
 
-A running server has a menu-bar item whose tooltip reads *The Hive · serving*.
+A running server has a menu-bar item whose tooltip reads *Hive TTY · serving*.
 Its menu shows the bound address (or *Not serving* with the reason), the paired
-devices, *Pair a device…* and *Open The Hive*. The dock
+devices, *Pair a device…* and *Open Hive TTY*. The dock
 icon is hidden, and no unread badge appears there: each attached client badges
 its own dock.
 
@@ -435,6 +435,6 @@ bytes at normal flush sizes.
 | Client gets a 403 | It dialed a name the server did not bind. Use the exact `bind.host` string. The server's log names the refused host. |
 | Client says the versions differ | Update whichever side the message names. |
 | Jira or Slack shows signed out after a reboot | The login keychain is locked: automatic login is off, or the keychain password differs from the account password. |
-| Log says another server is already running for this config | Two copies started. Remove The Hive from Login Items; keep only the LaunchAgent. |
+| Log says another server is already running for this config | Two copies started. Remove Hive TTY from Login Items; keep only the LaunchAgent. |
 | Server never updates | Something is always live. Check for a long-lived session or a busy agent schedule, or update by hand. |
 | Menu-bar item shows the text "Hive" | The bundle is missing `Contents/Resources/tray/`. Reinstall. |
