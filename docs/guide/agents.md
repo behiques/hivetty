@@ -192,7 +192,7 @@ and its merge asks as before.
   turns · 13s · $0.12`); click a row, or Enter or Space on it, to read another. A new run
   takes the selection only if you were on the latest one, so a run you picked stays put.
   A failed outcome reads red with its reason beside it, an asking one amber.
-- The box at the bottom posts to the agent. `answer a1 yes, go ahead` answers its open ask.
+- The box at the bottom posts to the agent. `answer a1 yes, go ahead` answers its open ask; the ref works in any case (`a1` or `A1`).
 - **Paused.** A paused agent's Status reads amber, and the box gives way to a bar: "acr is
   paused. Nothing wakes it, not the ledger, not a schedule, until you resume it." **Resume**
   brings the box back with whatever you had typed in it.
