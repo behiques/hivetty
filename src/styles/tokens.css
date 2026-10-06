@@ -321,6 +321,8 @@ body[data-theme='light'] {
   --color-panel-2: var(--cc-panel-2);
   --color-hover: var(--cc-hover);
   --color-active: var(--cc-active);
+  /* The one veil behind a modal or a cover (HIVE-225): the theme's own ground, so a theme repaints it. */
+  --color-scrim: color-mix(in srgb, var(--cc-bg) 70%, transparent);
   --color-border: var(--cc-border);
   --color-border-soft: var(--cc-border-soft);
   --color-ink: var(--cc-ink);

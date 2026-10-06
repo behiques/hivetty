@@ -301,3 +301,14 @@ describe('menus — one surface, one item recipe (HIVE-225)', () => {
     expect(offenders.map(relative)).toEqual([]);
   });
 });
+
+describe('overlays — one scrim (HIVE-225)', () => {
+  it('binds the scrim to the theme background', () => {
+    expect(tokensCss).toContain('--color-scrim: color-mix(in srgb, var(--cc-bg) 70%, transparent);');
+  });
+
+  it('no overlay picks its own veil', () => {
+    const offenders = sourceFiles().filter((f) => /\bbg-(?:black|bg)\/\d+/.test(readFileSync(f, 'utf8')));
+    expect(offenders.map(relative)).toEqual([]);
+  });
+});
