@@ -5,14 +5,14 @@
  * ## Why it exists
  *
  * Nine copies of this markup were spread across eight section files, and the
- * pane title was styled `text-ui text-ink` — byte-identical to the `h3`
+ * pane title was set at 13px in ink — byte-identical to the `h3`
  * inside every `SettingsGroup` below it. So "Appearance" and "Theme" rendered
  * at the same size, in the same colour, at the same weight, and the only thing
  * saying one contained the other was the vertical order. The reader has to
  * infer the hierarchy from the layout because the type refuses to state it.
  *
  * The copies had already started to disagree — two of the nine were
- * `text-ui-lg` — which is exactly the drift `settings-group.tsx` documents
+ * 14px — which is exactly the drift `settings-group.tsx` documents
  * getting ahead of once already.
  *
  * ## The scale
