@@ -930,6 +930,22 @@ describe('hive-store selectors', () => {
       expect(count.result.current).toBe(4);
     });
 
+    it('counts a session once after its input_needed row superseded its idle row', () => {
+      const action = { type: 'session', entityId: 'term-2' } as const;
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([
+          notif({ id: 'i', kind: 'session.idle', action }),
+          notif({ id: 'n', kind: 'session.input_needed', action }),
+        ]);
+        // What the hub announces when the notifier supersedes the idle row.
+        useHiveStore.getState().applyDismiss('i');
+      });
+
+      const { result } = renderHook(() => useSummons(null));
+      expect(result.current.sessions.map((n) => n.id)).toEqual(['n']);
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(1);
+    });
+
     it.each(['answer', 'done', 'failed'] as const)('drops an ask closed by %s', (kind) => {
       act(() => {
         useHiveStore.getState().hydrateNotifs([ask('q1')]);

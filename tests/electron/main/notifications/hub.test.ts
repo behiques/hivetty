@@ -632,6 +632,26 @@ describe('the badge: what waits on you (HIVE-214)', () => {
     expect(lastBadge()).toBe(1);
   });
 
+  /** One session, one count: the nudge supersedes the idle row, as the notifier asks of the hub. */
+  it('counts a session once after its input_needed supersedes its idle row', () => {
+    const action = { type: 'session', entityId: 'sess-05' } as const;
+    raise({ id: 'i', kind: 'session.idle', action });
+    raise({ id: 'n', kind: 'session.input_needed', action });
+    hub.dismissForSession('sess-05', ['session.idle']);
+
+    expect(lastBadge()).toBe(1);
+    expect(hub.list().map((n) => n.id)).toEqual(['n']);
+  });
+
+  it('counts nothing once the session works again and both rows are swept', () => {
+    const action = { type: 'session', entityId: 'sess-05' } as const;
+    raise({ id: 'i', kind: 'session.idle', action });
+    raise({ id: 'n', kind: 'session.input_needed', action });
+    hub.dismissForSession('sess-05', ['session.idle', 'session.input_needed']);
+
+    expect(lastBadge()).toBe(0);
+  });
+
   it('announces nothing for a notification that was dropped', () => {
     raise({ id: 'a' });
     announceBadge.mockClear();
