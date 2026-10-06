@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
+
 import { cn } from '@/lib/utils';
 import type { HiveNotification } from '@/types/notification';
 
 import { useLeavingAsks } from '@features/inbox/hooks/use-leaving-asks';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
+import { isSessionSummons } from '@shared/notification-lanes';
 import { useSummons } from '@stores/hive-store';
 import { useArrivals, useInboxActions, useSettingsOpen } from '@stores/ui-store';
 
@@ -18,8 +20,8 @@ export const ARRIVAL_FOLD_MS = 5000;
 
 /** What the corner's polite live region says for the newest arrival. */
 export const announcement = (row: HiveNotification, asker: string): string =>
-  row.kind === 'session.blocked'
-    ? `${asker} asked a question`
+  isSessionSummons(row)
+    ? `${asker} ${row.title}`
     : `${asker} ${row.kind === 'agent.permission' ? 'wants to run a command' : 'asks'}: ${row.title}`;
 
 /**
@@ -114,7 +116,7 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
         <div className="relative z-[2] rounded-xl shadow-xl [&>article]:border-amber-edge">
           {shown.leaving && newest.action.type === 'ask' ? (
             <AskLeaving notif={newest} thread={newest.action.thread} />
-          ) : newest.kind === 'session.blocked' ? (
+          ) : isSessionSummons(newest) ? (
             <SessionNote notif={newest} variant="note" onFold={foldArrivals} />
           ) : newest.action.type === 'ask' ? (
             <AskCard key={newest.id} notif={newest} thread={newest.action.thread} onClose={foldArrivals} />

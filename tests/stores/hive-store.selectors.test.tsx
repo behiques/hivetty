@@ -910,7 +910,7 @@ describe('hive-store selectors', () => {
       act(() => useHiveStore.setState({ notifs: [], ledger: [], closedAsks: new Set() }));
     });
 
-    it('splits asks from blocked sessions, newest first, and ignores the rest', () => {
+    it('splits asks from sessions waiting on you, newest first, and ignores news', () => {
       act(() => {
         useHiveStore.getState().hydrateNotifs([
           { ...ask('q1'), createdAt: 3 },
@@ -923,10 +923,27 @@ describe('hive-store selectors', () => {
 
       const { result } = renderHook(() => useSummons(null));
       expect(result.current.asks.map((n) => n.id)).toEqual(['q1', 'p1']);
-      expect(result.current.sessions.map((n) => n.id)).toEqual(['b1']);
+      // A session that is yours again waits on you too (6 Oct 2026).
+      expect(result.current.sessions.map((n) => n.id)).toEqual(['i', 'b1']);
 
       const count = renderHook(() => useSummonsCount(null));
-      expect(count.result.current).toBe(3);
+      expect(count.result.current).toBe(4);
+    });
+
+    it('counts a session once after its input_needed row superseded its idle row', () => {
+      const action = { type: 'session', entityId: 'term-2' } as const;
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([
+          notif({ id: 'i', kind: 'session.idle', action }),
+          notif({ id: 'n', kind: 'session.input_needed', action }),
+        ]);
+        // What the hub announces when the notifier supersedes the idle row.
+        useHiveStore.getState().applyDismiss('i');
+      });
+
+      const { result } = renderHook(() => useSummons(null));
+      expect(result.current.sessions.map((n) => n.id)).toEqual(['n']);
+      expect(renderHook(() => useSummonsCount(null)).result.current).toBe(1);
     });
 
     it.each(['answer', 'done', 'failed'] as const)('drops an ask closed by %s', (kind) => {

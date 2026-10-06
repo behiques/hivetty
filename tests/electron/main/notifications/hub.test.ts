@@ -624,10 +624,30 @@ describe('the badge: what waits on you (HIVE-214)', () => {
     expect(lastBadge()).toBe(2);
   });
 
-  it('never counts Burrowed or Echoes', () => {
-    raise({ id: 'i', kind: 'session.idle' });
-    raise({ id: 'n', kind: 'session.input_needed' });
+  it('counts a session that is yours again, and never Echoes', () => {
     raise({ id: 'm', kind: 'pr.merged' });
+    expect(lastBadge()).toBe(0);
+
+    raise({ id: 'i', kind: 'session.idle' });
+    expect(lastBadge()).toBe(1);
+  });
+
+  /** One session, one count: the nudge supersedes the idle row, as the notifier asks of the hub. */
+  it('counts a session once after its input_needed supersedes its idle row', () => {
+    const action = { type: 'session', entityId: 'sess-05' } as const;
+    raise({ id: 'i', kind: 'session.idle', action });
+    raise({ id: 'n', kind: 'session.input_needed', action });
+    hub.dismissForSession('sess-05', ['session.idle']);
+
+    expect(lastBadge()).toBe(1);
+    expect(hub.list().map((n) => n.id)).toEqual(['n']);
+  });
+
+  it('counts nothing once the session works again and both rows are swept', () => {
+    const action = { type: 'session', entityId: 'sess-05' } as const;
+    raise({ id: 'i', kind: 'session.idle', action });
+    raise({ id: 'n', kind: 'session.input_needed', action });
+    hub.dismissForSession('sess-05', ['session.idle', 'session.input_needed']);
 
     expect(lastBadge()).toBe(0);
   });

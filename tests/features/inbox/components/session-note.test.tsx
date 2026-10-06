@@ -36,13 +36,24 @@ describe('SessionNote (HIVE-198)', () => {
     useHiveStore.setState({ openEntity });
     render(<SessionNote notif={blocked()} variant="note" onFold={onFold} />);
 
-    expect(screen.getByText('asked a question')).toBeInTheDocument();
+    // The row's own words: a permission prompt is not "asked a question".
+    expect(screen.getByText('needs approval')).toBeInTheDocument();
     expect(screen.getByText('the-hive · it waits in the session; the answer goes there')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Open the session' }));
     expect(openEntity).toHaveBeenCalledWith('sess-03');
     await userEvent.click(screen.getByRole('button', { name: 'Later' }));
     await userEvent.click(screen.getByRole('button', { name: 'Fold into the pill' }));
     expect(onFold).toHaveBeenCalledTimes(2);
+  });
+
+  it('a session that is yours again says so, with nothing to answer', () => {
+    const idle = notif({ id: 'i1', kind: 'session.idle', title: 'is yours again', action: { type: 'session', entityId: 'nova' } });
+    const { unmount } = render(<SessionNote notif={idle} variant="note" />);
+    expect(screen.getByRole('article', { name: 'sess-03 is yours again' })).toBeInTheDocument();
+    expect(screen.getByText('the-hive · its turn is over; it waits for you')).toBeInTheDocument();
+    unmount();
+    render(<SessionNote notif={idle} variant="row" />);
+    expect(screen.getByText('the-hive · pick it up in the session')).toBeInTheDocument();
   });
 
   it('a drawer row: what it wants and Open ›', async () => {

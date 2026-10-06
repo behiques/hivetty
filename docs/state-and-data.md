@@ -386,7 +386,7 @@ Components never read a store object directly and never call `getState()`.
 | `useInboxDrawer()` / `useInboxActions()` | ui-store: the drawer's `{ open, thread }`, and the arrival and drawer actions |
 | `useUnreadCount()` | inbox unread count |
 | `useNotifs()` | the inbox, newest first |
-| `useSummons(onStage)` | the Summons queue, `{ asks, sessions }`, newest first: open `agent.ask` / `agent.permission` and `pr.review_requested`; `session.blocked` less the one on stage (HIVE-214) |
+| `useSummons(onStage)` | the Summons queue, `{ asks, sessions }`, newest first: open `agent.ask` / `agent.permission` and `pr.review_requested`; `session.blocked`, `session.idle` and `session.input_needed` less the one on stage (HIVE-214) |
 | `useSummonsCount(onStage)` | its length; `useSummonsCount(null)` is the dock's count |
 | `useYoursAgain(terminalId)` | true while an unswept `session.idle` / `session.input_needed` row names that terminal |
 | `useOnStage()` | what is on the centre stage — a terminal id, an agent's row id, or null; `useForegroundSession` and the Inbox both read it (`src/hooks/use-on-stage.ts`) |
@@ -552,10 +552,10 @@ end:
 
 - **`notifs`: 50 rows of news, and every row that waits on you** (HIVE-214).
   Every kind has a lane in `NOTIFICATION_KIND_SPECS`: **Summons** (`agent.ask`,
-  `agent.permission`, `session.blocked`, `pr.review_requested`), **Burrowed**
-  (`session.idle`, `session.input_needed`) and **Echoes** (the rest).
+  `agent.permission`, `session.blocked`, `session.idle`, `session.input_needed`,
+  `pr.review_requested`) and **Echoes** (the rest).
   `trimNotifications` in `electron/shared/notification-lanes.ts` keeps at most
-  `NOTIFICATION_CAP` Echo and Burrowed rows, Echoes leaving first, and never a
+  `NOTIFICATION_CAP` Echo rows, the oldest leaving first, and never a
   row that waits on you (a Summons row, unless it is an ask whose thread
   `closedAskThreads` says has closed). `pushNotif`, `hydrateNotifs` and main's
   hub all trim with it, so a hydration never brings back a row the store
