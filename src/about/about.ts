@@ -14,6 +14,8 @@ import {
   versionLine,
 } from './panel';
 
+import '@/styles/fonts';
+
 import './about.css';
 
 /**

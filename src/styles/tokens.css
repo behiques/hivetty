@@ -394,7 +394,7 @@ body[data-theme='light'] {
   --color-code-active-line: var(--cc-code-active-line);
   --color-code-selection: var(--cc-code-selection);
 
-  --font-mono: ui-monospace, Menlo, 'SF Mono', monospace;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, 'SF Mono', monospace;
   /**
    * The type scale (HIVE-225): five steps, app-wide, nothing between them.
    * Titles, names and reading text, controls, second lines, and micro labels.
@@ -408,10 +408,10 @@ body[data-theme='light'] {
   --text-micro: 11px;
   /**
    * Words, beside the mono that machine strings keep (HIVE-204): the agent
-   * page's descriptions, form labels and footers, and the picker's title. The
-   * system's own text face — no webfont round-trip.
+   * page's descriptions, form labels and footers, and the picker's title. IBM
+   * Plex Sans, bundled (`styles/fonts.ts`), with the system face behind it.
    */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'IBM Plex Sans Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   --animate-ccpulse: ccpulse 1.6s ease-in-out infinite;
   --animate-ccflow: ccflow 1s linear infinite;
   --animate-ccbreathe: ccbreathe 3.2s ease-in-out infinite;

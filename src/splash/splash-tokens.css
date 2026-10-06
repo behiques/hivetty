@@ -54,7 +54,7 @@
 
   /**
    * The one face the app uses, copied from `--font-mono` in `tokens.css` and
-   * checked by the same test. A system stack, so nothing is fetched.
+   * checked by the same test. Bundled (`styles/fonts.ts`), so nothing is fetched.
    */
-  --font-mono: ui-monospace, Menlo, 'SF Mono', monospace;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, 'SF Mono', monospace;
 }
