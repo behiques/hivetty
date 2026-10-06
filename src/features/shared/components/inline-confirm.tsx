@@ -117,7 +117,7 @@ export function InlineConfirm({
           type="button"
           onClick={onConfirm}
           onKeyDown={escapes}
-          className="rounded-md bg-red px-2.5 py-1 text-control font-medium text-bg hover:opacity-90"
+          className="rounded-md bg-danger-solid px-2.5 py-1 text-control font-medium text-on-danger hover:opacity-90"
         >
           {confirmLabel}
         </button>

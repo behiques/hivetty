@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BUILT_IN_THEME } from '@lib/theme/built-in';
+import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
 import { MAX_THEME_BYTES, THEME_MODES } from '@lib/theme/contract';
 import { importTheme, isHiveTheme, utf8ByteLength } from '@lib/theme/validate';
 
@@ -570,5 +571,24 @@ describe('contrast', () => {
     expect(
       result.notes.some((note) => note.includes('brand on panel')),
     ).toBe(false);
+  });
+});
+
+describe('rule 9 — the plan glyph’s check (panel on green)', () => {
+  it('notes a theme whose green is too close to its panel', () => {
+    const modes = structuredClone(BUILT_IN_THEME.modes);
+    modes.dark.ui.green = modes.dark.ui.panel;
+    const result = importTheme(fullTheme({ modes }), 'flat.json');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.notes.some((note) => note.includes('panel') && note.includes('green'))).toBe(true);
+  });
+
+  it('never fires on a built-in theme', () => {
+    for (const theme of [BUILT_IN_THEME, ...Object.values(BUILT_IN_THEMES)]) {
+      const result = importTheme(JSON.stringify(theme), 'built-in.json');
+      if (!result.ok) throw new Error(result.detail);
+      expect(result.notes.filter((note) => note.includes('green'))).toEqual([]);
+    }
   });
 });
