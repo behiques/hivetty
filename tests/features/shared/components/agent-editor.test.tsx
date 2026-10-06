@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -77,6 +77,21 @@ describe('AgentEditor', () => {
     expect(
       screen.getByDisplayValue('Watches #incorp-dev and my mentions.'),
     ).toBeInTheDocument();
+  });
+
+  it('Form and Source are a WAI-ARIA tablist with linked panels (HIVE-225)', () => {
+    setup();
+    const form = screen.getByRole('tab', { name: 'Form' });
+    const source = screen.getByRole('tab', { name: 'Source' });
+    expect(form).toHaveAttribute('tabindex', '0');
+    expect(source).toHaveAttribute('tabindex', '-1');
+    act(() => form.focus());
+    fireEvent.keyDown(form, { key: 'ArrowRight' });
+    expect(source).toHaveFocus();
+    expect(source).toHaveAttribute('aria-selected', 'true');
+    const panel = document.getElementById(source.getAttribute('aria-controls')!);
+    expect(panel).toHaveAttribute('role', 'tabpanel');
+    expect(panel).toHaveAttribute('aria-labelledby', source.id);
   });
 
   it('shows the path, which is where the bytes go', () => {
