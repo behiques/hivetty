@@ -1046,6 +1046,27 @@ describe('AgentRunLog', () => {
       }
     });
 
+    /*
+      A line appended to the live turn must not rebuild the turns before it
+      (HIVE-225): their nodes survive the push. Proves no remount; the memo
+      that also skips their render is read in the diff.
+    */
+    it('keeps the earlier turns’ nodes when the live turn grows', () => {
+      seed({ status: 'working', live: [standing()] });
+      lines(['first|', 'second'], 'live-standing');
+
+      const { container } = render(<AgentRunLog name="watcher" />);
+      const output = container.querySelector('[data-region="run-output"]') as HTMLElement;
+      const earlier = within(output).getByText('first');
+
+      act(() => {
+        lines(['third'], 'live-standing');
+      });
+
+      expect(within(output).getByText('first')).toBe(earlier);
+      expect(within(output).getByText('third')).toBeInTheDocument();
+    });
+
     it('names a live run\'s lane on its row and its group (HIVE-185)', () => {
       seed({ status: 'working', live: [standing({ lane: 'repo:a/x' })] });
       lines(['lane line'], 'live-standing');

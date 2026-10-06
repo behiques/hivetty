@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 
 import { laneLabel } from '@/lib/agents';
 import { cn } from '@/lib/utils';
@@ -264,11 +264,15 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
     agent being itself; a task is one job, and the newest job is the one the
     reader most likely just started.
   */
-  const inFlight = liveRuns
-    .slice()
-    .sort((a, b) =>
-      a.kind === b.kind ? b.startedAt - a.startedAt : a.kind === 'standing' ? -1 : 1,
-    );
+  const inFlight = useMemo(
+    () =>
+      liveRuns
+        .slice()
+        .sort((a, b) =>
+          a.kind === b.kind ? b.startedAt - a.startedAt : a.kind === 'standing' ? -1 : 1,
+        ),
+    [liveRuns],
+  );
 
   /*
     Newest first, in both halves.
@@ -280,8 +284,8 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
     `scrollTop: 0`, which is where a scroll box already opens, and the reader
     who scrolls away is not fighting an effect that wants to pull them back.
   */
-  const receipts = runs.toReversed();
-  const groups = groupsOf(lines, inFlight, receipts);
+  const receipts = useMemo(() => runs.toReversed(), [runs]);
+  const groups = useMemo(() => groupsOf(lines, inFlight, receipts), [lines, inFlight, receipts]);
 
   /*
     The run the output is showing (HIVE-204), the latest by default.
@@ -651,45 +655,11 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
               )}
 
               {group.turns.map((turn, turnIndex) => (
-                <div
-                  /*
-                    Counted from the **oldest** turn, so appending does not
-                    renumber.
-
-                    `turns` is newest-first, so `turnIndex` alone shifts every
-                    key each time a turn arrives — which is every turn boundary
-                    — and React would rebuild the whole subtree, losing a text
-                    selection someone was making in an older turn. Subtracting
-                    from the length pins each turn to its position from the far
-                    end, which only moves when a turn is *evicted*: past
-                    `AGENT_LINE_CAP`, far rarer than an append, and with nothing
-                    stateful in these blocks to lose when it does.
-
-                    A content key was tried and is worse on both counts: every
-                    turn opens with the same `ledger_read` line, so it is not
-                    unique without the index — and with the index it is the
-                    index that decides, which is the churn this avoids.
-                  */
+                <TurnBlock
                   key={group.turns.length - turnIndex}
-                  className="pt-0.5"
-                >
-                  {turn.map((line, index) => (
-                    <p
-                      key={index}
-                      className="break-words whitespace-pre-wrap"
-                      /*
-                        `palette` is keyed by every `TermColor`, and
-                        `RunLineColor` is a strict subset of it, so this indexes
-                        without a cast — the same subset relationship a contract
-                        test pins.
-                      */
-                      style={{ color: palette[line.color] }}
-                    >
-                      {line.text}
-                    </p>
-                  ))}
-
-                  {/*
+                  turn={turn}
+                  palette={palette}
+                  /*
                     The anchor the live autoscroll chases, at the end of the
                     newest turn's lines — which is where the newest line is.
                     Only on the newest turn of the group that wrote that line
@@ -697,11 +667,9 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
                     the group being followed has to be the one currently
                     talking, not whichever sorts first. A finished log has
                     nothing to follow and mounts no anchor at all.
-                  */}
-                  {live && groupIndex === anchored && turnIndex === 0 ? (
-                    <div ref={foot} data-testid="run-foot" />
-                  ) : null}
-                </div>
+                  */
+                  footRef={live && groupIndex === anchored && turnIndex === 0 ? foot : null}
+                />
               ))}
             </div>
           ))
@@ -828,6 +796,74 @@ function groupsOf(
 
   return groups;
 }
+
+type RunPalette = ReturnType<typeof useTerminalAppearance>['palette'];
+
+interface TurnBlockProps {
+  turn: readonly TermLine[];
+  palette: RunPalette;
+  /** The live autoscroll anchor, on the newest turn of the talking group only. */
+  footRef: RefObject<HTMLDivElement | null> | null;
+}
+
+/**
+ * One turn of the output, its lines in order.
+ *
+ * Keyed by the caller counted from the **oldest** turn, so appending does not
+ * renumber.
+ *
+ * `turns` is newest-first, so `turnIndex` alone shifts every key each time a
+ * turn arrives — which is every turn boundary — and React would rebuild the
+ * whole subtree, losing a text selection someone was making in an older turn.
+ * Subtracting from the length pins each turn to its position from the far end,
+ * which only moves when a turn is *evicted*: past `AGENT_LINE_CAP`, far rarer
+ * than an append, and with nothing stateful in these blocks to lose when it
+ * does.
+ *
+ * A content key was tried and is worse on both counts: every turn opens with
+ * the same `ledger_read` line, so it is not unique without the index — and with
+ * the index it is the index that decides, which is the churn this avoids.
+ */
+function TurnBlockImpl({ turn, palette, footRef }: TurnBlockProps) {
+  return (
+    <div className="pt-0.5">
+      {turn.map((line, index) => (
+        <p
+          key={index}
+          className="break-words whitespace-pre-wrap"
+          /*
+            `palette` is keyed by every `TermColor`, and `RunLineColor` is a
+            strict subset of it, so this indexes without a cast — the same
+            subset relationship a contract test pins.
+          */
+          style={{ color: palette[line.color] }}
+        >
+          {line.text}
+        </p>
+      ))}
+      {footRef === null ? null : <div ref={footRef} data-testid="run-foot" />}
+    </div>
+  );
+}
+
+/**
+ * Same lines, same objects, in the same order (HIVE-225).
+ *
+ * `groupsOf` rebuilds every turn array on each push, so identity alone would
+ * never match. The store appends without copying line objects, so comparing
+ * the lines one by one is exact: an old turn compares equal and skips its
+ * render, and only the turn that grew reconciles.
+ */
+function sameTurn(a: TurnBlockProps, b: TurnBlockProps): boolean {
+  return (
+    a.palette === b.palette &&
+    a.footRef === b.footRef &&
+    a.turn.length === b.turn.length &&
+    a.turn.every((line, index) => line === b.turn[index])
+  );
+}
+
+const TurnBlock = memo(TurnBlockImpl, sameTurn);
 
 interface LiveRowProps {
   run: LiveRunSummary;
