@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 
-import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-import { launchHive, writeProjectConfig } from './fixtures/hive-app';
+import { launchHive, resizeTo, writeProjectConfig } from './fixtures/hive-app';
 
 /**
  * Round two's list panel in a real window (HIVE-211).
@@ -19,15 +19,6 @@ const bar = (page: Page) => page.getByRole('navigation', { name: 'Places' });
 const sessionsList = (page: Page) => page.getByRole('region', { name: 'Sessions list' });
 const GROUND = { dark: 'rgb(16, 21, 42)', light: 'rgb(253, 253, 251)' } as const;
 const PANEL = { dark: 'rgb(20, 26, 51)', light: 'rgb(255, 255, 255)' } as const;
-
-async function resizeTo(app: ElectronApplication, page: Page, width: number): Promise<void> {
-  await app.evaluate(
-    ({ BrowserWindow }, w: number) =>
-      BrowserWindow.getAllWindows()[0]!.setBounds({ x: 0, y: 0, width: w, height: 800 }),
-    width,
-  );
-  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeLessThanOrEqual(width);
-}
 
 async function open(testInfo: { outputPath: (name: string) => string }) {
   const configPath = testInfo.outputPath('hive-config.json');
