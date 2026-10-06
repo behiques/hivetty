@@ -624,12 +624,12 @@ describe('the badge: what waits on you (HIVE-214)', () => {
     expect(lastBadge()).toBe(2);
   });
 
-  it('never counts Burrowed or Echoes', () => {
-    raise({ id: 'i', kind: 'session.idle' });
-    raise({ id: 'n', kind: 'session.input_needed' });
+  it('counts a session that is yours again, and never Echoes', () => {
     raise({ id: 'm', kind: 'pr.merged' });
-
     expect(lastBadge()).toBe(0);
+
+    raise({ id: 'i', kind: 'session.idle' });
+    expect(lastBadge()).toBe(1);
   });
 
   it('announces nothing for a notification that was dropped', () => {

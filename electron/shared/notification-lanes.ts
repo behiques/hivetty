@@ -20,6 +20,10 @@ export type AskOpen = (thread: string) => boolean;
 
 export const laneOf = (kind: NotificationKind): NotificationLane => NOTIFICATION_KIND_SPECS[kind].lane;
 
+/** A session waiting on you (blocked, or yours again): answered in its terminal, not on a card. */
+export const isSessionSummons = (row: HiveNotification): boolean =>
+  laneOf(row.kind) === 'summons' && NOTIFICATION_KIND_SPECS[row.kind].source === 'session';
+
 /**
  * Does this row wait on the user right now?
  *
@@ -33,8 +37,8 @@ export const waitsOnYou = (row: HiveNotification, isAskOpen: AskOpen): boolean =
  * The buffer's cap, without ever dropping a row that waits on you.
  *
  * Rows arrive newest first. At most {@link NOTIFICATION_CAP} of the rest stay:
- * Echoes leave oldest first, then Burrowed oldest first. A closed ask is news
- * now and leaves with the Echoes. Rows that wait on you are bounded elsewhere —
+ * Echoes leave oldest first, and a closed ask is news now and leaves with
+ * them. Rows that wait on you are bounded elsewhere —
  * the ask TTL and the session sweeps.
  */
 export function trimNotifications(
@@ -46,14 +50,10 @@ export function trimNotifications(
   if (excess <= 0) return [...rows];
 
   const drop = new Set<number>();
-  for (const lane of ['echo', 'burrowed'] as const) {
-    for (let i = rows.length - 1; i >= 0 && excess > 0; i -= 1) {
-      if (waiting[i]) continue;
-      const evicts = laneOf(rows[i].kind) === 'burrowed' ? 'burrowed' : 'echo';
-      if (evicts !== lane) continue;
-      drop.add(i);
-      excess -= 1;
-    }
+  for (let i = rows.length - 1; i >= 0 && excess > 0; i -= 1) {
+    if (waiting[i]) continue;
+    drop.add(i);
+    excess -= 1;
   }
   return rows.filter((_, i) => !drop.has(i));
 }

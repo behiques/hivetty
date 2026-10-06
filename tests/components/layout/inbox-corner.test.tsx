@@ -47,7 +47,7 @@ describe('InboxCorner (HIVE-198)', () => {
     ]);
     useUiStore.getState().pushArrival('s1', false);
     render(<InboxCorner stage={stage()} viewKey="home" />);
-    expect(screen.getByTestId('inbox-live')).toHaveTextContent(/asked a question$/);
+    expect(screen.getByTestId('inbox-live')).toHaveTextContent(/needs approval$/);
   });
 
   it('says nothing while Settings holds the stack back', () => {

@@ -178,7 +178,7 @@ import {
   type ShipTrack,
 } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
-import { trimNotifications, waitsOnYou, type AskOpen } from '@shared/notification-lanes';
+import { isSessionSummons, trimNotifications, waitsOnYou, type AskOpen } from '@shared/notification-lanes';
 import type { PlansSnapshot, SessionPlan } from '@shared/plan-contract';
 import {
   hiveNameFromTitle,
@@ -8956,7 +8956,7 @@ export function summonsOf(
   const summons: Summons = { asks: [], sessions: [] };
   for (const notif of notifs) {
     if (!waitsOnYou(notif, open)) continue;
-    if (notif.kind !== 'session.blocked') summons.asks.push(notif);
+    if (!isSessionSummons(notif)) summons.asks.push(notif);
     else if (!(notif.action.type === 'session' && notif.action.entityId === onStage)) {
       summons.sessions.push(notif);
     }
