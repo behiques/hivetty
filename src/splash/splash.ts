@@ -1,6 +1,8 @@
 import { scheduleCopy } from './chamber';
 import { paletteFrom, startGlobe } from './stage';
 
+import '@/styles/fonts';
+
 import './splash.css';
 
 /**
