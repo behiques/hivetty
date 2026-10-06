@@ -22,7 +22,12 @@ import { TerminalHint } from '@components/ui/terminal-hint';
 import { AgentPage } from '@features/agents/components/agent-page';
 import { AgentsStage } from '@features/agents/components/agents-stage';
 import { EditorPane } from '@features/editor/components/editor-pane';
-import { EditorTabStrip } from '@features/editor/components/editor-tab-strip';
+import {
+  EDITOR_FILE_PANEL,
+  EDITOR_TERMINAL_PANEL,
+  EditorTabStrip,
+  editorTabId,
+} from '@features/editor/components/editor-tab-strip';
 import { HomePage } from '@features/home/components/home-page';
 import { InboxDrawer } from '@features/inbox/components/inbox-drawer';
 import { ConsoleInput } from '@features/orchestrator/components/console-input';
@@ -160,6 +165,8 @@ export function CenterStage() {
   const editorOpen = activeFileKey !== null;
   const editorFull = editorOpen && placement === 'full';
   const splitting = editorOpen && placement === 'split';
+  /** The open-files strip is showing, so the regions it switches between are its tabpanels (HIVE-225). */
+  const tabbed = hasOpenFiles && nav === 'tabs';
   const home = place === 'home';
   const work = place === 'work';
   const agents = place === 'agents';
@@ -446,6 +453,9 @@ export function CenterStage() {
               editorFull && 'hidden',
               !splitting && !editorFull && 'flex-1',
             )}
+            {...(tabbed && placement === 'full'
+              ? { role: 'tabpanel', id: EDITOR_TERMINAL_PANEL, 'aria-labelledby': editorTabId(null) }
+              : {})}
             /*
               `flex: 0 0 <ratio>%` rather than a width or a height: the same
               declaration divides the container on either axis, so the split
@@ -703,7 +713,12 @@ export function CenterStage() {
             `ResizeObserver` and a document alive to show nothing.
           */}
           {editorOpen ? (
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div
+              className="flex min-h-0 min-w-0 flex-1 flex-col"
+              {...(tabbed && activeFileKey !== null
+                ? { role: 'tabpanel', id: EDITOR_FILE_PANEL, 'aria-labelledby': editorTabId(activeFileKey) }
+                : {})}
+            >
               <EditorPane />
             </div>
           ) : null}
