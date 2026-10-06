@@ -388,3 +388,11 @@ describe('radius — Tailwind’s scale, nothing arbitrary (HIVE-224)', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('tints — one map, in srgb (HIVE-224)', () => {
+  it.each(['green', 'amber', 'red', 'brand'])('binds %s’s three steps to the live token', (hue) => {
+    expect(tokensCss).toContain(`--color-${hue}-soft: color-mix(in srgb, var(--cc-${hue}) 10%, transparent);`);
+    expect(tokensCss).toContain(`--color-${hue}-strong: color-mix(in srgb, var(--cc-${hue}) 16%, transparent);`);
+    expect(tokensCss).toContain(`--color-${hue}-edge: color-mix(in srgb, var(--cc-${hue}) 50%, var(--cc-border));`);
+  });
+});

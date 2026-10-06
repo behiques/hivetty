@@ -350,6 +350,24 @@ body[data-theme='light'] {
   --color-danger-solid: var(--cc-danger-solid);
   --color-on-danger: var(--cc-on-danger);
   /**
+   * Status tints (HIVE-224): one map, mixed in srgb from the live tokens, so a
+   * theme recolours them. `soft` washes a line or a banner, `strong` fills a
+   * pill or a badge, `edge` is a tinted border or stroke. Data-viz fills,
+   * glows and gradients keep their own mix (DESIGN-SYSTEM.md, "Status → colour").
+   */
+  --color-green-soft: color-mix(in srgb, var(--cc-green) 10%, transparent);
+  --color-green-strong: color-mix(in srgb, var(--cc-green) 16%, transparent);
+  --color-green-edge: color-mix(in srgb, var(--cc-green) 50%, var(--cc-border));
+  --color-amber-soft: color-mix(in srgb, var(--cc-amber) 10%, transparent);
+  --color-amber-strong: color-mix(in srgb, var(--cc-amber) 16%, transparent);
+  --color-amber-edge: color-mix(in srgb, var(--cc-amber) 50%, var(--cc-border));
+  --color-red-soft: color-mix(in srgb, var(--cc-red) 10%, transparent);
+  --color-red-strong: color-mix(in srgb, var(--cc-red) 16%, transparent);
+  --color-red-edge: color-mix(in srgb, var(--cc-red) 50%, var(--cc-border));
+  --color-brand-soft: color-mix(in srgb, var(--cc-brand) 10%, transparent);
+  --color-brand-strong: color-mix(in srgb, var(--cc-brand) 16%, transparent);
+  --color-brand-edge: color-mix(in srgb, var(--cc-brand) 50%, var(--cc-border));
+  /**
    * The code roles are bound here too, even though CodeMirror reaches them as
    * `var(--cc-code-*)` directly rather than through a utility. The editor's
    * *chrome* — the gutter, the tab strip, the conflict banner — is ordinary
