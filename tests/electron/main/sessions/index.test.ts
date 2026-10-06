@@ -3613,6 +3613,46 @@ describe('terminals', () => {
     expect(sent.indexOf(lost)).toBeLessThan(terminated);
   });
 
+  it('reports nothing lost for a session the app killed itself (SIGHUP)', () => {
+    sessions.open(OPEN);
+    const sessionId = mintedFor('hero-refresh');
+
+    sessions.kill('hero-refresh');
+    emitExit({ sessionId, exitCode: 129, signal: 1 });
+
+    expect(on(CH.sessionTerminalEnded)).toHaveLength(0);
+  });
+
+  it('reports nothing lost while a restart kills the old generation', async () => {
+    sessions.open(OPEN);
+    const first = mintedFor('hero-refresh');
+
+    const restarted = sessions.restart(OPEN);
+    await Promise.resolve();
+    emitExit({ sessionId: first, exitCode: 129, signal: 1 });
+    vi.advanceTimersByTime(8);
+    await restarted;
+
+    expect(on(CH.sessionTerminalEnded)).toHaveLength(0);
+  });
+
+  it('still reports lost for an unasked kill after an earlier app kill', async () => {
+    sessions.open(OPEN);
+    const first = mintedFor('hero-refresh');
+    const restarted = sessions.restart(OPEN);
+    await Promise.resolve();
+    emitExit({ sessionId: first, exitCode: 129, signal: 1 });
+    vi.advanceTimersByTime(8);
+    await restarted;
+
+    emitExit({ sessionId: spawned[1]!.sessionId, exitCode: 137, signal: 9 });
+
+    expect(on(CH.sessionTerminalEnded).at(-1)!.payload).toEqual({
+      entityId: 'hero-refresh',
+      ending: { kind: 'lost', reason: 'its process was killed by signal 9' },
+    });
+  });
+
   it('says nothing for a session that exits cleanly, as /exit does', () => {
     sessions.open(OPEN);
     emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 0, signal: 0 });

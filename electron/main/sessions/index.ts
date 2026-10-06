@@ -1442,10 +1442,12 @@ export function createSessions(options: SessionsOptions): Sessions {
    * renderer knows why when the ending lands, and keeps the ended card over
    * the terminal instead of leaving for the Overmind as a clean `/exit` does.
    * Not for a session that declared `/done`: the force-kill after a wedged
-   * `/exit` is still the user's ending.
+   * `/exit` is still the user's ending. Nor for one the app killed itself
+   * ({@link appKilled}): a restart or a close hangs the pty up with SIGHUP, and
+   * the exit that follows reports that signal.
    */
   function sessionLost(entityId: string, reason: string): void {
-    if (declaredDone(entityId)) return;
+    if (declaredDone(entityId) || appKilled.has(entityId)) return;
     send(CH.sessionTerminalEnded, { entityId, ending: { kind: 'lost', reason } } satisfies SessionTerminalEndedEvent);
   }
 
@@ -1493,6 +1495,20 @@ export function createSessions(options: SessionsOptions): Sessions {
    * pty cannot make, now supplied by whoever typed `/done`.
    */
   const finishing = new Map<string, ReturnType<typeof setTimeout> | null>();
+
+  /**
+   * Sessions whose pty the app is killing on purpose — a restart, a close. The
+   * exit that follows carries the signal the app sent, which is not a loss.
+   * Cleared when the exit settles, so an unasked kill of the next generation
+   * still keeps its ended card.
+   */
+  const appKilled = new Set<string>();
+
+  /** Kill a session's pty at the app's own request. */
+  function killOnPurpose(entityId: string, sessionId: string): void {
+    appKilled.add(entityId);
+    ptyIpc.kill(sessionId);
+  }
 
   /** Whether this session has declared itself finished. */
   const declaredDone = (entityId: string): boolean => finishing.has(entityId);
@@ -1813,6 +1829,7 @@ export function createSessions(options: SessionsOptions): Sessions {
    * for that session id undeliverable.
    */
   function settleExit(entityId: string): void {
+    appKilled.delete(entityId);
     bootstrap.cancel(entityId);
     heldInput.delete(entityId);
     /**
@@ -2001,6 +2018,7 @@ export function createSessions(options: SessionsOptions): Sessions {
          * to prevent, arrived at by way of a safety net.
          */
         setTimeout(() => {
+          appKilled.delete(request.entityId);
           reject(
             new Error(
               `restart: ${request.entityId} did not exit within ${RESTART_EXIT_TIMEOUT_MS}ms — its process may still be running`,
@@ -2009,7 +2027,7 @@ export function createSessions(options: SessionsOptions): Sessions {
         }, RESTART_EXIT_TIMEOUT_MS);
       });
 
-      ptyIpc.kill(sessionId);
+      killOnPurpose(request.entityId, sessionId);
       await exit;
     }
 
@@ -2862,7 +2880,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       if (sessionId === undefined) return;
       // The transcript stays readable — killing ends the process, it does not
       // clear the terminal.
-      ptyIpc.kill(sessionId);
+      killOnPurpose(entityId, sessionId);
     },
 
     restart(request) {
