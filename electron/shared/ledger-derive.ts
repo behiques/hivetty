@@ -734,7 +734,8 @@ export function matches(entry: LedgerEntry, query: LedgerReadQuery): boolean {
  * A short ref, or a canonical id, to a canonical id.
  *
  * Accepting both is what lets one call site serve a human typing `a12` in the
- * console and a model echoing back the id it read.
+ * console and a model echoing back the id it read. A ref matches in any case:
+ * refs are minted lowercase, but `A12` is the same handle to whoever types it.
  */
 export function resolveRef(
   entries: readonly LedgerEntry[],
@@ -743,8 +744,9 @@ export function resolveRef(
   for (const entry of entries) {
     if (entry.id === refOrId) return entry.id;
   }
+  const ref = refOrId.toLowerCase();
   for (const entry of entries) {
-    if (entry.ref === refOrId) return entry.id;
+    if (entry.ref?.toLowerCase() === ref) return entry.id;
   }
   return undefined;
 }
