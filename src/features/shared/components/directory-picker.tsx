@@ -157,7 +157,7 @@ export function DirectoryPicker({
         utilities after unprefixed ones — so an unprefixed cap loses above
         640px and the dialog renders 512px wide.
       */}
-      <DialogContent className="gap-0 border-border bg-panel p-0 sm:max-w-[420px]">
+      <DialogContent className="gap-0 p-0 sm:max-w-[420px]">
         <DialogHeader className="gap-[7px] border-b border-border-soft px-3.5 pt-3 pb-2.5">
           <DialogTitle className="text-[13px] font-semibold text-ink">
             {title}
