@@ -85,7 +85,10 @@ describe('TerminalMenu', () => {
 
     const missing = screen.getByRole('menuitem', { name: /missing/ });
     expect(missing).toHaveAttribute('aria-disabled', 'true');
-    expect(missing).toHaveAttribute('title', expect.stringContaining('config.json'));
+    // Visible text, not a `title`: a disabled item has pointer-events off, so a tooltip never shows.
+    expect(missing).toHaveTextContent('config.json');
+    expect(missing).not.toHaveAttribute('title');
+    expect(screen.getByRole('menuitem', { name: /boxed · host/ })).not.toHaveTextContent('config.json');
     expect(screen.getByRole('menuitem', { name: /boxed · host/ })).toBeInTheDocument();
   });
 });

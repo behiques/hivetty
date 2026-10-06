@@ -59,9 +59,13 @@ function TerminalMenuItem({ project, onSelect }: { project: ProjectRow; onSelect
   const containerised = useProjectContainerised(project.id);
 
   return (
-    <DropdownMenuItem disabled={!access.spawnable} title={access.reason ?? undefined} onSelect={() => onSelect(project.id)}>
+    <DropdownMenuItem disabled={!access.spawnable} onSelect={() => onSelect(project.id)}>
       <Icon name={project.icon} size={13} className="text-brand" />
-      <span className="min-w-0 flex-1 truncate">{containerised ? `${project.name} · host` : project.name}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{containerised ? `${project.name} · host` : project.name}</span>
+        {/* Visible text, not a `title`: a disabled item has pointer-events off, so a tooltip would never show. */}
+        {access.reason && <span className="block text-micro text-subtle">{access.reason}</span>}
+      </span>
       <span className="text-micro text-subtle">{project.key}</span>
     </DropdownMenuItem>
   );
