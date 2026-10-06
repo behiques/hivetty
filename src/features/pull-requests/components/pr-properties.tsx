@@ -73,7 +73,7 @@ export function CheckRow({ check, onOpen }: { check: PrCheck; onOpen?: (check: P
       <CheckIcon status={check.status} />
       <span data-testid="check-name" className="tabular-nums text-ink">{check.name}</span>
       <span className="flex-1" />
-      <span className="tabular-nums text-[11.5px] text-muted">{checkTime(check, Date.now())}</span>
+      <span className="tabular-nums text-ui-sm text-muted">{checkTime(check, Date.now())}</span>
     </>
   );
   if (onOpen !== undefined) {

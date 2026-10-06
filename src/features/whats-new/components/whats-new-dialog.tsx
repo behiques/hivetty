@@ -93,7 +93,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
             <p id={`${id}-body`} className="max-w-[min(46ch,calc(100%-190px))] text-[13.5px] leading-[1.6] text-muted">
               {slide.body}
             </p>
-            <ul className="mt-3 grid gap-1.5 text-[13px] text-ink">
+            <ul className="mt-3 grid gap-1.5 text-ui text-ink">
               {slide.points.map((point) => (
                 <li key={point} className="flex items-baseline gap-2.5">
                   <span

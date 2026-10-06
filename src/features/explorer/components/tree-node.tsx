@@ -174,7 +174,7 @@ export function TreeNode({
           {children.error ? (
             <p
               style={{ paddingLeft: `${8 + (depth + 1) * 12 + 17}px` }}
-              className="py-[3px] text-[11.5px] text-amber-text"
+              className="py-[3px] text-ui-sm text-amber-text"
             >
               {children.error}
             </p>
@@ -183,7 +183,7 @@ export function TreeNode({
           {!children.error && children.entries?.length === 0 ? (
             <p
               style={{ paddingLeft: `${8 + (depth + 1) * 12 + 17}px` }}
-              className="py-[3px] text-[11.5px] text-subtle"
+              className="py-[3px] text-ui-sm text-subtle"
             >
               Empty folder.
             </p>
@@ -192,7 +192,7 @@ export function TreeNode({
           {children.loading && children.entries === null ? (
             <p
               style={{ paddingLeft: `${8 + (depth + 1) * 12 + 17}px` }}
-              className="py-[3px] text-[11.5px] text-subtle"
+              className="py-[3px] text-ui-sm text-subtle"
             >
               {readingPhrase}
             </p>

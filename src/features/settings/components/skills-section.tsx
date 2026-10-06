@@ -851,8 +851,8 @@ export function SkillsSection() {
         */}
         <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
           <SwarmCreature creature="spire" size={120} className="mb-9" />
-          <span className="text-[11.5px] text-muted">{phrase}</span>
-          <span className="text-[11.5px] text-subtle">
+          <span className="text-ui-sm text-muted">{phrase}</span>
+          <span className="text-ui-sm text-subtle">
             Write one and every session you start will have it.
           </span>
         </div>
@@ -860,7 +860,7 @@ export function SkillsSection() {
         {error === null ? null : (
           <p
             role="alert"
-            className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+            className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
           >
             {error}
           </p>
@@ -912,7 +912,7 @@ export function SkillsSection() {
       {invalid.map((skill) => (
         <p
           key={skill.name}
-          className="rounded-[5px] border border-amber px-2.5 py-1.5 text-[11.5px] text-amber-text"
+          className="rounded-[5px] border border-amber px-2.5 py-1.5 text-ui-sm text-amber-text"
         >
           {skill.name}: {skill.reason}
         </p>
@@ -921,7 +921,7 @@ export function SkillsSection() {
       {error === null ? null : (
         <p
           role="alert"
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -1041,7 +1041,7 @@ export function SkillsSection() {
             </>
           )}
           {buffer === null ? (
-            <div className="flex flex-1 items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-[11.5px] text-subtle">
+            <div className="flex flex-1 items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-ui-sm text-subtle">
               {drilled === null
                 ? 'Select a skill, or write a new one.'
                 : 'Select a file, or add one.'}

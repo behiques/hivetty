@@ -62,13 +62,13 @@ export function SessionEndedCover({ session }: { session: Session }) {
         >
           <X size={12} weight="bold" aria-hidden />
         </button>
-        <h2 className="text-[15px] font-semibold text-ink">This session ended</h2>
-        <p className="mt-1.5 text-[13px] text-muted">{reason}</p>
+        <h2 className="text-ui-lg font-semibold text-ink">This session ended</h2>
+        <p className="mt-1.5 text-ui text-muted">{reason}</p>
         {session.endedAt === undefined ? null : (
-          <p className="text-[13px] text-muted">{`It ended ${ageLabel(Date.now() - session.endedAt)} ago.`}</p>
+          <p className="text-ui text-muted">{`It ended ${ageLabel(Date.now() - session.endedAt)} ago.`}</p>
         )}
         {resumable ? (
-          <p className="mt-1.5 text-[13px] text-muted">
+          <p className="mt-1.5 text-ui text-muted">
             Its transcript is on disk, so it can carry on where it stopped.
           </p>
         ) : null}

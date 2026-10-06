@@ -80,8 +80,8 @@ export function AgentPage({ name }: { name: string | null }) {
       <header className="flex shrink-0 items-center gap-3 border-b border-border-soft bg-panel px-5 py-3">
         <Icon name={agent?.icon ?? 'ph-robot'} size={20} className="shrink-0 text-subtle" />
         <span className="flex max-w-[420px] min-w-0 flex-col">
-          <span className="truncate tabular-nums text-[13px] font-semibold">{name ?? 'New agent'}</span>
-          <span className="truncate font-sans text-[11.5px] text-muted">{agent?.sub ?? 'not saved yet'}</span>
+          <span className="truncate tabular-nums text-ui font-semibold">{name ?? 'New agent'}</span>
+          <span className="truncate font-sans text-ui-sm text-muted">{agent?.sub ?? 'not saved yet'}</span>
         </span>
         <span className="flex-1" />
         <SegmentedControl

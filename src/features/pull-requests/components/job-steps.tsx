@@ -49,7 +49,7 @@ export function JobSteps({ job, canRerun, onRerun, holder }: { job: RunJob; canR
               <StateIcon state={stepState} />
               <span className="truncate text-ink">{step.name}</span>
               <span className="flex-1" />
-              <span className="tabular-nums text-[11.5px] text-muted">{timeText(stepState === 'failed' ? 'passed' : stepState, step.startedAt, step.completedAt, now)}</span>
+              <span className="tabular-nums text-ui-sm text-muted">{timeText(stepState === 'failed' ? 'passed' : stepState, step.startedAt, step.completedAt, now)}</span>
             </li>
           );
         })}

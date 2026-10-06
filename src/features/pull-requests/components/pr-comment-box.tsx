@@ -41,7 +41,7 @@ export function PrCommentBox({ pr }: { pr: Pr }) {
         onChange={(event) => setDraft(event.target.value)}
         aria-label={label}
         placeholder={`${label}…`}
-        className="resize-y bg-transparent text-[13px] text-ink outline-none placeholder:text-subtle"
+        className="resize-y bg-transparent text-ui text-ink outline-none placeholder:text-subtle"
       />
       <div className="flex items-center gap-2.5 text-[12px]">
         <span className="rounded-md border border-border-soft px-2 py-0.5 text-ink">Comment on GitHub</span>

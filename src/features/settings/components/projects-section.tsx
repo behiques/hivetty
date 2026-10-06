@@ -75,8 +75,8 @@ export function ProjectsSection() {
       {declared.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
           <SwarmCreature creature="overlord" size={120} className="mb-9" />
-          <span className="text-[11.5px] text-muted">{phrase}</span>
-          <span className="text-[11.5px] text-subtle">
+          <span className="text-ui-sm text-muted">{phrase}</span>
+          <span className="text-ui-sm text-subtle">
             Add a folder to start a session in it.
           </span>
         </div>
@@ -93,7 +93,7 @@ export function ProjectsSection() {
       {snapshot?.errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>

@@ -98,7 +98,7 @@ function ReviewItem({ review, viaHive }: { review: PrReview; viaHive: boolean })
         verdict={VERDICT[review.state] ?? [review.state.toLowerCase(), 'text-muted bg-chip']}
       />
       {review.body.trim() === '' ? null : (
-        <div className="pl-[46px] text-[13px]">
+        <div className="pl-[46px] text-ui">
           <Markdown source={review.body} />
         </div>
       )}
@@ -191,7 +191,7 @@ export function PrConversation({
     <div className="flex flex-col gap-3">
       <div className="pt-3 pb-1">
         {detail.body.trim() === '' ? (
-          <p className="text-[13px] text-subtle">No description.</p>
+          <p className="text-ui text-subtle">No description.</p>
         ) : (
           <Markdown source={detail.body} />
         )}
@@ -213,7 +213,7 @@ export function PrConversation({
               {item.kind === 'comment' ? (
                 <>
                   <Said author={item.comment.author ?? 'ghost'} via={false} at={item.comment.createdAt} />
-                  <div className="pl-[46px] text-[13px]">
+                  <div className="pl-[46px] text-ui">
                     <Markdown source={item.comment.body} />
                   </div>
                 </>

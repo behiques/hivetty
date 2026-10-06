@@ -72,10 +72,10 @@ function SessionLine({ session }: { session: Session }) {
       */}
       {/* 96px at the narrowest step: beside both rails at 1200px the content box is 452px (the rails' grip gutters, #71), and the chip's last step needs 195. */}
       <span className="flex min-w-[140px] flex-1 basis-0 flex-col @max-[500px]:min-w-[96px]">
-        <span className="truncate text-[13px] font-semibold text-ink" title={session.task}>
+        <span className="truncate text-ui font-semibold text-ink" title={session.task}>
           {entityLabel(session)}
         </span>
-        <span className="truncate tabular-nums text-[11.5px] text-muted">
+        <span className="truncate tabular-nums text-ui-sm text-muted">
           {session.project} · {branchLabel(session)}
         </span>
       </span>
@@ -109,10 +109,10 @@ function TerminalLine({ terminal }: { terminal: Terminal }) {
     <>
       <TerminalGlyph size={20} aria-hidden="true" className="shrink-0 text-muted" />
       <span className="flex min-w-0 flex-col">
-        <span className="truncate tabular-nums text-[13px] font-semibold text-ink" title={entityLabel(terminal)}>
+        <span className="truncate tabular-nums text-ui font-semibold text-ink" title={entityLabel(terminal)}>
           {entityLabel(terminal)}
         </span>
-        <span className="truncate tabular-nums text-[11.5px] text-muted">
+        <span className="truncate tabular-nums text-ui-sm text-muted">
           {terminal.project} · {cwdTail(terminal.cwd)}
         </span>
       </span>

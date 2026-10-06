@@ -391,7 +391,7 @@ export function SkillBundle({
             onClick={() => {
               setAdding(false);
             }}
-            className="border-t border-border-soft px-2.5 py-1.5 text-left text-[11.5px] text-subtle hover:bg-hover"
+            className="border-t border-border-soft px-2.5 py-1.5 text-left text-ui-sm text-subtle hover:bg-hover"
           >
             Cancel
           </button>

@@ -70,7 +70,7 @@ function LatestComment({ ticketKey }: { ticketKey: string }) {
   if (comment === undefined) return null;
   return (
     <Section title="Latest comment">
-      <p className="text-[11.5px] font-semibold text-ink">{`${comment.author} · ${commentTime(comment.created)}`}</p>
+      <p className="text-ui-sm font-semibold text-ink">{`${comment.author} · ${commentTime(comment.created)}`}</p>
       <div className="flex flex-col gap-1.5 text-[12.5px] text-muted">
         <AdfBlocks blocks={comment.body} />
       </div>
@@ -217,7 +217,7 @@ export function TicketTab({ ticketKey, sessionId }: { ticketKey: string; session
   return (
     <div className="flex flex-col gap-4 px-1 pt-1 pb-3">
       <header className="flex flex-col gap-1">
-        <p className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted">
+        <p className="flex flex-wrap items-center gap-1.5 text-ui-sm text-muted">
           <span className="tabular-nums font-bold text-brand">{ticketKey}</span>
           {ticket?.issueType ? <span>{`· ${ticket.issueType} ·`}</span> : <span>·</span>}
           {ticket ? (

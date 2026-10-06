@@ -204,14 +204,14 @@ export function JiraCredentialGroup({
             </div>
           </>
         ) : (
-          <p className="text-[11.5px] text-subtle">
+          <p className="text-ui-sm text-subtle">
             Hive TTY will not write a token in plaintext instead. Set{' '}
             <code className="font-mono">{JIRA_TOKEN_ENV}</code> in this
             app&rsquo;s environment and restart it.
           </p>
         )}
 
-        <p className="text-[11.5px] text-subtle">
+        <p className="text-ui-sm text-subtle">
           Encrypted with a key the operating system holds, in this app&rsquo;s
           own data folder — never in{' '}
           <code className="font-mono">~/.hive/config.json</code>, which you are
@@ -231,7 +231,7 @@ export function JiraCredentialGroup({
           >
             {testing ? testingPhrase : 'Test connection'}
           </Button>
-          <span className="text-[11.5px] text-subtle">
+          <span className="text-ui-sm text-subtle">
             Calls <code className="font-mono">/rest/api/3/myself</code>.
           </span>
         </div>

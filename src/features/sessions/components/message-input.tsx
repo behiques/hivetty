@@ -114,7 +114,7 @@ export function MessageInput({ entityId, inputRef }: MessageInputProps) {
       down the side of a grown message and stops reading as a prompt.
     */
     <div data-stage-input="" className="flex shrink-0 items-start gap-2.5 border-t border-border-soft bg-term-input px-[18px] py-2.5">
-      <span className="shrink-0 font-mono text-[13px] text-green">
+      <span className="shrink-0 font-mono text-ui text-green">
         {`${entityId} ❯`}
       </span>
       <textarea

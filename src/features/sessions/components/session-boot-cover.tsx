@@ -80,12 +80,12 @@ export function SessionBootCover() {
           talking over whatever the user is doing.
         */
         aria-live="polite"
-        className="font-mono text-[13px] text-muted"
+        className="font-mono text-ui text-muted"
       >
         {phrase}
       </p>
 
-      <p className="font-mono text-[11.5px] text-term-head">
+      <p className="font-mono text-ui-sm text-term-head">
         press any key to watch it boot
       </p>
     </div>

@@ -433,7 +433,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
         {meta()}
         <span className={titleClass}>{notif.title}</span>
         {notif.body === '' ? null : (
-          <span className="text-[11.5px] leading-[1.4] text-muted">{notif.body}</span>
+          <span className="text-ui-sm leading-[1.4] text-muted">{notif.body}</span>
         )}
       </>,
     );
@@ -476,7 +476,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
           {detail}
         </pre>
       ) : (
-        <span className="text-[11.5px] leading-[1.4] text-muted">{detail}</span>
+        <span className="text-ui-sm leading-[1.4] text-muted">{detail}</span>
       )}
 
       {/*

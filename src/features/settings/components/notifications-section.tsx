@@ -106,7 +106,7 @@ function DeliveryControl({
     <div className="flex items-start justify-between gap-4 py-1.5">
       <div className="flex min-w-0 flex-col">
         <span className="text-[12.5px] text-ink">{spec.label}</span>
-        <span className="text-[11.5px] leading-[1.4] text-subtle">
+        <span className="text-ui-sm leading-[1.4] text-subtle">
           {spec.description}
         </span>
       </div>

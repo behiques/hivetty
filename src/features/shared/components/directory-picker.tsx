@@ -160,7 +160,7 @@ export function DirectoryPicker({
       */}
       <DialogContent className="gap-0 p-0 sm:max-w-[420px]">
         <DialogHeader className="gap-[7px] border-b border-border-soft px-3.5 pt-3 pb-2.5">
-          <DialogTitle className="text-[13px] font-semibold text-ink">
+          <DialogTitle className="text-ui font-semibold text-ink">
             {title}
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -183,7 +183,7 @@ export function DirectoryPicker({
                     type="button"
                     onClick={() => void browse(crumb.path)}
                     aria-current={index === crumbs.length - 1 ? 'true' : undefined}
-                    className="rounded-[3px] px-1.5 py-0.5 text-[11.5px] text-muted hover:bg-hover hover:text-ink aria-[current]:font-semibold aria-[current]:text-ink"
+                    className="rounded-[3px] px-1.5 py-0.5 text-ui-sm text-muted hover:bg-hover hover:text-ink aria-[current]:font-semibold aria-[current]:text-ink"
                   >
                     {crumb.label}
                   </button>
@@ -208,12 +208,12 @@ export function DirectoryPicker({
         */}
         <div aria-busy={busy} className="max-h-56 overflow-y-auto p-1.5">
           {failure !== null && (
-            <p role="status" className="px-2 py-1.5 text-[11.5px] text-red">
+            <p role="status" className="px-2 py-1.5 text-ui-sm text-red">
               {failure}
             </p>
           )}
           {listing !== null && listing.entries.length === 0 && failure === null && (
-            <p className="flex items-center gap-2 px-2 py-1.5 text-[11.5px] text-subtle">
+            <p className="flex items-center gap-2 px-2 py-1.5 text-ui-sm text-subtle">
               <FolderOpen aria-hidden="true" className="size-3.5 shrink-0" />
               No folders here. You can still use this one.
             </p>

@@ -71,7 +71,7 @@ export function PlanTab({
             <li
               key={task.id}
               className={cn(
-                'flex items-start gap-2.5 px-1 py-2 text-[13px]',
+                'flex items-start gap-2.5 px-1 py-2 text-ui',
                 current && 'rounded-lg bg-active px-2',
               )}
             >

@@ -21,7 +21,7 @@ export function PrCounts() {
             key={flap}
             className={cn('flex items-baseline gap-1', count === 0 ? 'text-subtle' : FLAP_TEXT[tone])}
           >
-            <b className="text-[13px]">{count}</b>
+            <b className="text-ui">{count}</b>
             <span>{flap}</span>
           </span>
         ))}

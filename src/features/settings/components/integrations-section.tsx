@@ -122,7 +122,7 @@ function TokenSourceLine({ gh }: { gh: GhStatus }) {
 function NotFoundReason({ loginEnv }: { loginEnv: LoginEnvStatus }) {
   if (loginEnv.error !== null) {
     return (
-      <p className="text-[11.5px] text-subtle">
+      <p className="text-ui-sm text-subtle">
         This app searched the <code className="font-mono">PATH</code> it was
         launched with, not your shell&rsquo;s — the import did not run.{' '}
         <strong className="font-normal text-muted">
@@ -135,7 +135,7 @@ function NotFoundReason({ loginEnv }: { loginEnv: LoginEnvStatus }) {
 
   if (!loginEnv.enabled) {
     return (
-      <p className="text-[11.5px] text-subtle">
+      <p className="text-ui-sm text-subtle">
         This app searched the <code className="font-mono">PATH</code> it was
         launched with — for a desktop app opened from Finder, launchd&rsquo;s
         four entries rather than your shell&rsquo;s. Switch the login-shell
@@ -149,7 +149,7 @@ function NotFoundReason({ loginEnv }: { loginEnv: LoginEnvStatus }) {
 
   // Enabled, and the probe succeeded — whether or not it had anything to add.
   return (
-    <p className="text-[11.5px] text-subtle">
+    <p className="text-ui-sm text-subtle">
       This app searched your login shell&rsquo;s own{' '}
       <code className="font-mono">PATH</code>
       {loginEnv.imported ? ', imported at startup' : ''} — the same one a
@@ -195,7 +195,7 @@ function GhSummary({
       </p>
 
       {gh.error === null ? null : (
-        <p className="text-[11.5px] text-amber-text">
+        <p className="text-ui-sm text-amber-text">
           Asking <code className="font-mono">gh</code> about its auth status failed:{' '}
           {gh.error}
         </p>
@@ -296,7 +296,7 @@ export function IntegrationsSection() {
       {snapshot.errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -313,7 +313,7 @@ export function IntegrationsSection() {
             ) : (
               <TokenSourceLine gh={status.gh} />
             )}
-            <p className="text-[11.5px] text-subtle">
+            <p className="text-ui-sm text-subtle">
               The pull-request list is still sample data — nothing in the app calls
               GitHub yet. This reports which source would be used when it does. The
               Hive <strong className="font-normal text-muted">does not store a token</strong>;

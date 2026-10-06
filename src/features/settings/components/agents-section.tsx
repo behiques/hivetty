@@ -86,8 +86,8 @@ export function AgentsSection() {
 
         <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
           <SwarmCreature creature="mutalisk" size={120} className="mb-9" />
-          <span className="text-[11.5px] text-muted">{phrase}</span>
-          <span className="text-[11.5px] text-subtle">
+          <span className="text-ui-sm text-muted">{phrase}</span>
+          <span className="text-ui-sm text-subtle">
             Write one and it will be listed here, asleep until the waker lands.
           </span>
         </div>
@@ -173,7 +173,7 @@ export function AgentsSection() {
         </div>
 
         {open === null ? (
-          <div className="flex items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-[11.5px] text-subtle">
+          <div className="flex items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-ui-sm text-subtle">
             Select an agent, or write a new one.
           </div>
         ) : (

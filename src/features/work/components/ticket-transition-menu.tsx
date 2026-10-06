@@ -230,7 +230,7 @@ export function TicketTransitionMenu({
             {/* Jira's own words, naming the field it wanted. Guessing a
                 resolution on the user's behalf is exactly what not to do. */}
             {state.details?.map((detail) => (
-              <p key={detail} className="text-[11.5px] text-subtle">
+              <p key={detail} className="text-ui-sm text-subtle">
                 {detail}
               </p>
             ))}

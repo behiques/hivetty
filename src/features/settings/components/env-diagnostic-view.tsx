@@ -30,7 +30,7 @@ export function EnvDiagnosticView({ diagnostic }: EnvDiagnosticViewProps) {
   return (
     <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
       <div className="flex flex-col gap-1">
-        <span className="text-[11.5px] text-muted">Ran</span>
+        <span className="text-ui-sm text-muted">Ran</span>
         <code className="rounded-[5px] bg-chip px-2 py-1.5 font-mono text-[11px] break-all text-muted">
           {shell} {ENV_PROBE_ARGS.join(' ')}
         </code>
@@ -55,7 +55,7 @@ export function EnvDiagnosticView({ diagnostic }: EnvDiagnosticViewProps) {
           <span className="text-amber-text">Could not probe this shell: {error}</span>
         </p>
       ) : vars.length === 0 ? (
-        <p className="text-[11.5px] text-subtle">
+        <p className="text-ui-sm text-subtle">
           No environment variables are configured for this shell.
         </p>
       ) : (
@@ -76,7 +76,7 @@ export function EnvDiagnosticView({ diagnostic }: EnvDiagnosticViewProps) {
               </p>
               {verdict.overridden ? (
                 <div className="flex flex-col gap-1 pl-[22px]">
-                  <p className="text-[11.5px] text-subtle">
+                  <p className="text-ui-sm text-subtle">
                     {verdict.actual === null ? (
                       <>
                         dropped by your rc file — the shell reported no such
@@ -94,7 +94,7 @@ export function EnvDiagnosticView({ diagnostic }: EnvDiagnosticViewProps) {
                    * tone: name the likely cause and what to do about it,
                    * rather than stating the fact and stopping.
                    */}
-                  <p className="text-[11.5px] text-subtle">
+                  <p className="text-ui-sm text-subtle">
                     This is usually your shell&rsquo;s rc file —{' '}
                     <code className="font-mono">.zshrc</code>,{' '}
                     <code className="font-mono">.bash_profile</code>, or

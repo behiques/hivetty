@@ -169,7 +169,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
       {phase === 'compose' ? (
         <>
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="clone-url" className="text-[11.5px] text-muted">
+            <label htmlFor="clone-url" className="text-ui-sm text-muted">
               Repository URL
             </label>
             <input
@@ -185,7 +185,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <span className="text-[11.5px] text-muted">Clone into</span>
+            <span className="text-ui-sm text-muted">Clone into</span>
             <div className="flex items-stretch gap-2">
               <span className="flex-1 truncate rounded-md border border-border bg-bg px-2.5 py-1.5 text-[12.5px] text-ink">
                 {parentPath ?? (
@@ -210,7 +210,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
             this only says what that will be.
           */}
           {ready ? (
-            <p className="text-[11.5px] text-subtle">
+            <p className="text-ui-sm text-subtle">
               Creates <span className="text-green">{parentPath}/{preview}</span>
             </p>
           ) : null}
@@ -218,7 +218,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
       ) : null}
 
       {error !== null ? (
-        <p className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red">
+        <p className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red">
           {error}
         </p>
       ) : null}

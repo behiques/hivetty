@@ -187,8 +187,8 @@ export function ThemeGallery() {
     <section className="flex flex-col gap-3 border-b border-border-soft pb-5 last:border-b-0 last:pb-0">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
-          <h3 className="text-[13px] font-semibold text-ink">Themes</h3>
-          <p className="text-[11.5px] text-subtle">
+          <h3 className="text-ui font-semibold text-ink">Themes</h3>
+          <p className="text-ui-sm text-subtle">
             Every theme carries a light and a dark mode. The switch below picks
             which one you see.
           </p>

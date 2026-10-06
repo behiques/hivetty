@@ -228,7 +228,7 @@ export function NewSessionPicker() {
                   ? 'Start a new session'
                   : `Start a session for ${pickerTicket}`}
               </DialogPrimitive.Title>
-              <span className="text-[13px] text-subtle">
+              <span className="text-ui text-subtle">
                 {ticket?.title ??
                   'Pick a project — a Claude Code terminal will open for it'}
               </span>
@@ -248,10 +248,10 @@ export function NewSessionPicker() {
         {noProjects ? (
           <div className="flex max-w-[560px] flex-col items-center gap-2.5">
             <SwarmCreature creature={creature} size={120} className="mb-8" />
-            <p className="text-center tabular-nums text-[11.5px] text-muted">
+            <p className="text-center tabular-nums text-ui-sm text-muted">
               {firstRunPhrase}
             </p>
-            <p className="text-center tabular-nums text-[11.5px] text-subtle">
+            <p className="text-center tabular-nums text-ui-sm text-subtle">
               no projects yet — add one of your repositories to open a session in it
             </p>
             <Button
@@ -344,7 +344,7 @@ export function NewSessionPicker() {
               aria-describedby="picker-first-message-hint"
               className="rounded-[6px] border border-border bg-term-input px-2.5 py-1.5 font-mono text-[12px] text-ink caret-green outline-none placeholder:font-sans placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
             />
-            <span id="picker-first-message-hint" className="text-[11.5px] text-subtle">
+            <span id="picker-first-message-hint" className="text-ui-sm text-subtle">
               {workflow === null
                 ? 'Set one for every ticket in Settings › Jira › Ticket workflow. ⌥↵ starts empty.'
                 : 'From Settings › Jira › Ticket workflow; a change here is for this session only. ⌥↵ starts empty.'}
@@ -435,7 +435,7 @@ function PinnedProject({
       onClick={() => onSelect(id)}
       disabled={!access.spawnable}
       title={access.reason ?? undefined}
-      className="flex items-center gap-2 rounded-full border border-border bg-chip px-3.5 py-2 tabular-nums text-[13px] text-ink hover:border-brand hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:border-border disabled:hover:bg-chip"
+      className="flex items-center gap-2 rounded-full border border-border bg-chip px-3.5 py-2 tabular-nums text-ui text-ink hover:border-brand hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:border-border disabled:hover:bg-chip"
     >
       <Icon
         name={icon}

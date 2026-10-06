@@ -269,7 +269,7 @@ function SearchPanel({ view, subscribe }: SearchPanelProps) {
 
         <span
           aria-live="polite"
-          className="shrink-0 tabular-nums whitespace-nowrap text-[11.5px] text-muted"
+          className="shrink-0 tabular-nums whitespace-nowrap text-ui-sm text-muted"
         >
           {counter}
         </span>

@@ -278,7 +278,7 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
           prefix is the renderer's own and main honours it by construction.
         */}
         <span
-          className="flex-1 truncate tabular-nums text-[11.5px] tracking-wide text-subtle uppercase"
+          className="flex-1 truncate tabular-nums text-ui-sm tracking-wide text-subtle uppercase"
           title={
             explorerRoot?.widened === true
               ? explorerRoot.path
@@ -436,8 +436,8 @@ function SearchView({
   if (state.results.hits.length === 0) {
     return (
       <div className="flex flex-col gap-[3px] px-2 py-3">
-        <p className="text-[11.5px] text-muted">{phrase}</p>
-        <p className="truncate text-[11.5px] text-subtle" title={query}>
+        <p className="text-ui-sm text-muted">{phrase}</p>
+        <p className="truncate text-ui-sm text-subtle" title={query}>
           nothing matches “{query}”
         </p>
       </div>

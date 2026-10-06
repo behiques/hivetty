@@ -68,7 +68,7 @@ export function PrChecks({ pr, detail }: { pr: Pr; detail: PrDetail }) {
   }
 
   if (push === undefined && others.length === 0) {
-    return <p className="px-6 pt-4 text-[13px] text-muted">{`No checks on ${(detail.headSha ?? '').slice(0, 7)}`}</p>;
+    return <p className="px-6 pt-4 text-ui text-muted">{`No checks on ${(detail.headSha ?? '').slice(0, 7)}`}</p>;
   }
 
   const inFlight = push?.runs.some((r) => ['running', 'waiting'].includes(jobState(r.status, r.conclusion))) ?? false;

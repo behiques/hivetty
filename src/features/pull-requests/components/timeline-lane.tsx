@@ -123,7 +123,7 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
         <div
           role="tooltip"
           className={cn(
-            'pointer-events-none absolute top-full z-10 -mt-2 flex flex-col gap-0.5 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 text-[11.5px] whitespace-nowrap text-muted shadow-lg',
+            'pointer-events-none absolute top-full z-10 -mt-2 flex flex-col gap-0.5 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 text-ui-sm whitespace-nowrap text-muted shadow-lg',
             hover.from > 0.5 && '-translate-x-full',
           )}
           style={{ left: hover.left }}

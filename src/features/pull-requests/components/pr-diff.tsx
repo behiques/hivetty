@@ -248,7 +248,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
             ))}
           </>
         ) : (
-          <div className="flex flex-col gap-1 px-[18px] py-4 font-sans text-[13px]">
+          <div className="flex flex-col gap-1 px-[18px] py-4 font-sans text-ui">
             <p className="text-muted">No diff to show</p>
             <ProblemLine problem={problem} onRetry={onRetry} className="" />
             <a href={`${prUrl}/files`} target="_blank" rel="noreferrer" className="text-[12px] text-brand hover:underline">

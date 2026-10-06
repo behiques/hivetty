@@ -89,7 +89,7 @@ function HitGroup({
           size={12}
           className="shrink-0 text-subtle"
         />
-        <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink">
+        <span className="min-w-0 flex-1 truncate text-ui-sm text-ink">
           <Marked text={hit.name} query={query} />
         </span>
         {hit.total > 1 ? (

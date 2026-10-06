@@ -22,7 +22,7 @@ type NewProjectVariant = 'icon' | 'cta';
  */
 const CLASSES: Record<NewProjectVariant, string> = {
   icon: 'ml-auto self-center rounded border-0 p-1 leading-normal text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted',
-  cta: 'inline-flex items-center gap-[7px] rounded-lg border border-border px-3 py-[5px] tabular-nums text-[11.5px] leading-normal text-ink hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:hover:bg-transparent aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent',
+  cta: 'inline-flex items-center gap-[7px] rounded-lg border border-border px-3 py-[5px] tabular-nums text-ui-sm leading-normal text-ink hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:hover:bg-transparent aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent',
 };
 
 /**

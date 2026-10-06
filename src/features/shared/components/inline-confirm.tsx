@@ -102,7 +102,7 @@ export function InlineConfirm({
       className={cn('bg-red/8 px-3 py-2.5', className)}
     >
       <p className="text-[12.5px] text-ink">{title}</p>
-      <p className="mt-0.5 text-[11.5px] text-subtle">{children}</p>
+      <p className="mt-0.5 text-ui-sm text-subtle">{children}</p>
       <div className="mt-2 flex justify-end gap-1.5">
         <button
           ref={cancel}

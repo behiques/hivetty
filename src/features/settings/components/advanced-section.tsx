@@ -80,7 +80,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
       <span className="text-[12px] text-subtle">{label}</span>
-      <span className="truncate tabular-nums text-[11.5px] text-ink">{value}</span>
+      <span className="truncate tabular-nums text-ui-sm text-ink">{value}</span>
     </div>
   );
 }
@@ -121,7 +121,7 @@ function PtyCounters({ rows }: { rows: readonly PtyDiagnostics[] }) {
           className="flex flex-col gap-1 rounded-[7px] border border-border-soft p-2.5"
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate tabular-nums text-[11.5px] text-ink">
+            <span className="truncate tabular-nums text-ui-sm text-ink">
               {row.sessionId}
             </span>
             {row.paused ? (
@@ -374,7 +374,7 @@ export function AdvancedSection() {
       {snapshot.errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -384,7 +384,7 @@ export function AdvancedSection() {
         title="Config file"
         description="Everything Settings writes goes in this one file, and it is meant to stay hand-editable."
       >
-        <p className="break-all tabular-nums text-[11.5px] text-muted">
+        <p className="break-all tabular-nums text-ui-sm text-muted">
           {snapshot.configPath}
         </p>
         <div className="flex items-center gap-2">
@@ -411,12 +411,12 @@ export function AdvancedSection() {
           </button>
         </div>
         {reloadFailed ? (
-          <p className="text-[11.5px] text-red">
+          <p className="text-ui-sm text-red">
             Reload failed — config, skills and agents are unchanged. Check the
             log and try again.
           </p>
         ) : reloaded === null ? (
-          <p className="text-[11.5px] text-subtle">
+          <p className="text-ui-sm text-subtle">
             The file is deliberately not watched. Edit it by hand and reload here
             — a config that changed under a live session would leave the terminal
             already running in the old directory. Reload also picks up skills and
@@ -424,7 +424,7 @@ export function AdvancedSection() {
             a running session keeps what it started with.
           </p>
         ) : (
-          <p className="text-[11.5px] text-green">{reloaded}</p>
+          <p className="text-ui-sm text-green">{reloaded}</p>
         )}
         {/*
           Independent of `reloadFailed`: a restart requirement a past reload
@@ -432,7 +432,7 @@ export function AdvancedSection() {
           channel happened to fail.
         */}
         {reloaded !== null && restart.length > 0 && (
-          <p className="text-[11.5px] text-amber-text">Restart to apply: {restart.join(', ')}.</p>
+          <p className="text-ui-sm text-amber-text">Restart to apply: {restart.join(', ')}.</p>
         )}
       </SettingsGroup>
 
@@ -530,7 +530,7 @@ export function AdvancedSection() {
               reason at the moment they wonder — and on a build that *can*
               self-install, the same line is the reassurance that it will.
             */}
-            <p className="text-[11.5px] text-subtle">
+            <p className="text-ui-sm text-subtle">
               {update.capability.reason}
             </p>
           </>
@@ -562,7 +562,7 @@ export function AdvancedSection() {
         description="Per-session flow control, and where to look when something goes wrong."
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11.5px] text-subtle">
+          <p className="text-ui-sm text-subtle">
             A snapshot, not a stream.
           </p>
           <button
@@ -601,10 +601,10 @@ export function AdvancedSection() {
         {info === null ? null : (
           <div className="flex flex-col gap-0.5 border-t border-border-soft pt-2">
             <p className="text-[12px] text-subtle">Log location</p>
-            <p className="break-all tabular-nums text-[11.5px] text-muted">
+            <p className="break-all tabular-nums text-ui-sm text-muted">
               {info.logPath}
             </p>
-            <p className="text-[11.5px] text-subtle">
+            <p className="text-ui-sm text-subtle">
               This app writes no log file — it logs to the terminal it was
               launched from. That directory is Electron&rsquo;s, and is where a
               crash report would land.

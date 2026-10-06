@@ -33,7 +33,7 @@ function inlineOne(token: Token): ReactNode {
       return <del>{inline((token as Tokens.Del).tokens)}</del>;
     case 'codespan':
       return (
-        <code className="rounded-[3px] bg-chip px-1 py-px font-mono text-[11.5px]">
+        <code className="rounded-[3px] bg-chip px-1 py-px font-mono text-ui-sm">
           {plain((token as Tokens.Codespan).text)}
         </code>
       );

@@ -109,7 +109,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
   return (
     <div className="flex flex-col gap-2">
       {rows.length === 0 ? (
-        <p className="text-[11.5px] text-subtle">
+        <p className="text-ui-sm text-subtle">
           No variables. Sessions in this project inherit your environment.
         </p>
       ) : null}
@@ -151,7 +151,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
       {errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>

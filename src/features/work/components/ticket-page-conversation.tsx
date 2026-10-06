@@ -118,7 +118,7 @@ function CommentItem({
             </span>
           </span>
         </div>
-        <div className="text-[13px]">
+        <div className="text-ui">
           <AdfBlocks blocks={comment.body} />
         </div>
       </div>
@@ -261,7 +261,7 @@ function ReplyBox({
           aria-autocomplete="list"
           aria-activedescendant={highlighted === undefined ? undefined : `${listId}-${highlighted.accountId}`}
           placeholder={replyTo === null ? 'Add a comment — markdown works' : `Reply to ${replyTo}…`}
-          className="w-full resize-y bg-transparent text-[13px] text-ink outline-none placeholder:text-subtle"
+          className="w-full resize-y bg-transparent text-ui text-ink outline-none placeholder:text-subtle"
         />
         {picker.open ? (
           <MentionList

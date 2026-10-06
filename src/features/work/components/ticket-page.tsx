@@ -207,7 +207,7 @@ export function WorkStage() {
     if (!listed) return <JiraSetupPage />;
     return (
       <section aria-label="Work" className="flex flex-1 items-center justify-center">
-        <p className="text-[13px] text-subtle">Pick a ticket</p>
+        <p className="text-ui text-subtle">Pick a ticket</p>
       </section>
     );
   }

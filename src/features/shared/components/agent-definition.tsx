@@ -272,7 +272,7 @@ export function AgentDefinition({ name, notice, onRename, onClose, layout = 'spl
   if (!snapshot) {
     return (
       <div className="flex flex-1 items-center justify-center px-5 py-4">
-        <p className="text-[13px] text-subtle">Background agents are only available in the desktop app.</p>
+        <p className="text-ui text-subtle">Background agents are only available in the desktop app.</p>
       </div>
     );
   }

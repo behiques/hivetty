@@ -35,7 +35,7 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
           <span className="truncate">
             <b className="font-semibold text-ink">{name}</b> <span className="text-muted">{notif.title}</span>
           </span>
-          <span className="text-[11.5px] text-muted">{`${project} · answer it in the session`}</span>
+          <span className="text-ui-sm text-muted">{`${project} · answer it in the session`}</span>
         </span>
         <button type="button" onClick={open} className="text-[12px] text-brand hover:underline">
           Open ›

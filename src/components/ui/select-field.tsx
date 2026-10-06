@@ -87,7 +87,7 @@ export function SelectField({
       </span>
 
       {hint ? (
-        <span id={hintId} className="text-[11.5px] text-subtle">
+        <span id={hintId} className="text-ui-sm text-subtle">
           {hint}
         </span>
       ) : null}

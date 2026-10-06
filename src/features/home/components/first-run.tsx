@@ -34,7 +34,7 @@ const STEP_BUTTON = 'inline-flex items-center gap-1.5';
 function Step({ title, body, children }: { title: string; body: ReactNode; children: ReactNode }) {
   return (
     <div className="grid w-[220px] content-start gap-2 rounded-xl border border-border bg-panel p-3.5 text-left">
-      <b className="text-[13px] text-ink">{title}</b>
+      <b className="text-ui text-ink">{title}</b>
       <span className="text-[12.5px] text-muted">{body}</span>
       <div className="pt-1">{children}</div>
     </div>

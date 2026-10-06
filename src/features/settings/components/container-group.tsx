@@ -265,7 +265,7 @@ export function ContainerGroup({
                   commit(normalise(next));
                 }}
               />
-              <span className="text-[11.5px] text-subtle">
+              <span className="text-ui-sm text-subtle">
                 {FRESHNESS_COPY[effective.freshness]}
               </span>
             </div>
@@ -279,7 +279,7 @@ export function ContainerGroup({
             {...(diagnostic === undefined ? {} : { diagnostic })}
           />
 
-          <p className="border-l-2 border-amber pl-2.5 text-[11.5px] text-muted">
+          <p className="border-l-2 border-amber pl-2.5 text-ui-sm text-muted">
             Values above are typed into the terminal, so they are visible in
             scroll-back and to ps. Credentials belong in the image — while
             Subscription auth is on, this app strips the API-key variables out of

@@ -91,7 +91,7 @@ function PathSourceLine({ loginEnv }: { loginEnv: LoginEnvStatus }) {
             Your login shell could not be read: {loginEnv.error}.
           </span>
         </p>
-        <p className="text-[11.5px] text-subtle">
+        <p className="text-ui-sm text-subtle">
           The app kept the environment it was launched with — {counts} Nothing is
           broken by this beyond what it could not find.
         </p>
@@ -117,7 +117,7 @@ function PathSourceLine({ loginEnv }: { loginEnv: LoginEnvStatus }) {
           true, and says the thing the reader actually needs — that what they
           just changed has not happened yet.
         */}
-        <p className="text-[11.5px] text-subtle">
+        <p className="text-ui-sm text-subtle">
           The login-shell import was off when this app started. The switch above
           controls it, and takes effect on the next launch.
         </p>
@@ -134,7 +134,7 @@ function PathSourceLine({ loginEnv }: { loginEnv: LoginEnvStatus }) {
             Already your login shell&rsquo;s. {counts}
           </span>
         </p>
-        <p className="text-[11.5px] text-subtle">
+        <p className="text-ui-sm text-subtle">
           <code className="font-mono">{loginEnv.shell ?? 'Your shell'}</code> was
           asked and had nothing to add — which is the normal answer when the app
           was started from a terminal.
@@ -153,7 +153,7 @@ function PathSourceLine({ loginEnv }: { loginEnv: LoginEnvStatus }) {
         </span>
       </p>
       {loginEnv.varsImported.some((name) => name !== 'PATH') ? (
-        <p className="text-[11.5px] text-subtle">
+        <p className="text-ui-sm text-subtle">
           Also taken from it:{' '}
           {loginEnv.varsImported
             .filter((name) => name !== 'PATH')

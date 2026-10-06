@@ -209,7 +209,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
         <PauseBar id={entity.id} onNotice={onNotice} />
       ) : (
       <div data-stage-input="" className="flex shrink-0 items-center gap-2.5 border-t border-border-soft bg-term-input px-[18px] py-2.5">
-        <span className="shrink-0 font-mono text-[13px] text-green">
+        <span className="shrink-0 font-mono text-ui text-green">
           {`${entity.id} ❯`}
         </span>
         <label htmlFor="agent-input" className="sr-only">

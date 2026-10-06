@@ -248,7 +248,7 @@ export function NotificationCard({ notif }: NotificationCardProps) {
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="text-[12.5px] font-semibold text-ink">{title}</span>
         {notif.body === '' ? null : (
-          <span className="text-[11.5px] leading-[1.4] text-muted">
+          <span className="text-ui-sm leading-[1.4] text-muted">
             {notif.body}
           </span>
         )}

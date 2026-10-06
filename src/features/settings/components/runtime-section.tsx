@@ -184,7 +184,7 @@ export function RuntimeSection() {
       {snapshot.errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -243,12 +243,12 @@ export function RuntimeSection() {
            *   secret-detection here, since a check that rejects `API_TOKEN`
            *   while waving through `TOKEN_API` teaches nothing.
            */}
-          <p className="text-[11.5px] text-subtle">
+          <p className="text-ui-sm text-subtle">
             Environment for every session, applied before the shell starts. A
             login shell’s rc file runs afterward and can override anything
             set here.
           </p>
-          <p className="text-[11.5px] text-subtle">
+          <p className="text-ui-sm text-subtle">
             Prefer your rc file for tokens and credentials — this file is
             stored in plain text.
           </p>

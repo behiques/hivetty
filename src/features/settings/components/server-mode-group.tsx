@@ -868,7 +868,7 @@ export function ServerModeGroup({
       {open ? (
         <>
           {attached ? (
-            <p className="text-[11.5px] text-muted">{SERVE_BIND_ATTACHED_HINT}</p>
+            <p className="text-ui-sm text-muted">{SERVE_BIND_ATTACHED_HINT}</p>
           ) : null}
 
           <TextField
@@ -983,7 +983,7 @@ export function ServerModeGroup({
             */
             <div className="flex gap-2 rounded-md border border-amber/45 bg-amber/8 px-3 py-2.5">
               <WarningCircle size={13} className="mt-0.5 shrink-0 text-amber-text" />
-              <div className="flex flex-col gap-2 text-[11.5px] text-subtle">
+              <div className="flex flex-col gap-2 text-ui-sm text-subtle">
                 <span>
                   Reconnecting to{' '}
                   <span className="font-medium text-ink">{attachedServerName}</span>.
@@ -1002,7 +1002,7 @@ export function ServerModeGroup({
             */
             <div className="flex gap-2 rounded-md border border-red/45 bg-red/8 px-3 py-2.5">
               <WarningCircle size={13} className="mt-0.5 shrink-0 text-red" />
-              <div className="flex flex-col gap-2 text-[11.5px] text-subtle">
+              <div className="flex flex-col gap-2 text-ui-sm text-subtle">
                 <span>
                   Disconnected from{' '}
                   <span className="font-medium text-ink">{attachedServerName}</span>.
@@ -1020,14 +1020,14 @@ export function ServerModeGroup({
               some config happened to mention. The config-derived line below is
               the not-attached case and says something different on purpose.
             */
-            <p className="text-[11.5px] text-subtle">
+            <p className="text-ui-sm text-subtle">
               Attached to{' '}
               <span className="font-medium text-ink">{attachedServerName}</span>.
               Everything this window shows comes from that machine. Turn the
               switch off to come back to this one.
             </p>
           ) : attachedServer ? (
-            <p className="text-[11.5px] text-subtle">
+            <p className="text-ui-sm text-subtle">
               Configured to attach to{' '}
               <span className="font-medium text-ink">{attachedServer.name}</span>.
               This is what <code>config.json</code> says right now — not
@@ -1070,7 +1070,7 @@ export function ServerModeGroup({
             unconditionally — which is what the hide was standing in for.
           */}
           {attached ? (
-            <p className="text-[11.5px] text-muted">
+            <p className="text-ui-sm text-muted">
               {target === null ? ATTACH_TARGET_PENDING : ATTACH_TARGET_HINT}
             </p>
           ) : null}
@@ -1133,7 +1133,7 @@ export function ServerModeGroup({
             this machine in both and there is nothing left to hide them from.
           */}
           {paired ? (
-            <div className="flex items-center gap-2 rounded-[6px] border border-border bg-panel px-2.5 py-2 text-[11.5px]">
+            <div className="flex items-center gap-2 rounded-[6px] border border-border bg-panel px-2.5 py-2 text-ui-sm">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
               <span>Paired</span>
             </div>
@@ -1152,7 +1152,7 @@ export function ServerModeGroup({
               hint="Printed by `the-hive --pair <name>` on the server. Stored in this machine's keychain, never in config.json. Forget clears it here without ending a live attachment — the next dial is what needs a new one."
             />
             {remotePairError ? (
-              <p className="text-[11.5px] text-red">{remotePairError}</p>
+              <p className="text-ui-sm text-red">{remotePairError}</p>
             ) : null}
             <div className="flex items-center gap-2">
               <Button
@@ -1208,7 +1208,7 @@ export function ServerModeGroup({
             {switchResult && !switchResult.ok && switchResult.reason === 'live-sessions' ? (
               <div className="flex items-start gap-2 rounded-[6px] border border-red bg-red/8 px-3 py-2.5">
                 <WarningCircle size={14} className="mt-px shrink-0 text-red" />
-                <div className="flex flex-col gap-1 text-[11.5px]">
+                <div className="flex flex-col gap-1 text-ui-sm">
                   <p className="text-ink">Can&rsquo;t attach while sessions are running here.</p>
                   <p className="text-subtle">
                     Attaching would hide terminals still running in this app. Close
@@ -1237,7 +1237,7 @@ export function ServerModeGroup({
             {switchResult && !switchResult.ok && switchResult.reason === 'plaintext-refused' ? (
               <div className="flex items-start gap-2 rounded-[6px] border border-red bg-red/8 px-3 py-2.5">
                 <WarningCircle size={14} className="mt-px shrink-0 text-red" />
-                <p className="text-[11.5px] text-ink">{ATTACH_HOST_INVALID}</p>
+                <p className="text-ui-sm text-ink">{ATTACH_HOST_INVALID}</p>
               </div>
             ) : null}
 
@@ -1256,7 +1256,7 @@ export function ServerModeGroup({
               itself as "Could not attach". Same source, same defect, one line.
             */}
             {switchResult && !switchResult.ok && switchResult.reason === 'connect-failed' ? (
-              <p className="text-[11.5px] text-red">
+              <p className="text-ui-sm text-red">
                 {attached ? 'Could not detach' : 'Could not attach'}:{' '}
                 {switchResult.message}
               </p>
@@ -1271,11 +1271,11 @@ export function ServerModeGroup({
         </h4>
 
         {attached ? (
-          <p className="text-[11.5px] text-muted">{SERVE_ROSTER_ATTACHED_HINT}</p>
+          <p className="text-ui-sm text-muted">{SERVE_ROSTER_ATTACHED_HINT}</p>
         ) : null}
 
         {devices.length === 0 ? (
-          <p className="text-[11.5px] text-subtle">No devices are paired.</p>
+          <p className="text-ui-sm text-subtle">No devices are paired.</p>
         ) : (
           <div className="flex flex-col divide-y divide-border-soft">
             {devices.map((device) => (
@@ -1285,7 +1285,7 @@ export function ServerModeGroup({
         )}
 
         {revokeError ? (
-          <p className="text-[11.5px] text-red">
+          <p className="text-ui-sm text-red">
             Could not revoke &quot;{revokeError.name}&quot;: {revokeError.message}
           </p>
         ) : null}
@@ -1310,12 +1310,12 @@ export function ServerModeGroup({
         </div>
 
         {pairError ? (
-          <p className="text-[11.5px] text-red">{pairError}</p>
+          <p className="text-ui-sm text-red">{pairError}</p>
         ) : null}
 
         {justPaired ? (
           <div className="flex flex-col gap-1 rounded-[6px] border border-border bg-panel-2 p-2.5">
-            <p className="text-[11.5px] text-ink">
+            <p className="text-ui-sm text-ink">
               Token for &quot;{justPaired.name}&quot; — copy it now. It will not be
               shown again.
             </p>

@@ -239,7 +239,7 @@ export function SkillEditor({
               ? 'This file is too large to show here.'
               : 'This file is not text.'}
           </span>
-          <span className="text-[11.5px] text-subtle">
+          <span className="text-ui-sm text-subtle">
             It ships with the skill. {humanSize(size)}
           </span>
         </div>

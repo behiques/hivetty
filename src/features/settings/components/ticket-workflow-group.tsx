@@ -174,7 +174,7 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
                   ? 'Nothing: the session opens at an empty prompt.'
                   : start.text}
             </code>
-            <span className="text-[11.5px] text-subtle">
+            <span className="text-ui-sm text-subtle">
               {start.kind === 'wake'
                 ? 'No terminal opens. Starting from a ticket asks the agent, and you land on its page.'
                 : start.text === ''

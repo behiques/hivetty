@@ -52,7 +52,7 @@ export function Switch({
           {label}
         </label>
         {description === undefined ? null : (
-          <p id={describedBy} className="text-[11.5px] text-subtle">
+          <p id={describedBy} className="text-ui-sm text-subtle">
             {description}
           </p>
         )}

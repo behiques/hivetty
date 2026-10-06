@@ -61,7 +61,7 @@ function Foot({ url, onShow }: { url: string; onShow?: () => void }) {
 function Remembered({ pr }: { pr: SessionPr }) {
   return (
     <div className="flex flex-col gap-2 text-[12.5px]">
-      <span className="px-1 tabular-nums text-[11.5px] text-muted">{`#${String(pr.n)} · last seen`}</span>
+      <span className="px-1 tabular-nums text-ui-sm text-muted">{`#${String(pr.n)} · last seen`}</span>
       <p className="px-1 text-muted">This PR isn&apos;t in the current sweep, so its checks and reviews can&apos;t be read here.</p>
       <Foot url={pr.url} />
     </div>
@@ -89,13 +89,13 @@ function LivePr({ sessionId, row }: { sessionId: string; row: HatcheryRow }) {
 
   return (
     <div className="flex flex-col text-[12.5px]">
-      <span data-testid="session-pr-sub" className="flex items-center gap-1.5 px-1 tabular-nums text-[11.5px] text-muted">
+      <span data-testid="session-pr-sub" className="flex items-center gap-1.5 px-1 tabular-nums text-ui-sm text-muted">
         {`#${String(pr.n)} · `}
         <Flap hatch={hatch} />
         {` · ${pr.state}`}
       </span>
       <p className="px-1 pt-2 pb-1 text-[14px] leading-snug font-bold text-ink">{pr.title}</p>
-      <span data-testid="session-pr-facts" className="px-1 tabular-nums text-[11.5px] break-all text-muted">
+      <span data-testid="session-pr-facts" className="px-1 tabular-nums text-ui-sm break-all text-muted">
         {detail === undefined ? (
           pr.branch
         ) : (
@@ -162,7 +162,7 @@ function LivePr({ sessionId, row }: { sessionId: string; row: HatcheryRow }) {
                     className="flex min-w-0 flex-col gap-0.5 rounded px-1 py-[5px] text-left hover:bg-hover disabled:hover:bg-transparent"
                   >
                     {/* RTL clips the start, so the file name and line stay in view; the inner span keeps the text LTR. */}
-                    <span dir="rtl" className="truncate text-left tabular-nums text-[11.5px] text-brand">
+                    <span dir="rtl" className="truncate text-left tabular-nums text-ui-sm text-brand">
                       <span dir="ltr">{threadPlace(thread)}</span>
                     </span>
                     {first === undefined ? null : (

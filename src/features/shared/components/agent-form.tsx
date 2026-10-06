@@ -492,7 +492,7 @@ function Adder({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-[4px] border border-dashed border-border bg-transparent px-2 py-0.5 text-[11.5px] text-subtle hover:border-brand hover:text-ink"
+        className="rounded-[4px] border border-dashed border-border bg-transparent px-2 py-0.5 text-ui-sm text-subtle hover:border-brand hover:text-ink"
       >
         + {label}
       </button>
@@ -527,7 +527,7 @@ function Adder({
           because closing would discard what the user typed and say nothing.
         */
         onBlur={commit}
-        className="w-24 rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-[11.5px] text-ink outline-none focus:border-brand"
+        className="w-24 rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-ink outline-none focus:border-brand"
       />
       {problem === null ? null : (
         <span role="alert" className="text-[10.5px] text-red">
@@ -937,7 +937,7 @@ export function AgentForm({
         showing text the buffer does not hold.
       */
       onBlur={() => setDraft(null)}
-      className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-[11.5px] text-ink outline-none focus:border-brand"
+      className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-ui-sm text-ink outline-none focus:border-brand"
     />
   );
 
@@ -949,8 +949,8 @@ export function AgentForm({
       onClick={onClick}
       className={
         on
-          ? 'rounded-[4px] border border-brand bg-active px-2 py-0.5 text-[11.5px] text-ink'
-          : 'rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-[11.5px] text-subtle hover:bg-hover hover:text-ink'
+          ? 'rounded-[4px] border border-brand bg-active px-2 py-0.5 text-ui-sm text-ink'
+          : 'rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-subtle hover:bg-hover hover:text-ink'
       }
     >
       {label}
@@ -999,10 +999,10 @@ export function AgentForm({
   if (read === null) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-4 text-center">
-        <span className="text-[11.5px] text-amber-text">
+        <span className="text-ui-sm text-amber-text">
           This file has no frontmatter.
         </span>
-        <span className="text-[11.5px] text-subtle">
+        <span className="text-ui-sm text-subtle">
           It must open and close with a --- line. Fix it in the Source tab and
           the form comes back.
         </span>
@@ -1080,7 +1080,7 @@ export function AgentForm({
                 setRenamed({ from: typed, to: free });
                 onChange(patchFrontmatter(source, 'name', free));
               }}
-              className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-[11.5px] text-ink outline-none focus:border-brand"
+              className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-ui-sm text-ink outline-none focus:border-brand"
             />,
           )}
           {row('description', 'description', input('description', 'description'))}

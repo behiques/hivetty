@@ -108,7 +108,7 @@ export function JiraQueryGroup({ jql, canTest }: JiraQueryGroupProps) {
             {testing ? testingPhrase : 'Test query'}
           </Button>
           {canTest ? null : (
-            <span className="text-[11.5px] text-subtle">
+            <span className="text-ui-sm text-subtle">
               Configure the site, email and token first.
             </span>
           )}

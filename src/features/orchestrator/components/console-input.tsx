@@ -188,7 +188,7 @@ export function ConsoleInput() {
           than a quoted literal. The test below greps the rendered output for
           `/orchestrator/i` precisely so a seventh copy cannot hide the same way.
         */}
-        <span className="shrink-0 font-mono text-[13px] text-green">
+        <span className="shrink-0 font-mono text-ui text-green">
           overmind ❯
         </span>
         <textarea

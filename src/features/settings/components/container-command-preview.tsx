@@ -39,12 +39,12 @@ export function ContainerCommandPreview({
       <span className="text-[12.5px] text-muted">What will be typed</span>
 
       {/* Scrolls inside itself; the pane must never scroll horizontally. */}
-      <pre className="overflow-x-auto rounded-[7px] border border-border-soft bg-term-bg px-3 py-2.5 text-[11.5px] leading-relaxed text-muted">
+      <pre className="overflow-x-auto rounded-[7px] border border-border-soft bg-term-bg px-3 py-2.5 text-ui-sm leading-relaxed text-muted">
         {line}
       </pre>
 
       {diagnostic?.missingEnvPlaceholder === true ? (
-        <p className="text-[11.5px] text-red">
+        <p className="text-ui-sm text-red">
           The agent command has no {'{env}'}, so no HIVE_ variable would reach
           the container and every hook would be refused.
         </p>

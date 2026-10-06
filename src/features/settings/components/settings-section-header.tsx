@@ -5,7 +5,7 @@
  * ## Why it exists
  *
  * Nine copies of this markup were spread across eight section files, and the
- * pane title was styled `text-[13px] text-ink` — byte-identical to the `h3`
+ * pane title was styled `text-ui text-ink` — byte-identical to the `h3`
  * inside every `SettingsGroup` below it. So "Appearance" and "Theme" rendered
  * at the same size, in the same colour, at the same weight, and the only thing
  * saying one contained the other was the vertical order. The reader has to
@@ -49,8 +49,8 @@ export function SettingsSectionHeader({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
-      <p className="text-[11.5px] text-subtle">{description}</p>
+      <h2 className="text-ui-lg font-semibold text-ink">{title}</h2>
+      <p className="text-ui-sm text-subtle">{description}</p>
     </div>
   );
 }
