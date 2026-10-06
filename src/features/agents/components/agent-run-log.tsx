@@ -271,25 +271,6 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
     );
 
   /*
-    `Took` counts up while a run is open, so this component owns a clock — one
-    second, which is the resolution the column shows. It runs only while
-    something is live, so a finished log re-renders on nothing at all.
-  */
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!live) return undefined;
-
-    const timer = setInterval(() => {
-      setNow(Date.now());
-    }, 1_000);
-
-    return () => {
-      clearInterval(timer);
-    };
-  }, [live]);
-
-  /*
     Newest first, in both halves.
 
     This replaces a scroll pin. `runs` is oldest-first, and clipping the
@@ -413,18 +394,21 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
   const selectedLive = inFlight.find((run) => run.run === selected);
   const selectedReceipt = selectedLive === undefined ? receipts.find((run) => run.run === selected) : undefined;
   const summary =
-    selectedLive !== undefined
-      ? ['running', formatDuration(now - selectedLive.startedAt)].join(' · ')
-      : selectedReceipt === undefined
-        ? null
-        : [
-            selectedReceipt.outcome,
-            selectedReceipt.turns === undefined ? null : `${String(selectedReceipt.turns)} turns`,
-            formatDuration(selectedReceipt.endedAt - selectedReceipt.startedAt),
-            formatRunCost(selectedReceipt.costUsd),
-          ]
-            .filter((part) => part !== null && part !== undefined)
-            .join(' · ');
+    selectedLive !== undefined ? (
+      <>
+        {'running · '}
+        <Took startedAt={selectedLive.startedAt} />
+      </>
+    ) : selectedReceipt === undefined
+      ? null
+      : [
+          selectedReceipt.outcome,
+          selectedReceipt.turns === undefined ? null : `${String(selectedReceipt.turns)} turns`,
+          formatDuration(selectedReceipt.endedAt - selectedReceipt.startedAt),
+          formatRunCost(selectedReceipt.costUsd),
+        ]
+          .filter((part) => part !== null && part !== undefined)
+          .join(' · ');
 
   return (
     <div
@@ -506,7 +490,6 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
             <LiveRow
               key={run.run}
               run={run}
-              now={now}
               dim={palette.dim}
               brand={palette.blue}
               green={palette.green}
@@ -848,7 +831,6 @@ function groupsOf(
 
 interface LiveRowProps {
   run: LiveRunSummary;
-  now: number;
   dim: string;
   brand: string;
   green: string;
@@ -880,7 +862,6 @@ interface LiveRowProps {
  */
 function LiveRow({
   run,
-  now,
   dim,
   brand,
   green,
@@ -925,7 +906,9 @@ function LiveRow({
         </span>
         {/* A turn count a run cannot know until it ends — see the docblock. */}
         <span className="truncate text-right tabular-nums">—</span>
-        <span className="truncate text-right tabular-nums">{formatDuration(now - run.startedAt)}</span>
+        <span className="truncate text-right tabular-nums">
+          <Took startedAt={run.startedAt} />
+        </span>
         {/* A cost a run cannot know until it ends — the same em dash a receipt uses. */}
         <span className="truncate text-right tabular-nums">—</span>
       </div>
@@ -944,6 +927,31 @@ function LiveRow({
       )}
     </div>
   );
+}
+
+/**
+ * How long a live run has taken, counting up (HIVE-225).
+ *
+ * A leaf on purpose. The clock used to be `AgentRunLog`'s own state, so every
+ * second re-rendered the whole log — up to `AGENT_LINE_CAP` lines — to move one
+ * cell. Here it re-renders a string. One second is the resolution the column
+ * shows; each instance keeps its own interval, so two live runs may tick a
+ * fraction of a second apart, which the column cannot show.
+ */
+function Took({ startedAt }: { startedAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1_000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
+
+  return formatDuration(now - startedAt);
 }
 
 interface RunHeaderProps {

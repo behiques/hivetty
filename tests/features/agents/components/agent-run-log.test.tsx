@@ -10,6 +10,25 @@ import {
 import { useAppearanceStore, useTerminalAppearance } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 
+/*
+  Counts AgentRunLog's own renders (HIVE-225). The component calls
+  `useTerminalAppearance` once per render and nothing below it does, so the
+  pass-through count is the body's render count. Every other spec in this file
+  sees the real hook.
+*/
+const bodyRenders = vi.hoisted(() => ({ count: 0 }));
+
+vi.mock('@stores/appearance-store', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@stores/appearance-store')>();
+  return {
+    ...real,
+    useTerminalAppearance: () => {
+      bodyRenders.count += 1;
+      return real.useTerminalAppearance();
+    },
+  };
+});
+
 /**
  * What an agent has been saying.
  *
@@ -994,6 +1013,34 @@ describe('AgentRunLog', () => {
 
         // Two units past a minute, as a receipt reads (HIVE-204).
         expect(within(screen.getByTestId('run-receipts')).getByText('1m 0s')).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    /*
+      The clock is a leaf's, not the log's (HIVE-225). A live run used to
+      re-render all two thousand buffered lines once a second just to move one
+      cell; now only the `Took` cells tick.
+    */
+    it('ticks Took without re-rendering the log around it', () => {
+      vi.useFakeTimers();
+
+      try {
+        vi.setSystemTime(Date.UTC(2026, 8, 1, 14, 2, 41));
+        seed({ status: 'working', live: [standing()] });
+        lines(['mid-flight'], 'live-standing');
+
+        render(<AgentRunLog name="watcher" />);
+        const before = bodyRenders.count;
+
+        act(() => {
+          vi.advanceTimersByTime(3_000);
+        });
+
+        expect(within(screen.getByTestId('run-receipts')).getByText('44s')).toBeInTheDocument();
+        expect(heading()).toHaveTextContent(/running · 44s/);
+        expect(bodyRenders.count).toBe(before);
       } finally {
         vi.useRealTimers();
       }
