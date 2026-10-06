@@ -70,7 +70,7 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
 
   return (
     <div ref={ref} className={cn('relative border-b border-border-soft', height === 40 ? 'h-10' : 'h-[52px]')}>
-      <span className="absolute inset-y-0 left-0 flex w-[130px] items-center text-[12px] text-muted">{label}</span>
+      <span className="absolute inset-y-0 left-0 flex w-[130px] items-center text-control text-muted">{label}</span>
       {marks.map((mark) => {
         const span = mark.to !== undefined;
         const left = axisLeft(mark.from);

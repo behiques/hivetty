@@ -79,7 +79,7 @@ function fileManager(platform: string | undefined): string {
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span className="text-[12px] text-subtle">{label}</span>
+      <span className="text-control text-subtle">{label}</span>
       <span className="truncate tabular-nums text-ui-sm text-ink">{value}</span>
     </div>
   );
@@ -568,7 +568,7 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => void refresh()}
-            className="shrink-0 rounded-md border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink"
+            className="shrink-0 rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
           >
             Refresh
           </button>
@@ -600,7 +600,7 @@ export function AdvancedSection() {
 
         {info === null ? null : (
           <div className="flex flex-col gap-0.5 border-t border-border-soft pt-2">
-            <p className="text-[12px] text-subtle">Log location</p>
+            <p className="text-control text-subtle">Log location</p>
             <p className="break-all tabular-nums text-ui-sm text-muted">
               {info.logPath}
             </p>

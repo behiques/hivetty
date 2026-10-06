@@ -53,7 +53,7 @@ export function PlanTab({
 
   return (
     <section aria-label="Plan" className="flex min-h-0 flex-col">
-      <p className="px-1 pb-2.5 text-[12px] text-muted">
+      <p className="px-1 pb-2.5 text-control text-muted">
         <b className="font-semibold text-ink">{`${String(done)} of ${String(total)}`}</b>
         {` tasks · ${formatDuration(sum)}`}
       </p>
@@ -81,11 +81,11 @@ export function PlanTab({
                   {task.title}
                 </span>
                 {current && task.activeForm !== undefined ? (
-                  <span className="text-[12px] text-green">{task.activeForm}</span>
+                  <span className="text-control text-green">{task.activeForm}</span>
                 ) : null}
               </span>
               {ms === undefined ? null : (
-                <span className=" text-[12px] text-muted tabular-nums">
+                <span className=" text-control text-muted tabular-nums">
                   {formatDuration(ms)}
                 </span>
               )}
@@ -104,12 +104,12 @@ export function PlanTab({
             onClick={() => {
               onOpenFile(file);
             }}
-            className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1.5 text-left text-[12px] text-brand hover:bg-hover"
+            className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1.5 text-left text-control text-brand hover:bg-hover"
           >
             <FileText size={14} aria-hidden className="shrink-0" />
             <span className="truncate tabular-nums">{planFileLabel(file)}</span>
           </button>
-          <p className="px-1 text-[12px] text-muted">
+          <p className="px-1 text-control text-muted">
             {plan.fileAt === undefined ? '' : `Written by hive:plan at ${clock(plan.fileAt)} · `}
             open it in the editor
           </p>

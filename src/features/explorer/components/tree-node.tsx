@@ -122,7 +122,7 @@ export function TreeNode({
 
         <span
           className={cn(
-            'truncate tabular-nums text-[12px]',
+            'truncate tabular-nums text-control',
             isActive ? 'text-ink' : 'text-muted',
           )}
         >

@@ -146,7 +146,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
         <button
           type="button"
           onClick={onDone}
-          className="flex w-fit items-center gap-1.5 text-[12px] text-muted hover:text-ink"
+          className="flex w-fit items-center gap-1.5 text-control text-muted hover:text-ink"
         >
           <ArrowLeft size={12} weight="bold" />
           Projects

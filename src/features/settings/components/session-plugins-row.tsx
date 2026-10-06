@@ -155,7 +155,7 @@ export function SessionPluginsRow() {
           </div>
 
           <DialogFooter className="border-t border-border-soft px-3.5 py-2.5">
-            <DialogClose className="rounded-[3px] border border-border bg-panel-2 px-[11px] py-[5px] text-[12px] text-ink hover:bg-hover">
+            <DialogClose className="rounded-[3px] border border-border bg-panel-2 px-[11px] py-[5px] text-control text-ink hover:bg-hover">
               Done
             </DialogClose>
           </DialogFooter>

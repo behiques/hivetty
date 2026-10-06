@@ -107,7 +107,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
           </div>
 
           <div className="mt-auto flex flex-wrap items-center gap-2.5 border-t border-border px-[18px] py-3">
-            <label className="flex cursor-pointer items-center gap-[7px] text-[12px] text-muted select-none">
+            <label className="flex cursor-pointer items-center gap-[7px] text-control text-muted select-none">
               <input
                 type="checkbox"
                 checked={optOut}

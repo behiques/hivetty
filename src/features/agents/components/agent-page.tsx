@@ -99,7 +99,7 @@ export function AgentPage({ name }: { name: string | null }) {
           type="button"
           onClick={runNow}
           title={refusal ?? 'Wake this agent once, now.'}
-          className="rounded-md border border-border px-2.5 py-1 text-[12px] text-ink hover:bg-hover"
+          className="rounded-md border border-border px-2.5 py-1 text-control text-ink hover:bg-hover"
         >
           Run now
         </button>

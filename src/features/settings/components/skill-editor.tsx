@@ -234,7 +234,7 @@ export function SkillEditor({
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-6 text-center">
-          <span className="text-[12px] text-muted">
+          <span className="text-control text-muted">
             {refused === 'too-large'
               ? 'This file is too large to show here.'
               : 'This file is not text.'}
@@ -268,7 +268,7 @@ export function SkillEditor({
             <button
               type="button"
               onClick={onRename}
-              className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink"
+              className="rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
             >
               Rename
             </button>
@@ -276,7 +276,7 @@ export function SkillEditor({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-md border border-border px-2.5 py-1 text-[12px] text-red hover:bg-hover"
+            className="rounded-md border border-border px-2.5 py-1 text-control text-red hover:bg-hover"
           >
             Delete
           </button>

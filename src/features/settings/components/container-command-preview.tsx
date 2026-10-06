@@ -51,7 +51,7 @@ export function ContainerCommandPreview({
       ) : null}
 
       {diagnostic === undefined || diagnostic.probe === null ? null : (
-        <div className="flex items-start gap-2 text-[12px]">
+        <div className="flex items-start gap-2 text-control">
           <span
             aria-hidden
             className={`mt-1.5 size-[7px] shrink-0 rounded-full ${

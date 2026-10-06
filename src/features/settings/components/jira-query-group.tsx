@@ -103,7 +103,7 @@ export function JiraQueryGroup({ jql, canTest }: JiraQueryGroupProps) {
             onClick={test}
             disabled={!canTest}
             pending={testing}
-            className="rounded-[6px] border-border bg-panel-2 px-2.5 py-1 text-[12px] leading-normal text-ink hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-panel-2 aria-disabled:text-subtle aria-disabled:hover:bg-panel-2"
+            className="rounded-[6px] border-border bg-panel-2 px-2.5 py-1 text-control leading-normal text-ink hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-panel-2 aria-disabled:text-subtle aria-disabled:hover:bg-panel-2"
           >
             {testing ? testingPhrase : 'Test query'}
           </Button>

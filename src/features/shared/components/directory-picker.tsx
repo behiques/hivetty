@@ -275,7 +275,7 @@ export function DirectoryPicker({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="rounded-[3px] border border-border bg-panel-2 px-[11px] py-[5px] text-[12px] text-ink hover:bg-hover"
+            className="rounded-[3px] border border-border bg-panel-2 px-[11px] py-[5px] text-control text-ink hover:bg-hover"
           >
             Cancel
           </button>

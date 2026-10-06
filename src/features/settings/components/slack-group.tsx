@@ -721,11 +721,11 @@ function AdvancedFields({
         <p className="text-ui-sm text-subtle">
           Only if your org runs its own. Changing either signs you out.
         </p>
-        <div className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-bg px-2.5 py-1.5 tabular-nums text-[12px] text-subtle">
+        <div className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-bg px-2.5 py-1.5 tabular-nums text-control text-subtle">
           <span>{SLACK_MCP_URL}</span>
           <span className="text-subtle">server</span>
         </div>
-        <div className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-bg px-2.5 py-1.5 tabular-nums text-[12px] text-muted">
+        <div className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-bg px-2.5 py-1.5 tabular-nums text-control text-muted">
           <span>{SLACK_CLIENT_ID}</span>
           <span className="text-subtle">client ID</span>
         </div>
@@ -1053,7 +1053,7 @@ export function SlackGroup({ agents }: SlackGroupProps) {
             type="button"
             onClick={() => setOpen((value) => !value)}
             aria-expanded={open}
-            className="flex shrink-0 items-center gap-1 text-[12px] text-brand hover:text-ink"
+            className="flex shrink-0 items-center gap-1 text-control text-brand hover:text-ink"
           >
             <CaretRight
               size={11}

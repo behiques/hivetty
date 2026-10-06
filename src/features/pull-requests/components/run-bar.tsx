@@ -39,7 +39,7 @@ export function RunBar({ pushes, shown, files, onShow }: { pushes: Push[]; shown
       <span className="text-muted">last 8 runs</span>
       <span className="flex-1" />
       {files.map((file) => (
-        <span key={file} className="flex items-center gap-[5px] tabular-nums text-[12px] text-muted">
+        <span key={file} className="flex items-center gap-[5px] tabular-nums text-control text-muted">
           <FlowArrow size={13} aria-hidden />
           {file}
         </span>

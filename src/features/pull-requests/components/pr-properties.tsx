@@ -117,7 +117,7 @@ export function PrProperties({
   return (
     <div className="flex flex-col gap-1.5">
       <Section title="Status">
-        <div className="flex flex-col items-start gap-1.5 px-1 pt-0.5 pb-1.5 text-[12px]">
+        <div className="flex flex-col items-start gap-1.5 px-1 pt-0.5 pb-1.5 text-control">
           <Flap hatch={hatch} />
           {/* The flap says merged and the time; the line stays when it adds the day, or when there is no time. */}
           {hatch.flap === 'HATCHED' && hatch.at !== undefined && hatch.github === `Merged ${hatch.at}` ? null : (
@@ -131,7 +131,7 @@ export function PrProperties({
           title="Checks"
           aside={
             failing > 0 ? (
-              <span className="tabular-nums text-[12px] font-semibold text-red">{`${String(failing)} failing`}</span>
+              <span className="tabular-nums text-control font-semibold text-red">{`${String(failing)} failing`}</span>
             ) : undefined
           }
         >
@@ -268,7 +268,7 @@ export function PrActions({ row }: { row: HatcheryRow }) {
       {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
       <div role="status">
         {note === null ? null : (
-          <p className={cn('px-1 pt-1 text-[12px]', note.tone === 'amber' ? 'text-amber-text' : 'text-muted')}>{note.text}</p>
+          <p className={cn('px-1 pt-1 text-control', note.tone === 'amber' ? 'text-amber-text' : 'text-muted')}>{note.text}</p>
         )}
       </div>
     </div>

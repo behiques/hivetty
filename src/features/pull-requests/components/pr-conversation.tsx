@@ -110,7 +110,7 @@ function ReviewItem({ review, viaHive }: { review: PrReview; viaHive: boolean })
 function EventItem({ entry }: { entry: LedgerEntry }) {
   const Glyph = entry.meta?.['pr'] === undefined ? Hexagon : GitPullRequest;
   return (
-    <div className="grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 px-1.5 py-1 text-[12px] text-muted">
+    <div className="grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 px-1.5 py-1 text-control text-muted">
       <span className="grid place-items-center text-subtle">
         <Glyph size={13} aria-hidden />
       </span>
@@ -201,7 +201,7 @@ export function PrConversation({
           <h2 id="pr-conversation" className="text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase">
             Conversation
           </h2>
-          <span className="text-[12px] text-muted">
+          <span className="text-control text-muted">
             {`${plural(detail.comments.length, 'comment', 'comments')} · ${plural(reviews.length, 'review', 'reviews')} · ${plural(openThreads, 'open thread', 'open threads')}`}
           </span>
           <span className="flex-1" />

@@ -63,7 +63,7 @@ function Header({ ticketKey, ticket, details }: { ticketKey: string; ticket: Tic
       <div className="flex items-center gap-2.5">
         {ticket?.url ? (
           <a
-            className="tabular-nums text-[12px] font-bold text-brand hover:underline"
+            className="tabular-nums text-control font-bold text-brand hover:underline"
             href={ticket.url}
             target="_blank"
             rel="noreferrer"
@@ -71,7 +71,7 @@ function Header({ ticketKey, ticket, details }: { ticketKey: string; ticket: Tic
             {ticketKey}
           </a>
         ) : (
-          <span className="tabular-nums text-[12px] font-bold text-brand">{ticketKey}</span>
+          <span className="tabular-nums text-control font-bold text-brand">{ticketKey}</span>
         )}
         {ticket ? (
           <TicketTransitionMenu
@@ -155,7 +155,7 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
               aria-expanded={drawer.open}
               aria-controls="ticket-details"
               onClick={drawer.toggle}
-              className="ml-auto flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-[12px] text-ink hover:bg-hover @min-[760px]:hidden"
+              className="ml-auto flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-control text-ink hover:bg-hover @min-[760px]:hidden"
             >
               Details
             </button>

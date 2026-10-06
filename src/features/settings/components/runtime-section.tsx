@@ -358,7 +358,7 @@ export function RuntimeSection() {
         <button
           type="button"
           onClick={() => void runDiagnostic()}
-          className="w-fit rounded-[6px] border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink"
+          className="w-fit rounded-[6px] border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
         >
           {selectedId === ''
             ? 'Check the default command'
@@ -376,7 +376,7 @@ export function RuntimeSection() {
           variant="ghost"
           onClick={() => void runEnvDiagnostic()}
           pending={envDiagnosticPending}
-          className="w-fit rounded-[6px] border-border px-2.5 py-1 text-[12px] leading-normal text-muted hover:bg-hover hover:text-ink aria-disabled:opacity-60"
+          className="w-fit rounded-[6px] border-border px-2.5 py-1 text-control leading-normal text-muted hover:bg-hover hover:text-ink aria-disabled:opacity-60"
         >
           {envDiagnosticPending
             ? 'Checking…'

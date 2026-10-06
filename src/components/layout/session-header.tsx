@@ -81,7 +81,7 @@ function SessionLine({ session }: { session: Session }) {
       </span>
       <span
         data-testid="session-status"
-        className={cn('flex shrink-0 items-center gap-1.5 text-[12px]', ended ? 'text-muted' : tone)}
+        className={cn('flex shrink-0 items-center gap-1.5 text-control', ended ? 'text-muted' : tone)}
         // A narrow header hides the word (HIVE-213; 720px since the rails' gutters, #71, where the row needs ~705); the title keeps it for the dot.
         title={reason ?? word}
         aria-label={reason === undefined ? undefined : `Ended: ${reason}`}
@@ -117,7 +117,7 @@ function TerminalLine({ terminal }: { terminal: Terminal }) {
         </span>
       </span>
       <span className="flex-1" />
-      <span className="shrink-0 text-[12px] text-muted">{terminalLabel(terminal)}</span>
+      <span className="shrink-0 text-control text-muted">{terminalLabel(terminal)}</span>
     </>
   );
 }

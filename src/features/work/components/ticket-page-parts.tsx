@@ -21,7 +21,7 @@ export function TicketProblem({
   readAt?: number;
 }) {
   return (
-    <p className="flex flex-wrap items-baseline gap-2 text-[12px]">
+    <p className="flex flex-wrap items-baseline gap-2 text-control">
       <span className="text-amber-text">{message}</span>
       <button type="button" onClick={onRetry} className="text-brand hover:underline">
         Retry

@@ -113,7 +113,7 @@ function TicketLinks({ ticketKey, sessionId }: { ticketKey: string; sessionId: s
         <>
           <p
             className={cn(
-              'rounded-md px-2 py-1.5 text-[12px]',
+              'rounded-md px-2 py-1.5 text-control',
               model.verdict.tone === 'amber' ? 'bg-amber/10 text-amber-text' : 'text-green',
             )}
           >
@@ -137,7 +137,7 @@ function TicketLinks({ ticketKey, sessionId }: { ticketKey: string; sessionId: s
                   type="button"
                   aria-expanded={openArc === arc}
                   onClick={() => toggle(arc)}
-                  className="flex items-center gap-2 rounded-md px-1.5 py-1 text-[12px] text-muted hover:bg-hover"
+                  className="flex items-center gap-2 rounded-md px-1.5 py-1 text-control text-muted hover:bg-hover"
                 >
                   <span>{ARC_LABEL[arc]}</span>
                   <b className="tabular-nums text-ink">{tickets.length}</b>
@@ -156,7 +156,7 @@ function TicketLinks({ ticketKey, sessionId }: { ticketKey: string; sessionId: s
                         <button
                           type="button"
                           onClick={() => openOnWork(ticket.key)}
-                          className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left text-[12px] hover:bg-hover"
+                          className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left text-control hover:bg-hover"
                         >
                           <span className="tabular-nums text-brand">{ticket.key}</span>
                           <span className="min-w-0 flex-1 text-ink">{ticket.summary}</span>

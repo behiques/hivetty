@@ -156,7 +156,7 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
         )}
 
         {problem === null ? null : (
-          <p role="alert" className="text-[12px] text-red">
+          <p role="alert" className="text-control text-red">
             {`Not saved: ${problem}.`}
           </p>
         )}
@@ -166,7 +166,7 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
             <span className="text-[11px] font-semibold tracking-[0.06em] text-subtle uppercase">{`For ${EXAMPLE.key}`}</span>
             <code
               data-testid="ticket-workflow-preview"
-              className="rounded-[6px] border border-border-soft bg-term-bg px-2.5 py-2 font-mono text-[12px] break-words text-ink"
+              className="rounded-[6px] border border-border-soft bg-term-bg px-2.5 py-2 font-mono text-control break-words text-ink"
             >
               {start.kind === 'wake'
                 ? `Wakes ${start.agent}: ${start.body}`

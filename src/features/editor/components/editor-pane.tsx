@@ -32,7 +32,7 @@ function PaneMessage({ icon, children }: { icon: string; children: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
       <Icon name={icon} size={20} className="text-subtle" />
-      <p className="text-[12px] text-subtle">{children}</p>
+      <p className="text-control text-subtle">{children}</p>
     </div>
   );
 }
@@ -152,8 +152,8 @@ export function EditorPane() {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 bg-panel-2 px-6 text-center">
         <SwarmCreature creature="spire" size={96} />
-        <p className="text-[12px] text-muted">{emptyPhrase}</p>
-        <p className="text-[12px] text-subtle">
+        <p className="text-control text-muted">{emptyPhrase}</p>
+        <p className="text-control text-subtle">
           Open a file from the explorer to edit it here.
         </p>
       </div>

@@ -242,7 +242,7 @@ export function SkillBundle({
       <button
         type="button"
         onClick={onBack}
-        className="flex items-center gap-1 border-b border-border-soft px-2.5 py-1.5 text-left text-[12px] text-muted hover:bg-hover hover:text-ink"
+        className="flex items-center gap-1 border-b border-border-soft px-2.5 py-1.5 text-left text-control text-muted hover:bg-hover hover:text-ink"
       >
         <Icon name="ph-caret-left" size={12} />
         <span className="truncate">Skills</span>

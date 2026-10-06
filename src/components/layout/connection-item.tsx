@@ -195,7 +195,7 @@ export function ConnectionItem() {
             </span>
             <h3 className={cn('text-control font-semibold', TONE[state])}>{rows[state].title}</h3>
             <span />
-            <div className="text-[12px] leading-[1.45] text-muted">{rows[state].body}</div>
+            <div className="text-control leading-[1.45] text-muted">{rows[state].body}</div>
           </section>
         ))}
       </PopoverContent>

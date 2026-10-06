@@ -1319,7 +1319,7 @@ export function ServerModeGroup({
               Token for &quot;{justPaired.name}&quot; — copy it now. It will not be
               shown again.
             </p>
-            <code className="break-all font-mono text-[12px] text-ink">
+            <code className="break-all font-mono text-control text-ink">
               {justPaired.token}
             </code>
             {/*

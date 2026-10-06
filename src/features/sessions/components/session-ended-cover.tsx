@@ -40,7 +40,7 @@ export function SessionEndedCover({ session }: { session: Session }) {
       <div
         role="status"
         data-testid="session-ended-strip"
-        className="absolute inset-x-0 bottom-0 z-10 flex items-center gap-3 border-t border-border-soft bg-panel/90 px-3.5 py-2 text-[12px] text-muted backdrop-blur-sm"
+        className="absolute inset-x-0 bottom-0 z-10 flex items-center gap-3 border-t border-border-soft bg-panel/90 px-3.5 py-2 text-control text-muted backdrop-blur-sm"
       >
         <span className="flex-1 truncate">{reason}</span>
         {actions}

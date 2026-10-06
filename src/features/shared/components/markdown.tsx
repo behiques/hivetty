@@ -133,7 +133,7 @@ function block(token: Token, i: number): ReactNode {
       );
     case 'code':
       return (
-        <pre key={i} className="mb-[0.75em] overflow-x-auto rounded-md bg-term-bg p-2.5 font-mono text-[12px] text-muted">
+        <pre key={i} className="mb-[0.75em] overflow-x-auto rounded-md bg-term-bg p-2.5 font-mono text-control text-muted">
           {(token as Tokens.Code).text}
         </pre>
       );

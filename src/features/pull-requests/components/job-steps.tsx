@@ -9,7 +9,7 @@ import { StateIcon } from '@features/pull-requests/components/state-icon';
 import { holderIcon } from '@features/pull-requests/holder-icon';
 import type { RunJob } from '@shared/github-contract';
 
-const BUTTON = 'flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-[12px] leading-normal text-ink hover:bg-hover hover:text-ink disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-transparent';
+const BUTTON = 'flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-control leading-normal text-ink hover:bg-hover hover:text-ink disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-transparent';
 
 /**
  * The shown job (HIVE-206): its name and state, its steps with their times
@@ -63,9 +63,9 @@ export function JobSteps({ job, canRerun, onRerun, holder }: { job: RunJob; canR
           Open the log
         </a>
       </div>
-      {error === null ? null : <p role="alert" className="mt-2 text-[12px] text-red">{error}</p>}
+      {error === null ? null : <p role="alert" className="mt-2 text-control text-red">{error}</p>}
       {Holder === null ? null : (
-        <div className="mt-3 flex items-center gap-2 text-[12px] text-muted">
+        <div className="mt-3 flex items-center gap-2 text-control text-muted">
           <Holder size={14} aria-hidden className="text-green" />
           <span><b className="text-ink">{holder}</b> has it</span>
         </div>

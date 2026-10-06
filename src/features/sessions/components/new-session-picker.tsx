@@ -319,14 +319,14 @@ export function NewSessionPicker() {
               <Button onClick={() => setSessionInstead(true)}>Open a session instead</Button>
             </div>
             {wakeProblem === null ? null : (
-              <p role="alert" className="text-[12px] text-red">
+              <p role="alert" className="text-control text-red">
                 {`Could not ask ${wake.agent}: ${wakeProblem}`}
               </p>
             )}
           </div>
         ) : (
           <div className="flex w-[560px] max-w-[92%] flex-col gap-1">
-            <label htmlFor="picker-first-message" className="text-[12px] text-muted">
+            <label htmlFor="picker-first-message" className="text-control text-muted">
               First message
             </label>
             <input
@@ -342,7 +342,7 @@ export function NewSessionPicker() {
               placeholder="Typed into the session when it opens. Blank opens at an empty prompt."
               spellCheck={false}
               aria-describedby="picker-first-message-hint"
-              className="rounded-[6px] border border-border bg-term-input px-2.5 py-1.5 font-mono text-[12px] text-ink caret-green outline-none placeholder:font-sans placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
+              className="rounded-[6px] border border-border bg-term-input px-2.5 py-1.5 font-mono text-control text-ink caret-green outline-none placeholder:font-sans placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
             />
             <span id="picker-first-message-hint" className="text-ui-sm text-subtle">
               {workflow === null

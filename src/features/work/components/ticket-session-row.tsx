@@ -39,7 +39,7 @@ export function TicketSessionRow({ id }: TicketSessionRowProps) {
         detail={entity.idleDetail}
       />
 
-      <span className="flex-1 truncate text-left tabular-nums text-[12px] text-muted">
+      <span className="flex-1 truncate text-left tabular-nums text-control text-muted">
         {entityLabel(entity)}
       </span>
 

@@ -80,7 +80,7 @@ export function MentionList({
 }) {
   if (failed) {
     return (
-      <p className="absolute left-3 top-full z-10 mt-1 rounded-lg border border-border bg-panel-2 px-2.5 py-2 text-[12px] text-muted">
+      <p className="absolute left-3 top-full z-10 mt-1 rounded-lg border border-border bg-panel-2 px-2.5 py-2 text-control text-muted">
         Could not search Jira
       </p>
     );

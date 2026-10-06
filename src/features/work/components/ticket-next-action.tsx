@@ -56,7 +56,7 @@ export function TicketNextAction({ ticketKey, className }: { ticketKey: string; 
       </Button>
       {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
       <div role="status">
-        {problem === null ? null : <p className="py-1 text-[12px] text-amber-text">{problem}</p>}
+        {problem === null ? null : <p className="py-1 text-control text-amber-text">{problem}</p>}
       </div>
     </div>
   );

@@ -34,7 +34,7 @@ export function ChangedFiles({ changesId, subRoot, onOpenFile }: ChangedFilesPro
           onClick={() => {
             onOpenFile(file.path);
           }}
-          className="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-[5px] text-left text-[12px] hover:bg-hover"
+          className="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-[5px] text-left text-control hover:bg-hover"
         >
           <i
             className={cn(

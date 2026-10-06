@@ -369,7 +369,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
 
   // The head row: the asker's glyph, its name, what it did, the wait, and the fold.
   const meta = () => (
-    <div className="flex items-center gap-[7px] text-[12px] text-muted">
+    <div className="flex items-center gap-[7px] text-control text-muted">
       {askerEntity !== undefined && isAgent(askerEntity) ? (
         <AgentTile icon={askerEntity.icon} tone="asking" live={0} size="sm" />
       ) : (
@@ -620,7 +620,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
         <button
           type="button"
           onClick={() => openEntity(from)}
-          className="self-end text-[12px] text-brand hover:underline"
+          className="self-end text-control text-brand hover:underline"
         >
           {`Open ${asker} ›`}
         </button>

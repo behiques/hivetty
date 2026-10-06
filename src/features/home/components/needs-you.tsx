@@ -46,7 +46,7 @@ export function NeedsYou() {
     <section aria-labelledby="needs-you-head" className="grid min-w-0 content-start gap-px">
       <StripHead>
         <span id="needs-you-head">
-          Needs you <b className="tabular-nums text-[12px] text-amber-text">{queue.length}</b>
+          Needs you <b className="tabular-nums text-control text-amber-text">{queue.length}</b>
         </span>
       </StripHead>
       {queue.slice(0, NEEDS_YOU_MAX).map((n) => (
@@ -55,7 +55,7 @@ export function NeedsYou() {
       {more > 0 && (
         <button
           type="button"
-          className="px-1 py-[5px] text-left text-[12px] text-muted hover:text-ink"
+          className="px-1 py-[5px] text-left text-control text-muted hover:text-ink"
           onClick={() => openInboxDrawer()}
         >
           {more} more in the Inbox ›
