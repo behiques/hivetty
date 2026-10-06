@@ -1491,6 +1491,25 @@ describe('a row dismisses itself once it has been acted on', () => {
       expect(dismissForSession).toHaveBeenCalledWith('sess-05', ['session.blocked']);
     });
 
+    /**
+     * Idle and input-needed rows count on the pill and the dock now, and Clear
+     * all keeps them, so one about a session that is gone would stay counted
+     * forever: the row's click opens nothing.
+     */
+    it.each([
+      ['finished', () => ({ entityId: 'sess-05' }), CH.sessionFinished],
+      ['terminated', () => ({ entityId: 'sess-05', status: 'terminated' }), CH.sessionStatus],
+    ])('sweeps the yours-again rows of a session that %s', (_name, payload, channel) => {
+      const n = withSweeps();
+
+      n.observe(channel, payload());
+
+      expect(dismissForSession).toHaveBeenCalledWith('sess-05', [
+        'session.idle',
+        'session.input_needed',
+      ]);
+    });
+
     it('sweeps nothing while the session is still blocked', () => {
       const n = withSweeps();
 

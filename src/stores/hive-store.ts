@@ -8939,7 +8939,7 @@ export const useUnreadCount = () =>
 export interface Summons {
   /** `agent.ask` and `agent.permission` whose thread is open, and `pr.review_requested`. */
   asks: HiveNotification[];
-  /** `session.blocked`, less the one on stage. */
+  /** `session.blocked`, `session.idle` and `session.input_needed`, less the one on stage. */
   sessions: HiveNotification[];
 }
 

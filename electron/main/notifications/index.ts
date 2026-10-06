@@ -619,6 +619,13 @@ export function createNotifier(options: NotifierOptions): Notifier {
     }
 
     /**
+     * A session that ended takes its yours-again rows with it. They count on
+     * the pill and the dock and Clear all keeps them, so without this a row
+     * whose click opens nothing would stay counted for good.
+     */
+    if (hasEnded(status)) hub.dismissForSession(entityId, ARRIVAL_KINDS);
+
+    /**
      * The inbox is routed off the hook **event**, never off the status.
      *
      * These are two different questions that used to share one branch. The
