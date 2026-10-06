@@ -16,6 +16,24 @@ const VIEWS = [
   { value: 'split', label: 'Split' },
 ] as const satisfies readonly { value: PrDiffView; label: string }[];
 
+/**
+ * Past this many rows a file (a lockfile, a generated bundle) waits behind
+ * "Show full diff". Rows are the current view's: lines in Unified, paired rows
+ * in Split, so Split shows at least as many lines. The offer still says
+ * "lines" in Split, where the number is rows: an accepted approximation.
+ */
+export const DIFF_ROW_CAP = 2_000;
+
+/** How many of each hunk's rows to draw: the cap spent in order, across hunk boundaries. */
+export function capRows(counts: readonly number[], cap: number): number[] {
+  let left = cap;
+  return counts.map((count) => {
+    const shown = Math.min(count, left);
+    left -= shown;
+    return shown;
+  });
+}
+
 /** A selected gutter number: its side too, since a removed line and an added one can share a number. */
 interface Selection {
   side: 'L' | 'R';
@@ -105,6 +123,13 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
     [diff],
   );
   const split = useMemo(() => diff?.hunks.map(splitRows) ?? [], [diff]);
+  const [full, setFull] = useState(false);
+  const counts = useMemo(
+    () => (view === 'unified' ? (diff?.hunks.map((hunk) => hunk.lines.length) ?? []) : split.map((rows) => rows.length)),
+    [view, diff, split],
+  );
+  const shown = useMemo(() => capRows(counts, full ? Infinity : DIFF_ROW_CAP), [counts, full]);
+  const hidden = counts.reduce((a, b) => a + b, 0) - shown.reduce((a, b) => a + b, 0);
 
   const card = (thread: PrThread) => (
     <div key={thread.id} data-thread={thread.id} className="my-1.5 mr-[18px] ml-[72px] font-sans">
@@ -160,11 +185,13 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
           <>
             <ProblemLine problem={problem} onRetry={onRetry} className="px-[18px] pb-2" />
             {placed?.outdated.map(card)}
-            {diff.hunks.map((hunk, h) => (
+            {diff.hunks.map((hunk, h) => {
+              const rows = shown[h] ?? 0;
+              return rows === 0 ? null : (
               <div key={`${String(h)}${hunk.header}`}>
                 <div className="px-[18px] py-0.5 text-subtle">{hunk.header}</div>
                 {view === 'unified'
-                  ? hunk.lines.map((line, i) => {
+                  ? hunk.lines.slice(0, rows).map((line, i) => {
                       const side = line.newN === null ? 'L' : 'R';
                       const n = line.newN ?? line.oldN;
                       return (
@@ -184,7 +211,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                       </Fragment>
                       );
                     })
-                  : (split[h] ?? []).map((row, i) => (
+                  : (split[h] ?? []).slice(0, rows).map((row, i) => (
                       <Fragment key={i}>
                         <div data-testid={`split-row-${String(i)}`} className="grid grid-cols-2">
                           <div data-side="left" className="min-w-0 border-r border-border-soft">
@@ -225,7 +252,16 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                       </Fragment>
                     ))}
               </div>
-            ))}
+              );
+            })}
+            {hidden > 0 ? (
+              <p className="flex items-center gap-2 px-[18px] py-2 font-sans text-control text-muted">
+                {`${String(hidden)} more ${hidden === 1 ? 'line' : 'lines'}`}
+                <button type="button" onClick={() => setFull(true)} className="text-brand hover:underline">
+                  Show full diff
+                </button>
+              </p>
+            ) : null}
           </>
         ) : (
           <div className="flex flex-col gap-1 px-[18px] py-4 font-sans text-ui">
