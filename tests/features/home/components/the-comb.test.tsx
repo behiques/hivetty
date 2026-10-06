@@ -242,7 +242,8 @@ describe('TheComb — the cells that fold others (decision D6)', () => {
     FakeIntersectionObserver.last!.fire(true);
     const before = rec.calls.filter((c) => c.op === 'fillRect').length;
     act(() => raf.mock.calls[0]![0](16));
-    act(() => raf.mock.calls[1]![0](32));
+    // A 30fps frame apart: the loop skips paints closer than that (HIVE-225).
+    act(() => raf.mock.calls[1]![0](50));
     expect(rec.calls.filter((c) => c.op === 'fillRect').length).toBe(before + 2);
   });
 });

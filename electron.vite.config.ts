@@ -144,6 +144,15 @@ export default defineConfig({
      * carrying a second copy of either.
      */
     build: {
+      /**
+       * Minified, with maps beside it (HIVE-225). electron-vite defaults every
+       * target to `minify: false`, so the packaged renderer shipped 4.9 MB of
+       * readable JS, twice what the web build ships, parsed and compiled on
+       * every cold start. The maps are separate files and are not loaded
+       * unless DevTools asks for them.
+       */
+      minify: true,
+      sourcemap: true,
       rollupOptions: {
         input: {
           index: 'index.html',

@@ -14,13 +14,20 @@ export type CanvasPaint = (ctx: CanvasRenderingContext2D, t: number, dt: number,
 const MAX_DT = 1 / 15;
 
 /**
+ * The shortest gap between two paints: 30fps, less a millisecond so rAF jitter
+ * on a 60Hz display never drops every other paint (HIVE-225).
+ */
+const FRAME_MS = 1000 / 30 - 1;
+
+/**
  * A canvas's animation loop (HIVE-221; extracted from the comb, HIVE-199).
  *
  * Runs `requestAnimationFrame` only while the canvas is on screen and the
- * document is visible, and stops for good on unmount. Each frame advances the
- * clock by the real elapsed time, clamped to 1/15 s, and calls `paint` with
- * it. The backing store follows the element, device pixel ratio capped at 2,
- * and is repainted on every resize.
+ * document is visible, and stops for good on unmount. At most thirty frames a
+ * second paint (HIVE-225); each paint advances the clock by the real time since
+ * the last one, clamped to 1/15 s, and calls `paint` with it. The backing
+ * store follows the element, device pixel ratio capped at 2, and is repainted
+ * on every resize.
  *
  * `still`, a number, is reduced motion: one paint at that `t`, no frame ever
  * scheduled, and a repaint whenever `paint` changes (the data or the palette
@@ -94,10 +101,12 @@ export function useCanvasLoop(
 
     function tick(now: number): void {
       frame = 0;
-      const dt = last === null ? 0 : Math.min(Math.max((now - last) / 1000, 0), MAX_DT);
-      last = now;
-      clock.current += dt;
-      draw(clock.current, dt);
+      if (last === null || now - last >= FRAME_MS) {
+        const dt = last === null ? 0 : Math.min(Math.max((now - last) / 1000, 0), MAX_DT);
+        last = now;
+        clock.current += dt;
+        draw(clock.current, dt);
+      }
       schedule();
     }
     function schedule(): void {
