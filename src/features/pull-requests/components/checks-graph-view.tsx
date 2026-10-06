@@ -31,7 +31,7 @@ const WHEEL_RATE = 0.01;
 
 const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
 
-const ZOOM_BUTTON = 'grid size-7 place-items-center rounded-md text-muted hover:bg-hover hover:text-ink aria-pressed:bg-hover aria-pressed:text-ink disabled:opacity-40 disabled:hover:bg-transparent';
+const ZOOM_BUTTON = 'grid size-7 place-items-center rounded-full text-muted hover:bg-hover hover:text-ink aria-pressed:bg-hover aria-pressed:text-ink disabled:opacity-40 disabled:hover:bg-transparent';
 
 /**
  * The Checks graph (HIVE-206): a box per job at the layout's place, its
@@ -88,11 +88,11 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
   }, []);
   return (
     <div className="mx-6 mt-3">
-      <div role="group" aria-label="Zoom" className="ml-auto flex w-fit items-center gap-0.5 rounded-lg border border-border-soft bg-panel p-0.5">
+      <div role="group" aria-label="Zoom" className="ml-auto flex w-fit items-center gap-0.5 rounded-full border border-border-soft bg-panel p-0.5">
         <button type="button" aria-label="Zoom out" title="Zoom out" disabled={scale <= ZOOM_MIN} onClick={() => step(-ZOOM_STEP)} className={ZOOM_BUTTON}>
           <MagnifyingGlassMinus size={14} aria-hidden />
         </button>
-        <button type="button" aria-label="Reset zoom" title="Back to 100%" onClick={() => setZoom(1)} className="h-7 min-w-11 rounded-md px-1 tabular-nums text-ui-sm text-muted hover:bg-hover hover:text-ink">
+        <button type="button" aria-label="Reset zoom" title="Back to 100%" onClick={() => setZoom(1)} className="h-7 min-w-11 rounded-full px-1 tabular-nums text-ui-sm text-muted hover:bg-hover hover:text-ink">
           {`${String(Math.round(scale * 100))}%`}
         </button>
         <button type="button" aria-label="Zoom in" title="Zoom in" disabled={scale >= ZOOM_MAX} onClick={() => step(ZOOM_STEP)} className={ZOOM_BUTTON}>

@@ -36,7 +36,7 @@ export function TerminalMenu() {
         <Button
           variant="primary"
           aria-label="Terminal in a project"
-          className="flex items-center self-stretch rounded-l-none border-l-brand-fill-strong px-2"
+          className="flex items-center self-stretch rounded-l-none border-l-brand-fill-strong pr-3 pl-2.5"
         >
           <CaretDown size={13} weight="bold" aria-hidden="true" />
         </Button>

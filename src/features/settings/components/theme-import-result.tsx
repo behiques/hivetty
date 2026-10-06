@@ -128,7 +128,7 @@ export function ThemeImportResult({ result, onDismiss }: ThemeImportResultProps)
         type="button"
         aria-label="Dismiss"
         onClick={onDismiss}
-        className="shrink-0 rounded p-1 text-subtle hover:bg-hover hover:text-ink"
+        className="shrink-0 rounded-full p-1.5 text-subtle hover:bg-hover hover:text-ink"
       >
         <X size={13} weight="bold" />
       </button>

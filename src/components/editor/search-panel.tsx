@@ -228,7 +228,7 @@ function SearchPanel({ view, subscribe }: SearchPanelProps) {
         onClick={() => setShowReplace((open) => !open)}
         aria-expanded={showReplace}
         aria-label={showReplace ? 'Hide replace' : 'Show replace'}
-        className="absolute top-1/2 left-0 flex h-7 w-5 -translate-y-1/2 items-center justify-center rounded text-subtle hover:bg-hover hover:text-muted"
+        className="absolute top-1/2 left-0 flex h-7 w-5 -translate-y-1/2 items-center justify-center rounded-full text-subtle hover:bg-hover hover:text-muted"
       >
         <Icon name={showReplace ? 'ph-caret-down' : 'ph-caret-right'} size={10} />
       </button>
@@ -254,7 +254,7 @@ function SearchPanel({ view, subscribe }: SearchPanelProps) {
               aria-pressed={query[toggle.key]}
               onClick={() => amend({ [toggle.key]: !query[toggle.key] })}
               className={[
-                'grid h-[18px] w-[18px] shrink-0 place-items-center rounded text-micro font-semibold',
+                'grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-micro font-semibold',
                 query[toggle.key]
                   ? 'bg-active text-brand'
                   : 'text-subtle hover:bg-hover hover:text-muted',
@@ -401,7 +401,7 @@ function IconButton({
       aria-label={label}
       onClick={onClick}
       disabled={disabled}
-      className="grid h-[21px] w-[21px] shrink-0 place-items-center rounded text-muted hover:bg-hover hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
+      className="grid h-[21px] w-[21px] shrink-0 place-items-center rounded-full text-muted hover:bg-hover hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
     >
       <Icon name={name} size={12} />
     </button>

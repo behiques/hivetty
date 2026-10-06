@@ -492,7 +492,7 @@ function Adder({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded border border-dashed border-border bg-transparent px-2 py-0.5 text-ui-sm text-subtle hover:border-brand hover:text-ink"
+        className="rounded-full border border-dashed border-border bg-transparent px-2.5 py-0.5 text-ui-sm text-subtle hover:border-brand hover:text-ink"
       >
         + {label}
       </button>
@@ -527,7 +527,7 @@ function Adder({
           because closing would discard what the user typed and say nothing.
         */
         onBlur={commit}
-        className="w-24 rounded border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-ink outline-none focus:border-brand"
+        className="w-24 rounded-full border border-border bg-panel-2 px-2.5 py-0.5 text-ui-sm text-ink outline-none focus:border-brand"
       />
       {problem === null ? null : (
         <span role="alert" className="text-micro text-red">
@@ -949,8 +949,8 @@ export function AgentForm({
       onClick={onClick}
       className={
         on
-          ? 'rounded border border-brand bg-active px-2 py-0.5 text-ui-sm text-ink'
-          : 'rounded border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-subtle hover:bg-hover hover:text-ink'
+          ? 'rounded-full border border-brand bg-active px-2.5 py-0.5 text-ui-sm text-ink'
+          : 'rounded-full border border-border bg-panel-2 px-2.5 py-0.5 text-ui-sm text-subtle hover:bg-hover hover:text-ink'
       }
     >
       {label}

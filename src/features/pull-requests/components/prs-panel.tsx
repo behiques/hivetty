@@ -181,7 +181,7 @@ function Header({
           aria-pressed={searching}
           onClick={onSearch}
           className={cn(
-            'grid size-[22px] place-items-center self-center rounded-md hover:bg-hover',
+            'grid size-7 place-items-center self-center rounded-full hover:bg-hover',
             searching ? 'text-ink' : 'text-muted',
           )}
         >

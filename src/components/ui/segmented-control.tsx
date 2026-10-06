@@ -181,8 +181,9 @@ export function SegmentedControl<T extends string>({
           file path — grows past whatever contains it, and in the
           316px rail that is the difference between a control and a bug.
         */
-        'inline-flex max-w-full items-center gap-0.5 rounded-lg border border-border-soft bg-panel-2 p-0.5',
-        wrap && 'flex-wrap',
+        'inline-flex max-w-full items-center gap-0.5 rounded-full border border-border-soft bg-panel-2 p-0.5',
+        // Wrapping onto a second row, a pill track would read as a blob; it softens to the card radius.
+        wrap && 'flex-wrap rounded-xl',
         disabled && 'opacity-45',
         className,
       )}
@@ -240,7 +241,7 @@ export function SegmentedControl<T extends string>({
               }
             }}
             className={cn(
-              'rounded-md px-2.5 py-1 text-control outline-none',
+              'rounded-full px-3 py-1 text-control outline-none',
               /*
                 One line, always: a wrapped label makes the group taller and
                 every segment in it taller with it, which is how a long path

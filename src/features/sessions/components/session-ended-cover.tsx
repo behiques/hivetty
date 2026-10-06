@@ -58,7 +58,7 @@ export function SessionEndedCover({ session }: { session: Session }) {
           type="button"
           aria-label="Close"
           onClick={() => setClosed(true)}
-          className="absolute top-3 right-3 rounded-md p-1 text-muted hover:bg-hover"
+          className="absolute top-3 right-3 rounded-full p-1.5 text-muted hover:bg-hover"
         >
           <X size={12} weight="bold" aria-hidden />
         </button>

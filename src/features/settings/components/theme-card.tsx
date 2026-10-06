@@ -139,7 +139,7 @@ export function ThemeCard({
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`${theme.name} actions`}
-            className="shrink-0 rounded p-1 text-subtle hover:bg-hover hover:text-ink"
+            className="shrink-0 rounded-full p-1.5 text-subtle hover:bg-hover hover:text-ink"
           >
             <DotsThreeVertical size={13} weight="bold" />
           </DropdownMenuTrigger>

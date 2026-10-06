@@ -187,7 +187,7 @@ export function AgentRow({ id }: AgentRowProps) {
             aria-label={`Run ${id} now`}
             title="Wake this agent once, now."
             onClick={runNow}
-            className="rounded p-0.5 text-muted hover:text-ink"
+            className="rounded-full p-0.5 text-muted hover:text-ink"
           >
             <Play size={13} aria-hidden="true" />
           </button>
@@ -197,7 +197,7 @@ export function AgentRow({ id }: AgentRowProps) {
           aria-label={paused ? `Resume ${id}` : `Pause ${id}`}
           title={paused ? 'Let this agent wake again' : 'Stop this agent waking. A turn already running finishes.'}
           onClick={togglePause}
-          className="rounded p-0.5 text-muted hover:text-ink"
+          className="rounded-full p-0.5 text-muted hover:text-ink"
         >
           {paused ? <Play size={13} aria-hidden="true" /> : <Pause size={13} aria-hidden="true" />}
         </button>

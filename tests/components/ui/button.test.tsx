@@ -16,7 +16,8 @@ describe('Button', () => {
     render(<Button>Cancel</Button>);
     const el = screen.getByRole('button', { name: 'Cancel' });
     expect(el).toHaveAttribute('type', 'button');
-    expect(el.className).toContain('border-border');
+    // A pill with an edge, not a hairline (the buttons' look, approved 6 Oct 2026).
+    expect(el).toHaveClass('rounded-full', 'border-edge', 'font-semibold');
   });
 
   it('draws the primary variant with the brand fill', () => {

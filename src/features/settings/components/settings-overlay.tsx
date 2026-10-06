@@ -231,7 +231,7 @@ export function SettingsOverlay() {
           </DialogPrimitive.Title>
           <DialogPrimitive.Close
             aria-label="Close settings"
-            className="rounded p-1 text-subtle hover:bg-hover hover:text-ink"
+            className="rounded-full p-1.5 text-subtle hover:bg-hover hover:text-ink"
           >
             <X size={13} weight="bold" />
           </DialogPrimitive.Close>

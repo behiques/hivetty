@@ -387,7 +387,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
           type="button"
           aria-label="Fold into the pill"
           onClick={onClose}
-          className="grid size-[22px] place-items-center rounded-md text-muted hover:bg-hover"
+          className="grid size-7 place-items-center rounded-full text-muted hover:bg-hover"
         >
           <X size={14} />
         </button>
@@ -600,7 +600,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
               value={reply}
               onChange={(event) => setReply(event.target.value)}
               onKeyDown={onEnter(sendReply)}
-              className="min-w-0 flex-1 rounded-md border border-border bg-term-input px-2 py-1 text-micro text-ink placeholder:text-subtle"
+              className="min-w-0 flex-1 rounded-full border border-border bg-term-input px-2.5 py-1 text-micro text-ink placeholder:text-subtle"
               placeholder="Answer…"
             />
             <Button

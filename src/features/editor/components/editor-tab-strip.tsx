@@ -145,7 +145,7 @@ export function EditorTabStrip({ showTerminalTab }: EditorTabStripProps) {
               aria-hidden="true"
               title={`Close ${tab.name}`}
               onClick={() => closeFile(tab.key)}
-              className="mr-1.5 rounded p-0.5 text-subtle hover:bg-active hover:text-ink"
+              className="mr-1.5 rounded-full p-0.5 text-subtle hover:bg-active hover:text-ink"
             >
               <Icon name="ph-x" size={11} />
             </button>

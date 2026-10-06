@@ -396,7 +396,7 @@ export function AdvancedSection() {
             }}
             disabled={!revealConfig}
             title={revealConfig ? undefined : REMOTE_DISABLED_REASON.revealConfig}
-            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink disabled:opacity-60"
+            className="flex w-fit items-center gap-1.5 rounded-full border border-edge px-4 py-1.5 text-control font-semibold text-ink hover:bg-hover disabled:opacity-60"
           >
             <FolderOpen size={12} weight="bold" />
             {fileManager(info?.platform)}
@@ -404,7 +404,7 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => void onReload()}
-            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
+            className="flex w-fit items-center gap-1.5 rounded-full border border-edge px-4 py-1.5 text-control font-semibold text-ink hover:bg-hover"
           >
             <ArrowClockwise size={12} weight="bold" />
             Reload
@@ -479,7 +479,7 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => setConfirming(true)}
-            className="w-fit rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
+            className="w-fit rounded-full border border-edge px-4 py-1.5 text-control font-semibold text-ink hover:bg-hover"
           >
             Reset to template
           </button>
@@ -550,7 +550,7 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => setWhatsNewOpen(true)}
-            className="rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
+            className="rounded-full border border-edge px-4 py-1.5 text-control font-semibold text-ink hover:bg-hover"
           >
             Open What’s new
           </button>
@@ -568,7 +568,7 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => void refresh()}
-            className="shrink-0 rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
+            className="shrink-0 rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
           >
             Refresh
           </button>

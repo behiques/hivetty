@@ -145,7 +145,7 @@ export function PrPage({ row }: { row: HatcheryRow }) {
           aria-expanded={drawer.open}
           aria-controls="pr-details"
           onClick={drawer.toggle}
-          className="flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-control text-ink hover:bg-hover @min-[760px]:hidden"
+          className="flex items-center gap-1.5 rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover @min-[760px]:hidden"
         >
           Details
         </button>
@@ -153,7 +153,7 @@ export function PrPage({ row }: { row: HatcheryRow }) {
           href={pr.url}
           target="_blank"
           rel="noreferrer"
-          className="flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-control text-ink hover:bg-hover"
+          className="flex items-center gap-1.5 rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
         >
           <GithubLogo size={13} aria-hidden />
           GitHub
