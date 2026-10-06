@@ -53,7 +53,8 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
     <div className="flex flex-col gap-0.5">
       <div
         className={cn(
-          'group relative flex items-center gap-1 rounded-lg pr-2.5',
+          // While the actions show, the row makes room for them (two 21px buttons, 6px in), so the name ellipsizes instead of running under them.
+          'group relative flex items-center gap-1 rounded-lg pr-2.5 hover:pr-14 has-[:focus-visible]:pr-14',
           selected ? 'bg-active' : 'hover:bg-hover',
         )}
       >

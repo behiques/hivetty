@@ -77,3 +77,31 @@ test('⌘[ from a session returns to the Overmind with the filter kept and the r
     await app.close();
   }
 });
+
+test('a hovered project row ellipsizes a long name so its actions never sit on it', async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  const name = 'apfm-provider-directory-with-a-long-tail';
+  writeProjectConfig(configPath, { id: 'long-name', name, path: REAL_DIRECTORY });
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  const page = await app.firstWindow();
+
+  try {
+    await page.waitForSelector('nav[aria-label="Places"]');
+    await page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: 'Sessions', exact: true }).click();
+    const list = page.getByRole('region', { name: 'Sessions list' });
+    const label = list.getByText(name, { exact: true });
+    const add = list.getByRole('button', { name: `New session in ${name}` });
+
+    await label.hover();
+    await expect(add).toHaveCSS('opacity', '1');
+
+    const box = async (locator: typeof label) => (await locator.boundingBox())!;
+    // The name ends before the first action begins, and is cut with an ellipsis rather than run underneath.
+    expect((await box(label)).x + (await box(label)).width).toBeLessThanOrEqual((await box(add)).x);
+    expect(await label.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+    await expect(label).toHaveCSS('text-overflow', 'ellipsis');
+    await page.screenshot({ path: testInfo.outputPath('hovered-row.png'), clip: { ...(await box(list)), height: 140 } });
+  } finally {
+    await app.close();
+  }
+});
