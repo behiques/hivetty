@@ -93,7 +93,7 @@ export function SkillPathPrompt({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover"
+            className="rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
           >
             Cancel
           </button>

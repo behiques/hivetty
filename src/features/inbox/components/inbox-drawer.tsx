@@ -82,7 +82,7 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
           type="button"
           aria-label="Close the inbox"
           onClick={closeInboxDrawer}
-          className="grid size-[22px] place-items-center self-center rounded-md text-muted hover:bg-hover"
+          className="grid size-7 place-items-center self-center rounded-full text-muted hover:bg-hover"
         >
           <X size={14} />
         </button>

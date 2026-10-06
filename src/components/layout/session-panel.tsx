@@ -212,7 +212,7 @@ export function SessionPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null>
               onClick={() => {
                 setTab(spec.id);
               }}
-              className={cn('rounded-md px-2 py-1', spec.id === shown ? 'bg-active text-ink' : 'hover:bg-hover')}
+              className={cn('rounded-full px-2.5 py-1', spec.id === shown ? 'bg-active text-ink' : 'hover:bg-hover')}
             >
               {spec.label(ctx)}
               {spec.dot === undefined ? null : (
@@ -231,7 +231,7 @@ export function SessionPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null>
           onClick={() => {
             setOpen(false);
           }}
-          className="grid size-7 place-items-center rounded-md text-muted hover:bg-hover"
+          className="grid size-7 place-items-center rounded-full text-muted hover:bg-hover"
         >
           <CaretRight size={14} aria-hidden />
         </button>

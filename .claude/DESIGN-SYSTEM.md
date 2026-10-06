@@ -175,6 +175,8 @@ working through the same variables:
 value at build time, which is what lets a single `data-theme` flip recolour the
 whole app.
 
+**Edge.** `border-edge` is the buttons' border (see Radius › Buttons are pills).
+
 **Scrim.** Every modal overlay and cover uses `bg-scrim`, which is `--cc-bg` at
 70%. No overlay picks its own veil (HIVE-225). **Menus.** `MENU_SURFACE` in
 `components/ui/dropdown-menu.tsx` is the one menu card. Items highlight on
@@ -399,13 +401,42 @@ Tailwind's own scale, no radius tokens (HIVE-224):
 | Role | Utility | px |
 | --- | --- | --- |
 | marks | `rounded-xs` | 2 |
-| chips, small controls, menu items | `rounded` | 4 |
-| buttons, inputs | `rounded-md` | 6 |
+| menu items | `rounded` | 4 |
+| list and tree rows, the settings nav | `rounded-md` | 6 |
 | cards, menus, popovers | `rounded-lg` | 8 |
-| dialogs | `rounded-xl` | 12 |
+| dialogs, a segmented control that wraps | `rounded-xl` | 12 |
+| **buttons** of every kind, single-line inputs, selects, search boxes, segmented controls, tabs, chips, pills, dots | `rounded-full` | — |
 
-`rounded-full` is for pills and dots. Arbitrary radii (`rounded-[7px]`) are
-banned, and `tests/design-system.test.ts` fails on one.
+Arbitrary radii (`rounded-[7px]`) are banned, and `tests/design-system.test.ts`
+fails on one.
+
+### Buttons are pills
+
+Every button is a pill (approved 6 Oct 2026; it is the old header's New session
+shape, applied everywhere). `Button` in `components/ui/button.tsx` is the one
+recipe; a hand-rolled button follows it:
+
+| Variant | Recipe |
+| --- | --- |
+| primary | `bg-brand-fill text-on-brand`, hover `bg-brand-fill-hover` |
+| secondary | `border border-edge text-ink`, hover `bg-hover` |
+| ghost | no border, `text-muted`, hover `bg-hover text-ink` |
+| danger | `border border-red-edge text-red`, hover `bg-hover` |
+| destructive confirm | `bg-danger-solid text-on-danger` |
+
+All are `rounded-full`, `text-control`, `font-semibold`: `md` is `px-4 py-1.5`,
+`sm` is `px-3 py-1`. **Icon buttons are circles** (`rounded-full`), 28px
+(`size-7`, or `p-1.5` round a 13–15px icon) where they stand alone; one that
+sits inside a dense row keeps the row's size and only rounds. A split button is
+one pill: the left half `rounded-r-none`, the right `rounded-l-none` with a
+`border-l-brand-fill-strong` seam (the Overmind's New session and its terminal
+chevron). Single-line inputs, selects and search boxes match the buttons beside
+them; textareas, cards and menus keep their radius.
+
+**`border-edge`** is the button's border: `--cc-muted` 38% into `--cc-border`,
+bound in `@theme inline` as `--color-edge`, so it is mixed where it is used and
+a light or imported theme derives its own. A hairline (`border-border`) is for
+dividers and fields, not buttons.
 
 ## Motion
 

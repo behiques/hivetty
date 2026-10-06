@@ -82,7 +82,7 @@ export function AgentsPanel() {
           type="button"
           aria-label="New agent"
           onClick={newAgent}
-          className="ml-auto self-center rounded-md p-1 text-muted hover:bg-hover hover:text-ink"
+          className="ml-auto self-center rounded-full p-1.5 text-muted hover:bg-hover hover:text-ink"
         >
           <Plus size={14} aria-hidden="true" />
         </button>

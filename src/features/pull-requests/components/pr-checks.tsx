@@ -89,9 +89,9 @@ export function PrChecks({ pr, detail }: { pr: Pr; detail: PrDetail }) {
           {others.map((check) => (
             <li key={check.name}>
               {check.url === null ? (
-                <span className="flex items-center gap-1.5 rounded-md border border-border-soft px-2 py-1 text-control"><StateIcon state={CHECK_STATE[check.status]} />{check.name}</span>
+                <span className="flex items-center gap-1.5 rounded-full border border-border-soft px-2.5 py-1 text-control"><StateIcon state={CHECK_STATE[check.status]} />{check.name}</span>
               ) : (
-                <a href={check.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-md border border-border-soft px-2 py-1 text-control hover:bg-hover">
+                <a href={check.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-full border border-border-soft px-2.5 py-1 text-control hover:bg-hover">
                   <StateIcon state={CHECK_STATE[check.status]} />
                   {check.name}
                 </a>

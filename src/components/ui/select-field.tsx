@@ -64,7 +64,7 @@ export function SelectField({
           onChange={(event) => onChange(event.target.value)}
           aria-describedby={hint ? hintId : undefined}
           className={cn(
-            'w-full appearance-none rounded-md border border-border bg-panel-2 py-1.5 pr-7 pl-2.5',
+            'w-full appearance-none rounded-full border border-border bg-panel-2 py-1.5 pr-7 pl-3',
             'text-control text-ink outline-none hover:bg-hover',
             'focus-visible:ring-1 focus-visible:ring-brand',
           )}

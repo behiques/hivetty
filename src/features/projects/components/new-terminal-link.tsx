@@ -60,7 +60,7 @@ export function NewTerminalLink({
       disabled={!access.spawnable}
       title={title}
       aria-label={`Terminal in ${projectName}${containerised ? ' · host' : ''}`}
-      className="rounded p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-transparent"
+      className="rounded-full p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-transparent"
     >
       <TerminalGlyph size={13} weight="bold" aria-hidden="true" />
     </button>

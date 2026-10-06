@@ -329,6 +329,8 @@ body[data-theme='light'] {
   --color-active: var(--cc-active);
   /* The one veil behind a modal or a cover (HIVE-225): the theme's own ground, so a theme repaints it. */
   --color-scrim: color-mix(in srgb, var(--cc-bg) 70%, transparent);
+  /* A button's edge (the pill buttons): stronger than a hairline, mixed where it is used so light and imported themes derive their own. */
+  --color-edge: color-mix(in srgb, var(--cc-muted) 38%, var(--cc-border));
   --color-border: var(--cc-border);
   --color-border-soft: var(--cc-border-soft);
   --color-ink: var(--cc-ink);

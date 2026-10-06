@@ -28,7 +28,7 @@ export function SearchBox({ label, value, onChange, onClear, focusOnMount }: Sea
   }, [focusOnMount]);
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-border bg-panel-2 px-2 py-1.5 focus-within:border-brand">
+    <div className="flex items-center gap-2 rounded-full border border-border bg-panel-2 px-3 py-1.5 focus-within:border-brand">
       <MagnifyingGlass size={12} className="shrink-0 text-subtle" />
       <input
         ref={input}
@@ -51,7 +51,7 @@ export function SearchBox({ label, value, onChange, onClear, focusOnMount }: Sea
         <button
           type="button"
           onClick={onClear}
-          className="shrink-0 rounded text-subtle hover:text-ink"
+          className="shrink-0 rounded-full text-subtle hover:text-ink"
         >
           <X size={11} />
           <span className="sr-only">Clear the search</span>

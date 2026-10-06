@@ -274,7 +274,7 @@ function ReplyBox({
         ) : null}
       </div>
       <div className="flex items-center gap-2 text-control">
-        <span className="rounded-md border border-border-soft px-2 py-0.5 text-ink">Comment on Jira</span>
+        <span className="rounded-full border border-border-soft px-2.5 py-0.5 text-ink">Comment on Jira</span>
         <span className="text-muted">everyone on the ticket sees it</span>
         <span className="flex-1" />
         <Button

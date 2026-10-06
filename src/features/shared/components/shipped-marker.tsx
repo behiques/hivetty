@@ -144,7 +144,7 @@ export function HeldBanner({
         <button
           type="button"
           onClick={onTake}
-          className="shrink-0 rounded-md border border-amber-edge px-2 py-0.5 text-ui-sm text-amber-text hover:bg-hover"
+          className="shrink-0 rounded-full border border-amber-edge px-2.5 py-0.5 text-ui-sm text-amber-text hover:bg-hover"
         >
           Take shipped prompt
         </button>

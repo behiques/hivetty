@@ -183,7 +183,7 @@ export function DirectoryPicker({
                     type="button"
                     onClick={() => void browse(crumb.path)}
                     aria-current={index === crumbs.length - 1 ? 'true' : undefined}
-                    className="rounded px-1.5 py-0.5 text-ui-sm text-muted hover:bg-hover hover:text-ink aria-[current]:font-semibold aria-[current]:text-ink"
+                    className="rounded-full px-2 py-0.5 text-ui-sm text-muted hover:bg-hover hover:text-ink aria-[current]:font-semibold aria-[current]:text-ink"
                   >
                     {crumb.label}
                   </button>

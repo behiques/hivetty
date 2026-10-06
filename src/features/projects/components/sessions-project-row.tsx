@@ -63,7 +63,7 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
           onClick={() => toggleFold(project.id)}
           aria-expanded={expanded}
           aria-label={`${expanded ? 'Fold' : 'Unfold'} ${project.name}`}
-          className="shrink-0 rounded px-1.5 py-[var(--cc-row-py)] text-subtle hover:text-ink"
+          className="shrink-0 rounded-full px-1.5 py-[var(--cc-row-py)] text-subtle hover:text-ink"
         >
           <Icon name={expanded ? 'ph-caret-down' : 'ph-caret-right'} size={11} />
         </button>

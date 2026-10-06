@@ -60,7 +60,7 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
           type="button"
           aria-label="Fold into the pill"
           onClick={onFold}
-          className="grid size-[22px] place-items-center rounded-md hover:bg-hover"
+          className="grid size-7 place-items-center rounded-full hover:bg-hover"
         >
           <X size={14} />
         </button>

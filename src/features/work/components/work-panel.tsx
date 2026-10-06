@@ -178,7 +178,7 @@ function WorkHeader() {
           aria-label="Search tickets"
           aria-pressed={searchShown}
           onClick={() => setSearchShown((shown) => !shown)}
-          className="self-center rounded-md p-1 text-muted hover:bg-hover hover:text-ink"
+          className="self-center rounded-full p-1.5 text-muted hover:bg-hover hover:text-ink"
         >
           <MagnifyingGlass size={15} />
         </button>

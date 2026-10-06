@@ -42,7 +42,7 @@ export function TerminalEndedCover({ terminal }: TerminalEndedCoverProps) {
         type="button"
         onClick={() => removeTerminal(terminal.id)}
         aria-label={`Close ${terminal.id}`}
-        className="flex items-center gap-1 rounded-md px-2 py-0.5 text-ink hover:bg-hover"
+        className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-ink hover:bg-hover"
       >
         <X size={11} weight="bold" aria-hidden="true" />
         close

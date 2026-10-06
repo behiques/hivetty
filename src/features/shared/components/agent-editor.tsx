@@ -443,7 +443,7 @@ export function AgentEditor({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-md border border-border px-2.5 py-1 text-control text-red hover:bg-hover"
+            className="rounded-full border border-red-edge px-3 py-1 text-control font-semibold text-red hover:bg-hover"
           >
             Delete
           </button>
@@ -451,7 +451,7 @@ export function AgentEditor({
             type="button"
             onClick={onRevert}
             disabled={!dirty}
-            className="rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
+            className="rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
           >
             Revert
           </button>

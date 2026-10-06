@@ -180,7 +180,7 @@ export function EditorPane() {
           <button
             type="button"
             onClick={() => closeFile(file.key)}
-            className="rounded p-0.5 text-subtle hover:bg-active hover:text-ink"
+            className="rounded-full p-0.5 text-subtle hover:bg-active hover:text-ink"
           >
             <Icon name="ph-x" size={12} />
             <span className="sr-only">Close {file.name}</span>

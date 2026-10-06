@@ -70,7 +70,7 @@ export function NewSessionLink({
       */
       title={access.reason ?? `Starts on ${newModel} · ${newEffort}`}
       aria-label={`New session in ${projectName}`}
-      className="rounded p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-transparent"
+      className="rounded-full p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-transparent"
     >
       <Plus size={13} weight="bold" aria-hidden="true" />
     </button>

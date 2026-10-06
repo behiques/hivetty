@@ -919,7 +919,7 @@ function SessionTableRow({
               resumeSession(id);
             }}
             className={cn(
-              'rounded px-1.5 py-[1px] text-micro text-subtle',
+              'rounded-full px-2 py-[1px] text-micro text-subtle',
               'hover:bg-term-row-hover hover:text-ink',
             )}
           >

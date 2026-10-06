@@ -109,7 +109,7 @@ export function InlineConfirm({
           type="button"
           onClick={onCancel}
           onKeyDown={escapes}
-          className="rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
+          className="rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
         >
           {cancelLabel}
         </button>
@@ -117,7 +117,7 @@ export function InlineConfirm({
           type="button"
           onClick={onConfirm}
           onKeyDown={escapes}
-          className="rounded-md bg-danger-solid px-2.5 py-1 text-control font-medium text-on-danger hover:opacity-90"
+          className="rounded-full bg-danger-solid px-3 py-1 text-control font-semibold text-on-danger hover:opacity-90"
         >
           {confirmLabel}
         </button>
