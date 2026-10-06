@@ -117,7 +117,7 @@ async function expectInsideStage(page: Page, inner: Locator): Promise<void> {
   expect(box.right).toBeLessThanOrEqual(stage.right + 0.5);
 }
 
-test('at the stage floor the session header, an arrival card and the ended cover stay inside the stage (HIVE-225)', async ({}, testInfo) => {
+test('at the stage floor the session header and an arrival card stay inside the stage, and an ending leaves it (HIVE-225)', async ({}, testInfo) => {
   test.setTimeout(90_000);
   const configPath = testInfo.outputPath('hive-config.json');
   writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
@@ -166,12 +166,16 @@ test('at the stage floor the session header, an arrival card and the ended cover
     await card.hover();
     await expectInsideStage(page, page.getByTestId('arrival-stack'));
 
-    // The session ends: its cover's card fits the stage.
+    /*
+      The session ends: the stage goes to the Overmind (#107) with no ended
+      card. The card is left only for a session that ended while its editor
+      was up, which no ended row can be opened to reach (HIVE-93).
+    */
     await page.mouse.move(0, 0);
     await shell(page, session, 'exit');
-    const cover = page.getByRole('region', { name: 'Session ended' });
-    await expect(cover).toBeVisible({ timeout: 15_000 });
-    await expectInsideStage(page, cover);
+    await expect(page.getByTestId('session-header')).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Session ended' })).toHaveCount(0);
+    await expect(page.getByTestId('session-row').filter({ hasText: session })).toHaveCount(1);
   } finally {
     await app.close();
   }
