@@ -38,7 +38,7 @@ describe('PrCommentBox', () => {
     await userEvent.type(screen.getByRole('textbox'), 'Hello');
     await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
     expect(screen.getByRole('textbox')).toHaveValue('Hello');
-    expect(screen.getByText(/is not a configured project/)).toHaveClass('text-amber');
+    expect(screen.getByText(/is not a configured project/)).toHaveClass('text-amber-text');
   });
 
   it('cannot post an empty comment', () => {

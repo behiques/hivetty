@@ -19,7 +19,7 @@ export const toCombInput = (e: CombEntity): CombInput => ({
 });
 
 const WORD_CLASS: Record<CellState, string> = {
-  morphing: 'text-green', summons: 'text-amber', failed: 'text-red', burrowed: 'text-subtle', terminal: 'text-muted',
+  morphing: 'text-green', summons: 'text-amber-text', failed: 'text-red', burrowed: 'text-subtle', terminal: 'text-muted',
 };
 
 function CombTooltip({ text, left, top }: { text: CellText; left: number; top: number }) {

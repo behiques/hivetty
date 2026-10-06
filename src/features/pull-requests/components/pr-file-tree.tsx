@@ -70,11 +70,11 @@ export function PrFileTree({ detail, selected, onSelect }: { detail: PrDetail; s
                   <ChatCircle
                     size={12}
                     aria-label={mark === 'open' ? 'open thread' : 'resolved threads'}
-                    className={mark === 'open' ? 'text-amber' : 'text-green'}
+                    className={mark === 'open' ? 'text-amber-text' : 'text-green'}
                   />
                 )}
                 {file.viewed === 'viewed' ? <Check size={11} aria-label="viewed" className="text-subtle" /> : null}
-                {file.viewed === 'dismissed' ? <span className="text-[10.5px] text-amber">changed</span> : null}
+                {file.viewed === 'dismissed' ? <span className="text-[10.5px] text-amber-text">changed</span> : null}
                 <span className="tabular-nums text-[10.5px] whitespace-nowrap text-muted">
                   {file.deletions === 0 ? `+${String(file.additions)}` : `+${String(file.additions)} −${String(file.deletions)}`}
                 </span>

@@ -21,7 +21,7 @@ describe('SessionsPanel (HIVE-197)', () => {
     render(<SessionsPanel />);
     expect(screen.getByRole('heading', { name: 'Projects' })).toBeInTheDocument();
     expect(screen.getByText(/^\d+ live$/)).toHaveClass('text-green');
-    expect(screen.getByText(/\d+ needs you/)).toHaveClass('text-amber-count');
+    expect(screen.getByText(/\d+ needs you/)).toHaveClass('text-amber-text');
   });
 
   it('All projects is current with no filter, and clears one', async () => {

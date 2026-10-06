@@ -286,8 +286,8 @@ describe('the reply box (HIVE-203)', () => {
     await userEvent.type(box(), 'draft');
     await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
 
-    expect(await screen.findByText('Jira refused it')).toHaveClass('text-amber');
-    expect(screen.getByText('body: too long')).toHaveClass('text-amber');
+    expect(await screen.findByText('Jira refused it')).toHaveClass('text-amber-text');
+    expect(screen.getByText('body: too long')).toHaveClass('text-amber-text');
     expect(box()).toHaveValue('draft');
   });
 
@@ -298,7 +298,7 @@ describe('the reply box (HIVE-203)', () => {
     await userEvent.type(box(), 'draft');
     await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
 
-    expect(await screen.findByText(/./, { selector: 'p.text-amber' })).toBeInTheDocument();
+    expect(await screen.findByText(/./, { selector: 'p.text-amber-text' })).toBeInTheDocument();
   });
 });
 

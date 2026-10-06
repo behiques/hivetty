@@ -49,7 +49,7 @@ describe('PrActions', () => {
     useHiveStore.setState({ ledger: [mergeCard] });
     render(<PrActions row={hatchRow()} />);
     await userEvent.click(screen.getByRole('button', { name: 'Merge' }));
-    expect(await screen.findByText('that ask is no longer open')).toHaveClass('text-amber');
+    expect(await screen.findByText('that ask is no longer open')).toHaveClass('text-amber-text');
   });
 
   it('offers Ready for review on a draft nobody holds, as a GitHub link', () => {
@@ -77,7 +77,7 @@ describe('PrActions', () => {
     post.mockResolvedValue({ ok: false, status: 404, reason: 'acr is not a party' });
     render(<PrActions row={hatchRow()} />);
     await userEvent.click(screen.getByRole('button', { name: 'Ask acr to look again' }));
-    expect(await screen.findByText('acr is not a party')).toHaveClass('text-amber');
+    expect(await screen.findByText('acr is not a party')).toHaveClass('text-amber-text');
   });
 
   it('opens the session only when there is a live one', async () => {
@@ -112,9 +112,9 @@ describe('PrActions', () => {
     useHiveStore.setState({ ledger: [mergeCard] });
     render(<PrActions row={hatchRow()} />);
     await userEvent.click(screen.getByRole('button', { name: 'Merge' }));
-    expect(await screen.findByText('IPC gone')).toHaveClass('text-amber');
+    expect(await screen.findByText('IPC gone')).toHaveClass('text-amber-text');
     await userEvent.click(screen.getByRole('button', { name: 'Ask acr to look again' }));
     expect(post).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText('IPC gone')).toHaveClass('text-amber');
+    expect(await screen.findByText('IPC gone')).toHaveClass('text-amber-text');
   });
 });

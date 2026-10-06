@@ -30,7 +30,8 @@ import {
  * chosen from. Hand-transcribing 588 hex values would have been 588 chances to
  * be one digit out. This file may hold hex literals for the same reason
  * `built-in.ts` may: it is the definition of a colour, not a use of one.
- * The text tokens (subtle, muted, termHead) were retuned by hand after generation, to clear AA on every ground (HIVE-223).
+ * The text tokens (subtle, muted, termHead) were retuned by hand after
+ * generation, to clear AA on every ground (HIVE-223).
  */
 
 /** Beeswax and warm oak. */

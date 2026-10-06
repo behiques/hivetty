@@ -83,7 +83,7 @@ describe('TicketNextAction (HIVE-202)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Move to Done' }));
 
-    expect(await screen.findByText('No transition')).toHaveClass('text-amber');
+    expect(await screen.findByText('No transition')).toHaveClass('text-amber-text');
     expect(screen.getByRole('button', { name: 'Move to Done' })).toBeEnabled();
   });
 
@@ -93,6 +93,6 @@ describe('TicketNextAction (HIVE-202)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Move to Done' }));
 
-    expect(await screen.findByText(/./, { selector: 'p.text-amber' })).toBeInTheDocument();
+    expect(await screen.findByText(/./, { selector: 'p.text-amber-text' })).toBeInTheDocument();
   });
 });

@@ -781,7 +781,7 @@ describe('AskCard head (HIVE-198)', () => {
     render(<AskCard notif={notif} thread="a41" />);
     expect(screen.getByText('drone')).toBeInTheDocument();
     expect(screen.getByText('asks')).toBeInTheDocument();
-    expect(screen.getByText('now')).toHaveClass('text-amber');
+    expect(screen.getByText('now')).toHaveClass('text-amber-text');
     expect(screen.getByText('ship it?')).toHaveClass('text-[14px]', 'font-semibold');
   });
 

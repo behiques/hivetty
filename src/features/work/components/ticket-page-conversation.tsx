@@ -286,7 +286,7 @@ function ReplyBox({
         </button>
       </div>
       {problem?.map((line) => (
-        <p key={line} className="text-[12px] text-amber">
+        <p key={line} className="text-[12px] text-amber-text">
           {line}
         </p>
       ))}

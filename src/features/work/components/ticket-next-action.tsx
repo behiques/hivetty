@@ -47,7 +47,7 @@ export function TicketNextAction({ ticketKey, className }: { ticketKey: string; 
         <CaretRight size={13} aria-hidden />
         {`Move to ${next.to.name}`}
       </button>
-      {problem === null ? null : <p className="py-1 text-[12px] text-amber">{problem}</p>}
+      {problem === null ? null : <p className="py-1 text-[12px] text-amber-text">{problem}</p>}
     </div>
   );
 }

@@ -78,12 +78,12 @@ export const STATUS_FILL: Record<DotStatus, string> = {
  */
 export const STATUS_TEXT: Record<DotStatus, string> = {
   working: 'text-green',
-  waiting: 'text-amber',
+  waiting: 'text-amber-text',
   idle: 'text-subtle',
   done: 'text-brand',
   terminated: 'text-muted',
   sleeping: 'text-subtle',
-  asking: 'text-amber',
+  asking: 'text-amber-text',
   paused: 'text-muted',
   failed: 'text-red',
   prompt: 'text-subtle',

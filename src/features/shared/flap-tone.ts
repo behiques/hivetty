@@ -4,6 +4,6 @@ import type { FlapTone } from '@/types/pull-request';
 export const FLAP_TEXT: Record<FlapTone, string> = {
   muted: 'text-muted',
   green: 'text-green',
-  amber: 'text-amber',
+  amber: 'text-amber-text',
   brand: 'text-brand',
 };

@@ -999,7 +999,7 @@ export function AgentForm({
   if (read === null) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-4 text-center">
-        <span className="text-[11.5px] text-amber">
+        <span className="text-[11.5px] text-amber-text">
           This file has no frontmatter.
         </span>
         <span className="text-[11.5px] text-subtle">

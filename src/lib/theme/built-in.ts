@@ -84,7 +84,7 @@ export const BUILT_IN_THEME: HiveTheme = {
         activeLine: '#eef7ff', selection: '#cfe3f7',
       },
       terminal: {
-        bg: '#f7fafb', ink: '#2c2f34', dim: '#6b6e74', black: '#2c2f34',
+        bg: '#f7fafb', ink: '#2c2f34', dim: '#686b71', black: '#2c2f34',
         green: '#2e6b52', blue: '#334fa9', amber: '#a1541a', red: '#b3271f',
         cyan: '#0b6b7d', magenta: '#6f42c1', selection: '#cfe3f7',
         // `--cc-panel` and `--cc-chip`. The mirror of dark's pair: the ground

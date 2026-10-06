@@ -128,7 +128,7 @@ export function HeldBanner({
   return (
     <div className="flex flex-col gap-1.5 rounded-[7px] border border-amber/40 bg-amber/8 px-3 py-2 text-[11.5px] text-ink">
       <span>
-        <span className="font-medium text-amber">Update held.</span> A newer shipped prompt for{' '}
+        <span className="font-medium text-amber-text">Update held.</span> A newer shipped prompt for{' '}
         {status.name} is waiting, but the one here has your edits. Until you choose, {status.name} runs
         your version.
       </span>
@@ -144,7 +144,7 @@ export function HeldBanner({
         <button
           type="button"
           onClick={onTake}
-          className="shrink-0 rounded-md border border-amber/60 px-2 py-0.5 text-[11.5px] text-amber hover:bg-hover"
+          className="shrink-0 rounded-md border border-amber/60 px-2 py-0.5 text-[11.5px] text-amber-text hover:bg-hover"
         >
           Take shipped prompt
         </button>

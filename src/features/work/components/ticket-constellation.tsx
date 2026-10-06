@@ -26,8 +26,8 @@ const BEAD_TONE: Record<CellState, string> = {
 };
 
 /** An edge's tone, which its arrowhead shares: amber only into an open blocker. */
-const edgeTone = (kind: Edge['kind']) => (kind === 'in-open' ? 'text-amber' : 'text-subtle');
-const ARROW_TONES = ['text-amber', 'text-subtle'] as const;
+const edgeTone = (kind: Edge['kind']) => (kind === 'in-open' ? 'text-amber-text' : 'text-subtle');
+const ARROW_TONES = ['text-amber-text', 'text-subtle'] as const;
 
 /** The spec draws beads at radius 5; the layout carries only their centres. */
 const BEAD_R = 5;
@@ -180,7 +180,7 @@ export function TicketConstellation({
             key={cell.ticket.key}
             ticket={cell.ticket}
             onOpen={onOpenTicket}
-            className={cell.open ? 'text-amber' : TONE[cell.state]}
+            className={cell.open ? 'text-amber-text' : TONE[cell.state]}
           >
             <polygon
               points={hex(cell.x, cell.y, cell.r)}
@@ -251,7 +251,7 @@ export function TicketConstellation({
       ) : null}
       <g
         data-blocked={layout.centre.blocked}
-        className={layout.centre.blocked ? 'text-amber drop-shadow-[0_0_8px_currentColor]' : 'text-green'}
+        className={layout.centre.blocked ? 'text-amber-text drop-shadow-[0_0_8px_currentColor]' : 'text-green'}
       >
         <polygon
           points={hex(layout.centre.x, layout.centre.y, layout.centre.r)}

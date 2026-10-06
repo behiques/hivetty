@@ -19,7 +19,7 @@ function Chip({ thread, fixerOnIt }: { thread: PrThread; fixerOnIt: boolean }) {
   const [text, tone] = thread.isResolved
     ? ['resolved', 'text-green bg-[color-mix(in_srgb,var(--cc-green)_14%,transparent)]']
     : fixerOnIt
-      ? ['fixer on it', 'text-amber bg-[color-mix(in_srgb,var(--cc-amber)_14%,transparent)]']
+      ? ['fixer on it', 'text-amber-text bg-[color-mix(in_srgb,var(--cc-amber)_14%,transparent)]']
       : ['open', 'text-muted bg-chip'];
   return <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-[10.5px] font-semibold', tone)}>{text}</span>;
 }
@@ -165,7 +165,7 @@ export function ThreadCard({
           </div>
         </div>
       ) : null}
-      {problem === null ? null : <p className="px-2.5 pb-2 text-[12px] text-amber">{problem}</p>}
+      {problem === null ? null : <p className="px-2.5 pb-2 text-[12px] text-amber-text">{problem}</p>}
     </div>
   );
 }

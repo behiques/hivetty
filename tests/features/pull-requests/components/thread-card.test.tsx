@@ -27,7 +27,7 @@ describe('ThreadCard', () => {
 
   it('says the fixer is on an open thread, and resolved over everything', () => {
     const { rerender } = render(<ThreadCard thread={prThread()} fixerOnIt />);
-    expect(screen.getByText('fixer on it')).toHaveClass('text-amber');
+    expect(screen.getByText('fixer on it')).toHaveClass('text-amber-text');
     rerender(<ThreadCard thread={prThread({ isResolved: true })} fixerOnIt />);
     expect(screen.getByText('resolved')).toHaveClass('text-green');
   });

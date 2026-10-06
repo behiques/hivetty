@@ -982,7 +982,7 @@ export function ServerModeGroup({
               fear this state produces is that they are gone.
             */
             <div className="flex gap-2 rounded-md border border-amber/45 bg-amber/8 px-3 py-2.5">
-              <WarningCircle size={13} className="mt-0.5 shrink-0 text-amber" />
+              <WarningCircle size={13} className="mt-0.5 shrink-0 text-amber-text" />
               <div className="flex flex-col gap-2 text-[11.5px] text-subtle">
                 <span>
                   Reconnecting to{' '}

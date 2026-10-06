@@ -37,7 +37,7 @@ function Holder({ who, words, amber = false }: { who: string; words: string; amb
     <div data-testid="holder" className={ROW}>
       {agent ? <Robot size={13} aria-hidden className="shrink-0 self-center text-muted" /> : null}
       <span className="font-semibold text-ink">{who}</span>{' '}
-      <span className={amber ? 'text-amber' : 'text-muted'}>{words}</span>
+      <span className={amber ? 'text-amber-text' : 'text-muted'}>{words}</span>
     </div>
   );
 }

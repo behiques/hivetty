@@ -78,10 +78,10 @@ describe('AgentRow', () => {
 
     render(<AgentRow id="watcher" />);
 
-    expect(screen.getByText('ask a3')).toHaveClass('text-amber');
+    expect(screen.getByText('ask a3')).toHaveClass('text-amber-text');
     expect(screen.getByText('Retry the deploy?')).toBeInTheDocument();
     expect(screen.queryByText(/failed twice/)).not.toBeInTheDocument();
-    expect(tile()).toHaveClass('text-amber');
+    expect(tile()).toHaveClass('text-amber-text');
   });
 
   it.each([
@@ -126,11 +126,11 @@ describe('AgentRow', () => {
 
     render(<AgentRow id="watcher" />);
 
-    expect(screen.getByText('invalid')).toHaveClass('text-amber');
+    expect(screen.getByText('invalid')).toHaveClass('text-amber-text');
     expect(screen.getByText('name: Required.')).toBeInTheDocument();
     // `invalid` wins: an ask ref beside it would suggest it is running.
     expect(screen.queryByText(/a71/)).not.toBeInTheDocument();
-    expect(tile()).toHaveClass('text-amber');
+    expect(tile()).toHaveClass('text-amber-text');
   });
 
   it('says paused for a paused agent that has never written', () => {
@@ -138,7 +138,7 @@ describe('AgentRow', () => {
 
     render(<AgentRow id="watcher" />);
 
-    expect(screen.getByText('paused')).toHaveClass('text-amber');
+    expect(screen.getByText('paused')).toHaveClass('text-amber-text');
     expect(screen.getByRole('button', { name: /^watcher, paused/ })).toBeInTheDocument();
   });
 
@@ -148,7 +148,7 @@ describe('AgentRow', () => {
 
     render(<AgentRow id="watcher" />);
 
-    expect(screen.getByText('paused')).toHaveClass('text-amber');
+    expect(screen.getByText('paused')).toHaveClass('text-amber-text');
     expect(screen.getByText('Shipped #303')).toBeInTheDocument();
     expect(screen.queryByText('done')).not.toBeInTheDocument();
   });
@@ -282,7 +282,7 @@ describe('AgentRow — the slot', () => {
 
     const notice = await screen.findByRole('status');
     expect(notice).toHaveTextContent('acr is working — try again when it sleeps');
-    expect(notice).toHaveClass('text-amber');
+    expect(notice).toHaveClass('text-amber-text');
     expect(screen.queryByText('Reviewed #303')).not.toBeInTheDocument();
 
     act(() => {

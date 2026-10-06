@@ -55,7 +55,7 @@ export function PrCommentBox({ pr }: { pr: Pr }) {
           {posting ? 'Posting…' : 'Comment'}
         </button>
       </div>
-      {problem === null ? null : <p className="text-[12px] text-amber">{problem}</p>}
+      {problem === null ? null : <p className="text-[12px] text-amber-text">{problem}</p>}
     </div>
   );
 }

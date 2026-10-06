@@ -151,7 +151,7 @@ describe('AgentEditor', () => {
   it('reads unsaved in amber while dirty', () => {
     setup({ dirty: true });
 
-    expect(screen.getByText('unsaved')).toHaveClass('text-amber');
+    expect(screen.getByText('unsaved')).toHaveClass('text-amber-text');
   });
 
   it("runRefusal gives today's sentences", () => {
