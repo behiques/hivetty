@@ -149,7 +149,7 @@ function SessionMenu({ session }: { session: Session }) {
           className="justify-between gap-4"
         >
           Terminal here
-          <span className="tabular-nums text-[11px] text-subtle">⌃`</span>
+          <span className="tabular-nums text-micro text-subtle">⌃`</span>
         </DropdownMenuItem>
         {pr ? (
           <DropdownMenuItem asChild>

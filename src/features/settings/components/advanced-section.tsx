@@ -125,14 +125,14 @@ function PtyCounters({ rows }: { rows: readonly PtyDiagnostics[] }) {
               {row.sessionId}
             </span>
             {row.paused ? (
-              <span className="shrink-0 text-[11px] text-amber-text">paused</span>
+              <span className="shrink-0 text-micro text-amber-text">paused</span>
             ) : null}
           </div>
           <dl className="flex flex-wrap gap-x-4 gap-y-0.5">
             {COUNTERS.map((counter) => (
               <div key={counter.key} className="flex items-baseline gap-1">
-                <dt className="text-[11px] text-subtle">{counter.label}</dt>
-                <dd className="tabular-nums text-[11px] text-muted">
+                <dt className="text-micro text-subtle">{counter.label}</dt>
+                <dd className="tabular-nums text-micro text-muted">
                   {/*
                     Raw numbers, deliberately not humanised. The *ratio* between
                     them is what diagnoses a flow-control bug — `bytesIn /

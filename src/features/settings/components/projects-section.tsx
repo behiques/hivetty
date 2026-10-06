@@ -125,7 +125,7 @@ export function ProjectsSection() {
       </div>
 
       {snapshot ? (
-        <p className="mt-auto pt-2 text-[11px] text-subtle">
+        <p className="mt-auto pt-2 text-micro text-subtle">
           Config file: {snapshot.configPath}
         </p>
       ) : null}

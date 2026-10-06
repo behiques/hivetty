@@ -163,7 +163,7 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
 
         {start === null ? null : (
           <div className="flex flex-col gap-1">
-            <span className="text-[11px] font-semibold tracking-[0.06em] text-subtle uppercase">{`For ${EXAMPLE.key}`}</span>
+            <span className="text-micro font-semibold tracking-[0.06em] text-subtle uppercase">{`For ${EXAMPLE.key}`}</span>
             <code
               data-testid="ticket-workflow-preview"
               className="rounded-[6px] border border-border-soft bg-term-bg px-2.5 py-2 font-mono text-control break-words text-ink"

@@ -242,7 +242,7 @@ export function ConsoleInput() {
           string that has moved is a spec that silently stops testing anything.
         */
         data-testid="console-hints"
-        className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-subtle"
+        className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-micro text-subtle"
       >
         <span>{ADVERTISED_VERBS.join(' · ')}</span>
       </div>

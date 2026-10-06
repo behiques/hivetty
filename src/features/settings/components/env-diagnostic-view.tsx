@@ -31,7 +31,7 @@ export function EnvDiagnosticView({ diagnostic }: EnvDiagnosticViewProps) {
     <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
       <div className="flex flex-col gap-1">
         <span className="text-ui-sm text-muted">Ran</span>
-        <code className="rounded-[5px] bg-chip px-2 py-1.5 font-mono text-[11px] break-all text-muted">
+        <code className="rounded-[5px] bg-chip px-2 py-1.5 font-mono text-micro break-all text-muted">
           {shell} {ENV_PROBE_ARGS.join(' ')}
         </code>
         {/*
@@ -41,7 +41,7 @@ export function EnvDiagnosticView({ diagnostic }: EnvDiagnosticViewProps) {
          * so an rc file gated on `[[ -t 0 ]]` can still behave differently
          * here than it would for the user.
          */}
-        <p className="text-[11px] text-subtle">
+        <p className="text-micro text-subtle">
           Interactive, so rc files are sourced the same way a real session's
           would be — but this probe has no terminal, so a check like{' '}
           <code className="font-mono">[[ -t 0 ]]</code> in your rc file can

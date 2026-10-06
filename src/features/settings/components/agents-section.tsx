@@ -103,7 +103,7 @@ export function AgentsSection() {
 
         </div>
 
-        <p className="mt-auto pt-2 text-[11px] text-subtle">
+        <p className="mt-auto pt-2 text-micro text-subtle">
           Agents folder: {snapshot.agentsRoot}
         </p>
       </div>
@@ -146,10 +146,10 @@ export function AgentsSection() {
                 <span className="truncate tabular-nums">{agent.name}</span>
                 <ShippedDot status={shipped.get(agent.name)} />
                 {broken ? (
-                  <span className="ml-auto shrink-0 text-[11px] text-amber-text">invalid</span>
+                  <span className="ml-auto shrink-0 text-micro text-amber-text">invalid</span>
                 ) : (
                   <span
-                    className="ml-auto shrink-0 text-[11px] text-subtle"
+                    className="ml-auto shrink-0 text-micro text-subtle"
                     title={
                       agent.wake.everyMs === undefined && agent.wake.on.length === 0
                         ? 'Manual only — no schedule and no triggers.'
@@ -190,7 +190,7 @@ export function AgentsSection() {
         )}
       </div>
 
-      <p className="text-[11px] text-subtle">
+      <p className="text-micro text-subtle">
         Agents folder: {snapshot.agentsRoot}
       </p>
     </div>

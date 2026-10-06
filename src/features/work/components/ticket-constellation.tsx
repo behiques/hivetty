@@ -262,7 +262,7 @@ export function TicketConstellation({
         <Label
           at={{ x: layout.centre.x, y: layout.centre.y + 4 }}
           text={layout.centre.label}
-          className="text-[11px] font-semibold text-ink"
+          className="text-micro font-semibold text-ink"
         />
       </g>
     </svg>

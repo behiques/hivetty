@@ -222,7 +222,7 @@ export function ContainerGroup({
         >
           <div className="flex flex-col gap-3.5 rounded-[8px] border border-border-soft bg-panel-2 p-3">
             <div className="flex flex-col gap-2">
-              <span className="text-[11px] uppercase tracking-wide text-subtle">
+              <span className="text-micro uppercase tracking-wide text-subtle">
                 Where things are
               </span>
               <div className="grid grid-cols-2 gap-3">
@@ -232,7 +232,7 @@ export function ContainerGroup({
             </div>
 
             <div className="flex flex-col gap-2">
-              <span className="text-[11px] uppercase tracking-wide text-subtle">
+              <span className="text-micro uppercase tracking-wide text-subtle">
                 How it is invoked
               </span>
               <div className="grid grid-cols-2 gap-3">
@@ -254,7 +254,7 @@ export function ContainerGroup({
             </div>
 
             <div className="flex flex-col gap-2">
-              <span className="text-[11px] uppercase tracking-wide text-subtle">Freshness</span>
+              <span className="text-micro uppercase tracking-wide text-subtle">Freshness</span>
               <SegmentedControl
                 label="Freshness"
                 options={FRESHNESS}

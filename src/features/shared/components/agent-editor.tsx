@@ -225,7 +225,7 @@ export function AgentEditor({
 
   const tabClass = (which: Tab) =>
     cn(
-      'rounded-[5px] px-2 py-0.5 text-[11px]',
+      'rounded-[5px] px-2 py-0.5 text-micro',
       tab === which ? 'bg-active text-ink' : 'text-subtle hover:text-ink',
     );
 
@@ -425,15 +425,15 @@ export function AgentEditor({
           never attempted.
         */}
         {problems.length === 0 && notice !== null ? (
-          <span role="status" className="min-w-0 text-[11px] text-amber-text">
+          <span role="status" className="min-w-0 text-micro text-amber-text">
             {notice}
           </span>
         ) : (
           <span
             className={
               problems.length === 0
-                ? 'min-w-0 text-[11px] text-subtle'
-                : 'min-w-0 text-[11px] text-red'
+                ? 'min-w-0 text-micro text-subtle'
+                : 'min-w-0 text-micro text-red'
             }
           >
             {footer}

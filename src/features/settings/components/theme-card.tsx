@@ -116,7 +116,7 @@ export function ThemeCard({
           <div className="truncate text-control font-medium text-ink">
             {theme.name}
           </div>
-          <div className="truncate text-[11px] text-muted">
+          <div className="truncate text-micro text-muted">
             {isBuiltIn ? 'Built in' : theme.author}
           </div>
         </div>

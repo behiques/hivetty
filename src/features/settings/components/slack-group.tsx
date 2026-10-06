@@ -635,14 +635,14 @@ function RealTimeFields({
           Wakes on
         </h5>
         <div className="flex flex-wrap gap-1.5">
-          <span className="rounded-[4px] bg-chip px-1.5 py-0.5 tabular-nums text-[11px] text-muted">
+          <span className="rounded-[4px] bg-chip px-1.5 py-0.5 tabular-nums text-micro text-muted">
             {commanderSummary(slack.commanders)}
           </span>
           {socket.kind === 'connected' &&
             socket.unresolved.map((name) => (
               <span
                 key={name}
-                className="rounded-[4px] bg-chip px-1.5 py-0.5 tabular-nums text-[11px] text-amber-text"
+                className="rounded-[4px] bg-chip px-1.5 py-0.5 tabular-nums text-micro text-amber-text"
                 title="Named in wake.on, but Slack could not resolve it to a channel."
               >
                 {name} → unresolved
@@ -715,7 +715,7 @@ function AdvancedFields({
   return (
     <div className="flex flex-col gap-4 pt-1" data-testid="advanced-drawer">
       <div className="flex flex-col gap-2">
-        <h5 className="tabular-nums text-[11px] font-semibold uppercase tracking-wide text-subtle">
+        <h5 className="tabular-nums text-micro font-semibold uppercase tracking-wide text-subtle">
           Slack app
         </h5>
         <p className="text-ui-sm text-subtle">
@@ -732,7 +732,7 @@ function AdvancedFields({
       </div>
 
       <div className="flex flex-col gap-2">
-        <h5 className="tabular-nums text-[11px] font-semibold uppercase tracking-wide text-subtle">
+        <h5 className="tabular-nums text-micro font-semibold uppercase tracking-wide text-subtle">
           Real-time events
         </h5>
 

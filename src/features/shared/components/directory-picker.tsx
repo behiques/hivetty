@@ -166,7 +166,7 @@ export function DirectoryPicker({
           <DialogDescription className="sr-only">
             Browse folders on {serverName} and choose one.
           </DialogDescription>
-          <span className="flex w-fit items-center gap-1.5 rounded-[3px] border border-border bg-chip px-[7px] py-0.5 text-[11px] text-muted">
+          <span className="flex w-fit items-center gap-1.5 rounded-[3px] border border-border bg-chip px-[7px] py-0.5 text-micro text-muted">
             <span aria-hidden="true" className="size-1.5 rounded-full bg-amber" />
             reading {serverName} · not this Mac
           </span>
@@ -242,7 +242,7 @@ export function DirectoryPicker({
                       className="size-3.5 shrink-0 text-subtle"
                     />
                     <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                    <span className="shrink-0 text-[11px] text-subtle">
+                    <span className="shrink-0 text-micro text-subtle">
                       {unreadable
                         ? 'no access'
                         : entry.childCount === 0
@@ -263,7 +263,7 @@ export function DirectoryPicker({
         </div>
 
         <DialogFooter className="flex-row flex-wrap items-center gap-2.5 border-t border-border-soft px-3.5 py-2.5">
-          <p className="min-w-0 flex-1 truncate text-[11px] text-muted">
+          <p className="min-w-0 flex-1 truncate text-micro text-muted">
             {listing === null ? (
               'Reading…'
             ) : (

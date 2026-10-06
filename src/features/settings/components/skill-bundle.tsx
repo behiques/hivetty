@@ -247,7 +247,7 @@ export function SkillBundle({
         <Icon name="ph-caret-left" size={12} />
         <span className="truncate">Skills</span>
         {dirty ? (
-          <span className="ml-auto shrink-0 text-[11px] text-brand">edited</span>
+          <span className="ml-auto shrink-0 text-micro text-brand">edited</span>
         ) : null}
       </button>
 
@@ -333,7 +333,7 @@ export function SkillBundle({
                 <span className={excluded === null ? 'truncate tabular-nums' : 'truncate tabular-nums text-subtle'}>{name}</span>
               </span>
               {excluded === null ? null : (
-                <span className="shrink-0 text-[11px] text-subtle">
+                <span className="shrink-0 text-micro text-subtle">
                   {CHIP[excluded.code]}
                 </span>
               )}
@@ -348,7 +348,7 @@ export function SkillBundle({
         an entry's own `excluded`.
       */}
       {skill.manifest.capped === null ? null : (
-        <p className="border-t border-border-soft px-2.5 py-1.5 text-[11px] text-amber-text">
+        <p className="border-t border-border-soft px-2.5 py-1.5 text-micro text-amber-text">
           {skill.manifest.capped}
         </p>
       )}

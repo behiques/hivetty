@@ -89,7 +89,7 @@ export function ThreadCard({
           <span>{thread.path}</span>
           {line === null ? null : <span className="text-muted">{`:${String(line)}`}</span>}
         </span>
-        {thread.isOutdated ? <span className="text-[11px] text-subtle">outdated</span> : null}
+        {thread.isOutdated ? <span className="text-micro text-subtle">outdated</span> : null}
         <span className="flex-1" />
         <Chip thread={thread} fixerOnIt={fixerOnIt} />
       </div>

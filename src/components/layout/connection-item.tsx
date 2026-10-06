@@ -76,7 +76,7 @@ export function ConnectionItem() {
         <button
           type="button"
           onClick={acknowledgeLost}
-          className="shrink-0 rounded-md bg-chip px-2 py-0.5 text-[11px] text-ink hover:bg-chip-hover"
+          className="shrink-0 rounded-md bg-chip px-2 py-0.5 text-micro text-ink hover:bg-chip-hover"
         >
           Clear
         </button>

@@ -254,7 +254,7 @@ export function TicketTransitionMenu({
                 className="cursor-pointer justify-between gap-3"
               >
                 <span>{transition.name}</span>
-                <span className="text-[11px] text-subtle">
+                <span className="text-micro text-subtle">
                   → {transition.to.name}
                 </span>
               </DropdownMenuItem>
@@ -281,7 +281,7 @@ export function TicketTransitionMenu({
                 <span>{transition.name}</span>
                 {/* The destination, because a transition name is a verb and
                     frequently not the status it lands on. */}
-                <span className="text-[11px] text-subtle">
+                <span className="text-micro text-subtle">
                   → {transition.to.name}
                 </span>
               </DropdownMenuItem>

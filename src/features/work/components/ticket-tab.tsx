@@ -143,7 +143,7 @@ function TicketLinks({ ticketKey, sessionId }: { ticketKey: string; sessionId: s
                   <b className="tabular-nums text-ink">{tickets.length}</b>
                   <span className="flex-1" />
                   {GLYPH.filter(([category]) => model.counts[arc][category] > 0).map(([category, glyph]) => (
-                    <span key={category} className="tabular-nums text-[11px]">
+                    <span key={category} className="tabular-nums text-micro">
                       {`${glyph}${String(model.counts[arc][category])}`}
                     </span>
                   ))}

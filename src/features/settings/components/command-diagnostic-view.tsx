@@ -69,7 +69,7 @@ export function CommandDiagnosticView({ diagnostic }: CommandDiagnosticViewProps
 
       <div className="flex flex-col gap-1">
         <span className="text-ui-sm text-muted">Searched</span>
-        <code className="rounded-[5px] bg-chip px-2 py-1.5 font-mono text-[11px] break-all text-muted">
+        <code className="rounded-[5px] bg-chip px-2 py-1.5 font-mono text-micro break-all text-muted">
           {path === '' ? '(empty)' : path}
         </code>
       </div>

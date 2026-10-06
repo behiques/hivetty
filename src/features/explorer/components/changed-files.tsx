@@ -47,7 +47,7 @@ export function ChangedFiles({ changesId, subRoot, onOpenFile }: ChangedFilesPro
           <span className="min-w-0 flex-1 truncate tabular-nums text-muted">
             {file.path.startsWith(prefix) ? file.path.slice(prefix.length) : file.path}
           </span>
-          <span className="shrink-0 tabular-nums text-[11px] whitespace-nowrap text-muted">
+          <span className="shrink-0 tabular-nums text-micro whitespace-nowrap text-muted">
             {file.mark === 'A' && file.removed === 0
               ? `+${String(file.added)}`
               : `+${String(file.added)} −${String(file.removed)}`}

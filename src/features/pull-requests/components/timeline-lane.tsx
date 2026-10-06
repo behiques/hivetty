@@ -30,7 +30,7 @@ const SHAPE: Record<LaneMark['shape'], string> = {
   ci: 'h-3 top-5 rounded-[3px]',
   review: 'size-3 -ml-1.5 top-[19px] rotate-45',
   comment: 'w-3 h-[11px] -ml-1.5 top-[19px] rounded-[3px_3px_3px_0] bg-brand',
-  hold: 'h-5 top-4 rounded-full border tabular-nums text-[11px]',
+  hold: 'h-5 top-4 rounded-full border tabular-nums text-micro',
 };
 
 /** Where `f` sits on the axis, past the label column. */
@@ -105,7 +105,7 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
             <span
               key={`${mark.key}-word`}
               aria-hidden
-              className="pointer-events-none absolute top-[17px] ml-2.5 tabular-nums text-[11px] whitespace-nowrap text-muted"
+              className="pointer-events-none absolute top-[17px] ml-2.5 tabular-nums text-micro whitespace-nowrap text-muted"
               style={{ left }}
             >
               {mark.word}

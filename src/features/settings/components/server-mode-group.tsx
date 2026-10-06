@@ -223,7 +223,7 @@ function DeviceRow({
     <div className="flex items-center justify-between gap-2 py-1">
       <div className="flex min-w-0 flex-col">
         <span className="truncate text-control text-ink">{device.name}</span>
-        <span className="text-[11px] text-subtle">
+        <span className="text-micro text-subtle">
           Paired {device.paired}
           {device.revoked ? ' · revoked' : ''}
         </span>
@@ -1217,7 +1217,7 @@ export function ServerModeGroup({
                   <ul className="flex flex-col gap-0.5 pl-4 text-subtle">
                     {switchResult.sessions.map((name) => (
                       <li key={name}>
-                        <code className="font-mono text-[11px] text-ink">{name}</code>
+                        <code className="font-mono text-micro text-ink">{name}</code>
                       </li>
                     ))}
                   </ul>
@@ -1266,7 +1266,7 @@ export function ServerModeGroup({
       ) : null}
 
       <div className="flex flex-col gap-2 pt-1">
-        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-subtle">
+        <h4 className="text-micro font-semibold uppercase tracking-wide text-subtle">
           Paired devices
         </h4>
 
@@ -1328,7 +1328,7 @@ export function ServerModeGroup({
               config.json, so a person holding the token had no way to
               actually use it.
             */}
-            <p className="text-[11px] text-subtle">Device id: {justPaired.deviceId}</p>
+            <p className="text-micro text-subtle">Device id: {justPaired.deviceId}</p>
             <Button
               variant="ghost"
               size="sm"

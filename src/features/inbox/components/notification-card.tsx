@@ -278,7 +278,7 @@ export function NotificationCard({ notif }: NotificationCardProps) {
           only one of.
         */
         onClick={(event) => event.stopPropagation()}
-        className="mt-1 block px-3 text-[11px] font-medium text-brand hover:underline"
+        className="mt-1 block px-3 text-micro font-medium text-brand hover:underline"
       >
         {notif.link.label}
       </a>

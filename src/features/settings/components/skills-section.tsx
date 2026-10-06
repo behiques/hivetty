@@ -879,7 +879,7 @@ export function SkillsSection() {
           )}
         </div>
 
-        <p className="mt-auto pt-2 text-[11px] text-subtle">
+        <p className="mt-auto pt-2 text-micro text-subtle">
           Skills folder: {snapshot.skillsRoot}
         </p>
       </div>
@@ -992,10 +992,10 @@ export function SkillsSection() {
                   <ShippedDot status={shipped.get(row.name)} />
                 </span>
                 {broken ? (
-                  <span className="shrink-0 text-[11px] text-amber-text">invalid</span>
+                  <span className="shrink-0 text-micro text-amber-text">invalid</span>
                 ) : null}
                 {active && dirty ? (
-                  <span className="shrink-0 text-[11px] text-brand">edited</span>
+                  <span className="shrink-0 text-micro text-brand">edited</span>
                 ) : null}
               </button>
             );
@@ -1110,7 +1110,7 @@ export function SkillsSection() {
         </div>
       </div>
 
-      <p className="text-[11px] text-subtle">
+      <p className="text-micro text-subtle">
         Skills folder: {snapshot.skillsRoot}
       </p>
     </div>

@@ -506,7 +506,7 @@ function ProjectRow({
         that cannot be started has nothing useful to say about how many
         sessions it is running (story 090).
       */}
-      <span className="shrink-0 tabular-nums text-[11px] text-subtle">
+      <span className="shrink-0 tabular-nums text-micro text-subtle">
         {access.spawnable ? `${live} active` : 'unmapped'}
       </span>
     </button>

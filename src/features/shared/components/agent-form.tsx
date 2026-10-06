@@ -871,7 +871,7 @@ export function AgentForm({
 
     return (
       <div key={path} className="grid grid-cols-[86px_minmax(0,1fr)] gap-2.5">
-        <label className="pt-1 text-right text-[11px] text-subtle">
+        <label className="pt-1 text-right text-micro text-subtle">
           {label}
         </label>
         <div className="flex min-w-0 flex-col gap-1">
@@ -882,7 +882,7 @@ export function AgentForm({
             themselves; this puts the sentence where the fix happens.
           */}
           {problem === null ? null : (
-            <span role="alert" className="text-[11px] text-red">
+            <span role="alert" className="text-micro text-red">
               {problem}
             </span>
           )}
@@ -1033,7 +1033,7 @@ export function AgentForm({
         <p
           key={`${problem.field}:${problem.reason}`}
           role="alert"
-          className="flex flex-wrap gap-x-1 rounded-[5px] border border-red px-2.5 py-1.5 text-[11px] text-red"
+          className="flex flex-wrap gap-x-1 rounded-[5px] border border-red px-2.5 py-1.5 text-micro text-red"
         >
           {/*
             The path and the sentence are separate nodes rather than one
@@ -1105,7 +1105,7 @@ export function AgentForm({
           <div className="grid grid-cols-[86px_minmax(0,1fr)] gap-2.5">
             <span
               aria-hidden="true"
-              className="pt-1 text-right text-[11px] text-subtle"
+              className="pt-1 text-right text-micro text-subtle"
             >
               wakes
             </span>

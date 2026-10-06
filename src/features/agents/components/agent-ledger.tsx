@@ -77,7 +77,7 @@ export function AgentLedger({ name }: AgentLedgerProps) {
       </p>
 
       {shown.length === 0 ? (
-        <p className="text-[11px] text-subtle">
+        <p className="text-micro text-subtle">
           Nothing on the record yet.
         </p>
       ) : (
@@ -100,7 +100,7 @@ export function AgentLedger({ name }: AgentLedgerProps) {
                 })}
               </span>
             </div>
-            <p className="text-[11px] leading-relaxed break-words text-muted">
+            <p className="text-micro leading-relaxed break-words text-muted">
               {entry.body}
             </p>
           </div>

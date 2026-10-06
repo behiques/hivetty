@@ -190,14 +190,14 @@ export function SkillEditor({
           never engages and a long path pushes the state badge off the panel
           instead of ellipsising. Every path here is absolute and most are long.
         */}
-        <span className="min-w-0 truncate tabular-nums text-[11px] text-subtle">
+        <span className="min-w-0 truncate tabular-nums text-micro text-subtle">
           {path ?? 'New skill'}
         </span>
         <span
           className={
             dirty
-              ? 'shrink-0 text-[11px] text-brand'
-              : 'shrink-0 text-[11px] text-subtle'
+              ? 'shrink-0 text-micro text-brand'
+              : 'shrink-0 text-micro text-subtle'
           }
         >
           {dirty ? 'unsaved' : 'saved'}
@@ -254,8 +254,8 @@ export function SkillEditor({
         <span
           className={
             problem === null
-              ? 'min-w-0 text-[11px] text-subtle'
-              : 'min-w-0 text-[11px] text-red'
+              ? 'min-w-0 text-micro text-subtle'
+              : 'min-w-0 text-micro text-red'
           }
         >
           {refused !== null

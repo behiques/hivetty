@@ -248,7 +248,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
       */}
       {notice === null ? (
         entity.status === 'paused' ? null : (
-        <p className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-subtle">
+        <p className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-micro text-subtle">
           ↵ posts to the ledger as the overmind · not a terminal — nothing here
           reaches a process
         </p>
@@ -256,7 +256,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
       ) : (
         <p
           role="status"
-          className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-amber-text"
+          className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-micro text-amber-text"
         >
           {notice}
         </p>
