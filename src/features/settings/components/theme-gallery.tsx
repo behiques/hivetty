@@ -198,7 +198,7 @@ export function ThemeGallery() {
           <button
             type="button"
             onClick={onDownloadTemplate}
-            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink disabled:opacity-60"
+            className="flex w-fit items-center gap-1.5 rounded-full border border-edge px-4 py-1.5 text-control font-semibold text-ink hover:bg-hover disabled:opacity-60"
           >
             Download template
           </button>

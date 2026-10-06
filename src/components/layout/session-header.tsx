@@ -45,7 +45,7 @@ export function SessionHeader({ entity }: { entity: Session | Terminal }) {
         onClick={backToOrch}
         aria-label="Back to overmind"
         title={`Back to overmind (${backChordLabel(isMacPlatform())})`}
-        className="grid size-7 shrink-0 place-items-center rounded-md text-brand hover:bg-hover"
+        className="grid size-7 shrink-0 place-items-center rounded-full text-brand hover:bg-hover"
       >
         <CaretLeft size={14} weight="bold" aria-hidden="true" />
       </button>
@@ -131,7 +131,7 @@ function SessionMenu({ session }: { session: Session }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Session menu"
-        className="shrink-0 rounded-md p-1 text-muted hover:bg-hover hover:text-ink"
+        className="shrink-0 rounded-full p-1 text-muted hover:bg-hover hover:text-ink"
       >
         <DotsThree size={18} weight="bold" aria-hidden="true" />
       </DropdownMenuTrigger>

@@ -875,7 +875,7 @@ export function SkillsSection() {
             + New skill
           </Button>
           {importButton(
-            'w-fit rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink',
+            'w-fit rounded-full border border-edge px-4 py-1.5 text-control font-semibold text-ink hover:bg-hover',
           )}
         </div>
 

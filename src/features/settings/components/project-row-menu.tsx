@@ -94,7 +94,7 @@ export function ProjectRowMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Actions for ${projectName}`}
-        className="shrink-0 rounded p-1 text-subtle hover:bg-hover hover:text-ink"
+        className="shrink-0 rounded-full p-1 text-subtle hover:bg-hover hover:text-ink"
       >
         <DotsThreeVertical size={13} weight="bold" />
       </DropdownMenuTrigger>

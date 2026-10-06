@@ -358,7 +358,7 @@ export function RuntimeSection() {
         <button
           type="button"
           onClick={() => void runDiagnostic()}
-          className="w-fit rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
+          className="w-fit rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
         >
           {selectedId === ''
             ? 'Check the default command'

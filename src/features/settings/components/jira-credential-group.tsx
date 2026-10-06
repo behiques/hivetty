@@ -196,7 +196,7 @@ export function JiraCredentialGroup({
                 <button
                   type="button"
                   onClick={clear}
-                  className="rounded-md border border-transparent px-2 py-1 text-control text-subtle hover:bg-hover hover:text-ink"
+                  className="rounded-full border border-transparent px-3 py-1 text-control text-subtle hover:bg-hover hover:text-ink"
                 >
                   Clear
                 </button>

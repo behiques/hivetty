@@ -313,7 +313,7 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
           type="button"
           onClick={refresh}
           title="Refresh"
-          className="rounded-md p-1 text-subtle hover:bg-hover hover:text-muted"
+          className="rounded-full p-1.5 text-subtle hover:bg-hover hover:text-muted"
         >
           <Icon name="ph-arrows-clockwise" size={13} />
           <span className="sr-only">Refresh the tree</span>
@@ -323,7 +323,7 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
           type="button"
           onClick={collapseAll}
           title="Collapse all"
-          className="rounded-md p-1 text-subtle hover:bg-hover hover:text-muted"
+          className="rounded-full p-1.5 text-subtle hover:bg-hover hover:text-muted"
         >
           <Icon name="ph-arrows-in-simple" size={13} />
           <span className="sr-only">Collapse every folder</span>

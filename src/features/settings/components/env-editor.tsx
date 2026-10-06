@@ -141,7 +141,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
             onClick={() =>
               setRows((current) => current.filter((_, at) => at !== index))
             }
-            className="rounded p-1.5 text-subtle hover:bg-hover hover:text-red"
+            className="rounded-full p-1.5 text-subtle hover:bg-hover hover:text-red"
           >
             <Trash size={13} />
           </button>
@@ -162,7 +162,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
           type="button"
           disabled={disabled}
           onClick={() => setRows((current) => [...current, makeRow()])}
-          className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
+          className="flex items-center gap-1.5 rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
         >
           <Plus size={12} weight="bold" />
           Add variable

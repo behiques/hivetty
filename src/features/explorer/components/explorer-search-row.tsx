@@ -58,7 +58,7 @@ export function ExplorerSearchRow({ status }: ExplorerSearchRowProps) {
           <div
             role="radiogroup"
             aria-label="What to search"
-            className="inline-flex overflow-hidden rounded-md border border-border"
+            className="inline-flex overflow-hidden rounded-full border border-border"
           >
             {MODES.map((option) => (
               <button

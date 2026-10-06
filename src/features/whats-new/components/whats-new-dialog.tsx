@@ -78,7 +78,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
           </div>
           <DialogPrimitive.Close
             aria-label="Close What's new"
-            className="absolute top-2.5 right-2.5 z-10 grid size-7 place-items-center rounded-lg text-muted hover:bg-hover hover:text-ink"
+            className="absolute top-2.5 right-2.5 z-10 grid size-7 place-items-center rounded-full text-muted hover:bg-hover hover:text-ink"
           >
             <X size={15} />
           </DialogPrimitive.Close>

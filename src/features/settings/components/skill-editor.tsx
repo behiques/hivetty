@@ -268,7 +268,7 @@ export function SkillEditor({
             <button
               type="button"
               onClick={onRename}
-              className="rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
+              className="rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
             >
               Rename
             </button>
@@ -276,7 +276,7 @@ export function SkillEditor({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-md border border-border px-2.5 py-1 text-control text-red hover:bg-hover"
+            className="rounded-full border border-red-edge px-3 py-1 text-control font-semibold text-red hover:bg-hover"
           >
             Delete
           </button>

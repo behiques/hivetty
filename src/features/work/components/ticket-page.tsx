@@ -155,7 +155,7 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
               aria-expanded={drawer.open}
               aria-controls="ticket-details"
               onClick={drawer.toggle}
-              className="ml-auto flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-control text-ink hover:bg-hover @min-[760px]:hidden"
+              className="ml-auto flex items-center gap-1.5 rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover @min-[760px]:hidden"
             >
               Details
             </button>

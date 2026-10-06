@@ -50,7 +50,7 @@ export function SessionPanelStrip({ plan, tabs, onOpen }: SessionPanelStripProps
             onClick={() => {
               onOpen('plan');
             }}
-            className="flex flex-col items-center rounded-md hover:bg-hover"
+            className="flex flex-col items-center rounded-full hover:bg-hover"
           >
             <PlanRings plan={plan} />
           </button>
@@ -66,7 +66,7 @@ export function SessionPanelStrip({ plan, tabs, onOpen }: SessionPanelStripProps
           onClick={() => {
             onOpen(id);
           }}
-          className="relative grid size-7 place-items-center rounded-md text-muted hover:bg-hover hover:text-ink"
+          className="relative grid size-7 place-items-center rounded-full text-muted hover:bg-hover hover:text-ink"
         >
           <TabIcon size={16} aria-hidden />
           {count === undefined || count === 0 ? null : (

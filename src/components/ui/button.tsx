@@ -37,15 +37,15 @@ const VARIANT: Record<ButtonVariant, string> = {
   primary:
     'bg-brand-fill text-on-brand hover:bg-brand-fill-hover disabled:hover:bg-brand-fill aria-disabled:hover:bg-brand-fill border border-transparent',
   secondary:
-    'border border-border text-muted hover:bg-hover hover:text-ink',
+    'border border-edge text-ink hover:bg-hover',
   danger:
-    'border border-border-soft text-red hover:bg-hover',
+    'border border-red-edge text-red hover:bg-hover',
   ghost: 'border border-transparent text-muted hover:bg-hover hover:text-ink',
 };
 
 const SIZE: Record<ButtonSize, string> = {
-  sm: 'rounded-md px-2.5 py-1 text-control',
-  md: 'rounded-md px-3 py-1.5 text-control',
+  sm: 'rounded-full px-3 py-1 text-control font-semibold',
+  md: 'rounded-full px-4 py-1.5 text-control font-semibold',
 };
 
 export function Button({
