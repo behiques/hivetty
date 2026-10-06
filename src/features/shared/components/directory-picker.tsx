@@ -272,13 +272,9 @@ export function DirectoryPicker({
               </>
             )}
           </p>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="rounded-[3px] border border-border bg-panel-2 px-[11px] py-[5px] text-control text-ink hover:bg-hover"
-          >
+          <Button size="sm" onClick={() => onOpenChange(false)}>
             Cancel
-          </button>
+          </Button>
           <Button
             variant="primary"
             size="sm"
