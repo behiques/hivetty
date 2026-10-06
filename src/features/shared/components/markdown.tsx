@@ -64,7 +64,7 @@ function inlineOne(token: Token): ReactNode {
 /** A task list is the PR's test plan: GitHub's tick, or an empty box. */
 function TestPlan({ items }: { items: Tokens.ListItem[] }) {
   return (
-    <ul className="mb-[0.75em] grid gap-[0.35em] text-[12.5px] text-muted">
+    <ul className="mb-[0.75em] grid gap-[0.35em] text-control text-muted">
       {items.map((item, i) => (
         <li key={i} className="flex items-center gap-2">
           {item.checked ? (

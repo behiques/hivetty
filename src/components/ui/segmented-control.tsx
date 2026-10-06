@@ -240,7 +240,7 @@ export function SegmentedControl<T extends string>({
               }
             }}
             className={cn(
-              'rounded-[5px] px-2.5 py-1 text-[12.5px] outline-none',
+              'rounded-[5px] px-2.5 py-1 text-control outline-none',
               /*
                 One line, always: a wrapped label makes the group taller and
                 every segment in it taller with it, which is how a long path

@@ -354,7 +354,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
     <article
       data-notification={notif.id}
       aria-label={`Ask from ${asker}: ${notif.title}`}
-      className="flex flex-col gap-[9px] rounded-[10px] border border-border bg-panel-2 px-3.5 py-3 text-left text-[12.5px]"
+      className="flex flex-col gap-[9px] rounded-[10px] border border-border bg-panel-2 px-3.5 py-3 text-left text-control"
     >
       {children}
     </article>

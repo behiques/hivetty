@@ -27,7 +27,7 @@ export function CommandDiagnosticView({ diagnostic }: CommandDiagnosticViewProps
 
   return (
     <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
-      <p className="flex items-start gap-2 text-[12.5px]">
+      <p className="flex items-start gap-2 text-control">
         {found ? (
           <CheckCircle size={14} className="mt-px shrink-0 text-green" />
         ) : (

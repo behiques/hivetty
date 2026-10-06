@@ -96,7 +96,7 @@ function CommentItem({
         <ViaFace agent={comment.via.agent} />
       )}
       <div className="flex min-w-0 flex-col gap-1">
-        <div className="flex items-baseline gap-2 text-[12.5px]">
+        <div className="flex items-baseline gap-2 text-control">
           <span className="font-medium text-ink">{comment.via?.agent ?? comment.author}</span>
           {comment.via === undefined ? null : <span className="text-[11px] text-subtle">via Hive TTY</span>}
           <span className="flex-1" />

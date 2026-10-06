@@ -52,7 +52,7 @@ export function SecretField({
 
   return (
     <div className={cn('flex flex-col gap-1', className)}>
-      <label htmlFor={id} className="text-[12.5px] text-muted">
+      <label htmlFor={id} className="text-control text-muted">
         {label}
       </label>
 
@@ -85,7 +85,7 @@ export function SecretField({
           }}
           className={cn(
             'min-w-0 flex-1 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5',
-            'text-[12.5px] text-ink outline-none placeholder:text-subtle',
+            'text-control text-ink outline-none placeholder:text-subtle',
             'focus-visible:ring-1 focus-visible:ring-brand',
           )}
         />

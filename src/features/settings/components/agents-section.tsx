@@ -132,7 +132,7 @@ export function AgentsSection() {
                   glyph then name — and the status is what floats to the far edge.
                 */
                 className={cn(
-                  'flex items-center gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-[12.5px] last:border-b-0 hover:bg-hover hover:text-ink',
+                  'flex items-center gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-control last:border-b-0 hover:bg-hover hover:text-ink',
                   active ? 'bg-hover text-ink' : 'text-muted',
                 )}
               >
@@ -166,7 +166,7 @@ export function AgentsSection() {
           <button
             type="button"
             onClick={newAgent}
-            className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-[12.5px] text-brand hover:bg-hover"
+            className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-control text-brand hover:bg-hover"
           >
             + New agent
           </button>

@@ -45,7 +45,7 @@ export function Switch({
         <label
           htmlFor={id}
           className={cn(
-            'text-[12.5px]',
+            'text-control',
             disabled ? 'text-subtle' : 'cursor-pointer text-ink',
           )}
         >

@@ -396,7 +396,7 @@ export function AdvancedSection() {
             }}
             disabled={!revealConfig}
             title={revealConfig ? undefined : REMOTE_DISABLED_REASON.revealConfig}
-            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink disabled:opacity-60"
+            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink disabled:opacity-60"
           >
             <FolderOpen size={12} weight="bold" />
             {fileManager(info?.platform)}
@@ -404,7 +404,7 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => void onReload()}
-            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink"
+            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
           >
             <ArrowClockwise size={12} weight="bold" />
             Reload
@@ -479,7 +479,7 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => setConfirming(true)}
-            className="w-fit rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink"
+            className="w-fit rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
           >
             Reset to template
           </button>
@@ -488,7 +488,7 @@ export function AdvancedSection() {
 
       <SettingsGroup title="About" description="What this build is made of.">
         {info === null ? (
-          <p className="text-[12.5px] text-subtle">Reading…</p>
+          <p className="text-control text-subtle">Reading…</p>
         ) : (
           <div className="flex flex-col gap-1 rounded-[7px] border border-border-soft p-3">
             <Fact label="Hive TTY" value={info.version} />
@@ -505,20 +505,20 @@ export function AdvancedSection() {
         description="Where a new version comes from, and whether this copy can install one."
       >
         {update === null ? (
-          <p className="text-[12.5px] text-subtle">
+          <p className="text-control text-subtle">
             Updates are only available in the desktop app.
           </p>
         ) : (
           <>
             <div className="flex items-center justify-between gap-2">
               {/* The check's result lands in this line; always mounted, so it is announced (HIVE-225). */}
-              <p role="status" className="text-[12.5px] text-muted">{updateLine(update, { downloading: downloadingPhrase, ready: readyPhrase })}</p>
+              <p role="status" className="text-control text-muted">{updateLine(update, { downloading: downloadingPhrase, ready: readyPhrase })}</p>
               <Button
                 variant="ghost"
                 disabled={!update.capability.canCheck}
                 pending={checking}
                 onClick={() => void onCheck()}
-                className="flex shrink-0 items-center gap-1.5 rounded-md border-border px-3 py-1.5 text-[12.5px] leading-normal text-muted hover:bg-hover hover:text-ink disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted"
+                className="flex shrink-0 items-center gap-1.5 rounded-md border-border px-3 py-1.5 text-control leading-normal text-muted hover:bg-hover hover:text-ink disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted"
               >
                 <ArrowCircleUp size={12} weight="bold" />
                 {checking ? 'Checking…' : 'Check now'}
@@ -550,7 +550,7 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => setWhatsNewOpen(true)}
-            className="rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink"
+            className="rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
           >
             Open What’s new
           </button>
@@ -587,11 +587,11 @@ export function AdvancedSection() {
           distinction survives to the screen here.
         */}
         {info === null ? (
-          <p className="text-[12.5px] text-subtle">
+          <p className="text-control text-subtle">
             Could not read diagnostics from the app.
           </p>
         ) : info.pty === undefined ? (
-          <p className="text-[12.5px] text-subtle">
+          <p className="text-control text-subtle">
             No session has run yet, so there is nothing to count.
           </p>
         ) : (

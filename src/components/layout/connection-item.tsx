@@ -193,7 +193,7 @@ export function ConnectionItem() {
             <span className="pt-[5px]">
               <Dot state={state} />
             </span>
-            <h3 className={cn('text-[12.5px] font-semibold', TONE[state])}>{rows[state].title}</h3>
+            <h3 className={cn('text-control font-semibold', TONE[state])}>{rows[state].title}</h3>
             <span />
             <div className="text-[12px] leading-[1.45] text-muted">{rows[state].body}</div>
           </section>

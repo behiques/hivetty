@@ -28,7 +28,7 @@ import { useOpenWorkTicket } from '@stores/ui-store';
 /** The tab re-reads once a minute while it is the visible tab (HIVE-202, D4). */
 const useTabPoller = createPoller({ intervalMs: 60_000 });
 
-const ACTION = 'flex items-center gap-1.5 text-[12.5px] text-brand hover:underline disabled:opacity-60';
+const ACTION = 'flex items-center gap-1.5 text-control text-brand hover:underline disabled:opacity-60';
 
 function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
   return (
@@ -48,7 +48,7 @@ function Criteria({ ticketKey }: { ticketKey: string }) {
   if (criteria.kind === 'description') {
     return (
       <Section title="Description">
-        <div className="flex flex-col gap-2 text-[12.5px]">
+        <div className="flex flex-col gap-2 text-control">
           <AdfBlocks blocks={criteria.blocks} />
         </div>
       </Section>
@@ -56,7 +56,7 @@ function Criteria({ ticketKey }: { ticketKey: string }) {
   }
   return (
     <Section title="Acceptance criteria" count={criteria.items.length}>
-      <ul className="flex list-disc flex-col gap-1 pl-4 text-[12.5px] text-ink">
+      <ul className="flex list-disc flex-col gap-1 pl-4 text-control text-ink">
         {criteria.items.map((runs, i) => (
           <li key={i}>{runs.map((one) => one.text).join('')}</li>
         ))}
@@ -71,7 +71,7 @@ function LatestComment({ ticketKey }: { ticketKey: string }) {
   return (
     <Section title="Latest comment">
       <p className="text-ui-sm font-semibold text-ink">{`${comment.author} · ${commentTime(comment.created)}`}</p>
-      <div className="flex flex-col gap-1.5 text-[12.5px] text-muted">
+      <div className="flex flex-col gap-1.5 text-control text-muted">
         <AdfBlocks blocks={comment.body} />
       </div>
     </Section>
@@ -108,7 +108,7 @@ function TicketLinks({ ticketKey, sessionId }: { ticketKey: string; sessionId: s
   return (
     <Section title="Links" count={model.total}>
       {model.total === 0 ? (
-        <p className="text-[12.5px] text-muted">No linked tickets</p>
+        <p className="text-control text-muted">No linked tickets</p>
       ) : (
         <>
           <p
@@ -210,7 +210,7 @@ export function TicketTab({ ticketKey, sessionId }: { ticketKey: string; session
   const nothing = ticket === undefined && entry?.detail === undefined;
 
   if (nothing && source.kind === 'unconfigured') {
-    return <p className="px-1 py-3 text-[12.5px] text-muted">Jira is not connected.</p>;
+    return <p className="px-1 py-3 text-control text-muted">Jira is not connected.</p>;
   }
   if (nothing && problem === undefined) return <LinesSkeleton label="Loading ticket" />;
 

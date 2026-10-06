@@ -314,7 +314,7 @@ export function SkillBundle({
                   : undefined
               }
               style={{ paddingLeft: `${String(10 + depth * 10)}px` }}
-              className={`flex items-center justify-between gap-1.5 border-b border-border-soft py-1.5 pr-2.5 text-left text-[12.5px] last:border-b-0 hover:bg-hover ${
+              className={`flex items-center justify-between gap-1.5 border-b border-border-soft py-1.5 pr-2.5 text-left text-control last:border-b-0 hover:bg-hover ${
                 selected ? 'bg-active text-ink' : 'text-muted'
               } ${over === entry.path ? 'bg-active' : ''}`}
             >
@@ -381,7 +381,7 @@ export function SkillBundle({
                 setAdding(false);
                 act();
               }}
-              className="px-2.5 py-1.5 text-left text-[12.5px] text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
+              className="px-2.5 py-1.5 text-left text-control text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
             >
               {label}
             </button>
@@ -402,7 +402,7 @@ export function SkillBundle({
           onClick={() => {
             setAdding(true);
           }}
-          className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-[12.5px] text-brand hover:bg-hover"
+          className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-control text-brand hover:bg-hover"
         >
           + Add
         </button>

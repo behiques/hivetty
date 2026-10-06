@@ -10,7 +10,7 @@ import { useOpenTicket, useTicketPrs, useTicketProperties, useTicketSessions } f
 import { usePickerActions } from '@stores/ui-store';
 
 const HEADING = 'pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase';
-const ACTION = 'flex items-center gap-2 py-1.5 text-left text-[12.5px] text-brand hover:underline disabled:opacity-60';
+const ACTION = 'flex items-center gap-2 py-1.5 text-left text-control text-brand hover:underline disabled:opacity-60';
 
 function Heading({ children }: { children: ReactNode }) {
   return <h2 className={HEADING}>{children}</h2>;
@@ -42,7 +42,7 @@ export function TicketProperties({ ticketKey }: { ticketKey: string }) {
 
   return (
     <div className="flex flex-col">
-      <dl className="grid grid-cols-[84px_1fr] gap-x-2.5 gap-y-[9px] text-[12.5px]">
+      <dl className="grid grid-cols-[84px_1fr] gap-x-2.5 gap-y-[9px] text-control">
         {rows.map(([key, text, extra]) =>
           text === undefined ? null : (
             <div key={key} className="contents">

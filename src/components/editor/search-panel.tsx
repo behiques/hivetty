@@ -376,7 +376,7 @@ function Field({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
-        className="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink outline-none placeholder:text-subtle"
+        className="min-w-0 flex-1 bg-transparent text-control text-ink outline-none placeholder:text-subtle"
       />
       {trailing}
     </div>

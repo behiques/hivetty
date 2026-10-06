@@ -117,7 +117,7 @@ export function ProjectsSection() {
         <button
           type="button"
           onClick={() => setView('clone')}
-          className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink"
+          className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
         >
           <GitBranch size={12} weight="bold" />
           Clone from URL

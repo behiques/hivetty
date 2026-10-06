@@ -39,7 +39,7 @@ interface JiraCredentialGroupProps {
 function CredentialLine({ credential }: { credential: JiraCredentialState }) {
   if (credential.kind === 'stored') {
     return (
-      <p className="flex items-start gap-2 text-[12.5px]">
+      <p className="flex items-start gap-2 text-control">
         <CheckCircle size={14} className="mt-px shrink-0 text-green" />
         <span className="text-ink">
           A token is stored for{' '}
@@ -51,7 +51,7 @@ function CredentialLine({ credential }: { credential: JiraCredentialState }) {
 
   if (credential.kind === 'env') {
     return (
-      <p className="flex items-start gap-2 text-[12.5px]">
+      <p className="flex items-start gap-2 text-control">
         <CheckCircle size={14} className="mt-px shrink-0 text-green" />
         <span className="text-ink">
           <code className="font-mono">{credential.variable}</code> is set in this
@@ -65,7 +65,7 @@ function CredentialLine({ credential }: { credential: JiraCredentialState }) {
 
   if (credential.kind === 'unavailable') {
     return (
-      <p className="flex items-start gap-2 text-[12.5px]">
+      <p className="flex items-start gap-2 text-control">
         <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
         {/* Main composed this sentence and it names the variable. Shown
             verbatim rather than translated back from a code. */}
@@ -75,7 +75,7 @@ function CredentialLine({ credential }: { credential: JiraCredentialState }) {
   }
 
   return (
-    <p className="flex items-start gap-2 text-[12.5px]">
+    <p className="flex items-start gap-2 text-control">
       <Circle size={14} className="mt-px shrink-0 text-subtle" />
       <span className="text-subtle">
         No token stored. The WORK tab will keep showing sample tickets.
@@ -88,7 +88,7 @@ function CredentialLine({ credential }: { credential: JiraCredentialState }) {
 function TestVerdict({ result }: { result: JiraResult<JiraIdentity> }) {
   if (result.ok) {
     return (
-      <p className="flex items-start gap-2 text-[12.5px]">
+      <p className="flex items-start gap-2 text-control">
         <CheckCircle size={14} className="mt-px shrink-0 text-green" />
         <span className="text-ink">
           Signed in as{' '}
@@ -99,7 +99,7 @@ function TestVerdict({ result }: { result: JiraResult<JiraIdentity> }) {
   }
 
   return (
-    <p className="flex items-start gap-2 text-[12.5px]">
+    <p className="flex items-start gap-2 text-control">
       <XCircle size={14} className="mt-px shrink-0 text-red" />
       <span className="text-red">{result.error.message}</span>
     </p>

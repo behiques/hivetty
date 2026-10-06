@@ -88,7 +88,7 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
         </button>
       </div>
       {asks.length + sessions.length === 0 ? (
-        <p className="px-0.5 text-[12.5px] text-muted">Nothing waits on you.</p>
+        <p className="px-0.5 text-control text-muted">Nothing waits on you.</p>
       ) : null}
       {placed.map(({ row, leaving }) => (
         <div

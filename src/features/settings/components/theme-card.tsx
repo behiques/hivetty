@@ -113,7 +113,7 @@ export function ThemeCard({
           long name never truncates underneath it instead of before it.
         */}
         <div className="min-w-0 pr-16">
-          <div className="truncate text-[12.5px] font-medium text-ink">
+          <div className="truncate text-control font-medium text-ink">
             {theme.name}
           </div>
           <div className="truncate text-[11px] text-muted">

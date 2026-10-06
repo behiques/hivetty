@@ -144,7 +144,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex items-center gap-2.5 border-b border-border-soft px-[18px] py-2.5 text-[12.5px]">
+      <div className="flex items-center gap-2.5 border-b border-border-soft px-[18px] py-2.5 text-control">
         <h2 className="truncate tabular-nums text-ink">{file.path}</h2>
         <span className="tabular-nums text-green">{`+${String(file.additions)}`}</span>
         <span className="tabular-nums text-red">{`−${String(file.deletions)}`}</span>
@@ -169,7 +169,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
         ) : null}
       </div>
       {viewedProblem === null ? null : <p className="px-[18px] pt-2 text-[12px] text-amber-text">{viewedProblem}</p>}
-      <div className="min-h-0 flex-1 overflow-auto py-2 font-mono text-[12.5px] leading-[1.75]">
+      <div className="min-h-0 flex-1 overflow-auto py-2 font-mono text-control leading-[1.75]">
         {loading ? (
           <div role="status" aria-label="Loading diff" aria-busy className="flex animate-pulse flex-col gap-2 px-[18px] pt-2">
             <SkeletonBar className="w-[92%]" />

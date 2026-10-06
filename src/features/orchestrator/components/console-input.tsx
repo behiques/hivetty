@@ -205,7 +205,7 @@ export function ConsoleInput() {
            * the cap the row scrolls. `resize-none` because a drag handle in the
            * corner of a terminal prompt would fight that.
            */
-          className="min-w-0 flex-1 resize-none field-sizing-content max-h-[10lh] overflow-y-auto border-none bg-transparent font-mono text-[12.5px] leading-normal text-ink caret-green outline-none placeholder:text-subtle"
+          className="min-w-0 flex-1 resize-none field-sizing-content max-h-[10lh] overflow-y-auto border-none bg-transparent font-mono text-control leading-normal text-ink caret-green outline-none placeholder:text-subtle"
         />
         <span className="shrink-0 pt-px font-mono text-[10.5px] whitespace-nowrap text-subtle">
           {KEY_HINT}

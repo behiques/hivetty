@@ -15,7 +15,7 @@ import { useAnswerAsk, useEntity, useMergeAsk, useOpenEntity, useReviewUrls } fr
 import { usePrPageActions } from '@stores/ui-store';
 
 const HEADING = 'flex items-center pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase';
-const CHECK_ROW = 'flex items-center gap-[9px] rounded px-1 py-[5px] text-[12.5px]';
+const CHECK_ROW = 'flex items-center gap-[9px] rounded px-1 py-[5px] text-control';
 
 export function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
@@ -144,7 +144,7 @@ export function PrProperties({
       {people.length > 0 ? (
         <Section title="Reviewers">
           {people.map(({ who, verdict }) => (
-            <div key={who} className="flex items-baseline gap-2 px-1 py-1 text-[12.5px]">
+            <div key={who} className="flex items-baseline gap-2 px-1 py-1 text-control">
               <span className="font-semibold text-ink">{who}</span>
               <span className="text-muted">{verdict}</span>
             </div>
@@ -154,7 +154,7 @@ export function PrProperties({
 
       {session !== null ? (
         <Section title="Linked">
-          <div className="flex items-baseline gap-2 px-1 py-1 text-[12.5px]">
+          <div className="flex items-baseline gap-2 px-1 py-1 text-control">
             {session.ticket === undefined ? null : <span className="tabular-nums text-brand">{session.ticket}</span>}
             <span className="text-muted">{`session ${statusLabel(session.status, session.idleDetail)}`}</span>
           </div>
@@ -169,7 +169,7 @@ export function PrProperties({
 // The resets (`rounded-none border-0 leading-normal hover:bg-transparent hover:text-brand`) undo the
 // ghost `Button`'s chrome on the two actions that use it; on the link they are no-ops (HIVE-225).
 const ACTION =
-  'flex items-center gap-2 rounded-none border-0 px-1 py-1.5 text-left text-[12.5px] leading-normal text-brand hover:bg-transparent hover:text-brand hover:underline disabled:cursor-not-allowed disabled:text-subtle disabled:no-underline aria-disabled:cursor-not-allowed aria-disabled:text-subtle aria-disabled:no-underline';
+  'flex items-center gap-2 rounded-none border-0 px-1 py-1.5 text-left text-control leading-normal text-brand hover:bg-transparent hover:text-brand hover:underline disabled:cursor-not-allowed disabled:text-subtle disabled:no-underline aria-disabled:cursor-not-allowed aria-disabled:text-subtle aria-disabled:no-underline';
 
 /**
  * What can be done from the page (HIVE-205, D16). No new `gh` writes: Merge

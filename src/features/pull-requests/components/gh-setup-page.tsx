@@ -58,7 +58,7 @@ export function GhSetupPage() {
         <p>
           PRs come from <code className="font-mono">gh</code>, run as you. Hive TTY stores no GitHub token.
         </p>
-        <pre className="my-3 rounded-md bg-chip px-3 py-2 text-left font-mono text-[12.5px] text-ink">
+        <pre className="my-3 rounded-md bg-chip px-3 py-2 text-left font-mono text-control text-ink">
           <code>gh auth login</code>
         </pre>
         <p>

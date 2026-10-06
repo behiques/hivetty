@@ -140,7 +140,7 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
                 >
                   <span className={cn('grid shrink-0', dim && 'opacity-60')}><StateIcon state={node.state} /></span>
                   <span className="flex min-w-0 flex-col gap-px">
-                    <b className={cn('truncate tabular-nums text-[12.5px]', dim ? 'text-muted' : 'text-ink')}>{label}</b>
+                    <b className={cn('truncate tabular-nums text-control', dim ? 'text-muted' : 'text-ink')}>{label}</b>
                     <span className={cn('truncate tabular-nums text-[11px]', dim ? 'text-subtle' : 'text-muted')}>{node.time}</span>
                   </span>
                   {node.progress === null ? null : (

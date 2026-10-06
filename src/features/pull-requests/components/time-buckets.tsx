@@ -33,7 +33,7 @@ export function TimeBuckets({ age, buckets, sentence }: { age: number; buckets: 
           </li>
         ))}
       </ol>
-      <p className="text-[12.5px] text-muted">{sentence}</p>
+      <p className="text-control text-muted">{sentence}</p>
     </section>
   );
 }

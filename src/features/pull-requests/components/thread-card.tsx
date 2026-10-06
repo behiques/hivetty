@@ -83,7 +83,7 @@ export function ThreadCard({
   };
 
   return (
-    <div className="overflow-hidden rounded-[9px] border border-border-soft bg-panel text-[12.5px]">
+    <div className="overflow-hidden rounded-[9px] border border-border-soft bg-panel text-control">
       <div className="flex items-center gap-2 border-b border-border-soft px-2.5 py-[7px] text-[12px]">
         <span className="tabular-nums text-ink">
           <span>{thread.path}</span>
@@ -147,7 +147,7 @@ export function ThreadCard({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             aria-label={`Reply to ${where}`}
-            className="resize-y bg-transparent text-[12.5px] text-ink outline-none placeholder:text-subtle"
+            className="resize-y bg-transparent text-control text-ink outline-none placeholder:text-subtle"
             placeholder="Reply…"
           />
           <div className="flex justify-end gap-2 text-[12px]">

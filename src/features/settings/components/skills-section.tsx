@@ -875,7 +875,7 @@ export function SkillsSection() {
             + New skill
           </Button>
           {importButton(
-            'w-fit rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink',
+            'w-fit rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink',
           )}
         </div>
 
@@ -980,7 +980,7 @@ export function SkillsSection() {
                 onClick={() => {
                   drillInto(row.name);
                 }}
-                className={`flex items-center justify-between gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-[12.5px] last:border-b-0 ${
+                className={`flex items-center justify-between gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-control last:border-b-0 ${
                   active ? 'bg-active text-ink' : 'text-muted'
                 } ${broken ? 'cursor-default' : 'hover:bg-hover hover:text-ink'}`}
               >
@@ -1004,12 +1004,12 @@ export function SkillsSection() {
           <button
             type="button"
             onClick={newSkill}
-            className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-[12.5px] text-brand hover:bg-hover"
+            className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-control text-brand hover:bg-hover"
           >
             + New skill
           </button>
           {importButton(
-            'border-t border-border-soft px-2.5 py-1.5 text-left text-[12.5px] text-muted hover:bg-hover hover:text-ink',
+            'border-t border-border-soft px-2.5 py-1.5 text-left text-control text-muted hover:bg-hover hover:text-ink',
           )}
         </div>
         )}

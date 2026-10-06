@@ -35,7 +35,7 @@ function Step({ title, body, children }: { title: string; body: ReactNode; child
   return (
     <div className="grid w-[220px] content-start gap-2 rounded-xl border border-border bg-panel p-3.5 text-left">
       <b className="text-ui text-ink">{title}</b>
-      <span className="text-[12.5px] text-muted">{body}</span>
+      <span className="text-control text-muted">{body}</span>
       <div className="pt-1">{children}</div>
     </div>
   );

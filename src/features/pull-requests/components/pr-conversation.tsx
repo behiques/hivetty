@@ -67,7 +67,7 @@ function Said({
   verdict?: [string, string];
 }) {
   return (
-    <div className="flex items-center gap-2 px-1.5 pt-[7px] text-[12.5px]">
+    <div className="flex items-center gap-2 px-1.5 pt-[7px] text-control">
       <span aria-hidden className={AVATAR}>
         {initials(author)}
       </span>

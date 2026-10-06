@@ -222,7 +222,7 @@ function DeviceRow({
   return (
     <div className="flex items-center justify-between gap-2 py-1">
       <div className="flex min-w-0 flex-col">
-        <span className="truncate text-[12.5px] text-ink">{device.name}</span>
+        <span className="truncate text-control text-ink">{device.name}</span>
         <span className="text-[11px] text-subtle">
           Paired {device.paired}
           {device.revoked ? ' · revoked' : ''}

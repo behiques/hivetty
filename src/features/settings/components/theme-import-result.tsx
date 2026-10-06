@@ -121,7 +121,7 @@ export function ThemeImportResult({ result, onDismiss }: ThemeImportResultProps)
     >
       <ToneGlyph tone={banner.tone} />
       <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] font-medium text-ink">{banner.title}</p>
+        <p className="text-control font-medium text-ink">{banner.title}</p>
         <p className="text-ui-sm text-muted">{banner.detail}</p>
       </div>
       <button

@@ -73,7 +73,7 @@ import { SLACK_SERVER_KEY } from '@shared/slack-contract';
 function TokenSourceLine({ gh }: { gh: GhStatus }) {
   if (gh.tokenSource === 'env' && gh.envVar !== null) {
     return (
-      <p className="text-[12.5px] text-ink">
+      <p className="text-control text-ink">
         <code className="font-mono">{gh.envVar}</code> is set in this app&rsquo;s
         environment, so that is the token that would be used.
       </p>
@@ -82,7 +82,7 @@ function TokenSourceLine({ gh }: { gh: GhStatus }) {
 
   if (gh.tokenSource === 'keyring') {
     return (
-      <p className="text-[12.5px] text-ink">
+      <p className="text-control text-ink">
         <code className="font-mono">gh</code> holds the credential itself, in your
         system keychain. Nothing needs to be configured here.
       </p>
@@ -95,7 +95,7 @@ function TokenSourceLine({ gh }: { gh: GhStatus }) {
   // check — so this only has to say what the remaining option is.
   if (!gh.installed) {
     return (
-      <p className="text-[12.5px] text-amber-text">
+      <p className="text-control text-amber-text">
         No token source. Without <code className="font-mono">gh</code>, the only
         one left is <code className="font-mono">GH_TOKEN</code> in this
         app&rsquo;s environment.
@@ -104,7 +104,7 @@ function TokenSourceLine({ gh }: { gh: GhStatus }) {
   }
 
   return (
-    <p className="text-[12.5px] text-amber-text">
+    <p className="text-control text-amber-text">
       No token source. Run <code className="font-mono">gh auth login</code>, or set{' '}
       <code className="font-mono">GH_TOKEN</code> in this app&rsquo;s environment.
     </p>
@@ -170,7 +170,7 @@ function GhSummary({
   if (!gh.installed) {
     return (
       <>
-        <p className="flex items-start gap-2 text-[12.5px]">
+        <p className="flex items-start gap-2 text-control">
           <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
           <span className="text-amber-text">
             <code className="font-mono">gh</code> was not found.
@@ -184,7 +184,7 @@ function GhSummary({
 
   return (
     <>
-      <p className="flex items-start gap-2 text-[12.5px]">
+      <p className="flex items-start gap-2 text-control">
         <CheckCircle size={14} className="mt-px shrink-0 text-green" />
         <span className="text-ink">
           <code className="font-mono text-muted">{gh.resolved}</code>
@@ -202,11 +202,11 @@ function GhSummary({
       )}
 
       {gh.authenticated ? (
-        <p className="text-[12.5px] text-ink">
+        <p className="text-control text-ink">
           Signed in as <span className="text-muted">{gh.account ?? 'unknown'}</span>.
         </p>
       ) : gh.error === null ? (
-        <p className="text-[12.5px] text-amber-text">
+        <p className="text-control text-amber-text">
           Installed, but not signed in. Run{' '}
           <code className="font-mono">gh auth login</code> in any terminal.
         </p>
@@ -309,7 +309,7 @@ export function IntegrationsSection() {
         >
           <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
             {status === null ? (
-              <p data-probing className="text-[12.5px] text-subtle">{probing}</p>
+              <p data-probing className="text-control text-subtle">{probing}</p>
             ) : (
               <TokenSourceLine gh={status.gh} />
             )}
@@ -328,7 +328,7 @@ export function IntegrationsSection() {
         >
           <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
             {status === null ? (
-              <p data-probing className="text-[12.5px] text-subtle">{probing}</p>
+              <p data-probing className="text-control text-subtle">{probing}</p>
             ) : (
               <GhSummary gh={status.gh} loginEnv={status.loginEnv} />
             )}
@@ -342,7 +342,7 @@ export function IntegrationsSection() {
             title="Connection"
             description="Real tickets in the WORK tab."
           >
-            <p data-probing className="text-[12.5px] text-subtle">{probing}</p>
+            <p data-probing className="text-control text-subtle">{probing}</p>
           </SettingsGroup>
         ) : (
           <>

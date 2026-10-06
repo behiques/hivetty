@@ -309,7 +309,7 @@ export function NewSessionPicker() {
             aria-label="Ticket workflow"
             className="flex w-[560px] max-w-[92%] flex-col gap-2 rounded-[8px] border border-border-soft px-3.5 py-3"
           >
-            <p className="text-[12.5px] text-muted">
+            <p className="text-control text-muted">
               {`The ticket workflow hands ${facts.key} to `}
               <b className="font-semibold text-ink">{wake.agent}</b>
               {' instead of opening a session.'}
@@ -375,7 +375,7 @@ export function NewSessionPicker() {
               placeholder="search all projects…"
               spellCheck={false}
               aria-label="Search all projects"
-              className="min-w-0 flex-1 border-none bg-transparent tabular-nums text-[12.5px] text-ink caret-green outline-none placeholder:text-subtle"
+              className="min-w-0 flex-1 border-none bg-transparent tabular-nums text-control text-ink caret-green outline-none placeholder:text-subtle"
             />
           </div>
 
@@ -495,7 +495,7 @@ function ProjectRow({
       */}
       <span
         className={cn(
-          'min-w-0 flex-1 truncate tabular-nums text-[12.5px]',
+          'min-w-0 flex-1 truncate tabular-nums text-control',
           access.spawnable ? 'text-ink' : 'text-subtle',
         )}
       >

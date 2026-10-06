@@ -49,11 +49,11 @@ export function PathSourceGroup({
     >
       <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
         {loginEnv === null ? (
-          <p data-probing className="text-[12.5px] text-subtle">
+          <p data-probing className="text-control text-subtle">
             {probing}
           </p>
         ) : loginEnv === 'unavailable' ? (
-          <p className="flex items-start gap-2 text-[12.5px]">
+          <p className="flex items-start gap-2 text-control">
             <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
             <span className="text-amber-text">
               This app could not be asked what environment it is using. Nothing
@@ -85,7 +85,7 @@ function PathSourceLine({ loginEnv }: { loginEnv: LoginEnvStatus }) {
   if (loginEnv.error !== null) {
     return (
       <>
-        <p className="flex items-start gap-2 text-[12.5px]">
+        <p className="flex items-start gap-2 text-control">
           <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
           <span className="text-amber-text">
             Your login shell could not be read: {loginEnv.error}.
@@ -102,7 +102,7 @@ function PathSourceLine({ loginEnv }: { loginEnv: LoginEnvStatus }) {
   if (!loginEnv.enabled) {
     return (
       <>
-        <p className="text-[12.5px] text-ink">
+        <p className="text-control text-ink">
           Inherited from whatever launched this app. {counts}
         </p>
         {/*
@@ -128,7 +128,7 @@ function PathSourceLine({ loginEnv }: { loginEnv: LoginEnvStatus }) {
   if (!loginEnv.imported) {
     return (
       <>
-        <p className="flex items-start gap-2 text-[12.5px]">
+        <p className="flex items-start gap-2 text-control">
           <CheckCircle size={14} className="mt-px shrink-0 text-green" />
           <span className="text-ink">
             Already your login shell&rsquo;s. {counts}
@@ -145,7 +145,7 @@ function PathSourceLine({ loginEnv }: { loginEnv: LoginEnvStatus }) {
 
   return (
     <>
-      <p className="flex items-start gap-2 text-[12.5px]">
+      <p className="flex items-start gap-2 text-control">
         <CheckCircle size={14} className="mt-px shrink-0 text-green" />
         <span className="text-ink">
           Imported from your login shell (

@@ -68,7 +68,7 @@ export function OvermindHead() {
           </>
         )}
       </h1>
-      <span className="min-w-0 truncate text-[12.5px] text-muted">{line}</span>
+      <span className="min-w-0 truncate text-control text-muted">{line}</span>
       <span className="flex-1" />
       <SegmentedControl label="Show" options={FILTERS} value={filter} onChange={setFilter} />
       {project === null ? (

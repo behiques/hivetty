@@ -117,7 +117,7 @@ export function JiraQueryGroup({ jql, canTest }: JiraQueryGroupProps) {
         {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
         <div role="status" className="empty:-mt-2.5">
           {verdict === null ? null : verdict.kind === 'matched' ? (
-            <p className="flex items-start gap-2 text-[12.5px]">
+            <p className="flex items-start gap-2 text-control">
               <CheckCircle size={14} className="mt-px shrink-0 text-green" />
               <span className="text-ink">
                 {verdict.count === 0
@@ -127,7 +127,7 @@ export function JiraQueryGroup({ jql, canTest }: JiraQueryGroupProps) {
               </span>
             </p>
           ) : (
-            <p className="flex items-start gap-2 text-[12.5px]">
+            <p className="flex items-start gap-2 text-control">
               <XCircle size={14} className="mt-px shrink-0 text-red" />
               {/* Jira's own words. It knows why better than any parser here would. */}
               <span className="text-red">{verdict.message}</span>

@@ -180,14 +180,14 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
               placeholder="https://github.com/owner/repo.git"
               spellCheck={false}
               autoComplete="off"
-              className="rounded-md border border-border bg-bg px-2.5 py-1.5 text-[12.5px] text-ink placeholder:text-subtle"
+              className="rounded-md border border-border bg-bg px-2.5 py-1.5 text-control text-ink placeholder:text-subtle"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <span className="text-ui-sm text-muted">Clone into</span>
             <div className="flex items-stretch gap-2">
-              <span className="flex-1 truncate rounded-md border border-border bg-bg px-2.5 py-1.5 text-[12.5px] text-ink">
+              <span className="flex-1 truncate rounded-md border border-border bg-bg px-2.5 py-1.5 text-control text-ink">
                 {parentPath ?? (
                   <span className="text-subtle">Choose a folder…</span>
                 )}
@@ -196,7 +196,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
                 variant="ghost"
                 onClick={onChoose}
                 pending={choosing}
-                className="flex items-center gap-1.5 rounded-md border-border px-3 py-1.5 text-[12.5px] leading-normal text-muted hover:bg-hover hover:text-ink aria-disabled:opacity-60"
+                className="flex items-center gap-1.5 rounded-md border-border px-3 py-1.5 text-control leading-normal text-muted hover:bg-hover hover:text-ink aria-disabled:opacity-60"
               >
                 <FolderOpen size={12} weight="bold" />
                 Choose…
@@ -249,7 +249,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
           <button
             type="button"
             onClick={() => void cancelClone()}
-            className="flex w-fit items-center gap-1.5 rounded-md bg-hover px-3 py-1.5 text-[12.5px] text-ink"
+            className="flex w-fit items-center gap-1.5 rounded-md bg-hover px-3 py-1.5 text-control text-ink"
           >
             Cancel clone
           </button>
@@ -271,7 +271,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
           <button
             type="button"
             onClick={onDone}
-            className="flex w-fit items-center gap-1.5 rounded-md bg-hover px-3 py-1.5 text-[12.5px] text-ink"
+            className="flex w-fit items-center gap-1.5 rounded-md bg-hover px-3 py-1.5 text-control text-ink"
           >
             Back
           </button>

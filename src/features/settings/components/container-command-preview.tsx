@@ -36,7 +36,7 @@ export function ContainerCommandPreview({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[12.5px] text-muted">What will be typed</span>
+      <span className="text-control text-muted">What will be typed</span>
 
       {/* Scrolls inside itself; the pane must never scroll horizontally. */}
       <pre className="overflow-x-auto rounded-[7px] border border-border-soft bg-term-bg px-3 py-2.5 text-ui-sm leading-relaxed text-muted">

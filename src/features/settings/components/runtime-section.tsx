@@ -258,7 +258,7 @@ export function RuntimeSection() {
            * a quick scroll relies on, not just proximity to the section
            * heading above.
            */}
-          <span className="text-[12.5px] text-muted">Environment variables</span>
+          <span className="text-control text-muted">Environment variables</span>
           <EnvEditor
             // `EnvEditor` seeds its rows once, from a lazy initializer with
             // no effect and no key of its own (see its doc comment). `shell`
@@ -483,7 +483,7 @@ function ProjectOverrides({
         aria-label="Project environment variables"
         className="flex flex-col gap-1.5"
       >
-        <span className="text-[12.5px] text-muted">Environment variables</span>
+        <span className="text-control text-muted">Environment variables</span>
         <EnvEditor
           value={env}
           onSave={(next) =>
