@@ -12,7 +12,7 @@ export function ConsolePeek() {
   const last = useLastOrchLine();
 
   return (
-    <div className="flex shrink-0 items-center gap-3 border-t border-border-soft bg-term-input px-[18px] py-1.5 font-mono text-[11.5px]">
+    <div className="flex shrink-0 items-center gap-3 border-t border-border-soft bg-term-input px-[18px] py-1.5 font-mono text-ui-sm">
       {shown ? null : <span className="min-w-0 flex-1 truncate text-subtle">{last}</span>}
       <button
         type="button"

@@ -68,7 +68,7 @@ export function PrChecks({ pr, detail }: { pr: Pr; detail: PrDetail }) {
   }
 
   if (push === undefined && others.length === 0) {
-    return <p className="px-6 pt-4 text-[13px] text-muted">{`No checks on ${(detail.headSha ?? '').slice(0, 7)}`}</p>;
+    return <p className="px-6 pt-4 text-ui text-muted">{`No checks on ${(detail.headSha ?? '').slice(0, 7)}`}</p>;
   }
 
   const inFlight = push?.runs.some((r) => ['running', 'waiting'].includes(jobState(r.status, r.conclusion))) ?? false;
@@ -89,9 +89,9 @@ export function PrChecks({ pr, detail }: { pr: Pr; detail: PrDetail }) {
           {others.map((check) => (
             <li key={check.name}>
               {check.url === null ? (
-                <span className="flex items-center gap-1.5 rounded-md border border-border-soft px-2 py-1 text-[12px]"><StateIcon state={CHECK_STATE[check.status]} />{check.name}</span>
+                <span className="flex items-center gap-1.5 rounded-md border border-border-soft px-2 py-1 text-control"><StateIcon state={CHECK_STATE[check.status]} />{check.name}</span>
               ) : (
-                <a href={check.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-md border border-border-soft px-2 py-1 text-[12px] hover:bg-hover">
+                <a href={check.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-md border border-border-soft px-2 py-1 text-control hover:bg-hover">
                   <StateIcon state={CHECK_STATE[check.status]} />
                   {check.name}
                 </a>

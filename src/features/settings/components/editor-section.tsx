@@ -112,7 +112,7 @@ export function EditorSection() {
           />
 
           {split ? (
-            <p className="text-[11.5px] text-subtle">
+            <p className="text-ui-sm text-subtle">
               Drag the divider to resize. Side by side leaves the terminal
               roughly half the stage — narrow enough that long agent output
               wraps.

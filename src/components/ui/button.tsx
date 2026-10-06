@@ -44,8 +44,8 @@ const VARIANT: Record<ButtonVariant, string> = {
 };
 
 const SIZE: Record<ButtonSize, string> = {
-  sm: 'rounded-[6px] px-2.5 py-1 text-[11px]',
-  md: 'rounded-md px-3 py-1.5 text-[12.5px]',
+  sm: 'rounded-[6px] px-2.5 py-1 text-control',
+  md: 'rounded-md px-3 py-1.5 text-control',
 };
 
 export function Button({

@@ -155,7 +155,7 @@ export function PrSearchRow({ projectId, focusOnMount }: PrSearchRowProps) {
       {term === '' ? null : (
         <div className="flex items-center justify-between gap-2 px-0.5">
           <label
-            className={`flex items-center gap-1.5 text-[10.5px] ${
+            className={`flex items-center gap-1.5 text-micro ${
               noSession ? 'text-subtle' : 'cursor-pointer text-muted'
             }`}
             title={
@@ -181,7 +181,7 @@ export function PrSearchRow({ projectId, focusOnMount }: PrSearchRowProps) {
             that it returns work the panel above it never shows, and a bare
             number would leave the user to infer that from the results.
           */}
-          <span className="tabular-nums text-[10.5px] text-subtle">
+          <span className="tabular-nums text-micro text-subtle">
             {search.searching
               ? 'Searching…'
               : search.error !== null

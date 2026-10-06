@@ -41,9 +41,9 @@ export function PrCommentBox({ pr }: { pr: Pr }) {
         onChange={(event) => setDraft(event.target.value)}
         aria-label={label}
         placeholder={`${label}…`}
-        className="resize-y bg-transparent text-[13px] text-ink outline-none placeholder:text-subtle"
+        className="resize-y bg-transparent text-ui text-ink outline-none placeholder:text-subtle"
       />
-      <div className="flex items-center gap-2.5 text-[12px]">
+      <div className="flex items-center gap-2.5 text-control">
         <span className="rounded-md border border-border-soft px-2 py-0.5 text-ink">Comment on GitHub</span>
         <span className="text-muted">everyone on the PR sees it</span>
         <span className="flex-1" />
@@ -58,7 +58,7 @@ export function PrCommentBox({ pr }: { pr: Pr }) {
       </div>
       {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
       <div role="status" className="empty:-mt-3">
-        {problem === null ? null : <p className="text-[12px] text-amber-text">{problem}</p>}
+        {problem === null ? null : <p className="text-control text-amber-text">{problem}</p>}
       </div>
     </div>
   );

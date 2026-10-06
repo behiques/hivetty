@@ -55,7 +55,7 @@ function Facts({ pr, detail }: { pr: Pr; detail: PrDetail | undefined }) {
   const age = useRelativeTime(detail === undefined ? Date.now() : Date.parse(detail.createdAt));
 
   if (detail === undefined) {
-    return <span className="truncate tabular-nums text-[11.5px] text-muted">{`${pr.repo} · ${pr.branch}`}</span>;
+    return <span className="truncate tabular-nums text-ui-sm text-muted">{`${pr.repo} · ${pr.branch}`}</span>;
   }
 
   /* D12: an agent opened it ("builder for you" when it is yours), a session by its name, else GitHub's author. */
@@ -67,7 +67,7 @@ function Facts({ pr, detail }: { pr: Pr; detail: PrDetail | undefined }) {
         : (detail.author ?? 'someone');
 
   return (
-    <span data-testid="pr-facts" className="truncate text-[11.5px] whitespace-nowrap text-muted">
+    <span data-testid="pr-facts" className="truncate text-ui-sm whitespace-nowrap text-muted">
       <span className="tabular-nums">{`${pr.repo} · ${detail.headRef} → ${detail.baseRef}`}</span>
       {' · '}
       <span className="tabular-nums text-green">{`+${String(detail.additions)}`}</span>{' '}
@@ -131,8 +131,8 @@ export function PrPage({ row }: { row: HatcheryRow }) {
         <GitPullRequest size={20} aria-hidden className={cn('shrink-0', FLAP_TEXT[hatch.tone])} />
         <div className="flex min-w-0 flex-col gap-[3px]">
           <div className="flex items-center gap-2.5">
-            <span className="tabular-nums text-[15px] font-bold text-ink">{`#${String(pr.n)}`}</span>
-            <h1 className="truncate text-[15px] text-ink">{pr.title}</h1>
+            <span className="tabular-nums text-ui-lg font-bold text-ink">{`#${String(pr.n)}`}</span>
+            <h1 className="truncate text-ui-lg text-ink">{pr.title}</h1>
             <Flap hatch={hatch} />
           </div>
           <Facts pr={pr} detail={detail} />
@@ -145,7 +145,7 @@ export function PrPage({ row }: { row: HatcheryRow }) {
           aria-expanded={drawer.open}
           aria-controls="pr-details"
           onClick={drawer.toggle}
-          className="flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-[12px] text-ink hover:bg-hover @min-[760px]:hidden"
+          className="flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-control text-ink hover:bg-hover @min-[760px]:hidden"
         >
           Details
         </button>
@@ -153,7 +153,7 @@ export function PrPage({ row }: { row: HatcheryRow }) {
           href={pr.url}
           target="_blank"
           rel="noreferrer"
-          className="flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-[12px] text-ink hover:bg-hover"
+          className="flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-control text-ink hover:bg-hover"
         >
           <GithubLogo size={13} aria-hidden />
           GitHub

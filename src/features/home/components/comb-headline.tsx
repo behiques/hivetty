@@ -36,9 +36,9 @@ export function CombHeadline({ needs, summary }: { needs: number; summary: CombS
   const team = useTeamName();
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 flex items-baseline gap-3.5 bg-linear-to-b from-bg to-transparent px-7 py-[18px]">
-      <h2 className={cn('text-[15px] font-semibold', tone)}>{text}</h2>
+      <h2 className={cn('text-ui-lg font-semibold', tone)}>{text}</h2>
       <span className="text-muted">{summaryText(summary)}</span>
-      {team ? <span className="ml-auto font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-subtle">{team}</span> : null}
+      {team ? <span className="ml-auto font-mono text-micro font-semibold uppercase tracking-[0.12em] text-subtle">{team}</span> : null}
     </div>
   );
 }

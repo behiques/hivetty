@@ -132,7 +132,7 @@ export function EmptyState({
 
   const body =
     sentence === undefined ? null : (
-      <p className="px-1 py-1 text-[11.5px] leading-[1.45] text-subtle">
+      <p className="px-1 py-1 text-ui-sm leading-[1.45] text-subtle">
         {sentence}
       </p>
     );

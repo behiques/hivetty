@@ -92,7 +92,7 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
         <button type="button" aria-label="Zoom out" title="Zoom out" disabled={scale <= ZOOM_MIN} onClick={() => step(-ZOOM_STEP)} className={ZOOM_BUTTON}>
           <MagnifyingGlassMinus size={14} aria-hidden />
         </button>
-        <button type="button" aria-label="Reset zoom" title="Back to 100%" onClick={() => setZoom(1)} className="h-7 min-w-11 rounded-[6px] px-1 tabular-nums text-[11.5px] text-muted hover:bg-hover hover:text-ink">
+        <button type="button" aria-label="Reset zoom" title="Back to 100%" onClick={() => setZoom(1)} className="h-7 min-w-11 rounded-[6px] px-1 tabular-nums text-ui-sm text-muted hover:bg-hover hover:text-ink">
           {`${String(Math.round(scale * 100))}%`}
         </button>
         <button type="button" aria-label="Zoom in" title="Zoom in" disabled={scale >= ZOOM_MAX} onClick={() => step(ZOOM_STEP)} className={ZOOM_BUTTON}>
@@ -107,7 +107,7 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
           <div className="relative origin-top-left" style={{ width: graph.width, height: graph.height, transform: scale === 1 ? undefined : `scale(${String(scale)})` }}>
             {graph.groups.map((group) => (
               <div key={group.file} className="absolute rounded-[14px] border border-dashed border-border" style={{ left: group.x, top: group.y, width: group.w, height: group.h }}>
-                <span className="absolute -top-[9px] left-3 bg-bg px-1.5 tabular-nums text-[11px] text-subtle">{group.file}</span>
+                <span className="absolute -top-[9px] left-3 bg-bg px-1.5 tabular-nums text-micro text-subtle">{group.file}</span>
               </div>
             ))}
             <svg aria-hidden className="absolute inset-0 overflow-visible" width={graph.width} height={graph.height}>
@@ -140,8 +140,8 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
                 >
                   <span className={cn('grid shrink-0', dim && 'opacity-60')}><StateIcon state={node.state} /></span>
                   <span className="flex min-w-0 flex-col gap-px">
-                    <b className={cn('truncate tabular-nums text-[12.5px]', dim ? 'text-muted' : 'text-ink')}>{label}</b>
-                    <span className={cn('truncate tabular-nums text-[11px]', dim ? 'text-subtle' : 'text-muted')}>{node.time}</span>
+                    <b className={cn('truncate tabular-nums text-control', dim ? 'text-muted' : 'text-ink')}>{label}</b>
+                    <span className={cn('truncate tabular-nums text-micro', dim ? 'text-subtle' : 'text-muted')}>{node.time}</span>
                   </span>
                   {node.progress === null ? null : (
                     <span role="progressbar" aria-label={`${node.label} progress`} aria-valuenow={Math.round(node.progress * 100)} aria-valuemin={0} aria-valuemax={100} className="absolute inset-x-0 bottom-0 h-[3px] bg-border">

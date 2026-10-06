@@ -41,7 +41,7 @@ export function InboxPill({ onStage }: InboxPillProps) {
       aria-label={`Inbox, ${String(count)} ${count === 1 ? 'needs' : 'need'} you`}
       onClick={() => openInboxDrawer()}
       className={cn(
-        'flex items-center gap-[7px] rounded-full border border-[color-mix(in_srgb,var(--cc-amber)_45%,var(--cc-border))] bg-panel-2 py-1.5 pr-3 pl-2.5 text-[12px] text-muted shadow-lg',
+        'flex items-center gap-[7px] rounded-full border border-[color-mix(in_srgb,var(--cc-amber)_45%,var(--cc-border))] bg-panel-2 py-1.5 pr-3 pl-2.5 text-control text-muted shadow-lg',
         counted && !reduced && 'motion-safe:animate-ccpulse motion-safe:[animation-iteration-count:1]',
       )}
     >

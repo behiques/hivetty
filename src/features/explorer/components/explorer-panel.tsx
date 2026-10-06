@@ -278,7 +278,7 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
           prefix is the renderer's own and main honours it by construction.
         */}
         <span
-          className="flex-1 truncate tabular-nums text-[11.5px] tracking-wide text-subtle uppercase"
+          className="flex-1 truncate tabular-nums text-ui-sm tracking-wide text-subtle uppercase"
           title={
             explorerRoot?.widened === true
               ? explorerRoot.path
@@ -302,7 +302,7 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
         */}
         {branch === undefined ? null : (
           <span
-            className="max-w-[110px] shrink-0 truncate rounded-full border border-border bg-chip px-1.5 py-px tabular-nums text-[9.5px] text-brand"
+            className="max-w-[110px] shrink-0 truncate rounded-full border border-border bg-chip px-1.5 py-px tabular-nums text-micro text-brand"
             title={`On branch ${branch}`}
           >
             {branch}
@@ -425,7 +425,7 @@ function SearchView({
   // Below the floor main enforces, so nothing was walked and nothing is owed.
   if (query.length < MIN_QUERY_CHARS) {
     return (
-      <p className="px-2 py-3 text-[10.5px] text-subtle">
+      <p className="px-2 py-3 text-micro text-subtle">
         Keep typing — {MIN_QUERY_CHARS} characters at least.
       </p>
     );
@@ -436,8 +436,8 @@ function SearchView({
   if (state.results.hits.length === 0) {
     return (
       <div className="flex flex-col gap-[3px] px-2 py-3">
-        <p className="text-[11.5px] text-muted">{phrase}</p>
-        <p className="truncate text-[11.5px] text-subtle" title={query}>
+        <p className="text-ui-sm text-muted">{phrase}</p>
+        <p className="truncate text-ui-sm text-subtle" title={query}>
           nothing matches “{query}”
         </p>
       </div>

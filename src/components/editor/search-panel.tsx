@@ -254,7 +254,7 @@ function SearchPanel({ view, subscribe }: SearchPanelProps) {
               aria-pressed={query[toggle.key]}
               onClick={() => amend({ [toggle.key]: !query[toggle.key] })}
               className={[
-                'grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[4px] text-[9.5px] font-semibold',
+                'grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[4px] text-micro font-semibold',
                 query[toggle.key]
                   ? 'bg-active text-brand'
                   : 'text-subtle hover:bg-hover hover:text-muted',
@@ -269,7 +269,7 @@ function SearchPanel({ view, subscribe }: SearchPanelProps) {
 
         <span
           aria-live="polite"
-          className="shrink-0 tabular-nums whitespace-nowrap text-[11.5px] text-muted"
+          className="shrink-0 tabular-nums whitespace-nowrap text-ui-sm text-muted"
         >
           {counter}
         </span>
@@ -376,7 +376,7 @@ function Field({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
-        className="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink outline-none placeholder:text-subtle"
+        className="min-w-0 flex-1 bg-transparent text-control text-ink outline-none placeholder:text-subtle"
       />
       {trailing}
     </div>

@@ -492,7 +492,7 @@ function Adder({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-[4px] border border-dashed border-border bg-transparent px-2 py-0.5 text-[11.5px] text-subtle hover:border-brand hover:text-ink"
+        className="rounded-[4px] border border-dashed border-border bg-transparent px-2 py-0.5 text-ui-sm text-subtle hover:border-brand hover:text-ink"
       >
         + {label}
       </button>
@@ -527,10 +527,10 @@ function Adder({
           because closing would discard what the user typed and say nothing.
         */
         onBlur={commit}
-        className="w-24 rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-[11.5px] text-ink outline-none focus:border-brand"
+        className="w-24 rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-ink outline-none focus:border-brand"
       />
       {problem === null ? null : (
-        <span role="alert" className="text-[10.5px] text-red">
+        <span role="alert" className="text-micro text-red">
           {problem}
         </span>
       )}
@@ -871,7 +871,7 @@ export function AgentForm({
 
     return (
       <div key={path} className="grid grid-cols-[86px_minmax(0,1fr)] gap-2.5">
-        <label className="pt-1 text-right text-[11px] text-subtle">
+        <label className="pt-1 text-right text-micro text-subtle">
           {label}
         </label>
         <div className="flex min-w-0 flex-col gap-1">
@@ -882,12 +882,12 @@ export function AgentForm({
             themselves; this puts the sentence where the fix happens.
           */}
           {problem === null ? null : (
-            <span role="alert" className="text-[11px] text-red">
+            <span role="alert" className="text-micro text-red">
               {problem}
             </span>
           )}
           {help === undefined ? null : (
-            <span className="text-[10.5px] leading-snug text-subtle">
+            <span className="text-micro leading-snug text-subtle">
               {help}
             </span>
           )}
@@ -900,7 +900,7 @@ export function AgentForm({
             the sentence disappears with the buffer that earned it.
           */}
           {path === 'name' && renamed !== null && renamed.to === at('name') ? (
-            <span role="status" className="text-[10.5px] text-muted">
+            <span role="status" className="text-micro text-muted">
               {renamed.from} was taken — using {renamed.to}.
             </span>
           ) : null}
@@ -937,7 +937,7 @@ export function AgentForm({
         showing text the buffer does not hold.
       */
       onBlur={() => setDraft(null)}
-      className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-[11.5px] text-ink outline-none focus:border-brand"
+      className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-ui-sm text-ink outline-none focus:border-brand"
     />
   );
 
@@ -949,8 +949,8 @@ export function AgentForm({
       onClick={onClick}
       className={
         on
-          ? 'rounded-[4px] border border-brand bg-active px-2 py-0.5 text-[11.5px] text-ink'
-          : 'rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-[11.5px] text-subtle hover:bg-hover hover:text-ink'
+          ? 'rounded-[4px] border border-brand bg-active px-2 py-0.5 text-ui-sm text-ink'
+          : 'rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-subtle hover:bg-hover hover:text-ink'
       }
     >
       {label}
@@ -999,10 +999,10 @@ export function AgentForm({
   if (read === null) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-4 text-center">
-        <span className="text-[11.5px] text-amber-text">
+        <span className="text-ui-sm text-amber-text">
           This file has no frontmatter.
         </span>
-        <span className="text-[11.5px] text-subtle">
+        <span className="text-ui-sm text-subtle">
           It must open and close with a --- line. Fix it in the Source tab and
           the form comes back.
         </span>
@@ -1033,7 +1033,7 @@ export function AgentForm({
         <p
           key={`${problem.field}:${problem.reason}`}
           role="alert"
-          className="flex flex-wrap gap-x-1 rounded-[5px] border border-red px-2.5 py-1.5 text-[11px] text-red"
+          className="flex flex-wrap gap-x-1 rounded-[5px] border border-red px-2.5 py-1.5 text-micro text-red"
         >
           {/*
             The path and the sentence are separate nodes rather than one
@@ -1080,7 +1080,7 @@ export function AgentForm({
                 setRenamed({ from: typed, to: free });
                 onChange(patchFrontmatter(source, 'name', free));
               }}
-              className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-[11.5px] text-ink outline-none focus:border-brand"
+              className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-ui-sm text-ink outline-none focus:border-brand"
             />,
           )}
           {row('description', 'description', input('description', 'description'))}
@@ -1105,7 +1105,7 @@ export function AgentForm({
           <div className="grid grid-cols-[86px_minmax(0,1fr)] gap-2.5">
             <span
               aria-hidden="true"
-              className="pt-1 text-right text-[11px] text-subtle"
+              className="pt-1 text-right text-micro text-subtle"
             >
               wakes
             </span>
@@ -1116,7 +1116,7 @@ export function AgentForm({
                 value={mode}
                 onChange={setMode}
               />
-              <span className="text-[10.5px] leading-snug text-subtle">
+              <span className="text-micro leading-snug text-subtle">
                 Two ways to say when. every — it repeats on an interval from its
                 last wake. on a schedule — it fires at fixed local times. off —
                 it only wakes when something addresses it.

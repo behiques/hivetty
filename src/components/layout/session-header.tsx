@@ -72,16 +72,16 @@ function SessionLine({ session }: { session: Session }) {
       */}
       {/* 96px at the narrowest step: beside both rails at 1200px the content box is 452px (the rails' grip gutters, #71), and the chip's last step needs 195. */}
       <span className="flex min-w-[140px] flex-1 basis-0 flex-col @max-[500px]:min-w-[96px]">
-        <span className="truncate text-[13px] font-semibold text-ink" title={session.task}>
+        <span className="truncate text-ui font-semibold text-ink" title={session.task}>
           {entityLabel(session)}
         </span>
-        <span className="truncate tabular-nums text-[11.5px] text-muted">
+        <span className="truncate tabular-nums text-ui-sm text-muted">
           {session.project} · {branchLabel(session)}
         </span>
       </span>
       <span
         data-testid="session-status"
-        className={cn('flex shrink-0 items-center gap-1.5 text-[12px]', ended ? 'text-muted' : tone)}
+        className={cn('flex shrink-0 items-center gap-1.5 text-control', ended ? 'text-muted' : tone)}
         // A narrow header hides the word (HIVE-213; 720px since the rails' gutters, #71, where the row needs ~705); the title keeps it for the dot.
         title={reason ?? word}
         aria-label={reason === undefined ? undefined : `Ended: ${reason}`}
@@ -109,15 +109,15 @@ function TerminalLine({ terminal }: { terminal: Terminal }) {
     <>
       <TerminalGlyph size={20} aria-hidden="true" className="shrink-0 text-muted" />
       <span className="flex min-w-0 flex-col">
-        <span className="truncate tabular-nums text-[13px] font-semibold text-ink" title={entityLabel(terminal)}>
+        <span className="truncate tabular-nums text-ui font-semibold text-ink" title={entityLabel(terminal)}>
           {entityLabel(terminal)}
         </span>
-        <span className="truncate tabular-nums text-[11.5px] text-muted">
+        <span className="truncate tabular-nums text-ui-sm text-muted">
           {terminal.project} · {cwdTail(terminal.cwd)}
         </span>
       </span>
       <span className="flex-1" />
-      <span className="shrink-0 text-[12px] text-muted">{terminalLabel(terminal)}</span>
+      <span className="shrink-0 text-control text-muted">{terminalLabel(terminal)}</span>
     </>
   );
 }
@@ -149,7 +149,7 @@ function SessionMenu({ session }: { session: Session }) {
           className="justify-between gap-4"
         >
           Terminal here
-          <span className="tabular-nums text-[11px] text-subtle">⌃`</span>
+          <span className="tabular-nums text-micro text-subtle">⌃`</span>
         </DropdownMenuItem>
         {pr ? (
           <DropdownMenuItem asChild>

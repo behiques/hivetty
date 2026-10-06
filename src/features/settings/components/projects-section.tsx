@@ -75,8 +75,8 @@ export function ProjectsSection() {
       {declared.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
           <SwarmCreature creature="overlord" size={120} className="mb-9" />
-          <span className="text-[11.5px] text-muted">{phrase}</span>
-          <span className="text-[11.5px] text-subtle">
+          <span className="text-ui-sm text-muted">{phrase}</span>
+          <span className="text-ui-sm text-subtle">
             Add a folder to start a session in it.
           </span>
         </div>
@@ -93,7 +93,7 @@ export function ProjectsSection() {
       {snapshot?.errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -117,7 +117,7 @@ export function ProjectsSection() {
         <button
           type="button"
           onClick={() => setView('clone')}
-          className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink"
+          className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
         >
           <GitBranch size={12} weight="bold" />
           Clone from URL
@@ -125,7 +125,7 @@ export function ProjectsSection() {
       </div>
 
       {snapshot ? (
-        <p className="mt-auto pt-2 text-[11px] text-subtle">
+        <p className="mt-auto pt-2 text-micro text-subtle">
           Config file: {snapshot.configPath}
         </p>
       ) : null}

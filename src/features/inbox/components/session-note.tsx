@@ -29,15 +29,15 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
 
   if (variant === 'row') {
     return (
-      <div className="flex items-center gap-2.5 rounded-lg p-2 text-[12.5px]">
+      <div className="flex items-center gap-2.5 rounded-lg p-2 text-control">
         <span aria-hidden className="size-2 shrink-0 rounded-full bg-amber" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate">
             <b className="font-semibold text-ink">{name}</b> <span className="text-muted">{notif.title}</span>
           </span>
-          <span className="text-[11.5px] text-muted">{`${project} · answer it in the session`}</span>
+          <span className="text-ui-sm text-muted">{`${project} · answer it in the session`}</span>
         </span>
-        <button type="button" onClick={open} className="text-[12px] text-brand hover:underline">
+        <button type="button" onClick={open} className="text-control text-brand hover:underline">
           Open ›
         </button>
       </div>
@@ -48,9 +48,9 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
     <article
       data-notification={notif.id}
       aria-label={`${name} asked a question`}
-      className="flex w-[380px] max-w-full flex-col gap-[9px] rounded-[10px] border border-[color-mix(in_srgb,var(--cc-amber)_55%,var(--cc-border))] bg-panel-2 px-3.5 py-3 text-[12.5px] shadow-xl"
+      className="flex w-[380px] max-w-full flex-col gap-[9px] rounded-[10px] border border-[color-mix(in_srgb,var(--cc-amber)_55%,var(--cc-border))] bg-panel-2 px-3.5 py-3 text-control shadow-xl"
     >
-      <div className="flex items-center gap-[7px] text-[12px] text-muted">
+      <div className="flex items-center gap-[7px] text-control text-muted">
         <span aria-hidden className="size-2 shrink-0 rounded-full bg-amber" />
         <b className="font-semibold text-ink">{name}</b>
         <span>asked a question</span>

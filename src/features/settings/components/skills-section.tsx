@@ -851,8 +851,8 @@ export function SkillsSection() {
         */}
         <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
           <SwarmCreature creature="spire" size={120} className="mb-9" />
-          <span className="text-[11.5px] text-muted">{phrase}</span>
-          <span className="text-[11.5px] text-subtle">
+          <span className="text-ui-sm text-muted">{phrase}</span>
+          <span className="text-ui-sm text-subtle">
             Write one and every session you start will have it.
           </span>
         </div>
@@ -860,7 +860,7 @@ export function SkillsSection() {
         {error === null ? null : (
           <p
             role="alert"
-            className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+            className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
           >
             {error}
           </p>
@@ -875,11 +875,11 @@ export function SkillsSection() {
             + New skill
           </Button>
           {importButton(
-            'w-fit rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink',
+            'w-fit rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink',
           )}
         </div>
 
-        <p className="mt-auto pt-2 text-[11px] text-subtle">
+        <p className="mt-auto pt-2 text-micro text-subtle">
           Skills folder: {snapshot.skillsRoot}
         </p>
       </div>
@@ -912,7 +912,7 @@ export function SkillsSection() {
       {invalid.map((skill) => (
         <p
           key={skill.name}
-          className="rounded-[5px] border border-amber px-2.5 py-1.5 text-[11.5px] text-amber-text"
+          className="rounded-[5px] border border-amber px-2.5 py-1.5 text-ui-sm text-amber-text"
         >
           {skill.name}: {skill.reason}
         </p>
@@ -921,7 +921,7 @@ export function SkillsSection() {
       {error === null ? null : (
         <p
           role="alert"
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -980,7 +980,7 @@ export function SkillsSection() {
                 onClick={() => {
                   drillInto(row.name);
                 }}
-                className={`flex items-center justify-between gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-[12.5px] last:border-b-0 ${
+                className={`flex items-center justify-between gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-control last:border-b-0 ${
                   active ? 'bg-active text-ink' : 'text-muted'
                 } ${broken ? 'cursor-default' : 'hover:bg-hover hover:text-ink'}`}
               >
@@ -992,10 +992,10 @@ export function SkillsSection() {
                   <ShippedDot status={shipped.get(row.name)} />
                 </span>
                 {broken ? (
-                  <span className="shrink-0 text-[11px] text-amber-text">invalid</span>
+                  <span className="shrink-0 text-micro text-amber-text">invalid</span>
                 ) : null}
                 {active && dirty ? (
-                  <span className="shrink-0 text-[11px] text-brand">edited</span>
+                  <span className="shrink-0 text-micro text-brand">edited</span>
                 ) : null}
               </button>
             );
@@ -1004,12 +1004,12 @@ export function SkillsSection() {
           <button
             type="button"
             onClick={newSkill}
-            className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-[12.5px] text-brand hover:bg-hover"
+            className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-control text-brand hover:bg-hover"
           >
             + New skill
           </button>
           {importButton(
-            'border-t border-border-soft px-2.5 py-1.5 text-left text-[12.5px] text-muted hover:bg-hover hover:text-ink',
+            'border-t border-border-soft px-2.5 py-1.5 text-left text-control text-muted hover:bg-hover hover:text-ink',
           )}
         </div>
         )}
@@ -1041,7 +1041,7 @@ export function SkillsSection() {
             </>
           )}
           {buffer === null ? (
-            <div className="flex flex-1 items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-[11.5px] text-subtle">
+            <div className="flex flex-1 items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-ui-sm text-subtle">
               {drilled === null
                 ? 'Select a skill, or write a new one.'
                 : 'Select a file, or add one.'}
@@ -1110,7 +1110,7 @@ export function SkillsSection() {
         </div>
       </div>
 
-      <p className="text-[11px] text-subtle">
+      <p className="text-micro text-subtle">
         Skills folder: {snapshot.skillsRoot}
       </p>
     </div>

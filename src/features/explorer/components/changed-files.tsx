@@ -22,7 +22,7 @@ export function ChangedFiles({ changesId, subRoot, onOpenFile }: ChangedFilesPro
 
   return (
     <section aria-label="Changed in this session" className="mb-1">
-      <h3 className="flex gap-1.5 px-2 pt-2 pb-1 text-[10.5px] font-semibold tracking-[.06em] text-subtle uppercase">
+      <h3 className="flex gap-1.5 px-2 pt-2 pb-1 text-micro font-semibold tracking-[.06em] text-subtle uppercase">
         Changed in this session
         <span className="tabular-nums tracking-normal">{files.length}</span>
       </h3>
@@ -34,11 +34,11 @@ export function ChangedFiles({ changesId, subRoot, onOpenFile }: ChangedFilesPro
           onClick={() => {
             onOpenFile(file.path);
           }}
-          className="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-[5px] text-left text-[12px] hover:bg-hover"
+          className="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-[5px] text-left text-control hover:bg-hover"
         >
           <i
             className={cn(
-              'w-3.5 shrink-0 text-center tabular-nums text-[10px] font-semibold not-italic',
+              'w-3.5 shrink-0 text-center tabular-nums text-micro font-semibold not-italic',
               file.mark === 'A' ? 'text-green' : 'text-brand',
             )}
           >
@@ -47,7 +47,7 @@ export function ChangedFiles({ changesId, subRoot, onOpenFile }: ChangedFilesPro
           <span className="min-w-0 flex-1 truncate tabular-nums text-muted">
             {file.path.startsWith(prefix) ? file.path.slice(prefix.length) : file.path}
           </span>
-          <span className="shrink-0 tabular-nums text-[11px] whitespace-nowrap text-muted">
+          <span className="shrink-0 tabular-nums text-micro whitespace-nowrap text-muted">
             {file.mark === 'A' && file.removed === 0
               ? `+${String(file.added)}`
               : `+${String(file.added)} −${String(file.removed)}`}

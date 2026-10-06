@@ -45,7 +45,7 @@ export function SearchBox({ label, value, onChange, onClear, focusOnMount }: Sea
         placeholder={label}
         aria-label={label}
         spellCheck={false}
-        className="min-w-0 flex-1 bg-transparent text-[11.5px] text-ink outline-none placeholder:text-subtle"
+        className="min-w-0 flex-1 bg-transparent text-ui-sm text-ink outline-none placeholder:text-subtle"
       />
       {value === '' ? null : (
         <button

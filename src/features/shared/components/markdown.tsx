@@ -33,7 +33,7 @@ function inlineOne(token: Token): ReactNode {
       return <del>{inline((token as Tokens.Del).tokens)}</del>;
     case 'codespan':
       return (
-        <code className="rounded-[3px] bg-chip px-1 py-px font-mono text-[11.5px]">
+        <code className="rounded-[3px] bg-chip px-1 py-px font-mono text-ui-sm">
           {plain((token as Tokens.Codespan).text)}
         </code>
       );
@@ -64,7 +64,7 @@ function inlineOne(token: Token): ReactNode {
 /** A task list is the PR's test plan: GitHub's tick, or an empty box. */
 function TestPlan({ items }: { items: Tokens.ListItem[] }) {
   return (
-    <ul className="mb-[0.75em] grid gap-[0.35em] text-[12.5px] text-muted">
+    <ul className="mb-[0.75em] grid gap-[0.35em] text-control text-muted">
       {items.map((item, i) => (
         <li key={i} className="flex items-center gap-2">
           {item.checked ? (
@@ -133,7 +133,7 @@ function block(token: Token, i: number): ReactNode {
       );
     case 'code':
       return (
-        <pre key={i} className="mb-[0.75em] overflow-x-auto rounded-md bg-term-bg p-2.5 font-mono text-[12px] text-muted">
+        <pre key={i} className="mb-[0.75em] overflow-x-auto rounded-md bg-term-bg p-2.5 font-mono text-control text-muted">
           {(token as Tokens.Code).text}
         </pre>
       );
@@ -172,5 +172,5 @@ function block(token: Token, i: number): ReactNode {
 
 export function Markdown({ source }: { source: string }) {
   const tokens = useMemo(() => marked.lexer(source, { gfm: true }), [source]);
-  return <div className="text-[13.5px] leading-[1.7]">{tokens.map(block)}</div>;
+  return <div className="text-ui leading-[1.7]">{tokens.map(block)}</div>;
 }

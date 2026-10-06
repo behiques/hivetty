@@ -53,7 +53,7 @@ export function Badge({ count, tone = 'danger', text, label, className }: BadgeP
     <span
       aria-hidden={label ? undefined : 'true'}
       className={cn(
-        'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none',
+        'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-micro font-bold leading-none',
         TONE_FILL[tone],
         className,
       )}

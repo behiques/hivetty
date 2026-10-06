@@ -17,7 +17,7 @@ import { useSettingsActions } from '@stores/ui-store';
 
 /** The bar's item shape (`activity-bar.tsx`), with room for a dot instead of an icon. */
 const ITEM =
-  'relative grid w-[52px] justify-items-center gap-[5px] rounded-[9px] pt-[9px] pb-[5px] text-[9.5px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
+  'relative grid w-[52px] justify-items-center gap-[5px] rounded-[9px] pt-[9px] pb-[5px] text-micro font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 
 /** Colour means state only. The ring pulses; the global reduced-motion clamp stills it. */
 const DOT: Record<ConnectionState, string> = {
@@ -76,7 +76,7 @@ export function ConnectionItem() {
         <button
           type="button"
           onClick={acknowledgeLost}
-          className="shrink-0 rounded-md bg-chip px-2 py-0.5 text-[11px] text-ink hover:bg-chip-hover"
+          className="shrink-0 rounded-md bg-chip px-2 py-0.5 text-micro text-ink hover:bg-chip-hover"
         >
           Clear
         </button>
@@ -193,9 +193,9 @@ export function ConnectionItem() {
             <span className="pt-[5px]">
               <Dot state={state} />
             </span>
-            <h3 className={cn('text-[12.5px] font-semibold', TONE[state])}>{rows[state].title}</h3>
+            <h3 className={cn('text-control font-semibold', TONE[state])}>{rows[state].title}</h3>
             <span />
-            <div className="text-[12px] leading-[1.45] text-muted">{rows[state].body}</div>
+            <div className="text-control leading-[1.45] text-muted">{rows[state].body}</div>
           </section>
         ))}
       </PopoverContent>

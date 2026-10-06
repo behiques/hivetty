@@ -47,6 +47,13 @@ describe('Button', () => {
     expect(screen.getByRole('button').className).not.toBe(small);
   });
 
+  it('sets both sizes at text-control: a button is a control, not a micro label (HIVE-225)', () => {
+    const { rerender } = render(<Button size="sm">a</Button>);
+    expect(screen.getByRole('button')).toHaveClass('text-control');
+    rerender(<Button size="md">a</Button>);
+    expect(screen.getByRole('button')).toHaveClass('text-control');
+  });
+
   it('forwards disabled and merges a caller class', () => {
     render(
       <Button disabled className="w-full">

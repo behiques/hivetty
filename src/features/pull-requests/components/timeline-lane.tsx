@@ -25,12 +25,12 @@ export interface LaneMark {
 export const GUTTER = 130;
 
 const SHAPE: Record<LaneMark['shape'], string> = {
-  flap: 'h-[22px] top-[9px] rounded-[5px] tabular-nums text-[9.5px] font-bold tracking-[0.08em]',
+  flap: 'h-[22px] top-[9px] rounded-[5px] tabular-nums text-micro font-bold tracking-[0.08em]',
   commit: 'size-[10px] -ml-[5px] top-[21px] rounded-full border-2 border-brand bg-bg',
   ci: 'h-3 top-5 rounded-[3px]',
   review: 'size-3 -ml-1.5 top-[19px] rotate-45',
   comment: 'w-3 h-[11px] -ml-1.5 top-[19px] rounded-[3px_3px_3px_0] bg-brand',
-  hold: 'h-5 top-4 rounded-full border tabular-nums text-[11px]',
+  hold: 'h-5 top-4 rounded-full border tabular-nums text-micro',
 };
 
 /** Where `f` sits on the axis, past the label column. */
@@ -70,7 +70,7 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
 
   return (
     <div ref={ref} className={cn('relative border-b border-border-soft', height === 40 ? 'h-10' : 'h-[52px]')}>
-      <span className="absolute inset-y-0 left-0 flex w-[130px] items-center text-[12px] text-muted">{label}</span>
+      <span className="absolute inset-y-0 left-0 flex w-[130px] items-center text-control text-muted">{label}</span>
       {marks.map((mark) => {
         const span = mark.to !== undefined;
         const left = axisLeft(mark.from);
@@ -105,7 +105,7 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
             <span
               key={`${mark.key}-word`}
               aria-hidden
-              className="pointer-events-none absolute top-[17px] ml-2.5 tabular-nums text-[11px] whitespace-nowrap text-muted"
+              className="pointer-events-none absolute top-[17px] ml-2.5 tabular-nums text-micro whitespace-nowrap text-muted"
               style={{ left }}
             >
               {mark.word}
@@ -123,7 +123,7 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
         <div
           role="tooltip"
           className={cn(
-            'pointer-events-none absolute top-full z-10 -mt-2 flex flex-col gap-0.5 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 text-[11.5px] whitespace-nowrap text-muted shadow-lg',
+            'pointer-events-none absolute top-full z-10 -mt-2 flex flex-col gap-0.5 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 text-ui-sm whitespace-nowrap text-muted shadow-lg',
             hover.from > 0.5 && '-translate-x-full',
           )}
           style={{ left: hover.left }}

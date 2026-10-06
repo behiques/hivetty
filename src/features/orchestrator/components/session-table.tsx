@@ -383,7 +383,7 @@ export function SessionTable() {
       /* Empty, it fills the pane so its notice can centre in the space below the header. */
       className={`${empty ? 'flex flex-1 flex-col ' : ''}min-h-0 overflow-y-auto bg-term-bg px-[18px] pt-4 font-sans text-ui`}
     >
-      <div className="flex items-center gap-2 px-2 pb-1.5 text-[11px] tracking-[0.06em] text-term-head">
+      <div className="flex items-center gap-2 px-2 pb-1.5 text-micro tracking-[0.06em] text-term-head">
         {/*
           The same box a row's button is (retro D): the six cells a row opens a
           terminal with sit in one `flex-1` wrapper, and `PR` and Resume sit
@@ -575,7 +575,7 @@ export function SessionTable() {
 /** A group's heading: its label and count, one extra clause, and a rule (HIVE-197). */
 function GroupHead({ label, extra, tone }: { label: string; extra?: string | null; tone?: string }) {
   return (
-    <div className="flex items-center gap-2 px-2 pt-3.5 pb-1.5 text-[11px] tracking-[0.06em]">
+    <div className="flex items-center gap-2 px-2 pt-3.5 pb-1.5 text-micro tracking-[0.06em]">
       <span className="shrink-0 text-term-head">{label}</span>
       {extra ? <span className={cn('shrink-0', tone ?? 'text-term-head')}>{extra}</span> : null}
       <span className="flex-1 border-t border-border" />
@@ -919,7 +919,7 @@ function SessionTableRow({
               resumeSession(id);
             }}
             className={cn(
-              'rounded px-1.5 py-[1px] text-[11px] text-subtle',
+              'rounded px-1.5 py-[1px] text-micro text-subtle',
               'hover:bg-term-row-hover hover:text-ink',
             )}
           >

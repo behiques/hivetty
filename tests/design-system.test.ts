@@ -336,3 +336,44 @@ describe('primary buttons — one atom (HIVE-225)', () => {
     expect([...new Set(offenders)]).toEqual([]);
   });
 });
+
+describe('type scale (HIVE-225)', () => {
+  const SRC = resolve(process.cwd(), 'src');
+  const files = readdirSync(SRC, { recursive: true, encoding: 'utf8' }).filter((f) => /\.tsx?$/.test(f));
+  const PX = /text-\[(\d+(?:\.\d+)?)px\]/g;
+  const EXEMPT = 'type-floor-exempt:';
+  /** Display headings sit above the scale; `em` sizes are not matched at all. */
+  const DISPLAY_MIN = 18;
+
+  it('scans the source tree', () => {
+    // Guards the walk: an empty list would pass the next test vacuously.
+    expect(files.length).toBeGreaterThan(100);
+  });
+
+  it('leaves no arbitrary pixel size below the display headings', () => {
+    const offenders: string[] = [];
+    for (const file of files) {
+      const lines = readFileSync(join(SRC, file), 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        for (const [, px] of line.matchAll(PX)) {
+          const n = Number(px);
+          if (n >= DISPLAY_MIN) continue;
+          const marked = line.includes(EXEMPT) || (lines[i - 1] ?? '').includes(EXEMPT);
+          if (marked && n < 11) continue;
+          offenders.push(`src/${file}:${String(i + 1)} text-[${px}px]`);
+        }
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('documents every step of the scale with its size', () => {
+    const steps = [...tokensCss.matchAll(/--text-([a-z-]+):\s*([\d.]+px)/g)];
+    expect(steps.map(([, name]) => name)).toEqual(['ui-lg', 'ui', 'control', 'ui-sm', 'micro']);
+    for (const [, name, size] of steps) {
+      expect(designSystem, `DESIGN-SYSTEM.md is missing text-${name} (${size})`).toMatch(
+        new RegExp(`\`text-${name}\`\\s*\\|\\s*${size.replace('.', '\\.')}`),
+      );
+    }
+  });
+});

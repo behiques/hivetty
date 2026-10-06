@@ -84,16 +84,16 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
           </DialogPrimitive.Close>
 
           <div className="px-[22px] pt-[26px] pb-[18px]" aria-live="polite">
-            <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-brand uppercase opacity-85">
+            <p className="font-mono text-micro font-semibold tracking-[0.14em] text-brand uppercase opacity-85">
               What’s new in {entry.version}
             </p>
             <DialogPrimitive.Title className="mt-3.5 mb-2 max-w-[calc(100%-150px)] text-[22px] leading-[1.15] font-semibold tracking-[-0.015em] text-balance text-ink">
               {slide.title}
             </DialogPrimitive.Title>
-            <p id={`${id}-body`} className="max-w-[min(46ch,calc(100%-190px))] text-[13.5px] leading-[1.6] text-muted">
+            <p id={`${id}-body`} className="max-w-[min(46ch,calc(100%-190px))] text-ui leading-[1.6] text-muted">
               {slide.body}
             </p>
-            <ul className="mt-3 grid gap-1.5 text-[13px] text-ink">
+            <ul className="mt-3 grid gap-1.5 text-ui text-ink">
               {slide.points.map((point) => (
                 <li key={point} className="flex items-baseline gap-2.5">
                   <span
@@ -107,7 +107,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
           </div>
 
           <div className="mt-auto flex flex-wrap items-center gap-2.5 border-t border-border px-[18px] py-3">
-            <label className="flex cursor-pointer items-center gap-[7px] text-[12px] text-muted select-none">
+            <label className="flex cursor-pointer items-center gap-[7px] text-control text-muted select-none">
               <input
                 type="checkbox"
                 checked={optOut}

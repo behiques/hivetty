@@ -309,7 +309,7 @@ export function ContainerAliasGroup({ hostAlias, bind }: ContainerAliasGroupProp
       {open ? (
         <>
           {exposed ? (
-            <p className="flex items-start gap-2 text-[12.5px]">
+            <p className="flex items-start gap-2 text-control">
               <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
               <span className="text-amber-text">{EXPOSED}</span>
             </p>

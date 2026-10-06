@@ -45,7 +45,7 @@ export function AskLeaving({ notif, thread }: { notif: HiveNotification; thread:
     <div
       data-leaving={reason.kind}
       role="status"
-      className="rounded-[10px] border border-dashed border-border px-3 py-[7px] text-[11px] text-subtle motion-safe:animate-ccslidein"
+      className="rounded-[10px] border border-dashed border-border px-3 py-[7px] text-micro text-subtle motion-safe:animate-ccslidein"
     >
       <span className="font-medium text-muted">{asker}</span>
       {' · '}

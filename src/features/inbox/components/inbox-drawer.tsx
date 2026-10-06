@@ -74,8 +74,8 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
       tabIndex={-1}
       className="fixed inset-y-0 right-0 z-40 flex w-[400px] flex-col gap-2.5 overflow-y-auto border-l border-border bg-panel px-3.5 py-3 shadow-2xl outline-none [-webkit-app-region:no-drag]"
     >
-      <div className="flex items-baseline gap-2.5 px-0.5 pb-1.5 text-[12px]">
-        <b className="text-[14px] text-ink">Needs you</b>
+      <div className="flex items-baseline gap-2.5 px-0.5 pb-1.5 text-control">
+        <b className="text-ui-lg text-ink">Needs you</b>
         <span className="text-muted">{`${plural(asks.length, 'ask')} · ${plural(sessions.length, 'session')}`}</span>
         <span className="flex-1" />
         <button
@@ -88,7 +88,7 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
         </button>
       </div>
       {asks.length + sessions.length === 0 ? (
-        <p className="px-0.5 text-[12.5px] text-muted">Nothing waits on you.</p>
+        <p className="px-0.5 text-control text-muted">Nothing waits on you.</p>
       ) : null}
       {placed.map(({ row, leaving }) => (
         <div
@@ -108,7 +108,7 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
       ))}
       {sessions.length > 0 ? (
         <>
-          <div className="flex gap-1.5 px-2 pt-3.5 pb-1 text-[10.5px] font-semibold tracking-[.06em] text-subtle uppercase">
+          <div className="flex gap-1.5 px-2 pt-3.5 pb-1 text-micro font-semibold tracking-[.06em] text-subtle uppercase">
             <span>Sessions off stage</span>
             <span className="tabular-nums tracking-normal">{sessions.length}</span>
           </div>

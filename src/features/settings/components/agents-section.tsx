@@ -86,8 +86,8 @@ export function AgentsSection() {
 
         <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
           <SwarmCreature creature="mutalisk" size={120} className="mb-9" />
-          <span className="text-[11.5px] text-muted">{phrase}</span>
-          <span className="text-[11.5px] text-subtle">
+          <span className="text-ui-sm text-muted">{phrase}</span>
+          <span className="text-ui-sm text-subtle">
             Write one and it will be listed here, asleep until the waker lands.
           </span>
         </div>
@@ -103,7 +103,7 @@ export function AgentsSection() {
 
         </div>
 
-        <p className="mt-auto pt-2 text-[11px] text-subtle">
+        <p className="mt-auto pt-2 text-micro text-subtle">
           Agents folder: {snapshot.agentsRoot}
         </p>
       </div>
@@ -132,7 +132,7 @@ export function AgentsSection() {
                   glyph then name — and the status is what floats to the far edge.
                 */
                 className={cn(
-                  'flex items-center gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-[12.5px] last:border-b-0 hover:bg-hover hover:text-ink',
+                  'flex items-center gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-control last:border-b-0 hover:bg-hover hover:text-ink',
                   active ? 'bg-hover text-ink' : 'text-muted',
                 )}
               >
@@ -146,10 +146,10 @@ export function AgentsSection() {
                 <span className="truncate tabular-nums">{agent.name}</span>
                 <ShippedDot status={shipped.get(agent.name)} />
                 {broken ? (
-                  <span className="ml-auto shrink-0 text-[11px] text-amber-text">invalid</span>
+                  <span className="ml-auto shrink-0 text-micro text-amber-text">invalid</span>
                 ) : (
                   <span
-                    className="ml-auto shrink-0 text-[11px] text-subtle"
+                    className="ml-auto shrink-0 text-micro text-subtle"
                     title={
                       agent.wake.everyMs === undefined && agent.wake.on.length === 0
                         ? 'Manual only — no schedule and no triggers.'
@@ -166,14 +166,14 @@ export function AgentsSection() {
           <button
             type="button"
             onClick={newAgent}
-            className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-[12.5px] text-brand hover:bg-hover"
+            className="border-t border-border-soft px-2.5 py-1.5 text-left tabular-nums text-control text-brand hover:bg-hover"
           >
             + New agent
           </button>
         </div>
 
         {open === null ? (
-          <div className="flex items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-[11.5px] text-subtle">
+          <div className="flex items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-ui-sm text-subtle">
             Select an agent, or write a new one.
           </div>
         ) : (
@@ -190,7 +190,7 @@ export function AgentsSection() {
         )}
       </div>
 
-      <p className="text-[11px] text-subtle">
+      <p className="text-micro text-subtle">
         Agents folder: {snapshot.agentsRoot}
       </p>
     </div>

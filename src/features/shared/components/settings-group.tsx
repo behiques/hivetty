@@ -54,8 +54,8 @@ export function SettingsGroup({
       )}
     >
       <div className="flex flex-col gap-0.5">
-        <Heading className="text-[13px] font-semibold text-ink">{title}</Heading>
-        <p className="text-[11.5px] text-subtle">{description}</p>
+        <Heading className="text-ui font-semibold text-ink">{title}</Heading>
+        <p className="text-ui-sm text-subtle">{description}</p>
       </div>
       {children}
     </section>

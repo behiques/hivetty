@@ -354,7 +354,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
     <article
       data-notification={notif.id}
       aria-label={`Ask from ${asker}: ${notif.title}`}
-      className="flex flex-col gap-[9px] rounded-[10px] border border-border bg-panel-2 px-3.5 py-3 text-left text-[12.5px]"
+      className="flex flex-col gap-[9px] rounded-[10px] border border-border bg-panel-2 px-3.5 py-3 text-left text-control"
     >
       {children}
     </article>
@@ -369,7 +369,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
 
   // The head row: the asker's glyph, its name, what it did, the wait, and the fold.
   const meta = () => (
-    <div className="flex items-center gap-[7px] text-[12px] text-muted">
+    <div className="flex items-center gap-[7px] text-control text-muted">
       {askerEntity !== undefined && isAgent(askerEntity) ? (
         <AgentTile icon={askerEntity.icon} tone="asking" live={0} size="sm" />
       ) : (
@@ -395,7 +395,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
     </div>
   );
 
-  const titleClass = 'text-[14px] font-semibold text-ink';
+  const titleClass = 'text-ui-lg font-semibold text-ink';
 
   /**
    * Answered, and checked **before** the missing-entry fallback below.
@@ -416,7 +416,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
    */
   if (answer !== undefined) {
     return shell(
-      <div data-answered={answer.body} className="text-[11px] text-subtle">
+      <div data-answered={answer.body} className="text-micro text-subtle">
         <span className="font-medium text-muted">{asker}</span>
         {' · answered '}
         <span className="text-green">{answer.body}</span>
@@ -433,7 +433,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
         {meta()}
         <span className={titleClass}>{notif.title}</span>
         {notif.body === '' ? null : (
-          <span className="text-[11.5px] leading-[1.4] text-muted">{notif.body}</span>
+          <span className="text-ui-sm leading-[1.4] text-muted">{notif.body}</span>
         )}
       </>,
     );
@@ -472,11 +472,11 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
           rail, and `overflow-x-auto` is the last resort for a token that
           cannot break at all.
         */
-        <pre className="mt-1 max-w-full overflow-x-auto rounded-md border border-border bg-panel-2 px-2 py-1.5 font-mono text-[11px] leading-[1.45] break-all whitespace-pre-wrap text-muted">
+        <pre className="mt-1 max-w-full overflow-x-auto rounded-md border border-border bg-panel-2 px-2 py-1.5 font-mono text-micro leading-[1.45] break-all whitespace-pre-wrap text-muted">
           {detail}
         </pre>
       ) : (
-        <span className="text-[11.5px] leading-[1.4] text-muted">{detail}</span>
+        <span className="text-ui-sm leading-[1.4] text-muted">{detail}</span>
       )}
 
       {/*
@@ -506,11 +506,11 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
       */}
       {inbound === undefined ? null : (
         <div className="mt-1 max-h-40 overflow-y-auto rounded-md bg-panel-2 px-2 py-1.5">
-          <span className="block truncate text-[10px] text-subtle">
+          <span className="block truncate text-micro text-subtle">
             {inbound.at === undefined ? inbound.author : `${inbound.author} · ${inbound.at}`}
             {` · via ${asker}`}
           </span>
-          <span className="block text-[11px] leading-[1.45] break-words whitespace-pre-wrap text-muted">
+          <span className="block text-micro leading-[1.45] break-words whitespace-pre-wrap text-muted">
             {inbound.text}
           </span>
         </div>
@@ -518,7 +518,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
 
       {draft === null ? (
         quote === undefined ? null : (
-          <p className="mt-1 rounded-r-md border-l-2 border-border bg-panel-2 px-2 py-1.5 text-[11px] leading-[1.45] text-muted">
+          <p className="mt-1 rounded-r-md border-l-2 border-border bg-panel-2 px-2 py-1.5 text-micro leading-[1.45] text-muted">
             {quote}
           </p>
         )
@@ -529,7 +529,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={onEnter(sendDraft, true)}
           rows={3}
-          className="mt-1 w-full resize-y rounded-md border border-brand-fill bg-term-input px-2 py-1.5 text-[11px] leading-[1.45] text-ink"
+          className="mt-1 w-full resize-y rounded-md border border-brand-fill bg-term-input px-2 py-1.5 text-micro leading-[1.45] text-ink"
         />
       )}
 
@@ -600,7 +600,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
               value={reply}
               onChange={(event) => setReply(event.target.value)}
               onKeyDown={onEnter(sendReply)}
-              className="min-w-0 flex-1 rounded-md border border-border bg-term-input px-2 py-1 text-[11px] text-ink placeholder:text-subtle"
+              className="min-w-0 flex-1 rounded-md border border-border bg-term-input px-2 py-1 text-micro text-ink placeholder:text-subtle"
               placeholder="Answer…"
             />
             <Button
@@ -620,7 +620,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
         <button
           type="button"
           onClick={() => openEntity(from)}
-          className="self-end text-[12px] text-brand hover:underline"
+          className="self-end text-control text-brand hover:underline"
         >
           {`Open ${asker} ›`}
         </button>
@@ -634,7 +634,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
           looks like: not a frozen card, not a silent no-op, but the reason
           and another chance.
         */
-        <p role="alert" className="text-[11px] text-red">
+        <p role="alert" className="text-micro text-red">
           {refusal}
         </p>
       )}

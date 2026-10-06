@@ -184,7 +184,7 @@ export function RuntimeSection() {
       {snapshot.errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -243,12 +243,12 @@ export function RuntimeSection() {
            *   secret-detection here, since a check that rejects `API_TOKEN`
            *   while waving through `TOKEN_API` teaches nothing.
            */}
-          <p className="text-[11.5px] text-subtle">
+          <p className="text-ui-sm text-subtle">
             Environment for every session, applied before the shell starts. A
             login shell’s rc file runs afterward and can override anything
             set here.
           </p>
-          <p className="text-[11.5px] text-subtle">
+          <p className="text-ui-sm text-subtle">
             Prefer your rc file for tokens and credentials — this file is
             stored in plain text.
           </p>
@@ -258,7 +258,7 @@ export function RuntimeSection() {
            * a quick scroll relies on, not just proximity to the section
            * heading above.
            */}
-          <span className="text-[12.5px] text-muted">Environment variables</span>
+          <span className="text-control text-muted">Environment variables</span>
           <EnvEditor
             // `EnvEditor` seeds its rows once, from a lazy initializer with
             // no effect and no key of its own (see its doc comment). `shell`
@@ -358,7 +358,7 @@ export function RuntimeSection() {
         <button
           type="button"
           onClick={() => void runDiagnostic()}
-          className="w-fit rounded-[6px] border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink"
+          className="w-fit rounded-[6px] border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
         >
           {selectedId === ''
             ? 'Check the default command'
@@ -376,7 +376,7 @@ export function RuntimeSection() {
           variant="ghost"
           onClick={() => void runEnvDiagnostic()}
           pending={envDiagnosticPending}
-          className="w-fit rounded-[6px] border-border px-2.5 py-1 text-[12px] leading-normal text-muted hover:bg-hover hover:text-ink aria-disabled:opacity-60"
+          className="w-fit rounded-[6px] border-border px-2.5 py-1 text-control leading-normal text-muted hover:bg-hover hover:text-ink aria-disabled:opacity-60"
         >
           {envDiagnosticPending
             ? 'Checking…'
@@ -483,7 +483,7 @@ function ProjectOverrides({
         aria-label="Project environment variables"
         className="flex flex-col gap-1.5"
       >
-        <span className="text-[12.5px] text-muted">Environment variables</span>
+        <span className="text-control text-muted">Environment variables</span>
         <EnvEditor
           value={env}
           onSave={(next) =>
