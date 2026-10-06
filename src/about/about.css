@@ -32,6 +32,15 @@ body {
   user-select: none;
 }
 
+/*
+  Shown only once this file applies: `about.html` hides the body until it does, so
+  an early paint cannot show the copy unstyled. Two type selectors, so this
+  outranks that one-selector rule wherever the bundler puts the two.
+*/
+html body {
+  visibility: visible;
+}
+
 .panel {
   position: relative;
   display: flex;

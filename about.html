@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <title>About Hive TTY</title>
+    <!--
+      Nothing paints until about.css does. The window can draw before that
+      stylesheet applies (always under the dev server, where Vite injects it
+      from the module; on a slow cold start in a build), and the copy below
+      would show for a moment as unstyled black text. about.css reveals the body.
+    -->
+    <style>
+      body {
+        visibility: hidden;
+      }
+    </style>
   </head>
   <body>
     <!--
