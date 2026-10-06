@@ -31,7 +31,7 @@ const VERDICT: Record<string, [string, string]> = {
   DISMISSED: ['dismissed', 'text-subtle bg-chip'],
 };
 
-const AVATAR = 'grid size-[26px] shrink-0 place-items-center rounded-full bg-panel-2 text-[10px] font-semibold text-ink';
+const AVATAR = 'grid size-[26px] shrink-0 place-items-center rounded-full bg-panel-2 text-micro font-semibold text-ink';
 
 const plural = (n: number, one: string, many: string) => `${String(n)} ${n === 1 ? one : many}`;
 /** `Maria Ortiz` → `MO`, `acr` → `AC` (copied from the Work slice, which this one cannot import; R6). */
@@ -67,20 +67,20 @@ function Said({
   verdict?: [string, string];
 }) {
   return (
-    <div className="flex items-center gap-2 px-1.5 pt-[7px] text-[12.5px]">
+    <div className="flex items-center gap-2 px-1.5 pt-[7px] text-control">
       <span aria-hidden className={AVATAR}>
         {initials(author)}
       </span>
       <span className="font-medium text-ink">{author}</span>
-      {via ? <span className="text-[11px] text-subtle">via Hive TTY</span> : null}
+      {via ? <span className="text-micro text-subtle">via Hive TTY</span> : null}
       {verdict === undefined ? null : (
-        <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-[10.5px] font-semibold', verdict[1])}>
+        <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-micro font-semibold', verdict[1])}>
           {verdict[0]}
         </span>
       )}
       <span className="flex-1" />
       {at === null ? null : (
-        <time dateTime={at} className="tabular-nums text-[11px] text-subtle">
+        <time dateTime={at} className="tabular-nums text-micro text-subtle">
           {clock(at)}
         </time>
       )}
@@ -98,7 +98,7 @@ function ReviewItem({ review, viaHive }: { review: PrReview; viaHive: boolean })
         verdict={VERDICT[review.state] ?? [review.state.toLowerCase(), 'text-muted bg-chip']}
       />
       {review.body.trim() === '' ? null : (
-        <div className="pl-[46px] text-[13px]">
+        <div className="pl-[46px] text-ui">
           <Markdown source={review.body} />
         </div>
       )}
@@ -110,7 +110,7 @@ function ReviewItem({ review, viaHive }: { review: PrReview; viaHive: boolean })
 function EventItem({ entry }: { entry: LedgerEntry }) {
   const Glyph = entry.meta?.['pr'] === undefined ? Hexagon : GitPullRequest;
   return (
-    <div className="grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 px-1.5 py-1 text-[12px] text-muted">
+    <div className="grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 px-1.5 py-1 text-control text-muted">
       <span className="grid place-items-center text-subtle">
         <Glyph size={13} aria-hidden />
       </span>
@@ -191,17 +191,17 @@ export function PrConversation({
     <div className="flex flex-col gap-3">
       <div className="pt-3 pb-1">
         {detail.body.trim() === '' ? (
-          <p className="text-[13px] text-subtle">No description.</p>
+          <p className="text-ui text-subtle">No description.</p>
         ) : (
           <Markdown source={detail.body} />
         )}
       </div>
       <section aria-labelledby="pr-conversation" className="flex flex-col gap-2">
         <div className="flex items-center gap-2.5 pt-2">
-          <h2 id="pr-conversation" className="text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase">
+          <h2 id="pr-conversation" className="text-micro font-semibold tracking-[0.06em] text-subtle uppercase">
             Conversation
           </h2>
-          <span className="text-[12px] text-muted">
+          <span className="text-control text-muted">
             {`${plural(detail.comments.length, 'comment', 'comments')} · ${plural(reviews.length, 'review', 'reviews')} · ${plural(openThreads, 'open thread', 'open threads')}`}
           </span>
           <span className="flex-1" />
@@ -213,7 +213,7 @@ export function PrConversation({
               {item.kind === 'comment' ? (
                 <>
                   <Said author={item.comment.author ?? 'ghost'} via={false} at={item.comment.createdAt} />
-                  <div className="pl-[46px] text-[13px]">
+                  <div className="pl-[46px] text-ui">
                     <Markdown source={item.comment.body} />
                   </div>
                 </>

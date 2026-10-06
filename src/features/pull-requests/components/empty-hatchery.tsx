@@ -19,7 +19,7 @@ export function EmptyHatchery() {
     >
       <BroodEgg className="-mt-10 h-[380px] w-[540px] max-w-full" />
       <h2 className="mt-1.5 text-[20px] text-ink">The Hatchery is quiet</h2>
-      <p className="mb-3 text-[13.5px] leading-[1.6] text-muted">
+      <p className="mb-3 text-ui leading-[1.6] text-muted">
         No pull request is open or in draft.
         <br />
         The next one hatches here when a session or the builder opens it.

@@ -22,7 +22,7 @@ function Chip({ thread, fixerOnIt }: { thread: PrThread; fixerOnIt: boolean }) {
     : fixerOnIt
       ? ['fixer on it', 'text-amber-text bg-[color-mix(in_srgb,var(--cc-amber)_14%,transparent)]']
       : ['open', 'text-muted bg-chip'];
-  return <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-[10.5px] font-semibold', tone)}>{text}</span>;
+  return <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-micro font-semibold', tone)}>{text}</span>;
 }
 
 /** The thread's writes (HIVE-207); absent on a read-only page. */
@@ -83,19 +83,19 @@ export function ThreadCard({
   };
 
   return (
-    <div className="overflow-hidden rounded-[9px] border border-border-soft bg-panel text-[12.5px]">
-      <div className="flex items-center gap-2 border-b border-border-soft px-2.5 py-[7px] text-[12px]">
+    <div className="overflow-hidden rounded-[9px] border border-border-soft bg-panel text-control">
+      <div className="flex items-center gap-2 border-b border-border-soft px-2.5 py-[7px] text-control">
         <span className="tabular-nums text-ink">
           <span>{thread.path}</span>
           {line === null ? null : <span className="text-muted">{`:${String(line)}`}</span>}
         </span>
-        {thread.isOutdated ? <span className="text-[11px] text-subtle">outdated</span> : null}
+        {thread.isOutdated ? <span className="text-micro text-subtle">outdated</span> : null}
         <span className="flex-1" />
         <Chip thread={thread} fixerOnIt={fixerOnIt} />
       </div>
       {first ? (
         <>
-          <pre className="overflow-x-auto bg-term-bg px-2.5 py-2 font-mono text-[12px] leading-[1.55] text-muted">
+          <pre className="overflow-x-auto bg-term-bg px-2.5 py-2 font-mono text-control leading-[1.55] text-muted">
             {hunkTail(first.diffHunk).map((row, i) => (
               <div key={i}>
                 <span className="inline-block w-[30px] text-subtle">{row.n ?? ''}</span>
@@ -117,7 +117,7 @@ export function ThreadCard({
         </div>
       ))}
       {writes !== undefined || (onOpenFile !== undefined && line !== null) ? (
-        <div className="flex gap-3.5 px-2.5 pt-1.5 pb-[9px] text-[12px]">
+        <div className="flex gap-3.5 px-2.5 pt-1.5 pb-[9px] text-control">
           {writes === undefined ? null : (
             <>
               <button type="button" onClick={() => setReplying(true)} className="text-brand hover:underline">
@@ -147,10 +147,10 @@ export function ThreadCard({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             aria-label={`Reply to ${where}`}
-            className="resize-y bg-transparent text-[12.5px] text-ink outline-none placeholder:text-subtle"
+            className="resize-y bg-transparent text-control text-ink outline-none placeholder:text-subtle"
             placeholder="Reply…"
           />
-          <div className="flex justify-end gap-2 text-[12px]">
+          <div className="flex justify-end gap-2 text-control">
             <button type="button" onClick={() => setReplying(false)} className="text-muted hover:underline">
               Cancel
             </button>
@@ -168,7 +168,7 @@ export function ThreadCard({
       ) : null}
       {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
       <div role="status">
-        {problem === null ? null : <p className="px-2.5 pb-2 text-[12px] text-amber-text">{problem}</p>}
+        {problem === null ? null : <p className="px-2.5 pb-2 text-control text-amber-text">{problem}</p>}
       </div>
     </div>
   );

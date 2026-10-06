@@ -225,7 +225,7 @@ export function AgentEditor({
 
   const tabClass = (which: Tab) =>
     cn(
-      'rounded-[5px] px-2 py-0.5 text-[11px]',
+      'rounded-[5px] px-2 py-0.5 text-micro',
       tab === which ? 'bg-active text-ink' : 'text-subtle hover:text-ink',
     );
 
@@ -282,7 +282,7 @@ export function AgentEditor({
         they go looking for the file outside the app. `min-w-0` is load-bearing:
         without it `truncate` never engages and a long path widens the page.
       */}
-      <div className="flex items-center gap-3 border-b border-border-soft px-5 py-2 text-[12px]">
+      <div className="flex items-center gap-3 border-b border-border-soft px-5 py-2 text-control">
         <span className="min-w-0 flex-1 truncate tabular-nums text-subtle">{path ?? 'not saved yet'}</span>
         <span className={dirty ? 'shrink-0 font-sans text-amber-text' : 'shrink-0 font-sans text-subtle'}>
           {dirty ? 'unsaved' : 'saved'}
@@ -381,7 +381,7 @@ export function AgentEditor({
             got wrong: the text under the frontmatter is the agent's job, re-read
             on every wake — not a description of what sort of agent it is.
           */}
-          <p className="border-b border-border-soft px-[18px] py-2 font-sans text-[12px] leading-relaxed text-subtle">
+          <p className="border-b border-border-soft px-[18px] py-2 font-sans text-control leading-relaxed text-subtle">
             Below the <code className="font-mono">---</code> is what this agent
             does, carried out on every wake. Write it as instructions, not as a
             description.
@@ -425,15 +425,15 @@ export function AgentEditor({
           never attempted.
         */}
         {problems.length === 0 && notice !== null ? (
-          <span role="status" className="min-w-0 text-[11px] text-amber-text">
+          <span role="status" className="min-w-0 text-micro text-amber-text">
             {notice}
           </span>
         ) : (
           <span
             className={
               problems.length === 0
-                ? 'min-w-0 text-[11px] text-subtle'
-                : 'min-w-0 text-[11px] text-red'
+                ? 'min-w-0 text-micro text-subtle'
+                : 'min-w-0 text-micro text-red'
             }
           >
             {footer}
@@ -443,7 +443,7 @@ export function AgentEditor({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-md border border-border px-2.5 py-1 text-[12px] text-red hover:bg-hover"
+            className="rounded-md border border-border px-2.5 py-1 text-control text-red hover:bg-hover"
           >
             Delete
           </button>
@@ -451,7 +451,7 @@ export function AgentEditor({
             type="button"
             onClick={onRevert}
             disabled={!dirty}
-            className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
+            className="rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
           >
             Revert
           </button>

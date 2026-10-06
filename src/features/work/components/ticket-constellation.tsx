@@ -67,7 +67,7 @@ function Node({
 }
 
 const Label = ({ at, text, className }: { at: Point; text: string; className?: string }) => (
-  <text x={at.x} y={at.y} textAnchor="middle" className={cn('fill-current tabular-nums text-[9.5px]', className)}>
+  <text x={at.x} y={at.y} textAnchor="middle" className={cn('fill-current tabular-nums text-micro', className)}>
     {text}
   </text>
 );
@@ -137,7 +137,7 @@ export function TicketConstellation({
           x={layout.epicLabel.x}
           y={layout.epicLabel.y}
           textAnchor="middle"
-          className="fill-current text-[10.5px] text-brand"
+          className="fill-current text-micro text-brand"
         >
           {layout.epicLabel.text}
         </text>
@@ -214,7 +214,7 @@ export function TicketConstellation({
             fill="none"
             strokeDasharray={hop.state === 'todo' ? '2 2' : undefined}
           />
-          <text x={hop.labelAt.x} y={hop.labelAt.y} className="fill-current tabular-nums text-[9.5px] text-muted">
+          <text x={hop.labelAt.x} y={hop.labelAt.y} className="fill-current tabular-nums text-micro text-muted">
             {hop.label}
           </text>
         </Node>
@@ -232,14 +232,14 @@ export function TicketConstellation({
             strokeDasharray={bead.state === 'todo' ? '2 2' : undefined}
           />
           {bead.label && bead.labelAt ? (
-            <text x={bead.labelAt.x} y={bead.labelAt.y} className="fill-current tabular-nums text-[9.5px] text-muted">
+            <text x={bead.labelAt.x} y={bead.labelAt.y} className="fill-current tabular-nums text-micro text-muted">
               {bead.label}
             </text>
           ) : null}
         </Node>
       ))}
       {layout.relatesLabel ? (
-        <text x={layout.relatesLabel.x} y={layout.relatesLabel.y} className="fill-current text-[9.5px] text-subtle">
+        <text x={layout.relatesLabel.x} y={layout.relatesLabel.y} className="fill-current text-micro text-subtle">
           {layout.relatesLabel.text}
         </text>
       ) : null}
@@ -262,7 +262,7 @@ export function TicketConstellation({
         <Label
           at={{ x: layout.centre.x, y: layout.centre.y + 4 }}
           text={layout.centre.label}
-          className="text-[11px] font-semibold text-ink"
+          className="text-micro font-semibold text-ink"
         />
       </g>
     </svg>

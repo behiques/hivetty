@@ -62,7 +62,7 @@ function ViaFace({ agent }: { agent: string }) {
 }
 
 const ROW = 'group grid grid-cols-[30px_minmax(0,1fr)] gap-2.5 rounded-lg px-1.5 py-[7px] hover:bg-panel focus-within:bg-panel';
-const ACTION = 'text-[12px] text-brand hover:underline';
+const ACTION = 'text-control text-brand hover:underline';
 
 /**
  * One comment: a face, the author, and a fixed slot that holds the time until
@@ -88,7 +88,7 @@ function CommentItem({
       {comment.via === undefined ? (
         <span
           aria-hidden
-          className="grid size-[26px] place-items-center rounded-full bg-panel-2 text-[10px] font-semibold text-ink"
+          className="grid size-[26px] place-items-center rounded-full bg-panel-2 text-micro font-semibold text-ink"
         >
           {initials(comment.author)}
         </span>
@@ -96,14 +96,14 @@ function CommentItem({
         <ViaFace agent={comment.via.agent} />
       )}
       <div className="flex min-w-0 flex-col gap-1">
-        <div className="flex items-baseline gap-2 text-[12.5px]">
+        <div className="flex items-baseline gap-2 text-control">
           <span className="font-medium text-ink">{comment.via?.agent ?? comment.author}</span>
-          {comment.via === undefined ? null : <span className="text-[11px] text-subtle">via Hive TTY</span>}
+          {comment.via === undefined ? null : <span className="text-micro text-subtle">via Hive TTY</span>}
           <span className="flex-1" />
           <span className="relative w-[120px] shrink-0 text-right">
             <time
               dateTime={comment.created}
-              className="tabular-nums text-[11px] text-subtle group-has-[:focus-visible]:invisible group-hover:invisible"
+              className="tabular-nums text-micro text-subtle group-has-[:focus-visible]:invisible group-hover:invisible"
             >
               {commentTime(comment.created)}
             </time>
@@ -118,7 +118,7 @@ function CommentItem({
             </span>
           </span>
         </div>
-        <div className="text-[13px]">
+        <div className="text-ui">
           <AdfBlocks blocks={comment.body} />
         </div>
       </div>
@@ -132,7 +132,7 @@ function EventItem({ entry }: { entry: LedgerEntry }) {
   const Glyph = pr ? GitPullRequest : Hexagon;
 
   return (
-    <li className="grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 px-1.5 py-1 text-[12px] text-muted">
+    <li className="grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 px-1.5 py-1 text-control text-muted">
       <span data-glyph={pr ? 'pr' : 'session'} className="grid place-items-center text-subtle">
         <Glyph size={13} aria-hidden />
       </span>
@@ -208,7 +208,7 @@ function ReplyBox({
           {mentions.map((mention) => (
             <span
               key={mention.accountId}
-              className="inline-flex items-center gap-1 rounded-[4px] bg-chip py-0.5 pl-1.5 pr-1 text-[12px] font-medium text-brand"
+              className="inline-flex items-center gap-1 rounded-[4px] bg-chip py-0.5 pl-1.5 pr-1 text-control font-medium text-brand"
             >
               @{mention.name}
               <button
@@ -261,7 +261,7 @@ function ReplyBox({
           aria-autocomplete="list"
           aria-activedescendant={highlighted === undefined ? undefined : `${listId}-${highlighted.accountId}`}
           placeholder={replyTo === null ? 'Add a comment — markdown works' : `Reply to ${replyTo}…`}
-          className="w-full resize-y bg-transparent text-[13px] text-ink outline-none placeholder:text-subtle"
+          className="w-full resize-y bg-transparent text-ui text-ink outline-none placeholder:text-subtle"
         />
         {picker.open ? (
           <MentionList
@@ -273,7 +273,7 @@ function ReplyBox({
           />
         ) : null}
       </div>
-      <div className="flex items-center gap-2 text-[12px]">
+      <div className="flex items-center gap-2 text-control">
         <span className="rounded-md border border-border-soft px-2 py-0.5 text-ink">Comment on Jira</span>
         <span className="text-muted">everyone on the ticket sees it</span>
         <span className="flex-1" />
@@ -289,7 +289,7 @@ function ReplyBox({
       {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
       <div role="status" className="flex flex-col gap-3 empty:-mt-3">
         {problem?.map((line) => (
-          <p key={line} className="text-[12px] text-amber-text">
+          <p key={line} className="text-control text-amber-text">
             {line}
           </p>
         ))}
@@ -352,10 +352,10 @@ export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
   return (
     <section aria-labelledby={`${ticketKey}-conversation`} className="mt-7 flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <h2 id={`${ticketKey}-conversation`} className="text-[14px] font-semibold text-ink">
+        <h2 id={`${ticketKey}-conversation`} className="text-ui-lg font-semibold text-ink">
           Conversation
         </h2>
-        <span className="text-[12px] text-muted">
+        <span className="text-control text-muted">
           {plural(total, 'comment', 'comments')} · {plural(events.length, 'event', 'events')}
         </span>
         <span className="flex-1" />
@@ -371,7 +371,7 @@ export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
       ) : (
         <>
           {total > comments.length ? (
-            <p className="text-[12px] text-subtle">
+            <p className="text-control text-subtle">
               {`Showing the latest ${comments.length} of ${total}`}
               {ticket?.url ? (
                 <>
@@ -387,7 +387,7 @@ export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
             <TicketProblem message={problem} onRetry={retry} readAt={mine?.readAt} />
           )}
           {items.length === 0 ? (
-            <p className="text-[12px] text-subtle">No comments yet.</p>
+            <p className="text-control text-subtle">No comments yet.</p>
           ) : (
             <ul aria-label="Conversation" className="flex flex-col gap-0.5">
               {items.map((item) =>

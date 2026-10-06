@@ -246,16 +246,16 @@ export function NotificationCard({ notif }: NotificationCardProps) {
       />
 
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-[12.5px] font-semibold text-ink">{title}</span>
+        <span className="text-control font-semibold text-ink">{title}</span>
         {notif.body === '' ? null : (
-          <span className="text-[11.5px] leading-[1.4] text-muted">
+          <span className="text-ui-sm leading-[1.4] text-muted">
             {notif.body}
           </span>
         )}
         {notif.unread ? <span className="sr-only">unread</span> : null}
       </span>
 
-      <span className="shrink-0 tabular-nums text-[10px] text-subtle">{time}</span>
+      <span className="shrink-0 tabular-nums text-micro text-subtle">{time}</span>
     </button>
   );
 
@@ -278,7 +278,7 @@ export function NotificationCard({ notif }: NotificationCardProps) {
           only one of.
         */
         onClick={(event) => event.stopPropagation()}
-        className="mt-1 block px-3 text-[11px] font-medium text-brand hover:underline"
+        className="mt-1 block px-3 text-micro font-medium text-brand hover:underline"
       >
         {notif.link.label}
       </a>

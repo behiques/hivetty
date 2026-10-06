@@ -95,7 +95,7 @@ export interface PrDiffProps {
 function ProblemLine({ problem, onRetry, className }: { problem: string | undefined; onRetry?: () => void; className: string }) {
   if (problem === undefined) return null;
   return (
-    <p className={cn('flex items-center gap-2 font-sans text-[12px] text-amber-text', className)}>
+    <p className={cn('flex items-center gap-2 font-sans text-control text-amber-text', className)}>
       {problem}
       {onRetry === undefined ? null : (
         <button type="button" onClick={onRetry} className="text-brand hover:underline">
@@ -144,12 +144,12 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex items-center gap-2.5 border-b border-border-soft px-[18px] py-2.5 text-[12.5px]">
+      <div className="flex items-center gap-2.5 border-b border-border-soft px-[18px] py-2.5 text-control">
         <h2 className="truncate tabular-nums text-ink">{file.path}</h2>
         <span className="tabular-nums text-green">{`+${String(file.additions)}`}</span>
         <span className="tabular-nums text-red">{`−${String(file.deletions)}`}</span>
         <span className="flex-1" />
-        <label className="flex items-center gap-1.5 text-[12px] text-muted">
+        <label className="flex items-center gap-1.5 text-control text-muted">
           <input
             type="checkbox"
             aria-label="Viewed"
@@ -163,13 +163,13 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
         </label>
         <SegmentedControl label="Diff view" options={VIEWS} value={view} onChange={setPrDiffView} />
         {onOpenFile !== undefined && diff?.status !== 'deleted' ? (
-          <button type="button" onClick={() => onOpenFile(file.path, openAt)} className="text-[12px] text-brand hover:underline">
+          <button type="button" onClick={() => onOpenFile(file.path, openAt)} className="text-control text-brand hover:underline">
             Open in the editor
           </button>
         ) : null}
       </div>
-      {viewedProblem === null ? null : <p className="px-[18px] pt-2 text-[12px] text-amber-text">{viewedProblem}</p>}
-      <div className="min-h-0 flex-1 overflow-auto py-2 font-mono text-[12.5px] leading-[1.75]">
+      {viewedProblem === null ? null : <p className="px-[18px] pt-2 text-control text-amber-text">{viewedProblem}</p>}
+      <div className="min-h-0 flex-1 overflow-auto py-2 font-mono text-control leading-[1.75]">
         {loading ? (
           <div role="status" aria-label="Loading diff" aria-busy className="flex animate-pulse flex-col gap-2 px-[18px] pt-2">
             <SkeletonBar className="w-[92%]" />
@@ -248,10 +248,10 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
             ))}
           </>
         ) : (
-          <div className="flex flex-col gap-1 px-[18px] py-4 font-sans text-[13px]">
+          <div className="flex flex-col gap-1 px-[18px] py-4 font-sans text-ui">
             <p className="text-muted">No diff to show</p>
             <ProblemLine problem={problem} onRetry={onRetry} className="" />
-            <a href={`${prUrl}/files`} target="_blank" rel="noreferrer" className="text-[12px] text-brand hover:underline">
+            <a href={`${prUrl}/files`} target="_blank" rel="noreferrer" className="text-control text-brand hover:underline">
               See it on GitHub
             </a>
           </div>

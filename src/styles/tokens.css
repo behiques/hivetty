@@ -370,12 +370,16 @@ body[data-theme='light'] {
 
   --font-mono: ui-monospace, Menlo, 'SF Mono', monospace;
   /**
-   * The list type scale: panel titles, a row's name, everything else. Three
-   * steps, set in sans; mono stays for identifiers at the size around them.
+   * The type scale (HIVE-225): five steps, app-wide, nothing between them.
+   * Titles, names and reading text, controls, second lines, and micro labels.
+   * 11px is the floor for functional text. No `--text-*--line-height`: a size
+   * swap from an arbitrary `text-[Npx]` must not change line height.
    */
   --text-ui-lg: 15px;
   --text-ui: 13px;
+  --text-control: 12.5px;
   --text-ui-sm: 11.5px;
+  --text-micro: 11px;
   /**
    * Words, beside the mono that machine strings keep (HIVE-204): the agent
    * page's descriptions, form labels and footers, and the picker's title. The

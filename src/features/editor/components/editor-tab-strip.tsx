@@ -70,7 +70,7 @@ export function EditorTabStrip({ showTerminalTab }: EditorTabStripProps) {
           onKeyDown={onTablistKeyDown}
           onClick={showTerminal}
           className={cn(
-            'flex shrink-0 items-center gap-1.5 px-3 py-1.5 tabular-nums text-[11.5px] whitespace-nowrap',
+            'flex shrink-0 items-center gap-1.5 px-3 py-1.5 tabular-nums text-ui-sm whitespace-nowrap',
             activeKey === null
               ? 'bg-panel-2 text-ink'
               : 'text-subtle hover:bg-hover hover:text-muted',
@@ -118,7 +118,7 @@ export function EditorTabStrip({ showTerminalTab }: EditorTabStripProps) {
               onClick={() => setActive(tab.key)}
               title={tab.relPath}
               className={cn(
-                'flex items-center gap-1.5 py-1.5 pr-1 pl-3 tabular-nums text-[11.5px] whitespace-nowrap',
+                'flex items-center gap-1.5 py-1.5 pr-1 pl-3 tabular-nums text-ui-sm whitespace-nowrap',
                 active ? 'text-ink' : 'text-subtle group-hover:text-muted',
               )}
             >

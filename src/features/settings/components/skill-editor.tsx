@@ -190,14 +190,14 @@ export function SkillEditor({
           never engages and a long path pushes the state badge off the panel
           instead of ellipsising. Every path here is absolute and most are long.
         */}
-        <span className="min-w-0 truncate tabular-nums text-[11px] text-subtle">
+        <span className="min-w-0 truncate tabular-nums text-micro text-subtle">
           {path ?? 'New skill'}
         </span>
         <span
           className={
             dirty
-              ? 'shrink-0 text-[11px] text-brand'
-              : 'shrink-0 text-[11px] text-subtle'
+              ? 'shrink-0 text-micro text-brand'
+              : 'shrink-0 text-micro text-subtle'
           }
         >
           {dirty ? 'unsaved' : 'saved'}
@@ -234,12 +234,12 @@ export function SkillEditor({
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-6 text-center">
-          <span className="text-[12px] text-muted">
+          <span className="text-control text-muted">
             {refused === 'too-large'
               ? 'This file is too large to show here.'
               : 'This file is not text.'}
           </span>
-          <span className="text-[11.5px] text-subtle">
+          <span className="text-ui-sm text-subtle">
             It ships with the skill. {humanSize(size)}
           </span>
         </div>
@@ -254,8 +254,8 @@ export function SkillEditor({
         <span
           className={
             problem === null
-              ? 'min-w-0 text-[11px] text-subtle'
-              : 'min-w-0 text-[11px] text-red'
+              ? 'min-w-0 text-micro text-subtle'
+              : 'min-w-0 text-micro text-red'
           }
         >
           {refused !== null
@@ -268,7 +268,7 @@ export function SkillEditor({
             <button
               type="button"
               onClick={onRename}
-              className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink"
+              className="rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
             >
               Rename
             </button>
@@ -276,7 +276,7 @@ export function SkillEditor({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-md border border-border px-2.5 py-1 text-[12px] text-red hover:bg-hover"
+            className="rounded-md border border-border px-2.5 py-1 text-control text-red hover:bg-hover"
           >
             Delete
           </button>

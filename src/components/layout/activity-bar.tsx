@@ -32,7 +32,7 @@ const PLACES: readonly { id: Place; label: string; icon: Icon }[] = [
 ];
 
 const ITEM =
-  'relative grid w-[52px] justify-items-center gap-[3px] rounded-[9px] pt-[7px] pb-[5px] text-[9.5px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
+  'relative grid w-[52px] justify-items-center gap-[3px] rounded-[9px] pt-[7px] pb-[5px] text-micro font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 
 /**
  * Round two's activity bar (HIVE-195): the brand, the five places, Settings.
@@ -90,7 +90,7 @@ export function ActivityBar() {
               <span
                 aria-hidden
                 className={cn(
-                  'absolute top-0.5 right-1.5 rounded-lg bg-chip px-1 tabular-nums text-[9px] font-semibold',
+                  'absolute top-0.5 right-1.5 rounded-lg bg-chip px-1 tabular-nums text-micro font-semibold',
                   needsYou ? 'text-amber-text' : 'text-muted',
                 )}
               >

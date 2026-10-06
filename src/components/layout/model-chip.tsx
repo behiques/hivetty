@@ -221,7 +221,7 @@ export function ModelChip() {
         This used to be a `Chip` — `rounded-full bg-chip px-3 py-1`. The fill
         implied the metrics were a distinct object you could act on. They are a
         readout, so they render like one: `tabular-nums text-xs text-muted` rather
-        than the chip's `text-[11.5px]`.
+        than the chip's `text-ui-sm`.
       */
       className="flex items-center gap-1.5 whitespace-nowrap tabular-nums text-xs text-muted"
     >

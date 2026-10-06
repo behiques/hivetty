@@ -38,7 +38,7 @@ export const CATEGORY_TEXT: Record<Ticket['statusCategory'], string> = {
  * 2px difference between them reads as a rendering bug.
  */
 export const STATUS_PILL =
-  'shrink-0 rounded-full bg-chip px-[9px] py-0.5 text-[10px] font-bold uppercase tracking-[0.05em]';
+  'shrink-0 rounded-full bg-chip px-[9px] py-0.5 text-micro font-bold uppercase tracking-[0.05em]';
 
 /**
  * `2026-08-07T00:41:13.497-0400` → `7 Aug, 00:41` (HIVE-71). Shared by the

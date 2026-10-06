@@ -129,7 +129,7 @@ function LiveBadge({ n, fill, label }: { n: number; fill: string; label: string 
       aria-hidden="true"
       title={`${String(n)} ${label}`}
       className={cn(
-        'absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-[9px] leading-none font-bold text-panel ring-2 ring-panel',
+        'absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-micro leading-none font-bold text-panel ring-2 ring-panel',
         fill,
       )}
     >

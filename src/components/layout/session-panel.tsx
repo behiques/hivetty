@@ -198,7 +198,7 @@ export function SessionPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null>
       className="flex w-[var(--cc-session-panel-w)] shrink flex-col overflow-hidden border-l border-border bg-panel px-3 py-1.5"
     >
       <div className="flex items-center gap-1 pt-2 pb-2.5">
-        <div role="tablist" aria-label="Session panel tabs" className="flex flex-1 items-center gap-1 text-[12px] text-muted">
+        <div role="tablist" aria-label="Session panel tabs" className="flex flex-1 items-center gap-1 text-control text-muted">
           {existing.map((spec) => (
             <button
               key={spec.id}

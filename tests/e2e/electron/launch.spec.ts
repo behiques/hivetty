@@ -71,3 +71,21 @@ test('is the desktop target, so it shows no demo chip', async ({ page }) => {
   await expect(page.getByText('demo', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => typeof window.hive)).toBe('object');
 });
+
+test('the activity bar fits every label at the 11px floor (HIVE-225)', async ({ page }) => {
+  const nav = page.getByRole('navigation', { name: 'Places' });
+  await expect(nav).toBeVisible();
+  const items = await nav.locator('button').evaluateAll((buttons) =>
+    buttons.map((b) => ({
+      label: b.textContent?.trim() ?? '',
+      fits: b.scrollWidth <= b.clientWidth,
+      size: getComputedStyle(b).fontSize,
+    })),
+  );
+  const labelled = items.filter((i) => i.label !== '');
+  expect(labelled.length).toBeGreaterThanOrEqual(5);
+  for (const item of labelled) {
+    expect(item, item.label).toMatchObject({ fits: true });
+    expect(Number.parseFloat(item.size), item.label).toBeGreaterThanOrEqual(11);
+  }
+});

@@ -44,7 +44,7 @@ export function Flap({ hatch }: { hatch: HatchStatus }) {
     <span
       key={turns}
       className={cn(
-        'relative inline-block shrink-0 rounded-[3px] bg-chip px-[7px] py-1 tabular-nums text-[9.5px] leading-none font-bold tracking-[0.08em] whitespace-nowrap',
+        'relative inline-block shrink-0 rounded-[3px] bg-chip px-[7px] py-1 tabular-nums text-micro leading-none font-bold tracking-[0.08em] whitespace-nowrap',
         FLAP_TEXT[hatch.tone],
         hatch.flap === 'SUMMONS' && !reduced && 'animate-ccpulse',
         turns > 0 && !reduced && 'animate-ccflap',

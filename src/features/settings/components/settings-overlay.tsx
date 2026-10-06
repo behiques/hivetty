@@ -226,7 +226,7 @@ export function SettingsOverlay() {
         className="flex min-h-0 flex-1 flex-col bg-panel-2 outline-none"
       >
         <div className="flex items-center justify-between border-b border-border-soft px-4 py-2.5">
-          <DialogPrimitive.Title className="text-[13px] text-ink">
+          <DialogPrimitive.Title className="text-ui text-ink">
             Settings
           </DialogPrimitive.Title>
           <DialogPrimitive.Close
@@ -254,7 +254,7 @@ export function SettingsOverlay() {
                   aria-current={active ? 'page' : undefined}
                   onClick={() => setSection(entry.id)}
                   className={cn(
-                    'rounded-[5px] px-2.5 py-1 text-left text-[13px] outline-none',
+                    'rounded-[5px] px-2.5 py-1 text-left text-ui outline-none',
                     'focus-visible:ring-1 focus-visible:ring-brand',
                     active
                       ? 'bg-active text-ink'

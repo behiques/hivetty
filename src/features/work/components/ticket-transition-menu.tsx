@@ -219,18 +219,18 @@ export function TicketTransitionMenu({
         className="min-w-[200px]"
       >
         {state.kind === 'loading' || state.kind === 'applying' ? (
-          <p className="px-2 py-1.5 text-[12px] text-subtle">
+          <p className="px-2 py-1.5 text-control text-subtle">
             {state.kind === 'loading' ? readingPhrase : 'Moving…'}
           </p>
         ) : null}
 
         {state.kind === 'problem' ? (
           <div className="flex flex-col gap-1 px-2 py-1.5">
-            <p className="text-[12px] text-red">{state.message}</p>
+            <p className="text-control text-red">{state.message}</p>
             {/* Jira's own words, naming the field it wanted. Guessing a
                 resolution on the user's behalf is exactly what not to do. */}
             {state.details?.map((detail) => (
-              <p key={detail} className="text-[11.5px] text-subtle">
+              <p key={detail} className="text-ui-sm text-subtle">
                 {detail}
               </p>
             ))}
@@ -238,7 +238,7 @@ export function TicketTransitionMenu({
         ) : null}
 
         {state.kind === 'problem' && state.transitions?.length === 0 ? (
-          <p className="px-2 py-1.5 text-[12px] text-subtle">
+          <p className="px-2 py-1.5 text-control text-subtle">
             Nothing is available from its new status.
           </p>
         ) : null}
@@ -254,7 +254,7 @@ export function TicketTransitionMenu({
                 className="cursor-pointer justify-between gap-3"
               >
                 <span>{transition.name}</span>
-                <span className="text-[11px] text-subtle">
+                <span className="text-micro text-subtle">
                   → {transition.to.name}
                 </span>
               </DropdownMenuItem>
@@ -262,7 +262,7 @@ export function TicketTransitionMenu({
           : null}
 
         {state.kind === 'ready' && state.transitions.length === 0 ? (
-          <p className="px-2 py-1.5 text-[12px] text-subtle">
+          <p className="px-2 py-1.5 text-control text-subtle">
             This issue&rsquo;s workflow offers nothing from here.
           </p>
         ) : null}
@@ -281,7 +281,7 @@ export function TicketTransitionMenu({
                 <span>{transition.name}</span>
                 {/* The destination, because a transition name is a verb and
                     frequently not the status it lands on. */}
-                <span className="text-[11px] text-subtle">
+                <span className="text-micro text-subtle">
                   → {transition.to.name}
                 </span>
               </DropdownMenuItem>

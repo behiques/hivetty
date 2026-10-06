@@ -42,7 +42,7 @@ export function AgentsStage() {
     }
     return (
       <section aria-label="Agents" className="flex flex-1 items-center justify-center">
-        <p className="text-[13px] text-subtle">Pick an agent</p>
+        <p className="text-ui text-subtle">Pick an agent</p>
       </section>
     );
   }

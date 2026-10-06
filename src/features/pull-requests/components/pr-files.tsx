@@ -41,7 +41,7 @@ export function PrFiles({ pr, detail, fixerOnIt, onOpenFile }: { pr: Pr; detail:
     <div className="flex min-h-0 flex-1">
       <PrFileTree detail={detail} selected={path} onSelect={setPrFile} />
       {file === undefined ? (
-        <p className="px-[18px] py-4 text-[13px] text-muted">No files changed.</p>
+        <p className="px-[18px] py-4 text-ui text-muted">No files changed.</p>
       ) : (
         <PrDiff
           key={file.path}

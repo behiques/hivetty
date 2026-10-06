@@ -29,7 +29,7 @@ function CombTooltip({ text, left, top }: { text: CellText; left: number; top: n
   return (
     <div
       role="tooltip"
-      className="pointer-events-none absolute z-10 grid max-w-[240px] gap-0.5 rounded-lg border border-border bg-panel-2 px-2.5 py-2 text-[12px] text-ink shadow-lg"
+      className="pointer-events-none absolute z-10 grid max-w-[240px] gap-0.5 rounded-lg border border-border bg-panel-2 px-2.5 py-2 text-control text-ink shadow-lg"
       style={{ left, top }}
     >
       <b>{text.title}</b>

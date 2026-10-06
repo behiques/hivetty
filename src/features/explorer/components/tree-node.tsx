@@ -122,7 +122,7 @@ export function TreeNode({
 
         <span
           className={cn(
-            'truncate tabular-nums text-[12px]',
+            'truncate tabular-nums text-control',
             isActive ? 'text-ink' : 'text-muted',
           )}
         >
@@ -134,7 +134,7 @@ export function TreeNode({
             role="img"
             aria-label={mark === 'A' ? 'added this session' : 'modified this session'}
             className={cn(
-              'ml-auto w-3.5 shrink-0 text-center tabular-nums text-[10px] font-semibold not-italic',
+              'ml-auto w-3.5 shrink-0 text-center tabular-nums text-micro font-semibold not-italic',
               mark === 'A' ? 'text-green' : 'text-brand',
             )}
           >
@@ -174,7 +174,7 @@ export function TreeNode({
           {children.error ? (
             <p
               style={{ paddingLeft: `${8 + (depth + 1) * 12 + 17}px` }}
-              className="py-[3px] text-[11.5px] text-amber-text"
+              className="py-[3px] text-ui-sm text-amber-text"
             >
               {children.error}
             </p>
@@ -183,7 +183,7 @@ export function TreeNode({
           {!children.error && children.entries?.length === 0 ? (
             <p
               style={{ paddingLeft: `${8 + (depth + 1) * 12 + 17}px` }}
-              className="py-[3px] text-[11.5px] text-subtle"
+              className="py-[3px] text-ui-sm text-subtle"
             >
               Empty folder.
             </p>
@@ -192,7 +192,7 @@ export function TreeNode({
           {children.loading && children.entries === null ? (
             <p
               style={{ paddingLeft: `${8 + (depth + 1) * 12 + 17}px` }}
-              className="py-[3px] text-[11.5px] text-subtle"
+              className="py-[3px] text-ui-sm text-subtle"
             >
               {readingPhrase}
             </p>

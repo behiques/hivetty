@@ -104,10 +104,10 @@ export function WhileYouWereAway() {
         <span id="away-head">While you were away</span>
       </StripHead>
       {rows.length === 0 && (
-        <p className="px-1 py-[5px] text-[12px] text-muted">Nothing happened while you were away.</p>
+        <p className="px-1 py-[5px] text-control text-muted">Nothing happened while you were away.</p>
       )}
       {rows.slice(0, AWAY_MAX)}
-      {more > 0 && <p className="px-1 py-[5px] text-[12px] text-muted">{more} more</p>}
+      {more > 0 && <p className="px-1 py-[5px] text-control text-muted">{more} more</p>}
     </section>
   );
 }

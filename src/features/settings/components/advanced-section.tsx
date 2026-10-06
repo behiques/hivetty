@@ -79,8 +79,8 @@ function fileManager(platform: string | undefined): string {
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span className="text-[12px] text-subtle">{label}</span>
-      <span className="truncate tabular-nums text-[11.5px] text-ink">{value}</span>
+      <span className="text-control text-subtle">{label}</span>
+      <span className="truncate tabular-nums text-ui-sm text-ink">{value}</span>
     </div>
   );
 }
@@ -121,18 +121,18 @@ function PtyCounters({ rows }: { rows: readonly PtyDiagnostics[] }) {
           className="flex flex-col gap-1 rounded-[7px] border border-border-soft p-2.5"
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate tabular-nums text-[11.5px] text-ink">
+            <span className="truncate tabular-nums text-ui-sm text-ink">
               {row.sessionId}
             </span>
             {row.paused ? (
-              <span className="shrink-0 text-[11px] text-amber-text">paused</span>
+              <span className="shrink-0 text-micro text-amber-text">paused</span>
             ) : null}
           </div>
           <dl className="flex flex-wrap gap-x-4 gap-y-0.5">
             {COUNTERS.map((counter) => (
               <div key={counter.key} className="flex items-baseline gap-1">
-                <dt className="text-[11px] text-subtle">{counter.label}</dt>
-                <dd className="tabular-nums text-[11px] text-muted">
+                <dt className="text-micro text-subtle">{counter.label}</dt>
+                <dd className="tabular-nums text-micro text-muted">
                   {/*
                     Raw numbers, deliberately not humanised. The *ratio* between
                     them is what diagnoses a flow-control bug — `bytesIn /
@@ -374,7 +374,7 @@ export function AdvancedSection() {
       {snapshot.errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -384,7 +384,7 @@ export function AdvancedSection() {
         title="Config file"
         description="Everything Settings writes goes in this one file, and it is meant to stay hand-editable."
       >
-        <p className="break-all tabular-nums text-[11.5px] text-muted">
+        <p className="break-all tabular-nums text-ui-sm text-muted">
           {snapshot.configPath}
         </p>
         <div className="flex items-center gap-2">
@@ -396,7 +396,7 @@ export function AdvancedSection() {
             }}
             disabled={!revealConfig}
             title={revealConfig ? undefined : REMOTE_DISABLED_REASON.revealConfig}
-            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink disabled:opacity-60"
+            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink disabled:opacity-60"
           >
             <FolderOpen size={12} weight="bold" />
             {fileManager(info?.platform)}
@@ -404,19 +404,19 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => void onReload()}
-            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink"
+            className="flex w-fit items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
           >
             <ArrowClockwise size={12} weight="bold" />
             Reload
           </button>
         </div>
         {reloadFailed ? (
-          <p className="text-[11.5px] text-red">
+          <p className="text-ui-sm text-red">
             Reload failed — config, skills and agents are unchanged. Check the
             log and try again.
           </p>
         ) : reloaded === null ? (
-          <p className="text-[11.5px] text-subtle">
+          <p className="text-ui-sm text-subtle">
             The file is deliberately not watched. Edit it by hand and reload here
             — a config that changed under a live session would leave the terminal
             already running in the old directory. Reload also picks up skills and
@@ -424,7 +424,7 @@ export function AdvancedSection() {
             a running session keeps what it started with.
           </p>
         ) : (
-          <p className="text-[11.5px] text-green">{reloaded}</p>
+          <p className="text-ui-sm text-green">{reloaded}</p>
         )}
         {/*
           Independent of `reloadFailed`: a restart requirement a past reload
@@ -432,7 +432,7 @@ export function AdvancedSection() {
           channel happened to fail.
         */}
         {reloaded !== null && restart.length > 0 && (
-          <p className="text-[11.5px] text-amber-text">Restart to apply: {restart.join(', ')}.</p>
+          <p className="text-ui-sm text-amber-text">Restart to apply: {restart.join(', ')}.</p>
         )}
       </SettingsGroup>
 
@@ -479,7 +479,7 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => setConfirming(true)}
-            className="w-fit rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink"
+            className="w-fit rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
           >
             Reset to template
           </button>
@@ -488,7 +488,7 @@ export function AdvancedSection() {
 
       <SettingsGroup title="About" description="What this build is made of.">
         {info === null ? (
-          <p className="text-[12.5px] text-subtle">Reading…</p>
+          <p className="text-control text-subtle">Reading…</p>
         ) : (
           <div className="flex flex-col gap-1 rounded-[7px] border border-border-soft p-3">
             <Fact label="Hive TTY" value={info.version} />
@@ -505,20 +505,20 @@ export function AdvancedSection() {
         description="Where a new version comes from, and whether this copy can install one."
       >
         {update === null ? (
-          <p className="text-[12.5px] text-subtle">
+          <p className="text-control text-subtle">
             Updates are only available in the desktop app.
           </p>
         ) : (
           <>
             <div className="flex items-center justify-between gap-2">
               {/* The check's result lands in this line; always mounted, so it is announced (HIVE-225). */}
-              <p role="status" className="text-[12.5px] text-muted">{updateLine(update, { downloading: downloadingPhrase, ready: readyPhrase })}</p>
+              <p role="status" className="text-control text-muted">{updateLine(update, { downloading: downloadingPhrase, ready: readyPhrase })}</p>
               <Button
                 variant="ghost"
                 disabled={!update.capability.canCheck}
                 pending={checking}
                 onClick={() => void onCheck()}
-                className="flex shrink-0 items-center gap-1.5 rounded-md border-border px-3 py-1.5 text-[12.5px] leading-normal text-muted hover:bg-hover hover:text-ink disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted"
+                className="flex shrink-0 items-center gap-1.5 rounded-md border-border px-3 py-1.5 text-control leading-normal text-muted hover:bg-hover hover:text-ink disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted"
               >
                 <ArrowCircleUp size={12} weight="bold" />
                 {checking ? 'Checking…' : 'Check now'}
@@ -530,7 +530,7 @@ export function AdvancedSection() {
               reason at the moment they wonder — and on a build that *can*
               self-install, the same line is the reassurance that it will.
             */}
-            <p className="text-[11.5px] text-subtle">
+            <p className="text-ui-sm text-subtle">
               {update.capability.reason}
             </p>
           </>
@@ -550,7 +550,7 @@ export function AdvancedSection() {
           <button
             type="button"
             onClick={() => setWhatsNewOpen(true)}
-            className="rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink"
+            className="rounded-md border border-border px-3 py-1.5 text-control text-muted hover:bg-hover hover:text-ink"
           >
             Open What’s new
           </button>
@@ -562,13 +562,13 @@ export function AdvancedSection() {
         description="Per-session flow control, and where to look when something goes wrong."
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11.5px] text-subtle">
+          <p className="text-ui-sm text-subtle">
             A snapshot, not a stream.
           </p>
           <button
             type="button"
             onClick={() => void refresh()}
-            className="shrink-0 rounded-md border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink"
+            className="shrink-0 rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
           >
             Refresh
           </button>
@@ -587,11 +587,11 @@ export function AdvancedSection() {
           distinction survives to the screen here.
         */}
         {info === null ? (
-          <p className="text-[12.5px] text-subtle">
+          <p className="text-control text-subtle">
             Could not read diagnostics from the app.
           </p>
         ) : info.pty === undefined ? (
-          <p className="text-[12.5px] text-subtle">
+          <p className="text-control text-subtle">
             No session has run yet, so there is nothing to count.
           </p>
         ) : (
@@ -600,11 +600,11 @@ export function AdvancedSection() {
 
         {info === null ? null : (
           <div className="flex flex-col gap-0.5 border-t border-border-soft pt-2">
-            <p className="text-[12px] text-subtle">Log location</p>
-            <p className="break-all tabular-nums text-[11.5px] text-muted">
+            <p className="text-control text-subtle">Log location</p>
+            <p className="break-all tabular-nums text-ui-sm text-muted">
               {info.logPath}
             </p>
-            <p className="text-[11.5px] text-subtle">
+            <p className="text-ui-sm text-subtle">
               This app writes no log file — it logs to the terminal it was
               launched from. That directory is Electron&rsquo;s, and is where a
               crash report would land.

@@ -12,7 +12,7 @@ export const MENU_SURFACE = 'rounded-[7px] border border-border bg-panel p-1 tex
 
 /** The one item recipe: a keyboard highlight on `active`, which clears 3:1 against the panel where `hover` did not. */
 const MENU_ITEM =
-  'relative flex cursor-default items-center gap-2 rounded-[4px] px-2 py-1.5 text-[12.5px] text-muted outline-none select-none data-[highlighted]:bg-active data-[highlighted]:text-ink data-[disabled]:pointer-events-none data-[disabled]:opacity-35 [&_svg]:pointer-events-none [&_svg]:shrink-0'
+  'relative flex cursor-default items-center gap-2 rounded-[4px] px-2 py-1.5 text-control text-muted outline-none select-none data-[highlighted]:bg-active data-[highlighted]:text-ink data-[disabled]:pointer-events-none data-[disabled]:opacity-35 [&_svg]:pointer-events-none [&_svg]:shrink-0'
 
 function DropdownMenu({
   ...props
@@ -111,7 +111,7 @@ function DropdownMenuLabel({
       data-slot="dropdown-menu-label"
       data-inset={inset}
       className={cn(
-        "px-2 py-1.5 text-[12.5px] text-muted font-medium data-[inset]:pl-8",
+        "px-2 py-1.5 text-control text-muted font-medium data-[inset]:pl-8",
         className
       )}
       {...props}

@@ -106,7 +106,7 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
       }}
     >
       {visible.length > 1 ? (
-        <span className="rounded-full border border-border bg-panel-2 px-2.5 py-1 text-[11.5px] text-muted">
+        <span className="rounded-full border border-border bg-panel-2 px-2.5 py-1 text-ui-sm text-muted">
           {`${String(visible.length)} arrived just now · newest first`}
         </span>
       ) : null}

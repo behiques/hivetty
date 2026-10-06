@@ -4,7 +4,7 @@ import { useAccountLimits } from '@stores/hive-store';
 
 function LimitRow({ label, pct, rest }: { label: string; pct: number; rest: string | null }) {
   return (
-    <div className="grid grid-cols-[56px_1fr_34px_76px] items-center gap-2 text-[12px] text-muted">
+    <div className="grid grid-cols-[56px_1fr_34px_76px] items-center gap-2 text-control text-muted">
       <span>{label}</span>
       <span className="h-1.5 rounded-[3px] bg-chip" aria-hidden="true">
         <span

@@ -73,7 +73,7 @@ export function Tag({
     <span
       title={title}
       className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-semibold',
+        'inline-flex items-center rounded-full px-2 py-0.5 text-micro font-semibold',
         SURFACE_FILL[surface],
         TONE_TEXT[tone],
         className,

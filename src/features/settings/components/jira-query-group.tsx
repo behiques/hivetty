@@ -103,12 +103,12 @@ export function JiraQueryGroup({ jql, canTest }: JiraQueryGroupProps) {
             onClick={test}
             disabled={!canTest}
             pending={testing}
-            className="rounded-[6px] border-border bg-panel-2 px-2.5 py-1 text-[12px] leading-normal text-ink hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-panel-2 aria-disabled:text-subtle aria-disabled:hover:bg-panel-2"
+            className="rounded-[6px] border-border bg-panel-2 px-2.5 py-1 text-control leading-normal text-ink hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-panel-2 aria-disabled:text-subtle aria-disabled:hover:bg-panel-2"
           >
             {testing ? testingPhrase : 'Test query'}
           </Button>
           {canTest ? null : (
-            <span className="text-[11.5px] text-subtle">
+            <span className="text-ui-sm text-subtle">
               Configure the site, email and token first.
             </span>
           )}
@@ -117,7 +117,7 @@ export function JiraQueryGroup({ jql, canTest }: JiraQueryGroupProps) {
         {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
         <div role="status" className="empty:-mt-2.5">
           {verdict === null ? null : verdict.kind === 'matched' ? (
-            <p className="flex items-start gap-2 text-[12.5px]">
+            <p className="flex items-start gap-2 text-control">
               <CheckCircle size={14} className="mt-px shrink-0 text-green" />
               <span className="text-ink">
                 {verdict.count === 0
@@ -127,7 +127,7 @@ export function JiraQueryGroup({ jql, canTest }: JiraQueryGroupProps) {
               </span>
             </p>
           ) : (
-            <p className="flex items-start gap-2 text-[12.5px]">
+            <p className="flex items-start gap-2 text-control">
               <XCircle size={14} className="mt-px shrink-0 text-red" />
               {/* Jira's own words. It knows why better than any parser here would. */}
               <span className="text-red">{verdict.message}</span>

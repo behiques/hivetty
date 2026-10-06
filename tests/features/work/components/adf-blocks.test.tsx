@@ -87,7 +87,7 @@ describe('blocks', () => {
     );
 
     expect(container.firstElementChild).toHaveClass('text-[13.5px]');
-    expect(container.firstElementChild).not.toHaveClass('text-[12px]');
+    expect(container.firstElementChild).not.toHaveClass('text-control');
   });
 });
 

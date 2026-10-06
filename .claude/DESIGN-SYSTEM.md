@@ -297,7 +297,7 @@ Two limits keep it from spreading into decoration:
   Nothing in this table is allowed to compete with it.
 
 The provider level in Settings is added by *colour*, not by a fourth heading
-size: the type scale is 15 / 13 / 11.5 and has no room above 13px
+size: the type scale (see Type) has nothing between 13px and the 15px panel title
 (`settings-section-header.tsx` records why), so `SettingsProviderGroup` is an
 11px mono eyebrow in brand over a hairline — the device the explorer already
 uses over the file tree. A group inside such a band draws no rule of its own.
@@ -347,12 +347,25 @@ model survives colour-blindness and reduced-motion.
   One deliberate exception: the team name at the right of Home's headline is
   a small mono label (11px, caps, 0.12em, `text-subtle`), set like the comb's
   own mono patch labels such as THE SWARM.
-- **List type scale:** three sizes in `tokens.css`, nothing between them.
-  `text-ui-lg` 15px for panel titles (600), `text-ui` 13px for a row's name,
-  `text-ui-sm` 11.5px for everything else: second lines, counts, ages, status
-  words, group heads (600, caps, 0.06em) and add links. Weight and colour carry
-  the rest. Flaps and badges keep their own sizes. `cn()` knows the three as
-  sizes, so `text-ui text-muted` keeps both.
+- **Type scale:** five sizes in `tokens.css`, app-wide, nothing between them
+  (HIVE-225). Weight and colour carry the rest. `cn()` knows all five as sizes,
+  so `text-micro text-muted` keeps both.
+
+  | Utility | Size | For |
+  | --- | --- | --- |
+  | `text-ui-lg` | 15px | panel, card and page-section titles (600) |
+  | `text-ui` | 13px | a row's name; body and reading text |
+  | `text-control` | 12.5px | buttons, menu items, inputs, tabs, dense body |
+  | `text-ui-sm` | 11.5px | second lines, counts, ages, status words, group heads (600, caps, 0.06em), add links |
+  | `text-micro` | 11px | badges, flaps, tags, eyebrows, the activity bar's labels |
+
+  **11px is the floor for functional text.** The only exception is a decorative
+  `aria-hidden` glyph in a fixed-size box, marked `type-floor-exempt:` in a
+  comment on or above its line. Display headings (Home's and the empty
+  places' heroes, dialog titles) sit above the scale at 18–22px, and are the
+  only arbitrary pixel sizes left. `em` sizes stay relative to their context.
+  `tests/design-system.test.ts` fails on anything else.
+
 - **Base size:** 13px / 1.5 on `body`.
 - **Terminal:** 12px inside xterm.
 

@@ -142,14 +142,14 @@ const FLOW =
 export function AdfBlocks({ blocks, className }: { blocks: AdfBlock[]; className?: string }) {
   if (blocks.length === 0) {
     return (
-      <p className="text-[12px] text-subtle">
+      <p className="text-control text-subtle">
         This comment has nothing this app can display.
       </p>
     );
   }
 
   return (
-    <div className={cn('text-[12px] leading-relaxed', FLOW, className)}>
+    <div className={cn('text-control leading-relaxed', FLOW, className)}>
       {blocks.map((block, index) => (
         <Fragment key={index}>
           <Block block={block} />

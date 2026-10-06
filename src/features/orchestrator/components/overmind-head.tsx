@@ -57,18 +57,18 @@ export function OvermindHead() {
             <button
               type="button"
               onClick={() => setProject(null)}
-              className="text-[14px] font-normal text-muted hover:text-ink"
+              className="text-ui-lg font-normal text-muted hover:text-ink"
             >
               Overmind
             </button>
-            <span aria-hidden="true" className="text-[14px] font-normal text-muted">
+            <span aria-hidden="true" className="text-ui-lg font-normal text-muted">
               ›
             </span>
             {name}
           </>
         )}
       </h1>
-      <span className="min-w-0 truncate text-[12.5px] text-muted">{line}</span>
+      <span className="min-w-0 truncate text-control text-muted">{line}</span>
       <span className="flex-1" />
       <SegmentedControl label="Show" options={FILTERS} value={filter} onChange={setFilter} />
       {project === null ? (

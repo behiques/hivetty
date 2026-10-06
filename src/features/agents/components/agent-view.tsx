@@ -144,7 +144,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
               the width evenly, and wrap onto a second row on a narrow stage
               (both rails dragged wide) rather than truncate.
             */
-            className="grid gap-2.5 font-sans text-[12.5px] [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]"
+            className="grid gap-2.5 font-sans text-control [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]"
           >
             {/* Paused reads amber here (HIVE-211): the bar below says why nothing happens. `STATUS_TEXT` is shared and stays. */}
             <Fact label="Status" tone={facts.status === 'paused' ? 'text-amber-text' : STATUS_TEXT[facts.status]}>
@@ -209,7 +209,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
         <PauseBar id={entity.id} onNotice={onNotice} />
       ) : (
       <div data-stage-input="" className="flex shrink-0 items-center gap-2.5 border-t border-border-soft bg-term-input px-[18px] py-2.5">
-        <span className="shrink-0 font-mono text-[13px] text-green">
+        <span className="shrink-0 font-mono text-ui text-green">
           {`${entity.id} ❯`}
         </span>
         <label htmlFor="agent-input" className="sr-only">
@@ -230,7 +230,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
             one failure this surface's `notice` channel cannot report.
           */
           placeholder="a message, or answer a1 <text>"
-          className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-ink caret-green outline-none placeholder:text-subtle"
+          className="min-w-0 flex-1 bg-transparent font-mono text-control text-ink caret-green outline-none placeholder:text-subtle"
         />
       </div>
       )}
@@ -248,7 +248,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
       */}
       {notice === null ? (
         entity.status === 'paused' ? null : (
-        <p className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-subtle">
+        <p className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-micro text-subtle">
           ↵ posts to the ledger as the overmind · not a terminal — nothing here
           reaches a process
         </p>
@@ -256,7 +256,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
       ) : (
         <p
           role="status"
-          className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-amber-text"
+          className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-micro text-amber-text"
         >
           {notice}
         </p>
@@ -282,7 +282,7 @@ function PauseBar({ id, onNotice }: { id: string; onNotice: (notice: string | nu
   return (
     <div
       role="status"
-      className="flex shrink-0 items-center gap-3 border-t border-border-soft bg-[color-mix(in_srgb,var(--cc-amber)_10%,var(--cc-term-input))] px-[18px] py-2.5 text-[12.5px] text-muted"
+      className="flex shrink-0 items-center gap-3 border-t border-border-soft bg-[color-mix(in_srgb,var(--cc-amber)_10%,var(--cc-term-input))] px-[18px] py-2.5 text-control text-muted"
     >
       <span className="flex-1">
         <b className="text-amber-text">{`${id} is paused.`}</b> Nothing wakes it, not the ledger, not a schedule, until
@@ -304,7 +304,7 @@ interface FactProps {
 function Fact({ label, tone, children }: FactProps) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5 rounded-[7px] border border-border-soft bg-panel px-3 py-2.5">
-      <span className="text-[10.5px] tracking-[0.06em] text-subtle uppercase">{label}</span>
+      <span className="text-micro tracking-[0.06em] text-subtle uppercase">{label}</span>
       <span className={cn('truncate', tone)}>{children}</span>
     </div>
   );

@@ -228,7 +228,7 @@ export function NewSessionPicker() {
                   ? 'Start a new session'
                   : `Start a session for ${pickerTicket}`}
               </DialogPrimitive.Title>
-              <span className="text-[13px] text-subtle">
+              <span className="text-ui text-subtle">
                 {ticket?.title ??
                   'Pick a project — a Claude Code terminal will open for it'}
               </span>
@@ -248,10 +248,10 @@ export function NewSessionPicker() {
         {noProjects ? (
           <div className="flex max-w-[560px] flex-col items-center gap-2.5">
             <SwarmCreature creature={creature} size={120} className="mb-8" />
-            <p className="text-center tabular-nums text-[11.5px] text-muted">
+            <p className="text-center tabular-nums text-ui-sm text-muted">
               {firstRunPhrase}
             </p>
-            <p className="text-center tabular-nums text-[11.5px] text-subtle">
+            <p className="text-center tabular-nums text-ui-sm text-subtle">
               no projects yet — add one of your repositories to open a session in it
             </p>
             <Button
@@ -309,7 +309,7 @@ export function NewSessionPicker() {
             aria-label="Ticket workflow"
             className="flex w-[560px] max-w-[92%] flex-col gap-2 rounded-[8px] border border-border-soft px-3.5 py-3"
           >
-            <p className="text-[12.5px] text-muted">
+            <p className="text-control text-muted">
               {`The ticket workflow hands ${facts.key} to `}
               <b className="font-semibold text-ink">{wake.agent}</b>
               {' instead of opening a session.'}
@@ -319,14 +319,14 @@ export function NewSessionPicker() {
               <Button onClick={() => setSessionInstead(true)}>Open a session instead</Button>
             </div>
             {wakeProblem === null ? null : (
-              <p role="alert" className="text-[12px] text-red">
+              <p role="alert" className="text-control text-red">
                 {`Could not ask ${wake.agent}: ${wakeProblem}`}
               </p>
             )}
           </div>
         ) : (
           <div className="flex w-[560px] max-w-[92%] flex-col gap-1">
-            <label htmlFor="picker-first-message" className="text-[12px] text-muted">
+            <label htmlFor="picker-first-message" className="text-control text-muted">
               First message
             </label>
             <input
@@ -342,9 +342,9 @@ export function NewSessionPicker() {
               placeholder="Typed into the session when it opens. Blank opens at an empty prompt."
               spellCheck={false}
               aria-describedby="picker-first-message-hint"
-              className="rounded-[6px] border border-border bg-term-input px-2.5 py-1.5 font-mono text-[12px] text-ink caret-green outline-none placeholder:font-sans placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
+              className="rounded-[6px] border border-border bg-term-input px-2.5 py-1.5 font-mono text-control text-ink caret-green outline-none placeholder:font-sans placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
             />
-            <span id="picker-first-message-hint" className="text-[11.5px] text-subtle">
+            <span id="picker-first-message-hint" className="text-ui-sm text-subtle">
               {workflow === null
                 ? 'Set one for every ticket in Settings › Jira › Ticket workflow. ⌥↵ starts empty.'
                 : 'From Settings › Jira › Ticket workflow; a change here is for this session only. ⌥↵ starts empty.'}
@@ -375,7 +375,7 @@ export function NewSessionPicker() {
               placeholder="search all projects…"
               spellCheck={false}
               aria-label="Search all projects"
-              className="min-w-0 flex-1 border-none bg-transparent tabular-nums text-[12.5px] text-ink caret-green outline-none placeholder:text-subtle"
+              className="min-w-0 flex-1 border-none bg-transparent tabular-nums text-control text-ink caret-green outline-none placeholder:text-subtle"
             />
           </div>
 
@@ -435,7 +435,7 @@ function PinnedProject({
       onClick={() => onSelect(id)}
       disabled={!access.spawnable}
       title={access.reason ?? undefined}
-      className="flex items-center gap-2 rounded-full border border-border bg-chip px-3.5 py-2 tabular-nums text-[13px] text-ink hover:border-brand hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:border-border disabled:hover:bg-chip"
+      className="flex items-center gap-2 rounded-full border border-border bg-chip px-3.5 py-2 tabular-nums text-ui text-ink hover:border-brand hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:border-border disabled:hover:bg-chip"
     >
       <Icon
         name={icon}
@@ -495,7 +495,7 @@ function ProjectRow({
       */}
       <span
         className={cn(
-          'min-w-0 flex-1 truncate tabular-nums text-[12.5px]',
+          'min-w-0 flex-1 truncate tabular-nums text-control',
           access.spawnable ? 'text-ink' : 'text-subtle',
         )}
       >
@@ -506,7 +506,7 @@ function ProjectRow({
         that cannot be started has nothing useful to say about how many
         sessions it is running (story 090).
       */}
-      <span className="shrink-0 tabular-nums text-[11px] text-subtle">
+      <span className="shrink-0 tabular-nums text-micro text-subtle">
         {access.spawnable ? `${live} active` : 'unmapped'}
       </span>
     </button>

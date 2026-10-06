@@ -130,7 +130,7 @@ describe('AgentView', () => {
       ]);
 
       for (const label of labels) {
-        expect(label).toHaveClass('text-[10.5px]', 'uppercase');
+        expect(label).toHaveClass('text-micro', 'uppercase');
         expect(label.parentElement).toHaveClass('rounded-[7px]', 'border', 'border-border-soft', 'bg-panel');
       }
     });

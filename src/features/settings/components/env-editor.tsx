@@ -109,7 +109,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
   return (
     <div className="flex flex-col gap-2">
       {rows.length === 0 ? (
-        <p className="text-[11.5px] text-subtle">
+        <p className="text-ui-sm text-subtle">
           No variables. Sessions in this project inherit your environment.
         </p>
       ) : null}
@@ -123,7 +123,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
             placeholder="NAME"
             disabled={disabled}
             onChange={(event) => update(index, { key: event.target.value })}
-            className="w-[168px] rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 tabular-nums text-[12px] text-ink outline-none placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
+            className="w-[168px] rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 tabular-nums text-control text-ink outline-none placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
           />
           <input
             type="text"
@@ -132,7 +132,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
             placeholder="value"
             disabled={disabled}
             onChange={(event) => update(index, { value: event.target.value })}
-            className="min-w-0 flex-1 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 tabular-nums text-[12px] text-ink outline-none placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
+            className="min-w-0 flex-1 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 tabular-nums text-control text-ink outline-none placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
           />
           <button
             type="button"
@@ -151,7 +151,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
       {errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-[11.5px] text-red"
+          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -162,7 +162,7 @@ export function EnvEditor({ value, onSave, disabled = false }: EnvEditorProps) {
           type="button"
           disabled={disabled}
           onClick={() => setRows((current) => [...current, makeRow()])}
-          className="flex items-center gap-1.5 rounded-[6px] border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink"
+          className="flex items-center gap-1.5 rounded-[6px] border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
         >
           <Plus size={12} weight="bold" />
           Add variable

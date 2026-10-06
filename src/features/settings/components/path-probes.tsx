@@ -16,7 +16,7 @@ export function PathProbes({ probes }: { probes: readonly PathProbe[] }) {
       {probes.map((probe) => (
         <li
           key={probe.directory}
-          className="flex items-center gap-2 tabular-nums text-[11px]"
+          className="flex items-center gap-2 tabular-nums text-micro"
         >
           <span
             aria-hidden

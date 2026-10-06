@@ -80,7 +80,7 @@ export function MentionList({
 }) {
   if (failed) {
     return (
-      <p className="absolute left-3 top-full z-10 mt-1 rounded-lg border border-border bg-panel-2 px-2.5 py-2 text-[12px] text-muted">
+      <p className="absolute left-3 top-full z-10 mt-1 rounded-lg border border-border bg-panel-2 px-2.5 py-2 text-control text-muted">
         Could not search Jira
       </p>
     );
@@ -104,10 +104,11 @@ export function MentionList({
             onPick(user);
           }}
           className={cn(
-            'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] text-ink',
+            'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-control text-ink',
             index === active && 'bg-chip-hover',
           )}
         >
+          {/* type-floor-exempt: one initial inside a 20px avatar dot, aria-hidden; the row names the person */}
           <span aria-hidden className="grid size-5 place-items-center rounded-full bg-chip text-[9px] font-semibold">
             {initials(user.displayName)}
           </span>

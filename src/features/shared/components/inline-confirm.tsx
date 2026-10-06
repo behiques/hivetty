@@ -101,15 +101,15 @@ export function InlineConfirm({
       aria-label={label}
       className={cn('bg-red/8 px-3 py-2.5', className)}
     >
-      <p className="text-[12.5px] text-ink">{title}</p>
-      <p className="mt-0.5 text-[11.5px] text-subtle">{children}</p>
+      <p className="text-control text-ink">{title}</p>
+      <p className="mt-0.5 text-ui-sm text-subtle">{children}</p>
       <div className="mt-2 flex justify-end gap-1.5">
         <button
           ref={cancel}
           type="button"
           onClick={onCancel}
           onKeyDown={escapes}
-          className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted hover:bg-hover hover:text-ink"
+          className="rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
         >
           {cancelLabel}
         </button>
@@ -117,7 +117,7 @@ export function InlineConfirm({
           type="button"
           onClick={onConfirm}
           onKeyDown={escapes}
-          className="rounded-md bg-red px-2.5 py-1 text-[12px] font-medium text-bg hover:opacity-90"
+          className="rounded-md bg-red px-2.5 py-1 text-control font-medium text-bg hover:opacity-90"
         >
           {confirmLabel}
         </button>

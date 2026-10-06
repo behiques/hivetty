@@ -20,7 +20,7 @@ export function PrsStage() {
   if (row === null) {
     return (
       <section aria-label="Pull requests" className="flex flex-1 items-center justify-center">
-        <p className="text-[13px] text-subtle">Pick a pull request</p>
+        <p className="text-ui text-subtle">Pick a pull request</p>
       </section>
     );
   }
