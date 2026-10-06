@@ -42,6 +42,15 @@ describe('ticks', () => {
   });
 });
 
+describe('ticks on a multi-week axis', () => {
+  it('dates the ticks past a week, so no two read alike', () => {
+    const labels = ticks(T0, T0 + 30 * 24 * 60 * MIN, 1200).map((t) => t.label);
+    expect(labels.length).toBeGreaterThan(1);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels[0]).toBe('Oct 3');
+  });
+});
+
 describe('ciBars', () => {
   const run = (over: Partial<PrTimelineRun>): PrTimelineRun => ({ id: 1, number: 2198, url: 'u', sha: 'abc', workflow: 'CI',
     startedAt: new Date(T0 + 61 * MIN).toISOString(), endedAt: new Date(T0 + 72 * MIN).toISOString(), state: 'passed', failedJobs: [], ...over });

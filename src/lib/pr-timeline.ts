@@ -15,9 +15,11 @@ import type { ShipVisit } from '@shared/ledger-derive';
 export const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
+const WEEK = 7 * DAY;
 const STEPS = [5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10_080, 20_160, 43_200].map((m) => m * MIN);
 /** The widest step; an axis too long even for monthly ticks takes it anyway. */
 const LARGEST = STEPS[STEPS.length - 1] ?? DAY;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -41,9 +43,10 @@ export function fraction(t: number, start: number, end: number): number {
   return Math.min(1, Math.max(0, (t - start) / (end - start)));
 }
 
-/** `HH:MM`, local; with the weekday once the axis spans more than a day. */
-const clock = (t: number, days: boolean) => {
+/** `HH:MM`, local; with the weekday once the axis spans more than a day, and a bare date once the axis spans more than a week (weekdays would repeat). */
+const clock = (t: number, days: boolean, dated: boolean) => {
   const d = new Date(t);
+  if (dated) return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
   return `${days ? `${DAYS[d.getDay()]} ` : ''}${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
@@ -60,7 +63,7 @@ export function ticks(start: number, end: number, widthPx: number, minGapPx = 72
   const first = Math.ceil((start - offset) / round) * round + offset;
   const days = span > DAY;
   const out: Tick[] = [];
-  for (let at = first; at <= end; at += step) out.push({ at, f: fraction(at, start, end), label: clock(at, days) });
+  for (let at = first; at <= end; at += step) out.push({ at, f: fraction(at, start, end), label: clock(at, days, step >= DAY && span > WEEK) });
   return out;
 }
 
