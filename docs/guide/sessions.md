@@ -130,8 +130,12 @@ no model and no menu.
 
 ### When a session ends
 
-The session header's status reads **Ended**, with the reason as its tooltip. A card covers the
-terminal: **This session ended**, why, and how long ago. When the conversation can be picked
+A session that ends while you are looking at it (`/exit`, `/done`, or its process going)
+takes you back to the overmind, with the selection on its row. `/clear` does not, because its
+terminal carries on as a new session.
+
+Open an ended session again and the session header's status reads **Ended**, with the reason
+as its tooltip. A card covers the terminal: **This session ended**, why, and how long ago. When the conversation can be picked
 up it adds that its transcript is on disk, and **Resume**. **‹ Overmind** is always there.
 ✕ closes the card to a strip along the foot, with the reason, Resume and Overmind, so you
 can read the scrollback above it. Closing is per session and forgotten on restart.
