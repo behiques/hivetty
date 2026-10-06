@@ -319,14 +319,14 @@ function Actions({
     case 'not-added':
     case 'needs-auth':
       return (
-        <Button variant="primary" onClick={onSignIn} disabled={signingIn}>
+        <Button variant="primary" onClick={onSignIn} pending={signingIn}>
           {signInLabel(signingIn, false)}
         </Button>
       );
     case 'connected':
       return (
         <>
-          <Button onClick={onTest} disabled={testing}>
+          <Button onClick={onTest} pending={testing}>
             {testLabel(testing, testFailed)}
           </Button>
           <Button variant="danger" onClick={onSignOut}>
@@ -336,13 +336,13 @@ function Actions({
       );
     case 'pending-approval':
       return (
-        <Button onClick={onTest} disabled={testing}>
+        <Button onClick={onTest} pending={testing}>
           {testLabel(testing, true)}
         </Button>
       );
     case 'error':
       return (
-        <Button variant="primary" onClick={onSignIn} disabled={signingIn}>
+        <Button variant="primary" onClick={onSignIn} pending={signingIn}>
           {signInLabel(signingIn, true)}
         </Button>
       );
@@ -652,12 +652,15 @@ function RealTimeFields({
       </div>
 
       <div>
-        <Button onClick={onTest} disabled={testing}>
+        <Button onClick={onTest} pending={testing}>
           {testing ? 'Testing…' : 'Test'}
         </Button>
       </div>
 
-      {testResult !== null && <SocketTestVerdict result={testResult} />}
+      {/* Always mounted, as the caption's region above (HIVE-225). */}
+      <div role="status" className="empty:-mt-2">
+        {testResult !== null && <SocketTestVerdict result={testResult} />}
+      </div>
     </>
   );
 }
@@ -1037,11 +1040,14 @@ export function SlackGroup({ agents }: SlackGroupProps) {
         <div className="h-px bg-border-soft" />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {status === null ? (
-            <p className="text-[11.5px] text-subtle">…</p>
-          ) : (
-            <Caption status={status} agents={agents} testError={testError} />
-          )}
+          {/* Always mounted: the Test's verdict lands in the caption, and a live region that mounts with its text is not reliably announced (HIVE-225). */}
+          <div role="status">
+            {status === null ? (
+              <p className="text-[11.5px] text-subtle">…</p>
+            ) : (
+              <Caption status={status} agents={agents} testError={testError} />
+            )}
+          </div>
 
           <button
             type="button"

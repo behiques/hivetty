@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
+import { Button } from '@components/ui/button';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { CloneRepoView } from '@features/settings/components/clone-repo-view';
 import { ProjectsList } from '@features/settings/components/projects-list';
@@ -99,15 +100,15 @@ export function ProjectsSection() {
       ))}
 
       <div className="flex items-center gap-2">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={addProject}
-          disabled={choosing}
-          className="flex w-fit items-center gap-1.5 rounded-md bg-brand-fill px-3 py-1.5 text-[12.5px] text-on-brand hover:bg-brand-fill-hover disabled:opacity-60"
+          pending={choosing}
+          className="flex w-fit items-center gap-1.5 rounded-md border-0 bg-brand-fill px-3 py-1.5 text-[12.5px] leading-normal text-on-brand hover:bg-brand-fill-hover hover:text-on-brand aria-disabled:opacity-60"
         >
           <Plus size={12} weight="bold" />
           Add project
-        </button>
+        </Button>
 
         {/*
           Secondary, because adding a folder you already have is the commoner

@@ -128,6 +128,14 @@ describe('SessionTable', () => {
     expect(labels.slice(8).join(' ')).toContain('ecs-scaling');
   });
 
+  it('dims an ended row by text token, not opacity (HIVE-225)', () => {
+    render(<SessionTable />);
+    const ended = rows().find((row) => row.textContent?.includes('tz-fix'))!;
+    const name = within(ended).getByText(/tz-fix/);
+    expect(name).toHaveClass('text-subtle');
+    expect(name.closest('.opacity-60')).toBeNull();
+  });
+
   it('shows id, status, project, branch, and PR for a row', () => {
     render(<SessionTable />);
     const row = rows()[0];

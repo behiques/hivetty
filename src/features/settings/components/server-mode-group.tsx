@@ -205,7 +205,7 @@ function nextTryIn(at: number): string {
  */
 function WorkLocallyButton({ onClick, busy }: { onClick: () => void; busy: boolean }) {
   return (
-    <Button variant="secondary" size="sm" onClick={onClick} disabled={busy} className="self-start">
+    <Button variant="secondary" size="sm" onClick={onClick} pending={busy} className="self-start">
       {busy ? 'Switching…' : 'Work locally'}
     </Button>
   );
@@ -1194,7 +1194,8 @@ export function ServerModeGroup({
             variant="primary"
             size="sm"
             className="w-fit"
-            disabled={attaching || serving}
+            disabled={serving}
+            pending={attaching}
             title={serving ? NO_ATTACH_WHILE_SERVING : undefined}
             onClick={handleAttach}
           >
@@ -1202,62 +1203,65 @@ export function ServerModeGroup({
           </Button>
           )}
 
-          {switchResult && !switchResult.ok && switchResult.reason === 'live-sessions' ? (
-            <div className="flex items-start gap-2 rounded-[6px] border border-red bg-red/8 px-3 py-2.5">
-              <WarningCircle size={14} className="mt-px shrink-0 text-red" />
-              <div className="flex flex-col gap-1 text-[11.5px]">
-                <p className="text-ink">Can&rsquo;t attach while sessions are running here.</p>
-                <p className="text-subtle">
-                  Attaching would hide terminals still running in this app. Close
-                  them first.
-                </p>
-                <ul className="flex flex-col gap-0.5 pl-4 text-subtle">
-                  {switchResult.sessions.map((name) => (
-                    <li key={name}>
-                      <code className="font-mono text-[11px] text-ink">{name}</code>
-                    </li>
-                  ))}
-                </ul>
+          {/* Always mounted: the attach or detach result lands here, and a live region that mounts with its text is not reliably announced (HIVE-225). */}
+          <div role="status" className="flex flex-col gap-3 empty:-mt-3">
+            {switchResult && !switchResult.ok && switchResult.reason === 'live-sessions' ? (
+              <div className="flex items-start gap-2 rounded-[6px] border border-red bg-red/8 px-3 py-2.5">
+                <WarningCircle size={14} className="mt-px shrink-0 text-red" />
+                <div className="flex flex-col gap-1 text-[11.5px]">
+                  <p className="text-ink">Can&rsquo;t attach while sessions are running here.</p>
+                  <p className="text-subtle">
+                    Attaching would hide terminals still running in this app. Close
+                    them first.
+                  </p>
+                  <ul className="flex flex-col gap-0.5 pl-4 text-subtle">
+                    {switchResult.sessions.map((name) => (
+                      <li key={name}>
+                        <code className="font-mono text-[11px] text-ink">{name}</code>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {/*
-            Fix round 1, item 5 (Minor, M2). `plaintext-refused` used to land
-            only as a hint-text swap beneath the address field, still showing
-            a client-side-valid address — the weakest-rendered of the four
-            arms, on the exact mistake (a public address) this whole fence
-            exists to catch. It now gets the same red bordered treatment
-            `live-sessions` does, not merely the ordinary field hint every
-            other validation failure in this file uses.
-          */}
-          {switchResult && !switchResult.ok && switchResult.reason === 'plaintext-refused' ? (
-            <div className="flex items-start gap-2 rounded-[6px] border border-red bg-red/8 px-3 py-2.5">
-              <WarningCircle size={14} className="mt-px shrink-0 text-red" />
-              <p className="text-[11.5px] text-ink">{ATTACH_HOST_INVALID}</p>
-            </div>
-          ) : null}
+            {/*
+              Fix round 1, item 5 (Minor, M2). `plaintext-refused` used to land
+              only as a hint-text swap beneath the address field, still showing
+              a client-side-valid address — the weakest-rendered of the four
+              arms, on the exact mistake (a public address) this whole fence
+              exists to catch. It now gets the same red bordered treatment
+              `live-sessions` does, not merely the ordinary field hint every
+              other validation failure in this file uses.
+            */}
+            {switchResult && !switchResult.ok && switchResult.reason === 'plaintext-refused' ? (
+              <div className="flex items-start gap-2 rounded-[6px] border border-red bg-red/8 px-3 py-2.5">
+                <WarningCircle size={14} className="mt-px shrink-0 text-red" />
+                <p className="text-[11.5px] text-ink">{ATTACH_HOST_INVALID}</p>
+              </div>
+            ) : null}
 
-          {/*
-            Fix round 1, item 1: "attach" and "detach" share one `SwitchOutcome`
-            arm (`connect-failed` — see `outcomeFor` in `router.ts`), so the
-            copy has to tell them apart itself. No new state needed to know
-            which one this was: a refused switch changes nothing (Ruling 19),
-            so a socket is still open exactly when the failure came from
-            `handleDetach`.
+            {/*
+              Fix round 1, item 1: "attach" and "detach" share one `SwitchOutcome`
+              arm (`connect-failed` — see `outcomeFor` in `router.ts`), so the
+              copy has to tell them apart itself. No new state needed to know
+              which one this was: a refused switch changes nothing (Ruling 19),
+              so a socket is still open exactly when the failure came from
+              `handleDetach`.
 
-            **`attached`, not `remote.mode` (Ruling 29.)** The original read
-            `remote.mode === 'remote'`, which is true of that sentence only
-            while the snapshot is this machine's own — and while attached it
-            is the server's and says `'local'`, so a failed *detach* announced
-            itself as "Could not attach". Same source, same defect, one line.
-          */}
-          {switchResult && !switchResult.ok && switchResult.reason === 'connect-failed' ? (
-            <p className="text-[11.5px] text-red">
-              {attached ? 'Could not detach' : 'Could not attach'}:{' '}
-              {switchResult.message}
-            </p>
-          ) : null}
+              **`attached`, not `remote.mode` (Ruling 29.)** The original read
+              `remote.mode === 'remote'`, which is true of that sentence only
+              while the snapshot is this machine's own — and while attached it
+              is the server's and says `'local'`, so a failed *detach* announced
+              itself as "Could not attach". Same source, same defect, one line.
+            */}
+            {switchResult && !switchResult.ok && switchResult.reason === 'connect-failed' ? (
+              <p className="text-[11.5px] text-red">
+                {attached ? 'Could not detach' : 'Could not attach'}:{' '}
+                {switchResult.message}
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -1297,7 +1301,8 @@ export function ServerModeGroup({
           <Button
             variant="secondary"
             size="sm"
-            disabled={pairing || pairName.trim() === ''}
+            disabled={pairName.trim() === ''}
+            pending={pairing}
             onClick={handlePair}
           >
             Pair

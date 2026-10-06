@@ -16,6 +16,7 @@ import { FLAP_DOT } from '@features/pull-requests/components/flap';
 import { SessionPrTab } from '@features/pull-requests/components/session-pr-tab';
 import { prFact } from '@features/pull-requests/session-pr';
 import { TicketTab } from '@features/work/components/ticket-tab';
+import { onTablistKeyDown } from '@lib/tablist';
 import type { SessionPlan } from '@shared/plan-contract';
 import {
   PANEL_WIDTHS,
@@ -196,41 +197,51 @@ export function SessionPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null>
       style={{ minWidth: PANEL_WIDTHS.session.min }}
       className="flex w-[var(--cc-session-panel-w)] shrink flex-col overflow-hidden border-l border-border bg-panel px-3 py-1.5"
     >
-      <div role="tablist" className="flex items-center gap-1 pt-2 pb-2.5 text-[12px] text-muted">
-        {existing.map((spec) => (
-          <button
-            key={spec.id}
-            type="button"
-            role="tab"
-            aria-selected={spec.id === shown}
-            onClick={() => {
-              setTab(spec.id);
-            }}
-            className={cn('rounded-md px-2 py-1', spec.id === shown ? 'bg-active text-ink' : 'hover:bg-hover')}
-          >
-            {spec.label(ctx)}
-            {spec.dot === undefined ? null : (
-              <i
-                aria-hidden
-                data-testid="pr-dot"
-                className={cn('ml-1.5 inline-block size-1.5 rounded-full align-middle', FLAP_DOT[spec.dot(ctx)])}
-              />
-            )}
-          </button>
-        ))}
-        <span className="flex-1" />
+      <div className="flex items-center gap-1 pt-2 pb-2.5">
+        <div role="tablist" aria-label="Session panel tabs" className="flex flex-1 items-center gap-1 text-[12px] text-muted">
+          {existing.map((spec) => (
+            <button
+              key={spec.id}
+              type="button"
+              role="tab"
+              id={`session-tab-${spec.id}`}
+              aria-selected={spec.id === shown}
+              aria-controls="session-tabpanel"
+              tabIndex={spec.id === shown ? 0 : -1}
+              onKeyDown={onTablistKeyDown}
+              onClick={() => {
+                setTab(spec.id);
+              }}
+              className={cn('rounded-md px-2 py-1', spec.id === shown ? 'bg-active text-ink' : 'hover:bg-hover')}
+            >
+              {spec.label(ctx)}
+              {spec.dot === undefined ? null : (
+                <i
+                  aria-hidden
+                  data-testid="pr-dot"
+                  className={cn('ml-1.5 inline-block size-1.5 rounded-full align-middle', FLAP_DOT[spec.dot(ctx)])}
+                />
+              )}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           aria-label="Close the session panel"
           onClick={() => {
             setOpen(false);
           }}
-          className="grid size-7 place-items-center rounded-md hover:bg-hover"
+          className="grid size-7 place-items-center rounded-md text-muted hover:bg-hover"
         >
           <CaretRight size={14} aria-hidden />
         </button>
       </div>
-      <div role="tabpanel" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div
+        role="tabpanel"
+        id="session-tabpanel"
+        aria-labelledby={`session-tab-${shown}`}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+      >
         {existing.find((spec) => spec.id === shown)?.body(ctx)}
       </div>
     </aside>

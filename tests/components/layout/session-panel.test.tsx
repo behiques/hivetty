@@ -109,6 +109,29 @@ describe('SessionPanel (HIVE-201)', () => {
     ).toBeInTheDocument();
   });
 
+  it('is a WAI-ARIA tablist: only tabs inside, roving tabIndex, arrows and Home, linked panel (HIVE-225)', () => {
+    render(<SessionPanel rowRef={createRef()} />);
+    const list = tabRow();
+    expect(within(list).queryAllByRole('button')).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Close the session panel' })).toBeInTheDocument();
+
+    const plan = screen.getByRole('tab', { name: 'Plan' });
+    expect(plan).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('tab', { name: 'Files 2' })).toHaveAttribute('tabindex', '-1');
+
+    act(() => plan.focus());
+    fireEvent.keyDown(plan, { key: 'ArrowRight' });
+    expect(useAppearanceStore.getState().sessionPanelTab).toBe('files');
+    expect(screen.getByRole('tab', { name: 'Files 2' })).toHaveFocus();
+
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Files 2' }), { key: 'Home' });
+    expect(useAppearanceStore.getState().sessionPanelTab).toBe('plan');
+
+    const panel = screen.getByRole('tabpanel');
+    expect(panel).toHaveAttribute('aria-labelledby', screen.getByRole('tab', { name: 'Plan' }).id);
+    expect(screen.getByRole('tab', { name: 'Files 2' })).toHaveAttribute('aria-controls', panel.id);
+  });
+
   it('may shrink to its minimum beside a crowded stage (HIVE-223)', () => {
     render(<SessionPanel rowRef={createRef()} />);
     const panel = screen.getByRole('complementary', { name: 'Session panel' });

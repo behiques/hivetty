@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import type { Pr } from '@/types/pull-request';
 
+import { Button } from '@components/ui/button';
 import { useCommentOnPr } from '@stores/hive-store';
 
 /**
@@ -46,16 +47,20 @@ export function PrCommentBox({ pr }: { pr: Pr }) {
         <span className="rounded-md border border-border-soft px-2 py-0.5 text-ink">Comment on GitHub</span>
         <span className="text-muted">everyone on the PR sees it</span>
         <span className="flex-1" />
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={post}
-          disabled={posting || draft.trim() === ''}
-          className="rounded-md bg-brand-fill px-3 py-1 text-on-brand hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-brand-fill"
+          disabled={draft.trim() === ''}
+          pending={posting}
+          className="rounded-md border-0 bg-brand-fill px-3 py-1 text-[length:inherit] leading-normal text-on-brand hover:bg-brand-fill-hover hover:text-on-brand disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-brand-fill aria-disabled:opacity-60 aria-disabled:hover:bg-brand-fill"
         >
           {posting ? 'Posting…' : 'Comment'}
-        </button>
+        </Button>
       </div>
-      {problem === null ? null : <p className="text-[12px] text-amber-text">{problem}</p>}
+      {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
+      <div role="status" className="empty:-mt-3">
+        {problem === null ? null : <p className="text-[12px] text-amber-text">{problem}</p>}
+      </div>
     </div>
   );
 }
