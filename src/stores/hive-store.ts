@@ -717,7 +717,7 @@ interface HiveState {
    * a row says `running` with nothing running in it.
    */
   setTerminalForeground: (id: string, name: string | null) => void;
-  /** The shell died unasked. The row stays, with the reason on it. */
+  /** The shell died unasked. The row stays, with the reason on it; a session's current row keeps it as `lost`. */
   markTerminalLost: (id: string, reason: string) => void;
   /** The `exit` ending, and the close control on a lost one. Nothing is kept. */
   removeTerminal: (id: string) => void;
@@ -1689,7 +1689,9 @@ function stampLifecycle(session: Session): Session {
   if (isEnded(session.status)) {
     if (session.endedAt === undefined) session.endedAt = Date.now();
   } else if (session.endedAt !== undefined) {
+    // Back from an ending: neither when it ended nor why still holds.
     delete session.endedAt;
+    delete session.lost;
   }
   return session;
 }
@@ -2624,6 +2626,12 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * the later message describes the consequence rather than the cause.
    */
   markTerminalLost: (id, reason) => {
+    // A session's pty: the reason goes on its current row, read when the ending lands.
+    const row = get().entities[currentSessionIn(get(), id)];
+    if (row !== undefined && isSession(row) && !isEnded(row.status) && row.lost === undefined) {
+      set((state) => ({ entities: { ...state.entities, [row.id]: { ...row, lost: reason } } }));
+      return;
+    }
     const current = get().entities[id];
     if (!current || !isTerminal(current) || current.ended !== undefined) return;
 

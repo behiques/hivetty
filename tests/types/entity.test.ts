@@ -132,6 +132,9 @@ describe('endings', () => {
       endedReason(session({ id: 'sess-01', status: 'terminated' })),
     ).toBe('sess-01 has terminated — its process is gone');
     expect(
+      endedReason(session({ id: 'sess-01', status: 'terminated', lost: 'its process was killed by signal 15' })),
+    ).toBe('sess-01 ended unexpectedly: its process was killed by signal 15');
+    expect(
       endedReason(session({ id: 'sess-01', status: 'done', endedBy: 'cleared' })),
     ).toBe('sess-01 was cleared — its terminal continues as a new session');
     expect(
