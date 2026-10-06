@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -249,5 +249,26 @@ describe('the amber text colour (HIVE-210, HIVE-223)', () => {
         expect(contrastRatio(text, ui[ground]), `${theme.name} on ${ground}`).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+});
+
+/**
+ * HIVE-225: the vendored shadcn primitives used colour names this app never
+ * binds (`bg-popover`, `ring-ring`, …), so Tailwind generated nothing and a bare
+ * `border` fell back to `currentColor`. None may come back.
+ */
+const SHADCN_NAME =
+  /(?:^|[\s"'`:])(?:bg|text|ring|ring-offset|border|outline)-(?:background|foreground|popover(?:-foreground)?|accent(?:-foreground)?|destructive|ring|muted-foreground|primary(?:-foreground)?|secondary(?:-foreground)?|card(?:-foreground)?|input)\b/;
+const UI_DIR = resolve(process.cwd(), 'src/components/ui');
+const uiFiles = readdirSync(UI_DIR).filter((f) => f.endsWith('.tsx'));
+
+describe('src/components/ui — no shadcn colour names', () => {
+  it('scans the primitives', () => {
+    expect(uiFiles).toEqual(expect.arrayContaining(['dialog.tsx', 'dropdown-menu.tsx']));
+  });
+
+  it.each(uiFiles)('%s uses only the app’s own colour names', (file) => {
+    const source = readFileSync(join(UI_DIR, file), 'utf8');
+    expect(source.match(SHADCN_NAME)?.[0]).toBeUndefined();
   });
 });
