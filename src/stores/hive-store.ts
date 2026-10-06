@@ -40,6 +40,7 @@ import {
   runsToday,
 } from '@lib/agents';
 import { type ChecksGraph, foldPushes, jobState, layoutGraph, type Push } from '@lib/checks-graph';
+import { delegationTitle, delegationWord } from '@lib/delegation';
 import {
   postPrComment,
   readJobLog,
@@ -162,6 +163,7 @@ import {
   asksMeAbout,
   buildProgressFor,
   closedAskThreads,
+  delegatesOf,
   holderPost,
   isHeld,
   isShipping,
@@ -175,6 +177,7 @@ import {
   shipStage,
   shipTrack,
   thread,
+  type Delegate,
   type ShipTrack,
 } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
@@ -1340,10 +1343,11 @@ const DETAIL_WORD: Record<IdleDetail, string> = {
   script: 'scripts',
 };
 
-export function statusWord(status: SessionStatus, detail?: IdleDetail): string {
+export function statusWord(status: SessionStatus, detail?: IdleDetail, delegate?: string | null): string {
   if (status === 'idle' && detail !== undefined) {
     return `working (${DETAIL_WORD[detail]})`;
   }
+  if (status === 'idle' && delegate) return `idle (${delegate})`;
   return STATUS_WORD[status];
 }
 
@@ -3035,7 +3039,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
               stops aligning: one row's project would start three columns right
               of its neighbours'.
             */
-            `  ${entityLabel(entity).padEnd(16)}${statusWord(entity.status, entity.idleDetail).padEnd(18)}${entity.project} · ${branchLabel(entity)}`,
+            // `idle (` + a ten-character agent + `)` is 17, inside the 18 as well.
+            `  ${entityLabel(entity).padEnd(16)}${statusWord(entity.status, entity.idleDetail, delegationWord(delegatesFor(state, entity))).padEnd(18)}${entity.project} · ${branchLabel(entity)}`,
             statusColor(entity.status, entity.idleDetail),
           );
         }
@@ -8963,6 +8968,25 @@ export function summonsOf(
   }
   return summons;
 }
+
+/**
+ * The agents on a quiet session's work (idle with agents, 6 Oct 2026): its
+ * open asks to agents, read off the ledger mirror. Only for a session that is
+ * plainly idle, so a working row never pays for the scan.
+ */
+const delegatesFor = (state: HiveState, session: Session | undefined): readonly Delegate[] => {
+  if (session === undefined || session.status !== 'idle' || session.idleDetail !== undefined) return [];
+  const open = openAsks(state.ledger, Date.now()).filter((ask) => !state.closedAsks.has(ask.id));
+  return delegatesOf(open, state.ledger, terminalOf(session), (id) => state.entities[id]?.kind === 'agent');
+};
+
+/** `shipper`, `agents` or `2 agents` for `idle (…)`, or null. A string, so a row re-renders only when it changes. */
+export const useDelegateWord = (session: Session | undefined): string | null =>
+  useHiveStore((state) => delegationWord(delegatesFor(state, session)));
+
+/** Every agent on it, by name, with who each brought in: the status's tooltip. */
+export const useDelegateTitle = (session: Session | undefined): string | null =>
+  useHiveStore((state) => delegationTitle(delegatesFor(state, session)));
 
 /** The Summons queue, leaving out the session on stage. Derived, never stored. */
 export const useSummons = (onStage: string | null): Summons => {

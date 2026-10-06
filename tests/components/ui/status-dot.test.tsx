@@ -274,3 +274,15 @@ describe('terminal statuses', () => {
     expect(statusLabel('prompt')).toBe('at prompt');
   });
 });
+
+describe('an idle session with an agent on its work', () => {
+  it('reads idle (shipper), in a grey ring, and its own running work wins', () => {
+    expect(statusLabel('idle', undefined, 'shipper')).toBe('idle (shipper)');
+    expect(statusLabel('idle', 'script', 'shipper')).toBe('working (scripts)');
+
+    const { container } = render(<StatusDot status="idle" delegate="shipper" label="hero status" />);
+    const dot = container.firstElementChild;
+    expect(dot).toHaveClass('border-[1.5px]', 'border-subtle');
+    expect(screen.getByText('hero status: idle (shipper)')).toBeInTheDocument();
+  });
+});

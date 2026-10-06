@@ -6,7 +6,14 @@ import { branchLabel, entityLabel, isSession, terminalOf } from '@/types/entity'
 import { Badge } from '@components/ui/badge';
 import { statusLabel, statusText } from '@components/ui/status-dot';
 import { Tag } from '@components/ui/tag';
-import { useEntity, useOpenEntity, usePlanProgress, useYoursAgain } from '@stores/hive-store';
+import {
+  useDelegateTitle,
+  useDelegateWord,
+  useEntity,
+  useOpenEntity,
+  usePlanProgress,
+  useYoursAgain,
+} from '@stores/hive-store';
 import { useActiveTab } from '@stores/ui-store';
 
 interface SessionRowProps {
@@ -37,6 +44,10 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
   const progress = usePlanProgress(id);
   // Also before the guard, with '' when there is no session to name (HIVE-198).
   const yoursAgain = useYoursAgain(entity && isSession(entity) ? terminalOf(entity) : '');
+  // Before the guard too: the agents on a quiet session's work, `idle (shipper)`.
+  const session = entity && isSession(entity) ? entity : undefined;
+  const delegate = useDelegateWord(session);
+  const delegateTitle = useDelegateTitle(session);
 
   if (!entity || !isSession(entity)) return null;
 
@@ -78,14 +89,15 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
             'shrink-0 text-ui-sm',
             statusText(entity.status, entity.idleDetail),
           )}
+          title={delegateTitle ?? undefined}
         >
           {/*
             Round two's panel says a session that finished for you is yours
             again, until opening it sweeps the row (HIVE-198). Idle's tone.
           */}
-          {compact && yoursAgain && entity.status === 'idle'
+          {compact && yoursAgain && entity.status === 'idle' && delegate === null
             ? 'yours again'
-            : statusLabel(entity.status, entity.idleDetail)}
+            : statusLabel(entity.status, entity.idleDetail, delegate)}
         </span>
         {/*
           The session's plan progress (HIVE-182), after the status label: the
