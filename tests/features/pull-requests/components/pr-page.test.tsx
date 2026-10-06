@@ -170,6 +170,25 @@ describe('PrPage on a narrow stage (HIVE-223)', () => {
     expect(screen.getByRole('button', { name: 'Details' })).toHaveClass('@min-[760px]:hidden');
   });
 
+  it('measures the Files and Checks thresholds against the tab column, not the page the sidebar shares', async () => {
+    useHiveStore.setState({ loadPrDiff: vi.fn(() => Promise.resolve()) });
+    render(<PrPage row={row} />);
+    const page = screen.getByRole('region', { name: 'Pull request #1182' });
+    const sidebar = screen.getByRole('complementary', { name: 'Pull request properties' });
+    const column = (el: HTMLElement): HTMLElement | null => {
+      for (let up = el.parentElement; up !== null && up !== page; up = up.parentElement) {
+        if (up.classList.contains('@container')) return up;
+      }
+      return null;
+    };
+    expect(column(screen.getByRole('list', { name: 'Conversation' }))).not.toBeNull();
+    expect(column(screen.getByRole('list', { name: 'Conversation' }))).not.toContainElement(sidebar);
+    await userEvent.click(screen.getByRole('radio', { name: 'Files 9' }));
+    const tree = screen.getByRole('complementary', { name: 'Changed files' });
+    expect(column(tree)).not.toBeNull();
+    expect(column(tree)).not.toContainElement(sidebar);
+  });
+
   it('opens the properties as an overlay from Details, and Escape closes it and returns focus', async () => {
     render(<PrPage row={row} />);
     const details = screen.getByRole('button', { name: 'Details' });

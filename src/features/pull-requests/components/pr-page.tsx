@@ -175,9 +175,10 @@ export function PrPage({ row }: { row: HatcheryRow }) {
       </header>
       <ShipTrack pr={pr} />
       <div className="relative flex min-h-0 flex-1">
+        {/* Each tab column is its own size container, so the 640px Files and Checks thresholds exclude the 260px sidebar beside it. */}
         {/* The Files tab scrolls its tree and its diff on its own, so it sits outside the padded column. */}
         {detail !== undefined && tab === 'files' ? (
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="@container flex min-w-0 flex-1 flex-col">
             {entry?.problem === undefined ? null : (
               <div className="px-8 pt-3">
                 <SourceProblem message={entry.problem} onRetry={retry} />
@@ -186,7 +187,7 @@ export function PrPage({ row }: { row: HatcheryRow }) {
             <PrFiles pr={pr} detail={detail} fixerOnIt={fixerOnIt} onOpenFile={onOpenFile} />
           </div>
         ) : (
-          <div className="min-w-0 flex-1 overflow-y-auto px-8 pb-6">
+          <div className="@container min-w-0 flex-1 overflow-y-auto px-8 pb-6">
             {detail === undefined ? (
               entry?.state === 'failed' ? (
                 <div className="pt-4">
