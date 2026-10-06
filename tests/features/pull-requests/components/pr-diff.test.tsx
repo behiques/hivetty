@@ -241,6 +241,21 @@ describe('PrDiff — a huge diff is capped (HIVE-224)', () => {
     expect(screen.queryByRole('button', { name: 'Show full diff' })).toBeNull();
   });
 
+  it('names the review threads hidden past the cap in the offer', async () => {
+    const thread = prThread({ path: 'lock', line: DIFF_ROW_CAP + 2, diffSide: 'RIGHT' });
+    render(<PrDiff {...props({ file: prFile({ path: 'lock' }), diff: huge(DIFF_ROW_CAP + 5), threads: [thread] })} />);
+    expect(screen.queryByText(thread.comments[0]!.body)).toBeNull();
+    expect(screen.getByText('5 more lines, with 1 review thread')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Show full diff' }));
+    expect(screen.getByText(thread.comments[0]!.body)).toBeInTheDocument();
+  });
+
+  it('leaves threads on drawn rows out of the offer', () => {
+    const thread = prThread({ path: 'lock', line: 3, diffSide: 'RIGHT' });
+    render(<PrDiff {...props({ file: prFile({ path: 'lock' }), diff: huge(DIFF_ROW_CAP + 5), threads: [thread] })} />);
+    expect(screen.getByText('5 more lines')).toBeInTheDocument();
+  });
+
   it('draws a diff at the cap whole, with no offer', () => {
     render(<PrDiff {...props({ diff: huge(DIFF_ROW_CAP) })} />);
     expect(screen.queryByRole('button', { name: 'Show full diff' })).toBeNull();

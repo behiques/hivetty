@@ -130,6 +130,25 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
   );
   const shown = useMemo(() => capRows(counts, full ? Infinity : DIFF_ROW_CAP), [counts, full]);
   const hidden = counts.reduce((a, b) => a + b, 0) - shown.reduce((a, b) => a + b, 0);
+  // Threads anchored on rows past the cap draw nowhere until the full diff is shown, so the offer names them.
+  const hiddenThreads = useMemo(() => {
+    if (placed === null || diff === null || hidden === 0) return 0;
+    const drawn = new Set<string>();
+    const rest = new Set<string>();
+    diff.hunks.forEach((hunk, h) => {
+      const cut = shown[h] ?? 0;
+      const ends: [number | null, number | null][] =
+        view === 'unified' ? hunk.lines.map((line) => [line.oldN, line.newN]) : (split[h] ?? []).map((row) => [row.left?.oldN ?? null, row.right?.newN ?? null]);
+      ends.forEach(([oldN, newN], i) => {
+        const into = i < cut ? drawn : rest;
+        if (oldN !== null) into.add(lineKey('L', oldN));
+        if (newN !== null) into.add(lineKey('R', newN));
+      });
+    });
+    let count = 0;
+    for (const [key, list] of placed.at) if (rest.has(key) && !drawn.has(key)) count += list.length;
+    return count;
+  }, [placed, diff, hidden, shown, view, split]);
 
   const card = (thread: PrThread) => (
     <div key={thread.id} data-thread={thread.id} className="my-1.5 mr-[18px] ml-[72px] font-sans">
@@ -256,7 +275,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
             })}
             {hidden > 0 ? (
               <p className="flex items-center gap-2 px-[18px] py-2 font-sans text-control text-muted">
-                {`${String(hidden)} more ${hidden === 1 ? 'line' : 'lines'}`}
+                {`${String(hidden)} more ${hidden === 1 ? 'line' : 'lines'}${hiddenThreads === 0 ? '' : `, with ${String(hiddenThreads)} review ${hiddenThreads === 1 ? 'thread' : 'threads'}`}`}
                 <button type="button" onClick={() => setFull(true)} className="text-brand hover:underline">
                   Show full diff
                 </button>
