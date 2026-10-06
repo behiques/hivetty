@@ -111,7 +111,7 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
         </span>
       ) : null}
       <div className={cn('relative w-[380px] max-w-full', !reduced && 'motion-safe:animate-ccslidein')}>
-        <div className="relative z-[2] rounded-xl shadow-xl [&>article]:border-[color-mix(in_srgb,var(--cc-amber)_55%,var(--cc-border))]">
+        <div className="relative z-[2] rounded-xl shadow-xl [&>article]:border-amber-edge">
           {shown.leaving && newest.action.type === 'ask' ? (
             <AskLeaving notif={newest} thread={newest.action.thread} />
           ) : newest.kind === 'session.blocked' ? (

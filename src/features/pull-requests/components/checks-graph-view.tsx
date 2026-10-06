@@ -9,14 +9,14 @@ import { StateIcon } from '@features/pull-requests/components/state-icon';
 import { useMeasuredWidth } from '@features/pull-requests/components/timeline-lane';
 
 const EDGE: Record<EdgeState, string> = {
-  ok: 'stroke-[color-mix(in_srgb,var(--cc-green)_45%,var(--cc-border))]',
-  bad: 'stroke-[color-mix(in_srgb,var(--cc-red)_55%,var(--cc-border))]',
+  ok: 'stroke-green-edge',
+  bad: 'stroke-red-edge',
   wait: 'stroke-border [stroke-dasharray:3_5]',
   flow: 'stroke-green [stroke-dasharray:6_5]',
 };
 
 const NODE: Record<GraphNode['state'], string> = {
-  passed: 'border-[color-mix(in_srgb,var(--cc-green)_35%,var(--cc-border))]',
+  passed: 'border-green-edge',
   failed: 'border-red bg-red-soft shadow-[0_0_18px_color-mix(in_srgb,var(--cc-red)_25%,transparent)]',
   running: 'border-green shadow-[0_0_0_3px_color-mix(in_srgb,var(--cc-green)_12%,transparent)]',
   waiting: 'border-dashed border-border',

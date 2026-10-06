@@ -419,3 +419,11 @@ describe('tints — status fills come from the map (HIVE-224)', () => {
     ).toEqual([]);
   });
 });
+
+describe('tints — tinted borders and strokes come from the map (HIVE-224)', () => {
+  it('no border/stroke/outline tint of green, amber, red or brand mixed by hand', () => {
+    expect(
+      unmarked(/\b(?:border|stroke|outline)-(?:\[color-mix\(in_srgb,var\(--cc-(?:green|amber|red|brand)\)|(?:green|amber|red|brand)\/\d)/, 'tint-exempt:'),
+    ).toEqual([]);
+  });
+});
