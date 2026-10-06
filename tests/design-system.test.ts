@@ -312,3 +312,12 @@ describe('overlays — one scrim (HIVE-225)', () => {
     expect(offenders.map(relative)).toEqual([]);
   });
 });
+
+describe('native controls follow the mode (HIVE-225)', () => {
+  const globalCss = read('src/styles/global.css');
+
+  it('declares dark on :root and light under the light theme', () => {
+    expect(globalCss).toMatch(/:root\s*\{[^}]*color-scheme:\s*dark;/);
+    expect(globalCss).toMatch(/body\[data-theme='light'\]\s*\{[^}]*color-scheme:\s*light;/);
+  });
+});

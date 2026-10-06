@@ -153,6 +153,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
           <input
             type="checkbox"
             aria-label="Viewed"
+            className="accent-[var(--cc-brand-fill)]"
             checked={file.viewed === 'viewed'}
             disabled={readOnly || pending}
             onChange={(event) => toggleViewed(event.target.checked)}

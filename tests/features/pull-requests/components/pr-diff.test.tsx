@@ -23,6 +23,11 @@ const props = (over: Partial<Parameters<typeof PrDiff>[0]> = {}) => ({
 beforeEach(() => useUiStore.getState().reset());
 
 describe('PrDiff', () => {
+  it('tints the Viewed checkbox with the brand accent, not Chromium blue', () => {
+    render(<PrDiff {...props()} />);
+    expect(screen.getByRole('checkbox', { name: 'Viewed' })).toHaveClass('accent-[var(--cc-brand-fill)]');
+  });
+
   it('heads with the path, +/− and the Unified | Split switch', () => {
     render(<PrDiff {...props()} />);
     expect(screen.getByRole('heading', { name: 'src/fees/validator.ts' })).toBeInTheDocument();
