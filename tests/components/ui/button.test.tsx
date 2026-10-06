@@ -4,6 +4,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { Button } from '@components/ui/button';
 
 describe('Button', () => {
+  it('keeps the primary fill under the pointer while it cannot be pressed', () => {
+    render(<Button variant="primary" disabled>Save</Button>);
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveClass(
+      'disabled:hover:bg-brand-fill',
+      'aria-disabled:hover:bg-brand-fill',
+    );
+  });
+
   it('defaults to a medium secondary button of type button', () => {
     render(<Button>Cancel</Button>);
     const el = screen.getByRole('button', { name: 'Cancel' });
