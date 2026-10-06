@@ -144,7 +144,11 @@ test('guide shots', async ({}, testInfo) => {
 
   await cleanScreen(page, testInfo.outputPath('cleared-again.marker'));
 
-  // The README's hero: the session, its panel, and the pill counting what needs you.
+  // The README's hero: a real Claude Code session, its panel, and the pill counting what
+  // needs you. The stub above only bootstraps; the hero starts the real `claude` on PATH
+  // and gives it a few seconds to draw, since the canvas has no text to wait on.
+  await shell(page, 'clear; claude');
+  await page.waitForTimeout(5_000);
   const pill = page.getByRole('button', { name: /^Inbox, / });
   await expect(pill).toBeVisible();
   await page.screenshot({ path: HERO });

@@ -12,7 +12,7 @@ to watch every session.
 
 ## How a notification is born
 
-The Hive writes a small hooks file for every session it starts. Claude Code then reports
+Hive TTY writes a small hooks file for every session it starts. Claude Code then reports
 what it is doing to a receiver inside the app, over loopback, with a per-session token.
 
 <picture>

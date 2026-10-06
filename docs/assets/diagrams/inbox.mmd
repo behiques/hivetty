@@ -1,5 +1,5 @@
 flowchart TD
-  claude[claude in its terminal] -->|hook event| rcv[Receiver in The Hive]
+  claude[claude in its terminal] -->|hook event| rcv[Receiver in Hive TTY]
   rcv --> trk[Status tracker]
   trk --> dot[Status dot and bar counts]
   rcv --> ntf[Notifier picks a kind]

@@ -1,6 +1,6 @@
 # Updates
 
-The Hive updates itself, but never without asking.
+Hive TTY updates itself, but never without asking.
 
 **On this page:** [Automatic updates](#automatic-updates) · [Check by hand](#check-by-hand) ·
 [Update from the command line](#update-from-the-command-line) ·

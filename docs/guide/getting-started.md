@@ -27,7 +27,7 @@ If macOS says the app "is damaged", see
 | GitHub CLI, signed in | `gh auth status` | fills the PRs tab |
 | A Jira account | optional | fills the Work tab |
 
-The Hive reads your login shell's `PATH` at startup, so a `claude` or `gh` installed with
+Hive TTY reads your login shell's `PATH` at startup, so a `claude` or `gh` installed with
 Homebrew is found even when you open the app from Finder.
 
 ## First launch
@@ -39,12 +39,12 @@ empty until you start a session.
 
 ![The Overmind with two projects mapped and nothing running](../assets/guide/01-empty-overmind.png)
 
-On first launch The Hive writes `~/.hive/config.json` from a commented template. You never
+On first launch Hive TTY writes `~/.hive/config.json` from a commented template. You never
 have to open it; Settings edits it for you. See [The config file](configuration.md).
 
 ## Map your first project
 
-A **project** is a folder The Hive can start sessions in, usually a git repository.
+A **project** is a folder Hive TTY can start sessions in, usually a git repository.
 
 1. Click **Add a project** on Home, or the **+** in the Sessions panel head.
 2. Choose the repository folder.
@@ -100,4 +100,4 @@ but keep a compiler around in case no prebuild matches your platform.
 
 - [A tour of the window](tour.md): what every part of the screen does.
 - [Sessions and terminals](sessions.md): statuses, names, `/done` and Resume.
-- [The inbox](inbox.md): how The Hive tells you a session needs you.
+- [The inbox](inbox.md): how Hive TTY tells you a session needs you.
