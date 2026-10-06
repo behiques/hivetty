@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import { EditorSurface } from '@components/editor/editor-surface';
+import { Button } from '@components/ui/button';
 import { languageFor } from '@lib/explorer/language';
 import { humanSize } from '@lib/human-size';
 import type { FsRefusalReason } from '@shared/fs-contract';
@@ -288,14 +289,14 @@ export function SkillEditor({
             something here, so it is the only one offered.
           */}
           {refused === null ? (
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
               onClick={onSave}
               disabled={problem !== null}
-              className="rounded-md bg-brand-fill px-2.5 py-1 text-[12px] text-on-brand hover:bg-brand-fill-hover disabled:opacity-60"
             >
               Save
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>

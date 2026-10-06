@@ -25,6 +25,7 @@ import {
   writeSkillFile,
 } from '@/lib/skills';
 
+import { Button } from '@components/ui/button';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { SessionPluginsRow } from '@features/settings/components/session-plugins-row';
@@ -866,13 +867,13 @@ export function SkillsSection() {
         )}
 
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={newSkill}
-            className="w-fit rounded-md bg-brand-fill px-3 py-1.5 text-[12.5px] text-on-brand hover:bg-brand-fill-hover"
+            className="w-fit"
           >
             + New skill
-          </button>
+          </Button>
           {importButton(
             'w-fit rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-ink',
           )}

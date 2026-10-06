@@ -137,7 +137,7 @@ function SessionMenu({ session }: { session: Session }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="min-w-[13rem] rounded-[7px] border border-border bg-panel p-1 shadow-lg"
+        className="min-w-[13rem]"
       >
         <DropdownMenuItem
           onSelect={() => spawnTerminalBeside(session.id)}
@@ -146,16 +146,13 @@ function SessionMenu({ session }: { session: Session }) {
               ? 'This session runs in a container; a terminal is host-only'
               : undefined
           }
-          className="flex cursor-default items-center justify-between gap-4 rounded px-2 py-1.5 text-[12.5px] outline-none data-[highlighted]:bg-active"
+          className="justify-between gap-4"
         >
           Terminal here
           <span className="tabular-nums text-[11px] text-subtle">⌃`</span>
         </DropdownMenuItem>
         {pr ? (
-          <DropdownMenuItem
-            asChild
-            className="rounded px-2 py-1.5 text-[12.5px] outline-none data-[highlighted]:bg-active"
-          >
+          <DropdownMenuItem asChild>
             <a href={pr.url} target="_blank" rel="noreferrer">
               Open PR #{pr.n}
               {pr.state === undefined ? ' · last seen' : ` · ${pr.state}`}

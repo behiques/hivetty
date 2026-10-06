@@ -48,11 +48,10 @@ export function PrCommentBox({ pr }: { pr: Pr }) {
         <span className="text-muted">everyone on the PR sees it</span>
         <span className="flex-1" />
         <Button
-          variant="ghost"
+          variant="primary"
           onClick={post}
           disabled={draft.trim() === ''}
           pending={posting}
-          className="rounded-md border-0 bg-brand-fill px-3 py-1 text-[length:inherit] leading-normal text-on-brand hover:bg-brand-fill-hover hover:text-on-brand disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-brand-fill aria-disabled:opacity-60 aria-disabled:hover:bg-brand-fill"
         >
           {posting ? 'Posting…' : 'Comment'}
         </Button>

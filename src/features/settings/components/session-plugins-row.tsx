@@ -116,7 +116,7 @@ export function SessionPluginsRow() {
 
         <DialogContent
           showCloseButton={false}
-          className="gap-0 border-border bg-panel p-0 sm:max-w-[560px]"
+          className="gap-0 p-0 sm:max-w-[560px]"
         >
           <DialogHeader className="gap-1 border-b border-border-soft px-3.5 pt-3 pb-2.5">
             <DialogTitle className="text-[13px] font-semibold text-ink">

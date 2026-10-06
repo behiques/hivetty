@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 
 import { EditorSurface } from '@components/editor/editor-surface';
+import { Button } from '@components/ui/button';
 import { SplitHandle } from '@components/ui/split-handle';
 import { AgentForm } from '@features/shared/components/agent-form';
 import { languageFor } from '@lib/explorer/language';
@@ -454,13 +455,13 @@ export function AgentEditor({
           >
             Revert
           </button>
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={onSave}
-            className="rounded-md bg-brand-fill px-2.5 py-1 text-[12px] text-on-brand hover:bg-brand-fill-hover disabled:opacity-60"
           >
             Save
-          </button>
+          </Button>
         </div>
       </div>
     </div>

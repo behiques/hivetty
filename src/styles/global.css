@@ -20,6 +20,12 @@ body,
 :root {
   /* Lets max-height animate from an intrinsic keyword (the card collapse). */
   interpolate-size: allow-keywords;
+  /* Native controls (checkboxes, the <select> popup, scrollbars) follow the app, not the OS (HIVE-225). */
+  color-scheme: dark;
+}
+
+body[data-theme='light'] {
+  color-scheme: light;
 }
 
 body {

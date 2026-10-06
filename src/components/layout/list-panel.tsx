@@ -127,7 +127,7 @@ export function ListPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null> })
         data-testid="list-veil"
         aria-hidden
         onClick={togglePanel}
-        className="absolute inset-y-0 right-0 left-[var(--cc-bar-w)] z-20 bg-bg/40"
+        className="absolute inset-y-0 right-0 left-[var(--cc-bar-w)] z-20 bg-scrim"
       />
       {panel}
     </>

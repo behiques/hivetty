@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { Button } from '@components/ui/button';
 import { TextField } from '@components/ui/text-field';
 
 /**
@@ -96,14 +97,14 @@ export function SkillPathPrompt({
           >
             Cancel
           </button>
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={submit}
             disabled={trimmed === ''}
-            className="rounded-md bg-brand-fill px-2.5 py-1 text-[12px] text-on-brand hover:bg-brand-fill-hover disabled:opacity-60"
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
