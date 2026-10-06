@@ -24,16 +24,19 @@ const between = (from: number, to: number) => `${clock(from)}–${clock(to)} · 
 
 const FLAP: Record<FlapTone, string> = {
   muted: 'bg-[color-mix(in_srgb,var(--cc-subtle)_16%,transparent)] text-muted',
-  green: 'bg-[color-mix(in_srgb,var(--cc-green)_16%,transparent)] text-green',
-  amber: 'bg-[color-mix(in_srgb,var(--cc-amber)_20%,transparent)] text-amber-text',
-  brand: 'bg-[color-mix(in_srgb,var(--cc-brand)_18%,transparent)] text-brand',
+  green: 'bg-green-strong text-green',
+  amber: 'bg-amber-strong text-amber-text',
+  brand: 'bg-brand-strong text-brand',
 };
 /** MUTATING's stripes (D1), over its green. */
 const STRIPES =
   'bg-[repeating-linear-gradient(135deg,color-mix(in_srgb,var(--cc-green)_24%,transparent)_0_6px,color-mix(in_srgb,var(--cc-green)_10%,transparent)_6px_12px)]';
 const CI: Record<CiBar['state'], string> = {
+  // tint-exempt: data-viz bar fills, not status tints
   passed: 'bg-green/60',
+  // tint-exempt: data-viz bar fills, not status tints
   failed: 'bg-red/65',
+  // tint-exempt: data-viz bar fills, not status tints
   running: 'bg-green/30',
   other: 'bg-subtle/40',
 };

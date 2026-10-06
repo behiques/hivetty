@@ -17,7 +17,7 @@ const EDGE: Record<EdgeState, string> = {
 
 const NODE: Record<GraphNode['state'], string> = {
   passed: 'border-[color-mix(in_srgb,var(--cc-green)_35%,var(--cc-border))]',
-  failed: 'border-red bg-[color-mix(in_srgb,var(--cc-red)_10%,var(--cc-panel))] shadow-[0_0_18px_color-mix(in_srgb,var(--cc-red)_25%,transparent)]',
+  failed: 'border-red bg-red-soft shadow-[0_0_18px_color-mix(in_srgb,var(--cc-red)_25%,transparent)]',
   running: 'border-green shadow-[0_0_0_3px_color-mix(in_srgb,var(--cc-green)_12%,transparent)]',
   waiting: 'border-dashed border-border',
   skipped: 'border-dashed border-border',

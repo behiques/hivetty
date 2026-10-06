@@ -99,7 +99,7 @@ export function InlineConfirm({
       // Claims Escape from the settings dialog; see `settings-overlay.tsx`.
       data-escape-scope=""
       aria-label={label}
-      className={cn('bg-red/8 px-3 py-2.5', className)}
+      className={cn('bg-red-soft px-3 py-2.5', className)}
     >
       <p className="text-control text-ink">{title}</p>
       <p className="mt-0.5 text-ui-sm text-subtle">{children}</p>

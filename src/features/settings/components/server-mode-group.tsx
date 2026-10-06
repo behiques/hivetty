@@ -981,7 +981,7 @@ export function ServerModeGroup({
               pane. And it says the sessions are still running, because the
               fear this state produces is that they are gone.
             */
-            <div className="flex gap-2 rounded-md border border-amber/45 bg-amber/8 px-3 py-2.5">
+            <div className="flex gap-2 rounded-md border border-amber/45 bg-amber-soft px-3 py-2.5">
               <WarningCircle size={13} className="mt-0.5 shrink-0 text-amber-text" />
               <div className="flex flex-col gap-2 text-ui-sm text-subtle">
                 <span>
@@ -1000,7 +1000,7 @@ export function ServerModeGroup({
               than amber, because the user's next move is different, and
               "stopped trying" is the thing they need to know to make it.
             */
-            <div className="flex gap-2 rounded-md border border-red/45 bg-red/8 px-3 py-2.5">
+            <div className="flex gap-2 rounded-md border border-red/45 bg-red-soft px-3 py-2.5">
               <WarningCircle size={13} className="mt-0.5 shrink-0 text-red" />
               <div className="flex flex-col gap-2 text-ui-sm text-subtle">
                 <span>
@@ -1206,7 +1206,7 @@ export function ServerModeGroup({
           {/* Always mounted: the attach or detach result lands here, and a live region that mounts with its text is not reliably announced (HIVE-225). */}
           <div role="status" className="flex flex-col gap-3 empty:-mt-3">
             {switchResult && !switchResult.ok && switchResult.reason === 'live-sessions' ? (
-              <div className="flex items-start gap-2 rounded-md border border-red bg-red/8 px-3 py-2.5">
+              <div className="flex items-start gap-2 rounded-md border border-red bg-red-soft px-3 py-2.5">
                 <WarningCircle size={14} className="mt-px shrink-0 text-red" />
                 <div className="flex flex-col gap-1 text-ui-sm">
                   <p className="text-ink">Can&rsquo;t attach while sessions are running here.</p>
@@ -1235,7 +1235,7 @@ export function ServerModeGroup({
               other validation failure in this file uses.
             */}
             {switchResult && !switchResult.ok && switchResult.reason === 'plaintext-refused' ? (
-              <div className="flex items-start gap-2 rounded-md border border-red bg-red/8 px-3 py-2.5">
+              <div className="flex items-start gap-2 rounded-md border border-red bg-red-soft px-3 py-2.5">
                 <WarningCircle size={14} className="mt-px shrink-0 text-red" />
                 <p className="text-ui-sm text-ink">{ATTACH_HOST_INVALID}</p>
               </div>

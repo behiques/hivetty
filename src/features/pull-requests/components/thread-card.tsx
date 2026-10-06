@@ -18,9 +18,9 @@ export function hunkTail(hunk: string, count = 4): { n: number | null; text: str
 
 function Chip({ thread, fixerOnIt }: { thread: PrThread; fixerOnIt: boolean }) {
   const [text, tone] = thread.isResolved
-    ? ['resolved', 'text-green bg-[color-mix(in_srgb,var(--cc-green)_14%,transparent)]']
+    ? ['resolved', 'text-green bg-green-strong']
     : fixerOnIt
-      ? ['fixer on it', 'text-amber-text bg-[color-mix(in_srgb,var(--cc-amber)_14%,transparent)]']
+      ? ['fixer on it', 'text-amber-text bg-amber-strong']
       : ['open', 'text-muted bg-chip'];
   return <span className={cn('rounded-md px-[7px] py-0.5 tabular-nums text-micro font-semibold', tone)}>{text}</span>;
 }

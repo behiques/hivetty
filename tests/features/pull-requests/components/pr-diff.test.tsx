@@ -56,8 +56,8 @@ describe('PrDiff', () => {
     const added = screen.getByText("if (filing.total < fee.minimum) return reject('underpaid');").closest('[data-kind]');
     const removed = screen.getByText("if (filing.total < 400) return reject('underpaid');").closest('[data-kind]');
     expect(added).toHaveAttribute('data-kind', 'add');
-    expect(added?.className).toContain('var(--cc-green)_11%');
-    expect(removed?.className).toContain('var(--cc-red)_11%');
+    expect(added?.className).toContain('bg-green-soft');
+    expect(removed?.className).toContain('bg-red-soft');
     expect(added).toHaveTextContent('115+');
   });
 

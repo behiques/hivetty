@@ -282,7 +282,7 @@ function PauseBar({ id, onNotice }: { id: string; onNotice: (notice: string | nu
   return (
     <div
       role="status"
-      className="flex shrink-0 items-center gap-3 border-t border-border-soft bg-[color-mix(in_srgb,var(--cc-amber)_10%,var(--cc-term-input))] px-[18px] py-2.5 text-control text-muted"
+      className="flex shrink-0 items-center gap-3 border-t border-border-soft bg-amber-soft px-[18px] py-2.5 text-control text-muted"
     >
       <span className="flex-1">
         <b className="text-amber-text">{`${id} is paused.`}</b> Nothing wakes it, not the ledger, not a schedule, until

@@ -22,7 +22,7 @@ export function ReconnectLine() {
       aria-live="polite"
       className={cn(
         'flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border-soft px-4 py-2 text-control',
-        reconnecting ? 'bg-amber/10 text-amber-text' : 'bg-red/10 text-red',
+        reconnecting ? 'bg-amber-strong text-amber-text' : 'bg-red-strong text-red',
       )}
     >
       <span className="flex-1">

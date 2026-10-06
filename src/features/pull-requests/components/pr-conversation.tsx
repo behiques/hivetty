@@ -25,8 +25,8 @@ type Item =
   | { kind: 'event'; at: number; key: string; entry: LedgerEntry };
 
 const VERDICT: Record<string, [string, string]> = {
-  CHANGES_REQUESTED: ['changes requested', 'text-amber-text bg-[color-mix(in_srgb,var(--cc-amber)_14%,transparent)]'],
-  APPROVED: ['approved', 'text-green bg-[color-mix(in_srgb,var(--cc-green)_14%,transparent)]'],
+  CHANGES_REQUESTED: ['changes requested', 'text-amber-text bg-amber-strong'],
+  APPROVED: ['approved', 'text-green bg-green-strong'],
   COMMENTED: ['commented', 'text-muted bg-chip'],
   DISMISSED: ['dismissed', 'text-subtle bg-chip'],
 };

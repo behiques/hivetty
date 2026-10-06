@@ -77,7 +77,7 @@ export function ShippedStrip({
 
   return (
     <div className="flex flex-col overflow-hidden rounded-lg border border-border-soft">
-      <div className="flex flex-col gap-1 bg-brand/8 px-3 py-1.5 text-ui-sm text-muted">
+      <div className="flex flex-col gap-1 bg-brand-soft px-3 py-1.5 text-ui-sm text-muted">
         <div className="flex items-center gap-1.5">
           <span className="mr-auto font-medium text-brand">● Customised</span>
           {moved.length > 0 ? (
@@ -126,7 +126,7 @@ export function HeldBanner({
   if (status === undefined || !status.held) return null;
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg border border-amber/40 bg-amber/8 px-3 py-2 text-ui-sm text-ink">
+    <div className="flex flex-col gap-1.5 rounded-lg border border-amber/40 bg-amber-soft px-3 py-2 text-ui-sm text-ink">
       <span>
         <span className="font-medium text-amber-text">Update held.</span> A newer shipped prompt for{' '}
         {status.name} is waiting, but the one here has your edits. Until you choose, {status.name} runs

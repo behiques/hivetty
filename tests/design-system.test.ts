@@ -396,3 +396,26 @@ describe('tints — one map, in srgb (HIVE-224)', () => {
     expect(tokensCss).toContain(`--color-${hue}-edge: color-mix(in srgb, var(--cc-${hue}) 50%, var(--cc-border));`);
   });
 });
+
+/** Lines matching `pattern`, unless the line or the one above carries `marker`; comment lines skipped. */
+function unmarked(pattern: RegExp, marker: string): string[] {
+  return sourceFiles()
+    .filter((f) => f.endsWith('.tsx'))
+    .flatMap((f) => {
+      const lines = readFileSync(f, 'utf8').split('\n');
+      return lines.flatMap((line, i) => {
+        if (/^\s*(\/\/|\*|\/\*)/.test(line)) return [];
+        if (!pattern.test(line)) return [];
+        if (line.includes(marker) || (lines[i - 1] ?? '').includes(marker)) return [];
+        return [`${relative(f)}:${String(i + 1)}`];
+      });
+    });
+}
+
+describe('tints — status fills come from the map (HIVE-224)', () => {
+  it('no bg/ring tint of green, amber, red or brand mixed by hand', () => {
+    expect(
+      unmarked(/\b(?:bg|ring)-(?:\[color-mix\(in_srgb,var\(--cc-(?:green|amber|red|brand)\)|(?:green|amber|red|brand)\/\d)/, 'tint-exempt:'),
+    ).toEqual([]);
+  });
+});

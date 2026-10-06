@@ -5,7 +5,7 @@ import { useOpenWorkTicket, useWorkTicket } from '@stores/ui-store';
 
 /** Amber needs you and glows; green is being worked; ring is quiet. */
 const DOT: Record<TicketTone, string> = {
-  amber: 'bg-amber ring-[3px] ring-amber/20',
+  amber: 'bg-amber ring-[3px] ring-amber-strong',
   green: 'bg-green',
   ring: 'border-[1.5px] border-subtle bg-transparent',
 };
