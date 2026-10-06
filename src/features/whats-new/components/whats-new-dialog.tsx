@@ -112,7 +112,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
                 type="checkbox"
                 checked={optOut}
                 onChange={(event) => setOptOut(event.target.checked)}
-                className="size-3.5 accent-[var(--cc-brand-fill)]"
+                className="size-3.5 accent-brand-fill"
               />
               Don’t show What’s new again
             </label>

@@ -118,7 +118,7 @@ export function WorkSearchRow() {
               onChange={(event) => {
                 setMineOnly(event.target.checked);
               }}
-              className="size-3 accent-[var(--cc-brand-fill)]"
+              className="size-3 accent-brand-fill"
             />
             Mine only
           </label>

@@ -180,6 +180,8 @@ export function ThemeCard({
 
 /** The dark-fills / light-triangle swatch, drawn from the theme's own tokens. */
 function ThemeSwatch({ theme }: { theme: HiveTheme }) {
+  /** The seam: a hairline from the swatch's own two inks, so it shows on both halves. */
+  const seam = `color-mix(in srgb, ${theme.modes.dark.ui.ink} 50%, ${theme.modes.light.ui.ink})`;
   return (
     <div className="relative aspect-[16/9] overflow-hidden rounded-md border border-border">
       <SwatchHalf mode="dark" colors={theme.modes.dark} />
@@ -194,8 +196,7 @@ function ThemeSwatch({ theme }: { theme: HiveTheme }) {
         aria-hidden="true"
         className="pointer-events-none absolute inset-0"
         style={{
-          background:
-            'linear-gradient(to top right, transparent calc(50% - 0.5px), rgba(255,255,255,0.30) calc(50% - 0.5px), rgba(255,255,255,0.30) calc(50% + 0.5px), transparent calc(50% + 0.5px))',
+          background: `linear-gradient(to top right, transparent calc(50% - 0.5px), ${seam} calc(50% - 0.5px), ${seam} calc(50% + 0.5px), transparent calc(50% + 0.5px))`,
         }}
       />
     </div>

@@ -427,3 +427,14 @@ describe('tints — tinted borders and strokes come from the map (HIVE-224)', ()
     ).toEqual([]);
   });
 });
+
+describe('colour literals — none unannotated in components (HIVE-224)', () => {
+  it('no rgb()/rgba(), no white/black utility or mix, no arbitrary accent var', () => {
+    expect(
+      unmarked(
+        /rgba?\(|\b(?:bg|text|border|ring|fill|stroke|from|via|to|shadow|accent|outline|decoration|divide|caret)-(?:white|black)\b|(?:color-mix|-gradient)\([^'"`]*\b(?:white|black)\b|accent-\[var\(/,
+        'colour-literal-exempt:',
+      ),
+    ).toEqual([]);
+  });
+});
