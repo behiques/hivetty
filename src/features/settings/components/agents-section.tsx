@@ -110,10 +110,10 @@ export function AgentsSection() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-hidden px-5 py-4">
+    <div className="@container flex min-h-0 flex-1 flex-col gap-3.5 overflow-hidden px-5 py-4">
       <SettingsSectionHeader title="Agents" description={description} />
 
-      <div className="grid min-h-0 flex-1 grid-cols-[190px_minmax(0,1fr)] gap-3">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,10rem)_minmax(0,1fr)] gap-3 @min-[520px]:grid-cols-[190px_minmax(0,1fr)] @min-[520px]:grid-rows-1">
         <div className="flex min-h-0 flex-col overflow-y-auto rounded-[7px] border border-border">
           {agents.map((agent) => {
             const broken = agent.invalid !== undefined;
