@@ -492,6 +492,11 @@ describe('resolveRef', () => {
   it('returns undefined for anything it does not know', () => {
     expect(resolveRef(entries, 'a9')).toBeUndefined();
   });
+
+  it('resolves a ref in any case, since A7 is the same handle to whoever types it', () => {
+    expect(resolveRef(entries, 'A7')).toBe('20260828-100000-0001');
+    expect(resolveRef([entry({ id: '20260828-100000-0002', kind: 'ask', ref: 'A8' })], 'a8')).toBe('20260828-100000-0002');
+  });
 });
 
 describe('keepNewest', () => {
