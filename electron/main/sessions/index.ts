@@ -711,6 +711,8 @@ export function createSessions(options: SessionsOptions): Sessions {
               ? { kind: 'lost', reason: `the shell was killed by signal ${data.signal}` }
               : { kind: 'finished' },
           );
+        } else if (data.signal !== undefined && data.signal !== 0) {
+          sessionLost(entityId, `its process was killed by signal ${data.signal}`);
         }
         settleCommand(entityId, {
           exitCode: data.exitCode,
@@ -727,6 +729,8 @@ export function createSessions(options: SessionsOptions): Sessions {
         send(channel, { ...data, sessionId: entityId } satisfies SessionLostEvent);
         if (terminalEntities.has(entityId)) {
           publishTerminalEnded(entityId, { kind: 'lost', reason: 'the pty host crashed' });
+        } else {
+          sessionLost(entityId, 'the pty host crashed');
         }
         // No code: nothing concluded. `-1` is the sentinel a command caller
         // reads as "did not finish", never as an exit status.
@@ -1432,6 +1436,19 @@ export function createSessions(options: SessionsOptions): Sessions {
    * `forward` and `supervisor.onError` translate whatever the host actually
    * said into one of the two kinds this function forwards untouched.
    */
+  /**
+   * A session's process went without being asked: a signal, or the pty host
+   * crashing. Sent **before** `settleExit` publishes `terminated`, so the
+   * renderer knows why when the ending lands, and keeps the ended card over
+   * the terminal instead of leaving for the Overmind as a clean `/exit` does.
+   * Not for a session that declared `/done`: the force-kill after a wedged
+   * `/exit` is still the user's ending.
+   */
+  function sessionLost(entityId: string, reason: string): void {
+    if (declaredDone(entityId)) return;
+    send(CH.sessionTerminalEnded, { entityId, ending: { kind: 'lost', reason } } satisfies SessionTerminalEndedEvent);
+  }
+
   function publishTerminalEnded(entityId: string, ending: TerminalEnding): void {
     plans.forget(entityId);
     changedFiles.drop(entityId);

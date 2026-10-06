@@ -2194,6 +2194,8 @@ describe('/done', () => {
     planTool: (call: PlanToolCall) => void;
     /** Every `CH.planChanged` payload for the entity, in order. */
     planPushes: (entityId: string) => Record<string, unknown>[];
+    /** Every `CH.sessionTerminalEnded` payload this harness sent. */
+    terminalEnded: () => Record<string, unknown>[];
     sessions: Sessions;
   } {
     const written: Written[] = [];
@@ -2323,6 +2325,8 @@ describe('/done', () => {
             (entry) => entry.channel === CH.planChanged && entry.payload.entityId === entityId,
           )
           .map((entry) => entry.payload),
+      terminalEnded: () =>
+        local.filter((entry) => entry.channel === CH.sessionTerminalEnded).map((entry) => entry.payload),
       sessions: instance,
     };
   }
@@ -2469,6 +2473,28 @@ describe('/done', () => {
 
   /** Every chunk written into the pty since the session opened. */
   const writes = () => vi.mocked(supervisor.write).mock.calls.map((call) => call[1]);
+
+  it('reports no lost ending for a /done whose wedged /exit was force-killed', () => {
+    const h = finished();
+    const sessionId = h.open();
+    h.done('hero-refresh');
+    h.hook('hero-refresh', 'Stop');
+
+    emitExit({ sessionId, exitCode: 129, signal: 9 });
+
+    expect(h.terminalEnded()).toEqual([]);
+  });
+
+  it('reports lost for the same kill when no /done was declared', () => {
+    const h = finished();
+    const sessionId = h.open();
+
+    emitExit({ sessionId, exitCode: 129, signal: 9 });
+
+    expect(h.terminalEnded()).toEqual([
+      { entityId: 'hero-refresh', ending: { kind: 'lost', reason: 'its process was killed by signal 9' } },
+    ]);
+  });
 
   it('closes the terminal with /exit rather than a signal', () => {
     const h = finished();
@@ -3566,6 +3592,38 @@ describe('terminals', () => {
 
     expect(on(CH.sessionTerminalEnded).at(-1)!.payload).toEqual({
       entityId: 'term-01',
+      ending: { kind: 'lost', reason: 'the pty host crashed' },
+    });
+  });
+
+  /**
+   * A session that dies unasked says why before it says `terminated`, so the
+   * stage keeps the ended card over it rather than leaving as `/exit` does.
+   */
+  it('reports a session killed by signal as lost, before its terminated status', () => {
+    sessions.open(OPEN);
+    emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 129, signal: 15 });
+
+    const lost = on(CH.sessionTerminalEnded).at(-1)!;
+    expect(lost.payload).toEqual({
+      entityId: 'hero-refresh',
+      ending: { kind: 'lost', reason: 'its process was killed by signal 15' },
+    });
+    const terminated = sent.findIndex((m) => m.channel === CH.sessionStatus && (m.payload as { status: string }).status === 'terminated');
+    expect(sent.indexOf(lost)).toBeLessThan(terminated);
+  });
+
+  it('says nothing for a session that exits cleanly, as /exit does', () => {
+    sessions.open(OPEN);
+    emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 0, signal: 0 });
+    expect(on(CH.sessionTerminalEnded)).toHaveLength(0);
+  });
+
+  it('reports a session whose host went away as lost', () => {
+    sessions.open(OPEN);
+    emitLost({ sessionId: mintedFor('hero-refresh') });
+    expect(on(CH.sessionTerminalEnded).at(-1)!.payload).toEqual({
+      entityId: 'hero-refresh',
       ending: { kind: 'lost', reason: 'the pty host crashed' },
     });
   });

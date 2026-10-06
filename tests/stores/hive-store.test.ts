@@ -4274,6 +4274,23 @@ describe('hive-store', () => {
       expect(useHiveStore.getState().order).toContain(id);
     });
 
+    it('markTerminalLost on a session puts the reason on its live row, and a resume clears it', () => {
+      const store = useHiveStore.getState();
+      store.setSessionStatus('hero-refresh', 'working');
+      store.markTerminalLost('hero-refresh', 'its process was killed by signal 15');
+      store.markTerminalLost('hero-refresh', 'a later consequence');
+      expect(useHiveStore.getState().entities['hero-refresh']).toMatchObject({
+        lost: 'its process was killed by signal 15',
+      });
+
+      store.setSessionStatus('hero-refresh', 'terminated');
+      expect(useHiveStore.getState().entities['hero-refresh']).toMatchObject({ lost: 'its process was killed by signal 15' });
+
+      // Back to life: neither when it ended nor why still holds.
+      store.setSessionStatus('hero-refresh', 'working');
+      expect(useHiveStore.getState().entities['hero-refresh']).not.toHaveProperty('lost');
+    });
+
     it('markTerminalLost keeps the first reason — the second is a consequence', () => {
       const id = useHiveStore.getState().spawnTerminal('nova-web');
       useHiveStore.getState().markTerminalLost(id, 'the pty host crashed');
