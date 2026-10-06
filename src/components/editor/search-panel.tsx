@@ -13,7 +13,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode, RefObject } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
+import { MENU_SURFACE } from '@components/ui/dropdown-menu';
 import { Icon } from '@components/ui/icon';
+import { cn } from '@lib/utils';
 
 /**
  * ⌘F, rebuilt.
@@ -214,7 +216,7 @@ function SearchPanel({ view, subscribe }: SearchPanelProps) {
       role="search"
       aria-label="Find in file"
       onSubmit={(event) => event.preventDefault()}
-      className="relative flex flex-col gap-[3px] rounded-[7px] border border-border bg-panel p-1 pl-5 shadow-lg"
+      className={cn(MENU_SURFACE, 'relative flex flex-col gap-[3px] pl-5')}
     >
       {/*
         The chevron is the replace row's only affordance, sitting in the gutter

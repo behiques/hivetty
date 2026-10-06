@@ -49,7 +49,7 @@ export function SessionEndedCover({ session }: { session: Session }) {
   }
 
   return (
-    <div data-testid="session-ended-cover" className="absolute inset-0 z-10 flex items-center justify-center bg-bg/50">
+    <div data-testid="session-ended-cover" className="absolute inset-0 z-10 flex items-center justify-center bg-scrim">
       <section
         aria-label="Session ended"
         className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-lg border border-border-soft bg-panel p-5 shadow-lg"

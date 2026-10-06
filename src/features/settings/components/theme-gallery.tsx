@@ -203,10 +203,10 @@ export function ThemeGallery() {
             Download template
           </button>
           <Button
-            variant="ghost"
+            variant="primary"
             onClick={() => void onImport()}
             pending={importing}
-            className="flex w-fit items-center gap-1.5 rounded-md border-0 bg-brand-fill px-3 py-1.5 text-[12.5px] leading-normal text-on-brand hover:bg-brand-fill-hover hover:text-on-brand aria-disabled:opacity-60"
+            className="flex w-fit items-center gap-1.5"
           >
             Import theme…
           </Button>

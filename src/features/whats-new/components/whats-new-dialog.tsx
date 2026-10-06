@@ -62,7 +62,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-bg/70" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-scrim" />
         <DialogPrimitive.Content
           aria-describedby={`${id}-body`}
           onKeyDown={onKeyDown}

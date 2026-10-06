@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -249,5 +249,90 @@ describe('the amber text colour (HIVE-210, HIVE-223)', () => {
         expect(contrastRatio(text, ui[ground]), `${theme.name} on ${ground}`).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+});
+
+/**
+ * HIVE-225: the vendored shadcn primitives used colour names this app never
+ * binds (`bg-popover`, `ring-ring`, …), so Tailwind generated nothing and a bare
+ * `border` fell back to `currentColor`. None may come back.
+ */
+const SHADCN_NAME =
+  /(?:^|[\s"'`:])(?:bg|text|ring|ring-offset|border|outline)-(?:background|foreground|popover(?:-foreground)?|accent(?:-foreground)?|destructive|ring|muted-foreground|primary(?:-foreground)?|secondary(?:-foreground)?|card(?:-foreground)?|input)\b/;
+const UI_DIR = resolve(process.cwd(), 'src/components/ui');
+const uiFiles = readdirSync(UI_DIR).filter((f) => f.endsWith('.tsx'));
+
+describe('src/components/ui — no shadcn colour names', () => {
+  it('scans the primitives', () => {
+    expect(uiFiles).toEqual(expect.arrayContaining(['dialog.tsx', 'dropdown-menu.tsx']));
+  });
+
+  it.each(uiFiles)('%s uses only the app’s own colour names', (file) => {
+    const source = readFileSync(join(UI_DIR, file), 'utf8');
+    expect(source.match(SHADCN_NAME)?.[0]).toBeUndefined();
+  });
+});
+
+/** Every `src/**` file, for the scans below. */
+function sourceFiles(dir = resolve(process.cwd(), 'src')): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFiles(path);
+    return /\.tsx?$/.test(entry.name) ? [path] : [];
+  });
+}
+const relative = (path: string) => path.slice(process.cwd().length + 1);
+
+describe('menus — one surface, one item recipe (HIVE-225)', () => {
+  const files = sourceFiles().filter((f) => !f.endsWith('components/ui/dropdown-menu.tsx'));
+
+  it('no consumer re-states the menu surface', () => {
+    const offenders = files.filter((f) =>
+      readFileSync(f, 'utf8').includes('rounded-[7px] border border-border bg-panel p-1'),
+    );
+    expect(offenders.map(relative)).toEqual([]);
+  });
+
+  it('no consumer highlights a menu item with hover', () => {
+    const offenders = files.filter((f) => {
+      const source = readFileSync(f, 'utf8');
+      return source.includes('DropdownMenuItem') && /focus:bg-hover|data-\[highlighted\]:bg-hover/.test(source);
+    });
+    expect(offenders.map(relative)).toEqual([]);
+  });
+});
+
+describe('overlays — one scrim (HIVE-225)', () => {
+  it('binds the scrim to the theme background', () => {
+    expect(tokensCss).toContain('--color-scrim: color-mix(in srgb, var(--cc-bg) 70%, transparent);');
+  });
+
+  it('no overlay picks its own veil', () => {
+    const offenders = sourceFiles().filter((f) => /\bbg-(?:black|bg)\/\d+/.test(readFileSync(f, 'utf8')));
+    expect(offenders.map(relative)).toEqual([]);
+  });
+});
+
+describe('native controls follow the mode (HIVE-225)', () => {
+  const globalCss = read('src/styles/global.css');
+
+  it('declares dark on :root and light under the light theme', () => {
+    expect(globalCss).toMatch(/:root\s*\{[^}]*color-scheme:\s*dark;/);
+    expect(globalCss).toMatch(/body\[data-theme='light'\]\s*\{[^}]*color-scheme:\s*light;/);
+  });
+});
+
+describe('primary buttons — one atom (HIVE-225)', () => {
+  /** A quoted class string carrying the brand fill and a horizontal padding is a hand-rolled button. */
+  const HAND_ROLLED = /['"`][^'"`]*\bbg-brand-fill[^'"`]*['"`]/g;
+  const files = sourceFiles().filter((f) => !f.endsWith('components/ui/button.tsx'));
+
+  it('no file outside button.tsx hand-rolls a primary button', () => {
+    const offenders = files.flatMap((f) =>
+      [...readFileSync(f, 'utf8').matchAll(HAND_ROLLED)]
+        .filter((m) => /\bpx-/.test(m[0]))
+        .map(() => relative(f)),
+    );
+    expect([...new Set(offenders)]).toEqual([]);
   });
 });

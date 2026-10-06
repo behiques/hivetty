@@ -1,6 +1,7 @@
 import { CaretRight, Folder, FolderOpen } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { Button } from '@components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -157,7 +158,7 @@ export function DirectoryPicker({
         utilities after unprefixed ones — so an unprefixed cap loses above
         640px and the dialog renders 512px wide.
       */}
-      <DialogContent className="gap-0 border-border bg-panel p-0 sm:max-w-[420px]">
+      <DialogContent className="gap-0 p-0 sm:max-w-[420px]">
         <DialogHeader className="gap-[7px] border-b border-border-soft px-3.5 pt-3 pb-2.5">
           <DialogTitle className="text-[13px] font-semibold text-ink">
             {title}
@@ -278,16 +279,16 @@ export function DirectoryPicker({
           >
             Cancel
           </button>
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             disabled={listing === null}
             onClick={() => {
               if (listing !== null) onChoose(listing.path);
             }}
-            className="rounded-[3px] border border-brand-fill-strong bg-brand-fill-strong px-[11px] py-[5px] text-[12px] text-on-brand hover:border-brand-fill hover:bg-brand-fill disabled:opacity-60"
           >
             {confirmLabel}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

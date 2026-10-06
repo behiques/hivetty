@@ -175,6 +175,11 @@ working through the same variables:
 value at build time, which is what lets a single `data-theme` flip recolour the
 whole app.
 
+**Scrim.** Every modal overlay and cover uses `bg-scrim`, which is `--cc-bg` at
+70%. No overlay picks its own veil (HIVE-225). **Menus.** `MENU_SURFACE` in
+`components/ui/dropdown-menu.tsx` is the one menu card. Items highlight on
+`bg-active`.
+
 **Raw hex literals in component code are banned.** If a colour is missing, add a
 token.
 

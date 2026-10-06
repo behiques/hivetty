@@ -57,6 +57,24 @@ test('theme applies to the document and survives a reload', async ({ page }) => 
   await expect(page.locator('body')).toHaveAttribute('data-theme', 'light');
 });
 
+test('native controls follow the mode: a checkbox is dark in dark, light in light', async ({ page }) => {
+  const scheme = () =>
+    page.evaluate(() => {
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      document.body.append(box);
+      const value = getComputedStyle(box).colorScheme;
+      box.remove();
+      return value;
+    });
+  expect(await scheme()).toBe('dark');
+
+  await openSettings(page);
+  await page.getByRole('radio', { name: 'Light' }).click();
+  await expect(page.locator('body')).toHaveAttribute('data-theme', 'light');
+  expect(await scheme()).toBe('light');
+});
+
 test('compact density tightens the rows and survives a reload', async ({ page }) => {
   // The token density drives (7px and 4px are tokens.css's comfortable and compact `--cc-row-py`).
   const rowPy = () => page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--cc-row-py').trim());

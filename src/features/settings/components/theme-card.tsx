@@ -80,9 +80,6 @@ export function ThemeCard({
   onExport,
   onRemove,
 }: ThemeCardProps) {
-  const item =
-    'rounded-[4px] px-2 py-1 text-[12.5px] text-muted focus:bg-hover focus:text-ink data-[disabled]:opacity-35';
-
   // See `project-row-menu.tsx`: Radix returns focus to the trigger when the
   // menu closes, which is wrong for actions that replace this card's own
   // controls with something that focuses itself on mount (none here yet, but
@@ -153,25 +150,23 @@ export function ThemeCard({
               handsOffFocus.current = false;
               event.preventDefault();
             }}
-            className="min-w-[9rem] rounded-[7px] border border-border bg-panel p-1 shadow-lg"
+            className="min-w-[9rem]"
           >
             <DropdownMenuItem
               disabled={isActive}
               onSelect={() => select(() => onActivate(id))}
-              className={item}
             >
               Activate
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => select(() => onExport(id))}
-              className={item}
             >
               Export…
             </DropdownMenuItem>
             {!isBuiltIn ? (
               <DropdownMenuItem
                 onSelect={() => select(() => onRemove(id), true)}
-                className={`${item} text-red focus:text-red`}
+                variant="destructive"
               >
                 Remove
               </DropdownMenuItem>
