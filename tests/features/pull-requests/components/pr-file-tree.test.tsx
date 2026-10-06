@@ -34,7 +34,7 @@ describe('PrFileTree', () => {
 
   it('marks open threads amber, resolved-only green, and a dismissed file "changed"', () => {
     render(<PrFileTree detail={detail} selected={null} onSelect={vi.fn()} />);
-    expect(within(screen.getByRole('button', { name: /validator\.ts/ })).getByLabelText('open thread')).toHaveClass('text-amber');
+    expect(within(screen.getByRole('button', { name: /validator\.ts/ })).getByLabelText('open thread')).toHaveClass('text-amber-text');
     const rule = screen.getByRole('button', { name: /delaware\.rule\.ts/ });
     expect(within(rule).getByLabelText('resolved threads')).toHaveClass('text-green');
     expect(within(rule).getByText('changed')).toBeInTheDocument();
@@ -60,5 +60,10 @@ describe('PrFileTree', () => {
   it('says when GitHub sent fewer files than changed, with a link', () => {
     render(<PrFileTree detail={{ ...detail, changedFiles: 240 }} selected={null} onSelect={vi.fn()} />);
     expect(screen.getByRole('link', { name: 'showing 4 · all on GitHub' })).toHaveAttribute('href', `${detail.url}/files`);
+  });
+
+  it('shows focus on the filter with the brand border (HIVE-223)', () => {
+    render(<PrFileTree detail={detail} selected={null} onSelect={vi.fn()} />);
+    expect(screen.getByRole('textbox', { name: 'Filter files' })).toHaveClass('focus:border-brand');
   });
 });

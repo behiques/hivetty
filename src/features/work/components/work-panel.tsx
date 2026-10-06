@@ -168,7 +168,7 @@ function WorkHeader() {
           {needYou > 0 ? (
             <>
               {' · '}
-              <span className="text-amber-count">{needYou} need you</span>
+              <span className="text-amber-text">{needYou} need you</span>
             </>
           ) : null}
         </span>
@@ -315,7 +315,7 @@ export function WorkPanel() {
     return (
       <WorkLayout header={header}>
         {search.error !== null ? (
-          <p className="px-1 pb-1 text-ui-sm leading-[1.45] text-amber">
+          <p className="px-1 pb-1 text-ui-sm leading-[1.45] text-amber-text">
             {search.error}
           </p>
         ) : null}

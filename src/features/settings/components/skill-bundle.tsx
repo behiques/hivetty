@@ -352,7 +352,7 @@ export function SkillBundle({
         an entry's own `excluded`.
       */}
       {skill.manifest.capped === null ? null : (
-        <p className="border-t border-border-soft px-2.5 py-1.5 text-[11px] text-amber">
+        <p className="border-t border-border-soft px-2.5 py-1.5 text-[11px] text-amber-text">
           {skill.manifest.capped}
         </p>
       )}

@@ -134,7 +134,7 @@ export function AgentLedger({ name }: AgentLedgerProps) {
  * keeping its own record, and it outnumbers everything else in the column.
  */
 const KIND_TONE: Record<LedgerKind, string> = {
-  ask: 'text-amber',
+  ask: 'text-amber-text',
   answer: 'text-green',
   done: 'text-green',
   failed: 'text-red',

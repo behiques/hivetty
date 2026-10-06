@@ -31,7 +31,7 @@ export function SourceProblem({
 }) {
   return (
     <div className="flex flex-col items-start gap-1 px-1 pb-1">
-      <p className="text-[11.5px] leading-[1.45] text-amber">{message}</p>
+      <p className="text-[11.5px] leading-[1.45] text-amber-text">{message}</p>
       <RetryButton onRetry={onRetry} />
     </div>
   );

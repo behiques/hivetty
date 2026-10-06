@@ -53,7 +53,7 @@ describe('PrsPanel (the Hatchery)', () => {
     render(<PrsPanel />);
     expect(screen.getByRole('heading', { name: 'Pull requests' })).toBeInTheDocument();
     expect(screen.getByText('3 open', { exact: false })).toBeInTheDocument();
-    expect(screen.getByText('1 need you')).toHaveClass('text-amber-count');
+    expect(screen.getByText('1 need you')).toHaveClass('text-amber-text');
   });
 
   it('leaves the need-you part out at zero', () => {

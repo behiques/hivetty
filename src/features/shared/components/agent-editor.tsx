@@ -281,7 +281,7 @@ export function AgentEditor({
       */}
       <div className="flex items-center gap-3 border-b border-border-soft px-5 py-2 text-[12px]">
         <span className="min-w-0 flex-1 truncate tabular-nums text-subtle">{path ?? 'not saved yet'}</span>
-        <span className={dirty ? 'shrink-0 font-sans text-amber' : 'shrink-0 font-sans text-subtle'}>
+        <span className={dirty ? 'shrink-0 font-sans text-amber-text' : 'shrink-0 font-sans text-subtle'}>
           {dirty ? 'unsaved' : 'saved'}
         </span>
       </div>
@@ -406,7 +406,7 @@ export function AgentEditor({
           never attempted.
         */}
         {problems.length === 0 && notice !== null ? (
-          <span role="status" className="min-w-0 text-[11px] text-amber">
+          <span role="status" className="min-w-0 text-[11px] text-amber-text">
             {notice}
           </span>
         ) : (

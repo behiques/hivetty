@@ -203,7 +203,7 @@ export function NotificationsSection() {
       />
 
       {status !== null && !status.supported ? (
-        <p className="text-[12.5px] text-amber">
+        <p className="text-[12.5px] text-amber-text">
           This system cannot show desktop notifications, so the
           &ldquo;System&rdquo; option would have no effect. On Linux this usually
           means no notification daemon is running — the inbox itself still works.
@@ -220,7 +220,7 @@ export function NotificationsSection() {
         sentence is the useful part rather than an apology.
       */}
       {status !== null && status.supported && status.refused !== null ? (
-        <p className="text-[12.5px] text-amber">
+        <p className="text-[12.5px] text-amber-text">
           The system refused this app&rsquo;s last desktop notification
           &mdash;&nbsp;
           <span className="text-subtle">{status.refused}</span>

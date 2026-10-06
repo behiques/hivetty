@@ -127,7 +127,7 @@ const PILL_LABEL: Record<PillKind, string> = {
 const PILL_TONE: Record<PillKind, string> = {
   off: 'text-subtle border-border',
   ok: 'text-green border-green',
-  wait: 'text-amber border-amber',
+  wait: 'text-amber-text border-amber',
   err: 'text-red border-red',
 };
 
@@ -225,7 +225,7 @@ function usedBySummary(agents: SlackGroupAgent[]): ReactNode {
           {index < agents.length - 1 ? ', ' : ''}
         </span>
       ))}
-      {missingGrant && <span className="text-amber"> · no slack tools granted</span>}
+      {missingGrant && <span className="text-amber-text"> · no slack tools granted</span>}
     </>
   );
 }
@@ -258,7 +258,7 @@ function Caption({
 
   if (status.kind === 'pending-approval') {
     return (
-      <p className="text-[11.5px] text-amber">
+      <p className="text-[11.5px] text-amber-text">
         <span className="font-semibold text-ink">
           A workspace admin must approve Slack&rsquo;s MCP server.
         </span>{' '}
@@ -642,7 +642,7 @@ function RealTimeFields({
             socket.unresolved.map((name) => (
               <span
                 key={name}
-                className="rounded-[4px] bg-chip px-1.5 py-0.5 tabular-nums text-[11px] text-amber"
+                className="rounded-[4px] bg-chip px-1.5 py-0.5 tabular-nums text-[11px] text-amber-text"
                 title="Named in wake.on, but Slack could not resolve it to a channel."
               >
                 {name} → unresolved
