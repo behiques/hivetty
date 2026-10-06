@@ -153,7 +153,7 @@ import type {
   JiraUser,
 } from '@shared/jira-contract';
 import { LEDGER_DIR, OVERMIND } from '@shared/ledger-contract';
-import { closedAskThreads } from '@shared/ledger-derive';
+import { closedAskThreads, delegatesOf } from '@shared/ledger-derive';
 import {
   isThisMachineAction,
   type NotificationAction,
@@ -1812,7 +1812,16 @@ export function registerIpcHandlers(
     subjectName: (terminalId) => sessionNames.get(terminalId),
   });
 
-  const notifier = createNotifier({ hub, isForeground, isForegroundEverywhere });
+  const notifier = createNotifier({
+    hub,
+    isForeground,
+    isForegroundEverywhere,
+    // `ledger` is bound below; this runs only on a hook, long after it exists.
+    isDelegated: (entityId) => {
+      const { entries, openAsks } = ledger.read({});
+      return delegatesOf(openAsks, entries, entityId, (id) => knownAgents.has(id)).length > 0;
+    },
+  });
 
   /**
    * Ledger entries into inbox cards (HIVE-118).
