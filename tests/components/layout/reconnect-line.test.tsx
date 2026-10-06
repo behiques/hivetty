@@ -42,7 +42,7 @@ describe('ReconnectLine (HIVE-211)', () => {
     act(() => useHiveStore.getState().setRemoteLink(link({})));
     render(<ReconnectLine />);
     const line = screen.getByRole('status');
-    expect(line).toHaveClass('text-amber');
+    expect(line).toHaveClass('text-amber-text');
     expect(line).toHaveTextContent(
       'Lost Hive TTY on mac-mini. Reconnecting in 4s. The sessions keep running there.',
     );

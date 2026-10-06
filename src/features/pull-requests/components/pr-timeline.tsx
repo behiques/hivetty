@@ -25,7 +25,7 @@ const between = (from: number, to: number) => `${clock(from)}–${clock(to)} · 
 const FLAP: Record<FlapTone, string> = {
   muted: 'bg-[color-mix(in_srgb,var(--cc-subtle)_16%,transparent)] text-muted',
   green: 'bg-[color-mix(in_srgb,var(--cc-green)_16%,transparent)] text-green',
-  amber: 'bg-[color-mix(in_srgb,var(--cc-amber)_20%,transparent)] text-amber',
+  amber: 'bg-[color-mix(in_srgb,var(--cc-amber)_20%,transparent)] text-amber-text',
   brand: 'bg-[color-mix(in_srgb,var(--cc-brand)_18%,transparent)] text-brand',
 };
 /** MUTATING's stripes (D1), over its green. */

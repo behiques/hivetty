@@ -145,7 +145,7 @@ export function AgentsSection() {
                 <span className="truncate tabular-nums">{agent.name}</span>
                 <ShippedDot status={shipped.get(agent.name)} />
                 {broken ? (
-                  <span className="ml-auto shrink-0 text-[11px] text-amber">invalid</span>
+                  <span className="ml-auto shrink-0 text-[11px] text-amber-text">invalid</span>
                 ) : (
                   <span
                     className="ml-auto shrink-0 text-[11px] text-subtle"

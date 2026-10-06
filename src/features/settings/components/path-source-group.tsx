@@ -54,8 +54,8 @@ export function PathSourceGroup({
           </p>
         ) : loginEnv === 'unavailable' ? (
           <p className="flex items-start gap-2 text-[12.5px]">
-            <WarningCircle size={14} className="mt-px shrink-0 text-amber" />
-            <span className="text-amber">
+            <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
+            <span className="text-amber-text">
               This app could not be asked what environment it is using. Nothing
               is broken by that beyond this box — reopening Settings asks again.
             </span>
@@ -86,8 +86,8 @@ function PathSourceLine({ loginEnv }: { loginEnv: LoginEnvStatus }) {
     return (
       <>
         <p className="flex items-start gap-2 text-[12.5px]">
-          <WarningCircle size={14} className="mt-px shrink-0 text-amber" />
-          <span className="text-amber">
+          <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
+          <span className="text-amber-text">
             Your login shell could not be read: {loginEnv.error}.
           </span>
         </p>

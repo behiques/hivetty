@@ -33,7 +33,7 @@ export function PrCommentBox({ pr }: { pr: Pr }) {
   };
 
   return (
-    <div className="mt-2.5 flex flex-col gap-3 rounded-xl border border-border-soft bg-panel px-3.5 py-3">
+    <div className="mt-2.5 flex flex-col gap-3 rounded-xl border border-border-soft bg-panel px-3.5 py-3 focus-within:border-brand">
       <textarea
         rows={3}
         value={draft}
@@ -55,7 +55,7 @@ export function PrCommentBox({ pr }: { pr: Pr }) {
           {posting ? 'Posting…' : 'Comment'}
         </button>
       </div>
-      {problem === null ? null : <p className="text-[12px] text-amber">{problem}</p>}
+      {problem === null ? null : <p className="text-[12px] text-amber-text">{problem}</p>}
     </div>
   );
 }

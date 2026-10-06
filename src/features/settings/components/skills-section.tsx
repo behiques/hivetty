@@ -911,7 +911,7 @@ export function SkillsSection() {
       {invalid.map((skill) => (
         <p
           key={skill.name}
-          className="rounded-[5px] border border-amber px-2.5 py-1.5 text-[11.5px] text-amber"
+          className="rounded-[5px] border border-amber px-2.5 py-1.5 text-[11.5px] text-amber-text"
         >
           {skill.name}: {skill.reason}
         </p>
@@ -991,7 +991,7 @@ export function SkillsSection() {
                   <ShippedDot status={shipped.get(row.name)} />
                 </span>
                 {broken ? (
-                  <span className="shrink-0 text-[11px] text-amber">invalid</span>
+                  <span className="shrink-0 text-[11px] text-amber-text">invalid</span>
                 ) : null}
                 {active && dirty ? (
                   <span className="shrink-0 text-[11px] text-brand">edited</span>

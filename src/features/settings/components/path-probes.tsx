@@ -24,7 +24,7 @@ export function PathProbes({ probes }: { probes: readonly PathProbe[] }) {
               probe.found
                 ? 'text-green'
                 : probe.notExecutable
-                  ? 'text-amber'
+                  ? 'text-amber-text'
                   : 'text-subtle'
             }
           >
@@ -36,7 +36,7 @@ export function PathProbes({ probes }: { probes: readonly PathProbe[] }) {
           {/* The genuinely confusing case: the file is right there, and the
               only reason it does not run is a missing +x bit. */}
           {probe.notExecutable ? (
-            <span className="text-amber">present, not executable</span>
+            <span className="text-amber-text">present, not executable</span>
           ) : null}
         </li>
       ))}

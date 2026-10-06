@@ -24,7 +24,7 @@ describe('PrRow', () => {
   it('marks the open PR', () => {
     render(<PrRow row={row} open onOpen={() => {}} />);
     expect(screen.getByRole('button')).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('button')).toHaveClass('bg-panel-2');
+    expect(screen.getByRole('button')).toHaveClass('bg-active');
   });
 
   it('draws the draft glyph for LARVA and COCOONING', () => {

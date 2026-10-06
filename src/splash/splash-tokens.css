@@ -27,19 +27,19 @@
   --cc-border: #273159;
   --cc-border-soft: #1e2747;
   --cc-ink: #e9effc;
-  --cc-muted: #98a3cc;
+  --cc-muted: #9faad0;
   --cc-brand: #8fa7f2;
   --cc-green: #74b79c;
   --cc-amber: #ffac47;
-  --cc-term-head: #4d5a86;
-  --cc-brand-fill: #5e76d0;
+  --cc-term-head: #8590b0;
+  --cc-brand-fill: #5470cb;
   --cc-brand-fill-strong: #334fa9;
 
   /* The comb globe's (HIVE-212): the rest of a SwarmPalette. The carapace and
      the creep's clear stop are derived from these in `stage.ts`, as
      `swarmPaletteOf` derives them for Home. */
   --cc-panel-2: #121731;
-  --cc-subtle: #6b779f;
+  --cc-subtle: #8d97b8;
   --cc-red: #ff8d85;
   --cc-creep: #5b3d8f;
   --cc-chitin: #b9a7f0;

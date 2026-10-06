@@ -169,7 +169,7 @@ function Header({
         {needYou > 0 ? (
           <>
             {' · '}
-            <span className="text-amber-count">{`${String(needYou)} need you`}</span>
+            <span className="text-amber-text">{`${String(needYou)} need you`}</span>
           </>
         ) : null}
       </span>
@@ -287,7 +287,7 @@ export function PrsPanel() {
     return (
       <PrsLayout header={header}>
         {search.error !== null ? (
-          <p className="px-1 pb-1 text-ui-sm leading-[1.45] text-amber">{search.error}</p>
+          <p className="px-1 pb-1 text-ui-sm leading-[1.45] text-amber-text">{search.error}</p>
         ) : null}
         {/* The skeleton stands in only for the first answer; a re-search keeps the rows it has. */}
         {results === null && search.error === null ? <PrListSkeleton /> : null}

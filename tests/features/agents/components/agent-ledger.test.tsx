@@ -48,7 +48,7 @@ describe('AgentLedger', () => {
   */
   it.each([
     ['event', 'text-subtle'],
-    ['ask', 'text-amber'],
+    ['ask', 'text-amber-text'],
     ['done', 'text-green'],
     ['answer', 'text-green'],
   ] as const)('badges %s in %s', (kind, tone) => {

@@ -8,7 +8,7 @@ export type TagTone = 'brand' | 'green' | 'amber' | 'red' | 'subtle';
 export const TONE_TEXT: Record<TagTone, string> = {
   brand: 'text-brand',
   green: 'text-green',
-  amber: 'text-amber',
+  amber: 'text-amber-text',
   red: 'text-red',
   subtle: 'text-subtle',
 };

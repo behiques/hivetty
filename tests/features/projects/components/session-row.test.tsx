@@ -78,7 +78,7 @@ describe('SessionRow', () => {
   it('colours the status label to match its dot', () => {
     render(<SessionRow id="lead-form" />);
 
-    expect(screen.getByText('needs input')).toHaveClass('text-amber');
+    expect(screen.getByText('needs input')).toHaveClass('text-amber-text');
   });
 
   it('opens the session’s tab when clicked', async () => {

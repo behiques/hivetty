@@ -79,7 +79,7 @@ describe('NotificationCard', () => {
     const { rerender } = render(
       <NotificationCard notif={notif({ kind: 'session.blocked' })} />,
     );
-    expect(document.querySelector('.text-amber')).not.toBeNull();
+    expect(document.querySelector('.text-amber-text')).not.toBeNull();
 
     rerender(<NotificationCard notif={notif({ kind: 'pr.merged' })} />);
     expect(document.querySelector('.text-green')).not.toBeNull();

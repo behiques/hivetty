@@ -22,7 +22,7 @@ export function TicketProblem({
 }) {
   return (
     <p className="flex flex-wrap items-baseline gap-2 text-[12px]">
-      <span className="text-amber">{message}</span>
+      <span className="text-amber-text">{message}</span>
       <button type="button" onClick={onRetry} className="text-brand hover:underline">
         Retry
       </button>

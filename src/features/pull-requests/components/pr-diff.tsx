@@ -95,7 +95,7 @@ export interface PrDiffProps {
 function ProblemLine({ problem, onRetry, className }: { problem: string | undefined; onRetry?: () => void; className: string }) {
   if (problem === undefined) return null;
   return (
-    <p className={cn('flex items-center gap-2 font-sans text-[12px] text-amber', className)}>
+    <p className={cn('flex items-center gap-2 font-sans text-[12px] text-amber-text', className)}>
       {problem}
       {onRetry === undefined ? null : (
         <button type="button" onClick={onRetry} className="text-brand hover:underline">
@@ -158,7 +158,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
             onChange={(event) => toggleViewed(event.target.checked)}
           />
           Viewed
-          {file.viewed === 'dismissed' ? <span className="text-amber">changed since</span> : null}
+          {file.viewed === 'dismissed' ? <span className="text-amber-text">changed since</span> : null}
         </label>
         <SegmentedControl label="Diff view" options={VIEWS} value={view} onChange={setPrDiffView} />
         {onOpenFile !== undefined && diff?.status !== 'deleted' ? (
@@ -167,7 +167,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
           </button>
         ) : null}
       </div>
-      {viewedProblem === null ? null : <p className="px-[18px] pt-2 text-[12px] text-amber">{viewedProblem}</p>}
+      {viewedProblem === null ? null : <p className="px-[18px] pt-2 text-[12px] text-amber-text">{viewedProblem}</p>}
       <div className="min-h-0 flex-1 overflow-auto py-2 font-mono text-[12.5px] leading-[1.75]">
         {loading ? (
           <div role="status" aria-label="Loading diff" aria-busy className="flex animate-pulse flex-col gap-2 px-[18px] pt-2">

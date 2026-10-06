@@ -31,9 +31,9 @@ export function CommandDiagnosticView({ diagnostic }: CommandDiagnosticViewProps
         {found ? (
           <CheckCircle size={14} className="mt-px shrink-0 text-green" />
         ) : (
-          <WarningCircle size={14} className="mt-px shrink-0 text-amber" />
+          <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
         )}
-        <span className={found ? 'text-ink' : 'text-amber'}>
+        <span className={found ? 'text-ink' : 'text-amber-text'}>
           {found ? (
             <>
               <code className="font-mono">{command}</code> resolves to{' '}

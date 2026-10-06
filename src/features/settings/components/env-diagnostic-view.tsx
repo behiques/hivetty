@@ -51,8 +51,8 @@ export function EnvDiagnosticView({ diagnostic }: EnvDiagnosticViewProps) {
 
       {error !== null ? (
         <p className="flex items-start gap-2 text-[12.5px]">
-          <WarningCircle size={14} className="mt-px shrink-0 text-amber" />
-          <span className="text-amber">Could not probe this shell: {error}</span>
+          <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
+          <span className="text-amber-text">Could not probe this shell: {error}</span>
         </p>
       ) : vars.length === 0 ? (
         <p className="text-[11.5px] text-subtle">
@@ -64,11 +64,11 @@ export function EnvDiagnosticView({ diagnostic }: EnvDiagnosticViewProps) {
             <li key={verdict.key} className="flex flex-col gap-1 text-[12.5px]">
               <p className="flex items-start gap-2">
                 {verdict.overridden ? (
-                  <WarningCircle size={14} className="mt-px shrink-0 text-amber" />
+                  <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
                 ) : (
                   <CheckCircle size={14} className="mt-px shrink-0 text-green" />
                 )}
-                <span className={verdict.overridden ? 'text-amber' : 'text-ink'}>
+                <span className={verdict.overridden ? 'text-amber-text' : 'text-ink'}>
                   <code className="font-mono">{verdict.key}</code>
                   {' = '}
                   <code className="font-mono text-muted">{verdict.configured}</code>

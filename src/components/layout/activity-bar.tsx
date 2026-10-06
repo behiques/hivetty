@@ -91,7 +91,7 @@ export function ActivityBar() {
                 aria-hidden
                 className={cn(
                   'absolute top-0.5 right-1.5 rounded-lg bg-chip px-1 tabular-nums text-[9px] font-semibold',
-                  needsYou ? 'text-amber-count' : 'text-muted',
+                  needsYou ? 'text-amber-text' : 'text-muted',
                 )}
               >
                 {count}

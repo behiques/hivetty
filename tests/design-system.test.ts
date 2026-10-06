@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { TERM } from '@lib/terminal/ansi';
+import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
 import { mixColour, parseColour } from '@lib/theme/colour';
 import { contrastRatio } from '@lib/theme/validate';
 
@@ -213,34 +214,40 @@ describe('AGENTS.md', () => {
   });
 });
 
-describe('the amber count colour (HIVE-210)', () => {
+describe('the amber text colour (HIVE-210, HIVE-223)', () => {
   const declared = (selector: RegExp) =>
-    /--cc-amber-count:\s*([^;]+);/.exec(block(tokensCss, selector))?.[1]?.trim();
+    /--cc-amber-text:\s*([^;]+);/.exec(block(tokensCss, selector))?.[1]?.trim();
+  const toHex = (colour: string) =>
+    `#${parseColour(colour)!
+      .slice(0, 3)
+      .map((channel) => Math.round(channel).toString(16).padStart(2, '0'))
+      .join('')}`;
 
   it('binds the creature colours as Tailwind utilities (HIVE-210)', () => {
     expect(tokensCss).toContain('--color-creep: var(--cc-creep);');
     expect(tokensCss).toContain('--color-chitin: var(--cc-chitin);');
   });
 
+  it('is a utility, and the count-only name is gone', () => {
+    expect(tokensCss).toContain('--color-amber-text: var(--cc-amber-text);');
+    expect(tokensCss).not.toContain('amber-count');
+  });
+
   it('is the drawn amber in dark', () => {
     expect(declared(/:root\s*\{/)).toBe('var(--cc-amber)');
   });
 
-  it('clears AA on every light ground a count sits on', () => {
+  it('clears AA on every light ground, in every built-in theme', () => {
     const value = declared(/body\[data-theme='light'\]\s*\{/);
-    const match = /^color-mix\(in srgb, var\(--cc-amber\) (\d+)%, var\(--cc-ink\)\)$/.exec(
-      value ?? '',
-    );
-    expect(match, `unexpected light --cc-amber-count: ${String(value)}`).not.toBeNull();
+    const match = /^color-mix\(in srgb, var\(--cc-amber\) (\d+)%, var\(--cc-ink\)\)$/.exec(value ?? '');
+    expect(match, `unexpected light --cc-amber-text: ${String(value)}`).not.toBeNull();
     const amberShare = Number(match![1]) / 100;
-    const mixed = mixColour(lightTokens['--cc-amber']!, lightTokens['--cc-ink']!, 1 - amberShare);
-    // contrastRatio reads hex only, and mixColour hands back `rgb(r g b)`.
-    const count = `#${parseColour(mixed)!
-      .slice(0, 3)
-      .map((channel) => Math.round(channel).toString(16).padStart(2, '0'))
-      .join('')}`;
-    for (const ground of ['--cc-bg', '--cc-panel', '--cc-panel-2', '--cc-chip']) {
-      expect(contrastRatio(count, lightTokens[ground]!), ground).toBeGreaterThanOrEqual(4.5);
+    for (const theme of Object.values(BUILT_IN_THEMES)) {
+      const { ui } = theme.modes.light;
+      const text = toHex(mixColour(ui.amber, ui.ink, 1 - amberShare));
+      for (const ground of ['bg', 'panel', 'panel2', 'chip', 'hover', 'active', 'termBg', 'termRowHover', 'termRowActive'] as const) {
+        expect(contrastRatio(text, ui[ground]), `${theme.name} on ${ground}`).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 });

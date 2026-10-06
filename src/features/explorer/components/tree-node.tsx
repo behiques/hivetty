@@ -174,7 +174,7 @@ export function TreeNode({
           {children.error ? (
             <p
               style={{ paddingLeft: `${8 + (depth + 1) * 12 + 17}px` }}
-              className="py-[3px] text-[11.5px] text-amber"
+              className="py-[3px] text-[11.5px] text-amber-text"
             >
               {children.error}
             </p>

@@ -97,20 +97,20 @@ describe('AgentsPanel', () => {
     useUiStore.getState().openAgentPage('standup-agent', 'activity');
     render(<AgentsPanel />);
 
-    expect(agentRow('standup-agent')).toHaveClass('bg-panel-2');
+    expect(agentRow('standup-agent')).toHaveClass('bg-active');
     expect(agentRow('standup-agent')).toHaveAttribute('aria-current', 'true');
-    expect(agentRow('slack-agent')).not.toHaveClass('bg-panel-2');
+    expect(agentRow('slack-agent')).not.toHaveClass('bg-active');
   });
 
   it('moves the highlight when another agent opens', async () => {
     render(<AgentsPanel />);
 
     await userEvent.click(agentRow('slack-agent'));
-    expect(agentRow('slack-agent')).toHaveClass('bg-panel-2');
+    expect(agentRow('slack-agent')).toHaveClass('bg-active');
 
     await userEvent.click(agentRow('pr-reviewer'));
-    expect(agentRow('pr-reviewer')).toHaveClass('bg-panel-2');
-    expect(agentRow('slack-agent')).not.toHaveClass('bg-panel-2');
+    expect(agentRow('pr-reviewer')).toHaveClass('bg-active');
+    expect(agentRow('slack-agent')).not.toHaveClass('bg-active');
   });
 
   it('highlights nothing while a session tab is open', () => {
@@ -282,7 +282,7 @@ describe('AgentsPanel', () => {
       const counts = heading.nextElementSibling as HTMLElement;
 
       expect(counts).toHaveTextContent('2 summons · 2 morphing');
-      expect(screen.getByText('2 summons')).toHaveClass('text-amber-count');
+      expect(screen.getByText('2 summons')).toHaveClass('text-amber-text');
       expect(screen.getByText('2 morphing')).toHaveClass('text-green');
     });
 

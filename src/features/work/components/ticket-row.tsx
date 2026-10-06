@@ -26,7 +26,7 @@ export function TicketRow({ row }: { row: TicketRowModel }) {
       aria-current={current ? 'true' : undefined}
       className={cn(
         'flex w-full items-start gap-2.5 rounded-[7px] px-2 py-2 text-left hover:bg-hover',
-        current && 'bg-panel-2 hover:bg-panel-2',
+        current && 'bg-active hover:bg-active',
       )}
     >
       <span

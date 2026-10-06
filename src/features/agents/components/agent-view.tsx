@@ -147,7 +147,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
             className="grid gap-2.5 font-sans text-[12.5px] [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]"
           >
             {/* Paused reads amber here (HIVE-211): the bar below says why nothing happens. `STATUS_TEXT` is shared and stays. */}
-            <Fact label="Status" tone={facts.status === 'paused' ? 'text-amber' : STATUS_TEXT[facts.status]}>
+            <Fact label="Status" tone={facts.status === 'paused' ? 'text-amber-text' : STATUS_TEXT[facts.status]}>
               {STATUS_LABEL[facts.status]}
               {facts.askRef === undefined ? '' : ` ${facts.askRef}`}
             </Fact>
@@ -256,7 +256,7 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
       ) : (
         <p
           role="status"
-          className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-amber"
+          className="flex shrink-0 items-center justify-center border-t border-border-soft bg-term-input px-[18px] py-[11px] font-mono text-[11px] text-amber-text"
         >
           {notice}
         </p>
@@ -285,7 +285,7 @@ function PauseBar({ id, onNotice }: { id: string; onNotice: (notice: string | nu
       className="flex shrink-0 items-center gap-3 border-t border-border-soft bg-[color-mix(in_srgb,var(--cc-amber)_10%,var(--cc-term-input))] px-[18px] py-2.5 text-[12.5px] text-muted"
     >
       <span className="flex-1">
-        <b className="text-amber">{`${id} is paused.`}</b> Nothing wakes it, not the ledger, not a schedule, until
+        <b className="text-amber-text">{`${id} is paused.`}</b> Nothing wakes it, not the ledger, not a schedule, until
         you resume it. Your draft is kept.
       </span>
       <Button variant="primary" onClick={resume}>

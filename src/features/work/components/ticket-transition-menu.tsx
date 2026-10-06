@@ -210,7 +210,7 @@ export function TicketTransitionMenu({
         aria-label={`${status} — move ${issueKey}`}
         className={cn(
           STATUS_PILL,
-          tone === 'amber' ? 'text-amber' : CATEGORY_TEXT[statusCategory],
+          tone === 'amber' ? 'text-amber-text' : CATEGORY_TEXT[statusCategory],
           'flex items-center gap-1 hover:bg-chip-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
         )}
       >

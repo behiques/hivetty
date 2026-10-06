@@ -29,7 +29,7 @@ function Row({ row, open, onOpen }: PrRowProps) {
       onClick={() => onOpen(row)}
       className={cn(
         'flex w-full min-w-0 gap-2.5 rounded-lg px-2 py-[9px] text-left focus-visible:outline-2 focus-visible:outline-brand',
-        open ? 'bg-panel-2' : 'hover:bg-hover',
+        open ? 'bg-active' : 'hover:bg-hover',
       )}
     >
       {/* Phosphor has no draft-PR glyph; the light weight stands in (R1). */}

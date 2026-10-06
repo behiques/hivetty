@@ -42,6 +42,7 @@ describe('TicketRow (HIVE-203)', () => {
 
     expect(useUiStore.getState().workTicket).toBe('HIVE-1');
     expect(row).toHaveAttribute('aria-current', 'true');
+    expect(row).toHaveClass('bg-active');
   });
 
   it('is not current for another open ticket', () => {

@@ -208,6 +208,18 @@ describe('AgentForm', () => {
     });
   });
 
+  it('focuses its inline fields with the brand border, not the 1.2:1 border step (HIVE-223)', () => {
+    setup();
+
+    const fields = screen.getAllByRole('textbox').filter((el) => el.className.includes('bg-panel-2'));
+    expect(fields.length).toBeGreaterThan(1); // the name field and at least one helper field
+    expect(fields.map((el) => el.getAttribute('aria-label'))).toContain('name');
+    for (const field of fields) {
+      expect(field).toHaveClass('focus:border-brand');
+      expect(field).not.toHaveClass('focus:border-border');
+    }
+  });
+
   /*
     `row`'s label carries no `htmlFor` — it cannot, because the control beside
     it is an arbitrary node — so every input but `name` used to reach the

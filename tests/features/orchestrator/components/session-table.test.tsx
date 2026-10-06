@@ -882,7 +882,7 @@ describe('SessionTable', () => {
       useHiveStore.getState().hydrateAgents([agent({ status: 'asking' })]);
       render(<SessionTable />);
 
-      expect(screen.getByText('· 1 ASKING')).toHaveClass('text-amber-count');
+      expect(screen.getByText('· 1 ASKING')).toHaveClass('text-amber-text');
     });
 
     /**
@@ -1255,7 +1255,7 @@ describe('SessionTable — groups (HIVE-197)', () => {
   it('heads the live rows with LIVE · N and the needs-you count', () => {
     render(<SessionTable />);
     expect(screen.getByText(/^LIVE · \d+$/)).toBeInTheDocument();
-    expect(screen.getByText(/^· \d+ NEEDS YOU$/)).toHaveClass('text-amber-count');
+    expect(screen.getByText(/^· \d+ NEEDS YOU$/)).toHaveClass('text-amber-text');
   });
 
   it('folds yesterday’s endings behind "N more", which reveals them', async () => {

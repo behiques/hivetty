@@ -550,13 +550,13 @@ describe('a paused agent (HIVE-211)', () => {
 
     rerender(<Harness entity={seed({ status: 'paused' })} />);
     expect(screen.queryByLabelText(/Post to watcher/)).toBeNull();
-    expect(screen.getByText('watcher is paused.')).toHaveClass('text-amber');
+    expect(screen.getByText('watcher is paused.')).toHaveClass('text-amber-text');
     expect(
       screen.getByText(/Nothing wakes it, not the ledger, not a schedule, until you resume it\. Your draft is kept\./),
     ).toBeInTheDocument();
     expect(screen.queryByText(/posts to the ledger as the overmind/)).toBeNull();
     const status = screen.getByText('Status').nextElementSibling;
-    expect(status).toHaveClass('text-amber');
+    expect(status).toHaveClass('text-amber-text');
 
     await userEvent.click(screen.getByRole('button', { name: 'Resume' }));
     expect(resume).toHaveBeenCalledWith({ name: 'watcher' });

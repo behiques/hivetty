@@ -484,7 +484,7 @@ export function SessionTable() {
         <GroupHead
           label={`LIVE · ${String(active.length)}`}
           extra={counts.needs > 0 ? `· ${String(counts.needs)} NEEDS YOU` : null}
-          tone="text-amber-count"
+          tone="text-amber-text"
         />
       ) : null}
       {active.map((id) => (
@@ -532,7 +532,7 @@ export function SessionTable() {
             <GroupHead
               label={`AGENTS · ${String(agents.length)}`}
               extra={askingAgents > 0 ? `· ${String(askingAgents)} ASKING` : null}
-              tone="text-amber-count"
+              tone="text-amber-text"
             />
           ) : (
             <GroupHead label={`AGENTS WORKING HERE · ${String(agents.length)}`} />

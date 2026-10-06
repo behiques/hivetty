@@ -30,7 +30,7 @@ export function StaleLine({
       role="status"
       className="mb-1 flex flex-col items-start gap-1 rounded-md bg-[color-mix(in_srgb,var(--cc-amber)_10%,transparent)] px-2 py-1.5"
     >
-      <p className="text-[11.5px] leading-[1.45] text-amber">{message}</p>
+      <p className="text-[11.5px] leading-[1.45] text-amber-text">{message}</p>
       <RetryButton onRetry={onRetry} />
     </div>
   );

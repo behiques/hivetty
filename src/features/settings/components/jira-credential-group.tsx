@@ -65,10 +65,10 @@ function CredentialLine({ credential }: { credential: JiraCredentialState }) {
   if (credential.kind === 'unavailable') {
     return (
       <p className="flex items-start gap-2 text-[12.5px]">
-        <WarningCircle size={14} className="mt-px shrink-0 text-amber" />
+        <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
         {/* Main composed this sentence and it names the variable. Shown
             verbatim rather than translated back from a code. */}
-        <span className="text-amber">{credential.reason}</span>
+        <span className="text-amber-text">{credential.reason}</span>
       </p>
     );
   }

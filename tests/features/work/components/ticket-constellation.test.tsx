@@ -51,7 +51,7 @@ describe('TicketConstellation (HIVE-202)', () => {
       return container.querySelector(`marker[id="${id}"]`);
     };
 
-    for (const [edge, tone] of [['in-open', 'text-amber'], ['in', 'text-subtle'], ['out', 'text-subtle']] as const) {
+    for (const [edge, tone] of [['in-open', 'text-amber-text'], ['in', 'text-subtle'], ['out', 'text-subtle']] as const) {
       expect(marker(edge)).toHaveClass(tone);
       expect(marker(edge)?.querySelector('path')).toHaveAttribute('fill', 'currentColor');
     }
@@ -101,8 +101,8 @@ describe('TicketConstellation (HIVE-202)', () => {
       />,
     );
     expect(centre()).toHaveAttribute('data-blocked', 'true');
-    expect(centre()).toHaveClass('text-amber');
-    expect(container.querySelector('[data-edge="in-open"]')).toHaveClass('text-amber');
+    expect(centre()).toHaveClass('text-amber-text');
+    expect(container.querySelector('[data-edge="in-open"]')).toHaveClass('text-amber-text');
   });
 
   it('draws the epic label and the PR only when given', () => {

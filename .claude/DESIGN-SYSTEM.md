@@ -24,8 +24,8 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | `--cc-border` | `#273159` | `#d4dee3` | dividers, outlines |
 | `--cc-border-soft` | `#1e2747` | `#edf2f4` | quieter dividers |
 | `--cc-ink` | `#e9effc` | `#2c2f34` | primary text |
-| `--cc-muted` | `#98a3cc` | `#73767c` | secondary text |
-| `--cc-subtle` | `#6b779f` | `#8e949c` | tertiary text, idle status |
+| `--cc-muted` | `#9faad0` | `#5a5d63` | secondary text |
+| `--cc-subtle` | `#8d97b8` | `#686d73` | tertiary text, idle status |
 | `--cc-brand` | `#8fa7f2` | `#334fa9` | brand, done status |
 | `--cc-green` | `#74b79c` | `#2e6b52` | working / online status |
 | `--cc-amber` | `#ffac47` | `#c77414` | needs-input status |
@@ -36,9 +36,9 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | `--cc-term-input` | `#0e1430` | `#ffffff` | terminal input bar |
 | `--cc-term-row-hover` | `#161f45` | `#eef4f9` | session-table row hover |
 | `--cc-term-row-active` | `#1a2450` | `#e4edf5` | session-table selected row |
-| `--cc-term-head` | `#4d5a86` | `#6b6e74` | session-table column headers |
+| `--cc-term-head` | `#8590b0` | `#686b71` | session-table column headers |
 | `--cc-term-track` | `#3a4674` | `#d4dee3` | picker stepper track and dots |
-| `--cc-brand-fill` | `#5e76d0` | *(unchanged)* | primary button |
+| `--cc-brand-fill` | `#5470cb` | *(unchanged)* | primary button |
 | `--cc-brand-fill-hover` | `#4f6ac5` | *(unchanged)* | primary button hover |
 | `--cc-brand-fill-strong` | `#334fa9` | *(unchanged)* | hive-mark tile (Serenity) |
 | `--cc-on-brand` | `#ffffff` | *(unchanged)* | text/icons on a brand fill |
@@ -63,14 +63,14 @@ and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 | `--cc-code-active-line` | `#202b50` | `#eef7ff` | editor: current line (painted at 35%) |
 | `--cc-code-selection` | `#2b3768` | `#cfe3f7` | editor: selection |
 
-**The needs-you count colour (HIVE-210), `text-amber-count`.** Dark: the amber
-itself. Light: the amber with 30% ink (a `color-mix`, not a hex), at least 4.5:1
-on bg, panel, panel-2 and chip, where `--cc-amber` as text is about 3.5:1 on
-white. Used only for needs-you count numbers: the activity bar, the Inbox pill,
-the project rows, Home's Needs you strip, the Sessions, Agents, Work and PRs list
-headers, and the Overmind's NEEDS YOU and ASKING group heads (on the terminal
-ground, which in light is panel-2). Every other amber stays `--cc-amber`.
-Being a mix, an imported theme derives it from its own amber and ink.
+**Amber drawn as text (HIVE-210, HIVE-223), `text-amber-text`.** Dark: the
+amber itself. Light: the amber with 35% ink (a `color-mix`, not a hex), where
+`--cc-amber` as text is about 3.5:1 on white. It clears 4.5:1 on all nine
+grounds (bg, panel, panel-2, chip, hover, active, the terminal ground and both
+terminal row fills) in every built-in theme. Every amber that is text uses it:
+needs-you counts, status words, notices. Fills, borders and dots stay
+`--cc-amber` (`bg-amber`, `border-amber`). Being a mix, an imported theme
+derives it from its own amber and ink.
 
 **Colours derived from the creatures' two:**
 
@@ -116,13 +116,13 @@ ground, so they have to move with it or end up dark-on-light.
 load-bearing rather than tidy: it is also `TERM_LIGHT.bg` in `ansi.ts`, because
 xterm paints its own background while the DOM paints the padding around it. Two
 systems, one colour, or a rectangle appears at the terminal's edge.
-`--cc-term-head` is four steps darker than `--cc-muted`, which lands at 4.34:1
-on this ground — under AA.
+`--cc-term-head` is tuned to clear 4.5:1 on the terminal ground and both
+terminal row fills (HIVE-223).
 
 Note what they are *not*: terminal **text** colours. Those live only in
 `src/lib/terminal/ansi.ts` and never appear in this file or in `tokens.css` — a
 rule with a test behind it. A DOM element sitting on the terminal background
-takes its text colour from the ordinary UI tokens (`text-green`, `text-amber`,
+takes its text colour from the ordinary UI tokens (`text-green`, `text-amber-text`,
 `text-subtle`, `text-brand`), which is why the session table's status column
 matches the panels rather than the transcript.
 
@@ -160,7 +160,7 @@ working through the same variables:
 --cc-border → border-border  --cc-border-soft → border-border-soft
 --cc-ink → text-ink        --cc-muted → text-muted   --cc-subtle → text-subtle
 --cc-brand → text-brand    --cc-green → text-green
---cc-amber → text-amber    --cc-red → text-red
+--cc-amber → bg-amber      --cc-amber-text → text-amber-text    --cc-red → text-red
 --cc-chip → bg-chip        --cc-term-bg → bg-term-bg
 --cc-brand-fill → bg-brand-fill    --cc-brand-fill-hover → bg-brand-fill-hover
 --cc-brand-fill-strong → bg-brand-fill-strong
@@ -195,7 +195,7 @@ an imported theme (HIVE-80) travels the same path these two do.
 | Key | `TERM` (dark) | `TERM_LIGHT` | Mirrors (light) | Used for |
 | --- | --- | --- | --- | --- |
 | `ink` | `#dbe4ff` | `#2c2f34` | `--cc-ink` | default foreground |
-| `dim` | `#7c88b8` | `#6b6e74` | `--cc-term-head` | secondary / meta |
+| `dim` | `#7c88b8` | `#686b71` | `--cc-term-head` | secondary / meta |
 | `green` | `#7ee2b8` | `#2e6b52` | `--cc-code-string` | success, prompts |
 | `blue` | `#8fb5ff` | `#334fa9` | `--cc-code-name` | tool calls (Read/Edit/Bash lines) |
 | `amber` | `#ffc06e` | `#a1541a` | `--cc-code-number` | working spinner, questions |

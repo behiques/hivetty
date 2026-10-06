@@ -45,8 +45,8 @@ export function InboxPill({ onStage }: InboxPillProps) {
         counted && !reduced && 'motion-safe:animate-ccpulse motion-safe:[animation-iteration-count:1]',
       )}
     >
-      <Bell size={14} className="text-amber" aria-hidden />
-      <b className="tabular-nums font-semibold text-amber-count">{count > 99 ? '99+' : count}</b>
+      <Bell size={14} className="text-amber-text" aria-hidden />
+      <b className="tabular-nums font-semibold text-amber-text">{count > 99 ? '99+' : count}</b>
       <span>need you</span>
     </button>
   );

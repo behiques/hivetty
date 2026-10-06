@@ -89,7 +89,7 @@ const TONE_BORDER: Record<ThemeBannerTone, string> = {
 
 const TONE_ICON_COLOR: Record<ThemeBannerTone, string> = {
   ok: 'text-green',
-  warn: 'text-amber',
+  warn: 'text-amber-text',
   err: 'text-red',
 };
 

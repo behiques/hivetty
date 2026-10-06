@@ -55,10 +55,10 @@ describe('ConnectionItem (HIVE-196)', () => {
     ['local', {}, 'Local', 'text-muted', 'bg-green'],
     ['serving', { serving: '0.0.0.0:7420', devices: 2 }, 'Serving', 'text-muted', 'bg-brand'],
     ['attached', { link: link() }, 'mac-mini', 'text-muted', 'bg-brand'],
-    ['reconnecting', { link: link({ state: 'reconnecting' }) }, 'mac-mini', 'text-amber', 'border-amber'],
+    ['reconnecting', { link: link({ state: 'reconnecting' }) }, 'mac-mini', 'text-amber-text', 'border-amber'],
     ['disconnected', { link: link({ state: 'disconnected' }) }, 'mac-mini', 'text-muted', 'bg-red'],
-    ['exposed', { exposed: '0.0.0.0' }, 'Exposed', 'text-amber', 'bg-amber'],
-    ['demo', { desktop: false }, 'Demo', 'text-amber', 'bg-amber'],
+    ['exposed', { exposed: '0.0.0.0' }, 'Exposed', 'text-amber-text', 'bg-amber'],
+    ['demo', { desktop: false }, 'Demo', 'text-amber-text', 'bg-amber'],
   ] as const)('%s: label, tone and dot', (_state, over, label, tone, dot) => {
     const { link: status = null, ...rest } = over as { link?: RemoteLinkStatus };
     Object.assign(src, rest);

@@ -19,7 +19,7 @@ export const toCombInput = (e: CombEntity): CombInput => ({
 });
 
 const WORD_CLASS: Record<CellState, string> = {
-  morphing: 'text-green', summons: 'text-amber', failed: 'text-red', burrowed: 'text-subtle', terminal: 'text-muted',
+  morphing: 'text-green', summons: 'text-amber-text', failed: 'text-red', burrowed: 'text-subtle', terminal: 'text-muted',
 };
 
 function CombTooltip({ text, left, top }: { text: CellText; left: number; top: number }) {
@@ -67,6 +67,7 @@ export function TheComb({ label }: { label: string }) {
   const selectPlace = useSelectPlace();
   const setSessionsProject = useSetSessionsProject();
   const [hover, setHover] = useState<{ cell: CombCell; k: number } | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(entities.map((e) => [e.id, e])), [entities]);
   const projectName = useCallback(
@@ -98,6 +99,8 @@ export function TheComb({ label }: { label: string }) {
   const now = Date.now();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  /** The canvas's CSS-px-per-unit scale, for a tooltip placed without a pointer. */
+  const scale = (): number => (canvasRef.current?.getBoundingClientRect().width ?? 0) / COMB_W;
   const flock = useRef<Flyer[]>([]);
   const still = useMemo(() => (reduced ? stillFlyers(layout, needs) : null), [reduced, layout, needs]);
 
@@ -111,9 +114,9 @@ export function TheComb({ label }: { label: string }) {
       }
       const k = (w * dpr) / COMB_W;
       ctx.setTransform(k, 0, 0, k, 0, 0);
-      drawComb(ctx, layout, flyers, t, palette, k);
+      drawComb(ctx, layout, flyers, t, palette, k, focusedId);
     },
-    [layout, needs, palette, still],
+    [layout, needs, palette, still, focusedId],
   );
   useCanvasLoop(canvasRef, paint, { still: reduced ? STILL_T : null });
 
@@ -144,7 +147,18 @@ export function TheComb({ label }: { label: string }) {
       <ul className="sr-only" aria-label="The comb's cells">
         {layout.cells.map((cell) => (
           <li key={cell.id}>
-            <button type="button" onClick={() => activate(cell)}>
+            <button
+              type="button"
+              onClick={() => activate(cell)}
+              onFocus={() => {
+                setFocusedId(cell.id);
+                setHover({ cell, k: scale() });
+              }}
+              onBlur={() => {
+                setFocusedId(null);
+                setHover(null);
+              }}
+            >
               {cellLabel(cellText(cell, byId.get(cell.id), projectName, now))}
             </button>
           </li>

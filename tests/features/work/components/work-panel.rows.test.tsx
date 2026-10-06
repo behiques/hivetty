@@ -55,7 +55,7 @@ describe('WorkPanel rows (HIVE-203)', () => {
 
     expect(screen.getByText('Work')).toBeInTheDocument();
     expect(screen.getByText(/3 tickets/)).toBeInTheDocument();
-    expect(screen.getByText('1 need you')).toHaveClass('text-amber-count');
+    expect(screen.getByText('1 need you')).toHaveClass('text-amber-text');
   });
 
   it('drops need-you at zero', () => {

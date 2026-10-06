@@ -55,7 +55,7 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
         <b className="font-semibold text-ink">{name}</b>
         <span>asked a question</span>
         <span className="flex-1" />
-        <span className="tabular-nums text-amber">now</span>
+        <span className="tabular-nums text-amber-text">now</span>
         <button
           type="button"
           aria-label="Fold into the pill"

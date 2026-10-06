@@ -71,7 +71,7 @@ export function AgentsPanel() {
         <h2 className="text-ui-lg font-semibold text-ink">Agents</h2>
         <span className="text-ui-sm">
           {summons > 0 ? (
-            <span className="text-amber-count">{`${String(summons)} summons`}</span>
+            <span className="text-amber-text">{`${String(summons)} summons`}</span>
           ) : null}
           {summons > 0 && morphing > 0 ? ' · ' : null}
           {morphing > 0 ? (

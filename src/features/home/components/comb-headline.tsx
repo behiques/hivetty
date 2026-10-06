@@ -5,7 +5,7 @@ import type { CombSummary } from '@stores/hive-store';
 
 /** The hive's mood, first match wins. Only the two that ask something of you take a colour. */
 export function headline(needs: number, s: CombSummary): { text: string; tone: string } {
-  if (needs > 0) return { text: `The hive is calling · ${String(needs)} summons`, tone: 'text-amber' };
+  if (needs > 0) return { text: `The hive is calling · ${String(needs)} summons`, tone: 'text-amber-text' };
   if (s.failed > 0) return { text: 'The hive is wounded', tone: 'text-red' };
   if (s.working > 0) return { text: 'The hive is humming', tone: 'text-muted' };
   if (s.resting > 0) return { text: 'The hive is quiet', tone: 'text-muted' };

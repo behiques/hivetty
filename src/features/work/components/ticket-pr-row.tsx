@@ -64,7 +64,7 @@ export function TicketPrRow({ pr }: TicketPrRowProps) {
       </span>
 
       {findings ? (
-        <span className="shrink-0 text-[10px] font-bold text-amber">
+        <span className="shrink-0 text-[10px] font-bold text-amber-text">
           <span aria-hidden="true">{findings}</span>
           <span className="sr-only">{findingsFor}</span>
         </span>

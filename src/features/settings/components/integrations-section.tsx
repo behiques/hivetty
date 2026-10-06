@@ -95,7 +95,7 @@ function TokenSourceLine({ gh }: { gh: GhStatus }) {
   // check — so this only has to say what the remaining option is.
   if (!gh.installed) {
     return (
-      <p className="text-[12.5px] text-amber">
+      <p className="text-[12.5px] text-amber-text">
         No token source. Without <code className="font-mono">gh</code>, the only
         one left is <code className="font-mono">GH_TOKEN</code> in this
         app&rsquo;s environment.
@@ -104,7 +104,7 @@ function TokenSourceLine({ gh }: { gh: GhStatus }) {
   }
 
   return (
-    <p className="text-[12.5px] text-amber">
+    <p className="text-[12.5px] text-amber-text">
       No token source. Run <code className="font-mono">gh auth login</code>, or set{' '}
       <code className="font-mono">GH_TOKEN</code> in this app&rsquo;s environment.
     </p>
@@ -171,8 +171,8 @@ function GhSummary({
     return (
       <>
         <p className="flex items-start gap-2 text-[12.5px]">
-          <WarningCircle size={14} className="mt-px shrink-0 text-amber" />
-          <span className="text-amber">
+          <WarningCircle size={14} className="mt-px shrink-0 text-amber-text" />
+          <span className="text-amber-text">
             <code className="font-mono">gh</code> was not found.
           </span>
         </p>
@@ -195,7 +195,7 @@ function GhSummary({
       </p>
 
       {gh.error === null ? null : (
-        <p className="text-[11.5px] text-amber">
+        <p className="text-[11.5px] text-amber-text">
           Asking <code className="font-mono">gh</code> about its auth status failed:{' '}
           {gh.error}
         </p>
@@ -206,7 +206,7 @@ function GhSummary({
           Signed in as <span className="text-muted">{gh.account ?? 'unknown'}</span>.
         </p>
       ) : gh.error === null ? (
-        <p className="text-[12.5px] text-amber">
+        <p className="text-[12.5px] text-amber-text">
           Installed, but not signed in. Run{' '}
           <code className="font-mono">gh auth login</code> in any terminal.
         </p>

@@ -523,10 +523,12 @@ const MUTA_SCALE_SMALL = MUTA_SCALE * 0.7;
 
 /**
  * One frame of the comb, in logical units. `ps` is device pixels per logical
- * unit, which sets the flyers' detail and line widths.
+ * unit, which sets the flyers' detail and line widths. `focusedId` is the cell
+ * whose button holds keyboard focus, if any.
  */
 export function drawComb(
   ctx: CanvasRenderingContext2D, layout: CombLayout, flyers: Flyer[], t: number, palette: SwarmPalette, ps = 1,
+  focusedId: string | null = null,
 ): void {
   const sc = layout.mode === 'scale';
   ctx.globalAlpha = 1;
@@ -551,4 +553,14 @@ export function drawComb(
   });
 
   if (sc) for (const cell of layout.cells) if (cell.state === 'summons' || cell.state === 'failed') drawTag(ctx, cell, layout.R, palette);
+
+  // A keyboard-focused cell (HIVE-223): the sr-only buttons are invisible, so the canvas shows which one has focus.
+  const focused = focusedId === null ? undefined : layout.cells.find((cell) => cell.id === focusedId);
+  if (focused) {
+    hexPath(ctx, focused.x, focused.y, layout.R - 1);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = palette.brand;
+    ctx.globalAlpha = 1;
+    ctx.stroke();
+  }
 }

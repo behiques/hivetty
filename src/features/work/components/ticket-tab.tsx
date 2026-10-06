@@ -114,7 +114,7 @@ function TicketLinks({ ticketKey, sessionId }: { ticketKey: string; sessionId: s
           <p
             className={cn(
               'rounded-md px-2 py-1.5 text-[12px]',
-              model.verdict.tone === 'amber' ? 'bg-amber/10 text-amber' : 'text-green',
+              model.verdict.tone === 'amber' ? 'bg-amber/10 text-amber-text' : 'text-green',
             )}
           >
             <b>{model.verdict.lead}</b>

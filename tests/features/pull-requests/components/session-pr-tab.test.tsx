@@ -173,7 +173,7 @@ describe('SessionPrTab review and threads (HIVE-209)', () => {
     render(<SessionPrTab sessionId="s1" sessionPr={live} />);
     const rows = screen.getAllByTestId('holder').map((el) => el.textContent);
     expect(rows).toEqual(['shipper took it · checks running', 'dana approved', 'acr review requested']);
-    expect(screen.getByText('took it · checks running')).toHaveClass('text-amber');
+    expect(screen.getByText('took it · checks running')).toHaveClass('text-amber-text');
   });
 
   it('Review is not drawn when nobody holds or reviews it', () => {

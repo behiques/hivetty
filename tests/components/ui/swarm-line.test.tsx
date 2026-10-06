@@ -26,7 +26,7 @@ describe('SwarmLine', () => {
     const line = document.querySelector('[data-swarm-line]');
 
     expect(line).toHaveClass('text-muted');
-    expect(line?.className).not.toContain('text-amber');
+    expect(line?.className).not.toContain('text-amber-text');
     expect(line?.className).not.toContain('text-red');
   });
 });
