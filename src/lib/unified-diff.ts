@@ -138,29 +138,35 @@ export function parseUnifiedDiff(text: string): DiffFile[] {
 export interface SplitRow {
   left: DiffLine | null;
   right: DiffLine | null;
+  /** `left`'s index in `hunk.lines`, so a click selects it without a search. */
+  leftAt: number | null;
+  rightAt: number | null;
 }
 
 /** Split's rows: context with itself, a deletion run beside the addition run that follows it. */
 export function splitRows(hunk: DiffHunk): SplitRow[] {
   const rows: SplitRow[] = [];
-  let dels: DiffLine[] = [];
-  let adds: DiffLine[] = [];
+  let dels: number[] = [];
+  let adds: number[] = [];
+  const line = (i: number | undefined) => (i === undefined ? null : (hunk.lines[i] ?? null));
   const flush = () => {
-    for (let i = 0; i < Math.max(dels.length, adds.length); i += 1) rows.push({ left: dels[i] ?? null, right: adds[i] ?? null });
+    for (let i = 0; i < Math.max(dels.length, adds.length); i += 1) {
+      rows.push({ left: line(dels[i]), right: line(adds[i]), leftAt: dels[i] ?? null, rightAt: adds[i] ?? null });
+    }
     dels = [];
     adds = [];
   };
-  for (const line of hunk.lines) {
-    if (line.kind === 'del') {
+  hunk.lines.forEach((l, i) => {
+    if (l.kind === 'del') {
       if (adds.length > 0) flush();
-      dels.push(line);
-    } else if (line.kind === 'add') {
-      adds.push(line);
+      dels.push(i);
+    } else if (l.kind === 'add') {
+      adds.push(i);
     } else {
       flush();
-      rows.push({ left: line, right: line });
+      rows.push({ left: l, right: l, leftAt: i, rightAt: i });
     }
-  }
+  });
   flush();
   return rows;
 }
