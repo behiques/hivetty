@@ -1,7 +1,7 @@
 # Agents and the ledger
 
 **Scope:** two things that belong together — the **ledger**, one append-only log
-every party in The Hive reads from and writes to, and the **agent definition**,
+every party in Hive TTY reads from and writes to, and the **agent definition**,
 the file that makes a party an agent in the first place.
 
 Load this when working on `electron/main/ledger/`, `electron/main/agents/`,
@@ -9,7 +9,7 @@ Load this when working on `electron/main/ledger/`, `electron/main/agents/`,
 two ledger routes, the renderer's mirrors of either (`use-ledger-sync.ts`,
 `use-agents-sync.ts`, the `useLedger*` and `useAgent*` selectors in
 `hive-store.ts`), the `ledger` / `ask` / `answer` console verbs, Settings ›
-Agents, or the agents rail and `src/features/agents/`.
+Agents, or the Agents panel and `src/features/agents/`.
 
 > **TL;DR**
 > - The ledger is one append-only log, `~/.hive/ledger/YYYY-MM-DD.jsonl`, one file per day.
@@ -572,7 +572,7 @@ touches `runsSinceRotate`, `pendingSession` or `sessionUuid`; the row stays
 status — from the closing run **and** from any ask the agent still has open,
 because a sibling that closed while this one was live left its question behind,
 and a resting status must never hide it. A task close also touches neither
-`lastRunAt` — the `onchange` watermark and the rail's "last used" — nor
+`lastRunAt` — the `onchange` watermark and the Agents panel's "last used" — nor
 `skipsSinceRun`, because a task run reads no inbox and is not a scheduled wake:
 moving either would hide an ask that arrived before the close, or erase the skip
 signal. `kill` stops every run under the name. The scheduler's flush, for an
@@ -590,7 +590,7 @@ row in the receipt columns — `●` standing, `○` task, `running`, `Took` cou
 up, the prompt on the reason line — and groups its output by `RunLine.run`,
 because three processes write into one buffer. `Turns` reads `—` on a live row
 rather than `0`: the fold marks a turn only at the CLI's `result` event, so the
-count is not knowable until the receipt. The rail and the fleet say `working ·3`.
+count is not knowable until the receipt. The Agents panel and the fleet say `working ·3`.
 
 **Two limits, gone.** Since HIVE-187 a permission answer resumes the lane whose
 run asked, carrying the one-time grant, and a sibling lane never receives it.
@@ -834,10 +834,10 @@ changed it to, so the agent that reads its answer back can tell a rubber stamp
 from a rewrite and can still match the body against the closed set it offered.
 
 A click on an ask's **toast** does not answer it and does not dismiss its row:
-it reveals the card. Main sends `{ type: 'ask' }` on `notifications:activate`
+it reveals the card. Main sends `{ type: 'ask', thread }` on `notifications:activate`
 — the same channel a session's click uses, widened into a union — and the
-renderer answers it with `revealRailTab('inbox')`, because main may not touch
-the rail and the rail can be sitting on another tab or collapsed outright.
+renderer answers it with `openInboxDrawer(thread)`, because main may not touch
+the renderer's view and the drawer is the one place an ask's card is drawn.
 
 ## The console verbs
 
@@ -884,7 +884,7 @@ functions in `electron/shared/ledger-derive.ts`:
   `done` and `failed` are the same rule as `answer` on purpose, and
   `ledger/notify.ts` dismisses the card for all three symmetrically. Left
   apart, the two halves disagreed on screen: a `done` dismissed the card while
-  the ask stayed open, so the left rail's Agents badge — counted off the
+  the ask stayed open, so the old Agents badge — counted off the
   ledger, immune to notification state — stayed lit with nothing behind it;
   and a `failed` closed nothing at all, so the user kept a live card whose
   buttons `append` would refuse.
@@ -917,14 +917,43 @@ Two more derivations read the same way (HIVE-171). `isShipping(entries, slug, n)
 whether the shipper's newest `post` for a PR, `meta.pr` and `meta.repo` compared against
 the whole `owner/name`, is at any stage but `closed`; it answers false once the shipper has
 released its `owner/name#N` claim. The card shows `shipping`, not the stage: most stages
-repeat a GitHub badge. `buildProgressFor(entries, key)` is the builder's newest for a
-ticket. The PR card and the ticket card read them through `useShipping` and
+repeat a GitHub badge. `buildProgressFor(entries, key)` is the newest `post` from **any**
+agent whose `meta.ticket` names the key and whose `meta.stage` is a string, returned as
+`{ from, stage, task? }` so the card can say whose it was (HIVE-203; it read only the
+builder's before). The PR card and the ticket card read them through `useShipping` and
 `useBuildProgress`; nothing is stored. Both keys are named in the ledger tools' `meta`
 description, because that description is the only place the model is told the shape.
 `agentSiteFor(entries, agent)` (HIVE-172) is the same reading for the agent's
 newest `meta.worktree` and `meta.checkout`, and it too stops at the agent's own
 `release`: the shipper removes the worktree after the merge. The console's
 `term <agent>` maps the checkout to a project and starts a shell in the worktree.
+
+`shipStage(entries, slug, n)` turns that yes or no into the stage: the newest
+shipper post's `meta.stage`, `'intake'` from the claim before any post, `null`
+after the release or `closed`. `isShipping` is `shipStage(...) !== null`.
+The shipper's asks to `reply-to` carry `meta: { pr, repo }`, so an ask naming a
+PR of yours (or a `gh pr merge … --repo` permission card) reads that PR as
+SUMMONS (HIVE-215).
+
+The PR page (HIVE-205) reads the same log four more ways. `shipTrack(entries,
+slug, n, now)` walks the shipper's entries naming the PR oldest first into its
+eight stops (`SHIP_STOPS`), each with when it was first reached, the time spent
+there over every visit, and its holder: `acr` or `fixer` when the shipper asked
+one about the PR during the visit (by `meta.pr` + `meta.repo`, or `slug#n` in the
+ask's body), else `shipper`. `prEvents` is every entry naming the PR, for the
+Conversation's Everything; `reviewUrls` is acr's `meta.review_url`s, so a GitHub
+review written through Hive TTY shows as acr; `prOpener` is who sent the
+shipper's intake ask. `mergeAsk(open, slug, n)` returns the shipper's open
+`gh pr merge … --repo` permission card itself (`mergeWaiting` is
+`mergeAsk(...) !== undefined`): the page's Merge answers that card with
+`allow-once`, the narrowest rung, exactly as the Inbox card would. Its **Ask acr
+to look again** posts `{ to: 'acr', kind: 'ask', body: 'Review <url> again',
+meta: { pr, repo } }`; a refusal (acr not a party) shows inline.
+
+A read can be narrowed to one ticket (HIVE-203): `LedgerReadQuery.ticket` keeps the
+entries whose `meta.ticket` names the key, case-insensitively, so `ledger:list
+{ ticket }` is a ticket's whole history in one call. The guard admits a string of at
+most 64 characters. The MCP `ledger_read` tool does not expose it.
 
 ## The routes
 
@@ -1026,7 +1055,7 @@ already has.
 
 ## The MCP host
 
-Every `claude` session The Hive launches is handed `--mcp-config` pointing at
+Every `claude` session Hive TTY launches is handed `--mcp-config` pointing at
 a generated file (`electron/main/mcp/config.ts`) naming one server: the built
 output of `electron/mcp-host/`, run as `${execPath} out/main/mcp-host.js`
 with `ELECTRON_RUN_AS_NODE=1` so the app's own binary runs it as plain Node
@@ -1050,7 +1079,7 @@ guarantee: the receiver's per-launch token is shared by every session it
 spawns, so a model with shell access could still `curl` the
 receiver directly using another session's header value. Closing that is
 tracked separately, not attempted here. If any of the three is missing — the
-process was started outside The Hive, or by hand in a plain terminal —
+process was started outside Hive TTY, or by hand in a plain terminal —
 `createHandlers` still lists all sixteen tools (so
 `/mcp` shows a connected server, not a broken one) but every *call* answers
 with a sentence explaining why the ledger is out of reach, rather than the
@@ -1077,9 +1106,9 @@ enough to earn their own schema.
 `--permission-prompt-tool` and the model is never meant to call, and `agents`,
 described next. That array is the ledger vocabulary the agent
 preamble teaches — one entry per ledger kind — and neither of these writes an
-entry. `tools/list` reports sixteen, in that order: the nine, then `agents`,
-`projects` and `pr` (HIVE-173), the three Jira tools (HIVE-174), then
-`approve` last.
+entry. `tools/list` reports eighteen, in that order: the nine, then `agents`,
+`projects` and `pr` (HIVE-173), the three Jira tools (HIVE-174) and
+`jira_users` (HIVE-216), `project_auto_merge`, then `approve` last.
 
 ### The agents directory: `mcp__hive__agents`
 
@@ -1215,7 +1244,7 @@ a tool rather than by opening `~/.hive/config.json`. The projection
 (`projectsDirectoryFor`, beside `agentsDirectoryFor`) is a whitelist: `env`,
 `shell` and `claudeCommand` never cross.
 
-`mcp__hive__pr { repo: "owner/name", number }` answers the Hive's own
+`mcp__hive__pr { repo: "owner/name", number }` answers Hive TTY's own
 `PrRecord` for one PR, from the same GitHub sweep the PRs panel runs, run
 fresh on each call since main keeps no snapshot of it:
 `state`, `findings` (unresolved review threads), `checks`, `branch`, `url`,
@@ -1235,9 +1264,9 @@ honest defaults, an empty list and "not wired", so a receiver composed without
 a config (the live suites) still answers. Both are reads, and both are in the
 standing grants every agent holds.
 
-### Jira through the Hive: `mcp__hive__jira_get`, `jira_transition`, `jira_comment`
+### Jira through Hive TTY: `mcp__hive__jira_get`, `jira_transition`, `jira_comment`, `jira_users`
 
-Three tools (HIVE-174) over the Jira integration the Work tab already uses,
+Three tools (HIVE-174), and a fourth (HIVE-216), over the Jira integration the Work tab already uses,
 through the token the app holds. An agent, or a container, reads and writes
 tickets with nothing on its PATH and no Atlassian credential in its
 environment; the skills prefer them and fall back to `jira-writer` where they
@@ -1268,14 +1297,27 @@ varies by project. An issue assigned to someone else is left alone. The
 outcome is one sentence in `assigned`; a failed assign lands there too,
 never as a failure of a move that already applied.
 
-`jira_comment { key, markdown }` is `addComment`, unchanged.
+`jira_comment { key, markdown, mentions? }` is `addComment`. `mentions` (HIVE-216) is at
+most ten `{ accountId, name }`, placed as ADF `mention` nodes at the front of the
+comment, and a comment may be mentions alone with `markdown` empty. The account ids
+come from `jira_users { query }`, a read over `/rest/api/3/user/search` that answers
+up to eight active people, each an `accountId` and a `displayName`.
+
+**Via Hive TTY (HIVE-216).** When the receiver's caller header names a known agent
+that is not also a session, the comment is posted with the comment property
+`hive.via = { agent }`; a session's comment, and every renderer comment, carries
+none, and no payload can set it. `jira.comments` reads it back
+(`expand=properties`) as `JiraComment.via`, keeping only Hive TTY's key and a valid
+agent name, and the ticket page draws it. It is a label for drawing, never a grant
+and never proof: anyone who can edit the issue can write a property, so nothing
+reads `via` to decide anything, and an agent reading `jira_get` should not either.
 
 **The two writes are consented, not standing.** A transition fires
 automation nobody can take back and a comment is the person's name on a
 ticket, so neither is in `HIVE_STANDING_GRANTS`: the builder and the shipper
 list `mcp__hive__jira_transition` in `tools:`, nobody shipped lists
 `jira_comment`, and an agent without the entry gets the ordinary permission
-ask and inbox card. `jira_get` is a read and stands.
+ask and inbox card. `jira_get` and `jira_users` are reads and stand.
 
 **`project_auto_merge { project, on }` asks every time (retro B).** It sets a
 project's `autoMerge`, found by id or key, and answers the directory `projects`
@@ -1294,11 +1336,13 @@ asked, so the tool is in `HIVE_CONSENT_TOOLS` and in `ONCE_ONLY_TOOLS`
 The route is `/projects/auto-merge`. A landed write is pushed to the renderer
 on `config:changed`, so Settings › Projects shows it without a reload.
 
-The comments read is the oldest `JIRA_MAX_COMMENTS`; a full page is named in
-`partial`, because "every comment" and "the first fifty" are different
-answers.
+The comments read is the oldest `JIRA_MAX_COMMENTS`. `jira.comments` answers a page
+with Jira's `total`, and a thread longer than the cap is named in `partial` with that
+total, because "every comment" and "the first fifty" are different answers. The
+renderer can ask for the newest page instead (`newest: true`), still oldest first
+(HIVE-203).
 
-**The routes.** `/jira/get`, `/jira/transition` and `/jira/comment`, one
+**The routes.** `/jira/get`, `/jira/transition`, `/jira/comment` and `/jira/users`, one
 handler shape: refuse, cap (`JIRA_TOOL_MAX_BYTES`), parse with the same guards
 the IPC channels use, answer. Jira's own refusals travel inside the 200 as a
 `JiraResult`, so a model reads "HIVE-9 does not exist" rather than a transport
@@ -1360,7 +1404,7 @@ starts a comment" silently truncates the first:
 
 ### What `wake.on` names, and who names it
 
-Three shapes, and all three strings are **The Hive's** rather than any external
+Three shapes, and all three strings are **Hive TTY's** rather than any external
 service's — which matters most for the middle one, because it reads like a Slack
 event name and is not one.
 
@@ -1368,7 +1412,7 @@ event name and is not one.
 | --- | --- |
 | `ledger` | An `ask` or `answer` whose `to` is this agent wakes it, whoever wrote it: the overmind through the console's `ask` verb, a terminal session through `ledger_ask`, or another agent through the same tools. A broadcast (no `to`) wakes nobody — parties read those on their own schedule. |
 | `slack.mention` | *Search my mentions on the wakes this agent already takes.* Slack's real `app_mention` fires for mentions of a Slack **app**, never of a person, so there is no push to subscribe to. It adds no wakes of its own. |
-| `slack.app_mention` | A genuine push trigger: Slack's own `app_mention`, for mentions of the Hive's app. Requires Socket Mode on and both tokens stored. An `@hive <agent> <task>` from an allow-listed author is a task run instead; see below. |
+| `slack.app_mention` | A genuine push trigger: Slack's own `app_mention`, for mentions of Hive TTY's app. Requires Socket Mode on and both tokens stored. An `@hive <agent> <task>` from an allow-listed author is a task run instead; see below. |
 | `slack.channel:#name` | A genuine push trigger, requiring Socket Mode and the app being a member of that channel. Inert without it. |
 
 `ledger` is the one worth understanding before turning it off, because its
@@ -1432,7 +1476,7 @@ a server arrived by, a token does **not** transfer between routes — a server
 named `slack` in a `--mcp-config` file reports `needs-auth` even when an
 identical URL is already authorised under a plugin's own delivery, because the
 two keys differ and Claude Code has no way to know they name the same service.
-This is why the Hive cannot piggyback on a plugin-based Slack sign-in the user
+This is why Hive TTY cannot piggyback on a plugin-based Slack sign-in the user
 already has and needs its own sign-in flow (`signInToSlack`, `login.ts`). `tools`
 decides which of the tools that exist may run unattended, and it is worth
 wording as *without asking* rather than *allowed*. Naming a system while
@@ -1585,7 +1629,7 @@ A Hive skill is its whole *folder* rather than a single SKILL.md, and that
 change deliberately did not reach here. This module resolves **names**, and a name is
 what an agent definition declares — the contents of the folder behind it are the
 plugin mirror's business, and `~/.claude/skills` and installed plugins are
-directories The Hive reads and never manages.
+directories Hive TTY reads and never manages.
 
 Making it a real sandbox would mean `--restricted`, which ignores the user's
 settings sources entirely — and would therefore cut off exactly the external
@@ -1593,14 +1637,14 @@ skills the widening exists to allow. That trade was declined: the wake
 command carries `--setting-sources ""` instead, which stops the user's own
 `settings.json` (and the `permissions.defaultMode: "auto"` a developer machine
 routinely carries) from leaking into an unattended turn, while `--settings`
-still applies alongside it so the Hive's own hooks keep firing. The skills stay
+still applies alongside it so Hive TTY's own hooks keep firing. The skills stay
 reachable and the field stays a declaration.
 
 Two details worth knowing before changing `available.ts`:
 
 - **`isSkillFolder`, not `entry.isDirectory()`.** `readdir` reports `lstat`
   semantics, so a symlinked skill folder answers `false` — and a personal skills
-  folder is *more* likely to be symlinked than the Hive's, because that is how
+  folder is *more* likely to be symlinked than Hive TTY's, because that is how
   dotfile repos carry skills. `read.ts` fixed this once and the helper is shared
   rather than copied, so it cannot be fixed twice and broken a third time.
 - **A user-scoped install beats the array order.** `installed_plugins.json` lists
@@ -1679,7 +1723,7 @@ which is why `approve` never lets a thrown error surface as an MCP error:
 every path through `approve` itself returns a `decision(...)` instead. The one
 place a permission prompt still answers with `isError: true` is the
 unreachable-environment branch in `electron/mcp-host/host.ts`, which refuses
-*every* call — `approve` included — when the host was started outside The Hive.
+*every* call — `approve` included — when the host was started outside Hive TTY.
 That is deliberate and safe precisely because `isError` fails closed: a Hive
 that is not running denies rather than allows.
 
@@ -2353,8 +2397,8 @@ line is derived rather than chosen:
   (`TERMINAL_FONT_SIZES`); the ledger is chrome at a fixed size showing short
   correspondence. Giving the moving one the remainder is what keeps both right
   at every size.
-- **280px** is the activity rail's own text measure — 316px less 14px of padding
-  either side. A ledger entry and an Inbox card show the same thing, and
+- **280px** is the Inbox card's text measure from the first frame — 316px less
+  14px of padding either side. A ledger entry and an Inbox card show the same thing, and
   one turns into the other.
 - **380px** because a tool line is `<name> <arg>` with `ARG_LIMIT = 60` in
   `run-log.ts`, so the longest line main can emit is ~95 characters. Past ~110
@@ -2368,8 +2412,8 @@ unbreakable 95-character tool line would push the grid past the stage and give
 the whole app a horizontal scrollbar.
 
 **A container query, not a media query**, and the first in this codebase. The
-rails drag from their floors (320px and 316px) up to 520px each, so a 1920px
-window can hold a 700px stage — the viewport width simply is not the question
+panels open and close beside the stage (and the list panel overlays it under
+1,200px), so the same window can hold very different stages — the viewport width simply is not the question
 being asked. The stack point is 720px: the default window leaves the stage
 804px, and the 800px it opened at was four pixels from flipping.
 

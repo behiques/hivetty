@@ -1,6 +1,6 @@
 # The project explorer and the editor
 
-**Scope:** the right rail's tree, the CodeMirror editor on the centre stage, and
+**Scope:** the session panel's Files tree, the CodeMirror editor on the centre stage, and
 the filesystem IPC surface underneath both.
 
 This is the first feature in the app that reads the user's source tree. Most of
@@ -159,9 +159,9 @@ argument — there is only ever one thing to stop. A watcher per visited project
 would be a file-descriptor leak with a long fuse.
 
 **The renderer subscribes at the composition root**, in `useProjectWatcher`, not
-in `ExplorerPanel`. It started in the panel and that was a bug: the rail swaps
-panels and the shell can unmount the rail entirely, so freshness died the moment
-the user looked at the Inbox with a file open — no silent reload, no
+in `ExplorerPanel`. It started in the panel and that was a bug: the session panel
+swaps tabs and closes to its strip, so freshness died the moment the user
+looked at another tab with a file open — no silent reload, no
 `staleOnDisk`, and the next save refused with a conflict they were never warned
 about. The tree is only one consumer; the editor is the other, and it outlives
 the panel.
@@ -210,6 +210,31 @@ the app is already organised around "which session am I watching", the session
 already names its project, and a second selector would be one more thing to keep
 in sync with the first. The orchestrator tab — which names no session — falls
 back to the last project the tree was rooted at, then to the first mapped one.
+
+**Where it lives.** The tree is the session panel's **Files** tab (HIVE-201),
+which hands `ExplorerPanel` the session's main id as `changesId`
+(`src/components/layout/session-panel.tsx:109`). A terminal on stage gets Files
+too: `use-explorer-project.ts` resolves a terminal's project and cwd as it does
+a session's, with no session to act for.
+
+### Changed in this session (HIVE-201)
+
+With a `changesId`, the panel shows "Changed in this session" above the tree
+(`src/features/explorer/components/changed-files.tsx:18`) and an `M` or `A`
+beside each changed file in it (`tree-node.tsx:73`). A terminal has no main id,
+passes no `changesId`, and shows neither.
+
+The list is not git's. It comes from the session's transcript:
+`electron/main/sessions/changed-files.ts` folds each `toolUseResult`'s
+`structuredPatch` into per-file `+N −M` tallies, and `A` means the first write
+it saw was a create. Only the main agent counts; `isSidechain` lines are a
+subagent's and are skipped. The list carries across `/clear`, which starts a new
+transcript file, and goes with the session. A main-agent `Edit`, `Write`,
+`MultiEdit` or `NotebookEdit` tells main to read on from where it stopped
+(`electron/main/hooks/receiver.ts`, `onFileTool`), and each entity has a
+generation, so a read still in flight when the session is dropped publishes
+nothing. Paths outside the tree's root are left out, since the fs seam would
+refuse to open them.
 
 ### It also follows the session *into a worktree*
 
@@ -293,6 +318,20 @@ to plain text. Rebuilds are not rare — the watcher's silent reload changes
 `value`, which is the feature's headline case. Highlighting used to disappear
 the first time an agent touched the open file. An extension with no entry opens as plain text with line numbers,
 wrapping and search intact — a supported outcome, not a gap.
+
+### A PR's file in the editor (HIVE-207)
+
+The PR page's "Open in the editor" (Files) and "Open the file" (a thread card)
+both go through `useOpenFileAt().openPath(projectId, sessionId, path, { line })`,
+built once in `pr-page.tsx`. `projectId` is the PR's live session's project, else
+the configured project whose folder name is the repository. `sessionId` is that
+session (`pr.session`) when it is live, so main roots the read at its worktree
+(`electron/main/fs/session-roots.ts` proves it a linked worktree of the project).
+With no session it is the project checkout as it is on disk, which may be on
+another branch than the PR, so the line can point elsewhere. A builder or fixer
+worktree under `~/.hive/work` is outside every project and unreachable unless a
+session works there. The line is the diff's selected line, else the first changed
+line.
 
 ## Placement, and the one rule that unifies it
 
@@ -379,6 +418,8 @@ the coarse case is ever actually hit, and the wrong default.
 - Image and binary previews — refused with a reason, not rendered.
 - Creating, renaming, deleting or moving files. The tree reads; the terminal is
   where the filesystem is mutated, and it already is.
-- Git status decoration and a diff view.
+- Git status decoration and a diff view. The `M` and `A` marks are not that:
+  they say what this session's own edits did, from its transcript, and a file
+  changed by hand, or committed already, carries none.
 - Multiple projects in one tree.
 - Restoring open files across launches — `editor-store` is not persisted.

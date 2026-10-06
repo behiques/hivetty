@@ -1,6 +1,6 @@
 # Server mode
 
-The Hive can run on an always-on Mac and hold the sessions, the agents, the
+Hive TTY can run on an always-on Mac and hold the sessions, the agents, the
 ledger and the hook receiver there. The desktop app on any other machine
 attaches to it and becomes a window onto it, from home or from a hotel four
 time zones away.
@@ -72,7 +72,7 @@ digest of each, in the config file, and needs no keychain to check one.
 
 ## 1. Prepare the server
 
-1. **Install The Hive** from the dmg into `/Applications`, and open it once from
+1. **Install Hive TTY** from the dmg into `/Applications`, and open it once from
    Finder so Gatekeeper records it. Quit it again; launchd starts it from step 4
    on. Use a Developer ID signed build if you want the server to update itself
    (see [Updates](#updates)).
@@ -210,7 +210,7 @@ What each part is for:
   Tailscale a head start, though nothing depends on that: a bind that fails
   because the tailnet address is not up yet is retried, after 5 s and then
   doubling to once a minute, until it lands.
-- **Do not also add The Hive to Login Items.** Two copies at login means one
+- **Do not also add Hive TTY to Login Items.** Two copies at login means one
   loses the single-instance lock and quits, and launchd relaunches it every
   twenty seconds forever.
 
@@ -224,9 +224,9 @@ launchctl bootout gui/$(id -u)/com.behiques.the-hive.server             # stop
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.the-hive.server.plist  # start
 ```
 
-A running server has a menu-bar item whose tooltip reads *The Hive · serving*.
+A running server has a menu-bar item whose tooltip reads *Hive TTY · serving*.
 Its menu shows the bound address (or *Not serving* with the reason), the paired
-devices, *Pair a device…* and *Open The Hive*. The dock
+devices, *Pair a device…* and *Open Hive TTY*. The dock
 icon is hidden, and no unread badge appears there: each attached client badges
 its own dock.
 
@@ -336,14 +336,25 @@ the error frame, never a silent change on the server:
 - **`skills:file:drop`** (`REMOTE_REFUSED`): its safety argument, that preload
   minted every source path from a real drop on this device, cannot cross a
   socket.
-- **The nine process-local channels** (`PROCESS_LOCAL`): `app:info`,
+- **The ten process-local channels** (`PROCESS_LOCAL`): `app:info`,
   `updates:status`, `updates:check`, `config:set-remote`, `config:get-remote`,
-  `remote:pair`, `remote:forget`, `notifications:delivery` and
-  `notifications:badge`. Each is about the machine that answers it. A shipped
-  client answers them itself, so a hand-built frame asking the server to forget
-  its credential, change its attachment or run its updater is refused.
+  `remote:pair`, `remote:forget`, `remote:dial-now`, `notifications:delivery`
+  and `notifications:badge`. Each is about the machine that answers it. A
+  shipped client answers them itself, so a hand-built frame asking the server to
+  forget its credential, change its attachment, restart a reconnect loop it does
+  not have or run its updater is refused. `remote:dial-now` is the client's
+  **Try now**: it restarts that client's own reconnect loop, which is why it has
+  to answer with the socket down.
 - **`notifications:act` carrying `url`, `update.download` or `update.install`.**
   The fleet actions (`ask`, `session`, `agent`, `none`) still cross.
+
+**Where an answer was given (HIVE-218).** `ledger:answer` stamps
+`meta.answeredOn` in main. An answer that arrives over a socket gets the paired
+device's name (`--pair "<name>"`). An answer from the serving machine's own
+window gets its `hostname()`, the name clients already show for the server. A
+machine that is not serving stamps nothing. Any `answeredOn` the caller sent is
+dropped first. The Inbox uses it to say "answered on mac-mini" when a card
+leaves.
 
 ## Reaching it from anywhere
 
@@ -424,6 +435,6 @@ bytes at normal flush sizes.
 | Client gets a 403 | It dialed a name the server did not bind. Use the exact `bind.host` string. The server's log names the refused host. |
 | Client says the versions differ | Update whichever side the message names. |
 | Jira or Slack shows signed out after a reboot | The login keychain is locked: automatic login is off, or the keychain password differs from the account password. |
-| Log says another server is already running for this config | Two copies started. Remove The Hive from Login Items; keep only the LaunchAgent. |
+| Log says another server is already running for this config | Two copies started. Remove Hive TTY from Login Items; keep only the LaunchAgent. |
 | Server never updates | Something is always live. Check for a long-lived session or a busy agent schedule, or update by hand. |
 | Menu-bar item shows the text "Hive" | The bundle is missing `Contents/Resources/tray/`. Reinstall. |

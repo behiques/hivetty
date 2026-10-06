@@ -55,6 +55,27 @@ placeholder are how. It will never have real terminals.
 `src/` is not moved, wrapped, or forked. `electron/` is a sibling, which is what
 keeps every ESLint import zone, alias site and `tests/` mirror intact.
 
+## The splash
+
+`splash.html` is a third document beside `index.html` and `about.html`: no React,
+no store, no preload, no channel. It holds a 960×600 chamber whose copy is fixed
+and whose right side is a live canvas, the brood world: a seed rises out of the
+creep and a hundred comb chambers bud from it into a spherical volume that nothing
+outlines, turning on layered orbits so the globe shows only through their motion.
+Each log line lands on them (4 sessions light green inside sealed chambers, a
+shiver, the creep spreads, 2 chambers pulse amber), "hive cluster online" is the
+hive's double heartbeat and lights a ring of spores, and seven mutalisks tear out
+of their chambers and circle that ring, the comb globe's flight (HIVE-212). `src/splash/globe.ts` is the geometry
+and the frame, `src/splash/stage.ts` the palette and the loop; the clock is the
+document's, the one `chamber.ts` schedules the copy on. Under reduced motion it
+draws one frame at `GLOBE_STILL_T` and schedules none. About draws the same globe,
+formed and turning.
+
+Its fence: the splash may import from `src/lib/` only the mutalisk, its palette
+type and tone, the Brood kit, the comb's `MUTA_SCALE` and `lib/theme/colour` (`eslint.config.mjs`, proved both ways by
+`pnpm verify:boundaries`). The CSP has no `media-src`: the splash used to inline
+an mp4 and needed one; nothing in the app plays media now.
+
 ## Processes
 
 | | Runs | May import | Never |
@@ -130,7 +151,7 @@ rather than `node:crypto`.
 ## The workspace config
 
 `~/.hive/config.json` — overridable by `HIVE_CONFIG_PATH` — maps a project id
-shown in the left rail to a real directory on this machine. It is the only thing
+shown in the Sessions panel to a real directory on this machine. It is the only thing
 that makes a PTY's `cwd` real; everything else about a project is still fixtures.
 
 `~/.hive/skills/<name>/SKILL.md` is its sibling: the custom slash
@@ -220,7 +241,7 @@ every record that any session had run: `hive-store` boots empty by design and
 the session registry is a `Map` cleared on quit. Claude Code itself does not
 behave that way — it writes each conversation to
 `~/.claude/projects/<escaped-cwd>/<uuid>.jsonl` and lists them again on the next
-launch — and this is the equivalent for the Hive's own rows.
+launch — and this is the equivalent for Hive TTY's own rows.
 
 Main authors it, from the four moments it already knows something worth keeping:
 the spawn (which is also the only moment the `--session-id` uuid can be
@@ -246,7 +267,7 @@ launch restored the id.
 **Nothing is named on the command line, and that is the feature.**
 
 Sessions used to be spawned as `claude --name sess-07` so the agent's prompt
-box, its `/resume` picker and its terminal title agreed with the rail. The cost
+box, its `/resume` picker and its terminal title agreed with the Sessions list. The cost
 of that agreement turned out to be the name itself: **`--name` suppresses Claude
 Code's own titling entirely.** Two arms of a real `claude`, same prompt, same
 moment, differing in nothing else:
@@ -258,13 +279,13 @@ moment, differing in nothing else:
 ```
 
 Every session this app had ever spawned carried a `custom-title` and no
-`ai-title` for that reason. The Hive was not failing to infer names; it was
+`ai-title` for that reason. Hive TTY was not failing to infer names; it was
 stopping Claude from inferring them.
 
 So a session now opens unnamed, Claude titles it from the conversation, and the
 title arrives on the OSC-0 stream `readTitle` already parses — no new
 transport and no second inference engine. `hiveNameFromTitle`
-(`electron/shared/session-contract.ts`) spells it the way the rail spells names:
+(`electron/shared/session-contract.ts`) spells it the way the Sessions list spells names:
 lower-cased, hyphenated, at most four words, with any ticket key upper-cased and
 hoisted to the front (`back key interception abc-123` →
 `ABC-123-back-key-interception`).
@@ -298,7 +319,7 @@ is the *terminal title* an unnamed session writes, and the splash banner
 the session. Neither is the box label.
 
 The row is untouched either way: `nameFromTitle` maps that title to the
-*absence* of a name, so the rail keeps `sess-07`, and two unnamed sessions stay
+*absence* of a name, so the list keeps `sess-07`, and two unnamed sessions stay
 distinct because they keep their distinct ids rather than sharing a title.
 
 Three properties are worth knowing before changing it:
@@ -547,7 +568,7 @@ by design. The plugin-hosted ones are not free: a single Telegram channel MCP
 server measured ~96 MB RSS, and its `start` script runs `bun install` on every
 session start.
 
-The Hive opts out of that path already — `hookSettings` sets
+Hive TTY opts out of that path already — `hookSettings` sets
 `disableAgentView: true` unconditionally, which also disables the on-demand
 daemon inside Hive sessions, so a Hive terminal's MCP servers are ordinary
 descendants of its shell and are swept with it.
@@ -663,7 +684,7 @@ A socket that dies after a successful attach is dialled again, on 1s, 2s, 4s,
 on its own: the sessions are running on the far machine, so a local surface
 would show an empty fleet and read as data loss, and a budget that expires
 strands whoever's server took longer to come back than the budget allowed. What
-makes indefinite retrying honest is that it says so — the header chip goes amber,
+makes indefinite retrying honest is that it says so — the connection item at the bar's foot goes amber,
 the attach pane names the attempt and the wait, and **Work locally** is the exit.
 Waking from sleep restarts the schedule and dials at once.
 

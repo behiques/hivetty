@@ -1,22 +1,23 @@
 # Files and the editor
 
-The **Explorer** tab (right rail) shows the repository of the session you are looking at.
-Click a file to open it in a CodeMirror editor on the centre stage.
+The **Files** tab of the session panel shows the repository of the session you are looking at.
+Click a file to open it in a CodeMirror editor on the stage.
 
 **On this page:** [Browse the project](#browse-the-project) · [Search](#search) ·
 [Edit a file](#edit-a-file) · [When the file changes on disk](#when-the-file-changes-on-disk) ·
-[Editor layouts](#editor-layouts) · [Limits](#limits)
+[Changed files](#changed-files) · [Editor layouts](#editor-layouts) · [Limits](#limits)
 
-![The explorer on the right, README.md open in the editor, the terminal one tab away](../assets/guide/04-explorer-editor.png)
+![The Files tab in the session panel, README.md open in the editor, the terminal one tab away](../assets/guide/04-explorer-editor.png)
 
 ## Browse the project
 
 - The tree follows the active session. On the overmind it shows the last project you looked
   at. If a session moves into a worktree under `.claude/worktrees/`, the tree follows it.
-- **Refresh** and **Collapse all** sit in the tab's header, with the current branch.
+- **Refresh** and **Collapse all** sit at the top of the tab, with the current branch.
 - Build and dependency folders are always hidden: `.git`, `node_modules`, `dist`, `out`,
   `.next`, `coverage`, `.turbo`, `target`, `__pycache__`, `.venv`. Other dotfiles show.
 - The tree is read-only: no create, rename, move or delete.
+- A terminal on the stage gets Files too, for the project it was opened in.
 
 ## Search
 
@@ -45,6 +46,17 @@ Agents and git change files under you. The editor keeps up:
 | any | you press `⌘S` after the file changed | nothing is written; **Overwrite** replaces the file |
 
 The tree refreshes too, a moment after the change.
+
+## Changed files
+
+**Changed in this session** sits above the tree: the files the
+session edited or created, each with its `+added −removed` count. Click one to open
+it. In the tree, those files carry an `M` (modified) or a green `A` (added). The
+tab shows how many, as `Files 3`, and so does the closed strip.
+
+The list comes from what the session itself did, not from git. Edits by a
+subagent are left out, `/clear` does not empty it, and it goes when the session
+ends. A plain terminal has neither the list nor the marks.
 
 ## Editor layouts
 

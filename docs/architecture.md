@@ -8,7 +8,7 @@ The map for contributors. Each box below has a deep dive; this page says which.
 
 ## At a glance
 
-The Hive is one Electron app with a strict process model. The renderer (`src/`) is React,
+Hive TTY is one Electron app with a strict process model. The renderer (`src/`) is React,
 four Zustand stores and xterm; it reaches the main process only through verbs the preload
 exposes on `window.hive`. Main (`electron/main`) is the single policy point: it validates
 every call, owns the config, the ledger, session history and the hook receiver. Terminals run
@@ -41,8 +41,24 @@ src/
   components/layout/     the composition root: rails and centre stage mount features
   components/terminal/   the terminal seam (speaks only TerminalTransport)
   components/editor/     the editor seam
-  features/<slice>/      agents, editor, explorer, inbox, orchestrator, projects,
-                         pull-requests, sessions, settings, work, shared
+  features/<slice>/      agents, editor, explorer, home, inbox, orchestrator,
+                         projects, pull-requests, sessions, settings, work, shared
+  lib/swarm/             pure canvas modules (HIVE-199): the palette type, the
+                         comb's layout, motion and drawing, and the Brood
+                         (HIVE-221): tone (the palette as numeric RGB, the one
+                         colour formatter), kit (the shared math and drawing
+                         helpers), muta (the top-down mutalisk, its spine
+                         simulated live per flyer), brood (the creature
+                         contract and paintCreature, which fits one into a
+                         canvas) and the four SwarmCreature drawings: spire,
+                         hover (the hovering mutalisk), overlord and hive.
+                         Each is a pure draw(ctx, t, s, tone) on its own loop,
+                         its seeded anatomy grown on first draw. No colour
+                         literals outside
+                         tone and no imports outside the folder. The splash's
+                         one exception to its fence (HIVE-212): it may import
+                         muta, tone, kit, palette, the comb (MUTA_SCALE) and
+                         lib/theme/colour, and nothing else from lib/
   stores/                hive, ui, appearance, editor
 electron/
   main/                  config, sessions, hooks, ledger, agents, integrations, server
