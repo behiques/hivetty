@@ -539,12 +539,12 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
             <Button
               size="sm"
               variant="primary"
-              disabled={sending}
+              pending={sending}
               onClick={sendDraft}
             >
               Send
             </Button>
-            <Button size="sm" disabled={sending} onClick={() => setDraft(null)}>
+            <Button size="sm" pending={sending} onClick={() => setDraft(null)}>
               Cancel
             </Button>
           </>
@@ -571,7 +571,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
                       ? 'primary'
                       : 'secondary'
                 }
-                disabled={sending}
+                pending={sending}
                 onClick={() =>
                   EDIT.test(option) && quote !== undefined
                     ? setDraft(quote)
@@ -588,7 +588,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
               grant nobody can match.
             */}
             {isPermission ? null : (
-              <Button size="sm" disabled={sending} onClick={() => setOther(true)}>
+              <Button size="sm" pending={sending} onClick={() => setOther(true)}>
                 Other…
               </Button>
             )}
@@ -606,7 +606,8 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
             <Button
               size="sm"
               variant="primary"
-              disabled={sending || reply.trim() === ''}
+              disabled={reply.trim() === ''}
+              pending={sending}
               onClick={sendReply}
             >
               Send
