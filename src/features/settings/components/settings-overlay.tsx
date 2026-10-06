@@ -225,8 +225,9 @@ export function SettingsOverlay() {
         }}
         className="flex min-h-0 flex-1 flex-col bg-panel-2 outline-none"
       >
-        <div className="flex items-center justify-between border-b border-border-soft px-4 py-2.5">
-          <DialogPrimitive.Title className="text-ui text-ink">
+        {/* The Overmind head's own title and padding, so a place and Settings read at the same weight. */}
+        <div className="flex items-center justify-between border-b border-border-soft px-7 pt-4 pb-3">
+          <DialogPrimitive.Title className="text-[18px] font-semibold text-ink">
             Settings
           </DialogPrimitive.Title>
           <DialogPrimitive.Close
