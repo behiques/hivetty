@@ -169,6 +169,8 @@ describe('the Notification hook', () => {
     notifier().observe(CH.sessionStatus, waiting('lead-form', 'idle_prompt'));
 
     expect(raised().kind).toBe('session.input_needed');
+    // It replaces the session's idle row, so it delivers at least as that row would.
+    expect(raised().deliverAsWell).toBe('session.idle');
     expect(raised().title).toBe('is waiting on you');
     expect(raised().action).toEqual({ type: 'session', entityId: 'lead-form' });
   });

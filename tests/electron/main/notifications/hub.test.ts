@@ -1392,3 +1392,51 @@ describe('dismissForSession', () => {
     expect(announceBadge).not.toHaveBeenCalled();
   });
 });
+
+describe('deliverAsWell: the row that replaces another keeps its toast (6 Oct 2026)', () => {
+  const session = { type: 'session' as const, entityId: 'term-3' };
+
+  beforeEach(() => {
+    prefs = { 'session.idle': 'both', 'session.input_needed': 'inbox' };
+  });
+
+  it('presents a nudge that takes over an idle row, as the idle row would have', () => {
+    hub.raise({ kind: 'session.idle', title: 'is yours again', action: session });
+    present.mockClear();
+
+    hub.raise({ kind: 'session.input_needed', title: 'is waiting on you', action: session, deliverAsWell: 'session.idle' });
+
+    expect(present).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps its own delivery when there is no idle row to take over', () => {
+    hub.raise({ kind: 'session.input_needed', title: 'is waiting on you', action: session, deliverAsWell: 'session.idle' });
+    hub.raise({ kind: 'session.idle', title: 'is yours again', action: { type: 'session', entityId: 'term-9' } });
+    present.mockClear();
+    hub.raise({ kind: 'session.input_needed', title: 'is waiting on you', action: session, deliverAsWell: 'session.idle' });
+
+    expect(present).not.toHaveBeenCalled();
+  });
+
+  it('never wakes a kind the user switched off', () => {
+    prefs = { 'session.idle': 'both', 'session.input_needed': 'off' };
+    hub.raise({ kind: 'session.idle', title: 'is yours again', action: session });
+
+    expect(hub.raise({ kind: 'session.input_needed', title: 'w', action: session, deliverAsWell: 'session.idle' })).toBeNull();
+  });
+
+  it('a gated takeover still toasts when promoted, once nobody is looking', () => {
+    const present = vi.fn();
+    let foreground = true;
+    const hub = makeHub({ present, isForegroundEverywhere: () => foreground });
+    hub.raise({ kind: 'session.idle', title: 'is yours again', action: session });
+    const nudge = hub.raise({ kind: 'session.input_needed', title: 'w', action: session, deliverAsWell: 'session.idle' })!;
+    expect(nudge.unread).toBe(false);
+    present.mockClear();
+
+    foreground = false;
+    hub.promote(nudge.id);
+
+    expect(present).toHaveBeenCalledTimes(1);
+  });
+});
