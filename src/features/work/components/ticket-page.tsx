@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { createPoller } from '@/hooks/create-poller';
+import { useDetailsDrawer } from '@/hooks/use-details-drawer';
 import type { Ticket } from '@/types/ticket';
 
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
@@ -52,8 +53,8 @@ function Description({ ticketKey }: { ticketKey: string }) {
   );
 }
 
-/** The key, the status pill and the title. */
-function Header({ ticketKey, ticket }: { ticketKey: string; ticket: Ticket | undefined }) {
+/** The key, the status pill, the narrow page's Details button and the title. */
+function Header({ ticketKey, ticket, details }: { ticketKey: string; ticket: Ticket | undefined; details: ReactNode }) {
   const listed = useMemo(() => (ticket ? [ticket] : []), [ticket]);
   const [row] = useTicketRowModels(listed);
 
@@ -80,6 +81,7 @@ function Header({ ticketKey, ticket }: { ticketKey: string; ticket: Ticket | und
             {...(row?.tone === 'amber' ? { tone: 'amber' as const } : {})}
           />
         ) : null}
+        {details}
       </div>
       {ticket && row ? (
         <h1 className="mt-1 mb-2 text-[19px] leading-[1.3] text-ink">{row.title}</h1>
@@ -137,16 +139,57 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
     void reload(ticketKey);
   }, [status, ticketKey, reload]);
 
+  // The properties sidebar folds into this below a 760px page, as the PR page's does (HIVE-225).
+  const drawer = useDetailsDrawer();
+
   return (
-    <section aria-label={`Ticket ${ticketKey}`} className="flex min-h-0 flex-1">
+    <section aria-label={`Ticket ${ticketKey}`} className="@container relative flex min-h-0 flex-1">
       <div className="min-w-0 flex-1 overflow-y-auto p-8">
-        <Header ticketKey={ticketKey} ticket={ticket} />
+        <Header
+          ticketKey={ticketKey}
+          ticket={ticket}
+          details={
+            <button
+              ref={drawer.button}
+              type="button"
+              aria-expanded={drawer.open}
+              aria-controls="ticket-details"
+              onClick={drawer.toggle}
+              className="ml-auto flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-[12px] text-ink hover:bg-hover @min-[760px]:hidden"
+            >
+              Details
+            </button>
+          }
+        />
         <Description ticketKey={ticketKey} />
         <TicketPageConversation ticketKey={ticketKey} />
       </div>
-      <aside className="w-[260px] shrink-0 overflow-y-auto border-l border-border-soft px-4 py-[18px]">
+      <aside
+        aria-label="Ticket properties"
+        className="hidden w-[260px] shrink-0 overflow-y-auto border-l border-border-soft px-4 py-[18px] @min-[760px]:block"
+      >
         <TicketProperties ticketKey={ticketKey} />
       </aside>
+      {drawer.open ? (
+        <>
+          <div
+            data-testid="ticket-details-veil"
+            aria-hidden
+            className="absolute inset-0 z-10 @min-[760px]:hidden"
+            onClick={drawer.close}
+          />
+          <div
+            ref={drawer.panel}
+            id="ticket-details"
+            role="dialog"
+            aria-label="Ticket details"
+            tabIndex={-1}
+            className="absolute inset-y-0 right-0 z-20 w-[260px] overflow-y-auto border-l border-border bg-panel px-4 py-[18px] shadow-lg outline-none @min-[760px]:hidden"
+          >
+            <TicketProperties ticketKey={ticketKey} />
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }

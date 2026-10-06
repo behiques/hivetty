@@ -91,6 +91,14 @@ describe('AgentsSection', () => {
     expect(screen.getByText('sleeping')).toBeInTheDocument();
   });
 
+  it('stacks its list above the editor below a 520px section (HIVE-225)', async () => {
+    stub([agent('slack-watcher')]);
+    render(<AgentsSection />);
+    const grid = (await screen.findByText('slack-watcher')).closest('.grid');
+    expect(grid).toHaveClass('@min-[520px]:grid-cols-[190px_minmax(0,1fr)]', 'grid-rows-[minmax(0,10rem)_minmax(0,1fr)]');
+    expect(grid?.parentElement).toHaveClass('@container');
+  });
+
   it('names the agents folder', async () => {
     stub([agent('slack-watcher')]);
     render(<AgentsSection />);

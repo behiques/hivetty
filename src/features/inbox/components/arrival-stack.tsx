@@ -110,7 +110,7 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
           {`${String(visible.length)} arrived just now · newest first`}
         </span>
       ) : null}
-      <div className={cn('relative w-[380px]', !reduced && 'motion-safe:animate-ccslidein')}>
+      <div className={cn('relative w-[380px] max-w-full', !reduced && 'motion-safe:animate-ccslidein')}>
         <div className="relative z-[2] rounded-[10px] shadow-xl [&>article]:border-[color-mix(in_srgb,var(--cc-amber)_55%,var(--cc-border))]">
           {shown.leaving && newest.action.type === 'ask' ? (
             <AskLeaving notif={newest} thread={newest.action.thread} />
