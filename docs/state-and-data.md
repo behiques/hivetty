@@ -32,15 +32,53 @@ the picker from re-rendering thirteen live terminals.
   orchestrator daemon: `spawnSession`, `sendToEntity`, `runOrchCommand`,
   `markAllRead`, `markRead`, `pushNotif`, `appendEntityLines`. It also holds the
   **ledger** and **plans** slices — see below.
-- `src/stores/ui-store.ts` — view state: `activeTab`, `selId`, `leftTab`,
-  `railTab`, `collapsed`, picker fields, `showActivityRail`,
-  `explorerExpanded`, `explorerProjectId`.
+- `src/stores/ui-store.ts` — view state: `activeTab`, `selId`, picker fields,
+  `settings`, `explorerExpanded`, the search boxes, and the place machine —
+  `place` (`'home'` on every launch), `panelOpen` (`true`) and `narrow`
+  (HIVE-195, HIVE-211). None persists: a launch always opens on Home with its
+  panel open.
+  The Sessions place adds (HIVE-197), none persisted: `sessionsProject`
+  (the overmind's project filter, `null` for all), `sessionsFilter`
+  (`'all' | 'live' | 'ended'`), `endedExpanded` ("N more ›" pressed) and
+  `expanded`, the Sessions panel's fold map, **folded by default**. `setSessionsProject(id)` also unfolds that project;
+  `backToOrch` and the Sessions icon put `selId` on the session being left.
+  The Inbox (HIVE-198), none persisted: `arrivals` (notification ids
+  up as a card or note, newest first), `arrivalPulse` (the latest arrival that
+  came in while the keyboard was in a terminal; the pill pulses once for it)
+  and `inboxDrawer` (`{ open, thread }`). `pushArrival(id, quiet)` raises or
+  pulses and does nothing over an open drawer; `foldArrivals()` empties the
+  queue (the rows stay in Summons); `openInboxDrawer(thread?)` folds and opens;
+  `closeInboxDrawer()`. What is drawn is `arrivals ∩ useSummons(onStage)`, so
+  an answered ask or the on-stage session drop out without anyone re-checking.
+  `consoleShown` (`false`) is the overmind's transcript in the dock,
+  flipped by `toggleConsole`; folded, the stage hides the transcript and the
+  table takes the page.
+  The Work place adds (HIVE-203), none persisted: `workTicket` (the ticket
+  last shown on the stage) and `workTicketAt` (where it sat in the list, `-1`
+  when opened from outside it), `workFolded` (per status
+  category, Done folded by default) and `workConversation`
+  (`'comments' | 'everything'`). `openWorkTicket(key)` opens the page: it
+  moves the bar to Work, shows the panel, resets the conversation to Comments
+  and dismisses the overlays. The stage shows `useShownTicket()`: that ticket
+  while listed, else the one after it, else the first (`lib/open-row.ts`), and
+  writes what it shows back through `rememberWorkTicket`. Agents
+  (`agentPage`/`agentPageAt`) and PRs (`prPage`/`prPageAt`) follow the same
+  rule. `sessionsTab` is what the Sessions place returns to — the tab last
+  opened there, or `'orch'` — kept apart from `activeTab` because the Agents
+  place writes an agent into that.
 - `src/stores/appearance-store.ts` — durable preferences: `theme`, the terminal
   and editor typography, `editorPlacement`, `editorNav`, `editorEditable`,
-  `density`, the rail widths, and the three draggable splits — `editorSplitRatio`
+  `density`, `teamName`, What's new's `whatsNewSeen` (the `major.minor` last
+  shown) and `whatsNewOff` (its opt-out), the theme library (`themes`, `activeThemeId`), the
+  session panel — `sessionPanelOpen` (default `true`) and `sessionPanelTab`
+  (`'plan' | 'ticket' | 'pr' | 'files'`, default `'plan'`, HIVE-201) — the
+  two rail widths in px, `listPanelWidth` and `sessionPanelWidth` (clamped by
+  `PANEL_WIDTHS`; absent or bad rehydrates as the initial width) — and the
+  four draggable splits — `editorSplitRatio`
   (terminal against editor), `consoleSplitRatio` (fleet table against
-  transcript, on the overmind) and `runLogSplitRatio` (receipts against output,
-  in an agent's run log).
+  transcript, on the overmind), `runLogSplitRatio` (receipts against output,
+  in an agent's run log) and `agentSplitRatio` (Form against Source on the
+  agent page's Definition, default 0.45, each pane held to a minimum width).
 - `src/stores/editor-store.ts` — open file buffers: `openFiles`, `activeKey`,
   and the actions over them (`openFile`, `edit`, `save`, `reload`,
   `reconcile`).
@@ -76,6 +114,11 @@ whose authority lives in the other process, and that shapes both of its actions:
   permanently — the hook mounts once at the composition root and never remounts,
   so there is no second hydrate to recover it. Entries are kept sorted by `id`,
   which is fixed-width and sorts as a string in write order.
+- **`hydrateLedger(entries, closed?)`** also merges the snapshot's
+  `closedAsks` (HIVE-198) into the closed set. `LedgerSnapshot.closedAsks` is
+  every ask thread closed anywhere in main's log: a window opened after an
+  ask's closing entry left the tail would otherwise count it open in the pill
+  and the dock. Optional on the wire, so an older peer still speaks the shape.
 - **`ledgerAppend(entry)`** is the push channel's only entry point. Nothing in
   the renderer writes to this slice directly; a write goes out over IPC and comes
   back on the channel, so the mirror can only ever hold what the log holds.
@@ -139,6 +182,86 @@ mode switch for the reason it clears `metrics`: session ids are minted the same
 way on every machine, and a stale plan would draw the departed session's tasks
 against the newly attached one wearing the same id.
 
+The plan's task now carries `activeForm` (Claude's spinner wording, task tools
+only), `startedAt` (first `in_progress`, never re-stamped, so a `TodoWrite`
+rewrite keeps it) and `endedAt` (`completed`). The plan carries `file`, the
+session's last plan file, and `fileAt`, when main accepted the read
+(`electron/shared/plan-contract.ts:19`). `file` survives a later plan from
+another source, and goes with the session: `plans.forget` on a session's end
+and on `/clear`, so a retired conversation's plan file and read time never reach
+the next plan (`electron/main/sessions/index.ts:1193`).
+
+### Changed files (HIVE-201)
+
+`changedFiles` is `Record<entityId, ChangedFile[]>`, one list per session in
+first-seen order, each `{ path, mark: 'A' | 'M', added, removed }`
+(`electron/shared/changed-files-contract.ts`). Main reads the session's own
+transcript (`electron/main/sessions/changed-files.ts`) and the page only
+mirrors it, so the slice holds no rule.
+
+It reaches the store as the plans do: a `changed-files:changed` push per
+change, whole, which `setChangedFiles` applies (`files: []` deletes the key),
+and a `changed-files:list` read that `hydrateChangedFiles` merges by entity id
+(`src/stores/hive-store.ts:3559`). `changed-files:list` is in
+`SNAPSHOT_CHANNELS`, so an attach sees the lists at once. Both channels sit
+beside `plans:list` and `plan:changed`, as `read`; adding them and the plan
+fields bumped `REMOTE_PROTOCOL_VERSION` to 7 (`electron/shared/remote-contract.ts`).
+
+The key is **main's id**, which for a session is `terminalOf(session)`, not the
+session's own. Three selectors read it: `useChangedFiles(id)`,
+`useChangedFileCount(id)` and `useChangedFileMark(id, path)`, which returns a
+primitive so a tree row re-renders only on its own change.
+`clearModeEntities` clears the slice with `plans`.
+
+### The keyed ticket slice
+
+`hive-store.state.ticketDetails` is the data for every ticket a reader has
+opened, keyed by issue key (HIVE-203, keyed by HIVE-202): the Work page and any
+number of Ticket tabs read side by side. Each entry is `{ key, issue?, detail?,
+comments?, total?, transitions?, history?, readAt?, links?, secondHop?,
+epicProgress?, problems }`. The map holds at most `TICKET_DETAIL_CAP` (16),
+the newest last; opening or refreshing a key moves it to the end, and the
+oldest falls off. An answer that lands for an evicted key is dropped.
+
+- `loadTicketDetail(key, want)` reads in parallel through `readTicketParts`:
+  `jira:detail`, the newest comments (`jira:comments { newest: true }`),
+  `jira:transitions`, and `jira:issue` only when the list does not hold the
+  key. `want` says who is asking. `'page'` adds `ledger:list { ticket }`;
+  `'tab'` adds `jira:links` instead. **Each part merges as it lands**, so one
+  failed read never blanks another: a failure sets `problems.detail`,
+  `problems.comments` or `problems.links` and keeps what the last read found.
+- The tab's **second hop**: for each link that is a Blocks link pointing
+  outward (the tickets this one blocks), `jira:links` is read again and the
+  ticket's own outward Blocks links go in `secondHop`, keyed by that ticket. It
+  is read only at five issue links or fewer (`SECOND_HOP_MAX_LINKS`). A later
+  read with more than five, or with nothing blocked, **clears** `secondHop`, so
+  a stale hop is never left drawn.
+- **Epic progress**: when the detail's parent is an epic, one `jira:search`
+  for `parent = <epic>` counts the children done of total, with `capped` when
+  the search was cut. The epic key is checked against the issue-key pattern
+  before it goes into the JQL. A failed search **clears** `epicProgress`; the
+  ring's label then shows the epic without a count.
+- `refreshTicketDetail(key, want)` is the pollers' call: detail, comments and
+  transitions again (and links, for `'tab'`), not the ledger history (the tail
+  carries what is appended after the open). A key never loaded does nothing.
+  The page and the Ticket tab each poll only after their own first load, so a
+  ticket the map already holds is read once on open, not twice.
+- `appendTicketComment(key, comment)` shows a just-posted comment and counts it.
+- `reloadTicketTransitions(key)` re-reads the transitions after the status
+  moves. They are cached here; the pill's menu still reads its own on open.
+- `setTicketDetailIssue(issue)` installs a re-read issue for a ticket the list
+  does not hold; a listed one is `updateTicket`'s.
+
+`JiraLink` (`electron/shared/jira-contract.ts`) gained optional fields for the
+Jira-to-Jira kind: `key`, `summary`, `statusCategory`, `linkType` (the link
+type's name: "Blocks", "Relates") and `direction` (`'inward'` or `'outward'`:
+which end the *other* issue is on). Remote links and older servers omit them.
+`lib/ticket-links.ts` reads "Blocks" by the type's name, whatever its wording
+(`isBlocks`): an inward Blocks link is a ticket this one **waits on**, an
+outward one a ticket it **blocks**, and every other type is a bead.
+
+Every reset path clears the map.
+
 ### The freshness rule
 
 `reconcile(projectId, paths)` is the watcher's entry point, and the whole
@@ -173,6 +296,11 @@ structural rather than a matter of taste:
   store rather than a field list is the point: otherwise every new `ui-store`
   field becomes a question somebody has to remember to answer, and answering it
   wrong is silent.
+
+The persisted payload is at `version: 4`. `migrateAppearance` drops Classic's
+keys (`CLASSIC_KEYS`) on the way up from v3 (HIVE-213), because `merge` spreads
+the stored object over the defaults and a stale key would otherwise ride into live
+state. Every other key is carried across untouched.
 
 `systemDark` is the one exception inside `appearance-store` — it is an
 observation of the OS, not a preference, so it is excluded from `partialize`.
@@ -243,33 +371,197 @@ Components never read a store object directly and never call `getState()`.
 | `useCounts()` | `{ working, waiting, idle, done, terminated }` |
 | `useNavOrder()` | active session ids, then ended ones |
 | `useActiveSessions()` / `useEndedSessions()` | the two sides of the table's divider |
+| `useFleetGroup(group)` | one of the overmind table's groups (`'live'`, `'agents'`, `'ended'`) under the current filters |
+| `useEndedMore()` | how many endings the unfiltered table folds behind "N more ›" |
+| `useFleetNavOrder()` | the rows on screen, in the table's order — what `↑↓` walks |
+| `useProjectCounts(id)` | a project's live entries: `{ needs, other }` |
+| `useSessionsHeadCounts()` | the Sessions panel head: `{ live, needs }` over every entry |
+| `useOvermindHeadCounts(project)` | the overmind head: `{ live, projects, needs, ended, endedToday }` over sessions |
+| `useAgentsWorkingIn(project)` | agents with a live `repo:` run in that project's folder |
 | `useProjectSessions(projectId)` | a project's sessions that have not ended |
 | `useOpenEntity()` | open an entity's tab, refusing a `terminated` one |
 | `useTicketPrs(ticketKey)` | PRs reachable from a ticket's sessions |
+| `useCurrentRow(terminalId)` | the row behind a terminal now, the subscribing `currentRowFor` (HIVE-198) |
+| `useArrivals()` / `useArrivalPulse()` | ui-store: the Inbox arrival queue and the pill's pulse id (HIVE-198) |
+| `useInboxDrawer()` / `useInboxActions()` | ui-store: the drawer's `{ open, thread }`, and the arrival and drawer actions |
 | `useUnreadCount()` | inbox unread count |
 | `useNotifs()` | the inbox, newest first |
+| `useSummons(onStage)` | the Summons queue, `{ asks, sessions }`, newest first: open `agent.ask` / `agent.permission` and `pr.review_requested`; `session.blocked`, `session.idle` and `session.input_needed` less the one on stage (HIVE-214) |
+| `useSummonsCount(onStage)` | its length; `useSummonsCount(null)` is the dock's count |
+| `useYoursAgain(terminalId)` | true while an unswept `session.idle` / `session.input_needed` row names that terminal |
+| `useOnStage()` | what is on the centre stage — a terminal id, an agent's row id, or null; `useForegroundSession` and the Inbox both read it (`src/hooks/use-on-stage.ts`) |
 | `usePrs()` | every open PR the fleet produced |
+| `useHatchery()` | every swept PR with its hatch status, in the Hatchery's order (HIVE-215) |
+| `useHatcherySearch()` | the same over the PR search; `null` with no search |
+| `usePrNeedsYouCount()` | how many swept PRs read SUMMONS; 0 unless `prSource` is live |
+| `usePrsQuiet()` | the sweep is live and empty: the empty Hatchery, and no PRs panel (HIVE-205) |
+| `usePrDetail(prKey(owner, repo, n))` | one PR's detail as read, `{ state, detail?, problem?, readAt? }` (HIVE-205) |
+| `usePrDiff(key)` | one PR's diff entry, `{ sha, state, text?, problem? }` (HIVE-207) |
+| `useParsedPrDiff(key)` | that diff parsed into files and hunks, memoised on the text; `null` before the first text (HIVE-207) |
+| `useLoadPrDiff()` | read one PR's diff at a head sha (HIVE-207) |
+| `usePrThreadActions()` | `{ reply, setResolved }` for a review thread; both re-read the detail (HIVE-207) |
+| `useSetPrFileViewed()` | mark or unmark a file viewed, optimistically (HIVE-207) |
+| `useShipTrack(slug, n)` | the shipper's eight stops for one PR, with time and holder (HIVE-205) |
+| `useMergeAsk(slug, n)` | the shipper's open merge card for one PR, the ask the PR page's Merge answers (HIVE-205) |
 | `useSessionPr(id)` | one row's PR, matched on its branch |
+| `useSessionPrRow(id)` | the session's PR with its Hatchery row, matched by URL; `row: null` for a remembered PR. The session panel's PR tab and dot (HIVE-209) |
 | `useHasResumable()` | whether the fleet table reserves its Resume column |
 | `useMarkRead()` | mark one notification read, by index |
+
 | `usePushNotif()` | push a notification |
 | `useActiveEntity()` | the entity behind `activeTab`, or `null` |
 | `useLedgerEntries(filter?)` | the ledger tail, by the shared query rules |
 | `useOpenAskCount()` | how many asks are unanswered and not yet TTL-retired |
 | `useThread(id)` | one conversation: the ask, and everything that named it |
+| `useCombEntities()` | Home's comb cells: every live session, live terminal and agent, as raw facts (HIVE-199) |
+| `useCombSummary()` | the headline's counts over the same cells: `{ working, failed, resting, projects, agents }` |
+| `useSwarmPalette()` | the swarm canvas's colours for the active theme and mode (appearance store) |
+| `useTicketGroups()` | the Work panel's groups (In progress, To do, Done; empty ones dropped) with `total` and `needYou` (HIVE-203) |
+| `useTicketRowModels(tickets)` | each ticket's row: title without tags, tone, and the one leading fact (`lib/ticket-activity.ts`) |
+| `useOpenTicket(key)` | the list's ticket, else the issue `ticketDetails[key]` read for itself |
+| `useTicketProperties(key)` | the page's key/values: status, priority (tag, else Jira), side, project, assignee, agent, epic |
+| `useTicketEvents(key)` | the ticket's ledger events: `ticketDetails[key].history` plus the tail, deduped and in id order |
+| `useNextTransition(key)` | the first transition exactly one status category forward, or nothing |
+| `useTicketLinks(key)` | the Ticket tab's links on three arcs (waits on, blocks, relates) with the verdict, open blockers and per-arc status counts (HIVE-202) |
+| `useTicketCriteria(key)` | the acceptance-criteria list under its heading, else the description, else nothing |
+| `useLatestComment(key)` | the newest comment read |
+| `useEpicLabel(key)` | the ring's label, `KEY · title · done/total` (`+` when capped), only for an epic |
 
 Derived values are computed in selectors and **never stored** — one source of
 truth for every number on screen.
+
+**`fleetGroupsOf` is the one source of the overmind table's row order**
+(HIVE-197). It takes the store, the filters (`useFleetView()`), the filtered
+project's folder name and the time, and returns the three groups plus
+`endedMore`. The table draws `useFleetGroup`'s groups and the caret walks
+`useFleetNavOrder`, both from it, so the rows and `↑↓` cannot disagree.
+`useNavOrder` stays the whole fleet, for the terminal host.
+
+**The comb selectors** (HIVE-199). `useCombEntities` flattens each cell to a
+NUL-separated string under `useShallow` and parses them in `useMemo`, so a
+transcript line or a cost update re-renders nothing. A session is Morphing when
+`working` (or `idle` with an `idleDetail`), Summons when `waiting`, Burrowed
+when idle; an agent is Failed when `failed` or its definition is `invalid`,
+Summons when `asking`, Morphing when `working`, Burrowed when sleeping or
+paused; a live terminal is Terminal; ended sessions and terminals drop out.
+`summariseComb` / `useCombSummary` count those cells for the headline's summary
+line. Its "calling · N summons" is not a cell count: it reads
+`useSummonsCount(useOnStage())`, the strip's and the pill's number (HIVE-217).
+`useSwarmPalette` is memoised per theme `ui` object, so an unrelated
+appearance write hands back the same reference; a theme without `creep` and
+`chitin` gets them derived from its own `bg`, `brand` and `ink`.
+
+### The hatch status (HIVE-215)
+
+Every PR has one word for what is happening to it: LARVA, COCOONING, INCUBATING,
+MUTATING, BURROWED, HATCHING, SUMMONS or HATCHED. `hatchStatus(pr, facts, now)` in
+`src/lib/pr-hatch.ts` derives it with its tone, GitHub's words, its sort rank
+and `needsYou` (SUMMONS, only ever on your own PR). It is in `lib`, not
+`features/shared`, because the store composes it. The facts come from the ledger:
+`shipStage`, `asksMeAbout` and `mergeWaiting` (`electron/shared/ledger-derive.ts`).
+
+- `useHatchery()`: every swept PR with its status, sorted (open by flap then
+  `updatedAt`, merged after by `mergedAt`). The one list the Hatchery, Home's
+  counts and the session panel's PR tab read.
+- `useHatcherySearch()`: the same over the search; `null` with no search.
+- `usePrNeedsYouCount()`: SUMMONS in the sweep; 0 unless `prSource` is live.
+
+The PR page (HIVE-205) reads one more slice and four ledger readings. `prDetails`,
+keyed by `prKey(owner, repo, n)` lowercased, holds each opened PR's detail
+(`loadPrDetail` is the first read and every refresh; capped at
+`PR_DETAIL_CAP`; a PR leaving the sweep drops its detail). `commentOnPr`
+answers the `GhResult` and re-reads on success. The readings, all memoised over
+the ledger: `useShipTrack`, `usePrEvents` (Everything), `usePrOpener` ("opened
+by"), `useReviewUrls` ("via Hive TTY"), `useHolderPost` (the track's now line)
+and `useMergeAsk`. `usePrsQuiet()` is the empty Hatchery.
+
+**The Files tab (HIVE-207).** `PrDetail.files` holds the first 100 changed files: path, +/−, change type and GitHub's `viewerViewedState` as `viewed`/`unviewed`/`dismissed`. `changedFiles` is the true total. The diff text lives in its own PR-keyed slice, `prDiffs`, read at the detail's `headSha`: once per sha, and again when the 60s detail poll sees the head move. It has its own slice because `loadPrDetail` replaces a detail wholesale. The same cap applies, and it is dropped with the PR. Parsing (`src/lib/unified-diff.ts`), the tree, counts and thread placement (`src/lib/pr-files.ts`) are computed on render, never stored. **Viewed state lives on GitHub, not in a store.** `setPrFileViewed` patches the one file at once, rolls it back on a refusal, and re-reads the detail either way. Thread writes (`replyToPrThread`, `setPrThreadResolved`) are not optimistic; the reload shows them.
+The Checks tab (HIVE-206) reads a fifth PR slice, `prChecks`, keyed by `prKey`
+and capped and dropped with `prDetails` (`PR_DETAIL_CAP`, `dropLeftPrs`). An
+entry holds the head branch's runs (`gh run list`, 40, folded into the last
+eight pushes by `foldPushes`), the checkout's workflow graph, the jobs of each
+run it has shown (by run id) and each failed job's cut log (by job id). It is
+its own slice because `loadPrDetail` replaces its entry whole every minute.
+**The rate rule:** runs and jobs are read only for the selected PR and only
+while its Checks tab is mounted, by a tab-local `createPoller` at 60s; the
+failed log once per job id, on show, never on a timer. The shown push and the
+clicked job are `ui-store`'s `prRun` and `prJob`, not persisted. The graph, the
+pushes and the shown job are derived in selectors over `src/lib/checks-graph.ts`.
+
+**The Timeline tab (HIVE-208).** A sixth PR slice, `prTimelines`, keyed by `prKey`
+and capped and dropped with `prDetails`. It is its own slice because `loadPrDetail`
+replaces a detail's entry whole every minute. An entry holds `github:pr-timeline`'s
+read (commits, runs, reviews, comments) and the ledger `history`. `loadPrTimeline`
+re-reads GitHub on every call, from a tab-local 60s poller that runs only while the
+tab is mounted, and reads the ledger **once**, from a day before the PR opened: the
+renderer's live tail is capped at 500, so a long PR's early holds would fall out of
+it. The day is slack for a server-mode client in another zone; `prEvents` drops the
+extras. A failed refresh keeps `timeline` and `history` beside the `problem`.
+`useTimelineModel(pr, now)` merges `history` with the live ledger by id (the tail
+wins) and runs `buildTimeline` in `src/lib/pr-timeline.ts`: the flap band, the
+commit, CI, review, comment and agent lanes, the time scale, and the buckets with
+their sentence. **Nothing derived is stored**; the tab captures `now` per poll so
+the memo holds between ticks. `ui-store`'s `prFocus` (not persisted) is the
+Conversation item a mark was clicked through to, by its list key; the Conversation
+scrolls to it and clears it.
+
+The ui-store's PRs fields are flat, as `workTicket` and `agentPage` are, and none
+is persisted: `prPage` (the last PR opened, which `useOpenPr()` keeps while it is
+still a row), `prTab`, `prsFolded` (the HATCHED fold, folded by default),
+`prConversation` (Comments or Everything) and `prSearchOpen` (the panel's search
+row; also what lets a quiet Hatchery draw its panel). The stage resolves to a
+`prs` view on the PRs place, just below Agents.
+
+`Pr` (and `PrRecord`) carry `mergedAt` and `mine`; `Pr` also carries `updatedAt`.
+
+### Home's strip (HIVE-200)
+
+Every number Home's strip shows is derived from state the renderer already
+holds; nothing new is stored but `awaySince`. Each reading is a pure `…Of`
+function in `hive-store.ts` behind a hook that keeps its identity across an
+unrelated write (a terminal line re-renders none of them).
+
+- `useAccountLimits()` (`accountLimitsOf(metrics)`): the account's five-hour and
+  seven-day windows. Limits are account-global, so any session's reading is the
+  account's; per window the reading with the latest `resetsAt` wins, then the
+  highest percentage, and a reading with no reset ranks below every one with one.
+  An unreported window is absent, never 0.
+- `useComingUp()` (`comingUpOf`): agents with a `nextRunAt`, soonest first, then
+  held asks (`isHeld`, an `after:` PR not yet closed) as "picks up X when repo#N
+  ships". At most five.
+- `useWhileAway(since)` (`whileAwayOf`): PRs merged after `since` (and the one
+  party whose `closed` post covers them all), `session.goal` notification titles,
+  `run.ended` events in the ledger tail with the failed ones counted (`failed`,
+  `budget` or `turns`, the outcomes `notify.ts` raises as `agent.failed`), and
+  todo tickets with no live session. Runs are bounded by `LEDGER_MEMORY_CAP`, so
+  a busy day can undercount; the row's tooltip says so. It also reads the `echo`
+  lane after `since` (HIVE-217): `pr.checks_failed` and `pr.approved` counted
+  with the first title, and each `clone.done`. `pr.merged` is left out because
+  `hatched` already counts it, and so are `agent.*` (each is a run already
+  counted) and `app.update_*` (it has its own surface). The trim drops Echoes
+  first, so a long absence can undercount these too.
+- `usePrFlapCounts()` (`flapCountsOf`): counts per flap over `useHatchery()`, in
+  `FLAP_RANK` order, toned by `flapTone`; empty unless `prSource` is live.
+- `ui-store.awaySince`: when this window last lost focus (`useAwayTracker`,
+  mounted once in the app shell), else when it launched. Per window, not persisted.
 
 ## Caps
 
 Two collections are bounded, because a long-running demo must not grow without
 end:
 
-- **`notifs` at 50** (`NOTIF_CAP`, which is `NOTIFICATION_CAP` from
-  `electron/shared/notification-contract.ts`) — `pushNotif` does the same, and
-  main's notification buffer uses the same constant. An inbox that grows forever
-  stops being an inbox.
+- **`notifs`: 50 rows of news, and every row that waits on you** (HIVE-214).
+  Every kind has a lane in `NOTIFICATION_KIND_SPECS`: **Summons** (`agent.ask`,
+  `agent.permission`, `session.blocked`, `session.idle`, `session.input_needed`,
+  `pr.review_requested`) and **Echoes** (the rest).
+  `trimNotifications` in `electron/shared/notification-lanes.ts` keeps at most
+  `NOTIFICATION_CAP` Echo rows, the oldest leaving first, and never a
+  row that waits on you (a Summons row, unless it is an ask whose thread
+  `closedAskThreads` says has closed). `pushNotif`, `hydrateNotifs` and main's
+  hub all trim with it, so a hydration never brings back a row the store
+  dropped. Clear all keeps the same rows. The dock badge is the count of those
+  rows (`useSummonsCount(null)`, and the hub's own count in local mode), read or
+  not. `useUnreadCount` still counts unread rows.
 - **`ledger` at 500** (`LEDGER_MEMORY_CAP`, in `electron/shared/ledger-contract.ts`)
   — the newest are kept, by both `hydrateLedger` and `ledgerAppend`. Unlike the
   inbox this cap loses nothing: the log on disk is complete, and an older entry is
@@ -311,7 +603,7 @@ pre-populated now start empty in both targets, because each has a real producer:
 
 `src/data/fixtures.ts` used to hold the concept's whole dataset — 10 sessions, 3
 agents, 5 projects, 8 tickets and the orchestrator boot banner — and the store
-loaded it at launch. That is what made the header count a fleet that was not
+loaded it at launch. That is what made the old header count a fleet that was not
 running, the projects tree list repositories nobody had mapped, and the WORK tab
 paint eight sample tickets for a frame before the real Jira read replaced them.
 
@@ -344,9 +636,15 @@ Every ticket is a real Jira issue. `ticketSource` says where the read has got to
 type TicketSource =
   | { kind: 'loading' }                               // boot, and every refresh
   | { kind: 'unconfigured' }                          // no credential — or a browser
-  | { kind: 'live'; stale: boolean; capped: boolean }
+  | { kind: 'live'; stale: boolean; capped: boolean; failedAt?: number }
   | { kind: 'failed'; message: string };
 ```
+
+A `Ticket` carries Jira's `priority` and the `assignee`'s display name beside the
+status and title, each `null` when Jira has none (HIVE-203). `toTicket` is the one
+mapping from a `JiraIssue`; `hydrateTickets` and `updateTicket` both go through it.
+The description and the parent are not on the list: the ticket page reads them per
+issue on `jira:detail`.
 
 `loading` replaced a `fixtures` variant that meant "these eight are samples",
 which is precisely what made real issues arrive *behind* fake ones. The panel
@@ -370,6 +668,19 @@ Two properties worth not breaking:
 - **`capped` is not a truncation.** Reaching the 200-issue limit sets the flag so
   the panel can say so. A backlog silently cut to 200 is the one failure a read
   path can have that the user cannot detect for themselves.
+
+**The stale line's two times (HIVE-211, D5).** `failedAt` is stamped on `live`
+once, when `stale` flips: the first failure of the outage, never moved by the
+repeats. The time of the last good read is **beside** the source, in
+`ticketsReadAt` (and `prsReadAt` for PRs), written by every successful hydrate
+and read through `useTicketsReadAt()` / `usePrsReadAt()`. Not inside the
+source, because the sweep runs once a minute and `hydrateTickets` keeps the
+source referentially stable on a quiet sweep; a time inside it would re-render
+every reader of the source every minute. Only the stale line reads it.
+
+`PrSource.unconfigured` carries `reason` (HIVE-211, D6): `'not-installed'`,
+`'unauthenticated'`, `'no-repos'`, or `null` for the browser preview, which has
+no `gh` to be wrong about. The PRs stage picks its title by it.
 
 ## The console grammar
 

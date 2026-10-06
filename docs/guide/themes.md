@@ -1,7 +1,8 @@
 # Themes
 
 One theme colours everything: the chrome, the terminal and the code editor. Every theme has a
-light and a dark mode; the sun and moon in the header switch between them.
+light and a dark mode. The sun or moon at the foot of the bar switches between them, and
+**Settings › Appearance › Mode** also offers System, which follows macOS.
 
 **On this page:** [Pick a theme](#pick-a-theme) · [Import your own](#import-your-own) ·
 [The theme file](#the-theme-file) · [Other appearance settings](#other-appearance-settings)
@@ -49,9 +50,18 @@ template is easiest.
 
 | Group | Keys | Colours |
 | --- | --- | --- |
-| `ui` | 28 | the app chrome: backgrounds, borders, ink, brand, status colours |
+| `ui` | 28 (+7 optional) | the app chrome: backgrounds, borders, ink, brand, status colours |
 | `syntax` | 11 | the editor: keyword, string, number, comment, selection… |
 | `terminal` | 11 (+2 optional) | xterm: background, ink and the ANSI colours |
+
+`ui.creep` and `ui.chitin` colour Home's comb creatures. They are optional: a theme without them
+imports with no warning, and the app derives both from the theme's own background, brand and ink,
+so its creatures match it rather than the Hive's violet.
+
+`ui.tissueDeep`, `ui.tissue` and `ui.tissueLit` are the Brood creatures' flesh in shadow, mid tone
+and light; `ui.glowCore` is the hot centre of their green glow (the glow itself is `ui.green`); and
+`ui.ground` is the ground they stand on. They are optional too: without them the app mixes each from
+the theme's background, chitin, creep, green and ink.
 
 The importer refuses a file over 256 KB, a version other than 1, a missing mode, a bad
 colour (naming the key), or a `terminal.bg` that differs from `ui.termBg`.

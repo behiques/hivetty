@@ -1,7 +1,7 @@
 # Containers
 
 Run a project's sessions, or an agent, inside a Docker (or Podman) container you already
-have running. The Hive never starts, stops or names the container; it only runs `claude`
+have running. Hive TTY never starts, stops or names the container; it only runs `claude`
 inside it.
 
 **On this page:** [How it works](#how-it-works) · [A containerised session](#a-containerised-session) ·
@@ -11,7 +11,7 @@ inside it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/containers.dark.svg">
-  <img src="../assets/diagrams/containers.light.svg" alt="The Hive runs claude inside your container with docker exec; the container reports back to the receiver over HTTP">
+  <img src="../assets/diagrams/containers.light.svg" alt="Hive TTY runs claude inside your container with docker exec; the container reports back to the receiver over HTTP">
 </picture>
 
 The container reaches the app through a host alias: `host.docker.internal` for Docker
@@ -47,7 +47,7 @@ Add a `container` block to the project. Its presence is the switch.
 | `freshness` | `exec-env` (default, no secret on disk) or `rewrite` |
 | `hostAlias` | overrides the global alias for this project |
 
-The rail's terminal link reads **terminal · host**: a plain terminal still opens on your Mac.
+The Sessions panel's terminal button is named **Terminal in <project> · host**: a plain terminal still opens on your Mac.
 
 ## A containerised agent
 

@@ -1,17 +1,18 @@
 # The inbox
 
-The inbox is the right rail's first tab. A card lands there when a session or agent needs
-you, so you never have to watch every tab.
+The inbox comes to you: a pill in the stage's corner counts what needs you, a card rises
+above it when something new arrives, and the drawer holds the whole queue. You never have
+to watch every session.
 
 **On this page:** [How a notification is born](#how-a-notification-is-born) ·
 [Card types](#card-types) · [Choosing what reaches you](#choosing-what-reaches-you) ·
-[What clears a card](#what-clears-a-card)
+[What clears a card](#what-clears-a-card) · [The pill and the drawer](#the-pill-and-the-drawer)
 
 <img src="../assets/guide/05-inbox-asks.png" alt="Two cards: a permission ask with a scope ladder, and a question with two options" width="360">
 
 ## How a notification is born
 
-The Hive writes a small hooks file for every session it starts. Claude Code then reports
+Hive TTY writes a small hooks file for every session it starts. Claude Code then reports
 what it is doing to a receiver inside the app, over loopback, with a per-session token.
 
 <picture>
@@ -73,12 +74,49 @@ Or in the config file:
 }
 ```
 
+A session is one card. When "runs out of instructions" replaces that session's "yours again"
+card, it notifies the desktop if either of the two is set to **Both**, so looking away after a
+turn you watched end still brings the notification.
+
 ## What clears a card
 
 - Opening the session or agent it is about.
 - The session leaving "needs input": you approved, answered, or typed a refusal.
   Pressing Escape on a prompt sends no hook, so that card stays until the next prompt.
-- **Clear all** at the top of the tab.
 
-The inbox keeps the latest 50 cards and does not survive a restart. The dock icon shows
-the unread count.
+The inbox keeps the latest 50 cards of news, and every card still waiting on you however
+many there are. It does not survive a restart. The dock icon counts what waits on you:
+open questions, permission requests and sessions waiting on you, not unread cards.
+
+## The pill and the drawer
+
+The Inbox sits in the stage's bottom-right corner, just above the page's own
+input.
+
+- **The pill** counts what needs you: open questions, permission requests,
+  review requests, and sessions waiting on you (blocked, yours again, or out of
+  instructions), leaving out the session on stage. What bounces the dock is
+  always on it. Turning a kind **Off** in Settings › Notifications keeps it off
+  the pill too. It is
+  absent at zero, and reads **99+** past ninety-nine; a screen reader still
+  hears the exact number.
+- **Cards.** A new ask rises above the pill as an answerable card. It stays 5
+  seconds, then folds into the pill. Pointing at it, focusing in it, or
+  answering it holds it up; ✕ folds it at once. Several at once stack, the
+  newest on top, under "N arrived just now · newest first". Each arrival
+  restarts the 5 seconds. A card never takes the keyboard.
+- **Notes.** A session off stage that asks a question, or becomes yours again, rises as a note:
+  **Open the session** takes you there, **Later** folds it.
+- **The quiet rules.** With the keyboard in a terminal, nothing rises; the
+  pill pulses once instead. With Settings open, arrivals wait and rise when it
+  closes. The session on stage never shows.
+- **The drawer.** The pill opens a 400px panel on the right, "Needs you", with
+  every ask whole and the sessions off stage under it. Esc or ✕ closes it.
+  Clicking an ask's desktop notification opens the drawer on that ask.
+- **Yours again.** A session in the Sessions panel that finished and is
+  waiting for you reads "yours again" until you open it.
+
+Echoes (news cards) are not in the Inbox: they show on Home,
+under **While you were away**, once nothing needs you. On Home, a **Needs you**
+row opens the drawer on that ask.
+
