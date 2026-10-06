@@ -32,14 +32,10 @@ import { useUpdateTicket } from '@stores/hive-store';
  * So the menu asks when it is opened, which is also the only moment the answer
  * matters.
  *
- * ## The primitive's own classes are inert here
+ * ## The primitive owns the look
  *
- * Same as `project-row-menu.tsx`, whose header explains it: `dropdown-menu.tsx`
- * is shadcn's and its defaults name shadcn's palette (`bg-popover`,
- * `bg-accent`), none of which exists in `tokens.css`. In Tailwind v4 a utility
- * whose token is undefined is never generated, so those classes are no-ops
- * rather than wrong colours — and every surface, border and text colour below
- * is therefore supplied explicitly.
+ * As in `project-row-menu.tsx`: `dropdown-menu.tsx` draws the menu surface and
+ * item recipe from `--cc-*` tokens (HIVE-225), so this menu passes layout only.
  */
 
 interface TicketTransitionMenuProps {

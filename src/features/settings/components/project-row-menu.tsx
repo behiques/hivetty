@@ -52,15 +52,11 @@ interface ProjectRowMenuProps {
  * is provable in unit tests. A lift mode would have made drag the only path to
  * that code, which is the fragile one.
  *
- * ## The primitive's own classes are inert here
+ * ## The primitive owns the look
  *
- * `dropdown-menu.tsx` is shadcn's, and this is its first consumer. Its defaults
- * name shadcn's palette (`bg-popover`, `bg-accent`, `text-destructive`), none of
- * which is defined in `tokens.css` — this app's colour comes from `--cc-*`. In
- * Tailwind v4 a utility whose token does not exist is simply never generated,
- * so those classes are no-ops rather than wrong colours. Every surface, border
- * and text colour below is therefore supplied explicitly; without them the menu
- * would render as unstyled text over the list.
+ * `dropdown-menu.tsx` draws the one menu surface (`MENU_SURFACE`) and the one
+ * item recipe from `--cc-*` tokens (HIVE-225), so this menu passes layout only:
+ * its `min-w`, and `variant="destructive"` for Remove.
  */
 export function ProjectRowMenu({
   projectName,
