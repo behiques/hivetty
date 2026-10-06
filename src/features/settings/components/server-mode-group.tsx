@@ -956,7 +956,7 @@ export function ServerModeGroup({
       />
 
       {attachOpen ? (
-        <div className="flex flex-col gap-3 rounded-[7px] border border-border-soft bg-panel-2 p-3">
+        <div className="flex flex-col gap-3 rounded-lg border border-border-soft bg-panel-2 p-3">
           {/*
             Fix round 1, item 2 (IMPORTANT). Naming the machine from
             `attachedServer` is correct and stays — that field genuinely is
@@ -1133,7 +1133,7 @@ export function ServerModeGroup({
             this machine in both and there is nothing left to hide them from.
           */}
           {paired ? (
-            <div className="flex items-center gap-2 rounded-[6px] border border-border bg-panel px-2.5 py-2 text-ui-sm">
+            <div className="flex items-center gap-2 rounded-md border border-border bg-panel px-2.5 py-2 text-ui-sm">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
               <span>Paired</span>
             </div>
@@ -1206,7 +1206,7 @@ export function ServerModeGroup({
           {/* Always mounted: the attach or detach result lands here, and a live region that mounts with its text is not reliably announced (HIVE-225). */}
           <div role="status" className="flex flex-col gap-3 empty:-mt-3">
             {switchResult && !switchResult.ok && switchResult.reason === 'live-sessions' ? (
-              <div className="flex items-start gap-2 rounded-[6px] border border-red bg-red/8 px-3 py-2.5">
+              <div className="flex items-start gap-2 rounded-md border border-red bg-red/8 px-3 py-2.5">
                 <WarningCircle size={14} className="mt-px shrink-0 text-red" />
                 <div className="flex flex-col gap-1 text-ui-sm">
                   <p className="text-ink">Can&rsquo;t attach while sessions are running here.</p>
@@ -1235,7 +1235,7 @@ export function ServerModeGroup({
               other validation failure in this file uses.
             */}
             {switchResult && !switchResult.ok && switchResult.reason === 'plaintext-refused' ? (
-              <div className="flex items-start gap-2 rounded-[6px] border border-red bg-red/8 px-3 py-2.5">
+              <div className="flex items-start gap-2 rounded-md border border-red bg-red/8 px-3 py-2.5">
                 <WarningCircle size={14} className="mt-px shrink-0 text-red" />
                 <p className="text-ui-sm text-ink">{ATTACH_HOST_INVALID}</p>
               </div>
@@ -1314,7 +1314,7 @@ export function ServerModeGroup({
         ) : null}
 
         {justPaired ? (
-          <div className="flex flex-col gap-1 rounded-[6px] border border-border bg-panel-2 p-2.5">
+          <div className="flex flex-col gap-1 rounded-md border border-border bg-panel-2 p-2.5">
             <p className="text-ui-sm text-ink">
               Token for &quot;{justPaired.name}&quot; — copy it now. It will not be
               shown again.

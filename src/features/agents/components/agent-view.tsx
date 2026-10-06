@@ -303,7 +303,7 @@ interface FactProps {
 
 function Fact({ label, tone, children }: FactProps) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 rounded-[7px] border border-border-soft bg-panel px-3 py-2.5">
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-lg border border-border-soft bg-panel px-3 py-2.5">
       <span className="text-micro tracking-[0.06em] text-subtle uppercase">{label}</span>
       <span className={cn('truncate', tone)}>{children}</span>
     </div>

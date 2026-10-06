@@ -254,7 +254,7 @@ export function SettingsOverlay() {
                   aria-current={active ? 'page' : undefined}
                   onClick={() => setSection(entry.id)}
                   className={cn(
-                    'rounded-[5px] px-2.5 py-1 text-left text-ui outline-none',
+                    'rounded-md px-2.5 py-1 text-left text-ui outline-none',
                     'focus-visible:ring-1 focus-visible:ring-brand',
                     active
                       ? 'bg-active text-ink'

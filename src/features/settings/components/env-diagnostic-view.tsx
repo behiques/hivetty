@@ -28,10 +28,10 @@ export function EnvDiagnosticView({ diagnostic }: EnvDiagnosticViewProps) {
   const { shell, error, vars } = diagnostic;
 
   return (
-    <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
+    <div className="flex flex-col gap-2 rounded-lg border border-border-soft p-3">
       <div className="flex flex-col gap-1">
         <span className="text-ui-sm text-muted">Ran</span>
-        <code className="rounded-[5px] bg-chip px-2 py-1.5 font-mono text-micro break-all text-muted">
+        <code className="rounded-md bg-chip px-2 py-1.5 font-mono text-micro break-all text-muted">
           {shell} {ENV_PROBE_ARGS.join(' ')}
         </code>
         {/*

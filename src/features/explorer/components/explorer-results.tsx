@@ -75,7 +75,7 @@ function HitGroup({
           else onOpenFile(hit.relPath, hit.name);
         }}
         title={hit.relPath}
-        className="flex w-full items-center gap-1.5 rounded-[5px] px-1.5 py-[3px] text-left hover:bg-hover"
+        className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-[3px] text-left hover:bg-hover"
       >
         {hasLines ? (
           <Icon
@@ -149,7 +149,7 @@ function LineRow({
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-baseline gap-2 rounded-[5px] py-[2px] pr-1.5 pl-[26px] text-left hover:bg-hover"
+      className="flex w-full items-baseline gap-2 rounded-md py-[2px] pr-1.5 pl-[26px] text-left hover:bg-hover"
     >
       <span className="w-6 shrink-0 text-right text-micro text-subtle tabular-nums">
         {line.line}
@@ -187,7 +187,7 @@ function Marked({
   return (
     <>
       {text.slice(0, start)}
-      <mark className="rounded-[2px] bg-code-selection text-ink">
+      <mark className="rounded-xs bg-code-selection text-ink">
         {text.slice(start, start + query.length)}
       </mark>
       {text.slice(start + query.length)}

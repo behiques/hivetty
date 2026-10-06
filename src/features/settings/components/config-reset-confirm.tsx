@@ -47,7 +47,7 @@ export function ConfigResetConfirm({
       label="Reset the config file?"
       title="Reset the config file to the first-run template?"
       confirmLabel="Reset config"
-      className="rounded-[7px] border border-red"
+      className="rounded-lg border border-red"
       onConfirm={onConfirm}
       onCancel={onCancel}
     >

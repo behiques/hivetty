@@ -69,7 +69,7 @@ export function SessionPluginsRow() {
   }
 
   return (
-    <div className="@container flex items-center gap-2.5 rounded-[6px] border border-border-soft bg-panel px-2.5 py-1.5 text-ui-sm">
+    <div className="@container flex items-center gap-2.5 rounded-md border border-border-soft bg-panel px-2.5 py-1.5 text-ui-sm">
       <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden whitespace-nowrap">
         <span className="shrink-0 text-subtle">Off in Hive sessions:</span>
         {off.length === 0 ? (
@@ -155,7 +155,7 @@ export function SessionPluginsRow() {
           </div>
 
           <DialogFooter className="border-t border-border-soft px-3.5 py-2.5">
-            <DialogClose className="rounded-[3px] border border-border bg-panel-2 px-[11px] py-[5px] text-control text-ink hover:bg-hover">
+            <DialogClose className="rounded border border-border bg-panel-2 px-[11px] py-[5px] text-control text-ink hover:bg-hover">
               Done
             </DialogClose>
           </DialogFooter>

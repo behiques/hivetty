@@ -47,7 +47,7 @@ export function PathSourceGroup({
       title="PATH source"
       description="Which environment this app searched when it started, and where it came from."
     >
-      <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
+      <div className="flex flex-col gap-2 rounded-lg border border-border-soft p-3">
         {loginEnv === null ? (
           <p data-probing className="text-control text-subtle">
             {probing}

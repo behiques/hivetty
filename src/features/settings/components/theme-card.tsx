@@ -94,7 +94,7 @@ export function ThemeCard({
 
   return (
     <div
-      className={`relative flex w-full flex-col gap-2 rounded-[7px] border bg-panel p-[9px] hover:bg-hover ${
+      className={`relative flex w-full flex-col gap-2 rounded-lg border bg-panel p-[9px] hover:bg-hover ${
         isActive
           ? 'border-brand-fill shadow-[0_0_0_1px_var(--cc-brand-fill)]'
           : 'border-border'
@@ -181,7 +181,7 @@ export function ThemeCard({
 /** The dark-fills / light-triangle swatch, drawn from the theme's own tokens. */
 function ThemeSwatch({ theme }: { theme: HiveTheme }) {
   return (
-    <div className="relative aspect-[16/9] overflow-hidden rounded-[5px] border border-border">
+    <div className="relative aspect-[16/9] overflow-hidden rounded-md border border-border">
       <SwatchHalf mode="dark" colors={theme.modes.dark} />
       <SwatchHalf
         mode="light"

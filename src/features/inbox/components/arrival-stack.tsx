@@ -111,7 +111,7 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
         </span>
       ) : null}
       <div className={cn('relative w-[380px] max-w-full', !reduced && 'motion-safe:animate-ccslidein')}>
-        <div className="relative z-[2] rounded-[10px] shadow-xl [&>article]:border-[color-mix(in_srgb,var(--cc-amber)_55%,var(--cc-border))]">
+        <div className="relative z-[2] rounded-xl shadow-xl [&>article]:border-[color-mix(in_srgb,var(--cc-amber)_55%,var(--cc-border))]">
           {shown.leaving && newest.action.type === 'ask' ? (
             <AskLeaving notif={newest} thread={newest.action.thread} />
           ) : newest.kind === 'session.blocked' ? (
@@ -126,14 +126,14 @@ export function ArrivalStack({ onStage }: ArrivalStackProps) {
           <span
             data-sliver
             aria-hidden
-            className="absolute inset-x-3 -bottom-[7px] z-[1] h-3 rounded-b-[10px] border border-t-0 border-border bg-panel-2"
+            className="absolute inset-x-3 -bottom-[7px] z-[1] h-3 rounded-b-xl border border-t-0 border-border bg-panel-2"
           />
         ) : null}
         {slivers >= 2 ? (
           <span
             data-sliver
             aria-hidden
-            className="absolute inset-x-6 -bottom-[13px] z-0 h-3 rounded-b-[10px] border border-t-0 border-border bg-panel-2 opacity-70"
+            className="absolute inset-x-6 -bottom-[13px] z-0 h-3 rounded-b-xl border border-t-0 border-border bg-panel-2 opacity-70"
           />
         ) : null}
       </div>

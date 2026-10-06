@@ -25,11 +25,11 @@ export interface LaneMark {
 export const GUTTER = 130;
 
 const SHAPE: Record<LaneMark['shape'], string> = {
-  flap: 'h-[22px] top-[9px] rounded-[5px] tabular-nums text-micro font-bold tracking-[0.08em]',
+  flap: 'h-[22px] top-[9px] rounded-md tabular-nums text-micro font-bold tracking-[0.08em]',
   commit: 'size-[10px] -ml-[5px] top-[21px] rounded-full border-2 border-brand bg-bg',
-  ci: 'h-3 top-5 rounded-[3px]',
+  ci: 'h-3 top-5 rounded',
   review: 'size-3 -ml-1.5 top-[19px] rotate-45',
-  comment: 'w-3 h-[11px] -ml-1.5 top-[19px] rounded-[3px_3px_3px_0] bg-brand',
+  comment: 'w-3 h-[11px] -ml-1.5 top-[19px] rounded rounded-bl-none bg-brand',
   hold: 'h-5 top-4 rounded-full border tabular-nums text-micro',
 };
 
@@ -123,7 +123,7 @@ export function TimelineLane({ label, marks, height = 52 }: { label: string; mar
         <div
           role="tooltip"
           className={cn(
-            'pointer-events-none absolute top-full z-10 -mt-2 flex flex-col gap-0.5 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5 text-ui-sm whitespace-nowrap text-muted shadow-lg',
+            'pointer-events-none absolute top-full z-10 -mt-2 flex flex-col gap-0.5 rounded-md border border-border bg-panel-2 px-2.5 py-1.5 text-ui-sm whitespace-nowrap text-muted shadow-lg',
             hover.from > 0.5 && '-translate-x-full',
           )}
           style={{ left: hover.left }}

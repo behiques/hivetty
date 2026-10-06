@@ -25,7 +25,7 @@ export function TicketRow({ row }: { row: TicketRowModel }) {
       onClick={() => openTicket(row.ticket.key)}
       aria-current={current ? 'true' : undefined}
       className={cn(
-        'flex w-full items-start gap-2.5 rounded-[7px] px-2 py-2 text-left hover:bg-hover',
+        'flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-hover',
         current && 'bg-active hover:bg-active',
       )}
     >

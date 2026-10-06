@@ -32,7 +32,7 @@ export function RunBar({ pushes, shown, files, onShow }: { pushes: Push[]; shown
             aria-pressed={push.sha === shown.sha}
             aria-label={`Run #${String(push.number)}, ${push.state}, ${push.sha.slice(0, 7)}`}
             onClick={() => onShow(push.sha)}
-            className={cn('h-[14px] w-[9px] rounded-[2px]', SQUARE[push.state], push.sha === shown.sha && 'outline outline-1 outline-offset-1 outline-ink')}
+            className={cn('h-[14px] w-[9px] rounded-xs', SQUARE[push.state], push.sha === shown.sha && 'outline outline-1 outline-offset-1 outline-ink')}
           />
         ))}
       </span>

@@ -225,7 +225,7 @@ export function AgentEditor({
 
   const tabClass = (which: Tab) =>
     cn(
-      'rounded-[5px] px-2 py-0.5 text-micro',
+      'rounded-md px-2 py-0.5 text-micro',
       tab === which ? 'bg-active text-ink' : 'text-subtle hover:text-ink',
     );
 

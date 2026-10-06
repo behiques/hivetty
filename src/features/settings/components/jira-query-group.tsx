@@ -87,7 +87,7 @@ export function JiraQueryGroup({ jql, canTest }: JiraQueryGroupProps) {
       title="Query"
       description="Which issues the WORK tab shows."
     >
-      <div className="flex flex-col gap-2.5 rounded-[7px] border border-border-soft p-3">
+      <div className="flex flex-col gap-2.5 rounded-lg border border-border-soft p-3">
         <TextField
           label="JQL override"
           value={draft}
@@ -103,7 +103,7 @@ export function JiraQueryGroup({ jql, canTest }: JiraQueryGroupProps) {
             onClick={test}
             disabled={!canTest}
             pending={testing}
-            className="rounded-[6px] border-border bg-panel-2 px-2.5 py-1 text-control leading-normal text-ink hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-panel-2 aria-disabled:text-subtle aria-disabled:hover:bg-panel-2"
+            className="rounded-md border-border bg-panel-2 px-2.5 py-1 text-control leading-normal text-ink hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-panel-2 aria-disabled:text-subtle aria-disabled:hover:bg-panel-2"
           >
             {testing ? testingPhrase : 'Test query'}
           </Button>

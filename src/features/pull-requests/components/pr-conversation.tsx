@@ -74,7 +74,7 @@ function Said({
       <span className="font-medium text-ink">{author}</span>
       {via ? <span className="text-micro text-subtle">via Hive TTY</span> : null}
       {verdict === undefined ? null : (
-        <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-micro font-semibold', verdict[1])}>
+        <span className={cn('rounded-md px-[7px] py-0.5 tabular-nums text-micro font-semibold', verdict[1])}>
           {verdict[0]}
         </span>
       )}

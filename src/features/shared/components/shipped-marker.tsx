@@ -76,7 +76,7 @@ export function ShippedStrip({
   ].filter((part) => part !== null);
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-[7px] border border-border-soft">
+    <div className="flex flex-col overflow-hidden rounded-lg border border-border-soft">
       <div className="flex flex-col gap-1 bg-brand/8 px-3 py-1.5 text-ui-sm text-muted">
         <div className="flex items-center gap-1.5">
           <span className="mr-auto font-medium text-brand">● Customised</span>
@@ -126,7 +126,7 @@ export function HeldBanner({
   if (status === undefined || !status.held) return null;
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-[7px] border border-amber/40 bg-amber/8 px-3 py-2 text-ui-sm text-ink">
+    <div className="flex flex-col gap-1.5 rounded-lg border border-amber/40 bg-amber/8 px-3 py-2 text-ui-sm text-ink">
       <span>
         <span className="font-medium text-amber-text">Update held.</span> A newer shipped prompt for{' '}
         {status.name} is waiting, but the one here has your edits. Until you choose, {status.name} runs
@@ -153,7 +153,7 @@ export function HeldBanner({
         </button>
       </span>
       {comparing ? (
-        <pre className="max-h-64 overflow-auto rounded-[5px] border border-border-soft bg-bg px-2.5 py-2 font-mono text-ui-sm whitespace-pre-wrap text-muted">
+        <pre className="max-h-64 overflow-auto rounded-md border border-border-soft bg-bg px-2.5 py-2 font-mono text-ui-sm whitespace-pre-wrap text-muted">
           {status.shippedBody.trim()}
         </pre>
       ) : null}

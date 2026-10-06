@@ -54,7 +54,7 @@ function ViaFace({ agent }: { agent: string }) {
     <span
       aria-hidden
       data-gutter="agent"
-      className="grid size-[26px] place-items-center rounded-[7px] border border-border bg-chip text-brand"
+      className="grid size-[26px] place-items-center rounded-lg border border-border bg-chip text-brand"
     >
       <Icon name={icon} size={14} />
     </span>
@@ -208,7 +208,7 @@ function ReplyBox({
           {mentions.map((mention) => (
             <span
               key={mention.accountId}
-              className="inline-flex items-center gap-1 rounded-[4px] bg-chip py-0.5 pl-1.5 pr-1 text-control font-medium text-brand"
+              className="inline-flex items-center gap-1 rounded bg-chip py-0.5 pl-1.5 pr-1 text-control font-medium text-brand"
             >
               @{mention.name}
               <button

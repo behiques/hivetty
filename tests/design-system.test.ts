@@ -288,7 +288,7 @@ describe('menus — one surface, one item recipe (HIVE-225)', () => {
 
   it('no consumer re-states the menu surface', () => {
     const offenders = files.filter((f) =>
-      readFileSync(f, 'utf8').includes('rounded-[7px] border border-border bg-panel p-1'),
+      readFileSync(f, 'utf8').includes('rounded-lg border border-border bg-panel p-1'),
     );
     expect(offenders.map(relative)).toEqual([]);
   });
@@ -375,5 +375,16 @@ describe('type scale (HIVE-225)', () => {
         new RegExp(`\`text-${name}\`\\s*\\|\\s*${size.replace('.', '\\.')}`),
       );
     }
+  });
+});
+
+describe('radius — Tailwind’s scale, nothing arbitrary (HIVE-224)', () => {
+  it('no rounded-[Npx] anywhere in src', () => {
+    const offenders = sourceFiles().flatMap((f) =>
+      readFileSync(f, 'utf8')
+        .split('\n')
+        .flatMap((line, i) => (/\brounded(?:-[a-z]{1,2})?-\[/.test(line) ? [`${relative(f)}:${String(i + 1)}`] : [])),
+    );
+    expect(offenders).toEqual([]);
   });
 });

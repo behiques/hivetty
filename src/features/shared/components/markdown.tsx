@@ -33,7 +33,7 @@ function inlineOne(token: Token): ReactNode {
       return <del>{inline((token as Tokens.Del).tokens)}</del>;
     case 'codespan':
       return (
-        <code className="rounded-[3px] bg-chip px-1 py-px font-mono text-ui-sm">
+        <code className="rounded bg-chip px-1 py-px font-mono text-ui-sm">
           {plain((token as Tokens.Codespan).text)}
         </code>
       );
@@ -70,7 +70,7 @@ function TestPlan({ items }: { items: Tokens.ListItem[] }) {
           {item.checked ? (
             <Check size={13} role="img" aria-label="done" className="shrink-0 text-green" />
           ) : (
-            <span role="img" aria-label="to do" className="mx-0.5 size-[9px] shrink-0 rounded-[2px] border border-subtle" />
+            <span role="img" aria-label="to do" className="mx-0.5 size-[9px] shrink-0 rounded-xs border border-subtle" />
           )}
           <span>{itemBody(item)}</span>
         </li>

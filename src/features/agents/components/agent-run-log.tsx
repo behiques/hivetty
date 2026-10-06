@@ -576,7 +576,7 @@ export function AgentRunLog({ name }: AgentRunLogProps) {
           data-testid="run-output-heading"
         >
           <span className="tracking-[0.1em] uppercase">Output</span>
-          <i className="rounded-[5px] bg-panel-2 px-[7px] py-0.5 not-italic" style={{ color: palette.blue }}>
+          <i className="rounded-md bg-panel-2 px-[7px] py-0.5 not-italic" style={{ color: palette.blue }}>
             {`#${selected.slice(0, 8)}`}
           </i>
           <span>{summary}</span>
