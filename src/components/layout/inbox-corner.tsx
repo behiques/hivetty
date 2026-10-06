@@ -39,7 +39,7 @@ export function InboxCorner({ stage, viewKey }: InboxCornerProps) {
 
   return (
     <div
-      className="pointer-events-none absolute right-6 z-20 flex flex-col items-end gap-3.5"
+      className="pointer-events-none absolute right-6 z-20 flex max-w-[calc(100%-3rem)] flex-col items-end gap-3.5"
       style={{ bottom }}
     >
       <div className="pointer-events-auto">

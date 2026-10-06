@@ -48,7 +48,7 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
     <article
       data-notification={notif.id}
       aria-label={`${name} asked a question`}
-      className="flex w-[380px] flex-col gap-[9px] rounded-[10px] border border-[color-mix(in_srgb,var(--cc-amber)_55%,var(--cc-border))] bg-panel-2 px-3.5 py-3 text-[12.5px] shadow-xl"
+      className="flex w-[380px] max-w-full flex-col gap-[9px] rounded-[10px] border border-[color-mix(in_srgb,var(--cc-amber)_55%,var(--cc-border))] bg-panel-2 px-3.5 py-3 text-[12.5px] shadow-xl"
     >
       <div className="flex items-center gap-[7px] text-[12px] text-muted">
         <span aria-hidden className="size-2 shrink-0 rounded-full bg-amber" />
