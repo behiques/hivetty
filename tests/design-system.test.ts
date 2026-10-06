@@ -448,6 +448,6 @@ describe('DESIGN-SYSTEM.md records the scales (HIVE-224)', () => {
     }
   });
   it('names no utility that does not exist', () => {
-    expect(readFileSync(resolve(process.cwd(), 'src/styles/tokens.css'), 'utf8')).not.toMatch(/`border-soft`/);
+    expect(doc).not.toMatch(/`border-soft`/);
   });
 });
