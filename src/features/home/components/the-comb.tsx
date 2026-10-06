@@ -70,6 +70,20 @@ export function TheComb({ label }: { label: string }) {
   const selectPlace = useSelectPlace();
   const setSessionsProject = useSetSessionsProject();
   const [hover, setHover] = useState<{ cell: CombCell; k: number } | null>(null);
+  /**
+   * Hover a cell, or nothing, committing only when that changes. The pointer
+   * reports every pixel and the hidden list re-runs `cellText` for every cell on
+   * each render, so a move inside one cell must cost nothing. Identity, not id:
+   * a new layout makes new cells whose `x`/`y` the tooltip needs. The check
+   * against the rendered `hover` comes first because an updater that returns
+   * `prev` still costs React one render right after a change; the updater's own
+   * check covers a move that lands before that render.
+   */
+  const hoverOn = (cell: CombCell | null, k: number) => {
+    const same = (h: typeof hover) => (h === null ? cell === null : h.cell === cell && h.k === k);
+    if (same(hover)) return;
+    setHover((prev) => (same(prev) ? prev : cell ? { cell, k } : null));
+  };
   const [focusedId, setFocusedId] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(entities.map((e) => [e.id, e])), [entities]);
@@ -132,7 +146,7 @@ export function TheComb({ label }: { label: string }) {
         className={cn('block aspect-[1376/520] w-full', hover && 'cursor-pointer')}
         onMouseMove={(event) => {
           const { cell, k } = pick(event);
-          setHover(cell ? { cell, k } : null);
+          hoverOn(cell, k);
         }}
         onMouseLeave={() => setHover(null)}
         onClick={(event) => {
@@ -155,7 +169,7 @@ export function TheComb({ label }: { label: string }) {
               onClick={() => activate(cell)}
               onFocus={() => {
                 setFocusedId(cell.id);
-                setHover({ cell, k: scale() });
+                hoverOn(cell, scale());
               }}
               onBlur={() => {
                 setFocusedId(null);

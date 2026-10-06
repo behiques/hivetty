@@ -1,10 +1,11 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 
 import { lineKey, placeThreads } from '@/lib/pr-files';
 import { splitRows, type DiffFile, type DiffLine } from '@/lib/unified-diff';
 import { cn } from '@/lib/utils';
 
 import { SegmentedControl } from '@components/ui/segmented-control';
+import { DiffRow, type SelectLine } from '@features/pull-requests/components/pr-diff-row';
 import { ThreadCard, type ThreadWrites } from '@features/pull-requests/components/thread-card';
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 import type { GhResult, PrFile, PrThread } from '@shared/github-contract';
@@ -15,16 +16,23 @@ const VIEWS = [
   { value: 'split', label: 'Split' },
 ] as const satisfies readonly { value: PrDiffView; label: string }[];
 
-const WASH: Record<DiffLine['kind'], string> = {
-  add: 'bg-[color-mix(in_srgb,var(--cc-green)_11%,transparent)]',
-  del: 'bg-[color-mix(in_srgb,var(--cc-red)_11%,transparent)]',
-  context: '',
-};
-const SIGN: Record<DiffLine['kind'], { text: string; tone: string }> = {
-  add: { text: '+', tone: 'text-green' },
-  del: { text: '−', tone: 'text-red' },
-  context: { text: '', tone: 'text-subtle' },
-};
+/**
+ * Past this many rows a file (a lockfile, a generated bundle) waits behind
+ * "Show full diff". Rows are the current view's: lines in Unified, paired rows
+ * in Split, so Split shows at least as many lines. The offer still says
+ * "lines" in Split, where the number is rows: an accepted approximation.
+ */
+export const DIFF_ROW_CAP = 2_000;
+
+/** How many of each hunk's rows to draw: the cap spent in order, across hunk boundaries. */
+export function capRows(counts: readonly number[], cap: number): number[] {
+  let left = cap;
+  return counts.map((count) => {
+    const shown = Math.min(count, left);
+    left -= shown;
+    return shown;
+  });
+}
 
 /** A selected gutter number: its side too, since a removed line and an added one can share a number. */
 interface Selection {
@@ -45,27 +53,6 @@ function openLineOf(lines: DiffLine[], index: number): number {
   if (next !== null && next !== undefined) return next;
   const before = lines.slice(0, index).findLast((line) => line.newN !== null)?.newN;
   return before ?? 1;
-}
-
-/**
- * One diff row: a 46px number gutter (a button, selecting the line), a 16px sign, the text.
- * `wrap` is Split's: a half-width column wraps a long line instead of running into its neighbour.
- */
-export function DiffRow({ line, n, side, selected, onSelect, wrap = false }: { line: DiffLine; n: number | null; side: 'L' | 'R'; selected: boolean; onSelect: () => void; wrap?: boolean }) {
-  const sign = SIGN[line.kind];
-  return (
-    <div data-kind={line.kind} className={cn('flex h-full pr-4 font-mono', wrap ? 'whitespace-pre-wrap' : 'whitespace-pre', WASH[line.kind], selected && 'shadow-[inset_2px_0_var(--cc-amber)]')}>
-      {n === null ? (
-        <span className="w-[46px] shrink-0" />
-      ) : (
-        <button type="button" aria-label={`${side === 'L' ? 'Old line' : 'Line'} ${String(n)}`} onClick={onSelect} className="w-[46px] shrink-0 pr-2.5 text-right text-subtle hover:text-ink">
-          {n}
-        </button>
-      )}
-      <span className={cn('w-4 shrink-0', sign.tone)}>{sign.text}</span>
-      <span className={cn('text-ink', wrap && 'min-w-0 wrap-anywhere')}>{line.text === '' ? ' ' : line.text}</span>
-    </div>
-  );
 }
 
 /**
@@ -125,6 +112,43 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
   const openAt = selected?.open ?? firstOpenLine(diff);
   const showable = diff !== null && !diff.binary && diff.hunks.length > 0;
   const placed = useMemo(() => (diff === null ? null : placeThreads(diff, threads)), [diff, threads]);
+  const select = useCallback<SelectLine>(
+    (side, h, at) => {
+      const lines = diff?.hunks[h]?.lines;
+      const line = lines?.[at];
+      if (!lines || !line) return;
+      const n = side === 'L' ? line.oldN : line.newN;
+      if (n !== null) setSelected({ side, n, open: openLineOf(lines, at) });
+    },
+    [diff],
+  );
+  const split = useMemo(() => diff?.hunks.map(splitRows) ?? [], [diff]);
+  const [full, setFull] = useState(false);
+  const counts = useMemo(
+    () => (view === 'unified' ? (diff?.hunks.map((hunk) => hunk.lines.length) ?? []) : split.map((rows) => rows.length)),
+    [view, diff, split],
+  );
+  const shown = useMemo(() => capRows(counts, full ? Infinity : DIFF_ROW_CAP), [counts, full]);
+  const hidden = counts.reduce((a, b) => a + b, 0) - shown.reduce((a, b) => a + b, 0);
+  // Threads anchored on rows past the cap draw nowhere until the full diff is shown, so the offer names them.
+  const hiddenThreads = useMemo(() => {
+    if (placed === null || diff === null || hidden === 0) return 0;
+    const drawn = new Set<string>();
+    const rest = new Set<string>();
+    diff.hunks.forEach((hunk, h) => {
+      const cut = shown[h] ?? 0;
+      const ends: [number | null, number | null][] =
+        view === 'unified' ? hunk.lines.map((line) => [line.oldN, line.newN]) : (split[h] ?? []).map((row) => [row.left?.oldN ?? null, row.right?.newN ?? null]);
+      ends.forEach(([oldN, newN], i) => {
+        const into = i < cut ? drawn : rest;
+        if (oldN !== null) into.add(lineKey('L', oldN));
+        if (newN !== null) into.add(lineKey('R', newN));
+      });
+    });
+    let count = 0;
+    for (const [key, list] of placed.at) if (rest.has(key) && !drawn.has(key)) count += list.length;
+    return count;
+  }, [placed, diff, hidden, shown, view, split]);
 
   const card = (thread: PrThread) => (
     <div key={thread.id} data-thread={thread.id} className="my-1.5 mr-[18px] ml-[72px] font-sans">
@@ -180,11 +204,13 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
           <>
             <ProblemLine problem={problem} onRetry={onRetry} className="px-[18px] pb-2" />
             {placed?.outdated.map(card)}
-            {diff.hunks.map((hunk, h) => (
+            {diff.hunks.map((hunk, h) => {
+              const rows = shown[h] ?? 0;
+              return rows === 0 ? null : (
               <div key={`${String(h)}${hunk.header}`}>
                 <div className="px-[18px] py-0.5 text-subtle">{hunk.header}</div>
                 {view === 'unified'
-                  ? hunk.lines.map((line, i) => {
+                  ? hunk.lines.slice(0, rows).map((line, i) => {
                       const side = line.newN === null ? 'L' : 'R';
                       const n = line.newN ?? line.oldN;
                       return (
@@ -193,8 +219,10 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                           line={line}
                           n={n}
                           side={side}
+                          hunk={h}
+                          at={i}
+                          onSelect={select}
                           selected={n !== null && selected?.side === side && selected.n === n}
-                          onSelect={() => n !== null && setSelected({ side, n, open: openLineOf(hunk.lines, i) })}
                         />
                         {line.oldN !== null && line.kind !== 'context' ? under(lineKey('L', line.oldN)) : null}
                         {line.newN !== null ? under(lineKey('R', line.newN)) : null}
@@ -202,7 +230,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                       </Fragment>
                       );
                     })
-                  : splitRows(hunk).map((row, i) => (
+                  : (split[h] ?? []).slice(0, rows).map((row, i) => (
                       <Fragment key={i}>
                         <div data-testid={`split-row-${String(i)}`} className="grid grid-cols-2">
                           <div data-side="left" className="min-w-0 border-r border-border-soft">
@@ -214,11 +242,10 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                                 n={row.left.oldN}
                                 side="L"
                                 wrap
+                                hunk={h}
+                                at={row.leftAt ?? 0}
+                                onSelect={select}
                                 selected={selected?.side === 'L' && selected.n === row.left.oldN}
-                                onSelect={() => {
-                                  const left = row.left;
-                                  if (left?.oldN != null) setSelected({ side: 'L', n: left.oldN, open: openLineOf(hunk.lines, hunk.lines.indexOf(left)) });
-                                }}
                               />
                             )}
                           </div>
@@ -231,11 +258,10 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                                 n={row.right.newN}
                                 side="R"
                                 wrap
+                                hunk={h}
+                                at={row.rightAt ?? 0}
+                                onSelect={select}
                                 selected={selected?.side === 'R' && selected.n === row.right.newN}
-                                onSelect={() => {
-                                  const right = row.right;
-                                  if (right?.newN != null) setSelected({ side: 'R', n: right.newN, open: right.newN });
-                                }}
                               />
                             )}
                           </div>
@@ -245,7 +271,16 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                       </Fragment>
                     ))}
               </div>
-            ))}
+              );
+            })}
+            {hidden > 0 ? (
+              <p className="flex items-center gap-2 px-[18px] py-2 font-sans text-control text-muted">
+                {`${String(hidden)} more ${hidden === 1 ? 'line' : 'lines'}${hiddenThreads === 0 ? '' : `, with ${String(hiddenThreads)} review ${hiddenThreads === 1 ? 'thread' : 'threads'}`}`}
+                <button type="button" onClick={() => setFull(true)} className="text-brand hover:underline">
+                  Show full diff
+                </button>
+              </p>
+            ) : null}
           </>
         ) : (
           <div className="flex flex-col gap-1 px-[18px] py-4 font-sans text-ui">

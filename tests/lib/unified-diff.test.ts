@@ -105,22 +105,40 @@ describe('splitRows', () => {
   const hunk = (lines: DiffLine[]) => ({ header: '@@', oldStart: 1, newStart: 1, lines });
 
   it('pairs a context line with itself', () => {
-    expect(splitRows(hunk([c(1)]))).toEqual([{ left: c(1), right: c(1) }]);
+    expect(splitRows(hunk([c(1)]))).toEqual([{ left: c(1), right: c(1), leftAt: 0, rightAt: 0 }]);
   });
   it('pairs equal runs of deletions and additions index by index', () => {
-    expect(splitRows(hunk([d(2), d(3), a(2), a(3)]))).toEqual([{ left: d(2), right: a(2) }, { left: d(3), right: a(3) }]);
+    expect(splitRows(hunk([d(2), d(3), a(2), a(3)]))).toEqual([
+      { left: d(2), right: a(2), leftAt: 0, rightAt: 2 }, { left: d(3), right: a(3), leftAt: 1, rightAt: 3 },
+    ]);
   });
   it('pads the shorter side of unequal runs with null', () => {
     expect(splitRows(hunk([d(2), a(2), a(3), c(4)]))).toEqual([
-      { left: d(2), right: a(2) }, { left: null, right: a(3) }, { left: c(4), right: c(4) },
+      { left: d(2), right: a(2), leftAt: 0, rightAt: 1 },
+      { left: null, right: a(3), leftAt: null, rightAt: 2 },
+      { left: c(4), right: c(4), leftAt: 3, rightAt: 3 },
     ]);
   });
   it('leaves a deletion-only run and an addition-only run alone', () => {
     expect(splitRows(hunk([d(2), c(3), a(4)]))).toEqual([
-      { left: d(2), right: null }, { left: c(3), right: c(3) }, { left: null, right: a(4) },
+      { left: d(2), right: null, leftAt: 0, rightAt: null },
+      { left: c(3), right: c(3), leftAt: 1, rightAt: 1 },
+      { left: null, right: a(4), leftAt: null, rightAt: 2 },
     ]);
   });
   it('starts a new pair when a deletion follows additions', () => {
-    expect(splitRows(hunk([a(1), d(1)]))).toEqual([{ left: null, right: a(1) }, { left: d(1), right: null }]);
+    expect(splitRows(hunk([a(1), d(1)]))).toEqual([
+      { left: null, right: a(1), leftAt: null, rightAt: 0 }, { left: d(1), right: null, leftAt: 1, rightAt: null },
+    ]);
+  });
+  it('carries each side’s index in hunk.lines, so a click needs no indexOf', () => {
+    const lines = [c(1), d(2), d(3), a(2), c(4), a(5)];
+    expect(splitRows(hunk(lines)).map(({ leftAt, rightAt }) => [leftAt, rightAt])).toEqual([
+      [0, 0], // context: one line, both sides
+      [1, 3], // d(2) paired with a(2)
+      [2, null], // d(3) unpaired
+      [4, 4], // context
+      [null, 5], // a(5) unpaired
+    ]);
   });
 });

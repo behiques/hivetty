@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session } from '@/types/entity';
@@ -187,6 +188,36 @@ describe('TheComb — hover, click and the hidden list', () => {
     expect(buttons[0]).toHaveAccessibleName('s0, Summons · p1, needs input');
     fireEvent.click(buttons[1]!);
     expect(openEntity).toHaveBeenCalledWith('s1');
+  });
+
+  it('commits nothing for a move inside the same cell, and follows a move to another (HIVE-224)', () => {
+    const layout = seed(2);
+    const commits = vi.fn();
+    render(
+      <Profiler id="comb" onRender={commits}>
+        <TheComb label="x" />
+      </Profiler>,
+    );
+    const s0 = layout.cells.find((c) => c.id === 's0')!;
+    const s1 = layout.cells.find((c) => c.id === 's1')!;
+    fireEvent.mouseMove(canvas(), { clientX: s0.x + 5, clientY: s0.y });
+    const settled = commits.mock.calls.length;
+    fireEvent.mouseMove(canvas(), { clientX: s0.x + 6, clientY: s0.y + 1 });
+    fireEvent.mouseMove(canvas(), { clientX: s0.x + 4, clientY: s0.y - 1 });
+    expect(commits).toHaveBeenCalledTimes(settled);
+    fireEvent.mouseMove(canvas(), { clientX: s1.x + 5, clientY: s1.y });
+    expect(commits.mock.calls.length).toBeGreaterThan(settled);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('s1');
+  });
+
+  it('focusing the cell already hovered moves only the ring, not the hover', () => {
+    const layout = seed(2);
+    render(<TheComb label="x" />);
+    const s0 = layout.cells.find((c) => c.id === 's0')!;
+    fireEvent.mouseMove(canvas(), { clientX: s0.x + 5, clientY: s0.y });
+    const tip = screen.getByRole('tooltip');
+    act(() => screen.getAllByRole('button')[0]!.focus());
+    expect(screen.getByRole('tooltip')).toBe(tip);
   });
 });
 

@@ -2,10 +2,25 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PrDiff } from '@features/pull-requests/components/pr-diff';
+import { capRows, DIFF_ROW_CAP, PrDiff } from '@features/pull-requests/components/pr-diff';
 import { parseUnifiedDiff } from '@lib/unified-diff';
 import { useUiStore } from '@stores/ui-store';
 import { prFile, prThread } from '@tests/support/pr-detail';
+
+const rowRenders = vi.hoisted(() => vi.fn());
+vi.mock('@features/pull-requests/components/pr-diff-row', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@features/pull-requests/components/pr-diff-row')>();
+  const { createElement, memo } = await import('react');
+  return {
+    ...actual,
+    // The real row, under the same shallow memo, counting its renders: what is
+    // under test is that PrDiff hands each row stable props.
+    DiffRow: memo((props: Parameters<typeof actual.DiffRowView>[0]) => {
+      rowRenders(props.side, props.n);
+      return createElement(actual.DiffRowView, props);
+    }),
+  };
+});
 
 const TEXT = [
   'diff --git a/src/fees/validator.ts b/src/fees/validator.ts', '--- a/src/fees/validator.ts', '+++ b/src/fees/validator.ts',
@@ -179,5 +194,70 @@ describe('PrDiff — Split and threads (HIVE-207)', () => {
     render(<PrDiff {...props({ problem: 'rate limited' })} />);
     expect(screen.getByText('rate limited')).toBeInTheDocument();
     expect(screen.queryByText('No diff to show')).toBeNull();
+  });
+});
+
+describe('PrDiff — selecting re-renders two rows, not the file (HIVE-224)', () => {
+  it('in Unified, only the row going off and the row coming on', async () => {
+    render(<PrDiff {...props()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Line 114' }));
+    rowRenders.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Line 116' }));
+    expect(rowRenders.mock.calls).toEqual(expect.arrayContaining([['R', 114], ['R', 116]]));
+    expect(rowRenders).toHaveBeenCalledTimes(2);
+  });
+
+  it('in Split, the same', async () => {
+    render(<PrDiff {...props()} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Split' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Old line 115' }));
+    rowRenders.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Line 115' }));
+    expect(rowRenders.mock.calls).toEqual(expect.arrayContaining([['L', 115], ['R', 115]]));
+    expect(rowRenders).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('capRows', () => {
+  it('spends the cap across hunks in order, and nothing after it', () => {
+    expect(capRows([3, 4, 5], 5)).toEqual([3, 2, 0]);
+    expect(capRows([3, 4], 100)).toEqual([3, 4]);
+    expect(capRows([3, 4], Infinity)).toEqual([3, 4]);
+  });
+});
+
+describe('PrDiff — a huge diff is capped (HIVE-224)', () => {
+  const huge = (n: number) =>
+    parseUnifiedDiff(
+      ['diff --git a/lock b/lock', '--- a/lock', '+++ b/lock', `@@ -0,0 +1,${String(n)} @@`, ...Array.from({ length: n }, (_, i) => `+line ${String(i)}`)].join('\n'),
+    )[0]!;
+
+  it('draws the first DIFF_ROW_CAP rows, then offers the rest', async () => {
+    render(<PrDiff {...props({ diff: huge(DIFF_ROW_CAP + 1) })} />);
+    expect(screen.getAllByRole('button', { name: /^Line \d+$/ })).toHaveLength(DIFF_ROW_CAP);
+    expect(screen.getByText('1 more line')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Show full diff' }));
+    expect(screen.getAllByRole('button', { name: /^Line \d+$/ })).toHaveLength(DIFF_ROW_CAP + 1);
+    expect(screen.queryByRole('button', { name: 'Show full diff' })).toBeNull();
+  });
+
+  it('names the review threads hidden past the cap in the offer', async () => {
+    const thread = prThread({ path: 'lock', line: DIFF_ROW_CAP + 2, diffSide: 'RIGHT' });
+    render(<PrDiff {...props({ file: prFile({ path: 'lock' }), diff: huge(DIFF_ROW_CAP + 5), threads: [thread] })} />);
+    expect(screen.queryByText(thread.comments[0]!.body)).toBeNull();
+    expect(screen.getByText('5 more lines, with 1 review thread')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Show full diff' }));
+    expect(screen.getByText(thread.comments[0]!.body)).toBeInTheDocument();
+  });
+
+  it('leaves threads on drawn rows out of the offer', () => {
+    const thread = prThread({ path: 'lock', line: 3, diffSide: 'RIGHT' });
+    render(<PrDiff {...props({ file: prFile({ path: 'lock' }), diff: huge(DIFF_ROW_CAP + 5), threads: [thread] })} />);
+    expect(screen.getByText('5 more lines')).toBeInTheDocument();
+  });
+
+  it('draws a diff at the cap whole, with no offer', () => {
+    render(<PrDiff {...props({ diff: huge(DIFF_ROW_CAP) })} />);
+    expect(screen.queryByRole('button', { name: 'Show full diff' })).toBeNull();
   });
 });
