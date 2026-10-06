@@ -216,7 +216,7 @@ describe('SplitHandle', () => {
 
   /*
     The gutter appearance the agent run log needs (HIVE polish). Both sides of
-    that seam are the same black, so a hairline in `border-soft` is exactly what
+    that seam are the same black, so a hairline in `border-border-soft` is exactly what
     separates one receipt row from the next — the divider read as one more row.
     A caller sizes the band itself and gets a grip in it instead of a rule.
   */

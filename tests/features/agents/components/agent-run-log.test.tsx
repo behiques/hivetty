@@ -194,7 +194,7 @@ describe('AgentRunLog', () => {
 
     /*
       Both sides of this seam are the same black, so a 1px rule in
-      `border-soft` is indistinguishable from the row rules a few pixels above
+      `border-border-soft` is indistinguishable from the row rules a few pixels above
       it — the divider between two documents read as one more receipts row. A
       band of the panel ground is the one thing a rule sharing that black
       cannot be, and the grip is the first time the control has looked like
