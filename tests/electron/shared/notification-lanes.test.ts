@@ -36,16 +36,18 @@ const newestFirst = (rows: HiveNotification[]) => [...rows].reverse();
 describe('laneOf', () => {
   it('reads the lane off the registry', () => {
     expect(laneOf('agent.ask')).toBe('summons');
-    expect(laneOf('session.idle')).toBe('burrowed');
+    expect(laneOf('session.idle')).toBe('summons');
     expect(laneOf('pr.merged')).toBe('echo');
   });
 });
 
 describe('waitsOnYou', () => {
-  it('is true for an open ask and a blocked session, false for news', () => {
+  it('is true for an open ask and a session waiting on you, false for news', () => {
     expect(waitsOnYou(row('agent.ask'), open)).toBe(true);
     expect(waitsOnYou(row('session.blocked'), open)).toBe(true);
-    expect(waitsOnYou(row('session.idle'), open)).toBe(false);
+    // It bounces the dock, so it waits on you (6 Oct 2026).
+    expect(waitsOnYou(row('session.idle'), open)).toBe(true);
+    expect(waitsOnYou(row('session.input_needed'), open)).toBe(true);
     expect(waitsOnYou(row('pr.merged'), open)).toBe(false);
   });
 
@@ -69,18 +71,13 @@ describe('trimNotifications', () => {
     );
   });
 
-  it('evicts Burrowed only after the last Echo', () => {
-    const idle = Array.from({ length: 45 }, () => row('session.idle'));
+  it('never evicts a session that is yours again: the session sweeps bound it', () => {
+    const idle = Array.from({ length: 60 }, () => row('session.idle'));
     const echoes = Array.from({ length: 10 }, () => row('pr.merged'));
     const trimmed = trimNotifications(newestFirst([...idle, ...echoes]), open);
 
-    expect(trimmed.filter((r) => r.kind === 'pr.merged')).toHaveLength(5);
-    expect(trimmed.filter((r) => r.kind === 'session.idle')).toHaveLength(45);
-
-    const more = Array.from({ length: 60 }, () => row('session.idle'));
-    const flooded = trimNotifications(newestFirst([...echoes, ...more]), open);
-    expect(flooded.some((r) => r.kind === 'pr.merged')).toBe(false);
-    expect(flooded).toHaveLength(NOTIFICATION_CAP);
+    expect(trimmed.filter((r) => r.kind === 'session.idle')).toHaveLength(60);
+    expect(trimmed.filter((r) => r.kind === 'pr.merged')).toHaveLength(10);
   });
 
   it('keeps more than fifty Summons, all of them', () => {

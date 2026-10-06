@@ -209,9 +209,9 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
     };
     await shoot('home-comb-needs');
 
-    // A new prompt answers the block; the turn's Stop leaves it idle.
+    // A new prompt answers the block and the session works again. No Stop: a
+    // finished turn is yours again, which is a summons since 6 Oct 2026.
     await post(waiting, 'UserPromptSubmit');
-    await post(waiting, 'Stop');
     await expect(page.getByRole('heading', { level: 2, name: 'The hive is humming' })).toBeVisible();
     await shoot('home-comb-calm');
 

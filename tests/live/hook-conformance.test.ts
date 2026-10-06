@@ -65,7 +65,7 @@ import type { SessionStatusEvent } from '../../electron/shared/session-contract'
  *                   -> Stop             idle      => row: session.idle (HIVE-89)
  *                   -> Notification     idle     idle_prompt        (+60s)
  *                   => 2 rows: session.idle (presented), session.input_needed
- *                      (inbox only), badge 0 (both rows are Burrowed)
+ *                      (inbox only), badge 2 (both rows are Summons)
  *
  * AskUserQuestion   -> UserPromptSubmit  working
  *                   -> PermissionRequest waiting
@@ -74,9 +74,10 @@ import type { SessionStatusEvent } from '../../electron/shared/session-contract'
  *                   -> PostToolUse       working                    (the fix)
  *                   -> Stop              idle      => row: session.idle
  *                   => 2 rows: session.blocked, session.idle — both presented,
- *                      badge **0**: answering the question retires the
- *                      blocked row, so it is raised, toasted and then swept
- *                      (see `expectedBadge`). Still not a second blocked row.
+ *                      badge **1**: answering the question retires the
+ *                      blocked row, so it is raised, toasted and then swept,
+ *                      and the idle row still counts (see `expectedBadge`).
+ *                      Still not a second blocked row.
  * ```
  *
  * ## The fifth row (HIVE-89)
@@ -332,16 +333,20 @@ const SCENARIO_TIMEOUT_MS = (IDLE_PROMPT_DEADLINE + 75) * 1000;
 
 /**
  * What the dock badge should read at the end of a run (HIVE-214): the rows
- * that wait on you, which in these scenarios is the `session.blocked` row —
- * and only while its question is unanswered. Idle and input-needed rows are
- * Burrowed and never count.
+ * that wait on you: the `session.blocked` row, and only while its question is
+ * unanswered, and the idle and input-needed rows, which are Summons too.
  *
  * `completesTool` is the discriminator because it is precisely "the block was
  * answered inside the run": the notifier sweeps the blocked row the moment the
  * session stops being `waiting`. The scenario that never answers keeps its row.
  */
 const expectedBadge = (kinds: NotificationKind[], completesTool: boolean): number =>
-  completesTool ? 0 : kinds.filter((kind) => kind === 'session.blocked').length;
+  kinds.filter(
+    (kind) =>
+      kind === 'session.idle' ||
+      kind === 'session.input_needed' ||
+      (kind === 'session.blocked' && !completesTool),
+  ).length;
 
 const scenarios: Scenario[] = [
   {

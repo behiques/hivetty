@@ -127,8 +127,11 @@ describe('ArrivalStack (HIVE-198)', () => {
     expect(announcement(notif({ kind: 'agent.ask', title: 'Which repo?' }), 'pr-patrol')).toBe(
       'pr-patrol asks: Which repo?',
     );
-    expect(announcement(notif({ kind: 'session.blocked' }), 'inbox-redesign')).toBe(
+    expect(announcement(notif({ kind: 'session.blocked', title: 'asked a question' }), 'inbox-redesign')).toBe(
       'inbox-redesign asked a question',
+    );
+    expect(announcement(notif({ kind: 'session.idle', title: 'is yours again' }), 'inbox-redesign')).toBe(
+      'inbox-redesign is yours again',
     );
   });
 });

@@ -1,9 +1,11 @@
 import type { RefObject } from 'react';
 
+
 import { ArrivalStack, announcement, useVisibleArrivals } from '@features/inbox/components/arrival-stack';
 import { InboxPill } from '@features/inbox/components/inbox-pill';
 import { useOnStage } from '@hooks/use-on-stage';
 import { useStageInset } from '@hooks/use-stage-inset';
+import { isSessionSummons } from '@shared/notification-lanes';
 import { useDisplayName, useThread } from '@stores/hive-store';
 import { useSettingsOpen } from '@stores/ui-store';
 
@@ -35,7 +37,7 @@ export function InboxCorner({ stage, viewKey }: InboxCornerProps) {
   const said =
     newest === undefined || settings
       ? ''
-      : announcement(newest, newest.kind === 'session.blocked' ? sessionName : from);
+      : announcement(newest, isSessionSummons(newest) ? sessionName : from);
 
   return (
     <div

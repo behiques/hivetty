@@ -15,8 +15,8 @@ interface SessionNoteProps {
 }
 
 /**
- * A session off stage that asked (HIVE-198). Its question is answered in its
- * own terminal, so this only takes you there.
+ * A session off stage that waits on you (HIVE-198): it asked, or its turn is
+ * over. Either is answered in its own terminal, so this only takes you there.
  */
 export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
   const terminalId = notif.action.type === 'session' ? notif.action.entityId : '';
@@ -26,6 +26,7 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
   const openEntity = useOpenEntity();
   const project = entity !== undefined && isSession(entity) ? entity.project : '';
   const open = () => openEntity(rowId);
+  const asked = notif.kind === 'session.blocked';
 
   if (variant === 'row') {
     return (
@@ -35,7 +36,9 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
           <span className="truncate">
             <b className="font-semibold text-ink">{name}</b> <span className="text-muted">{notif.title}</span>
           </span>
-          <span className="text-ui-sm text-muted">{`${project} · answer it in the session`}</span>
+          <span className="text-ui-sm text-muted">
+            {`${project} · ${asked ? 'answer it in the session' : 'pick it up in the session'}`}
+          </span>
         </span>
         <button type="button" onClick={open} className="text-control text-brand hover:underline">
           Open ›
@@ -47,13 +50,13 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
   return (
     <article
       data-notification={notif.id}
-      aria-label={`${name} asked a question`}
+      aria-label={`${name} ${notif.title}`}
       className="flex w-[380px] max-w-full flex-col gap-[9px] rounded-xl border border-amber-edge bg-panel-2 px-3.5 py-3 text-control shadow-xl"
     >
       <div className="flex items-center gap-[7px] text-control text-muted">
         <span aria-hidden className="size-2 shrink-0 rounded-full bg-amber" />
         <b className="font-semibold text-ink">{name}</b>
-        <span>asked a question</span>
+        <span>{notif.title}</span>
         <span className="flex-1" />
         <span className="tabular-nums text-amber-text">now</span>
         <button
@@ -65,7 +68,9 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
           <X size={14} />
         </button>
       </div>
-      <span className="text-muted">{`${project} · it waits in the session; the answer goes there`}</span>
+      <span className="text-muted">
+        {`${project} · ${asked ? 'it waits in the session; the answer goes there' : 'its turn is over; it waits for you'}`}
+      </span>
       <div className="flex gap-1.5">
         <Button size="sm" variant="primary" onClick={open}>
           Open the session

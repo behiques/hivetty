@@ -625,6 +625,26 @@ export function createNotifier(options: NotifierOptions): Notifier {
     }
 
     /**
+     * A session that ended takes its yours-again rows with it. They count on
+     * the pill and the dock and Clear all keeps them, so without this a row
+     * whose click opens nothing would stay counted for good.
+     */
+    if (hasEnded(status)) hub.dismissForSession(entityId, ARRIVAL_KINDS);
+
+    /**
+     * The session working again takes both yours-again rows with it, on every
+     * device at once: the hub announces the dismissal to each window and each
+     * attached client, so a row does not wait for the foreground sweep to
+     * catch up on a device that never looked. `UserPromptSubmit` is the user
+     * coming back; a `working` status is the turn resuming without a typed
+     * prompt. Neither is gated on `isDelegated`: a delegated session raises
+     * neither row, so there is nothing a hold could be protecting here.
+     */
+    if (event === 'UserPromptSubmit' || status === 'working') {
+      hub.dismissForSession(entityId, ARRIVAL_KINDS);
+    }
+
+    /**
      * The inbox is routed off the hook **event**, never off the status.
      *
      * These are two different questions that used to share one branch. The
@@ -734,6 +754,20 @@ export function createNotifier(options: NotifierOptions): Notifier {
       }
 
       /*
+        One row per session: the nudge supersedes the `session.idle` row of the
+        same stretch, so the pill, the drawer and the dock count the session
+        once. After the raise and only if it happened, so a switched-off kind
+        never leaves the session with no row at all. The pending entry for the
+        dismissed idle row goes with it; a gated nudge re-records itself below.
+      */
+      if (kind === 'session.input_needed' && raised !== null) {
+        hub.dismissForSession(entityId, ['session.idle']);
+        if (pendingForeground.get(entityId)?.kind === 'session.idle') {
+          pendingForeground.delete(entityId);
+        }
+      }
+
+      /*
         Remember it if, and only if, it was gated — `unread: false` off a raise
         that happened is the hub saying "kept, but delivered to nobody" — that
         is, every attended surface was already looking (HIVE-154). No
@@ -744,19 +778,6 @@ export function createNotifier(options: NotifierOptions): Notifier {
         `event !== undefined`.
       */
       if (raised !== null && !raised.unread) {
-        /*
-          One exception to "the newer replaces the older" (HIVE-89). A gated
-          `session.idle` is followed, a minute later and still gated, by the
-          `session.input_needed` for the same stretch — the same fact, said
-          twice, and the older is the one that toasts (`both`) while the newer
-          is inbox-only. Letting the nudge evict the moment would promote the
-          weaker of two rows about one idle and leave the stronger unread for
-          good. Both expire by `stillRelevant` on the same `UserPromptSubmit`,
-          so keeping the first costs nothing in staleness.
-        */
-        const pending = pendingForeground.get(entityId);
-        if (kind === 'session.input_needed' && pending?.kind === 'session.idle')
-          return;
         pendingForeground.set(entityId, { id: raised.id, kind });
       }
       return;

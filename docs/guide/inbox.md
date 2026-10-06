@@ -82,7 +82,7 @@ Or in the config file:
 
 The inbox keeps the latest 50 cards of news, and every card still waiting on you however
 many there are. It does not survive a restart. The dock icon counts what waits on you:
-open questions, permission requests and blocked sessions, not unread cards.
+open questions, permission requests and sessions waiting on you, not unread cards.
 
 ## The pill and the drawer
 
@@ -90,7 +90,10 @@ The Inbox sits in the stage's bottom-right corner, just above the page's own
 input.
 
 - **The pill** counts what needs you: open questions, permission requests,
-  review requests and blocked sessions, leaving out the session on stage. It is
+  review requests, and sessions waiting on you (blocked, yours again, or out of
+  instructions), leaving out the session on stage. What bounces the dock is
+  always on it. Turning a kind **Off** in Settings › Notifications keeps it off
+  the pill too. It is
   absent at zero, and reads **99+** past ninety-nine; a screen reader still
   hears the exact number.
 - **Cards.** A new ask rises above the pill as an answerable card. It stays 5
@@ -98,7 +101,7 @@ input.
   answering it holds it up; ✕ folds it at once. Several at once stack, the
   newest on top, under "N arrived just now · newest first". Each arrival
   restarts the 5 seconds. A card never takes the keyboard.
-- **Notes.** A session off stage that asks a question rises as a note:
+- **Notes.** A session off stage that asks a question, or becomes yours again, rises as a note:
   **Open the session** takes you there, **Later** folds it.
 - **The quiet rules.** With the keyboard in a terminal, nothing rises; the
   pill pulses once instead. With Settings open, arrivals wait and rise when it

@@ -41,10 +41,11 @@ export type Tone = 'amber' | 'green' | 'brand' | 'red';
 
 /**
  * Where a kind sits in the Inbox (HIVE-214, PRD v8 §5.1). Summons wait on you
- * and are counted; Burrowed is a session that is yours again; Echoes are news.
- * The trim evicts Echoes first, then Burrowed, and never a row that waits on you.
+ * and are counted, a session that is yours again among them (6 Oct 2026: it
+ * was its own Burrowed lane, which bounced the dock and showed on no pill);
+ * Echoes are news. The trim evicts Echoes, never a row that waits on you.
  */
-export type NotificationLane = 'summons' | 'burrowed' | 'echo';
+export type NotificationLane = 'summons' | 'echo';
 
 /**
  * Where a notification came from. Groups the settings section, nothing more.
@@ -460,7 +461,8 @@ export const NOTIFICATION_KIND_SPECS: Record<
       'Its turn ended and nothing is left running — no background agent, no background script. The moment it stopped working.',
     icon: 'ph-moon',
     tone: 'brand',
-    lane: 'burrowed',
+    // Summons: it bounces the dock, so it is on the pill too (6 Oct 2026).
+    lane: 'summons',
     defaultDelivery: 'both',
   },
   'session.input_needed': {
@@ -470,7 +472,7 @@ export const NOTIFICATION_KIND_SPECS: Record<
       'Its turn ended and nothing was typed for a while. Not a question — it has simply finished and is waiting on you.',
     icon: 'ph-keyboard',
     tone: 'amber',
-    lane: 'burrowed',
+    lane: 'summons',
     /**
      * `inbox`, not `both` — and not `off` either.
      *
