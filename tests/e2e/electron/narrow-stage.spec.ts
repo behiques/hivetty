@@ -1,6 +1,16 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+import {
+  HOOK_ENV_RECEIVER_URL,
+  HOOK_ENV_SESSION,
+  HOOK_ENV_TOKEN,
+  HOOK_HEADER_SESSION,
+  HOOK_HEADER_TOKEN,
+} from '../../../electron/shared/hook-contract';
+import { LEDGER_POST_PATH } from '../../../electron/shared/ledger-contract';
 
 import { launchHive, resizeTo, writeProjectConfig } from './fixtures/hive-app';
 
@@ -65,6 +75,103 @@ test('saved wide rails yield to the stage floor at 1,200px, and come back at 1,4
     await resizeTo(app, page, 1440);
     await expect.poll(() => width(page, LIST)).toBeCloseTo(wideList, 0);
     await expect.poll(() => width(page, SESSION)).toBeCloseTo(wideSession, 0);
+  } finally {
+    await app.close();
+  }
+});
+
+const readMarker = (path: string): string | null => (existsSync(path) ? readFileSync(path, 'utf8').trim() : null);
+
+async function shell(page: Page, sessionId: string, command: string): Promise<void> {
+  await page.evaluate(
+    ([id, data]) => {
+      window.hive!.pty.write({ sessionId: id!, data: data! });
+    },
+    [sessionId, `${command}\n`],
+  );
+}
+
+/** An ask posted from the session's own shell, as `inbox-pill.spec.ts` posts one. */
+function postAskCommand(body: string, statusMarker: string): string {
+  const payload = JSON.stringify({ to: 'overmind', kind: 'ask', body, meta: { options: ['yes', 'no'] } });
+  return (
+    `curl -sS -m 5 -o /dev/null -w '%{http_code}' -X POST "$${HOOK_ENV_RECEIVER_URL}${LEDGER_POST_PATH}"` +
+    ` -H "${HOOK_HEADER_SESSION}: $${HOOK_ENV_SESSION}"` +
+    ` -H "${HOOK_HEADER_TOKEN}: $${HOOK_ENV_TOKEN}"` +
+    ` -H "content-type: application/json"` +
+    ` --data-binary '${payload}'` +
+    ` > '${statusMarker}'`
+  );
+}
+
+const rect = (locator: Locator) =>
+  locator.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { left: r.left, right: r.right };
+  });
+
+async function expectInsideStage(page: Page, inner: Locator): Promise<void> {
+  const stage = await rect(page.getByRole('main'));
+  const box = await rect(inner);
+  expect(box.left).toBeGreaterThanOrEqual(stage.left - 0.5);
+  expect(box.right).toBeLessThanOrEqual(stage.right + 0.5);
+}
+
+test('at the stage floor the session header, an arrival card and the ended cover stay inside the stage (HIVE-225)', async ({}, testInfo) => {
+  test.setTimeout(90_000);
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeProjectConfig(configPath, { id: PROJECT, path: REAL_DIRECTORY });
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  try {
+    const page = await app.firstWindow();
+    await page.waitForSelector('nav[aria-label="Places"]');
+    // Both rails at their default widths, the session panel open.
+    await page.evaluate(() => {
+      const raw = localStorage.getItem('hive.appearance');
+      const saved =
+        raw === null
+          ? { state: {}, version: 4 }
+          : (JSON.parse(raw) as { state: Record<string, unknown>; version: number });
+      saved.state = { ...saved.state, sessionPanelOpen: true };
+      localStorage.setItem('hive.appearance', JSON.stringify(saved));
+    });
+    await page.reload();
+    await page.waitForSelector('nav[aria-label="Places"]');
+    await resizeTo(app, page, 1200);
+
+    await page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: 'Sessions', exact: true }).click();
+    await page.locator(LIST).getByRole('button', { name: new RegExp(`^${PROJECT}`) }).click();
+    await page.getByRole('main').getByRole('button', { name: `New session in ${PROJECT}`, exact: true }).click();
+    const terminal = page.locator('[data-terminal-id^="sess-"]').last();
+    await expect(terminal).toBeVisible();
+    const session = await terminal.getAttribute('data-terminal-id');
+    if (session === null) throw new Error('the spawned session has no terminal id');
+    await expect(page.locator(SESSION)).toBeVisible();
+    await expect.poll(() => width(page, 'main')).toBeGreaterThanOrEqual(STAGE_MIN - 1);
+
+    // The header: nothing scrolls sideways, and ⋯ sits inside its box.
+    const header = page.getByTestId('session-header');
+    expect(await header.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+    const headerBox = await rect(header);
+    const menuBox = await rect(page.getByRole('button', { name: 'Session menu' }));
+    expect(menuBox.right).toBeLessThanOrEqual(headerBox.right + 0.5);
+
+    // An arrival card, with the keyboard off the terminal so it rises; hovered so it does not fold.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const marker = testInfo.outputPath('posted-1.txt');
+    await shell(page, session, postAskCommand('Run the ledger tests?', marker));
+    await expect.poll(() => readMarker(marker), { timeout: 15_000 }).toBe('200');
+    const card = page.getByRole('article', { name: /^Ask from / });
+    await expect(card).toBeVisible();
+    await card.hover();
+    await expectInsideStage(page, page.getByTestId('arrival-stack'));
+
+    // The session ends: its cover's card fits the stage.
+    await page.mouse.move(0, 0);
+    await shell(page, session, 'exit');
+    const cover = page.getByRole('region', { name: 'Session ended' });
+    await expect(cover).toBeVisible({ timeout: 15_000 });
+    await expectInsideStage(page, cover);
   } finally {
     await app.close();
   }
