@@ -40,6 +40,7 @@ import { NewSessionPicker } from '@features/sessions/components/new-session-pick
 import { SessionBootCover } from '@features/sessions/components/session-boot-cover';
 import { SessionEndedCover } from '@features/sessions/components/session-ended-cover';
 import { TerminalEndedCover } from '@features/sessions/components/terminal-ended-cover';
+import { useLeaveOnEnd } from '@features/sessions/hooks/use-leave-on-end';
 import { useSessionBoot } from '@features/sessions/hooks/use-session-boot';
 import { SettingsOverlay } from '@features/settings/components/settings-overlay';
 import { WorkStage } from '@features/work/components/ticket-page';
@@ -188,6 +189,7 @@ export function CenterStage() {
     isTerminalView(view) ? activeTab : null,
     terminalRegion,
   );
+  useLeaveOnEnd(isTerminalView(view) ? entity : null);
   const showingPicker = view === 'picker';
   /**
    * Both full-stage overlays hide the terminal region, not just the picker.

@@ -449,16 +449,18 @@ describe('CenterStage — interactive terminals', () => {
       act(() =>
         useHiveStore.getState().setSessionStatus('hero-refresh', 'terminated'),
       );
+      // The ending took the stage to the Overmind; back on it, it is read-only.
+      act(() => useUiStore.getState().openTab('hero-refresh'));
 
       expect(optionsFor(1).disableStdin).toBe(true);
       expect(optionsFor(1).cursorBlink).toBe(false);
     });
 
-    it('does not navigate away — the exit notice is the point', () => {
+    it('goes back to the Overmind: an /exit is the user leaving', () => {
       /**
-       * Terminated sessions cannot be *re-entered*, but yanking the view out
-       * from under someone the instant their agent quits would make the ending
-       * impossible to read. The gate is about coming back, not about leaving.
+       * Story 108 stayed put so the ending could be read; the user asked
+       * (6 Oct 2026) for the ended card's ‹ Overmind click to go. A session
+       * opened after it ended still gets the card, which is where Resume is.
        */
       withBridge();
       render(<CenterStage />);
@@ -468,7 +470,8 @@ describe('CenterStage — interactive terminals', () => {
         useHiveStore.getState().setSessionStatus('hero-refresh', 'terminated'),
       );
 
-      expect(useUiStore.getState().activeTab).toBe('hero-refresh');
+      expect(useUiStore.getState().activeTab).toBe('orch');
+      expect(screen.queryByTestId('session-ended-cover')).toBeNull();
     });
   });
 
