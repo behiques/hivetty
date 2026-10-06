@@ -358,11 +358,12 @@ a `tint-exempt: <why>` comment on its line or the line above, which the scan in
 
 ## Type
 
-- **Family:** sans by default — `body` sets `--font-sans`, the system text
-  face. Every content area (tickets, PRs, agents, Home, Settings, the list
+- **Family:** IBM Plex (6 Oct 2026, on trial; Recursive is the fallback
+  pick). Sans by default: `body` sets `--font-sans`, IBM Plex Sans, bundled
+  in `styles/fonts.ts` with the system face behind it. Every content area (tickets, PRs, agents, Home, Settings, the list
   panel) sets words in it.
-- **Mono is only for code and consoles.** `--font-mono` (`ui-monospace, Menlo,
-  'SF Mono', monospace`, the `font-mono` utility) for what displays code or
+- **Mono is only for code and consoles.** `--font-mono` (IBM Plex Mono, then
+  `ui-monospace, Menlo`, the `font-mono` utility) for what displays code or
   machine output — `<pre>` and `<code>`, diff lines, matched lines in a file search, run logs, command output
   in Settings — and for the consoles: the Overmind and agent consoles, the
   message input under a terminal, and the covers over it. The terminal and the
