@@ -69,4 +69,16 @@ describe('ShipTrack', () => {
       .filter((li) => li.hasAttribute('data-state'));
     expect(stops.every((li) => li.getAttribute('data-state') === 'done')).toBe(true);
   });
+
+  it('is a size container whose stops other than the current one keep only their dot below 760px (HIVE-225)', () => {
+    useHiveStore.setState({
+      ledger: [entry({ kind: 'claim', meta: { task: `${slug}#1182` } }), stage('findings', T0 + 10 * 60_000)],
+    });
+    render(<ShipTrack pr={fixturePr()} />);
+    const band = screen.getByRole('group', { name: 'Ship track' });
+    expect(band).toHaveClass('@container');
+    expect(within(band).getByRole('list')).toHaveClass('min-w-0');
+    expect(within(band).getByText('Findings')).not.toHaveClass('@max-[760px]:sr-only');
+    expect(within(band).getByText('Approval')).toHaveClass('@max-[760px]:sr-only');
+  });
 });
