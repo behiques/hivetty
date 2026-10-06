@@ -453,7 +453,7 @@ Canvas loops, rAF work and SVG SMIL are out of its reach and must read
   `--cc-session-panel-w: 320px` (260–480) start there and drag from their
   seams, a 12px gutter with a grip; `AppShell` sets both tokens from
   `appearance-store`, and a double-click on the seam resets it.
-  A bar item is 52px wide, a 19px icon over a 9.5px/500 label; active is
+  A bar item is 52px wide, a 19px icon over an 11px/500 label (`text-micro`); active is
   `text-ink` on `bg-panel-2`, the rest `text-muted`.
 - Scrollbars are thin (10px), thumb `--cc-border`, transparent track, rounded.
 - **Shadows** are Tailwind's defaults (`shadow-lg`, `shadow-xl`, `shadow-2xl`).
