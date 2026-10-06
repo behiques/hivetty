@@ -84,14 +84,14 @@ open it again.
 | `rotate <agent>` | have the agent hand off, then start a fresh session |
 | `clear` | empty the transcript |
 
-`<project>` is a key, an id or a name: `hive`, `the-hive` or `"The Hive"`. A name with
+`<project>` is a key, an id or a name: `hive`, `the-hive` or `"Hive TTY"`. A name with
 spaces needs quotes. `<session>` is an id or a name, in any case.
 
 ## Examples
 
 ```text
 overmind ❯ spawn hive fix the flaky login test
-overmind ❯ spawn "The Hive" add a dark-mode toggle to settings
+overmind ❯ spawn "Hive TTY" add a dark-mode toggle to settings
 overmind ❯ send ABC-123 run the e2e suite again
 routed → ABC-123
 overmind ❯ open ABC-123
