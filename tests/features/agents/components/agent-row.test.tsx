@@ -66,6 +66,23 @@ describe('AgentRow', () => {
     vi.useRealTimers();
   });
 
+  it('centres the tile against one line or two, and levels the actions with the name', () => {
+    hydrate();
+    const { unmount } = render(<AgentRow id="watcher" />);
+    const row = () => screen.getByRole('button', { name: /^watcher, / });
+    const actions = () => screen.getByRole('button', { name: 'Pause watcher' }).parentElement!;
+    // One line: the actions sit in the middle of the row, beside the name.
+    expect(row()).toHaveClass('items-center');
+    expect(actions()).toHaveClass('top-1/2');
+    unmount();
+
+    said({ kind: 'event', body: 'run.ended — done' });
+    render(<AgentRow id="watcher" />);
+    // Two lines: the tile still centres, and the actions keep to the first line.
+    expect(row()).toHaveClass('items-center');
+    expect(actions()).toHaveClass('top-2');
+  });
+
   it('renders nothing for an id that is not an agent', () => {
     const { container } = render(<AgentRow id="nobody" />);
 
