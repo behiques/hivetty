@@ -711,6 +711,8 @@ export function createSessions(options: SessionsOptions): Sessions {
               ? { kind: 'lost', reason: `the shell was killed by signal ${data.signal}` }
               : { kind: 'finished' },
           );
+        } else if (data.signal !== undefined && data.signal !== 0) {
+          sessionLost(entityId, `its process was killed by signal ${data.signal}`);
         }
         settleCommand(entityId, {
           exitCode: data.exitCode,
@@ -727,6 +729,8 @@ export function createSessions(options: SessionsOptions): Sessions {
         send(channel, { ...data, sessionId: entityId } satisfies SessionLostEvent);
         if (terminalEntities.has(entityId)) {
           publishTerminalEnded(entityId, { kind: 'lost', reason: 'the pty host crashed' });
+        } else {
+          sessionLost(entityId, 'the pty host crashed');
         }
         // No code: nothing concluded. `-1` is the sentinel a command caller
         // reads as "did not finish", never as an exit status.
@@ -1432,6 +1436,21 @@ export function createSessions(options: SessionsOptions): Sessions {
    * `forward` and `supervisor.onError` translate whatever the host actually
    * said into one of the two kinds this function forwards untouched.
    */
+  /**
+   * A session's process went without being asked: a signal, or the pty host
+   * crashing. Sent **before** `settleExit` publishes `terminated`, so the
+   * renderer knows why when the ending lands, and keeps the ended card over
+   * the terminal instead of leaving for the Overmind as a clean `/exit` does.
+   * Not for a session that declared `/done`: the force-kill after a wedged
+   * `/exit` is still the user's ending. Nor for one the app killed itself
+   * ({@link appKilled}): a restart or a close hangs the pty up with SIGHUP, and
+   * the exit that follows reports that signal.
+   */
+  function sessionLost(entityId: string, reason: string): void {
+    if (declaredDone(entityId) || appKilled.has(entityId)) return;
+    send(CH.sessionTerminalEnded, { entityId, ending: { kind: 'lost', reason } } satisfies SessionTerminalEndedEvent);
+  }
+
   function publishTerminalEnded(entityId: string, ending: TerminalEnding): void {
     plans.forget(entityId);
     changedFiles.drop(entityId);
@@ -1476,6 +1495,20 @@ export function createSessions(options: SessionsOptions): Sessions {
    * pty cannot make, now supplied by whoever typed `/done`.
    */
   const finishing = new Map<string, ReturnType<typeof setTimeout> | null>();
+
+  /**
+   * Sessions whose pty the app is killing on purpose — a restart, a close. The
+   * exit that follows carries the signal the app sent, which is not a loss.
+   * Cleared when the exit settles, so an unasked kill of the next generation
+   * still keeps its ended card.
+   */
+  const appKilled = new Set<string>();
+
+  /** Kill a session's pty at the app's own request. */
+  function killOnPurpose(entityId: string, sessionId: string): void {
+    appKilled.add(entityId);
+    ptyIpc.kill(sessionId);
+  }
 
   /** Whether this session has declared itself finished. */
   const declaredDone = (entityId: string): boolean => finishing.has(entityId);
@@ -1796,6 +1829,7 @@ export function createSessions(options: SessionsOptions): Sessions {
    * for that session id undeliverable.
    */
   function settleExit(entityId: string): void {
+    appKilled.delete(entityId);
     bootstrap.cancel(entityId);
     heldInput.delete(entityId);
     /**
@@ -1984,6 +2018,7 @@ export function createSessions(options: SessionsOptions): Sessions {
          * to prevent, arrived at by way of a safety net.
          */
         setTimeout(() => {
+          appKilled.delete(request.entityId);
           reject(
             new Error(
               `restart: ${request.entityId} did not exit within ${RESTART_EXIT_TIMEOUT_MS}ms — its process may still be running`,
@@ -1992,7 +2027,7 @@ export function createSessions(options: SessionsOptions): Sessions {
         }, RESTART_EXIT_TIMEOUT_MS);
       });
 
-      ptyIpc.kill(sessionId);
+      killOnPurpose(request.entityId, sessionId);
       await exit;
     }
 
@@ -2845,7 +2880,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       if (sessionId === undefined) return;
       // The transcript stays readable — killing ends the process, it does not
       // clear the terminal.
-      ptyIpc.kill(sessionId);
+      killOnPurpose(entityId, sessionId);
     },
 
     restart(request) {

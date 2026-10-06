@@ -131,13 +131,15 @@ no model and no menu.
 
 ### When a session ends
 
-A session that ends while you are looking at it (`/exit`, `/done`, or its process going)
-takes you back to the overmind, with the selection on its row. `/clear` does not, because its
-terminal carries on as a new session.
+A session you end while looking at it (`/exit`, `/done`) takes you back to the overmind,
+with the selection on its row. `/clear` does not, because its terminal carries on as a new
+session. A session that ends without being asked (killed by a signal, or the pty host
+crashing) keeps you there, so its card can say what happened.
 
 An ended session's row can't be opened; **Resume** on the row picks it back up when it can.
-If a session ends while you are in its editor, its header's status reads **Ended**, with the
-reason as its tooltip, and a card covers the terminal when you come back to it: **This session ended**, why, and how long ago. When the conversation can be picked
+When a session is killed or crashes in front of you, or ends while you are in its editor,
+its header's status reads **Ended**, with the reason as its tooltip, and a card covers the
+terminal: **This session ended**, why, and how long ago. When the conversation can be picked
 up it adds that its transcript is on disk, and **Resume**. **‹ Overmind** is always there.
 ✕ closes the card to a strip along the foot, with the reason, Resume and Overmind, so you
 can read the scrollback above it. Closing is per session and forgotten on restart.

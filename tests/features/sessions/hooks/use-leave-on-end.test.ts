@@ -38,6 +38,12 @@ describe('useLeaveOnEnd', () => {
     expect(useUiStore.getState().activeTab).toBe('orch');
   });
 
+  it('stays on a session that was killed or lost, so its card can say why', () => {
+    const { rerender } = mount(live());
+    rerender({ e: ended({ lost: 'its process was killed by signal 15' }) });
+    expect(useUiStore.getState().activeTab).toBe('hero-refresh');
+  });
+
   it('stays for a /clear, whose terminal carries on', () => {
     const { rerender } = mount(live());
     rerender({ e: ended({ status: 'done', endedBy: 'cleared' }) });
