@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
+import { Button } from '@components/ui/button';
 import { SecretField } from '@components/ui/secret-field';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { clearJiraToken, saveJiraToken, testJiraConnection } from '@lib/jira';
@@ -222,20 +223,23 @@ export function JiraCredentialGroup({
         </p>
 
         <div className="flex items-center gap-2 border-t border-border-soft pt-2.5">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            pending={testing}
             onClick={test}
-            disabled={testing}
-            className="rounded-[6px] border border-border bg-panel-2 px-2.5 py-1 text-[12px] text-ink hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-panel-2"
+            className="rounded-[6px] border-border bg-panel-2 px-2.5 py-1 text-[12px] leading-normal text-ink hover:bg-hover aria-disabled:text-subtle aria-disabled:hover:bg-panel-2"
           >
             {testing ? testingPhrase : 'Test connection'}
-          </button>
+          </Button>
           <span className="text-[11.5px] text-subtle">
             Calls <code className="font-mono">/rest/api/3/myself</code>.
           </span>
         </div>
 
-        {verdict === null ? null : <TestVerdict result={verdict} />}
+        {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
+        <div role="status" className="empty:-mt-2.5">
+          {verdict === null ? null : <TestVerdict result={verdict} />}
+        </div>
       </div>
     </SettingsGroup>
   );
