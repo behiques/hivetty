@@ -254,15 +254,14 @@ export function NewSessionPicker() {
             <p className="text-center tabular-nums text-[11.5px] text-subtle">
               no projects yet — add one of your repositories to open a session in it
             </p>
-            <button
-              type="button"
+            <Button
+              variant="primary"
               // Wrapped: `openSettings` takes an optional pane, and a bare
               // handler would hand it the click event as one (HIVE-116).
               onClick={() => openSettings()}
-              className="rounded-md bg-brand-fill px-3 py-1.5 text-[12.5px] text-on-brand hover:bg-brand-fill-hover"
             >
               Add project
-            </button>
+            </Button>
           </div>
         ) : null}
 

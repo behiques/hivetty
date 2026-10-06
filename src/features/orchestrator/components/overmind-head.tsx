@@ -1,5 +1,6 @@
 import { Plus } from '@phosphor-icons/react';
 
+import { Button } from '@components/ui/button';
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { useProjectAccess } from '@hooks/use-project-config';
 import { useAgentsWorkingIn, useOvermindHeadCounts, useProjects, useSpawnSession } from '@stores/hive-store';
@@ -20,8 +21,6 @@ const FILTERS = [
 ] as const satisfies readonly { value: TableFilter; label: string }[];
 
 const plural = (n: number, word: string) => `${String(n)} ${word}${n === 1 ? '' : 's'}`;
-const primary =
-  'flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-fill px-3 py-1.5 text-[12.5px] text-on-brand hover:bg-brand-fill-hover disabled:cursor-not-allowed disabled:opacity-60';
 
 /**
  * The Overmind's page head (HIVE-197): what the table holds, its filter, and New
@@ -73,10 +72,10 @@ export function OvermindHead() {
       <span className="flex-1" />
       <SegmentedControl label="Show" options={FILTERS} value={filter} onChange={setFilter} />
       {project === null ? (
-        <button type="button" onClick={() => openPicker()} className={primary}>
+        <Button variant="primary" onClick={() => openPicker()} className="flex items-center gap-1.5">
           <Plus size={13} weight="bold" aria-hidden="true" />
           New session
-        </button>
+        </Button>
       ) : (
         <NewSessionHere projectId={project} projectName={name ?? project} />
       )}
@@ -91,15 +90,15 @@ function NewSessionHere({ projectId, projectName }: { projectId: string; project
   const access = useProjectAccess(projectId);
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="primary"
       onClick={() => spawnSession(projectId, '', newModel, newEffort)}
       disabled={!access.spawnable}
       title={access.reason ?? `Starts on ${newModel} · ${newEffort}`}
-      className={primary}
+      className="flex items-center gap-1.5"
     >
       <Plus size={13} weight="bold" aria-hidden="true" />
       New session in {projectName}
-    </button>
+    </Button>
   );
 }

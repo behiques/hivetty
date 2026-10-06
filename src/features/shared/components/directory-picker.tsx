@@ -1,6 +1,7 @@
 import { CaretRight, Folder, FolderOpen } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { Button } from '@components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -278,16 +279,16 @@ export function DirectoryPicker({
           >
             Cancel
           </button>
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             disabled={listing === null}
             onClick={() => {
               if (listing !== null) onChoose(listing.path);
             }}
-            className="rounded-[3px] border border-brand-fill-strong bg-brand-fill-strong px-[11px] py-[5px] text-[12px] text-on-brand hover:border-brand-fill hover:bg-brand-fill disabled:opacity-60"
           >
             {confirmLabel}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
