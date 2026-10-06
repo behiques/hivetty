@@ -318,11 +318,7 @@ export function SkillBundle({
                 selected ? 'bg-active text-ink' : 'text-muted'
               } ${over === entry.path ? 'bg-active' : ''}`}
             >
-              <span
-                className={`flex min-w-0 items-center gap-1.5 ${
-                  excluded === null ? '' : 'opacity-55'
-                }`}
-              >
+              <span className="flex min-w-0 items-center gap-1.5">
                 <Icon
                   name={
                     folder
@@ -332,9 +328,9 @@ export function SkillBundle({
                       : 'ph-file'
                   }
                   size={12}
-                  className="shrink-0"
+                  className={excluded === null ? 'shrink-0' : 'shrink-0 opacity-55'}
                 />
-                <span className="truncate tabular-nums">{name}</span>
+                <span className={excluded === null ? 'truncate tabular-nums' : 'truncate tabular-nums text-subtle'}>{name}</span>
               </span>
               {excluded === null ? null : (
                 <span className="shrink-0 text-[11px] text-subtle">
