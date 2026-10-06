@@ -80,7 +80,6 @@ export function ThemeCard({
   onExport,
   onRemove,
 }: ThemeCardProps) {
-
   // See `project-row-menu.tsx`: Radix returns focus to the trigger when the
   // menu closes, which is wrong for actions that replace this card's own
   // controls with something that focuses itself on mount (none here yet, but

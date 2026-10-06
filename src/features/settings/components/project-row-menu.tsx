@@ -75,7 +75,6 @@ export function ProjectRowMenu({
   autoMerge,
   onToggleAutoMerge,
 }: ProjectRowMenuProps) {
-
   /**
    * Whether the chosen item replaces the row with something that focuses itself.
    *
