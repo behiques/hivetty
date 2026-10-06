@@ -75,8 +75,6 @@ export function ProjectRowMenu({
   autoMerge,
   onToggleAutoMerge,
 }: ProjectRowMenuProps) {
-  const item =
-    'rounded-[4px] px-2 py-1 text-[12.5px] text-muted focus:bg-hover focus:text-ink data-[disabled]:opacity-35';
 
   /**
    * Whether the chosen item replaces the row with something that focuses itself.
@@ -112,7 +110,7 @@ export function ProjectRowMenu({
           handsOffFocus.current = false;
           event.preventDefault();
         }}
-        className="min-w-[11rem] rounded-[7px] border border-border bg-panel p-1 shadow-lg"
+        className="min-w-[11rem]"
       >
         {/*
           Disabled at the ends of the list rather than removed: an item that
@@ -122,14 +120,12 @@ export function ProjectRowMenu({
         <DropdownMenuItem
           disabled={!canMoveUp}
           onSelect={() => select(onMoveUp)}
-          className={item}
         >
           Move up
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={!canMoveDown}
           onSelect={() => select(onMoveDown)}
-          className={item}
         >
           Move down
         </DropdownMenuItem>
@@ -138,7 +134,6 @@ export function ProjectRowMenu({
 
         <DropdownMenuItem
           onSelect={() => select(onRename, true)}
-          className={item}
         >
           Rename…
         </DropdownMenuItem>
@@ -151,7 +146,6 @@ export function ProjectRowMenu({
         <DropdownMenuCheckboxItem
           checked={autoMerge}
           onSelect={() => select(onToggleAutoMerge)}
-          className={`${item} pl-7`}
         >
           Merge PRs unattended
         </DropdownMenuCheckboxItem>
@@ -163,13 +157,11 @@ export function ProjectRowMenu({
         */}
         <DropdownMenuItem
           onSelect={() => select(onChangeKey, true)}
-          className={item}
         >
           Change key…
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={() => select(onRepoint)}
-          className={item}
         >
           Change folder…
         </DropdownMenuItem>
@@ -178,7 +170,7 @@ export function ProjectRowMenu({
 
         <DropdownMenuItem
           onSelect={() => select(onRemove, true)}
-          className={`${item} text-red focus:text-red`}
+          variant="destructive"
         >
           Remove
         </DropdownMenuItem>

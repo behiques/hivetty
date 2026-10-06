@@ -220,7 +220,7 @@ export function TicketTransitionMenu({
 
       <DropdownMenuContent
         align="end"
-        className="min-w-[200px] rounded-[7px] border border-border bg-panel p-1 text-ink shadow-lg"
+        className="min-w-[200px]"
       >
         {state.kind === 'loading' || state.kind === 'applying' ? (
           <p className="px-2 py-1.5 text-[12px] text-subtle">
@@ -255,7 +255,7 @@ export function TicketTransitionMenu({
                   event.preventDefault();
                   apply(transition);
                 }}
-                className="flex cursor-pointer items-center justify-between gap-3 rounded-[5px] px-2 py-1.5 text-[12px] text-ink focus:bg-hover"
+                className="cursor-pointer justify-between gap-3"
               >
                 <span>{transition.name}</span>
                 <span className="text-[11px] text-subtle">
@@ -280,7 +280,7 @@ export function TicketTransitionMenu({
                   event.preventDefault();
                   apply(transition);
                 }}
-                className="flex cursor-pointer items-center justify-between gap-3 rounded-[5px] px-2 py-1.5 text-[12px] text-ink focus:bg-hover"
+                className="cursor-pointer justify-between gap-3"
               >
                 <span>{transition.name}</span>
                 {/* The destination, because a transition name is a verb and

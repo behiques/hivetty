@@ -272,3 +272,32 @@ describe('src/components/ui — no shadcn colour names', () => {
     expect(source.match(SHADCN_NAME)?.[0]).toBeUndefined();
   });
 });
+
+/** Every `src/**` file, for the scans below. */
+function sourceFiles(dir = resolve(process.cwd(), 'src')): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFiles(path);
+    return /\.tsx?$/.test(entry.name) ? [path] : [];
+  });
+}
+const relative = (path: string) => path.slice(process.cwd().length + 1);
+
+describe('menus — one surface, one item recipe (HIVE-225)', () => {
+  const files = sourceFiles().filter((f) => !f.endsWith('components/ui/dropdown-menu.tsx'));
+
+  it('no consumer re-states the menu surface', () => {
+    const offenders = files.filter((f) =>
+      readFileSync(f, 'utf8').includes('rounded-[7px] border border-border bg-panel p-1'),
+    );
+    expect(offenders.map(relative)).toEqual([]);
+  });
+
+  it('no consumer highlights a menu item with hover', () => {
+    const offenders = files.filter((f) => {
+      const source = readFileSync(f, 'utf8');
+      return source.includes('DropdownMenuItem') && /focus:bg-hover|data-\[highlighted\]:bg-hover/.test(source);
+    });
+    expect(offenders.map(relative)).toEqual([]);
+  });
+});
