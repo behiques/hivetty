@@ -1,4 +1,4 @@
-import { CaretDown } from '@phosphor-icons/react';
+import { ArrowSquareOut, CaretDown, Kanban } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { createPoller } from '@/hooks/create-poller';
@@ -28,7 +28,8 @@ import { useOpenWorkTicket } from '@stores/ui-store';
 /** The tab re-reads once a minute while it is the visible tab (HIVE-202, D4). */
 const useTabPoller = createPoller({ intervalMs: 60_000 });
 
-const ACTION = 'flex items-center gap-1.5 text-control text-brand hover:underline disabled:opacity-60';
+/** One action per line, as the Work page's Actions list draws them, so a long status never squeezes a neighbour. */
+const ACTION = 'flex items-center gap-2 py-1 text-left text-control text-brand hover:underline disabled:opacity-60';
 
 function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
   return (
@@ -232,12 +233,21 @@ export function TicketTab({ ticketKey, sessionId }: { ticketKey: string; session
       <Criteria ticketKey={ticketKey} />
       <LatestComment ticketKey={ticketKey} />
       <TicketLinks ticketKey={ticketKey} sessionId={sessionId} />
-      <footer className="flex items-start gap-3 border-t border-border-soft pt-2.5">
-        <TicketNextAction ticketKey={ticketKey} className={ACTION} />
-        <button type="button" className={cn(ACTION, 'ml-auto')} onClick={() => openOnWork(ticketKey)}>
-          Open the ticket ›
-        </button>
-      </footer>
+      <Section title="Actions">
+        <div className="flex flex-col items-start">
+          <TicketNextAction ticketKey={ticketKey} className={ACTION} />
+          <button type="button" className={ACTION} onClick={() => openOnWork(ticketKey)}>
+            <Kanban size={13} aria-hidden />
+            Open the ticket
+          </button>
+          {ticket?.url ? (
+            <a className={ACTION} href={ticket.url} target="_blank" rel="noreferrer">
+              <ArrowSquareOut size={13} aria-hidden />
+              Open in Jira
+            </a>
+          ) : null}
+        </div>
+      </Section>
     </div>
   );
 }

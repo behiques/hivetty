@@ -155,7 +155,7 @@ describe('TicketTab (HIVE-202)', () => {
     seed();
     render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Open the ticket ›' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open the ticket' }));
 
     expect(useUiStore.getState().workTicket).toBe('HIVE-193');
     expect(useUiStore.getState().place).toBe('work');
@@ -267,11 +267,11 @@ describe('TicketTab links (HIVE-202)', () => {
 
   it('says there are no linked tickets, with no drawing, when only remote links exist', () => {
     seed({ links: [remote] });
-    const { container } = render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
+    render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
 
     expect(screen.getByRole('heading', { name: 'Links 0' })).toBeInTheDocument();
     expect(screen.getByText('No linked tickets')).toBeInTheDocument();
-    expect(container.querySelector('svg')).toBeNull();
+    expect(screen.queryByRole('group', { name: /^Links of/ })).toBeNull();
   });
 
   it('draws a row per non-empty arc, each opening its list', async () => {
