@@ -53,7 +53,7 @@ export function TicketNextAction({ ticketKey, className }: { ticketKey: string; 
         pending={busy}
       >
         <CaretRight size={13} aria-hidden />
-        Move to
+        Move to{' '}
         {/* The header's own status pill, so where it goes reads like where it is. */}
         <span className={cn(STATUS_PILL, CATEGORY_TEXT[next.to.statusCategory])}>{next.to.name}</span>
       </Button>
