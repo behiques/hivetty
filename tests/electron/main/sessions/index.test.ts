@@ -215,7 +215,7 @@ const BOOT = `unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN; claude --session-id 
  * The task is a positional argument on `BOOT`, not a second thing written into
  * the pty after it — which is why there is a constant for it at all.
  */
-const BOOT_WITH_TASK = `unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN; claude --session-id ${TEST_UUID} 'fix the hero' && exit`;
+const BOOT_WITH_TASK = `unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN; claude --session-id ${TEST_UUID} -- 'fix the hero' && exit`;
 
 /** How long after a stage's text its submitting `\r` follows (HIVE-63). */
 const SUBMIT = 300;
