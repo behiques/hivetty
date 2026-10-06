@@ -26,7 +26,7 @@ export function CommandDiagnosticView({ diagnostic }: CommandDiagnosticViewProps
   const found = resolved !== null;
 
   return (
-    <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
+    <div className="flex flex-col gap-2 rounded-lg border border-border-soft p-3">
       <p className="flex items-start gap-2 text-control">
         {found ? (
           <CheckCircle size={14} className="mt-px shrink-0 text-green" />
@@ -69,7 +69,7 @@ export function CommandDiagnosticView({ diagnostic }: CommandDiagnosticViewProps
 
       <div className="flex flex-col gap-1">
         <span className="text-ui-sm text-muted">Searched</span>
-        <code className="rounded-[5px] bg-chip px-2 py-1.5 font-mono text-micro break-all text-muted">
+        <code className="rounded-md bg-chip px-2 py-1.5 font-mono text-micro break-all text-muted">
           {path === '' ? '(empty)' : path}
         </code>
       </div>

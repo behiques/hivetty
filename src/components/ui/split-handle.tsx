@@ -41,7 +41,7 @@ interface SplitHandleProps {
    * is right where the seam divides two surfaces that already look different —
    * the editor's panes, a panel against the stage. It is wrong where both sides
    * are the same black: in the agent run log the receipts table and the output
-   * share one ground, so a hairline in `border-soft` is indistinguishable from
+   * share one ground, so a hairline in `border-border-soft` is indistinguishable from
    * the row rules a few pixels above it, and the divider read as one more table
    * row (HIVE polish). A caller passing this sizes the handle itself — 12px of
    * band, filled from its own `className` — and gets three dots centred in it

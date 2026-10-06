@@ -854,7 +854,7 @@ describe('AskCard head (HIVE-198)', () => {
     seedLedger([ask]);
     render(<AskCard notif={notif} thread="a41" />);
     expect(screen.getByText('asks')).toBeInTheDocument();
-    expect(screen.getByRole('article')).toHaveClass('rounded-[10px]');
+    expect(screen.getByRole('article')).toHaveClass('rounded-xl');
   });
 });
 

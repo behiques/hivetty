@@ -6,9 +6,9 @@ function LimitRow({ label, pct, rest }: { label: string; pct: number; rest: stri
   return (
     <div className="grid grid-cols-[56px_1fr_34px_76px] items-center gap-2 text-control text-muted">
       <span>{label}</span>
-      <span className="h-1.5 rounded-[3px] bg-chip" aria-hidden="true">
+      <span className="h-1.5 rounded bg-chip" aria-hidden="true">
         <span
-          className="block h-full rounded-[3px] bg-muted"
+          className="block h-full rounded bg-muted"
           style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
         />
       </span>

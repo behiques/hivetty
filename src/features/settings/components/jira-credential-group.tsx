@@ -164,7 +164,7 @@ export function JiraCredentialGroup({
       title="API token"
       description="The one secret this app stores."
     >
-      <div className="flex flex-col gap-2.5 rounded-[7px] border border-border-soft p-3">
+      <div className="flex flex-col gap-2.5 rounded-lg border border-border-soft p-3">
         <CredentialLine credential={status.credential} />
 
         {/* A control that cannot work is absent rather than disabled — the same
@@ -188,7 +188,7 @@ export function JiraCredentialGroup({
                 type="button"
                 onClick={save}
                 disabled={draft.trim() === ''}
-                className="rounded-[6px] border border-border bg-panel-2 px-2.5 py-1 text-control text-ink hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-panel-2"
+                className="rounded-md border border-border bg-panel-2 px-2.5 py-1 text-control text-ink hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-panel-2"
               >
                 Save
               </button>
@@ -196,7 +196,7 @@ export function JiraCredentialGroup({
                 <button
                   type="button"
                   onClick={clear}
-                  className="rounded-[6px] border border-transparent px-2 py-1 text-control text-subtle hover:bg-hover hover:text-ink"
+                  className="rounded-md border border-transparent px-2 py-1 text-control text-subtle hover:bg-hover hover:text-ink"
                 >
                   Clear
                 </button>
@@ -227,7 +227,7 @@ export function JiraCredentialGroup({
             variant="ghost"
             pending={testing}
             onClick={test}
-            className="rounded-[6px] border-border bg-panel-2 px-2.5 py-1 text-control leading-normal text-ink hover:bg-hover aria-disabled:text-subtle aria-disabled:hover:bg-panel-2"
+            className="rounded-md border-border bg-panel-2 px-2.5 py-1 text-control leading-normal text-ink hover:bg-hover aria-disabled:text-subtle aria-disabled:hover:bg-panel-2"
           >
             {testing ? testingPhrase : 'Test connection'}
           </Button>

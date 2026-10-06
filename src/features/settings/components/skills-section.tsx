@@ -849,7 +849,7 @@ export function SkillsSection() {
           an invitation reads as a furnished, empty place; a bare heading above a
           button reads as a broken render.
         */}
-        <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
+        <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border px-4 py-6 text-center">
           <SwarmCreature creature="spire" size={120} className="mb-9" />
           <span className="text-ui-sm text-muted">{phrase}</span>
           <span className="text-ui-sm text-subtle">
@@ -860,7 +860,7 @@ export function SkillsSection() {
         {error === null ? null : (
           <p
             role="alert"
-            className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
+            className="rounded-md border border-red px-2.5 py-1.5 text-ui-sm text-red"
           >
             {error}
           </p>
@@ -912,7 +912,7 @@ export function SkillsSection() {
       {invalid.map((skill) => (
         <p
           key={skill.name}
-          className="rounded-[5px] border border-amber px-2.5 py-1.5 text-ui-sm text-amber-text"
+          className="rounded-md border border-amber px-2.5 py-1.5 text-ui-sm text-amber-text"
         >
           {skill.name}: {skill.reason}
         </p>
@@ -921,7 +921,7 @@ export function SkillsSection() {
       {error === null ? null : (
         <p
           role="alert"
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
+          className="rounded-md border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -962,7 +962,7 @@ export function SkillsSection() {
             onDrop={dropIntoBundle}
           />
         ) : (
-        <div className="flex flex-col overflow-y-auto rounded-[7px] border border-border">
+        <div className="flex flex-col overflow-y-auto rounded-lg border border-border">
           {rows.map((row) => {
             const active = row.name === open;
             const broken = row.reason !== null;
@@ -1041,7 +1041,7 @@ export function SkillsSection() {
             </>
           )}
           {buffer === null ? (
-            <div className="flex flex-1 items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-ui-sm text-subtle">
+            <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-ui-sm text-subtle">
               {drilled === null
                 ? 'Select a skill, or write a new one.'
                 : 'Select a file, or add one.'}
@@ -1095,7 +1095,7 @@ export function SkillsSection() {
               label={pending.question}
               title={pending.question}
               confirmLabel={pending.confirmLabel}
-              className="rounded-[6px] border border-border-soft"
+              className="rounded-md border border-border-soft"
               cancelLabel="Keep editing"
               escape="document"
               onConfirm={() => {

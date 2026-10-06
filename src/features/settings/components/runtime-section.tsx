@@ -184,7 +184,7 @@ export function RuntimeSection() {
       {snapshot.errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
+          className="rounded-md border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -358,7 +358,7 @@ export function RuntimeSection() {
         <button
           type="button"
           onClick={() => void runDiagnostic()}
-          className="w-fit rounded-[6px] border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
+          className="w-fit rounded-md border border-border px-2.5 py-1 text-control text-muted hover:bg-hover hover:text-ink"
         >
           {selectedId === ''
             ? 'Check the default command'
@@ -376,7 +376,7 @@ export function RuntimeSection() {
           variant="ghost"
           onClick={() => void runEnvDiagnostic()}
           pending={envDiagnosticPending}
-          className="w-fit rounded-[6px] border-border px-2.5 py-1 text-control leading-normal text-muted hover:bg-hover hover:text-ink aria-disabled:opacity-60"
+          className="w-fit rounded-md border-border px-2.5 py-1 text-control leading-normal text-muted hover:bg-hover hover:text-ink aria-disabled:opacity-60"
         >
           {envDiagnosticPending
             ? 'Checking…'
@@ -451,7 +451,7 @@ function ProjectOverrides({
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-[7px] border border-border-soft p-3">
+    <div className="flex flex-col gap-3 rounded-lg border border-border-soft p-3">
       <div className="grid max-w-[520px] grid-cols-2 gap-3">
         <TextField
           label="Shell override"

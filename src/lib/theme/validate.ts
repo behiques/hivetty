@@ -485,6 +485,13 @@ export function importTheme(raw: string, fileName: string): ImportResult {
       ui.dangerSolid,
       4.5,
     );
+    /**
+     * The plan glyph's done check: `text-panel` on `bg-green`
+     * (`plan-glyph.tsx`). A glyph rather than text, so WCAG 1.4.11's 3:1 for a
+     * graphic. Every built-in clears it; an imported theme with a pale green
+     * would draw a check nobody can see, and nothing said so.
+     */
+    checkContrast(notes, mode, 'panel', ui.panel, 'green', ui.green, 3);
   }
 
   const theme: HiveTheme = {

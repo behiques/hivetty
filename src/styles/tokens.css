@@ -7,7 +7,7 @@
  * `data-theme` flip on <body> recolours the whole app.
  *
  * Components use the resulting utilities (`bg-panel`, `text-muted`,
- * `border-soft`). Raw hex literals in component code are banned.
+ * `border-border-soft`). Raw hex literals in component code are banned.
  *
  * The terminal text palette is deliberately NOT here — it never reaches CSS.
  * It lives in `src/lib/terminal/ansi.ts` and is consumed as JS by xterm's
@@ -310,6 +310,12 @@ body[data-theme='light'] {
   --cc-code-selection: #cfe3f7;
 }
 
+/*
+ * Deliberately unbound: `--cc-shell`, `--cc-tissue*`, `--cc-glow-core` and
+ * `--cc-ground` are the creatures' and the splash's, read raw by canvas code
+ * (`src/splash/stage.ts`) and by inline `var()`; no component should paint
+ * with them, so they get no utility. A `bg-ground` would silently not exist.
+ */
 /**
  * `inline` matters: it makes the utilities emit `var(--cc-*)` rather than
  * resolving the value at build time, which is what lets the `data-theme`
@@ -349,6 +355,24 @@ body[data-theme='light'] {
   --color-on-brand: var(--cc-on-brand);
   --color-danger-solid: var(--cc-danger-solid);
   --color-on-danger: var(--cc-on-danger);
+  /**
+   * Status tints (HIVE-224): one map, mixed in srgb from the live tokens, so a
+   * theme recolours them. `soft` washes a line or a banner, `strong` fills a
+   * pill or a badge, `edge` is a tinted border or stroke. Data-viz fills,
+   * glows and gradients keep their own mix (DESIGN-SYSTEM.md, "Status → colour").
+   */
+  --color-green-soft: color-mix(in srgb, var(--cc-green) 10%, transparent);
+  --color-green-strong: color-mix(in srgb, var(--cc-green) 16%, transparent);
+  --color-green-edge: color-mix(in srgb, var(--cc-green) 50%, var(--cc-border));
+  --color-amber-soft: color-mix(in srgb, var(--cc-amber) 10%, transparent);
+  --color-amber-strong: color-mix(in srgb, var(--cc-amber) 16%, transparent);
+  --color-amber-edge: color-mix(in srgb, var(--cc-amber) 50%, var(--cc-border));
+  --color-red-soft: color-mix(in srgb, var(--cc-red) 10%, transparent);
+  --color-red-strong: color-mix(in srgb, var(--cc-red) 16%, transparent);
+  --color-red-edge: color-mix(in srgb, var(--cc-red) 50%, var(--cc-border));
+  --color-brand-soft: color-mix(in srgb, var(--cc-brand) 10%, transparent);
+  --color-brand-strong: color-mix(in srgb, var(--cc-brand) 16%, transparent);
+  --color-brand-edge: color-mix(in srgb, var(--cc-brand) 50%, var(--cc-border));
   /**
    * The code roles are bound here too, even though CodeMirror reaches them as
    * `var(--cc-code-*)` directly rather than through a utility. The editor's

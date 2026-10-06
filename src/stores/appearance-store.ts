@@ -15,6 +15,13 @@ import { BUILT_IN_THEME } from '@lib/theme/built-in';
 import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
 import { swarmPaletteOf } from '@lib/theme/colour';
 import { BUILT_IN_THEME_ID, type HiveTheme, type UiColors } from '@lib/theme/contract';
+import {
+  activeThemeOf,
+  APPEARANCE_STORAGE_KEY,
+  resolveTheme,
+  type ResolvedTheme,
+  type ThemePreference,
+} from '@lib/theme/persisted';
 import { isHiveTheme } from '@lib/theme/validate';
 
 /**
@@ -41,11 +48,8 @@ import { isHiveTheme } from '@lib/theme/validate';
  * `theme` moved here out of `ui-store` for that reason.
  */
 
-/** What the user chose. `system` defers to the OS; it is not a third palette. */
-export type ThemePreference = 'system' | 'dark' | 'light';
-
-/** What the DOM actually gets. */
-type ResolvedTheme = 'dark' | 'light';
+export { activeThemeOf, APPEARANCE_STORAGE_KEY, resolveTheme } from '@lib/theme/persisted';
+export type { ThemePreference } from '@lib/theme/persisted';
 
 export type Density = 'comfortable' | 'compact';
 
@@ -336,21 +340,6 @@ function prefersDark(): boolean {
 }
 
 /**
- * Preference plus environment, in one place.
- *
- * Exported for the selectors below and for tests; the *stored* answer stays the
- * preference, and this is derived on every read rather than kept in state —
- * there is exactly one source of truth for what theme is showing.
- */
-export function resolveTheme(
-  theme: ThemePreference,
-  systemDark: boolean,
-): ResolvedTheme {
-  if (theme === 'system') return systemDark ? 'dark' : 'light';
-  return theme;
-}
-
-/**
  * Write the resolved theme to `<body data-theme>`, which is what the
  * `body[data-theme="light"]` override in tokens.css keys off.
  *
@@ -384,41 +373,6 @@ function applyDensity(density: Density) {
   } else {
     document.body.removeAttribute('data-density');
   }
-}
-
-/**
- * The theme actually active, resolved from the built-ins and then the library.
- *
- * `null` does **not** mean "no theme" — it means *the Hive*, and specifically
- * that nothing needs to be written: `tokens.css` is already that palette, so
- * `applyThemeColors(null)` removes the style element and lets the stylesheet
- * paint. Every other shipped theme resolves to a real theme object and
- * paints through the same generated `<style>` an imported theme does.
- *
- * A dangling `activeThemeId` — a theme removed elsewhere, a store that only
- * half-restored — resolves to `null` rather than throwing: a store in that
- * state still has to paint something.
- *
- * Built-ins are looked up **before** the library so a shipped id can never be
- * shadowed by a stored one, whatever found its way into `localStorage`.
- *
- * Every lookup is `Object.hasOwn`, never `in` or a bare `?? `. `'toString' in
- * BUILT_IN_THEMES` is `true` for any object literal and the lookup yields
- * `Object.prototype.toString` — a function rather than `undefined`, so `??`
- * does not fire and a stored `activeThemeId` of `"toString"` reached
- * `applyThemeColors` and the terminal-palette selector as a function, throwing
- * on `.modes` on every render. That is the same unrecoverable boot this
- * store's rehydrate guard was written to close, arriving through the id
- * instead of through the theme.
- */
-export function activeThemeOf(
-  state: Pick<AppearanceState, 'themes' | 'activeThemeId'>,
-): HiveTheme | null {
-  const { activeThemeId } = state;
-  if (activeThemeId === BUILT_IN_THEME_ID) return null;
-  if (Object.hasOwn(BUILT_IN_THEMES, activeThemeId)) return BUILT_IN_THEMES[activeThemeId];
-  if (Object.hasOwn(state.themes, activeThemeId)) return state.themes[activeThemeId];
-  return null;
 }
 
 /** Push everything that lives on `<body>` (and the theme style element) at once — rehydration and reset. */
@@ -658,8 +612,6 @@ export function migrateAppearance(
   const { editorEditable: _dropped, ...rest } = withThemes;
   return rest;
 }
-
-export const APPEARANCE_STORAGE_KEY = 'hive.appearance';
 
 export const useAppearanceStore = create<AppearanceState>()(
   persist(

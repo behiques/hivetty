@@ -26,7 +26,7 @@ function PopoverContent({
         data-slot="popover-content"
         sideOffset={sideOffset}
         className={cn(
-          "z-50 rounded-[10px] border border-border bg-panel p-1.5 text-ink shadow-lg outline-none",
+          "z-50 rounded-xl border border-border bg-panel p-1.5 text-ink shadow-lg outline-none",
           className
         )}
         {...props}

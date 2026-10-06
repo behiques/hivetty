@@ -220,7 +220,7 @@ export function ContainerGroup({
           title="Container"
           description="Present means every session for this project runs inside the container the command starts. This app never starts, stops or names it."
         >
-          <div className="flex flex-col gap-3.5 rounded-[8px] border border-border-soft bg-panel-2 p-3">
+          <div className="flex flex-col gap-3.5 rounded-lg border border-border-soft bg-panel-2 p-3">
             <div className="flex flex-col gap-2">
               <span className="text-micro uppercase tracking-wide text-subtle">
                 Where things are

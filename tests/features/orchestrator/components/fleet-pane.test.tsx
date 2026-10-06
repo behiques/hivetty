@@ -153,7 +153,7 @@ describe('FleetPane', () => {
   /*
     The same seam the agent run log draws, and for the same reason: the fleet
     table and the overmind console sit on one terminal black, so a 1px rule in
-    `border-soft` is indistinguishable from the row rules a few pixels above it
+    `border-border-soft` is indistinguishable from the row rules a few pixels above it
     and the divider between two regions read as one more ended session. A band
     of the panel ground is the one thing a rule sharing that black cannot be.
   */

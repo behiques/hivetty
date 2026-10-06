@@ -17,7 +17,7 @@ import { useSettingsActions } from '@stores/ui-store';
 
 /** The bar's item shape (`activity-bar.tsx`), with room for a dot instead of an icon. */
 const ITEM =
-  'relative grid w-[52px] justify-items-center gap-[5px] rounded-[9px] pt-[9px] pb-[5px] text-micro font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
+  'relative grid w-[52px] justify-items-center gap-[5px] rounded-lg pt-[9px] pb-[5px] text-micro font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 
 /** Colour means state only. The ring pulses; the global reduced-motion clamp stills it. */
 const DOT: Record<ConnectionState, string> = {

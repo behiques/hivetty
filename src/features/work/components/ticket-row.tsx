@@ -5,7 +5,7 @@ import { useOpenWorkTicket, useWorkTicket } from '@stores/ui-store';
 
 /** Amber needs you and glows; green is being worked; ring is quiet. */
 const DOT: Record<TicketTone, string> = {
-  amber: 'bg-amber ring-[3px] ring-amber/20',
+  amber: 'bg-amber ring-[3px] ring-amber-strong',
   green: 'bg-green',
   ring: 'border-[1.5px] border-subtle bg-transparent',
 };
@@ -25,7 +25,7 @@ export function TicketRow({ row }: { row: TicketRowModel }) {
       onClick={() => openTicket(row.ticket.key)}
       aria-current={current ? 'true' : undefined}
       className={cn(
-        'flex w-full items-start gap-2.5 rounded-[7px] px-2 py-2 text-left hover:bg-hover',
+        'flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-hover',
         current && 'bg-active hover:bg-active',
       )}
     >

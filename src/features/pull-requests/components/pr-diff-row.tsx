@@ -21,8 +21,8 @@ export interface DiffRowProps {
 }
 
 const WASH: Record<DiffLine['kind'], string> = {
-  add: 'bg-[color-mix(in_srgb,var(--cc-green)_11%,transparent)]',
-  del: 'bg-[color-mix(in_srgb,var(--cc-red)_11%,transparent)]',
+  add: 'bg-green-soft',
+  del: 'bg-red-soft',
   context: '',
 };
 const SIGN: Record<DiffLine['kind'], { text: string; tone: string }> = {

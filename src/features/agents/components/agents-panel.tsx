@@ -112,7 +112,7 @@ export function AgentsPanel() {
               />
               <span
                 aria-hidden="true"
-                className={cn('size-[9px] rounded-[2px]', SQUARE[group.key])}
+                className={cn('size-[9px] rounded-xs', SQUARE[group.key])}
               />
               {group.label}
               <span className="font-medium text-subtle">{group.ids.length}</span>

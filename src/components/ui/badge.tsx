@@ -11,9 +11,9 @@ const TONE_FILL: Record<BadgeTone, string> = {
   /*
     Plan progress on a session row (HIVE-182). A tint, not a solid fill: it
     sits beside a status dot that keeps priority, and green text on its own
-    15% tint reads in both themes with no "on-green" token to invent.
+    `strong` tint reads in both themes with no "on-green" token to invent.
   */
-  green: 'bg-green/15 text-green',
+  green: 'bg-green-strong text-green',
 };
 
 interface BadgeProps {

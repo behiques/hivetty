@@ -296,7 +296,7 @@ export function IntegrationsSection() {
       {snapshot.errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
+          className="rounded-md border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -307,7 +307,7 @@ export function IntegrationsSection() {
           title="Token source"
           description="Which credential a GitHub request would use."
         >
-          <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
+          <div className="flex flex-col gap-2 rounded-lg border border-border-soft p-3">
             {status === null ? (
               <p data-probing className="text-control text-subtle">{probing}</p>
             ) : (
@@ -326,7 +326,7 @@ export function IntegrationsSection() {
           title="Command line"
           description="Where gh is, and whether it is signed in."
         >
-          <div className="flex flex-col gap-2 rounded-[7px] border border-border-soft p-3">
+          <div className="flex flex-col gap-2 rounded-lg border border-border-soft p-3">
             {status === null ? (
               <p data-probing className="text-control text-subtle">{probing}</p>
             ) : (

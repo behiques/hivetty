@@ -2,6 +2,7 @@ import { GLOBE_STILL_T } from '@/splash/globe';
 import { paletteFrom, startGlobe } from '@/splash/stage';
 
 import { pickPhrase } from '@lib/swarm/phrases';
+import { applyPersistedAppearance } from '@lib/theme/persisted';
 import { checkForUpdates, readUpdateStatus } from '@lib/updates';
 import type { UpdateStatus } from '@shared/update-contract';
 
@@ -108,6 +109,14 @@ function renderUpdate(
 
   void refresh();
 }
+
+/**
+ * The person's own theme (HIVE-224). The splash stays on its built-in dark
+ * tokens because it opens before preferences exist; About opens on demand,
+ * long after, on the same origin, so it reads them. Before the palette read
+ * below, which is what the globe paints with.
+ */
+applyPersistedAppearance(localStorage, matchMedia('(prefers-color-scheme: dark)').matches);
 
 const canvas = document.querySelector<HTMLCanvasElement>('#globe');
 

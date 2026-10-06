@@ -166,7 +166,7 @@ export function DirectoryPicker({
           <DialogDescription className="sr-only">
             Browse folders on {serverName} and choose one.
           </DialogDescription>
-          <span className="flex w-fit items-center gap-1.5 rounded-[3px] border border-border bg-chip px-[7px] py-0.5 text-micro text-muted">
+          <span className="flex w-fit items-center gap-1.5 rounded border border-border bg-chip px-[7px] py-0.5 text-micro text-muted">
             <span aria-hidden="true" className="size-1.5 rounded-full bg-amber" />
             reading {serverName} · not this Mac
           </span>
@@ -183,7 +183,7 @@ export function DirectoryPicker({
                     type="button"
                     onClick={() => void browse(crumb.path)}
                     aria-current={index === crumbs.length - 1 ? 'true' : undefined}
-                    className="rounded-[3px] px-1.5 py-0.5 text-ui-sm text-muted hover:bg-hover hover:text-ink aria-[current]:font-semibold aria-[current]:text-ink"
+                    className="rounded px-1.5 py-0.5 text-ui-sm text-muted hover:bg-hover hover:text-ink aria-[current]:font-semibold aria-[current]:text-ink"
                   >
                     {crumb.label}
                   </button>
@@ -235,7 +235,7 @@ export function DirectoryPicker({
                     disabled={unreadable}
                     title={unreadable ? 'this folder cannot be read' : undefined}
                     onClick={() => void browse(entry.path)}
-                    className="flex w-full items-center gap-2 rounded-[3px] border border-transparent px-2 py-1.5 text-left text-ink hover:bg-hover disabled:opacity-50 disabled:hover:bg-transparent"
+                    className="flex w-full items-center gap-2 rounded border border-transparent px-2 py-1.5 text-left text-ink hover:bg-hover disabled:opacity-50 disabled:hover:bg-transparent"
                   >
                     <Folder
                       aria-hidden="true"

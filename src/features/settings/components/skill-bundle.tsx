@@ -238,7 +238,7 @@ export function SkillBundle({
   };
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-[7px] border border-border">
+    <div className="flex flex-col overflow-hidden rounded-lg border border-border">
       <button
         type="button"
         onClick={onBack}

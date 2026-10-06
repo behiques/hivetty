@@ -28,7 +28,7 @@ export function StaleLine({
   return (
     <div
       role="status"
-      className="mb-1 flex flex-col items-start gap-1 rounded-md bg-[color-mix(in_srgb,var(--cc-amber)_10%,transparent)] px-2 py-1.5"
+      className="mb-1 flex flex-col items-start gap-1 rounded-md bg-amber-soft px-2 py-1.5"
     >
       <p className="text-ui-sm leading-[1.45] text-amber-text">{message}</p>
       <RetryButton onRetry={onRetry} />

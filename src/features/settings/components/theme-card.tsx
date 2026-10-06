@@ -94,7 +94,7 @@ export function ThemeCard({
 
   return (
     <div
-      className={`relative flex w-full flex-col gap-2 rounded-[7px] border bg-panel p-[9px] hover:bg-hover ${
+      className={`relative flex w-full flex-col gap-2 rounded-lg border bg-panel p-[9px] hover:bg-hover ${
         isActive
           ? 'border-brand-fill shadow-[0_0_0_1px_var(--cc-brand-fill)]'
           : 'border-border'
@@ -180,8 +180,10 @@ export function ThemeCard({
 
 /** The dark-fills / light-triangle swatch, drawn from the theme's own tokens. */
 function ThemeSwatch({ theme }: { theme: HiveTheme }) {
+  /** The seam: a hairline from the swatch's own two inks, so it shows on both halves. */
+  const seam = `color-mix(in srgb, ${theme.modes.dark.ui.ink} 50%, ${theme.modes.light.ui.ink})`;
   return (
-    <div className="relative aspect-[16/9] overflow-hidden rounded-[5px] border border-border">
+    <div className="relative aspect-[16/9] overflow-hidden rounded-md border border-border">
       <SwatchHalf mode="dark" colors={theme.modes.dark} />
       <SwatchHalf
         mode="light"
@@ -194,8 +196,7 @@ function ThemeSwatch({ theme }: { theme: HiveTheme }) {
         aria-hidden="true"
         className="pointer-events-none absolute inset-0"
         style={{
-          background:
-            'linear-gradient(to top right, transparent calc(50% - 0.5px), rgba(255,255,255,0.30) calc(50% - 0.5px), rgba(255,255,255,0.30) calc(50% + 0.5px), transparent calc(50% + 0.5px))',
+          background: `linear-gradient(to top right, transparent calc(50% - 0.5px), ${seam} calc(50% - 0.5px), ${seam} calc(50% + 0.5px), transparent calc(50% + 0.5px))`,
         }}
       />
     </div>

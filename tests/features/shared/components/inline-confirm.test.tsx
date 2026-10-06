@@ -60,6 +60,11 @@ describe('InlineConfirm', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
+  it('draws the destructive button on the validated danger pair', () => {
+    renderConfirm();
+    expect(screen.getByRole('button', { name: 'Drop' })).toHaveClass('bg-danger-solid', 'text-on-danger');
+  });
+
   it('cancels on Escape and keeps the key from reaching the document', async () => {
     document.addEventListener('keydown', outside);
     const { onCancel } = renderConfirm();

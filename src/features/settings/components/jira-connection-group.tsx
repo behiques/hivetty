@@ -81,7 +81,7 @@ export function JiraConnectionGroup({
       title="Site"
       description="Which Atlassian instance, and as whom."
     >
-      <div className="flex flex-col gap-3 rounded-[7px] border border-border-soft p-3">
+      <div className="flex flex-col gap-3 rounded-lg border border-border-soft p-3">
         <TextField
           label="Site"
           value={site}

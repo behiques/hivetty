@@ -22,7 +22,7 @@ export function JobLog({ entry, onRetry }: { entry: PrLogEntry | undefined; onRe
     );
   }
   return (
-    <pre className="mt-3 overflow-x-auto rounded-[10px] border border-border-soft bg-term-bg px-3.5 py-3 font-mono text-control leading-[1.55] whitespace-pre">
+    <pre className="mt-3 overflow-x-auto rounded-xl border border-border-soft bg-term-bg px-3.5 py-3 font-mono text-control leading-[1.55] whitespace-pre">
       {entry.log.truncated ? <span className="block text-muted">…</span> : null}
       {entry.log.lines.map((line, i) => {
         const tone = classifyLogLine(line);

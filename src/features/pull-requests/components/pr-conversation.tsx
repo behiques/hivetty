@@ -25,8 +25,8 @@ type Item =
   | { kind: 'event'; at: number; key: string; entry: LedgerEntry };
 
 const VERDICT: Record<string, [string, string]> = {
-  CHANGES_REQUESTED: ['changes requested', 'text-amber-text bg-[color-mix(in_srgb,var(--cc-amber)_14%,transparent)]'],
-  APPROVED: ['approved', 'text-green bg-[color-mix(in_srgb,var(--cc-green)_14%,transparent)]'],
+  CHANGES_REQUESTED: ['changes requested', 'text-amber-text bg-amber-strong'],
+  APPROVED: ['approved', 'text-green bg-green-strong'],
   COMMENTED: ['commented', 'text-muted bg-chip'],
   DISMISSED: ['dismissed', 'text-subtle bg-chip'],
 };
@@ -74,7 +74,7 @@ function Said({
       <span className="font-medium text-ink">{author}</span>
       {via ? <span className="text-micro text-subtle">via Hive TTY</span> : null}
       {verdict === undefined ? null : (
-        <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-micro font-semibold', verdict[1])}>
+        <span className={cn('rounded-md px-[7px] py-0.5 tabular-nums text-micro font-semibold', verdict[1])}>
           {verdict[0]}
         </span>
       )}

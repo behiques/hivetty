@@ -51,7 +51,7 @@ export function SearchBox({ label, value, onChange, onClear, focusOnMount }: Sea
         <button
           type="button"
           onClick={onClear}
-          className="shrink-0 rounded-[4px] text-subtle hover:text-ink"
+          className="shrink-0 rounded text-subtle hover:text-ink"
         >
           <X size={11} />
           <span className="sr-only">Clear the search</span>

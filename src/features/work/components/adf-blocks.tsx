@@ -23,7 +23,7 @@ import type { AdfBlock, AdfRun } from '@shared/jira-contract';
 function Run({ run }: { run: AdfRun }) {
   if (run.mention) {
     return (
-      <span data-mention className="rounded-[4px] bg-chip px-1 py-px font-medium text-brand">
+      <span data-mention className="rounded bg-chip px-1 py-px font-medium text-brand">
         {run.text}
       </span>
     );
@@ -34,7 +34,7 @@ function Run({ run }: { run: AdfRun }) {
     run.marks.includes('em') && 'italic',
     run.marks.includes('strike') && 'line-through',
     run.marks.includes('code') &&
-      'rounded-[3px] bg-chip px-1 py-px font-mono text-[0.9em]',
+      'rounded bg-chip px-1 py-px font-mono text-[0.9em]',
   );
 
   if (run.href !== undefined) {
@@ -80,7 +80,7 @@ function Block({ block }: { block: AdfBlock }) {
 
   if (block.kind === 'code') {
     return (
-      <pre className="overflow-x-auto rounded-[5px] bg-term-bg px-2 py-1.5 font-mono text-[0.9em] text-ink">
+      <pre className="overflow-x-auto rounded-md bg-term-bg px-2 py-1.5 font-mono text-[0.9em] text-ink">
         {block.runs.map((run) => run.text).join('')}
       </pre>
     );

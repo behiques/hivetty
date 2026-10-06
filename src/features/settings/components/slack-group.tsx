@@ -635,14 +635,14 @@ function RealTimeFields({
           Wakes on
         </h5>
         <div className="flex flex-wrap gap-1.5">
-          <span className="rounded-[4px] bg-chip px-1.5 py-0.5 tabular-nums text-micro text-muted">
+          <span className="rounded bg-chip px-1.5 py-0.5 tabular-nums text-micro text-muted">
             {commanderSummary(slack.commanders)}
           </span>
           {socket.kind === 'connected' &&
             socket.unresolved.map((name) => (
               <span
                 key={name}
-                className="rounded-[4px] bg-chip px-1.5 py-0.5 tabular-nums text-micro text-amber-text"
+                className="rounded bg-chip px-1.5 py-0.5 tabular-nums text-micro text-amber-text"
                 title="Named in wake.on, but Slack could not resolve it to a channel."
               >
                 {name} → unresolved
@@ -721,11 +721,11 @@ function AdvancedFields({
         <p className="text-ui-sm text-subtle">
           Only if your org runs its own. Changing either signs you out.
         </p>
-        <div className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-bg px-2.5 py-1.5 tabular-nums text-control text-subtle">
+        <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5 tabular-nums text-control text-subtle">
           <span>{SLACK_MCP_URL}</span>
           <span className="text-subtle">server</span>
         </div>
-        <div className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-bg px-2.5 py-1.5 tabular-nums text-control text-muted">
+        <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5 tabular-nums text-control text-muted">
           <span>{SLACK_CLIENT_ID}</span>
           <span className="text-subtle">client ID</span>
         </div>
@@ -1012,7 +1012,7 @@ export function SlackGroup({ agents }: SlackGroupProps) {
       title="Connection"
       description="Agents reach Slack as you, through Slack's own MCP server."
     >
-      <div className="flex flex-col gap-3 rounded-[7px] border border-border-soft p-3">
+      <div className="flex flex-col gap-3 rounded-lg border border-border-soft p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             {status === null ? (

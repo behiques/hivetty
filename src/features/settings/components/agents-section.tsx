@@ -84,7 +84,7 @@ export function AgentsSection() {
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 py-4">
         <SettingsSectionHeader title="Agents" description={description} />
 
-        <div className="flex flex-col items-center gap-1 rounded-[7px] border border-dashed border-border px-4 py-6 text-center">
+        <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border px-4 py-6 text-center">
           <SwarmCreature creature="mutalisk" size={120} className="mb-9" />
           <span className="text-ui-sm text-muted">{phrase}</span>
           <span className="text-ui-sm text-subtle">
@@ -115,7 +115,7 @@ export function AgentsSection() {
       <SettingsSectionHeader title="Agents" description={description} />
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,10rem)_minmax(0,1fr)] gap-3 @min-[520px]:grid-cols-[190px_minmax(0,1fr)] @min-[520px]:grid-rows-1">
-        <div className="flex min-h-0 flex-col overflow-y-auto rounded-[7px] border border-border">
+        <div className="flex min-h-0 flex-col overflow-y-auto rounded-lg border border-border">
           {agents.map((agent) => {
             const broken = agent.invalid !== undefined;
             const active = open?.name === agent.name;
@@ -173,11 +173,11 @@ export function AgentsSection() {
         </div>
 
         {open === null ? (
-          <div className="flex items-center justify-center rounded-[7px] border border-dashed border-border px-4 text-center text-ui-sm text-subtle">
+          <div className="flex items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-ui-sm text-subtle">
             Select an agent, or write a new one.
           </div>
         ) : (
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-[7px] border border-border">
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border">
             <AgentDefinition
               key={open.name ?? '+new'}
               name={open.name}

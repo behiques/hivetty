@@ -6,7 +6,7 @@ export function RetryButton({ onRetry }: { onRetry: () => void }) {
     <button
       type="button"
       onClick={onRetry}
-      className="flex items-center gap-1 rounded-[5px] border border-border px-1.5 py-0.5 text-micro text-muted hover:bg-hover hover:text-ink"
+      className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-micro text-muted hover:bg-hover hover:text-ink"
     >
       <ArrowClockwise size={11} />
       Try again

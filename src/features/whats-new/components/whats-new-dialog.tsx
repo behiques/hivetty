@@ -66,7 +66,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
         <DialogPrimitive.Content
           aria-describedby={`${id}-body`}
           onKeyDown={onKeyDown}
-          className="fixed top-1/2 left-1/2 z-50 flex min-h-[350px] w-[560px] max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[12px] border border-border bg-panel text-ink shadow-2xl outline-none"
+          className="fixed top-1/2 left-1/2 z-50 flex min-h-[350px] w-[560px] max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-panel text-ink shadow-2xl outline-none"
         >
           {/* The creep's glow on its own wider layer, so it fades out instead of ending at the canvas's edge. */}
           <div
@@ -78,7 +78,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
           </div>
           <DialogPrimitive.Close
             aria-label="Close What's new"
-            className="absolute top-2.5 right-2.5 z-10 grid size-7 place-items-center rounded-[7px] text-muted hover:bg-hover hover:text-ink"
+            className="absolute top-2.5 right-2.5 z-10 grid size-7 place-items-center rounded-lg text-muted hover:bg-hover hover:text-ink"
           >
             <X size={15} />
           </DialogPrimitive.Close>
@@ -112,7 +112,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
                 type="checkbox"
                 checked={optOut}
                 onChange={(event) => setOptOut(event.target.checked)}
-                className="size-3.5 accent-[var(--cc-brand-fill)]"
+                className="size-3.5 accent-brand-fill"
               />
               Don’t show What’s new again
             </label>
@@ -125,7 +125,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
                   aria-label={s.title}
                   aria-selected={k === index}
                   onClick={() => go(k)}
-                  className={`h-1.5 w-[22px] rounded-[3px] ${k === index ? 'bg-brand' : 'bg-border'}`}
+                  className={`h-1.5 w-[22px] rounded ${k === index ? 'bg-brand' : 'bg-border'}`}
                 />
               ))}
             </div>

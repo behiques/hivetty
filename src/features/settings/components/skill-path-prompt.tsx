@@ -79,7 +79,7 @@ export function SkillPathPrompt({
       // Escape cancels this question rather than closing the whole overlay
       // behind it. Same contract as `inline-confirm.tsx`.
       data-escape-scope="skill-path-prompt"
-      className="flex flex-col gap-1.5 rounded-[7px] border border-border bg-panel px-2.5 py-2"
+      className="flex flex-col gap-1.5 rounded-lg border border-border bg-panel px-2.5 py-2"
     >
       <TextField
         label={question}

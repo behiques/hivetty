@@ -288,7 +288,7 @@ describe('menus — one surface, one item recipe (HIVE-225)', () => {
 
   it('no consumer re-states the menu surface', () => {
     const offenders = files.filter((f) =>
-      readFileSync(f, 'utf8').includes('rounded-[7px] border border-border bg-panel p-1'),
+      readFileSync(f, 'utf8').includes('rounded-lg border border-border bg-panel p-1'),
     );
     expect(offenders.map(relative)).toEqual([]);
   });
@@ -375,5 +375,79 @@ describe('type scale (HIVE-225)', () => {
         new RegExp(`\`text-${name}\`\\s*\\|\\s*${size.replace('.', '\\.')}`),
       );
     }
+  });
+});
+
+describe('radius — Tailwind’s scale, nothing arbitrary (HIVE-224)', () => {
+  it('no rounded-[Npx] anywhere in src', () => {
+    const offenders = sourceFiles().flatMap((f) =>
+      readFileSync(f, 'utf8')
+        .split('\n')
+        .flatMap((line, i) => (/\brounded(?:-[a-z]{1,2})?-\[/.test(line) ? [`${relative(f)}:${String(i + 1)}`] : [])),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('tints — one map, in srgb (HIVE-224)', () => {
+  it.each(['green', 'amber', 'red', 'brand'])('binds %s’s three steps to the live token', (hue) => {
+    expect(tokensCss).toContain(`--color-${hue}-soft: color-mix(in srgb, var(--cc-${hue}) 10%, transparent);`);
+    expect(tokensCss).toContain(`--color-${hue}-strong: color-mix(in srgb, var(--cc-${hue}) 16%, transparent);`);
+    expect(tokensCss).toContain(`--color-${hue}-edge: color-mix(in srgb, var(--cc-${hue}) 50%, var(--cc-border));`);
+  });
+});
+
+/** Lines matching `pattern`, unless the line or the one above carries `marker`; comment lines skipped. */
+function unmarked(pattern: RegExp, marker: string): string[] {
+  return sourceFiles()
+    .filter((f) => f.endsWith('.tsx'))
+    .flatMap((f) => {
+      const lines = readFileSync(f, 'utf8').split('\n');
+      return lines.flatMap((line, i) => {
+        if (/^\s*(\/\/|\*|\/\*)/.test(line)) return [];
+        if (!pattern.test(line)) return [];
+        if (line.includes(marker) || (lines[i - 1] ?? '').includes(marker)) return [];
+        return [`${relative(f)}:${String(i + 1)}`];
+      });
+    });
+}
+
+describe('tints — status fills come from the map (HIVE-224)', () => {
+  it('no bg/ring tint of green, amber, red or brand mixed by hand', () => {
+    expect(
+      unmarked(/\b(?:bg|ring)-(?:\[color-mix\(in_srgb,var\(--cc-(?:green|amber|red|brand)\)|(?:green|amber|red|brand)\/\d)/, 'tint-exempt:'),
+    ).toEqual([]);
+  });
+});
+
+describe('tints — tinted borders and strokes come from the map (HIVE-224)', () => {
+  it('no border/stroke/outline tint of green, amber, red or brand mixed by hand', () => {
+    expect(
+      unmarked(/\b(?:border|stroke|outline)-(?:\[color-mix\(in_srgb,var\(--cc-(?:green|amber|red|brand)\)|(?:green|amber|red|brand)\/\d)/, 'tint-exempt:'),
+    ).toEqual([]);
+  });
+});
+
+describe('colour literals — none unannotated in components (HIVE-224)', () => {
+  it('no rgb()/rgba(), no white/black utility or mix, no arbitrary accent var', () => {
+    expect(
+      unmarked(
+        /rgba?\(|\b(?:bg|text|border|ring|fill|stroke|from|via|to|shadow|accent|outline|decoration|divide|caret)-(?:white|black)\b|(?:color-mix|-gradient)\([^'"`]*\b(?:white|black)\b|accent-\[var\(/,
+        'colour-literal-exempt:',
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('DESIGN-SYSTEM.md records the scales (HIVE-224)', () => {
+  const doc = readFileSync(resolve(process.cwd(), '.claude/DESIGN-SYSTEM.md'), 'utf8');
+  it('has a radius scale and the tint map, with their exemption markers', () => {
+    expect(doc).toMatch(/^## Radius$/m);
+    for (const name of ['rounded-xs', 'rounded-md', 'rounded-lg', 'rounded-xl', 'green-soft', 'green-strong', 'green-edge', 'tint-exempt:', 'colour-literal-exempt:']) {
+      expect(doc).toContain(name);
+    }
+  });
+  it('names no utility that does not exist', () => {
+    expect(doc).not.toMatch(/`border-soft`/);
   });
 });

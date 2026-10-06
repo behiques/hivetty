@@ -10,7 +10,8 @@ import { bandStops, stopTitle, type BandStop } from '@features/pull-requests/shi
 import { useHolderPost, useShipTrack } from '@stores/hive-store';
 
 const DOT: Record<BandStop['state'], string> = {
-  done: 'border-[color-mix(in_srgb,var(--cc-green)_55%,var(--cc-border))] text-green',
+  done: 'border-green-edge text-green',
+  // tint-exempt: an opaque dot over the track line, not a tint
   now: 'border-green bg-[color-mix(in_srgb,var(--cc-green)_30%,var(--cc-bg))] shadow-[0_0_12px_color-mix(in_srgb,var(--cc-green)_55%,transparent)]',
   next: 'border-border',
 };
@@ -50,7 +51,7 @@ export function ShipTrack({ pr }: { pr: Pr }) {
                   'mx-[5px] h-0.5 min-w-1.5 flex-1',
                   nowIndex !== -1 && i > nowIndex
                     ? 'bg-[repeating-linear-gradient(90deg,var(--cc-border)_0_4px,transparent_4px_8px)]'
-                    : 'bg-[color-mix(in_srgb,var(--cc-green)_45%,var(--cc-border))]',
+                    : 'bg-green-edge',
                 )}
               />
             )}

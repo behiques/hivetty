@@ -99,7 +99,7 @@ export function InlineConfirm({
       // Claims Escape from the settings dialog; see `settings-overlay.tsx`.
       data-escape-scope=""
       aria-label={label}
-      className={cn('bg-red/8 px-3 py-2.5', className)}
+      className={cn('bg-red-soft px-3 py-2.5', className)}
     >
       <p className="text-control text-ink">{title}</p>
       <p className="mt-0.5 text-ui-sm text-subtle">{children}</p>
@@ -117,7 +117,7 @@ export function InlineConfirm({
           type="button"
           onClick={onConfirm}
           onKeyDown={escapes}
-          className="rounded-md bg-red px-2.5 py-1 text-control font-medium text-bg hover:opacity-90"
+          className="rounded-md bg-danger-solid px-2.5 py-1 text-control font-medium text-on-danger hover:opacity-90"
         >
           {confirmLabel}
         </button>

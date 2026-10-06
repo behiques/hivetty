@@ -307,7 +307,7 @@ export function NewSessionPicker() {
           <div
             role="group"
             aria-label="Ticket workflow"
-            className="flex w-[560px] max-w-[92%] flex-col gap-2 rounded-[8px] border border-border-soft px-3.5 py-3"
+            className="flex w-[560px] max-w-[92%] flex-col gap-2 rounded-lg border border-border-soft px-3.5 py-3"
           >
             <p className="text-control text-muted">
               {`The ticket workflow hands ${facts.key} to `}
@@ -342,7 +342,7 @@ export function NewSessionPicker() {
               placeholder="Typed into the session when it opens. Blank opens at an empty prompt."
               spellCheck={false}
               aria-describedby="picker-first-message-hint"
-              className="rounded-[6px] border border-border bg-term-input px-2.5 py-1.5 font-mono text-control text-ink caret-green outline-none placeholder:font-sans placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
+              className="rounded-md border border-border bg-term-input px-2.5 py-1.5 font-mono text-control text-ink caret-green outline-none placeholder:font-sans placeholder:text-subtle focus-visible:ring-1 focus-visible:ring-brand"
             />
             <span id="picker-first-message-hint" className="text-ui-sm text-subtle">
               {workflow === null

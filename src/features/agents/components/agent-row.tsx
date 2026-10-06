@@ -152,7 +152,7 @@ export function AgentRow({ id }: AgentRowProps) {
         aria-current={current ? 'true' : undefined}
         aria-label={name}
         className={cn(
-          'flex w-full gap-2.5 rounded-[10px] p-2 text-left',
+          'flex w-full gap-2.5 rounded-xl p-2 text-left',
           current ? 'bg-active' : 'hover:bg-hover',
         )}
       >
