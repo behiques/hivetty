@@ -885,3 +885,60 @@ export function laneOfRun(agent: string, run: unknown, entries: readonly LedgerE
   const lane = begun?.meta?.['lane'];
   return typeof lane === 'string' && lane !== '' ? lane : STANDING_LANE;
 }
+
+/**
+ * An agent this party asked directly, still on the job, and the agents it
+ * brought in for the same job (idle with agents, 6 Oct 2026).
+ */
+export interface Delegate {
+  agent: string;
+  helpers: string[];
+}
+
+/** Two asks name the same job: the same PR, or the same ticket. */
+const sameJob = (a: LedgerEntry, b: LedgerEntry): boolean => {
+  const pr = wholeNumberOf(a.meta?.['pr']);
+  const repo = a.meta?.['repo'];
+  if (pr !== undefined && typeof repo === 'string' && namesPr(b.meta, repo, pr)) return true;
+  const ticket = a.meta?.['ticket'];
+  return typeof ticket === 'string' && ticket !== '' && b.meta?.['ticket'] === ticket;
+};
+
+/**
+ * The agents doing work for `party`: each agent it has an open ask with, in
+ * the order it asked, and under each the agents that agent asked about the
+ * same job (a PR or a ticket in `meta`).
+ *
+ * The open ask is the signal, not a live run: a shipper's job spans several
+ * runs with sleeps between them, and the ask stays open until the job closes.
+ * Only agents count (`isAgent`), and a held ask (`meta.after`) counts once
+ * its PR is out. Helpers are only ever a tooltip's detail; the label names
+ * the agents `party` asked itself.
+ */
+export function delegatesOf(
+  open: readonly LedgerEntry[],
+  log: readonly LedgerEntry[],
+  party: string,
+  isAgent: (id: string) => boolean,
+): Delegate[] {
+  const asked = open.filter(
+    (ask) => ask.kind === 'ask' && ask.from === party && ask.to !== undefined && isAgent(ask.to) && !isHeld(ask, log),
+  );
+  const agents = [...new Set(asked.map((ask) => ask.to ?? ''))];
+  return agents.map((agent) => {
+    const jobs = asked.filter((ask) => ask.to === agent);
+    const helpers = open
+      .filter(
+        (ask) =>
+          ask.kind === 'ask' &&
+          ask.from === agent &&
+          ask.to !== undefined &&
+          ask.to !== agent &&
+          ask.to !== party &&
+          isAgent(ask.to) &&
+          jobs.some((job) => sameJob(job, ask)),
+      )
+      .map((ask) => ask.to ?? '');
+    return { agent, helpers: [...new Set(helpers)] };
+  });
+}

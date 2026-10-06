@@ -24,7 +24,7 @@ import { StatusDot, statusLabel, statusText } from '@components/ui/status-dot';
 import { useProjectContainerised } from '@hooks/use-project-config';
 import { isMacPlatform } from '@lib/platform';
 import { backChordLabel } from '@lib/terminal/keymap';
-import { useSessionPr, useSpawnTerminalBeside } from '@stores/hive-store';
+import { useDelegateTitle, useDelegateWord, useSessionPr, useSpawnTerminalBeside } from '@stores/hive-store';
 import { useBackToOrch } from '@stores/ui-store';
 
 /**
@@ -57,10 +57,12 @@ export function SessionHeader({ entity }: { entity: Session | Terminal }) {
 
 function SessionLine({ session }: { session: Session }) {
   const tone = statusText(session.status, session.idleDetail);
+  const delegate = useDelegateWord(session);
+  const delegateTitle = useDelegateTitle(session);
   // An ended session says so, and why (HIVE-211); the cover over the terminal says the rest.
   const ended = isTerminated(session);
   const reason = ended ? endedReason(session) : undefined;
-  const word = ended ? 'Ended' : statusLabel(session.status, session.idleDetail);
+  const word = ended ? 'Ended' : statusLabel(session.status, session.idleDetail, delegate);
 
   return (
     <>
@@ -83,10 +85,10 @@ function SessionLine({ session }: { session: Session }) {
         data-testid="session-status"
         className={cn('flex shrink-0 items-center gap-1.5 text-control', ended ? 'text-muted' : tone)}
         // A narrow header hides the word (HIVE-213; 720px since the rails' gutters, #71, where the row needs ~705); the title keeps it for the dot.
-        title={reason ?? word}
+        title={reason ?? delegateTitle ?? word}
         aria-label={reason === undefined ? undefined : `Ended: ${reason}`}
       >
-        <StatusDot status={session.status} detail={session.idleDetail} />
+        <StatusDot status={session.status} detail={session.idleDetail} delegate={delegate} />
         <span data-word className="@max-[720px]:sr-only">
           {word}
         </span>

@@ -24,6 +24,8 @@ import {
   useAskingAgentCount,
   useAgentPr,
   useEndedMore,
+  useDelegateTitle,
+  useDelegateWord,
   useEntity,
   useFleetGroup,
   useHasResumable,
@@ -604,6 +606,9 @@ function SessionTableRow({
   const openEntity = useOpenEntity();
   const resumeSession = useResumeSession();
   const activeTab = useActiveTab();
+  // The agents on a quiet session's work, `idle (shipper)`; before the guard, as every hook here.
+  const delegate = useDelegateWord(entity !== undefined && isSession(entity) ? entity : undefined);
+  const delegateTitle = useDelegateTitle(entity !== undefined && isSession(entity) ? entity : undefined);
   /**
    * The row's pull request, resolved from the live GitHub list (HIVE-100).
    *
@@ -768,8 +773,9 @@ function SessionTableRow({
       <span
         className={cn(COL.status, statusText(entity.status, entity.idleDetail))}
         data-col="status"
+        title={delegateTitle ?? undefined}
       >
-        {statusLabel(entity.status, entity.idleDetail)}
+        {statusLabel(entity.status, entity.idleDetail, delegate)}
       </span>
       {/*
         The session's plan progress (HIVE-182), a bar and `done/total` in its own

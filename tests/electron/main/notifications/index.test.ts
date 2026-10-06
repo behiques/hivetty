@@ -1019,6 +1019,38 @@ describe('session.idle', () => {
     expect(raise).not.toHaveBeenCalled();
   });
 
+  it('holds it while an agent the session asked is on the job, and says it after', () => {
+    let delegated = true;
+    const n = createNotifier({
+      hub,
+      isForeground: () => false,
+      isForegroundEverywhere: () => false,
+      isDelegated: (id) => delegated && id === 'sess-05',
+    });
+
+    n.observe(CH.sessionStatus, prompt('sess-05'));
+    n.observe(CH.sessionStatus, stop('sess-05'));
+    expect(idleKinds()).toEqual([]);
+
+    // The shipper's closing note wakes the session; its Stop is the one that says so.
+    delegated = false;
+    n.observe(CH.sessionStatus, stop('sess-05'));
+    expect(idleKinds()).toEqual(['session.idle']);
+  });
+
+  it('does not say a delegated session ran out of instructions', () => {
+    const n = createNotifier({
+      hub,
+      isForeground: () => false,
+      isForegroundEverywhere: () => false,
+      isDelegated: () => true,
+    });
+
+    n.observe(CH.sessionStatus, { entityId: 'sess-05', status: 'waiting', event: 'Notification', notificationType: 'idle_prompt' });
+
+    expect(raise).not.toHaveBeenCalled();
+  });
+
   /**
    * Measured (`tests/live/hook-conformance`): `Stop` idle/agents ->
    * `SubagentStop` idle -> internal `UserPromptSubmit` -> `Stop` idle. The

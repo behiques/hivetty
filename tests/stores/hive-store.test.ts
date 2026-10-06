@@ -2924,6 +2924,13 @@ describe('hive-store', () => {
       expect(statusWord('idle')).toBe('idle');
       expect(statusWord('waiting')).toBe('needs input');
     });
+
+    it('names the agent on a quiet session, and its own running work wins', () => {
+      expect(statusWord('idle', undefined, 'shipper')).toBe('idle (shipper)');
+      expect(statusWord('idle', 'agents', 'shipper')).toBe('working (agents)');
+      expect(statusWord('waiting', undefined, 'shipper')).toBe('needs input');
+      expect(statusWord('idle', undefined, null)).toBe('idle');
+    });
   });
 
   /**
@@ -5023,13 +5030,14 @@ describe('statusWord agrees with statusLabel', () => {
     'terminated',
   ];
   const DETAILS: (IdleDetail | undefined)[] = [undefined, 'agents', 'script'];
+  const DELEGATES: (string | null)[] = [null, 'shipper'];
 
   it.each(
     STATUSES.flatMap((status) =>
-      DETAILS.map((detail) => [status, detail] as const),
+      DETAILS.flatMap((detail) => DELEGATES.map((delegate) => [status, detail, delegate] as const)),
     ),
-  )('says the same thing for %s / %s', (status, detail) => {
-    expect(statusWord(status, detail)).toBe(statusLabel(status, detail));
+  )('says the same thing for %s / %s / %s', (status, detail, delegate) => {
+    expect(statusWord(status, detail, delegate)).toBe(statusLabel(status, detail, delegate));
   });
 
   /**

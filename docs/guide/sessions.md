@@ -49,6 +49,7 @@ Every session shows a coloured dot and a word.
 | **idle** | the turn is over and nothing is running | your turn |
 | **working (agents)** | Claude finished but a subagent is still running | wait |
 | **working (scripts)** | a background shell is still running | wait, or carry on |
+| **idle (shipper)** | the turn is over, and an agent it asked (`ledger_ask`) is still on the job: named when its name is 10 characters or fewer, else **idle (agents)**, or **idle (2 agents)** for more | wait; hover for every agent, and who each brought in |
 | **done** | ended on purpose (`/done`, `/clear`, or the app closed) | resume it if you want |
 | **terminated** | the process is gone (`/exit`, `Ctrl+D`, a crash) | read the scrollback |
 
@@ -57,7 +58,7 @@ Every session shows a coloured dot and a word.
   <img src="../assets/diagrams/session-status.light.svg" alt="Session status: working, needs input, idle, done and terminated, and what moves a session between them">
 </picture>
 
-Status comes from Claude Code's own hooks, so "needs input" is exact rather than guessed.
+Status comes from Claude Code's own hooks, so "needs input" is exact rather than guessed. The agents come from the ledger: an ask from the session to an agent stays open until the job closes, and only the agents the session asked itself are named. While one is on the job, the session is not yours again yet, so "is yours again" and "runs out of instructions" wait until it closes.
 
 ## Names and branches
 
