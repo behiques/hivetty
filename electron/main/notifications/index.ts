@@ -730,6 +730,8 @@ export function createNotifier(options: NotifierOptions): Notifier {
         subject: entityId,
         body: copy.body,
         action,
+        // It replaces this session's idle row below, so it keeps that row's toast if it had one.
+        ...(kind === 'session.input_needed' ? { deliverAsWell: 'session.idle' as const } : {}),
       });
 
       /*

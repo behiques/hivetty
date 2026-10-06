@@ -74,6 +74,10 @@ Or in the config file:
 }
 ```
 
+A session is one card. When "runs out of instructions" replaces that session's "yours again"
+card, it notifies the desktop if either of the two is set to **Both**, so looking away after a
+turn you watched end still brings the notification.
+
 ## What clears a card
 
 - Opening the session or agent it is about.
