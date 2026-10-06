@@ -4,6 +4,7 @@ import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ListPanel } from '@components/layout/list-panel';
+import { PANEL_WIDTHS } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore, type Place } from '@stores/ui-store';
 import { resetProjectConfig } from '@lib/project-config';
@@ -38,8 +39,17 @@ describe('ListPanel (HIVE-195)', () => {
     render(<ListPanel rowRef={createRef()} />);
 
     const region = screen.getByRole('region', { name: label });
-    expect(region).toHaveClass('w-[var(--cc-list-w)]', 'shrink-0', 'bg-panel');
+    expect(region).toHaveClass('w-[var(--cc-list-w)]', 'shrink', 'bg-panel');
     expect(screen.getByText(marker)).toBeInTheDocument();
+  });
+
+  it('may shrink to its minimum beside a crowded stage (HIVE-223)', () => {
+    useUiStore.setState({ place: 'sessions' });
+    render(<ListPanel rowRef={createRef()} />);
+    const panel = screen.getByRole('region', { name: 'Sessions list' });
+    expect(panel).not.toHaveClass('shrink-0');
+    expect(panel).toHaveClass('shrink');
+    expect(panel.style.minWidth).toBe(`${String(PANEL_WIDTHS.list.min)}px`);
   });
 
   it('draws nothing on Home', () => {

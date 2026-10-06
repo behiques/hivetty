@@ -6,7 +6,7 @@ import type { Session, Terminal } from '@/types/entity';
 import type { Ticket } from '@/types/ticket';
 import { pickTab, SessionPanel } from '@components/layout/session-panel';
 import type { SessionPlan } from '@shared/plan-contract';
-import { useAppearanceStore } from '@stores/appearance-store';
+import { PANEL_WIDTHS, useAppearanceStore } from '@stores/appearance-store';
 import { fileKey, useEditorStore } from '@stores/editor-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
@@ -107,6 +107,13 @@ describe('SessionPanel (HIVE-201)', () => {
     expect(
       screen.getByText((_, element) => element?.tagName === 'P' && element.textContent?.startsWith('1 of 2 tasks') === true),
     ).toBeInTheDocument();
+  });
+
+  it('may shrink to its minimum beside a crowded stage (HIVE-223)', () => {
+    render(<SessionPanel rowRef={createRef()} />);
+    const panel = screen.getByRole('complementary', { name: 'Session panel' });
+    expect(panel).not.toHaveClass('shrink-0');
+    expect(panel.style.minWidth).toBe(`${String(PANEL_WIDTHS.session.min)}px`);
   });
 
   it('a tab click picks it, and Files shows the explorer for main’s id', () => {

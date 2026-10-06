@@ -18,6 +18,7 @@ import { prFact } from '@features/pull-requests/session-pr';
 import { TicketTab } from '@features/work/components/ticket-tab';
 import type { SessionPlan } from '@shared/plan-contract';
 import {
+  PANEL_WIDTHS,
   type SessionPanelTab,
   useSessionPanelOpen,
   useSessionPanelTab,
@@ -192,7 +193,8 @@ export function SessionPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null>
     <RailHandle rowRef={rowRef} rail="session" label="Resize the session panel" width={width} onWidth={setWidth} />
     <aside
       aria-label="Session panel"
-      className="flex w-[var(--cc-session-panel-w)] shrink-0 flex-col overflow-hidden border-l border-border bg-panel px-3 py-1.5"
+      style={{ minWidth: PANEL_WIDTHS.session.min }}
+      className="flex w-[var(--cc-session-panel-w)] shrink flex-col overflow-hidden border-l border-border bg-panel px-3 py-1.5"
     >
       <div role="tablist" className="flex items-center gap-1 pt-2 pb-2.5 text-[12px] text-muted">
         {existing.map((spec) => (

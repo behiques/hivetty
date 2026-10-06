@@ -101,7 +101,7 @@ export function PrChecks({ pr, detail }: { pr: Pr; detail: PrDetail }) {
         </ul>
       )}
       {job === null ? null : (
-        <div className="mt-2 grid grid-cols-[300px_minmax(0,1fr)] gap-5 border-t border-border-soft px-6 pt-1.5 pb-4">
+        <div className="mt-2 grid grid-cols-1 gap-5 @min-[640px]:grid-cols-[300px_minmax(0,1fr)] border-t border-border-soft px-6 pt-1.5 pb-4">
           <JobSteps
             // Keyed by job, so a refusal shown under one job does not linger under the next.
             key={job.id}

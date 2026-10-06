@@ -50,6 +50,7 @@ import { isLiveTerminal, resolveTransport } from '@lib/terminal/resolve-transpor
 import { ORCHESTRATOR_ID } from '@lib/terminal/static-transport';
 import type { TerminalTransport } from '@lib/terminal/terminal-transport';
 import {
+  STAGE_MIN,
   useEditorLayout,
   useSetEditorSplitRatio,
   useTerminalAppearance,
@@ -387,7 +388,12 @@ export function CenterStage() {
   }, [backToOrch]);
 
   return (
-    <main ref={stageRef} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-panel-2">
+    <main
+      ref={stageRef}
+      style={{ minWidth: STAGE_MIN }}
+      className="relative flex flex-1 flex-col overflow-hidden bg-panel-2"
+    >
+      {/* The floor the rails yield to (HIVE-223): beside both, flexbox pulls them in before the stage drops under it. */}
       {/*
         Lost the server (HIVE-211): first, so it sits above every place and the
         picker and the stage keeps the rest of the column.

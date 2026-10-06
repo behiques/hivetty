@@ -7,7 +7,7 @@ import { AgentsPanel } from '@features/agents/components/agents-panel';
 import { SessionsPanel } from '@features/projects/components/sessions-panel';
 import { PrsPanel } from '@features/pull-requests/components/prs-panel';
 import { WorkPanel } from '@features/work/components/work-panel';
-import { useListPanelWidth, useSetListPanelWidth } from '@stores/appearance-store';
+import { PANEL_WIDTHS, useListPanelWidth, useSetListPanelWidth } from '@stores/appearance-store';
 import {
   useAgentsListed,
   usePrsListed,
@@ -99,8 +99,9 @@ export function ListPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null> })
   const panel = (
     <section
       aria-label={`${LABELS[place]} list`}
+      style={{ minWidth: PANEL_WIDTHS.list.min }}
       className={cn(
-        'flex w-[var(--cc-list-w)] shrink-0 flex-col border-r border-border-soft bg-panel px-2.5 pt-3.5 pb-5 font-sans',
+        'flex w-[var(--cc-list-w)] shrink flex-col border-r border-border-soft bg-panel px-2.5 pt-3.5 pb-5 font-sans',
         narrow && 'absolute inset-y-0 left-[var(--cc-bar-w)] z-30 shadow-lg',
         arriving && 'motion-safe:animate-ccslidein',
       )}
