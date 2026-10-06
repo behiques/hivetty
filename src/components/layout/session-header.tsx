@@ -146,7 +146,7 @@ function SessionMenu({ session }: { session: Session }) {
               ? 'This session runs in a container; a terminal is host-only'
               : undefined
           }
-          className="flex cursor-default items-center justify-between gap-4 rounded px-2 py-1.5 text-[12.5px] outline-none data-[highlighted]:bg-hover"
+          className="flex cursor-default items-center justify-between gap-4 rounded px-2 py-1.5 text-[12.5px] outline-none data-[highlighted]:bg-active"
         >
           Terminal here
           <span className="tabular-nums text-[11px] text-subtle">⌃`</span>
@@ -154,7 +154,7 @@ function SessionMenu({ session }: { session: Session }) {
         {pr ? (
           <DropdownMenuItem
             asChild
-            className="rounded px-2 py-1.5 text-[12.5px] outline-none data-[highlighted]:bg-hover"
+            className="rounded px-2 py-1.5 text-[12.5px] outline-none data-[highlighted]:bg-active"
           >
             <a href={pr.url} target="_blank" rel="noreferrer">
               Open PR #{pr.n}
