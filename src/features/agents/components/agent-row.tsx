@@ -136,6 +136,8 @@ export function AgentRow({ id }: AgentRowProps) {
   else if (last !== undefined) keyword = last.kind === 'ask' && last.ref !== undefined ? `ask ${last.ref}` : last.kind;
 
   const text = broken ? entity.invalid : (last?.line ?? '');
+  // The second line is drawn only when it has something to say.
+  const twoLines = notice !== null || keyword !== '' || text !== '';
   const keywordTone =
     broken || paused || last === undefined ? 'text-amber-text' : (KEYWORD_TONE[last.kind] ?? 'text-subtle');
 
@@ -152,7 +154,8 @@ export function AgentRow({ id }: AgentRowProps) {
         aria-current={current ? 'true' : undefined}
         aria-label={name}
         className={cn(
-          'flex w-full gap-2.5 rounded-xl p-2 text-left',
+          // Centred: with a second line the text outgrows the tile, which would otherwise sit at the top.
+          'flex w-full items-center gap-2.5 rounded-xl p-2 text-left',
           current ? 'bg-active' : 'hover:bg-hover',
         )}
       >
@@ -179,7 +182,13 @@ export function AgentRow({ id }: AgentRowProps) {
           )}
         </span>
       </button>
-      <span className="invisible absolute top-2 right-2 flex gap-2.5 group-focus-within:visible group-hover:visible">
+      {/* Level with the name: the first line when there are two, the middle of the row when there is one. */}
+      <span
+        className={cn(
+          'invisible absolute right-2 flex gap-2.5 group-focus-within:visible group-hover:visible',
+          twoLines ? 'top-2' : 'top-1/2 -translate-y-1/2',
+        )}
+      >
         {/* A paused agent refuses a run, and its Resume is a play icon too: one ▶, not two. */}
         {paused ? null : (
           <button
