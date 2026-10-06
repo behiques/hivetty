@@ -91,6 +91,25 @@ describe('useCanvasLoop', () => {
     expect(raf).toHaveBeenCalledTimes(3);
   });
 
+  /*
+    Decorative art at 120fps on ProMotion is four times the blur work for no
+    visible gain (HIVE-225). The cap is in `tick`, so every caller gets it.
+  */
+  it('paints at most 30 frames a second however fast the display asks, dt from the last paint', () => {
+    render(<Harness still={null} />);
+    FakeIntersectionObserver.last!.fire(true);
+    paint.mockClear();
+    // 121 frames at 120Hz: one simulated second, both ends included.
+    for (let i = 0; i <= 120; i += 1) {
+      act(() => raf.mock.calls.at(-1)![0](1000 + i * (1000 / 120)));
+    }
+    expect(paint.mock.calls.length).toBeLessThanOrEqual(31);
+    expect(paint.mock.calls.length).toBeGreaterThanOrEqual(29);
+    expect(paint.mock.calls[1]![2]).toBeCloseTo(1 / 30, 3);
+    // A skipped frame still asks for the next one: the loop never stalls.
+    expect(raf).toHaveBeenCalledTimes(1 + 121);
+  });
+
   it('stops on visibilitychange to hidden, and resumes when shown', () => {
     render(<Harness still={null} />);
     FakeIntersectionObserver.last!.fire(true);
