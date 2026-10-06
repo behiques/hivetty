@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { isSession } from '@/types/entity';
 import type { HatcheryRow } from '@/types/pull-request';
 
+import { Button } from '@components/ui/button';
 import { statusLabel } from '@components/ui/status-dot';
 import { Flap } from '@features/pull-requests/components/flap';
 import { checkTime } from '@features/pull-requests/session-pr';
@@ -165,8 +166,10 @@ export function PrProperties({
   );
 }
 
+// The resets (`rounded-none border-0 leading-normal hover:bg-transparent hover:text-brand`) undo the
+// ghost `Button`'s chrome on the two actions that use it; on the link they are no-ops (HIVE-225).
 const ACTION =
-  'flex items-center gap-2 px-1 py-1.5 text-left text-[12.5px] text-brand hover:underline disabled:cursor-not-allowed disabled:text-subtle disabled:no-underline';
+  'flex items-center gap-2 rounded-none border-0 px-1 py-1.5 text-left text-[12.5px] leading-normal text-brand hover:bg-transparent hover:text-brand hover:underline disabled:cursor-not-allowed disabled:text-subtle disabled:no-underline aria-disabled:cursor-not-allowed aria-disabled:text-subtle aria-disabled:no-underline';
 
 /**
  * What can be done from the page (HIVE-205, D16). No new `gh` writes: Merge
@@ -240,21 +243,21 @@ export function PrActions({ row }: { row: HatcheryRow }) {
 
   return (
     <div className="flex flex-col">
-      <button type="button" className={ACTION} disabled={card === undefined || sending} onClick={merge}>
+      <Button variant="ghost" className={ACTION} disabled={card === undefined} pending={sending} onClick={merge}>
         <GitMerge size={13} aria-hidden />
         Merge
         {card === undefined ? <span className="text-subtle">· after approval</span> : null}
-      </button>
+      </Button>
       {hatch.flap === 'LARVA' ? (
         <a className={ACTION} href={pr.url} target="_blank" rel="noreferrer">
           <ArrowSquareOut size={13} aria-hidden />
           Ready for review
         </a>
       ) : null}
-      <button type="button" className={ACTION} disabled={sending} onClick={askAcr}>
+      <Button variant="ghost" className={ACTION} pending={sending} onClick={askAcr}>
         <Binoculars size={13} aria-hidden />
         Ask acr to look again
-      </button>
+      </Button>
       {session === null ? null : (
         <button type="button" className={ACTION} onClick={() => openEntity(session)}>
           <Hexagon size={13} aria-hidden />
@@ -262,9 +265,12 @@ export function PrActions({ row }: { row: HatcheryRow }) {
         </button>
       )}
       {github}
-      {note === null ? null : (
-        <p className={cn('px-1 pt-1 text-[12px]', note.tone === 'amber' ? 'text-amber-text' : 'text-muted')}>{note.text}</p>
-      )}
+      {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
+      <div role="status">
+        {note === null ? null : (
+          <p className={cn('px-1 pt-1 text-[12px]', note.tone === 'amber' ? 'text-amber-text' : 'text-muted')}>{note.text}</p>
+        )}
+      </div>
     </div>
   );
 }

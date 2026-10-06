@@ -67,7 +67,7 @@ export function FirstRun() {
       </p>
       <div className="mt-2 flex flex-wrap justify-center gap-4">
         <Step title="1 · Add a project" body="Point Hive TTY at a repository on this machine.">
-          <Button size="sm" variant="primary" className={STEP_BUTTON} onClick={addProject} disabled={choosing}>
+          <Button size="sm" variant="primary" className={STEP_BUTTON} onClick={addProject} pending={choosing}>
             <FolderSimple aria-hidden="true" />
             Add a project
           </Button>

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -39,6 +39,27 @@ describe('PrCommentBox', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Comment' }));
     expect(screen.getByRole('textbox')).toHaveValue('Hello');
     expect(screen.getByText(/is not a configured project/)).toHaveClass('text-amber-text');
+  });
+
+  it('keeps focus on the action while its call runs, and announces the result (HIVE-225)', async () => {
+    const user = userEvent.setup();
+    let settle: (value: unknown) => void = () => {};
+    commentOnPr.mockReturnValueOnce(
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    );
+    render(<PrCommentBox pr={fixturePr()} />);
+    await user.type(screen.getByRole('textbox'), 'Hello');
+    const button = screen.getByRole('button', { name: 'Comment' });
+    await user.click(button);
+    expect(button).toHaveFocus();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    await act(async () => {
+      settle({ ok: false, error: { kind: 'no-repos', message: 'acme/incorpx-server is not a configured project’s repository.' } });
+    });
+    expect(button).toHaveFocus();
+    expect(screen.getByRole('status')).toHaveTextContent(/is not a configured project/);
   });
 
   it('cannot post an empty comment', () => {

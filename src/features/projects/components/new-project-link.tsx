@@ -1,5 +1,6 @@
 import { Plus } from '@phosphor-icons/react';
 
+import { Button } from '@components/ui/button';
 import { DirectoryPicker } from '@features/shared/components/directory-picker';
 import { useAddProject } from '@hooks/use-add-project';
 import { useAttachedServer } from '@hooks/use-project-config';
@@ -20,8 +21,8 @@ type NewProjectVariant = 'icon' | 'cta';
  * `EmptyState` says a rail must not do.
  */
 const CLASSES: Record<NewProjectVariant, string> = {
-  icon: 'ml-auto self-center rounded p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted',
-  cta: 'inline-flex items-center gap-[7px] rounded-lg border border-border px-3 py-[5px] tabular-nums text-[11.5px] text-ink hover:bg-hover disabled:cursor-not-allowed disabled:hover:bg-transparent',
+  icon: 'ml-auto self-center rounded border-0 p-1 leading-normal text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted',
+  cta: 'inline-flex items-center gap-[7px] rounded-lg border border-border px-3 py-[5px] tabular-nums text-[11.5px] leading-normal text-ink hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:hover:bg-transparent aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent',
 };
 
 /**
@@ -62,10 +63,10 @@ export function NewProjectLink({
 
   return (
     <>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
         onClick={addProject}
-        disabled={choosing}
+        pending={choosing}
         /*
           What the click opens. It no longer carries a refusal: while attached
           this opens the server-side picker rather than a dialog that could
@@ -83,7 +84,7 @@ export function NewProjectLink({
           className="shrink-0"
         />
         {variant === 'cta' ? 'new project' : null}
-      </button>
+      </Button>
       <DirectoryPicker
         open={picking}
         onOpenChange={(next) => {
