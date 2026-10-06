@@ -7,6 +7,21 @@ import { parseUnifiedDiff } from '@lib/unified-diff';
 import { useUiStore } from '@stores/ui-store';
 import { prFile, prThread } from '@tests/support/pr-detail';
 
+const rowRenders = vi.hoisted(() => vi.fn());
+vi.mock('@features/pull-requests/components/pr-diff-row', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@features/pull-requests/components/pr-diff-row')>();
+  const { createElement, memo } = await import('react');
+  return {
+    ...actual,
+    // The real row, under the same shallow memo, counting its renders: what is
+    // under test is that PrDiff hands each row stable props.
+    DiffRow: memo((props: Parameters<typeof actual.DiffRowView>[0]) => {
+      rowRenders(props.side, props.n);
+      return createElement(actual.DiffRowView, props);
+    }),
+  };
+});
+
 const TEXT = [
   'diff --git a/src/fees/validator.ts b/src/fees/validator.ts', '--- a/src/fees/validator.ts', '+++ b/src/fees/validator.ts',
   '@@ -114,4 +114,4 @@', '   const fee = feeTable.for(filing.state, filing.year);',
@@ -179,5 +194,26 @@ describe('PrDiff — Split and threads (HIVE-207)', () => {
     render(<PrDiff {...props({ problem: 'rate limited' })} />);
     expect(screen.getByText('rate limited')).toBeInTheDocument();
     expect(screen.queryByText('No diff to show')).toBeNull();
+  });
+});
+
+describe('PrDiff — selecting re-renders two rows, not the file (HIVE-224)', () => {
+  it('in Unified, only the row going off and the row coming on', async () => {
+    render(<PrDiff {...props()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Line 114' }));
+    rowRenders.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Line 116' }));
+    expect(rowRenders.mock.calls).toEqual(expect.arrayContaining([['R', 114], ['R', 116]]));
+    expect(rowRenders).toHaveBeenCalledTimes(2);
+  });
+
+  it('in Split, the same', async () => {
+    render(<PrDiff {...props()} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Split' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Old line 115' }));
+    rowRenders.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Line 115' }));
+    expect(rowRenders.mock.calls).toEqual(expect.arrayContaining([['L', 115], ['R', 115]]));
+    expect(rowRenders).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,10 +1,11 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 
 import { lineKey, placeThreads } from '@/lib/pr-files';
 import { splitRows, type DiffFile, type DiffLine } from '@/lib/unified-diff';
 import { cn } from '@/lib/utils';
 
 import { SegmentedControl } from '@components/ui/segmented-control';
+import { DiffRow, type SelectLine } from '@features/pull-requests/components/pr-diff-row';
 import { ThreadCard, type ThreadWrites } from '@features/pull-requests/components/thread-card';
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 import type { GhResult, PrFile, PrThread } from '@shared/github-contract';
@@ -14,17 +15,6 @@ const VIEWS = [
   { value: 'unified', label: 'Unified' },
   { value: 'split', label: 'Split' },
 ] as const satisfies readonly { value: PrDiffView; label: string }[];
-
-const WASH: Record<DiffLine['kind'], string> = {
-  add: 'bg-[color-mix(in_srgb,var(--cc-green)_11%,transparent)]',
-  del: 'bg-[color-mix(in_srgb,var(--cc-red)_11%,transparent)]',
-  context: '',
-};
-const SIGN: Record<DiffLine['kind'], { text: string; tone: string }> = {
-  add: { text: '+', tone: 'text-green' },
-  del: { text: '−', tone: 'text-red' },
-  context: { text: '', tone: 'text-subtle' },
-};
 
 /** A selected gutter number: its side too, since a removed line and an added one can share a number. */
 interface Selection {
@@ -45,27 +35,6 @@ function openLineOf(lines: DiffLine[], index: number): number {
   if (next !== null && next !== undefined) return next;
   const before = lines.slice(0, index).findLast((line) => line.newN !== null)?.newN;
   return before ?? 1;
-}
-
-/**
- * One diff row: a 46px number gutter (a button, selecting the line), a 16px sign, the text.
- * `wrap` is Split's: a half-width column wraps a long line instead of running into its neighbour.
- */
-export function DiffRow({ line, n, side, selected, onSelect, wrap = false }: { line: DiffLine; n: number | null; side: 'L' | 'R'; selected: boolean; onSelect: () => void; wrap?: boolean }) {
-  const sign = SIGN[line.kind];
-  return (
-    <div data-kind={line.kind} className={cn('flex h-full pr-4 font-mono', wrap ? 'whitespace-pre-wrap' : 'whitespace-pre', WASH[line.kind], selected && 'shadow-[inset_2px_0_var(--cc-amber)]')}>
-      {n === null ? (
-        <span className="w-[46px] shrink-0" />
-      ) : (
-        <button type="button" aria-label={`${side === 'L' ? 'Old line' : 'Line'} ${String(n)}`} onClick={onSelect} className="w-[46px] shrink-0 pr-2.5 text-right text-subtle hover:text-ink">
-          {n}
-        </button>
-      )}
-      <span className={cn('w-4 shrink-0', sign.tone)}>{sign.text}</span>
-      <span className={cn('text-ink', wrap && 'min-w-0 wrap-anywhere')}>{line.text === '' ? ' ' : line.text}</span>
-    </div>
-  );
 }
 
 /**
@@ -125,6 +94,17 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
   const openAt = selected?.open ?? firstOpenLine(diff);
   const showable = diff !== null && !diff.binary && diff.hunks.length > 0;
   const placed = useMemo(() => (diff === null ? null : placeThreads(diff, threads)), [diff, threads]);
+  const select = useCallback<SelectLine>(
+    (side, h, at) => {
+      const lines = diff?.hunks[h]?.lines;
+      const line = lines?.[at];
+      if (!lines || !line) return;
+      const n = side === 'L' ? line.oldN : line.newN;
+      if (n !== null) setSelected({ side, n, open: openLineOf(lines, at) });
+    },
+    [diff],
+  );
+  const split = useMemo(() => diff?.hunks.map(splitRows) ?? [], [diff]);
 
   const card = (thread: PrThread) => (
     <div key={thread.id} data-thread={thread.id} className="my-1.5 mr-[18px] ml-[72px] font-sans">
@@ -193,8 +173,10 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                           line={line}
                           n={n}
                           side={side}
+                          hunk={h}
+                          at={i}
+                          onSelect={select}
                           selected={n !== null && selected?.side === side && selected.n === n}
-                          onSelect={() => n !== null && setSelected({ side, n, open: openLineOf(hunk.lines, i) })}
                         />
                         {line.oldN !== null && line.kind !== 'context' ? under(lineKey('L', line.oldN)) : null}
                         {line.newN !== null ? under(lineKey('R', line.newN)) : null}
@@ -202,7 +184,7 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                       </Fragment>
                       );
                     })
-                  : splitRows(hunk).map((row, i) => (
+                  : (split[h] ?? []).map((row, i) => (
                       <Fragment key={i}>
                         <div data-testid={`split-row-${String(i)}`} className="grid grid-cols-2">
                           <div data-side="left" className="min-w-0 border-r border-border-soft">
@@ -214,11 +196,10 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                                 n={row.left.oldN}
                                 side="L"
                                 wrap
+                                hunk={h}
+                                at={row.leftAt ?? 0}
+                                onSelect={select}
                                 selected={selected?.side === 'L' && selected.n === row.left.oldN}
-                                onSelect={() => {
-                                  const left = row.left;
-                                  if (left?.oldN != null) setSelected({ side: 'L', n: left.oldN, open: openLineOf(hunk.lines, hunk.lines.indexOf(left)) });
-                                }}
                               />
                             )}
                           </div>
@@ -231,11 +212,10 @@ export function PrDiff({ file, diff, threads, problem, loading = false, prUrl, r
                                 n={row.right.newN}
                                 side="R"
                                 wrap
+                                hunk={h}
+                                at={row.rightAt ?? 0}
+                                onSelect={select}
                                 selected={selected?.side === 'R' && selected.n === row.right.newN}
-                                onSelect={() => {
-                                  const right = row.right;
-                                  if (right?.newN != null) setSelected({ side: 'R', n: right.newN, open: right.newN });
-                                }}
                               />
                             )}
                           </div>
