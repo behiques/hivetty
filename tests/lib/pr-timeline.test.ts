@@ -32,6 +32,14 @@ describe('ticks', () => {
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(56);
     expect(out[0]?.label).toBe('Sat 11:00');
   });
+  it('a 30-day PR never crowds its labels, narrow or wide (HIVE-225)', () => {
+    for (const width of [400, 1200]) {
+      const out = ticks(T0, T0 + 30 * 24 * 60 * MIN, width);
+      const gaps = out.slice(1).map((t, i) => (t.f - out[i]!.f) * width);
+      expect(out.length).toBeGreaterThan(1);
+      expect(Math.min(...gaps)).toBeGreaterThanOrEqual(72);
+    }
+  });
 });
 
 describe('ciBars', () => {

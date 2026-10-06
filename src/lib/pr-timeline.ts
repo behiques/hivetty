@@ -15,7 +15,9 @@ import type { ShipVisit } from '@shared/ledger-derive';
 export const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
-const STEPS = [5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map((m) => m * MIN);
+const STEPS = [5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10_080, 20_160, 43_200].map((m) => m * MIN);
+/** The widest step; an axis too long even for monthly ticks takes it anyway. */
+const LARGEST = STEPS[STEPS.length - 1] ?? DAY;
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -52,7 +54,7 @@ const clock = (t: number, days: boolean) => {
  */
 export function ticks(start: number, end: number, widthPx: number, minGapPx = 72): Tick[] {
   const span = Math.max(end - start, MIN);
-  const step = STEPS.find((s) => (s / span) * widthPx >= minGapPx) ?? DAY;
+  const step = STEPS.find((s) => (s / span) * widthPx >= minGapPx) ?? LARGEST;
   const round = Math.min(step, HOUR);
   const offset = new Date(start).getTimezoneOffset() * MIN;
   const first = Math.ceil((start - offset) / round) * round + offset;
