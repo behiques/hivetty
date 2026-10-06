@@ -1,7 +1,8 @@
 import { GithubLogo, GitPullRequest } from '@phosphor-icons/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback } from 'react';
 
 import { createPoller } from '@/hooks/create-poller';
+import { useDetailsDrawer } from '@/hooks/use-details-drawer';
 import { useOpenFileAt } from '@/hooks/use-open-file-at';
 import { useProjectConfig } from '@/hooks/use-project-config';
 import { useRelativeTime } from '@/hooks/use-relative-time';
@@ -122,22 +123,7 @@ export function PrPage({ row }: { row: HatcheryRow }) {
   const retry = () => void load(pr.owner, pr.repo, pr.n);
 
   // The properties sidebar folds into this below a 760px page (HIVE-223); above it the state is moot.
-  const [details, setDetails] = useState(false);
-  const detailsButton = useRef<HTMLButtonElement>(null);
-  const detailsPanel = useRef<HTMLDivElement>(null);
-  const closeDetails = useCallback(() => {
-    setDetails(false);
-    detailsButton.current?.focus();
-  }, []);
-  useEffect(() => {
-    if (!details) return undefined;
-    detailsPanel.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeDetails();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [details, closeDetails]);
+  const drawer = useDetailsDrawer();
 
   return (
     <section aria-label={`Pull request #${String(pr.n)}`} className="@container flex min-h-0 flex-1 flex-col">
@@ -154,11 +140,11 @@ export function PrPage({ row }: { row: HatcheryRow }) {
         <span className="flex-1" />
         <SegmentedControl label="Tab" options={tabs} value={tab} onChange={setPrTab} />
         <button
-          ref={detailsButton}
+          ref={drawer.button}
           type="button"
-          aria-expanded={details}
+          aria-expanded={drawer.open}
           aria-controls="pr-details"
-          onClick={() => (details ? closeDetails() : setDetails(true))}
+          onClick={drawer.toggle}
           className="flex items-center gap-1.5 rounded-md border border-border-soft px-2.5 py-1 text-[12px] text-ink hover:bg-hover @min-[760px]:hidden"
         >
           Details
@@ -238,16 +224,16 @@ export function PrPage({ row }: { row: HatcheryRow }) {
         >
           <PrProperties row={row} detail={detail} actions={<PrActions row={row} />} />
         </aside>
-        {details ? (
+        {drawer.open ? (
           <>
             <div
               data-testid="pr-details-veil"
               aria-hidden
               className="absolute inset-0 z-10 @min-[760px]:hidden"
-              onClick={closeDetails}
+              onClick={drawer.close}
             />
             <div
-              ref={detailsPanel}
+              ref={drawer.panel}
               id="pr-details"
               role="dialog"
               aria-label="Pull request details"
