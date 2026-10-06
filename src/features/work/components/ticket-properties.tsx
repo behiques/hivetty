@@ -9,7 +9,7 @@ import { TicketSessionRow } from '@features/work/components/ticket-session-row';
 import { useOpenTicket, useTicketPrs, useTicketProperties, useTicketSessions } from '@stores/hive-store';
 import { usePickerActions } from '@stores/ui-store';
 
-const HEADING = 'pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase';
+const HEADING = 'pt-3 pb-1 text-micro font-semibold tracking-[0.06em] text-subtle uppercase';
 const ACTION = 'flex items-center gap-2 py-1.5 text-left text-control text-brand hover:underline disabled:opacity-60';
 
 function Heading({ children }: { children: ReactNode }) {

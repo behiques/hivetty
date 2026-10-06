@@ -151,7 +151,7 @@ function StatePill({ kind, label }: { kind: PillKind; label?: string }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 tabular-nums text-[10.5px] font-semibold uppercase tracking-wide',
+        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 tabular-nums text-micro font-semibold uppercase tracking-wide',
         PILL_TONE[kind],
       )}
     >
@@ -631,7 +631,7 @@ function RealTimeFields({
       />
 
       <div className="flex flex-col gap-1">
-        <h5 className="tabular-nums text-[10.5px] font-semibold uppercase tracking-wide text-subtle">
+        <h5 className="tabular-nums text-micro font-semibold uppercase tracking-wide text-subtle">
           Wakes on
         </h5>
         <div className="flex flex-wrap gap-1.5">

@@ -74,8 +74,8 @@ export function PrFileTree({ detail, selected, onSelect }: { detail: PrDetail; s
                   />
                 )}
                 {file.viewed === 'viewed' ? <Check size={11} aria-label="viewed" className="text-subtle" /> : null}
-                {file.viewed === 'dismissed' ? <span className="text-[10.5px] text-amber-text">changed</span> : null}
-                <span className="tabular-nums text-[10.5px] whitespace-nowrap text-muted">
+                {file.viewed === 'dismissed' ? <span className="text-micro text-amber-text">changed</span> : null}
+                <span className="tabular-nums text-micro whitespace-nowrap text-muted">
                   {file.deletions === 0 ? `+${String(file.additions)}` : `+${String(file.additions)} −${String(file.deletions)}`}
                 </span>
               </button>

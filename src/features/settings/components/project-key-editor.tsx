@@ -134,7 +134,7 @@ export function ProjectKeyEditor({
         }`}
       />
       <span
-        className={`whitespace-nowrap text-[10.5px] ${
+        className={`whitespace-nowrap text-micro ${
           problem === null ? 'text-subtle' : 'text-red'
         }`}
       >

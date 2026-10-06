@@ -31,7 +31,7 @@ const VERDICT: Record<string, [string, string]> = {
   DISMISSED: ['dismissed', 'text-subtle bg-chip'],
 };
 
-const AVATAR = 'grid size-[26px] shrink-0 place-items-center rounded-full bg-panel-2 text-[10px] font-semibold text-ink';
+const AVATAR = 'grid size-[26px] shrink-0 place-items-center rounded-full bg-panel-2 text-micro font-semibold text-ink';
 
 const plural = (n: number, one: string, many: string) => `${String(n)} ${n === 1 ? one : many}`;
 /** `Maria Ortiz` → `MO`, `acr` → `AC` (copied from the Work slice, which this one cannot import; R6). */
@@ -74,7 +74,7 @@ function Said({
       <span className="font-medium text-ink">{author}</span>
       {via ? <span className="text-micro text-subtle">via Hive TTY</span> : null}
       {verdict === undefined ? null : (
-        <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-[10.5px] font-semibold', verdict[1])}>
+        <span className={cn('rounded-[5px] px-[7px] py-0.5 tabular-nums text-micro font-semibold', verdict[1])}>
           {verdict[0]}
         </span>
       )}
@@ -198,7 +198,7 @@ export function PrConversation({
       </div>
       <section aria-labelledby="pr-conversation" className="flex flex-col gap-2">
         <div className="flex items-center gap-2.5 pt-2">
-          <h2 id="pr-conversation" className="text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase">
+          <h2 id="pr-conversation" className="text-micro font-semibold tracking-[0.06em] text-subtle uppercase">
             Conversation
           </h2>
           <span className="text-control text-muted">

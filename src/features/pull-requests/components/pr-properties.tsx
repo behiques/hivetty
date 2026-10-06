@@ -14,7 +14,7 @@ import type { LedgerResult } from '@shared/ledger-contract';
 import { useAnswerAsk, useEntity, useMergeAsk, useOpenEntity, useReviewUrls } from '@stores/hive-store';
 import { usePrPageActions } from '@stores/ui-store';
 
-const HEADING = 'flex items-center pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase';
+const HEADING = 'flex items-center pt-3 pb-1 text-micro font-semibold tracking-[0.06em] text-subtle uppercase';
 const CHECK_ROW = 'flex items-center gap-[9px] rounded px-1 py-[5px] text-control';
 
 export function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {

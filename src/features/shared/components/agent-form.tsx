@@ -530,7 +530,7 @@ function Adder({
         className="w-24 rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-ink outline-none focus:border-brand"
       />
       {problem === null ? null : (
-        <span role="alert" className="text-[10.5px] text-red">
+        <span role="alert" className="text-micro text-red">
           {problem}
         </span>
       )}
@@ -887,7 +887,7 @@ export function AgentForm({
             </span>
           )}
           {help === undefined ? null : (
-            <span className="text-[10.5px] leading-snug text-subtle">
+            <span className="text-micro leading-snug text-subtle">
               {help}
             </span>
           )}
@@ -900,7 +900,7 @@ export function AgentForm({
             the sentence disappears with the buffer that earned it.
           */}
           {path === 'name' && renamed !== null && renamed.to === at('name') ? (
-            <span role="status" className="text-[10.5px] text-muted">
+            <span role="status" className="text-micro text-muted">
               {renamed.from} was taken — using {renamed.to}.
             </span>
           ) : null}
@@ -1116,7 +1116,7 @@ export function AgentForm({
                 value={mode}
                 onChange={setMode}
               />
-              <span className="text-[10.5px] leading-snug text-subtle">
+              <span className="text-micro leading-snug text-subtle">
                 Two ways to say when. every — it repeats on an interval from its
                 last wake. on a schedule — it fires at fixed local times. off —
                 it only wakes when something addresses it.

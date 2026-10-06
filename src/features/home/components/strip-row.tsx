@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 /** A strip column's head (HIVE-200): sans 600 10.5px, uppercase, 0.06em, subtle. */
 export function StripHead({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
-    <h3 className="flex items-center gap-2 pb-2 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase">
+    <h3 className="flex items-center gap-2 pb-2 text-micro font-semibold tracking-[0.06em] text-subtle uppercase">
       {children}
       {aside}
     </h3>

@@ -43,7 +43,7 @@ export function TicketSessionRow({ id }: TicketSessionRowProps) {
         {entityLabel(entity)}
       </span>
 
-      <span className="shrink-0 tabular-nums text-[10px] text-subtle">
+      <span className="shrink-0 tabular-nums text-micro text-subtle">
         {entity.project}
       </span>
     </button>

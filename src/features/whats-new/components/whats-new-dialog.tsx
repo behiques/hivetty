@@ -84,7 +84,7 @@ export function WhatsNewDialog({ entry, onClose }: { entry: WhatsNew; onClose: (
           </DialogPrimitive.Close>
 
           <div className="px-[22px] pt-[26px] pb-[18px]" aria-live="polite">
-            <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-brand uppercase opacity-85">
+            <p className="font-mono text-micro font-semibold tracking-[0.14em] text-brand uppercase opacity-85">
               What’s new in {entry.version}
             </p>
             <DialogPrimitive.Title className="mt-3.5 mb-2 max-w-[calc(100%-150px)] text-[22px] leading-[1.15] font-semibold tracking-[-0.015em] text-balance text-ink">

@@ -31,7 +31,7 @@ export function JobSteps({ job, canRerun, onRerun, holder }: { job: RunJob; canR
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center gap-2 pt-3 pb-1.5 text-[10.5px] font-semibold tracking-[.06em] text-subtle">
+      <div className="flex items-center gap-2 pt-3 pb-1.5 text-micro font-semibold tracking-[.06em] text-subtle">
         <span>{job.name.toUpperCase()}</span>
         <b className={cn('ml-auto tabular-nums font-semibold', state === 'failed' ? 'text-red' : 'text-muted')}>
           {timeText(state, job.startedAt, job.completedAt, now).toUpperCase()}

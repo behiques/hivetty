@@ -108,6 +108,7 @@ export function MentionList({
             index === active && 'bg-chip-hover',
           )}
         >
+          {/* type-floor-exempt: one initial inside a 20px avatar dot, aria-hidden; the row names the person */}
           <span aria-hidden className="grid size-5 place-items-center rounded-full bg-chip text-[9px] font-semibold">
             {initials(user.displayName)}
           </span>

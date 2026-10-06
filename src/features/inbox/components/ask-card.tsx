@@ -506,7 +506,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
       */}
       {inbound === undefined ? null : (
         <div className="mt-1 max-h-40 overflow-y-auto rounded-md bg-panel-2 px-2 py-1.5">
-          <span className="block truncate text-[10px] text-subtle">
+          <span className="block truncate text-micro text-subtle">
             {inbound.at === undefined ? inbound.author : `${inbound.author} · ${inbound.at}`}
             {` · via ${asker}`}
           </span>

@@ -88,7 +88,7 @@ function CommentItem({
       {comment.via === undefined ? (
         <span
           aria-hidden
-          className="grid size-[26px] place-items-center rounded-full bg-panel-2 text-[10px] font-semibold text-ink"
+          className="grid size-[26px] place-items-center rounded-full bg-panel-2 text-micro font-semibold text-ink"
         >
           {initials(comment.author)}
         </span>

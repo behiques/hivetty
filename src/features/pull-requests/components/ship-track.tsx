@@ -39,7 +39,7 @@ export function ShipTrack({ pr }: { pr: Pr }) {
       aria-label="Ship track"
       className="@container flex flex-wrap items-center gap-x-3.5 gap-y-1.5 border-b border-border-soft bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--cc-green)_5%,transparent)_70%,transparent)] px-5 py-[9px] text-control"
     >
-      <span className="text-[10.5px] font-semibold tracking-[0.06em] whitespace-nowrap text-subtle uppercase">Ship track</span>
+      <span className="text-micro font-semibold tracking-[0.06em] whitespace-nowrap text-subtle uppercase">Ship track</span>
       <ol className="flex min-w-0 flex-1 items-center">
         {stops.map((stop, i) => (
           <Fragment key={stop.key}>

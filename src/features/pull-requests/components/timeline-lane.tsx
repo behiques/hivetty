@@ -25,7 +25,7 @@ export interface LaneMark {
 export const GUTTER = 130;
 
 const SHAPE: Record<LaneMark['shape'], string> = {
-  flap: 'h-[22px] top-[9px] rounded-[5px] tabular-nums text-[9.5px] font-bold tracking-[0.08em]',
+  flap: 'h-[22px] top-[9px] rounded-[5px] tabular-nums text-micro font-bold tracking-[0.08em]',
   commit: 'size-[10px] -ml-[5px] top-[21px] rounded-full border-2 border-brand bg-bg',
   ci: 'h-3 top-5 rounded-[3px]',
   review: 'size-3 -ml-1.5 top-[19px] rotate-45',

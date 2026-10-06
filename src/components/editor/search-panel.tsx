@@ -254,7 +254,7 @@ function SearchPanel({ view, subscribe }: SearchPanelProps) {
               aria-pressed={query[toggle.key]}
               onClick={() => amend({ [toggle.key]: !query[toggle.key] })}
               className={[
-                'grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[4px] text-[9.5px] font-semibold',
+                'grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[4px] text-micro font-semibold',
                 query[toggle.key]
                   ? 'bg-active text-brand'
                   : 'text-subtle hover:bg-hover hover:text-muted',

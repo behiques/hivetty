@@ -93,7 +93,7 @@ function HitGroup({
           <Marked text={hit.name} query={query} />
         </span>
         {hit.total > 1 ? (
-          <span className="shrink-0 rounded-full bg-chip px-1.5 text-[9.5px] text-muted tabular-nums">
+          <span className="shrink-0 rounded-full bg-chip px-1.5 text-micro text-muted tabular-nums">
             {hit.total}
           </span>
         ) : null}
@@ -101,7 +101,7 @@ function HitGroup({
 
       {directory === '' ? null : (
         <span
-          className="truncate px-1.5 pb-0.5 pl-[26px] text-[10px] text-subtle"
+          className="truncate px-1.5 pb-0.5 pl-[26px] text-micro text-subtle"
           dir="rtl"
           title={directory}
         >
@@ -128,7 +128,7 @@ function HitGroup({
         set — the rule the PRs panel states for its own "200+".
       */}
       {open && hasLines && hit.total > hit.lines.length ? (
-        <span className="px-1.5 pb-1 pl-[26px] text-[10px] text-subtle">
+        <span className="px-1.5 pb-1 pl-[26px] text-micro text-subtle">
           + {hit.total - hit.lines.length} more in this file
         </span>
       ) : null}
@@ -151,11 +151,11 @@ function LineRow({
       onClick={onOpen}
       className="flex w-full items-baseline gap-2 rounded-[5px] py-[2px] pr-1.5 pl-[26px] text-left hover:bg-hover"
     >
-      <span className="w-6 shrink-0 text-right text-[10px] text-subtle tabular-nums">
+      <span className="w-6 shrink-0 text-right text-micro text-subtle tabular-nums">
         {line.line}
       </span>
       {/* A line of the file: code, so mono. */}
-      <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-muted">
+      <span className="min-w-0 flex-1 truncate font-mono text-micro text-muted">
         <Marked text={line.text} query={query} at={line.column} />
       </span>
     </button>

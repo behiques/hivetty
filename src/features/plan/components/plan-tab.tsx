@@ -95,7 +95,7 @@ export function PlanTab({
       </ul>
       {file === undefined ? null : (
         <>
-          <h3 className="px-1 pt-3.5 pb-1 text-[10.5px] font-semibold tracking-[.06em] text-subtle uppercase">
+          <h3 className="px-1 pt-3.5 pb-1 text-micro font-semibold tracking-[.06em] text-subtle uppercase">
             Where it came from
           </h3>
           <button

@@ -22,7 +22,7 @@ export function ChangedFiles({ changesId, subRoot, onOpenFile }: ChangedFilesPro
 
   return (
     <section aria-label="Changed in this session" className="mb-1">
-      <h3 className="flex gap-1.5 px-2 pt-2 pb-1 text-[10.5px] font-semibold tracking-[.06em] text-subtle uppercase">
+      <h3 className="flex gap-1.5 px-2 pt-2 pb-1 text-micro font-semibold tracking-[.06em] text-subtle uppercase">
         Changed in this session
         <span className="tabular-nums tracking-normal">{files.length}</span>
       </h3>
@@ -38,7 +38,7 @@ export function ChangedFiles({ changesId, subRoot, onOpenFile }: ChangedFilesPro
         >
           <i
             className={cn(
-              'w-3.5 shrink-0 text-center tabular-nums text-[10px] font-semibold not-italic',
+              'w-3.5 shrink-0 text-center tabular-nums text-micro font-semibold not-italic',
               file.mark === 'A' ? 'text-green' : 'text-brand',
             )}
           >

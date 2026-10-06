@@ -108,7 +108,7 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
       ))}
       {sessions.length > 0 ? (
         <>
-          <div className="flex gap-1.5 px-2 pt-3.5 pb-1 text-[10.5px] font-semibold tracking-[.06em] text-subtle uppercase">
+          <div className="flex gap-1.5 px-2 pt-3.5 pb-1 text-micro font-semibold tracking-[.06em] text-subtle uppercase">
             <span>Sessions off stage</span>
             <span className="tabular-nums tracking-normal">{sessions.length}</span>
           </div>

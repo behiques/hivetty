@@ -19,7 +19,7 @@ const TONE: Record<BucketName, string> = {
 export function TimeBuckets({ age, buckets, sentence }: { age: number; buckets: Bucket[]; sentence: string }) {
   return (
     <section aria-labelledby="pr-time-buckets" className="flex flex-col gap-2.5">
-      <h3 id="pr-time-buckets" className="text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase">
+      <h3 id="pr-time-buckets" className="text-micro font-semibold tracking-[0.06em] text-subtle uppercase">
         {`Where the ${dur(age)} went`}
       </h3>
       <ol className="flex h-[34px] gap-[3px]">

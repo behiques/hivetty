@@ -64,7 +64,7 @@ export function PermissionControls({
       />
 
       {selected === undefined ? null : (
-        <span className="text-[10px] text-subtle">{selected.caption}</span>
+        <span className="text-micro text-subtle">{selected.caption}</span>
       )}
 
       <div className="flex flex-wrap gap-1.5">

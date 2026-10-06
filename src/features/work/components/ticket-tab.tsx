@@ -33,7 +33,7 @@ const ACTION = 'flex items-center gap-1.5 text-control text-brand hover:underlin
 function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-1.5">
-      <h3 className="flex items-baseline gap-1.5 text-[10.5px] font-semibold tracking-[0.06em] text-subtle uppercase">
+      <h3 className="flex items-baseline gap-1.5 text-micro font-semibold tracking-[0.06em] text-subtle uppercase">
         {title}
         {count === undefined ? null : <span className="tabular-nums text-muted">{count}</span>}
       </h3>

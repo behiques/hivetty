@@ -207,7 +207,7 @@ export function ConsoleInput() {
            */
           className="min-w-0 flex-1 resize-none field-sizing-content max-h-[10lh] overflow-y-auto border-none bg-transparent font-mono text-control leading-normal text-ink caret-green outline-none placeholder:text-subtle"
         />
-        <span className="shrink-0 pt-px font-mono text-[10.5px] whitespace-nowrap text-subtle">
+        <span className="shrink-0 pt-px font-mono text-micro whitespace-nowrap text-subtle">
           {KEY_HINT}
         </span>
       </div>
