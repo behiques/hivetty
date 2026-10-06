@@ -18,6 +18,9 @@ export const toCombInput = (e: CombEntity): CombInput => ({
   progress: e.total ? (e.done ?? 0) / e.total : undefined,
 });
 
+/** The tooltip's left edge in px: beside the cell, never past the canvas's right edge (its 240px max width and 8px spare). */
+export const tooltipLeft = (x: number, k: number): number => Math.min((x + 18) * k, COMB_W * k - 248);
+
 const WORD_CLASS: Record<CellState, string> = {
   morphing: 'text-green', summons: 'text-amber-text', failed: 'text-red', burrowed: 'text-subtle', terminal: 'text-muted',
 };
@@ -140,7 +143,7 @@ export function TheComb({ label }: { label: string }) {
       {hover ? (
         <CombTooltip
           text={cellText(hover.cell, byId.get(hover.cell.id), projectName, now)}
-          left={Math.min(hover.cell.x + 18, COMB_W - 250) * hover.k}
+          left={tooltipLeft(hover.cell.x, hover.k)}
           top={Math.max(0, hover.cell.y - 10) * hover.k}
         />
       ) : null}

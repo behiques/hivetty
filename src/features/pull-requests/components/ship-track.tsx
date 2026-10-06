@@ -37,10 +37,10 @@ export function ShipTrack({ pr }: { pr: Pr }) {
     <div
       role="group"
       aria-label="Ship track"
-      className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 border-b border-border-soft bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--cc-green)_5%,transparent)_70%,transparent)] px-5 py-[9px] text-[12px]"
+      className="@container flex flex-wrap items-center gap-x-3.5 gap-y-1.5 border-b border-border-soft bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--cc-green)_5%,transparent)_70%,transparent)] px-5 py-[9px] text-[12px]"
     >
       <span className="text-[10.5px] font-semibold tracking-[0.06em] whitespace-nowrap text-subtle uppercase">Ship track</span>
-      <ol className="flex flex-1 items-center">
+      <ol className="flex min-w-0 flex-1 items-center">
         {stops.map((stop, i) => (
           <Fragment key={stop.key}>
             {i === 0 ? null : (
@@ -65,7 +65,7 @@ export function ShipTrack({ pr }: { pr: Pr }) {
               <span className={cn('grid size-3.5 place-items-center rounded-full border-[1.5px]', DOT[stop.state])}>
                 {stop.state === 'done' ? <Check size={9} weight="bold" aria-hidden /> : null}
               </span>
-              <span>{stop.label}</span>
+              <span className={cn(stop.state !== 'now' && '@max-[760px]:sr-only')}>{stop.label}</span>
               {stop.state === 'now' && stop.spentMs !== null ? (
                 <span className="tabular-nums text-[11px] font-normal text-muted">{formatDuration(stop.spentMs)}</span>
               ) : null}

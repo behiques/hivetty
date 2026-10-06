@@ -39,4 +39,11 @@ describe('RunBar', () => {
     fireEvent.click(screen.getByRole('button', { name: /Run #2203/ }));
     expect(onShow).toHaveBeenCalledWith('2222222bbb');
   });
+
+  it('wraps on a narrow column, and truncates its run text (HIVE-225)', () => {
+    render(<RunBar pushes={pushes} shown={pushes[2]!} files={['ci.yml', 'preview.yml']} onShow={() => {}} />);
+    const text = screen.getByText(/^on 9f3c2ab · started/);
+    expect(text).toHaveClass('min-w-0', 'truncate');
+    expect(text.parentElement).toHaveClass('flex-wrap', 'gap-y-1', 'min-w-0');
+  });
 });

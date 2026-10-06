@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
-import { TheComb } from '@features/home/components/the-comb';
+import { TheComb, tooltipLeft } from '@features/home/components/the-comb';
 import { COMB_W, layoutComb } from '@lib/swarm/comb';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
@@ -245,5 +245,15 @@ describe('TheComb — the cells that fold others (decision D6)', () => {
     // A 30fps frame apart: the loop skips paints closer than that (HIVE-225).
     act(() => raf.mock.calls[1]![0](50));
     expect(rec.calls.filter((c) => c.op === 'fillRect').length).toBe(before + 2);
+  });
+});
+
+describe('tooltipLeft (HIVE-225)', () => {
+  it('keeps a 240px tooltip inside the canvas at the 1100px window scale', () => {
+    const k = 0.75;
+    expect(tooltipLeft(COMB_W - 10, k) + 240).toBeLessThanOrEqual(COMB_W * k);
+  });
+  it('sits 18 canvas units right of a cell away from the edge', () => {
+    expect(tooltipLeft(100, 0.5)).toBe(59);
   });
 });

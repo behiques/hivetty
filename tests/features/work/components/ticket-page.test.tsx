@@ -247,3 +247,32 @@ describe('TicketPage (HIVE-203)', () => {
     await waitFor(() => expect(readJiraTransitions.mock.calls.length).toBe(before + 1));
   });
 });
+
+describe('TicketPage on a narrow stage (HIVE-225)', () => {
+  it('is a size container whose sidebar shows inline only from 760px', () => {
+    render(<TicketPage ticketKey="GRAC-3018" />);
+    expect(screen.getByRole('region', { name: 'Ticket GRAC-3018' })).toHaveClass('@container');
+    expect(screen.getByRole('complementary', { name: 'Ticket properties' })).toHaveClass('hidden', '@min-[760px]:block');
+    expect(screen.getByRole('button', { name: 'Details' })).toHaveClass('@min-[760px]:hidden');
+  });
+
+  it('opens the properties as an overlay from Details, and Escape closes it and returns focus', async () => {
+    render(<TicketPage ticketKey="GRAC-3018" />);
+    const details = screen.getByRole('button', { name: 'Details' });
+    await userEvent.click(details);
+    const dialog = screen.getByRole('dialog', { name: 'Ticket details' });
+    expect(details).toHaveAttribute('aria-expanded', 'true');
+    expect(dialog).toHaveClass('@min-[760px]:hidden');
+    expect(dialog).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Ticket details' })).not.toBeInTheDocument();
+    expect(details).toHaveFocus();
+  });
+
+  it('closes from a click outside it', async () => {
+    render(<TicketPage ticketKey="GRAC-3018" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+    await userEvent.click(screen.getByTestId('ticket-details-veil'));
+    expect(screen.queryByRole('dialog', { name: 'Ticket details' })).not.toBeInTheDocument();
+  });
+});
