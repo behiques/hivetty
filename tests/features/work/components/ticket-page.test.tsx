@@ -180,7 +180,7 @@ describe('TicketPage (HIVE-203)', () => {
     readJiraDetail.mockResolvedValue(fail('Jira is down'));
     render(<TicketPage ticketKey="GRAC-3018" />);
 
-    expect(await screen.findByText('Jira is down')).toHaveClass('text-amber');
+    expect(await screen.findByText('Jira is down')).toHaveClass('text-amber-text');
     readJiraDetail.mockResolvedValue(ok(paragraph('Back again')));
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -209,7 +209,7 @@ describe('TicketPage (HIVE-203)', () => {
     }));
     render(<TicketPage ticketKey="GRAC-3018" />);
 
-    expect(screen.getByRole('button', { name: 'In Progress — move GRAC-3018' })).toHaveClass('text-amber');
+    expect(screen.getByRole('button', { name: 'In Progress — move GRAC-3018' })).toHaveClass('text-amber-text');
   });
 
   it('draws the key and a header skeleton for a ticket it does not know yet', () => {

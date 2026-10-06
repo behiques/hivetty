@@ -34,10 +34,10 @@ const TONE: Record<ConnectionState, string> = {
   local: 'text-ink',
   serving: 'text-ink',
   attached: 'text-ink',
-  reconnecting: 'text-amber',
+  reconnecting: 'text-amber-text',
   disconnected: 'text-red',
-  exposed: 'text-amber',
-  demo: 'text-amber',
+  exposed: 'text-amber-text',
+  demo: 'text-amber-text',
 };
 
 const AMBER_LABEL: ReadonlySet<ConnectionState> = new Set(['reconnecting', 'exposed', 'demo']);
@@ -177,7 +177,7 @@ export function ConnectionItem() {
           className={cn(
             ITEM,
             open ? 'bg-hover' : 'hover:bg-hover',
-            AMBER_LABEL.has(top) ? 'text-amber' : 'text-muted',
+            AMBER_LABEL.has(top) ? 'text-amber-text' : 'text-muted',
           )}
         >
           <Dot state={top} />

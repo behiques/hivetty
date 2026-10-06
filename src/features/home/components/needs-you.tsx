@@ -21,11 +21,11 @@ function NeedsYouRow({ notif, now }: { notif: HiveNotification; now: number }) {
   const { action } = notif;
   return (
     <StripRow
-      icon={<Circle size={9} weight="fill" className="text-amber" aria-hidden="true" />}
+      icon={<Circle size={9} weight="fill" className="text-amber-text" aria-hidden="true" />}
       name={who === '' ? notif.title : name}
       detail={who === '' ? (notif.body.split('\n')[0] ?? '') : notif.title}
       value={waitText(notif.createdAt, now)}
-      valueClass="text-amber-count"
+      valueClass="text-amber-text"
       onClick={() => openInboxDrawer(action.type === 'ask' ? action.thread : undefined)}
     />
   );
@@ -46,7 +46,7 @@ export function NeedsYou() {
     <section aria-labelledby="needs-you-head" className="grid min-w-0 content-start gap-px">
       <StripHead>
         <span id="needs-you-head">
-          Needs you <b className="tabular-nums text-[12px] text-amber-count">{queue.length}</b>
+          Needs you <b className="tabular-nums text-[12px] text-amber-text">{queue.length}</b>
         </span>
       </StripHead>
       {queue.slice(0, NEEDS_YOU_MAX).map((n) => (

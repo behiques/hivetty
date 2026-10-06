@@ -35,14 +35,13 @@
   --cc-border: #273159;
   --cc-border-soft: #1e2747;
   --cc-ink: #e9effc;
-  --cc-muted: #98a3cc;
-  --cc-subtle: #6b779f;
+  --cc-muted: #9faad0;
+  --cc-subtle: #8d97b8;
   --cc-brand: #8fa7f2;
   --cc-green: #74b79c;
   --cc-amber: #ffac47;
-  /* Needs-you counts drawn as amber text (activity bar, Inbox pill, project rows, Home's strip).
-     Dark already clears AA, so it is the amber itself. */
-  --cc-amber-count: var(--cc-amber);
+  /* Amber drawn as text. Dark already clears AA, so it is the amber itself. */
+  --cc-amber-text: var(--cc-amber);
   --cc-red: #ff8d85;
   --cc-chip: #1c2648;
   /**
@@ -74,7 +73,7 @@
    */
   --cc-term-row-hover: #161f45;
   --cc-term-row-active: #1a2450;
-  --cc-term-head: #4d5a86;
+  --cc-term-head: #8590b0;
   /* Unselected track and dot outline in the picker's steppers (story 044). */
   --cc-term-track: #3a4674;
 
@@ -87,7 +86,7 @@
    * (`var(--blue-600/700/800)`, which its light theme leaves alone). Reusing
    * `--cc-brand` here would repaint the logo tile pale blue in dark mode.
    */
-  --cc-brand-fill: #5e76d0;
+  --cc-brand-fill: #5470cb;
   --cc-brand-fill-hover: #4f6ac5;
   --cc-brand-fill-strong: #334fa9; /* Serenity — the signature brand blue */
   --cc-on-brand: #ffffff;
@@ -226,14 +225,15 @@ body[data-theme='light'] {
   --cc-border: #d4dee3;
   --cc-border-soft: #edf2f4;
   --cc-ink: #2c2f34;
-  --cc-muted: #73767c;
-  --cc-subtle: #8e949c;
+  --cc-muted: #5a5d63;
+  --cc-subtle: #686d73;
   --cc-brand: #334fa9;
   --cc-green: #2e6b52;
   --cc-amber: #c77414;
-  /* #c77414 as text is 3.5:1 on white; 30% ink takes it past 4.5:1 on every light ground,
-     chip included (HIVE-210). A mix, not a hex: an imported theme derives it from its own colours. */
-  --cc-amber-count: color-mix(in srgb, var(--cc-amber) 70%, var(--cc-ink));
+  /* #c77414 as text is 3.5:1 on white; 35% ink takes it past 4.5:1 on every light ground in every
+     built-in theme, the terminal rows included (HIVE-210, HIVE-223). A mix, not a hex: an imported
+     theme derives it from its own colours. */
+  --cc-amber-text: color-mix(in srgb, var(--cc-amber) 65%, var(--cc-ink));
   --cc-red: #d3372f;
   --cc-chip: #edf2f4;
   /* Light lifts by *deepening*: the chip already sits below a white panel, so
@@ -279,7 +279,7 @@ body[data-theme='light'] {
    */
   --cc-term-row-hover: #eef4f9;
   --cc-term-row-active: #e4edf5;
-  --cc-term-head: #6b6e74;
+  --cc-term-head: #686b71;
   --cc-term-track: #d4dee3;
 
   /**
@@ -329,7 +329,7 @@ body[data-theme='light'] {
   --color-brand: var(--cc-brand);
   --color-green: var(--cc-green);
   --color-amber: var(--cc-amber);
-  --color-amber-count: var(--cc-amber-count);
+  --color-amber-text: var(--cc-amber-text);
   --color-creep: var(--cc-creep);
   --color-chitin: var(--cc-chitin);
   --color-red: var(--cc-red);

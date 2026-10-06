@@ -324,6 +324,26 @@ describe('drawComb', () => {
     expect(texts).not.toContain('agent-2'); // morphing
   });
 
+  it('rings the focused cell in brand, and nothing without one (HIVE-223)', () => {
+    const layout = layoutComb([agent('s1', 'morphing')], []);
+    const ringed = (focusedId: string | null) => {
+      const { ctx, calls } = recordingContext();
+      drawComb(ctx, layout, [], 0, PALETTE, 1, focusedId);
+      // The recorder keeps no per-call state, so replay the style setters up to each stroke.
+      let lineWidth: unknown = 1;
+      let strokeStyle: unknown;
+      let count = 0;
+      for (const c of calls) {
+        if (c.op === 'set:lineWidth') lineWidth = c.args[0];
+        if (c.op === 'set:strokeStyle') strokeStyle = c.args[0];
+        if (c.op === 'stroke' && lineWidth === 2 && strokeStyle === PALETTE.brand) count += 1;
+      }
+      return count;
+    };
+    expect(ringed(null)).toBe(0);
+    expect(ringed('s1')).toBe(1);
+  });
+
   describe('the flyers', () => {
     beforeEach(() => {
       vi.mocked(drawMuta).mockClear();

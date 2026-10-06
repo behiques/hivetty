@@ -9,11 +9,11 @@ const tile = (tone: TileTone, live = 0) =>
 
 describe('AgentTile', () => {
   it.each([
-    ['asking', 'text-amber'],
+    ['asking', 'text-amber-text'],
     ['failed', 'text-red'],
     ['working', 'text-green'],
     ['resting', 'text-subtle'],
-    ['invalid', 'text-amber'],
+    ['invalid', 'text-amber-text'],
   ] as const)('draws %s in %s', (tone, colour) => {
     expect(tile(tone)).toHaveClass(colour);
   });

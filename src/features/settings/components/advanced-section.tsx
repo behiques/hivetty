@@ -124,7 +124,7 @@ function PtyCounters({ rows }: { rows: readonly PtyDiagnostics[] }) {
               {row.sessionId}
             </span>
             {row.paused ? (
-              <span className="shrink-0 text-[11px] text-amber">paused</span>
+              <span className="shrink-0 text-[11px] text-amber-text">paused</span>
             ) : null}
           </div>
           <dl className="flex flex-wrap gap-x-4 gap-y-0.5">
@@ -431,7 +431,7 @@ export function AdvancedSection() {
           channel happened to fail.
         */}
         {reloaded !== null && restart.length > 0 && (
-          <p className="text-[11.5px] text-amber">Restart to apply: {restart.join(', ')}.</p>
+          <p className="text-[11.5px] text-amber-text">Restart to apply: {restart.join(', ')}.</p>
         )}
       </SettingsGroup>
 

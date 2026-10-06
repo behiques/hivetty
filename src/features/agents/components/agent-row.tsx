@@ -24,7 +24,7 @@ interface AgentRowProps {
 
 /** Line 2's keyword, in the colour of what the entry was. */
 const KEYWORD_TONE: Partial<Record<LedgerKind, string>> = {
-  ask: 'text-amber',
+  ask: 'text-amber-text',
   failed: 'text-red',
   event: 'text-brand',
   post: 'text-subtle',
@@ -137,7 +137,7 @@ export function AgentRow({ id }: AgentRowProps) {
 
   const text = broken ? entity.invalid : (last?.line ?? '');
   const keywordTone =
-    broken || paused || last === undefined ? 'text-amber' : (KEYWORD_TONE[last.kind] ?? 'text-subtle');
+    broken || paused || last === undefined ? 'text-amber-text' : (KEYWORD_TONE[last.kind] ?? 'text-subtle');
 
   const state = broken ? 'invalid' : STATUS_LABEL[entity.status];
   const name =
@@ -153,7 +153,7 @@ export function AgentRow({ id }: AgentRowProps) {
         aria-label={name}
         className={cn(
           'flex w-full gap-2.5 rounded-[10px] p-2 text-left',
-          current ? 'bg-panel-2' : 'hover:bg-hover',
+          current ? 'bg-active' : 'hover:bg-hover',
         )}
       >
         <AgentTile icon={entity.icon} tone={tone} live={live} size="sm" />
@@ -173,7 +173,7 @@ export function AgentRow({ id }: AgentRowProps) {
               {text}
             </span>
           ) : (
-            <span role="status" className="truncate text-ui-sm text-amber">
+            <span role="status" className="truncate text-ui-sm text-amber-text">
               {notice}
             </span>
           )}

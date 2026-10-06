@@ -12,7 +12,7 @@ describe('CombHeadline', () => {
 
   it('is calling, in amber, with the summons count', () => {
     render(<CombHeadline needs={5} summary={BUSY} />);
-    expect(screen.getByRole('heading', { level: 2, name: 'The hive is calling · 5 summons' })).toHaveClass('text-amber');
+    expect(screen.getByRole('heading', { level: 2, name: 'The hive is calling · 5 summons' })).toHaveClass('text-amber-text');
     expect(screen.getByText('4 working · 1 failed · 3 resting · 3 projects · 6 agents')).toBeInTheDocument();
     expect(screen.queryByText('The Comb')).not.toBeInTheDocument();
   });

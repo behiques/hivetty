@@ -262,7 +262,7 @@ describe('TicketTab links (HIVE-202)', () => {
     seed({ links: [link('HIVE-188', 'todo', 'Blocks', 'inward')] });
     render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
 
-    expect(screen.getByText('Blocked by 1 open:').parentElement).toHaveClass('text-amber');
+    expect(screen.getByText('Blocked by 1 open:').parentElement).toHaveClass('text-amber-text');
   });
 
   it('says there are no linked tickets, with no drawing, when only remote links exist', () => {

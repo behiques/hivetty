@@ -71,7 +71,7 @@ describe('PrConversation', () => {
     render(<PrConversation pr={fixturePr()} detail={detail} fixerOnIt={false} />);
     expect(screen.getByText('via Hive TTY')).toBeInTheDocument();
     expect(screen.getByText('acr')).toBeInTheDocument();
-    expect(screen.getByText('changes requested')).toHaveClass('text-amber');
+    expect(screen.getByText('changes requested')).toHaveClass('text-amber-text');
   });
 
   it('lists comments, reviews and threads oldest first; a bodyless COMMENTED review is left out', () => {

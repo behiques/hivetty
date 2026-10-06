@@ -937,7 +937,7 @@ export function AgentForm({
         showing text the buffer does not hold.
       */
       onBlur={() => setDraft(null)}
-      className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-[11.5px] text-ink outline-none focus:border-border"
+      className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-[11.5px] text-ink outline-none focus:border-brand"
     />
   );
 
@@ -999,7 +999,7 @@ export function AgentForm({
   if (read === null) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-4 text-center">
-        <span className="text-[11.5px] text-amber">
+        <span className="text-[11.5px] text-amber-text">
           This file has no frontmatter.
         </span>
         <span className="text-[11.5px] text-subtle">
@@ -1080,7 +1080,7 @@ export function AgentForm({
                 setRenamed({ from: typed, to: free });
                 onChange(patchFrontmatter(source, 'name', free));
               }}
-              className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-[11.5px] text-ink outline-none focus:border-border"
+              className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-[11.5px] text-ink outline-none focus:border-brand"
             />,
           )}
           {row('description', 'description', input('description', 'description'))}

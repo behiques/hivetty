@@ -29,7 +29,7 @@ export function EditorNotice({ tone, icon, children, actions }: EditorNoticeProp
       className={cn(
         'flex shrink-0 items-center gap-2 border-b px-3 py-1.5 text-[11.5px]',
         tone === 'amber'
-          ? 'border-border-soft bg-panel text-amber'
+          ? 'border-border-soft bg-panel text-amber-text'
           : 'border-border-soft bg-panel text-subtle',
       )}
     >

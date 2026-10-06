@@ -20,11 +20,11 @@ interface AgentTileProps {
 */
 const TONE: Record<TileTone, string> = {
   asking:
-    'text-amber [&_polygon]:fill-[color-mix(in_srgb,var(--cc-amber)_22%,transparent)]',
+    'text-amber-text [&_polygon]:fill-[color-mix(in_srgb,var(--cc-amber)_22%,transparent)]',
   failed: 'text-red [&_polygon]:fill-[color-mix(in_srgb,var(--cc-red)_14%,transparent)]',
   working: 'text-green',
   resting: 'text-subtle',
-  invalid: 'text-amber',
+  invalid: 'text-amber-text',
 };
 
 /** Asking glows, at the panel's size only: a small tile in a card header stays flat. */

@@ -42,7 +42,7 @@ export function SessionsPanel() {
         <h2 className="text-ui-lg font-semibold text-ink">Projects</h2>
         <span className="text-ui-sm text-muted">
           <span className="text-green">{live} live</span> ·{' '}
-          <span className="text-amber-count">{needs} needs you</span>
+          <span className="text-amber-text">{needs} needs you</span>
         </span>
         <NewProjectLink />
       </div>

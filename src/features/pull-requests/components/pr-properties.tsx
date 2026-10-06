@@ -263,7 +263,7 @@ export function PrActions({ row }: { row: HatcheryRow }) {
       )}
       {github}
       {note === null ? null : (
-        <p className={cn('px-1 pt-1 text-[12px]', note.tone === 'amber' ? 'text-amber' : 'text-muted')}>{note.text}</p>
+        <p className={cn('px-1 pt-1 text-[12px]', note.tone === 'amber' ? 'text-amber-text' : 'text-muted')}>{note.text}</p>
       )}
     </div>
   );

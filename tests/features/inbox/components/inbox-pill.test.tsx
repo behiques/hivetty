@@ -32,7 +32,7 @@ describe('InboxPill (HIVE-198)', () => {
     useHiveStore.getState().hydrateNotifs([ask('a1'), blocked('s1', 'nova'), blocked('s2', 'lead')]);
     render(<InboxPill onStage="lead" />);
     expect(screen.getByRole('button', { name: 'Inbox, 2 need you' })).toHaveTextContent('2need you');
-    expect(screen.getByText('2').className).toContain('text-amber-count');
+    expect(screen.getByText('2').className).toContain('text-amber-text');
   });
 
   it('hides while the drawer is open', () => {

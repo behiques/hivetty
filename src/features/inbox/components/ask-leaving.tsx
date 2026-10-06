@@ -50,7 +50,7 @@ export function AskLeaving({ notif, thread }: { notif: HiveNotification; thread:
       <span className="font-medium text-muted">{asker}</span>
       {' · '}
       {reason.kind === 'expired' ? (
-        <span className="text-amber">expired</span>
+        <span className="text-amber-text">expired</span>
       ) : (
         <>
           <span className="text-green">answered</span>

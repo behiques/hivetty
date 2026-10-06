@@ -27,7 +27,7 @@ describe('ThreadCard', () => {
 
   it('says the fixer is on an open thread, and resolved over everything', () => {
     const { rerender } = render(<ThreadCard thread={prThread()} fixerOnIt />);
-    expect(screen.getByText('fixer on it')).toHaveClass('text-amber');
+    expect(screen.getByText('fixer on it')).toHaveClass('text-amber-text');
     rerender(<ThreadCard thread={prThread({ isResolved: true })} fixerOnIt />);
     expect(screen.getByText('resolved')).toHaveClass('text-green');
   });
@@ -125,5 +125,11 @@ describe('ThreadCard writes (HIVE-207)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('textbox', { name: /Reply to/ })).toBeNull();
     expect(w.reply).not.toHaveBeenCalled();
+  });
+
+  it('shows focus on the reply box with the brand border (HIVE-223)', async () => {
+    render(<ThreadCard thread={prThread()} fixerOnIt={false} writes={writes()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    expect(screen.getByRole('textbox', { name: /^Reply to / }).parentElement).toHaveClass('focus-within:border-brand');
   });
 });
