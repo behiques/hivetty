@@ -14,6 +14,18 @@ function measuredRow() {
   return ref;
 }
 
+/** A 1,000px row holding a `<main>` stage at [left, right]: the rails' drawn widths are the gaps either side, less a 12px grip. */
+function rowWithStage(left: number, right: number) {
+  const row = document.createElement('div');
+  row.getBoundingClientRect = () => ({ width: 1000, height: 500, left: 0, right: 1000, top: 0 }) as DOMRect;
+  const stage = document.createElement('main');
+  stage.getBoundingClientRect = () => ({ width: right - left, height: 500, left, right, top: 0 }) as DOMRect;
+  row.appendChild(stage);
+  const ref = createRef<HTMLElement>();
+  (ref as { current: HTMLElement | null }).current = row;
+  return ref;
+}
+
 describe('RailHandle', () => {
   let observed: (() => void) | undefined;
 
@@ -76,5 +88,33 @@ describe('RailHandle', () => {
     // The handle is 12px: its centre at 400 leaves 394 of list, at 600 leaves 394 of session.
     expect(onList.mock.calls[0]?.[0]).toBeCloseTo(394);
     expect(onSession.mock.calls[0]?.[0]).toBeCloseTo(394);
+  });
+
+  it('reports the drawn width when flexbox has pulled the rail in (HIVE-223)', () => {
+    // Saved 400, but the stage starts at 312: the list is drawn 300 wide.
+    render(<RailHandle rowRef={rowWithStage(312, 1000)} rail="list" label="Resize" width={400} onWidth={vi.fn()} />);
+    act(() => observed?.());
+    // (300 + 6) / 1000
+    expect(screen.getByRole('slider', { name: 'Resize' })).toHaveAttribute('aria-valuenow', '31');
+  });
+
+  it('reports the session rail’s drawn width from the stage’s right edge (HIVE-223)', () => {
+    // Saved 480, but the stage ends at 668: the session rail is drawn 320 wide.
+    render(<RailHandle rowRef={rowWithStage(0, 668)} rail="session" label="Resize" width={480} onWidth={vi.fn()} />);
+    act(() => observed?.());
+    // (1000 - 320 - 6) / 1000
+    expect(screen.getByRole('slider', { name: 'Resize' })).toHaveAttribute('aria-valuenow', '67');
+  });
+
+  it('will not grow a rail past the stage floor (HIVE-223)', async () => {
+    const onWidth = vi.fn();
+    // Stage 540 wide: 20px of slack above STAGE_MIN, so the list may reach 320.
+    render(<RailHandle rowRef={rowWithStage(312, 852)} rail="list" label="Resize" width={300} onWidth={onWidth} />);
+    act(() => observed?.());
+    const handle = screen.getByRole('slider', { name: 'Resize' });
+    expect(handle).toHaveAttribute('aria-valuemax', '33'); // (320 + 6) / 1000
+    handle.focus();
+    await userEvent.keyboard('{ArrowRight}{ArrowRight}{ArrowRight}');
+    expect(Math.max(...onWidth.mock.calls.map((c) => c[0] as number))).toBeLessThanOrEqual(320.5);
   });
 });

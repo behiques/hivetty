@@ -242,6 +242,16 @@ export async function setContentSize(
 
 export { expect };
 
+/** The window's outer width, and wait until the page has followed it (HIVE-211, shared since HIVE-223). */
+export async function resizeTo(app: ElectronApplication, page: Page, width: number): Promise<void> {
+  await app.evaluate(
+    ({ BrowserWindow }, w: number) =>
+      BrowserWindow.getAllWindows()[0]!.setBounds({ x: 0, y: 0, width: w, height: 800 }),
+    width,
+  );
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeLessThanOrEqual(width);
+}
+
 /**
  * What the dock icon is currently badged with.
  *

@@ -64,6 +64,13 @@ describe('PrChecks', () => {
     expect(loadJobLog).toHaveBeenCalledTimes(1);
   });
 
+  it('stacks steps over the log on a page under 640px (HIVE-223)', () => {
+    seed([run(2, 'new', 'failure')], { 2: [job(22, 2, 'failure')] });
+    render(<PrChecks pr={pr} detail={prDetail()} />);
+    const grid = screen.getByText('JOB22').closest('.grid');
+    expect(grid).toHaveClass('grid-cols-1', '@min-[640px]:grid-cols-[300px_minmax(0,1fr)]');
+  });
+
   it('shows another push when its square is clicked', () => {
     seed([run(2, 'new', 'failure'), run(1, 'old', 'success')], {});
     render(<PrChecks pr={pr} detail={prDetail()} />);

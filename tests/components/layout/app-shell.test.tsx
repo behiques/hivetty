@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppShell } from '@components/layout/app-shell';
 import { TooltipProvider } from '@components/ui/tooltip';
-import { useAppearanceStore } from '@stores/appearance-store';
+import { STAGE_MIN, useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { resetProjectConfig } from '@lib/project-config';
@@ -60,7 +60,8 @@ describe('AppShell', () => {
     const row = container.querySelector('div > div.flex.min-h-0');
     expect(row).not.toBeNull();
     expect(row).toHaveClass('min-h-0', 'flex-1');
-    expect(screen.getByRole('main')).toHaveClass('min-w-0');
+    // An explicit floor, not `auto`: content cannot widen the stage, and the rails yield to it (HIVE-223).
+    expect(screen.getByRole('main').style.minWidth).toBe(`${String(STAGE_MIN)}px`);
   });
 
   it('mounts the session panel for a session on stage (HIVE-201)', () => {

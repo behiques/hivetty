@@ -11,6 +11,7 @@ import {
   DEFAULT_AGENT_SPLIT_RATIO,
   DEFAULT_TEAM_NAME,
   PANEL_WIDTHS,
+  STAGE_MIN,
   useListPanelWidth,
   useSessionPanelWidth,
   useSetListPanelWidth,
@@ -1101,6 +1102,12 @@ describe('appearance-store — rail widths', () => {
   beforeEach(() => {
     localStorage.clear();
     useAppearanceStore.getState().reset();
+  });
+
+  it('leaves a 1,200px window room for both rails at their minimums and the stage floor (HIVE-223)', () => {
+    const BAR = 64;
+    const GRIPS = 24;
+    expect(PANEL_WIDTHS.list.min + PANEL_WIDTHS.session.min + GRIPS + STAGE_MIN).toBeLessThanOrEqual(1200 - BAR);
   });
 
   it('clamps a drag to the rail bounds, in whole pixels', () => {
