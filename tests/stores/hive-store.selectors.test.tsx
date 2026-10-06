@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Agent, Entity, Session, Terminal } from '@/types/entity';
+import { terminalOf, type Agent, type Entity, type Session, type Terminal } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
 import { LEDGER_MEMORY_CAP, type LedgerEntry } from '@shared/ledger-contract';
 import type { NotificationKind } from '@shared/notification-contract';
@@ -32,6 +32,8 @@ import {
   useWorkingAgentCount,
   useAgentLive,
   useAgentLiveCount,
+  useDelegateTitle,
+  useDelegateWord,
   useAgentPr,
   useCounts,
   useFleetAgents,
@@ -1109,6 +1111,72 @@ describe('hive-store selectors', () => {
       });
 
       expect(result.current).toBeNull();
+    });
+  });
+
+  describe('useDelegateWord and useDelegateTitle (idle with agents)', () => {
+    const agent = (name: string): AgentSummary => ({
+      name,
+      description: 'Ships.',
+      icon: 'Robot',
+      status: 'sleeping',
+      wake: { on: [] },
+      mcp: [],
+      tools: [],
+      rotateAfter: 50,
+      runs: [],
+    });
+    const at = (id: string) => useHiveStore.getState().entities[id] as Session;
+    const ask = (id: string, from: string, to: string): LedgerEntry => ({
+      id,
+      ts: Date.now(),
+      from,
+      to,
+      kind: 'ask',
+      body: 'ship it',
+      meta: { pr: 106, repo: 'behiques/hivetty' },
+    });
+
+    beforeEach(() => {
+      act(() => {
+        useHiveStore.getState().hydrateAgents([agent('shipper'), agent('fixer')]);
+        useHiveStore.getState().setSessionStatus('hero-refresh', 'idle');
+      });
+    });
+
+    it('names the agent a quiet session asked, and who it brought in', () => {
+      const party = terminalOf(at('hero-refresh'));
+      act(() => useHiveStore.getState().ledgerAppend(ask('20261006-0001', party, 'shipper')));
+      act(() => useHiveStore.getState().ledgerAppend(ask('20261006-0002', 'shipper', 'fixer')));
+
+      expect(renderHook(() => useDelegateWord(at('hero-refresh'))).result.current).toBe('shipper');
+      expect(renderHook(() => useDelegateTitle(at('hero-refresh'))).result.current).toBe('Waiting on shipper (with fixer)');
+    });
+
+    it('says nothing once the job closes, or while the session works', () => {
+      const party = terminalOf(at('hero-refresh'));
+      act(() => useHiveStore.getState().ledgerAppend(ask('20261006-0001', party, 'shipper')));
+      act(() => useHiveStore.getState().setSessionStatus('hero-refresh', 'working'));
+      expect(renderHook(() => useDelegateWord(at('hero-refresh'))).result.current).toBeNull();
+
+      act(() => useHiveStore.getState().setSessionStatus('hero-refresh', 'idle'));
+      act(() =>
+        useHiveStore.getState().ledgerAppend({
+          id: '20261006-0003',
+          ts: Date.now(),
+          from: 'shipper',
+          kind: 'done',
+          body: 'merged',
+          thread: '20261006-0001',
+        }),
+      );
+      expect(renderHook(() => useDelegateWord(at('hero-refresh'))).result.current).toBeNull();
+    });
+
+    it('does not count an ask to something that is not an agent', () => {
+      const party = terminalOf(at('hero-refresh'));
+      act(() => useHiveStore.getState().ledgerAppend(ask('20261006-0001', party, 'nova-web')));
+      expect(renderHook(() => useDelegateWord(at('hero-refresh'))).result.current).toBeNull();
     });
   });
 

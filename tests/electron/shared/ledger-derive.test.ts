@@ -15,6 +15,7 @@ import {
   buildProgressFor,
   claims,
   closedAskThreads,
+  delegatesOf,
   expiredAsks,
   holderPost,
   isShipping,
@@ -1014,5 +1015,51 @@ describe('the PR page readings (HIVE-205)', () => {
     expect(holderPost(log, slug, 1182, 'fixer')?.id).toBe('f4');
     expect(holderPost(log, slug, 1182, 'acr')).toBeNull();
     expect(holderPost(log, '', 1182, 'fixer')).toBeNull();
+  });
+});
+
+describe('delegatesOf (idle with agents)', () => {
+  const AGENTS = new Set(['shipper', 'fixer', 'acr', 'builder', 'pr-patrol-nightly']);
+  const isAgent = (id: string) => AGENTS.has(id);
+  const ask = (id: string, from: string, to: string, meta?: Record<string, unknown>) =>
+    entry({ id, from, to, kind: 'ask', body: 'job', ...(meta === undefined ? {} : { meta }) });
+  const of = (log: LedgerEntry[], party = 'sess-a') => delegatesOf(openAsks(log, NOW), log, party, isAgent);
+
+  it('names the agents the session asked, once each, in the order it asked', () => {
+    const log = [
+      ask('a1', 'sess-a', 'shipper', { pr: 106, repo: 'behiques/hivetty' }),
+      ask('a2', 'sess-a', 'builder', { ticket: 'HIVE-9' }),
+      ask('a3', 'sess-a', 'shipper', { pr: 107, repo: 'behiques/hivetty' }),
+    ];
+    expect(of(log).map((d) => d.agent)).toEqual(['shipper', 'builder']);
+  });
+
+  it('drops a closed ask, an ask to a session or the overmind, and another party\'s ask', () => {
+    const log = [
+      ask('a1', 'sess-a', 'shipper'),
+      entry({ id: 'd1', from: 'shipper', kind: 'done', body: 'merged', thread: 'a1' }),
+      ask('a2', 'sess-a', 'sess-b'),
+      ask('a3', 'sess-a', OVERMIND),
+      ask('a4', 'sess-b', 'fixer'),
+    ];
+    expect(of(log)).toEqual([]);
+  });
+
+  it('counts a held ask only once its PR has closed', () => {
+    const held = ask('a1', 'sess-a', 'builder', { after: 'behiques/hivetty#108' });
+    expect(of([held])).toEqual([]);
+    const closed = entry({ id: 'c1', from: 'shipper', body: 'closed', meta: { pr: 108, repo: 'behiques/hivetty', stage: 'closed' } });
+    expect(of([held, closed]).map((d) => d.agent)).toEqual(['builder']);
+  });
+
+  it('lists the helpers an agent brought in for the same PR or ticket, and no other job\'s', () => {
+    const log = [
+      ask('a1', 'sess-a', 'shipper', { pr: 106, repo: 'behiques/hivetty' }),
+      ask('s1', 'shipper', 'acr', { pr: 106, repo: 'Behiques/Hivetty' }),
+      ask('s2', 'shipper', 'fixer', { pr: 106, repo: 'behiques/hivetty' }),
+      ask('s3', 'shipper', 'acr', { pr: 99, repo: 'behiques/hivetty' }),
+      ask('s4', 'shipper', 'sess-a', { pr: 106, repo: 'behiques/hivetty' }),
+    ];
+    expect(of(log)).toEqual([{ agent: 'shipper', helpers: ['acr', 'fixer'] }]);
   });
 });

@@ -98,6 +98,12 @@ interface NotifierOptions {
    * sitting `unread: false` in an inbox one device has not looked at.
    */
   isForegroundEverywhere: (entityId: string) => boolean;
+  /**
+   * Has this session an agent on its work: an open ask from it to an agent
+   * (`delegatesOf`, 6 Oct 2026)? Then it is not yours again yet, and it has
+   * not run out of instructions: it handed them out. Absent reads no.
+   */
+  isDelegated?: (entityId: string) => boolean;
 }
 
 interface Notifier {
@@ -335,7 +341,7 @@ function stillRelevant(
 }
 
 export function createNotifier(options: NotifierOptions): Notifier {
-  const { hub, isForeground, isForegroundEverywhere } = options;
+  const { hub, isForeground, isForegroundEverywhere, isDelegated = () => false } = options;
 
   /*
    * A note on `/clear`, which `observe` does not handle and does not need to.
@@ -645,11 +651,17 @@ export function createNotifier(options: NotifierOptions): Notifier {
        * `idle` with nothing still running, while the arm is held. See
        * `armedIdle` for why it is an arm and why only `Stop` spends it.
        */
+      /*
+        Not while an agent it asked is still on the job. The arm stays held, so
+        the Stop after the agent's closing note wakes the session is the one
+        that says it is yours again.
+      */
       const trueIdle =
         event === 'Stop' &&
         status === 'idle' &&
         !hasLiveDetail(idleDetail) &&
-        armedIdle.has(entityId);
+        armedIdle.has(entityId) &&
+        !isDelegated(entityId);
       const kind =
         waitingKind(event, notificationType) ??
         (trueIdle ? ('session.idle' as const) : undefined);
@@ -661,7 +673,7 @@ export function createNotifier(options: NotifierOptions): Notifier {
         (HIVE-89). The mark is deliberately not spent by a suppressed prompt:
         the one that arrives after the agent finishes is the first real one.
       */
-      if (kind === 'session.input_needed' && hasLiveDetail(idleDetail)) return;
+      if (kind === 'session.input_needed' && (hasLiveDetail(idleDetail) || isDelegated(entityId))) return;
 
       /*
         Marked before the raise, and deliberately not rolled back when the raise

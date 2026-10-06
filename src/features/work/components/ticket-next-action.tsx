@@ -5,6 +5,7 @@ import { applyJiraTransition } from '@/lib/jira';
 import { BRIDGE_ERROR, cn } from '@/lib/utils';
 
 import { Button } from '@components/ui/button';
+import { CATEGORY_TEXT, STATUS_PILL } from '@features/work/ticket-presentation';
 import {
   useNextTransition,
   useReloadTicketTransitions,
@@ -13,7 +14,7 @@ import {
 } from '@stores/hive-store';
 
 /**
- * "Move to <status>": the one step forward (HIVE-203, D6), shared by the
+ * "Move to [status]": the one step forward (HIVE-203, D6), shared by the
  * ticket page's properties and the session panel's Ticket tab (HIVE-202). The
  * re-read issue goes to both homes a ticket can have — the list, and the
  * slice's own `issue` for one the list does not hold; each ignores a ticket
@@ -47,12 +48,14 @@ export function TicketNextAction({ ticketKey, className }: { ticketKey: string; 
       {/* The resets undo the ghost Button's chrome; the callers pass a brand text link (HIVE-225). */}
       <Button
         variant="ghost"
-        className={cn('rounded-none border-0 p-0 leading-normal hover:bg-transparent hover:text-brand aria-disabled:opacity-60', className)}
+        className={cn('flex-wrap rounded-none border-0 p-0 leading-normal hover:bg-transparent hover:text-brand aria-disabled:opacity-60', className)}
         onClick={apply}
         pending={busy}
       >
         <CaretRight size={13} aria-hidden />
-        {`Move to ${next.to.name}`}
+        Move to{' '}
+        {/* The header's own status pill, so where it goes reads like where it is. */}
+        <span className={cn(STATUS_PILL, CATEGORY_TEXT[next.to.statusCategory])}>{next.to.name}</span>
       </Button>
       {/* Always mounted: a live region that mounts with its text is not reliably announced (HIVE-225). */}
       <div role="status">

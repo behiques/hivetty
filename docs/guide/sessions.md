@@ -49,6 +49,7 @@ Every session shows a coloured dot and a word.
 | **idle** | the turn is over and nothing is running | your turn |
 | **working (agents)** | Claude finished but a subagent is still running | wait |
 | **working (scripts)** | a background shell is still running | wait, or carry on |
+| **idle (shipper)** | the turn is over, and an agent it asked (`ledger_ask`) is still on the job: named when its name is 10 characters or fewer, else **idle (agents)**, or **idle (2 agents)** for more | wait; hover for every agent, and who each brought in |
 | **done** | ended on purpose (`/done`, `/clear`, or the app closed) | resume it if you want |
 | **terminated** | the process is gone (`/exit`, `Ctrl+D`, a crash) | read the scrollback |
 
@@ -57,7 +58,7 @@ Every session shows a coloured dot and a word.
   <img src="../assets/diagrams/session-status.light.svg" alt="Session status: working, needs input, idle, done and terminated, and what moves a session between them">
 </picture>
 
-Status comes from Claude Code's own hooks, so "needs input" is exact rather than guessed.
+Status comes from Claude Code's own hooks, so "needs input" is exact rather than guessed. The agents come from the ledger: an ask from the session to an agent stays open until the job closes, and only the agents the session asked itself are named. While one is on the job, the session is not yours again yet, so "is yours again" and "runs out of instructions" wait until it closes.
 
 ## Names and branches
 
@@ -134,8 +135,9 @@ A session that ends while you are looking at it (`/exit`, `/done`, or its proces
 takes you back to the overmind, with the selection on its row. `/clear` does not, because its
 terminal carries on as a new session.
 
-Open an ended session again and the session header's status reads **Ended**, with the reason
-as its tooltip. A card covers the terminal: **This session ended**, why, and how long ago. When the conversation can be picked
+An ended session's row can't be opened; **Resume** on the row picks it back up when it can.
+If a session ends while you are in its editor, its header's status reads **Ended**, with the
+reason as its tooltip, and a card covers the terminal when you come back to it: **This session ended**, why, and how long ago. When the conversation can be picked
 up it adds that its transcript is on disk, and **Resume**. **‹ Overmind** is always there.
 ✕ closes the card to a strip along the foot, with the reason, Resume and Overmind, so you
 can read the scrollback above it. Closing is per session and forgotten on restart.
