@@ -44,7 +44,7 @@ export function JobSteps({ job, canRerun, onRerun, holder }: { job: RunJob; canR
             <li
               key={step.number}
               data-state={stepState}
-              className={cn('flex items-center gap-[9px] rounded-md px-1 py-[5px] text-control', stepState === 'failed' && 'bg-[color-mix(in_srgb,var(--cc-red)_10%,transparent)]')}
+              className={cn('flex items-center gap-[9px] rounded-md px-1 py-[5px] text-control', stepState === 'failed' && 'bg-red-soft')}
             >
               <StateIcon state={stepState} />
               <span className="truncate text-ink">{step.name}</span>

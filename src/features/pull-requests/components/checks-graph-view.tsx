@@ -9,15 +9,15 @@ import { StateIcon } from '@features/pull-requests/components/state-icon';
 import { useMeasuredWidth } from '@features/pull-requests/components/timeline-lane';
 
 const EDGE: Record<EdgeState, string> = {
-  ok: 'stroke-[color-mix(in_srgb,var(--cc-green)_45%,var(--cc-border))]',
-  bad: 'stroke-[color-mix(in_srgb,var(--cc-red)_55%,var(--cc-border))]',
+  ok: 'stroke-green-edge',
+  bad: 'stroke-red-edge',
   wait: 'stroke-border [stroke-dasharray:3_5]',
   flow: 'stroke-green [stroke-dasharray:6_5]',
 };
 
 const NODE: Record<GraphNode['state'], string> = {
-  passed: 'border-[color-mix(in_srgb,var(--cc-green)_35%,var(--cc-border))]',
-  failed: 'border-red bg-[color-mix(in_srgb,var(--cc-red)_10%,var(--cc-panel))] shadow-[0_0_18px_color-mix(in_srgb,var(--cc-red)_25%,transparent)]',
+  passed: 'border-green-edge',
+  failed: 'border-red bg-red-soft shadow-[0_0_18px_color-mix(in_srgb,var(--cc-red)_25%,transparent)]',
   running: 'border-green shadow-[0_0_0_3px_color-mix(in_srgb,var(--cc-green)_12%,transparent)]',
   waiting: 'border-dashed border-border',
   skipped: 'border-dashed border-border',
@@ -31,7 +31,7 @@ const WHEEL_RATE = 0.01;
 
 const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
 
-const ZOOM_BUTTON = 'grid size-7 place-items-center rounded-[6px] text-muted hover:bg-hover hover:text-ink aria-pressed:bg-hover aria-pressed:text-ink disabled:opacity-40 disabled:hover:bg-transparent';
+const ZOOM_BUTTON = 'grid size-7 place-items-center rounded-md text-muted hover:bg-hover hover:text-ink aria-pressed:bg-hover aria-pressed:text-ink disabled:opacity-40 disabled:hover:bg-transparent';
 
 /**
  * The Checks graph (HIVE-206): a box per job at the layout's place, its
@@ -88,11 +88,11 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
   }, []);
   return (
     <div className="mx-6 mt-3">
-      <div role="group" aria-label="Zoom" className="ml-auto flex w-fit items-center gap-0.5 rounded-[8px] border border-border-soft bg-panel p-0.5">
+      <div role="group" aria-label="Zoom" className="ml-auto flex w-fit items-center gap-0.5 rounded-lg border border-border-soft bg-panel p-0.5">
         <button type="button" aria-label="Zoom out" title="Zoom out" disabled={scale <= ZOOM_MIN} onClick={() => step(-ZOOM_STEP)} className={ZOOM_BUTTON}>
           <MagnifyingGlassMinus size={14} aria-hidden />
         </button>
-        <button type="button" aria-label="Reset zoom" title="Back to 100%" onClick={() => setZoom(1)} className="h-7 min-w-11 rounded-[6px] px-1 tabular-nums text-ui-sm text-muted hover:bg-hover hover:text-ink">
+        <button type="button" aria-label="Reset zoom" title="Back to 100%" onClick={() => setZoom(1)} className="h-7 min-w-11 rounded-md px-1 tabular-nums text-ui-sm text-muted hover:bg-hover hover:text-ink">
           {`${String(Math.round(scale * 100))}%`}
         </button>
         <button type="button" aria-label="Zoom in" title="Zoom in" disabled={scale >= ZOOM_MAX} onClick={() => step(ZOOM_STEP)} className={ZOOM_BUTTON}>
@@ -106,7 +106,7 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
         <div style={{ width: graph.width * scale, height: graph.height * scale }}>
           <div className="relative origin-top-left" style={{ width: graph.width, height: graph.height, transform: scale === 1 ? undefined : `scale(${String(scale)})` }}>
             {graph.groups.map((group) => (
-              <div key={group.file} className="absolute rounded-[14px] border border-dashed border-border" style={{ left: group.x, top: group.y, width: group.w, height: group.h }}>
+              <div key={group.file} className="absolute rounded-2xl border border-dashed border-border" style={{ left: group.x, top: group.y, width: group.w, height: group.h }}>
                 <span className="absolute -top-[9px] left-3 bg-bg px-1.5 tabular-nums text-micro text-subtle">{group.file}</span>
               </div>
             ))}
@@ -135,7 +135,7 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
                     if (node.matrix !== null) onExpand(node.matrix);
                     else if (node.jobId !== null) onJob(node.jobId);
                   }}
-                  className={cn('absolute flex items-center gap-2.5 overflow-hidden rounded-[10px] border bg-panel px-3 text-left hover:bg-hover', NODE[node.state])}
+                  className={cn('absolute flex items-center gap-2.5 overflow-hidden rounded-xl border bg-panel px-3 text-left hover:bg-hover', NODE[node.state])}
                   style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
                 >
                   <span className={cn('grid shrink-0', dim && 'opacity-60')}><StateIcon state={node.state} /></span>

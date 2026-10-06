@@ -176,7 +176,7 @@ export function SkillEditor({
   return (
     <div
       ref={frame}
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[7px] border border-border"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border"
     >
       <div className="flex items-center justify-between gap-3 border-b border-border-soft px-2.5 py-1.5">
         {/*

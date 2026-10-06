@@ -25,6 +25,7 @@ import { useResolvedTheme } from '@stores/appearance-store';
 
 const FILL_BOX = { transformBox: 'fill-box' } as const;
 /** The design's `#000`: black, but never blacker than the theme's ground allows. */
+// colour-literal-exempt: shading toward black is the egg's depth, the same in every theme.
 const DARK = 'color-mix(in srgb, var(--cc-bg) 30%, black)';
 /** The shell darkened by `pct`% of itself: the design's `color-mix(shell pct%, #000)`. */
 const shellShade = (pct: number) => `color-mix(in srgb, var(--cc-shell) ${String(pct)}%, ${DARK})`;
@@ -97,7 +98,7 @@ export function BroodEgg({
       <filter id={ids.eb1}>
         <feGaussianBlur stdDeviation="1.1" />
       </filter>
-      {/* The design's white-to-black luminance mask, as alpha: a token ink is dark in light. */}
+      {/* The design's luminance mask (white to black), as alpha: a token ink is dark in light. */}
       <radialGradient id={ids.cmk}>
         <stop offset="0.3" style={{ stopColor: 'var(--cc-ink)' }} stopOpacity={1} />
         <stop offset="1" style={{ stopColor: DARK }} stopOpacity={0} />

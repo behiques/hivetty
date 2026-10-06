@@ -207,7 +207,7 @@ export function FleetPane({ containerRef, floored, split = true }: FleetPaneProp
         for the same reason.
 
         Both sides of this divider are one terminal black: the fleet table
-        above, the overmind console below. A 1px rule in `border-soft` is
+        above, the overmind console below. A 1px rule in `border-border-soft` is
         exactly what separates one ended session from the next a few pixels
         above it, so the divider between two whole regions read as one more row
         of the table. A 12px band of the **panel** ground cuts that black in

@@ -84,7 +84,7 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
 
   return (
     <SettingsGroup title="Ticket workflow" description="What a session started from a ticket in Work does first.">
-      <div className="flex flex-col gap-3 rounded-[7px] border border-border-soft p-3">
+      <div className="flex flex-col gap-3 rounded-lg border border-border-soft p-3">
         <SegmentedControl
           label="When a session starts from a ticket"
           options={MODES}
@@ -166,7 +166,7 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
             <span className="text-micro font-semibold tracking-[0.06em] text-subtle uppercase">{`For ${EXAMPLE.key}`}</span>
             <code
               data-testid="ticket-workflow-preview"
-              className="rounded-[6px] border border-border-soft bg-term-bg px-2.5 py-2 font-mono text-control break-words text-ink"
+              className="rounded-md border border-border-soft bg-term-bg px-2.5 py-2 font-mono text-control break-words text-ink"
             >
               {start.kind === 'wake'
                 ? `Wakes ${start.agent}: ${start.body}`

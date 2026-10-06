@@ -71,6 +71,6 @@ describe('SettingsProviderGroup', () => {
     const rule = container.querySelector('[aria-hidden="true"]');
 
     expect(rule).not.toBeNull();
-    expect(rule?.className).toContain('bg-brand/25');
+    expect(rule?.className).toContain('bg-brand-strong');
   });
 });

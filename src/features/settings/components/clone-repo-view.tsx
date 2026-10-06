@@ -218,7 +218,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
       ) : null}
 
       {error !== null ? (
-        <p className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red">
+        <p className="rounded-md border border-red px-2.5 py-1.5 text-ui-sm text-red">
           {error}
         </p>
       ) : null}
@@ -236,7 +236,7 @@ export function CloneRepoView({ onDone }: { onDone: () => void }) {
 
       {phase === 'cloning' ? (
         <>
-          <div className="min-h-0 flex-1 overflow-hidden rounded-[7px] border border-border">
+          <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border">
             <TerminalSurface
               transport={transport}
               palette={palette}

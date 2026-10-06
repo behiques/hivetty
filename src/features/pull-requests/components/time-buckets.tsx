@@ -9,8 +9,11 @@ export function dur(ms: number): string {
 const TONE: Record<BucketName, string> = {
   'Before the shipper': 'bg-[color-mix(in_srgb,var(--cc-chitin)_18%,var(--cc-panel))]',
   'Self review and fix': 'bg-[color-mix(in_srgb,var(--cc-subtle)_25%,var(--cc-panel))]',
+  // tint-exempt: a heatmap scale, data-viz
   CI: 'bg-[color-mix(in_srgb,var(--cc-green)_25%,var(--cc-panel))]',
+  // tint-exempt: a heatmap scale, data-viz
   Findings: 'bg-[color-mix(in_srgb,var(--cc-green)_16%,var(--cc-panel))]',
+  // tint-exempt: a heatmap scale, data-viz
   'Waiting on you': 'bg-[color-mix(in_srgb,var(--cc-amber)_28%,var(--cc-panel))]',
   'Waiting on review': 'bg-[color-mix(in_srgb,var(--cc-subtle)_15%,var(--cc-panel))]',
 };
@@ -26,7 +29,7 @@ export function TimeBuckets({ age, buckets, sentence }: { age: number; buckets: 
         {buckets.map((bucket) => (
           <li
             key={bucket.name}
-            className={`flex min-w-0 items-center gap-1.5 overflow-hidden rounded-[5px] px-2.5 text-control whitespace-nowrap text-ink ${TONE[bucket.name]}`}
+            className={`flex min-w-0 items-center gap-1.5 overflow-hidden rounded-md px-2.5 text-control whitespace-nowrap text-ink ${TONE[bucket.name]}`}
             style={{ flex: Math.max(bucket.ms / 60_000, 24) }}
           >
             <span className="truncate">{bucket.name}</span> <b className="tabular-nums">{dur(bucket.ms)}</b>

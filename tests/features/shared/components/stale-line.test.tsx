@@ -16,7 +16,7 @@ describe('StaleLine (HIVE-211)', () => {
       `Couldn't reach Jira at ${clockTime(failed)}. Showing what was loaded at ${clockTime(loaded)}.`,
     );
     expect(line).toHaveClass('text-amber-text');
-    expect(screen.getByRole('status')).toHaveClass('bg-[color-mix(in_srgb,var(--cc-amber)_10%,transparent)]');
+    expect(screen.getByRole('status')).toHaveClass('bg-amber-soft');
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });

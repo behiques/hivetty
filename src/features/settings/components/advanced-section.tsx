@@ -118,7 +118,7 @@ function PtyCounters({ rows }: { rows: readonly PtyDiagnostics[] }) {
       {rows.map((row) => (
         <div
           key={row.sessionId}
-          className="flex flex-col gap-1 rounded-[7px] border border-border-soft p-2.5"
+          className="flex flex-col gap-1 rounded-lg border border-border-soft p-2.5"
         >
           <div className="flex items-center justify-between gap-2">
             <span className="truncate tabular-nums text-ui-sm text-ink">
@@ -374,7 +374,7 @@ export function AdvancedSection() {
       {snapshot.errors.map((error) => (
         <p
           key={error}
-          className="rounded-[5px] border border-red px-2.5 py-1.5 text-ui-sm text-red"
+          className="rounded-md border border-red px-2.5 py-1.5 text-ui-sm text-red"
         >
           {error}
         </p>
@@ -490,7 +490,7 @@ export function AdvancedSection() {
         {info === null ? (
           <p className="text-control text-subtle">Reading…</p>
         ) : (
-          <div className="flex flex-col gap-1 rounded-[7px] border border-border-soft p-3">
+          <div className="flex flex-col gap-1 rounded-lg border border-border-soft p-3">
             <Fact label="Hive TTY" value={info.version} />
             <Fact label="Electron" value={info.electron} />
             <Fact label="Chromium" value={info.chrome} />

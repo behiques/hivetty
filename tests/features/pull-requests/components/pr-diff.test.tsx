@@ -40,7 +40,7 @@ beforeEach(() => useUiStore.getState().reset());
 describe('PrDiff', () => {
   it('tints the Viewed checkbox with the brand accent, not Chromium blue', () => {
     render(<PrDiff {...props()} />);
-    expect(screen.getByRole('checkbox', { name: 'Viewed' })).toHaveClass('accent-[var(--cc-brand-fill)]');
+    expect(screen.getByRole('checkbox', { name: 'Viewed' })).toHaveClass('accent-brand-fill');
   });
 
   it('heads with the path, +/− and the Unified | Split switch', () => {
@@ -56,8 +56,8 @@ describe('PrDiff', () => {
     const added = screen.getByText("if (filing.total < fee.minimum) return reject('underpaid');").closest('[data-kind]');
     const removed = screen.getByText("if (filing.total < 400) return reject('underpaid');").closest('[data-kind]');
     expect(added).toHaveAttribute('data-kind', 'add');
-    expect(added?.className).toContain('var(--cc-green)_11%');
-    expect(removed?.className).toContain('var(--cc-red)_11%');
+    expect(added?.className).toContain('bg-green-soft');
+    expect(removed?.className).toContain('bg-red-soft');
     expect(added).toHaveTextContent('115+');
   });
 

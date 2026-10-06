@@ -8,11 +8,11 @@ import { cn } from "@lib/utils"
  * The one menu surface (HIVE-225). Exported for the find panel, which draws the
  * same card without being a Radix menu. Consumers add layout only, such as `min-w-*`.
  */
-export const MENU_SURFACE = 'rounded-[7px] border border-border bg-panel p-1 text-ink shadow-lg'
+export const MENU_SURFACE = 'rounded-lg border border-border bg-panel p-1 text-ink shadow-lg'
 
 /** The one item recipe: a keyboard highlight on `active`, which clears 3:1 against the panel where `hover` did not. */
 const MENU_ITEM =
-  'relative flex cursor-default items-center gap-2 rounded-[4px] px-2 py-1.5 text-control text-muted outline-none select-none data-[highlighted]:bg-active data-[highlighted]:text-ink data-[disabled]:pointer-events-none data-[disabled]:opacity-35 [&_svg]:pointer-events-none [&_svg]:shrink-0'
+  'relative flex cursor-default items-center gap-2 rounded px-2 py-1.5 text-control text-muted outline-none select-none data-[highlighted]:bg-active data-[highlighted]:text-ink data-[disabled]:pointer-events-none data-[disabled]:opacity-35 [&_svg]:pointer-events-none [&_svg]:shrink-0'
 
 function DropdownMenu({
   ...props

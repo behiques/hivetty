@@ -84,7 +84,7 @@ export function SecretField({
              */
           }}
           className={cn(
-            'min-w-0 flex-1 rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5',
+            'min-w-0 flex-1 rounded-md border border-border bg-panel-2 px-2.5 py-1.5',
             'text-control text-ink outline-none placeholder:text-subtle',
             'focus-visible:ring-1 focus-visible:ring-brand',
           )}
@@ -95,7 +95,7 @@ export function SecretField({
           aria-label={revealed ? 'Hide the token' : 'Show the token'}
           onClick={() => setRevealed((current) => !current)}
           className={cn(
-            'rounded-[6px] border border-transparent p-1.5 text-subtle',
+            'rounded-md border border-transparent p-1.5 text-subtle',
             'hover:bg-hover hover:text-ink',
             'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
           )}

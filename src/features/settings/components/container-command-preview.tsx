@@ -39,7 +39,7 @@ export function ContainerCommandPreview({
       <span className="text-control text-muted">What will be typed</span>
 
       {/* Scrolls inside itself; the pane must never scroll horizontally. */}
-      <pre className="overflow-x-auto rounded-[7px] border border-border-soft bg-term-bg px-3 py-2.5 text-ui-sm leading-relaxed text-muted">
+      <pre className="overflow-x-auto rounded-lg border border-border-soft bg-term-bg px-3 py-2.5 text-ui-sm leading-relaxed text-muted">
         {line}
       </pre>
 

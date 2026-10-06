@@ -72,7 +72,7 @@ export function TextField({
            */
         }}
         className={cn(
-          'rounded-[6px] border border-border bg-panel-2 px-2.5 py-1.5',
+          'rounded-md border border-border bg-panel-2 px-2.5 py-1.5',
           'text-control outline-none placeholder:text-subtle',
           'focus-visible:ring-1 focus-visible:ring-brand',
           muted ? 'text-subtle' : 'text-ink',

@@ -171,7 +171,7 @@ export function PrSearchRow({ projectId, focusOnMount }: PrSearchRowProps) {
               onChange={(event) => {
                 setAllRepos(event.target.checked);
               }}
-              className="size-3 accent-[var(--cc-brand-fill)]"
+              className="size-3 accent-brand-fill"
             />
             All repos
           </label>

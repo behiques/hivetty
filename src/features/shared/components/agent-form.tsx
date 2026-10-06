@@ -492,7 +492,7 @@ function Adder({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-[4px] border border-dashed border-border bg-transparent px-2 py-0.5 text-ui-sm text-subtle hover:border-brand hover:text-ink"
+        className="rounded border border-dashed border-border bg-transparent px-2 py-0.5 text-ui-sm text-subtle hover:border-brand hover:text-ink"
       >
         + {label}
       </button>
@@ -527,7 +527,7 @@ function Adder({
           because closing would discard what the user typed and say nothing.
         */
         onBlur={commit}
-        className="w-24 rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-ink outline-none focus:border-brand"
+        className="w-24 rounded border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-ink outline-none focus:border-brand"
       />
       {problem === null ? null : (
         <span role="alert" className="text-micro text-red">
@@ -937,7 +937,7 @@ export function AgentForm({
         showing text the buffer does not hold.
       */
       onBlur={() => setDraft(null)}
-      className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-ui-sm text-ink outline-none focus:border-brand"
+      className="min-w-0 rounded-md border border-border-soft bg-panel-2 px-2 py-1 text-ui-sm text-ink outline-none focus:border-brand"
     />
   );
 
@@ -949,8 +949,8 @@ export function AgentForm({
       onClick={onClick}
       className={
         on
-          ? 'rounded-[4px] border border-brand bg-active px-2 py-0.5 text-ui-sm text-ink'
-          : 'rounded-[4px] border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-subtle hover:bg-hover hover:text-ink'
+          ? 'rounded border border-brand bg-active px-2 py-0.5 text-ui-sm text-ink'
+          : 'rounded border border-border bg-panel-2 px-2 py-0.5 text-ui-sm text-subtle hover:bg-hover hover:text-ink'
       }
     >
       {label}
@@ -1033,7 +1033,7 @@ export function AgentForm({
         <p
           key={`${problem.field}:${problem.reason}`}
           role="alert"
-          className="flex flex-wrap gap-x-1 rounded-[5px] border border-red px-2.5 py-1.5 text-micro text-red"
+          className="flex flex-wrap gap-x-1 rounded-md border border-red px-2.5 py-1.5 text-micro text-red"
         >
           {/*
             The path and the sentence are separate nodes rather than one
@@ -1080,7 +1080,7 @@ export function AgentForm({
                 setRenamed({ from: typed, to: free });
                 onChange(patchFrontmatter(source, 'name', free));
               }}
-              className="min-w-0 rounded-[5px] border border-border-soft bg-panel-2 px-2 py-1 text-ui-sm text-ink outline-none focus:border-brand"
+              className="min-w-0 rounded-md border border-border-soft bg-panel-2 px-2 py-1 text-ui-sm text-ink outline-none focus:border-brand"
             />,
           )}
           {row('description', 'description', input('description', 'description'))}
