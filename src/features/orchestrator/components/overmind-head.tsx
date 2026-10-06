@@ -2,6 +2,7 @@ import { Plus } from '@phosphor-icons/react';
 
 import { Button } from '@components/ui/button';
 import { SegmentedControl } from '@components/ui/segmented-control';
+import { TerminalMenu } from '@features/orchestrator/components/terminal-menu';
 import { useProjectAccess } from '@hooks/use-project-config';
 import { useAgentsWorkingIn, useOvermindHeadCounts, useProjects, useSpawnSession } from '@stores/hive-store';
 import {
@@ -28,7 +29,8 @@ const plural = (n: number, word: string) => `${String(n)} ${word}${n === 1 ? '' 
  *
  * Unfiltered it counts the fleet and "+ New session" opens the picker; filtered
  * to a project it breadcrumbs back to the fleet, names the agents working there,
- * and starts a session in that project directly (spec, Decisions).
+ * and starts a session in that project directly (spec, Decisions). Either way
+ * the button's chevron opens a terminal in any project.
  */
 export function OvermindHead() {
   const project = useSessionsProject();
@@ -71,14 +73,18 @@ export function OvermindHead() {
       <span className="min-w-0 truncate text-control text-muted">{line}</span>
       <span className="flex-1" />
       <SegmentedControl label="Show" options={FILTERS} value={filter} onChange={setFilter} />
-      {project === null ? (
-        <Button variant="primary" onClick={() => openPicker()} className="flex items-center gap-1.5">
-          <Plus size={13} weight="bold" aria-hidden="true" />
-          New session
-        </Button>
-      ) : (
-        <NewSessionHere projectId={project} projectName={name ?? project} />
-      )}
+      {/* One pill, two controls: New session as it was, and the chevron's terminal in any project. */}
+      <div className="flex shrink-0 items-stretch">
+        {project === null ? (
+          <Button variant="primary" onClick={() => openPicker()} className="flex items-center gap-1.5 rounded-r-none">
+            <Plus size={13} weight="bold" aria-hidden="true" />
+            New session
+          </Button>
+        ) : (
+          <NewSessionHere projectId={project} projectName={name ?? project} />
+        )}
+        <TerminalMenu />
+      </div>
     </div>
   );
 }
@@ -95,7 +101,7 @@ function NewSessionHere({ projectId, projectName }: { projectId: string; project
       onClick={() => spawnSession(projectId, '', newModel, newEffort)}
       disabled={!access.spawnable}
       title={access.reason ?? `Starts on ${newModel} · ${newEffort}`}
-      className="flex items-center gap-1.5"
+      className="flex items-center gap-1.5 rounded-r-none"
     >
       <Plus size={13} weight="bold" aria-hidden="true" />
       New session in {projectName}

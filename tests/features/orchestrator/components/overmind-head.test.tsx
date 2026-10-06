@@ -39,6 +39,20 @@ describe('OvermindHead (HIVE-197)', () => {
     expect(useUiStore.getState().sessionsProject).toBeNull();
   });
 
+  it('carries the terminal chevron beside New session, filtered or not, and it opens a terminal', async () => {
+    const { unmount } = render(<OvermindHead />);
+    expect(screen.getByRole('button', { name: 'Terminal in a project' })).toBeInTheDocument();
+    unmount();
+
+    useUiStore.getState().setSessionsProject('nova-web');
+    render(<OvermindHead />);
+    await userEvent.click(screen.getByRole('button', { name: 'Terminal in a project' }));
+    expect(screen.getByText('New terminal in…')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('menuitem', { name: /^nova-web/ }));
+    const id = useHiveStore.getState().order.at(-1)!;
+    expect(useHiveStore.getState().entities[id]).toMatchObject({ kind: 'terminal', project: 'nova-web' });
+  });
+
   it('names the agents working in the project', () => {
     useHiveStore.getState().hydrateAgents([
       {
