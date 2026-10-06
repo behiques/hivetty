@@ -395,7 +395,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
     </div>
   );
 
-  const titleClass = 'text-[14px] font-semibold text-ink';
+  const titleClass = 'text-ui-lg font-semibold text-ink';
 
   /**
    * Answered, and checked **before** the missing-entry fallback below.

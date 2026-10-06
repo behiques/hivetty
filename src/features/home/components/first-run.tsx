@@ -62,7 +62,7 @@ export function FirstRun() {
         ))}
       </svg>
       <h2 className="text-[19px] font-semibold text-ink">An empty hive</h2>
-      <p className="text-[13.5px] leading-[1.6] text-muted">
+      <p className="text-ui leading-[1.6] text-muted">
         Nothing is running yet. Three steps and the comb fills.
       </p>
       <div className="mt-2 flex flex-wrap justify-center gap-4">

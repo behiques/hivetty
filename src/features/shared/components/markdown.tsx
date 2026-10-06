@@ -172,5 +172,5 @@ function block(token: Token, i: number): ReactNode {
 
 export function Markdown({ source }: { source: string }) {
   const tokens = useMemo(() => marked.lexer(source, { gfm: true }), [source]);
-  return <div className="text-[13.5px] leading-[1.7]">{tokens.map(block)}</div>;
+  return <div className="text-ui leading-[1.7]">{tokens.map(block)}</div>;
 }

@@ -23,7 +23,7 @@ export function EmptyPlace({ label, glyph, title, children, actions }: EmptyPlac
         {glyph}
       </div>
       <h2 className="text-[20px] text-ink">{title}</h2>
-      <div className="mb-3 max-w-[460px] text-[13.5px] leading-[1.6] text-muted">{children}</div>
+      <div className="mb-3 max-w-[460px] text-ui leading-[1.6] text-muted">{children}</div>
       {actions === undefined ? null : <div className="flex justify-center gap-1.5">{actions}</div>}
     </section>
   );

@@ -352,7 +352,7 @@ export function TicketPageConversation({ ticketKey }: { ticketKey: string }) {
   return (
     <section aria-labelledby={`${ticketKey}-conversation`} className="mt-7 flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <h2 id={`${ticketKey}-conversation`} className="text-[14px] font-semibold text-ink">
+        <h2 id={`${ticketKey}-conversation`} className="text-ui-lg font-semibold text-ink">
           Conversation
         </h2>
         <span className="text-control text-muted">

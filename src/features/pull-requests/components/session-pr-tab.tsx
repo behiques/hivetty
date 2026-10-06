@@ -94,7 +94,7 @@ function LivePr({ sessionId, row }: { sessionId: string; row: HatcheryRow }) {
         <Flap hatch={hatch} />
         {` · ${pr.state}`}
       </span>
-      <p className="px-1 pt-2 pb-1 text-[14px] leading-snug font-bold text-ink">{pr.title}</p>
+      <p className="px-1 pt-2 pb-1 text-ui-lg leading-snug font-bold text-ink">{pr.title}</p>
       <span data-testid="session-pr-facts" className="px-1 tabular-nums text-ui-sm break-all text-muted">
         {detail === undefined ? (
           pr.branch

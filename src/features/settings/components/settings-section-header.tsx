@@ -12,7 +12,7 @@
  * infer the hierarchy from the layout because the type refuses to state it.
  *
  * The copies had already started to disagree — two of the nine were
- * `text-[14px]` — which is exactly the drift `settings-group.tsx` documents
+ * `text-ui-lg` — which is exactly the drift `settings-group.tsx` documents
  * getting ahead of once already.
  *
  * ## The scale

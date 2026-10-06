@@ -42,11 +42,11 @@ function Description({ ticketKey }: { ticketKey: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-2 text-[13.5px]">
+    <div className="flex flex-col gap-2 text-ui">
       {description.length === 0 ? (
         <p className="text-subtle">No description.</p>
       ) : (
-        <AdfBlocks blocks={description} className="text-[13.5px] leading-[1.7]" />
+        <AdfBlocks blocks={description} className="text-ui leading-[1.7]" />
       )}
       {problem === undefined ? null : <TicketProblem message={problem} onRetry={retry} readAt={mine?.readAt} />}
     </div>

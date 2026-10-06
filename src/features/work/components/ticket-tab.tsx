@@ -225,7 +225,7 @@ export function TicketTab({ ticketKey, sessionId }: { ticketKey: string; session
           ) : null}
         </p>
         {ticket ? (
-          <h2 className="text-[14px] leading-snug font-semibold text-ink">{parseTitleTags(ticket.title).title}</h2>
+          <h2 className="text-ui-lg leading-snug font-semibold text-ink">{parseTitleTags(ticket.title).title}</h2>
         ) : null}
       </header>
       {problem === undefined ? null : <TicketProblem message={problem} onRetry={retry} readAt={entry?.readAt} />}

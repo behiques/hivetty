@@ -75,7 +75,7 @@ export function InboxDrawer({ onStage }: InboxDrawerProps) {
       className="fixed inset-y-0 right-0 z-40 flex w-[400px] flex-col gap-2.5 overflow-y-auto border-l border-border bg-panel px-3.5 py-3 shadow-2xl outline-none [-webkit-app-region:no-drag]"
     >
       <div className="flex items-baseline gap-2.5 px-0.5 pb-1.5 text-control">
-        <b className="text-[14px] text-ink">Needs you</b>
+        <b className="text-ui-lg text-ink">Needs you</b>
         <span className="text-muted">{`${plural(asks.length, 'ask')} · ${plural(sessions.length, 'session')}`}</span>
         <span className="flex-1" />
         <button

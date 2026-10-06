@@ -57,11 +57,11 @@ export function OvermindHead() {
             <button
               type="button"
               onClick={() => setProject(null)}
-              className="text-[14px] font-normal text-muted hover:text-ink"
+              className="text-ui-lg font-normal text-muted hover:text-ink"
             >
               Overmind
             </button>
-            <span aria-hidden="true" className="text-[14px] font-normal text-muted">
+            <span aria-hidden="true" className="text-ui-lg font-normal text-muted">
               ›
             </span>
             {name}
