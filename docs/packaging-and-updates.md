@@ -28,6 +28,7 @@ Load this when working on `electron-builder.yml`, `.github/workflows/release.yml
 ## Cutting a release
 
 ```bash
+pnpm desktop:dist         # then launch the packaged app once, see "The app's name"
 pnpm version minor        # writes package.json and creates the tag v0.2.0
 git push --follow-tags
 ```
@@ -203,10 +204,10 @@ submenu read **About the-hive**. Those are two different bugs.
 
 | What you see | Where it comes from | Set by |
 | --- | --- | --- |
-| Leftmost menu title | `CFBundleName` in the **running bundle's** `Info.plist` | `mac.extendInfo` in `electron-builder.yml`: **Hive TTY** |
+| Leftmost menu title | `CFBundleName` in the **running bundle's** `Info.plist` | `productName`: **The Hive** (it cannot be overridden, see below) |
 | `About …`, `Hide …`, `Quit …` | the menu template's labels | `APP_DISPLAY_NAME` (`electron/shared/app-name.ts`): **Hive TTY** |
 | About window, update dialogs, the server's tray | their own strings | `APP_DISPLAY_NAME`: **Hive TTY** |
-| Dock and Cmd-Tab while running, Launchpad | `CFBundleName` and `CFBundleDisplayName` (macOS prefers the display name where it has one) | `mac.extendInfo`: **Hive TTY**, not verified on hardware |
+| Dock and Cmd-Tab while running, Launchpad | `CFBundleDisplayName` (macOS prefers the display name where it has one) | `mac.extendInfo`: **Hive TTY** |
 | Finder, the Applications folder, the file on disk | the bundle's **file name** | `productName`: **The Hive** |
 
 The app has two names on purpose. **Hive TTY is what people read; The Hive is
@@ -239,8 +240,22 @@ a migration rather than a rename:
   after the update unless `executableName` stays `The Hive`.
 - **Scripts and docs** that name the bundle (`verify:bundle`, `docs/server-mode.md`).
 
-`CFBundleName` and `CFBundleDisplayName` are not part of the designated
-requirement, so setting them over the identity costs nothing at update time.
+`CFBundleDisplayName` is not part of the designated requirement, so setting it
+over the identity costs nothing at update time.
+
+**`CFBundleName` cannot be overridden.** Electron's main process locates its
+helper apps as `<CFBundleName> Helper.app` under `Contents/Frameworks`, falls
+back to `Electron Helper.app`, and otherwise aborts before any JavaScript runs
+(`FATAL: Unable to find helper app`, `electron_main_delegate_mac.mm`). The
+helpers are named from `productName`, so the two keys must agree. 1.0.0 shipped
+with `CFBundleName: Hive TTY` and crashed with `EXC_BREAKPOINT` 85ms after
+launch on every install; 1.0.1 removed the override. The updater cannot recover
+a build that never starts, so before pushing a tag, launch the packaged app once:
+
+```sh
+pnpm desktop:dist
+timeout 5 "dist/mac-arm64/The Hive.app/Contents/MacOS/The Hive"; echo $?   # 124 = still alive
+```
 
 `app.setName` cannot fix the first. Under `pnpm desktop:dev` the running bundle
 is `node_modules/electron/dist/Electron.app`, and macOS reads that title from
@@ -372,11 +387,29 @@ assumed:
   the signing step, so an unsigned build never reaches it.
 
 `hardenedRuntime: true` is required by notarization, and it is what makes
-entitlements matter. electron-builder's default `entitlements.mac.plist` already
-grants the three this app needs — `allow-jit` and
-`allow-unsigned-executable-memory` for V8, and `disable-library-validation` for
-`node-pty`, whose `.node` and `spawn-helper` are loaded and executed out of
-`app.asar.unpacked`. No custom plist is carried until one proves insufficient.
+entitlements matter. electron-builder's default template grants three —
+`allow-jit` and `allow-unsigned-executable-memory` for V8, and
+`disable-library-validation` for `node-pty`, whose `.node` and `spawn-helper` are
+loaded and executed out of `app.asar.unpacked`.
+
+The template proved insufficient at the microphone (#307), so
+`resources/entitlements.mac.plist` carries it verbatim plus
+`com.apple.security.device.audio-input`. A `claude` running in a Hive pty asks
+for the microphone as The Hive, the process macOS holds responsible, and the
+hardened runtime refuses a bundle without that entitlement silently: no prompt,
+no row under Privacy › Microphone, and Claude Code's voice mode (hold space)
+records nothing. `entitlements` signs the app, `entitlementsInherit` every
+helper inside it, the pty host's utility process included; both name the file.
+`tests/package-manifest.test.ts` pins all four keys, because the copy no longer
+follows the template when Electron changes it.
+
+Only a Developer ID build proves this. `pnpm desktop:dev` runs Electron's own
+`Electron.app`, ad-hoc signed without the hardened runtime, so voice mode works
+there with or without the entitlement; an ad-hoc `desktop:dist` is the same.
+After installing a signed build, holding space in a session should raise
+"The Hive would like to access the microphone"; if an earlier build was already
+refused, `tccutil reset Microphone com.behiques.the-hive` clears it, and
+`codesign -d --entitlements - "/Applications/The Hive.app"` lists what shipped.
 
 `scripts/adhoc-sign.mjs` skips itself when a real identity is available. It runs
 in `afterPack`, which electron-builder documents as happening *before* signing,

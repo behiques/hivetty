@@ -69,10 +69,11 @@ of their chambers and circle that ring, the comb globe's flight (HIVE-212). `src
 and the frame, `src/splash/stage.ts` the palette and the loop; the clock is the
 document's, the one `chamber.ts` schedules the copy on. Under reduced motion it
 draws one frame at `GLOBE_STILL_T` and schedules none. About draws the same globe,
-formed and turning.
+formed and turning. Both paint in the person's saved theme (`lib/theme/persisted`,
+read from the shared origin's `localStorage`) before the globe reads its palette.
 
 Its fence: the splash may import from `src/lib/` only the mutalisk, its palette
-type and tone, the Brood kit, the comb's `MUTA_SCALE` and `lib/theme/colour` (`eslint.config.mjs`, proved both ways by
+type and tone, the Brood kit, the comb's `MUTA_SCALE`, `lib/theme/colour` and `lib/theme/persisted` (`eslint.config.mjs`, proved both ways by
 `pnpm verify:boundaries`). The CSP has no `media-src`: the splash used to inline
 an mp4 and needed one; nothing in the app plays media now.
 
@@ -153,6 +154,14 @@ rather than `node:crypto`.
 `~/.hive/config.json` — overridable by `HIVE_CONFIG_PATH` — maps a project id
 shown in the Sessions panel to a real directory on this machine. It is the only thing
 that makes a PTY's `cwd` real; everything else about a project is still fixtures.
+
+An unpackaged build (`pnpm desktop:dev`, `desktop:preview`) uses `~/.hive-dev`
+instead, the same split userData already makes, so a dev run beside the
+installed app never shares its ledger, agents or scheduler. `HIVE_CONFIG_PATH`
+overrides both. A fresh `~/.hive-dev` has no projects: copy `config.json`
+across to start from yours. Whichever folder it is, one app process holds it:
+`hive.lock` beside `config.json` (pid plus start time, taken over when that
+process is gone) refuses a second one at boot (HIVE-227).
 
 `~/.hive/skills/<name>/SKILL.md` is its sibling: the custom slash
 commands the app injects into every session it starts. Main reads that tree

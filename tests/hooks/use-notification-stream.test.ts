@@ -48,20 +48,28 @@ describe('useNotificationStream — arrivals (HIVE-198)', () => {
     renderHook(() => useNotificationStream());
     const row = ask();
     onNew(row);
-    expect(useUiStore.getState().arrivals).toEqual([row.id]);
+    expect(useUiStore.getState().stackUp).toBe(true);
   });
 
-  it('an echo does not', () => {
+  it('an echo does not rise; it pulses the pill (HIVE-231)', () => {
     renderHook(() => useNotificationStream());
-    onNew(notif({ kind: 'clone.done', action: { type: 'none' } }));
-    expect(useUiStore.getState().arrivals).toEqual([]);
+    const row = notif({ kind: 'clone.done', action: { type: 'none' } });
+    onNew(row);
+    expect(useUiStore.getState().stackUp).toBe(false);
+    expect(useUiStore.getState().arrivalPulse).toBe(row.id);
+  });
+
+  it('an update ready to install rises, since the restart waits on you (HIVE-231)', () => {
+    renderHook(() => useNotificationStream());
+    onNew(notif({ kind: 'app.update_ready', action: { type: 'update.install' } }));
+    expect(useUiStore.getState().stackUp).toBe(true);
   });
 
   it('the boot snapshot raises nothing', async () => {
     renderHook(() => useNotificationStream());
     resolveList([ask()]);
     await vi.waitFor(() => expect(useHiveStore.getState().notifs).toHaveLength(1));
-    expect(useUiStore.getState().arrivals).toEqual([]);
+    expect(useUiStore.getState().stackUp).toBe(false);
   });
 
   it('after a hydrate, only the live arrival rises', async () => {
@@ -71,7 +79,7 @@ describe('useNotificationStream — arrivals (HIVE-198)', () => {
     await vi.waitFor(() => expect(useHiveStore.getState().notifs).toHaveLength(1));
     const live = notif({ kind: 'agent.ask', action: { type: 'ask', thread: 't2' } });
     onNew(live);
-    expect(useUiStore.getState().arrivals).toEqual([live.id]);
+    expect(useUiStore.getState().stackUp).toBe(true);
   });
 
   it('with the keyboard in a terminal it pulses instead of rising', () => {
@@ -80,7 +88,7 @@ describe('useNotificationStream — arrivals (HIVE-198)', () => {
     renderHook(() => useNotificationStream());
     const row = ask();
     onNew(row);
-    expect(useUiStore.getState().arrivals).toEqual([]);
+    expect(useUiStore.getState().stackUp).toBe(false);
     expect(useUiStore.getState().arrivalPulse).toBe(row.id);
   });
 });

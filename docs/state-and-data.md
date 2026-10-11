@@ -42,14 +42,17 @@ the picker from re-rendering thirteen live terminals.
   (`'all' | 'live' | 'ended'`), `endedExpanded` ("N more ›" pressed) and
   `expanded`, the Sessions panel's fold map, **folded by default**. `setSessionsProject(id)` also unfolds that project;
   `backToOrch` and the Sessions icon put `selId` on the session being left.
-  The Inbox (HIVE-198), none persisted: `arrivals` (notification ids
-  up as a card or note, newest first), `arrivalPulse` (the latest arrival that
+  The Inbox (HIVE-198, HIVE-228), none persisted: `stackUp` (the arrival
+  stack is up over the pill), `arrivalPulse` (the latest arrival that
   came in while the keyboard was in a terminal; the pill pulses once for it)
-  and `inboxDrawer` (`{ open, thread }`). `pushArrival(id, quiet)` raises or
-  pulses and does nothing over an open drawer; `foldArrivals()` empties the
-  queue (the rows stay in Summons); `openInboxDrawer(thread?)` folds and opens;
-  `closeInboxDrawer()`. What is drawn is `arrivals ∩ useSummons(onStage)`, so
-  an answered ask or the on-stage session drop out without anyone re-checking.
+  and `inboxDrawer` (`{ open, thread }`). `pushArrival(id, quiet)` raises the
+  stack or pulses, and does nothing over an open drawer; `hideStack()` (✕) and
+  `toggleStack()` (the pill's count) take it down or flip it, and the rows stay
+  in Summons either way; `openInboxDrawer(thread?)` hides the stack and opens;
+  `closeInboxDrawer()`. What the stack deals is `useSummons(onStage)` whole,
+  newest first (`useStackCards`), so an answered ask or the on-stage session
+  drop out without anyone re-checking. Nothing folds it on a timer; an emptied
+  queue lowers it (the stack calls `hideStack`), so a later quiet arrival only pulses.
   `consoleShown` (`false`) is the overmind's transcript in the dock,
   flipped by `toggleConsole`; folded, the stage hides the transcript and the
   table takes the page.
@@ -162,9 +165,10 @@ than half-read.
 
 Main owns every rule, so the renderer holds none of them. Which source wins
 when more than one offers a plan (task tools, then a plan file, then plan
-mode), how long an all-done plan stays on screen (`PLAN_GRACE_MS`, five
-seconds), and when a plan goes — `/clear`, `/done`, any other exit, a restart,
-a terminal's end — are all decided in main and arrive as the result.
+mode), and when a plan goes — `/clear`, `/done`, any other exit, a restart,
+a terminal's end — are all decided in main and arrive as the result. A plan
+that reaches all done stays, `N/N`, until one of those endings or until a new
+plan replaces it; no timer removes it (HIVE-229).
 
 It reaches the store two ways, the ledger's two: a `plan:changed` push per
 change, which `setPlan` applies (`plan: null` deletes the key), and a
@@ -382,7 +386,7 @@ Components never read a store object directly and never call `getState()`.
 | `useOpenEntity()` | open an entity's tab, refusing a `terminated` one |
 | `useTicketPrs(ticketKey)` | PRs reachable from a ticket's sessions |
 | `useCurrentRow(terminalId)` | the row behind a terminal now, the subscribing `currentRowFor` (HIVE-198) |
-| `useArrivals()` / `useArrivalPulse()` | ui-store: the Inbox arrival queue and the pill's pulse id (HIVE-198) |
+| `useStackUp()` / `useArrivalPulse()` | ui-store: whether the Inbox stack is up (HIVE-228) and the pill's pulse id (HIVE-198) |
 | `useInboxDrawer()` / `useInboxActions()` | ui-store: the drawer's `{ open, thread }`, and the arrival and drawer actions |
 | `useUnreadCount()` | inbox unread count |
 | `useNotifs()` | the inbox, newest first |
