@@ -6,7 +6,7 @@ import { InboxDrawer } from '@features/inbox/components/inbox-drawer';
 import { LEAVE_MS } from '@features/inbox/hooks/use-leaving-asks';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
-import { useUiStore } from '@stores/ui-store';
+import { NEWS_SECTION, useUiStore } from '@stores/ui-store';
 
 import { seedLedger } from '@tests/support/ledger';
 import { notif, resetNotifIds } from '@tests/support/notifications';
@@ -54,6 +54,13 @@ describe('InboxDrawer (HIVE-198)', () => {
     expect(screen.getByRole('dialog', { name: 'Needs you' })).toHaveClass('[-webkit-app-region:no-drag]');
   });
 
+  it('casts its shadow left, onto the stage it covers (HIVE-228)', () => {
+    // happy-dom resolves no box-shadow, so the token's class is the witness; its value lives in tokens.css.
+    useUiStore.getState().openInboxDrawer();
+    render(<InboxDrawer onStage={null} />);
+    expect(screen.getByRole('dialog', { name: 'Needs you' })).toHaveClass('shadow-drawer');
+  });
+
   it('renders in light on tokens alone (HIVE-210)', () => {
     useUiStore.getState().openInboxDrawer();
     inLight();
@@ -70,7 +77,7 @@ describe('InboxDrawer (HIVE-198)', () => {
     expect(within(drawer).getAllByRole('button', { name: /^Open builder ›$/ })).toHaveLength(2);
     expect(within(drawer).getAllByRole('button', { name: 'yes' })).toHaveLength(2);
     expect(within(drawer).getByText('Sessions off stage')).toBeInTheDocument();
-    expect(within(drawer).getByRole('button', { name: 'Open ›' })).toBeInTheDocument();
+    expect(within(drawer).getByRole('button', { name: /^Open \S+, / })).toBeInTheDocument();
   });
 
   it('a review request is the plain notification card', () => {
@@ -121,6 +128,50 @@ describe('InboxDrawer (HIVE-198)', () => {
     useUiStore.getState().openInboxDrawer('a1');
     render(<InboxDrawer onStage={null} />);
     expect(document.activeElement?.getAttribute('data-thread')).toBe('a1');
+  });
+
+  it('lists the news under its own New heading, after what waits on you (HIVE-231)', () => {
+    useUiStore.getState().openInboxDrawer();
+    render(<InboxDrawer onStage={null} />);
+    const news = screen.getByRole('region', { name: 'New' });
+    expect(within(news).getByText('1')).toBeInTheDocument();
+    expect([...news.querySelectorAll('[data-notification]')].map((el) => el.getAttribute('data-notification'))).toEqual([
+      'e1',
+    ]);
+  });
+
+  it('opened at New, the section has focus (HIVE-231)', () => {
+    useUiStore.getState().openInboxDrawer(NEWS_SECTION);
+    render(<InboxDrawer onStage={null} />);
+    expect(document.activeElement).toBe(screen.getByRole('region', { name: 'New' }));
+  });
+
+  it('Clear empties New and leaves what waits on you (HIVE-231)', async () => {
+    const dismiss = vi.fn((_id: string) => Promise.resolve());
+    (window as { hive?: unknown }).hive = { notifications: { dismiss } };
+    useHiveStore.getState().pushNotif(notif({ id: 'e2', kind: 'pr.merged', action: { type: 'none' } }));
+    useUiStore.getState().openInboxDrawer();
+    render(<InboxDrawer onStage={null} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Clear the news' }));
+    expect(screen.queryByRole('region', { name: 'New' })).toBeNull();
+    expect(dismiss.mock.calls.map(([id]) => id).sort()).toEqual(['e1', 'e2']);
+    expect(useHiveStore.getState().notifs.map((n) => n.id).sort()).toEqual(['a1', 'a2', 's1']);
+    delete (window as { hive?: unknown }).hive;
+  });
+
+  it('Clear leaves an update ready to install, the news that waits on you (HIVE-231)', async () => {
+    const dismiss = vi.fn((_id: string) => Promise.resolve());
+    (window as { hive?: unknown }).hive = { notifications: { dismiss } };
+    useHiveStore.getState().pushNotif(notif({ id: 'r1', kind: 'app.update_ready', action: { type: 'update.install' } }));
+    useUiStore.getState().openInboxDrawer();
+    render(<InboxDrawer onStage={null} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Clear the news' }));
+    expect(dismiss.mock.calls.map(([id]) => id)).toEqual(['e1']);
+    const news = screen.getByRole('region', { name: 'New' });
+    expect(news.querySelector('[data-notification="r1"]')).not.toBeNull();
+    // Nothing left that Clear would take, so it is not offered.
+    expect(within(news).queryByRole('button', { name: 'Clear the news' })).toBeNull();
+    delete (window as { hive?: unknown }).hive;
   });
 
   it('says so when everything has been answered', () => {
