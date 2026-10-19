@@ -315,8 +315,8 @@ Because `brand` is now body text rather than an accent, `validate.ts` measures
 it: **`brand` below 4.5:1 is a note at import time**, alongside the `ink` checks.
 Against *both* grounds brand text actually sits on — `panel` for the list panel,
 `panel-2` for the settings dialog — for the same reason `ink` is checked against
-`panel` and `bg`. All seven built-ins clear both: 5.15:1 at worst on `panel`
-(Graphite light), 4.80:1 at worst on `panel-2` (Graphite light again).
+`panel` and `bg`. All nine built-ins clear both: 5.43:1 at worst on `panel`
+(Graphite light), 5.06:1 at worst on `panel-2` (Graphite light again).
 
 ## Status → colour
 

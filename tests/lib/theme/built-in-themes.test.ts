@@ -14,7 +14,7 @@ import {
 import { contrastRatio, importTheme, isHiveTheme } from '@lib/theme/validate';
 import { TOKENS_CSS } from '@tests/support/css-tokens';
 
-/** The seven that ship beside HiveTTY, in gallery order. */
+/** The eight that ship beside HiveTTY, in gallery order. */
 const SHIPPED = [
   'honeycomb',
   'graphite',
@@ -23,10 +23,11 @@ const SHIPPED = [
   'porcelain',
   'cinder',
   'creep',
+  'beacon',
 ] as const;
 
 describe('the shipped set', () => {
-  it('is HiveTTY plus seven, in that order', () => {
+  it('is HiveTTY plus eight, in that order', () => {
     expect(Object.keys(BUILT_IN_THEMES)).toEqual([
       BUILT_IN_THEME_ID,
       ...SHIPPED,
@@ -63,7 +64,7 @@ describe('the shipped set', () => {
    * palette — so if a second theme's colours ever leak into `tokens.css`, this
    * fails here rather than quietly making the drift test ambiguous.
    */
-  it('keeps the seven out of tokens.css', () => {
+  it('keeps the eight out of tokens.css', () => {
     for (const id of SHIPPED) {
       const { bg, brand } = BUILT_IN_THEMES[id].modes.dark.ui;
       expect(TOKENS_CSS, `${id} bg`).not.toContain(bg);
@@ -123,7 +124,7 @@ describe.each(SHIPPED)('%s', (id) => {
       /*
         `brand` joined the floor with the hierarchy pass: it names every project
         in the rail and every provider in Integrations, both on `panel`, which
-        is body text rather than an accent. The worst built-in is 5.15:1.
+        is body text rather than an accent. The worst built-in is 5.43:1.
       */
       expect(contrastRatio(ui.brand, ui.panel)).toBeGreaterThanOrEqual(4.5);
     });
@@ -207,7 +208,7 @@ describe('text tokens clear AA (HIVE-223)', () => {
  * (`editor-theme.ts`). The active line is mixed down to 35% and is not a ground.
  * Only the themes added with the rule are held to it; the older ones predate it.
  */
-describe.each(['hivetty', 'creep'])('%s comments', (id) => {
+describe.each(['hivetty', 'creep', 'beacon'])('%s comments', (id) => {
   it.each(THEME_MODES)('clear 3:1 on the editor ground in %s mode', (mode) => {
     const { ui, syntax } = BUILT_IN_THEMES[id]!.modes[mode];
     expect(contrastRatio(syntax.comment, ui.panel2)).toBeGreaterThanOrEqual(3);

@@ -16,7 +16,7 @@ import {
  * in the stylesheet would have no `--cc-*` block to be compared against, and
  * the drift test would have to learn which declarations belong to which theme.
  *
- * So these seven paint the way an *imported* theme paints — through
+ * So these eight paint the way an *imported* theme paints — through
  * `applyThemeColors`, which writes a `<style>` element at runtime. The only
  * thing that makes them "built in" is that they ship in the bundle and cannot
  * be removed from the library. {@link activeThemeOf} keeps returning `null`
@@ -499,6 +499,72 @@ const CREEP_THEME: HiveTheme = {
   },
 };
 
+/** Hive navy kept, the blue brand swapped for signal gold. */
+const BEACON_THEME: HiveTheme = {
+  hiveThemeVersion: HIVE_THEME_VERSION,
+  name: 'Beacon',
+  author: 'Built in',
+  version: '1.0.0',
+  modes: {
+    dark: {
+      ui: {
+        bg: '#10152a', panel: '#141a33', panel2: '#121731',
+        hover: '#1b2344', active: '#222c55',
+        border: '#273159', borderSoft: '#1e2747',
+        ink: '#e9effc', muted: '#9faad0', subtle: '#8d97b8',
+        brand: '#fbc044', green: '#74b79c', amber: '#fea979', red: '#ff8d85',
+        chip: '#1c2648', chipHover: '#232e57',
+        termBg: '#0b1023', termInput: '#0e1430',
+        termRowHover: '#161f45', termRowActive: '#1a2450',
+        termHead: '#8590b0', termTrack: '#3a4674',
+        brandFill: '#f0b21b', brandFillHover: '#e4a70b',
+        brandFillStrong: '#b38309', onBrand: '#10152a', dangerSolid: '#d3372f',
+        onDanger: '#ffffff',
+      },
+      syntax: {
+        keyword: '#b39ff0', string: '#74b79c', number: '#fea979',
+        comment: '#6b779f', name: '#fbc044', type: '#7fd0e0',
+        operator: '#98a3cc', constant: '#ff8d85', invalid: '#ff8d85',
+        activeLine: '#202b50', selection: '#48391b',
+      },
+      terminal: {
+        bg: '#0b1023', ink: '#dbe4ff', dim: '#7c88b8', black: '#0b1023',
+        green: '#7ee2b8', blue: '#8fb5ff', amber: '#ffbd98', red: '#ff8d85',
+        cyan: '#7edce2', magenta: '#7edce2', selection: '#3c2d0f',
+        surface: '#0e1430', surfaceAlt: '#1b2344',
+      },
+    },
+    light: {
+      ui: {
+        bg: '#fdfdfb', panel: '#ffffff', panel2: '#f7fafb',
+        hover: '#f4f9ff', active: '#e9f3fc',
+        border: '#d4dee3', borderSoft: '#edf2f4',
+        ink: '#2c2f34', muted: '#5a5d63', subtle: '#686d73',
+        brand: '#876204', green: '#2e6b52', amber: '#b05307', red: '#cd332b',
+        chip: '#edf2f4', chipHover: '#e2eaee',
+        termBg: '#f7fafb', termInput: '#ffffff',
+        termRowHover: '#eef4f9', termRowActive: '#e4edf5',
+        termHead: '#686b71', termTrack: '#d4dee3',
+        brandFill: '#f0b21b', brandFillHover: '#e4a70b',
+        brandFillStrong: '#b38309', onBrand: '#10152a', dangerSolid: '#d3372f',
+        onDanger: '#ffffff',
+      },
+      syntax: {
+        keyword: '#6f42c1', string: '#2e6b52', number: '#a2531f',
+        comment: '#8b9199', name: '#876204', type: '#0b6b7d',
+        operator: '#707379', constant: '#b3271f', invalid: '#d3372f',
+        activeLine: '#eef7ff', selection: '#f5ddb4',
+      },
+      terminal: {
+        bg: '#f7fafb', ink: '#2c2f34', dim: '#686b71', black: '#2c2f34',
+        green: '#2e6b52', blue: '#334fa9', amber: '#a2531f', red: '#b3271f',
+        cyan: '#0b6b7d', magenta: '#6f42c1', selection: '#f1debb',
+        surface: '#ffffff', surfaceAlt: '#edf2f4',
+      },
+    },
+  },
+};
+
 /**
  * Every theme that ships in the bundle, keyed by the id the gallery and
  * `activeThemeId` use.
@@ -517,6 +583,7 @@ export const BUILT_IN_THEMES: Readonly<Record<string, HiveTheme>> = {
   porcelain: PORCELAIN_THEME,
   cinder: CINDER_THEME,
   creep: CREEP_THEME,
+  beacon: BEACON_THEME,
 };
 
 /**
