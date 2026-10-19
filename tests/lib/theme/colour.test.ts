@@ -56,9 +56,9 @@ describe('swarmPaletteOf', () => {
 
   it('uses the theme creature colours when present', () => {
     const p = swarmPaletteOf(BUILT_IN_THEME.modes.dark.ui);
-    expect(p.creep).toBe('#5b3d8f');
-    expect(p.chitin).toBe('#b9a7f0');
-    expect(p.carapace).toBe(mixColour(BUILT_IN_THEME.modes.dark.ui.bg, '#b9a7f0', 0.18));
+    expect(p.creep).toBe('#6a4404');
+    expect(p.chitin).toBe('#eab26b');
+    expect(p.carapace).toBe(mixColour(BUILT_IN_THEME.modes.dark.ui.bg, '#eab26b', 0.18));
   });
 
   it('derives them from bg, brand and ink when absent (formulas pinned)', () => {
@@ -85,14 +85,14 @@ describe('swarmPaletteOf', () => {
   });
 
   it('derives the dark tissue ramp and carries the rest from the built-in', () => {
-    // Hive dark carries no tissue ramp: derived from bg, chitin and ink like every other dark theme.
+    // HiveTTY dark carries no tissue ramp: derived from bg, chitin and ink like every other dark theme.
     const p = swarmPaletteOf(BUILT_IN_THEME.modes.dark.ui);
     expect([p.tissueDeep, p.tissue, p.tissueLit, p.glowCore, p.ground]).toEqual([
-      'rgb(23 27 50)', 'rgb(53 53 86)', 'rgb(195 181 242)', '#e2ffee', '#141128',
+      'rgb(33 28 23)', 'rgb(71 56 38)', 'rgb(235 190 133)', '#e2ffee', '#171411',
     ]);
     const l = swarmPaletteOf(BUILT_IN_THEME.modes.light.ui);
     expect([l.tissueDeep, l.tissue, l.tissueLit, l.glowCore, l.ground]).toEqual([
-      '#7a68b6', '#d4ccee', '#fbf9ff', '#96deb8', '#eeeafa',
+      '#926d3d', '#e2cdb5', '#fef9f3', '#96deb8', '#f3ebe4',
     ]);
   });
 
@@ -117,6 +117,22 @@ describe('the creature accents (HIVE-221)', () => {
 
   // The Brood v15's literals: dark, then light. The maw on light is the
   // artifact's `spTone(T, 0.04)`.
+  //
+  // The artifact was drawn on the old violet Hive, so the formulas are held to
+  // it on that palette (HIVE-241): the inputs `accentsOf` reads, as the Hive
+  // shipped them before HiveTTY replaced it.
+  const BROOD_HIVE = {
+    dark: {
+      ...BUILT_IN_THEME.modes.dark.ui,
+      bg: '#10152a', ink: '#e9effc', red: '#ff8d85', onBrand: '#ffffff',
+      creep: '#5b3d8f', chitin: '#b9a7f0',
+    },
+    light: {
+      ...BUILT_IN_THEME.modes.light.ui,
+      bg: '#fdfdfb', ink: '#2c2f34', red: '#cd332b', onBrand: '#ffffff',
+      creep: '#b7a3e6', chitin: '#6a54b0', tissueDeep: '#7a68b6', tissue: '#d4ccee',
+    },
+  } as const;
   const ARTIFACT = {
     membrane: [[150, 80, 150], [196, 140, 206]],
     maw: [[9, 3, 13], [129, 112, 186]],
@@ -129,9 +145,9 @@ describe('the creature accents (HIVE-221)', () => {
     ['dark', 0],
     ['light', 1],
   ] as const)('derives each accent within 12 of the artifact in %s', (mode, at) => {
-    const p = swarmPaletteOf(BUILT_IN_THEME.modes[mode].ui);
+    const p = swarmPaletteOf(BROOD_HIVE[mode]);
     for (const [key, literals] of Object.entries(ARTIFACT)) {
-      // The mouth and gums are mixed from the shadowed tissue, which Hive dark now derives.
+      // The mouth and gums are mixed from the shadowed tissue, which the Hive's dark derived.
       if (mode === 'dark' && (key === 'maw' || key === 'gum')) continue;
       const value = p[key as keyof typeof ARTIFACT];
       expect(near(value, literals[at], 12), `${mode} ${key}: ${value}`).toBe(true);

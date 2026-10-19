@@ -112,7 +112,7 @@ export interface HiveTheme {
 }
 
 export const HIVE_THEME_VERSION = 1;
-export const BUILT_IN_THEME_ID = 'hive';
+export const BUILT_IN_THEME_ID = 'hivetty';
 
 /** `borderSoft` → `--cc-border-soft`; `panel2` → `--cc-panel-2`. */
 function kebab(key: string): string {

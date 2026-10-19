@@ -15,43 +15,43 @@
  * `tests/splash/splash-tokens.test.ts` parses both files and fails if any value
  * here has drifted from `:root` in `tokens.css`.
  *
- * The dark values only: the built-in Hive, dark. The person's theme, either mode,
+ * The dark values only: the built-in HiveTTY, dark. The person's theme, either mode,
  * is painted over them at run time by `applyPersistedAppearance` (`splash.ts`,
  * `about.ts`), which reads what the app saved; these are what shows when nothing
  * was saved.
  */
 
 :root {
-  --cc-bg: #10152a;
-  --cc-hover: #1b2344;
-  --cc-term-bg: #0b1023;
-  --cc-border: #273159;
-  --cc-border-soft: #1e2747;
-  --cc-ink: #e9effc;
-  --cc-muted: #9faad0;
-  --cc-brand: #8fa7f2;
+  --cc-bg: #191613;
+  --cc-hover: #292520;
+  --cc-term-bg: #14110e;
+  --cc-border: #39332d;
+  --cc-border-soft: #2d2824;
+  --cc-ink: #f0eeec;
+  --cc-muted: #b0aba5;
+  --cc-brand: #ffb348;
   --cc-green: #74b79c;
-  --cc-amber: #ffac47;
-  --cc-term-head: #8590b0;
-  --cc-brand-fill: #5470cb;
-  --cc-brand-fill-strong: #334fa9;
+  --cc-amber: #fea97c;
+  --cc-term-head: #95908b;
+  --cc-brand-fill: #fea91e;
+  --cc-brand-fill-strong: #b67703;
 
   /* The comb globe's (HIVE-212): the rest of a SwarmPalette. The carapace and
      the creep's clear stop are derived from these in `stage.ts`, as
      `swarmPaletteOf` derives them for Home. */
-  --cc-panel-2: #121731;
-  --cc-subtle: #8d97b8;
+  --cc-panel-2: #1c1915;
+  --cc-subtle: #9c9792;
   --cc-red: #ff8d85;
-  --cc-creep: #5b3d8f;
-  --cc-chitin: #b9a7f0;
+  --cc-creep: #6a4404;
+  --cc-chitin: #eab26b;
   /* The Brood's tissue ramp (HIVE-221), for the globe's mutalisks. */
-  --cc-tissue-deep: #171b32;
-  --cc-tissue: #353556;
-  --cc-tissue-lit: #c3b5f2;
+  --cc-tissue-deep: #211c17;
+  --cc-tissue: #473826;
+  --cc-tissue-lit: #ebbe85;
   --cc-glow-core: #e2ffee;
-  --cc-ground: #141128;
+  --cc-ground: #171411;
   /* Only for the mutalisk's glints, `accentsOf`'s brightest colour. */
-  --cc-on-brand: #ffffff;
+  --cc-on-brand: #110f0d;
 
   /**
    * The one face the app uses, copied from `--font-mono` in `tokens.css` and

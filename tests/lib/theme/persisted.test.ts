@@ -38,6 +38,12 @@ describe('readPersistedAppearance', () => {
     expect(readPersistedAppearance({ getItem: () => { throw new Error('denied'); } }, false)).toEqual(fallback);
     expect(readPersistedAppearance(store({ activeThemeId: 'evil', themes: { evil: { name: 1 } } }), false).theme).toBe(BUILT_IN_THEME);
   });
+  /** HIVE-241: the default was keyed `hive` before HiveTTY replaced it. */
+  it('lands a persisted Hive choice on HiveTTY before first paint', () => {
+    const { theme } = readPersistedAppearance(store({ activeThemeId: 'hive' }), true);
+    expect(theme).toBe(BUILT_IN_THEME);
+    expect(theme.name).toBe('HiveTTY');
+  });
 });
 
 describe('applyPersistedAppearance', () => {

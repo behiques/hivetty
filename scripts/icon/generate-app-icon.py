@@ -18,19 +18,18 @@ work at.
 
 Nothing is traced from a bitmap any more — the geometry below *is* the mark, so
 there is no master image to drift from. Every colour still comes from
-`src/styles/tokens.css` and nothing is invented here:
+`src/styles/tokens.css` (the HiveTTY theme) and nothing is invented here:
 
-    ink          #10152A   --cc-bg / the ground, and the seam between plates
-    active       #222C55   --cc-active / the rearmost plate
-    Serenity     #334FA9   --cc-brand-fill-strong / the middle plate
-    lifted       #5E76D0   --cc-brand-fill / the front plate, the live one
-    white        #FFFFFF   --cc-on-brand / the cursor
+    ink          #191613   --cc-bg / the ground, and the seam between plates
+    active       #342F28   --cc-active / the rearmost plate
+    amber deep   #B67703   --cc-brand-fill-strong / the middle plate
+    amber        #FEA91E   --cc-brand-fill / the front plate, the live one
+    cursor       #110F0D   --cc-on-brand / the cursor, the button-text colour
 
-The chevron is the one derived value: `--cc-brand` (#8FA7F2) is calibrated to
-read as text on a panel, and on the front plate it sits too close to the fill.
-It is lifted to #C7D3FA, the same lift the previous icon used and for the same
-reason. If a colour changes in the tokens it must change here too; the icon has
-no palette of its own.
+The chevron is the one derived value: the front plate is light, so the chevron
+is dark, `--cc-brand`'s hue darkened to #412700. The chevron and the cursor are
+dark for the same reason a primary button's label is. If a colour changes in the
+tokens it must change here too; the icon has no palette of its own.
 
 Outputs:
 
@@ -73,12 +72,12 @@ PUBLIC = ROOT / "public"
 S = 1024  # master canvas
 SS = 4  # supersample factor for every mask we rasterise
 
-INK = (0x10, 0x15, 0x2A)
-PLATE_BACK = (0x22, 0x2C, 0x55)
-PLATE_MID = (0x33, 0x4F, 0xA9)
-PLATE_FRONT = (0x5E, 0x76, 0xD0)
-CHEVRON = (0xC7, 0xD3, 0xFA)  # --cc-brand lifted, so it reads on the front plate
-WHITE = (0xFF, 0xFF, 0xFF)
+INK = (0x19, 0x16, 0x13)
+PLATE_BACK = (0x34, 0x2F, 0x28)
+PLATE_MID = (0xB6, 0x77, 0x03)
+PLATE_FRONT = (0xFE, 0xA9, 0x1E)
+CHEVRON = (0x41, 0x27, 0x00)  # --cc-brand's hue, darkened, so it reads on the light front plate
+CURSOR = (0x11, 0x0F, 0x0D)
 
 # macOS draws its own grid, and a full-bleed icon ignores it: in the dock ours
 # stood a head taller than Docker and iTerm. Apple's rounded-rectangle app icon
@@ -267,7 +266,7 @@ def render() -> Image.Image:
 
     img.alpha_composite(stroke(CHEVRON_PATH, CHEVRON_WEIGHT, CHEVRON))
     img.alpha_composite(
-        painted(S, rounded(S, CARET, (CARET[3] - CARET[1]) / 2), WHITE)
+        painted(S, rounded(S, CARET, (CARET[3] - CARET[1]) / 2), CURSOR)
     )
     return img
 
@@ -351,7 +350,7 @@ def render_mark(px: int) -> Image.Image:
         img.putalpha(ImageChops.subtract(img.getchannel("A"), polygon_mask(points, SEAM)))
         img.alpha_composite(painted(S, polygon_mask(points), fill))
     img.alpha_composite(stroke(CHEVRON_PATH, CHEVRON_WEIGHT, CHEVRON))
-    img.alpha_composite(painted(S, rounded(S, CARET, (CARET[3] - CARET[1]) / 2), WHITE))
+    img.alpha_composite(painted(S, rounded(S, CARET, (CARET[3] - CARET[1]) / 2), CURSOR))
 
     shape = img.crop(img.getbbox())
     side = max(shape.size)

@@ -98,7 +98,7 @@ describe('DESIGN-SYSTEM.md — colour tokens', () => {
     }
 
     // Dark is untouched by the change.
-    expect(darkTokens['--cc-term-bg']).toBe('#0b1023');
+    expect(darkTokens['--cc-term-bg']).toBe('#14110e');
     // And the light ground is the editor's, which is the whole point.
     expect(lightTokens['--cc-term-bg']).toBe(lightTokens['--cc-panel-2']);
   });
@@ -182,9 +182,11 @@ describe('AGENTS.md', () => {
    * What has not changed is what the cap is for. Anything that is reference —
    * how a subsystem works, what a token means, why a decision went the way it
    * did — still belongs in a deep-dive behind the table.
+   *
+   * Raised to 265 (HIVE-241): the HiveTTY fork notice is a rule every session needs loaded.
    */
-  it('stays under 250 lines — anything longer belongs in a deep-dive', () => {
-    expect(agents.split('\n').length).toBeLessThan(250);
+  it('stays under 265 lines — anything longer belongs in a deep-dive', () => {
+    expect(agents.split('\n').length).toBeLessThan(265);
   });
 
   it('routes to every deep-dive doc that exists', () => {

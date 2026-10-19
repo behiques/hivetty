@@ -27,37 +27,37 @@
  * how that test leaves them alone.
  */
 :root {
-  --cc-bg: #10152a;
-  --cc-panel: #141a33;
-  --cc-panel-2: #121731;
-  --cc-hover: #1b2344;
-  --cc-active: #222c55;
-  --cc-border: #273159;
-  --cc-border-soft: #1e2747;
-  --cc-ink: #e9effc;
-  --cc-muted: #9faad0;
-  --cc-subtle: #8d97b8;
-  --cc-brand: #8fa7f2;
+  --cc-bg: #191613;
+  --cc-panel: #1f1b18;
+  --cc-panel-2: #1c1915;
+  --cc-hover: #292520;
+  --cc-active: #342f28;
+  --cc-border: #39332d;
+  --cc-border-soft: #2d2824;
+  --cc-ink: #f0eeec;
+  --cc-muted: #b0aba5;
+  --cc-subtle: #9c9792;
+  --cc-brand: #ffb348;
   --cc-green: #74b79c;
-  --cc-amber: #ffac47;
+  --cc-amber: #fea97c;
   /* Amber drawn as text. Dark already clears AA, so it is the amber itself. */
   --cc-amber-text: var(--cc-amber);
   --cc-red: #ff8d85;
-  --cc-chip: #1c2648;
+  --cc-chip: #2c2822;
   /**
    * Hover for a card already filled with `--cc-chip` — the PRs panel's live
    * cards (052).
    *
    * `--cc-hover` cannot serve: it is calibrated against `--cc-panel`, and on a
-   * chip fill it lands *below* the surface it is meant to lift (#1b2344 under
-   * #1c2648), so the affordance reads as a faint darkening or vanishes. This
+   * chip fill it lands *below* the surface it is meant to lift (the old Hive's
+   * #1b2344 under #1c2648), so the affordance reads as a faint darkening or vanishes. This
    * continues the lift in the direction the theme already lifts — brighter in
    * dark, deeper in light — so a filled card answers the pointer the way a flat
    * one does.
    */
-  --cc-chip-hover: #232e57;
-  --cc-term-bg: #0b1023;
-  --cc-term-input: #0e1430;
+  --cc-chip-hover: #36302a;
+  --cc-term-bg: #14110e;
+  --cc-term-input: #1a1612;
 
   /**
    * Chrome for DOM surfaces that sit *on* the terminal background — today the
@@ -71,25 +71,26 @@
    * Like `--cc-term-bg`, they are overridden for light mode: the terminal
    * surface follows the theme, so the chrome sitting on it has to as well.
    */
-  --cc-term-row-hover: #161f45;
-  --cc-term-row-active: #1a2450;
-  --cc-term-head: #8590b0;
+  --cc-term-row-hover: #27221c;
+  --cc-term-row-active: #2d2721;
+  --cc-term-head: #95908b;
   /* Unselected track and dot outline in the picker's steppers (story 044). */
-  --cc-term-track: #3a4674;
+  --cc-term-track: #4e4841;
 
   /**
    * Brand fills — deliberately theme-invariant, and not overridden below.
    *
    * `--cc-brand` is a *text* colour and flips between themes for legibility on
    * a panel. These are *surfaces*: the hive mark's tile and the primary action
-   * keep the same signature blue in light and dark, exactly as the concept does
-   * (`var(--blue-600/700/800)`, which its light theme leaves alone). Reusing
-   * `--cc-brand` here would repaint the logo tile pale blue in dark mode.
+   * keep the same signature amber in light and dark, exactly as the concept
+   * kept its blue (`var(--blue-600/700/800)`, which its light theme leaves
+   * alone). Reusing `--cc-brand` here would repaint the logo tile pale amber in
+   * dark mode.
    */
-  --cc-brand-fill: #5470cb;
-  --cc-brand-fill-hover: #4f6ac5;
-  --cc-brand-fill-strong: #334fa9; /* Serenity — the signature brand blue */
-  --cc-on-brand: #ffffff;
+  --cc-brand-fill: #fea91e;
+  --cc-brand-fill-hover: #f19f05;
+  --cc-brand-fill-strong: #b67703; /* the signature brand amber, deep */
+  --cc-on-brand: #110f0d;
 
   /* Notification badge fill, and darker than `--cc-red` so that the badge text
      above it clears AA. What that text *is* is `--cc-on-danger`, below — this
@@ -111,8 +112,8 @@
 
   /* The creature (HIVE-199): the ground under a busy comb patch, and the
      mutalisk's wings, bones and claws. Themeable, optional keys. */
-  --cc-creep: #5b3d8f;
-  --cc-chitin: #b9a7f0;
+  --cc-creep: #6a4404;
+  --cc-chitin: #eab26b;
   /* The Hatchery egg's shell (HIVE-221): a mix, not a hex, so an imported theme
      derives it. Repeated in the light block: a custom property resolves where it
      is declared, and light overrides `--cc-bg` on `body`, below `:root`. */
@@ -120,11 +121,11 @@
 
   /* The Brood's tissue ramp (HIVE-221): shadowed, mid and lit flesh, the glow's
      core and the ground. Themeable, optional keys; the canvas reads them. */
-  --cc-tissue-deep: #171b32;
-  --cc-tissue: #353556;
-  --cc-tissue-lit: #c3b5f2;
+  --cc-tissue-deep: #211c17;
+  --cc-tissue: #473826;
+  --cc-tissue-lit: #ebbe85;
   --cc-glow-core: #e2ffee;
-  --cc-ground: #141128;
+  --cc-ground: #171411;
 
   /**
    * Density (story 105) — the comfortable values.
@@ -167,11 +168,11 @@
    */
   --cc-code-keyword: #b39ff0;
   --cc-code-string: #74b79c;
-  --cc-code-number: #ffac47;
-  --cc-code-comment: #6b779f;
-  --cc-code-name: #8fa7f2;
+  --cc-code-number: #fea97c;
+  --cc-code-comment: #7d7872;
+  --cc-code-name: #ffb348;
   --cc-code-type: #7fd0e0;
-  --cc-code-operator: #98a3cc;
+  --cc-code-operator: #aaa49e;
   --cc-code-constant: #ff8d85;
   --cc-code-invalid: #ff8d85;
   /**
@@ -190,8 +191,8 @@
    * into this variable by `lib/theme/apply.ts`), so an alpha baked in here
    * would protect the built-in themes and nobody else's.
    */
-  --cc-code-active-line: #202b50;
-  --cc-code-selection: #2b3768;
+  --cc-code-active-line: #322d27;
+  --cc-code-selection: #4b371c;
 
   /* Round two's frame (HIVE-195): fixed, not density-dependent. */
   --cc-bar-w: 64px;
@@ -217,35 +218,36 @@ body[data-density='compact'] {
 }
 
 body[data-theme='light'] {
-  --cc-bg: #fdfdfb;
+  --cc-bg: #fefdfc;
   --cc-panel: #ffffff;
-  --cc-panel-2: #f7fafb;
-  --cc-hover: #f4f9ff;
-  --cc-active: #e9f3fc;
-  --cc-border: #d4dee3;
-  --cc-border-soft: #edf2f4;
-  --cc-ink: #2c2f34;
-  --cc-muted: #5a5d63;
-  --cc-subtle: #686d73;
-  --cc-brand: #334fa9;
+  --cc-panel-2: #faf9f8;
+  --cc-hover: #fbf8f4;
+  --cc-active: #f6f1eb;
+  --cc-border: #e0dbd7;
+  --cc-border-soft: #f3f1ee;
+  --cc-ink: #312e2c;
+  --cc-muted: #5f5c59;
+  --cc-subtle: #6f6c68;
+  --cc-brand: #885703;
   --cc-green: #2e6b52;
-  --cc-amber: #c77414;
-  /* #c77414 as text is 3.5:1 on white; 35% ink takes it past 4.5:1 on every light ground in every
-     built-in theme, the terminal rows included (HIVE-210, HIVE-223). A mix, not a hex: an imported
-     theme derives it from its own colours. */
+  --cc-amber: #b15313;
+  /* A light amber as text can fall short on white (the old Hive's #c77414 was 3.5:1); 35% ink
+     takes it past 4.5:1 on every light ground in every built-in theme, the terminal rows
+     included (HIVE-210, HIVE-223). A mix, not a hex: an imported theme derives it from its own
+     colours. */
   --cc-amber-text: color-mix(in srgb, var(--cc-amber) 65%, var(--cc-ink));
   --cc-red: #cd332b;
-  --cc-chip: #edf2f4;
+  --cc-chip: #f3f1ee;
   /* Light lifts by *deepening*: the chip already sits below a white panel, so
      its hover continues down rather than back up toward the panel. */
-  --cc-chip-hover: #e2eaee;
-  --cc-creep: #b7a3e6;
-  --cc-chitin: #6a54b0;
-  --cc-tissue-deep: #7a68b6;
-  --cc-tissue: #d4ccee;
-  --cc-tissue-lit: #fbf9ff;
+  --cc-chip-hover: #ebe8e4;
+  --cc-creep: #dfad6d;
+  --cc-chitin: #885703;
+  --cc-tissue-deep: #926d3d;
+  --cc-tissue: #e2cdb5;
+  --cc-tissue-lit: #fef9f3;
   --cc-glow-core: #96deb8;
-  --cc-ground: #eeeafa;
+  --cc-ground: #f3ebe4;
   --cc-shell: color-mix(in srgb, var(--cc-bg) 91%, var(--cc-chitin));
 
   /**
@@ -265,7 +267,7 @@ body[data-theme='light'] {
    * around it. Two different systems, one colour, or a visible rectangle
    * appears at the terminal's edge. `ansi.test.ts` asserts the two agree.
    */
-  --cc-term-bg: #f7fafb;
+  --cc-term-bg: #faf9f8;
   --cc-term-input: #ffffff;
   /**
    * Deepened, not borrowed from `--cc-hover`.
@@ -277,10 +279,10 @@ body[data-theme='light'] {
    * lifts, and land on the steps the app's own chrome uses on a panel: hover
    * 1.057:1 (app: 1.058), active 1.129:1 (app: 1.124).
    */
-  --cc-term-row-hover: #eef4f9;
-  --cc-term-row-active: #e4edf5;
-  --cc-term-head: #686b71;
-  --cc-term-track: #d4dee3;
+  --cc-term-row-hover: #f6f2ef;
+  --cc-term-row-active: #f0ebe6;
+  --cc-term-head: #6d6a67;
+  --cc-term-track: #e0dbd7;
 
   /**
    * The editor, which follows the theme — as, now, does the terminal above it.
@@ -297,17 +299,17 @@ body[data-theme='light'] {
    */
   --cc-code-keyword: #6f42c1;
   --cc-code-string: #2e6b52;
-  --cc-code-number: #a1541a;
-  --cc-code-comment: #8e949c;
-  --cc-code-name: #334fa9;
+  --cc-code-number: #a35223;
+  --cc-code-comment: #94908b;
+  --cc-code-name: #885703;
   --cc-code-type: #0b6b7d;
-  --cc-code-operator: #73767c;
+  --cc-code-operator: #75726f;
   --cc-code-constant: #b3271f;
   --cc-code-invalid: #d3372f;
   /* Mixed down at the point of use like the dark one, and chosen to composite
      over the light `--cc-panel-2` to what it always looked like. */
-  --cc-code-active-line: #eef7ff;
-  --cc-code-selection: #cfe3f7;
+  --cc-code-active-line: #faf5f0;
+  --cc-code-selection: #fadbb5;
 }
 
 /*

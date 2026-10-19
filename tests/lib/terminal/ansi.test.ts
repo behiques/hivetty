@@ -50,20 +50,20 @@ describe('TERM palette (dark)', () => {
    */
   it('matches the documented values', () => {
     expect(TERM).toEqual({
-      ink: '#dbe4ff',
-      dim: '#7c88b8',
+      ink: '#fae0c1',
+      dim: '#9b8871',
       green: '#7ee2b8',
       blue: '#8fb5ff',
-      amber: '#ffc06e',
+      amber: '#febc9b',
       red: '#ff8d85',
       cyan: '#7edce2',
       magenta: '#7edce2',
-      black: '#0b1023',
-      bg: '#0b1023',
-      selection: '#222c55',
+      black: '#14110e',
+      bg: '#14110e',
+      selection: '#3f2b10',
       // The surfaces (HIVE-82): `--cc-term-input` and `--cc-hover`.
-      surface: '#0e1430',
-      surfaceAlt: '#1b2344',
+      surface: '#1a1612',
+      surfaceAlt: '#292520',
     });
   });
 
@@ -104,11 +104,12 @@ describe('TERM_LIGHT palette', () => {
   it('mirrors the light tokens in tokens.css', () => {
     const light = lightTokens();
 
-    const mirror: Record<keyof typeof TERM_LIGHT, string> = {
+    const mirror: Record<Exclude<keyof typeof TERM_LIGHT, 'blue'>, string> = {
       ink: '--cc-ink',
       dim: '--cc-term-head',
       green: '--cc-code-string',
-      blue: '--cc-code-name',
+      // `blue` is not mirrored (HIVE-241): `--cc-code-name` is the brand, and
+      // in an amber theme the brand cannot double as ANSI blue.
       amber: '--cc-code-number',
       red: '--cc-code-constant',
       cyan: '--cc-code-type',
@@ -255,27 +256,27 @@ describe('XTERM_THEME', () => {
     expect(extendedAnsi.at(-1)).toBe(TERM.dim);
 
     expect(slots).toEqual({
-      background: '#0b1023',
-      foreground: '#dbe4ff',
-      selectionBackground: '#222c55',
-      cursor: '#dbe4ff',
-      cursorAccent: '#0b1023',
-      black: '#0e1430',
+      background: '#14110e',
+      foreground: '#fae0c1',
+      selectionBackground: '#3f2b10',
+      cursor: '#fae0c1',
+      cursorAccent: '#14110e',
+      black: '#1a1612',
       red: '#ff8d85',
       green: '#7ee2b8',
-      yellow: '#ffc06e',
+      yellow: '#febc9b',
       blue: '#8fb5ff',
       magenta: '#7edce2',
       cyan: '#7edce2',
-      white: '#dbe4ff',
-      brightBlack: '#1b2344',
+      white: '#fae0c1',
+      brightBlack: '#292520',
       brightRed: '#ff8d85',
       brightGreen: '#7ee2b8',
-      brightYellow: '#ffc06e',
+      brightYellow: '#febc9b',
       brightBlue: '#8fb5ff',
       brightMagenta: '#7edce2',
       brightCyan: '#7edce2',
-      brightWhite: '#dbe4ff',
+      brightWhite: '#fae0c1',
     });
   });
 });

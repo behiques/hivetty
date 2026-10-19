@@ -98,7 +98,7 @@ A tab appears only when the session has that thing. Close the panel with **›**
 becomes a strip of icons, each with one fact, such as `2 files changed`. Click one to open the
 panel on that tab.
 
-![The same window in the Hive theme's light mode](../assets/guide/22-light-theme.png)
+![The same window in the HiveTTY theme's light mode](../assets/guide/22-light-theme.png)
 
 ## The pill and the drawer
 
