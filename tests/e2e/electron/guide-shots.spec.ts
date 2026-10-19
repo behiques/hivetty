@@ -189,7 +189,7 @@ test('guide shots', async ({}, testInfo) => {
   await expect(page.getByRole('main').getByRole('radio', { name: 'Activity' })).toBeVisible();
   await shot(page, '10-agent-view.png');
 
-  // 12: Settings › Appearance, the gallery's eight cards with HiveTTY first and active (HIVE-241).
+  // 12: Settings › Appearance, the gallery's nine cards with HiveTTY first and active (HIVE-241).
   await page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: 'Settings', exact: true }).click();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
@@ -197,6 +197,7 @@ test('guide shots', async ({}, testInfo) => {
     .click();
   await expect(page.getByRole('button', { name: 'HiveTTY Built in' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Creep Built in' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Beacon Built in' })).toBeVisible();
   await shot(page, '12-settings-appearance.png');
 
   // 22: Home in the HiveTTY theme's light mode.

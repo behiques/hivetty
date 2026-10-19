@@ -207,7 +207,7 @@ describe('ThemeGallery', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Import theme…' }));
     await screen.findByText('Nord imported and activated');
 
-    // By name, not by index: the gallery ships eight built-ins and an
+    // By name, not by index: the gallery ships nine built-ins and an
     // index would silently follow whichever one sorts into that slot.
     await userEvent.click(
       screen.getByRole('button', { name: 'Nord actions' }),
