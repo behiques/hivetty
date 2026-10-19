@@ -65,7 +65,7 @@ never replies twice.
 
 ## Step 2: the ledger file
 
-`~/.hive/work/fixer/ledgers/<owner>-<repo>-pr<N>.md`, the same path from a
+`~/.hivetty/work/fixer/ledgers/<owner>-<repo>-pr<N>.md`, the same path from a
 session, so there is one place per PR. One row per finding: `finding → round
 first seen → verdict → action → resolution`. Read it before assessing
 anything. A finding already assessed in an earlier round is not re-fixed:

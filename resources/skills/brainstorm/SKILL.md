@@ -55,7 +55,7 @@ way: complexity found mid-task upgrades the path; nothing downgrades.
    the first one.
 3. **Questions: one call, four questions, recommended option first.** Collect
    every decision the design needs before asking any. A second call only when
-   an answer changes what the next question is. (This is the Hive's rule and
+   an answer changes what the next question is. (This is HiveTTY's rule and
    it replaces "one question at a time": every serial question parks the
    session for the same information one call gathers.)
 4. **Two or three approaches**, trade-offs, your recommendation first, YAGNI

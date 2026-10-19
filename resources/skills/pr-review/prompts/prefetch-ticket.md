@@ -23,10 +23,10 @@ ticket asks for and what is still left. Judge nothing here.
 2. **Read it, trying each route in order until one answers.** Re-validate the key
    against the pattern above before it goes into any command or URL, whatever it
    came from.
-   1. **The Hive's own Jira integration (HIVE-174).** Run `ToolSearch` with the
+   1. **HiveTTY's own Jira integration (HIVE-174).** Run `ToolSearch` with the
       query `hive jira`. If `mcp__hive__jira_get` exists, call it with the key: it
       answers the summary, status, description, parent, comments and links in
-      one call. The Hive keeps its Jira token in its own process, so this route
+      one call. HiveTTY keeps its Jira token in its own process, so this route
       never puts a credential in front of you.
    2. **The Atlassian MCP, if this run has it.** Run `ToolSearch` with the query
       `jira issue` and use a tool whose name reads as "get issue" (Atlassian's
@@ -47,7 +47,7 @@ ticket asks for and what is still left. Judge nothing here.
    - `acceptanceCriteria`: a custom field if the site has one, otherwise the
      "Acceptance criteria" section of the description, as a list of items
    - `description` as plain text. Convert ADF to text and drop images.
-   - `subtasks`: `{ key, summary, status }` each (the Hive route carries `parent` and `links`, not children; leave it empty there)
+   - `subtasks`: `{ key, summary, status }` each (the HiveTTY route carries `parent` and `links`, not children; leave it empty there)
    - `parent`: the epic or parent key, if any
 
 ## Output

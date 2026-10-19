@@ -150,7 +150,7 @@ what makes it a gate rather than a collection of readings.
 | any `latestReviews.nodes[]` with `state: CHANGES_REQUESTED` | `CHANGES_REQUESTED standing from: <logins>` |
 | `mergeable` is `CONFLICTING` | `mergeable=CONFLICTING` |
 | `mergeable` is `UNKNOWN` | `mergeable=UNKNOWN: re-query` |
-| with the Hive's tools: `mcp__hive__ledger_read { limit: 0 }` shows `claims["<owner>/<repo>#<N> findings"]` held | `fix in flight: <holder>` |
+| with HiveTTY's tools: `mcp__hive__ledger_read { limit: 0 }` shows `claims["<owner>/<repo>#<N> findings"]` held | `fix in flight: <holder>` |
 
 No line applies: CLEAR. Empty output from either command is a stop; empty is
 not a pass, and neither is a JSON you did not read to the end.
@@ -187,7 +187,7 @@ gh pr view <N> --repo <owner>/<repo> --json state,mergedAt,mergeCommit --jq '[.s
 
 **The fence.** Run by the shipper, `gh pr merge` is granted only for projects
 whose `autoMerge` is on (HIVE-166). For any other project the call stops at
-the Hive's permission fence and becomes an inbox card; the run ends `asking`,
+HiveTTY's permission fence and becomes an inbox card; the run ends `asking`,
 and the answer wakes a fresh run. That card is the checkpoint, and the wait
 behind it voids the CLEAR like any other wait: **the resumed run re-runs the
 gate** and merges on the new CLEAR, which the one-shot grant now lets through.
@@ -219,7 +219,7 @@ does not use it for that either.
    paths. An empty status after a refusal is a stop too: git refused for
    another reason (a submodule, a lock), and the report names it. A refusal
    of `--force` is a stop; never `--force` twice. Then `git -C <main working tree> worktree prune`. An agent worktree
-   under `~/.hive/work/<agent>/` is a linked worktree of the project and goes
+   under `~/.hivetty/work/<agent>/` is a linked worktree of the project and goes
    the same way.
 4. `git -C <main working tree> status --porcelain` and
    `git -C <main working tree> branch --show-current`. The main working tree
@@ -265,7 +265,7 @@ Then exactly one rule:
 | P1 | any | one, matching one of them or the branch has none | transition it |
 | P2 | one or more | one, matching none | transition nothing; report both |
 | P3 | none | none | skip; note it |
-| P4 | one | none | remote-link check on that key through `mcp__hive__jira_get { key }` (its `links`; `jira-writer get_remote_links` without the Hive's tools): a link naming this PR or branch confirms; otherwise transition nothing, report the candidate |
+| P4 | one | none | remote-link check on that key through `mcp__hive__jira_get { key }` (its `links`; `jira-writer get_remote_links` without HiveTTY's tools): a link naming this PR or branch confirms; otherwise transition nothing, report the candidate |
 | P5 | two or more | none | transition nothing; report all |
 
 Transition to **Done**: `mcp__hive__jira_transition { key, status: "Done" }`,

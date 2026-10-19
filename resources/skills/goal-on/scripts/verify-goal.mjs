@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * goal-on Stop verifier, The Hive's copy (HIVE-163). Ported from claude-kit's
- * workstream plugin with two changes: the brief lives in ~/.hive/goals, and every
- * status the floor writes is also posted to the Hive's ledger as a receipt.
+ * goal-on Stop verifier, HiveTTY's copy (HIVE-163). Ported from claude-kit's
+ * workstream plugin with two changes: the brief lives in ~/.hivetty/goals, and every
+ * status the floor writes is also posted to HiveTTY's ledger as a receipt.
  *
  * This script is the FLOOR under both harnesses: a plain Node process that reads the
  * brief with `readFileSync` and is therefore not permission-gated. It is the only
@@ -103,7 +103,7 @@ export function sessionIdOf(payload) {
   return id;
 }
 
-export const briefDir = () => process.env.HIVE_GOALS_DIR || join(homedir(), '.hive', 'goals');
+export const briefDir = () => process.env.HIVE_GOALS_DIR || join(homedir(), '.hivetty', 'goals');
 
 /** Split a brief into { header, body }. Returns null if there is no frontmatter. */
 export function splitFrontmatter(md) {
@@ -431,7 +431,7 @@ export function decide(md, opts = {}) {
   const { total, unchecked } = checkboxItems(outcome);
   const evidenceOk = hasEvidence(evidence);
 
-  // The plan file is what the Hive's plan panel draws. A goal once went DONE with
+  // The plan file is what HiveTTY's plan panel draws. A goal once went DONE with
   // its panel stuck at 0/3: the brief was ticked, the plan never was. The header's
   // `plan:` names it; no header or an unreadable file adds no gate (fail open).
   const planPath = headerValue(header, 'plan');
@@ -493,7 +493,7 @@ export function decide(md, opts = {}) {
 /**
  * The ledger receipt (HIVE-163). One `event` per status or turn the floor
  * changes, so the overmind sees ACTIVE turns, DONE and FAILED without opening
- * the file. Posted to the Hive's own receiver with the session's token, both
+ * the file. Posted to HiveTTY's own receiver with the session's token, both
  * exported into every hook process by the app. Fire-and-forget: a receiver
  * that is not there, a token that is wrong, a body the receiver refuses, none
  * of them change the decision, which is already on stdout. What they can cost
