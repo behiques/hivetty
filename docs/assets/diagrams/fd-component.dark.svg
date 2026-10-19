@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 558.975 954.1" width="558.975" height="954.1" style="--bg:#10152a;--fg:#e9effc;--line:#6b779f;--accent:#8fa7f2;--muted:#98a3cc;--surface:#141a33;--border:#273159;background:var(--bg)">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 558.975 954.1" width="558.975" height="954.1" style="--bg:#191613;--fg:#f0eeec;--line:#7d7872;--accent:#ffb348;--muted:#aaa49e;--surface:#1f1b18;--border:#39332d;background:var(--bg)">
 <style>
-
+  @import url('https://fonts.googleapis.com/css2?family=system-ui:wght@400;500;600;700&amp;display=swap');
   text { font-family: 'system-ui', system-ui, sans-serif; }
   svg {
     /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */

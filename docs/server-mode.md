@@ -1,6 +1,6 @@
 # Server mode
 
-Hive TTY can run on an always-on Mac and hold the sessions, the agents, the
+HiveTTY can run on an always-on Mac and hold the sessions, the agents, the
 ledger and the hook receiver there. The desktop app on any other machine
 attaches to it and becomes a window onto it, from home or from a hotel four
 time zones away.
@@ -19,7 +19,7 @@ that the machine looks after itself.
 >   block makes a laptop a window onto it.
 > - It needs automatic login plus a LaunchAgent (the Keychain), `pmset autorestart`, and
 >   Tailscale with key expiry off.
-> - `the-hive --pair`, `--devices` and `--revoke` manage device tokens; only hashes are stored.
+> - `hivetty --pair`, `--devices` and `--revoke` manage device tokens; only hashes are stored.
 > - The hook receiver stays on loopback. Exposure rests on Tailscale first, then tokens.
 
 <picture>
@@ -72,7 +72,7 @@ digest of each, in the config file, and needs no keychain to check one.
 
 ## 1. Prepare the server
 
-1. **Install Hive TTY** from the dmg into `/Applications`, and open it once from
+1. **Install HiveTTY** from the dmg into `/Applications`, and open it once from
    Finder so Gatekeeper records it. Quit it again; launchd starts it from step 4
    on. Use a Developer ID signed build if you want the server to update itself
    (see [Updates](#updates)).
@@ -103,16 +103,16 @@ digest of each, in the config file, and needs no keychain to check one.
 
    In the Tailscale admin console, **disable key expiry** for the server Mac, or it
    drops off the tailnet when its node key expires and every client with it.
-5. **Install the `the-hive` command**, so the one-shot commands below work over
+5. **Install the `hivetty` command**, so the one-shot commands below work over
    SSH:
 
    ```sh
    sudo mkdir -p /usr/local/bin
-   sudo tee /usr/local/bin/the-hive >/dev/null <<'EOF'
+   sudo tee /usr/local/bin/hivetty >/dev/null <<'EOF'
    #!/bin/sh
-   exec "/Applications/The Hive.app/Contents/MacOS/The Hive" "$@"
+   exec "/Applications/HiveTTY.app/Contents/MacOS/HiveTTY" "$@"
    EOF
-   sudo chmod 755 /usr/local/bin/the-hive
+   sudo chmod 755 /usr/local/bin/hivetty
    ```
 
    `/usr/local/bin` is on the default `PATH` of a macOS login shell, including
@@ -120,19 +120,19 @@ digest of each, in the config file, and needs no keychain to check one.
 
 ## 2. Write the server block
 
-In the server's `~/.hive/config.json` (or in Settings, Advanced, *Serve this
+In the server's `~/.hivetty/config.json` (or in Settings, Advanced, *Serve this
 machine*, from a screen-sharing session):
 
 ```json
 "server": {
   "enabled": true,
-  "bind": { "host": "100.101.102.103", "port": 7433, "allowedOrigins": [] },
+  "bind": { "host": "100.101.102.103", "port": 7434, "allowedOrigins": [] },
   "devices": []
 }
 ```
 
 - **`enabled: true`** is what makes a plain launch serve. The LaunchAgent below
-  passes no flag. `the-hive --server` serves for one run without writing the
+  passes no flag. `hivetty --server` serves for one run without writing the
   file, which is for trying it out, not for the deployment. A `--server` run
   does not update itself either: only `enabled: true` means launchd is behind
   the process.
@@ -149,7 +149,7 @@ machine*, from a screen-sharing session):
   literal and have clients use the literal. A `.ts.net` name works too, if both
   sides use the name.
 - **`port`** is fixed, never OS-assigned: clients and the LaunchAgent have to
-  know it ahead of time. 7433 is the default.
+  know it ahead of time. 7434 is the default.
 - **`allowedOrigins`** stays empty. The desktop client sends no `Origin`; a
   listed one exists only for a browser page someone points at the socket on
   purpose.
@@ -165,18 +165,18 @@ item needs a menu bar.
 
 ```sh
 mkdir -p ~/Library/LaunchAgents ~/Library/Logs
-cat > ~/Library/LaunchAgents/com.behiques.the-hive.server.plist <<EOF
+cat > ~/Library/LaunchAgents/com.behiques.hivetty.server.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.behiques.the-hive.server</string>
+  <string>com.behiques.hivetty.server</string>
   <key>ProgramArguments</key>
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>sleep 20; exec "/Applications/The Hive.app/Contents/MacOS/The Hive"</string>
+    <string>sleep 20; exec "/Applications/HiveTTY.app/Contents/MacOS/HiveTTY"</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -185,14 +185,14 @@ cat > ~/Library/LaunchAgents/com.behiques.the-hive.server.plist <<EOF
   <key>ProcessType</key>
   <string>Interactive</string>
   <key>StandardOutPath</key>
-  <string>$HOME/Library/Logs/the-hive-server.log</string>
+  <string>$HOME/Library/Logs/hivetty-server.log</string>
   <key>StandardErrorPath</key>
-  <string>$HOME/Library/Logs/the-hive-server.log</string>
+  <string>$HOME/Library/Logs/hivetty-server.log</string>
 </dict>
 </plist>
 EOF
-plutil -lint ~/Library/LaunchAgents/com.behiques.the-hive.server.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.the-hive.server.plist
+plutil -lint ~/Library/LaunchAgents/com.behiques.hivetty.server.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty.server.plist
 ```
 
 The heredoc is unquoted on purpose: `$HOME` is expanded when the file is
@@ -210,23 +210,23 @@ What each part is for:
   Tailscale a head start, though nothing depends on that: a bind that fails
   because the tailnet address is not up yet is retried, after 5 s and then
   doubling to once a minute, until it lands.
-- **Do not also add Hive TTY to Login Items.** Two copies at login means one
+- **Do not also add HiveTTY to Login Items.** Two copies at login means one
   loses the single-instance lock and quits, and launchd relaunches it every
   twenty seconds forever.
 
 Day to day:
 
 ```sh
-launchctl print gui/$(id -u)/com.behiques.the-hive.server | head -20   # state and pid
-lsof -nP -iTCP:7433 -sTCP:LISTEN                                         # the socket
-tail -f ~/Library/Logs/the-hive-server.log                               # the log
-launchctl bootout gui/$(id -u)/com.behiques.the-hive.server             # stop
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.the-hive.server.plist  # start
+launchctl print gui/$(id -u)/com.behiques.hivetty.server | head -20   # state and pid
+lsof -nP -iTCP:7434 -sTCP:LISTEN                                         # the socket
+tail -f ~/Library/Logs/hivetty-server.log                               # the log
+launchctl bootout gui/$(id -u)/com.behiques.hivetty.server             # stop
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty.server.plist  # start
 ```
 
-A running server has a menu-bar item whose tooltip reads *Hive TTY · serving*.
+A running server has a menu-bar item whose tooltip reads *HiveTTY · serving*.
 Its menu shows the bound address (or *Not serving* with the reason), the paired
-devices, *Pair a device…* and *Open Hive TTY*. The dock
+devices, *Pair a device…* and *Open HiveTTY*. The dock
 icon is hidden, and no unread badge appears there: each attached client badges
 its own dock.
 
@@ -235,7 +235,7 @@ its own dock.
 On the server, over SSH, once per device:
 
 ```sh
-the-hive --pair "MacBook"
+hivetty --pair "MacBook"
 ```
 
 It prints the token once, then the device id and how to revoke it. The token is
@@ -244,8 +244,8 @@ while the server is running; the running server sees the new device without a
 restart. The menu-bar item's *Pair a device…* does the same thing.
 
 ```sh
-the-hive --devices            # who is paired
-the-hive --revoke "MacBook"   # cut one device off, at once
+hivetty --devices            # who is paired
+hivetty --revoke "MacBook"   # cut one device off, at once
 ```
 
 On the client: Settings, Advanced, *Attach to a server*. Fill in *Server
@@ -301,9 +301,9 @@ row pointing at the release page instead, and changes nothing.
 ### By hand, over SSH
 
 ```sh
-launchctl bootout gui/$(id -u)/com.behiques.the-hive.server
-the-hive --update
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.the-hive.server.plist
+launchctl bootout gui/$(id -u)/com.behiques.hivetty.server
+hivetty --update
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty.server.plist
 ```
 
 `--update` refuses while the server is running, so installation cannot drop
@@ -402,7 +402,7 @@ DERP server and drop the default map.
 The controls, in order of how much they carry:
 
 1. **Tailscale.** Bind the tailnet address only. Use a Tailscale ACL to limit
-   which of your devices can reach port 7433 at all. No port forward, no public
+   which of your devices can reach port 7434 at all. No port forward, no public
    DNS, no ngrok: those put a remote execution endpoint on the internet behind
    auth this app wrote itself. `ssh -L` over the tailnet is a good break-glass
    path.
@@ -435,6 +435,6 @@ bytes at normal flush sizes.
 | Client gets a 403 | It dialed a name the server did not bind. Use the exact `bind.host` string. The server's log names the refused host. |
 | Client says the versions differ | Update whichever side the message names. |
 | Jira or Slack shows signed out after a reboot | The login keychain is locked: automatic login is off, or the keychain password differs from the account password. |
-| Log says another server is already running for this config | Two copies started. Remove Hive TTY from Login Items; keep only the LaunchAgent. |
+| Log says another server is already running for this config | Two copies started. Remove HiveTTY from Login Items; keep only the LaunchAgent. |
 | Server never updates | Something is always live. Check for a long-lived session or a busy agent schedule, or update by hand. |
 | Menu-bar item shows the text "Hive" | The bundle is missing `Contents/Resources/tray/`. Reinstall. |

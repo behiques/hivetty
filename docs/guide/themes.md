@@ -36,9 +36,9 @@ card menu has **Export…** and, for imported themes, **Remove**.
   "version": "1.0.0",
   "modes": {
     "dark": {
-      "ui":       { "bg": "#0f1326", "termBg": "#0b0f1f", "brand": "#8fa7f2" },
-      "syntax":   { "keyword": "#8fa7f2", "comment": "#6b779f" },
-      "terminal": { "bg": "#0b0f1f", "ink": "#e6e9f5" }
+      "ui":       { "bg": "#191613", "termBg": "#14110e", "brand": "#ffb348" },
+      "syntax":   { "keyword": "#b39ff0", "comment": "#7d7872" },
+      "terminal": { "bg": "#14110e", "ink": "#fae0c1" }
     },
     "light": { "ui": {}, "syntax": {}, "terminal": {} }
   }

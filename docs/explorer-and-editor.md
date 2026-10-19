@@ -331,7 +331,7 @@ session (`pr.session`) when it is live, so main roots the read at its worktree
 (`electron/main/fs/session-roots.ts` proves it a linked worktree of the project).
 With no session it is the project checkout as it is on disk, which may be on
 another branch than the PR, so the line can point elsewhere. A builder or fixer
-worktree under `~/.hive/work` is outside every project and unreachable unless a
+worktree under `~/.hivetty/work` is outside every project and unreachable unless a
 session works there. The line is the diff's selected line, else the first changed
 line.
 

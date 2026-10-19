@@ -11,7 +11,7 @@ sleep. It asks you before it does anything you have not allowed.
 
 ## What an agent is
 
-One file, `~/.hive/agents/<name>/AGENT.md`: frontmatter that says when and how it runs, and a
+One file, `~/.hivetty/agents/<name>/AGENT.md`: frontmatter that says when and how it runs, and a
 body that is its standing job. Each wake is one headless `claude -p` run that resumes the
 last one, so it remembers.
 
@@ -22,8 +22,8 @@ last one, so it remembers.
 
 ## Agents the app ships
 
-Agents come with Hive TTY: the app's own `resources/agents/` is copied into
-`~/.hive/agents` on launch, the way shipped skills are ([Custom skills](skills.md)).
+Agents come with HiveTTY: the app's own `resources/agents/` is copied into
+`~/.hivetty/agents` on launch, the way shipped skills are ([Custom skills](skills.md)).
 Today that is **builder**, which builds an approved plan in its own worktree and opens
 the draft PR, **shipper**, the PR endgame, **acr**, the reviewer it asks (named after the
 review tool it runs, `acr`, which is a command on the machine, not this agent), and **fixer**,

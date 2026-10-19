@@ -1,6 +1,6 @@
-# Hive TTY documentation
+# HiveTTY documentation
 
-Two layers. **Guides** show you how to use Hive TTY, one task per section, with a
+Two layers. **Guides** show you how to use HiveTTY, one task per section, with a
 screenshot or a diagram on every page. **Internals** explain how each part is built, for
 anyone changing the code.
 
@@ -45,9 +45,9 @@ New here? Start with [Getting started](guide/getting-started.md), then
 | Page | What you will learn |
 | --- | --- |
 | [Settings](guide/settings.md) | Every Settings section, what it changes |
-| [The config file](guide/configuration.md) | `~/.hive/config.json`, key by key |
+| [The config file](guide/configuration.md) | `~/.hivetty/config.json`, key by key |
 | [Themes](guide/themes.md) | Pick, import and write a theme |
-| [Updates](guide/updates.md) | How updates arrive, and `the-hive --update` |
+| [Updates](guide/updates.md) | How updates arrive, and `hivetty --update` |
 
 ## Internals
 
