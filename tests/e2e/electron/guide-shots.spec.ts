@@ -18,7 +18,7 @@ import { launchHive, mainWindow, setContentSize } from './fixtures/hive-app';
 /**
  * Retakes the guide screenshots (HIVE-213). Not part of `test:e2e`: skipped unless
  * HIVE_GUIDE_SHOTS=1 (`pnpm docs:shots`, after `desktop:build`). Fixed 1440×900, dark theme
- * (the default), light for shot 22.
+ * (the default), light for shot 22. Shot 12 is the theme gallery.
  *
  * Each shot is the state its guide's caption describes, reached the way a person would:
  * through the bar, the Overmind and the session panel. The asks in shot 05 are posted from
@@ -189,12 +189,17 @@ test('guide shots', async ({}, testInfo) => {
   await expect(page.getByRole('main').getByRole('radio', { name: 'Activity' })).toBeVisible();
   await shot(page, '10-agent-view.png');
 
-  // 22: Home in the Hive theme's light mode.
+  // 12: Settings › Appearance, the gallery's eight cards with HiveTTY first and active (HIVE-241).
   await page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: 'Settings', exact: true }).click();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
     .getByRole('button', { name: 'Appearance', exact: true })
     .click();
+  await expect(page.getByRole('button', { name: 'HiveTTY Built in' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Creep Built in' })).toBeVisible();
+  await shot(page, '12-settings-appearance.png');
+
+  // 22: Home in the HiveTTY theme's light mode.
   await page.getByRole('radiogroup', { name: 'Mode' }).getByRole('radio', { name: 'Light' }).click();
   await page.keyboard.press('Escape');
   await goToPlace(page, 'Home');
