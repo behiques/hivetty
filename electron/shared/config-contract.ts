@@ -863,9 +863,9 @@ export interface RemoteConfig {
 /**
  * Every install that has never attached carries exactly this. `host` is
  * empty because there is nothing to validate in `'local'` mode — see
- * {@link isRemoteTarget}.
+ * {@link isRemoteTarget}. The port is 7434, one above The Hive's default, so
+ * both can serve on one Mac (HIVE-242).
  */
-// 7434, one above The Hive's default, so both can serve on one Mac (HIVE-242).
 export const DEFAULT_REMOTE: RemoteConfig = { mode: 'local', host: '', port: 7434 };
 
 /** The block's keys, for the parser's exact-key check. */
