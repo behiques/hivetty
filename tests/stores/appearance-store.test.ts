@@ -601,7 +601,7 @@ describe('the theme library', () => {
  * under another theme's name.
  */
 describe('the shipped themes beside HiveTTY', () => {
-  const SHIPPED = ['honeycomb', 'graphite', 'tidewater', 'terracotta', 'porcelain', 'cinder', 'creep'];
+  const SHIPPED = ['honeycomb', 'graphite', 'tidewater', 'terracotta', 'porcelain', 'cinder', 'creep', 'beacon'];
 
   it('resolves HiveTTY to null — the stylesheet is already that palette', () => {
     useAppearanceStore.getState().activateTheme('hivetty');
