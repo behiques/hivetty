@@ -5,6 +5,9 @@
 [![Open issues](https://img.shields.io/github/issues/yunidbauza/the-hive?style=flat-square&labelColor=141a33&color=ffac47&label=open%20issues)](https://github.com/yunidbauza/the-hive/issues)
 [![License](https://img.shields.io/github/license/yunidbauza/the-hive?style=flat-square&labelColor=141a33&color=74b79c)](LICENSE)
 
+> **HiveTTY** is the [`behiques/hivetty`](https://github.com/behiques/hivetty) fork of
+> [The Hive](https://github.com/yunidbauza/the-hive), with its own theme, name and releases.
+
 # Hive TTY
 
 **A hive mind for your sessions: many workers, one queen, nothing slipping through the comb.**
