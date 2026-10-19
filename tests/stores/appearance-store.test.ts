@@ -592,7 +592,7 @@ describe('the theme library', () => {
 });
 
 /**
- * The six that ship beside HiveTTY.
+ * The seven that ship beside HiveTTY.
  *
  * The distinction that matters here is which of them `activeThemeOf` answers
  * `null` for. `null` means *the stylesheet already is this palette* — true of
@@ -601,7 +601,7 @@ describe('the theme library', () => {
  * under another theme's name.
  */
 describe('the shipped themes beside HiveTTY', () => {
-  const SHIPPED = ['honeycomb', 'graphite', 'tidewater', 'terracotta', 'porcelain', 'cinder'];
+  const SHIPPED = ['honeycomb', 'graphite', 'tidewater', 'terracotta', 'porcelain', 'cinder', 'creep'];
 
   it('resolves HiveTTY to null — the stylesheet is already that palette', () => {
     useAppearanceStore.getState().activateTheme('hivetty');
@@ -695,6 +695,21 @@ describe('a malformed persisted theme', () => {
     );
     expect(store.getState().activeThemeId).toBe('hivetty');
     expect(document.getElementById('hive-theme')).toBeNull();
+  });
+
+  /** HIVE-241: an import keyed after a new built-in is pushed aside, and stays active. */
+  it('re-keys a stored theme squatting on hivetty or creep, keeping it active', async () => {
+    const { useAppearanceStore: store } = await bootFrom(
+      JSON.stringify({
+        version: 2,
+        state: {
+          themes: { hivetty: nordFixture, creep: { ...nordFixture, name: 'Mine' } },
+          activeThemeId: 'creep',
+        },
+      }),
+    );
+    expect(Object.keys(store.getState().themes).sort()).toEqual(['creep-2', 'hivetty-2']);
+    expect(store.getState().activeThemeId).toBe('creep-2');
   });
 
   it('boots on the built-in rather than crashing', async () => {

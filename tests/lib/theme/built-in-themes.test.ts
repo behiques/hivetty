@@ -14,7 +14,7 @@ import {
 import { contrastRatio, importTheme, isHiveTheme } from '@lib/theme/validate';
 import { TOKENS_CSS } from '@tests/support/css-tokens';
 
-/** The six that ship beside the Hive, in gallery order. */
+/** The seven that ship beside HiveTTY, in gallery order. */
 const SHIPPED = [
   'honeycomb',
   'graphite',
@@ -22,17 +22,18 @@ const SHIPPED = [
   'terracotta',
   'porcelain',
   'cinder',
+  'creep',
 ] as const;
 
 describe('the shipped set', () => {
-  it('is the Hive plus six, in that order', () => {
+  it('is HiveTTY plus seven, in that order', () => {
     expect(Object.keys(BUILT_IN_THEMES)).toEqual([
       BUILT_IN_THEME_ID,
       ...SHIPPED,
     ]);
   });
 
-  it('keeps the Hive entry identical to the built-in itself', () => {
+  it('keeps the HiveTTY entry identical to the built-in itself', () => {
     expect(BUILT_IN_THEMES[BUILT_IN_THEME_ID]).toBe(BUILT_IN_THEME);
   });
 
@@ -57,17 +58,22 @@ describe('the shipped set', () => {
   /**
    * The `tokens.css` pact is exactly one theme wide.
    *
-   * `built-in.test.ts` asserts the Hive and the stylesheet agree in both
+   * `built-in.test.ts` asserts HiveTTY and the stylesheet agree in both
    * directions. That check only means something while the stylesheet holds one
    * palette — so if a second theme's colours ever leak into `tokens.css`, this
    * fails here rather than quietly making the drift test ambiguous.
    */
-  it('keeps the six out of tokens.css', () => {
+  it('keeps the seven out of tokens.css', () => {
     for (const id of SHIPPED) {
       const { bg, brand } = BUILT_IN_THEMES[id].modes.dark.ui;
       expect(TOKENS_CSS, `${id} bg`).not.toContain(bg);
       expect(TOKENS_CSS, `${id} brand`).not.toContain(brand);
     }
+  });
+
+  it('names and keys nothing "Hive" any more (HIVE-241)', () => {
+    expect(Object.keys(BUILT_IN_THEMES)).not.toContain('hive');
+    expect(Object.values(BUILT_IN_THEMES).map((t) => t.name)).not.toContain('Hive');
   });
 });
 
@@ -193,5 +199,17 @@ describe('text tokens clear AA (HIVE-223)', () => {
         expect(contrastRatio(ui.onBrand, ui.brandFill)).toBeGreaterThanOrEqual(4.5);
       });
     });
+  });
+});
+
+/**
+ * HIVE-241: comments clear 3:1 on the editor's own ground, `--cc-panel-2`
+ * (`editor-theme.ts`). The active line is mixed down to 35% and is not a ground.
+ * Only the themes added with the rule are held to it; the older ones predate it.
+ */
+describe.each(['hivetty', 'creep'])('%s comments', (id) => {
+  it.each(THEME_MODES)('clear 3:1 on the editor ground in %s mode', (mode) => {
+    const { ui, syntax } = BUILT_IN_THEMES[id]!.modes[mode];
+    expect(contrastRatio(syntax.comment, ui.panel2)).toBeGreaterThanOrEqual(3);
   });
 });
