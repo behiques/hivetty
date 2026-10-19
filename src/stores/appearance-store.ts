@@ -29,7 +29,7 @@ import { isHiveTheme } from '@lib/theme/validate';
  *
  * ## Why this is a third store, and why it is not the config file
  *
- * Everything else in the settings epic writes `~/.hive/config.json` through
+ * Everything else in the settings epic writes `~/.hivetty/config.json` through
  * main's single write path. That file describes the **workspace**: where
  * projects live, which shell to spawn, what command starts an agent — facts a
  * session needs before it can run. Appearance is a fact about the person looking
@@ -297,7 +297,7 @@ export const EDITOR_FONT_SIZES: readonly number[] = [
 ] as const;
 
 /**
- * What the brand tooltip says under "The Hive" until someone says otherwise.
+ * What the brand tooltip says under "HiveTTY" until someone says otherwise.
  *
  * A hive's workers are a swarm and this app is a command centre for them, so
  * the default names the room rather than any real team — anyone who has not

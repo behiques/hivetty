@@ -147,7 +147,7 @@ describe('createUpdater — background checks', () => {
     expect(h.notify.mock.calls[0][0]).toMatchObject({
       action: {
         type: 'url',
-        url: 'https://github.com/yunidbauza/the-hive/releases/tag/v0.2.0',
+        url: 'https://github.com/behiques/hivetty/releases/tag/v0.2.0',
       },
     });
   });
@@ -183,7 +183,7 @@ describe('createUpdater — the menu', () => {
 
     expect(h.inform).toHaveBeenCalledWith({
       message: "You're up to date.",
-      detail: 'Hive TTY 0.1.0 is the latest version.',
+      detail: 'HiveTTY 0.1.0 is the latest version.',
     });
   });
 
@@ -191,7 +191,7 @@ describe('createUpdater — the menu', () => {
     const yes = harness(SELF_INSTALL);
     await createUpdater(yes.deps).check('menu');
     expect(yes.confirm.mock.calls[0][0]).toMatchObject({
-      message: 'Hive TTY 0.2.0 is available.',
+      message: 'HiveTTY 0.2.0 is available.',
       confirmLabel: 'Download',
     });
     expect(yes.engine.download).toHaveBeenCalledTimes(1);
@@ -279,7 +279,7 @@ describe('createUpdater — download and install', () => {
 
     expect(h.engine.download).not.toHaveBeenCalled();
     expect(h.openExternal).toHaveBeenCalledWith(
-      'https://github.com/yunidbauza/the-hive/releases/tag/v0.2.0',
+      'https://github.com/behiques/hivetty/releases/tag/v0.2.0',
     );
   });
 });
@@ -325,7 +325,7 @@ describe('createUpdater — a staged update is not lost', () => {
 
     expect(h.confirm).not.toHaveBeenCalled();
     expect(h.inform.mock.calls.at(-1)?.[0]).toMatchObject({
-      message: 'Hive TTY 0.2.0 is ready to install.',
+      message: 'HiveTTY 0.2.0 is ready to install.',
     });
   });
 
@@ -398,7 +398,7 @@ describe('createUpdater — a swap macOS refuses', () => {
     await updater.download();
 
     expect(h.openExternal).toHaveBeenCalledWith(
-      'https://github.com/yunidbauza/the-hive/releases/tag/v0.2.0',
+      'https://github.com/behiques/hivetty/releases/tag/v0.2.0',
     );
     expect(updater.status().capability).toMatchObject({ mode: 'manual' });
     expect(updater.status().capability.reason).toContain(
@@ -443,7 +443,7 @@ describe('createUpdater — a swap macOS refuses', () => {
     await updater.install();
 
     expect(h.openExternal).toHaveBeenCalledWith(
-      'https://github.com/yunidbauza/the-hive/releases/tag/v0.2.0',
+      'https://github.com/behiques/hivetty/releases/tag/v0.2.0',
     );
     expect(updater.status().capability.mode).toBe('manual');
     expect(updater.status().capability.reason).toContain(

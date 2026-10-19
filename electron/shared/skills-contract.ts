@@ -2,7 +2,7 @@ import { HIDDEN_ENTRIES } from './fs-contract';
 import type { FsRefusalReason } from './fs-contract';
 
 /**
- * Custom skills — the slash commands The Hive gives the sessions it starts
+ * Custom skills — the slash commands HiveTTY gives the sessions it starts
  * (HIVE-96), and the folders behind them (HIVE-148).
  *
  * ## Which verbs take a path, and why that changed
@@ -48,7 +48,7 @@ import type { FsRefusalReason } from './fs-contract';
  * What a skill may be called.
  *
  * The folder name is three things at once — the directory under
- * `~/.hive/skills`, the `name:` in the file's own frontmatter, and the slash
+ * `~/.hivetty/skills`, the `name:` in the file's own frontmatter, and the slash
  * command the user types. So it is bounded by what Claude Code accepts and by
  * what is safe to `join` onto a root main owns: no separators, no dot segments,
  * and no case to normalise on a case-insensitive disk.

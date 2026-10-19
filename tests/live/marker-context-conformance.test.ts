@@ -140,7 +140,7 @@ describe.skipIf(!enabled)('a marker carries its entry as context, against a real
     const arrivals: Arrival[] = [];
 
     /*
-      The real ledger, in a `~/.hive` of its own, and the real receiver over
+      The real ledger, in a `~/.hivetty` of its own, and the real receiver over
       it, wired the way `hooks/index.ts` wires them: the query goes down
       untouched and the receiver's own identity filters do the narrowing.
     */

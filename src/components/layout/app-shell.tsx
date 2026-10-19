@@ -57,7 +57,7 @@ export function AppShell() {
   useLedgerSync();
 
   /**
-   * Keep the fleet's agents in step with `~/.hive/agents` (HIVE-114).
+   * Keep the fleet's agents in step with `~/.hivetty/agents` (HIVE-114).
    *
    * One broadcast channel again, and here rather than in the Settings pane
    * because the list panel lists agents whether or not Settings has ever been

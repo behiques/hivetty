@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
  * (`resources/skills/goal-on/scripts/verify-goal.mjs`), because a hook process
  * has no vitest and no TypeScript. Its own suite is `node:test`, ported from
  * claude-kit with the Hive's changes (HIVE-163): the brief under
- * `~/.hive/goals`, and the ledger receipt. This wrapper is what makes
+ * `~/.hivetty/goals`, and the ledger receipt. This wrapper is what makes
  * `pnpm test` run it.
  */
 describe('goal-on verifier', () => {

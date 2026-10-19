@@ -57,7 +57,7 @@ export function AgentsSection() {
   const newAgent = (): void => setOpen({ name: null });
 
   const description =
-    'Background agents that wake on a schedule or a message and correspond through the ledger. Saved as AGENT.md under ~/.hive/agents.';
+    'Background agents that wake on a schedule or a message and correspond through the ledger. Saved as AGENT.md under ~/.hivetty/agents.';
 
   /*
     No snapshot is the browser demo, which has no bridge to ask and no disk to

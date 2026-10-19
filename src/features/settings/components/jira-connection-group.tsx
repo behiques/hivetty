@@ -14,7 +14,7 @@ import {
  *
  * Split from the credential group because the story's own security argument
  * splits here: these two are **ordinary settings** and live in
- * `~/.hive/config.json`, a file the product invites the user to hand-edit. The
+ * `~/.hivetty/config.json`, a file the product invites the user to hand-edit. The
  * token is the one thing that does not, and putting it in the same card would
  * blur exactly the line this design exists to draw.
  *
@@ -64,7 +64,7 @@ export function JiraConnectionGroup({
    * machine set up for Atlassian is often one nobody typed — `JIRA_DOMAIN`, or
    * the address `JIRA_API_KEY` carries in its `email:token` form. Showing it
    * without saying so would look like a stored setting, and the user would go
-   * looking in `~/.hive/config.json` for a line that is not there.
+   * looking in `~/.hivetty/config.json` for a line that is not there.
    */
   const siteHint =
     status.siteSource === 'environment'
@@ -74,7 +74,7 @@ export function JiraConnectionGroup({
   const emailHint =
     status.emailSource === 'credential'
       ? `From ${JIRA_TOKEN_ENV}, which carries it as email:token. Typing here overrides it.`
-      : 'Both are ordinary settings and live in ~/.hive/config.json.';
+      : 'Both are ordinary settings and live in ~/.hivetty/config.json.';
 
   return (
     <SettingsGroup

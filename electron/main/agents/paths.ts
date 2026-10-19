@@ -8,7 +8,7 @@ import { configPath } from '../config/paths';
 /**
  * Where agent definitions live (HIVE-114).
  *
- * Beside `config.json`, `skills/` and `ledger/` under `~/.hive` — not inside
+ * Beside `config.json`, `skills/` and `ledger/` under `~/.hivetty` — not inside
  * Electron's userData. `skills/paths.ts` and `ledger/` both give the reasoning
  * and this follows it: a definition is a document the person is invited to
  * open, `grep` and back up, not an app-private artifact.
@@ -16,7 +16,7 @@ import { configPath } from '../config/paths';
  * Derived from `configPath()` rather than `homedir()` for the reason that file
  * states: `configPath()` honours `HIVE_CONFIG_PATH`, so a test that relocates
  * the config relocates the agents with it. Reaching for `homedir()` here would
- * have every e2e run write into the developer's own `~/.hive` — and this
+ * have every e2e run write into the developer's own `~/.hivetty` — and this
  * story's e2e spec *creates an agent*, so that would not stay theoretical.
  *
  * Read per call rather than captured, so the first spec to import this module
@@ -25,7 +25,7 @@ import { configPath } from '../config/paths';
 export const agentsRoot = (): string => join(dirname(configPath()), AGENTS_DIR);
 
 /**
- * `~/.hive/ledger/agents.json` — main's own bookkeeping about the runs it has
+ * `~/.hivetty/ledger/agents.json` — main's own bookkeeping about the runs it has
  * made (HIVE-115).
  *
  * Inside `ledger/` rather than beside it, because the ledger directory is
@@ -37,9 +37,9 @@ export const agentStateFile = (): string =>
   join(dirname(configPath()), LEDGER_DIR, 'agents.json');
 
 /**
- * `~/.hive/work/<name>` — an agent's working directory, created on demand.
+ * `~/.hivetty/work/<name>` — an agent's working directory, created on demand.
  *
- * **Deliberately not** `~/.hive/agents/<name>`. `registry.ts` watches that tree
+ * **Deliberately not** `~/.hivetty/agents/<name>`. `registry.ts` watches that tree
  * with `{ recursive: true }`, so every scratch file an agent wrote would fire
  * the debounced watcher, re-parse every definition on the machine, and push
  * `agents:changed` at the renderer. A working directory that invalidates the
@@ -69,8 +69,8 @@ export const laneWorkdir = (name: string, lane: string): string =>
  * absolute form needs `app.getPath` and keeping the constant relative is what
  * lets this module's callers be tested under plain Node.
  *
- * In `userData` rather than `~/.hive`, and the line is the one `skills/paths.ts`
- * draws: `~/.hive` holds what the *user* writes, `userData` holds what the app
+ * In `userData` rather than `~/.hivetty`, and the line is the one `skills/paths.ts`
+ * draws: `~/.hivetty` holds what the *user* writes, `userData` holds what the app
  * regenerates. This file is rewritten from the preamble and the definition body
  * on every single wake, so that an app update reaches every agent without
  * anyone editing anything.

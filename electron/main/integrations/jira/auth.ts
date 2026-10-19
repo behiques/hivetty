@@ -18,7 +18,7 @@ import { parseCredential, readEnvToken, type ParsedCredential } from './env';
  * product encourages the user to hand-edit."
  *
  * Both halves stop being true here. Something reads this one — the WORK tab —
- * and it is not going in `~/.hive/config.json`. That file is deliberately
+ * and it is not going in `~/.hivetty/config.json`. That file is deliberately
  * hand-editable: `HIVE_CONFIG_PATH` relocates it, story 107 shipped a verb that
  * reveals it in the file manager, and `config-contract.ts` keeps an
  * `UNSAFE_ENV_KEYS` deny-list precisely because users edit it. So the token goes

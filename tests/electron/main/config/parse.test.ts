@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { parseConfig, serverBindRefusal } from '../../../../electron/main/config/parse';
 
 /**
- * Shape validation for `~/.hive/config.json` (stories 090, 101).
+ * Shape validation for `~/.hivetty/config.json` (stories 090, 101).
  *
  * `parseConfig` is pure — a string in, a verdict out — so these tests need no
  * filesystem at all. That split is the reason the one module that touches `fs`

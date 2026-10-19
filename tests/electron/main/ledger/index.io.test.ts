@@ -14,7 +14,7 @@ import { createLedger, type Ledger } from '../../../../electron/main/ledger/inde
  * and `index.test.ts` needs the real one — the same reason `guards.*.test.ts`
  * is several files rather than one.
  *
- * ENOSPC and EACCES are the realistic causes: a full disk, or a `~/.hive` the
+ * ENOSPC and EACCES are the realistic causes: a full disk, or a `~/.hivetty` the
  * user moved or chmod-ed out from under the app. Before this, `appendFileSync`
  * threw straight out through `store.append` and `ledger.append`, reaching the
  * HTTP caller as a bare `500` with no body and the IPC caller as a rejected

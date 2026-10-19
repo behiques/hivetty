@@ -30,7 +30,7 @@ overmind instead of this session.
 ## Steps
 
 **1. Fetch the ticket.** `mcp__hive__jira_get { key }` when this session has
-the Hive's tools: the description, the parent, every comment and link in one
+HiveTTY's tools: the description, the parent, every comment and link in one
 call, through the token the Work tab holds. Otherwise `jira-writer get_issue
 <KEY>` (the `jira-writer` skill; the Atlassian MCP tools if it is not
 installed; never raw REST). Keep the fetch lean:
@@ -125,7 +125,7 @@ already known, post them all at once.
 *Attached (default).* Stay open. A `📒` marker from the builder is a question.
 Answer it with `ledger_answer` when the spec, the plan or this conversation
 already holds the answer, and say so in the answer ("per spec §3"). Otherwise
-`AskUserQuestion`; the Hive flags the session input-needed, and you relay the
+`AskUserQuestion`; HiveTTY flags the session input-needed, and you relay the
 answer. Never invent a decision the spec did not make. The shipper's "PR #N
 merged" arrives as a notice with nothing owed back; run `/done` once your own
 work is finished.
@@ -140,7 +140,7 @@ you (`mcp__hive__jira_transition { key, status: "In Progress", from: "To Do",
 assignToMe: true }`, where `from` leaves a ticket already past To Do alone and
 `assignToMe` fills an empty assignee with the Jira token's owner, moved or not;
 someone else's ticket keeps its assignee and the answer names them. Without
-the Hive's tools, read the status and assignee with `jira-writer get_issue
+HiveTTY's tools, read the status and assignee with `jira-writer get_issue
 <KEY> status,assignee`; if it is still To Do, take the In Progress id from
 `jira-writer get_transitions <KEY>` and call `jira-writer transition_issue
 <KEY> <id>`; if it is unassigned, take your `accountId` from `jira-writer
@@ -180,6 +180,6 @@ because the key came from its own arguments. Never from a branch name.
 - Ending the turn on "draft PR created". Ask the shipper in the same turn.
 - Answering a builder question the spec does not answer. That one is the
   person's.
-- A plugin skill from outside the Hive as a step of the process. This skill
+- A plugin skill from outside HiveTTY as a step of the process. This skill
   and its siblings are the whole process; the Jira CLI fallbacks are tools,
   not steps.

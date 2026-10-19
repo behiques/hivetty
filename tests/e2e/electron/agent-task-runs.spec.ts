@@ -95,7 +95,7 @@ test('draws two live task runs and counts them in the rail and the fleet', async
     would be four clicks between the launch and the thing under test.
 
     `agentsRoot()` is `dirname(configPath())/agents`, so this lands in the
-    test's output directory and never in the developer's real `~/.hive`.
+    test's output directory and never in the developer's real `~/.hivetty`.
   */
   const folder = join(dirname(configPath), 'agents', 'fanout');
 

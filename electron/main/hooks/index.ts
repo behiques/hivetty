@@ -63,7 +63,7 @@ export interface HookRuntimeOptions {
   /**
    * The ledger (HIVE-111), threaded through rather than constructed here.
    *
-   * This runtime has no opinion about where `~/.hive/ledger` lives or who
+   * This runtime has no opinion about where `~/.hivetty/ledger` lives or who
    * counts as a known party — `ipc/index.ts` is where both of those facts are
    * already reachable, from `configPath()` and the session registry. Handing
    * over a constructed `Ledger` keeps this module's only job the receiver's

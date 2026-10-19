@@ -12,7 +12,7 @@
  *
  * It resolves **three** roots, not one. An agent is a `claude -p` process on
  * this machine, so it already loads the user's `~/.claude/skills` and their
- * installed plugins; validating against `~/.hive/skills` alone refused names
+ * installed plugins; validating against `~/.hivetty/skills` alone refused names
  * the agent could reach anyway, and refused every name at all on the fresh
  * install where that folder is empty. `available.ts` carries the argument in
  * full.

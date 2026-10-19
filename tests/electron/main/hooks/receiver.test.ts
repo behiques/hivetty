@@ -2543,7 +2543,7 @@ describe('the agent id space (HIVE-115)', () => {
       /*
         Disjoint on purpose, and the whole suite depends on it: a fixture in
         which one id answered both would be testing a state the app cannot be
-        in — `sess-07` is not a folder in `~/.hive/agents`.
+        in — `sess-07` is not a folder in `~/.hivetty/agents`.
       */
       knowsSession: (entityId) => entityId === SESSION,
       knowsAgent: (entityId) => entityId === AGENT,

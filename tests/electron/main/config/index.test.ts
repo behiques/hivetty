@@ -250,7 +250,7 @@ describe('malformed input', () => {
 
 describe('first run', () => {
   it('writes a template when no file exists, and that template parses clean', async () => {
-    const path = join(home, '.hive', 'config.json');
+    const path = join(home, '.hivetty', 'config.json');
     delete process.env[CONFIG_PATH_ENV];
 
     const first = await loadConfig();
@@ -274,7 +274,7 @@ describe('first run', () => {
     await loadConfig();
 
     expect(console.info).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(console.info).mock.calls[0]?.join(' ')).toContain('.hive');
+    expect(vi.mocked(console.info).mock.calls[0]?.join(' ')).toContain('.hivetty');
   });
 });
 
@@ -311,12 +311,12 @@ describe('defaults', () => {
 });
 
 describe(CONFIG_PATH_ENV, () => {
-  it('takes precedence over ~/.hive/config.json, which is what isolates a test run', async () => {
+  it('takes precedence over ~/.hivetty/config.json, which is what isolates a test run', async () => {
     // A real config exists in the fake home and would be found without the env
     // var — the assertion is that it is not.
-    mkdirSync(join(home, '.hive'), { recursive: true });
+    mkdirSync(join(home, '.hivetty'), { recursive: true });
     writeFileSync(
-      join(home, '.hive', 'config.json'),
+      join(home, '.hivetty', 'config.json'),
       JSON.stringify({
         version: 1,
         projects: [{ id: 'real-project', path: sandbox }],

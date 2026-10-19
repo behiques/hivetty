@@ -57,7 +57,7 @@ describe('seedShippedIntoHive', () => {
     expect(manifest.parts['agents/builder/AGENT.md']?.keys['limits.parallel']).toBeDefined();
   });
 
-  it('answers null rather than throwing when ~/.hive cannot be written', async () => {
+  it('answers null rather than throwing when ~/.hivetty cannot be written', async () => {
     // A file where the folder should be: every mkdir under it fails.
     await mkdir(base, { recursive: true });
     await writeFile(join(base, 'hive'), 'not a folder', 'utf8');

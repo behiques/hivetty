@@ -90,7 +90,7 @@ interface SessionOptions {
   /**
    * What to call the session inside Claude (HIVE-61).
    *
-   * The Hive's own entity id, so the agent's prompt box, its `/resume` picker
+   * HiveTTY's own entity id, so the agent's prompt box, its `/resume` picker
    * entry and its terminal title all say `sess-07` rather than an auto-title
    * derived from whatever the first message happened to be.
    *
@@ -215,7 +215,7 @@ interface SessionOptions {
  * `git diff` or rerun the tests without starting a new session. That was a
  * deliberate decision and this deliberately undoes it.
  *
- * The reason is that The Hive is a fleet view. A session whose agent has quit
+ * The reason is that HiveTTY is a fleet view. A session whose agent has quit
  * is finished work, and leaving thirteen idle login shells in the rail — each
  * indistinguishable from a session that is merely quiet — makes the one list
  * the app exists to render steadily less true. `/exit` should retire the row.

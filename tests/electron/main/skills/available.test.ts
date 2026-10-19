@@ -118,7 +118,7 @@ describe('readAvailableSkillNames', () => {
 
   /*
     Every root is optional in practice, and the empty case is the default one:
-    `~/.hive/skills` does not exist on a fresh install. Failing closed here
+    `~/.hivetty/skills` does not exist on a fresh install. Failing closed here
     would refuse every skill name on exactly the machines where the user has
     the fewest ways to work out why.
   */
@@ -171,7 +171,7 @@ describe('readAvailableSkillNames', () => {
     `~/.claude/skills` are links into a dotfile repo — which is where personal
     skills usually live — so dropping them would refuse exactly the skills this
     module was widened to admit. `read.ts` already fixed this once for
-    `~/.hive/skills`; sharing `isSkillFolder` is what stops it being fixed twice
+    `~/.hivetty/skills`; sharing `isSkillFolder` is what stops it being fixed twice
     and broken a third time.
   */
   it('follows a symlinked skill folder', async () => {

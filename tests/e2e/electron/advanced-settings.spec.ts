@@ -20,7 +20,7 @@ import { launchHive } from './fixtures/hive-app';
  * `security.spec.ts` asserts it is on the bridge's exact key set.
  *
  * `HIVE_CONFIG_PATH` points at a scratch file, so nothing here touches the
- * developer's own `~/.hive/config.json`.
+ * developer's own `~/.hivetty/config.json`.
  */
 
 const openAdvanced = async (page: Page): Promise<void> => {
@@ -218,7 +218,7 @@ test('reset writes the template and empties the project list', async ({}, testIn
 
   const written = read(configPath);
   // Still the *commented* template, not a bare `{ projects: [] }`.
-  expect(written['//']).toContain('Hive TTY');
+  expect(written['//']).toContain('HiveTTY');
   expect(written.version).toBe(2);
   // The one write that discards what it did not put there.
   expect(written['//mine']).toBeUndefined();

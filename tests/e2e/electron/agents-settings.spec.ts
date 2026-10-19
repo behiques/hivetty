@@ -25,7 +25,7 @@ import { launchHive } from './fixtures/hive-app';
  * row, a mocked bridge routes a verb, a temp directory accepts a write — and
  * none of them answers the questions this file exists for:
  *
- * - does a definition typed in the pane reach `~/.hive/agents` as *bytes main's
+ * - does a definition typed in the pane reach `~/.hivetty/agents` as *bytes main's
  *   own parser accepts*, through the real IPC and the real guards?
  * - does a definition already on disk appear **without a restart**, which is
  *   what the watcher was added for and what no unit test can observe?
@@ -33,7 +33,7 @@ import { launchHive } from './fixtures/hive-app';
  *
  * The agents root is `dirname(configPath())/agents`, and the harness points
  * `HIVE_CONFIG_PATH` at this test's own output directory — so everything below
- * lands in scratch space and never in the developer's real `~/.hive`. That is
+ * lands in scratch space and never in the developer's real `~/.hivetty`. That is
  * the whole reason `agentsRoot()` is derived from the config path rather than
  * from `homedir()`.
  */
@@ -138,7 +138,7 @@ test('adds a schedule time the presets do not offer, and saves it', async ({}, t
    * The pane used to tell the user outright to go and edit the file — "other
    * times can be added in the Source tab" — so this walks the path that
    * sentence stood in for: switch to the calendar mode, type a time no preset
-   * offers, and watch it reach `~/.hive/agents` as bytes main's own parser
+   * offers, and watch it reach `~/.hivetty/agents` as bytes main's own parser
    * accepted. A jsdom test can assert the buffer; only this can assert that the
    * chip, the patch, the IPC, the validator and the disk all agree.
    */
@@ -485,7 +485,7 @@ test('seeds a new agent with an icon the registry can draw', async ({}, testInfo
 test('switches an agent into a container and writes the block to disk (HIVE-137)', async ({}, testInfo) => {
   /**
    * The switch driven for real: on writes `container.runtime`, the fields
-   * appear, three of them are filled, and what reaches `~/.hive/agents` is a
+   * appear, three of them are filled, and what reaches `~/.hivetty/agents` is a
    * block main's own parser accepted. Then off again, and the block is gone
    * — parent line included, which a jsdom test cannot distinguish from a
    * file the reader merely tolerates.

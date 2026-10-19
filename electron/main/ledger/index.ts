@@ -415,7 +415,7 @@ export function createLedger(options: LedgerOptions): Ledger {
       } catch (cause) {
         /*
           The one failure here that is nobody's fault: ENOSPC, EACCES, a
-          `~/.hive` the user moved out from under the app. Reported as a value
+          `~/.hivetty` the user moved out from under the app. Reported as a value
           like every other refusal, because that is the whole reason
           `LedgerResult` is a value — a throw would reach the HTTP caller as a
           bare 500 with no body and the IPC caller as a rejected promise,

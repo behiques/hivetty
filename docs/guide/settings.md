@@ -1,7 +1,7 @@
 # Settings
 
 Open Settings with the gear at the foot of the bar. Nine sections, top to bottom. Almost everything
-here is written to `~/.hive/config.json` ([The config file](configuration.md)); appearance
+here is written to `~/.hivetty/config.json` ([The config file](configuration.md)); appearance
 and editor preferences stay on this machine.
 
 **On this page:** [Projects](#projects) · [Runtime](#runtime) · [Skills](#skills) ·
@@ -10,9 +10,9 @@ and editor preferences stay on this machine.
 
 | Where it is stored | What |
 | --- | --- |
-| `~/.hive/config.json` | projects, runtime, Jira site and email, notifications, Slack, server and remote |
+| `~/.hivetty/config.json` | projects, runtime, Jira site and email, notifications, Slack, server and remote |
 | Encrypted with the Keychain, in the app's data folder | the Jira API token, the Slack tokens, the remote device token |
-| `~/.hive/skills/`, `~/.hive/agents/` | skills and agents |
+| `~/.hivetty/skills/`, `~/.hivetty/agents/` | skills and agents |
 | This machine only | appearance and editor preferences |
 
 ## Projects
@@ -75,7 +75,7 @@ One row per event: Off, Inbox or Both. See [The inbox](inbox.md#choosing-what-re
 ## Advanced
 
 - **Config file**: its path, **Reveal in Finder**, **Reload**. The file is not watched: edit
-  it by hand, then Reload. Reload also picks up skills and agents edited under `~/.hive`, so
+  it by hand, then Reload. Reload also picks up skills and agents edited under `~/.hivetty`, so
   the next session and agent run use them. A running session keeps what it started with, and
   the few fields read only at launch (receiver bind, server mode and bind, login environment,
   remote attach) are named under the button as needing a restart.

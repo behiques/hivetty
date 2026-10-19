@@ -151,7 +151,7 @@ export const GH_THREAD_PAGE = 100;
  *
  * The shipper's merge gate needs a contemporaneous unresolved-thread count and
  * may hold no `gh api` (a REST or GraphQL merge hides behind that glob; see
- * HIVE-168). The Hive's own sweep already counts threads for the PR badge, so
+ * HIVE-168). HiveTTY's own sweep already counts threads for the PR badge, so
  * the record is served to the agent instead.
  */
 export const PR_PATH = '/pr';

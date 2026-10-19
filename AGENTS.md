@@ -8,7 +8,7 @@ carrying all of it every turn.
 
 ## Project overview
 
-Hive TTY is a **command center for multiple agentic terminal sessions** running on
+HiveTTY is a **command center for multiple agentic terminal sessions** running on
 a single machine. An orchestrator ("Concierge"-style coordinator, called *maestro*
 in the console) routes messages between the user and sessions, surfaces questions
 and permission requests as an inbox, tracks PRs and tickets, and spawns new
@@ -35,8 +35,8 @@ It is its own product, with its own look, name and release line, and it is never
 - Upstream work arrives as "Merge the-hive main back into the fork" merge commits; resolve them
   in favour of the fork's identity (theme, icon, names).
 - The app, its data folders and its release feed are separate from The Hive's: a HiveTTY build
-  must never read, write or update from The Hive's. Text that still says "The Hive" or
-  "Hive TTY" is being renamed (HIVE-241); new text says **HiveTTY**.
+  must never read, write or update from The Hive's. Everything this repo ships says **HiveTTY**;
+  "The Hive" names only the upstream.
 
 ## Essential commands
 
@@ -64,7 +64,7 @@ done.** Neither is optional, and no rule may be disabled inline to make a task p
 
 ## Working a ticket
 
-The workflow is Hive TTY's own (Epic HIVE-161; the guide is [`docs/guide/workflow.md`](docs/guide/workflow.md)):
+The workflow is HiveTTY's own (Epic HIVE-161; the guide is [`docs/guide/workflow.md`](docs/guide/workflow.md)):
 `hive:work-on` for a ticket or `hive:goal-on` for a request, then `hive:brainstorm`, `hive:plan` and `hive:execute`
 in the **builder** agent when the machine has one (inline otherwise), `hive:verify`; the **shipper** runs `hive:ship`.
 

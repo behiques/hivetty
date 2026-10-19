@@ -15,7 +15,7 @@ import { launchHive } from './fixtures/hive-app';
  * real filesystem. That is what this covers.
  *
  * `HIVE_CONFIG_PATH` points at a scratch file, so nothing here touches the
- * developer's own `~/.hive/config.json`.
+ * developer's own `~/.hivetty/config.json`.
  */
 
 const openRuntime = async (page: Page): Promise<void> => {

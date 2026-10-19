@@ -32,7 +32,7 @@ const SQUARE: Record<AgentGroupKey, string> = {
  * empty and the copy pointing at nothing.
  *
  * Since HIVE-114 there is somewhere to point: `useAgentsSync` mirrors
- * `~/.hive/agents` into the store, so a row here is a real `AGENT.md`.
+ * `~/.hivetty/agents` into the store, so a row here is a real `AGENT.md`.
  *
  * ## Why grouped, and why by state
  *

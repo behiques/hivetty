@@ -80,7 +80,7 @@ jobs:
           # The gist file is written whole — PATCH replaces the named file's
           # content, and there is only ever one file in it.
           jq -n --arg c "$payload" \
-            '{files: {"the-hive-downloads.json": {content: $c}}}' \
+            '{files: {"hivetty-downloads.json": {content: $c}}}' \
             | gh api "gists/${GIST_ID}" -X PATCH --input - >/dev/null
 
           echo "Recorded **${count}** \`.dmg\` downloads." >> "$GITHUB_STEP_SUMMARY"

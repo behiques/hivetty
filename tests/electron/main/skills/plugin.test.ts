@@ -719,7 +719,7 @@ describe('writePluginDir', () => {
    * produces a manifest; this is the copy loop that mirrors it, and it did
    * not hold the rule until this story's review found it. Reproduced the way
    * the finding names as most likely — a file gone between the walk and the
-   * copy, since `~/.hive/skills` is hand-editable by design — rather than a
+   * copy, since `~/.hivetty/skills` is hand-editable by design — rather than a
    * permission bit, which a test running as root would not reproduce at all.
    *
    * Before the fix this `writePluginDir` call rejected outright: `stat` on

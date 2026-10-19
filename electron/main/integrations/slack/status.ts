@@ -74,7 +74,7 @@ export async function readSlackStatus(
       `claude mcp get` searches scopes automatically and does not accept a
       `--scope` argument — attempting to pass one fails with "unknown option".
       It reports servers visible to the current process, which is sufficient:
-      agents run with cwd `~/.hive/work/<name>`, a different project entirely,
+      agents run with cwd `~/.hivetty/work/<name>`, a different project entirely,
       so a locally-scoped sign-in would show here and be missing at wake time
       (a third Finding, deferred as Minor).
     */

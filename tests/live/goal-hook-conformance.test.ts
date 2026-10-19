@@ -32,7 +32,7 @@ import { readUserSkills } from '../../electron/main/skills/read';
  * skill has, and the model is given `Read` only so it answers and stops
  * rather than editing anything. The brief the verifier reads sits under
  * `HIVE_GOALS_DIR`, which the model does not know about, so whatever the
- * model does to `~/.hive/goals` is not what is measured.
+ * model does to `~/.hivetty/goals` is not what is measured.
  *
  * The brief is written `ACTIVE` with one unticked Outcome and `turn_budget: 1`,
  * so the cheapest possible run proves the block: the first Stop is refused

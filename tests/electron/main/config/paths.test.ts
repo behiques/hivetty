@@ -14,17 +14,17 @@ describe('configPath', () => {
     vi.unstubAllEnvs();
   });
 
-  it('defaults to ~/.hive', async () => {
+  it('defaults to ~/.hivetty (HIVE-242)', async () => {
     vi.stubEnv('HIVE_CONFIG_PATH', '');
     const { configPath } = await load();
-    expect(configPath()).toBe(join(homedir(), '.hive', 'config.json'));
+    expect(configPath()).toBe(join(homedir(), '.hivetty', 'config.json'));
   });
 
-  it('moves to ~/.hive-dev for an unpackaged build (HIVE-227)', async () => {
+  it('moves to ~/.hivetty-dev for an unpackaged build (HIVE-227)', async () => {
     vi.stubEnv('HIVE_CONFIG_PATH', '');
     const { configPath, switchToDevHiveDir } = await load();
     switchToDevHiveDir();
-    expect(configPath()).toBe(join(homedir(), '.hive-dev', 'config.json'));
+    expect(configPath()).toBe(join(homedir(), '.hivetty-dev', 'config.json'));
   });
 
   it('lets HIVE_CONFIG_PATH win over both', async () => {

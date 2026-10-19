@@ -81,8 +81,8 @@ const watchFolder: WatchFactory = (root, onEvent) => {
  *
  * `remove` and `rename` used to move a folder and nothing else, which was
  * correct only for as long as an agent *was* its folder. It is not any more:
- * `~/.hive/ledger/agents.json` holds its session uuid, its run history and its
- * rotation counter, and `~/.hive/work/<name>` holds whatever it has been
+ * `~/.hivetty/ledger/agents.json` holds its session uuid, its run history and its
+ * rotation counter, and `~/.hivetty/work/<name>` holds whatever it has been
  * writing. Both are keyed by the name, so both outlive a delete and neither
  * follows a rename.
  *
@@ -109,7 +109,7 @@ interface RegistryOptions {
   /** See {@link AgentRunFiles}. */
   runFiles?: AgentRunFiles;
   /**
-   * The skill names an agent may reference, and the subset The Hive owns.
+   * The skill names an agent may reference, and the subset HiveTTY owns.
    *
    * A function rather than a snapshot: skills can be written while the app
    * runs, and an agent naming one added a minute ago must validate against the
@@ -185,7 +185,7 @@ export function createAgentRegistry({
   /**
    * Bind the watcher, rebinding when the folder it was watching is gone.
    *
-   * `fs.watch` holds an inode, not a path: delete `~/.hive/agents` in Finder
+   * `fs.watch` holds an inode, not a path: delete `~/.hivetty/agents` in Finder
    * and the handle stops delivering while staying non-null. A plain
    * `if (watcher !== null) return` therefore turned live updates off for the
    * rest of the session the first time the folder was removed — the same class
@@ -201,7 +201,7 @@ export function createAgentRegistry({
   /*
     Resolved once per call and passed down, never fetched per folder.
 
-    `skillNames()` now walks `~/.hive/skills`, `~/.claude/skills` and every
+    `skillNames()` now walks `~/.hivetty/skills`, `~/.claude/skills` and every
     installed plugin. `list()` calls `parse` once per agent folder and re-runs
     on every debounced watcher event — and a single save fires the watcher
     twice, for the temp write and the rename. Fetching inside `parse` therefore
@@ -291,7 +291,7 @@ export function createAgentRegistry({
         failure was invisible to every test that seeded a folder first.
 
         Creating it is not merely a fix of convenience: the pane *tells* the
-        user "Agents folder: ~/.hive/agents", and a path the app names is one
+        user "Agents folder: ~/.hivetty/agents", and a path the app names is one
         it should be willing to make.
       */
       let recreated = false;

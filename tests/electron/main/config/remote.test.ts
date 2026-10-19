@@ -34,7 +34,7 @@ const doc = (extra: object) => JSON.stringify({ version: 2, projects: [], ...ext
 
 describe('remote resolution', () => {
   it('defaults to local mode with no target', () => {
-    expect(DEFAULT_REMOTE).toEqual({ mode: 'local', host: '', port: 7433 });
+    expect(DEFAULT_REMOTE).toEqual({ mode: 'local', host: '', port: 7434 });
   });
 
   it('a file with no block resolves to the default', () => {

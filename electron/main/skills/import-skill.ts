@@ -41,7 +41,7 @@ import { frontmatter } from './read';
  *
  * Every entry is checked before a byte is written, and the bytes are written
  * to a staging folder beside `skills/` — beside where it really resolves, so
- * the last step is one same-volume `rename` even when `~/.hive/skills` is a
+ * the last step is one same-volume `rename` even when `~/.hivetty/skills` is a
  * dotfiles symlink — never into `skills/` itself. A refusal at any point
  * leaves nothing behind: not a half-copied skill, and not a staging folder,
  * which is removed on every path out. Staging sits outside `skills/` because
@@ -202,7 +202,7 @@ function declaredName(body: string): string {
     throw new Error('Its SKILL.md declares no name — nothing was imported.');
   }
   if (name === RESERVED_SKILL_NAME) {
-    throw new Error(`"${name}" is reserved by Hive TTY — nothing was imported.`);
+    throw new Error(`"${name}" is reserved by HiveTTY — nothing was imported.`);
   }
   if (!SKILL_NAME_PATTERN.test(name)) {
     throw new Error(

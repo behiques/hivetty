@@ -186,7 +186,7 @@ const opts = () => ({
 const originalConfigPath = process.env[CONFIG_PATH_ENV];
 let dir: string;
 
-/** `~/.hive/ledger/agents.json`, under this case's own temp root. */
+/** `~/.hivetty/ledger/agents.json`, under this case's own temp root. */
 const stateFile = (): string => join(dir, 'ledger', 'agents.json');
 
 const storedUuid = (): string | undefined => {

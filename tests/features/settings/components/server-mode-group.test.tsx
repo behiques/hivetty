@@ -1308,7 +1308,7 @@ describe('ServerModeGroup', () => {
 
       The two blocks are made to disagree on the port in the way that actually
       happens: this window dials 9000, the server's own `remote.port` is the
-      default 7433, and the user types 7433. Guarded against `remote` that
+      default 7434, and the user types 7434. Guarded against `remote` that
       returned early and dropped the write, while the draft kept showing the
       value the file did not hold.
     */
@@ -1318,7 +1318,7 @@ describe('ServerModeGroup', () => {
           enabled={false}
           bind={DEFAULT_BIND}
           devices={[]}
-          remote={{ mode: 'local', host: 'studio.tail1234.ts.net', port: 7433 }}
+          remote={{ mode: 'local', host: 'studio.tail1234.ts.net', port: 7434 }}
           localRemote={{ mode: 'remote', host: 'mini.tail1234.ts.net', port: 9000, paired: false }}
           attachedServer={null}
           attachedServerName="mini"
@@ -1328,10 +1328,10 @@ describe('ServerModeGroup', () => {
 
       const port = screen.getByLabelText(/^port$/i);
       await userEvent.clear(port);
-      await userEvent.type(port, '7433');
+      await userEvent.type(port, '7434');
       await userEvent.tab();
 
-      expect(setRemoteConfig).toHaveBeenCalledWith({ port: 7433 });
+      expect(setRemoteConfig).toHaveBeenCalledWith({ port: 7434 });
     });
 
     it('commits an address that matches the server’s but not this machine’s', async () => {

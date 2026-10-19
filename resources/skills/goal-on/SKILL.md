@@ -31,7 +31,7 @@ hooks:
             MEANING, and you write NOTHING. Never edit the brief.
 
             1. Read session_id from $ARGUMENTS.
-            2. Read ~/.hive/goals/<session_id>.md. Missing, denied or erroring:
+            2. Read ~/.hivetty/goals/<session_id>.md. Missing, denied or erroring:
                return ok:true and say which. The floor has the session covered.
             3. Return ok:true unless status is ACTIVE, or DONE with done_at
                equal to last_verified: the turn the floor settled it (the two
@@ -74,7 +74,7 @@ blocks turn-end, so every question is asked in Phase 1.
 
 ## The brief
 
-`~/.hive/goals/<session-id>.md`, named exactly that, with the id repeated in
+`~/.hivetty/goals/<session-id>.md`, named exactly that, with the id repeated in
 the header's `session:` field. The verifier tries the filename first and falls
 back to the header; a brief it cannot find reads as "no goal here".
 
@@ -164,14 +164,14 @@ writes `DONE`.
 2. `hive:worktree` (or, for `current`, `git checkout -b goal/<slug>
    origin/<default>`). Record `branch:`, `repo:` and `worktree:` as absolute
    paths: the verifier's PR check runs `gh` from `worktree:` or `repo:`.
-3. Plan, always: the plan file is what the Hive's plan panel reads, and a
+3. Plan, always: the plan file is what HiveTTY's plan panel reads, and a
    terminal session has no task tools to fall back on. Big enough to plan?
    `hive:plan` straight from the brief (no brainstorm: the brief is the
    design, and every question was asked in Phase 1), then `hive:execute`
    inline. Otherwise write a short one yourself, a `## Task N: <name>` per
    Outcome item with its `- [ ]` steps, and tick each step as it lands.
    Either way it goes in `.hive/plans/YYYY-MM-DD-goal-<slug>.md` under the
-   directory you are working in (the worktree, when there is one): the Hive
+   directory you are working in (the worktree, when there is one): HiveTTY
    reads a plan file only from under the session's own cwd. Record its
    absolute path as the brief's `plan:`: the verifier holds `DONE` until
    every step in it is ticked, so a finished goal never leaves the panel at 0/N.
@@ -195,7 +195,7 @@ that is correct.
 
 ## The ledger receipt
 
-`scripts/verify-goal.mjs` posts one `event` entry to the Hive on every status
+`scripts/verify-goal.mjs` posts one `event` entry to HiveTTY on every status
 it writes (`ACTIVE` turns, `DONE`, `FAILED`), through `$HIVE_RECEIVER_URL`
 with the session's own token, `meta.goal` naming the session and
 `meta.status`, `meta.turns_used`, `meta.turn_budget`. The overmind sees the

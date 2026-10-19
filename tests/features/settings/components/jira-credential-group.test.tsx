@@ -256,6 +256,6 @@ describe('the copy', () => {
 
   it('says the token is not in the config file', () => {
     draw(status({ kind: 'none' }));
-    expect(screen.getByText('~/.hive/config.json')).toBeInTheDocument();
+    expect(screen.getByText('~/.hivetty/config.json')).toBeInTheDocument();
   });
 });

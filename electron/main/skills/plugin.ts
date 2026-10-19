@@ -21,7 +21,7 @@ import type { SkillsRead } from './read';
  * Generating the plugin directory `--plugin-dir` points at (HIVE-96).
  *
  * The directory is the app's, not the user's: regenerated from
- * `~/.hive/skills` at launch and again before every spawn, and safe to delete.
+ * `~/.hivetty/skills` at launch and again before every spawn, and safe to delete.
  * Nothing reads it but `claude`, and nothing writes it but this module.
  */
 
@@ -38,7 +38,7 @@ const manifest = (version: string): string =>
     {
       name: 'hive',
       version,
-      description: 'Skills Hive TTY injects into the sessions it starts.',
+      description: 'Skills HiveTTY injects into the sessions it starts.',
       skills: ['./skills/'],
     },
     null,

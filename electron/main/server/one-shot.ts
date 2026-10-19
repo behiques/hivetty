@@ -99,7 +99,7 @@ function runPair(
   io.print(outcome.token);
   io.print(`Device id: ${outcome.device.id}`);
   io.print(`This token grants "${name}" access to this Hive over the network.`);
-  io.print(`Revoke it any time with: the-hive --revoke "${name}"`);
+  io.print(`Revoke it any time with: hivetty --revoke "${name}"`);
   return 0;
 }
 

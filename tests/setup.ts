@@ -9,10 +9,10 @@ import { afterAll, afterEach, vi } from 'vitest';
 
 /**
  * No test reaches the developer's real home folder. `os.homedir()` reads
- * `HOME`, so every `~/.hive` path the main process builds lands here instead.
+ * `HOME`, so every `~/.hivetty` path the main process builds lands here instead.
  *
- * `registerIpcHandlers` seeds `~/.hive` at start-up, and the ipc specs that
- * never set `HIVE_CONFIG_PATH` wrote the real `~/.hive/.seed.json` on every
+ * `registerIpcHandlers` seeds `~/.hivetty` at start-up, and the ipc specs that
+ * never set `HIVE_CONFIG_PATH` wrote the real `~/.hivetty/.seed.json` on every
  * run. An emptied manifest reads every shipped file as the user's edit, so
  * the app stopped upgrading the skills and agents it installs. Per spec rather
  * than per `HIVE_CONFIG_PATH` so a spec that deletes that variable in its
@@ -35,7 +35,7 @@ if (
 }
 
 /**
- * No spec seeds `~/.hive` behind its own back (HIVE-230). `registerIpcHandlers`
+ * No spec seeds `~/.hivetty` behind its own back (HIVE-230). `registerIpcHandlers`
  * starts the seed without awaiting it, so a spec could end with the seed still
  * writing `.seed.json` while the `afterAll` above removed the folder: ENOTEMPTY
  * from `rmSync`, or ENOENT from the seed. Mocked here, beside the teardown it

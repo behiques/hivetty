@@ -79,7 +79,7 @@ export function parseInvocation(argv: readonly string[], packaged: boolean): Inv
     if (name === null) {
       return {
         kind: 'usage',
-        message: 'Usage: the-hive --pair "<device name>"\nA device name is required.',
+        message: 'Usage: hivetty --pair "<device name>"\nA device name is required.',
       };
     }
     return { kind: 'pair', name };
@@ -92,7 +92,7 @@ export function parseInvocation(argv: readonly string[], packaged: boolean): Inv
     if (name === null) {
       return {
         kind: 'usage',
-        message: 'Usage: the-hive --revoke "<device name>"\nA device name is required.',
+        message: 'Usage: hivetty --revoke "<device name>"\nA device name is required.',
       };
     }
     return { kind: 'revoke', name };
