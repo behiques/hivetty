@@ -50,7 +50,7 @@ import type { FsRefusalReason } from '@shared/fs-contract';
  * ## What this manages
  *
  * Markdown files under `~/.hivetty/skills`, which main injects into every session
- * The Hive starts and into no other `claude`. Editing them in a text editor
+ * HiveTTY starts and into no other `claude`. Editing them in a text editor
  * works and keeps working — this pane is a second way in, not the only one, and
  * main re-reads the tree before every spawn precisely so the two are the same
  * feature.
@@ -818,7 +818,7 @@ export function SkillsSection() {
       .length ?? 0;
 
   const description =
-    'Slash commands available only inside sessions Hive TTY starts. Saved as SKILL.md under ~/.hivetty/skills. A skill can end with /done handoff to close its session.';
+    'Slash commands available only inside sessions HiveTTY starts. Saved as SKILL.md under ~/.hivetty/skills. A skill can end with /done handoff to close its session.';
 
   /*
     No snapshot is the browser demo, which has no bridge to ask and no disk to

@@ -73,7 +73,7 @@ export interface WakeCommandDeps {
   workdir: (name: string, lane: string) => string;
   /** `<userData>/hive/agents/<name>.system.md`, rewritten before the spawn. */
   promptFile: (name: string) => string;
-  /** `<userData>/hive/plugin` — the skills The Hive generates. */
+  /** `<userData>/hive/plugin` — the skills HiveTTY generates. */
   pluginDir: () => string;
   /**
    * `hooks.agentSettingsPathFor()`. `null` until the receiver has bound.

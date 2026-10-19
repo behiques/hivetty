@@ -2541,7 +2541,7 @@ export function createSessions(options: SessionsOptions): Sessions {
          *
          * Every session this app has ever spawned carries a `custom-title` and no
          * `ai-title` for exactly this reason — 25+ transcripts, some 3,000 lines
-         * long, all of them mute. The Hive was not failing to infer names; it was
+         * long, all of them mute. HiveTTY was not failing to infer names; it was
          * stopping Claude from inferring them.
          *
          * So the id fallback is gone. A session opens unnamed, Claude titles it

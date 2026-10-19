@@ -38,7 +38,7 @@ import { isSkillFolder } from './read';
 interface SkillRoots {
   /** `~/.hivetty/skills` — the folder Settings › Skills writes. */
   hive: string;
-  /** `~/.claude/skills` — the user's own, which The Hive does not manage. */
+  /** `~/.claude/skills` — the user's own, which HiveTTY does not manage. */
   user: string;
   /** `~/.claude/plugins/installed_plugins.json`. */
   installedPlugins: string;
@@ -179,15 +179,15 @@ async function pluginSkills(file: string): Promise<string[]> {
 }
 
 /**
- * The names an agent may reference, and the subset The Hive itself owns.
+ * The names an agent may reference, and the subset HiveTTY itself owns.
  *
  * Two sets rather than one, because `parseAgent` asks two different questions
  * of them. `all` answers *may this definition name this skill*, and has to be
  * as wide as the machine. `hive` answers *may an agent take this name*, and
- * must not be — that rule exists because an agent and a skill The Hive manages
+ * must not be — that rule exists because an agent and a skill HiveTTY manages
  * share one namespace, and widening it silently reserved every name in the
  * user's personal skills folder: with `~/.claude/skills/graphify` present, no
- * agent could be called `graphify`, refused on account of a folder The Hive
+ * agent could be called `graphify`, refused on account of a folder HiveTTY
  * neither manages nor mentions.
  */
 interface AvailableSkills {

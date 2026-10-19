@@ -62,14 +62,14 @@ interface ParseContext {
    */
   skillNames: readonly string[];
   /**
-   * The subset The Hive itself manages, for the *name* clash alone.
+   * The subset HiveTTY itself manages, for the *name* clash alone.
    *
    * Deliberately narrower than `skillNames`, and the two must not be merged.
-   * An agent may not take the name of a skill The Hive manages because those
+   * An agent may not take the name of a skill HiveTTY manages because those
    * two share a namespace — but checking the wide set instead reserved every
    * name in the user's own `~/.claude/skills`, so a machine with a personal
    * `graphify` skill could not have an agent called `graphify`, refused on
-   * account of a folder The Hive neither manages nor mentions.
+   * account of a folder HiveTTY neither manages nor mentions.
    */
   hiveSkillNames: readonly string[];
   integrations: readonly string[];
@@ -295,7 +295,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
   }
 
   /*
-    Every string in `wake.on` must be one The Hive knows how to act on.
+    Every string in `wake.on` must be one HiveTTY knows how to act on.
 
     This was the one list in the grammar with no check at all — the parsed
     strings were cast straight to `WakeOn[]`, so `on: [bananna]` saved cleanly

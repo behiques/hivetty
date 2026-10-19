@@ -198,7 +198,7 @@ export type WakeOn =
 /**
  * The three wake events that are a fixed word, rather than a word plus a target.
  *
- * These strings are **The Hive's**, not Slack's, and the two Slack-shaped ones
+ * These strings are **HiveTTY's**, not Slack's, and the two Slack-shaped ones
  * are worth separating because they read like the same event and are opposites.
  *
  * `slack.mention` is **not** an event. Slack has no event for mentions of a
@@ -234,7 +234,7 @@ export const WAKE_ON_CHANNEL_PREFIX = 'slack.channel:';
 const CHANNEL = /^#?[a-z0-9_-][a-z0-9._-]*$/;
 
 /**
- * Is this a wake event The Hive knows how to act on?
+ * Is this a wake event HiveTTY knows how to act on?
  *
  * Exists because `wake.on` was the one list `parseAgent` never checked — it
  * cast the parsed strings straight to {@link WakeOn}, so a typo saved cleanly

@@ -109,7 +109,7 @@ interface RegistryOptions {
   /** See {@link AgentRunFiles}. */
   runFiles?: AgentRunFiles;
   /**
-   * The skill names an agent may reference, and the subset The Hive owns.
+   * The skill names an agent may reference, and the subset HiveTTY owns.
    *
    * A function rather than a snapshot: skills can be written while the app
    * runs, and an agent naming one added a minute ago must validate against the

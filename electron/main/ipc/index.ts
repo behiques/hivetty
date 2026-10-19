@@ -1952,7 +1952,7 @@ export function registerIpcHandlers(
    * (HIVE-87).
    *
    * Constructed before the session layer because that layer takes it as an
-   * option. Nothing about it touches `~/.claude` — it records what The Hive
+   * option. Nothing about it touches `~/.claude` — it records what HiveTTY
    * knows about its own rows, not anything Claude wrote.
    */
   history = createSessionHistory(
@@ -4908,7 +4908,7 @@ export function registerIpcHandlers(
    * Takes the same name guard as `read` and `remove`, and can only ever reach a
    * child this app spawned and still holds: the tracker looks the name up in
    * its own map and answers `false` for anything it does not find. There is no
-   * pid on this channel and no way to reach a process The Hive did not start.
+   * pid on this channel and no way to reach a process HiveTTY did not start.
    *
    * `false` is not an error. A run can end between the row rendering its stop
    * button and the click arriving, and reporting that as a failure would teach

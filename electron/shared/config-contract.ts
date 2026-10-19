@@ -1665,11 +1665,11 @@ const SESSION_ENV_DENY_EXACT: readonly string[] = [
  *
  * ## Why `CLAUDE_*` is on this list, and why it matters most here
  *
- * Launch The Hive from a terminal that is *itself* inside a Claude Code session
+ * Launch HiveTTY from a terminal that is *itself* inside a Claude Code session
  * — `pnpm desktop:dev` typed into one, which is exactly how it gets developed —
  * and Electron inherits that session's variables: `CLAUDE_CODE_SESSION_ID`,
  * `CLAUDE_CODE_CHILD_SESSION=1`, `CLAUDECODE=1`, and the rest. Every pty then
- * hands them to `claude`, and every agent The Hive spawns **joins the launching
+ * hands them to `claude`, and every agent HiveTTY spawns **joins the launching
  * session instead of starting its own**.
  *
  * The symptoms are bizarre until the cause is known, and were all observed:

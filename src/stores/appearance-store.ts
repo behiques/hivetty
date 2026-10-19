@@ -297,7 +297,7 @@ export const EDITOR_FONT_SIZES: readonly number[] = [
 ] as const;
 
 /**
- * What the brand tooltip says under "The Hive" until someone says otherwise.
+ * What the brand tooltip says under "HiveTTY" until someone says otherwise.
  *
  * A hive's workers are a swarm and this app is a command centre for them, so
  * the default names the room rather than any real team — anyone who has not

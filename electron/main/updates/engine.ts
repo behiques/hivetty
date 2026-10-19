@@ -152,7 +152,7 @@ export function createElectronUpdaterEngine(
        * `quitAndInstall` returns immediately and cheerfully. Measured, with the
        * app's stderr captured:
        *
-       *     [Error: Code signature at URL file:///…/The Hive.app/ did not pass
+       *     [Error: Code signature at URL file:///…/HiveTTY.app/ did not pass
        *      validation: code failed to satisfy specified code requirement(s)]
        *       code: -1, domain: 'SQRLCodeSignatureErrorDomain'
        *

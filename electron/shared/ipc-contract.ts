@@ -2415,7 +2415,7 @@ export interface HiveBridge {
     keepMine(request: ShippedRequest): Promise<ShippedStatus[]>;
   };
   /**
-   * The custom skills The Hive injects into the sessions it starts (HIVE-96,
+   * The custom skills HiveTTY injects into the sessions it starts (HIVE-96,
    * HIVE-148).
    *
    * Five of the fourteen verbs still name only a skill, none of them a path:

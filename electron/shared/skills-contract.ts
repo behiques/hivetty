@@ -2,7 +2,7 @@ import { HIDDEN_ENTRIES } from './fs-contract';
 import type { FsRefusalReason } from './fs-contract';
 
 /**
- * Custom skills — the slash commands The Hive gives the sessions it starts
+ * Custom skills — the slash commands HiveTTY gives the sessions it starts
  * (HIVE-96), and the folders behind them (HIVE-148).
  *
  * ## Which verbs take a path, and why that changed

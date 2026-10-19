@@ -20,7 +20,7 @@ import { TITLEBAR_HEIGHT } from '@shared/window';
  *
  * A drag region and 32px of panel is the entire component. The temptation is to
  * put the window title in it, which is what a native bar would have shown — but
- * the header directly below already says `The Hive`, and repeating it 32px
+ * the header directly below already says `HiveTTY`, and repeating it 32px
  * higher is two answers to one question. An empty strip is the honest shape of
  * "this row belongs to the OS".
  *

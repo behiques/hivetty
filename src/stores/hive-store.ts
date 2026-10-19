@@ -1323,7 +1323,7 @@ const HELP_LINES = [
     project answers to three different things, and `help` is where a user goes
     to find that out.
   */
-  '  <project> is a key, an id or a name — hive, the-hive, "The Hive"',
+  '  <project> is a key, an id or a name — hiv, hivetty, "HiveTTY"',
 ];
 
 /**
