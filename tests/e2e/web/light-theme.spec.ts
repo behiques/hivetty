@@ -7,7 +7,7 @@ import { expect, test, type Page } from '@playwright/test';
  * (HIVE-211), so the panel's colour is checked in list-panel.spec.ts (electron).
  * The theme is seeded before the first frame.
  */
-const GROUND = { dark: 'rgb(16, 21, 42)', light: 'rgb(253, 253, 251)' } as const;
+const GROUND = { dark: 'rgb(25, 22, 19)', light: 'rgb(254, 253, 252)' } as const;
 
 const bar = (page: Page) => page.getByRole('navigation', { name: 'Places' });
 const bg = (page: Page, selector: string) =>
