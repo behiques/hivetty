@@ -443,7 +443,7 @@ describe('AgentDefinition — a shipped agent the user changed', () => {
   it('takes the shipped prompt from the banner, and says so when main refuses', async () => {
     const { shipped } = withShipped({
       takePrompt: vi.fn(async () => {
-        throw new Error('slack-watcher is a symlink in ~/.hive');
+        throw new Error('slack-watcher is a symlink in ~/.hivetty');
       }),
     });
     await open();

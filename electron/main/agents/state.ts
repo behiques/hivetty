@@ -11,11 +11,11 @@ import {
 } from '@shared/agent-contract';
 
 /**
- * `~/.hive/ledger/agents.json` — the only rewritten file this epic owns
+ * `~/.hivetty/ledger/agents.json` — the only rewritten file this epic owns
  * (HIVE-115).
  *
  * One debounced writer, following `sessions/history.ts`. Every other file in
- * `~/.hive` is either append-only (the ledger) or user-authored (definitions);
+ * `~/.hivetty` is either append-only (the ledger) or user-authored (definitions);
  * this one is main's own bookkeeping, and a run that ends writes three fields.
  * Coalescing them is what keeps a chatty agent from rewriting the file on
  * every event.

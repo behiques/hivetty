@@ -8,14 +8,14 @@ import { isSkillFolder } from './read';
 /**
  * Every skill name an agent definition may name.
  *
- * ## Why this is wider than `~/.hive/skills`
+ * ## Why this is wider than `~/.hivetty/skills`
  *
  * `parseAgent` used to validate `skills:` against the Hive's own folder alone,
  * and that was wrong in both directions. Too narrow, because an agent runs as a
  * `claude -p` process on this machine: it loads the user's `~/.claude/skills`
  * and their installed plugins whether or not the definition names them, so
  * refusing `jira-writer:jira-writer` refused a skill the agent could reach
- * regardless. And wrong in practice, because `~/.hive/skills` is empty on a
+ * regardless. And wrong in practice, because `~/.hivetty/skills` is empty on a
  * fresh install — which made the field refuse *every* name a person could type.
  *
  * So the field is not a sandbox and this is not a permission list. It is the
@@ -36,7 +36,7 @@ import { isSkillFolder } from './read';
  */
 
 interface SkillRoots {
-  /** `~/.hive/skills` — the folder Settings › Skills writes. */
+  /** `~/.hivetty/skills` — the folder Settings › Skills writes. */
   hive: string;
   /** `~/.claude/skills` — the user's own, which The Hive does not manage. */
   user: string;

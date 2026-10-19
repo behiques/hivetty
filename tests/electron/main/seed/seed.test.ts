@@ -69,7 +69,7 @@ afterEach(async () => {
 });
 
 describe('seedShipped', () => {
-  it('copies every shipped file into an empty ~/.hive and records what it wrote', async () => {
+  it('copies every shipped file into an empty ~/.hivetty and records what it wrote', async () => {
     await ship('skills/worktree/SKILL.md', skill('worktree'));
     await ship('skills/worktree/scripts/add.sh', '#!/bin/sh\n');
     await ship('agents/shipper/AGENT.md', '---\nname: shipper\n---\nbody\n');

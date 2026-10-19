@@ -365,7 +365,7 @@ export interface Session {
 /**
  * A long-lived background worker, not tied to a branch (HIVE-114).
  *
- * Backed by a real `AGENT.md` under `~/.hive/agents` rather than by a fixture:
+ * Backed by a real `AGENT.md` under `~/.hivetty/agents` rather than by a fixture:
  * `id` is the agent's name, which is also its folder and the identity its
  * ledger entries are `from`.
  *
@@ -376,7 +376,7 @@ export interface Session {
  */
 export interface Agent {
   kind: 'agent';
-  /** The agent's name — also its folder under `~/.hive/agents`. */
+  /** The agent's name — also its folder under `~/.hivetty/agents`. */
   id: string; // 'slack-watcher'
   icon: string; // phosphor icon name, e.g. 'ChatCircleDots'
   /** The definition's `description`. */

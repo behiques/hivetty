@@ -214,7 +214,7 @@ export function JiraCredentialGroup({
         <p className="text-ui-sm text-subtle">
           Encrypted with a key the operating system holds, in this app&rsquo;s
           own data folder — never in{' '}
-          <code className="font-mono">~/.hive/config.json</code>, which you are
+          <code className="font-mono">~/.hivetty/config.json</code>, which you are
           meant to hand-edit. The app can write it and clear it;{' '}
           <strong className="font-normal text-muted">
             there is no way to read it back

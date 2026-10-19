@@ -237,7 +237,7 @@ export function RuntimeSection() {
            *   clobber it. Without saying so, "I set FOO here and it's still
            *   the old value" reads as a bug in this editor rather than in
            *   `.zshrc`.
-           * - Storage: `~/.hive/config.json` is plain JSON on disk, not a
+           * - Storage: `~/.hivetty/config.json` is plain JSON on disk, not a
            *   secrets store, so credentials belong in the rc file instead.
            *   This is guidance, not a guard — there is deliberately no
            *   secret-detection here, since a check that rejects `API_TOKEN`

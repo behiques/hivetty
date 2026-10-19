@@ -121,7 +121,7 @@ describe('the boot path of a served machine', () => {
 describe('the boot path holds one hive folder (HIVE-227)', () => {
   const at = (needle: string): number => source.indexOf(needle);
 
-  it('moves an unpackaged build to ~/.hive-dev before anything reads the config', () => {
+  it('moves an unpackaged build to ~/.hivetty-dev before anything reads the config', () => {
     expect(source).toContain('if (!app.isPackaged) switchToDevHiveDir();');
     expect(at('switchToDevHiveDir();')).toBeLessThan(at('parseInvocation(process.argv'));
     expect(at('switchToDevHiveDir();')).toBeLessThan(at('getConfig()'));

@@ -22,7 +22,7 @@ import { isSkillManifest, resolveInSkill } from '../../../../electron/main/skill
  * verbs — `writeFile`, `removeFile`, `moveFile` — which meant the containment
  * guard behind every one of them had no test of its own to look for where the
  * repo's own mirror rule says to look. `resolveInSkill` is what stands between
- * a hand-editable, symlink-friendly `~/.hive/skills` and every write main
+ * a hand-editable, symlink-friendly `~/.hivetty/skills` and every write main
  * performs, and the escape table below is duplicated rather than moved out of
  * `index.test.ts`: that file keeps proving the *runtime verbs* refuse an
  * escape end to end, and this file proves the *guard itself* does, with

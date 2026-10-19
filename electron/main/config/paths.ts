@@ -13,15 +13,15 @@ import { CONFIG_PATH_ENV } from '@shared/config-contract';
  */
 
 /**
- * The hive folder's name under the home directory: `.hive`, or `.hive-dev`
- * for an unpackaged build (HIVE-227). A module setting rather than
+ * The hive folder's name under the home directory: `.hivetty`, or `.hivetty-dev`
+ * for an unpackaged build (HIVE-227, HIVE-242). A module setting rather than
  * `HIVE_CONFIG_PATH`, which every PTY session and agent run would inherit.
  */
-let hiveDir = '.hive';
+let hiveDir = '.hivetty';
 
 /** Called once, at boot, by an unpackaged build. `HIVE_CONFIG_PATH` still wins. */
 export function switchToDevHiveDir(): void {
-  hiveDir = '.hive-dev';
+  hiveDir = '.hivetty-dev';
 }
 
 /**

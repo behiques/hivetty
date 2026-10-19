@@ -1,9 +1,9 @@
 /**
  * What a deleted or renamed agent leaves behind, cleaned up (HIVE-115).
  *
- * The registry moves `~/.hive/agents/<name>`; this moves the two things keyed
+ * The registry moves `~/.hivetty/agents/<name>`; this moves the two things keyed
  * by that same name which are not in it — the `agents.json` entry, and
- * `~/.hive/work/<name>`. `AgentRunFiles` in `registry.ts` carries the argument
+ * `~/.hivetty/work/<name>`. `AgentRunFiles` in `registry.ts` carries the argument
  * for why leaving them behind is a correctness bug rather than untidiness.
  *
  * The state is reached through a **function**, not a value: `ipc/index.ts`
@@ -29,7 +29,7 @@ import type { AgentState } from './state';
 interface AgentRunFilesDeps {
   /** `agents.json`, once it has been opened. */
   state: () => AgentState | null;
-  /** `~/.hive/work/<name>`. */
+  /** `~/.hivetty/work/<name>`. */
   workdir: (name: string) => string;
 }
 

@@ -33,7 +33,7 @@ interface UserSkill {
    *
    * Main never rewrites what the user typed — not to normalise the frontmatter,
    * not to add a trailing newline. The bytes that reach Claude Code are the
-   * bytes in `~/.hive/skills`, which is what makes "edit it in a text editor"
+   * bytes in `~/.hivetty/skills`, which is what makes "edit it in a text editor"
    * and "edit it in Settings" the same feature.
    */
   body: string;
@@ -108,7 +108,7 @@ export function frontmatter(body: string): Record<string, string> | null {
  * Exported for `available.ts`, which asks the same question of three roots and
  * must answer it the same way. A second copy would be a second chance to
  * reintroduce the bug documented below — and `~/.claude/skills` is *more*
- * likely to be symlinked than `~/.hive/skills`, since dotfile repos are where
+ * likely to be symlinked than `~/.hivetty/skills`, since dotfile repos are where
  * personal skills usually live.
  */
 export async function isSkillFolder(root: string, entry: Dirent): Promise<boolean> {
@@ -163,7 +163,7 @@ export async function readUserSkills(root: string): Promise<SkillsRead> {
       A **symlink** to a directory is a skill, though, and `Dirent` answers with
       `lstat` semantics — so `isDirectory()` is false for one and the skill was
       silently dropped with no row and no reason. Anyone whose dotfiles manage
-      `~/.hive/skills` links these in, which is exactly the population most
+      `~/.hivetty/skills` links these in, which is exactly the population most
       likely to write skills at all. The `readFile` below resolves the link, so
       admitting it here is the whole fix.
     */

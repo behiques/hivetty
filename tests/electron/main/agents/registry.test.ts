@@ -319,7 +319,7 @@ describe('remove and rename', () => {
 
 /**
  * An agent is more than its folder (HIVE-115): `agents.json` holds its session
- * uuid, its history and its rotation counter, and `~/.hive/work/<name>` holds
+ * uuid, its history and its rotation counter, and `~/.hivetty/work/<name>` holds
  * what it has been writing. Both are keyed by the name, so a delete that moved
  * only the folder left the next agent to take that name resuming the deleted
  * one's conversation and showing its cost.

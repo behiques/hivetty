@@ -332,12 +332,12 @@ describe('AgentEditor', () => {
     it('renders a problem beside the field it names', () => {
       setup({
         problems: [
-          { field: 'skills', reason: 'release-notes is not in ~/.hive/skills.' },
+          { field: 'skills', reason: 'release-notes is not in ~/.hivetty/skills.' },
         ],
       });
 
       expect(
-        screen.getByText('release-notes is not in ~/.hive/skills.'),
+        screen.getByText('release-notes is not in ~/.hivetty/skills.'),
       ).toBeInTheDocument();
     });
 
@@ -376,7 +376,7 @@ describe('AgentEditor', () => {
     it('counts field problems rather than repeating them in the footer', () => {
       setup({
         problems: [
-          { field: 'skills', reason: 'release-notes is not in ~/.hive/skills.' },
+          { field: 'skills', reason: 'release-notes is not in ~/.hivetty/skills.' },
           { field: 'wake.every', reason: 'Cannot be faster than 1m.' },
         ],
       });

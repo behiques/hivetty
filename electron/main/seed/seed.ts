@@ -17,14 +17,14 @@ import { legacyBase, readHistory, type History } from './history';
 import { baseOf, mergeParts, parseParts, type PartBase } from './merge';
 
 /**
- * Seeding the skills and agents the app ships into `~/.hive` (HIVE-162).
+ * Seeding the skills and agents the app ships into `~/.hivetty` (HIVE-162).
  *
- * `~/.hive/skills` and `~/.hive/agents` are the **user's** folders: Settings
+ * `~/.hivetty/skills` and `~/.hivetty/agents` are the **user's** folders: Settings
  * writes them, a text editor writes them, dotfiles back them up. The app
  * ships skills and agent definitions of its own (`resources/skills`,
  * `resources/agents`; the workflow lands there story by story), and they have
  * to land in those same folders — a session gets its skills from the generated plugin
- * that mirrors `~/.hive/skills`, and an agent is a file the registry watches
+ * that mirrors `~/.hivetty/skills`, and an agent is a file the registry watches
  * there. So the app writes into a folder it does not own, and the whole of
  * this module is the rule that makes that safe: **the user's edits win.**
  *
@@ -46,7 +46,7 @@ import { baseOf, mergeParts, parseParts, type PartBase } from './merge';
  * keeps its meaning, so an older build reading this manifest still refuses
  * to overwrite a file the user changed.
  *
- * "What the last seed wrote" is a hash per file in `~/.hive/.seed.json`. It
+ * "What the last seed wrote" is a hash per file in `~/.hivetty/.seed.json`. It
  * is what tells an untouched copy from an edited one, and a deleted copy from
  * a never-seeded one: without it the rows are indistinguishable, and the
  * choice would be between clobbering edits on every update and never updating
@@ -66,14 +66,14 @@ import { baseOf, mergeParts, parseParts, type PartBase } from './merge';
  * into whatever it points at, anywhere on disk. So every path component
  * between `<target>` and the file is `lstat`ed: a linked `skills/`, a linked
  * skill folder, or a linked folder inside one all stop the write. `<target>`
- * itself may be a link; relocating `~/.hive` whole is the user's business.
+ * itself may be a link; relocating `~/.hivetty` whole is the user's business.
  *
  * A file's mode travels with it. `writeFile` creates at 0644, and a shipped
  * script that lands non-executable fails the first session that runs it, the
  * same failure `import-skill.ts` and `plugin.ts` each already guard against.
  *
  * `done` is never seeded: it is generated into the plugin directly and is
- * reserved in `~/.hive/skills` (`RESERVED_SKILL_NAME`).
+ * reserved in `~/.hivetty/skills` (`RESERVED_SKILL_NAME`).
  */
 
 export interface SeedReport {
@@ -99,7 +99,7 @@ export interface Manifest {
 export interface SeedOptions {
   /** The shipped tree: `<source>/skills/<name>/…` and `<source>/agents/<name>/AGENT.md`. */
   source: string;
-  /** `~/.hive`, the folder that holds `skills/` and `agents/`. */
+  /** `~/.hivetty`, the folder that holds `skills/` and `agents/`. */
   target: string;
   /** The manifest path, normally `<target>/.seed.json`. */
   manifestFile: string;

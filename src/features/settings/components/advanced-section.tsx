@@ -48,7 +48,7 @@ import { useSetWhatsNewOpen } from '@stores/ui-store';
  * about the PTY already running in the old directory … the explicit reload in
  * 107 is the answer." So reload is not a convenience here — it is the whole
  * mechanism by which a hand-edited file reaches a running app, and the same
- * goes for `~/.hive/skills` and `~/.hive/agents`: main regenerates the plugin
+ * goes for `~/.hivetty/skills` and `~/.hivetty/agents`: main regenerates the plugin
  * every agent run reads and re-lists the agents before it answers. It reports
  * what it found, because a button that flashes and says nothing leaves the user
  * unable to tell a successful reload from a broken one, which is precisely the

@@ -9,7 +9,7 @@ import { seedShipped, type SeedOptions, type SeedReport } from './seed';
 
 export { keepMine, resetShipped, shippedStatus, takeShippedPrompt } from './actions';
 
-/** Where the shipped tree, `~/.hive`, the manifest and the history are. */
+/** Where the shipped tree, `~/.hivetty`, the manifest and the history are. */
 export function shippedOptions(fromDir: string = import.meta.dirname): SeedOptions {
   const target = dirname(configPath());
   const source = shippedRoot(app.isPackaged, process.resourcesPath, fromDir);
@@ -23,7 +23,7 @@ export function shippedOptions(fromDir: string = import.meta.dirname): SeedOptio
 }
 
 /**
- * Seed the shipped skills and agents into `~/.hive` (HIVE-162).
+ * Seed the shipped skills and agents into `~/.hivetty` (HIVE-162).
  *
  * The composition: `seed.ts` knows nothing about Electron or where the config
  * lives, and this file knows nothing else. `ipc/index.ts` calls it once, at
@@ -36,7 +36,7 @@ export function shippedOptions(fromDir: string = import.meta.dirname): SeedOptio
  * `import.meta.dirname` is this source folder, not `out/main/`, and the test
  * has to name the tree it means.
  *
- * Never fatal. A `~/.hive` the app cannot write is a `~/.hive` the rest of the
+ * Never fatal. A `~/.hivetty` the app cannot write is a `~/.hivetty` the rest of the
  * app is about to complain about in its own words; a seed that failed costs
  * the shipped skills until the next launch, and says so on the console.
  */

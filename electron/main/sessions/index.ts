@@ -209,7 +209,7 @@ export interface SessionsOptions {
    * A **function**, not a snapshot, for the reason `config` is one and the
    * reason `createAgentsRuntime` gives for `skillNames`: a definition can be
    * written while the app is running, and a set captured at construction would
-   * pin whatever `~/.hive/agents` held at boot — leaving an agent the user
+   * pin whatever `~/.hivetty/agents` held at boot — leaving an agent the user
    * created five minutes ago unable to report its own turns.
    *
    * Absent means "this build has no agents", which answers every hook under an

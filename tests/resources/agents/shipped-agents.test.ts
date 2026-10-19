@@ -14,7 +14,7 @@ import type { LedgerEntry } from '../../../electron/shared/ledger-contract';
 
 /**
  * Every agent the app ships parses against the skills the app ships
- * (HIVE-168). The seeder copies these into `~/.hive/agents` verbatim, and a
+ * (HIVE-168). The seeder copies these into `~/.hivetty/agents` verbatim, and a
  * definition the registry refuses is listed with its problem and never wakes,
  * which would be a shipped agent that does nothing on a fresh machine.
  */

@@ -48,7 +48,7 @@ import type { FsRefusalReason } from './fs-contract';
  * What a skill may be called.
  *
  * The folder name is three things at once — the directory under
- * `~/.hive/skills`, the `name:` in the file's own frontmatter, and the slash
+ * `~/.hivetty/skills`, the `name:` in the file's own frontmatter, and the slash
  * command the user types. So it is bounded by what Claude Code accepts and by
  * what is safe to `join` onto a root main owns: no separators, no dot segments,
  * and no case to normalise on a case-insensitive disk.

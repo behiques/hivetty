@@ -4,7 +4,7 @@ import { parseShippedRequest } from '../../../electron/shared/guards';
 
 /**
  * `shipped:*` requests name a kind and an agent or skill, never a path: main
- * joins the name onto `~/.hive/<kind>/`.
+ * joins the name onto `~/.hivetty/<kind>/`.
  */
 describe('parseShippedRequest', () => {
   it('passes a shipped agent and a shipped skill through', () => {

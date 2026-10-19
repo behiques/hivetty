@@ -315,7 +315,7 @@ export const APPROVE_TOOL: McpToolDefinition = {
 /**
  * The projects directory (HIVE-173): what the config maps, so an ask body can
  * say `the-hive` and the agent can turn it into a checkout path and a consent
- * flag without reading `~/.hive/config.json` itself. No arguments, for
+ * flag without reading `~/.hivetty/config.json` itself. No arguments, for
  * {@link AGENTS_TOOL}'s reason.
  */
 export const PROJECTS_TOOL: McpToolDefinition = {

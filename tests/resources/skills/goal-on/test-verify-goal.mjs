@@ -430,7 +430,7 @@ test('Copilot keeps its agentStop shape unchanged', () => {
 
 // A brief the verifier cannot locate is indistinguishable from no goal at all, and
 // the filename is written by a model. Every drift below was observed in a real
-// ~/.hive/goals directory.
+// ~/.hivetty/goals directory.
 
 const dirWith = (files) => {
   const dir = mkdtempSync(join(tmpdir(), 'goal-on-'));

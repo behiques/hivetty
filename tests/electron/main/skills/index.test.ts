@@ -753,7 +753,7 @@ describe('createSkillsRuntime file verbs', () => {
         No outside link at all — `here -> .` is entirely in-bundle and looks
         innocent, and `./here/../X` still climbs a level, into the skills tree
         itself. A planted file there is another skill's content, or a new
-        skill, which is escape enough without ever leaving `~/.hive`.
+        skill, which is escape enough without ever leaving `~/.hivetty`.
       */
       what: 'a link to . landing in the skills tree',
       target: './here/../PWNED.txt',

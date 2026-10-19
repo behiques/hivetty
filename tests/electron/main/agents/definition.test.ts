@@ -176,7 +176,7 @@ describe('parseAgent — refusals', () => {
   /**
    * The reader refuses it too, not only the IPC guard (HIVE-115).
    *
-   * A definition reaches this parser from `~/.hive/agents` as well as from the
+   * A definition reaches this parser from `~/.hivetty/agents` as well as from the
    * Settings form, and a folder created by hand never passes through
    * `assertAgentName`. An agent called `sess-01` would share a live terminal's
    * identity — see `isReservedAgentName` for what that costs.
@@ -215,7 +215,7 @@ describe('parseAgent — refusals', () => {
     expect(problems(GOOD, { skillNames: ['jira-writer'] })).toContainEqual({
       field: 'skills',
       reason:
-        'No skill called release-notes — looked in ~/.hive/skills, ~/.claude/skills and your installed plugins.',
+        'No skill called release-notes — looked in ~/.hivetty/skills, ~/.claude/skills and your installed plugins.',
     });
   });
 
@@ -223,7 +223,7 @@ describe('parseAgent — refusals', () => {
     The field is a declaration, not a sandbox. An agent runs as a `claude -p`
     process on this machine, which loads `~/.claude/skills` and the user's
     installed plugins whether or not the definition names them — so a validator
-    that only knew `~/.hive/skills` refused names the agent could reach anyway,
+    that only knew `~/.hivetty/skills` refused names the agent could reach anyway,
     and on the fresh install where that folder is empty it refused every name
     there is.
   */

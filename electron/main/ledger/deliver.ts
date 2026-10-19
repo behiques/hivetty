@@ -222,7 +222,7 @@ export function createDeliver({ ledger, isLive, isIdle, write }: DeliverOptions)
 
     /*
       A refused receipt is reported, not swallowed. `Ledger.append` returns a
-      refusal as a value (ENOSPC, a `~/.hive` moved out from under the app), and
+      refusal as a value (ENOSPC, a `~/.hivetty` moved out from under the app), and
       without a receipt this exact nudge is rewritten on every subsequent idle —
       forever, into a real terminal. Saying so once is what makes that
       diagnosable; the alternative is a session that mysteriously repeats a

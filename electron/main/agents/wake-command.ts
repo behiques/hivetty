@@ -66,9 +66,9 @@ const REAL_FS: WakeFs = {
 };
 
 export interface WakeCommandDeps {
-  /** `~/.hive/agents`. Read per call, so a relocated config is honoured. */
+  /** `~/.hivetty/agents`. Read per call, so a relocated config is honoured. */
   agentsRoot: () => string;
-  /** `~/.hive/work/<name>`, created before the spawn. */
+  /** `~/.hivetty/work/<name>`, created before the spawn. */
   /** The lane's working directory (HIVE-188); `standing` is the agent's own. */
   workdir: (name: string, lane: string) => string;
   /** `<userData>/hive/agents/<name>.system.md`, rewritten before the spawn. */

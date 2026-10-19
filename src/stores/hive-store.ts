@@ -429,7 +429,7 @@ export interface SetSessionTicketOptions {
  * Where a terminal for an agent starts (HIVE-172): the worktree its newest
  * `post` names, under the project whose checkout that post also names. A
  * string is the refusal the console prints. The agent has to name the checkout
- * because its worktree lives under `~/.hive/work`, outside every project path,
+ * because its worktree lives under `~/.hivetty/work`, outside every project path,
  * and a terminal needs a project for its shell and environment.
  */
 function agentTerminalSite(
@@ -836,7 +836,7 @@ interface HiveState {
    */
   hydrateSessions: (records: SessionHistoryEntry[]) => void;
   /**
-   * Mirror `~/.hive/agents` into the fleet (HIVE-114).
+   * Mirror `~/.hivetty/agents` into the fleet (HIVE-114).
    *
    * A **replacement**, which is the opposite of what {@link hydrateSessions}
    * and {@link hydrateLedger} do, and deliberately so. Those two merge because
@@ -1277,7 +1277,7 @@ const LEDGER_REQUIRES_DESKTOP =
  * The same refusal for the agent verbs (HIVE-117).
  *
  * A second string rather than a reuse of the one above, because it is a
- * different subject and the sentence names it: a browser has no `~/.hive/agents`
+ * different subject and the sentence names it: a browser has no `~/.hivetty/agents`
  * to read and no process to wake, which is a fuller absence than the ledger's.
  */
 const AGENTS_REQUIRE_DESKTOP =
@@ -9063,7 +9063,7 @@ export const useYoursAgain = (terminalId: string): boolean =>
 /** Hydration and the push subscription — see `use-ledger-sync.ts`. */
 export const useHydrateLedger = () => useHiveStore((state) => state.hydrateLedger);
 
-/** Mirror `~/.hive/agents` into the fleet (HIVE-114). */
+/** Mirror `~/.hivetty/agents` into the fleet (HIVE-114). */
 export const useHydrateAgents = () => useHiveStore((state) => state.hydrateAgents);
 export const useLedgerAppend = () => useHiveStore((state) => state.ledgerAppend);
 

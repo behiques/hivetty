@@ -11,7 +11,7 @@ import type { TicketWorkflow } from './ticket-workflow';
 /**
  * The workspace config contract (story 090).
  *
- * `~/.hive/config.json` is where the user says which of the fixture projects
+ * `~/.hivetty/config.json` is where the user says which of the fixture projects
  * map to real directories on this machine. A PTY needs a `cwd`; this file is
  * the smallest thing that supplies one.
  *
@@ -1203,7 +1203,7 @@ export function isOrigin(value: unknown): value is string {
  * an absent snapshot.
  */
 export interface ConfigSnapshot {
-  /** The file that was read — `HIVE_CONFIG_PATH` or `~/.hive/config.json`. */
+  /** The file that was read — `HIVE_CONFIG_PATH` or `~/.hivetty/config.json`. */
   configPath: string;
   /**
    * True when no file existed and a template was written during this load.

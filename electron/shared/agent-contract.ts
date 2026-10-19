@@ -27,7 +27,7 @@ import {
 } from './session-contract';
 import { RESERVED_SKILL_NAME, SKILL_NAME_PATTERN } from './skills-contract';
 
-/** Folder under `~/.hive` holding one directory per agent. */
+/** Folder under `~/.hivetty` holding one directory per agent. */
 export const AGENTS_DIR = 'agents';
 
 /** The definition file inside each agent's folder. */
@@ -1087,7 +1087,7 @@ export interface LaneState {
   closedAt?: number;
 }
 
-/** What `~/.hive/ledger/agents.json` holds per agent. */
+/** What `~/.hivetty/ledger/agents.json` holds per agent. */
 export interface AgentRunState {
   sessionUuid?: string;
   /** The standing lane's {@link LaneState.promptHash}. */

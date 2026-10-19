@@ -318,14 +318,14 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
     if (ctx.skillNames.includes(skill)) continue;
 
     /*
-      Named against everything on the machine, not only `~/.hive/skills`.
+      Named against everything on the machine, not only `~/.hivetty/skills`.
 
       An agent runs as a `claude -p` process on this machine, which loads the
       user's own `~/.claude/skills` and their installed plugins whether or not
       this file names them. Refusing `jira-writer:jira-writer` here therefore
       refused a skill the agent could reach anyway — a validator holding an
       opinion the runtime does not share, and on a machine with an empty
-      `~/.hive/skills` (the default) it refused *every* name.
+      `~/.hivetty/skills` (the default) it refused *every* name.
 
       What the field is, then, is a declaration this catches typos in. The
       sentence says where it looked so that a name it did not find can be
@@ -333,7 +333,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
     */
     problems.push({
       field: 'skills',
-      reason: `No skill called ${skill} — looked in ~/.hive/skills, ~/.claude/skills and your installed plugins.`,
+      reason: `No skill called ${skill} — looked in ~/.hivetty/skills, ~/.claude/skills and your installed plugins.`,
     });
   }
 

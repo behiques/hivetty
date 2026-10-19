@@ -1242,7 +1242,7 @@ describe('tearing the handlers down (HIVE-115)', () => {
 
 describe('what the registry was handed (HIVE-115)', () => {
   /**
-   * A delete or a rename has to reach `agents.json` and `~/.hive/work/<name>`,
+   * A delete or a rename has to reach `agents.json` and `~/.hivetty/work/<name>`,
    * and only this composition knows both. Without them a name freed by a delete
    * is reused with the previous agent's session uuid still attached, so its
    * first wake resumes a conversation that belonged to something else.

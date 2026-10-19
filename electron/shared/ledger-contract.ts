@@ -7,7 +7,7 @@
  * contract a compile-time artifact rather than a convention.
  */
 
-/** Directory under `dirname(configPath())` — i.e. `~/.hive/ledger`. */
+/** Directory under `dirname(configPath())` — i.e. `~/.hivetty/ledger`. */
 export const LEDGER_DIR = 'ledger';
 
 export const LEDGER_KINDS = [
