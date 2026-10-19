@@ -549,7 +549,7 @@ describe('contrast', () => {
    *
    * The case this exists for is an imported theme: nothing stops one shipping a
    * brand that vanishes into its own panel, and before this the format had no
-   * way to say so. All seven built-ins clear it, 5.15:1 at worst.
+   * way to say so. All nine built-ins clear it, 5.43:1 at worst.
    */
   it('notes a brand that disappears into its own panel', () => {
     const modes = structuredClone(BUILT_IN_THEME.modes) as Record<string, any>;

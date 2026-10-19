@@ -437,8 +437,8 @@ export function importTheme(raw: string, fileName: string): ImportResult {
      * rail and every provider in Integrations, on `panel` in both cases, which
      * is a paragraph's worth of reading rather than a highlight.
      *
-     * All seven built-ins clear it comfortably — 5.15:1 at worst (Graphite
-     * light), 9.72:1 at best — so this cannot fire on the app's own themes, and
+     * All nine built-ins clear it comfortably — 5.43:1 at worst (Graphite
+     * light), 10.39:1 at best — so this cannot fire on the app's own themes, and
      * unlike the `onBrand`/`brandFill` pair below there is nothing to move
      * first. An imported theme is the case it exists for: nothing stops one
      * shipping a brand that vanishes into its own panel, and before this the
