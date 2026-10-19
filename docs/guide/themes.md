@@ -9,19 +9,19 @@ light and a dark mode. The sun or moon at the foot of the bar switches between t
 
 ## Pick a theme
 
-**Settings › Appearance › Themes**. Seven ship with the app: Hive, Honeycomb, Graphite,
-Tidewater, Terracotta, Porcelain and Cinder. Click a card to use it. The
+**Settings › Appearance › Themes**. Eight ship with the app: HiveTTY, Honeycomb, Graphite,
+Tidewater, Terracotta, Porcelain, Cinder and Creep. Click a card to use it. The
 card menu has **Export…** and, for imported themes, **Remove**.
 
 ![Settings › Appearance: the theme gallery](../assets/guide/12-settings-appearance.png)
 
 **Mode** chooses System, Dark or Light. With System, the app follows macOS.
 
-![The Hive theme in light mode](../assets/guide/22-light-theme.png)
+![The HiveTTY theme in light mode](../assets/guide/22-light-theme.png)
 
 ## Import your own
 
-1. **Download template** saves `hive-theme-template.json`: a full copy of the Hive theme named
+1. **Download template** saves `hive-theme-template.json`: a full copy of the HiveTTY theme named
    "My theme".
 2. Change the colours you want.
 3. **Import theme…** and pick the file.
@@ -56,7 +56,7 @@ template is easiest.
 
 `ui.creep` and `ui.chitin` colour Home's comb creatures. They are optional: a theme without them
 imports with no warning, and the app derives both from the theme's own background, brand and ink,
-so its creatures match it rather than the Hive's violet.
+so its creatures match it rather than HiveTTY's amber.
 
 `ui.tissueDeep`, `ui.tissue` and `ui.tissueLit` are the Brood creatures' flesh in shadow, mid tone
 and light; `ui.glowCore` is the hot centre of their green glow (the glow itself is `ui.green`); and

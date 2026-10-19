@@ -2,7 +2,7 @@
 
 A stack of carapace plates carrying a prompt: three overlapping scutes — smooth
 on the leading edge, two hooked spines trailing — receding up and to the right,
-with a pale chevron and a white cursor on the front plate. One plate per
+with a dark chevron and a dark cursor on the front plate. One plate per
 session, the front one live.
 
 The hive this app is named for is the **Zerg** structure, not a beehive, and the

@@ -168,7 +168,9 @@ test('guide shots', async ({}, testInfo) => {
   await page.getByRole('radio', { name: 'Source' }).click();
   await expect(page.locator('.cm-editor')).toBeVisible();
   await shot(page, '04-explorer-editor.png');
-  await page.getByRole('button', { name: 'Close README.md' }).click();
+  // The tab's × is aria-hidden (the tab strip's keyboard model closes tabs
+  // another way), so it has a title and no accessible name.
+  await page.getByTitle('Close README.md').click();
 
   // 08: the Overmind with its console open and the help output.
   await openConsole(page);

@@ -142,8 +142,8 @@ interface HookSettings {
    *
    * **Pinned rather than paired with `light-ansi`.** Its slot choices are the
    * ones `xtermThemeFor` already resolves correctly in both modes —
-   * `text: ansi:whiteBright` → `palette.ink`, which is `#dbe4ff` on dark and
-   * `#2c2f34` on light. `light-ansi` would be wrong the moment the app went
+   * `text: ansi:whiteBright` → `palette.ink`, which is `#fae0c1` on dark and
+   * `#312e2c` on light. `light-ansi` would be wrong the moment the app went
    * dark: its `text: ansi:black` resolves to the palette's surface.
    *
    * The counterpart is in `ansi.ts`: `black` and `brightBlack` had to stop
