@@ -91,6 +91,13 @@ describe('electron-builder.yml', () => {
     expect(config).toMatch(/^ {2}entitlements: resources\/entitlements\.mac\.plist$/m);
     expect(config).toMatch(/^ {2}entitlementsInherit: resources\/entitlements\.mac\.plist$/m);
   });
+
+  /** HIVE-242: HiveTTY is its own app, so it can run beside The Hive. */
+  it('names the bundle HiveTTY under its own identifier', () => {
+    expect(config).toMatch(/^appId: com\.behiques\.hivetty$/m);
+    expect(config).toMatch(/^productName: HiveTTY$/m);
+    expect(config).not.toMatch(/CFBundleDisplayName:/);
+  });
 });
 
 describe('resources/entitlements.mac.plist', () => {

@@ -65,19 +65,15 @@ import { createWindow } from './window';
 app.setName(APP_NAME);
 
 /**
- * Development keeps the userData directory it already has.
+ * Development pins its own userData directory, `hivetty`.
  *
- * `setName` moves it: `userData` is derived from the app name, so renaming
- * would silently relocate `~/Library/Application Support/the-hive` to
- * `…/The Hive` and leave the window state, the hook settings and — the one that
- * would actually hurt — the encrypted Jira credential behind, with no error and
- * no hint that a re-authentication was caused by a cosmetic rename.
- *
- * Pinning it in dev has a second and larger benefit: the packaged app resolves
- * `userData` to `The Hive`, so the two stay **separate instances**. They can run
- * side by side. Had both landed on one directory, `requestSingleInstanceLock`
- * would treat a development run and the installed app as the same app, and
- * launching one while the other was open would just focus the wrong window.
+ * The packaged app resolves `userData` from `setName` to `HiveTTY`, so the two
+ * stay **separate instances**. They can run side by side. Had both landed on
+ * one directory, `requestSingleInstanceLock` would treat a development run and
+ * the installed app as the same app, and launching one while the other was open
+ * would just focus the wrong window. The Keychain item `safeStorage` uses follows
+ * `setName`, not this path, so credentials saved by a dev build before HIVE-242
+ * are entered again once.
  *
  * **`--user-data-dir` wins.** An explicit profile is a deliberate choice and
  * this default must not silently overrule it. Learned the hard way: without the
@@ -88,7 +84,7 @@ app.setName(APP_NAME);
  * each, none of them saying anything about a profile.
  */
 if (!app.isPackaged && !app.commandLine.hasSwitch('user-data-dir')) {
-  app.setPath('userData', join(app.getPath('appData'), 'the-hive'));
+  app.setPath('userData', join(app.getPath('appData'), 'hivetty'));
 }
 
 /*
@@ -228,9 +224,9 @@ if (!app.requestSingleInstanceLock()) {
   */
   const hiveLock = claimServerLock(hiveLockPath());
   if (hiveLock.kind === 'active') {
-    const message = `Another copy of The Hive (pid ${hiveLock.pid === null ? 'unknown' : String(hiveLock.pid)}) is using ${dirname(configPath())}. Quit it first, or point this one at another folder with HIVE_CONFIG_PATH.`;
+    const message = `Another copy of HiveTTY (pid ${hiveLock.pid === null ? 'unknown' : String(hiveLock.pid)}) is using ${dirname(configPath())}. Quit it first, or point this one at another folder with HIVE_CONFIG_PATH.`;
     console.error(`[hive] ${message}`);
-    if (!serverMode) dialog.showErrorBox('The Hive is already running', message);
+    if (!serverMode) dialog.showErrorBox('HiveTTY is already running', message);
     process.exit(1);
   }
   process.on('exit', hiveLock.release);
