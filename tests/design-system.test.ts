@@ -182,9 +182,11 @@ describe('AGENTS.md', () => {
    * What has not changed is what the cap is for. Anything that is reference —
    * how a subsystem works, what a token means, why a decision went the way it
    * did — still belongs in a deep-dive behind the table.
+   *
+   * Raised to 265 (HIVE-241): the HiveTTY fork notice is a rule every session needs loaded.
    */
-  it('stays under 250 lines — anything longer belongs in a deep-dive', () => {
-    expect(agents.split('\n').length).toBeLessThan(250);
+  it('stays under 265 lines — anything longer belongs in a deep-dive', () => {
+    expect(agents.split('\n').length).toBeLessThan(265);
   });
 
   it('routes to every deep-dive doc that exists', () => {
