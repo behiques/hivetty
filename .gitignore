@@ -50,3 +50,4 @@ blob-report/
 # belongs in AGENTS.md, the deep-dive docs, or the commit that shipped it.
 # Everything committed up to this point stays in history.
 docs/superpowers/
+__pycache__/
