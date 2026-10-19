@@ -222,7 +222,7 @@ test('creates a skill from Settings, beside the config', async ({}, testInfo) =>
    * The skills root is `dirname(configPath())/skills`, and the harness points
    * `HIVE_CONFIG_PATH` at this test's own output directory — so the file below
    * is written into the test's scratch space and never into the developer's
-   * real `~/.hive`. That is the whole reason the root is derived from the
+   * real `~/.hivetty`. That is the whole reason the root is derived from the
    * config path instead of `homedir()`.
    */
   // The shipped skills deleted: since HIVE-162 a fresh install seeds them,

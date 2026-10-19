@@ -225,7 +225,7 @@ test('fills both fields from the environment, and says where they came from', as
   await expect(page.getByLabel('Account email')).toHaveValue('me@example.com');
 
   // Said out loud, or the values look like stored settings and the user goes
-  // looking in ~/.hive/config.json for lines that are not there.
+  // looking in ~/.hivetty/config.json for lines that are not there.
   await expect(page.getByText(/From JIRA_DOMAIN/)).toBeVisible();
   await expect(page.getByText(/From JIRA_API_KEY/)).toBeVisible();
 

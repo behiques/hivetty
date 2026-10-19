@@ -149,7 +149,7 @@ export async function launchHive({
        */
       HIVE_E2E: '1',
       /**
-       * Overrides `~/.hive/config.json` (story 090) so specs point at a scratch
+       * Overrides `~/.hivetty/config.json` (story 090) so specs point at a scratch
        * fixture repo and never at the developer's real projects. A suite that
        * can spawn `claude` in a real working tree is a suite that can commit
        * to it.

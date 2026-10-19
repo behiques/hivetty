@@ -63,7 +63,7 @@ const noAgents = {
  */
 const enabled = process.env.HIVE_LIVE_READY_PROOF === '1';
 
-/** The Hive id this run's session answers to, echoed back in the POST header. */
+/** The HiveTTY id this run's session answers to, echoed back in the POST header. */
 const ENTITY = 'sess-live-ready';
 
 describe.skipIf(!enabled)('ready-signal conformance', () => {

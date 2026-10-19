@@ -414,7 +414,7 @@ test('bare ← at an empty Claude prompt returns to the orchestrator', async ({}
 
     /**
      * The whole point of the story: `←` here would have opened Claude Code's
-     * own agent list inside the session. It goes to The Hive's orchestrator
+     * own agent list inside the session. It goes to HiveTTY's orchestrator
      * instead, and the pty never sees the key.
      */
     await expect(terminal).toBeHidden({ timeout: 5_000 });

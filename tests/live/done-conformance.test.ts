@@ -73,7 +73,7 @@ const noAgents = {
  */
 const enabled = process.env.HIVE_LIVE_DONE_PROOF === '1';
 
-/** The Hive id this run's session answers to, echoed back in the POST's header. */
+/** The HiveTTY id this run's session answers to, echoed back in the POST's header. */
 const ENTITY = 'sess-live-done';
 
 /** No custom skills — the built-in `/done` is what is under test. */

@@ -122,7 +122,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    *   be added here by hand — which is the whole point of asserting the exact
    *   set rather than a subset.
    * - **`test` takes no argument.** The host it reaches comes from
-   *   `~/.hive/config.json`, read in main, so nothing on the call can redirect
+   *   `~/.hivetty/config.json`, read in main, so nothing on the call can redirect
    *   a request already going out. The renderer can still *change* the site
    *   through `config.setJira` — that is the settings pane's whole job, and it
    *   grants nothing the bridge does not already grant far more of through
@@ -1085,7 +1085,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * exists to force, so what each one grants is written down rather than
    * asserted away:
    *
-   * `history()` returns The Hive's own record of its own rows — entity ids,
+   * `history()` returns HiveTTY's own record of its own rows — entity ids,
    * project ids, branch names, a working directory, the model and effort a
    * session was started as, and the uuid main pinned as `--session-id`. It
    * carries **no prompt text and no transcript**, and it reads nothing out of

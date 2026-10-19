@@ -196,11 +196,11 @@ import {
  * ## `HIVE_CONFIG_PATH` is mandatory, and never inherited
  *
  * `--user-data-dir` only relocates Electron's own profile (window state, the
- * single-instance lock) — the workspace config lives at `~/.hive/config.json`
+ * single-instance lock) — the workspace config lives at `~/.hivetty/config.json`
  * (`electron/main/config/paths.ts`) unless `HIVE_CONFIG_PATH` says otherwise
  * (`config-contract.ts`'s `CONFIG_PATH_ENV`), and nothing here ever spawns a
  * process without it explicitly set. That one variable relocates the *whole*
- * `~/.hive` tree, not only the config file: `ledger-contract.ts` derives the
+ * `~/.hivetty` tree, not only the config file: `ledger-contract.ts` derives the
  * ledger, agents and work directories from `dirname(configPath())`, so this
  * suite cannot reach a developer's ledger or agent state either.
  * {@link REAL_CONFIG_PATHS} is asserted against on every scratch path this
@@ -239,8 +239,8 @@ const execFileAsync = promisify(execFile);
 
 /** The paths this file must never write to: the real workspace configs. */
 const REAL_CONFIG_PATHS = [
-  join(homedir(), '.hive', 'config.json'),
-  join(homedir(), '.hive-dev', 'config.json'),
+  join(homedir(), '.hivetty', 'config.json'),
+  join(homedir(), '.hivetty-dev', 'config.json'),
 ];
 
 /** Refuses to proceed if `path` is one of the developer's real config files. */
