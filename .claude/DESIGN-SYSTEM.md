@@ -11,57 +11,59 @@ the test fails.
 
 ## Colour tokens
 
+The default theme is **HiveTTY** (HIVE-241): amber phosphor on warm carbon.
+
 Defined on `:root` (dark, the default) with a `body[data-theme="light"]` override,
 and bound to Tailwind via `@theme inline` in `src/styles/tokens.css`.
 
 | Token | Dark | Light | Used for |
 | --- | --- | --- | --- |
-| `--cc-bg` | `#10152a` | `#fdfdfb` | app background |
-| `--cc-panel` | `#141a33` | `#ffffff` | panels, cards |
-| `--cc-panel-2` | `#121731` | `#f7fafb` | nested/recessed panels |
-| `--cc-hover` | `#1b2344` | `#f4f9ff` | hover state |
-| `--cc-active` | `#222c55` | `#e9f3fc` | active/selected row |
-| `--cc-border` | `#273159` | `#d4dee3` | dividers, outlines |
-| `--cc-border-soft` | `#1e2747` | `#edf2f4` | quieter dividers |
-| `--cc-ink` | `#e9effc` | `#2c2f34` | primary text |
-| `--cc-muted` | `#9faad0` | `#5a5d63` | secondary text |
-| `--cc-subtle` | `#8d97b8` | `#686d73` | tertiary text, idle status |
-| `--cc-brand` | `#8fa7f2` | `#334fa9` | brand, done status |
+| `--cc-bg` | `#191613` | `#fefdfc` | app background |
+| `--cc-panel` | `#1f1b18` | `#ffffff` | panels, cards |
+| `--cc-panel-2` | `#1c1915` | `#faf9f8` | nested/recessed panels |
+| `--cc-hover` | `#292520` | `#fbf8f4` | hover state |
+| `--cc-active` | `#342f28` | `#f6f1eb` | active/selected row |
+| `--cc-border` | `#39332d` | `#e0dbd7` | dividers, outlines |
+| `--cc-border-soft` | `#2d2824` | `#f3f1ee` | quieter dividers |
+| `--cc-ink` | `#f0eeec` | `#312e2c` | primary text |
+| `--cc-muted` | `#b0aba5` | `#5f5c59` | secondary text |
+| `--cc-subtle` | `#9c9792` | `#6f6c68` | tertiary text, idle status |
+| `--cc-brand` | `#ffb348` | `#885703` | brand, done status |
 | `--cc-green` | `#74b79c` | `#2e6b52` | working / online status |
-| `--cc-amber` | `#ffac47` | `#c77414` | needs-input status |
+| `--cc-amber` | `#fea97c` | `#b15313` | needs-input status |
 | `--cc-red` | `#ff8d85` | `#cd332b` | errors, failing checks |
-| `--cc-chip` | `#1c2648` | `#edf2f4` | chips, pills, raised cards |
-| `--cc-chip-hover` | `#232e57` | `#e2eaee` | hover on a chip-filled card |
-| `--cc-term-bg` | `#0b1023` | `#f7fafb` | terminal background |
-| `--cc-term-input` | `#0e1430` | `#ffffff` | terminal input bar |
-| `--cc-term-row-hover` | `#161f45` | `#eef4f9` | session-table row hover |
-| `--cc-term-row-active` | `#1a2450` | `#e4edf5` | session-table selected row |
-| `--cc-term-head` | `#8590b0` | `#686b71` | session-table column headers |
-| `--cc-term-track` | `#3a4674` | `#d4dee3` | picker stepper track and dots |
-| `--cc-brand-fill` | `#5470cb` | *(unchanged)* | primary button |
-| `--cc-brand-fill-hover` | `#4f6ac5` | *(unchanged)* | primary button hover |
-| `--cc-brand-fill-strong` | `#334fa9` | *(unchanged)* | hive-mark tile (Serenity) |
-| `--cc-on-brand` | `#ffffff` | *(unchanged)* | text/icons on a brand fill |
+| `--cc-chip` | `#2c2822` | `#f3f1ee` | chips, pills, raised cards |
+| `--cc-chip-hover` | `#36302a` | `#ebe8e4` | hover on a chip-filled card |
+| `--cc-term-bg` | `#14110e` | `#faf9f8` | terminal background |
+| `--cc-term-input` | `#1a1612` | `#ffffff` | terminal input bar |
+| `--cc-term-row-hover` | `#27221c` | `#f6f2ef` | session-table row hover |
+| `--cc-term-row-active` | `#2d2721` | `#f0ebe6` | session-table selected row |
+| `--cc-term-head` | `#95908b` | `#6d6a67` | session-table column headers |
+| `--cc-term-track` | `#4e4841` | `#e0dbd7` | picker stepper track and dots |
+| `--cc-brand-fill` | `#fea91e` | *(unchanged)* | primary button |
+| `--cc-brand-fill-hover` | `#f19f05` | *(unchanged)* | primary button hover |
+| `--cc-brand-fill-strong` | `#b67703` | *(unchanged)* | the icon's middle plate |
+| `--cc-on-brand` | `#110f0d` | *(unchanged)* | text/icons on a brand fill |
 | `--cc-danger-solid` | `#d3372f` | *(unchanged)* | notification badge fill |
 | `--cc-on-danger` | `#ffffff` | *(unchanged)* | text/icons on a danger fill |
-| `--cc-creep` | `#5b3d8f` | `#b7a3e6` | the ground under a busy comb patch; the flyers' trace (HIVE-199) |
-| `--cc-chitin` | `#b9a7f0` | `#6a54b0` | the mutalisk's wings, bones and claws (HIVE-199); the Brood creatures' chitin (HIVE-221) |
-| `--cc-tissue-deep` | `#171b32` | `#7a68b6` | the Brood creatures' shadowed tissue (HIVE-221); dark is derived from `bg`, `chitin` and `ink`, as every dark theme's is |
-| `--cc-tissue` | `#353556` | `#d4ccee` | the Brood creatures' mid tissue (HIVE-221); dark is derived from `bg`, `chitin` and `ink`, as every dark theme's is |
-| `--cc-tissue-lit` | `#c3b5f2` | `#fbf9ff` | the Brood creatures' lit tissue (HIVE-221); dark is derived from `bg`, `chitin` and `ink`, as every dark theme's is |
+| `--cc-creep` | `#6a4404` | `#dfad6d` | the ground under a busy comb patch; the flyers' trace (HIVE-199) |
+| `--cc-chitin` | `#eab26b` | `#885703` | the mutalisk's wings, bones and claws (HIVE-199); the Brood creatures' chitin (HIVE-221) |
+| `--cc-tissue-deep` | `#211c17` | `#926d3d` | the Brood creatures' shadowed tissue (HIVE-221); dark is derived from `bg`, `chitin` and `ink`, as every dark theme's is |
+| `--cc-tissue` | `#473826` | `#e2cdb5` | the Brood creatures' mid tissue (HIVE-221); dark is derived from `bg`, `chitin` and `ink`, as every dark theme's is |
+| `--cc-tissue-lit` | `#ebbe85` | `#fef9f3` | the Brood creatures' lit tissue (HIVE-221); dark is derived from `bg`, `chitin` and `ink`, as every dark theme's is |
 | `--cc-glow-core` | `#e2ffee` | `#96deb8` | the hot centre of the Brood's green glow (HIVE-221) |
-| `--cc-ground` | `#141128` | `#eeeafa` | the ground under a Brood creature (HIVE-221) |
+| `--cc-ground` | `#171411` | `#f3ebe4` | the ground under a Brood creature (HIVE-221) |
 | `--cc-code-keyword` | `#b39ff0` | `#6f42c1` | editor: keywords |
 | `--cc-code-string` | `#74b79c` | `#2e6b52` | editor: strings, regexps |
-| `--cc-code-number` | `#ffac47` | `#a1541a` | editor: numbers, booleans, null |
-| `--cc-code-comment` | `#6b779f` | `#8e949c` | editor: comments |
-| `--cc-code-name` | `#8fa7f2` | `#334fa9` | editor: functions, properties, headings |
+| `--cc-code-number` | `#fea97c` | `#a35223` | editor: numbers, booleans, null |
+| `--cc-code-comment` | `#7d7872` | `#94908b` | editor: comments |
+| `--cc-code-name` | `#ffb348` | `#885703` | editor: functions, properties, headings |
 | `--cc-code-type` | `#7fd0e0` | `#0b6b7d` | editor: types, classes, tags |
-| `--cc-code-operator` | `#98a3cc` | `#73767c` | editor: operators, punctuation |
+| `--cc-code-operator` | `#aaa49e` | `#75726f` | editor: operators, punctuation |
 | `--cc-code-constant` | `#ff8d85` | `#b3271f` | editor: constants |
 | `--cc-code-invalid` | `#ff8d85` | `#d3372f` | editor: parse errors |
-| `--cc-code-active-line` | `#202b50` | `#eef7ff` | editor: current line (painted at 35%) |
-| `--cc-code-selection` | `#2b3768` | `#cfe3f7` | editor: selection |
+| `--cc-code-active-line` | `#322d27` | `#faf5f0` | editor: current line (painted at 35%) |
+| `--cc-code-selection` | `#4b371c` | `#fadbb5` | editor: selection |
 
 **Amber drawn as text (HIVE-210, HIVE-223), `text-amber-text`.** Dark: the
 amber itself. Light: the amber with 35% ink (a `color-mix`, not a hex), where
@@ -206,19 +208,19 @@ an imported theme (HIVE-80) travels the same path these two do.
 
 | Key | `TERM` (dark) | `TERM_LIGHT` | Mirrors (light) | Used for |
 | --- | --- | --- | --- | --- |
-| `ink` | `#dbe4ff` | `#2c2f34` | `--cc-ink` | default foreground |
-| `dim` | `#7c88b8` | `#686b71` | `--cc-term-head` | secondary / meta |
+| `ink` | `#fae0c1` | `#312e2c` | `--cc-ink` | default foreground |
+| `dim` | `#9b8871` | `#6d6a67` | `--cc-term-head` | secondary / meta |
 | `green` | `#7ee2b8` | `#2e6b52` | `--cc-code-string` | success, prompts |
-| `blue` | `#8fb5ff` | `#334fa9` | `--cc-code-name` | tool calls (Read/Edit/Bash lines) |
-| `amber` | `#ffc06e` | `#a1541a` | `--cc-code-number` | working spinner, questions |
+| `blue` | `#8fb5ff` | `#334fa9` | — (stays blue, HIVE-241) | tool calls (Read/Edit/Bash lines) |
+| `amber` | `#febc9b` | `#a35223` | `--cc-code-number` | working spinner, questions |
 | `red` | `#ff8d85` | `#b3271f` | `--cc-code-constant` | errors |
 | `cyan` | `#7edce2` | `#0b6b7d` | `--cc-code-type` | orchestrator-injected lines, PR refs |
 | `magenta` | `#7edce2` | `#6f42c1` | `--cc-code-keyword` | ANSI slot 35 |
-| `black` | `#0b1023` | `#2c2f34` | `--cc-ink` | text colour a theme may still name |
-| `bg` | `#0b1023` | `#f7fafb` | `--cc-term-bg` | terminal background |
-| `selection` | `#222c55` | `#cfe3f7` | `--cc-code-selection` | selection highlight |
-| `surface` | `#0e1430` | `#ffffff` | `--cc-panel` | **ANSI slot 30** — panels a program paints |
-| `surfaceAlt` | `#1b2344` | `#edf2f4` | `--cc-chip` | **ANSI slot 90** — the second fill |
+| `black` | `#14110e` | `#312e2c` | `--cc-ink` | text colour a theme may still name |
+| `bg` | `#14110e` | `#faf9f8` | `--cc-term-bg` | terminal background |
+| `selection` | `#3f2b10` | `#fadbb5` | `--cc-code-selection` | selection highlight |
+| `surface` | `#1a1612` | `#ffffff` | `--cc-panel` | **ANSI slot 30** — panels a program paints |
+| `surfaceAlt` | `#292520` | `#f3f1ee` | `--cc-chip` | **ANSI slot 90** — the second fill |
 
 `surface` and `surfaceAlt` arrived with HIVE-82, and they are the reason slots 30
 and 90 no longer hold text colours. Claude Code paints its own chrome — the
@@ -249,21 +251,21 @@ defaults to `1`, so nothing would correct it.
 The xterm theme also sets **`cursorAccent` to the palette's `bg`** in both
 themes. It is the glyph under a block cursor; xterm defaults it to `#000000`,
 which was survivable only while every cursor was light. A light theme whose
-cursor is `#2c2f34` would otherwise hide the character under the caret at
+cursor is `#312e2c` would otherwise hide the character under the caret at
 1.56:1.
 
 **The two palettes follow opposite rules, on purpose.** The dark text colours are
 deliberately *not* the UI tokens — `TERM.green` is not `--cc-green` — because
 text on a dark canvas needs more lift than the same semantic colour does in
-chrome; only three surface values coincide (`bg` is `--cc-term-bg`, `selection`
-is `--cc-active`, `red` is shared with `--cc-red`). Every light value, by
-contrast, **is** a token, listed above: the light terminal shares the editor's
+chrome; only two values coincide (`bg` is `--cc-term-bg`, `red` is shared
+with `--cc-red`). Every light value but `blue`, by contrast, **is** a token,
+listed above (`blue` cannot be `--cc-code-name`, which is HiveTTY's amber brand): the light terminal shares the editor's
 ground, so the colours the editor already proved there are the right ones, and a
 second light identity would be the actual bug. xterm cannot read a custom
 property, so the value has to exist twice — `ansi.test.ts` reads `tokens.css`
 and fails if the copies drift.
 
-Every light pair clears WCAG AA on `#f7fafb` (lowest: `dim` at 4.87:1), asserted
+Every light pair clears WCAG AA on `#faf9f8` (lowest: `dim` at 5.11:1), asserted
 in `ansi.test.ts` rather than eyeballed.
 
 **Transcript colour is emitted as an ANSI *index*, not truecolor.** A baked

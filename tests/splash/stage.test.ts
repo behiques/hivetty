@@ -14,35 +14,35 @@ vi.mock('@/splash/globe', async (importOriginal) => ({
 }));
 
 const TOKENS: Record<string, string> = {
-  '--cc-bg': ' #10152a',
-  '--cc-panel-2': ' #121731',
-  '--cc-ink': ' #e9effc',
-  '--cc-muted': ' #98a3cc',
-  '--cc-subtle': ' #6b779f',
-  '--cc-brand': ' #8fa7f2',
+  '--cc-bg': ' #191613',
+  '--cc-panel-2': ' #1c1915',
+  '--cc-ink': ' #f0eeec',
+  '--cc-muted': ' #aaa49e',
+  '--cc-subtle': ' #7d7872',
+  '--cc-brand': ' #ffb348',
   '--cc-green': ' #74b79c',
-  '--cc-amber': ' #ffac47',
+  '--cc-amber': ' #fea97c',
   '--cc-red': ' #ff8d85',
-  '--cc-creep': ' #5b3d8f',
-  '--cc-chitin': ' #b9a7f0',
+  '--cc-creep': ' #6a4404',
+  '--cc-chitin': ' #eab26b',
   '--cc-tissue-deep': ' #0b0816',
   '--cc-tissue': ' #2c2346',
   '--cc-tissue-lit': ' #8474c0',
   '--cc-glow-core': ' #e2ffee',
-  '--cc-ground': ' #141128',
-  '--cc-on-brand': ' #ffffff',
+  '--cc-ground': ' #171411',
+  '--cc-on-brand': ' #110f0d',
 };
 
 describe('paletteFrom', () => {
   it('reads every token, trimmed, and derives the carapace and the creep stop as Home does', () => {
     const palette = paletteFrom((token) => TOKENS[token] ?? '');
-    expect(palette.bg).toBe('#10152a');
-    expect(palette.panel2).toBe('#121731');
-    expect(palette.chitin).toBe('#b9a7f0');
-    expect(palette.carapace).toBe(mixColour('#10152a', '#b9a7f0', 0.18));
-    expect(palette.creepClear).toBe(clearColour('#5b3d8f'));
+    expect(palette.bg).toBe('#191613');
+    expect(palette.panel2).toBe('#1c1915');
+    expect(palette.chitin).toBe('#eab26b');
+    expect(palette.carapace).toBe(mixColour('#191613', '#eab26b', 0.18));
+    expect(palette.creepClear).toBe(clearColour('#6a4404'));
     expect(palette.tissueDeep).toBe('#0b0816');
-    expect(palette.ground).toBe('#141128');
+    expect(palette.ground).toBe('#171411');
     expect(palette).not.toHaveProperty('onBrand');
     expect(palette.glint).toBe(swarmPaletteOf(BUILT_IN_THEME.modes.dark.ui).glint);
   });

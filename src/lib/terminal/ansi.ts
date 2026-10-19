@@ -205,7 +205,7 @@ export const SGR_RESET = `${ESC}[0m`;
  * is emitted; xterm stores that RGB value in the cell and no later change of
  * `terminal.options.theme` can reach it. An index stores the *slot*, and the
  * slot is resolved against the active theme at paint time — so the same
- * scrollback renders pastel-on-navy in dark mode and ink-on-paper in light,
+ * scrollback renders pastel-on-carbon in dark mode and ink-on-paper in light,
  * with nothing rewritten.
  *
  * `ink` maps to 39 (default foreground) rather than to white, so a line the

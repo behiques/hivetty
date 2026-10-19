@@ -14,17 +14,17 @@ const base = {
 
 describe('ThemeCard', () => {
   it('marks the active card pressed', () => {
-    render(<ThemeCard {...base} id="hive" isActive isBuiltIn />);
+    render(<ThemeCard {...base} id="hivetty" isActive isBuiltIn />);
     // Exact: the card holds two buttons naming this theme — the activate
-    // button ("Hive Built in") and the ⋯ trigger ("Hive actions").
-    expect(screen.getByRole('button', { name: 'Hive Built in' })).toHaveAttribute(
+    // button ("HiveTTY Built in") and the ⋯ trigger ("HiveTTY actions").
+    expect(screen.getByRole('button', { name: 'HiveTTY Built in' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
   });
 
   it('draws the seam from the swatch’s own inks, not a fixed white', () => {
-    const { container } = render(<ThemeCard {...base} id="hive" isActive isBuiltIn />);
+    const { container } = render(<ThemeCard {...base} id="hivetty" isActive isBuiltIn />);
     const seam = container.querySelector<HTMLElement>('.pointer-events-none.absolute.inset-0');
     const background = seam?.style.background ?? '';
     expect(background).toContain('color-mix(in srgb,');
@@ -33,7 +33,7 @@ describe('ThemeCard', () => {
   });
 
   it('names the author, or says it ships with the app', () => {
-    render(<ThemeCard {...base} id="hive" isActive isBuiltIn />);
+    render(<ThemeCard {...base} id="hivetty" isActive isBuiltIn />);
     expect(screen.getByText('Built in')).toBeInTheDocument();
   });
 
@@ -49,13 +49,13 @@ describe('ThemeCard', () => {
   });
 
   it('offers the built-in no Remove at all, rather than a disabled one', async () => {
-    render(<ThemeCard {...base} id="hive" isActive isBuiltIn />);
+    render(<ThemeCard {...base} id="hivetty" isActive isBuiltIn />);
     await userEvent.click(screen.getByRole('button', { name: /actions$/ }));
     expect(screen.queryByRole('menuitem', { name: 'Remove' })).toBeNull();
   });
 
   it('disables Activate on the theme already active', async () => {
-    render(<ThemeCard {...base} id="hive" isActive isBuiltIn />);
+    render(<ThemeCard {...base} id="hivetty" isActive isBuiltIn />);
     await userEvent.click(screen.getByRole('button', { name: /actions$/ }));
     expect(screen.getByRole('menuitem', { name: 'Activate' })).toHaveAttribute(
       'aria-disabled',
@@ -102,7 +102,7 @@ describe('ThemeCard', () => {
   it('leaves Export… enabled and calls onExport', async () => {
     const onExport = vi.fn();
     render(
-      <ThemeCard {...base} id="hive" isActive isBuiltIn onExport={onExport} />,
+      <ThemeCard {...base} id="hivetty" isActive isBuiltIn onExport={onExport} />,
     );
     await userEvent.click(screen.getByRole('button', { name: /actions$/ }));
 
@@ -110,6 +110,6 @@ describe('ThemeCard', () => {
     expect(item).not.toHaveAttribute('aria-disabled', 'true');
 
     await userEvent.click(item);
-    expect(onExport).toHaveBeenCalledWith('hive');
+    expect(onExport).toHaveBeenCalledWith('hivetty');
   });
 });

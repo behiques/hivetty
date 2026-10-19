@@ -27,7 +27,7 @@ import { launchHive, startSession } from './fixtures/hive-app';
 
 const NORD_FIXTURE = join(import.meta.dirname, '../fixtures/nord.hive-theme.json');
 
-/** `modes.dark.ui.panel` in the fixture — chosen to be unmistakable against the built-in's `#141a33`. */
+/** `modes.dark.ui.panel` in the fixture — chosen to be unmistakable against the built-in's `#1f1b18`. */
 const NORD_PANEL_DARK = '#3b4252';
 /** `modes.dark.terminal.bg` (== `modes.dark.ui.termBg`) in the fixture. */
 const NORD_TERMINAL_BG_DARK = '#2e3440';
@@ -113,7 +113,7 @@ test('an imported theme survives a reload, on the first painted frame', async ({
      *
      * A first `requestAnimationFrame` was tried here and rejected: it fires
      * before the renderer bundle has even been fetched, when `--cc-panel`
-     * still reads `tokens.css`'s own static default (`#141a33`) because
+     * still reads `tokens.css`'s own static default (`#1f1b18`) because
      * nothing has overridden it *or drawn anything with it* yet. That is a
      * true reading and a meaningless one — a CSS custom property holding the
      * wrong value on a blank, content-free document is not a flash, because
@@ -312,9 +312,8 @@ test('activating a theme recolours a live terminal without clearing scrollback',
      * -viewport` natively (`docs/terminal-architecture.md`); it exists for
      * every terminal regardless of which layer draws the cells, and its
      * inline `background-color` is what actually paints the terminal's
-     * ground (confirmed against this build: `rgb(11, 16, 35)`, the built-in
-     * dark palette's `terminal.bg` in `#0b1023`, i.e. the built-in dark
-     * palette).
+     * ground (on HiveTTY: `rgb(20, 17, 14)`, the built-in
+     * dark palette's `terminal.bg`, `#14110e`).
      *
      * Its **DOM node identity**, not just its colour, is what this test can
      * actually offer toward the scrollback claim — and it is worth being

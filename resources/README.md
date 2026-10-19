@@ -2,7 +2,7 @@
 
 A stack of carapace plates carrying a prompt: three overlapping scutes — smooth
 on the leading edge, two hooked spines trailing — receding up and to the right,
-with a pale chevron and a white cursor on the front plate. One plate per
+with a dark chevron and a dark cursor on the front plate. One plate per
 session, the front one live.
 
 The hive this app is named for is the **Zerg** structure, not a beehive, and the
@@ -19,16 +19,16 @@ for the ladder to drift from — and every colour is a token from
 
 | | |
 | --- | --- |
-| `--cc-bg` `#10152A` | the ground, and the seam between plates |
-| `--cc-active` `#222C55` | the rearmost plate |
-| `--cc-brand-fill-strong` `#334FA9` | the middle plate |
-| `--cc-brand-fill` `#5E76D0` | the front plate, the live one |
-| `--cc-on-brand` `#FFFFFF` | the cursor |
+| `--cc-bg` `#191613` | the ground, and the seam between plates |
+| `--cc-active` `#342F28` | the rearmost plate |
+| `--cc-brand-fill-strong` `#B67703` | the middle plate |
+| `--cc-brand-fill` `#FEA91E` | the front plate, the live one |
+| `--cc-on-brand` `#110F0D` | the cursor |
 
-The chevron is the one derived value — `--cc-brand` (#8FA7F2) is calibrated to
-read as text on a panel and sits too close to the front plate's fill, so it is
-lifted to `#C7D3FA`. If a colour changes in the tokens it must change in the
-generator too; the icon has no palette of its own.
+The chevron is the one derived value: the front plate is light, so the chevron is
+`--cc-brand`'s hue darkened to `#412700`, dark for the same reason the cursor is.
+If a colour changes in the tokens it must change in the generator too; the icon
+has no palette of its own.
 
 ## What is here
 

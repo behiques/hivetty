@@ -230,7 +230,7 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
       const c = el as HTMLCanvasElement;
       return Array.from(c.getContext('2d')!.getImageData(2, 2, 1, 1).data.slice(0, 3));
     });
-    expect(corner).toEqual([253, 253, 251]);
+    expect(corner).toEqual([254, 253, 252]);
     await setMode(page, 'Dark');
   } finally {
     await app.close();

@@ -6,21 +6,21 @@ import {
 } from '@lib/theme/contract';
 
 /**
- * The themes the app ships with, beyond the Hive itself.
+ * The themes the app ships with, beyond HiveTTY itself.
  *
  * ## Why these are not in `tokens.css`
  *
- * `tokens.css` **is** the Hive theme — `built-in.ts` mirrors it and
+ * `tokens.css` **is** the HiveTTY theme — `built-in.ts` mirrors it and
  * `built-in.test.ts` fails on any drift between the two, in both directions.
  * That pact is exactly one theme wide and must stay that way: a second palette
  * in the stylesheet would have no `--cc-*` block to be compared against, and
  * the drift test would have to learn which declarations belong to which theme.
  *
- * So these six paint the way an *imported* theme paints — through
+ * So these seven paint the way an *imported* theme paints — through
  * `applyThemeColors`, which writes a `<style>` element at runtime. The only
  * thing that makes them "built in" is that they ship in the bundle and cannot
  * be removed from the library. {@link activeThemeOf} keeps returning `null`
- * for the Hive alone, because for that one theme the stylesheet is already the
+ * for HiveTTY alone, because for that one theme the stylesheet is already the
  * answer and writing a style element would be work with no effect.
  *
  * ## Generated, not typed
@@ -31,7 +31,8 @@ import {
  * be one digit out. This file may hold hex literals for the same reason
  * `built-in.ts` may: it is the definition of a colour, not a use of one.
  * The text tokens (subtle, muted, termHead) were retuned by hand after
- * generation, to clear AA on every ground (HIVE-223).
+ * generation, to clear AA on every ground (HIVE-223). Creep's light termHead
+ * was retuned the same way (HIVE-241).
  */
 
 /** Beeswax and warm oak. */
@@ -430,11 +431,79 @@ const CINDER_THEME: HiveTheme = {
   },
 };
 
+/** Electric violet on aubergine black, the swarm's creep made brand. */
+const CREEP_THEME: HiveTheme = {
+  hiveThemeVersion: HIVE_THEME_VERSION,
+  name: 'Creep',
+  author: 'Built in',
+  version: '1.0.0',
+  modes: {
+    dark: {
+      ui: {
+        bg: '#19141f', panel: '#1f1926', panel2: '#1d1624',
+        hover: '#2a2233', active: '#342a40',
+        border: '#392f45', borderSoft: '#2d2537',
+        ink: '#f0edf5', muted: '#b0a7bc', subtle: '#9c94a6',
+        brand: '#c598ff', green: '#74b79c', amber: '#ffac47', red: '#ff8d85',
+        chip: '#2d2437', chipHover: '#362c42',
+        termBg: '#140f19', termInput: '#1a1322',
+        termRowHover: '#271e32', termRowActive: '#2e233a',
+        termHead: '#958d9f', termTrack: '#4f435c',
+        brandFill: '#8f42da', brandFillHover: '#8535ce',
+        brandFillStrong: '#641f9f', onBrand: '#ffffff', dangerSolid: '#d3372f',
+        onDanger: '#ffffff',
+      },
+      syntax: {
+        keyword: '#35c4cb', string: '#74b79c', number: '#ffac47',
+        comment: '#7d748a', name: '#c598ff', type: '#7fd0e0',
+        operator: '#aaa0b6', constant: '#ff8d85', invalid: '#ff8d85',
+        activeLine: '#32293d', selection: '#403551',
+      },
+      terminal: {
+        bg: '#140f19', ink: '#e8e1f0', dim: '#90859f', black: '#140f19',
+        green: '#7ee2b8', blue: '#8fb5ff', amber: '#ffc06e', red: '#ff8d85',
+        cyan: '#7edce2', magenta: '#7edce2', selection: '#352944',
+        surface: '#1a1322', surfaceAlt: '#2a2233',
+      },
+    },
+    light: {
+      ui: {
+        bg: '#fdfdfe', panel: '#ffffff', panel2: '#faf9fb',
+        hover: '#f9f7fc', active: '#f3f0f7',
+        border: '#dddbe0', borderSoft: '#f1f0f3',
+        ink: '#2f2e31', muted: '#5e5c60', subtle: '#6d6b70',
+        brand: '#7630b7', green: '#2e6b52', amber: '#a15c05', red: '#cd332b',
+        chip: '#f1f0f3', chipHover: '#e9e8ec',
+        termBg: '#faf9fb', termInput: '#ffffff',
+        termRowHover: '#f4f2f6', termRowActive: '#edeaf0',
+        // Retuned by hand from the generated #6c6a6e (4.49:1 on termRowActive),
+        // as HIVE-223 retuned the other themes' text tokens (HIVE-241).
+        termHead: '#6b696d', termTrack: '#dddbe0',
+        brandFill: '#8f42da', brandFillHover: '#8535ce',
+        brandFillStrong: '#641f9f', onBrand: '#ffffff', dangerSolid: '#d3372f',
+        onDanger: '#ffffff',
+      },
+      syntax: {
+        keyword: '#047277', string: '#2e6b52', number: '#a1541a',
+        comment: '#929096', name: '#7630b7', type: '#0b6b7d',
+        operator: '#747276', constant: '#b3271f', invalid: '#d3372f',
+        activeLine: '#f7f4fa', selection: '#e7d8ff',
+      },
+      terminal: {
+        bg: '#faf9fb', ink: '#2f2e31', dim: '#6c6a6e', black: '#2f2e31',
+        green: '#2e6b52', blue: '#334fa9', amber: '#a1541a', red: '#b3271f',
+        cyan: '#0b6b7d', magenta: '#6f42c1', selection: '#e7d9fc',
+        surface: '#ffffff', surfaceAlt: '#f1f0f3',
+      },
+    },
+  },
+};
+
 /**
  * Every theme that ships in the bundle, keyed by the id the gallery and
  * `activeThemeId` use.
  *
- * The Hive is first because the gallery renders in insertion order and the
+ * HiveTTY is first because the gallery renders in insertion order and the
  * default belongs at the front. An id in here is reserved: `theme-gallery`
  * seeds its collision set from these keys, so importing a file called
  * "Graphite" lands as `graphite-2` rather than shadowing the built-in.
@@ -447,6 +516,7 @@ export const BUILT_IN_THEMES: Readonly<Record<string, HiveTheme>> = {
   terracotta: TERRACOTTA_THEME,
   porcelain: PORCELAIN_THEME,
   cinder: CINDER_THEME,
+  creep: CREEP_THEME,
 };
 
 /**

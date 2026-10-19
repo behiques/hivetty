@@ -19,12 +19,12 @@
  * window factory.
  *
  * The app is themeable — `body[data-theme='light']` moves `--cc-bg` to
- * `#fdfdfb` — but a `BrowserWindow` needs one colour before the renderer can
+ * `#fefdfc` — but a `BrowserWindow` needs one colour before the renderer can
  * report which theme it will use. Dark is the default theme, so dark is the
  * right guess; the mismatched flash on a light-theme cold start lasts one paint
  * and is the cheaper of the two errors.
  */
-export const WINDOW_BACKGROUND = '#10152a';
+export const WINDOW_BACKGROUND = '#191613';
 
 /**
  * Below this the two rails and the center column stop being usable at all

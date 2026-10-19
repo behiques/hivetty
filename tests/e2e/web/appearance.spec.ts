@@ -127,26 +127,28 @@ test('changing the terminal font resizes the terminal without destroying it', as
  * The shipped theme set.
  *
  * A unit test can prove the store resolves an id and that the gallery renders
- * seven cards. It cannot prove the app actually *repaints* — that lives in a
+ * eight cards. It cannot prove the app actually *repaints* — that lives in a
  * `<style>` element written at runtime, resolved by the real cascade against
  * `tokens.css`, and read back off a computed style. happy-dom has no cascade
  * to lose the fight in, which is exactly the bug `apply.ts` documents.
  */
-const SHIPPED = ['Honeycomb', 'Graphite', 'Tidewater', 'Terracotta', 'Porcelain', 'Cinder'];
+const SHIPPED = [
+  'Honeycomb', 'Graphite', 'Tidewater', 'Terracotta', 'Porcelain', 'Cinder', 'Creep',
+];
 
-test('every shipped theme has a card, and only the Hive has no style element', async ({
+test('every shipped theme has a card, and only HiveTTY has no style element', async ({
   page,
 }) => {
   await openSettings(page);
 
-  for (const name of ['Hive', ...SHIPPED]) {
+  for (const name of ['HiveTTY', ...SHIPPED]) {
     await expect(
       page.getByRole('button', { name: `${name} Built in` }),
       name,
     ).toBeVisible();
   }
 
-  // The Hive is active on boot, and `tokens.css` already is that palette — so
+  // HiveTTY is active on boot, and `tokens.css` already is that palette — so
   // there is deliberately nothing written to the document.
   await expect(page.locator('#hive-theme')).toHaveCount(0);
 });
@@ -180,13 +182,13 @@ test('activating a shipped theme repaints the app and survives a reload', async 
   );
 });
 
-test('going back to the Hive removes the style element again', async ({ page }) => {
+test('going back to HiveTTY removes the style element again', async ({ page }) => {
   await openSettings(page);
 
   await page.getByRole('button', { name: 'Porcelain Built in' }).click();
   await expect(page.locator('#hive-theme')).toHaveCount(1);
 
-  await page.getByRole('button', { name: 'Hive Built in' }).click();
+  await page.getByRole('button', { name: 'HiveTTY Built in' }).click();
   await expect(page.locator('#hive-theme')).toHaveCount(0);
 });
 
@@ -211,7 +213,7 @@ test('a shipped theme offers no Remove', async ({ page }) => {
 test('theme tiles keep their size and flow to fill the row', async ({ page }) => {
   await openSettings(page);
 
-  const card = page.getByRole('button', { name: 'Hive Built in' });
+  const card = page.getByRole('button', { name: 'HiveTTY Built in' });
   const columns = async () =>
     page.evaluate(() => {
       const grid = document.querySelector<HTMLElement>('[class*="auto-fill"]');

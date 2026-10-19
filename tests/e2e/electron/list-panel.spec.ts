@@ -17,8 +17,8 @@ const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
 
 const bar = (page: Page) => page.getByRole('navigation', { name: 'Places' });
 const sessionsList = (page: Page) => page.getByRole('region', { name: 'Sessions list' });
-const GROUND = { dark: 'rgb(16, 21, 42)', light: 'rgb(253, 253, 251)' } as const;
-const PANEL = { dark: 'rgb(20, 26, 51)', light: 'rgb(255, 255, 255)' } as const;
+const GROUND = { dark: 'rgb(25, 22, 19)', light: 'rgb(254, 253, 252)' } as const;
+const PANEL = { dark: 'rgb(31, 27, 24)', light: 'rgb(255, 255, 255)' } as const;
 
 async function open(testInfo: { outputPath: (name: string) => string }) {
   const configPath = testInfo.outputPath('hive-config.json');

@@ -84,7 +84,7 @@ describe('ThemeGallery', () => {
   });
 
   /**
-   * Every shipped id is reserved, not just the Hive's. An import named after
+   * Every shipped id is reserved, not just HiveTTY's. An import named after
    * one used to be able to take its key in `themes` — where the store's
    * built-in-first lookup would then ignore it, leaving a card in the gallery
    * that could never be activated.
@@ -115,7 +115,7 @@ describe('ThemeGallery', () => {
     expect(
       await screen.findByText('Nord imported and activated'),
     ).toBeInTheDocument();
-    expect(useAppearanceStore.getState().activeThemeId).not.toBe('hive');
+    expect(useAppearanceStore.getState().activeThemeId).not.toBe('hivetty');
   });
 
   it('reports a bad file and changes nothing', async () => {
@@ -130,7 +130,7 @@ describe('ThemeGallery', () => {
     expect(
       await screen.findByText("Couldn't import midnight.json"),
     ).toBeInTheDocument();
-    expect(useAppearanceStore.getState().activeThemeId).toBe('hive');
+    expect(useAppearanceStore.getState().activeThemeId).toBe('hivetty');
   });
 
   it('reports a rejected pick (oversize file) rather than treating it as a cancel', async () => {
@@ -150,7 +150,7 @@ describe('ThemeGallery', () => {
       screen.getByText('the file is 300 KB, over the 256 KB limit.'),
     ).toBeInTheDocument();
     expect(screen.getAllByText(/Couldn't import that file/)).toHaveLength(1);
-    expect(useAppearanceStore.getState().activeThemeId).toBe('hive');
+    expect(useAppearanceStore.getState().activeThemeId).toBe('hivetty');
   });
 
   it('a cancelled pick changes nothing and shows no banner', async () => {
@@ -163,7 +163,7 @@ describe('ThemeGallery', () => {
     await Promise.resolve();
 
     expect(screen.queryByText(/imported/i)).toBeNull();
-    expect(useAppearanceStore.getState().activeThemeId).toBe('hive');
+    expect(useAppearanceStore.getState().activeThemeId).toBe('hivetty');
   });
 
   it('hands out a template that is a real theme', async () => {
@@ -207,7 +207,7 @@ describe('ThemeGallery', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Import theme…' }));
     await screen.findByText('Nord imported and activated');
 
-    // By name, not by index: the gallery ships seven built-ins and an
+    // By name, not by index: the gallery ships eight built-ins and an
     // index would silently follow whichever one sorts into that slot.
     await userEvent.click(
       screen.getByRole('button', { name: 'Nord actions' }),
@@ -222,12 +222,12 @@ describe('ThemeGallery', () => {
 
   it('exports the built-in theme too, under its own id', async () => {
     render(<ThemeGallery />);
-    await userEvent.click(screen.getByRole('button', { name: 'Hive actions' }));
+    await userEvent.click(screen.getByRole('button', { name: 'HiveTTY actions' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Export…' }));
 
     expect(vi.mocked(saveThemeFile)).toHaveBeenCalledWith(
-      'hive.json',
-      expect.stringContaining('"name": "Hive"'),
+      'hivetty.json',
+      expect.stringContaining('"name": "HiveTTY"'),
     );
   });
 
@@ -282,7 +282,7 @@ describe('ThemeGallery', () => {
       expect(screen.getByText(/no room left to store it/)).toBeInTheDocument();
       // Rolled back, so what the gallery shows is what storage holds.
       expect(useAppearanceStore.getState().themes).toEqual({});
-      expect(useAppearanceStore.getState().activeThemeId).toBe('hive');
+      expect(useAppearanceStore.getState().activeThemeId).toBe('hivetty');
     } finally {
       setItem.mockRestore();
     }

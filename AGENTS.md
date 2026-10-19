@@ -25,6 +25,19 @@ context and scope: the **HIVE project in Jira**, the backlog.
 Stack: React 19 · TypeScript (strict) · Vite · xterm.js · CodeMirror 6 ·
 Zustand · Tailwind v4 · shadcn/ui · pnpm.
 
+## This repository is HiveTTY, a fork
+
+This checkout is **HiveTTY**, the `behiques/hivetty` fork of The Hive (`yunidbauza/the-hive`).
+It is its own product, with its own look, name and release line, and it is never upstreamed.
+
+- Branch from `origin/main` and open every PR against **`behiques/hivetty`**.
+- Never push to, or open a PR on, the `upstream` remote (`yunidbauza/the-hive`).
+- Upstream work arrives as "Merge the-hive main back into the fork" merge commits; resolve them
+  in favour of the fork's identity (theme, icon, names).
+- The app, its data folders and its release feed are separate from The Hive's: a HiveTTY build
+  must never read, write or update from The Hive's. Text that still says "The Hive" or
+  "Hive TTY" is being renamed (HIVE-241); new text says **HiveTTY**.
+
 ## Essential commands
 
 | Command | What it does |

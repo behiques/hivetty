@@ -24,9 +24,9 @@ import { bar, openConsole } from '../fixtures/places';
 
 const APP_URL = '/?sim=0';
 
-/** `#f7fafb` and `#0b1023`, as the browser reports them. */
-const LIGHT_GROUND = 'rgb(247, 250, 251)';
-const DARK_GROUND = 'rgb(11, 16, 35)';
+/** `#faf9f8` and `#14110e`, as the browser reports them. */
+const LIGHT_GROUND = 'rgb(250, 249, 248)';
+const DARK_GROUND = 'rgb(20, 17, 14)';
 
 /**
  * Dark carries *no* `data-theme` attribute — `:root` is the dark theme and

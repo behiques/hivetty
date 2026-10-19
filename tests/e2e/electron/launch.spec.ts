@@ -47,7 +47,7 @@ test('shows no white flash — the window paints the app background', async ({
 
   // --cc-bg. The default is white, and on a dark app that is the flash people
   // notice on every cold launch (story 081).
-  expect(background.toLowerCase()).toBe('#10152a');
+  expect(background.toLowerCase()).toBe('#191613');
 });
 
 test('loads the dock icon as the bar\'s brand under file://', async ({ page }) => {
