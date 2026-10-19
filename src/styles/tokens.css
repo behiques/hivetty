@@ -231,9 +231,10 @@ body[data-theme='light'] {
   --cc-brand: #885703;
   --cc-green: #2e6b52;
   --cc-amber: #b15313;
-  /* #c77414 as text is 3.5:1 on white; 35% ink takes it past 4.5:1 on every light ground in every
-     built-in theme, the terminal rows included (HIVE-210, HIVE-223). A mix, not a hex: an imported
-     theme derives it from its own colours. */
+  /* A light amber as text can fall short on white (the old Hive's #c77414 was 3.5:1); 35% ink
+     takes it past 4.5:1 on every light ground in every built-in theme, the terminal rows
+     included (HIVE-210, HIVE-223). A mix, not a hex: an imported theme derives it from its own
+     colours. */
   --cc-amber-text: color-mix(in srgb, var(--cc-amber) 65%, var(--cc-ink));
   --cc-red: #cd332b;
   --cc-chip: #f3f1ee;
