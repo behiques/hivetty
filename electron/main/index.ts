@@ -2,7 +2,7 @@ import { dirname, join } from 'node:path';
 
 import { app, dialog, powerSaveBlocker } from 'electron';
 
-import { APP_IDENTITY_NAME } from '@shared/app-name';
+import { APP_NAME } from '@shared/app-name';
 
 import { applyDevDockIcon } from './app-icon';
 import { primaryWindow } from './aux-windows';
@@ -45,25 +45,24 @@ import { createWindow } from './window';
  */
 
 /**
- * The app's identity is "The Hive", and stays so; what people read is
- * `APP_DISPLAY_NAME`, "Hive TTY" (`@shared/app-name` says why the two differ).
- * The menu is built with the display name, so this only decides `userData`
- * and the Keychain item `safeStorage` uses.
+ * The app's one name, `APP_NAME` ("HiveTTY"; `@shared/app-name` says what it
+ * decides). The menu is built with it, and this decides `userData` and the
+ * Keychain item `safeStorage` uses.
  *
  * Without this, `app.getName()` falls back to `package.json`'s `name` field and
- * every role-driven menu item reads `About the-hive`, `Quit the-hive`. The
+ * every role-driven menu item reads `About hivetty`, `Quit hivetty`. The
  * package name is an npm identifier; it was never meant to be shown to anyone.
  *
  * **What this does not fix**, and cannot: the *leftmost* menu title. macOS
  * takes that from `CFBundleName` in the running bundle's `Info.plist`, and
  * under `pnpm desktop:dev` the running bundle is Electron's own — so dev shows
  * `Electron` no matter what any API says. The packaged app's `CFBundleName` is
- * `productName` ("The Hive"), and it has to be: Electron finds its helper apps
- * by that key (see `mac.extendInfo` in `electron-builder.yml`). Patching
- * Electron's `Info.plist` in `node_modules` would make dev *look* right while
- * changing nothing about what ships. See `docs/packaging-and-updates.md`.
+ * `productName` (`HiveTTY`), the same string `APP_NAME` sets, and Electron finds
+ * its helper apps by that key. Patching Electron's `Info.plist` in
+ * `node_modules` would make dev *look* right while changing nothing about what
+ * ships. See `docs/packaging-and-updates.md`.
  */
-app.setName(APP_IDENTITY_NAME);
+app.setName(APP_NAME);
 
 /**
  * Development keeps the userData directory it already has.

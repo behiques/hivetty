@@ -1,6 +1,6 @@
 import { app, type BrowserWindow, dialog, shell } from 'electron';
 
-import { APP_DISPLAY_NAME } from '@shared/app-name';
+import { APP_NAME } from '@shared/app-name';
 import {
   idleUpdateStatus,
   RELEASES_URL,
@@ -145,7 +145,7 @@ export async function ensureUpdater(): Promise<Updater> {
         const parent = parentWindow();
         const options = {
           type: 'info' as const,
-          title: APP_DISPLAY_NAME,
+          title: APP_NAME,
           message,
           detail,
           buttons: ['OK'],
