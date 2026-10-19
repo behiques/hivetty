@@ -53,14 +53,14 @@ asarUnpack:
 extraResources:
   - from: resources/tray
     to: tray
-  # The skills and agents the app ships (HIVE-162), seeded into `~/.hive` on
+  # The skills and agents the app ships (HIVE-162), seeded into `~/.hivetty` on
   # boot by `electron/main/seed/`. Read at runtime like the tray icon, so they
   # ride the same block; `shippedRoot` in `seed/paths.ts` names both locations.
   - from: resources/skills
     to: skills
   - from: resources/agents
     to: agents
-  # Every past version of those files as part hashes, for a `~/.hive` seeded
+  # Every past version of those files as part hashes, for a `~/.hivetty` seeded
   # before the seed merged part by part (`pnpm seed:history`).
   - from: resources/shipped-history.json
     to: shipped-history.json
@@ -174,8 +174,8 @@ dmg:
 # The repository is public, so the updater needs no token and no auth.
 publish:
   provider: github
-  owner: yunidbauza
-  repo: the-hive
+  owner: behiques
+  repo: hivetty
   # **The workflow owns publication, not electron-builder.**
   #
   # `draft` here does not mean "ship drafts". `.github/workflows/release.yml`
