@@ -4,6 +4,7 @@ import { BUILT_IN_THEME } from '@lib/theme/built-in';
 import { BUILT_IN_THEMES } from '@lib/theme/built-in-themes';
 import { luminance, parseColour, swarmPaletteOf } from '@lib/theme/colour';
 import {
+  BUILT_IN_THEME_ID,
   SYNTAX_KEYS,
   TERMINAL_KEYS,
   UI_KEYS,
@@ -27,6 +28,10 @@ describe('the format', () => {
       'creep', 'chitin', 'tissueDeep', 'tissue', 'tissueLit', 'glowCore', 'ground',
     ]);
   });
+  it('is HiveTTY, keyed hivetty (HIVE-241)', () => {
+    expect(BUILT_IN_THEME_ID).toBe('hivetty');
+    expect(BUILT_IN_THEME.name).toBe('HiveTTY');
+  });
 });
 
 describe('the built-in theme mirrors tokens.css', () => {
@@ -42,7 +47,7 @@ describe('the built-in theme mirrors tokens.css', () => {
   /**
    * The creature colours the app applies: the theme's own where it carries
    * them, derived where it does not (`apply.ts` writes `swarmPaletteOf`'s).
-   * Hive dark derives its tissue ramp, so the token is compared as a colour.
+   * HiveTTY dark derives its tissue ramp, so the token is compared as a colour.
    */
   it.each([
     ['dark', dark],
@@ -128,11 +133,11 @@ describe('the built-in theme mirrors tokens.css', () => {
 });
 
 /**
- * The Brood on Hive dark (the hard-coded tissue ramp sat almost on the ground):
+ * The Brood on HiveTTY dark (the hard-coded tissue ramp sat almost on the ground):
  * the creature's body and its lit edges must clear the background at least as
  * well as the weakest of the other built-in dark themes.
  */
-describe('the creatures on Hive dark', () => {
+describe('the creatures on HiveTTY dark', () => {
   const contrast = (a: string, b: string): number => {
     const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
     return (hi + 0.05) / (lo + 0.05);
@@ -148,7 +153,7 @@ describe('the creatures on Hive dark', () => {
   it('stand off the ground as the other themes do', () => {
     expect(others.length).toBeGreaterThan(3);
     const hive = of(BUILT_IN_THEME.modes.dark.ui);
-    // Within 5% of the weakest other theme: the same formula, on Hive's own colours.
+    // Within 5% of the weakest other theme: the same formula, on HiveTTY's own colours.
     expect(hive.body).toBeGreaterThanOrEqual(Math.min(...others.map((o) => o.body)) * 0.95);
     expect(hive.lit).toBeGreaterThanOrEqual(Math.min(...others.map((o) => o.lit)) * 0.95);
   });

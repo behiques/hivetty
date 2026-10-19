@@ -98,7 +98,7 @@ describe('DESIGN-SYSTEM.md — colour tokens', () => {
     }
 
     // Dark is untouched by the change.
-    expect(darkTokens['--cc-term-bg']).toBe('#0b1023');
+    expect(darkTokens['--cc-term-bg']).toBe('#14110e');
     // And the light ground is the editor's, which is the whole point.
     expect(lightTokens['--cc-term-bg']).toBe(lightTokens['--cc-panel-2']);
   });

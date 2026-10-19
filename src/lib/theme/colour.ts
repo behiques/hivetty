@@ -129,9 +129,9 @@ export function luminance(value: string): number {
  *
  * The artifact picks different literals for its dark and light stages, so the
  * mixes do too, keyed on the luminance of `bg` as `tone.ts` keys `T.dark`.
- * Each is tuned to land within 12 per channel of the artifact on the built-in
- * theme, and is made only of the theme's own colours, so an imported theme's
- * creatures match it.
+ * Each is tuned to land within 12 per channel of the artifact on the violet
+ * Hive it was drawn on (the default before HIVE-241), and is made only of the
+ * theme's own colours, so an imported theme's creatures match it.
  */
 export function accentsOf(
   ui: Pick<UiColors, 'bg' | 'ink' | 'red' | 'onBrand'>,

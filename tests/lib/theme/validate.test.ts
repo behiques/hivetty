@@ -281,8 +281,8 @@ describe('the creature colours (HIVE-199)', () => {
   });
 
   it('round-trips a theme that carries them', () => {
-    const result = importTheme(JSON.stringify(BUILT_IN_THEME), 'hive.json');
-    expect(result.ok && result.theme.modes.light.ui.chitin).toBe('#6a54b0');
+    const result = importTheme(JSON.stringify(BUILT_IN_THEME), 'hivetty.json');
+    expect(result.ok && result.theme.modes.light.ui.chitin).toBe('#885703');
   });
 
   it('rejects an unreadable creep like any other ui colour', () => {

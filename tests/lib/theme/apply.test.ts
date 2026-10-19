@@ -71,7 +71,7 @@ describe('themeCss', () => {
     delete theme.modes.dark.ui.creep;
     const out = themeCss(theme);
     expect(out).toContain(`--cc-creep: ${swarmPaletteOf(theme.modes.dark.ui).creep};`);
-    expect(out).toContain('--cc-chitin: #b9a7f0;');
+    expect(out).toContain('--cc-chitin: #eab26b;');
   });
 
   it.each(['dark', 'light'] as const)(
