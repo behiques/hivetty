@@ -37,7 +37,7 @@ import { readUserSkills, type SkillsRead } from './read';
 
 export interface SkillsRuntime {
   /**
-   * Re-read `~/.hive/skills` and regenerate the plugin directory.
+   * Re-read `~/.hivetty/skills` and regenerate the plugin directory.
    *
    * Called at launch and again before **every** spawn. A readdir per spawn is
    * cheap, and paying it is what makes "save a skill, start a session, it is
@@ -174,7 +174,7 @@ interface SkillsRuntimeOptions {
   /**
    * Something the first regeneration must wait for (HIVE-162).
    *
-   * The seed writes shipped skills into `~/.hive/skills` at registration, and
+   * The seed writes shipped skills into `~/.hivetty/skills` at registration, and
    * the plugin is regenerated before every spawn. The two are independent
    * promises, and a spawn that raced the seed would mirror a half-copied
    * folder — a `SKILL.md` whose script is not on disk yet, the exact shape
@@ -382,7 +382,7 @@ export function createSkillsRuntime({
 
     async write(name: string, body: string): Promise<SkillsSnapshot> {
       // The tree does not exist until there is something to put in it, so the
-      // first save is also what creates `~/.hive/skills`.
+      // first save is also what creates `~/.hivetty/skills`.
       await mkdir(join(skillsRoot(), name), { recursive: true });
       await writeFile(fileFor(name), body, 'utf8');
       return snapshot(await sync());
@@ -451,7 +451,7 @@ export function createSkillsRuntime({
       /*
         The content decides, and nothing else does (HIVE-148).
 
-        A blanket `+x` would show up in `~/.hive/skills` as a page of
+        A blanket `+x` would show up in `~/.hivetty/skills` as a page of
         `100644 -> 100755` with nothing behind it, and that directory is a
         dotfiles directory for the people most likely to write skills. A
         toggle would be a second thing to get wrong. `#!` is what the kernel

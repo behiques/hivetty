@@ -1958,7 +1958,7 @@ export interface PtyDiagnostics {
  *
  * HIVE-96 adds `skills`, and it is the second namespace after `fs` that writes
  * to the disk. What a web page can now do that it could not before: create,
- * rewrite and delete files under `~/.hive/skills` — and **only** there. No verb
+ * rewrite and delete files under `~/.hivetty/skills` — and **only** there. No verb
  * takes a path; each names a skill, and `SKILL_NAME_PATTERN` admits only
  * `[a-z0-9-]+`, so the directory a request can reach is not a matter of
  * validation but of what the name is able to express. `fs`, by contrast, has to
@@ -2415,7 +2415,7 @@ export interface HiveBridge {
     keepMine(request: ShippedRequest): Promise<ShippedStatus[]>;
   };
   /**
-   * The custom skills The Hive injects into the sessions it starts (HIVE-96,
+   * The custom skills HiveTTY injects into the sessions it starts (HIVE-96,
    * HIVE-148).
    *
    * Five of the fourteen verbs still name only a skill, none of them a path:

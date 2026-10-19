@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { parseInvocation } from '../../../electron/main/cli';
 
 /** Packaged argv is [exe, ...args]; dev argv is [electron, appPath, ...args]. */
-const packagedArgv = (...args: string[]) => ['/Applications/The Hive.app/x', ...args];
+const packagedArgv = (...args: string[]) => ['/Applications/HiveTTY.app/x', ...args];
 const devArgv = (...args: string[]) => ['/node_modules/electron', '/repo', ...args];
 
 describe('parseInvocation', () => {
@@ -23,7 +23,7 @@ describe('parseInvocation', () => {
   });
 
   it('does not mistake a path containing --server for the flag', () => {
-    expect(parseInvocation(['/opt/--server/The Hive'], true)).toEqual({ kind: 'app', server: false });
+    expect(parseInvocation(['/opt/--server/HiveTTY'], true)).toEqual({ kind: 'app', server: false });
   });
 
   it('reads --pair with a name', () => {
@@ -43,11 +43,14 @@ describe('parseInvocation', () => {
   it('asks for a name when --pair has none', () => {
     const result = parseInvocation(packagedArgv('--pair'), true);
     expect(result.kind).toBe('usage');
+    // HIVE-242: the command is hivetty.
+    expect(result).toMatchObject({ message: expect.stringMatching(/^Usage: hivetty --pair /) });
   });
 
   it('asks for a name when --revoke has none', () => {
     const result = parseInvocation(packagedArgv('--revoke'), true);
     expect(result.kind).toBe('usage');
+    expect(result).toMatchObject({ message: expect.stringMatching(/^Usage: hivetty --revoke /) });
   });
 
   it('asks for a name when the next token after --pair is another flag', () => {

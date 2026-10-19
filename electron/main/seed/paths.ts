@@ -23,10 +23,10 @@ export function shippedRoot(
 }
 
 /**
- * `~/.hive/.seed.json` — what the last seed wrote, per file.
+ * `~/.hivetty/.seed.json` — what the last seed wrote, per file.
  *
- * A dotfile beside `config.json`, in `~/.hive` rather than userData: it
- * records a fact about files that live in `~/.hive`, and a person who copies
+ * A dotfile beside `config.json`, in `~/.hivetty` rather than userData: it
+ * records a fact about files that live in `~/.hivetty`, and a person who copies
  * that folder to a new machine should carry the record with it, or every
  * shipped file they had left untouched would look hand-edited there.
  */
@@ -34,7 +34,7 @@ export const SEED_MANIFEST_FILE = '.seed.json';
 
 /**
  * `shipped-history.json` beside `skills/` and `agents/` under the shipped root:
- * every past version of each shipped definition, for a `~/.hive` seeded
+ * every past version of each shipped definition, for a `~/.hivetty` seeded
  * before the manifest recorded parts (`history.ts`).
  */
 export const SHIPPED_HISTORY_FILE = 'shipped-history.json';

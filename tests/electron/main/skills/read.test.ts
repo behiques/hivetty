@@ -129,7 +129,7 @@ describe('readUserSkills', () => {
     /*
       A `Dirent` reports `lstat`, so `isDirectory()` is false for a link and the
       skill was dropped with no row and no reason. Anyone whose dotfiles manage
-      `~/.hive/skills` links them in — the population most likely to write
+      `~/.hivetty/skills` links them in — the population most likely to write
       skills at all.
     */
     const elsewhere = join(await mkdtemp(join(tmpdir(), 'hive-linked-')), 'deploy');
@@ -211,7 +211,7 @@ describe('readUserSkills', () => {
   });
 
   it('ignores a loose file beside the skill folders', async () => {
-    // `~/.hive/skills/README.md` is a thing a person writes. It is not a
+    // `~/.hivetty/skills/README.md` is a thing a person writes. It is not a
     // skill, and it is not a problem either.
     await mkdir(root, { recursive: true });
     await writeFile(join(root, 'README.md'), 'notes', 'utf8');

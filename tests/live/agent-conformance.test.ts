@@ -1083,10 +1083,10 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
 
     /*
       The isolation, and it is one line because the runtime was built for it:
-      every path an agent touches — `~/.hive/agents`, `~/.hive/ledger/agents.json`,
-      `~/.hive/work/<name>`, `~/.hive/skills` — is derived from `configPath()`,
+      every path an agent touches — `~/.hivetty/agents`, `~/.hivetty/ledger/agents.json`,
+      `~/.hivetty/work/<name>`, `~/.hivetty/skills` — is derived from `configPath()`,
       which reads this variable per call. Pointing it at a temp directory moves
-      all of them at once, so nothing here can reach the developer's own `~/.hive`.
+      all of them at once, so nothing here can reach the developer's own `~/.hivetty`.
       `userData` is passed explicitly rather than read from Electron, which is not
       running under Vitest.
     */

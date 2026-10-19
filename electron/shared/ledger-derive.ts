@@ -613,7 +613,7 @@ interface AgentSite {
  *
  * The builder and the fixer post `meta.worktree` (and `meta.checkout`, the
  * project checkout the worktree was cut from) on the posts of a job
- * (`resources/skills/worktree`). Their worktrees live under `~/.hive/work`,
+ * (`resources/skills/worktree`). Their worktrees live under `~/.hivetty/work`,
  * outside every project path, which is why the checkout has to be named too:
  * the renderer maps it to a project, and a terminal needs one.
  *

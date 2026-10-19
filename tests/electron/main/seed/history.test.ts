@@ -14,7 +14,7 @@ import {
 import { baseOf, hashPart, mergeParts } from '../../../../electron/main/seed/merge';
 
 /**
- * A `~/.hive` seeded before the part manifest has no base for its files. The
+ * A `~/.hivetty` seeded before the part manifest has no base for its files. The
  * shipped history gives it one: the version the file came from, with any
  * part that still matches some shipped version counted as untouched.
  */

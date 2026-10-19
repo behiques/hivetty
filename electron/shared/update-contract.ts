@@ -19,14 +19,14 @@
  * what this app has, because no Developer ID exists to sign it with — the
  * designated requirement is the binary's `cdhash`:
  *
- *     $ codesign -d -r- "The Hive.app"
+ *     $ codesign -d -r- "HiveTTY.app"
  *     # designated => cdhash H"4070118b4071c5c37facee2a4e06c36b9a79dd4c"
  *
  * A new version has a different cdhash by construction, so it can never satisfy
  * the old one's requirement. **Measured, not assumed** — 0.1.0 was published,
  * then 0.1.1, and the packaged 0.1.0 was driven through the whole flow:
  *
- *     [Error: Code signature at URL file:///…/The Hive.app/ did not pass
+ *     [Error: Code signature at URL file:///…/HiveTTY.app/ did not pass
  *      validation: code failed to satisfy specified code requirement(s)]
  *       code: -1, domain: 'SQRLCodeSignatureErrorDomain'
  *
@@ -43,7 +43,7 @@
  */
 
 /** Where a user goes when the app cannot update itself. */
-export const RELEASES_URL = 'https://github.com/yunidbauza/the-hive/releases';
+export const RELEASES_URL = 'https://github.com/behiques/hivetty/releases';
 
 /** The release page for one specific version. */
 export const releaseUrlFor = (version: string): string =>

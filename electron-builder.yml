@@ -1,26 +1,19 @@
-# How The Hive becomes something you can install.
+# How HiveTTY becomes something you can install.
 #
 # `electron-vite` already produces `out/{main,preload,renderer}`; this turns that
 # into a `.app` inside a `.dmg`, plus the `.zip` and `latest-mac.yml` that
 # `electron-updater` needs to find a newer one. See `docs/packaging-and-updates.md`.
 
-# The bundle identifier, and **not** a cosmetic string.
-#
-# For a Developer ID build it is part of the *designated requirement* Squirrel
-# checks before swapping one version for the next, so changing it after signed
-# releases begin breaks in-place updating across exactly one release. It was
-# changed from `dev.yunidbauza.the-hive` in the same release that introduced
-# signing, because that release already required a manual install — the one
-# moment the change costs nothing.
-appId: com.behiques.the-hive
+# HiveTTY's own identifier (HIVE-242). It is part of the designated requirement,
+# so it differs from The Hive's `com.behiques.the-hive` on purpose: the two
+# install side by side and neither updates the other. Changing it after signed
+# releases begin breaks in-place updating across exactly one release.
+appId: com.behiques.hivetty
 
-# The app's identity, not its display name: it names the bundle (`The Hive.app`),
-# its executable, the dmg and zip the updater fetches, and so the Finder
-# label and the path a server's LaunchAgent runs. The name people read,
-# "Hive TTY", is set over it below as `CFBundleDisplayName` (`mac.extendInfo`)
-# and in `electron/shared/app-name.ts`. Changing this one is a migration, not a rename:
-# see "The app's name" in `docs/packaging-and-updates.md`.
-productName: The Hive
+# The app's one name (`electron/shared/app-name.ts`): it names the bundle
+# (`HiveTTY.app`), its executable and helper apps, and the dmg and zip the
+# updater fetches. See "The app's name" in `docs/packaging-and-updates.md`.
+productName: HiveTTY
 
 copyright: Copyright © 2026 Behiques Consulting LLC
 
@@ -60,14 +53,14 @@ asarUnpack:
 extraResources:
   - from: resources/tray
     to: tray
-  # The skills and agents the app ships (HIVE-162), seeded into `~/.hive` on
+  # The skills and agents the app ships (HIVE-162), seeded into `~/.hivetty` on
   # boot by `electron/main/seed/`. Read at runtime like the tray icon, so they
   # ride the same block; `shippedRoot` in `seed/paths.ts` names both locations.
   - from: resources/skills
     to: skills
   - from: resources/agents
     to: agents
-  # Every past version of those files as part hashes, for a `~/.hive` seeded
+  # Every past version of those files as part hashes, for a `~/.hivetty` seeded
   # before the seed merged part by part (`pnpm seed:history`).
   - from: resources/shipped-history.json
     to: shipped-history.json
@@ -75,20 +68,11 @@ extraResources:
 mac:
   category: public.app-category.developer-tools
   icon: resources/icon.icns
-  # The name people read, over the identity `productName` keeps
-  # (`electron/shared/app-name.ts`): the Dock, Cmd-Tab and Launchpad prefer
-  # the display name, so they say "Hive TTY"; Finder still says "The Hive"
-  # (the file name). The key is not part of the code signature's designated
-  # requirement, so in-place updates are unaffected.
-  #
-  # `CFBundleName` must stay `productName`. Electron locates its helper apps
-  # as `<CFBundleName> Helper.app` under Contents/Frameworks and aborts at
-  # launch (`FATAL: Unable to find helper app`, electron_main_delegate_mac.mm)
-  # when that bundle is missing, while electron-builder names the helpers
-  # from `productName`. Overriding it shipped 1.0.0 crashing 85ms after
-  # launch on every install; so the leftmost menu title reads "The Hive".
-  extendInfo:
-    CFBundleDisplayName: Hive TTY
+  # `CFBundleName` follows `productName`, and no `extendInfo` overrides it.
+  # Electron locates its helper apps as `<CFBundleName> Helper.app` under
+  # Contents/Frameworks and aborts at launch (`FATAL: Unable to find helper
+  # app`) when that bundle is missing, while electron-builder names the helpers
+  # from `productName`. Overriding it shipped 1.0.0 crashing 85ms after launch.
   target:
     - target: dmg
       arch: [arm64]
@@ -136,7 +120,7 @@ mac:
   hardenedRuntime: true
 
   # The template stopped being enough at the microphone (#307). A `claude` in a
-  # Hive pty asks for it as The Hive, the process macOS holds responsible, and
+  # Hive pty asks for it as HiveTTY, the process macOS holds responsible, and
   # the hardened runtime refuses a bundle without `device.audio-input` *silently*:
   # no prompt, no row in Privacy › Microphone, Claude Code's voice mode just
   # never hears anything. So the plist is carried now, the template's three
@@ -190,8 +174,8 @@ dmg:
 # The repository is public, so the updater needs no token and no auth.
 publish:
   provider: github
-  owner: yunidbauza
-  repo: the-hive
+  owner: behiques
+  repo: hivetty
   # **The workflow owns publication, not electron-builder.**
   #
   # `draft` here does not mean "ship drafts". `.github/workflows/release.yml`

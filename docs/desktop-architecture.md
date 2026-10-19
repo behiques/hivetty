@@ -151,26 +151,26 @@ rather than `node:crypto`.
 
 ## The workspace config
 
-`~/.hive/config.json` — overridable by `HIVE_CONFIG_PATH` — maps a project id
+`~/.hivetty/config.json` — overridable by `HIVE_CONFIG_PATH` — maps a project id
 shown in the Sessions panel to a real directory on this machine. It is the only thing
 that makes a PTY's `cwd` real; everything else about a project is still fixtures.
 
-An unpackaged build (`pnpm desktop:dev`, `desktop:preview`) uses `~/.hive-dev`
+An unpackaged build (`pnpm desktop:dev`, `desktop:preview`) uses `~/.hivetty-dev`
 instead, the same split userData already makes, so a dev run beside the
 installed app never shares its ledger, agents or scheduler. `HIVE_CONFIG_PATH`
-overrides both. A fresh `~/.hive-dev` has no projects: copy `config.json`
+overrides both. A fresh `~/.hivetty-dev` has no projects: copy `config.json`
 across to start from yours. Whichever folder it is, one app process holds it:
 `hive.lock` beside `config.json` (pid plus start time, taken over when that
 process is gone) refuses a second one at boot (HIVE-227).
 
-`~/.hive/skills/<name>/SKILL.md` is its sibling: the custom slash
+`~/.hivetty/skills/<name>/SKILL.md` is its sibling: the custom slash
 commands the app injects into every session it starts. Main reads that tree
 before **every** spawn — a readdir over a handful of small files — which is what
 makes a skill written by hand in a text editor and one saved from Settings the
 same feature, with no invalidation protocol between them. The root is derived
 from `dirname(configPath())` rather than `homedir()`, so `HIVE_CONFIG_PATH`
 relocates the skills too and an e2e run never writes into the developer's own
-`~/.hive`.
+`~/.hivetty`.
 
 Read in main (`electron/main/config/`), never in the renderer. The file is
 user-authored input arriving from disk, so it gets the same treatment as input
@@ -196,7 +196,7 @@ template has to explain itself in the file the user opens.
 
 ## What main writes to `userData`, and the session history
 
-`~/.hive/config.json` is the user's; `app.getPath('userData')` is the app's, and
+`~/.hivetty/config.json` is the user's; `app.getPath('userData')` is the app's, and
 five things live there. `window-state.json` (geometry, `window-state.ts`), the
 per-theme hook settings and the status-line script under `hive/`
 (`hooks/settings.ts`), the **generated skills plugin** under `hive/plugin/`
@@ -250,7 +250,7 @@ every record that any session had run: `hive-store` boots empty by design and
 the session registry is a `Map` cleared on quit. Claude Code itself does not
 behave that way — it writes each conversation to
 `~/.claude/projects/<escaped-cwd>/<uuid>.jsonl` and lists them again on the next
-launch — and this is the equivalent for Hive TTY's own rows.
+launch — and this is the equivalent for HiveTTY's own rows.
 
 Main authors it, from the four moments it already knows something worth keeping:
 the spawn (which is also the only moment the `--session-id` uuid can be
@@ -288,7 +288,7 @@ moment, differing in nothing else:
 ```
 
 Every session this app had ever spawned carried a `custom-title` and no
-`ai-title` for that reason. Hive TTY was not failing to infer names; it was
+`ai-title` for that reason. HiveTTY was not failing to infer names; it was
 stopping Claude from inferring them.
 
 So a session now opens unnamed, Claude titles it from the conversation, and the
@@ -584,7 +584,7 @@ by design. The plugin-hosted ones are not free: a single Telegram channel MCP
 server measured ~96 MB RSS, and its `start` script runs `bun install` on every
 session start.
 
-Hive TTY opts out of that path already — `hookSettings` sets
+HiveTTY opts out of that path already — `hookSettings` sets
 `disableAgentView: true` unconditionally, which also disables the on-demand
 daemon inside Hive sessions, so a Hive terminal's MCP servers are ordinary
 descendants of its shell and are swept with it.

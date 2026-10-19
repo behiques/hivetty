@@ -1,8 +1,8 @@
 # The config file
 
-`~/.hive/config.json` holds your projects and everything Settings changes. It is meant to stay
+`~/.hivetty/config.json` holds your projects and everything Settings changes. It is meant to stay
 hand-editable. Settings writes it for you; if you edit it by hand, press **Reload** in
-**Settings › Advanced**. The same button picks up skills and agents edited under `~/.hive`, and
+**Settings › Advanced**. The same button picks up skills and agents edited under `~/.hivetty`, and
 names any field that only takes effect after a restart.
 
 **On this page:** [Where it lives](#where-it-lives) · [A complete example](#a-complete-example) ·
@@ -12,14 +12,14 @@ names any field that only takes effect after a restart.
 ## Where it lives
 
 ```text
-~/.hive/
+~/.hivetty/
 ├── config.json               projects, runtime, integrations (this page)
 ├── skills/<name>/SKILL.md    custom skills
 ├── agents/<name>/AGENT.md    agent definitions
 ├── work/<agent>/             each agent's working folder
 └── ledger/YYYY-MM-DD.jsonl   the ledger, one file per day
 
-~/Library/Application Support/The Hive/     the app's own data folder
+~/Library/Application Support/HiveTTY/      the app's own data folder
 ├── sessions.json             session history
 ├── jira-credential.bin       encrypted with the Keychain
 ├── slack-tokens.bin          encrypted with the Keychain
@@ -33,14 +33,14 @@ Set `HIVE_CONFIG_PATH` to use another file. Skills, agents and the ledger move w
 
 ```json
 {
-  "//": "Hive TTY workspace config. Keys starting with // are comments.",
+  "//": "HiveTTY workspace config. Keys starting with // are comments.",
   "version": 2,
   "shell": "/bin/zsh",
   "claudeCommand": "claude",
   "env": { "NODE_ENV": "development" },
   "importLoginEnv": true,
   "projects": [
-    { "id": "the-hive", "key": "hive", "name": "Hive TTY", "path": "~/Projects/the-hive" },
+    { "id": "the-hive", "key": "hive", "name": "HiveTTY", "path": "~/Projects/the-hive" },
     {
       "id": "nova-web",
       "key": "nw",

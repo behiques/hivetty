@@ -55,7 +55,7 @@ describe('environment', () => {
     /**
      * The most consequential entry on the deny list for *this* app.
      *
-     * Launch The Hive from a terminal that is itself inside a Claude Code
+     * Launch HiveTTY from a terminal that is itself inside a Claude Code
      * session — which is how it gets developed — and every pty would hand
      * `CLAUDE_CODE_SESSION_ID` and `CLAUDE_CODE_CHILD_SESSION` to the `claude`
      * it starts. That agent then joins the launching session instead of

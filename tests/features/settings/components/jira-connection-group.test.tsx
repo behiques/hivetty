@@ -63,7 +63,7 @@ describe('rendering', () => {
 
   it('says where these two live', () => {
     draw();
-    expect(screen.getByText(/~\/\.hive\/config\.json/)).toBeInTheDocument();
+    expect(screen.getByText(/~\/\.hivetty\/config\.json/)).toBeInTheDocument();
   });
 });
 
@@ -172,7 +172,7 @@ describe('committing', () => {
     it('says where each one came from', () => {
       /**
        * Without this the values look like stored settings, and the user goes
-       * looking in ~/.hive/config.json for lines that are not there.
+       * looking in ~/.hivetty/config.json for lines that are not there.
        */
       draw(
         status({
@@ -189,7 +189,7 @@ describe('committing', () => {
       draw(status());
 
       expect(screen.getByText(/pasted https:\/\//)).toBeInTheDocument();
-      expect(screen.getByText(/~\/\.hive\/config\.json/)).toBeInTheDocument();
+      expect(screen.getByText(/~\/\.hivetty\/config\.json/)).toBeInTheDocument();
     });
 
     it('writes an edit to config, which then overrides the environment', async () => {

@@ -195,7 +195,7 @@ test('a first run writes a template and offers a way to add a project', async ({
   }
 });
 
-test('HIVE_CONFIG_PATH wins over ~/.hive/config.json', async ({}, testInfo) => {
+test('HIVE_CONFIG_PATH wins over ~/.hivetty/config.json', async ({}, testInfo) => {
   // Prove the override by pointing at a directory the developer's real config
   // could not name: a scratch path created for this test only.
   const scratch = testInfo.outputPath('scratch-repo');

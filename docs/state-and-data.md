@@ -107,7 +107,7 @@ What *is* split off it, on purpose: **where** a file renders is
 ### The ledger slice is a mirror, not a source
 
 `hive-store.state.ledger` is a `LedgerEntry[]` — the tail of the append-only log
-that main owns on disk under `~/.hive/ledger/`. It is the one slice in this store
+that main owns on disk under `~/.hivetty/ledger/`. It is the one slice in this store
 whose authority lives in the other process, and that shapes both of its actions:
 
 - **`hydrateLedger(entries)` merges by `id`; it does not replace.**
@@ -314,7 +314,7 @@ Restoring it would mean trusting a stale answer on a machine whose theme has
 since changed. `resolvedTheme` is likewise derived in a selector and never
 stored, per the one-source-of-truth rule below.
 
-**Why `localStorage` and not `~/.hive/config.json`.** That file is main's and
+**Why `localStorage` and not `~/.hivetty/config.json`.** That file is main's and
 describes the *workspace* — project paths, shell, agent command — facts a
 session needs before it can run. Appearance is a fact about the person looking
 at the screen, wanted by the renderer before its first paint. Reading it over
@@ -478,7 +478,7 @@ keyed by `prKey(owner, repo, n)` lowercased, holds each opened PR's detail
 `PR_DETAIL_CAP`; a PR leaving the sweep drops its detail). `commentOnPr`
 answers the `GhResult` and re-reads on success. The readings, all memoised over
 the ledger: `useShipTrack`, `usePrEvents` (Everything), `usePrOpener` ("opened
-by"), `useReviewUrls` ("via Hive TTY"), `useHolderPost` (the track's now line)
+by"), `useReviewUrls` ("via HiveTTY"), `useHolderPost` (the track's now line)
 and `useMergeAsk`. `usePrsQuiet()` is the empty Hatchery.
 
 **The Files tab (HIVE-207).** `PrDetail.files` holds the first 100 changed files: path, +/−, change type and GitHub's `viewerViewedState` as `viewed`/`unviewed`/`dismissed`. `changedFiles` is the true total. The diff text lives in its own PR-keyed slice, `prDiffs`, read at the detail's `headSha`: once per sha, and again when the 60s detail poll sees the head move. It has its own slice because `loadPrDetail` replaces a detail wholesale. The same cap applies, and it is dropped with the PR. Parsing (`src/lib/unified-diff.ts`), the tree, counts and thread placement (`src/lib/pr-files.ts`) are computed on render, never stored. **Viewed state lives on GitHub, not in a store.** `setPrFileViewed` patches the one file at once, rolls it back on a refusal, and re-reads the detail either way. Thread writes (`replyToPrThread`, `setPrThreadResolved`) are not optimistic; the reload shows them.
@@ -602,7 +602,7 @@ pre-populated now start empty in both targets, because each has a real producer:
 | Slice | Comes from |
 | --- | --- |
 | `entities`, `order` | sessions the user starts (PTYs) |
-| `agentOrder` | `AGENT.md` definitions under `~/.hive/agents`, mirrored by `use-agents-sync.ts` |
+| `agentOrder` | `AGENT.md` definitions under `~/.hivetty/agents`, mirrored by `use-agents-sync.ts` |
 | `projects` | the config file, read through `useProjects()` |
 | `tickets` | Jira, via `refreshTickets()` |
 | `orchLines` | what the orchestrator actually does |

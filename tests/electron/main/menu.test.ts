@@ -9,7 +9,7 @@ vi.mock('electron', () => ({
 
 const { buildMenuTemplate } = await import('../../../electron/main/menu');
 
-const mac = { isMac: true, isDev: false, appName: 'The Hive' };
+const mac = { isMac: true, isDev: false, appName: 'HiveTTY' };
 
 /** Collect every `role` in a template, at any depth. */
 function roles(template: MenuItemConstructorOptions[]): string[] {
@@ -43,7 +43,7 @@ describe('buildMenuTemplate', () => {
   });
 
   it('titles the app menu with the app name on macOS', () => {
-    expect(buildMenuTemplate(mac)[0]?.label).toBe('The Hive');
+    expect(buildMenuTemplate(mac)[0]?.label).toBe('HiveTTY');
   });
 
   it('omits the macOS app menu elsewhere, but keeps Edit and its clipboard roles', () => {
@@ -97,7 +97,7 @@ describe('buildMenuTemplate', () => {
       const item = appSubmenu({ ...mac, onShowAbout })[0];
 
       expect(item?.role).toBeUndefined();
-      expect(item?.label).toBe('About The Hive');
+      expect(item?.label).toBe('About HiveTTY');
 
       item?.click?.(undefined as never, undefined as never, undefined as never);
       expect(onShowAbout).toHaveBeenCalledTimes(1);
@@ -121,18 +121,18 @@ describe('buildMenuTemplate', () => {
         onCheckForUpdates: vi.fn(),
       }).map((entry) => entry.label);
 
-      expect(labels[0]).toBe('About The Hive');
+      expect(labels[0]).toBe('About HiveTTY');
       expect(labels.indexOf('Check for Updates…')).toBeGreaterThan(0);
     });
   });
 
   it('names Hide and Quit after the app, as their roles would after app.getName()', () => {
-    // The roles' own labels read app.getName(), which is the identity ("The Hive"), not the display name.
-    const submenu = buildMenuTemplate({ ...mac, appName: 'Hive TTY' })[0]?.submenu as MenuItemConstructorOptions[];
+    // The roles' own labels read app.getName(); the template names them after appName instead.
+    const submenu = buildMenuTemplate({ ...mac, appName: 'HiveTTY' })[0]?.submenu as MenuItemConstructorOptions[];
     const hide = submenu.find((item) => item.role === 'hide');
     const quit = submenu.find((item) => item.role === 'quit');
-    expect(hide?.label).toBe('Hide Hive TTY');
-    expect(quit?.label).toBe('Quit Hive TTY');
+    expect(hide?.label).toBe('Hide HiveTTY');
+    expect(quit?.label).toBe('Quit HiveTTY');
   });
 
   it('keeps zoom and fullscreen available', () => {

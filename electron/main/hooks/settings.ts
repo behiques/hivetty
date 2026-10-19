@@ -153,7 +153,7 @@ interface HookSettings {
   /**
    * Claude Code's agent view, which the Hive turns off in every session.
    *
-   * **The Hive is the fleet view.** Claude Code's own agent list is a second,
+   * **HiveTTY is the fleet view.** Claude Code's own agent list is a second,
    * competing one inside a single tab of the first, and `←` — the app's own
    * "back to the orchestrator" key — is what opens it. `keymap.ts` intercepts
    * that key at an empty prompt, which leaves the race to be won on every
@@ -164,7 +164,7 @@ interface HookSettings {
    *
    * **What it costs**, and it is not nothing: the same switch disables
    * `claude agents`, `--bg`, `/background` and the on-demand daemon inside
-   * these sessions. The Hive drives none of them — it spawns its own ptys and
+   * these sessions. HiveTTY drives none of them — it spawns its own ptys and
    * watches them through hooks — so the loss is confined to a user who wanted
    * Claude Code's background agents *inside* a Hive session, which is the
    * fleet-within-a-fleet this exists to prevent.
@@ -477,7 +477,7 @@ export function metricsScript(url: string, identity?: HookIdentity): string {
   const token = identity?.token ?? `$${HOOK_ENV_TOKEN}`;
 
   return `#!/bin/sh
-# The Hive — session usage reporter. Written per launch; do not edit.
+# HiveTTY — session usage reporter. Written per launch; do not edit.
 # Reads Claude Code's status line payload on stdin, forwards it to the app, and
 # prints nothing so no status line is rendered. See electron/main/hooks/settings.ts.
 ${guards}curl -s -m 5 -o /dev/null \\

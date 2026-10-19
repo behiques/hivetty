@@ -412,7 +412,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
 
         `Ledger.append` reports a failure as a value rather than throwing, and
         without this the entry that would have retired this ask is missing while
-        the wake still fires — so a full disk or a moved `~/.hive` would spawn a
+        the wake still fires — so a full disk or a moved `~/.hivetty` would spawn a
         fresh headless run for every expired ask, every sixty seconds, for as
         long as the condition lasts.
       */
@@ -1334,7 +1334,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         return {
           started: false,
           refused: 'unknown',
-          reason: 'Hive TTY is shutting down.',
+          reason: 'HiveTTY is shutting down.',
         };
       }
 

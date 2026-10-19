@@ -1,18 +1,18 @@
 <img src="docs/assets/splash.webp" alt="The splash: HIVE tty and the boot log beside the brood world, comb chambers turning in a volume nothing outlines, two of them lit amber" width="100%">
 
-[![Latest release](https://img.shields.io/github/v/release/yunidbauza/the-hive?style=flat-square&labelColor=141a33&color=334fa9&label=release)](https://github.com/yunidbauza/the-hive/releases/latest)
-[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fyunidbauza%2F404ec74f87cbfb9939bb78482eff9719%2Fraw%2Fthe-hive-downloads.json&style=flat-square&labelColor=141a33)](https://github.com/yunidbauza/the-hive/releases)
-[![Open issues](https://img.shields.io/github/issues/yunidbauza/the-hive?style=flat-square&labelColor=141a33&color=ffac47&label=open%20issues)](https://github.com/yunidbauza/the-hive/issues)
-[![License](https://img.shields.io/github/license/yunidbauza/the-hive?style=flat-square&labelColor=141a33&color=74b79c)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/behiques/hivetty?style=flat-square&labelColor=1f1b18&color=b67703&label=release)](https://github.com/behiques/hivetty/releases/latest)
+[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fyunidbauza%2F404ec74f87cbfb9939bb78482eff9719%2Fraw%2Fhivetty-downloads.json&style=flat-square&labelColor=1f1b18)](https://github.com/behiques/hivetty/releases)
+[![Open issues](https://img.shields.io/github/issues/behiques/hivetty?style=flat-square&labelColor=1f1b18&color=fea97c&label=open%20issues)](https://github.com/behiques/hivetty/issues)
+[![License](https://img.shields.io/github/license/behiques/hivetty?style=flat-square&labelColor=1f1b18&color=74b79c)](LICENSE)
 
 > **HiveTTY** is the [`behiques/hivetty`](https://github.com/behiques/hivetty) fork of
 > [The Hive](https://github.com/yunidbauza/the-hive), with its own theme, name and releases.
 
-# Hive TTY
+# HiveTTY
 
 **A hive mind for your sessions: many workers, one queen, nothing slipping through the comb.**
 
-Hive TTY is a command center for many Claude Code sessions on one Mac. Every session is a
+HiveTTY is a command center for many Claude Code sessions on one Mac. Every session is a
 real `claude` in a real terminal, unchanged: same keys, same output, same conversation.
 Around it sits everything you would otherwise leave the terminal for: an inbox that
 surfaces the session waiting on you, Jira tickets, pull requests, a file explorer and
@@ -20,7 +20,7 @@ editor, custom skills, and background agents.
 
 Built for Claude Code.
 
-<img src="docs/assets/screenshot.png" alt="Hive TTY: the bar and the Sessions panel, a live session on the stage, its Files tab, and the Inbox pill" width="100%">
+<img src="docs/assets/screenshot.png" alt="HiveTTY: the bar and the Sessions panel, a live session on the stage, its Files tab, and the Inbox pill" width="100%">
 
 ## Contents
 
@@ -35,7 +35,7 @@ Built for Claude Code.
 - [Stack](#stack)
 - [License](#license)
 
-**Guides** (using Hive TTY)
+**Guides** (using HiveTTY)
 
 | Start here | Everyday work | Automation | Setup and reference |
 | --- | --- | --- | --- |
@@ -46,18 +46,18 @@ Built for Claude Code.
 | | [Files and the editor](docs/guide/explorer.md) | [Server mode and remote attach](docs/guide/remote.md) | |
 | | [Custom skills](docs/guide/skills.md) | | |
 
-**Internals** (working on Hive TTY): [architecture](docs/architecture.md) ·
+**Internals** (working on HiveTTY): [architecture](docs/architecture.md) ·
 [contributing](docs/contributing.md) · [every deep dive](docs/README.md#internals)
 
 ## What it does
 
 | Feature | What it does |
 | --- | --- |
-| **Runs the terminals** | One real PTY per session. Start one from a project, a Jira ticket, or the console: `spawn the-hive "fix the lead form"`. [Sessions](docs/guide/sessions.md) |
+| **Runs the terminals** | One real PTY per session. Start one from a project, a Jira ticket, or the console: `spawn hivetty "fix the lead form"`. [Sessions](docs/guide/sessions.md) |
 | **Notices when one needs you** | Claude Code's hooks report in, so a permission prompt or a finished turn raises an inbox card instead of scrolling past in a tab you were not watching. [Inbox](docs/guide/inbox.md) |
 | **Keeps the work in view** | Jira tickets and `gh` pull requests, matched to the session that made them. [Jira and PRs](docs/guide/work-and-prs.md) |
 | **Opens the repository** | A project explorer over the active session's checkout, opening files into a CodeMirror editor. [Files](docs/guide/explorer.md) |
-| **Carries your skills** | Skill folders under `~/.hive/skills` reach every session Hive TTY starts, and no other `claude`. [Skills](docs/guide/skills.md) |
+| **Carries your skills** | Skill folders under `~/.hivetty/skills` reach every session HiveTTY starts, and no other `claude`. [Skills](docs/guide/skills.md) |
 | **Runs agents in the background** | Headless `claude` runs that wake on a schedule, a message or a Slack mention, and ask you before they act. [Agents](docs/guide/agents.md) |
 | **Serves from another Mac** | Run sessions on one always-on Mac and drive them from another over Tailscale. [Remote](docs/guide/remote.md) |
 | **Follows a theme all the way down** | Chrome, terminal and editor all take their colours from one theme file. [Themes](docs/guide/themes.md) |
@@ -65,7 +65,7 @@ Built for Claude Code.
 
 ## Quick start
 
-1. Download the `.dmg` from [the latest release](https://github.com/yunidbauza/the-hive/releases/latest)
+1. Download the `.dmg` from [the latest release](https://github.com/behiques/hivetty/releases/latest)
    (macOS, Apple silicon). It updates itself.
 2. Open it, click **Add a project** on Home, and choose a repository folder.
 3. Click **New session**, type the project's name, and press Enter.
@@ -97,7 +97,7 @@ Building from source also needs Node 22 ([`.nvmrc`](.nvmrc)) and pnpm (pinned in
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/overview.dark.svg">
-  <img src="docs/assets/diagrams/overview.light.svg" alt="You drive Hive TTY; its main process runs claude sessions through the PTY host, wakes agents, and hears back through hooks">
+  <img src="docs/assets/diagrams/overview.light.svg" alt="You drive HiveTTY; its main process runs claude sessions through the PTY host, wakes agents, and hears back through hooks">
 </picture>
 
 Sessions report their state back through Claude Code's hooks. That is how the inbox knows

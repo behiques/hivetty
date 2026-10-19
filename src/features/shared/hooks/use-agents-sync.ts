@@ -9,7 +9,7 @@ import {
 } from '@stores/hive-store';
 
 /**
- * Keep the fleet's agents in step with `~/.hive/agents` (HIVE-114).
+ * Keep the fleet's agents in step with `~/.hivetty/agents` (HIVE-114).
  *
  * Mounted once at the composition root, for the reason `useLedgerSync` is:
  * `agents:changed` is a broadcast, and a per-consumer subscription would mean

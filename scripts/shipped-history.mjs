@@ -3,7 +3,7 @@
  *
  * The seed merges a shipped file into the user's copy one part at a time
  * (`electron/main/seed/merge.ts`), from the hash of what it shipped last. A
- * `~/.hive` seeded before that merge existed has no such base: its manifest
+ * `~/.hivetty` seeded before that merge existed has no such base: its manifest
  * holds a whole-file hash, or nothing at all for the agents that predate the
  * manifest. This index is where their base comes from. A packaged app has no
  * git history to read, so the index is generated here and committed as

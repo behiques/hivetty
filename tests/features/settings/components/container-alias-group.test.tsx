@@ -14,7 +14,7 @@ vi.mock('@lib/project-config', () => ({
  * The container host alias field (HIVE-131).
  *
  * Committed on Enter and blur, never per keystroke — this writes to
- * `~/.hive/config.json`, so a commit per character would be a whole-file atomic
+ * `~/.hivetty/config.json`, so a commit per character would be a whole-file atomic
  * write per character (`text-field.tsx:24`).
  */
 

@@ -174,7 +174,7 @@ test('start a session, quit, relaunch — it is still listed, under ENDED', asyn
 test('a fresh profile still boots with an empty fleet', async ({}, testInfo) => {
   /*
     The other half of the claim: history is additive. A machine that has never
-    run The Hive must open exactly as it did before this feature existed, and a
+    run HiveTTY must open exactly as it did before this feature existed, and a
     deleted `sessions.json` must return it to that state rather than erroring.
   */
   const app = await launchHive({

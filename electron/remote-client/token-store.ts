@@ -33,7 +33,7 @@ import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
  * It stores and returns the pair the socket handshake needs
  * (`electron/remote-client/index.ts`'s `attachRequest` takes `deviceId` and
  * `token` as plain arguments) — it does not construct an `AttachRequest`
- * itself, and it never touches `~/.hive/config.json`. `RemoteConfig` names
+ * itself, and it never touches `~/.hivetty/config.json`. `RemoteConfig` names
  * *where* to attach; this module names *who is attaching*, and the two are
  * kept apart so a config file a user is invited to hand-edit can never carry
  * a secret.

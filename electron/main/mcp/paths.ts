@@ -22,9 +22,9 @@ export const MCP_CONFIG_FILE = join('hive', 'hive.mcp.json');
 /**
  * `<userData>/hive/agents/<name>.mcp.json` — an agent's own server set.
  *
- * Beside `<name>.system.md` rather than under `~/.hive/agents/`, and for the
+ * Beside `<name>.system.md` rather than under `~/.hivetty/agents/`, and for the
  * same two reasons that file is: it is app-generated and rewritten every wake,
- * and `~/.hive/agents/` is watched recursively, so writing here would re-parse
+ * and `~/.hivetty/agents/` is watched recursively, so writing here would re-parse
  * every definition on every wake.
  *
  * Built from the same `AGENTS_DIR` `agents/paths.ts` builds `AGENT_PROMPT_DIR`

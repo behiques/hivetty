@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { RELEASES_URL } from '@shared/update-contract';
+
 /**
  * Guards on `package.json` itself (story 084).
  *
@@ -90,6 +92,19 @@ describe('electron-builder.yml', () => {
   it('signs the app and its helpers with the entitlements file in resources', () => {
     expect(config).toMatch(/^ {2}entitlements: resources\/entitlements\.mac\.plist$/m);
     expect(config).toMatch(/^ {2}entitlementsInherit: resources\/entitlements\.mac\.plist$/m);
+  });
+
+  /** HIVE-242: HiveTTY is its own app, so it can run beside The Hive. */
+  it('names the bundle HiveTTY under its own identifier', () => {
+    expect(config).toMatch(/^appId: com\.behiques\.hivetty$/m);
+    expect(config).toMatch(/^productName: HiveTTY$/m);
+    expect(config).not.toMatch(/CFBundleDisplayName:/);
+  });
+
+  /** HIVE-242: HiveTTY looks for its updates on its own repo, never upstream. */
+  it('publishes to and updates from behiques/hivetty', () => {
+    expect(config).toMatch(/^publish:\n {2}provider: github\n {2}owner: behiques\n {2}repo: hivetty$/m);
+    expect(RELEASES_URL).toBe('https://github.com/behiques/hivetty/releases');
   });
 });
 

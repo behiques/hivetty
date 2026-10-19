@@ -11,7 +11,7 @@ import type { TicketWorkflow } from './ticket-workflow';
 /**
  * The workspace config contract (story 090).
  *
- * `~/.hive/config.json` is where the user says which of the fixture projects
+ * `~/.hivetty/config.json` is where the user says which of the fixture projects
  * map to real directories on this machine. A PTY needs a `cwd`; this file is
  * the smallest thing that supplies one.
  *
@@ -798,7 +798,8 @@ export interface ServerConfig {
 
 export const DEFAULT_SERVER: ServerConfig = {
   enabled: false,
-  bind: { host: '127.0.0.1', port: 7433, allowedOrigins: [] },
+  // 7434, one above The Hive's default, so both can serve on one Mac (HIVE-242).
+  bind: { host: '127.0.0.1', port: 7434, allowedOrigins: [] },
   devices: [],
 };
 
@@ -862,9 +863,10 @@ export interface RemoteConfig {
 /**
  * Every install that has never attached carries exactly this. `host` is
  * empty because there is nothing to validate in `'local'` mode — see
- * {@link isRemoteTarget}.
+ * {@link isRemoteTarget}. The port is 7434, one above The Hive's default, so
+ * both can serve on one Mac (HIVE-242).
  */
-export const DEFAULT_REMOTE: RemoteConfig = { mode: 'local', host: '', port: 7433 };
+export const DEFAULT_REMOTE: RemoteConfig = { mode: 'local', host: '', port: 7434 };
 
 /** The block's keys, for the parser's exact-key check. */
 export const REMOTE_KEYS: readonly (keyof RemoteConfig)[] = ['mode', 'host', 'port'];
@@ -1203,7 +1205,7 @@ export function isOrigin(value: unknown): value is string {
  * an absent snapshot.
  */
 export interface ConfigSnapshot {
-  /** The file that was read — `HIVE_CONFIG_PATH` or `~/.hive/config.json`. */
+  /** The file that was read — `HIVE_CONFIG_PATH` or `~/.hivetty/config.json`. */
   configPath: string;
   /**
    * True when no file existed and a template was written during this load.
@@ -1663,11 +1665,11 @@ const SESSION_ENV_DENY_EXACT: readonly string[] = [
  *
  * ## Why `CLAUDE_*` is on this list, and why it matters most here
  *
- * Launch The Hive from a terminal that is *itself* inside a Claude Code session
+ * Launch HiveTTY from a terminal that is *itself* inside a Claude Code session
  * — `pnpm desktop:dev` typed into one, which is exactly how it gets developed —
  * and Electron inherits that session's variables: `CLAUDE_CODE_SESSION_ID`,
  * `CLAUDE_CODE_CHILD_SESSION=1`, `CLAUDECODE=1`, and the rest. Every pty then
- * hands them to `claude`, and every agent The Hive spawns **joins the launching
+ * hands them to `claude`, and every agent HiveTTY spawns **joins the launching
  * session instead of starting its own**.
  *
  * The symptoms are bizarre until the cause is known, and were all observed:

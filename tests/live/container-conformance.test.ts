@@ -758,8 +758,8 @@ tool it names, and nothing more. Never ask a question.
     /*
       Every path an agent touches derives from `configPath()`, which reads
       this variable per call — pointing it at a temp directory moves
-      `~/.hive/agents`, the work dir and `agents.json` at once, so nothing
-      here can reach the developer's own `~/.hive`.
+      `~/.hivetty/agents`, the work dir and `agents.json` at once, so nothing
+      here can reach the developer's own `~/.hivetty`.
     */
     previousConfigPath = process.env[CONFIG_PATH_ENV];
     process.env[CONFIG_PATH_ENV] = join(dir, '.hive', 'config.json');

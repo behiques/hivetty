@@ -62,7 +62,7 @@ The job is one of these:
 
 `<pr>` is a number or a PR link. A link carries its own repository, so
 `<link>` or `<link> --self` needs no project. `<path>` is an absolute path to a
-git checkout. It is the way to point at a worktree the Hive's project list
+git checkout. It is the way to point at a worktree HiveTTY's project list
 doesn't know about.
 
 It reaches you through one of three doors:
@@ -167,8 +167,8 @@ Put the verdict in `meta` as well as in the line. The line is for a person; the
       report: "<the report path, for a self review; omitted otherwise>"
     }
 
-The line is one short sentence, read on a card in the Hive. It is never written
-for Slack or anywhere else outside the Hive: whoever carries a verdict further
+The line is one short sentence, read on a card in HiveTTY. It is never written
+for Slack or anywhere else outside HiveTTY: whoever carries a verdict further
 writes their own words from `meta`, which is why `headline` and `review_url` are
 in it. Say what you found and what you did. For a review, always say whether
 you approved:

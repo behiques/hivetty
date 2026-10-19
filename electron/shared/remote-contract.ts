@@ -1,7 +1,7 @@
 /**
  * The wire contract for server mode (HIVE-141).
  *
- * The Hive can run as two processes on two machines: a server that owns the
+ * HiveTTY can run as two processes on two machines: a server that owns the
  * PTYs, the agents, the ledger and the config, and a client that owns a window.
  * Everything between them crosses this file. Nothing here opens a socket —
  * HIVE-142 and HIVE-143 do that — but every frame they exchange is shaped here
@@ -668,7 +668,7 @@ export const WINDOW_BOUND = {
   [CH.skillsFileImport]:
     'Adding files to a skill opens a dialog on the server, which has no window — and would copy the server’s files, not yours. Drag them onto the skill instead.',
   [CH.skillsImport]:
-    'Importing a skill opens a dialog on the server, which has no window — and would import the server’s files, not yours. Import it in Hive TTY running on the machine that holds the zip or folder.',
+    'Importing a skill opens a dialog on the server, which has no window — and would import the server’s files, not yours. Import it in HiveTTY running on the machine that holds the zip or folder.',
   [CH.configReveal]:
     'Revealing the config file opens Finder on the server, which nobody is sitting at — and while attached, Settings is already showing the server’s config, not this machine’s.',
 } as const satisfies Partial<Record<Channel, string>>;

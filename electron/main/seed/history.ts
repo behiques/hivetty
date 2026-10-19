@@ -6,7 +6,7 @@ import { hashPart, ownKey, parseParts, type PartBase } from './merge';
  * Every version the app has shipped of each AGENT.md and SKILL.md, as part
  * hashes: `resources/shipped-history.json`, written by `pnpm seed:history`.
  *
- * It exists for one case: a `~/.hive` seeded before the manifest recorded
+ * It exists for one case: a `~/.hivetty` seeded before the manifest recorded
  * parts. Such a file has a whole-file hash at best, and the agents that
  * predate the manifest have nothing, so the seed cannot tell an edit from an
  * old shipped value. The history can.

@@ -62,14 +62,14 @@ interface ParseContext {
    */
   skillNames: readonly string[];
   /**
-   * The subset The Hive itself manages, for the *name* clash alone.
+   * The subset HiveTTY itself manages, for the *name* clash alone.
    *
    * Deliberately narrower than `skillNames`, and the two must not be merged.
-   * An agent may not take the name of a skill The Hive manages because those
+   * An agent may not take the name of a skill HiveTTY manages because those
    * two share a namespace — but checking the wide set instead reserved every
    * name in the user's own `~/.claude/skills`, so a machine with a personal
    * `graphify` skill could not have an agent called `graphify`, refused on
-   * account of a folder The Hive neither manages nor mentions.
+   * account of a folder HiveTTY neither manages nor mentions.
    */
   hiveSkillNames: readonly string[];
   integrations: readonly string[];
@@ -295,7 +295,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
   }
 
   /*
-    Every string in `wake.on` must be one The Hive knows how to act on.
+    Every string in `wake.on` must be one HiveTTY knows how to act on.
 
     This was the one list in the grammar with no check at all — the parsed
     strings were cast straight to `WakeOn[]`, so `on: [bananna]` saved cleanly
@@ -318,14 +318,14 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
     if (ctx.skillNames.includes(skill)) continue;
 
     /*
-      Named against everything on the machine, not only `~/.hive/skills`.
+      Named against everything on the machine, not only `~/.hivetty/skills`.
 
       An agent runs as a `claude -p` process on this machine, which loads the
       user's own `~/.claude/skills` and their installed plugins whether or not
       this file names them. Refusing `jira-writer:jira-writer` here therefore
       refused a skill the agent could reach anyway — a validator holding an
       opinion the runtime does not share, and on a machine with an empty
-      `~/.hive/skills` (the default) it refused *every* name.
+      `~/.hivetty/skills` (the default) it refused *every* name.
 
       What the field is, then, is a declaration this catches typos in. The
       sentence says where it looked so that a name it did not find can be
@@ -333,7 +333,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
     */
     problems.push({
       field: 'skills',
-      reason: `No skill called ${skill} — looked in ~/.hive/skills, ~/.claude/skills and your installed plugins.`,
+      reason: `No skill called ${skill} — looked in ~/.hivetty/skills, ~/.claude/skills and your installed plugins.`,
     });
   }
 

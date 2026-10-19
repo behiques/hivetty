@@ -90,7 +90,7 @@ vi.mock('../../../../electron/main/shutdown', () => ({
 
 /*
   The two runtimes Reload has to refresh, stubbed so the spec can see it
-  refresh them and never reads a real `~/.hive`. Their own behaviour is
+  refresh them and never reads a real `~/.hivetty`. Their own behaviour is
   covered in `tests/electron/main/skills` and `tests/electron/main/agents`.
 */
 const skillsSync = vi.fn(() => Promise.resolve({} as never));

@@ -100,7 +100,7 @@ the ask. Do not reach the merge through `gh api`; that is the line.
 Consent lives in the config: `mcp__hive__projects` lists every project with
 its `path` and `autoMerge`; the one whose `path` is this PR's checkout with
 `autoMerge: true` means the approval wait is skipped. Nothing else about the
-stages changes. `mcp__hive__pr` gives you the Hive's own unresolved-thread
+stages changes. `mcp__hive__pr` gives you HiveTTY's own unresolved-thread
 count for a PR (`findings`) without `gh api`, which you do not hold.
 
 ## Lines you keep

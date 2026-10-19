@@ -1,27 +1,25 @@
 /**
- * The app's two names, which are deliberately not the same string.
+ * The app's one name (HIVE-242): what people read and what the app *is*.
  *
- * **`APP_DISPLAY_NAME` is what people read**: the app menu and its About, Hide
- * and Quit items, the About window, the update dialogs and the server's tray.
- * The Dock, Cmd-Tab and Launchpad say it too, through `CFBundleDisplayName`
- * in `electron-builder.yml`'s `mac.extendInfo`. The menu bar's leftmost title
- * does not: it reads `CFBundleName`, which must stay the identity (Electron
- * finds its helper apps by it).
- *
- * **`APP_IDENTITY_NAME` is what the app *is***, and changing it is not cosmetic:
+ * It used to be two (`Hive TTY` displayed over a `The Hive` identity). HiveTTY
+ * runs beside The Hive as its own product, so the split has nothing left to
+ * protect. Changing this is still not cosmetic:
  * - `app.setName` takes it, and `userData` is derived from it
- *   (`~/Library/Application Support/The Hive`): the window state, the hook
+ *   (`~/Library/Application Support/HiveTTY`): the window state, the hook
  *   settings, the session history, the generated plugin every session loads.
- * - Electron names the Keychain item that `safeStorage` encrypts with after it,
- *   so the stored Jira and remote credentials are only readable under it.
- * - `productName` in `electron-builder.yml` matches it, and that names the
- *   bundle (`The Hive.app`), its executable, the dmg and zip the updater
- *   fetches, and the path a server's LaunchAgent runs. Finder shows the bundle's
- *   file name, so it keeps saying "The Hive" until it changes (the Dock and
- *   Launchpad prefer `CFBundleDisplayName`, so they say Hive TTY).
+ * - Electron names the Keychain item `safeStorage` encrypts with after it, so the
+ *   stored Jira and remote credentials are only readable under it.
+ * - `productName` in `electron-builder.yml` matches it, and that names the bundle
+ *   (`HiveTTY.app`), its executable and helper apps, and the dmg and zip the
+ *   updater fetches.
  *
- * See `docs/packaging-and-updates.md` ("The app's name") for what moving the
- * identity would take.
+ * See "The app's name" in `docs/packaging-and-updates.md`.
  */
-export const APP_DISPLAY_NAME = 'Hive TTY';
-export const APP_IDENTITY_NAME = 'The Hive';
+export const APP_NAME = 'HiveTTY';
+
+/**
+ * The unpackaged build's `userData` folder name. Not `hivetty`: APFS is
+ * case-insensitive, so that is the packaged `HiveTTY` folder and a dev run would
+ * share its single-instance lock and state. It mirrors `~/.hivetty-dev`.
+ */
+export const DEV_USER_DATA_NAME = 'hivetty-dev';

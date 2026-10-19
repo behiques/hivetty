@@ -3,7 +3,7 @@ import type { SessionEffort, SessionModel } from './session-contract';
 /**
  * What survives a quit (HIVE-87).
  *
- * The Hive's fleet list lived only in `hive-store`, which boots empty by design,
+ * HiveTTY's fleet list lived only in `hive-store`, which boots empty by design,
  * and in `sessions/registry.ts`, which is a `Map` cleared on quit. Closing the
  * app therefore erased every record that any session had ever run — while
  * `claude` itself, reopened in a plain terminal, still lists every past

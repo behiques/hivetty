@@ -3033,7 +3033,7 @@ export function parsePrLookup(input: unknown): PrLookup {
  * `shipped:*` — a kind and a name, never a path.
  *
  * The name goes through the same rule its kind's own channels use, since
- * main joins it onto `~/.hive/<kind>/`; main then refuses any folder the app
+ * main joins it onto `~/.hivetty/<kind>/`; main then refuses any folder the app
  * does not ship.
  */
 export function parseShippedRequest(input: unknown): ShippedRequest {

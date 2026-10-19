@@ -888,7 +888,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * kind of drift a reviewer has to notice rather than the compiler.
    *
    * "An identity this app has" is **two** registers since HIVE-115: the pty
-   * sessions, and the agents `~/.hive/agents` holds a definition for. Both post
+   * sessions, and the agents `~/.hivetty/agents` holds a definition for. Both post
    * here, both authenticate identically — a token is
    * `HMAC(launchSecret, entityId)` and an agent name is a legal entity id — and
    * both are refused when the app has never heard of them. What differs is what
@@ -1754,7 +1754,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
      * `onEvent`, `onTicketIntent` or `onCleared`.
      *
      * A session wins a collision. The registers are disjoint in practice —
-     * `sess-07` is not a folder in `~/.hive/agents` — but were they ever not,
+     * `sess-07` is not a folder in `~/.hivetty/agents` — but were they ever not,
      * the session is the one with a pty, a status dot and a history record that
      * have to stay truthful.
      */

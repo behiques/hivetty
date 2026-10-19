@@ -49,7 +49,7 @@ import {
 import { ticketWorkflowOf } from '@shared/ticket-workflow';
 
 /**
- * Parsing and shape-validation for `~/.hive/config.json` (story 090).
+ * Parsing and shape-validation for `~/.hivetty/config.json` (story 090).
  *
  * Pure — no filesystem, no path resolution. That split is what lets every
  * shape rule below be tested against a string rather than against a directory
