@@ -31,6 +31,7 @@ describe('runOneShot --pair', () => {
     expect(written).toHaveLength(1);
     expect(written[0]).toHaveLength(1);
     expect(lines.join('\n')).toMatch(/[0-9A-HJ-NP-TV-Z]{4}(-[0-9A-HJ-NP-TV-Z]{4}){3}/);
+    expect(lines).toContain('Revoke it any time with: hivetty --revoke "MacBook"');
   });
 
   it('never prints or persists the digest alongside the token', () => {

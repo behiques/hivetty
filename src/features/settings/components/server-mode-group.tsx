@@ -1149,7 +1149,7 @@ export function ServerModeGroup({
               label="Pairing token"
               value={remotePairToken}
               onChange={setRemotePairToken}
-              hint="Printed by `the-hive --pair <name>` on the server. Stored in this machine's keychain, never in config.json. Forget clears it here without ending a live attachment — the next dial is what needs a new one."
+              hint="Printed by `hivetty --pair <name>` on the server. Stored in this machine's keychain, never in config.json. Forget clears it here without ending a live attachment — the next dial is what needs a new one."
             />
             {remotePairError ? (
               <p className="text-ui-sm text-red">{remotePairError}</p>

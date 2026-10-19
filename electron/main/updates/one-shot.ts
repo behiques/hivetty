@@ -19,7 +19,7 @@ export interface UpdateOneShotDeps {
 }
 
 /**
- * What `the-hive --update` exits with, one code per outcome a script can act on
+ * What `hivetty --update` exits with, one code per outcome a script can act on
  * (HIVE-158, made distinct after the HIVE-140 audit). `null` from
  * {@link runUpdateOneShot} is the fifth outcome: installation has started and
  * the process quits normally, exiting 0.
