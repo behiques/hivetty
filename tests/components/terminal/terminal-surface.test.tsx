@@ -524,8 +524,8 @@ describe('TerminalSurface', () => {
       render(<TerminalSurface transport={transport} palette={TERM} />);
 
       expect(terminal().options.theme).toMatchObject({
-        background: '#0b1023',
-        selectionBackground: '#222c55',
+        background: '#14110e',
+        selectionBackground: '#3f2b10',
       });
     });
 
@@ -541,10 +541,10 @@ describe('TerminalSurface', () => {
        * panel that failed to load.
        */
       expect(terminal().options.theme).toMatchObject({
-        background: '#f7fafb',
-        foreground: '#2c2f34',
-        selectionBackground: '#cfe3f7',
-        cursor: '#2c2f34',
+        background: '#faf9f8',
+        foreground: '#312e2c',
+        selectionBackground: '#fadbb5',
+        cursor: '#312e2c',
       });
     });
 
@@ -602,8 +602,8 @@ describe('TerminalSurface', () => {
       expect(terminal().disposed).toBe(false);
       // And the whole surface really did repaint, not just its chrome.
       expect(terminal().options.theme).toMatchObject({
-        background: '#f7fafb',
-        selectionBackground: '#cfe3f7',
+        background: '#faf9f8',
+        selectionBackground: '#fadbb5',
       });
     });
   });

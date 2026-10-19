@@ -26,18 +26,18 @@ describe('toneOf', () => {
   it('turns the built-in dark palette into the artifact T', () => {
     const T = toneOf(dark);
     expect(T.dark).toBe(true);
-    // The derived ramp: Hive dark carries none of its own.
-    expect(T.lo).toEqual([23, 27, 50]);
-    expect(T.mid).toEqual([53, 53, 86]);
-    expect(T.hi).toEqual([195, 181, 242]);
+    // The derived ramp: HiveTTY dark carries none of its own.
+    expect(T.lo).toEqual([33, 28, 23]);
+    expect(T.mid).toEqual([71, 56, 38]);
+    expect(T.hi).toEqual([235, 190, 133]);
     expect(T.core).toEqual([226, 255, 238]);
-    expect(T.ground).toEqual([20, 17, 40]);
+    expect(T.ground).toEqual([23, 20, 17]);
   });
 
   it('marks the light palette light', () => {
     const T = toneOf(light);
     expect(T.dark).toBe(false);
-    expect(T.lo).toEqual([122, 104, 182]);
+    expect(T.lo).toEqual([146, 109, 61]);
   });
 
   it('memoises per palette object', () => {

@@ -332,7 +332,7 @@ describe('appearance-store — persistence', () => {
       editorTabWidth: 2,
       markdownOpensIn: 'preview',
       themes: {},
-      activeThemeId: 'hive',
+      activeThemeId: 'hivetty',
       whatsNewSeen: null,
       whatsNewOff: false,
     });
@@ -564,7 +564,7 @@ describe('appearance-store — the editor', () => {
 describe('the theme library', () => {
   it('starts with the built-in active and nothing imported', () => {
     const s = useAppearanceStore.getState();
-    expect(s.activeThemeId).toBe('hive');
+    expect(s.activeThemeId).toBe('hivetty');
     expect(s.themes).toEqual({});
   });
 
@@ -574,12 +574,12 @@ describe('the theme library', () => {
     expect(document.getElementById('hive-theme')).not.toBeNull();
   });
 
-  it('removing the active theme falls back to Hive in the same action', () => {
+  it('removing the active theme falls back to HiveTTY in the same action', () => {
     useAppearanceStore.getState().addTheme('nord', nordFixture);
     useAppearanceStore.getState().activateTheme('nord');
     useAppearanceStore.getState().removeTheme('nord');
 
-    expect(useAppearanceStore.getState().activeThemeId).toBe('hive');
+    expect(useAppearanceStore.getState().activeThemeId).toBe('hivetty');
     expect(useAppearanceStore.getState().themes).toEqual({});
     // and the app is never left pointing at a theme that is not there
     expect(document.getElementById('hive-theme')).toBeNull();
@@ -592,19 +592,19 @@ describe('the theme library', () => {
 });
 
 /**
- * The six that ship beside the Hive.
+ * The six that ship beside HiveTTY.
  *
  * The distinction that matters here is which of them `activeThemeOf` answers
  * `null` for. `null` means *the stylesheet already is this palette* — true of
- * the Hive and of nothing else — so a shipped theme that resolved to `null`
- * would activate by removing the style element and leave the Hive on screen
+ * HiveTTY and of nothing else — so a shipped theme that resolved to `null`
+ * would activate by removing the style element and leave HiveTTY on screen
  * under another theme's name.
  */
-describe('the shipped themes beside the Hive', () => {
+describe('the shipped themes beside HiveTTY', () => {
   const SHIPPED = ['honeycomb', 'graphite', 'tidewater', 'terracotta', 'porcelain', 'cinder'];
 
-  it('resolves the Hive to null — the stylesheet is already that palette', () => {
-    useAppearanceStore.getState().activateTheme('hive');
+  it('resolves HiveTTY to null — the stylesheet is already that palette', () => {
+    useAppearanceStore.getState().activateTheme('hivetty');
     expect(activeThemeOf(useAppearanceStore.getState())).toBeNull();
     expect(document.getElementById('hive-theme')).toBeNull();
   });
@@ -623,11 +623,11 @@ describe('the shipped themes beside the Hive', () => {
     expect(style?.textContent).toContain(BUILT_IN_THEMES[id].modes.dark.ui.brand);
   });
 
-  it('switching from a shipped theme back to the Hive removes the element again', () => {
+  it('switching from a shipped theme back to HiveTTY removes the element again', () => {
     useAppearanceStore.getState().activateTheme('cinder');
     expect(document.getElementById('hive-theme')).not.toBeNull();
 
-    useAppearanceStore.getState().activateTheme('hive');
+    useAppearanceStore.getState().activateTheme('hivetty');
     expect(document.getElementById('hive-theme')).toBeNull();
   });
 
@@ -688,12 +688,21 @@ describe('a malformed persisted theme', () => {
     return import('@stores/appearance-store');
   }
 
+  /** HIVE-241: the default was keyed `hive` before HiveTTY replaced it. */
+  it('moves a persisted Hive choice to HiveTTY', async () => {
+    const { useAppearanceStore: store } = await bootFrom(
+      JSON.stringify({ version: 2, state: { themes: {}, activeThemeId: 'hive' } }),
+    );
+    expect(store.getState().activeThemeId).toBe('hivetty');
+    expect(document.getElementById('hive-theme')).toBeNull();
+  });
+
   it('boots on the built-in rather than crashing', async () => {
     const { useAppearanceStore: store } = await bootFrom(corrupt);
 
     expect(store.getState().themes).toEqual({});
     // Not merely dangling: the gallery would ring a card that is not there.
-    expect(store.getState().activeThemeId).toBe('hive');
+    expect(store.getState().activeThemeId).toBe('hivetty');
     // tokens.css is painting, and it is the only thing painting.
     expect(document.getElementById('hive-theme')).toBeNull();
   });
@@ -706,7 +715,7 @@ describe('a malformed persisted theme', () => {
     // `Cannot read properties of undefined (reading 'dark')`.
     const { result } = renderHook(() => palette());
     expect(result.current.palette).toEqual(BUILT_IN_THEME.modes.dark.terminal);
-    expect(store.getState().activeThemeId).toBe('hive');
+    expect(store.getState().activeThemeId).toBe('hivetty');
   });
 
   it('keeps the valid entries and drops only the broken one', async () => {
@@ -736,7 +745,7 @@ describe('a malformed persisted theme', () => {
     );
 
     expect(store.getState().themes).toEqual({});
-    expect(store.getState().activeThemeId).toBe('hive');
+    expect(store.getState().activeThemeId).toBe('hivetty');
   });
 
   it('survives a themes field that is not even an object', async () => {
@@ -748,7 +757,7 @@ describe('a malformed persisted theme', () => {
     );
 
     expect(store.getState().themes).toEqual({});
-    expect(store.getState().activeThemeId).toBe('hive');
+    expect(store.getState().activeThemeId).toBe('hivetty');
   });
 });
 
@@ -762,7 +771,7 @@ describe('the v1 → v2 migration', () => {
     const migrated = migrateAppearance(v1, 1);
 
     expect(migrated.themes).toEqual({});
-    expect(migrated.activeThemeId).toBe('hive');
+    expect(migrated.activeThemeId).toBe('hivetty');
     expect(migrated.theme).toBe('light');
     expect(migrated.density).toBe('compact');
     expect(migrated.teamName).toBe('Swarm');
@@ -781,7 +790,7 @@ describe('the v1 → v2 migration', () => {
     );
 
     expect(migrated.themes).toEqual({});
-    expect(migrated.activeThemeId).toBe('hive');
+    expect(migrated.activeThemeId).toBe('hivetty');
   });
 });
 
@@ -846,7 +855,7 @@ describe('the v3 → v4 migration (HIVE-213)', () => {
       sessionPanelOpen: false,
       sessionPanelTab: 'files',
       themes: {},
-      activeThemeId: 'hive',
+      activeThemeId: 'hivetty',
     };
     const migrated = migrateAppearance({ ...kept, ...CLASSIC_PAYLOAD }, 3);
 
@@ -857,7 +866,7 @@ describe('the v3 → v4 migration (HIVE-213)', () => {
   it('still migrates a v1 payload as before, and drops the Classic keys on the way', () => {
     const migrated = migrateAppearance({ theme: 'dark', editorEditable: false, ...CLASSIC_PAYLOAD }, 1);
     expect(migrated.themes).toEqual({});
-    expect(migrated.activeThemeId).toBe('hive');
+    expect(migrated.activeThemeId).toBe('hivetty');
     expect(migrated).not.toHaveProperty('editorEditable');
     expect(migrated).not.toHaveProperty('layout');
   });
@@ -874,7 +883,7 @@ describe('the v3 → v4 migration (HIVE-213)', () => {
       theme: 'light',
       editorEditable: false,
       themes: {},
-      activeThemeId: 'hive',
+      activeThemeId: 'hivetty',
     });
   });
 
@@ -907,14 +916,14 @@ describe('sanitizeThemeState', () => {
   });
 
   it('leaves an explicit built-in id alone even with nothing imported', () => {
-    expect(sanitizeThemeState({ themes: {}, activeThemeId: 'hive' })).toEqual({
+    expect(sanitizeThemeState({ themes: {}, activeThemeId: 'hivetty' })).toEqual({
       themes: {},
-      activeThemeId: 'hive',
+      activeThemeId: 'hivetty',
     });
   });
 
   it('returns the built-in for a state with no theme fields at all', () => {
-    expect(sanitizeThemeState({})).toEqual({ themes: {}, activeThemeId: 'hive' });
+    expect(sanitizeThemeState({})).toEqual({ themes: {}, activeThemeId: 'hivetty' });
   });
 
   it.each(['honeycomb', 'graphite', 'tidewater', 'terracotta', 'porcelain', 'cinder'])(
@@ -930,7 +939,7 @@ describe('sanitizeThemeState', () => {
   it('still rejects an id that is neither shipped nor in the library', () => {
     expect(sanitizeThemeState({ themes: {}, activeThemeId: 'nord' })).toEqual({
       themes: {},
-      activeThemeId: 'hive',
+      activeThemeId: 'hivetty',
     });
   });
 
@@ -947,7 +956,7 @@ describe('sanitizeThemeState', () => {
     (key) => {
       expect(sanitizeThemeState({ themes: {}, activeThemeId: key })).toEqual({
         themes: {},
-        activeThemeId: 'hive',
+        activeThemeId: 'hivetty',
       });
       expect(
         activeThemeOf({ themes: {}, activeThemeId: key }),
@@ -997,7 +1006,7 @@ describe('appearance-store — the swarm palette (HIVE-199)', () => {
     expect(result.current).toEqual(swarmPaletteOf(BUILT_IN_THEME.modes.light.ui));
     act(() => useAppearanceStore.getState().setTheme('dark'));
     rerender();
-    expect(result.current.creep).toBe('#5b3d8f');
+    expect(result.current.creep).toBe('#6a4404');
   });
 
   it("uses an imported theme's creep and chitin", () => {
