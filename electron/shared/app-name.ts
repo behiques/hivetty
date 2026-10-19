@@ -16,3 +16,10 @@
  * See "The app's name" in `docs/packaging-and-updates.md`.
  */
 export const APP_NAME = 'HiveTTY';
+
+/**
+ * The unpackaged build's `userData` folder name. Not `hivetty`: APFS is
+ * case-insensitive, so that is the packaged `HiveTTY` folder and a dev run would
+ * share its single-instance lock and state. It mirrors `~/.hivetty-dev`.
+ */
+export const DEV_USER_DATA_NAME = 'hivetty-dev';

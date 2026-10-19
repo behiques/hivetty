@@ -2,7 +2,7 @@ import { dirname, join } from 'node:path';
 
 import { app, dialog, powerSaveBlocker } from 'electron';
 
-import { APP_NAME } from '@shared/app-name';
+import { APP_NAME, DEV_USER_DATA_NAME } from '@shared/app-name';
 
 import { applyDevDockIcon } from './app-icon';
 import { primaryWindow } from './aux-windows';
@@ -65,7 +65,7 @@ import { createWindow } from './window';
 app.setName(APP_NAME);
 
 /**
- * Development pins its own userData directory, `hivetty`.
+ * Development pins its own userData directory, `hivetty-dev`.
  *
  * The packaged app resolves `userData` from `setName` to `HiveTTY`, so the two
  * stay **separate instances**. They can run side by side. Had both landed on
@@ -84,7 +84,7 @@ app.setName(APP_NAME);
  * each, none of them saying anything about a profile.
  */
 if (!app.isPackaged && !app.commandLine.hasSwitch('user-data-dir')) {
-  app.setPath('userData', join(app.getPath('appData'), 'hivetty'));
+  app.setPath('userData', join(app.getPath('appData'), DEV_USER_DATA_NAME));
 }
 
 /*

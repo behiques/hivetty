@@ -207,7 +207,7 @@ does not use it for that either.
 3. A linked worktree: `git -C <main working tree> worktree remove <that path>`.
    On a refusal, `git -C <that path> status --porcelain --untracked-files=all`.
    The worktree is disposable only when **all** of these hold:
-   - the path is under `$HOME/.hive/work/`, an agent's worktree and never the
+   - the path is under `$HOME/.hivetty/work/`, an agent's worktree and never the
      person's checkout;
    - the status prints at least one line, and no line is a tracked change:
      every line starts with `??`;

@@ -35,7 +35,7 @@ describe('fork identity (HIVE-242)', () => {
   const docs = [...filesUnder('docs', '.claude'), join(ROOT, 'AGENTS.md'), join(ROOT, 'README.md')];
 
   it('ships no path into The Hive’s home folder', () => {
-    expect(offenders(shipped, /~\/\.hive\b|homedir\(\),\s*'\.hive'/)).toEqual([]);
+    expect(offenders(shipped, /~\/\.hive\b|\$HOME\/\.hive\b|homedir\(\),\s*'\.hive'/)).toEqual([]);
   });
 
   it('documents no path into The Hive’s home folder', () => {

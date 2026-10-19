@@ -261,7 +261,7 @@ packaged app says `HiveTTY`.** Patching Electron's `Info.plist` from a
 postinstall would make dev *look* right while changing nothing that ships; it is
 deliberately not done.
 
-`electron/main/index.ts` pins the development `userData` to `hivetty`, which
+`electron/main/index.ts` pins the development `userData` to `hivetty-dev`, which
 keeps a development run and the installed app (`HiveTTY`) as two separate
 instances that can run side by side. Sharing
 one `userData` would make `requestSingleInstanceLock` treat them as the same app.

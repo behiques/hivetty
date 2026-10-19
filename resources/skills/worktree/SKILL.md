@@ -58,7 +58,7 @@ builder's worktree, before `merge-pr` removes it) is worked on **there**,
 never duplicated. Otherwise the worktree lives in your own working directory:
 
 ```bash
-WT="$HOME/.hive/work/<agent>/<repo-name>-<slug>"
+WT="$HOME/.hivetty/work/<agent>/<repo-name>-<slug>"
 git -C "$REPO" worktree add "$WT" -b "<branch>" "origin/$DEFAULT"
 ```
 
@@ -73,7 +73,7 @@ git -C "$REPO" worktree add --detach "$WT" "origin/<branch>"
 git -C "$WT" push origin HEAD:<branch>      # after each round's commits
 ```
 
-Then, for an agent worktree under `$HOME/.hive/work/`, new or reused, write
+Then, for an agent worktree under `$HOME/.hivetty/work/`, new or reused, write
 `$WT/.hive/.gitignore` containing the single line `*` if it is not there.
 Never in a worktree that is not yours. `.hive/` is HiveTTY's
 working folder (plans, specs, a builder's progress notes). Ignored from the
