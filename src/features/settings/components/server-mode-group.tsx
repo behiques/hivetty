@@ -566,7 +566,7 @@ export function ServerModeGroup({
     `useAttachedServer` read `app:info`, and false since HIVE-150 rewrote it to
     a synchronous store read of a link main pushed at attach time. So
     `attached` is true on the *first* render, and a fallback would paint the
-    server's host and port — `''` and 7433 on a real client — directly under
+    server's host and port — `''` and 7434 on a real client — directly under
     `ATTACH_TARGET_HINT`'s claim that these came from this machine. Settings
     unmounts, so that is every time the pane is opened, not once per launch.
 
@@ -633,7 +633,7 @@ export function ServerModeGroup({
       This is the "did anything actually change?" guard, so it has to compare
       the typed value with the one the field was *showing*. While attached those
       are different blocks: `remote` is the server's, so typing this machine's
-      real address — or, far more likely, typing the server's default 7433 into
+      real address — or, far more likely, typing the server's default 7434 into
       the port — matched the wrong block and returned early. The write was
       dropped, and because the draft had already been set the field went on
       showing a value `config.json` did not hold, which is the exact defect this
@@ -673,7 +673,7 @@ export function ServerModeGroup({
     setRemotePortInvalid(false);
     setRemotePortDraft(String(next));
     // Against `target` for the reason `commitRemoteHost` states above, and this
-    // is the field where it bites: the server's own port is the default 7433.
+    // is the field where it bites: the server's own port is the default 7434.
     if (target === null || next === target.port) return;
     void setRemoteConfig({ port: next });
   };
@@ -1041,7 +1041,7 @@ export function ServerModeGroup({
             These fields used to be hidden while attached, and hiding was the
             honest thing to do at the time: they read `remote.host`/`remote.port`,
             and while attached that block comes off the *server's* snapshot — on
-            a real attached client, its defaults, an empty address and 7433. So
+            a real attached client, its defaults, an empty address and 7434. So
             the pane would have stated a target that is not this machine's and is
             not what a commit here would write either, since `config:set-remote`
             is `PROCESS_LOCAL` and writes locally (Ruling 28). Disabling them

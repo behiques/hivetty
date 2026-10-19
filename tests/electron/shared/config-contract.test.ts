@@ -91,7 +91,7 @@ describe('isLoopbackHost — spelling attacks (loopback half of the same finding
 
 describe('the remote block', () => {
   it('defaults to local mode with no address, so a never-attached install carries no target', () => {
-    expect(DEFAULT_REMOTE).toEqual({ mode: 'local', host: '', port: 7433 });
+    expect(DEFAULT_REMOTE).toEqual({ mode: 'local', host: '', port: 7434 });
   });
 
   it('names mode, host and port, for the parser exact-key check', () => {

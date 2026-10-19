@@ -87,7 +87,7 @@ import { attachRequest } from './index';
  *
  * - a tailnet host that is simply off costs the OS TCP connect timeout, about
  *   75 s on macOS;
- * - a host running some *other* TCP service on 7433 accepts the connection and
+ * - a host running some *other* TCP service on 7434 accepts the connection and
  *   never speaks HTTP, and the dial **hangs indefinitely**.
  *
  * `switchIpcMode` awaits this after `unbindEverything()`, so for the whole of

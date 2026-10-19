@@ -798,7 +798,8 @@ export interface ServerConfig {
 
 export const DEFAULT_SERVER: ServerConfig = {
   enabled: false,
-  bind: { host: '127.0.0.1', port: 7433, allowedOrigins: [] },
+  // 7434, one above The Hive's default, so both can serve on one Mac (HIVE-242).
+  bind: { host: '127.0.0.1', port: 7434, allowedOrigins: [] },
   devices: [],
 };
 
@@ -864,7 +865,8 @@ export interface RemoteConfig {
  * empty because there is nothing to validate in `'local'` mode — see
  * {@link isRemoteTarget}.
  */
-export const DEFAULT_REMOTE: RemoteConfig = { mode: 'local', host: '', port: 7433 };
+// 7434, one above The Hive's default, so both can serve on one Mac (HIVE-242).
+export const DEFAULT_REMOTE: RemoteConfig = { mode: 'local', host: '', port: 7434 };
 
 /** The block's keys, for the parser's exact-key check. */
 export const REMOTE_KEYS: readonly (keyof RemoteConfig)[] = ['mode', 'host', 'port'];
