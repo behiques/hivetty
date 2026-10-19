@@ -455,7 +455,7 @@ export function importTheme(raw: string, fileName: string): ImportResult {
      * surface further along. `ink` is already checked against two grounds for
      * the same reason.
      *
-     * Every built-in clears it; the worst is 4.80:1 (Graphite light).
+     * Every built-in clears it; the worst is 5.06:1 (Graphite light).
      */
     checkContrast(notes, mode, 'brand', ui.brand, 'panel2', ui.panel2, 4.5);
     /**

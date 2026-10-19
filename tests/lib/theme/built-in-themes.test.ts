@@ -124,7 +124,7 @@ describe.each(SHIPPED)('%s', (id) => {
       /*
         `brand` joined the floor with the hierarchy pass: it names every project
         in the rail and every provider in Integrations, both on `panel`, which
-        is body text rather than an accent. The worst built-in is 5.15:1.
+        is body text rather than an accent. The worst built-in is 5.43:1.
       */
       expect(contrastRatio(ui.brand, ui.panel)).toBeGreaterThanOrEqual(4.5);
     });

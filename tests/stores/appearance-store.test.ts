@@ -592,7 +592,7 @@ describe('the theme library', () => {
 });
 
 /**
- * The seven that ship beside HiveTTY.
+ * The eight that ship beside HiveTTY.
  *
  * The distinction that matters here is which of them `activeThemeOf` answers
  * `null` for. `null` means *the stylesheet already is this palette* — true of
