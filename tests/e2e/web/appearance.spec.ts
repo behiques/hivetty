@@ -127,13 +127,13 @@ test('changing the terminal font resizes the terminal without destroying it', as
  * The shipped theme set.
  *
  * A unit test can prove the store resolves an id and that the gallery renders
- * eight cards. It cannot prove the app actually *repaints* — that lives in a
+ * nine cards. It cannot prove the app actually *repaints* — that lives in a
  * `<style>` element written at runtime, resolved by the real cascade against
  * `tokens.css`, and read back off a computed style. happy-dom has no cascade
  * to lose the fight in, which is exactly the bug `apply.ts` documents.
  */
 const SHIPPED = [
-  'Honeycomb', 'Graphite', 'Tidewater', 'Terracotta', 'Porcelain', 'Cinder', 'Creep',
+  'Honeycomb', 'Graphite', 'Tidewater', 'Terracotta', 'Porcelain', 'Cinder', 'Creep', 'Beacon',
 ];
 
 test('every shipped theme has a card, and only HiveTTY has no style element', async ({

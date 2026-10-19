@@ -9,8 +9,8 @@ light and a dark mode. The sun or moon at the foot of the bar switches between t
 
 ## Pick a theme
 
-**Settings › Appearance › Themes**. Eight ship with the app: HiveTTY, Honeycomb, Graphite,
-Tidewater, Terracotta, Porcelain, Cinder and Creep. Click a card to use it. The
+**Settings › Appearance › Themes**. Nine ship with the app: HiveTTY, Honeycomb, Graphite,
+Tidewater, Terracotta, Porcelain, Cinder, Creep and Beacon. Click a card to use it. The
 card menu has **Export…** and, for imported themes, **Remove**.
 
 ![Settings › Appearance: the theme gallery](../assets/guide/12-settings-appearance.png)
