@@ -313,8 +313,7 @@ test('activating a theme recolours a live terminal without clearing scrollback',
      * every terminal regardless of which layer draws the cells, and its
      * inline `background-color` is what actually paints the terminal's
      * ground (on HiveTTY: `rgb(20, 17, 14)`, the built-in
-     * dark palette's `terminal.bg` in `#14110e`, i.e. the built-in dark
-     * palette).
+     * dark palette's `terminal.bg`, `#14110e`).
      *
      * Its **DOM node identity**, not just its colour, is what this test can
      * actually offer toward the scrollback claim — and it is worth being
