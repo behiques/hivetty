@@ -25,7 +25,7 @@ import {
   writeAgentSettings,
   writeHookSettings,
 } from '../../../../../electron/main/harness/claude-code/settings';
-import { doneSkill } from '../../../../../electron/main/skills/done-skill';
+import { doneSkill } from '../../../../../electron/main/harness/claude-code/done-skill';
 
 /**
  * The settings file and the receiver are two halves of one contract (HIVE-62).

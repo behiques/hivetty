@@ -26,7 +26,7 @@ import { createLedger, type Ledger } from '../../electron/main/ledger';
 import { agentMcpConfigFile } from '../../electron/main/mcp';
 import { mcpConfig } from '../../electron/main/mcp/config';
 import { PLUGIN_DIR } from '../../electron/main/skills/paths';
-import { writePluginDir } from '../../electron/main/skills/plugin';
+import { writePluginDir } from '../../electron/main/harness/claude-code/plugin';
 import type { SkillsRead } from '../../electron/main/skills/read';
 import type { RunLine } from '../../electron/shared/agent-contract';
 import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';

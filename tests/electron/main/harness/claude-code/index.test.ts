@@ -10,12 +10,12 @@ import {
   writeSessionContainerFiles,
   writeSharedContainerFiles,
 } from '../../../../../electron/main/container/generated';
+import { writePluginDir } from '../../../../../electron/main/harness/claude-code/plugin';
 import {
   writeAgentSettings,
   writeHookSettings,
 } from '../../../../../electron/main/harness/claude-code/settings';
 import { writeMcpConfig } from '../../../../../electron/main/mcp/config';
-import { writePluginDir } from '../../../../../electron/main/skills/plugin';
 import { readUserSkills } from '../../../../../electron/main/skills/read';
 
 /**

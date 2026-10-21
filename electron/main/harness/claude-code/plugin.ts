@@ -14,8 +14,9 @@ import { join } from 'node:path';
 
 import { RESERVED_SKILL_NAME } from '@shared/skills-contract';
 
+import type { SkillsRead } from '../../skills/read';
+
 import { doneSkill } from './done-skill';
-import type { SkillsRead } from './read';
 
 /**
  * Generating the plugin directory `--plugin-dir` points at (HIVE-96).

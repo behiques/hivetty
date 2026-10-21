@@ -1,9 +1,9 @@
 import { writeMcpConfig } from '../../mcp/config';
-import { writePluginDir } from '../../skills/plugin';
 import type { HarnessAdapter } from '../port';
 
 import { writeContainerSet } from './container-files';
 import { launch } from './launch';
+import { writePluginDir } from './plugin';
 import { writeAgentSettings, writeHookSettings } from './settings';
 
 /** Adapter #1. `launch` arrived with HIVE-234, `prepare` with HIVE-235; later stories add the rest. */

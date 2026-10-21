@@ -480,7 +480,7 @@ export const DONE_PATH = '/done';
  * grants (HIVE-93).
  *
  * **One builder, two callers, on purpose** — and both of them are
- * `skills/done-skill.ts`: `active()` spells the command out in the body, and
+ * `harness/claude-code/done-skill.ts`: `active()` spells the command out in the body, and
  * `frontmatter()` wraps the same string in `allowed-tools`. (An earlier version
  * put the grant in the app-generated settings file instead; that file merges
  * above the user's own scope, so the permission was invisible and unrevokable

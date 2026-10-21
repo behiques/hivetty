@@ -321,7 +321,7 @@ export function hookSettings(
     /*
       No grant, deliberately (HIVE-93). `/done`'s `curl` is authorised by
       `allowed-tools` in the generated skill's own frontmatter instead — see
-      `skills/done-skill.ts`. This file merges above the user's scope, so a
+      `harness/claude-code/done-skill.ts`. This file merges above the user's scope, so a
       grant written here is one they can neither see among their own settings
       nor revoke; the skill's frontmatter puts the authorisation three lines
       above the command it authorises, in a file they can read.
