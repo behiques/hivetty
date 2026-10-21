@@ -646,7 +646,7 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
         onEvent: (e) => {
           const derived = statusTracker.apply({
             entityId: e.entityId,
-            event: e.event,
+            signal: e.signal,
             ...(e.toolUseId === undefined ? {} : { toolUseId: e.toolUseId }),
             ...(e.toolName === undefined ? {} : { toolName: e.toolName }),
             ...(e.agentId === undefined ? {} : { agentId: e.agentId }),
@@ -656,9 +656,6 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
             ...(e.backgroundShells === undefined
               ? {}
               : { backgroundShells: e.backgroundShells }),
-            ...(e.notificationType === undefined
-              ? {}
-              : { notificationType: e.notificationType }),
           });
 
           publish({

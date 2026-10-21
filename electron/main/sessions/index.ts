@@ -1078,7 +1078,7 @@ export function createSessions(options: SessionsOptions): Sessions {
        */
       const derived = statusTracker.apply({
         entityId: event.entityId,
-        event: event.event,
+        signal: event.signal,
         ...(event.toolUseId === undefined ? {} : { toolUseId: event.toolUseId }),
         ...(event.toolName === undefined ? {} : { toolName: event.toolName }),
         ...(event.agentId === undefined ? {} : { agentId: event.agentId }),
@@ -1088,9 +1088,6 @@ export function createSessions(options: SessionsOptions): Sessions {
         ...(event.backgroundShells === undefined
           ? {}
           : { backgroundShells: event.backgroundShells }),
-        ...(event.notificationType === undefined
-          ? {}
-          : { notificationType: event.notificationType }),
       });
 
       publishHookStatus(
