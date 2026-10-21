@@ -5,7 +5,6 @@ import {
   type HookIdentity,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
-  HOOK_EVENTS,
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
   readyCommand,
@@ -15,6 +14,8 @@ import { METRICS_REFRESH_SECONDS } from '@shared/metrics-contract';
 import { ONCE_ONLY_TOOLS } from '@shared/permission-rules';
 
 import type { HookTransport } from '../port';
+
+import { HOOK_EVENTS } from './hook-vocabulary';
 
 /**
  * The settings file the app hands every session (HIVE-62, HIVE-79).
@@ -223,7 +224,7 @@ export function hookSettings(
    * Three seconds, and the reason is no longer "the answer never matters".
    *
    * The prompt waits behind this hook. Measured (HIVE-136, the note beside
-   * `HOOK_EVENTS` in `hook-contract.ts`, pinned by
+   * `HOOK_EVENTS` in `hook-vocabulary.ts`, pinned by
    * `tests/live/hook-context-conformance.test.ts`): a reply that took 5 s
    * moved a turn's end from 7.5 s to 11.8 s after the prompt, and a reply past
    * the timeout is discarded with "UserPromptSubmit hook timed out" drawn on
@@ -271,7 +272,7 @@ export function hookSettings(
    *
    * Not redundancy. The http handler above is subscribed to every event and
    * **`SessionStart` is the one that never arrives** — measured, twice, and
-   * recorded in `hook-contract.ts`. So the app has no http-borne way to learn
+   * recorded in `hook-vocabulary.ts`. So the app has no http-borne way to learn
    * that Claude is up, which is precisely the moment the boot overlay needs.
    *
    * The http entry stays anyway, exactly as the note there argues: it costs one

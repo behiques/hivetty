@@ -1,15 +1,16 @@
+import { HOOK_MAX_BODY_BYTES } from '@shared/hook-contract';
+import { isPlanFilePath, TASK_TOOL_NAMES, type PlanToolCall } from '@shared/plan-contract';
+
+import type { HookEffect, HookInput, HookReading } from '../port';
+
 import {
   CLEAR_REASON,
   HOOK_EVENTS,
-  HOOK_MAX_BODY_BYTES,
   HOOK_STATUS,
   isHookNotificationType,
   NOTIFICATION_TYPE_STATUS,
   type HookEvent,
-} from '@shared/hook-contract';
-import { isPlanFilePath, TASK_TOOL_NAMES, type PlanToolCall } from '@shared/plan-contract';
-
-import type { HookEffect, HookInput, HookReading } from '../port';
+} from './hook-vocabulary';
 
 /** Whether a string is one of the events the app subscribes to. */
 const isHookEvent = (value: unknown): value is HookEvent =>

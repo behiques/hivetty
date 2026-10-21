@@ -33,7 +33,6 @@ import {
   HOOK_HEADER_TOKEN,
   HOOK_MAX_BODY_BYTES,
   type HookAgentEvent,
-  type HookContextReply,
   type HookStatusEvent,
   type HookTicketIntentEvent,
 } from '../../../../electron/shared/hook-contract';
@@ -53,6 +52,7 @@ import {
   type SessionMetrics,
 } from '../../../../electron/shared/metrics-contract';
 import { createLedger, type Ledger } from '../../../../electron/main/ledger';
+import type { HookContextReply } from '../../../../electron/main/harness/claude-code/hook-vocabulary';
 import { createReceiver, type Receiver } from '../../../../electron/main/hooks/receiver';
 import { sessionAdapter, type HarnessRegistry } from '../../../../electron/main/harness/registry';
 import type { PlanToolCall } from '../../../../electron/main/plans';

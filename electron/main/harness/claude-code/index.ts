@@ -1,8 +1,7 @@
-import { hookContextReply } from '@shared/hook-contract';
-
 import type { HarnessAdapter } from '../port';
 
 import { writeContainerSet } from './container-files';
+import { hookContextReply } from './hook-vocabulary';
 import { readHook } from './hooks';
 import { launch } from './launch';
 import { writeMcpConfig } from './mcp-config';

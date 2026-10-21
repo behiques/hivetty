@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { HOOK_STATUS, NOTIFICATION_TYPE_STATUS } from '@shared/hook-contract';
-
+import {
+  HOOK_STATUS,
+  NOTIFICATION_TYPE_STATUS,
+} from '../../../../../electron/main/harness/claude-code/hook-vocabulary';
 import { readHook } from '../../../../../electron/main/harness/claude-code/hooks';
 
 const json = (fields: Record<string, unknown>): string => JSON.stringify(fields);
