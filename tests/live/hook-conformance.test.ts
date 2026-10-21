@@ -13,7 +13,7 @@ import {
   createNotifier,
   createNotificationHub,
 } from '../../electron/main/notifications';
-import { NOTIFICATION_TYPE_STATUS } from '../../electron/main/harness/claude-code/hook-vocabulary';
+import { noticeSignal } from '../../electron/main/harness/claude-code/hook-vocabulary';
 import {
   type HookNotificationType,
   type IdleDetail,
@@ -122,7 +122,7 @@ import type { SessionStatusEvent } from '../../electron/shared/session-contract'
  *
  * The two scenarios above only ever have one tool outstanding, so nothing
  * distinguishes "the status derived per-event" from "the status derived from
- * what the session actually is" — `receiver.ts`'s own `HOOK_STATUS` fallback
+ * what the session actually is" — the old per-event status fallback
  * happens to agree with `hooks/tracker.ts` in both of them. A **parallel**
  * batch is the only thing that can tell them apart: `PostToolUse` maps to
  * `working` unconditionally at the receiver, so a test that reads status
@@ -217,7 +217,7 @@ interface Scenario {
    * How many toasts this scenario's row is expected to produce.
    *
    * Not derivable from `kinds` inside this file — see the literal-not-derived
-   * discipline `NOTIFICATION_TYPE_STATUS` follows above. `session.blocked` is
+   * discipline the notice-signal assertion follows above. `session.blocked` is
    * `defaultDelivery: 'both'`; `session.input_needed` is deliberately
    * `'inbox'` only (HIVE-83's Task 5) — a row still lands and the badge still
    * counts it, but no toast. The live run is what caught this file's own
@@ -354,7 +354,7 @@ const scenarios: Scenario[] = [
     prompt: 'say ok, nothing else',
     type: 'idle_prompt',
     /**
-     * Asserted as a literal, not read back out of `NOTIFICATION_TYPE_STATUS`
+     * Asserted as a literal, not read back out of the adapter's `noticeSignal`
      * (the review's third point).
      *
      * This file's whole job is to pin the app's beliefs against what the real
@@ -615,8 +615,8 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
       });
 
       /**
-       * A real tracker, one per run. `receiver.ts`'s own `HOOK_STATUS` is a
-       * per-event fallback only — the honest, id-paired status is what
+       * A real tracker, one per run. The hook's own signal is a per-event
+       * reading only — the honest, id-paired status is what
        * `hooks/tracker.ts` derives, which is what `sessions/index.ts` publishes
        * (HIVE-83). Reading `e.status` straight off the receiver here would
        * report every `PostToolUse` as `working` regardless of what else is
@@ -777,7 +777,10 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
           editing the constant fails here instead of quietly moving the
           expectation with it.
         */
-        expect(NOTIFICATION_TYPE_STATUS[expectedType]).toBe(expectedStatus);
+        expect(noticeSignal(expectedType)).toEqual({
+          kind: 'notice',
+          reason: expectedType === 'idle_prompt' ? 'idle' : 'permission',
+        });
 
         /**
          * A session **leaves** `waiting`, and what takes it out is the

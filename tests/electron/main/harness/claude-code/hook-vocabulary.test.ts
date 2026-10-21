@@ -2,10 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   HOOK_EVENTS,
-  HOOK_STATUS,
   hookContextReply,
-  NOTIFICATION_TYPE_STATUS,
-  NOTIFICATION_TYPES,
   noticeSignal,
   toSignal,
 } from '../../../../../electron/main/harness/claude-code/hook-vocabulary';
@@ -26,16 +23,6 @@ describe('hook contract', () => {
     }
   });
 
-  it('gives every status-bearing event a status', () => {
-    for (const event of HOOK_EVENTS) {
-      if (event === 'SessionEnd') continue;
-      expect(HOOK_STATUS[event]).toBeDefined();
-    }
-  });
-
-  it('lists exactly the notification types the status map reads', () => {
-    expect([...NOTIFICATION_TYPES].sort()).toEqual(Object.keys(NOTIFICATION_TYPE_STATUS).sort());
-  });
 });
 
 describe('the signal table (HIVE-237)', () => {

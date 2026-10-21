@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  HOOK_STATUS,
-  NOTIFICATION_TYPE_STATUS,
-} from '../../../../../electron/main/harness/claude-code/hook-vocabulary';
 import { readHook } from '../../../../../electron/main/harness/claude-code/hooks';
 
 const json = (fields: Record<string, unknown>): string => JSON.stringify(fields);
@@ -23,7 +19,7 @@ describe('readHook, agent lane (HIVE-236)', () => {
     ).toEqual({
       effects: [{
         kind: 'agent',
-        event: { entityId: 'reviewer', event: 'Stop', status: 'idle', sessionUuid: 'abc-1', backgroundWork: true },
+        event: { entityId: 'reviewer', event: 'Stop', signal: { kind: 'turn-end' }, sessionUuid: 'abc-1', backgroundWork: true },
       }],
     });
   });
@@ -36,12 +32,15 @@ describe('readHook, agent lane (HIVE-236)', () => {
   });
   it('recovers the event and uuid from a truncated prefix, and nothing else', () => {
     expect(agent('{"session_id":"abc-1","hook_event_name":"Stop","tool_input":{"x":"', true)).toEqual({
-      effects: [{ kind: 'agent', event: { entityId: 'reviewer', event: 'Stop', status: 'idle', sessionUuid: 'abc-1' } }],
+      effects: [{ kind: 'agent', event: { entityId: 'reviewer', event: 'Stop', signal: { kind: 'turn-end' }, sessionUuid: 'abc-1' } }],
     });
   });
   it('emits nothing for SessionEnd or an unsubscribed event', () => {
     expect(agent(json({ hook_event_name: 'SessionEnd', reason: 'other' }))).toEqual({ effects: [] });
     expect(agent(json({ hook_event_name: 'NotAnEvent' }))).toEqual({ effects: [] });
+  });
+  it('emits nothing for a Notification, which never fires headless (HIVE-237)', () => {
+    expect(agent(json({ hook_event_name: 'Notification', notification_type: 'idle_prompt' }))).toEqual({ effects: [] });
   });
   it('marks a body that does not parse', () => {
     expect(agent('{nope')).toEqual({ malformed: true, effects: [] });
@@ -55,7 +54,7 @@ describe('readHook, session lane (HIVE-236)', () => {
       tool_name: 'Bash', agent_id: 'ag-1', tool_input: { run_in_background: true },
     }))).toEqual({
       effects: [{ kind: 'status', event: {
-        entityId: 'sess-07', event: 'PreToolUse', status: HOOK_STATUS.PreToolUse, sessionUuid: 'u-1',
+        entityId: 'sess-07', event: 'PreToolUse', signal: { kind: 'tool-start' }, sessionUuid: 'u-1',
         cwd: '/r', toolUseId: 't-1', toolName: 'Bash', agentId: 'ag-1', runInBackground: true,
       } }],
     });
@@ -71,14 +70,14 @@ describe('readHook, session lane (HIVE-236)', () => {
       ],
     }));
     expect(reading.effects).toEqual([{ kind: 'status', event: {
-      entityId: 'sess-07', event: 'SubagentStop', status: HOOK_STATUS.SubagentStop, backgroundShells: ['s1'],
+      entityId: 'sess-07', event: 'SubagentStop', signal: { kind: 'subagent-end' }, backgroundShells: ['s1'],
     } }]);
     expect(reading.unknownTaskTypes).toEqual(['monitor']);
   });
   it('recovers event, cwd, tool name and uuid from a truncated prefix', () => {
     expect(session('{"session_id":"abc-1","cwd":"/r","hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"content":"', true))
       .toEqual({ effects: [{ kind: 'status', event: {
-        entityId: 'sess-07', event: 'PreToolUse', status: HOOK_STATUS.PreToolUse,
+        entityId: 'sess-07', event: 'PreToolUse', signal: { kind: 'tool-start' },
         sessionUuid: 'abc-1', cwd: '/r', toolName: 'Write',
       } }] });
   });
@@ -90,7 +89,7 @@ describe('readHook, session lane (HIVE-236)', () => {
   it('reads a recognised Notification with its own status and type, even truncated', () => {
     expect(session('{"session_id":"abc-1","cwd":"/r","hook_event_name":"Notification","notification_type":"permission_prompt","message":"', true))
       .toEqual({ effects: [{ kind: 'status', event: {
-        entityId: 'sess-07', event: 'Notification', status: NOTIFICATION_TYPE_STATUS.permission_prompt,
+        entityId: 'sess-07', event: 'Notification', signal: { kind: 'notice', reason: 'permission' },
         notificationType: 'permission_prompt', cwd: '/r', sessionUuid: 'abc-1',
       } }] });
   });

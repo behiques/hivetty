@@ -62,7 +62,7 @@ describe('session status', () => {
   });
 
   /**
-   * `HOOK_STATUS` maps both `SessionStart` and `Stop` to `idle`, so without the
+   * The tracker derives `idle` from both a session's start and a turn's end, so without the
    * gate every spawn announced "has gone quiet" the moment it started, and
    * every turn announced it again — filling the buffer and evicting the
    * approval request the user actually walked away from.
@@ -275,7 +275,7 @@ describe('the Notification hook', () => {
 
 /**
  * HIVE-81: `idle_prompt` now reports the status `idle`, not `waiting` — see
- * `hook-vocabulary.ts`'s `NOTIFICATION_TYPE_STATUS`. The inbox row it raises is
+ * `hooks/tracker.ts`'s `notice` branch. The inbox row it raises is
  * routed off the hook *event*, independently of that status, which is the
  * split these tests pin down.
  */

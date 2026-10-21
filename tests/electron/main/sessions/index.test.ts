@@ -1055,9 +1055,9 @@ describe('status', () => {
   });
 
   /**
-   * HIVE-81: `idle_prompt` reports `idle`, not `waiting` (`NOTIFICATION_TYPE_STATUS`
-   * in `hook-vocabulary.ts`). This layer does not compute that mapping — the
-   * receiver does — but it must pass whatever the receiver decided straight
+   * HIVE-81: `idle_prompt` reports `idle`, not `waiting` (its `notice` signal,
+   * through `hooks/tracker.ts`). This layer does not compute that mapping — the
+   * tracker does — but it must pass whatever the receiver decided straight
    * through rather than reinterpreting it.
    */
   it('reports idle, not waiting, for an idle_prompt notification', () => {
@@ -1085,8 +1085,8 @@ describe('status', () => {
     // 'idle' rather than reinterpreting it as 'waiting'.
     onEvent!({
       entityId: 'hero-refresh',
-      status: 'idle',
       event: 'Notification',
+      signal: { kind: 'notice', reason: 'idle' },
       notificationType: 'idle_prompt',
     });
 
@@ -1164,8 +1164,8 @@ describe('status', () => {
     const toolFinished = () =>
       onEvent!({
         entityId: 'hero-refresh',
-        status: 'working',
         event: 'PostToolUse',
+        signal: { kind: 'tool-end' },
         cwd: '/home/dev/repos/hero-refresh',
       } as HookStatusEvent);
 
@@ -1255,8 +1255,8 @@ describe('status', () => {
     const turnEnded = () =>
       onEvent!({
         entityId: 'hero-refresh',
-        status: 'idle',
         event: 'Stop',
+        signal: { kind: 'turn-end' },
         cwd: '/home/dev/repos/hero-refresh',
       } as HookStatusEvent);
 
@@ -2325,7 +2325,7 @@ describe('/done', () => {
       },
       done: (entityId) => onDone(entityId),
       hook: (entityId, event) =>
-        onEvent({ entityId, event, status: 'working' } as HookStatusEvent),
+        onEvent({ entityId, event } as HookStatusEvent),
       cleared: (entityId) => onCleared(entityId),
       restart: () => instance.restart(OPEN),
       patches: (entityId) =>
@@ -2913,11 +2913,10 @@ describe('the agent id space (HIVE-115)', () => {
 
     return {
       knowsAgent: (entityId) => knowsAgent!(entityId),
-      // `status` is required on the wire contract and unread here.
       agentEvent: (event) =>
-        onAgentEvent!({ entityId: AGENT, status: 'idle', ...event } as HookAgentEvent),
+        onAgentEvent!({ entityId: AGENT, ...event } as HookAgentEvent),
       sessionEvent: (event: HookStatusEvent['event']) =>
-        onEvent!({ entityId: 'hero-refresh', status: 'idle', event } as HookStatusEvent),
+        onEvent!({ entityId: 'hero-refresh', event } as HookStatusEvent),
       turnsEnded,
       names,
       sent: localSent,

@@ -1,3 +1,5 @@
+import type { StatusSignal } from './harness-contract';
+
 /**
  * What Claude Code's hooks tell the app about a session (HIVE-62).
  *
@@ -217,7 +219,8 @@ export const HOOK_MAX_BODY_BYTES = 64 * 1024;
 export interface HookStatusEvent {
   entityId: string;
   event: StatusHookEvent;
-  status: ObservedStatus;
+  /** What the hook says the session is doing, in the core's words (HIVE-237). The tracker derives the status. */
+  signal: StatusSignal;
   /**
    * Which kind of interruption, for a `Notification` event only.
    *
