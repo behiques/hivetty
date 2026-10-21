@@ -3,7 +3,6 @@ import {
   BOOTSTRAP_DEBOUNCE_MS,
   BOOTSTRAP_FALLBACK_MS,
   isSendableSessionName,
-  SUBMIT_DELAY_MS,
   type SessionEffort,
   type SessionModel,
 } from '@shared/session-contract';
@@ -476,7 +475,7 @@ export interface Bootstrap {
    * initial prompt — see {@link sessionCommand} — rather than following it as a
    * second write, which is what HIVE-91 removed.
    */
-  arm(entityId: string, command: string): void;
+  arm(entityId: string, command: string, submitDelayMs: number): void;
   /** Report output. The first one starts the debounce. */
   sawOutput(entityId: string): void;
   /** Abandon a pending bootstrap — the session died before it ran. */
@@ -488,6 +487,8 @@ export interface Bootstrap {
 
 interface Pending {
   command: string;
+  /** The harness's text-then-`\r` gap (HIVE-63), from its launch plan (HIVE-234). */
+  submitDelayMs: number;
   timer: ReturnType<typeof setTimeout>;
   /** True once the first chunk has arrived and the debounce is running. */
   settling: boolean;
@@ -526,7 +527,7 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
      * nobody could see it had been given. Separating them makes the text a
      * paste (which it is) and the `\r` a keystroke (which is unambiguous).
      *
-     * Every stage is split, not just the long ones. See {@link SUBMIT_DELAY_MS}
+     * Every stage is split, not just the long ones. See `SUBMIT_DELAY_MS`
      * for why a measured threshold is deliberately not branched on.
      */
     write(entityId, entry.command);
@@ -557,16 +558,17 @@ export function createBootstrap(options: BootstrapOptions): Bootstrap {
          * this one, and the rule reduces to: submit, then release.
          */
         onComplete?.(entityId);
-      }, SUBMIT_DELAY_MS),
+      }, entry.submitDelayMs),
     );
   }
 
   return {
-    arm(entityId, command) {
+    arm(entityId, command, submitDelayMs) {
       // Re-arming would stack a second timer and write the command twice.
       if (pending.has(entityId)) return;
       pending.set(entityId, {
         command,
+        submitDelayMs,
         settling: false,
         timer: setTimeout(() => fire(entityId, true), fallbackMs),
       });

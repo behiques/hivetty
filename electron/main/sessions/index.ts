@@ -36,6 +36,7 @@ import {
   type SessionEffort,
   type SessionModel,
   SESSION_NAME_DISPLAY_MAX,
+  SUBMIT_DELAY_MS,
   type SessionBranchEvent,
   type SessionClearedEvent,
   type SessionFinishedEvent,
@@ -2645,6 +2646,7 @@ export function createSessions(options: SessionsOptions): Sessions {
         */
         ...(request.task === undefined || resume ? {} : { task: request.task }),
       }),
+      SUBMIT_DELAY_MS,
     );
 
     /**

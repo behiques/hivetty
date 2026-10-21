@@ -79,7 +79,7 @@ describe('bootstrap timing', () => {
      * at a bare prompt having silently swallowed the command.
      */
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
 
     vi.advanceTimersByTime(4_000);
 
@@ -89,7 +89,7 @@ describe('bootstrap timing', () => {
 
   it('writes after the first output plus a settling debounce', () => {
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
 
     boot.sawOutput('sess');
     vi.advanceTimersByTime(149);
@@ -107,7 +107,7 @@ describe('bootstrap timing', () => {
      * failing to start.
      */
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
     boot.sawOutput('sess');
     vi.advanceTimersByTime(150);
     vi.advanceTimersByTime(SUBMIT_DELAY_MS);
@@ -128,7 +128,7 @@ describe('bootstrap timing', () => {
      * characters and is swallowed at ≥65.
      */
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
     boot.sawOutput('sess');
     vi.advanceTimersByTime(150);
 
@@ -150,7 +150,7 @@ describe('bootstrap timing', () => {
      * that is gone.
      */
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
     boot.sawOutput('sess');
     vi.advanceTimersByTime(150);
     expect(written).toHaveLength(1);
@@ -165,7 +165,7 @@ describe('bootstrap timing', () => {
     // A shell that prints a long motd would otherwise postpone the bootstrap
     // indefinitely, one chunk at a time.
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
 
     boot.sawOutput('sess');
     vi.advanceTimersByTime(100);
@@ -178,7 +178,7 @@ describe('bootstrap timing', () => {
 
   it('writes exactly once, however much output arrives afterwards', () => {
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
     boot.sawOutput('sess');
     vi.advanceTimersByTime(150);
 
@@ -195,7 +195,7 @@ describe('bootstrap timing', () => {
      * the session permanently empty.
      */
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
 
     vi.advanceTimersByTime(5_000);
 
@@ -207,7 +207,7 @@ describe('bootstrap timing', () => {
 
   it('does not flag a bootstrap that followed real output', () => {
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
     boot.sawOutput('sess');
     vi.advanceTimersByTime(150);
 
@@ -218,7 +218,7 @@ describe('bootstrap timing', () => {
     // `claudeCommand` from story 090, so a user with a wrapper or an alternate
     // binary is not stuck.
     const boot = bootstrap();
-    boot.arm('sess', '/opt/bin/claude-wrapper');
+    boot.arm('sess', '/opt/bin/claude-wrapper', SUBMIT_DELAY_MS);
     boot.sawOutput('sess');
     vi.advanceTimersByTime(150);
 
@@ -230,8 +230,8 @@ describe('bootstrap lifecycle', () => {
   it('ignores a second arm for the same session', () => {
     // Re-arming would stack a timer and write the command twice.
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
 
     boot.sawOutput('sess');
     vi.advanceTimersByTime(5_000);
@@ -241,7 +241,7 @@ describe('bootstrap lifecycle', () => {
 
   it('drops a pending bootstrap when the session dies first', () => {
     const boot = bootstrap();
-    boot.arm('sess', 'claude');
+    boot.arm('sess', 'claude', SUBMIT_DELAY_MS);
     boot.cancel('sess');
 
     vi.advanceTimersByTime(10_000);
@@ -259,8 +259,8 @@ describe('bootstrap lifecycle', () => {
 
   it('keeps sessions independent', () => {
     const boot = bootstrap();
-    boot.arm('a', 'claude');
-    boot.arm('b', 'claude');
+    boot.arm('a', 'claude', SUBMIT_DELAY_MS);
+    boot.arm('b', 'claude', SUBMIT_DELAY_MS);
 
     boot.sawOutput('a');
     vi.advanceTimersByTime(150);
@@ -271,8 +271,8 @@ describe('bootstrap lifecycle', () => {
 
   it('drops every timer on dispose, so nothing outlives the app', () => {
     const boot = bootstrap();
-    boot.arm('a', 'claude');
-    boot.arm('b', 'claude');
+    boot.arm('a', 'claude', SUBMIT_DELAY_MS);
+    boot.arm('b', 'claude', SUBMIT_DELAY_MS);
 
     boot.dispose();
     vi.advanceTimersByTime(10_000);
@@ -313,7 +313,7 @@ describe('the single stage (HIVE-91)', () => {
 
   it('writes the command carrying its task, and nothing after it', () => {
     const boot = armed();
-    boot.arm('sess-a', WITH_TASK);
+    boot.arm('sess-a', WITH_TASK, SUBMIT_DELAY_MS);
 
     boot.sawOutput('sess-a');
     vi.advanceTimersByTime(SETTLE);
@@ -336,7 +336,7 @@ describe('the single stage (HIVE-91)', () => {
      * the pty as a line in its own right, whoever happened to be reading it.
      */
     const boot = armed();
-    boot.arm('sess-a', WITH_TASK);
+    boot.arm('sess-a', WITH_TASK, SUBMIT_DELAY_MS);
     boot.sawOutput('sess-a');
     vi.advanceTimersByTime(SETTLE);
 
@@ -351,7 +351,7 @@ describe('the single stage (HIVE-91)', () => {
 
   it('a TUI that never stops painting still adds no second write', () => {
     const boot = armed();
-    boot.arm('sess-a', WITH_TASK);
+    boot.arm('sess-a', WITH_TASK, SUBMIT_DELAY_MS);
     boot.sawOutput('sess-a');
     vi.advanceTimersByTime(SETTLE);
 
@@ -372,7 +372,7 @@ describe('the single stage (HIVE-91)', () => {
       fallbackMs: FALLBACK,
     });
 
-    boot.arm('sess-a', WITH_TASK);
+    boot.arm('sess-a', WITH_TASK, SUBMIT_DELAY_MS);
     boot.sawOutput('sess-a');
     vi.advanceTimersByTime(DEBOUNCE);
 
@@ -397,7 +397,7 @@ describe('the single stage (HIVE-91)', () => {
       fallbackMs: FALLBACK,
     });
 
-    boot.arm('sess-a', WITH_TASK);
+    boot.arm('sess-a', WITH_TASK, SUBMIT_DELAY_MS);
     boot.sawOutput('sess-a');
     vi.advanceTimersByTime(SETTLE);
     boot.sawOutput('sess-a');
@@ -408,7 +408,7 @@ describe('the single stage (HIVE-91)', () => {
 
   it('a session that dies before settling writes nothing at all', () => {
     const boot = armed();
-    boot.arm('sess-a', WITH_TASK);
+    boot.arm('sess-a', WITH_TASK, SUBMIT_DELAY_MS);
     boot.cancel('sess-a');
     vi.advanceTimersByTime(FALLBACK * 2);
 
@@ -417,7 +417,7 @@ describe('the single stage (HIVE-91)', () => {
 
   it('drops a pending stage on dispose, so nothing outlives the app', () => {
     const boot = armed();
-    boot.arm('sess-a', WITH_TASK);
+    boot.arm('sess-a', WITH_TASK, SUBMIT_DELAY_MS);
     boot.dispose();
     vi.advanceTimersByTime(FALLBACK * 2);
 
@@ -426,8 +426,8 @@ describe('the single stage (HIVE-91)', () => {
 
   it('keeps two sessions’ stages independent', () => {
     const boot = armed();
-    boot.arm('sess-a', "claude 'first' && exit");
-    boot.arm('sess-b', "claude 'second' && exit");
+    boot.arm('sess-a', "claude 'first' && exit", SUBMIT_DELAY_MS);
+    boot.arm('sess-b', "claude 'second' && exit", SUBMIT_DELAY_MS);
 
     for (const id of ['sess-a', 'sess-b']) {
       boot.sawOutput(id);
@@ -461,7 +461,7 @@ describe('byte order (HIVE-63)', () => {
      */
     const boot = bootstrap({ debounceMs: DEBOUNCE, fallbackMs: FALLBACK });
     const command = "claude --name sess-a 'fix the hero' && exit";
-    boot.arm('sess-a', command);
+    boot.arm('sess-a', command, SUBMIT_DELAY_MS);
 
     // The shell speaks; the stage settles and its text goes in.
     boot.sawOutput('sess-a');
@@ -486,7 +486,7 @@ describe('byte order (HIVE-63)', () => {
      * appended to the command line.
      */
     const boot = bootstrap({ debounceMs: DEBOUNCE, fallbackMs: FALLBACK });
-    boot.arm('sess-a', 'claude');
+    boot.arm('sess-a', 'claude', SUBMIT_DELAY_MS);
     boot.sawOutput('sess-a');
     vi.advanceTimersByTime(DEBOUNCE);
 
@@ -494,6 +494,18 @@ describe('byte order (HIVE-63)', () => {
 
     vi.advanceTimersByTime(SUBMIT_DELAY_MS);
     expect(boot.isPending('sess-a')).toBe(false);
+  });
+
+  it('submits after the delay it was armed with (HIVE-234)', () => {
+    const boot = bootstrap({ debounceMs: 10 });
+    boot.arm('sess-a', 'claude && exit', 50);
+    boot.sawOutput('sess-a');
+    vi.advanceTimersByTime(10);
+    expect(written.map((w) => w.data)).toEqual(['claude && exit']);
+    vi.advanceTimersByTime(49);
+    expect(written.map((w) => w.data)).toEqual(['claude && exit']);
+    vi.advanceTimersByTime(1);
+    expect(written.map((w) => w.data)).toEqual(['claude && exit', '\r']);
   });
 });
 
