@@ -1019,6 +1019,8 @@ export function createSessions(options: SessionsOptions): Sessions {
       `knowsSession` consults the live registry per call.
     */
     knowsAgent: (entityId) => agentNames().has(entityId),
+    // What reads each session's hook body (HIVE-236); this closure owns the registry.
+    harnesses,
     /*
       The peer directory (HIVE-127). Asked per call, like `knowsAgent` above
       and for the same reason: a definition can be written while the app runs,
