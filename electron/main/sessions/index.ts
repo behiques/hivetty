@@ -2604,7 +2604,6 @@ export function createSessions(options: SessionsOptions): Sessions {
       stripEnv: plan.stripEnv,
     });
 
-
     /**
      * The transcript this generation will write to (first-prompt naming).
      *
