@@ -6,6 +6,8 @@ import {
   hookContextReply,
   NOTIFICATION_TYPE_STATUS,
   NOTIFICATION_TYPES,
+  noticeSignal,
+  toSignal,
 } from '../../../../../electron/main/harness/claude-code/hook-vocabulary';
 
 describe('hook contract', () => {
@@ -33,5 +35,42 @@ describe('hook contract', () => {
 
   it('lists exactly the notification types the status map reads', () => {
     expect([...NOTIFICATION_TYPES].sort()).toEqual(Object.keys(NOTIFICATION_TYPE_STATUS).sort());
+  });
+});
+
+describe('the signal table (HIVE-237)', () => {
+  it.each([
+    ['SessionStart', undefined, { kind: 'session-start' }],
+    ['UserPromptSubmit', undefined, { kind: 'prompt' }],
+    ['PreToolUse', 'Bash', { kind: 'tool-start' }],
+    ['PostToolUse', 'Bash', { kind: 'tool-end' }],
+    ['PermissionRequest', 'AskUserQuestion', { kind: 'waiting', reason: 'question' }],
+    ['PermissionRequest', 'Bash', { kind: 'waiting', reason: 'permission' }],
+    ['PermissionRequest', undefined, { kind: 'waiting', reason: 'permission' }],
+    ['Elicitation', undefined, { kind: 'waiting', reason: 'input' }],
+    ['Elicitation', 'AskUserQuestion', { kind: 'waiting', reason: 'input' }],
+    ['SubagentStart', undefined, { kind: 'subagent-start' }],
+    ['SubagentStop', undefined, { kind: 'subagent-end' }],
+    ['Stop', undefined, { kind: 'turn-end' }],
+  ] as const)('maps %s (tool %s) to %j', (event, toolName, signal) => {
+    expect(toSignal(event, toolName)).toEqual(signal);
+  });
+
+  it.each([
+    ['idle_prompt', { kind: 'notice', reason: 'idle' }],
+    ['permission_prompt', { kind: 'notice', reason: 'permission' }],
+    ['auth_success', undefined],
+    ['constructor', undefined],
+    [undefined, undefined],
+  ] as const)('maps Notification %s to %j', (type, signal) => {
+    expect(noticeSignal(type)).toEqual(signal);
+  });
+
+  it('maps every subscribed event but SessionEnd', () => {
+    for (const event of HOOK_EVENTS) {
+      if (event === 'SessionEnd') continue;
+      const signal = event === 'Notification' ? noticeSignal('idle_prompt') : toSignal(event);
+      expect(signal).toBeDefined();
+    }
   });
 });

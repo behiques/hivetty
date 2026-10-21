@@ -1,3 +1,4 @@
+import type { NoticeReason, StatusSignal } from '@shared/harness-contract';
 import {
   DONE_PATH,
   HOOK_ENV_RECEIVER_URL,
@@ -297,6 +298,48 @@ export const isHookNotificationType = (
 ): value is HookNotificationType =>
   typeof value === 'string' &&
   (NOTIFICATION_TYPES as readonly string[]).includes(value);
+
+/** The events whose signal is a property of the event alone. */
+type PlainSignalEvent = Exclude<HookEvent, 'SessionEnd' | 'Notification' | 'PermissionRequest' | 'Elicitation'>;
+
+/** The events {@link toSignal} reads: every subscribed one but the lifecycle `SessionEnd` and the two-field `Notification`. */
+export type SignalEvent = Exclude<HookEvent, 'SessionEnd' | 'Notification'>;
+
+const PLAIN_SIGNAL: Record<PlainSignalEvent, Exclude<StatusSignal['kind'], 'waiting' | 'notice'>> = {
+  SessionStart: 'session-start',
+  UserPromptSubmit: 'prompt',
+  PreToolUse: 'tool-start',
+  PostToolUse: 'tool-end',
+  SubagentStart: 'subagent-start',
+  SubagentStop: 'subagent-end',
+  Stop: 'turn-end',
+};
+
+const NOTICE_REASON: Record<(typeof NOTIFICATION_TYPES)[number], NoticeReason> = {
+  idle_prompt: 'idle',
+  permission_prompt: 'permission',
+};
+
+/**
+ * What a Claude event says, as a signal (HIVE-237). The only Claude knowledge the status path keeps.
+ *
+ * `PermissionRequest` and `Elicitation` both block on a human, by different mechanisms: a tool wanting a yes
+ * (the `AskUserQuestion` tool is the agent asking), and an MCP server wanting input. The reason keeps the three
+ * apart, because the inbox's words and the tracker's pairing both depend on which.
+ */
+export function toSignal(event: SignalEvent, toolName?: unknown): StatusSignal {
+  if (event === 'PermissionRequest')
+    return { kind: 'waiting', reason: toolName === 'AskUserQuestion' ? 'question' : 'permission' };
+  if (event === 'Elicitation') return { kind: 'waiting', reason: 'input' };
+  return { kind: PLAIN_SIGNAL[event] };
+}
+
+/** A `Notification`'s signal, or `undefined` for a type this app has no reading of (see `readHook`). */
+export function noticeSignal(notificationType: unknown): StatusSignal | undefined {
+  return isHookNotificationType(notificationType)
+    ? { kind: 'notice', reason: NOTICE_REASON[notificationType] }
+    : undefined;
+}
 
 /**
  * What each recognised type means for the **status**, which is no longer the
