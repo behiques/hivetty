@@ -1,6 +1,7 @@
 import type { ContainerFreshness, ResolvedContainer } from '@shared/config-contract';
 import type { Capabilities, HarnessId } from '@shared/harness-contract';
-import type { HookIdentity } from '@shared/hook-contract';
+import type { HookAgentEvent, HookIdentity, HookStatusEvent } from '@shared/hook-contract';
+import type { PlanToolCall } from '@shared/plan-contract';
 import type { SessionEffort, SessionModel } from '@shared/session-contract';
 
 import type { ContainerOrigins } from '../container/layout';
@@ -256,4 +257,32 @@ export interface LaunchPlan {
   stripEnv: readonly string[];
   /** The bootstrap's gap between the text and its `\r` (HIVE-63). */
   submitDelayMs: number;
+}
+
+/** Which side of the receiver a hook arrived on: an entity session, or an agent's headless run (HIVE-236). */
+export type HookLane = 'session' | 'agent';
+
+/** One thing a hook body says, in the order the receiver acts on it (HIVE-236). */
+export type HookEffect =
+  | { kind: 'status'; event: HookStatusEvent }
+  | { kind: 'agent'; event: HookAgentEvent }
+  | { kind: 'cleared' }
+  | { kind: 'plan'; call: PlanToolCall; reread?: true }
+  | { kind: 'file-edit' }
+  | { kind: 'prompt'; text?: string; conversation?: string };
+
+/** A body that did not parse is `malformed`; empty `effects` means answer 204 and publish nothing. */
+export interface HookReading {
+  malformed?: true;
+  effects: HookEffect[];
+  /** Running background-task kinds with no reading; the receiver warns once per kind. */
+  unknownTaskTypes?: string[];
+}
+
+/** What a hook body is read from (HIVE-236): its lane, the entity it names, and whether it was cut at the cap. */
+export interface HookInput {
+  lane: HookLane;
+  entityId: string;
+  body: string;
+  truncated: boolean;
 }
