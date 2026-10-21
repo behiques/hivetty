@@ -2241,40 +2241,6 @@ export function createSessions(options: SessionsOptions): Sessions {
      */
     const runtime = effectiveRuntime(snapshot, project);
 
-    // An agent session from here on, spawn failed or not — see `agentSessions`.
-    agentSessions.add(request.entityId);
-    startProcess({
-      entityId: request.entityId,
-      cwd: project.path,
-      file: runtime.shell,
-      args: LOGIN_SHELL_ARGS,
-      cols: request.cols,
-      rows: request.rows,
-      /**
-       * The hook environment is merged **over** the project's (HIVE-62).
-       *
-       * Project env is the user's to control and wins everywhere else, but not
-       * here: these two variables are how a hook proves which row it speaks
-       * for, so a project able to set `HIVE_SESSION_ID` could point another
-       * session's status at a row of its choosing. Attribution is the app's
-       * claim about its own sessions, not a value under configuration.
-       *
-       * This is the *only* thing enforcing it. `config-contract.ts` has
-       * `RESERVED_ENV_KEYS` and `UNSAFE_ENV_KEYS`, and neither lists the two
-       * Hive variables — so the spread order here is the whole guarantee rather
-       * than a second layer behind a list. Adding them to that list as well
-       * would be belt and braces; leaving this comment claiming a protection
-       * that does not exist would not.
-       */
-      env: { ...runtime.env, ...hooks?.envFor(request.entityId) },
-      /*
-        A session, unlike a clone, runs `claude` — so it is the one spawn whose
-        authentication matters. `snapshot` is the config already read for this
-        spawn, so this costs no extra read.
-      */
-      stripEnv: snapshot.subscriptionAuth ? AUTH_ENV_KEYS : [],
-    });
-
     /*
       Resolved before the command is assembled, because it is the one argument
       that depends on something the renderer told us about *itself* rather than
@@ -2329,7 +2295,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     const hookEnv = hooks?.envFor(request.entityId) ?? {};
     /*
       The same filter the host pty env gets via `startProcess`'s `stripEnv`
-      above, applied to the container's copy of `runtime.env` (final-review
+      below, applied to the container's copy of `runtime.env` (final-review
       fix, Important 3).
 
       `stripEnv` only ever reaches the pty environment. A container project's
@@ -2366,7 +2332,7 @@ export function createSessions(options: SessionsOptions): Sessions {
               is the user's to control and wins everywhere else, but not here:
               these are how a hook proves which row it speaks for. The spread
               order is the whole guarantee, exactly as it is for the pty env
-              above — and now that project env crosses the boundary, it has to
+              below — and now that project env crosses the boundary, it has to
               be restated on the command line as well.
             */
             env: {
@@ -2465,64 +2431,8 @@ export function createSessions(options: SessionsOptions): Sessions {
     const resume = resumeUuid !== undefined;
     const sessionUuid = resumeUuid ?? newSessionUuid();
 
-    /**
-     * The transcript this generation will write to (first-prompt naming).
-     *
-     * Recorded here because this is the only place both halves of the path are
-     * known at once, and overwritten rather than merged: a restart mints a new
-     * uuid, and classifying a new generation's titles against the previous
-     * conversation's transcript would answer about a file that has stopped
-     * growing. The stale origin cache goes with it, for the same reason.
-     */
-    transcripts.set(request.entityId, { cwd: project.path, sessionUuid });
-    titleOrigins.delete(request.entityId);
-
-    /**
-     * Written down before the process starts, not after (HIVE-87).
-     *
-     * A spawn that throws below still happened as far as the user is concerned
-     * — they asked for a session and something went wrong — and a record of it
-     * is more useful than silence. The uuid especially: it cannot be assigned
-     * retroactively to a session that has already started, so the only moment
-     * it can be captured is this one.
-     */
-    history?.begin(
-      request.entityId,
-      {
-        project: request.projectId,
-        // A resumed row keeps the task it was opened with; see `resume` below.
-        ...(resume ? {} : { task: request.task ?? '' }),
-        status: 'working',
-        sessionUuid,
-        ...(request.name === undefined ? {} : { name: request.name }),
-        ...(request.model === undefined ? {} : { model: request.model }),
-        ...(request.effort === undefined ? {} : { effort: request.effort }),
-      },
-      { resume },
-    );
-
-    /**
-     * A container project whose `claudeCommand` has no `{env}` still spawns
-     * (final-review fix, Important 6) — refusing outright is a behaviour
-     * change beyond this fix wave, and `sessionCommand`'s own `?? line`
-     * fallback already keeps a half-built command line off the pty. But
-     * nothing on this path consulted `missingEnvPlaceholder` before, so the
-     * session started with none of `HIVE_SESSION_ID`, `HIVE_HOOK_TOKEN` or
-     * `HIVE_RECEIVER_URL` reaching the container — every hook, ledger and
-     * `/done` call 403ing — and the only way to learn why was to open
-     * Settings and run the diagnostic by hand. This names the project and the
-     * missing placeholder in main's own log at the moment it matters, so the
-     * failure is diagnosable from the one place every other spawn failure
-     * already is.
-     */
-    if (containerSpawn !== undefined && !runtime.claudeCommand.includes(ENV_PLACEHOLDER)) {
-      console.warn(
-        `[hive] ${request.projectId}: claudeCommand has no ${ENV_PLACEHOLDER} placeholder — ` +
-          'this container session will start with none of the HIVE_* variables, ' +
-          'and every hook, ledger and /done call from it will be refused',
-      );
-    }
-
+    // An agent session from here on, spawn failed or not — see `agentSessions`.
+    agentSessions.add(request.entityId);
     /**
      * `sessionCommand` wraps the configured binary so a clean `/exit` takes the
      * login shell with it and the session settles to `done`. See its own
@@ -2635,7 +2545,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       */
       ...(containerSpawn === undefined ? {} : { container: containerSpawn }),
       /*
-        Belt *and* braces, deliberately. `stripEnv` above covers the ambient
+        Belt *and* braces, deliberately. `stripEnv` below covers the ambient
         environment and a project's own `env` block; this covers the login
         shell's profile, which re-exports whatever the user put in `~/.zshrc`
         after the host has already sanitised. Neither one is sufficient alone.
@@ -2660,6 +2570,99 @@ export function createSessions(options: SessionsOptions): Sessions {
       */
       ...(request.task === undefined || resume ? {} : { task: request.task }),
     });
+
+    startProcess({
+      entityId: request.entityId,
+      cwd: project.path,
+      file: runtime.shell,
+      args: LOGIN_SHELL_ARGS,
+      cols: request.cols,
+      rows: request.rows,
+      /**
+       * The hook environment is merged **over** the project's (HIVE-62).
+       *
+       * Project env is the user's to control and wins everywhere else, but not
+       * here: these two variables are how a hook proves which row it speaks
+       * for, so a project able to set `HIVE_SESSION_ID` could point another
+       * session's status at a row of its choosing. Attribution is the app's
+       * claim about its own sessions, not a value under configuration.
+       *
+       * This is the *only* thing enforcing it. `config-contract.ts` has
+       * `RESERVED_ENV_KEYS` and `UNSAFE_ENV_KEYS`, and neither lists the two
+       * Hive variables — so the spread order here is the whole guarantee rather
+       * than a second layer behind a list. Adding them to that list as well
+       * would be belt and braces; leaving this comment claiming a protection
+       * that does not exist would not.
+       */
+      env: { ...runtime.env, ...hooks?.envFor(request.entityId) },
+      /*
+        A session, unlike a clone, runs `claude` — so it is the one spawn whose
+        authentication matters. `snapshot` is the config already read for this
+        spawn, so this costs no extra read.
+        The adapter decides which credentials go (HIVE-234).
+      */
+      stripEnv: plan.stripEnv,
+    });
+
+
+    /**
+     * The transcript this generation will write to (first-prompt naming).
+     *
+     * Recorded here because this is the only place both halves of the path are
+     * known at once, and overwritten rather than merged: a restart mints a new
+     * uuid, and classifying a new generation's titles against the previous
+     * conversation's transcript would answer about a file that has stopped
+     * growing. The stale origin cache goes with it, for the same reason.
+     */
+    transcripts.set(request.entityId, { cwd: project.path, sessionUuid });
+    titleOrigins.delete(request.entityId);
+
+    /**
+     * Written down before the process starts, not after (HIVE-87).
+     *
+     * A spawn that throws below still happened as far as the user is concerned
+     * — they asked for a session and something went wrong — and a record of it
+     * is more useful than silence. The uuid especially: it cannot be assigned
+     * retroactively to a session that has already started, so the only moment
+     * it can be captured is this one.
+     */
+    history?.begin(
+      request.entityId,
+      {
+        project: request.projectId,
+        // A resumed row keeps the task it was opened with; see `resume` below.
+        ...(resume ? {} : { task: request.task ?? '' }),
+        status: 'working',
+        sessionUuid,
+        ...(request.name === undefined ? {} : { name: request.name }),
+        ...(request.model === undefined ? {} : { model: request.model }),
+        ...(request.effort === undefined ? {} : { effort: request.effort }),
+      },
+      { resume },
+    );
+
+    /**
+     * A container project whose `claudeCommand` has no `{env}` still spawns
+     * (final-review fix, Important 6) — refusing outright is a behaviour
+     * change beyond this fix wave, and `sessionCommand`'s own `?? line`
+     * fallback already keeps a half-built command line off the pty. But
+     * nothing on this path consulted `missingEnvPlaceholder` before, so the
+     * session started with none of `HIVE_SESSION_ID`, `HIVE_HOOK_TOKEN` or
+     * `HIVE_RECEIVER_URL` reaching the container — every hook, ledger and
+     * `/done` call 403ing — and the only way to learn why was to open
+     * Settings and run the diagnostic by hand. This names the project and the
+     * missing placeholder in main's own log at the moment it matters, so the
+     * failure is diagnosable from the one place every other spawn failure
+     * already is.
+     */
+    if (containerSpawn !== undefined && !runtime.claudeCommand.includes(ENV_PLACEHOLDER)) {
+      console.warn(
+        `[hive] ${request.projectId}: claudeCommand has no ${ENV_PLACEHOLDER} placeholder — ` +
+          'this container session will start with none of the HIVE_* variables, ' +
+          'and every hook, ledger and /done call from it will be refused',
+      );
+    }
+
     bootstrap.arm(request.entityId, plan.command, plan.submitDelayMs);
 
     /**
