@@ -1,14 +1,95 @@
 import {
+  CLEAR_REASON,
   HOOK_EVENTS,
   HOOK_STATUS,
+  isHookNotificationType,
+  NOTIFICATION_TYPE_STATUS,
   type HookEvent,
 } from '@shared/hook-contract';
 
-import type { HookInput, HookReading } from '../port';
+import type { HookEffect, HookInput, HookReading } from '../port';
 
 /** Whether a string is one of the events the app subscribes to. */
 const isHookEvent = (value: unknown): value is HookEvent =>
   typeof value === 'string' && (HOOK_EVENTS as readonly string[]).includes(value);
+
+/**
+ * The ids of the background **shells** a payload reports still running
+ * (HIVE-90).
+ *
+ * Returns `undefined` when the payload carried no `background_tasks` key at
+ * all, and an array — possibly empty — when it did. That distinction is the
+ * whole contract; see {@link HookStatusEvent.backgroundShells} for why an
+ * observed empty list and a silent body must not collapse into each other.
+ *
+ * ## `background_tasks` is a union, and that is why `type` is filtered
+ *
+ * The name suggests one kind of thing and it is two. Measured against 2.1.245,
+ * a session whose only background work is a **subagent**:
+ *
+ * ```
+ * Stop  background_tasks: [
+ *   { id: 'a1bb2b63ce60a4e1c', type: 'subagent', status: 'running',
+ *     agent_type: 'general-purpose', description: '…' }
+ * ]
+ * ```
+ *
+ * — the same array a backgrounded `Bash` puts a `type: 'shell'` entry in. So
+ * an unfiltered read makes a live subagent arrive as a background shell, and
+ * a session that has reported `idle (agents)` since HIVE-83 starts reporting
+ * `idle (script)` about an agent. Subagents are tracked from `SubagentStart` /
+ * `SubagentStop`, which is both a finer signal and a *fresher* one: the same
+ * measurement shows a subagent still listed as `running` in the
+ * `background_tasks` of its own `SubagentStop`, because the list is a snapshot
+ * taken before the stop is applied. Shells are the half with no such pair —
+ * no hook fires when a backgrounded process dies — which is exactly why this
+ * list is worth reading for them and not for agents.
+ *
+ * `status === 'running'` is filtered for the obvious reason, and an entry with
+ * no string `id` is dropped because ids are the only part of an entry this app
+ * keeps.
+ *
+ * **What the `type` filter costs:** a third kind of background task, added in
+ * some later release, is dropped here and a session running one would report a
+ * plain `idle`. That is a real risk and the honest reading of it is that the
+ * union has one member this app already tracks better and one it needs; a
+ * member that does not exist yet cannot be assigned to `script` — which is a
+ * *shell* — without repeating the subagent mistake in the other direction.
+ *
+ * So it is dropped and **said out loud**: `onUnknownType` fires for a running
+ * entry of a kind this app has no reading for, and `createReceiver` turns that
+ * into one warning per kind per launch. Without it the only thing that could
+ * ever notice is `hook-conformance.test.ts`, which needs a real binary and an
+ * opt-in environment variable — a silent wrong `idle` is exactly the failure
+ * HIVE-90 exists to remove, and it should not be able to come back quietly.
+ */
+function liveBackgroundShellIds(
+  value: unknown,
+  onUnknownType: (type: string) => void,
+): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const ids: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { id, type, status } = entry as {
+      id?: unknown;
+      type?: unknown;
+      status?: unknown;
+    };
+    if (status !== 'running') continue;
+    if (type !== 'shell') {
+      /*
+        `subagent` is a known member and tracked elsewhere, so it is dropped
+        quietly. Anything else is news.
+      */
+      if (typeof type === 'string' && type !== '' && type !== 'subagent')
+        onUnknownType(type);
+      continue;
+    }
+    if (typeof id === 'string' && id !== '') ids.push(id);
+  }
+  return ids;
+}
 
 /**
  * Whether a payload's `background_tasks` lists work that keeps a headless
@@ -39,6 +120,52 @@ function holdsTheProcess(value: unknown): boolean | undefined {
 const EVENT_IN_PREFIX = /"hook_event_name"\s*:\s*"([A-Za-z]+)"/;
 
 /**
+ * Same trick, same justification, for `SessionEnd`'s `reason`.
+ *
+ * It decides whether a `SessionEnd` means the conversation ended (`clear`) or
+ * something this app leaves to the pty, so it has to survive a truncated body
+ * exactly as the event name does.
+ */
+const REASON_IN_PREFIX = /"reason"\s*:\s*"([a-z_]+)"/;
+
+/**
+ * And again for `cwd`, which HIVE-78 reads to resolve the session's branch.
+ *
+ * A path is not a fixed vocabulary the way an event name is, so this is the
+ * loosest of the three: everything up to the closing quote, refusing a value
+ * that carries a backslash escape rather than trying to unescape it. On the
+ * platforms this app runs on a project path contains no character JSON
+ * escapes, so the refusal costs nothing real — and hand-rolling an unescaper
+ * against a truncated body to save it would be the wrong trade.
+ */
+const CWD_IN_PREFIX = /"cwd"\s*:\s*"([^"\\]*)"/;
+
+/**
+ * And once more for `notification_type`, which decides what a `Notification`
+ * means.
+ *
+ * A closed vocabulary like the event name, so the same fixed shape and the
+ * same justification apply — and it has to survive truncation for a reason
+ * the others do not share: a `Notification` payload carries the `message`
+ * Claude would have shown, which is unbounded prose.
+ */
+const NOTIFICATION_TYPE_IN_PREFIX = /"notification_type"\s*:\s*"([a-z_]+)"/;
+
+/**
+ * And once more for `tool_name`, which HIVE-83 needs to keep a blocked
+ * session from stranding on `waiting`.
+ *
+ * `tool_name` precedes `tool_input` on the wire, and `tool_input` is what
+ * grows a body past `HOOK_MAX_BODY_BYTES` in the first place (a `Write` or
+ * `Edit` carries the whole file there) — so `tool_name` always survives a
+ * truncation that claims `tool_input` and everything after it, including
+ * `tool_use_id`. A closed-enough vocabulary — `Bash`, `Write`,
+ * `mcp__server__tool` — so word characters and underscores, same
+ * conservatism as the other prefix regexes here.
+ */
+const TOOL_NAME_IN_PREFIX = /"tool_name"\s*:\s*"([A-Za-z0-9_]+)"/;
+
+/**
  * And once more for `session_id`, which correlates an agent's `Stop` with the
  * run it belongs to (HIVE-115).
  *
@@ -54,7 +181,7 @@ const SESSION_ID_IN_PREFIX = /"session_id"\s*:\s*"([0-9a-fA-F-]+)"/;
 
 /** Claude Code's hook body read into effects (HIVE-236). Pure: no callbacks, no state. */
 export function readHook({ lane, entityId, body, truncated }: HookInput): HookReading {
-  return lane === 'agent' ? readAgent(entityId, body, truncated) : { effects: [] };
+  return lane === 'agent' ? readAgent(entityId, body, truncated) : readSession(entityId, body, truncated);
 }
 
 /**
@@ -134,4 +261,155 @@ function readAgent(entityId: string, body: string, truncated: boolean): HookRead
       },
     ],
   };
+}
+
+/**
+ * A hook from an entity **session**: every field the status tracker, the plan
+ * panel and the prompt semantics read (HIVE-236). The parse is `handle`'s, moved
+ * from `electron/main/hooks/receiver.ts`.
+ */
+function readSession(entityId: string, body: string, truncated: boolean): HookReading {
+  let event: unknown;
+  let reason: unknown;
+  let cwd: unknown;
+  let notificationType: unknown;
+  let toolUseId: unknown;
+  let toolName: unknown;
+  let toolInput: unknown;
+  let agentId: unknown;
+  let runInBackground: unknown;
+  let backgroundShells: string[] | undefined;
+  /**
+   * Claude's own id for the conversation this event fired in (first-prompt naming).
+   *
+   * Read on the session path as well as the agent one, because it is what
+   * names the transcript — and unlike the uuid pinned at spawn it stays
+   * correct across a `/clear`, which starts a *new* conversation in the same
+   * pty under a uuid nothing told main about.
+   */
+  let sessionUuid: unknown;
+  const unknownTaskTypes: string[] = [];
+
+  if (truncated) {
+    // The prefix is all there is; see EVENT_IN_PREFIX.
+    event = EVENT_IN_PREFIX.exec(body)?.[1];
+    reason = REASON_IN_PREFIX.exec(body)?.[1];
+    cwd = CWD_IN_PREFIX.exec(body)?.[1];
+    notificationType = NOTIFICATION_TYPE_IN_PREFIX.exec(body)?.[1];
+    toolName = TOOL_NAME_IN_PREFIX.exec(body)?.[1];
+    sessionUuid = SESSION_ID_IN_PREFIX.exec(body)?.[1];
+  } else {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      return { malformed: true, effects: [] };
+    }
+    const fields =
+      typeof parsed === 'object' && parsed !== null
+        ? (parsed as {
+            hook_event_name?: unknown;
+            reason?: unknown;
+            cwd?: unknown;
+            notification_type?: unknown;
+            tool_use_id?: unknown;
+            tool_name?: unknown;
+            agent_id?: unknown;
+            tool_input?: unknown;
+            background_tasks?: unknown;
+            session_id?: unknown;
+          })
+        : undefined;
+    event = fields?.hook_event_name;
+    sessionUuid = fields?.session_id;
+    reason = fields?.reason;
+    cwd = fields?.cwd;
+    notificationType = fields?.notification_type;
+    toolUseId = fields?.tool_use_id;
+    toolName = fields?.tool_name;
+    agentId = fields?.agent_id;
+    toolInput = fields?.tool_input;
+    runInBackground = (toolInput as { run_in_background?: unknown } | null | undefined)
+      ?.run_in_background;
+    backgroundShells = liveBackgroundShellIds(fields?.background_tasks, (type) =>
+      unknownTaskTypes.push(type),
+    );
+  }
+
+  const reading = (effects: HookEffect[]): HookReading =>
+    unknownTaskTypes.length > 0 ? { effects, unknownTaskTypes } : { effects };
+
+  /**
+   * An event outside the subscribed set is a success, not an error.
+   *
+   * Claude may deliver more than was asked for — a settings merge the user
+   * made, a future default — and answering 4xx would print a hook failure in
+   * their session for something the app simply does not care about.
+   */
+  if (!isHookEvent(event)) return reading([]);
+
+  /**
+   * `SessionEnd` is a lifecycle event and leaves here on its own channel.
+   *
+   * **Only `clear` is acted on.** `logout`, `prompt_input_exit` and `other`
+   * all mean the process is going away, and the pty is the honest observer of
+   * that — `activity.ts` reports `terminated` for hook-driven sessions too.
+   * Acting on them here is the exact bug this event was withdrawn for once
+   * already.
+   */
+  if (event === 'SessionEnd') return reading(reason === CLEAR_REASON ? [{ kind: 'cleared' }] : []);
+
+  const effects: HookEffect[] = [];
+  const cwdField = typeof cwd === 'string' && cwd !== '' ? { cwd } : {};
+  const uuidField = typeof sessionUuid === 'string' && sessionUuid !== '' ? { sessionUuid } : {};
+
+  /**
+   * A `Notification` is the one event whose status is not a property of the
+   * event.
+   *
+   * An **unrecognised** type is answered 204 and published as nothing, which
+   * is the same treatment an unsubscribed event gets and for the same reason:
+   * Claude raises notifications this app has no reading of — an auth prompt,
+   * something added in a later release — and moving a session to `waiting` on
+   * one would put a dot on the rail that no amount of looking at the terminal
+   * explains. The vocabulary is closed here so that a new member is a decision
+   * someone makes, not a guess this code makes on their behalf.
+   */
+  if (event === 'Notification') {
+    if (!isHookNotificationType(notificationType)) return reading([]);
+    effects.push({
+      kind: 'status',
+      event: {
+        entityId,
+        event,
+        status: NOTIFICATION_TYPE_STATUS[notificationType],
+        notificationType,
+        ...cwdField,
+        ...uuidField,
+      },
+    });
+    return reading(effects);
+  }
+
+  effects.push({
+    kind: 'status',
+    event: {
+      entityId,
+      event,
+      status: HOOK_STATUS[event],
+      ...uuidField,
+      /**
+       * Absent rather than empty when the payload did not carry one. The
+       * session layer treats absence as "nothing to look at on this tick",
+       * which is the honest reading — an empty string would be a directory.
+       */
+      ...cwdField,
+      ...(typeof toolUseId === 'string' ? { toolUseId } : {}),
+      ...(typeof toolName === 'string' ? { toolName } : {}),
+      ...(typeof agentId === 'string' && agentId !== '' ? { agentId } : {}),
+      ...(runInBackground === true ? { runInBackground: true } : {}),
+      ...(backgroundShells === undefined ? {} : { backgroundShells }),
+    },
+  });
+  return reading(effects);
 }
