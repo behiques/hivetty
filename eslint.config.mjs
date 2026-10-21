@@ -493,6 +493,28 @@ export default tseslint.config(
               message:
                 'An adapter does not reach the core. The core passes what an adapter needs in as arguments.',
             },
+            /**
+             * THE DRIVEN SIDE STAYS SEALED (HIVE-233).
+             *
+             * Only `electron/main/harness/**` may import an adapter; everyone
+             * else asks the registry (`adapterFor`, `harnessOf`). That is what
+             * lets a second harness land as a new folder rather than a hunt for
+             * every place that knew it was Claude. The target is everything that
+             * ships outside `harness/`: `!(harness)` is a minimatch extglob,
+             * which the plugin matches targets with. `tests/**` stays unfenced,
+             * as everywhere else. A second adapter adds its folder to `from`.
+             */
+            {
+              target: [
+                './electron/main/!(harness)/**/*',
+                './electron/main/*',
+                './electron/!(main)/**/*',
+                './src/**/*',
+              ],
+              from: './electron/main/harness/claude-code/**/*',
+              message:
+                'Only electron/main/harness/ may import an adapter. Reach Claude Code through the registry: adapterFor() and harnessOf().',
+            },
           ],
         },
       ],
