@@ -36,7 +36,6 @@ import {
   type SessionEffort,
   type SessionModel,
   SESSION_NAME_DISPLAY_MAX,
-  SUBMIT_DELAY_MS,
   type SessionBranchEvent,
   type SessionClearedEvent,
   type SessionFinishedEvent,
@@ -74,7 +73,7 @@ import type { PtyHostSupervisor } from '../pty-host/supervisor';
 import type { SkillsRuntime } from '../skills';
 
 import { createActivityTracker, type ActivityTracker } from './activity';
-import { createBootstrap, sessionCommand, type Bootstrap } from './bootstrap';
+import { createBootstrap, type Bootstrap } from './bootstrap';
 import { createChangedFiles } from './changed-files';
 import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
 import type { SessionHistory } from './history';
@@ -2529,141 +2528,139 @@ export function createSessions(options: SessionsOptions): Sessions {
      * login shell with it and the session settles to `done`. See its own
      * comment for why that reverses story 096, and why it is `&&`.
      */
-    bootstrap.arm(
-      request.entityId,
+    /**
+     * The picker's model and effort become flags on that command
+     * (story 109). They were recorded on the entity and shown on its chip
+     * from the first story that offered them, and reached the process in no
+     * story at all — so a session started as Haiku with low effort opened as
+     * Opus and said so on the meta bar.
+     */
+    const plan = harnesses.adapterFor(harnesses.harnessOf(request.entityId)!).launch({
+      command: runtime.claudeCommand,
+      ...(request.model === undefined ? {} : { model: request.model }),
+      ...(request.effort === undefined ? {} : { effort: request.effort }),
       /**
-       * The picker's model and effort become flags on that command
-       * (story 109). They were recorded on the entity and shown on its chip
-       * from the first story that offered them, and reached the process in no
-       * story at all — so a session started as Haiku with low effort opened as
-       * Opus and said so on the meta bar.
+       * **Nothing is named here any more, and that is the feature** (HIVE-108).
+       *
+       * HIVE-61 sent the row's own id — `--name sess-07` — so that the agent's
+       * prompt box, its `/resume` picker and the terminal title all agreed with
+       * the rail. The cost of that agreement turned out to be the name itself:
+       * **`--name` suppresses Claude Code's own titling entirely.** Two arms of
+       * a real `claude`, same prompt, same moment, differing in nothing else:
+       *
+       * ```
+       * --name sess-probe   ai-title: (none)               OSC: "✳ sess-probe"
+       * (no flag)           ai-title: "Mutex explanation"  OSC: "✳ Claude Code"
+       *                                                    → "◐ Mutex explanation"
+       * ```
+       *
+       * Every session this app has ever spawned carries a `custom-title` and no
+       * `ai-title` for exactly this reason — 25+ transcripts, some 3,000 lines
+       * long, all of them mute. HiveTTY was not failing to infer names; it was
+       * stopping Claude from inferring them.
+       *
+       * So the id fallback is gone. A session opens unnamed, Claude titles it
+       * from the conversation once there is one, and the title arrives on the
+       * OSC-0 stream `readTitle` has parsed since HIVE-61 — no new transport,
+       * no prompt scraping, no second inference engine. `hiveNameFromTitle`
+       * spells it the way the rail spells names.
+       *
+       * What is given up is the opening frame: until Claude has titled it, the
+       * label on its input box is simply **absent**, where it used to read
+       * `sess-07`. Measured against a real `claude` — the name is drawn into
+       * the box's top border, and with no name the border is unlabelled:
+       *
+       * ```
+       * named    ────────────────────── sess-probe ─
+       * unnamed  ──────────────────────────────────
+       * ```
+       *
+       * (HIVE-108 first recorded this as "the prompt box says `Claude Code`".
+       * It does not. `Claude Code` is the *terminal title* Claude writes while
+       * unnamed, and the splash banner — which prints either way and names the
+       * product, not the session.)
+       *
+       * The row is untouched: `nameFromTitle` maps that title to the *absence*
+       * of a name, so the rail goes on saying `sess-07` until a real one lands.
+       *
+       * **This subsumes HIVE-107.** That fix carved `--resume` out of the id
+       * fallback, because `--name` on a resume renames the stored conversation
+       * rather than labelling a new one. With no fallback left there is nothing
+       * to carve: a resume sends no flag because *no spawn does*.
+       *
+       * An explicit `request.name` still survives, because that is a caller
+       * saying something the transcript cannot: *call it this from now on*.
+       * Nothing asks for it today — a ticket session is named by the store,
+       * which pins `HIVE-73` in front of whatever Claude infers, rather than by
+       * a flag that would cost it the inference.
        */
-      sessionCommand(runtime.claudeCommand, {
-        ...(request.model === undefined ? {} : { model: request.model }),
-        ...(request.effort === undefined ? {} : { effort: request.effort }),
-        /**
-         * **Nothing is named here any more, and that is the feature** (HIVE-108).
-         *
-         * HIVE-61 sent the row's own id — `--name sess-07` — so that the agent's
-         * prompt box, its `/resume` picker and the terminal title all agreed with
-         * the rail. The cost of that agreement turned out to be the name itself:
-         * **`--name` suppresses Claude Code's own titling entirely.** Two arms of
-         * a real `claude`, same prompt, same moment, differing in nothing else:
-         *
-         * ```
-         * --name sess-probe   ai-title: (none)               OSC: "✳ sess-probe"
-         * (no flag)           ai-title: "Mutex explanation"  OSC: "✳ Claude Code"
-         *                                                    → "◐ Mutex explanation"
-         * ```
-         *
-         * Every session this app has ever spawned carries a `custom-title` and no
-         * `ai-title` for exactly this reason — 25+ transcripts, some 3,000 lines
-         * long, all of them mute. HiveTTY was not failing to infer names; it was
-         * stopping Claude from inferring them.
-         *
-         * So the id fallback is gone. A session opens unnamed, Claude titles it
-         * from the conversation once there is one, and the title arrives on the
-         * OSC-0 stream `readTitle` has parsed since HIVE-61 — no new transport,
-         * no prompt scraping, no second inference engine. `hiveNameFromTitle`
-         * spells it the way the rail spells names.
-         *
-         * What is given up is the opening frame: until Claude has titled it, the
-         * label on its input box is simply **absent**, where it used to read
-         * `sess-07`. Measured against a real `claude` — the name is drawn into
-         * the box's top border, and with no name the border is unlabelled:
-         *
-         * ```
-         * named    ────────────────────── sess-probe ─
-         * unnamed  ──────────────────────────────────
-         * ```
-         *
-         * (HIVE-108 first recorded this as "the prompt box says `Claude Code`".
-         * It does not. `Claude Code` is the *terminal title* Claude writes while
-         * unnamed, and the splash banner — which prints either way and names the
-         * product, not the session.)
-         *
-         * The row is untouched: `nameFromTitle` maps that title to the *absence*
-         * of a name, so the rail goes on saying `sess-07` until a real one lands.
-         *
-         * **This subsumes HIVE-107.** That fix carved `--resume` out of the id
-         * fallback, because `--name` on a resume renames the stored conversation
-         * rather than labelling a new one. With no fallback left there is nothing
-         * to carve: a resume sends no flag because *no spawn does*.
-         *
-         * An explicit `request.name` still survives, because that is a caller
-         * saying something the transcript cannot: *call it this from now on*.
-         * Nothing asks for it today — a ticket session is named by the store,
-         * which pins `HIVE-73` in front of whatever Claude infers, rather than by
-         * a flag that would cost it the inference.
-         */
-        ...(request.name === undefined ? {} : { name: request.name }),
-        sessionUuid,
-        resume,
-        /*
-          One file for every session since HIVE-82: nothing in it varies by
-          theme any more, because Claude's is pinned to `dark-ansi` and the
-          colours resolve against the terminal's palette at paint time.
+      ...(request.name === undefined ? {} : { name: request.name }),
+      sessionUuid,
+      resume,
+      /*
+        One file for every session since HIVE-82: nothing in it varies by
+        theme any more, because Claude's is pinned to `dark-ansi` and the
+        colours resolve against the terminal's palette at paint time.
 
-          `spawnSettingsPath`, not `settingsPath`: a container project's set
-          lives under `containerSet` (HIVE-133), and `sessionCommand` maps
-          whichever one lands here into its container-side spelling.
-        */
-        ...(spawnSettingsPath == null ? {} : { settingsPath: spawnSettingsPath }),
-        /*
-          The generated plugin, when there is one (HIVE-96). Resolved above for
-          the same reason `settingsPath` is: it is main's own path, chosen at
-          spawn, and it never crosses IPC — `parseSpawnRequest` has no field for
-          it and deliberately never will.
+        `spawnSettingsPath`, not `settingsPath`: a container project's set
+        lives under `containerSet` (HIVE-133), and `sessionCommand` maps
+        whichever one lands here into its container-side spelling.
+      */
+      ...(spawnSettingsPath == null ? {} : { settingsPath: spawnSettingsPath }),
+      /*
+        The generated plugin, when there is one (HIVE-96). Resolved above for
+        the same reason `settingsPath` is: it is main's own path, chosen at
+        spawn, and it never crosses IPC — `parseSpawnRequest` has no field for
+        it and deliberately never will.
 
-          Unlike `settingsPath` and `mcpConfig`, never swapped for a
-          container-flavoured path: `--plugin-dir` is shared between host and
-          container sessions (see the comment on `containerSpawn` above).
-        */
-        ...(pluginDir == null ? {} : { pluginDir }),
-        /*
-          The ledger tools (HIVE-112). Resolved here for the same reason
-          `pluginDir` is: it is main's own path, chosen at spawn, and it never
-          crosses IPC.
+        Unlike `settingsPath` and `mcpConfig`, never swapped for a
+        container-flavoured path: `--plugin-dir` is shared between host and
+        container sessions (see the comment on `containerSpawn` above).
+      */
+      ...(pluginDir == null ? {} : { pluginDir }),
+      /*
+        The ledger tools (HIVE-112). Resolved here for the same reason
+        `pluginDir` is: it is main's own path, chosen at spawn, and it never
+        crosses IPC.
 
-          `spawnMcpConfig`, for the reason `spawnSettingsPath` is above.
-        */
-        ...(spawnMcpConfig == null ? {} : { mcpConfig: spawnMcpConfig }),
-        /*
-          The project runs inside a container (HIVE-133). `sessionCommand`
-          reads this to expand `container.env` at the command's `{env}`
-          placeholder and to rewrite the three flag paths above into their
-          container-side spelling — see `ContainerSpawn`'s own comment for
-          what each half does.
-        */
-        ...(containerSpawn === undefined ? {} : { container: containerSpawn }),
-        /*
-          Belt *and* braces, deliberately. `stripEnv` above covers the ambient
-          environment and a project's own `env` block; this covers the login
-          shell's profile, which re-exports whatever the user put in `~/.zshrc`
-          after the host has already sanitised. Neither one is sufficient alone.
-        */
-        subscriptionAuth: snapshot.subscriptionAuth,
-        /**
-         * The opening instruction becomes `claude`'s initial prompt, on this
-         * command line, rather than a second write into the pty afterwards
-         * (HIVE-91).
-         *
-         * It moved *into* `sessionCommand` from `arm`'s third argument. The old
-         * shape waited for the TUI to settle and then typed the task in, which
-         * meant a `claude` that failed to start handed the user's instruction to
-         * the login shell to run as a command. See `sessionCommand`'s own
-         * comment for the transcript that produced.
-         */
-        /*
-          Not on a resume (HIVE-88): the conversation being picked up has
-          already heard its opening instruction, and a history record carries
-          the task precisely so the row can display it — not so it can be
-          said twice.
-        */
-        ...(request.task === undefined || resume ? {} : { task: request.task }),
-      }),
-      SUBMIT_DELAY_MS,
-    );
+        `spawnMcpConfig`, for the reason `spawnSettingsPath` is above.
+      */
+      ...(spawnMcpConfig == null ? {} : { mcpConfig: spawnMcpConfig }),
+      /*
+        The project runs inside a container (HIVE-133). `sessionCommand`
+        reads this to expand `container.env` at the command's `{env}`
+        placeholder and to rewrite the three flag paths above into their
+        container-side spelling — see `ContainerSpawn`'s own comment for
+        what each half does.
+      */
+      ...(containerSpawn === undefined ? {} : { container: containerSpawn }),
+      /*
+        Belt *and* braces, deliberately. `stripEnv` above covers the ambient
+        environment and a project's own `env` block; this covers the login
+        shell's profile, which re-exports whatever the user put in `~/.zshrc`
+        after the host has already sanitised. Neither one is sufficient alone.
+      */
+      subscriptionAuth: snapshot.subscriptionAuth,
+      /**
+       * The opening instruction becomes `claude`'s initial prompt, on this
+       * command line, rather than a second write into the pty afterwards
+       * (HIVE-91).
+       *
+       * It moved *into* `sessionCommand` from `arm`'s third argument. The old
+       * shape waited for the TUI to settle and then typed the task in, which
+       * meant a `claude` that failed to start handed the user's instruction to
+       * the login shell to run as a command. See `sessionCommand`'s own
+       * comment for the transcript that produced.
+       */
+      /*
+        Not on a resume (HIVE-88): the conversation being picked up has
+        already heard its opening instruction, and a history record carries
+        the task precisely so the row can display it — not so it can be
+        said twice.
+      */
+      ...(request.task === undefined || resume ? {} : { task: request.task }),
+    });
+    bootstrap.arm(request.entityId, plan.command, plan.submitDelayMs);
 
     /**
      * The branch this session opens on (HIVE-78).
