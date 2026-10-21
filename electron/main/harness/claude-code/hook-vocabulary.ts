@@ -7,13 +7,11 @@ import {
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
   type HookIdentity,
-  type HookNotificationType,
-  type StatusHookEvent,
 } from '@shared/hook-contract';
 
 /**
- * Claude Code's hook vocabulary (HIVE-236): the events it is subscribed to, what each means
- * for status, its notification types and its reply shape. Adapter-owned and fenced: the core
+ * Claude Code's hook vocabulary (HIVE-236): the events it is subscribed to, the signal each
+ * maps to (HIVE-237), its notification types and its reply shape. Adapter-owned and fenced: the core
  * sees only `@shared/hook-contract`'s transport and event shapes.
  */
 
@@ -92,9 +90,6 @@ export const HOOK_EVENTS = [
 
 export type HookEvent = (typeof HOOK_EVENTS)[number];
 
-/** A `StatusHookEvent` the list lacks fails here; a list member the union lacks fails where readHook publishes it. */
-const statusEventsListed: [Exclude<StatusHookEvent, HookEvent>] extends [never] ? true : never = true;
-void statusEventsListed;
 
 /**
  * `SessionStart` is subscribed and does not arrive. Measured, not assumed.
@@ -235,17 +230,10 @@ export const CLEAR_REASON = 'clear';
  */
 export const NOTIFICATION_TYPES = ['idle_prompt', 'permission_prompt'] as const;
 
-/** A `HookNotificationType` the list lacks fails here; a list member the union lacks fails where readHook publishes it. */
-const notificationTypesListed: [
-  Exclude<HookNotificationType, (typeof NOTIFICATION_TYPES)[number]>,
-] extends [never]
-  ? true
-  : never = true;
-void notificationTypesListed;
 
-export const isHookNotificationType = (
+const isNotificationType = (
   value: unknown,
-): value is HookNotificationType =>
+): value is (typeof NOTIFICATION_TYPES)[number] =>
   typeof value === 'string' &&
   (NOTIFICATION_TYPES as readonly string[]).includes(value);
 
@@ -289,7 +277,7 @@ export function toSignal(event: SignalEvent, toolName?: unknown): StatusSignal {
 
 /** A `Notification`'s signal, or `undefined` for a type this app has no reading of (see `readHook`). */
 export function noticeSignal(notificationType: unknown): StatusSignal | undefined {
-  return isHookNotificationType(notificationType)
+  return isNotificationType(notificationType)
     ? { kind: 'notice', reason: NOTICE_REASON[notificationType] }
     : undefined;
 }

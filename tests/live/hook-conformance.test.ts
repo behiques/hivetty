@@ -13,9 +13,12 @@ import {
   createNotifier,
   createNotificationHub,
 } from '../../electron/main/notifications';
-import { noticeSignal, toSignal } from '../../electron/main/harness/claude-code/hook-vocabulary';
 import {
-  type HookNotificationType,
+  noticeSignal,
+  type NOTIFICATION_TYPES,
+  toSignal,
+} from '../../electron/main/harness/claude-code/hook-vocabulary';
+import {
   type IdleDetail,
   type ObservedStatus,
 } from '../../electron/shared/hook-contract';
@@ -208,7 +211,7 @@ const RUN = process.env.HIVE_LIVE_HOOK_PROOF === '1';
 interface Scenario {
   scenario: string;
   prompt: string;
-  type: HookNotificationType | null;
+  type: (typeof NOTIFICATION_TYPES)[number] | null;
   status: ObservedStatus;
   idleDetail?: IdleDetail;
   /** Every inbox row the run raises, in order (HIVE-89 widened this from one). */

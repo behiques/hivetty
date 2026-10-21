@@ -1038,8 +1038,9 @@ export function createSessions(options: SessionsOptions): Sessions {
      * the finish arming, the branch read, the history record — is about a pty,
      * and an agent has none. So this handler does one thing and refuses to grow
      * a second: a `turn-end` (Claude's `Stop`) is what tells the run tracker a
-     * turn ended, and it is the only signal a wake acts on today. The rest arrive so the receiver can
-     * answer them rather than 404 a run's own hooks, and are ignored until
+     * turn ended, and it is the only signal a wake acts on today. The rest
+     * arrive so the receiver can answer them rather than 404 a run's own
+     * hooks, and are ignored until
      * HIVE-116 has somewhere to draw them.
      *
      * `event.sessionUuid` rides along rather than being dropped. Without it a

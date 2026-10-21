@@ -952,8 +952,8 @@ function harness(
   onEnded?: (entityId: string) => void,
 ): {
   hook: (
-    event: { entityId: string; event: HookStatusEvent['event'] } & Partial<
-      Omit<HookStatusEvent, 'entityId' | 'event' | 'status'>
+    event: { entityId: string; signal: StatusSignal } & Partial<
+      Omit<HookStatusEvent, 'entityId' | 'signal'>
     >,
   ) => void;
   cleared: (entityId: string) => void;
@@ -1004,7 +1004,7 @@ function harness(
     // `status` is a required field on the wire contract but unread by
     // `onEvent` — the tracker derives it — so a fixed fallback here is
     // never observed downstream.
-    hook: (event) => onEvent!({ status: 'working', ...event } as HookStatusEvent),
+    hook: (event) => onEvent!(event as HookStatusEvent),
     cleared: (entityId) => onCleared!(entityId),
     lastStatus: (entityId) => statusFor(entityId).status,
     lastEvent: (entityId) => statusFor(entityId),
@@ -1086,9 +1086,7 @@ describe('status', () => {
     // 'idle' rather than reinterpreting it as 'waiting'.
     onEvent!({
       entityId: 'hero-refresh',
-      event: 'Notification',
       signal: { kind: 'notice', reason: 'idle' },
-      notificationType: 'idle_prompt',
     });
 
     expect(sent.at(-1)).toEqual({
@@ -1164,7 +1162,6 @@ describe('status', () => {
     const toolFinished = () =>
       onEvent!({
         entityId: 'hero-refresh',
-        event: 'PostToolUse',
         signal: { kind: 'tool-end' },
         cwd: '/home/dev/repos/hero-refresh',
       } as HookStatusEvent);
@@ -1255,7 +1252,6 @@ describe('status', () => {
     const turnEnded = () =>
       onEvent!({
         entityId: 'hero-refresh',
-        event: 'SubagentStop',
         signal: { kind: 'turn-end' },
         cwd: '/home/dev/repos/hero-refresh',
       } as HookStatusEvent);
@@ -1406,26 +1402,26 @@ describe('status', () => {
   it('holds waiting while a sibling tool finishes, then releases on the blocked one', () => {
     const h = harness();
 
-    h.hook({ entityId: 'sess-a', event: 'UserPromptSubmit', signal: { kind: 'prompt' } });
-    h.hook({ entityId: 'sess-a', event: 'PreToolUse', signal: { kind: 'tool-start' }, toolUseId: 'A', toolName: 'Bash' });
+    h.hook({ entityId: 'sess-a', signal: { kind: 'prompt' } });
+    h.hook({ entityId: 'sess-a', signal: { kind: 'tool-start' }, toolUseId: 'A', toolName: 'Bash' });
     h.hook({
       entityId: 'sess-a',
-      event: 'PreToolUse', signal: { kind: 'tool-start' },
+      signal: { kind: 'tool-start' },
       toolUseId: 'B',
       toolName: 'AskUserQuestion',
     });
     h.hook({
       entityId: 'sess-a',
-      event: 'PermissionRequest', signal: { kind: 'waiting', reason: 'question' },
+      signal: { kind: 'waiting', reason: 'question' },
       toolName: 'AskUserQuestion',
     });
-    h.hook({ entityId: 'sess-a', event: 'PostToolUse', signal: { kind: 'tool-end' }, toolUseId: 'A', toolName: 'Bash' });
+    h.hook({ entityId: 'sess-a', signal: { kind: 'tool-end' }, toolUseId: 'A', toolName: 'Bash' });
 
     expect(h.lastStatus('sess-a')).toBe('waiting');
 
     h.hook({
       entityId: 'sess-a',
-      event: 'PostToolUse', signal: { kind: 'tool-end' },
+      signal: { kind: 'tool-end' },
       toolUseId: 'B',
       toolName: 'AskUserQuestion',
     });
@@ -1476,13 +1472,13 @@ describe('status', () => {
   it('clears tracker state when the conversation is cleared', () => {
     const h = harness();
 
-    h.hook({ entityId: 'sess-b', event: 'UserPromptSubmit', signal: { kind: 'prompt' } });
-    h.hook({ entityId: 'sess-b', event: 'SubagentStart', signal: { kind: 'subagent-start' }, agentId: 'X' });
-    h.hook({ entityId: 'sess-b', event: 'Stop', signal: { kind: 'turn-end' } });
+    h.hook({ entityId: 'sess-b', signal: { kind: 'prompt' } });
+    h.hook({ entityId: 'sess-b', signal: { kind: 'subagent-start' }, agentId: 'X' });
+    h.hook({ entityId: 'sess-b', signal: { kind: 'turn-end' } });
     expect(h.lastEvent('sess-b')).toMatchObject({ idleDetail: 'agents' });
 
     h.cleared('sess-b');
-    h.hook({ entityId: 'sess-b', event: 'Stop', signal: { kind: 'turn-end' } });
+    h.hook({ entityId: 'sess-b', signal: { kind: 'turn-end' } });
     expect(h.lastEvent('sess-b').idleDetail).toBeUndefined();
   });
 });
@@ -2216,7 +2212,7 @@ describe('/done', () => {
   function finished(): {
     open: () => string;
     done: (entityId: string) => void;
-    hook: (entityId: string, event: HookStatusEvent['event'], signal: StatusSignal) => void;
+    hook: (entityId: string, signal: StatusSignal) => void;
     cleared: (entityId: string) => void;
     restart: () => Promise<void>;
     patches: (entityId: string) => Record<string, unknown>[];
@@ -2324,8 +2320,7 @@ describe('/done', () => {
         return mintedFor('hero-refresh');
       },
       done: (entityId) => onDone(entityId),
-      hook: (entityId, event, signal) =>
-        onEvent({ entityId, event, signal } as HookStatusEvent),
+      hook: (entityId, signal) => onEvent({ entityId, signal }),
       cleared: (entityId) => onCleared(entityId),
       restart: () => instance.restart(OPEN),
       patches: (entityId) =>
@@ -2443,7 +2438,7 @@ describe('/done', () => {
       h.planTool(createAlpha('hero-refresh'));
 
       h.done('hero-refresh');
-      h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+      h.hook('hero-refresh', { kind: 'turn-end' });
       emitExit({ sessionId, exitCode: 0 });
 
       expect(h.finishedFor('hero-refresh')).toBe(1);
@@ -2511,7 +2506,7 @@ describe('/done', () => {
     const h = finished();
     const sessionId = h.open();
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
 
     emitExit({ sessionId, exitCode: 129, signal: 9 });
 
@@ -2534,7 +2529,7 @@ describe('/done', () => {
     const sessionId = h.open();
 
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'SubagentStop', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
 
     /*
       The assertion is the *mechanism*, not just the effect. `bootstrap.ts`
@@ -2565,7 +2560,7 @@ describe('/done', () => {
     const sessionId = h.open();
 
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
     emitExit({ sessionId, exitCode: 0 });
 
     expect(h.patches('hero-refresh').at(-1)).toMatchObject({ status: 'done' });
@@ -2585,7 +2580,7 @@ describe('/done', () => {
     const sessionId = h.open();
 
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
     emitExit({ sessionId, exitCode: 0 });
 
     /*
@@ -2616,8 +2611,8 @@ describe('/done', () => {
     const sessionId = h.open();
 
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'SessionStart', { kind: 'prompt' });
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'prompt' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
 
     // Nothing written, and the ending that eventually comes is not `done`.
     expect(writes()).toEqual([]);
@@ -2632,7 +2627,7 @@ describe('/done', () => {
     h.open();
 
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'SubagentStop', { kind: 'subagent-end' });
+    h.hook('hero-refresh', { kind: 'subagent-end' });
 
     expect(writes()).toEqual([]);
   });
@@ -2642,7 +2637,7 @@ describe('/done', () => {
     const sessionId = h.open();
 
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
     expect(killed).not.toContain(sessionId);
 
     vi.advanceTimersByTime(10_000);
@@ -2655,7 +2650,7 @@ describe('/done', () => {
     const sessionId = h.open();
 
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
     emitExit({ sessionId, exitCode: 0 });
 
     // The timer has to go with the session, or it fires against a closed
@@ -2671,8 +2666,8 @@ describe('/done', () => {
 
     h.done('hero-refresh');
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
 
     expect(writes()).toEqual(['/exit\r']);
   });
@@ -2683,7 +2678,7 @@ describe('/done', () => {
 
     h.done('hero-refresh');
     h.cleared('hero-refresh');
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
 
     /*
       `/clear` retires the conversation that declared itself finished and opens
@@ -2706,7 +2701,7 @@ describe('/done', () => {
     const sessionId = h.open();
 
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+    h.hook('hero-refresh', { kind: 'turn-end' });
     expect(writes()).toEqual(['/exit\r']);
 
     /*
@@ -2716,7 +2711,7 @@ describe('/done', () => {
       this event is the proof. Left armed, the backstop would destroy the pty
       ten seconds into that turn and file it as `done`.
     */
-    h.hook('hero-refresh', 'UserPromptSubmit', { kind: 'prompt' });
+    h.hook('hero-refresh', { kind: 'prompt' });
     vi.advanceTimersByTime(10_000);
 
     expect(killed).not.toContain(sessionId);
@@ -2794,7 +2789,7 @@ describe('the idle signal', () => {
     const h = harness(onIdle);
     h.sessions.open(OPEN);
 
-    h.hook({ entityId: 'hero-refresh', event: 'Stop', signal: { kind: 'turn-end' }, backgroundShells: [] });
+    h.hook({ entityId: 'hero-refresh', signal: { kind: 'turn-end' }, backgroundShells: [] });
 
     expect(onIdle).toHaveBeenCalledWith('hero-refresh');
   });
@@ -2810,7 +2805,7 @@ describe('the idle signal', () => {
     const h = harness(onIdle);
     h.sessions.open(OPEN);
 
-    h.hook({ entityId: 'hero-refresh', event: 'Stop', signal: { kind: 'turn-end' }, backgroundShells: ['shell-1'] });
+    h.hook({ entityId: 'hero-refresh', signal: { kind: 'turn-end' }, backgroundShells: ['shell-1'] });
 
     expect(onIdle).not.toHaveBeenCalled();
   });
@@ -2821,7 +2816,7 @@ describe('the idle signal', () => {
     const h = harness(onIdle);
     h.sessions.open(OPEN);
 
-    h.hook({ entityId: 'hero-refresh', event: 'PermissionRequest', signal: { kind: 'waiting', reason: 'permission' }, toolName: 'Bash' });
+    h.hook({ entityId: 'hero-refresh', signal: { kind: 'waiting', reason: 'permission' }, toolName: 'Bash' });
 
     expect(onIdle).not.toHaveBeenCalled();
   });
@@ -2833,11 +2828,11 @@ describe('the idle signal', () => {
     expect(h.sessions.isIdle('hero-refresh')).toBe(false);
 
     h.sessions.open(OPEN);
-    h.hook({ entityId: 'hero-refresh', event: 'Stop', signal: { kind: 'turn-end' }, backgroundShells: [] });
+    h.hook({ entityId: 'hero-refresh', signal: { kind: 'turn-end' }, backgroundShells: [] });
     expect(h.sessions.isIdle('hero-refresh')).toBe(true);
 
     // `UserPromptSubmit` derives `working` — the turn started again.
-    h.hook({ entityId: 'hero-refresh', event: 'UserPromptSubmit', signal: { kind: 'prompt' } });
+    h.hook({ entityId: 'hero-refresh', signal: { kind: 'prompt' } });
     expect(h.sessions.isIdle('hero-refresh')).toBe(false);
   });
 
@@ -2845,7 +2840,7 @@ describe('the idle signal', () => {
     const h = harness();
     h.sessions.open(OPEN);
 
-    h.hook({ entityId: 'hero-refresh', event: 'Stop', signal: { kind: 'turn-end' }, backgroundShells: ['shell-1'] });
+    h.hook({ entityId: 'hero-refresh', signal: { kind: 'turn-end' }, backgroundShells: ['shell-1'] });
 
     expect(h.sessions.isIdle('hero-refresh')).toBe(false);
   });
@@ -2866,8 +2861,8 @@ describe('the agent id space (HIVE-115)', () => {
 
   const agentHarness = (): {
     knowsAgent: (entityId: string) => boolean;
-    agentEvent: (event: Partial<HookAgentEvent> & { event: HookAgentEvent['event'] }) => void;
-    sessionEvent: (event: HookStatusEvent['event'], signal: StatusSignal) => void;
+    agentEvent: (event: Partial<HookAgentEvent> & { signal: StatusSignal }) => void;
+    sessionEvent: (signal: StatusSignal) => void;
     turnsEnded: ReturnType<typeof vi.fn>;
     names: Set<string>;
     sent: Sent[];
@@ -2915,8 +2910,7 @@ describe('the agent id space (HIVE-115)', () => {
       knowsAgent: (entityId) => knowsAgent!(entityId),
       agentEvent: (event) =>
         onAgentEvent!({ entityId: AGENT, ...event } as HookAgentEvent),
-      sessionEvent: (event: HookStatusEvent['event'], signal: StatusSignal) =>
-        onEvent!({ entityId: 'hero-refresh', event, signal } as HookStatusEvent),
+      sessionEvent: (signal: StatusSignal) => onEvent!({ entityId: 'hero-refresh', signal }),
       turnsEnded,
       names,
       sent: localSent,
@@ -2941,7 +2935,7 @@ describe('the agent id space (HIVE-115)', () => {
   it('forwards a Stop with the session uuid that came with it', () => {
     const h = agentHarness();
 
-    h.agentEvent({ event: 'SubagentStop', signal: { kind: 'turn-end' }, sessionUuid: UUID });
+    h.agentEvent({ signal: { kind: 'turn-end' }, sessionUuid: UUID });
 
     expect(h.turnsEnded).toHaveBeenCalledWith(AGENT, UUID, undefined);
 
@@ -2951,7 +2945,7 @@ describe('the agent id space (HIVE-115)', () => {
   it('forwards whether the Stop reported background work holding the run', () => {
     const h = agentHarness();
 
-    h.agentEvent({ event: 'Stop', signal: { kind: 'turn-end' }, sessionUuid: UUID, backgroundWork: true });
+    h.agentEvent({ signal: { kind: 'turn-end' }, sessionUuid: UUID, backgroundWork: true });
 
     expect(h.turnsEnded).toHaveBeenCalledWith(AGENT, UUID, true);
 
@@ -2966,7 +2960,7 @@ describe('the agent id space (HIVE-115)', () => {
   it('forwards a Stop with no uuid as undefined', () => {
     const h = agentHarness();
 
-    h.agentEvent({ event: 'Stop', signal: { kind: 'turn-end' } });
+    h.agentEvent({ signal: { kind: 'turn-end' } });
 
     expect(h.turnsEnded).toHaveBeenCalledWith(AGENT, undefined, undefined);
 
@@ -2980,10 +2974,10 @@ describe('the agent id space (HIVE-115)', () => {
     ['SubagentStop', { kind: 'subagent-end' }],
   ] as const)(
     'accepts %s from an agent and acts on none of it',
-    (event, signal) => {
+    (_event, signal) => {
       const h = agentHarness();
 
-      h.agentEvent({ event, signal, sessionUuid: UUID });
+      h.agentEvent({ signal, sessionUuid: UUID });
 
       expect(h.turnsEnded).not.toHaveBeenCalled();
 
@@ -3002,17 +2996,17 @@ describe('the agent id space (HIVE-115)', () => {
   it('never publishes a session status for an agent, though a session does', () => {
     const h = agentHarness();
 
-    for (const [event, signal] of [
+    for (const [, signal] of [
       ['SessionStart', { kind: 'session-start' }],
       ['PreToolUse', { kind: 'tool-start' }],
       ['Stop', { kind: 'turn-end' }],
     ] as const) {
-      h.agentEvent({ event, signal, sessionUuid: UUID });
+      h.agentEvent({ signal, sessionUuid: UUID });
     }
 
     expect(h.sent.filter((entry) => entry.channel === CH.sessionStatus)).toEqual([]);
 
-    h.sessionEvent('Stop', { kind: 'turn-end' });
+    h.sessionEvent({ kind: 'turn-end' });
 
     expect(
       h.sent

@@ -1,4 +1,3 @@
-import type { StatusSignal } from '@shared/harness-contract';
 import { HOOK_MAX_BODY_BYTES } from '@shared/hook-contract';
 import { isPlanFilePath, TASK_TOOL_NAMES, type PlanToolCall } from '@shared/plan-contract';
 
@@ -7,7 +6,6 @@ import type { HookEffect, HookInput, HookReading } from '../port';
 import {
   CLEAR_REASON,
   HOOK_EVENTS,
-  isHookNotificationType,
   noticeSignal,
   toSignal,
   type HookEvent,
@@ -285,7 +283,6 @@ function readAgent(entityId: string, body: string, truncated: boolean): HookRead
         kind: 'agent',
         event: {
           entityId,
-          event,
           signal: toSignal(event),
           // Absent rather than empty when the payload did not carry one, the same
           // discipline every optional field on the session event follows.
@@ -508,18 +505,9 @@ function readSession(entityId: string, body: string, truncated: boolean): HookRe
    * someone makes, not a guess this code makes on their behalf.
    */
   if (event === 'Notification') {
-    if (!isHookNotificationType(notificationType)) return reading([]);
-    effects.push({
-      kind: 'status',
-      event: {
-        entityId,
-        event,
-        signal: noticeSignal(notificationType) as StatusSignal,
-        notificationType,
-        ...cwdField,
-        ...uuidField,
-      },
-    });
+    const signal = noticeSignal(notificationType);
+    if (signal === undefined) return reading([]);
+    effects.push({ kind: 'status', event: { entityId, signal, ...cwdField, ...uuidField } });
     return reading(effects);
   }
 
@@ -527,7 +515,6 @@ function readSession(entityId: string, body: string, truncated: boolean): HookRe
     kind: 'status',
     event: {
       entityId,
-      event,
       signal: toSignal(event, toolName),
       ...uuidField,
       /**
