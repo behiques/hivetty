@@ -8,9 +8,9 @@ import {
   type SessionModel,
 } from '@shared/session-contract';
 
-import { expandEnvArgs, substituteEnv } from './container-command';
-import type { PathMap } from './path-map';
-import { shellQuote } from './shell-quote';
+import { expandEnvArgs, substituteEnv } from '../container/container-command';
+import type { PathMap } from '../container/path-map';
+import { shellQuote } from '../container/shell-quote';
 
 /**
  * What a container project's session needs beyond the host shape (HIVE-133).

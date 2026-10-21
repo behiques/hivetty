@@ -58,6 +58,7 @@ import {
   CONTAINER_SETTINGS_FILE,
   removeSessionContainerFiles,
 } from '../container/generated';
+import { createPathMap } from '../container/path-map';
 import { sessionRoot } from '../fs/session-roots';
 import type { HookRuntime } from '../hooks';
 import { withHostAlias } from '../hooks/container-origin';
@@ -75,7 +76,6 @@ import { createBootstrap, sessionCommand, type Bootstrap } from './bootstrap';
 import { createChangedFiles } from './changed-files';
 import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
 import type { SessionHistory } from './history';
-import { createPathMap } from './path-map';
 import { createSessionRegistry, type SessionRegistry } from './registry';
 import { createTitleReader, type TitleReader } from './title';
 import { createTitleOriginReader } from './title-origin';

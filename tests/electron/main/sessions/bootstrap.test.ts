@@ -5,7 +5,7 @@ import {
   createBootstrap,
   sessionCommand,
 } from '../../../../electron/main/sessions/bootstrap';
-import { createPathMap } from '../../../../electron/main/sessions/path-map';
+import { createPathMap } from '../../../../electron/main/container/path-map';
 import { SUBMIT_DELAY_MS } from '../../../../electron/shared/session-contract';
 
 /**
