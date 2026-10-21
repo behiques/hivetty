@@ -1096,8 +1096,7 @@ describe('status', () => {
       payload: {
         entityId: 'hero-refresh',
         status: 'idle',
-        event: 'Notification',
-        notificationType: 'idle_prompt',
+        signal: { kind: 'notice', reason: 'idle' },
       },
     });
 

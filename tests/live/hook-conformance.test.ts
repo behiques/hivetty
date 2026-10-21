@@ -13,7 +13,7 @@ import {
   createNotifier,
   createNotificationHub,
 } from '../../electron/main/notifications';
-import { noticeSignal } from '../../electron/main/harness/claude-code/hook-vocabulary';
+import { noticeSignal, toSignal } from '../../electron/main/harness/claude-code/hook-vocabulary';
 import {
   type HookNotificationType,
   type IdleDetail,
@@ -266,6 +266,11 @@ interface Scenario {
  */
 interface TestStatusEvent extends SessionStatusEvent {
   toolUseId?: string;
+  /**
+   * Test-only for the same reason (HIVE-237): `SessionStatusEvent` no longer
+   * carries it, but pairing a block with its tool still needs the name.
+   */
+  toolName?: string;
   /** Also test-only, and for the same reason — see `Scenario.backgroundsAShell`. */
   runInBackground?: boolean;
 }
@@ -661,10 +666,7 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
           publish({
             entityId: e.entityId,
             status: derived.status,
-            event: e.event,
-            ...(e.notificationType === undefined
-              ? {}
-              : { notificationType: e.notificationType }),
+            signal: e.signal,
             ...(e.toolName === undefined ? {} : { toolName: e.toolName }),
             ...(derived.detail === undefined
               ? {}
@@ -764,9 +766,9 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
         // already set `idle`, with nothing blocked, so it stays `idle` and the
         // inbox row is what carries the signal instead.
         const waited = statuses.findIndex(
-          (s) => s.status === expectedStatus && s.event === 'Notification',
+          (s) => s.status === expectedStatus && s.signal?.kind === 'notice',
         );
-        expect(statuses[waited]?.notificationType).toBe(expectedType);
+        expect(statuses[waited]?.signal).toEqual(noticeSignal(expectedType));
 
         /*
           The shared mapping still agrees with what the binary just did.
@@ -801,15 +803,15 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
           // `PreToolUse` with that name carries the id it was opened under
           // (`hooks/tracker.ts`'s own `resolve()` does the same walk).
           const blockedName = statuses.find(
-            (s) => s.event === 'PermissionRequest',
+            (s) => s.signal?.kind === 'waiting',
           )?.toolName;
           const blockedToolUseId = statuses.find(
-            (s) => s.event === 'PreToolUse' && s.toolName === blockedName,
+            (s) => s.signal?.kind === 'tool-start' && s.toolName === blockedName,
           )?.toolUseId;
           expect(blockedToolUseId).toBeDefined();
 
           const postToolUseEvents = after.filter(
-            (s) => s.event === 'PostToolUse',
+            (s) => s.signal?.kind === 'tool-end',
           );
           // The blocked tool really did complete — otherwise the loop below
           // would pass vacuously on a run where nothing ever answered it.
@@ -855,7 +857,7 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
 
         // The main agent's own `Stop`, while the subagent or the background
         // shell is still running.
-        const stopIdx = statuses.findIndex((s) => s.event === 'Stop');
+        const stopIdx = statuses.findIndex((s) => s.signal?.kind === 'turn-end');
         expect(stopIdx).toBeGreaterThanOrEqual(0);
         expect(statuses[stopIdx]?.status).toBe(expectedStatus);
         expect(statuses[stopIdx]?.idleDetail).toBe(expectedIdleDetail);
@@ -869,7 +871,7 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
         if (backgroundsAShell === true) {
           expect(
             statuses.some(
-              (s) => s.event === 'PostToolUse' && s.runInBackground === true,
+              (s) => s.signal?.kind === 'tool-end' && s.runInBackground === true,
             ),
           ).toBe(true);
         }
@@ -903,7 +905,7 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
           .slice(stopIdx)
           .find((s) => s.idleDetail === undefined);
         expect(cleared).toBeDefined();
-        expect(cleared?.event).toBe(clearedBy);
+        expect(cleared?.signal).toEqual(toSignal(clearedBy as NonNullable<typeof clearedBy>));
 
         /**
          * The `session.idle` row landed on a true idle, never on the main
@@ -915,7 +917,7 @@ describe.skipIf(!RUN)('real claude -> receiver -> notifier -> hub', () => {
         const raisedAt = raisedAtIndex[0];
         expect(raisedAt).toBeDefined();
         const edge = statuses[raisedAt as number];
-        expect(edge?.event).toBe('Stop');
+        expect(edge?.signal).toEqual({ kind: 'turn-end' });
         expect(edge?.status).toBe('idle');
         expect(edge?.idleDetail).toBeUndefined();
         expect(raisedAt as number).toBeGreaterThanOrEqual(

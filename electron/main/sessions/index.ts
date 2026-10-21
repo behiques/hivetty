@@ -12,12 +12,11 @@ import {
   type ProjectConfig,
 } from '@shared/config-contract';
 import type { PrLookup, PrLookupReply } from '@shared/github-contract';
+import type { StatusSignal } from '@shared/harness-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
-  type HookNotificationType,
   type IdleDetail,
   type ObservedStatus,
-  type StatusHookEvent,
 } from '@shared/hook-contract';
 import {
   CH,
@@ -1090,14 +1089,7 @@ export function createSessions(options: SessionsOptions): Sessions {
           : { backgroundShells: event.backgroundShells }),
       });
 
-      publishHookStatus(
-        event.entityId,
-        derived.status,
-        event.event,
-        event.notificationType,
-        derived.detail,
-        event.toolName,
-      );
+      publishHookStatus(event.entityId, derived.status, event.signal, derived.detail);
 
       /**
        * `/done`'s two turning points, both of them events on this stream
@@ -1294,38 +1286,18 @@ export function createSessions(options: SessionsOptions): Sessions {
     entityId: string,
     status: ObservedStatus,
     /**
-     * The hook that produced this status, when one did (HIVE-75).
+     * What the hook that produced this status said, when one did (HIVE-75, HIVE-237).
      *
-     * Passed straight through rather than interpreted here. The session layer's
-     * job is to say what a session is doing; deciding that a `PermissionRequest`
-     * deserves a different notification than an `Elicitation` is the hub's, and
-     * putting that judgement here would give the sessions layer an opinion
-     * about the inbox it has managed to avoid having so far.
+     * Passed straight through; deciding what it means for the inbox is the hub's.
      */
-    event?: StatusHookEvent,
-    /**
-     * What kind of interruption, when `event` is `Notification`.
-     *
-     * Passed through for the reason `event` is: the hub decides that a
-     * `permission_prompt` is already covered by the `PermissionRequest` ahead of
-     * it and an `idle_prompt` is not, and that judgement has no business here.
-     */
-    notificationType?: HookNotificationType,
+    signal?: StatusSignal,
     /**
      * What is still running while the main agent is not (HIVE-83).
      *
-     * Passed through for the same reason `event` is: the session layer says
+     * Passed through for the same reason `signal` is: the session layer says
      * what a session is doing, and the renderer decides how to draw it.
      */
     idleDetail?: IdleDetail,
-    /**
-     * The tool a `PermissionRequest` named, when it named one (HIVE-83).
-     *
-     * Passed through for the same reason `event` is: telling `AskUserQuestion`
-     * apart from any other blocking tool is the notification hub's judgement,
-     * not the session layer's.
-     */
-    toolName?: string,
   ): void {
     /**
      * The history's `status` is documented as the *last known* one, and until
@@ -1369,10 +1341,8 @@ export function createSessions(options: SessionsOptions): Sessions {
     send(CH.sessionStatus, {
       entityId,
       status,
-      ...(event === undefined ? {} : { event }),
-      ...(notificationType === undefined ? {} : { notificationType }),
+      ...(signal === undefined ? {} : { signal }),
       ...(idleDetail === undefined ? {} : { idleDetail }),
-      ...(toolName === undefined ? {} : { toolName }),
     } satisfies SessionStatusEvent);
   }
 
@@ -1725,13 +1695,11 @@ export function createSessions(options: SessionsOptions): Sessions {
   function publishHookStatus(
     entityId: string,
     status: ObservedStatus,
-    event?: StatusHookEvent,
-    notificationType?: HookNotificationType,
+    signal?: StatusSignal,
     idleDetail?: IdleDetail,
-    toolName?: string,
   ): void {
     hookDriven.add(entityId);
-    publishStatus(entityId, status, event, notificationType, idleDetail, toolName);
+    publishStatus(entityId, status, signal, idleDetail);
   }
 
   /**
