@@ -36,7 +36,7 @@ export interface HarnessAdapter {
  *
  * `http` on the host. `command` for a set that runs inside a container
  * (HIVE-137), where the binary refuses an http hook to `host.docker.internal`
- * — see `statusCommand` in `@shared/hook-contract` for the measurement.
+ * — see `statusCommand` in `claude-code/hook-vocabulary.ts` for the measurement.
  * The core picks it from the bound host (HIVE-134).
  */
 export type HookTransport = 'http' | 'command';

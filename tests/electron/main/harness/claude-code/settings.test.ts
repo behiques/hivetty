@@ -6,13 +6,16 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
-  doneCommand,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
 } from '../../../../../electron/shared/hook-contract';
-import { HOOK_EVENTS, HOOK_STATUS } from '../../../../../electron/main/harness/claude-code/hook-vocabulary';
+import {
+  doneCommand,
+  HOOK_EVENTS,
+  HOOK_STATUS,
+} from '../../../../../electron/main/harness/claude-code/hook-vocabulary';
 import { METRICS_REFRESH_SECONDS } from '../../../../../electron/shared/metrics-contract';
 import {
   AGENT_SETTINGS_FILE,

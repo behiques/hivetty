@@ -1221,7 +1221,7 @@ export function createSessions(options: SessionsOptions): Sessions {
        *
        * `/clear` starts a new one under a new id, and the only hook that
        * carries that id — `SessionStart` — never reaches the receiver (see
-       * `hook-contract.ts`). So the history cannot learn it, and keeping the
+       * `harness/claude-code/hook-vocabulary.ts`). So the history cannot learn it, and keeping the
        * old one would let a later `--resume` reopen the conversation the user
        * deliberately ended. Dropped, so a restored row for this terminal opens
        * as a fresh session instead.
