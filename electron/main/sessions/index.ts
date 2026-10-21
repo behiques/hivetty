@@ -1037,19 +1037,19 @@ export function createSessions(options: SessionsOptions): Sessions {
      * Everything `onEvent` does below — the status tracker, `publishHookStatus`,
      * the finish arming, the branch read, the history record — is about a pty,
      * and an agent has none. So this handler does one thing and refuses to grow
-     * a second: `Stop` is what tells the run tracker a turn ended, and it is
-     * the only event a wake acts on today. The rest arrive so the receiver can
+     * a second: a `turn-end` (Claude's `Stop`) is what tells the run tracker a
+     * turn ended, and it is the only signal a wake acts on today. The rest arrive so the receiver can
      * answer them rather than 404 a run's own hooks, and are ignored until
      * HIVE-116 has somewhere to draw them.
      *
      * `event.sessionUuid` rides along rather than being dropped. Without it a
-     * `Stop` is keyed by the agent's name alone, which every run that agent
+     * turn's end is keyed by the agent's name alone, which every run that agent
      * ever makes shares — so a late one could arm the stall watchdog against
      * the *next* run and SIGTERM a healthy process. Forwarding the uuid is what
-     * lets the tracker refuse a `Stop` that is not about the run it is holding.
+     * lets the tracker refuse a turn's end that is not about the run it is holding.
      */
     onAgentEvent: (event) => {
-      if (event.event === 'Stop') {
+      if (event.signal.kind === 'turn-end') {
         onAgentTurnEnded?.(event.entityId, event.sessionUuid, event.backgroundWork);
       }
     },
@@ -1095,20 +1095,20 @@ export function createSessions(options: SessionsOptions): Sessions {
        * `/done`'s two turning points, both of them events on this stream
        * (HIVE-93).
        *
-       * `Stop` is the end of a turn, and the app's only reliable signal that the
+       * A turn's end (`turn-end`) is the app's only reliable signal that the
        * REPL is back at an empty prompt — so it is when a declared finish is
-       * acted on. `SubagentStop` deliberately is not: a helper agent finishing
-       * says nothing about the session.
+       * acted on. A `subagent-end` deliberately is not: a helper agent
+       * finishing says nothing about the session.
        *
-       * `UserPromptSubmit` is the opposite turning point — the user went back to
+       * A `prompt` is the opposite turning point — the user went back to
        * work, which withdraws a declaration nothing has acted on yet.
        *
        * Both sit after the status publish so a session that is closing still
        * reports the turn it just finished; its last live status stays truthful
        * right up until the exit replaces it.
        */
-      if (event.event === 'Stop') closeFinished(event.entityId);
-      else if (event.event === 'UserPromptSubmit') disarmFinish(event.entityId);
+      if (event.signal.kind === 'turn-end') closeFinished(event.entityId);
+      else if (event.signal.kind === 'prompt') disarmFinish(event.entityId);
       /**
        * The branch read is deliberately **after** the status (HIVE-78).
        *
@@ -1146,7 +1146,7 @@ export function createSessions(options: SessionsOptions): Sessions {
 
       if (event.cwd !== undefined) {
         /**
-         * `Stop` reads **fresh** (HIVE-78).
+         * A turn's end reads **fresh** (HIVE-78).
          *
          * It is the end of a turn — the moment the agent has finished whatever
          * it was doing, and the last event that will fire until the user types
@@ -1155,7 +1155,7 @@ export function createSessions(options: SessionsOptions): Sessions {
          * old branch until the *next* prompt, which is exactly the window in
          * which the user looks at it. Every other event still pays the floor.
          */
-        void publishBranch(event.entityId, event.cwd, event.event === 'Stop');
+        void publishBranch(event.entityId, event.cwd, event.signal.kind === 'turn-end');
       }
     },
     onTicketIntent: (event) =>

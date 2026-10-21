@@ -1255,7 +1255,7 @@ describe('status', () => {
     const turnEnded = () =>
       onEvent!({
         entityId: 'hero-refresh',
-        event: 'Stop',
+        event: 'SubagentStop',
         signal: { kind: 'turn-end' },
         cwd: '/home/dev/repos/hero-refresh',
       } as HookStatusEvent);
@@ -2534,7 +2534,7 @@ describe('/done', () => {
     const sessionId = h.open();
 
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
+    h.hook('hero-refresh', 'SubagentStop', { kind: 'turn-end' });
 
     /*
       The assertion is the *mechanism*, not just the effect. `bootstrap.ts`
@@ -2616,7 +2616,7 @@ describe('/done', () => {
     const sessionId = h.open();
 
     h.done('hero-refresh');
-    h.hook('hero-refresh', 'UserPromptSubmit', { kind: 'prompt' });
+    h.hook('hero-refresh', 'SessionStart', { kind: 'prompt' });
     h.hook('hero-refresh', 'Stop', { kind: 'turn-end' });
 
     // Nothing written, and the ending that eventually comes is not `done`.
@@ -2941,7 +2941,7 @@ describe('the agent id space (HIVE-115)', () => {
   it('forwards a Stop with the session uuid that came with it', () => {
     const h = agentHarness();
 
-    h.agentEvent({ event: 'Stop', signal: { kind: 'turn-end' }, sessionUuid: UUID });
+    h.agentEvent({ event: 'SubagentStop', signal: { kind: 'turn-end' }, sessionUuid: UUID });
 
     expect(h.turnsEnded).toHaveBeenCalledWith(AGENT, UUID, undefined);
 
