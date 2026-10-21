@@ -14,9 +14,7 @@ import {
 import { METRICS_REFRESH_SECONDS } from '@shared/metrics-contract';
 import { ONCE_ONLY_TOOLS } from '@shared/permission-rules';
 
-import type { HookTransport } from '../harness/port';
-
-export type { HookTransport };
+import type { HookTransport } from '../port';
 
 /**
  * The settings file the app hands every session (HIVE-62, HIVE-79).

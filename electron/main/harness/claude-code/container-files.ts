@@ -7,9 +7,10 @@ import {
   CONTAINER_SCRIPT_FILE,
   CONTAINER_SETTINGS_FILE,
 } from '../../container/layout';
-import { agentSettings, hookSettings, metricsScript, statusLineSettings } from '../../hooks/settings';
 import { containerMcpConfig } from '../../mcp/container-config';
 import type { ContainerSetInput } from '../port';
+
+import { agentSettings, hookSettings, metricsScript, statusLineSettings } from './settings';
 
 /** The Claude Code half of a container set (HIVE-132, HIVE-235): what each file says. Layout is `container/generated.ts`'s. */
 export async function writeContainerSet(

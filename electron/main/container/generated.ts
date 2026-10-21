@@ -21,7 +21,7 @@ export {
  * (HIVE-132).
  *
  * A **parallel** set rather than a branch inside the existing writers, for the
- * reason `hooks/settings.ts` already gives about writing both themes up front:
+ * reason `harness/claude-code/settings.ts` already gives about writing both themes up front:
  * writing everything ahead of time means the spawn path never writes, it picks
  * a path. Nothing here decides *which* path — that is HIVE-133's per-project
  * `container` block, and its absence is why this module has no notion of a
@@ -104,7 +104,6 @@ export const writeAliasContainerFiles = (
     options,
   );
 
-
 /** What only the caller placing these files can know (HIVE-133). */
 interface ContainerSetOptions {
   /**
@@ -123,7 +122,6 @@ interface ContainerSetOptions {
    */
   run?: string;
 }
-
 
 /**
  * The same URLs, addressed by `alias` instead of loopback.

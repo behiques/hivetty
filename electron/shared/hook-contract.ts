@@ -153,7 +153,7 @@ export type HookEvent = (typeof HOOK_EVENTS)[number];
  * above.
  *
  * What that costs was measured in the same runs, one session each, and it is
- * why the ten-second `timeout` in `electron/main/hooks/settings.ts` loses its
+ * why the ten-second `timeout` in `electron/main/harness/claude-code/settings.ts` loses its
  * rationale the moment a response carries context:
  *
  * ```

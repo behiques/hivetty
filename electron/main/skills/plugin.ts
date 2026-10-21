@@ -176,7 +176,7 @@ async function prune(
 /**
  * Regenerate the plugin directory from `read`.
  *
- * Modelled on `writeHookSettings` (`hooks/settings.ts`): generated up front so
+ * Modelled on `writeHookSettings` (`harness/claude-code/settings.ts`): generated up front so
  * that the spawn path *picks a path* rather than negotiating with a live
  * directory.
  *

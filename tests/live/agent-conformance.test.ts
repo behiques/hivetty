@@ -27,7 +27,7 @@ import {
 import { createAgentState, type AgentState } from '../../electron/main/agents/state';
 import { createWakeCommand } from '../../electron/main/agents/wake-command';
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
-import { writeAgentSettings } from '../../electron/main/hooks/settings';
+import { writeAgentSettings } from '../../electron/main/harness/claude-code/settings';
 import { runAsync } from '../../electron/main/integrations/github/run';
 import { createSlackBridge, type SlackBridge } from '../../electron/main/integrations/slack/bridge';
 import { openSlackSocket, openSlackWeb } from '../../electron/main/integrations/slack/clients';
