@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { HOOK_STATUS, NOTIFICATION_TYPE_STATUS } from '@shared/hook-contract';
 
@@ -98,5 +98,57 @@ describe('readHook, session lane (HIVE-236)', () => {
   });
   it('marks a body that does not parse', () => {
     expect(session('not json')).toEqual({ malformed: true, effects: [] });
+  });
+});
+
+describe('readHook, plan, file and prompt effects (HIVE-236)', () => {
+  const status = (event: string, extra: Record<string, unknown> = {}) =>
+    ({ kind: 'status', event: expect.objectContaining({ event, ...extra }) });
+
+  it('hands a main-agent task tool to the plan, then publishes', () => {
+    const toolInput = { subject: 'x' };
+    const toolResponse = { task: { id: '1' } };
+    expect(session(json({ hook_event_name: 'PostToolUse', cwd: '/r', tool_name: 'TaskCreate', tool_input: toolInput, tool_response: toolResponse })).effects)
+      .toEqual([
+        { kind: 'plan', call: { entityId: 'sess-07', toolName: 'TaskCreate', toolInput, toolResponse, cwd: '/r' } },
+        status('PostToolUse'),
+      ]);
+  });
+  it('hands a truncated plan-file Write over by path, counts the edit, then publishes', () => {
+    expect(session('{"cwd":"/r","hook_event_name":"PostToolUse","tool_name":"Write","tool_input":{"file_path":"/r/.hive/plans/p.md","content":"', true).effects)
+      .toEqual([
+        { kind: 'plan', call: { entityId: 'sess-07', toolName: 'Write', toolInput: { file_path: '/r/.hive/plans/p.md' }, toolResponse: undefined, truncated: true, cwd: '/r' } },
+        { kind: 'file-edit' },
+        status('PostToolUse'),
+      ]);
+  });
+  it('counts a non-plan edit without a plan call', () => {
+    expect(session(json({ hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { file_path: '/r/a.ts' } })).effects)
+      .toEqual([{ kind: 'file-edit' }, status('PostToolUse')]);
+  });
+  it("ignores a subagent's edit for both plan and changed files", () => {
+    expect(session(json({ hook_event_name: 'PostToolUse', agent_id: 'ag-1', tool_name: 'Write', tool_input: { file_path: '/r/.hive/plans/p.md' } })).effects)
+      .toEqual([status('PostToolUse', { agentId: 'ag-1' })]);
+    expect(session('{"agent_id":"ag-1","hook_event_name":"PostToolUse","tool_name":"Edit","tool_input":{"file_path":"', true).effects)
+      .toEqual([status('PostToolUse')]);
+  });
+  it('drops a truncated plan-mode plan and says so', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(session('{"hook_event_name":"PostToolUse","tool_name":"ExitPlanMode","tool_input":{"plan":"', true).effects)
+      .toEqual([status('PostToolUse')]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('plan mode plan over'));
+    warn.mockRestore();
+  });
+  it('re-reads the plan on Stop, then publishes', () => {
+    expect(session(json({ hook_event_name: 'Stop', cwd: '/r' })).effects).toEqual([
+      { kind: 'plan', reread: true, call: { entityId: 'sess-07', toolName: 'Stop', toolInput: undefined, toolResponse: undefined, cwd: '/r' } },
+      status('Stop'),
+    ]);
+  });
+  it('carries the prompt and its conversation before the status', () => {
+    expect(session(json({ hook_event_name: 'UserPromptSubmit', session_id: 'u-1', prompt: 'work on HIVE-1' })).effects)
+      .toEqual([{ kind: 'prompt', text: 'work on HIVE-1', conversation: 'u-1' }, status('UserPromptSubmit')]);
+    expect(session('{"session_id":"abc-1","hook_event_name":"UserPromptSubmit","prompt":"', true).effects)
+      .toEqual([{ kind: 'prompt', conversation: 'abc-1' }, status('UserPromptSubmit')]);
   });
 });

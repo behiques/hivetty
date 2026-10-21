@@ -13,8 +13,9 @@ import type { SkillsRead } from '../skills/read';
  * The port every harness adapter implements (HIVE-233).
  *
  * Methods arrive with the stories that move code behind them: `launch`
- * (HIVE-234, landed), `prepare` (HIVE-235, landed), `readHook` (HIVE-236–238),
- * `record` and `meters` (HIVE-239), `deliverContext` (HIVE-240). See
+ * (HIVE-234, landed), `prepare` (HIVE-235, landed), `readHook` (HIVE-236, landed;
+ * HIVE-237–238 change what it says), `record` and `meters` (HIVE-239),
+ * `deliverContext` (HIVE-240). See
  * `docs/harness-architecture.md`.
  */
 export interface HarnessAdapter {
@@ -24,6 +25,10 @@ export interface HarnessAdapter {
   launch(spec: LaunchSpec): LaunchPlan;
   /** What a session needs written before it starts (HIVE-235). */
   readonly prepare: HarnessFiles;
+  /** A hook body read into effects, in the order the receiver acts on them (HIVE-236). */
+  readHook(input: HookInput): HookReading;
+  /** The response body that hands `text` to the model as context, for a prompt hook (HIVE-138). */
+  contextReply(text: string): unknown;
 }
 
 /**

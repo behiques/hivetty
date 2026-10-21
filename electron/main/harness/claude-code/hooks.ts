@@ -1,11 +1,13 @@
 import {
   CLEAR_REASON,
   HOOK_EVENTS,
+  HOOK_MAX_BODY_BYTES,
   HOOK_STATUS,
   isHookNotificationType,
   NOTIFICATION_TYPE_STATUS,
   type HookEvent,
 } from '@shared/hook-contract';
+import { isPlanFilePath, TASK_TOOL_NAMES, type PlanToolCall } from '@shared/plan-contract';
 
 import type { HookEffect, HookInput, HookReading } from '../port';
 
@@ -165,6 +167,34 @@ const NOTIFICATION_TYPE_IN_PREFIX = /"notification_type"\s*:\s*"([a-z_]+)"/;
  */
 const TOOL_NAME_IN_PREFIX = /"tool_name"\s*:\s*"([A-Za-z0-9_]+)"/;
 
+/** The tools whose edits the changed-files reader counts (HIVE-201). */
+const FILE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'Edit',
+  'Write',
+  'MultiEdit',
+  'NotebookEdit',
+]);
+
+/**
+ * And for a `Write` or `Edit`'s `file_path`, which the plan panel needs to
+ * re-read a plan file whose whole new content pushed the body past the cap
+ * (HIVE-180).
+ *
+ * `file_path` is the first key of both tools' `tool_input`, so it survives
+ * any truncation that `tool_name` does. The same refusal as `CWD_IN_PREFIX`:
+ * a value carrying a backslash escape is not read, and a plan path never
+ * carries one.
+ */
+const FILE_PATH_IN_PREFIX = /"file_path"\s*:\s*"([^"\\]*)"/;
+
+/**
+ * And `agent_id`, so a truncated subagent `Write` is still known as the
+ * subagent's (HIVE-180). It precedes `tool_name` on the wire (claude
+ * 2.1.269, `tests/fixtures/hooks`). Read for the plan gate only: what a
+ * truncated body publishes as status is unchanged.
+ */
+const AGENT_ID_IN_PREFIX = /"agent_id"\s*:\s*"([^"\\]+)"/;
+
 /**
  * And once more for `session_id`, which correlates an agent's `Stop` with the
  * run it belongs to (HIVE-115).
@@ -273,9 +303,21 @@ function readSession(entityId: string, body: string, truncated: boolean): HookRe
   let reason: unknown;
   let cwd: unknown;
   let notificationType: unknown;
+  /**
+   * Only ever set on a body that parsed whole.
+   *
+   * A truncated body means the payload was **larger than 64 KB**, and the
+   * intent shapes this looks for are short opening phrases in short messages.
+   * Recovering a prompt from a truncated prefix would mean matching against
+   * text that has been cut at an arbitrary byte, in the one case where the
+   * user pasted something enormous — the worst input for a shape test and the
+   * least likely to be "work on ABC-123".
+   */
+  let prompt: unknown;
   let toolUseId: unknown;
   let toolName: unknown;
   let toolInput: unknown;
+  let toolResponse: unknown;
   let agentId: unknown;
   let runInBackground: unknown;
   let backgroundShells: string[] | undefined;
@@ -311,11 +353,13 @@ function readSession(entityId: string, body: string, truncated: boolean): HookRe
             hook_event_name?: unknown;
             reason?: unknown;
             cwd?: unknown;
+            prompt?: unknown;
             notification_type?: unknown;
             tool_use_id?: unknown;
             tool_name?: unknown;
             agent_id?: unknown;
             tool_input?: unknown;
+            tool_response?: unknown;
             background_tasks?: unknown;
             session_id?: unknown;
           })
@@ -324,11 +368,13 @@ function readSession(entityId: string, body: string, truncated: boolean): HookRe
     sessionUuid = fields?.session_id;
     reason = fields?.reason;
     cwd = fields?.cwd;
+    prompt = fields?.prompt;
     notificationType = fields?.notification_type;
     toolUseId = fields?.tool_use_id;
     toolName = fields?.tool_name;
     agentId = fields?.agent_id;
     toolInput = fields?.tool_input;
+    toolResponse = fields?.tool_response;
     runInBackground = (toolInput as { run_in_background?: unknown } | null | undefined)
       ?.run_in_background;
     backgroundShells = liveBackgroundShellIds(fields?.background_tasks, (type) =>
@@ -362,6 +408,88 @@ function readSession(entityId: string, body: string, truncated: boolean): HookRe
   const effects: HookEffect[] = [];
   const cwdField = typeof cwd === 'string' && cwd !== '' ? { cwd } : {};
   const uuidField = typeof sessionUuid === 'string' && sessionUuid !== '' ? { sessionUuid } : {};
+
+  /*
+    The plan panel's sources (HIVE-179, HIVE-180). The main agent only: a
+    subagent's work shares the session's id space but is not the session's
+    plan, so `agent_id` is read off a truncated prefix too. PreToolUse is
+    ignored — a task's id exists only in the response, and a denied call
+    never ran.
+
+    The task tools and plan mode: whole bodies only, since a truncated one
+    has lost `tool_input`'s tail and a half-read plan is worse than a late
+    one. A truncated plan-mode plan is dropped and said so.
+
+    A `Write` or `Edit` to a `.hive/plans/*.md` file: handed over with its
+    `file_path` and nothing else — main re-reads the file itself, under
+    confinement — and so a truncated body still counts, by the path in its
+    prefix.
+  */
+  if (event === 'PostToolUse' && typeof toolName === 'string') {
+    const callerAgent = truncated ? AGENT_ID_IN_PREFIX.exec(body)?.[1] : agentId;
+    let call: PlanToolCall | undefined;
+    if (callerAgent === undefined) {
+      if (toolName === 'Write' || toolName === 'Edit') {
+        const filePath = truncated
+          ? FILE_PATH_IN_PREFIX.exec(body)?.[1]
+          : (toolInput as { file_path?: unknown } | null | undefined)?.file_path;
+        if (isPlanFilePath(filePath)) {
+          call = {
+            entityId,
+            toolName,
+            toolInput: { file_path: filePath },
+            toolResponse: undefined,
+            ...(truncated ? { truncated: true as const } : {}),
+            ...cwdField,
+          };
+        }
+      } else if (TASK_TOOL_NAMES.has(toolName) || toolName === 'ExitPlanMode') {
+        if (!truncated) {
+          call = { entityId, toolName, toolInput, toolResponse, ...cwdField };
+        } else if (toolName === 'ExitPlanMode') {
+          console.warn(
+            `[hive] plan mode plan over ${String(HOOK_MAX_BODY_BYTES)} bytes, dropped (${entityId})`,
+          );
+        }
+      }
+    }
+    if (call !== undefined) effects.push({ kind: 'plan', call });
+    if (callerAgent === undefined && FILE_TOOL_NAMES.has(toolName)) effects.push({ kind: 'file-edit' });
+  }
+
+  /*
+    A turn's end, so the store re-reads the session's plan file: a step
+    ticked by a shell edit fires no Write or Edit to hand over above. `Stop`
+    is the main agent's only; a subagent's is `SubagentStop`.
+  */
+  if (event === 'Stop') {
+    effects.push({
+      kind: 'plan',
+      reread: true,
+      call: { entityId, toolName: 'Stop', toolInput: undefined, toolResponse: undefined, ...cwdField },
+    });
+  }
+
+  /**
+   * The intent goes out **before** the status (HIVE-78).
+   *
+   * Ordering, not taste. `onEvent` is what makes a session `working`, and a
+   * renderer that learned the ticket second would briefly render the row
+   * under its old identity — the visible flicker being precisely a rename, on
+   * the frame the user pressed enter. Neither callback is allowed to throw
+   * into the other's path, which is why the whole `handle` runs inside the
+   * caller's try.
+   *
+   * The receiver decides what the prompt means (marker, ticket, first-prompt
+   * name); this only carries it.
+   */
+  if (event === 'UserPromptSubmit') {
+    effects.push({
+      kind: 'prompt',
+      ...(typeof prompt === 'string' ? { text: prompt } : {}),
+      ...(typeof sessionUuid === 'string' && sessionUuid !== '' ? { conversation: sessionUuid } : {}),
+    });
+  }
 
   /**
    * A `Notification` is the one event whose status is not a property of the
