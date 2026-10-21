@@ -90,7 +90,6 @@ export const HOOK_EVENTS = [
 
 export type HookEvent = (typeof HOOK_EVENTS)[number];
 
-
 /**
  * `SessionStart` is subscribed and does not arrive. Measured, not assumed.
  *
@@ -229,7 +228,6 @@ export const CLEAR_REASON = 'clear';
  * every other comment about this wait points here rather than naming a number.
  */
 export const NOTIFICATION_TYPES = ['idle_prompt', 'permission_prompt'] as const;
-
 
 const isNotificationType = (
   value: unknown,
