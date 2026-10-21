@@ -1,8 +1,8 @@
-import { writeMcpConfig } from '../../mcp/config';
 import type { HarnessAdapter } from '../port';
 
 import { writeContainerSet } from './container-files';
 import { launch } from './launch';
+import { writeMcpConfig } from './mcp-config';
 import { writePluginDir } from './plugin';
 import { writeAgentSettings, writeHookSettings } from './settings';
 

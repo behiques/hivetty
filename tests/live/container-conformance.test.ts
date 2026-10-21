@@ -24,7 +24,7 @@ import { createHookRuntime, type HookRuntime } from '../../electron/main/hooks';
 import { createReceiver } from '../../electron/main/hooks/receiver';
 import { createLedger, type Ledger } from '../../electron/main/ledger';
 import { agentMcpConfigFile } from '../../electron/main/mcp';
-import { mcpConfig } from '../../electron/main/mcp/config';
+import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
 import { PLUGIN_DIR } from '../../electron/main/skills/paths';
 import { writePluginDir } from '../../electron/main/harness/claude-code/plugin';
 import type { SkillsRead } from '../../electron/main/skills/read';

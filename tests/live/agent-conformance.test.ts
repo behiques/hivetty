@@ -38,7 +38,8 @@ import {
 } from '../../electron/main/integrations/slack/subscriptions';
 import { createLedger, type Ledger } from '../../electron/main/ledger';
 import { agentMcpConfigFile } from '../../electron/main/mcp';
-import { hiveServerSpec, mcpConfig } from '../../electron/main/mcp/config';
+import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
+import { hiveServerSpec } from '../../electron/main/mcp/config';
 import { createSkillsRuntime } from '../../electron/main/skills';
 import {
   parseList,
