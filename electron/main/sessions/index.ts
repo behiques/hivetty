@@ -61,6 +61,7 @@ import {
 } from '../container/generated';
 import { createPathMap } from '../container/path-map';
 import { sessionRoot } from '../fs/session-roots';
+import { createHarnessRegistry } from '../harness/registry';
 import type { HookRuntime } from '../hooks';
 import { withHostAlias } from '../hooks/container-origin';
 import { ticketKeysFromBranch } from '../hooks/ticket-intent';
@@ -638,14 +639,26 @@ export function createSessions(options: SessionsOptions): Sessions {
   const commandEntities = new Set<string>();
 
   /**
-   * Entities that are terminals (terminals).
+   * Entities that are agent sessions (HIVE-234): the one positive fact the
+   * harness registry is told. A terminal is neither this nor a command.
    *
-   * Like `commandEntities`, membership is what keeps the activity tracker, the
-   * bootstrap, the title scanner and history away from output that is not a
-   * Claude's. Unlike a command, a terminal has an ending the renderer needs
-   * to hear about — see `publishTerminalEnded`.
+   * Added by `spawn` before its process starts and removed only by
+   * `settleExit` — **not** on a failed spawn, because a session whose spawn
+   * failed was never a terminal, and a late host error must not read it as one.
    */
-  const terminalEntities = new Set<string>();
+  const agentSessions = new Set<string>();
+  const harnesses = createHarnessRegistry({
+    isAgentSession: (entityId) => agentSessions.has(entityId),
+  });
+  /**
+   * A plain terminal (terminals): no harness, and not a command (story 102).
+   * Membership is what keeps the activity tracker, the bootstrap, the title
+   * scanner and history away from output that is not an agent's; unlike a
+   * command, a terminal has an ending the renderer needs to hear about — see
+   * `publishTerminalEnded`.
+   */
+  const isTerminal = (entityId: string): boolean =>
+    harnesses.harnessOf(entityId) === undefined && !commandEntities.has(entityId);
 
   function settleCommand(entityId: string, result: CommandExit): void {
     const onExit = commandExit.get(entityId);
@@ -681,7 +694,7 @@ export function createSessions(options: SessionsOptions): Sessions {
          * tracker would publish `session:status` for an entity the store does
          * not have, and feeding the bootstrap would type `claude` into it.
          */
-        if (!commandEntities.has(entityId) && !terminalEntities.has(entityId)) {
+        if (harnesses.harnessOf(entityId) !== undefined) {
           activity.sawOutput(entityId);
           bootstrap.sawOutput(entityId);
           // A command has no agent, so it has no name to report either.
@@ -705,7 +718,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       case CH.ptyExit: {
         const data = payload as ExitEvent;
         send(channel, { ...data, sessionId: entityId } satisfies ExitEvent);
-        if (terminalEntities.has(entityId)) {
+        if (isTerminal(entityId)) {
           publishTerminalEnded(
             entityId,
             data.signal !== undefined && data.signal !== 0
@@ -728,7 +741,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       case CH.ptyLost: {
         const data = payload as SessionLostEvent;
         send(channel, { ...data, sessionId: entityId } satisfies SessionLostEvent);
-        if (terminalEntities.has(entityId)) {
+        if (isTerminal(entityId)) {
           publishTerminalEnded(entityId, { kind: 'lost', reason: 'the pty host crashed' });
         } else {
           sessionLost(entityId, 'the pty host crashed');
@@ -742,7 +755,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       case CH.sessionForeground: {
         // Only a terminal asked. Anything else on this channel is a host bug
         // and is dropped rather than painted onto a session row.
-        if (!terminalEntities.has(entityId)) return;
+        if (!isTerminal(entityId)) return;
         const data = payload as { sessionId: string; name: string | null };
         send(CH.sessionForeground, { entityId, name: data.name } satisfies SessionForegroundEvent);
         return;
@@ -1265,7 +1278,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     if (event.sessionId === undefined) return;
     const entityId = registry.entityFor(event.sessionId);
     if (entityId === undefined) return;
-    if (terminalEntities.has(entityId)) {
+    if (isTerminal(entityId)) {
       publishTerminalEnded(entityId, { kind: 'lost', reason: event.message });
       settleExit(entityId);
       return;
@@ -1887,8 +1900,9 @@ export function createSessions(options: SessionsOptions): Sessions {
     lastBranch.delete(entityId);
     // Same reason as the data path: a command's or a terminal's ending is not
     // a session's — see `publishTerminalEnded`.
-    if (commandEntities.delete(entityId) || terminalEntities.delete(entityId)) {
+    if (!agentSessions.delete(entityId)) {
       // Nothing to tell the store about.
+      commandEntities.delete(entityId);
     } else {
       /**
        * The ending, recorded where it is actually known (HIVE-87).
@@ -2228,6 +2242,8 @@ export function createSessions(options: SessionsOptions): Sessions {
      */
     const runtime = effectiveRuntime(snapshot, project);
 
+    // An agent session from here on, spawn failed or not — see `agentSessions`.
+    agentSessions.add(request.entityId);
     startProcess({
       entityId: request.entityId,
       cwd: project.path,
@@ -2701,27 +2717,21 @@ export function createSessions(options: SessionsOptions): Sessions {
       const project = requireMappedProject(snapshot, request.projectId);
       const runtime = effectiveRuntime(snapshot, project);
 
-      terminalEntities.add(request.entityId);
-      try {
-        startProcess({
-          entityId: request.entityId,
-          // "Terminal here" names a directory; every other entry point means
-          // the project root. A directory that is gone is not repaired: the
-          // host's spawn error reaches the tab with its reason.
-          cwd: request.cwd ?? project.path,
-          file: runtime.shell,
-          args: LOGIN_SHELL_ARGS,
-          cols: request.cols,
-          rows: request.rows,
-          // The project's own variables, and nothing of the hook receiver's:
-          // there is no Claude here to call it.
-          env: runtime.env,
-          foreground: true,
-        });
-      } catch (cause) {
-        terminalEntities.delete(request.entityId);
-        throw cause;
-      }
+      startProcess({
+        entityId: request.entityId,
+        // "Terminal here" names a directory; every other entry point means
+        // the project root. A directory that is gone is not repaired: the
+        // host's spawn error reaches the tab with its reason.
+        cwd: request.cwd ?? project.path,
+        file: runtime.shell,
+        args: LOGIN_SHELL_ARGS,
+        cols: request.cols,
+        rows: request.rows,
+        // The project's own variables, and nothing of the hook receiver's:
+        // there is no Claude here to call it.
+        env: runtime.env,
+        foreground: true,
+      });
     },
 
     open(request) {
@@ -2783,7 +2793,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     },
 
     refresh(entityId) {
-      if (terminalEntities.has(entityId) || commandEntities.has(entityId)) return;
+      if (harnesses.harnessOf(entityId) === undefined) return;
       const sessionId = registry.sessionFor(entityId);
       if (sessionId === undefined) return;
       ptyIpc.refresh(sessionId);
