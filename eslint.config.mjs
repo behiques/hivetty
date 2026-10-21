@@ -473,6 +473,26 @@ export default tseslint.config(
               message:
                 'The remote client runs on the laptop. It may not import the renderer, the bridge, or the host half — the two halves must stay separable onto two machines.',
             },
+            /**
+             * ADAPTERS DON'T REACH THE CORE (HIVE-233).
+             *
+             * The harness port points one way: the core calls an adapter, and
+             * passes in as arguments whatever the adapter needs. An adapter that
+             * imported sessions, IPC, notifications or plans would make the port
+             * a cycle by another name, and a second harness would inherit the
+             * first one's grip on the core.
+             */
+            {
+              target: './electron/main/harness/**/*',
+              from: [
+                './electron/main/sessions/**/*',
+                './electron/main/ipc/**/*',
+                './electron/main/notifications/**/*',
+                './electron/main/plans/**/*',
+              ],
+              message:
+                'An adapter does not reach the core. The core passes what an adapter needs in as arguments.',
+            },
           ],
         },
       ],

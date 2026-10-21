@@ -471,6 +471,15 @@ const CASES = [
         "import { cn } from '@lib/utils';\nimport { useState } from 'react';\n\nexport const probe = cn(String(useState));\n",
     },
   },
+  {
+    name: 'zone: electron/main/harness/ may not import electron/main/sessions/ (HIVE-233)',
+    rule: 'import/no-restricted-paths',
+    files: {
+      'electron/main/sessions/probe-target.ts': 'export const core = 1;\n',
+      'electron/main/harness/claude-code/probe.ts':
+        "import { core } from '../../sessions/probe-target';\nexport const probe = core;\n",
+    },
+  },
 
   // Inverse cases — these must stay legal.
   {
