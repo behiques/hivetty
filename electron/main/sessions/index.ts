@@ -2378,6 +2378,10 @@ export function createSessions(options: SessionsOptions): Sessions {
     const spawnMcpConfig =
       containerSet === null ? mcpConfig : join(containerSet, CONTAINER_MCP_FILE);
 
+    // An agent session from here on, spawn failed or not — see `agentSessions`.
+    agentSessions.add(request.entityId);
+    const adapter = harnesses.adapterFor(harnesses.harnessOf(request.entityId)!);
+
     /**
      * Hoisted out of the `sessionCommand` call it used to sit inside (HIVE-87).
      *
@@ -2393,15 +2397,14 @@ export function createSessions(options: SessionsOptions): Sessions {
      * there is nothing to pick up — no history, no record, no uuid, or an id
      * this run began — and the request degrades to the plain spawn it would
      * otherwise have been. The renderer asked to resume; main decides whether
-     * it can.
+     * it can. A harness that cannot resume by id (HIVE-239) always starts afresh.
      */
     const resumeUuid =
-      request.resume === true ? history?.resumable(request.entityId) : undefined;
+      request.resume === true && adapter.capabilities.resume === 'by-id'
+        ? history?.resumable(request.entityId)
+        : undefined;
     const resume = resumeUuid !== undefined;
     const sessionUuid = resumeUuid ?? newSessionUuid();
-
-    // An agent session from here on, spawn failed or not — see `agentSessions`.
-    agentSessions.add(request.entityId);
     /**
      * `sessionCommand` wraps the configured binary so a clean `/exit` takes the
      * login shell with it and the session settles to `done`. See its own
@@ -2414,7 +2417,7 @@ export function createSessions(options: SessionsOptions): Sessions {
      * story at all — so a session started as Haiku with low effort opened as
      * Opus and said so on the meta bar.
      */
-    const plan = harnesses.adapterFor(harnesses.harnessOf(request.entityId)!).launch({
+    const plan = adapter.launch({
       command: runtime.claudeCommand,
       ...(request.model === undefined ? {} : { model: request.model }),
       ...(request.effort === undefined ? {} : { effort: request.effort }),
