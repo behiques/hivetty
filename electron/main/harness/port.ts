@@ -1,7 +1,7 @@
 import type { ContainerFreshness, ResolvedContainer } from '@shared/config-contract';
 import type { Capabilities, HarnessId } from '@shared/harness-contract';
 import type { HookAgentEvent, HookIdentity, HookStatusEvent } from '@shared/hook-contract';
-import type { PlanToolCall } from '@shared/plan-contract';
+import type { PlanUpdate } from '@shared/plan-contract';
 import type { SessionEffort, SessionModel } from '@shared/session-contract';
 
 import type { ContainerOrigins } from '../container/layout';
@@ -272,7 +272,7 @@ export type HookEffect =
   | { kind: 'status'; event: HookStatusEvent }
   | { kind: 'agent'; event: HookAgentEvent }
   | { kind: 'cleared' }
-  | { kind: 'plan'; call: PlanToolCall; reread?: true }
+  | { kind: 'plan'; update: PlanUpdate }
   | { kind: 'file-edit' }
   | { kind: 'prompt'; text?: string; conversation?: string };
 

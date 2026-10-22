@@ -1166,7 +1166,7 @@ export function createSessions(options: SessionsOptions): Sessions {
         source: event.source,
       } satisfies SessionTicketIntentEvent),
     // The plan panel's source 1 (HIVE-179); the receiver already filtered.
-    onPlanTool: (call) => plans.onTool(call),
+    onPlan: (update) => plans.apply(update),
     // Changed files (HIVE-201): a main-agent edit re-reads the transcript.
     onFileTool: (entityId) => void changedFiles.onFileTool(entityId),
     /**
