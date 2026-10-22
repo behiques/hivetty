@@ -1,8 +1,8 @@
 /**
  * A session's plan: the task list the plan panel draws (HIVE-178).
  *
- * One plan per session, owned by one source at a time. Types, one constant
- * and the hook-facing plan helpers (HIVE-236), all import-free, so both
+ * One plan per session, owned by one source at a time. Types, the plan ops
+ * (HIVE-238) and the plan-file path helpers, all import-free, so both
  * processes may import it.
  */
 export type PlanTaskStatus = 'pending' | 'in_progress' | 'completed';
@@ -60,26 +60,6 @@ export interface PlansSnapshot {
 }
 
 /**
- * One main-agent `PostToolUse` of a plan tool, as the hook receiver hands it
- * over (HIVE-179). The receiver has already filtered out Pre, subagents and
- * truncated bodies; this module only folds. A `Stop` comes through here too,
- * as `toolName: 'Stop'`, so the store re-reads the session's plan file.
- */
-export interface PlanToolCall {
-  entityId: string;
-  toolName: string;
-  toolInput: unknown;
-  toolResponse: unknown;
-  cwd?: string;
-  /**
-   * The body was over the hook route's cap and only its prefix was read
-   * (HIVE-180). Only a plan-file `Write` or `Edit` is ever handed over like
-   * this, carrying nothing but `file_path`.
-   */
-  truncated?: true;
-}
-
-/**
  * A `hive:plan` file: `<anything>/.hive/plans/<name>.md`, one level deep
  * (HIVE-180). A path with an escaped quote never reaches here — the prefix
  * read refuses it — and main confines the read to the session's cwd besides.
@@ -89,9 +69,6 @@ export const PLAN_FILE_PATH = /\/\.hive\/plans\/[^/]+\.md$/;
 /** Whether a hook payload's `file_path` names a plan file. */
 export const isPlanFilePath = (value: unknown): value is string =>
   typeof value === 'string' && PLAN_FILE_PATH.test(value);
-
-/** Claude's task tools. `TodoWrite` is not offered by 2.1.269 `-p`, but older builds send it. */
-export const TASK_TOOL_NAMES: ReadonlySet<string> = new Set(['TaskCreate', 'TaskUpdate', 'TodoWrite']);
 
 /** A harness's plan tool call, normalised by its adapter (HIVE-238). The plans store applies these. */
 export type PlanOp =
