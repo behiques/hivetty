@@ -60,7 +60,7 @@ import {
 import { createPathMap } from '../container/path-map';
 import { sessionRoot } from '../fs/session-roots';
 import type { PreparedFiles } from '../harness/port';
-import { createHarnessRegistry } from '../harness/registry';
+import { createHarnessRegistry, sessionAdapter } from '../harness/registry';
 import type { HookRuntime } from '../hooks';
 import { withHostAlias } from '../hooks/container-origin';
 import { ticketKeysFromBranch } from '../hooks/ticket-intent';
@@ -818,6 +818,10 @@ export function createSessions(options: SessionsOptions): Sessions {
     send,
     transcriptOf: (entityId) => transcripts.get(entityId),
     rootOf: changedFilesRoot,
+    adapterOf: (entityId) => {
+      const harness = harnesses.harnessOf(entityId);
+      return harness === undefined ? sessionAdapter() : harnesses.adapterFor(harness);
+    },
   });
 
   /**
