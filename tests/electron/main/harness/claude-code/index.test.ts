@@ -195,10 +195,14 @@ describe('what is installed for Claude Code (HIVE-345)', () => {
     expect(
       await readSessionPluginOverrides(installedPluginsFile(), ['workstream', 'superpowers']),
     ).toEqual({ 'workstream@claude-kit': false });
+    expect(await claudeCodeAdapter.installed.sessionOverrides(['workstream', 'superpowers'])).toEqual({
+      'workstream@claude-kit': false,
+    });
   });
 
   it('the plugins Settings lists', async () => {
     expect(await readInstalledPluginNames(installedPluginsFile())).toEqual(['ponytail', 'workstream']);
+    expect(await claudeCodeAdapter.installed.pluginNames()).toEqual(['ponytail', 'workstream']);
   });
 
   it('the skill names an agent may reference', async () => {
@@ -212,5 +216,10 @@ describe('what is installed for Claude Code (HIVE-345)', () => {
       all: ['mine', 'ponytail:ponytail', 'release-notes', 'workstream:standup'],
       hive: ['release-notes'],
     });
+    expect((await claudeCodeAdapter.installed.skillNames()).sort()).toEqual([
+      'mine',
+      'ponytail:ponytail',
+      'workstream:standup',
+    ]);
   });
 });

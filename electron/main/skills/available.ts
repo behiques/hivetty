@@ -68,7 +68,7 @@ interface SkillRoots {
  * into memory to prove it exists and then discarding it is a cost paid on every
  * keystroke-triggered save for information `access` already gives.
  */
-async function skillsUnder(root: string): Promise<string[]> {
+export async function skillsUnder(root: string): Promise<string[]> {
   let entries;
 
   try {
