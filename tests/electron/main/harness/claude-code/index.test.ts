@@ -19,12 +19,7 @@ import {
   writeAgentSettings,
   writeHookSettings,
 } from '../../../../../electron/main/harness/claude-code/settings';
-import {
-  readAvailableSkillNames,
-  readInstalledPluginNames,
-  readSessionPluginOverrides,
-} from '../../../../../electron/main/skills/available';
-import { installedPluginsFile, userSkillsRoot } from '../../../../../electron/main/skills/paths';
+import { readAvailableSkillNames } from '../../../../../electron/main/skills/available';
 import { readUserSkills } from '../../../../../electron/main/skills/read';
 
 /**
@@ -192,26 +187,18 @@ describe('what is installed for Claude Code (HIVE-345)', () => {
   });
 
   it('the enabledPlugins a session settings file carries', async () => {
-    expect(
-      await readSessionPluginOverrides(installedPluginsFile(), ['workstream', 'superpowers']),
-    ).toEqual({ 'workstream@claude-kit': false });
     expect(await claudeCodeAdapter.installed.sessionOverrides(['workstream', 'superpowers'])).toEqual({
       'workstream@claude-kit': false,
     });
   });
 
   it('the plugins Settings lists', async () => {
-    expect(await readInstalledPluginNames(installedPluginsFile())).toEqual(['ponytail', 'workstream']);
     expect(await claudeCodeAdapter.installed.pluginNames()).toEqual(['ponytail', 'workstream']);
   });
 
   it('the skill names an agent may reference', async () => {
     expect(
-      await readAvailableSkillNames({
-        hive: join(root, 'hive', 'skills'),
-        user: userSkillsRoot(),
-        installedPlugins: installedPluginsFile(),
-      }),
+      await readAvailableSkillNames(join(root, 'hive', 'skills'), () => claudeCodeAdapter.installed.skillNames()),
     ).toEqual({
       all: ['mine', 'ponytail:ponytail', 'release-notes', 'workstream:standup'],
       hive: ['release-notes'],
