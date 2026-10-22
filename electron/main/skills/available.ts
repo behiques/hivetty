@@ -32,8 +32,8 @@ import { isSkillFolder } from './read';
  * happened to be installed that week —
  * green here, red on CI, and untestable for the case that matters most (a
  * machine with nothing installed). `createAgentsRuntime` is the only caller
- * that knows the real paths, exactly as it is already the only caller that
- * knows `agentsRoot()`.
+ * that knows HiveTTY's real root, exactly as it is already the only caller
+ * that knows `agentsRoot()`.
  */
 
 /**
