@@ -229,15 +229,17 @@ describe.skipIf(!enabled)('custom skills conformance', () => {
         it was designed not to be.
       */
       // The init line lists a plugin's skills namespaced, though the bare name resolves when typed.
-      const knows = (list: string[], name: string): boolean =>
+      // The namespaced fallback is for the control only: in the negative case a user-scoped `hive`
+      // plugin would list `hive:<name>` for a reason that has nothing to do with the flag.
+      const knowsViaFlag = (list: string[], name: string): boolean =>
         list.includes(name) || list.includes(`hive:${name}`);
       const without = await commands(cwd, []);
       // The control: the same read sees both through the flag, so absence below is not a blind read.
       const withFlag = await commands(cwd, ['--plugin-dir', pluginRoot]);
 
-      expect(knows(withFlag, 'hive-marker') && knows(withFlag, 'done')).toBe(true);
-      expect(knows(without, 'hive-marker')).toBe(false);
-      expect(knows(without, 'done')).toBe(false);
+      expect(knowsViaFlag(withFlag, 'hive-marker') && knowsViaFlag(withFlag, 'done')).toBe(true);
+      expect(without).not.toContain('hive-marker');
+      expect(without).not.toContain('done');
     },
   );
 
