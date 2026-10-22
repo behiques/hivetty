@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { readHook } from '../../../../electron/main/harness/claude-code/hooks';
 import { createPlans, type PlanToolCall } from '../../../../electron/main/plans';
 import { parsePlanFile } from '../../../../electron/main/plans/parse-plan-file';
 import { CH } from '../../../../electron/shared/ipc-contract';
@@ -450,5 +451,28 @@ describe('createPlans: plan file and plan mode (HIVE-180)', () => {
     plans.forget('sess-01');
     void plans.onTool(create('3', 'C'));
     expect(plans.get('sess-01')?.file).toBeUndefined();
+  });
+});
+
+describe('fixture replay equivalence (HIVE-238)', () => {
+  const replayFixture = async (name: string): Promise<unknown[]> => {
+    const sent: unknown[] = [];
+    let t = 0;
+    const plans = createPlans({ send: (_channel, payload) => sent.push(payload), now: () => (t += 1_000) });
+    const lines = readFileSync(join(__dirname, '../../../fixtures/hooks', name), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '');
+    for (const body of lines) {
+      for (const effect of readHook({ lane: 'session', entityId: 'sess-01', body, truncated: false }).effects) {
+        if (effect.kind === 'plan') await plans.onTool(effect.call);
+      }
+    }
+    return sent;
+  };
+
+  it.each(['task-tools-2.1.269.jsonl', 'exit-plan-mode-2.1.270.jsonl'])('%s publishes the same plans', async (name) => {
+    const sent = await replayFixture(name);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent).toMatchSnapshot();
   });
 });
