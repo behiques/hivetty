@@ -15,7 +15,7 @@ import { foldTranscriptLines } from './transcript-edits';
  */
 export const claudeCodeAdapter: HarnessAdapter = {
   id: 'claude-code',
-  capabilities: {},
+  capabilities: { resume: 'by-id', meters: true },
   launch,
   prepare: {
     sessionSettings: writeHookSettings,
