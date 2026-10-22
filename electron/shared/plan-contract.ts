@@ -92,3 +92,21 @@ export const isPlanFilePath = (value: unknown): value is string =>
 
 /** Claude's task tools. `TodoWrite` is not offered by 2.1.269 `-p`, but older builds send it. */
 export const TASK_TOOL_NAMES: ReadonlySet<string> = new Set(['TaskCreate', 'TaskUpdate', 'TodoWrite']);
+
+/** A harness's plan tool call, normalised by its adapter (HIVE-238). The plans store applies these. */
+export type PlanOp =
+  | { kind: 'task-created'; id: string; title: string; activeForm?: string }
+  | { kind: 'task-updated'; id: string; status?: PlanTaskStatus; title?: string; activeForm?: string }
+  | { kind: 'task-deleted'; id: string }
+  | { kind: 'tasks-replaced'; tasks: { id: string; title: string; status: PlanTaskStatus; activeForm?: string }[] }
+  | { kind: 'plan-proposed'; tasks: PlanTask[] }
+  | { kind: 'plan-file-touched'; path: string }
+  /** A turn ended: re-read the plan file the session last read. */
+  | { kind: 'plan-file-reread' };
+
+/** One main-agent plan op for one session, as the receiver hands it to the plans store (HIVE-238). */
+export interface PlanUpdate {
+  entityId: string;
+  op: PlanOp;
+  cwd?: string;
+}
