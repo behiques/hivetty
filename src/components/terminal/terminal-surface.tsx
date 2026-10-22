@@ -4,6 +4,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal, type IBufferCell, type IBufferLine } from '@xterm/xterm';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 
+import { DEFAULT_INPUT_PROFILE } from '@lib/harness/input-profile';
 import { isMacPlatform } from '@lib/platform';
 import { xtermThemeFor, type TermPalette } from '@lib/terminal/ansi';
 import { shouldAutoScroll } from '@lib/terminal/auto-scroll';
@@ -628,6 +629,8 @@ export function TerminalSurface({
         const action = decideTerminalKey(event, {
           isMac,
           hasSelection: terminal.hasSelection(),
+          // Task 6 of HIVE-240 replaces this with the surface's own profile prop.
+          profile: DEFAULT_INPUT_PROFILE,
           /** Read per keystroke, not captured. See {@link endedRef}. */
           ended: endedRef.current,
           /**
