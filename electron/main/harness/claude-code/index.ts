@@ -5,13 +5,15 @@ import { hookContextReply } from './hook-vocabulary';
 import { readHook } from './hooks';
 import { launch } from './launch';
 import { writeMcpConfig } from './mcp-config';
+import { parseMetrics } from './metrics';
 import { writePluginDir } from './plugin';
 import { writeAgentSettings, writeHookSettings } from './settings';
 import { foldTranscriptLines } from './transcript-edits';
 
 /**
  * Adapter #1. `launch` arrived with HIVE-234, `prepare` with HIVE-235, `readHook` and
- * `contextReply` with HIVE-236, `foldEdits` with HIVE-238; later stories add the rest.
+ * `contextReply` with HIVE-236, `foldEdits` with HIVE-238, `capabilities` and `meters`
+ * with HIVE-239; later stories add the rest.
  */
 export const claudeCodeAdapter: HarnessAdapter = {
   id: 'claude-code',
@@ -27,4 +29,5 @@ export const claudeCodeAdapter: HarnessAdapter = {
   readHook,
   contextReply: hookContextReply,
   foldEdits: foldTranscriptLines,
+  meters: parseMetrics,
 };

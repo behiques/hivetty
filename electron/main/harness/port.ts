@@ -2,6 +2,7 @@ import type { ChangeMark } from '@shared/changed-files-contract';
 import type { ContainerFreshness, ResolvedContainer } from '@shared/config-contract';
 import type { Capabilities, HarnessId } from '@shared/harness-contract';
 import type { HookAgentEvent, HookIdentity, HookStatusEvent } from '@shared/hook-contract';
+import type { SessionMetrics } from '@shared/metrics-contract';
 import type { PlanUpdate } from '@shared/plan-contract';
 import type { SessionEffort, SessionModel } from '@shared/session-contract';
 
@@ -16,7 +17,7 @@ import type { SkillsRead } from '../skills/read';
  * Methods arrive with the stories that move code behind them: `launch`
  * (HIVE-234, landed), `prepare` (HIVE-235, landed), `readHook` (HIVE-236, landed;
  * HIVE-237 normalised its signals, HIVE-238 its plan ops), `foldEdits` (HIVE-238),
- * `record` and `meters` (HIVE-239),
+ * `record` (HIVE-239) and `meters` (HIVE-239, landed),
  * `deliverContext` (HIVE-240). See
  * `docs/harness-architecture.md`.
  */
@@ -33,6 +34,8 @@ export interface HarnessAdapter {
   contextReply(text: string): unknown;
   /** Transcript lines folded into per-file edit tallies, for the changed-files list (HIVE-201, HIVE-238). */
   foldEdits(tallies: Map<string, FileTally>, lines: readonly string[]): Map<string, FileTally>;
+  /** A status-line body read into metrics; `null` for one that is not an object, which the receiver answers 400 (HIVE-239). */
+  meters(body: string): SessionMetrics | null;
 }
 
 /** One file's edits in a session, as the changed-files list counts them (HIVE-201). */
