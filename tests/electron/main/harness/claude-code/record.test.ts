@@ -41,4 +41,9 @@ describe('the Claude Code record (HIVE-239)', () => {
     expect(record.titleOrigin(CWD, 'u1', 'mine')).toBe('rename');
     expect(record.titleOrigin(CWD, 'u1', 'other')).toBe('unknown');
   });
+
+  it("spells Claude's unnamed title as no name", () => {
+    expect(createClaudeRecord(home).nameFromTitle('✳ Claude Code')).toBe('');
+    expect(createClaudeRecord(home).nameFromTitle('✳ sess-07')).toBe('sess-07');
+  });
 });

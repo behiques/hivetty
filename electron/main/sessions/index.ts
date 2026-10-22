@@ -1731,7 +1731,7 @@ export function createSessions(options: SessionsOptions): Sessions {
 
     let reader = titles.get(entityId);
     if (reader === undefined) {
-      reader = createTitleReader();
+      reader = createTitleReader(adapterOf(entityId).record.nameFromTitle);
       titles.set(entityId, reader);
     }
     for (const name of reader.read(chunk)) {

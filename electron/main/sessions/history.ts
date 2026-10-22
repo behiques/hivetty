@@ -13,8 +13,6 @@ import {
 
 import { sessionAdapter } from '../harness/registry';
 
-import { nameFromTitle } from './title';
-
 /**
  * What the fleet looked like last time (HIVE-87).
  *
@@ -171,7 +169,7 @@ const finite = (value: unknown): number | undefined =>
 const cleanName = (value: unknown): string | undefined => {
   const raw = text(value);
   if (raw === undefined) return undefined;
-  const name = nameFromTitle(raw);
+  const name = sessionAdapter().record.nameFromTitle(raw);
   return name === '' ? undefined : name;
 };
 

@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 
 import type { HarnessRecord } from '../port';
 
+import { nameFromTitle } from './title';
 import { createTitleOriginReader, transcriptPath } from './title-origin';
 
 /**
@@ -15,5 +16,6 @@ export function createClaudeRecord(home: string = homedir()): HarnessRecord {
     transcriptPath: (cwd, sessionUuid) => transcriptPath(home, cwd, sessionUuid),
     hasTranscript: (cwd, sessionUuid) => transcriptPath(home, cwd, sessionUuid) !== null,
     titleOrigin: (cwd, sessionUuid, name) => origins.classify(cwd, sessionUuid, name),
+    nameFromTitle,
   };
 }

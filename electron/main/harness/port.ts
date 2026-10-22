@@ -57,6 +57,8 @@ export interface HarnessRecord {
   hasTranscript(cwd: string, sessionUuid: string): boolean;
   /** Whether `name` was a rename or the harness's own guess; never throws, `unknown` on any doubt. */
   titleOrigin(cwd: string, sessionUuid: string, name: string): TitleVerdict;
+  /** A raw terminal title as a session name: activity marks stripped, `''` for the harness's "unnamed". */
+  nameFromTitle(title: string): string;
 }
 
 /** One file's edits in a session, as the changed-files list counts them (HIVE-201). */
