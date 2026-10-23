@@ -168,7 +168,7 @@ describe('createUserRepos', () => {
     const result = await createUserRepos('gh', ok('<html>')).list();
     expect(result).toEqual({
       ok: false,
-      error: { kind: 'unknown', message: 'GitHub returned a reply the Hive could not read.' },
+      error: { kind: 'unknown', message: 'GitHub returned a reply HiveTTY could not read.' },
     });
   });
 });

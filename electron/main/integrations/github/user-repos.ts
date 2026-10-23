@@ -164,7 +164,7 @@ export function createUserRepos(ghPath: string, run: RunAsync): UserRepos {
       if (parsed === null) {
         return {
           ok: false,
-          error: ghError('unknown', 'GitHub returned a reply the Hive could not read.'),
+          error: ghError('unknown', 'GitHub returned a reply HiveTTY could not read.'),
         };
       }
 
