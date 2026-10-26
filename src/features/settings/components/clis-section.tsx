@@ -5,12 +5,21 @@ import { SettingsProviderGroup } from '@features/settings/components/settings-pr
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useProjectConfig } from '@hooks/use-project-config';
-import { setCliAgentsConfig } from '@lib/project-config';
-import { CLI_VOCAB, type CliAgents } from '@shared/cli-contract';
+import { setAgentsDefaultCliConfig, setCliAgentsConfig } from '@lib/project-config';
+import {
+  CLI_VOCAB,
+  HEADLESS_SANDBOXES,
+  type CliAgents,
+  type HeadlessSandbox,
+} from '@shared/cli-contract';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
 /** A CLI's name as a person reads it. A new CLI adds a row (HIVE-342, HIVE-343). */
 const CLI_NAMES: Record<HarnessId, string> = { 'claude-code': 'Claude Code', codex: 'Codex' };
+
+const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli] }));
+// workspace-write first: it is what an unset card runs (HIVE-342). No "CLI default": codex's own is not ours.
+const SANDBOX_OPTIONS = HEADLESS_SANDBOXES.map((value) => ({ value, label: value })).reverse();
 
 const CLI_DEFAULT = { value: '', label: 'CLI default' };
 const options = (values: readonly string[]) => [
@@ -42,6 +51,14 @@ export function ClisSection() {
         title="CLIs"
         description="The agent CLIs this app drives, and how each one runs headless agents."
       />
+      <SelectField
+        className="max-w-xs"
+        label="Default CLI for agents"
+        value={snapshot.agentsDefaultCli ?? 'claude-code'}
+        options={CLI_OPTIONS}
+        onChange={(value) => void setAgentsDefaultCliConfig({ cli: value as HarnessId })}
+        hint="For agents whose AGENT.md has no harness: field."
+      />
       {HARNESS_IDS.map((cli) => (
         <CliCard key={cli} cli={cli} agents={snapshot.clis[cli].agents} />
       ))}
@@ -57,7 +74,11 @@ function CliCard({ cli, agents }: { cli: HarnessId; agents: CliAgents }) {
     <SettingsProviderGroup name={name}>
       <SettingsGroup
         title="Headless agents"
-        description={`Defaults for agent runs on ${name}. An agent's own model: or effort: in AGENT.md wins.`}
+        description={`Defaults for agent runs on ${name}. ${
+          cli === 'claude-code'
+            ? "An agent's own model: or effort: in AGENT.md wins."
+            : "AGENT.md's model: and effort: are Claude's, so these always apply."
+        }`}
       >
         <Switch
           label="Enabled for agents"
@@ -89,8 +110,24 @@ function CliCard({ cli, agents }: { cli: HarnessId; agents: CliAgents }) {
               void setCliAgentsConfig({ cli, effort: value || null })
             }
           />
+          {cli === 'codex' && (
+            <SelectField
+              className="min-w-0 flex-1"
+              label="Sandbox"
+              value={agents.sandbox ?? 'workspace-write'}
+              options={SANDBOX_OPTIONS}
+              onChange={(value) =>
+                void setCliAgentsConfig({ cli, sandbox: value as HeadlessSandbox })
+              }
+            />
+          )}
         </fieldset>
         <p className="text-ui-sm text-subtle">CLI default leaves the flag off, so {name} picks.</p>
+        {cli === 'codex' && (
+          <p className="text-ui-sm text-subtle">
+            The sandbox defaults to workspace-write: an agent writes only inside its own workdir.
+          </p>
+        )}
       </SettingsGroup>
     </SettingsProviderGroup>
   );
