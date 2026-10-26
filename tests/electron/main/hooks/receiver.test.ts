@@ -3559,11 +3559,13 @@ describe('the MCP route', () => {
   let dir: string;
   let ledger: Ledger;
   let posted: { caller: string; request: unknown }[];
+  let refusePosts: boolean;
 
   const CALLER = 'sess-mcp';
 
   beforeEach(async () => {
     posted = [];
+    refusePosts = false;
     dir = mkdtempSync(join(tmpdir(), 'hive-receiver-mcp-'));
     ledger = createLedger({ dir, knowsParty: () => true });
     receiver = createReceiver({
@@ -3598,6 +3600,7 @@ describe('the MCP route', () => {
       },
       onLedgerRead: (_caller, query) => ledger.read(query),
       onLedgerPost: (caller, request) => {
+        if (refusePosts) return { ok: false as const, status: 503, reason: 'the ledger is down' };
         posted.push({ caller, request });
         return ledger.append({ ...request, from: caller });
       },
@@ -4022,11 +4025,12 @@ describe('the MCP route', () => {
       expect(await behaviour(await approve('run-1'))).toBe('deny');
     });
 
+    /*
+      Not just the same word: `deny` is two different outcomes, decided by `decide` with nothing
+      posted, or an ask posted and the model told to wait (HIVE-342 tightened this). The post count
+      on each side tells them apart, and a post that fails must deny on both, saying so.
+    */
     it('answers as stdio approve and decide do, for the same call and grants (HIVE-339)', async () => {
-      const stdioClient = {
-        read: vi.fn(),
-        post: vi.fn(async () => ({ id: 'id-1', ref: 'a1' })),
-      } as unknown as ReceiverClient;
       const cases = [
         { tool: 'Read', input: { file_path: '/repo/a.ts' }, grants: ['Read'] },
         { tool: 'Bash', input: { command: 'git status' }, grants: ['Bash(git *)'] },
@@ -4035,36 +4039,73 @@ describe('the MCP route', () => {
         { tool: 'Bash]\ntools: [Write', input: {}, grants: ['Read'] },
         { tool: 'Write', input: { file_path: '/repo/a.ts' }, grants: [] },
       ];
+      const outcome = (behavior: string, posts: number) =>
+        behavior === 'allow' ? 'allow' : posts === 1 ? 'ask' : posts === 0 ? 'deny' : `posted ${String(posts)}`;
 
       for (const [i, call] of cases.entries()) {
         const run = `parity-${String(i)}`;
         receiver.grants.set(run, CALLER, call.grants);
+        const stdioPost = vi.fn(async () => ({ id: 'id-1', ref: 'a1' }));
+        const stdioClient = { read: vi.fn(), post: stdioPost } as unknown as ReceiverClient;
+        const before = posted.length;
 
-        const overHttp = await behaviour(
-          await rpc(
-            {
-              jsonrpc: '2.0',
-              id: 10 + i,
-              method: 'tools/call',
-              params: { name: 'approve', arguments: { tool_name: call.tool, input: call.input } },
-            },
-            { [HOOK_HEADER_SESSION]: CALLER, [HOOK_HEADER_RUN]: run },
+        const overHttp = outcome(
+          await behaviour(
+            await rpc(
+              {
+                jsonrpc: '2.0',
+                id: 10 + i,
+                method: 'tools/call',
+                params: { name: 'approve', arguments: { tool_name: call.tool, input: call.input } },
+              },
+              {
+                [HOOK_HEADER_SESSION]: CALLER,
+                [HOOK_HEADER_RUN]: run,
+                [HOOK_HEADER_RUN_TOKEN]: receiver.runToken(run),
+              },
+            ),
           ),
+          posted.length - before,
         );
-        const overStdio = (
-          JSON.parse(
-            (
-              await createToolHandlers(stdioClient, call.grants).callTool('approve', {
-                tool_name: call.tool,
-                input: call.input,
-              })
-            ).content[0]!.text,
-          ) as { behavior: string }
-        ).behavior;
-        const verdict = decide(call.tool, call.input, call.grants).behavior;
+        const overStdio = outcome(
+          (
+            JSON.parse(
+              (
+                await createToolHandlers(stdioClient, call.grants).callTool('approve', {
+                  tool_name: call.tool,
+                  input: call.input,
+                })
+              ).content[0]!.text,
+            ) as { behavior: string }
+          ).behavior,
+          stdioPost.mock.calls.length,
+        );
 
         expect(overHttp, call.tool).toBe(overStdio);
-        expect(overStdio, call.tool).toBe(verdict === 'allow' ? 'allow' : 'deny');
+        expect(overStdio, call.tool).toBe(decide(call.tool, call.input, call.grants).behavior);
+      }
+    });
+
+    it('denies on both transports, saying why, when the ask cannot be posted', async () => {
+      refusePosts = true;
+      const call = { tool_name: 'Write', input: { file_path: '/repo/a.ts' } };
+      const message = (text: string) => (JSON.parse(text) as { behavior: string; message: string });
+
+      const http = (await (
+        await rpc(
+          { jsonrpc: '2.0', id: 30, method: 'tools/call', params: { name: 'approve', arguments: call } },
+          { [HOOK_HEADER_SESSION]: CALLER },
+        )
+      ).json()) as { result: { content: { text: string }[] } };
+      const stdioClient = {
+        read: vi.fn(),
+        post: vi.fn(() => Promise.reject(new Error('the ledger is down'))),
+      } as unknown as ReceiverClient;
+      const stdio = await createToolHandlers(stdioClient, []).callTool('approve', call);
+
+      for (const text of [http.result.content[0]!.text, stdio.content[0]!.text]) {
+        expect(message(text).behavior).toBe('deny');
+        expect(message(text).message).toMatch(/^Could not ask for permission/);
       }
     });
   });
