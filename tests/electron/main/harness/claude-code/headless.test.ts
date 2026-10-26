@@ -21,6 +21,8 @@ const spec = (over: Partial<HeadlessSpec> = {}): HeadlessSpec => ({
   grants: ['mcp__hive__ledger_*', 'Read'],
   prompt: 'You were woken.',
   subscriptionAuth: true,
+  instructions: 'p',
+  hiveServer: { command: '/e', args: ['/h.js'], env: {} },
   ...over,
 });
 const flag = (args: readonly string[], name: string) => args[args.indexOf(name) + 1];
@@ -36,6 +38,11 @@ describe('launchHeadless', () => {
     expect(plan.args.slice(0, 3)).toEqual(['-p', '--session-id', 'new-uuid']);
     expect(plan.args).not.toContain('--resume');
     expect(plan.stopPattern).toBe('new-uuid');
+  });
+
+  it('names the conversation on its argv, starting or resuming (HIVE-342)', () => {
+    expect(launchHeadless(spec()).namesConversation).toBe(true);
+    expect(launchHeadless(spec({ conversation: { resume: 'old' } })).namesConversation).toBe(true);
   });
 
   it('resumes with --resume and stops on that id', () => {

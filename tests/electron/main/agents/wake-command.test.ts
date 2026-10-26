@@ -8,6 +8,8 @@ import {
 } from '../../../../electron/main/agents/wake-command';
 import type { AgentState } from '../../../../electron/main/agents/state';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
+import { codexAdapter } from '../../../../electron/main/harness/codex';
+import type { HarnessAdapter, HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { McpServerSpec } from '../../../../electron/main/mcp/agent-config';
 import { STANDING_LANE, type AgentRunState } from '../../../../electron/shared/agent-contract';
 import type { HarnessId } from '../../../../electron/shared/harness-contract';
@@ -114,8 +116,8 @@ const build = (over: Partial<WakeCommandDeps> = {}) =>
     pluginDir: () => '/data/hive/plugin',
     agentSettingsPath: () => '/data/hive/claude-agent.settings.json',
     mcpConfig: () => '/data/hive/hive.mcp.json',
-    // Unused by every test below: `AGENT_MD` has no `mcp:` field, so
-    // `def.mcp.length > 0` never fires and neither dep is ever called.
+    // Handed to every wake's adapter (HIVE-342). `AGENT_MD` has no `mcp:` field,
+    // so no per-agent file is written from it.
     hiveServer: () => ({
       command: '/App',
       args: ['/host.js'],
@@ -1048,7 +1050,7 @@ describe('a changed system prompt', () => {
 });
 
 describe('the CLI a wake runs on (HIVE-340)', () => {
-  const codex = 'codex' as string as HarnessId;
+  const codex: HarnessId = 'codex';
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -1229,5 +1231,95 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
     expect(built.sessionUuid).toBe('parked-uuid');
     expect(built.args.join('\n')).toContain('Pick up the PR review.');
     expect(built.args.join('\n')).not.toContain('This is a fresh conversation');
+  });
+});
+
+describe('what a CLI without a settings file is handed (HIVE-342)', () => {
+  const recording = () => {
+    const seen: HeadlessSpec[] = [];
+    const adapter: HarnessAdapter = {
+      ...claudeCodeAdapter,
+      headless: {
+        ...claudeCodeAdapter.headless,
+        launch: (spec) => {
+          seen.push(spec);
+          return claudeCodeAdapter.headless.launch(spec);
+        },
+      },
+    };
+    return { seen, adapter };
+  };
+
+  it('hands the adapter the system prompt text and the hive server', () => {
+    const { seen, adapter } = recording();
+    const built = build({ adapter: () => adapter })('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(seen[0]?.instructions).toBe(written['/data/hive/agents/slack-watcher.system.md']);
+    expect(seen[0]?.instructions).toContain('Read the channel and report.');
+    expect(seen[0]?.hiveServer).toEqual({
+      command: '/App',
+      args: ['/host.js'],
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+    });
+  });
+
+  it('refuses the wake when the hive descriptor is unavailable, with no mcp: at all', () => {
+    expect(build({ hiveServer: () => null })('slack-watcher', 'manual')).toEqual({
+      problem:
+        'The ledger tools are not configured yet, and an agent reads its ' +
+        'inbox before anything else. Try again in a moment.',
+    });
+  });
+});
+
+describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
+  const CODEX_MD = AGENT_MD.replace('limits:', 'harness: [codex]\nlimits:');
+  // PR1's codex fence refuses everything; these tests stand in PR2's, which passes.
+  const fenced: HarnessAdapter = {
+    ...codexAdapter,
+    headless: { ...codexAdapter.headless, fence: { express: () => ({ ok: true }) } },
+  };
+  const adapter = (id: HarnessId) => (id === 'codex' ? fenced : claudeCodeAdapter);
+
+  it('resolves codex on PATH and runs codex exec', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD;
+    const built = build({
+      adapter,
+      env: () => ({ PATH: '/bin:/opt/bin', HOME: '/home/u' }),
+      isExecutable: (path) => path === '/opt/bin/codex',
+    })('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built.file).toBe('/opt/bin/codex');
+    expect(built.args[0]).toBe('exec');
+    expect(built.harness).toBe('codex');
+  });
+
+  it('says codex was not found when it is not on PATH', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD;
+    const built = build({ adapter })('slack-watcher', 'manual');
+
+    expect('problem' in built ? built.problem : 'resolved').toMatch(
+      /^No CLI can run slack-watcher: codex cannot start: `codex` was not found on PATH/,
+    );
+  });
+
+  it('refuses a codex agent that runs in a container', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD.replace(
+      'limits:',
+      'container:\n  runtime: docker\n  name: devbox\n  workspace: /work\n  hive_dir: /hive\nlimits:',
+    );
+    const built = build({
+      adapter,
+      agentContainerSettingsPath: () => '/data/hive/container/claude-agent.settings.json',
+    })('slack-watcher', 'manual');
+
+    expect(built).toEqual({
+      problem:
+        'slack-watcher runs in a container, and codex agents cannot yet — run it on the host, or name claude-code first in harness:.',
+    });
   });
 });

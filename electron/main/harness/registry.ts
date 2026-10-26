@@ -1,11 +1,13 @@
 import type { HarnessId } from '@shared/harness-contract';
 
 import { claudeCodeAdapter } from './claude-code';
+import { codexAdapter } from './codex';
 import type { HarnessAdapter } from './port';
 
 /** Keyed by every `HarnessId`, so a harness without an adapter fails to compile. */
 const adapters: Record<HarnessId, HarnessAdapter> = {
   'claude-code': claudeCodeAdapter,
+  codex: codexAdapter,
 };
 
 /**

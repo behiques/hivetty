@@ -27,4 +27,14 @@ describe('createCliGate (HIVE-341)', () => {
     expect(gate.defaults('claude-code')).toEqual({ effort: 'max' });
     expect(gate.defaultCli()).toBeUndefined();
   });
+
+  it("reads codex's model and sandbox from its card (HIVE-342)", () => {
+    const gate = createCliGate(() => ({
+      clis: resolveClis({
+        codex: { agents: { enabled: true, model: 'gpt-6-luna', sandbox: 'read-only' } },
+      }),
+    }));
+
+    expect(gate.defaults('codex')).toEqual({ model: 'gpt-6-luna', sandbox: 'read-only' });
+  });
 });

@@ -15,6 +15,7 @@ import { HIVE_STANDING_GRANTS } from '@shared/ledger-tools';
 import { createPathMap } from '../container/path-map';
 import type { HarnessAdapter } from '../harness/port';
 import { withHostAlias } from '../hooks/container-origin';
+import type { McpServerSpec } from '../mcp/agent-config';
 
 /**
  * The command line one wake runs (HIVE-115).
@@ -52,8 +53,8 @@ interface WakeInput {
   /** The CLI the lane's last conversation ran on, when this wake starts fresh on another (HIVE-340). */
   switchedFrom?: HarnessId;
   def: AgentDefinition;
-  /** Settings › CLIs' model and effort for this CLI, under the definition's own (HIVE-341). */
-  defaults?: Pick<CliAgents, 'model' | 'effort'>;
+  /** Settings › CLIs' model, effort and sandbox for this CLI (HIVE-341, HIVE-342). */
+  defaults?: Pick<CliAgents, 'model' | 'effort' | 'sandbox'>;
   /** Absent on the very first run, which mints one instead. */
   sessionUuid?: string;
   newUuid: string;
@@ -61,6 +62,10 @@ interface WakeInput {
   extra?: string;
   paths: WakePaths;
   env: WakeEnv;
+  /** The system prompt's text, for a CLI that takes it inline (HIVE-342). */
+  instructions: string;
+  /** The hive MCP server, for a CLI that takes it inline (HIVE-342). */
+  hiveServer: McpServerSpec;
   /**
    * Grants that apply to **this wake only** — an answered `allow-once`.
    *
@@ -139,6 +144,11 @@ export interface WakeCommand {
   cwd: string;
   /** Present for a container wake, absent for a host one. */
   container?: ContainerWake;
+  /**
+   * Whether the argv names the conversation, so a run with no output may persist its id
+   * (HIVE-342). False for a first Codex wake, whose id only `thread.started` names.
+   */
+  namesConversation: boolean;
 }
 
 export function wakePrompt(
@@ -332,18 +342,23 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   };
   const { adapter } = input;
   const fenced = fencedRules(def, input.grants);
-  // Claude's vocabulary (HIVE-340). Another CLI takes its own defaults, never a translated `opus`.
+  /*
+    `AGENT.md`'s model and effort are Claude's vocabulary (HIVE-340), so they apply only there, ahead
+    of the card; every CLI takes its own card's (HIVE-341, HIVE-342), never a translated `opus`.
+    With neither, the flag is omitted.
+  */
   const claude = adapter.id === 'claude-code';
-  // HIVE-341. `AGENT.md` first, then the Settings › CLIs card; neither, and the flag is omitted.
-  const model = def.model ?? input.defaults?.model;
-  const effort = def.effort ?? input.defaults?.effort;
+  const model = (claude ? def.model : undefined) ?? input.defaults?.model;
+  const effort = (claude ? def.effort : undefined) ?? input.defaults?.effort;
 
   const plan = adapter.headless.launch({
     conversation:
       input.sessionUuid === undefined ? { start: input.newUuid } : { resume: input.sessionUuid },
     name: def.name,
-    ...(claude && model !== undefined ? { model } : {}),
-    ...(claude && effort !== undefined ? { effort } : {}),
+    ...(model === undefined ? {} : { model }),
+    ...(effort === undefined ? {} : { effort }),
+    // A sandbox is Codex's (HIVE-342): the card's, else `workspace-write`.
+    ...(claude ? {} : { sandbox: input.defaults?.sandbox ?? 'workspace-write' }),
     limits: {
       turns: def.limits.turns,
       ...(def.limits.budgetUsd === undefined ? {} : { budgetUsd: def.limits.budgetUsd }),
@@ -368,6 +383,8 @@ export function wakeCommand(input: WakeInput): WakeCommand {
       ...(input.def.lane === undefined ? {} : { laneMode: input.def.lane, agent: input.def.name }),
     })}`,
     subscriptionAuth: env.subscriptionAuth,
+    instructions: input.instructions,
+    hiveServer: input.hiveServer,
   });
   const args = [...plan.args];
 
@@ -452,6 +469,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
         ...hook,
       },
       cwd: paths.workdir,
+      namesConversation: plan.namesConversation,
       container: {
         runtime: config.runtime,
         name: config.name,
@@ -468,5 +486,6 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     args,
     env: { ...merged, ...env.hook, HIVE_AGENT: '1', ...plan.addEnv },
     cwd: paths.workdir,
+    namesConversation: plan.namesConversation,
   };
 }

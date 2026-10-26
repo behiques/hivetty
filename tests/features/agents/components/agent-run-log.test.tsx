@@ -7,7 +7,6 @@ import {
   type LiveRunSummary,
   type RunSummary,
 } from '@shared/agent-contract';
-import type { HarnessId } from '@shared/harness-contract';
 import { useAppearanceStore, useTerminalAppearance } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 
@@ -1222,7 +1221,7 @@ describe('the CLI a run ran on (HIVE-340)', () => {
     container.querySelector('[data-region="run-receipts"]') as HTMLElement;
 
   it('chips a run that ran on another CLI', () => {
-    seed({ runs: [run(1, { harness: 'codex' as string as HarnessId })] });
+    seed({ runs: [run(1, { harness: 'codex' })] });
 
     const { container } = render(<AgentRunLog name="watcher" />);
 

@@ -40,16 +40,18 @@ test('the card writes the file, and off disables the defaults', async ({}, testI
     await page.waitForSelector('nav[aria-label="Places"]');
     await openClis(page);
 
-    const model = page.getByRole('combobox', { name: 'Model' });
+    // A card per CLI since HIVE-342: everything below is the Claude Code card's.
+    const claude = page.getByRole('region', { name: 'Claude Code' });
+    const model = claude.getByRole('combobox', { name: 'Model' });
     await expect(model).toHaveValue('');
     await model.selectOption('haiku');
     await expect.poll(() => read(configPath).clis?.['claude-code']?.agents?.model).toBe('haiku');
     await page.screenshot({ path: testInfo.outputPath('clis-on.png') });
 
-    await page.getByRole('switch', { name: 'Enabled for agents' }).click();
+    await claude.getByRole('switch', { name: 'Enabled for agents' }).click();
     await expect.poll(() => read(configPath).clis['claude-code'].agents.enabled).toBe(false);
     await expect(model).toBeDisabled();
-    await expect(page.getByRole('switch', { name: 'Enabled for agents' })).toHaveAttribute(
+    await expect(claude.getByRole('switch', { name: 'Enabled for agents' })).toHaveAttribute(
       'aria-checked',
       'false',
     );
@@ -60,6 +62,40 @@ test('the card writes the file, and off disables the defaults', async ({}, testI
 
     // The file keeps the model while the CLI is off: off is not a clear.
     expect(read(configPath).clis['claude-code'].agents.model).toBe('haiku');
+  } finally {
+    await app.close();
+  }
+});
+
+test("the default CLI and codex's sandbox write the file (HIVE-342)", async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeFileSync(configPath, JSON.stringify({ version: 2, projects: [] }));
+
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  const page = await app.firstWindow();
+
+  try {
+    await page.waitForSelector('nav[aria-label="Places"]');
+    await openClis(page);
+
+    const fallback = page.getByRole('combobox', { name: 'Default CLI for agents' });
+    await expect(fallback).toHaveValue('claude-code');
+    await fallback.selectOption('codex');
+    await expect.poll(() => read(configPath).agentsDefaultCli).toBe('codex');
+
+    const codex = page.getByRole('region', { name: 'Codex' });
+    const sandbox = codex.getByRole('combobox', { name: 'Sandbox' });
+    await expect(sandbox).toHaveValue('workspace-write');
+    await sandbox.selectOption('read-only');
+    await expect.poll(() => read(configPath).clis?.codex?.agents?.sandbox).toBe('read-only');
+    await codex.getByRole('combobox', { name: 'Model' }).selectOption('gpt-6-luna');
+    await expect.poll(() => read(configPath).clis.codex.agents.model).toBe('gpt-6-luna');
+    await expect(
+      page.getByRole('region', { name: 'Claude Code' }).getByRole('combobox', { name: 'Sandbox' }),
+    ).toHaveCount(0);
+
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+    await page.screenshot({ path: testInfo.outputPath('clis-codex.png'), fullPage: true });
   } finally {
     await app.close();
   }

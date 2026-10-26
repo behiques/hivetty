@@ -490,6 +490,15 @@ const CASES = [
     },
   },
   {
+    name: 'zone: electron/main/agents/ may not import electron/main/harness/codex/ (HIVE-342)',
+    rule: 'import/no-restricted-paths',
+    files: {
+      'electron/main/harness/codex/probe-target.ts': 'export const adapter = 1;\n',
+      'electron/main/agents/probe.ts':
+        "import { adapter } from '../harness/codex/probe-target';\nexport const probe = adapter;\n",
+    },
+  },
+  {
     name: 'zone: electron/main/hooks/ may not import the Claude hook vocabulary (HIVE-236)',
     rule: 'import/no-restricted-paths',
     files: {

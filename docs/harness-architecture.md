@@ -195,7 +195,8 @@ neutral `SessionMetrics`. Claude Code's live in `claude-code/{record,title-origi
   never run unfenced.
 - `HarnessGate` (`agents/resolve-harness.ts`) is what the licence and Settings › CLIs say about a
   CLI. It is wired as `createCliGate(getConfig)` (`agents/cli-gate.ts`, HIVE-341): `enabled`,
-  `defaultCli` and `defaults` (the card's model and effort, under `AGENT.md`'s) read the config
+  `defaultCli` and `defaults` (the card's model, effort and Codex's sandbox; on Claude under
+  `AGENT.md`'s model and effort, which are Claude's vocabulary and never reach another CLI) read the config
   per call, and `entitled` allows every CLI until HIVE-332. A new CLI adds its models and efforts
   as a row of `CLI_VOCAB` in `@shared/cli-contract`, which the config parser, the IPC guard and
   the card all read.
@@ -206,13 +207,67 @@ neutral `SessionMetrics`. Claude Code's live in `claude-code/{record,title-origi
 - `record: { transcriptPath, hasTranscript, titleOrigin, nameFromTitle }`.
 - `capabilities: { resume, meters, contextDelivery }`.
 
+## Codex (headless, HIVE-342)
+
+Adapter #2 lives in `electron/main/harness/codex/` and is headless only: every interactive member
+refuses with "codex has no interactive sessions yet (HIVE-279)", `record` answers `null`/`false`/
+`'unknown'`, `installed` answers `[]`/`{}`, and `sessionAdapter()` and `harnessOf` stay Claude, so
+nothing interactive reaches the refusals. Measured against `codex-cli 0.164.0`; the recorded
+output and hook payloads are in `tests/fixtures/codex/`.
+
+**The argv** (`codex/headless.ts`), flag by flag:
+
+- `exec`, or `exec resume <thread_id>` on a later wake.
+- `--json`: one event per line; `thread.started` is the first, before any tool can run.
+- `--skip-git-repo-check`: an agent's workdir is not a repo, and `exec` refuses outside one.
+- `--ignore-user-config`: the user's `config.toml` (plugins, MCP servers, profiles, hooks) never
+  reaches an agent. Auth still comes from `CODEX_HOME`, which is never moved. This is the
+  `--strict-mcp-config` analogue: **a Codex agent sees exactly one MCP server, `hive`**, and
+  nothing the user configured for themselves.
+- `--dangerously-bypass-hook-trust`: hooks given through `-c` fire only with it. It trusts only
+  HiveTTY's own hooks, because every hook on the run is this argv's (user config is ignored), and
+  nothing is ever written into `~/.codex`. Codex prints a warning `error` item per run for it; the
+  reader drops it.
+- `-m <model>` and `-c model_reasoning_effort="…"` from the Codex card, omitted when it names none.
+- `-c sandbox_mode="…"`: `resume` has no `-s`, so both shapes use `-c`. **The sandbox defaults to
+  `workspace-write`** when the card sets none; `danger-full-access` is never offered.
+- `-c developer_instructions=…`, the system prompt, on a first wake only: a resumed thread keeps
+  it. Every `-c` value is `JSON.stringify` output, a valid TOML basic string, with DEL escaped and
+  lone surrogates replaced, the two strings JSON writes that TOML refuses.
+- `-c mcp_servers.hive.{command,args,env}` and `env_vars=[…]`: the stdio hive host, its identity
+  forwarded **by name** from the run's environment, so no token lands on the argv.
+  `default_tools_approval_mode="approve"` turns Codex's own approval off for `hive`: the fence is
+  the `PreToolUse` hook (PR2), never this.
+- `-c hooks.Stop=[…]`: a `curl` to `$HIVE_RECEIVER_URL/hook` with the session and token headers
+  read from the run's environment, as the container transport does. Codex's payloads are
+  Claude-shaped, so the agent lane reads them unchanged.
+- **The stop marker:** `-c mcp_servers.hive_wake.enabled=false -c mcp_servers.hive_wake.command="<id>"`.
+  A disabled server is on the argv with no warning and no effect, so `pkill -f <id>` finds the
+  run. `<id>` is the minted uuid on a first wake and the thread id on a resume.
+
+`stripEnv` removes the eight `CODEX_*` keys a parent Codex session exports, and `OPENAI_API_KEY`
+and `CODEX_API_KEY` under subscription auth. `CODEX_HOME` passes.
+
+**`namesConversation`** (`HeadlessPlan`): whether the argv names the conversation. Claude's always
+does. A first Codex wake's does not (its id is only the stop marker), so the tracker persists a
+first Codex wake's conversation only from `thread.started`, and a run killed before that line
+persists nothing rather than a uuid `resume` would fail on.
+
+**Resolution:** `codex` is resolved on `PATH` with the same lookup as `claude` until HIVE-332 adds
+its setting. **Containers are refused** for Codex: the container's hive server is the HTTP
+descriptor, and the image has no signed-in `codex`. PR1's `codexFence` refuses every rule set, so
+no Codex run can start until PR2's `PreToolUse` fence lands.
+
+Interactive: HIVE-279. Meters: HIVE-334. Plans: HIVE-352. Containers: refused.
+
 ## The fences
 
 Both are `import/no-restricted-paths` zones in `eslint.config.mjs`, and
 `pnpm verify:boundaries` plants a violation for each.
 
 1. **The driven side stays sealed.** Nothing outside `electron/main/harness/**` may import
-   `electron/main/harness/claude-code/**`. Everyone else goes through the registry.
+   `electron/main/harness/claude-code/**` or `electron/main/harness/codex/**`. Everyone else goes
+   through the registry.
 2. **Adapters don't reach the core.** `electron/main/harness/**` may not import
    `electron/main/{sessions,ipc,notifications,plans}/**`. The core passes what an adapter
    needs in as arguments.

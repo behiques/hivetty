@@ -15,7 +15,7 @@ import type {
   AgentWriteResult,
 } from '@shared/agent-contract';
 import type { ChangedFilesEvent, ChangedFilesSnapshot } from '@shared/changed-files-contract';
-import type { SetCliAgentsRequest } from '@shared/cli-contract';
+import type { SetAgentsDefaultCliRequest, SetCliAgentsRequest } from '@shared/cli-contract';
 import type {
   AddProjectRequest,
   BrowseDirRequest,
@@ -337,6 +337,8 @@ const bridge: HiveBridge = {
     // HIVE-341. One CLI's headless agent defaults (Settings › CLIs).
     setCliAgents: (request: SetCliAgentsRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetCliAgents, request),
+    setAgentsDefaultCli: (request: SetAgentsDefaultCliRequest): Promise<ConfigSnapshot> =>
+      ipcRenderer.invoke(CH.configSetAgentsDefaultCli, request),
     // HIVE-131. The name a container resolves to reach this host.
     setReceiver: (request: SetReceiverRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetReceiver, request),
