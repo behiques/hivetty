@@ -729,10 +729,10 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
     expect(fencedRules(def(), ['literal:Bash:git push'])).toEqual(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
   });
 
-  it('drops the card defaults on another CLI too (HIVE-341)', () => {
-    const args = build({ adapter: other, def: def({}), defaults: { model: 'haiku' } }).args;
+  it("hands another CLI its own card's defaults (HIVE-342, replacing HIVE-341's drop)", () => {
+    const args = build({ adapter: other, def: def({}), defaults: { model: 'gpt-6-luna' } }).args;
 
-    expect(args).not.toContain('--model');
+    expect(args[args.indexOf('--model') + 1]).toBe('gpt-6-luna');
   });
 
   it("drops Claude's model and effort on another CLI", () => {
@@ -759,6 +759,65 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
 
     expect(seen[0]?.instructions).toBe('Be brief.');
     expect(seen[0]?.hiveServer).toEqual(HIVE_SERVER);
+  });
+
+  describe('a codex run takes its card, never AGENT.md (HIVE-342)', () => {
+    const recordingCodex = () => {
+      const seen: HeadlessSpec[] = [];
+      const adapter = {
+        ...claudeCodeAdapter,
+        id: 'codex' as const,
+        headless: {
+          ...claudeCodeAdapter.headless,
+          launch: (spec: HeadlessSpec) => {
+            seen.push(spec);
+            return claudeCodeAdapter.headless.launch(spec);
+          },
+        },
+      };
+      return { seen, adapter };
+    };
+
+    it("launches with the card's model, effort and sandbox, and AGENT.md's model never reaches it", () => {
+      const { seen, adapter } = recordingCodex();
+
+      build({
+        adapter,
+        def: def({ model: 'opus' }),
+        defaults: { model: 'gpt-6-luna', effort: 'high', sandbox: 'read-only' },
+      });
+
+      expect(seen[0]).toMatchObject({ model: 'gpt-6-luna', effort: 'high', sandbox: 'read-only' });
+    });
+
+    it('launches with no model, no effort and workspace-write when the card is empty', () => {
+      const { seen, adapter } = recordingCodex();
+
+      build({ adapter, def: def({ model: 'opus', effort: 'high' }) });
+
+      expect(seen[0]?.model).toBeUndefined();
+      expect(seen[0]?.effort).toBeUndefined();
+      expect(seen[0]?.sandbox).toBe('workspace-write');
+    });
+
+    it("gives Claude no sandbox, and AGENT.md's model over the card's", () => {
+      const seen: HeadlessSpec[] = [];
+      const recording = {
+        ...claudeCodeAdapter,
+        headless: {
+          ...claudeCodeAdapter.headless,
+          launch: (spec: HeadlessSpec) => {
+            seen.push(spec);
+            return claudeCodeAdapter.headless.launch(spec);
+          },
+        },
+      };
+
+      build({ adapter: recording, def: def({ model: 'opus' }), defaults: { model: 'haiku' } });
+
+      expect(seen[0]?.model).toBe('opus');
+      expect(seen[0]?.sandbox).toBeUndefined();
+    });
   });
 
   it('opens a fresh conversation on a new CLI by saying so first', () => {

@@ -53,8 +53,8 @@ interface WakeInput {
   /** The CLI the lane's last conversation ran on, when this wake starts fresh on another (HIVE-340). */
   switchedFrom?: HarnessId;
   def: AgentDefinition;
-  /** Settings › CLIs' model and effort for this CLI, under the definition's own (HIVE-341). */
-  defaults?: Pick<CliAgents, 'model' | 'effort'>;
+  /** Settings › CLIs' model, effort and sandbox for this CLI (HIVE-341, HIVE-342). */
+  defaults?: Pick<CliAgents, 'model' | 'effort' | 'sandbox'>;
   /** Absent on the very first run, which mints one instead. */
   sessionUuid?: string;
   newUuid: string;
@@ -337,18 +337,23 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   };
   const { adapter } = input;
   const fenced = fencedRules(def, input.grants);
-  // Claude's vocabulary (HIVE-340). Another CLI takes its own defaults, never a translated `opus`.
+  /*
+    `AGENT.md`'s model and effort are Claude's vocabulary (HIVE-340), so they apply only there, ahead
+    of the card; every CLI takes its own card's (HIVE-341, HIVE-342), never a translated `opus`.
+    Neither, and the flag is omitted.
+  */
   const claude = adapter.id === 'claude-code';
-  // HIVE-341. `AGENT.md` first, then the Settings › CLIs card; neither, and the flag is omitted.
-  const model = def.model ?? input.defaults?.model;
-  const effort = def.effort ?? input.defaults?.effort;
+  const model = (claude ? def.model : undefined) ?? input.defaults?.model;
+  const effort = (claude ? def.effort : undefined) ?? input.defaults?.effort;
 
   const plan = adapter.headless.launch({
     conversation:
       input.sessionUuid === undefined ? { start: input.newUuid } : { resume: input.sessionUuid },
     name: def.name,
-    ...(claude && model !== undefined ? { model } : {}),
-    ...(claude && effort !== undefined ? { effort } : {}),
+    ...(model === undefined ? {} : { model }),
+    ...(effort === undefined ? {} : { effort }),
+    // A sandbox is Codex's (HIVE-342): the card's, else `workspace-write`.
+    ...(claude ? {} : { sandbox: input.defaults?.sandbox ?? 'workspace-write' }),
     limits: {
       turns: def.limits.turns,
       ...(def.limits.budgetUsd === undefined ? {} : { budgetUsd: def.limits.budgetUsd }),

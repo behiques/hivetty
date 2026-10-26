@@ -19,7 +19,7 @@ export interface HarnessGate {
   /** "Default CLI for agents", when the person chose one. */
   defaultCli(): HarnessId | undefined;
   /** The card's model and effort for agents on this CLI (HIVE-341); `AGENT.md` wins over both. */
-  defaults(id: HarnessId): Pick<CliAgents, 'model' | 'effort'>;
+  defaults(id: HarnessId): Pick<CliAgents, 'model' | 'effort' | 'sandbox'>;
 }
 
 export interface ResolveDeps {
