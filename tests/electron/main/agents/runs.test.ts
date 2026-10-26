@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -625,6 +628,37 @@ describe('createRunTracker', () => {
       childInstances[0]?.emitClose(1, null);
 
       expect(state.lane('a', 'standing').sessionUuid).toBe('t-1');
+    });
+
+    it('closes a recorded codex wake with its usage, no cost, and the thread on the lane', () => {
+      const exec = readFileSync(
+        join(__dirname, '../../../fixtures/codex/exec-0.164.0.jsonl'),
+        'utf8',
+      );
+      const lines = exec.split('\n').map((line) => (line === '' ? null : JSON.parse(line)));
+      const thread = lines[0] as { thread_id: string };
+      const usage = lines.find((line) => line?.type === 'turn.completed')?.usage as Record<
+        string,
+        number
+      >;
+
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitStdout(exec);
+      childInstances[0]?.emitClose(0, null);
+
+      const summary = state.read('a').runs.at(-1);
+      expect(summary).toMatchObject({
+        harness: 'codex',
+        outcome: 'done',
+        sessionUuid: thread.thread_id,
+        usage: {
+          inputTokens: usage['input_tokens'],
+          outputTokens: usage['output_tokens'],
+          cachedTokens: usage['cached_input_tokens'],
+        },
+      });
+      expect(summary).not.toHaveProperty('costUsd');
+      expect(state.lane('a', 'standing').sessionUuid).toBe(thread.thread_id);
     });
 
     it("still persists the argv's id for a CLI that names it (Claude)", () => {
