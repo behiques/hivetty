@@ -5,8 +5,8 @@
 [![Open issues](https://img.shields.io/github/issues/behiques/hivetty?style=flat-square&labelColor=1f1b18&color=fea97c&label=open%20issues)](https://github.com/behiques/hivetty/issues)
 [![License](https://img.shields.io/github/license/behiques/hivetty?style=flat-square&labelColor=1f1b18&color=74b79c)](LICENSE)
 
-> **HiveTTY** is the [`behiques/hivetty`](https://github.com/behiques/hivetty) fork of
-> [The Hive](https://github.com/yunidbauza/the-hive), with its own theme, name and releases.
+> **HiveTTY Pro** is a private fork of [HiveTTY](https://github.com/yunidbauza/hivetty),
+> with its own name, licence and releases.
 
 # HiveTTY
 
