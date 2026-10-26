@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
+import type { HarnessId } from '../../../../electron/shared/harness-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '../../../../electron/shared/ledger-tools';
 import { matches } from '../../../../electron/shared/permission-rules';
 import {
+  fencedRules,
   systemPromptFor,
   wakeCommand,
   wakePrompt,
@@ -46,6 +48,7 @@ const env = {
 const build = (over: Partial<Parameters<typeof wakeCommand>[0]> = {}) =>
   wakeCommand({
     claudePath: '/opt/bin/claude',
+    adapter: claudeCodeAdapter,
     def: def(),
     newUuid: '11111111-2222-3333-4444-555555555555',
     trigger: 'ledger',
@@ -696,28 +699,27 @@ describe('the command line an agent wake runs (HIVE-337 pin)', () => {
   });
 });
 
-describe('the permission fence blocks a CLI that cannot express a rule (HIVE-339)', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+describe('the adapter a wake runs on (HIVE-340)', () => {
+  const other = { ...claudeCodeAdapter, id: 'codex' as string as HarnessId };
 
-  it('asks the fence about exactly the rules HIVE_GRANTS carries', () => {
-    const express = vi.spyOn(claudeCodeAdapter.headless.fence, 'express');
+  it('lists exactly what HIVE_GRANTS carries', () => {
     const command = build({ grants: ['literal:Bash:git push'] });
 
-    expect(express).toHaveBeenCalledWith(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
+    expect(fencedRules(def(), ['literal:Bash:git push'])).toEqual(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
   });
 
-  it('refuses the run naming the rule, and never builds a command line', () => {
-    vi.spyOn(claudeCodeAdapter.headless.fence, 'express').mockReturnValue({
-      ok: false,
-      unexpressible: ['Bash(git:*)'],
-    });
-    const launch = vi.spyOn(claudeCodeAdapter.headless, 'launch');
+  it("drops Claude's model and effort on another CLI", () => {
+    const args = build({ adapter: other, def: def({ model: 'opus', effort: 'high' }) }).args;
 
-    expect(() => build({ def: def({ tools: ['Bash(git:*)'] }) })).toThrow(
-      'claude-code cannot enforce Bash(git:*), so slack-watcher will not run on it.',
+    expect(args).not.toContain('--model');
+    expect(args).not.toContain('--effort');
+  });
+
+  it('opens a fresh conversation on a new CLI by saying so first', () => {
+    const prompt = build({ switchedFrom: 'codex' as string as HarnessId }).args.join('\n');
+
+    expect(prompt).toContain(
+      'This is a fresh conversation on claude-code: your last one ran on codex, which is not available for this wake.\n\nYou woke because: ledger.',
     );
-    expect(launch).not.toHaveBeenCalled();
   });
 });

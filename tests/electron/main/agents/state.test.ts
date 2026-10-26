@@ -462,4 +462,15 @@ describe('lanes (HIVE-184)', () => {
     lanes.forgetLane('nobody', 'thread:A');
     lanes.dispose();
   });
+
+  it('reads a pre-HIVE-340 state with no harness, and keeps one written to the standing lane (HIVE-340)', () => {
+    const state = createAgentState({ path, debounceMs: 1 });
+
+    state.patch('drone', { sessionUuid: 'old' });
+    expect(state.lane('drone', STANDING_LANE).harness).toBeUndefined();
+
+    state.patchLane('drone', STANDING_LANE, { sessionUuid: 'new', harness: 'claude-code' });
+    expect(state.lane('drone', STANDING_LANE)).toMatchObject({ sessionUuid: 'new', harness: 'claude-code' });
+    expect(state.read('drone').harness).toBe('claude-code');
+  });
 });

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
-import { createHarnessRegistry, sessionAdapter } from '../../../../electron/main/harness/registry';
+import {
+  createHarnessRegistry,
+  headlessAdapter,
+  sessionAdapter,
+} from '../../../../electron/main/harness/registry';
 
 /** Stands in for the sessions closure, which alone knows what an entity is. */
 const agentSessions = new Set(['sess-01']);
@@ -34,10 +38,21 @@ describe('harness registry', () => {
       enforcesTurns: true,
       enforcesBudget: true,
       reportsMcpStatus: true,
+      agentMcp: ['slack'],
     });
   });
 
   it('hands the shared runtimes the Claude Code adapter (phase 1)', () => {
     expect(sessionAdapter()).toBe(claudeCodeAdapter);
+  });
+});
+
+describe('headless runs (HIVE-340)', () => {
+  it('serves the slack integration on Claude', () => {
+    expect(claudeCodeAdapter.capabilities.agentMcp).toEqual(['slack']);
+  });
+
+  it('answers the adapter for a CLI id', () => {
+    expect(headlessAdapter('claude-code')).toBe(claudeCodeAdapter);
   });
 });

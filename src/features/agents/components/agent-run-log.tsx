@@ -4,6 +4,7 @@ import { laneLabel } from '@/lib/agents';
 import { cn } from '@/lib/utils';
 import type { TermLine } from '@/types/terminal';
 
+import { Chip } from '@components/ui/chip';
 import { SplitHandle } from '@components/ui/split-handle';
 import { formatDuration } from '@lib/format-duration';
 import type { LiveRunSummary, RunSummary } from '@shared/agent-contract';
@@ -1049,8 +1050,14 @@ function RunHeader({ run, dim, brand, first, selected, amber, red, onJump }: Run
         every other column combined — and eight is what already distinguishes a
         conversation on the Session tile.
       */}
-      <span className="truncate" style={{ color: brand }} title={run.run}>
-        {`#${run.run.slice(0, 8)}`}
+      <span className="flex min-w-0 items-baseline gap-1.5" style={{ color: brand }} title={run.run}>
+        <span className="truncate">{`#${run.run.slice(0, 8)}`}</span>
+        {/* The CLI, only when it is not the default one: a chip on every row says nothing (HIVE-340). */}
+        {run.harness === undefined || run.harness === 'claude-code' ? null : (
+          <Chip title={`Ran on ${run.harness}`} className="shrink-0 px-1.5 py-0">
+            {run.harness}
+          </Chip>
+        )}
       </span>
       <span className="truncate" title={run.trigger}>
         {run.trigger}

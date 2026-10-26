@@ -18,6 +18,7 @@
  * rather than a leak — `hive-store.ts` imports `@shared/ledger-derive` and
  * `env-editor.tsx` imports `unsafeEnvReason` the same way.
  */
+import type { HarnessId } from './harness-contract';
 import { OVERMIND } from './ledger-contract';
 import {
   SESSION_EFFORTS,
@@ -288,6 +289,8 @@ export interface AgentDefinition {
   icon: string;
   model?: SessionModel;
   effort?: SessionEffort;
+  /** The CLIs this agent may run on, in preference order (HIVE-340). Absent: the Settings default, else `claude-code`. */
+  harness?: HarnessId[];
   wake: WakeSpec;
   skills: string[];
   mcp: string[];
@@ -625,6 +628,7 @@ export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'skills', kind: 'list', required: false },
   { path: 'mcp', kind: 'list', required: false },
   { path: 'tools', kind: 'list', required: false },
+  { path: 'harness', kind: 'list', required: false },
   { path: 'autonomy', kind: 'enum', required: false, values: AUTONOMIES },
   { path: 'lane', kind: 'enum', required: false, values: AGENT_LANES },
   { path: 'limits.turns', kind: 'number', required: false },
@@ -1032,6 +1036,8 @@ export interface RunSummary {
   turns?: number;
   /** Tokens, from a CLI that reports them (HIVE-338). Absent for Claude, whose cost is `costUsd`. */
   usage?: RunUsage;
+  /** The CLI this run ran on (HIVE-340). Absent on records before it, which were all `claude-code`. */
+  harness?: HarnessId;
   /** Why it ended that way, when the outcome alone does not say. */
   reason?: string;
   /**
@@ -1083,6 +1089,8 @@ export const repoLane = (slug: string): string => `repo:${slug.toLowerCase()}`;
  */
 export interface LaneState {
   sessionUuid?: string;
+  /** The CLI `sessionUuid` belongs to (HIVE-340). Absent is `claude-code`. Another CLI cannot resume it. */
+  harness?: HarnessId;
   pendingWake?: PendingWakeEntry[];
   runsSinceRotate: number;
   pendingSession?: { uuid: string; handoff: string };
@@ -1102,6 +1110,8 @@ export interface LaneState {
 /** What `~/.hivetty/ledger/agents.json` holds per agent. */
 export interface AgentRunState {
   sessionUuid?: string;
+  /** The standing lane's {@link LaneState.harness}. */
+  harness?: HarnessId;
   /** The standing lane's {@link LaneState.promptHash}. */
   promptHash?: string;
   status: AgentStatus;

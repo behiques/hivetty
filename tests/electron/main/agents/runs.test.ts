@@ -338,6 +338,18 @@ describe('createRunTracker', () => {
     expect(persisted.sessionUuid).toBe('uuid-from-result');
   });
 
+  it('records the CLI a run ran on, on the run and beside the conversation (HIVE-340)', () => {
+    tracker.run('a', 'ledger');
+    childInstances[0]?.emitStdout(resultLine());
+    childInstances[0]?.emitClose(0);
+
+    const persisted = state.read('a');
+
+    // The command fixture names no harness, which reads as claude-code.
+    expect(persisted.runs.at(-1)?.harness).toBe('claude-code');
+    expect(persisted.harness).toBe('claude-code');
+  });
+
   it('closes done on close and persists the session uuid, pushing status on start and on close', () => {
     tracker.run('a', 'ledger');
     childInstances[0]?.emitStdout(resultLine());

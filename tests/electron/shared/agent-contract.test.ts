@@ -147,6 +147,7 @@ describe('agent-contract', () => {
       'skills',
       'mcp',
       'tools',
+      'harness',
       'autonomy',
       'lane',
       'limits.turns',

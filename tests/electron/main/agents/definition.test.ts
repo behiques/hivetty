@@ -779,3 +779,32 @@ describe('lane (HIVE-184)', () => {
     expect(definition(withLane('thread')).limits.parallel).toBe(1);
   });
 });
+
+describe('harness: (HIVE-340)', () => {
+  const withHarness = (value: string): string =>
+    GOOD.replace('autonomy: ask\n', `autonomy: ask\nharness: ${value}\n`);
+
+  it('reads the CLIs in preference order', () => {
+    expect(definition(withHarness('[claude-code]')).harness).toEqual(['claude-code']);
+  });
+
+  it('leaves harness unset with no field, or an empty list', () => {
+    expect(definition(GOOD).harness).toBeUndefined();
+    expect(definition(withHarness('[]')).harness).toBeUndefined();
+  });
+
+  it('names a CLI this build cannot run as a problem on the field', () => {
+    expect(problems(withHarness('[codex, claude-code]'))).toContainEqual(
+      expect.objectContaining({
+        field: 'harness',
+        reason: 'codex is not a CLI HiveTTY can run headless. Known: claude-code.',
+      }),
+    );
+  });
+
+  it('refuses a value that is not a list', () => {
+    expect(problems(withHarness('claude-code'))).toContainEqual(
+      expect.objectContaining({ field: 'harness' }),
+    );
+  });
+});

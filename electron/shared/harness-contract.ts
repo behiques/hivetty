@@ -5,8 +5,15 @@
  * module follows `electron/shared`'s rule and drags nothing in.
  */
 
-/** Which CLI drives an agent session. One member until a second harness lands. */
-export type HarnessId = 'claude-code';
+/** Every CLI the app can drive. One member until a second harness lands (HIVE-342, HIVE-343). */
+export const HARNESS_IDS = ['claude-code'] as const;
+
+/** Which CLI drives an agent session. */
+export type HarnessId = (typeof HARNESS_IDS)[number];
+
+/** A definition's `harness:` entry, or a recorded one, names a CLI this build knows (HIVE-340). */
+export const isHarnessId = (value: string): value is HarnessId =>
+  (HARNESS_IDS as readonly string[]).includes(value);
 
 /**
  * What a harness can do ("build one, shape for three"). A field lands only with the
@@ -39,6 +46,11 @@ export interface Capabilities {
   enforcesBudget: boolean;
   /** The run's output says which MCP servers connected (the Slack chip, HIVE-123). */
   reportsMcpStatus: boolean;
+  /**
+   * The `mcp:` integrations a headless run on this CLI can be given (HIVE-340). An agent naming
+   * one that is not here does not resolve to this CLI.
+   */
+  agentMcp: readonly string[];
 }
 
 /** Why a session is blocked on a human (HIVE-237): a tool wants a yes, the agent asked, or a server wants input. */
