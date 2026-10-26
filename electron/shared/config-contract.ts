@@ -1,3 +1,5 @@
+import { resolveClis, type ClisConfig } from './cli-contract';
+import type { HarnessId } from './harness-contract';
 import type { JiraMention } from './jira-contract';
 import {
   NOTIFICATION_KINDS,
@@ -1325,6 +1327,10 @@ export interface ConfigSnapshot {
    * defaults is one that will eventually forget on one branch.
    */
   slack: SlackConfig;
+  /** Per-CLI headless agent defaults, always resolved: every CLI present (HIVE-341). */
+  clis: ClisConfig;
+  /** "Default CLI for agents" (HIVE-341). Absent: resolution falls back to `claude-code`. */
+  agentsDefaultCli?: HarnessId;
   /**
    * Whether sessions authenticate on the Claude.ai plan (HIVE-79).
    *
@@ -1844,6 +1850,7 @@ export function emptySnapshot(
     // and what it deliberately does not.
     attachedServer: null,
     slack: { ...DEFAULT_SLACK },
+    clis: resolveClis(undefined),
     errors: [],
   };
 }

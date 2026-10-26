@@ -1,7 +1,13 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { reloadConfig } from '../../../../electron/main/config';
 import { parseConfig } from '../../../../electron/main/config/parse';
+import { CONFIG_PATH_ENV, emptySnapshot } from '../../../../electron/shared/config-contract';
 
 const doc = (extra: object) => JSON.stringify({ version: 2, projects: [], ...extra });
 
@@ -71,5 +77,46 @@ describe('the clis block (HIVE-341)', () => {
 
     expect(bad.agentsDefaultCli).toBeUndefined();
     expect(bad.errors).toEqual(['config.agentsDefaultCli: expected one of claude-code — ignored']);
+  });
+});
+
+describe('the snapshot (HIVE-341)', () => {
+  let dir: string;
+  let saved: string | undefined;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-clis-'));
+    saved = process.env[CONFIG_PATH_ENV];
+    process.env[CONFIG_PATH_ENV] = join(dir, 'config.json');
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env[CONFIG_PATH_ENV];
+    else process.env[CONFIG_PATH_ENV] = saved;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('resolves a file with no block to every CLI enabled', () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({}));
+
+    const snapshot = reloadConfig();
+
+    expect(snapshot.clis).toEqual({ 'claude-code': { agents: { enabled: true } } });
+    expect(snapshot.agentsDefaultCli).toBeUndefined();
+  });
+
+  it('carries what the file named', () => {
+    writeFileSync(
+      process.env[CONFIG_PATH_ENV]!,
+      doc({ agentsDefaultCli: 'claude-code', clis: { 'claude-code': { agents: { model: 'opus' } } } }),
+    );
+
+    const snapshot = reloadConfig();
+
+    expect(snapshot.clis['claude-code'].agents).toEqual({ enabled: true, model: 'opus' });
+    expect(snapshot.agentsDefaultCli).toBe('claude-code');
+  });
+
+  it('an empty snapshot has every CLI enabled', () => {
+    expect(emptySnapshot('/tmp/config.json').clis).toEqual({ 'claude-code': { agents: { enabled: true } } });
   });
 });

@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 
+import { resolveClis } from '@shared/cli-contract';
 import {
   DEFAULT_BIND,
   DEFAULT_CLAUDE_COMMAND,
@@ -200,6 +201,9 @@ export function loadConfig(): ConfigSnapshot {
     // Defaults *under* whatever the file named, exactly as `jira` and
     // `receiver` do above (HIVE-124). A plain spread suffices here too.
     slack: { ...DEFAULT_SLACK, ...parsed.slack },
+    // HIVE-341. Every CLI resolved, enabled unless the file says otherwise.
+    clis: resolveClis(parsed.clis),
+    ...(parsed.agentsDefaultCli === undefined ? {} : { agentsDefaultCli: parsed.agentsDefaultCli }),
     errors: parsed.errors,
   };
 
