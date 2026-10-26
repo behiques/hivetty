@@ -59,6 +59,7 @@ describe('SettingsOverlay', () => {
     for (const present of [
       'Projects',
       'Runtime',
+      'CLIs',
       'Skills',
       'Agents',
       'Appearance',
@@ -69,11 +70,12 @@ describe('SettingsOverlay', () => {
     }
   });
 
-  it('puts Skills next to Runtime (HIVE-96)', () => {
+  it('puts CLIs, then Skills, right after Runtime (HIVE-96, HIVE-341)', () => {
     /*
-      Both answer "what does a session I start actually run?" — Runtime decides
-      the binary and its environment, Skills decides the commands it comes with.
-      Appearance onwards is about the app rather than the session.
+      All three answer "what does a session I start actually run?" — Runtime decides
+      the binary and its environment, CLIs how each agent CLI runs headless, Skills
+      the commands a session comes with. Appearance onwards is about the app rather
+      than the session.
     */
     render(<SettingsOverlay />);
 
@@ -82,7 +84,18 @@ describe('SettingsOverlay', () => {
       .getAllByRole('button')
       .map((button) => button.textContent);
 
-    expect(labels.indexOf('Skills')).toBe(labels.indexOf('Runtime') + 1);
+    expect(labels.indexOf('CLIs')).toBe(labels.indexOf('Runtime') + 1);
+    expect(labels.indexOf('Skills')).toBe(labels.indexOf('CLIs') + 1);
+  });
+
+  it('opens the CLIs pane from the nav (HIVE-341)', async () => {
+    const user = userEvent.setup();
+    render(<SettingsOverlay />);
+
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+    await user.click(within(nav).getByRole('button', { name: 'CLIs' }));
+
+    expect(screen.getByRole('heading', { name: 'CLIs', level: 2 })).toBeInTheDocument();
   });
 
   it('puts Agents between Skills and Appearance (HIVE-114)', () => {
