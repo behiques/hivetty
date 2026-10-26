@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   CODEX_AUTH_ENV_KEYS,
   CODEX_SESSION_ENV_KEYS,
-  codexFence,
   launchCodexHeadless,
   toml,
 } from '../../../../../electron/main/harness/codex/headless';
@@ -133,9 +132,3 @@ describe('launchCodexHeadless', () => {
   });
 });
 
-describe('codexFence', () => {
-  it('refuses every rule set until the PreToolUse fence lands', () => {
-    expect(codexFence.express([])).toEqual({ ok: false, unexpressible: ['*'] });
-    expect(codexFence.express(['Read'])).toEqual({ ok: false, unexpressible: ['*'] });
-  });
-});

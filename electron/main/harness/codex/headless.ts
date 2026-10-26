@@ -10,7 +10,7 @@ import {
   HOOK_PATH,
 } from '@shared/hook-contract';
 
-import type { HeadlessPlan, HeadlessSpec, PermissionFence } from '../port';
+import type { HeadlessPlan, HeadlessSpec } from '../port';
 
 /**
  * The command line one agent wake runs, in Codex's spelling (HIVE-342). Pure: no spawn, no disk.
@@ -120,8 +120,3 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
     namesConversation: !start,
   };
 }
-
-/** Refuses every rule set: no Codex run may start before the PreToolUse fence exists (PR2 of HIVE-342). */
-export const codexFence: PermissionFence = {
-  express: () => ({ ok: false, unexpressible: ['*'] }),
-};
