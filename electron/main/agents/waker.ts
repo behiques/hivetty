@@ -310,7 +310,24 @@ export function wakeCommand(input: WakeInput): WakeCommand {
 
     return mapped;
   };
-  const plan = sessionAdapter().headless.launch({
+  const adapter = sessionAdapter();
+  // What the fence enforces, as written: `HOOK_ENV_GRANTS` below carries this same list, and the
+  // adapter narrows only its own `--allowedTools`. `ToolSearch`'s place in it is explained there.
+  const fenced = [...HIVE_STANDING_GRANTS, 'ToolSearch', ...def.tools, ...(input.grants ?? [])];
+  const fence = adapter.headless.fence.express(fenced);
+
+  /*
+    The block rule (HIVE-339). A rule this CLI cannot enforce means the run does not start on it:
+    running it with the rule dropped would leave the call it fenced unfenced. A throw, as the path
+    map's refusal above is, so `createWakeCommand` returns it as the run's problem.
+  */
+  if (!fence.ok) {
+    throw new Error(
+      `${adapter.id} cannot enforce ${fence.unexpressible.join(', ')}, so ${def.name} will not run on it.`,
+    );
+  }
+
+  const plan = adapter.headless.launch({
     conversation:
       input.sessionUuid === undefined ? { start: input.newUuid } : { resume: input.sessionUuid },
     name: def.name,
@@ -386,13 +403,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     the moment it is actually called — so widening this list widens nothing
     an agent can do, only what it can find out it could ask to do.
   */
-  merged[HOOK_ENV_GRANTS] = JSON.stringify([
-    ...HIVE_STANDING_GRANTS,
-    'ToolSearch',
-    // As written, not narrowed: the adapter narrows only its own `--allowedTools`.
-    ...def.tools,
-    ...(input.grants ?? []),
-  ]);
+  merged[HOOK_ENV_GRANTS] = JSON.stringify(fenced);
 
   if (input.container !== undefined) {
     const { config, hostAlias } = input.container;

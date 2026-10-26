@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
-import { launchHeadless } from '../../../../../electron/main/harness/claude-code/headless';
+import {
+  claudeFence,
+  launchHeadless,
+} from '../../../../../electron/main/harness/claude-code/headless';
 import type { HeadlessSpec } from '../../../../../electron/main/harness/port';
 import { AUTH_ENV_KEYS } from '../../../../../electron/shared/config-contract';
 
@@ -113,5 +116,27 @@ describe('launchHeadless', () => {
 
   it('runs claude inside a container that names no command', () => {
     expect(launchHeadless(spec()).defaultContainerCommand).toBe('claude');
+  });
+});
+
+describe('claudeFence (HIVE-339)', () => {
+  it('is the adapter member', () => {
+    expect(claudeCodeAdapter.headless.fence).toBe(claudeFence);
+  });
+
+  it('expresses every rule shape the grammar has, malformed ones included', () => {
+    expect(
+      claudeFence.express([
+        '*',
+        'Edit',
+        'Bash(git status:*)',
+        'Read(/repo/**)',
+        'WebFetch(domain:example.com)',
+        'mcp__hive__ledger_*',
+        'literal:Bash:git push',
+        'Bash(',
+        '',
+      ]),
+    ).toEqual({ ok: true });
   });
 });

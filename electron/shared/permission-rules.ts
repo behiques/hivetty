@@ -25,6 +25,12 @@ export type PermissionDecision =
   | { behavior: 'allow'; updatedInput: Record<string, unknown> }
   | { behavior: 'deny'; message: string };
 
+/** What the fence decides about one call, before anyone is asked (HIVE-339). */
+export type FenceVerdict =
+  | { behavior: 'allow' }
+  | { behavior: 'ask' }
+  | { behavior: 'deny'; message: string };
+
 export type RungId = 'allow-once' | 'allow-family' | 'allow-tool';
 
 export interface Rung {
@@ -304,6 +310,36 @@ export function matches(
   if (PATH_TOOLS[toolName] !== undefined && walksUp(text)) return false;
 
   return globToRegExp(pattern).test(text);
+}
+
+/**
+ * The permission fence's one decision (HIVE-339). Every CLI's fence ends here — MCP `approve`
+ * for Claude, the receiver for a hook-based CLI — so no adapter runs a second matcher. Pure:
+ * posting the ask on `ask` is the caller's, and so is failing closed when it cannot.
+ */
+export function decide(
+  tool: string,
+  input: Record<string, unknown>,
+  grants: readonly string[],
+): FenceVerdict {
+  if (grants.some((rule) => matches(rule, tool, input))) return { behavior: 'allow' };
+
+  /*
+    Never ask what cannot be described. `Ledger.append` downgrades a permission ask whose `tool`
+    is not a tool name to an ordinary one with an empty body: a card that says nothing.
+
+    **Below the grants check, not above it.** A grant is a decision the user already made, and
+    `matches` compares the name literally, so a rule can name a tool this predicate rejects.
+    Above the check this denied calls the fence was configured to allow — MCP tool names carry
+    hyphens, which `isToolName` did not always admit. Only the road that renders a card needs a
+    describable name.
+
+    `PERMISSION_DENY_MESSAGE` rather than a bespoke line: that text tells the model to end its
+    turn instead of retrying.
+  */
+  if (!isToolName(tool)) return { behavior: 'deny', message: PERMISSION_DENY_MESSAGE };
+
+  return { behavior: 'ask' };
 }
 
 /**

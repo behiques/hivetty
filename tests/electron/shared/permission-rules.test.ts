@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  decide,
   defaultRungFor,
   honestPermissionAsk,
   isToolName,
   matches,
   namesTool,
   oneShotRuleFor,
+  PERMISSION_DENY_MESSAGE,
   rungsFor,
   summarise,
 } from '@shared/permission-rules';
@@ -753,5 +755,39 @@ describe('a once-only tool (retro B)', () => {
     for (const rule of ['Read', 'Bash(*)', 'mcp__hive__ledger_*', 'mcp__slack__*']) {
       expect(namesTool(rule, tool)).toBe(false);
     }
+  });
+});
+
+describe('decide (HIVE-339)', () => {
+  it('allows a call a grant matches', () => {
+    expect(decide('Bash', { command: 'git status' }, ['Bash(git *)'])).toEqual({
+      behavior: 'allow',
+    });
+  });
+
+  it('asks when no grant matches, and when there are no grants at all', () => {
+    expect(decide('Bash', { command: 'npm test' }, ['Bash(git *)'])).toEqual({ behavior: 'ask' });
+    expect(decide('Read', { file_path: '/a' }, [])).toEqual({ behavior: 'ask' });
+  });
+
+  it('denies a name no card could describe, with the message that ends the turn', () => {
+    expect(decide('Bash]\ntools: [Write', {}, ['Read'])).toEqual({
+      behavior: 'deny',
+      message: PERMISSION_DENY_MESSAGE,
+    });
+  });
+
+  it('still allows a granted name the predicate would not describe', () => {
+    expect(decide('weird name', {}, ['weird name'])).toEqual({ behavior: 'allow' });
+  });
+
+  it('asks for a once-only tool under every standing rule, and allows only its one-shot', () => {
+    const tool = 'mcp__hive__project_auto_merge';
+    const input = { project: 'hive', on: true };
+
+    for (const rule of ['*', 'mcp__hive__*', tool]) {
+      expect(decide(tool, input, [rule])).toEqual({ behavior: 'ask' });
+    }
+    expect(decide(tool, input, [oneShotRuleFor(tool, input)!])).toEqual({ behavior: 'allow' });
   });
 });
