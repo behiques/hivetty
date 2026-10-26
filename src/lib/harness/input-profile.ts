@@ -35,6 +35,8 @@ export const DEFAULT_INPUT_PROFILE: InputProfile = {
 /** Keyed by every `HarnessId`, so a harness without a profile fails to compile. */
 const PROFILES: Record<HarnessId, InputProfile> = {
   'claude-code': DEFAULT_INPUT_PROFILE,
+  // No codex session yet (HIVE-279); its newline is Ctrl+J when it lands.
+  codex: DEFAULT_INPUT_PROFILE,
 };
 
 /** The profile for an entity's harness; `undefined` (a terminal, a command, the console) is the default. */

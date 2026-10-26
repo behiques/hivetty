@@ -10,7 +10,7 @@ import { CLI_VOCAB, type CliAgents } from '@shared/cli-contract';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
 /** A CLI's name as a person reads it. A new CLI adds a row (HIVE-342, HIVE-343). */
-const CLI_NAMES: Record<HarnessId, string> = { 'claude-code': 'Claude Code' };
+const CLI_NAMES: Record<HarnessId, string> = { 'claude-code': 'Claude Code', codex: 'Codex' };
 
 const CLI_DEFAULT = { value: '', label: 'CLI default' };
 const options = (values: readonly string[]) => [
@@ -77,7 +77,7 @@ function CliCard({ cli, agents }: { cli: HarnessId; agents: CliAgents }) {
             value={agents.model ?? ''}
             options={options(models)}
             onChange={(value) =>
-              void setCliAgentsConfig({ cli, model: (value || null) as CliAgents['model'] | null })
+              void setCliAgentsConfig({ cli, model: value || null })
             }
           />
           <SelectField
@@ -86,7 +86,7 @@ function CliCard({ cli, agents }: { cli: HarnessId; agents: CliAgents }) {
             value={agents.effort ?? ''}
             options={options(efforts)}
             onChange={(value) =>
-              void setCliAgentsConfig({ cli, effort: (value || null) as CliAgents['effort'] | null })
+              void setCliAgentsConfig({ cli, effort: value || null })
             }
           />
         </fieldset>

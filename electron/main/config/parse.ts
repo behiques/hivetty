@@ -1371,12 +1371,12 @@ function optionalClis(
     }
     if (raw.model !== undefined) {
       if (typeof raw.model === 'string' && models.includes(raw.model)) {
-        agents.model = raw.model as CliAgents['model'];
+        agents.model = raw.model;
       } else errors.push(`${agentsAt}.model: expected one of ${models.join(', ')} — ignored`);
     }
     if (raw.effort !== undefined) {
       if (typeof raw.effort === 'string' && efforts.includes(raw.effort)) {
-        agents.effort = raw.effort as CliAgents['effort'];
+        agents.effort = raw.effort;
       } else errors.push(`${agentsAt}.effort: expected one of ${efforts.join(', ')} — ignored`);
     }
 

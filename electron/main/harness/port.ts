@@ -1,5 +1,6 @@
 import type { RunUsage } from '@shared/agent-contract';
 import type { ChangeMark } from '@shared/changed-files-contract';
+import type { HeadlessSandbox } from '@shared/cli-contract';
 import type { ContainerFreshness, ResolvedContainer } from '@shared/config-contract';
 import type { Capabilities, HarnessId } from '@shared/harness-contract';
 import type { HookAgentEvent, HookIdentity, HookStatusEvent } from '@shared/hook-contract';
@@ -338,8 +339,7 @@ export interface PermissionFence {
   express(rules: readonly string[]): { ok: true } | { ok: false; unexpressible: string[] };
 }
 
-/** The sandbox a Codex run gets (HIVE-342); `danger-full-access` is never offered. */
-export type HeadlessSandbox = 'read-only' | 'workspace-write';
+export type { HeadlessSandbox } from '@shared/cli-contract';
 
 /** What the core knows about one headless wake, harness-neutral (HIVE-337). */
 export interface HeadlessSpec {
