@@ -1,7 +1,8 @@
 import { claudeCodeAdapter } from '../claude-code';
 import type { HarnessAdapter } from '../port';
 
-import { codexFence, launchCodexHeadless } from './headless';
+import { codexFence } from './fence';
+import { launchCodexHeadless } from './headless';
 import { readCodexHeadless } from './headless-reader';
 
 const NO_SESSIONS = 'codex has no interactive sessions yet (HIVE-279).';

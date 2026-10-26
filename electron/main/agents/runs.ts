@@ -216,9 +216,9 @@ export interface RunTrackerDeps {
   /**
    * The receiver's per-run grants registry (HIVE-137), for `approve` over
    * HTTP. Registered before the spawn with the same list the child gets in
-   * `HIVE_GRANTS`, and deleted in `close()`. Optional, because the tracker is
-   * composed before the receiver binds and a host run never needs it: the
-   * stdio host reads the environment instead.
+   * `HIVE_GRANTS`, and deleted in `close()`. A Codex run needs it on the host
+   * too: its fence is the receiver's `/fence`, which has no environment to read
+   * (HIVE-342). Optional only because a unit spec composes no receiver.
    */
   grants?: {
     set(run: string, owner: string, grants: readonly string[]): void;

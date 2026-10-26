@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../../electron/main/harness/codex';
-import { codexFence, launchCodexHeadless } from '../../../../../electron/main/harness/codex/headless';
+import { codexFence } from '../../../../../electron/main/harness/codex/fence';
+import { launchCodexHeadless } from '../../../../../electron/main/harness/codex/headless';
 import { readCodexHeadless } from '../../../../../electron/main/harness/codex/headless-reader';
 
 describe('codexAdapter', () => {

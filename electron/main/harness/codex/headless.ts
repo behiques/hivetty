@@ -1,3 +1,4 @@
+import { HEADLESS_SANDBOXES } from '@shared/cli-contract';
 import {
   HOOK_ENV_GRANTS,
   HOOK_ENV_RECEIVER_URL,
@@ -5,12 +6,15 @@ import {
   HOOK_ENV_RUN_TOKEN,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
+  FENCE_PATH,
+  HOOK_HEADER_RUN,
+  HOOK_HEADER_RUN_TOKEN,
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
   HOOK_PATH,
 } from '@shared/hook-contract';
 
-import type { HeadlessPlan, HeadlessSpec, PermissionFence } from '../port';
+import type { HeadlessPlan, HeadlessSpec } from '../port';
 
 /**
  * The command line one agent wake runs, in Codex's spelling (HIVE-342). Pure: no spawn, no disk.
@@ -73,6 +77,32 @@ export const hookCommand = (): string =>
   ` -H "${HOOK_HEADER_TOKEN}: $${HOOK_ENV_TOKEN}"` +
   ` --data-binary @- >/dev/null 2>&1 || true`;
 
+/** What the fence hook prints when it cannot get an answer: codex stops the call. */
+const FENCE_DOWN = JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: 'PreToolUse',
+    permissionDecision: 'deny',
+    permissionDecisionReason:
+      'HiveTTY could not be reached to check this call, so it was not run. End your turn.',
+  },
+});
+
+/** Single quotes for `sh`, a `'` inside written as `'\''`. */
+const shellQuote = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * The fence (HIVE-342): every tool call's `PreToolUse` goes to the receiver's `/fence`, which
+ * answers as `approve` does. Fails closed: a receiver that is down, slow, refusing or silent gives
+ * a deny, never the empty reply codex would run. The identity and run come from the env by name.
+ */
+export const fenceCommand = (): string =>
+  `out=$(curl -sf -m 30 -X POST "$${HOOK_ENV_RECEIVER_URL}${FENCE_PATH}"` +
+  ` -H 'content-type: application/json'` +
+  ` -H "${HOOK_HEADER_SESSION}: $${HOOK_ENV_SESSION}" -H "${HOOK_HEADER_TOKEN}: $${HOOK_ENV_TOKEN}"` +
+  ` -H "${HOOK_HEADER_RUN}: $${HOOK_ENV_RUN}" -H "${HOOK_HEADER_RUN_TOKEN}: $${HOOK_ENV_RUN_TOKEN}"` +
+  ` --data-binary @- 2>/dev/null) && [ -n "$out" ] && printf '%s' "$out"` +
+  ` || printf '%s' ${shellQuote(FENCE_DOWN)}`;
+
 const hooks = (event: string, command: string, matcher?: string): string =>
   `hooks.${event}=[{${matcher === undefined ? '' : `matcher=${toml(matcher)},`}hooks=[{type="command",command=${toml(command)}}]}]`;
 
@@ -87,6 +117,15 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
     throw new Error('codex agents cannot run in a container yet: the hive server there is HTTP.');
   }
 
+  /*
+    Checked here as well as where the setting is read: this is the last place before the argv,
+    and `danger-full-access` (or anything else codex accepts) must not arrive by a forged spec.
+  */
+  const sandbox = spec.sandbox ?? 'workspace-write';
+  if (!(HEADLESS_SANDBOXES as readonly string[]).includes(sandbox)) {
+    throw new Error(`codex: refusing sandbox ${JSON.stringify(sandbox)}; only ${HEADLESS_SANDBOXES.join(', ')} are allowed.`);
+  }
+
   return {
     args: [
       'exec',
@@ -97,16 +136,17 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
       '--dangerously-bypass-hook-trust',
       ...(spec.model === undefined ? [] : ['-m', spec.model]),
       ...(spec.effort === undefined ? [] : config(`model_reasoning_effort=${toml(spec.effort)}`)),
-      ...config(`sandbox_mode=${toml(spec.sandbox ?? 'workspace-write')}`),
+      ...config(`sandbox_mode=${toml(sandbox)}`),
       ...(start ? config(`developer_instructions=${toml(spec.instructions)}`) : []),
       ...config(`mcp_servers.hive.command=${toml(hiveServer.command)}`),
       ...config(`mcp_servers.hive.args=${tomlList(hiveServer.args)}`),
       // On the argv as written: `hiveServer.env` must never carry a secret, which goes by name below.
       ...config(`mcp_servers.hive.env=${tomlTable(hiveServer.env)}`),
       ...config(`mcp_servers.hive.env_vars=${tomlList(HIVE_SERVER_ENV)}`),
-      // Codex's own approval off for hive: the fence is the PreToolUse hook (PR2), never this.
+      // Codex's own approval off for hive: the fence is the PreToolUse hook below, never this.
       ...config('mcp_servers.hive.default_tools_approval_mode="approve"'),
       ...config(hooks('Stop', hookCommand())),
+      ...config(hooks('PreToolUse', fenceCommand(), '*')),
       // The stop marker: a disabled server, so it is on the argv with no warning and no effect.
       ...config('mcp_servers.hive_wake.enabled=false'),
       ...config(`mcp_servers.hive_wake.command=${toml(id)}`),
@@ -120,8 +160,3 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
     namesConversation: !start,
   };
 }
-
-/** Refuses every rule set: no Codex run may start before the PreToolUse fence exists (PR2 of HIVE-342). */
-export const codexFence: PermissionFence = {
-  express: () => ({ ok: false, unexpressible: ['*'] }),
-};
