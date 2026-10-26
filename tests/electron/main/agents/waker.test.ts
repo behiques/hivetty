@@ -647,3 +647,49 @@ describe('the lane in the wake prompt (HIVE-188)', () => {
     expect(wakePrompt('manual', 'x', { task: true, laneMode: 'thread', agent: 'b' })).not.toContain('lane');
   });
 });
+
+/**
+ * HIVE-337's byte-identity pin. Recorded before the argv moved behind
+ * `claudeCodeAdapter.headless.launch`; the move must leave the snapshot file untouched.
+ */
+describe('the command line an agent wake runs (HIVE-337 pin)', () => {
+  const container = {
+    config: { runtime: 'docker', name: 'devbox', workspace: '/work', hiveDir: '/hive' },
+    userDataPath: '/u',
+    hostAlias: 'host.docker.internal',
+  };
+  const containerPaths = {
+    ...paths,
+    settings: '/u/hive/container/claude-agent.settings.json',
+    mcpConfig: '/u/hive/container/hive.mcp.json',
+  };
+
+  it.each([
+    ['first wake', {}],
+    ['resume', { sessionUuid: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' }],
+    ['task run', { kind: 'task' as const }],
+    ['handoff (last turn)', { sessionUuid: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', lastTurn: true as const }],
+    ['fresh session with a handoff', { handoff: 'Carry on with the review.' }],
+    ['thread lane', { lane: 'thread:A', def: def({ lane: 'thread' }) }],
+    ['container agent', { container, paths: containerPaths }],
+    [
+      'container agent, resumed, own command',
+      {
+        container: { ...container, config: { ...container.config, command: '/opt/claude' } },
+        paths: containerPaths,
+        sessionUuid: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      },
+    ],
+    ['subscriptionAuth on', {}],
+    ['subscriptionAuth off', { env: { ...env, subscriptionAuth: false } }],
+    ['a one-shot grant', { grants: ['Bash(git push:*)'] }],
+    [
+      'budgetUsd set',
+      { def: def({ limits: { turns: 40, budgetUsd: 2.5, rotateAfter: 50, parallel: 1 } }) },
+    ],
+    ['model and effort', { def: def({ model: 'opus', effort: 'high' }) }],
+    ['a wide grant narrowed', { def: def({ tools: ['*', 'mcp__hive__project_auto_merge'] }) }],
+  ] as const)('%s', (_name, over) => {
+    expect(build(over as Partial<Parameters<typeof wakeCommand>[0]>)).toMatchSnapshot();
+  });
+});

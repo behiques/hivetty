@@ -1,6 +1,7 @@
 import type { HarnessAdapter } from '../port';
 
 import { writeContainerSet } from './container-files';
+import { launchHeadless } from './headless';
 import { hookContextReply } from './hook-vocabulary';
 import { readHook } from './hooks';
 import { createClaudeInstalled } from './installed';
@@ -17,7 +18,8 @@ import { foldTranscriptLines } from './transcript-edits';
  * Adapter #1. `launch` arrived with HIVE-234, `prepare` with HIVE-235, `readHook` and
  * `contextReply` with HIVE-236, `foldEdits` with HIVE-238, `capabilities`, `meters` and
  * `record` with HIVE-239,
- * `contextDelivery` and `promptMarker` with HIVE-240, `installed` with HIVE-345.
+ * `contextDelivery` and `promptMarker` with HIVE-240, `installed` with HIVE-345,
+ * `headless` with HIVE-337.
  */
 export const claudeCodeAdapter: HarnessAdapter = {
   id: 'claude-code',
@@ -37,4 +39,5 @@ export const claudeCodeAdapter: HarnessAdapter = {
   meters: parseMetrics,
   record: createClaudeRecord(),
   installed: createClaudeInstalled(),
+  headless: { launch: launchHeadless },
 };
