@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
+import { codexAdapter } from '../../../../electron/main/harness/codex';
 import {
   createHarnessRegistry,
   headlessAdapter,
@@ -54,5 +55,12 @@ describe('headless runs (HIVE-340)', () => {
 
   it('answers the adapter for a CLI id', () => {
     expect(headlessAdapter('claude-code')).toBe(claudeCodeAdapter);
+  });
+
+  it('runs a codex agent on the codex adapter, and every session still on claude (HIVE-342)', () => {
+    expect(headlessAdapter('codex')).toBe(codexAdapter);
+    expect(registry.adapterFor('codex')).toBe(codexAdapter);
+    expect(sessionAdapter()).toBe(claudeCodeAdapter);
+    expect(registry.harnessOf('sess-01')).toBe('claude-code');
   });
 });

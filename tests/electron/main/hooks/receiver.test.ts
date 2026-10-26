@@ -2632,6 +2632,29 @@ describe('the agent id space (HIVE-115)', () => {
   });
 
   /**
+   * Codex sends Claude-shaped hook payloads (HIVE-342): the recorded 0.164.0 `Stop` is read on the
+   * agent lane unchanged, and its `session_id` is the thread id the run's `thread.started` named.
+   */
+  it("reads codex's recorded Stop as a turn end on its thread (HIVE-342)", async () => {
+    const stop = readFileSync(join(__dirname, '../../../fixtures/codex/hooks-0.164.0.jsonl'), 'utf8')
+      .split('\n')
+      .find((line) => line.includes('"hook_event_name":"Stop"'));
+    const thread = readFileSync(join(__dirname, '../../../fixtures/codex/exec-0.164.0.jsonl'), 'utf8')
+      .split('\n')[0];
+    if (stop === undefined || thread === undefined) throw new Error('fixture is missing a line');
+
+    await postAs(AGENT, stop);
+
+    expect(agentEvents).toEqual([
+      {
+        entityId: AGENT,
+        signal: { kind: 'turn-end' },
+        sessionUuid: (JSON.parse(thread) as { thread_id: string }).thread_id,
+      },
+    ]);
+  });
+
+  /**
    * `session_id` is the first key Claude Code writes, so it survives a body cut
    * at `HOOK_MAX_BODY_BYTES` — which is where a long `last_assistant_message`
    * puts a real `Stop`. Losing the uuid there would silently give the watchdog

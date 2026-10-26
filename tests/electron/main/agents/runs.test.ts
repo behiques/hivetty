@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -50,6 +53,8 @@ describe('createRunTracker', () => {
   /** The prompt hash a session-starting command carries. Set per test. */
   let promptHash: string | undefined;
   let commandCalls: number;
+  /** Fields a test lays over the built command: a codex run's (HIVE-342). */
+  let commandOver: Record<string, unknown>;
   let commandArgs: {
     name: string;
     trigger: string;
@@ -79,6 +84,7 @@ describe('createRunTracker', () => {
     handoff = undefined;
     promptHash = undefined;
     commandCalls = 0;
+    commandOver = {};
     commandArgs = [];
     parallel = 1;
     limits = {};
@@ -106,9 +112,11 @@ describe('createRunTracker', () => {
           env: { HIVE_AGENT: '1' },
           cwd: '/tmp/work',
           sessionUuid: `sess-${commandCalls}`,
+          namesConversation: true,
           lastTurn,
           kind: options?.kind ?? 'standing',
           ...(promptHash === undefined ? {} : { promptHash }),
+          ...commandOver,
         };
       },
       parallelFor: () => parallel,
@@ -257,6 +265,7 @@ describe('createRunTracker', () => {
         env: {},
         cwd: '/tmp/work',
         sessionUuid: 'sess-1',
+        namesConversation: true,
         lastTurn: false,
         kind: 'standing' as const,
       }),
@@ -465,6 +474,7 @@ describe('createRunTracker', () => {
         env: {},
         cwd: '/tmp/work',
         sessionUuid: 'sess-1',
+        namesConversation: true,
         lastTurn: false,
         kind: 'standing' as const,
       }),
@@ -594,6 +604,89 @@ describe('createRunTracker', () => {
    * a quit, a kill, a stall or a crash — left `agents.json` with no uuid, the
    * next wake minted a fresh one, and the conversation was orphaned.
    */
+  describe('a first codex wake, whose argv names no conversation (HIVE-342)', () => {
+    const THREAD = `${JSON.stringify({ type: 'thread.started', thread_id: 't-1' })}\n`;
+
+    beforeEach(() => {
+      commandOver = { sessionUuid: 'minted', namesConversation: false, harness: 'codex' };
+    });
+
+    it('persists nothing when the child dies before naming one', () => {
+      promptHash = 'hash-1';
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitClose(1, null);
+
+      expect(state.lane('a', 'standing').sessionUuid).toBeUndefined();
+      // A hash with no uuid would describe a conversation that does not exist.
+      expect(state.lane('a', 'standing').promptHash).toBeUndefined();
+      expect(state.read('a').runs.at(-1)?.sessionUuid).toBeUndefined();
+    });
+
+    it('persists the thread its output named', () => {
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitStdout(THREAD);
+      childInstances[0]?.emitClose(1, null);
+
+      expect(state.lane('a', 'standing').sessionUuid).toBe('t-1');
+    });
+
+    it('closes a recorded codex wake with its usage, no cost, and the thread on the lane', () => {
+      const exec = readFileSync(
+        join(__dirname, '../../../fixtures/codex/exec-0.164.0.jsonl'),
+        'utf8',
+      );
+      const lines = exec.split('\n').map((line) => (line === '' ? null : JSON.parse(line)));
+      const thread = lines[0] as { thread_id: string };
+      const usage = lines.find((line) => line?.type === 'turn.completed')?.usage as Record<
+        string,
+        number
+      >;
+
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitStdout(exec);
+      childInstances[0]?.emitClose(0, null);
+
+      const summary = state.read('a').runs.at(-1);
+      expect(summary).toMatchObject({
+        harness: 'codex',
+        outcome: 'done',
+        sessionUuid: thread.thread_id,
+        usage: {
+          inputTokens: usage['input_tokens'],
+          outputTokens: usage['output_tokens'],
+          cachedTokens: usage['cached_input_tokens'],
+        },
+      });
+      expect(summary).not.toHaveProperty('costUsd');
+      expect(state.lane('a', 'standing').sessionUuid).toBe(thread.thread_id);
+    });
+
+    it("still persists the argv's id for a CLI that names it (Claude)", () => {
+      commandOver = { sessionUuid: 'minted', namesConversation: true };
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitClose(1, null);
+
+      expect(state.lane('a', 'standing').sessionUuid).toBe('minted');
+    });
+
+    it('arms the watchdog on a Stop naming the thread', () => {
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitStdout(THREAD);
+
+      tracker.noteTurnEnded('a', 't-1');
+      vi.advanceTimersByTime(AGENT_STALL_GRACE_MS);
+
+      expect(childInstances[0]?.killSignals).toContain('SIGTERM');
+      childInstances[0]?.emitClose(null, 'SIGTERM');
+      expect(state.read('a').runs.at(-1)).toMatchObject({
+        sessionUuid: 't-1',
+        harness: 'codex',
+        outcome: 'failed',
+        reason: 'stalled',
+      });
+    });
+  });
+
   it('persists the session uuid it invoked even when no result ever arrived', () => {
     tracker.run('a', 'ledger');
     tracker.kill('a');
@@ -1557,6 +1650,7 @@ describe('createRunTracker', () => {
         sessionUuid: 'u-1',
       },
       sessionUuid: 'u-1',
+      namesConversation: true,
       lastTurn: false,
       kind: 'standing' as const,
     });

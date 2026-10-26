@@ -31,6 +31,7 @@ import {
   parseSetReceiverRequest,
   parseSetRemoteRequest,
   parseSetServerRequest,
+  parseSetAgentsDefaultCliRequest,
   parseSetCliAgentsRequest,
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
@@ -1982,6 +1983,17 @@ describe('hasControlCharacters', () => {
   });
 });
 
+describe('parseSetAgentsDefaultCliRequest (HIVE-342)', () => {
+  it('accepts a known CLI, and null as a clear', () => {
+    expect(parseSetAgentsDefaultCliRequest({ cli: 'codex' })).toEqual({ cli: 'codex' });
+    expect(parseSetAgentsDefaultCliRequest({ cli: null })).toEqual({ cli: null });
+  });
+
+  it.each([[{ cli: 'copilot' }], [{}], [{ cli: 'codex', extra: 1 }]])('refuses %j', (input) => {
+    expect(() => parseSetAgentsDefaultCliRequest(input)).toThrow();
+  });
+});
+
 describe('parseSetCliAgentsRequest (HIVE-341)', () => {
   it('accepts each field, and null as a clear', () => {
     expect(parseSetCliAgentsRequest({ cli: 'claude-code', enabled: false })).toEqual({
@@ -1995,8 +2007,33 @@ describe('parseSetCliAgentsRequest (HIVE-341)', () => {
     });
   });
 
+  it('takes a sandbox for codex only, and null as a clear (HIVE-342)', () => {
+    expect(parseSetCliAgentsRequest({ cli: 'codex', sandbox: 'read-only' })).toEqual({
+      cli: 'codex',
+      sandbox: 'read-only',
+    });
+    expect(parseSetCliAgentsRequest({ cli: 'codex', sandbox: null })).toEqual({
+      cli: 'codex',
+      sandbox: null,
+    });
+    expect(() => parseSetCliAgentsRequest({ cli: 'codex', sandbox: 'danger-full-access' })).toThrow(
+      /sandbox/,
+    );
+    expect(() => parseSetCliAgentsRequest({ cli: 'claude-code', sandbox: 'read-only' })).toThrow(
+      'setCliAgents.sandbox: only codex takes a sandbox',
+    );
+  });
+
+  it("takes codex's own vocabulary (HIVE-342)", () => {
+    expect(parseSetCliAgentsRequest({ cli: 'codex', model: 'gpt-6-luna' })).toEqual({
+      cli: 'codex',
+      model: 'gpt-6-luna',
+    });
+  });
+
   it.each([
-    [{ cli: 'codex', enabled: true }, /cli/],
+    [{ cli: 'copilot', enabled: true }, /cli/],
+    [{ cli: 'codex', model: 'opus' }, /model/],
     [{ cli: 'claude-code', model: 'gpt-5' }, /model/],
     [{ cli: 'claude-code', effort: 'extreme' }, /effort/],
     [{ cli: 'claude-code', enabled: 'yes' }, /enabled/],

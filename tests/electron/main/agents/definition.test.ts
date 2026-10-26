@@ -794,10 +794,10 @@ describe('harness: (HIVE-340)', () => {
   });
 
   it('names a CLI this build cannot run as a problem on the field', () => {
-    expect(problems(withHarness('[codex, claude-code]'))).toContainEqual(
+    expect(problems(withHarness('[copilot, claude-code]'))).toContainEqual(
       expect.objectContaining({
         field: 'harness',
-        reason: 'codex is not a CLI HiveTTY can run headless. Known: claude-code.',
+        reason: 'copilot is not a CLI HiveTTY can run headless. Known: claude-code, codex.',
       }),
     );
   });

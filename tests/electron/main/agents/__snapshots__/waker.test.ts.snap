@@ -42,6 +42,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > a one-shot grant 1
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -87,6 +88,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > a wide grant narro
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -134,6 +136,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > budgetUsd set 1`] 
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -185,6 +188,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > container agent 1`
     "HIVE_SESSION_ID": "slack-watcher",
   },
   "file": "claude",
+  "namesConversation": true,
 }
 `;
 
@@ -236,6 +240,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > container agent, r
     "HIVE_SESSION_ID": "slack-watcher",
   },
   "file": "/opt/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -281,6 +286,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > first wake 1`] = `
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -330,6 +336,7 @@ You woke because: ledger. Read your ledger inbox, then carry out the instruction
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -375,6 +382,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > handoff (last turn
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -424,6 +432,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > model and effort 1
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -469,6 +478,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > resume 1`] = `
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -515,6 +525,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > subscriptionAuth o
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -560,6 +571,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > subscriptionAuth o
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -605,6 +617,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > task run 1`] = `
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;
 
@@ -650,5 +663,6 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > thread lane 1`] = 
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "namesConversation": true,
 }
 `;

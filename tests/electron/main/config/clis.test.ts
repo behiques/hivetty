@@ -5,7 +5,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { reloadConfig, setCliAgents } from '../../../../electron/main/config';
+import {
+  reloadConfig,
+  setAgentsDefaultCli,
+  setCliAgents,
+} from '../../../../electron/main/config';
 import { parseConfig } from '../../../../electron/main/config/parse';
 import { CONFIG_PATH_ENV, emptySnapshot } from '../../../../electron/shared/config-contract';
 
@@ -29,10 +33,46 @@ describe('the clis block (HIVE-341)', () => {
   });
 
   it('ignores an unknown CLI id and says so', () => {
-    const parsed = parseConfig(doc({ clis: { codex: { agents: { enabled: true } } } }), 'config');
+    const parsed = parseConfig(doc({ clis: { copilot: { agents: { enabled: true } } } }), 'config');
 
     expect(parsed.clis).toEqual({});
-    expect(parsed.errors).toContain('config.clis: unknown key "codex" — ignored');
+    expect(parsed.errors).toContain('config.clis: unknown key "copilot" — ignored');
+  });
+
+  it("checks codex's fields against codex's vocabulary (HIVE-342)", () => {
+    const parsed = parseConfig(
+      doc({ clis: { codex: { agents: { model: 'gpt-6-luna', effort: 'xhigh' } } } }),
+      'config',
+    );
+    const claudeWords = parseConfig(doc({ clis: { codex: { agents: { model: 'opus' } } } }), 'config');
+
+    expect(parsed.clis).toEqual({ codex: { agents: { model: 'gpt-6-luna', effort: 'xhigh' } } });
+    expect(claudeWords.errors).toEqual([
+      'config.clis.codex.agents.model: expected one of gpt-6-luna, gpt-5.6-terra, gpt-5.6-luna — ignored',
+    ]);
+  });
+
+  it('reads a sandbox on codex only, and never danger-full-access (HIVE-342)', () => {
+    const readOnly = parseConfig(doc({ clis: { codex: { agents: { sandbox: 'read-only' } } } }), 'config');
+    const danger = parseConfig(
+      doc({ clis: { codex: { agents: { sandbox: 'danger-full-access' } } } }),
+      'config',
+    );
+    const claude = parseConfig(
+      doc({ clis: { 'claude-code': { agents: { sandbox: 'read-only' } } } }),
+      'config',
+    );
+
+    expect(readOnly.clis).toEqual({ codex: { agents: { sandbox: 'read-only' } } });
+    expect(readOnly.errors).toEqual([]);
+    expect(danger.clis).toEqual({ codex: { agents: {} } });
+    expect(danger.errors).toEqual([
+      'config.clis.codex.agents.sandbox: expected one of read-only, workspace-write — ignored',
+    ]);
+    expect(claude.clis).toEqual({ 'claude-code': { agents: {} } });
+    expect(claude.errors).toEqual([
+      'config.clis.claude-code.agents.sandbox: only codex takes a sandbox — ignored',
+    ]);
   });
 
   it('costs a bad field, never its siblings', () => {
@@ -73,10 +113,14 @@ describe('the clis block (HIVE-341)', () => {
       'claude-code',
     );
 
-    const bad = parseConfig(doc({ agentsDefaultCli: 'codex' }), 'config');
+    expect(parseConfig(doc({ agentsDefaultCli: 'codex' }), 'config').agentsDefaultCli).toBe('codex');
+
+    const bad = parseConfig(doc({ agentsDefaultCli: 'copilot' }), 'config');
 
     expect(bad.agentsDefaultCli).toBeUndefined();
-    expect(bad.errors).toEqual(['config.agentsDefaultCli: expected one of claude-code — ignored']);
+    expect(bad.errors).toEqual([
+      'config.agentsDefaultCli: expected one of claude-code, codex — ignored',
+    ]);
   });
 });
 
@@ -100,7 +144,10 @@ describe('the snapshot (HIVE-341)', () => {
 
     const snapshot = reloadConfig();
 
-    expect(snapshot.clis).toEqual({ 'claude-code': { agents: { enabled: true } } });
+    expect(snapshot.clis).toEqual({
+      'claude-code': { agents: { enabled: true } },
+      codex: { agents: { enabled: true } },
+    });
     expect(snapshot.agentsDefaultCli).toBeUndefined();
   });
 
@@ -134,6 +181,40 @@ describe('the snapshot (HIVE-341)', () => {
     expect(snapshot.clis['claude-code'].agents.model).toBe('haiku');
   });
 
+  it('writes the default CLI for agents, and null deletes the key (HIVE-342)', () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({ shell: '/bin/zsh' }));
+    reloadConfig();
+
+    let snapshot = setAgentsDefaultCli({ cli: 'codex' });
+
+    expect(snapshot.agentsDefaultCli).toBe('codex');
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8'))).toMatchObject({
+      agentsDefaultCli: 'codex',
+      shell: '/bin/zsh',
+    });
+
+    snapshot = setAgentsDefaultCli({ cli: null });
+    expect(snapshot.agentsDefaultCli).toBeUndefined();
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8'))).not.toHaveProperty(
+      'agentsDefaultCli',
+    );
+  });
+
+  it("writes codex's sandbox, and null deletes it (HIVE-342)", () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({}));
+    reloadConfig();
+
+    let snapshot = setCliAgents({ cli: 'codex', sandbox: 'read-only' });
+
+    expect(snapshot.clis.codex.agents).toEqual({ enabled: true, sandbox: 'read-only' });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis).toEqual({
+      codex: { agents: { sandbox: 'read-only' } },
+    });
+
+    snapshot = setCliAgents({ cli: 'codex', sandbox: null });
+    expect(snapshot.clis.codex.agents).toEqual({ enabled: true });
+  });
+
   it('replaces a block that is not an object rather than merging into it', () => {
     writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({ clis: 'nope' }));
     reloadConfig();
@@ -144,6 +225,9 @@ describe('the snapshot (HIVE-341)', () => {
   });
 
   it('an empty snapshot has every CLI enabled', () => {
-    expect(emptySnapshot('/tmp/config.json').clis).toEqual({ 'claude-code': { agents: { enabled: true } } });
+    expect(emptySnapshot('/tmp/config.json').clis).toEqual({
+      'claude-code': { agents: { enabled: true } },
+      codex: { agents: { enabled: true } },
+    });
   });
 });

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
+import { codexAdapter } from '../../../../electron/main/harness/codex';
+import type { HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
-import type { HarnessId } from '../../../../electron/shared/harness-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '../../../../electron/shared/ledger-tools';
 import { matches } from '../../../../electron/shared/permission-rules';
@@ -45,6 +46,8 @@ const env = {
   subscriptionAuth: true,
 };
 
+const HIVE_SERVER = { command: '/App', args: ['/host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } };
+
 const build = (over: Partial<Parameters<typeof wakeCommand>[0]> = {}) =>
   wakeCommand({
     claudePath: '/opt/bin/claude',
@@ -54,6 +57,8 @@ const build = (over: Partial<Parameters<typeof wakeCommand>[0]> = {}) =>
     trigger: 'ledger',
     paths,
     env,
+    instructions: 'You are slack-watcher.',
+    hiveServer: HIVE_SERVER,
     ...over,
   });
 
@@ -717,7 +722,7 @@ describe('the command line an agent wake runs (HIVE-337 pin)', () => {
 });
 
 describe('the adapter a wake runs on (HIVE-340)', () => {
-  const other = { ...claudeCodeAdapter, id: 'codex' as string as HarnessId };
+  const other = { ...claudeCodeAdapter, id: 'codex' as const };
 
   it('lists exactly what HIVE_GRANTS carries', () => {
     const command = build({ grants: ['literal:Bash:git push'] });
@@ -725,10 +730,10 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
     expect(fencedRules(def(), ['literal:Bash:git push'])).toEqual(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
   });
 
-  it('drops the card defaults on another CLI too (HIVE-341)', () => {
-    const args = build({ adapter: other, def: def({}), defaults: { model: 'haiku' } }).args;
+  it("hands another CLI its own card's defaults (HIVE-342, replacing HIVE-341's drop)", () => {
+    const args = build({ adapter: other, def: def({}), defaults: { model: 'gpt-6-luna' } }).args;
 
-    expect(args).not.toContain('--model');
+    expect(args[args.indexOf('--model') + 1]).toBe('gpt-6-luna');
   });
 
   it("drops Claude's model and effort on another CLI", () => {
@@ -738,8 +743,92 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
     expect(args).not.toContain('--effort');
   });
 
+  it('hands the adapter the instructions and the hive server it carried (HIVE-342)', () => {
+    const seen: HeadlessSpec[] = [];
+    const recording = {
+      ...claudeCodeAdapter,
+      headless: {
+        ...claudeCodeAdapter.headless,
+        launch: (spec: HeadlessSpec) => {
+          seen.push(spec);
+          return claudeCodeAdapter.headless.launch(spec);
+        },
+      },
+    };
+
+    build({ adapter: recording, instructions: 'Be brief.' });
+
+    expect(seen[0]?.instructions).toBe('Be brief.');
+    expect(seen[0]?.hiveServer).toEqual(HIVE_SERVER);
+  });
+
+  describe('a codex run takes its card, never AGENT.md (HIVE-342)', () => {
+    const recordingCodex = () => {
+      const seen: HeadlessSpec[] = [];
+      const adapter = {
+        ...claudeCodeAdapter,
+        id: 'codex' as const,
+        headless: {
+          ...claudeCodeAdapter.headless,
+          launch: (spec: HeadlessSpec) => {
+            seen.push(spec);
+            return claudeCodeAdapter.headless.launch(spec);
+          },
+        },
+      };
+      return { seen, adapter };
+    };
+
+    it("launches with the card's model, effort and sandbox, and AGENT.md's model never reaches it", () => {
+      const { seen, adapter } = recordingCodex();
+
+      build({
+        adapter,
+        def: def({ model: 'opus' }),
+        defaults: { model: 'gpt-6-luna', effort: 'high', sandbox: 'read-only' },
+      });
+
+      expect(seen[0]).toMatchObject({ model: 'gpt-6-luna', effort: 'high', sandbox: 'read-only' });
+    });
+
+    it('launches with no model, no effort and workspace-write when the card is empty', () => {
+      const { seen, adapter } = recordingCodex();
+
+      build({ adapter, def: def({ model: 'opus', effort: 'high' }) });
+
+      expect(seen[0]?.model).toBeUndefined();
+      expect(seen[0]?.effort).toBeUndefined();
+      expect(seen[0]?.sandbox).toBe('workspace-write');
+    });
+
+    it("gives Claude no sandbox, and AGENT.md's model over the card's", () => {
+      const seen: HeadlessSpec[] = [];
+      const recording = {
+        ...claudeCodeAdapter,
+        headless: {
+          ...claudeCodeAdapter.headless,
+          launch: (spec: HeadlessSpec) => {
+            seen.push(spec);
+            return claudeCodeAdapter.headless.launch(spec);
+          },
+        },
+      };
+
+      build({ adapter: recording, def: def({ model: 'opus' }), defaults: { model: 'haiku' } });
+
+      expect(seen[0]?.model).toBe('opus');
+      expect(seen[0]?.sandbox).toBeUndefined();
+    });
+  });
+
+  it("carries the plan's namesConversation, so the tracker knows whether the argv id is a conversation (HIVE-342)", () => {
+    expect(build().namesConversation).toBe(true);
+    expect(build({ adapter: codexAdapter }).namesConversation).toBe(false);
+    expect(build({ adapter: codexAdapter, sessionUuid: 'thread-1' }).namesConversation).toBe(true);
+  });
+
   it('opens a fresh conversation on a new CLI by saying so first', () => {
-    const prompt = build({ switchedFrom: 'codex' as string as HarnessId }).args.join('\n');
+    const prompt = build({ switchedFrom: 'codex' }).args.join('\n');
 
     expect(prompt).toContain(
       'This is a fresh conversation on claude-code: your last one ran on codex, which is not available for this wake.\n\nYou woke because: ledger.',

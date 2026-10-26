@@ -1,5 +1,5 @@
 import { containsPath } from '@lib/explorer/session-root';
-import type { SetCliAgentsRequest } from '@shared/cli-contract';
+import type { SetAgentsDefaultCliRequest, SetCliAgentsRequest } from '@shared/cli-contract';
 import type {
   AddProjectRequest,
   BrowseListing,
@@ -304,6 +304,10 @@ export const setRuntimeConfig = (request: SetRuntimeRequest): Promise<void> =>
 /** One CLI's headless agent defaults (HIVE-341). `null` clears a default. Same `mutate` path as every write. */
 export const setCliAgentsConfig = (request: SetCliAgentsRequest): Promise<void> =>
   mutate((bridge) => bridge.config.setCliAgents(request));
+
+/** The default CLI for agents (HIVE-342). `null` falls back to claude-code. Same `mutate` path as every write. */
+export const setAgentsDefaultCliConfig = (request: SetAgentsDefaultCliRequest): Promise<void> =>
+  mutate((bridge) => bridge.config.setAgentsDefaultCli(request));
 
 /**
  * Change one project's overrides (story 104).

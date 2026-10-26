@@ -110,6 +110,7 @@ import {
   parseSetRuntimeRequest,
   parseSetServerRequest,
   parseSetSessionPluginRequest,
+  parseSetAgentsDefaultCliRequest,
   parseSetCliAgentsRequest,
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
@@ -235,6 +236,7 @@ import {
   setRuntime,
   setServer,
   setSlack,
+  setAgentsDefaultCli,
   setCliAgents,
 } from '../config';
 import { diagnoseEnv } from '../config/env-diagnostic';
@@ -4217,6 +4219,9 @@ export function registerIpcHandlers(
   // HIVE-341. An ordinary settings write; the next wake reads it through the gate.
   handle(CH.configSetCliAgents, (_event, payload): ConfigSnapshot =>
     setCliAgents(parseSetCliAgentsRequest(payload)),
+  );
+  handle(CH.configSetAgentsDefaultCli, (_event, payload): ConfigSnapshot =>
+    setAgentsDefaultCli(parseSetAgentsDefaultCliRequest(payload)),
   );
   // HIVE-131. The container host alias — an ordinary settings write.
   handle(CH.configSetReceiver, (_event, payload): ConfigSnapshot =>

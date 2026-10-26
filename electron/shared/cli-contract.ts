@@ -6,12 +6,19 @@
  * vocabulary below imports `session-contract` back.
  */
 import { HARNESS_IDS, type HarnessId } from './harness-contract';
-import {
-  SESSION_EFFORTS,
-  SESSION_MODELS,
-  type SessionEffort,
-  type SessionModel,
-} from './session-contract';
+import { SESSION_EFFORTS, SESSION_MODELS } from './session-contract';
+
+/** Codex's models, from `~/.codex/models_cache.json` at 0.164.0 (HIVE-342). The first is its default. */
+export const CODEX_MODELS = ['gpt-6-luna', 'gpt-5.6-terra', 'gpt-5.6-luna'] as const;
+
+/** Codex's `model_reasoning_effort` values at 0.164.0 (HIVE-342). */
+export const CODEX_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+/** The sandboxes a Codex run may get (HIVE-342); `danger-full-access` is never offered. */
+export const HEADLESS_SANDBOXES = ['read-only', 'workspace-write'] as const;
+
+/** The sandbox a Codex run gets (HIVE-342). */
+export type HeadlessSandbox = (typeof HEADLESS_SANDBOXES)[number];
 
 /**
  * The models and efforts each CLI accepts: the closed lists the config parser, the IPC guard and
@@ -19,13 +26,19 @@ import {
  */
 export const CLI_VOCAB = {
   'claude-code': { models: SESSION_MODELS, efforts: SESSION_EFFORTS },
+  codex: { models: CODEX_MODELS, efforts: CODEX_EFFORTS },
 } as const satisfies Record<HarnessId, { models: readonly string[]; efforts: readonly string[] }>;
 
-/** A CLI's headless agent defaults. An absent model or effort omits the flag: the CLI picks. */
+/**
+ * A CLI's headless agent defaults. An absent model or effort omits the flag: the CLI picks. Each is
+ * a member of `CLI_VOCAB[cli]`, which the parser and the guard check (HIVE-342).
+ */
 export interface CliAgents {
   enabled: boolean;
-  model?: SessionModel;
-  effort?: SessionEffort;
+  model?: string;
+  effort?: string;
+  /** Codex only (HIVE-342). Absent runs `workspace-write`. */
+  sandbox?: HeadlessSandbox;
 }
 
 export interface CliConfig {
@@ -51,6 +64,13 @@ export function resolveClis(raw: RawClis | undefined): ClisConfig {
 export interface SetCliAgentsRequest {
   cli: HarnessId;
   enabled?: boolean;
-  model?: SessionModel | null;
-  effort?: SessionEffort | null;
+  model?: string | null;
+  effort?: string | null;
+  /** Codex only (HIVE-342). */
+  sandbox?: HeadlessSandbox | null;
+}
+
+/** Payload of `config:set-agents-default-cli` (HIVE-342). `null` clears it: resolution falls back to claude-code. */
+export interface SetAgentsDefaultCliRequest {
+  cli: HarnessId | null;
 }

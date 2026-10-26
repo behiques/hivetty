@@ -94,7 +94,8 @@ export interface WakeCommandDeps {
   /**
    * `mcp.hiveServerSpec()`. `null` on the same condition `mcpConfig` is.
    *
-   * Needed only for an agent that names an integration: its file is written
+   * Every wake hands it to the adapter, for a CLI that takes the server inline
+   * (HIVE-342). An agent that names an integration also gets a file: it is written
    * here rather than by the runtime, because it is per-wake content and this
    * is where per-wake files are written — the same place, and the same `fs`,
    * as `<name>.system.md`.
@@ -306,14 +307,16 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       `claude` on it, or one whose command carries arguments, can still wake
       an agent whose image has one. `wakeCommand` puts `container.command`
       after the container's name; `claudePath` is what a *host* wake spawns.
-      HIVE-332 generalises this per CLI; today every CLI that resolves is Claude's binary.
+      On the host each CLI resolves its own: Claude through `claudeCommand`, Codex as `codex` on
+      PATH until HIVE-332 adds its setting (HIVE-342).
     */
-    const binary = () =>
-      def.container !== undefined
-        ? { path: def.container.command ?? 'claude' }
-        : deps.isExecutable === undefined
-          ? resolveClaude(deps.claudeCommand(), deps.env()['PATH'])
-          : resolveClaude(deps.claudeCommand(), deps.env()['PATH'], deps.isExecutable);
+    const binary = (id: HarnessId) => {
+      if (def.container !== undefined) return { path: def.container.command ?? 'claude' };
+      const command = id === 'codex' ? 'codex' : deps.claudeCommand();
+      return deps.isExecutable === undefined
+        ? resolveClaude(command, deps.env()['PATH'])
+        : resolveClaude(command, deps.env()['PATH'], deps.isExecutable);
+    };
 
     /*
       What this story does not do for an agent, refused rather than half-done
@@ -403,6 +406,11 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     const task = kind === 'task';
     const pending = previous.pendingSession;
     const grants = deps.pendingGrants(name, task ? STANDING_LANE : lane);
+    // Every CLI is handed the hive server (HIVE-342); `null` is the condition `mcpConfig` guards.
+    const hive = deps.hiveServer();
+
+    if (hive === null) return { problem: MCP_NOT_READY };
+
     /*
       Which CLI runs this wake (HIVE-340), once per wake: a lapse moves the next wake, never this
       one. Before any write, so a refusal leaves nothing behind.
@@ -416,6 +424,13 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     if ('problem' in resolved) return resolved;
 
     const { adapter } = resolved;
+
+    // The container's hive server is HTTP and its image has no signed-in codex (HIVE-342).
+    if (def.container !== undefined && adapter.id === 'codex') {
+      return {
+        problem: `${name} runs in a container, and codex agents cannot yet — run it on the host, or name claude-code first in harness:.`,
+      };
+    }
     /*
       A conversation belongs to the CLI that started it: Claude cannot `--resume` a Codex thread.
       So a lane whose CLI changed starts fresh, with no handoff turn on the old CLI (it may be the
@@ -459,10 +474,6 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
         and a second file per agent is a second thing to go stale.
       */
       if (def.mcp.length > 0) {
-        const hive = deps.hiveServer();
-
-        if (hive === null) return { problem: MCP_NOT_READY };
-
         agentMcp = deps.agentMcpFile(name);
         fs.mkdir(dirname(agentMcp));
         fs.write(agentMcp, agentMcpConfig(hive, def.mcp));
@@ -529,6 +540,8 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
           subscriptionAuth: deps.subscriptionAuth(),
         },
         grants,
+        instructions: prompt,
+        hiveServer: hive,
         ...(def.container === undefined
           ? {}
           : {
