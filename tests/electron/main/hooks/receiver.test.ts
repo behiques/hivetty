@@ -46,7 +46,10 @@ import {
   MCP_PATH,
   MCP_PROTOCOL_VERSION,
   MCP_SERVER_NAME,
+  type ReceiverClient,
 } from '../../../../electron/shared/mcp-contract';
+import { createToolHandlers } from '../../../../electron/shared/mcp-tools';
+import { decide } from '../../../../electron/shared/permission-rules';
 import {
   METRICS_PATH,
   type SessionMetrics,
@@ -3991,6 +3994,52 @@ describe('the MCP route', () => {
       url = (await receiver.start()) as string;
 
       expect(await behaviour(await approve('run-1'))).toBe('deny');
+    });
+
+    it('answers as stdio approve and decide do, for the same call and grants (HIVE-339)', async () => {
+      const stdioClient = {
+        read: vi.fn(),
+        post: vi.fn(async () => ({ id: 'id-1', ref: 'a1' })),
+      } as unknown as ReceiverClient;
+      const cases = [
+        { tool: 'Read', input: { file_path: '/repo/a.ts' }, grants: ['Read'] },
+        { tool: 'Bash', input: { command: 'git status' }, grants: ['Bash(git *)'] },
+        { tool: 'Bash', input: { command: 'git status && rm -rf /' }, grants: ['Bash(git *)'] },
+        { tool: 'mcp__hive__project_auto_merge', input: { project: 'hive', on: true }, grants: ['*'] },
+        { tool: 'Bash]\ntools: [Write', input: {}, grants: ['Read'] },
+        { tool: 'Write', input: { file_path: '/repo/a.ts' }, grants: [] },
+      ];
+
+      for (const [i, call] of cases.entries()) {
+        const run = `parity-${String(i)}`;
+        receiver.grants.set(run, CALLER, call.grants);
+
+        const overHttp = await behaviour(
+          await rpc(
+            {
+              jsonrpc: '2.0',
+              id: 10 + i,
+              method: 'tools/call',
+              params: { name: 'approve', arguments: { tool_name: call.tool, input: call.input } },
+            },
+            { [HOOK_HEADER_SESSION]: CALLER, [HOOK_HEADER_RUN]: run },
+          ),
+        );
+        const overStdio = (
+          JSON.parse(
+            (
+              await createToolHandlers(stdioClient, call.grants).callTool('approve', {
+                tool_name: call.tool,
+                input: call.input,
+              })
+            ).content[0]!.text,
+          ) as { behavior: string }
+        ).behavior;
+        const verdict = decide(call.tool, call.input, call.grants).behavior;
+
+        expect(overHttp, call.tool).toBe(overStdio);
+        expect(overStdio, call.tool).toBe(verdict === 'allow' ? 'allow' : 'deny');
+      }
     });
   });
 });
