@@ -28,6 +28,7 @@ import {
   resolveProjectRef,
   revealConfigFile,
   revokeDevice,
+  setAgentsDefaultCliConfig,
   setProjectConfigForTest,
   setServerConfig,
   subscribeProjectConfig,
@@ -441,6 +442,19 @@ describe('setServerConfig (HIVE-142)', () => {
   it('is a no-op with no bridge, like every other verb', async () => {
     await expect(setServerConfig({ enabled: true })).resolves.toBeUndefined();
     expect(projectConfigSnapshot()).toBeNull();
+  });
+});
+
+describe('setAgentsDefaultCliConfig (HIVE-342)', () => {
+  it('calls the bridge and installs the snapshot main returns', async () => {
+    const next = snapshot([], { agentsDefaultCli: 'codex' });
+    const setAgentsDefaultCli = vi.fn().mockResolvedValue(next);
+    (window as { hive?: unknown }).hive = { config: { setAgentsDefaultCli } };
+
+    await setAgentsDefaultCliConfig({ cli: 'codex' });
+
+    expect(setAgentsDefaultCli).toHaveBeenCalledWith({ cli: 'codex' });
+    expect(projectConfigSnapshot()).toBe(next);
   });
 });
 

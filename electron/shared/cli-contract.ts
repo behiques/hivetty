@@ -69,3 +69,8 @@ export interface SetCliAgentsRequest {
   /** Codex only (HIVE-342). */
   sandbox?: HeadlessSandbox | null;
 }
+
+/** Payload of `config:set-agents-default-cli` (HIVE-342). `null` clears it: resolution falls back to claude-code. */
+export interface SetAgentsDefaultCliRequest {
+  cli: HarnessId | null;
+}

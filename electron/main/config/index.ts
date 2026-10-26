@@ -1,7 +1,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 
-import { resolveClis, type SetCliAgentsRequest } from '@shared/cli-contract';
+import {
+  resolveClis,
+  type SetAgentsDefaultCliRequest,
+  type SetCliAgentsRequest,
+} from '@shared/cli-contract';
 import {
   DEFAULT_BIND,
   DEFAULT_CLAUDE_COMMAND,
@@ -1269,6 +1273,16 @@ export function setCliAgents(request: SetCliAgentsRequest): ConfigSnapshot {
       }
 
       return { ...draft, clis: { ...clis, [request.cli]: { ...cli, agents } } };
+    }),
+  );
+}
+
+/** The CLI for agents whose `AGENT.md` names no harness (HIVE-342). `null` deletes the key. */
+export function setAgentsDefaultCli({ cli }: SetAgentsDefaultCliRequest): ConfigSnapshot {
+  return commit(
+    writeConfig((draft) => {
+      const { agentsDefaultCli: _old, ...rest } = draft;
+      return cli === null ? rest : { ...rest, agentsDefaultCli: cli };
     }),
   );
 }

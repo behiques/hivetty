@@ -5,7 +5,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { reloadConfig, setCliAgents } from '../../../../electron/main/config';
+import {
+  reloadConfig,
+  setAgentsDefaultCli,
+  setCliAgents,
+} from '../../../../electron/main/config';
 import { parseConfig } from '../../../../electron/main/config/parse';
 import { CONFIG_PATH_ENV, emptySnapshot } from '../../../../electron/shared/config-contract';
 
@@ -175,6 +179,25 @@ describe('the snapshot (HIVE-341)', () => {
 
     snapshot = setCliAgents({ cli: 'claude-code', model: 'haiku' });
     expect(snapshot.clis['claude-code'].agents.model).toBe('haiku');
+  });
+
+  it('writes the default CLI for agents, and null deletes the key (HIVE-342)', () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({ shell: '/bin/zsh' }));
+    reloadConfig();
+
+    let snapshot = setAgentsDefaultCli({ cli: 'codex' });
+
+    expect(snapshot.agentsDefaultCli).toBe('codex');
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8'))).toMatchObject({
+      agentsDefaultCli: 'codex',
+      shell: '/bin/zsh',
+    });
+
+    snapshot = setAgentsDefaultCli({ cli: null });
+    expect(snapshot.agentsDefaultCli).toBeUndefined();
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8'))).not.toHaveProperty(
+      'agentsDefaultCli',
+    );
   });
 
   it("writes codex's sandbox, and null deletes it (HIVE-342)", () => {

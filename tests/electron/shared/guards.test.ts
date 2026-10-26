@@ -31,6 +31,7 @@ import {
   parseSetReceiverRequest,
   parseSetRemoteRequest,
   parseSetServerRequest,
+  parseSetAgentsDefaultCliRequest,
   parseSetCliAgentsRequest,
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
@@ -1979,6 +1980,17 @@ describe('hasControlCharacters', () => {
     expect(hasControlCharactersOutsideWhitespace('a\tb\nc\r\n')).toBe(false);
     expect(hasControlCharactersOutsideWhitespace('a\u0000b')).toBe(true);
     expect(hasControlCharactersOutsideWhitespace('a\u0085b')).toBe(true);
+  });
+});
+
+describe('parseSetAgentsDefaultCliRequest (HIVE-342)', () => {
+  it('accepts a known CLI, and null as a clear', () => {
+    expect(parseSetAgentsDefaultCliRequest({ cli: 'codex' })).toEqual({ cli: 'codex' });
+    expect(parseSetAgentsDefaultCliRequest({ cli: null })).toEqual({ cli: null });
+  });
+
+  it.each([[{ cli: 'copilot' }], [{}], [{ cli: 'codex', extra: 1 }]])('refuses %j', (input) => {
+    expect(() => parseSetAgentsDefaultCliRequest(input)).toThrow();
   });
 });
 

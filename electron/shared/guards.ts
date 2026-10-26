@@ -8,7 +8,12 @@ import type {
   AgentRunRequest,
   AgentWriteRequest,
 } from './agent-contract';
-import { CLI_VOCAB, HEADLESS_SANDBOXES, type SetCliAgentsRequest } from './cli-contract';
+import {
+  CLI_VOCAB,
+  HEADLESS_SANDBOXES,
+  type SetAgentsDefaultCliRequest,
+  type SetCliAgentsRequest,
+} from './cli-contract';
 import {
   NOTIFICATION_KEYS,
   PROJECT_KEY_HINT,
@@ -1781,6 +1786,14 @@ export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
 
   if (Object.keys(request).length === 1) return fail('setCliAgents: nothing to change');
   return request;
+}
+
+/** The CLI an agent whose `AGENT.md` names no harness runs on (HIVE-342). `null` clears it. */
+export function parseSetAgentsDefaultCliRequest(input: unknown): SetAgentsDefaultCliRequest {
+  const raw = assertShape(input, ['cli'], 'setAgentsDefaultCli');
+  return {
+    cli: raw.cli === null ? null : assertOneOf(raw.cli, HARNESS_IDS, 'setAgentsDefaultCli.cli'),
+  };
 }
 
 /** The token, on its way to `safeStorage`. The first payload carrying a secret. */

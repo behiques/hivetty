@@ -862,6 +862,11 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
      */
     'setCliAgents',
     /**
+     * HIVE-342's default CLI for agents: one CLI id from a closed list, or `null`, checked by
+     * `parseSetAgentsDefaultCliRequest`. No path, no command, no credential.
+     */
+    'setAgentsDefaultCli',
+    /**
      * HIVE-67's connection settings — the site and the account email.
      *
      * Ordinary settings, written through the same guarded path as every other,
