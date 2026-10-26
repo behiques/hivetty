@@ -1010,6 +1010,16 @@ export interface RunLine {
  */
 export type RunOutcome = 'done' | 'asking' | 'budget' | 'turns' | 'failed';
 
+/**
+ * Tokens a run reported (HIVE-338), for a CLI that reports no USD. Each meter is absent when the
+ * CLI did not report it, never `0`.
+ */
+export interface RunUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedTokens?: number;
+}
+
 export interface RunSummary {
   run: string;
   /** Absent on records written before HIVE-128; read as `standing`. */
@@ -1020,6 +1030,8 @@ export interface RunSummary {
   outcome: RunOutcome;
   costUsd?: number;
   turns?: number;
+  /** Tokens, from a CLI that reports them (HIVE-338). Absent for Claude, whose cost is `costUsd`. */
+  usage?: RunUsage;
   /** Why it ended that way, when the outcome alone does not say. */
   reason?: string;
   /**
