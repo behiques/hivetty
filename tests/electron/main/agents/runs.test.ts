@@ -609,10 +609,14 @@ describe('createRunTracker', () => {
     });
 
     it('persists nothing when the child dies before naming one', () => {
+      promptHash = 'hash-1';
       tracker.run('a', 'ledger');
       childInstances[0]?.emitClose(1, null);
 
       expect(state.lane('a', 'standing').sessionUuid).toBeUndefined();
+      // A hash with no uuid would describe a conversation that does not exist.
+      expect(state.lane('a', 'standing').promptHash).toBeUndefined();
+      expect(state.read('a').runs.at(-1)?.sessionUuid).toBeUndefined();
     });
 
     it('persists the thread its output named', () => {
@@ -640,7 +644,12 @@ describe('createRunTracker', () => {
 
       expect(childInstances[0]?.killSignals).toContain('SIGTERM');
       childInstances[0]?.emitClose(null, 'SIGTERM');
-      expect(state.read('a').runs.at(-1)).toMatchObject({ sessionUuid: 't-1', harness: 'codex' });
+      expect(state.read('a').runs.at(-1)).toMatchObject({
+        sessionUuid: 't-1',
+        harness: 'codex',
+        outcome: 'failed',
+        reason: 'stalled',
+      });
     });
   });
 
