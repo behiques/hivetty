@@ -307,14 +307,16 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       `claude` on it, or one whose command carries arguments, can still wake
       an agent whose image has one. `wakeCommand` puts `container.command`
       after the container's name; `claudePath` is what a *host* wake spawns.
-      HIVE-332 generalises this per CLI; today every CLI that resolves is Claude's binary.
+      On the host each CLI resolves its own: Claude through `claudeCommand`, Codex as `codex` on
+      PATH until HIVE-332 adds its setting (HIVE-342).
     */
-    const binary = () =>
-      def.container !== undefined
-        ? { path: def.container.command ?? 'claude' }
-        : deps.isExecutable === undefined
-          ? resolveClaude(deps.claudeCommand(), deps.env()['PATH'])
-          : resolveClaude(deps.claudeCommand(), deps.env()['PATH'], deps.isExecutable);
+    const binary = (id: HarnessId) => {
+      if (def.container !== undefined) return { path: def.container.command ?? 'claude' };
+      const command = id === 'codex' ? 'codex' : deps.claudeCommand();
+      return deps.isExecutable === undefined
+        ? resolveClaude(command, deps.env()['PATH'])
+        : resolveClaude(command, deps.env()['PATH'], deps.isExecutable);
+    };
 
     /*
       What this story does not do for an agent, refused rather than half-done
@@ -422,6 +424,13 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     if ('problem' in resolved) return resolved;
 
     const { adapter } = resolved;
+
+    // The container's hive server is HTTP and its image has no signed-in codex (HIVE-342).
+    if (def.container !== undefined && adapter.id === 'codex') {
+      return {
+        problem: `${name} runs in a container, and codex agents cannot yet — run it on the host, or name claude-code first in harness:.`,
+      };
+    }
     /*
       A conversation belongs to the CLI that started it: Claude cannot `--resume` a Codex thread.
       So a lane whose CLI changed starts fresh, with no handoff turn on the old CLI (it may be the
