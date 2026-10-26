@@ -318,6 +318,8 @@ interface LiveRun {
   extra?: string;
   startedAt: number;
   sessionUuid: string;
+  /** See {@link FinalizeInfo.namesConversation}. */
+  namesConversation: boolean;
   child: ChildLike;
   /**
    * Stop the run *inside* the container (HIVE-137), or `null` for a host run.
@@ -393,6 +395,11 @@ interface FinalizeInfo {
    * the comment on the `sessionUuid` line in {@link finalizeRun}.
    */
   sessionUuid?: string;
+  /**
+   * Whether the argv named {@link FinalizeInfo.sessionUuid} as the conversation (HIVE-342). A
+   * first Codex wake's argv id is only a stop marker, so it is never persisted.
+   */
+  namesConversation: boolean;
   /** The prompt a session-starting run started with; stored beside its uuid. */
   promptHash?: string;
   /** The CLI that launched this run, and so reads its output (HIVE-340). */
@@ -569,7 +576,9 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       persisting a uuid no session file backs would fail the *next* wake instead
       of this one.
     */
-    const sessionUuid = conversation ?? (reachedModel ? info.sessionUuid : undefined);
+    // A first Codex wake's argv uuid is a stop marker, not a conversation (HIVE-342): only its output names one.
+    const sessionUuid =
+      conversation ?? (reachedModel && info.namesConversation ? info.sessionUuid : undefined);
     const slack = slackStatus(mcpServers);
 
     /*
@@ -1113,6 +1122,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             startedAt,
             lastTurn: command.lastTurn,
             harness: command.harness ?? 'claude-code',
+            namesConversation: command.namesConversation,
           },
           'failed',
           null,
@@ -1141,6 +1151,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         ...(extra === undefined ? {} : { extra }),
         startedAt,
         sessionUuid: command.sessionUuid,
+        namesConversation: command.namesConversation,
         child,
         stop:
           container === undefined

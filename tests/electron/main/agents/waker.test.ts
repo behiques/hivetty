@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
+import { codexAdapter } from '../../../../electron/main/harness/codex';
 import type { HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
@@ -818,6 +819,12 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
       expect(seen[0]?.model).toBe('opus');
       expect(seen[0]?.sandbox).toBeUndefined();
     });
+  });
+
+  it("carries the plan's namesConversation, so the tracker knows whether the argv id is a conversation (HIVE-342)", () => {
+    expect(build().namesConversation).toBe(true);
+    expect(build({ adapter: codexAdapter }).namesConversation).toBe(false);
+    expect(build({ adapter: codexAdapter, sessionUuid: 'thread-1' }).namesConversation).toBe(true);
   });
 
   it('opens a fresh conversation on a new CLI by saying so first', () => {

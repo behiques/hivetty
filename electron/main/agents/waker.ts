@@ -144,6 +144,11 @@ export interface WakeCommand {
   cwd: string;
   /** Present for a container wake, absent for a host one. */
   container?: ContainerWake;
+  /**
+   * Whether the argv names the conversation, so a run with no output may persist its id
+   * (HIVE-342). False for a first Codex wake, whose id only `thread.started` names.
+   */
+  namesConversation: boolean;
 }
 
 export function wakePrompt(
@@ -464,6 +469,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
         ...hook,
       },
       cwd: paths.workdir,
+      namesConversation: plan.namesConversation,
       container: {
         runtime: config.runtime,
         name: config.name,
@@ -480,5 +486,6 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     args,
     env: { ...merged, ...env.hook, HIVE_AGENT: '1', ...plan.addEnv },
     cwd: paths.workdir,
+    namesConversation: plan.namesConversation,
   };
 }
