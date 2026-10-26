@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 
-import { resolveClis } from '@shared/cli-contract';
+import { resolveClis, type SetCliAgentsRequest } from '@shared/cli-contract';
 import {
   DEFAULT_BIND,
   DEFAULT_CLAUDE_COMMAND,
@@ -1240,6 +1240,35 @@ export function setSlack(request: SetSlackRequest): ConfigSnapshot {
       if (request.commanders !== undefined) current.commanders = request.commanders;
 
       return { ...draft, slack: current };
+    }),
+  );
+}
+
+const objectOrEmpty = (value: unknown): Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
+
+/**
+ * One CLI's headless agent defaults (HIVE-341). Merged field by field like {@link setSlack}; `null`
+ * deletes a default so the flag is omitted. A non-object at any level is replaced: the reader has
+ * already reported it.
+ */
+export function setCliAgents(request: SetCliAgentsRequest): ConfigSnapshot {
+  return commit(
+    writeConfig((draft) => {
+      const clis = objectOrEmpty(draft.clis);
+      const cli = objectOrEmpty(clis[request.cli]);
+      const agents = objectOrEmpty(cli.agents);
+
+      if (request.enabled !== undefined) agents.enabled = request.enabled;
+      for (const key of ['model', 'effort'] as const) {
+        const next = request[key];
+        if (next === null) delete agents[key];
+        else if (next !== undefined) agents[key] = next;
+      }
+
+      return { ...draft, clis: { ...clis, [request.cli]: { ...cli, agents } } };
     }),
   );
 }

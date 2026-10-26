@@ -1,11 +1,11 @@
 // @vitest-environment node
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { reloadConfig } from '../../../../electron/main/config';
+import { reloadConfig, setCliAgents } from '../../../../electron/main/config';
 import { parseConfig } from '../../../../electron/main/config/parse';
 import { CONFIG_PATH_ENV, emptySnapshot } from '../../../../electron/shared/config-contract';
 
@@ -114,6 +114,33 @@ describe('the snapshot (HIVE-341)', () => {
 
     expect(snapshot.clis['claude-code'].agents).toEqual({ enabled: true, model: 'opus' });
     expect(snapshot.agentsDefaultCli).toBe('claude-code');
+  });
+
+  it('writes a field, keeps its siblings, and null clears one', () => {
+    writeFileSync(
+      process.env[CONFIG_PATH_ENV]!,
+      doc({ clis: { 'claude-code': { agents: { model: 'opus', effort: 'high' } } } }),
+    );
+    reloadConfig();
+
+    let snapshot = setCliAgents({ cli: 'claude-code', enabled: false, model: null });
+
+    expect(snapshot.clis['claude-code'].agents).toEqual({ enabled: false, effort: 'high' });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis).toEqual({
+      'claude-code': { agents: { enabled: false, effort: 'high' } },
+    });
+
+    snapshot = setCliAgents({ cli: 'claude-code', model: 'haiku' });
+    expect(snapshot.clis['claude-code'].agents.model).toBe('haiku');
+  });
+
+  it('replaces a block that is not an object rather than merging into it', () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({ clis: 'nope' }));
+    reloadConfig();
+
+    expect(setCliAgents({ cli: 'claude-code', enabled: false }).clis['claude-code'].agents.enabled).toBe(
+      false,
+    );
   });
 
   it('an empty snapshot has every CLI enabled', () => {
