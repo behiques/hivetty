@@ -1672,6 +1672,36 @@ a headless agent that has no pty to close. Widening `available.ts` before that
 has an answer would let a definition name a skill whose effect on an agent is
 undefined.
 
+### `harness:` — which CLI runs the agent (HIVE-340)
+
+`harness: [codex, claude-code]` is an ordered preference. Each wake resolves it once,
+in `createWakeCommand` (`agents/resolve-harness.ts`). The candidates are this list,
+otherwise the Settings default for agents (HIVE-341), otherwise `claude-code`. The first
+candidate that passes every check runs:
+
+1. it has a headless adapter in this build;
+2. its binary starts;
+3. the licence allows it (HIVE-332);
+4. it is enabled for agents in Settings › CLIs (HIVE-341);
+5. its fence can express every rule `HIVE_GRANTS` carries (HIVE-339);
+6. it reports cost in USD, if the agent sets `budget_usd` or `daily_usd`;
+7. it can serve every `mcp:` integration (`Capabilities.agentMcp`).
+
+When none passes, the run is refused as `invalid` with every candidate and its reason,
+for example: "No CLI can run reviewer: codex is not in your plan (Starter or higher);
+claude-code is turned off for agents in Settings › CLIs." A fence reason names tools,
+never a rule's argument.
+
+An id the build does not know is a definition problem. Until HIVE-332 and HIVE-341
+wire the gate, every CLI counts as entitled and enabled, and there is no Settings
+default. `model:` and `effort:` are Claude's vocabulary and apply only on `claude-code`.
+
+A conversation belongs to its CLI. The lane records `harness` beside `sessionUuid`;
+absent means `claude-code`. A wake that resolves to a different CLI starts a fresh
+session with no handoff turn, and the prompt's first line says so. A lapse never
+touches a live run: the next wake resolves again. Each run's receipt records
+`harness`, and the run log chips any run that was not `claude-code`.
+
 ### The shipper's merge grant (HIVE-166)
 
 A project's `autoMerge: true` becomes, at wake time and for the agent named
