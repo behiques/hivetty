@@ -185,6 +185,7 @@ neutral `SessionMetrics`. Claude Code's live in `claude-code/{record,title-origi
 
 - `launch(spec): LaunchPlan`.
 - `headless.launch(spec): HeadlessPlan` — an agent run's argv, the env it adds and strips, the container's default binary and the `pkill -f` stop pattern (HIVE-337). `agents/waker.ts` keeps the prompt, the path map, the env filter and the `HIVE_*` identity.
+- `headless.reader(): RunEventReader` — one run's stdout read into `RunEvent`s: the conversation id, MCP status, what the agent says, its tool calls, and the end with its stop, cost, turns and usage (HIVE-338). `agents/run-log.ts` folds events into run lines; `agents/runs.ts` decides the outcome from `end.stop`. Capabilities `reportsCostUsd`, `enforcesTurns`, `enforcesBudget` and `reportsMcpStatus` say which of those a CLI reports.
 - `prepare: HarnessFiles`, a property reached through `sessionAdapter()`, whose result travels as
   `PreparedFiles` on `OpenRequest.files`.
 - `readHook(input): HookReading`, `contextReply(text)`, `promptMarker(entry)`,
@@ -212,6 +213,7 @@ The checklist, member by member, with the live suite that proves each:
   `Record<HarnessId, …>`, so a missing one fails to compile).
 - [ ] `launch` (`test:pty` for the spawn, `test:ready` for boot).
 - [ ] `headless.launch` (`test:agent`).
+- [ ] `headless.reader` (`test:agent`).
 - [ ] `prepare` (`test:hooks`, `test:skills`, `test:mcp-http`, `test:container`).
 - [ ] `readHook` (`test:hooks`, `test:plan`, `test:done`).
 - [ ] `contextReply` (`test:hook-context`).
