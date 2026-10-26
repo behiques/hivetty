@@ -856,16 +856,16 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'resetConfig',
     'revealConfig',
     /**
+     * HIVE-342's default CLI for agents: one CLI id from a closed list, or `null`, checked by
+     * `parseSetAgentsDefaultCliRequest`. No path, no command, no credential.
+     */
+    'setAgentsDefaultCli',
+    /**
      * HIVE-341's per-CLI headless agent defaults: a model, an effort and an
      * on/off switch, each checked against a closed list by
      * `parseSetCliAgentsRequest`. No path, no command, no credential.
      */
     'setCliAgents',
-    /**
-     * HIVE-342's default CLI for agents: one CLI id from a closed list, or `null`, checked by
-     * `parseSetAgentsDefaultCliRequest`. No path, no command, no credential.
-     */
-    'setAgentsDefaultCli',
     /**
      * HIVE-67's connection settings — the site and the account email.
      *
