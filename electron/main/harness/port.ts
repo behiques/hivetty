@@ -337,6 +337,14 @@ export interface HeadlessHarness {
  */
 export interface PermissionFence {
   express(rules: readonly string[]): { ok: true } | { ok: false; unexpressible: string[] };
+  /** A hook-based fence's calls in Claude's vocabulary, so `decide` stays the only matcher (HIVE-342). */
+  translate?(tool: string, input: Record<string, unknown>, cwd: string): FenceCall[];
+}
+
+/** One call as `decide` reads it. */
+export interface FenceCall {
+  tool: string;
+  input: Record<string, unknown>;
 }
 
 export type { HeadlessSandbox } from '@shared/cli-contract';

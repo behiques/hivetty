@@ -30,6 +30,8 @@ import {
   HOOK_HEADER_RUN,
   HOOK_HEADER_RUN_TOKEN,
   HOOK_HEADER_SESSION,
+  FENCE_MAX_BODY_BYTES,
+  FENCE_PATH,
   HOOK_HEADER_TOKEN,
   HOOK_MAX_BODY_BYTES,
   type HookAgentEvent,
@@ -49,11 +51,12 @@ import {
   type ReceiverClient,
 } from '../../../../electron/shared/mcp-contract';
 import { createToolHandlers } from '../../../../electron/shared/mcp-tools';
-import { decide } from '../../../../electron/shared/permission-rules';
+import { decide, PERMISSION_DENY_MESSAGE } from '../../../../electron/shared/permission-rules';
 import {
   METRICS_PATH,
   type SessionMetrics,
 } from '../../../../electron/shared/metrics-contract';
+import { translateCodexCall } from '../../../../electron/main/harness/codex/fence';
 import { createLedger, type Ledger } from '../../../../electron/main/ledger';
 import type { HookContextReply } from '../../../../electron/main/harness/claude-code/hook-vocabulary';
 import { createReceiver, type Receiver } from '../../../../electron/main/hooks/receiver';
@@ -3556,11 +3559,13 @@ describe('the MCP route', () => {
   let dir: string;
   let ledger: Ledger;
   let posted: { caller: string; request: unknown }[];
+  let refusePosts: boolean;
 
   const CALLER = 'sess-mcp';
 
   beforeEach(async () => {
     posted = [];
+    refusePosts = false;
     dir = mkdtempSync(join(tmpdir(), 'hive-receiver-mcp-'));
     ledger = createLedger({ dir, knowsParty: () => true });
     receiver = createReceiver({
@@ -3595,6 +3600,7 @@ describe('the MCP route', () => {
       },
       onLedgerRead: (_caller, query) => ledger.read(query),
       onLedgerPost: (caller, request) => {
+        if (refusePosts) return { ok: false as const, status: 503, reason: 'the ledger is down' };
         posted.push({ caller, request });
         return ledger.append({ ...request, from: caller });
       },
@@ -4019,11 +4025,12 @@ describe('the MCP route', () => {
       expect(await behaviour(await approve('run-1'))).toBe('deny');
     });
 
+    /*
+      Not just the same word: `deny` is two different outcomes, decided by `decide` with nothing
+      posted, or an ask posted and the model told to wait (HIVE-342 tightened this). The post count
+      on each side tells them apart, and a post that fails must deny on both, saying so.
+    */
     it('answers as stdio approve and decide do, for the same call and grants (HIVE-339)', async () => {
-      const stdioClient = {
-        read: vi.fn(),
-        post: vi.fn(async () => ({ id: 'id-1', ref: 'a1' })),
-      } as unknown as ReceiverClient;
       const cases = [
         { tool: 'Read', input: { file_path: '/repo/a.ts' }, grants: ['Read'] },
         { tool: 'Bash', input: { command: 'git status' }, grants: ['Bash(git *)'] },
@@ -4032,36 +4039,73 @@ describe('the MCP route', () => {
         { tool: 'Bash]\ntools: [Write', input: {}, grants: ['Read'] },
         { tool: 'Write', input: { file_path: '/repo/a.ts' }, grants: [] },
       ];
+      const outcome = (behavior: string, posts: number) =>
+        behavior === 'allow' ? 'allow' : posts === 1 ? 'ask' : posts === 0 ? 'deny' : `posted ${String(posts)}`;
 
       for (const [i, call] of cases.entries()) {
         const run = `parity-${String(i)}`;
         receiver.grants.set(run, CALLER, call.grants);
+        const stdioPost = vi.fn(async () => ({ id: 'id-1', ref: 'a1' }));
+        const stdioClient = { read: vi.fn(), post: stdioPost } as unknown as ReceiverClient;
+        const before = posted.length;
 
-        const overHttp = await behaviour(
-          await rpc(
-            {
-              jsonrpc: '2.0',
-              id: 10 + i,
-              method: 'tools/call',
-              params: { name: 'approve', arguments: { tool_name: call.tool, input: call.input } },
-            },
-            { [HOOK_HEADER_SESSION]: CALLER, [HOOK_HEADER_RUN]: run },
+        const overHttp = outcome(
+          await behaviour(
+            await rpc(
+              {
+                jsonrpc: '2.0',
+                id: 10 + i,
+                method: 'tools/call',
+                params: { name: 'approve', arguments: { tool_name: call.tool, input: call.input } },
+              },
+              {
+                [HOOK_HEADER_SESSION]: CALLER,
+                [HOOK_HEADER_RUN]: run,
+                [HOOK_HEADER_RUN_TOKEN]: receiver.runToken(run),
+              },
+            ),
           ),
+          posted.length - before,
         );
-        const overStdio = (
-          JSON.parse(
-            (
-              await createToolHandlers(stdioClient, call.grants).callTool('approve', {
-                tool_name: call.tool,
-                input: call.input,
-              })
-            ).content[0]!.text,
-          ) as { behavior: string }
-        ).behavior;
-        const verdict = decide(call.tool, call.input, call.grants).behavior;
+        const overStdio = outcome(
+          (
+            JSON.parse(
+              (
+                await createToolHandlers(stdioClient, call.grants).callTool('approve', {
+                  tool_name: call.tool,
+                  input: call.input,
+                })
+              ).content[0]!.text,
+            ) as { behavior: string }
+          ).behavior,
+          stdioPost.mock.calls.length,
+        );
 
         expect(overHttp, call.tool).toBe(overStdio);
-        expect(overStdio, call.tool).toBe(verdict === 'allow' ? 'allow' : 'deny');
+        expect(overStdio, call.tool).toBe(decide(call.tool, call.input, call.grants).behavior);
+      }
+    });
+
+    it('denies on both transports, saying why, when the ask cannot be posted', async () => {
+      refusePosts = true;
+      const call = { tool_name: 'Write', input: { file_path: '/repo/a.ts' } };
+      const message = (text: string) => (JSON.parse(text) as { behavior: string; message: string });
+
+      const http = (await (
+        await rpc(
+          { jsonrpc: '2.0', id: 30, method: 'tools/call', params: { name: 'approve', arguments: call } },
+          { [HOOK_HEADER_SESSION]: CALLER },
+        )
+      ).json()) as { result: { content: { text: string }[] } };
+      const stdioClient = {
+        read: vi.fn(),
+        post: vi.fn(() => Promise.reject(new Error('the ledger is down'))),
+      } as unknown as ReceiverClient;
+      const stdio = await createToolHandlers(stdioClient, []).callTool('approve', call);
+
+      for (const text of [http.result.content[0]!.text, stdio.content[0]!.text]) {
+        expect(message(text).behavior).toBe('deny');
+        expect(message(text).message).toMatch(/^Could not ask for permission/);
       }
     });
   });
@@ -5293,5 +5337,185 @@ describe('hook receiver: reads through the harness registry (HIVE-236)', () => {
     expect(status).toBe(404);
     expect(meters).not.toHaveBeenCalled();
     expect(metrics).toEqual([]);
+  });
+});
+
+/**
+ * `POST /fence` (HIVE-342): a hook-based CLI's `PreToolUse`, answered exactly as `approve` answers.
+ * The call is translated into Claude's vocabulary by the adapter, `decide` runs first so a deny never
+ * posts, then `approve` posts the one ask. The reply is the CLI's hook JSON: `{}` lets the call run.
+ */
+describe('the fence route (HIVE-342)', () => {
+  let receiver: Receiver;
+  let url: string;
+  let dir: string;
+  let ledger: Ledger;
+  let posted: { caller: string; request: { kind: string; meta?: Record<string, unknown> } }[];
+  let failPosts: boolean;
+
+  const AGENT = 'codex-agent';
+  const PTY = 'sess-pty';
+  const RUN = 'run-fence';
+  let translate: typeof translateCodexCall = translateCodexCall;
+
+  beforeEach(async () => {
+    posted = [];
+    failPosts = false;
+    translate = translateCodexCall;
+    dir = mkdtempSync(join(tmpdir(), 'hive-receiver-fence-'));
+    ledger = createLedger({ dir, knowsParty: () => true });
+    receiver = createReceiver({
+      onCleared: () => {},
+      onEvent: () => {},
+      onPlan: () => {},
+      onTicketIntent: () => {},
+      onPromptName: () => {},
+      onDone: () => {},
+      onReady: () => {},
+      onMetrics: () => {},
+      onAgentEvent: () => {},
+      onAgentsList: async () => ({ agents: [] }) as AgentsDirectory,
+      knowsSession: (id) => id === PTY,
+      knowsAgent: (id) => id === AGENT,
+      fenceTranslate: (tool, input, cwd) => translate(tool, input, cwd),
+      onLedgerRead: (_caller, query) => ledger.read(query),
+      onLedgerPost: (caller, request) => {
+        if (failPosts) return { ok: false as const, status: 503, reason: 'the ledger is down' };
+        posted.push({ caller, request: request as (typeof posted)[number]['request'] });
+        return ledger.append({ ...request, from: caller });
+      },
+    });
+    url = (await receiver.start()) as string;
+  });
+
+  afterEach(async () => {
+    await receiver.stop();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const fence = (
+    payload: unknown,
+    who = AGENT,
+    extra: Record<string, string> = {},
+  ): Promise<Response> =>
+    fetch(`${new URL(url).origin}${FENCE_PATH}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [HOOK_HEADER_SESSION]: who,
+        [HOOK_HEADER_TOKEN]: receiver.tokenFor(who),
+        [HOOK_HEADER_RUN]: RUN,
+        [HOOK_HEADER_RUN_TOKEN]: receiver.runToken(RUN),
+        ...extra,
+      },
+      body: typeof payload === 'string' ? payload : JSON.stringify(payload),
+    });
+
+  const preToolUse = (tool_name: string, tool_input: Record<string, unknown>) => ({
+    session_id: 'thread-1',
+    hook_event_name: 'PreToolUse',
+    tool_name,
+    tool_input,
+    cwd: '/w',
+  });
+
+  const denied = (reason: string) => ({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: reason,
+    },
+  });
+
+  it('lets a granted call run and posts nothing', async () => {
+    receiver.grants.set(RUN, AGENT, ['Bash(echo *)']);
+    const response = await fence(preToolUse('Bash', { command: 'echo hi' }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({});
+    expect(posted).toEqual([]);
+  });
+
+  it('denies an ungranted call and posts exactly one permission ask for it', async () => {
+    const response = await fence(preToolUse('Bash', { command: 'echo hi' }));
+
+    expect(await response.json()).toEqual(denied(PERMISSION_DENY_MESSAGE));
+    expect(posted).toHaveLength(1);
+    expect(posted[0]!.request.kind).toBe('ask');
+    expect(posted[0]!.request.meta).toMatchObject({ kind: 'permission', tool: 'Bash', run: RUN });
+  });
+
+  it('asks about the one file of a patch its grants do not cover', async () => {
+    receiver.grants.set(RUN, AGENT, ['Write(/w/src/**)', 'Edit(/w/src/**)']);
+    const patch = '*** Begin Patch\n*** Add File: src/a.ts\n+x\n*** Add File: notes.md\n+y\n*** End Patch';
+    const response = await fence(preToolUse('apply_patch', { command: patch }));
+
+    expect(await response.json()).toEqual(denied(PERMISSION_DENY_MESSAGE));
+    expect(posted).toHaveLength(1);
+    expect(posted[0]!.request.meta).toMatchObject({
+      kind: 'permission',
+      tool: 'Write',
+      input: { file_path: '/w/notes.md' },
+    });
+  });
+
+  it('asks about the raw call when a translation comes back empty, never allows it', async () => {
+    translate = () => [];
+    const response = await fence(preToolUse('Bash', { command: 'echo hi' }));
+
+    expect(await response.json()).toEqual(denied(PERMISSION_DENY_MESSAGE));
+    expect(posted).toHaveLength(1);
+    expect(posted[0]!.request.meta).toMatchObject({ kind: 'permission', tool: 'Bash' });
+  });
+
+  it('lets a patch run when every file it touches is granted', async () => {
+    receiver.grants.set(RUN, AGENT, ['Write(/w/src/**)']);
+    const patch = '*** Begin Patch\n*** Add File: src/a.ts\n+x\n*** End Patch';
+
+    expect(await (await fence(preToolUse('apply_patch', { command: patch }))).json()).toEqual({});
+    expect(posted).toEqual([]);
+  });
+
+  it('denies what decide denies without posting', async () => {
+    const tool = 'Bash]\ntools: [Write';
+    const response = await fence(preToolUse(tool, {}));
+
+    expect(await response.json()).toEqual(denied((decide(tool, {}, []) as { message: string }).message));
+    expect(posted).toEqual([]);
+  });
+
+  it('denies, saying why, when the ask cannot be posted', async () => {
+    failPosts = true;
+    const body = (await (await fence(preToolUse('Bash', { command: 'ls' }))).json()) as ReturnType<
+      typeof denied
+    >;
+
+    expect(body.hookSpecificOutput.permissionDecision).toBe('deny');
+    expect(body.hookSpecificOutput.permissionDecisionReason).toMatch(/^Could not ask for permission/);
+  });
+
+  it('denies a body too large to read, rather than reading half of it', async () => {
+    receiver.grants.set(RUN, AGENT, ['*']);
+    const response = await fence(
+      preToolUse('apply_patch', { command: `*** Begin Patch\n*** Add File: a\n+${'x'.repeat(FENCE_MAX_BODY_BYTES)}\n*** End Patch` }),
+    );
+    const body = (await response.json()) as ReturnType<typeof denied>;
+
+    expect(body.hookSpecificOutput.permissionDecision).toBe('deny');
+    expect(posted).toEqual([]);
+  });
+
+  it('refuses a bad token, an unknown caller, a pty session, an Origin and a body that is not a call', async () => {
+    expect((await fence(preToolUse('Bash', {}), AGENT, { [HOOK_HEADER_TOKEN]: 'x'.repeat(64) })).status).toBe(403);
+    expect((await fence(preToolUse('Bash', {}), 'stranger')).status).toBe(404);
+    expect((await fence(preToolUse('Bash', {}), PTY)).status).toBe(403);
+    expect((await fence(preToolUse('Bash', {}), AGENT, { origin: 'http://evil.test' })).status).toBe(403);
+    expect((await fence('not json')).status).toBe(400);
+    expect((await fence({ tool_input: {} })).status).toBe(400);
+    expect(posted).toEqual([]);
+  });
+
+  it('is bounded by its own cap, which is larger than a hook body', () => {
+    expect(FENCE_MAX_BODY_BYTES).toBeGreaterThan(HOOK_MAX_BODY_BYTES);
   });
 });

@@ -188,6 +188,18 @@ export const READY_PATH = '/ready';
  */
 export const HOOK_MAX_BODY_BYTES = 64 * 1024;
 
+/**
+ * A hook-based CLI's `PreToolUse`, answered as `approve` answers (HIVE-342). Codex's fence hook
+ * POSTs here and reads back its own hook JSON: `{}` lets the call run, a `deny` stops it.
+ */
+export const FENCE_PATH = '/fence';
+
+/**
+ * Larger than {@link HOOK_MAX_BODY_BYTES}, because this route reads `tool_input` whole: a patch
+ * carries every file it writes. A body past it is denied, never checked by half.
+ */
+export const FENCE_MAX_BODY_BYTES = 1024 * 1024;
+
 /** What the receiver hands the rest of main once a POST validates. */
 export interface HookStatusEvent {
   entityId: string;

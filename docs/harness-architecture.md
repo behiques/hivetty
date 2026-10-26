@@ -237,10 +237,11 @@ output and hook payloads are in `tests/fixtures/codex/`.
 - `-c mcp_servers.hive.{command,args,env}` and `env_vars=[…]`: the stdio hive host, its identity
   forwarded **by name** from the run's environment, so no token lands on the argv.
   `default_tools_approval_mode="approve"` turns Codex's own approval off for `hive`: the fence is
-  the `PreToolUse` hook (PR2), never this.
+  the `PreToolUse` hook below, never this.
 - `-c hooks.Stop=[…]`: a `curl` to `$HIVE_RECEIVER_URL/hook` with the session and token headers
   read from the run's environment, as the container transport does. Codex's payloads are
   Claude-shaped, so the agent lane reads them unchanged.
+- `-c hooks.PreToolUse=[{matcher="*",…}]`: **the fence**, below.
 - **The stop marker:** `-c mcp_servers.hive_wake.enabled=false -c mcp_servers.hive_wake.command="<id>"`.
   A disabled server is on the argv with no warning and no effect, so `pkill -f <id>` finds the
   run. `<id>` is the minted uuid on a first wake and the thread id on a resume.
@@ -255,8 +256,34 @@ persists nothing rather than a uuid `resume` would fail on.
 
 **Resolution:** `codex` is resolved on `PATH` with the same lookup as `claude` until HIVE-332 adds
 its setting. **Containers are refused** for Codex: the container's hive server is the HTTP
-descriptor, and the image has no signed-in `codex`. PR1's `codexFence` refuses every rule set, so
-no Codex run can start until PR2's `PreToolUse` fence lands.
+descriptor, and the image has no signed-in `codex`. A sandbox outside `HEADLESS_SANDBOXES`
+(`read-only`, `workspace-write`) is refused at the argv too, not only where the setting is read.
+
+**The fence** (`codex/fence.ts`, the receiver's `POST /fence`). Codex has no permission-prompt
+tool, so the fence is a `PreToolUse` hook on every tool call (`matcher="*"`, probed at 0.164.0 to
+fire for `Bash`, `apply_patch` and MCP calls, and its deny to block each):
+
+1. `fenceCommand()` POSTs the payload to `$HIVE_RECEIVER_URL/fence` with the session, token, run
+   and run-token headers read from the env. **It fails closed**: a non-2xx, a timeout (30 s), an
+   unreachable receiver or an empty reply prints a deny, never the empty output Codex would run.
+2. The route authenticates as `/mcp` does and is the agent lane's alone (a pty session is `403`).
+   A body over `FENCE_MAX_BODY_BYTES` (1 MiB) is denied, never checked by half.
+3. `codexFence.translate` turns the call into Claude's vocabulary so `decide` stays the only
+   matcher: `Bash` and `mcp__<server>__<tool>` pass through; an `apply_patch` becomes one `Write`
+   (add, delete) or `Edit` (update, move target) per file, a relative path joined to `cwd` and
+   never normalised, so `decide` refuses a `..` walk-up as it does for Claude. A patch the reader
+   cannot read whole (an unknown `***` line, a control or line-separator character in a path, a
+   `Move to` with no file, anything after `*** End Patch`, a relative `cwd`) is asked about as the
+   raw `apply_patch` call: a header skipped there would be a file written unchecked.
+4. Each translated call goes through `approve`, in order: `decide` allows, denies without posting,
+   or posts the one permission ask and denies. The reply is Codex's hook JSON: `{}` to run, or a
+   `permissionDecision: "deny"` carrying the reason.
+
+`CODEX_RULE_TABLE` files every rule shape under `expressed` (`*`, `Bash`, `Bash(<glob>)`, `Write`,
+`Edit` and their globs, MCP names and wildcards, their `literal:` forms) or `neverProduced`
+(`Read`, `Glob`, `Grep`, `WebFetch`, `NotebookEdit`, `Task`, `Agent`, their globs and literals):
+Codex reads and searches through the shell, so a rule naming those allows nothing and widens
+nothing. The fence is total: `express` accepts every rule set.
 
 Interactive: HIVE-279. Meters: HIVE-334. Plans: HIVE-352. Containers: refused.
 

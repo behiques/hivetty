@@ -36,7 +36,7 @@ import {
   writeSharedContainerFiles,
 } from '../container/generated';
 import type { HookTransport } from '../harness/port';
-import { sessionAdapter, type HarnessRegistry } from '../harness/registry';
+import { headlessAdapter, sessionAdapter, type HarnessRegistry } from '../harness/registry';
 import type { Ledger } from '../ledger';
 
 import { withHostAlias } from './container-origin';
@@ -500,6 +500,8 @@ export function createHookRuntime(options: HookRuntimeOptions): HookRuntime {
         knowsSession,
         knowsAgent,
         ...(harnesses === undefined ? {} : { harnesses }),
+        // HIVE-342: Codex is the one hook-fenced CLI; its PreToolUse reaches `/fence`.
+        fenceTranslate: headlessAdapter('codex').headless.fence.translate,
         /*
           `port` stays the test override it has always been and wins when given,
           so a spec that pins a port is not fighting a config default. Config

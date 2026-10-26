@@ -58,6 +58,7 @@ draws cannot be faked. Each costs time, some cost tokens.
 | `pnpm test:hook-context` · `:marker` | hook context reaches the model |
 | `pnpm test:ledger` · `:mcp-http` | the ledger MCP tools, stdio and HTTP |
 | `pnpm test:agent` | headless agent runs end to end |
+| `pnpm test:agent:codex` | headless Codex agent runs end to end: thread, resume, the fence, receipts (codex 0.164.x, signed in) |
 | `pnpm test:container` | containerised sessions and agents |
 | `pnpm test:server` | server mode across two real app processes |
 
