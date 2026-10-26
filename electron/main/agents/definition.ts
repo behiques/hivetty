@@ -44,6 +44,7 @@ import {
   isEnvArgTemplate,
   isHostAlias,
 } from '@shared/config-contract';
+import { HARNESS_IDS, isHarnessId, type HarnessId } from '@shared/harness-contract';
 import type {
   SessionEffort,
   SessionModel,
@@ -355,6 +356,21 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
   }
 
   /*
+    The CLIs this agent may run on, in order (HIVE-340). An id this build cannot run is a problem,
+    not a silent skip: the author wrote it expecting it to run there.
+  */
+  const harness = parseList(shaped('harness') ?? '[]') ?? [];
+
+  for (const id of harness) {
+    if (isHarnessId(id)) continue;
+
+    problems.push({
+      field: 'harness',
+      reason: `${id} is not a CLI HiveTTY can run headless. Known: ${HARNESS_IDS.join(', ')}.`,
+    });
+  }
+
+  /*
     The shared `number` rule accepts `1.5`, and a cap of one and a half runs
     is a cap of one that pretends otherwise. Whole numbers only (HIVE-128).
   */
@@ -464,6 +480,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
       icon: shaped('icon') as string,
       ...(model === undefined ? {} : { model: model as SessionModel }),
       ...(effort === undefined ? {} : { effort: effort as SessionEffort }),
+      ...(harness.length === 0 ? {} : { harness: harness as HarnessId[] }),
       wake: {
         ...(everyMs === undefined || everyMs === null ? {} : { everyMs }),
         ...(at === undefined ? {} : { at: parseTimes(at) as string[] }),

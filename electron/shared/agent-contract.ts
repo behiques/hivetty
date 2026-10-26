@@ -628,6 +628,7 @@ export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'skills', kind: 'list', required: false },
   { path: 'mcp', kind: 'list', required: false },
   { path: 'tools', kind: 'list', required: false },
+  { path: 'harness', kind: 'list', required: false },
   { path: 'autonomy', kind: 'enum', required: false, values: AUTONOMIES },
   { path: 'lane', kind: 'enum', required: false, values: AGENT_LANES },
   { path: 'limits.turns', kind: 'number', required: false },

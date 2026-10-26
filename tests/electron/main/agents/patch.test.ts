@@ -19,6 +19,12 @@ You are the Slack watcher.
 `;
 
 describe('patchFrontmatter', () => {
+  it('leaves a harness: line alone when another field is patched (HIVE-340)', () => {
+    const source = SOURCE.replace('autonomy: ask', 'harness: [claude-code]\nautonomy: ask');
+
+    expect(patchFrontmatter(source, 'autonomy', 'act')).toContain('harness: [claude-code]\n');
+  });
+
   it('replaces only the value token, leaving the comment', () => {
     expect(patchFrontmatter(SOURCE, 'autonomy', 'act')).toContain(
       'autonomy: act                       # ask | act',
