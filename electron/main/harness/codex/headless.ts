@@ -50,8 +50,15 @@ const HIVE_SERVER_ENV = [
   HOOK_ENV_GRANTS,
 ];
 
-/** A TOML basic string. JSON's escapes are a subset of TOML's, so `JSON.stringify` is one. */
-export const toml = (value: string): string => JSON.stringify(value);
+/** Half a surrogate pair: JSON escapes it, but TOML holds Unicode scalar values only. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+/**
+ * A TOML basic string. JSON's escapes are a subset of TOML's, so `JSON.stringify` is one, apart
+ * from the two strings it writes that TOML refuses: a raw DEL, and an escaped lone surrogate.
+ */
+export const toml = (value: string): string =>
+  JSON.stringify(value.replace(LONE_SURROGATE, '�')).replace(/\u007f/g, '\\u007f');
 const tomlList = (values: readonly string[]): string => `[${values.map(toml).join(',')}]`;
 const tomlTable = (record: Record<string, string>): string =>
   `{${Object.entries(record)
@@ -94,6 +101,7 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
       ...(start ? config(`developer_instructions=${toml(spec.instructions)}`) : []),
       ...config(`mcp_servers.hive.command=${toml(hiveServer.command)}`),
       ...config(`mcp_servers.hive.args=${tomlList(hiveServer.args)}`),
+      // On the argv as written: `hiveServer.env` must never carry a secret, which goes by name below.
       ...config(`mcp_servers.hive.env=${tomlTable(hiveServer.env)}`),
       ...config(`mcp_servers.hive.env_vars=${tomlList(HIVE_SERVER_ENV)}`),
       // Codex's own approval off for hive: the fence is the PreToolUse hook (PR2), never this.

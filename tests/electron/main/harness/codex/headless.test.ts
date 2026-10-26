@@ -81,11 +81,24 @@ describe('launchCodexHeadless', () => {
     }
   });
 
-  it('never puts a token on the argv', () => {
-    const argv = launchCodexHeadless(spec()).args.join(' ');
+  it('escapes what JSON leaves raw but TOML forbids, and replaces what TOML cannot hold', () => {
+    // DEL is a control character TOML requires escaped; a lone surrogate is no scalar value.
+    expect(toml('a\u007fb')).toBe('"a\\u007fb"');
+    expect(toml('x\ud800y')).toBe('"x\ufffdy"');
+    expect(toml('\udc00')).toBe('"\ufffd"');
+    expect(toml('😀')).toBe('"😀"');
+  });
 
-    expect(argv).not.toMatch(/\btok\b|secret/);
-    expect(argv).toContain('$HIVE_HOOK_TOKEN');
+  it('never puts a token on the argv: the identity is forwarded by name', () => {
+    const args = launchCodexHeadless(spec()).args;
+    const value = (key: string) => args.find((arg) => arg.startsWith(`${key}=`));
+
+    expect(value('mcp_servers.hive.env_vars')).toBe(
+      'mcp_servers.hive.env_vars=["HIVE_RECEIVER_URL","HIVE_SESSION_ID","HIVE_HOOK_TOKEN","HIVE_RUN_ID","HIVE_RUN_TOKEN","HIVE_GRANTS"]',
+    );
+    expect(value('hooks.Stop')).toContain('x-hive-session: $HIVE_SESSION_ID');
+    expect(value('hooks.Stop')).toContain('x-hive-token: $HIVE_HOOK_TOKEN');
+    expect(args.join(' ')).not.toContain('HIVE_HOOK_TOKEN=');
   });
 
   it('stops on the wake id, which a first wake does not otherwise name', () => {
