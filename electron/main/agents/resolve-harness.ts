@@ -3,6 +3,9 @@ import type { HarnessId } from '@shared/harness-contract';
 
 import type { HarnessAdapter } from '../harness/port';
 
+/** The sentinel on a one-shot grant (`@shared/permission-rules`), whose specifier text must never be quoted. */
+const LITERAL_PREFIX = 'literal:';
+
 /**
  * What the licence (HIVE-332) and Settings › CLIs (HIVE-341) say about a CLI. Absent until they
  * land: every CLI entitled and enabled, and no Settings default.
@@ -48,9 +51,18 @@ export function firstPassing<Id extends string, T>(
   return { fail: reasons };
 }
 
+/**
+ * The tool a rule names, never its argument: an argument can carry a host path or a secret (PR #141).
+ * A one-shot grant is `literal:<tool>:<specifier>`, so its tool sits between the first two colons.
+ */
+const toolOf = (rule: string): string =>
+  rule.startsWith(LITERAL_PREFIX)
+    ? (rule.slice(LITERAL_PREFIX.length).split(':')[0] ?? rule)
+    : (rule.split('(')[0] ?? rule);
+
 function check(
-  _def: AgentDefinition,
-  _rules: readonly string[],
+  def: AgentDefinition,
+  rules: readonly string[],
   deps: ResolveDeps,
   id: HarnessId,
 ): Check<Resolved> {
@@ -69,6 +81,27 @@ function check(
   if (deps.gate !== undefined && !deps.gate.enabled(id)) {
     return { fail: `${id} is turned off for agents in Settings › CLIs` };
   }
+
+  /*
+    The fence (HIVE-339), asked about exactly what `HIVE_GRANTS` carries. A rule this CLI cannot
+    enforce skips it: running with the rule dropped would leave the call it fenced unfenced.
+  */
+  const fence = adapter.headless.fence.express(rules);
+
+  if (!fence.ok) {
+    return { fail: `${id} cannot enforce ${[...new Set(fence.unexpressible.map(toolOf))].join(', ')}` };
+  }
+
+  const caps = adapter.capabilities;
+
+  // A ceiling on a meter the CLI never reports would silently never trip.
+  if ((def.limits.budgetUsd !== undefined || def.limits.dailyUsd !== undefined) && !caps.reportsCostUsd) {
+    return { fail: `${id} does not report cost in USD, which ${def.name}'s budget limit needs` };
+  }
+
+  const unserved = def.mcp.filter((integration) => !caps.agentMcp.includes(integration));
+
+  if (unserved.length > 0) return { fail: `${id} cannot serve the ${unserved.join(', ')} integration` };
 
   return { pass: { adapter, path: binary.path } };
 }

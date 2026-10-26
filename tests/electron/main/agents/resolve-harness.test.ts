@@ -163,3 +163,71 @@ describe('resolveHarness: availability (HIVE-340)', () => {
     expect(resolveHarness(prefer, [], deps(both, { gate: lapsing }))).toMatchObject({ adapter: both['claude-code'] });
   });
 });
+
+describe('resolveHarness: can it honour this definition (HIVE-340)', () => {
+  const claude = fake('claude-code');
+
+  it('asks the fence about the rules it is given, all of them', () => {
+    const seen: string[][] = [];
+    const watching = fake('claude-code', {
+      express: (rules) => {
+        seen.push([...rules]);
+        return { ok: true };
+      },
+    });
+
+    resolveHarness(def(), ['Read', 'ToolSearch', 'literal:Bash:git push'], deps({ 'claude-code': watching }));
+
+    expect(seen).toEqual([['Read', 'ToolSearch', 'literal:Bash:git push']]);
+  });
+
+  it('skips a CLI that cannot enforce a rule, naming the tool and never its argument', () => {
+    const blind = fake('claude-code', {
+      express: () => ({ ok: false, unexpressible: ['Bash(cat /Users/u/.ssh/id_rsa)', 'Bash(git:*)', 'WebFetch'] }),
+    });
+    const result = resolveHarness(def(), [], deps({ 'claude-code': blind }));
+
+    expect(result).toEqual({ problem: 'No CLI can run reviewer: claude-code cannot enforce Bash, WebFetch.' });
+    expect(JSON.stringify(result)).not.toContain('/Users');
+  });
+
+  it('names the tool of a one-shot literal rule, never its specifier', () => {
+    const blind = fake('claude-code', {
+      express: () => ({ ok: false, unexpressible: ['literal:Bash:cat /Users/u/.ssh/id_rsa'] }),
+    });
+    const result = resolveHarness(def(), [], deps({ 'claude-code': blind }));
+
+    expect(result).toEqual({ problem: 'No CLI can run reviewer: claude-code cannot enforce Bash.' });
+  });
+
+  it('skips a CLI that reports no USD cost when the agent has a budget or a daily ceiling', () => {
+    const blind = { codex: fake('codex', { caps: { reportsCostUsd: false } }), 'claude-code': claude };
+
+    for (const limits of [
+      { turns: 40, rotateAfter: 50, parallel: 1, budgetUsd: 1 },
+      { turns: 40, rotateAfter: 50, parallel: 1, dailyUsd: 5 },
+    ]) {
+      const result = resolveHarness(def({ harness: [cli('codex')], limits }), [], deps(blind));
+
+      expect(result).toEqual({
+        problem: "No CLI can run reviewer: codex does not report cost in USD, which reviewer's budget limit needs.",
+      });
+    }
+
+    expect(resolveHarness(def({ harness: [cli('codex')] }), [], deps(blind))).toMatchObject({ adapter: blind.codex });
+  });
+
+  it('skips a CLI that cannot serve an mcp: integration', () => {
+    const adapters = { codex: fake('codex', { caps: { agentMcp: [] } }), 'claude-code': claude };
+    const result = resolveHarness(
+      def({ harness: [cli('codex'), 'claude-code'], mcp: ['slack'] }),
+      [],
+      deps(adapters),
+    );
+
+    expect(result).toMatchObject({ adapter: claude });
+    expect(
+      resolveHarness(def({ harness: [cli('codex')], mcp: ['slack'] }), [], deps(adapters)),
+    ).toEqual({ problem: 'No CLI can run reviewer: codex cannot serve the slack integration.' });
+  });
+});
