@@ -25,18 +25,18 @@ context and scope: the **HIVE project in Jira**, the backlog.
 Stack: React 19 · TypeScript (strict) · Vite · xterm.js · CodeMirror 6 ·
 Zustand · Tailwind v4 · shadcn/ui · pnpm.
 
-## This repository is HiveTTY, a fork
+## This repository is HiveTTY Pro
 
-This checkout is **HiveTTY**, the `behiques/hivetty` fork of The Hive (`yunidbauza/the-hive`).
-It is its own product, with its own look, name and release line, and it is never upstreamed.
+This checkout is **HiveTTY Pro**, the commercial app, in the private `behiques/hivetty` repo: a
+fork of the free Apache-2.0 **HiveTTY** (`yunidbauza/hivetty`) that no longer tracks it.
 
-- Branch from `origin/main` and open every PR against **`behiques/hivetty`**.
-- Never push to, or open a PR on, the `upstream` remote (`yunidbauza/the-hive`).
-- Upstream work arrives as "Merge the-hive main back into the fork" merge commits; resolve them
-  in favour of the fork's identity (theme, icon, names).
-- The app, its data folders and its release feed are separate from The Hive's: a HiveTTY build
-  must never read, write or update from The Hive's. Everything this repo ships says **HiveTTY**;
-  "The Hive" names only the upstream.
+- Every PR targets **`behiques/hivetty`**. There is no upstream: nothing merges in, nothing goes back.
+- Paid code needs no extension seam. Each paid feature lives in its own directory
+  (`electron/main/licence/`, a `src/features/<slice>/`) and turns on from a lease entitlement,
+  never an `isPro` check in a core file. Everything HiveTTY does stays in Community.
+- Pro's data lives in `~/.hivetty`. `~/.hive` is HiveTTY's: only the importer (HIVE-269) reads it,
+  as a copy the user starts, and nothing writes there. Pro's name, bundle ID, data folders and
+  release feed are its own (HIVE-350).
 
 ## Essential commands
 
