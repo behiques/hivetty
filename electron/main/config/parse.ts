@@ -1,4 +1,10 @@
-import { CLI_VOCAB, type CliAgents, type RawClis } from '@shared/cli-contract';
+import {
+  CLI_VOCAB,
+  HEADLESS_SANDBOXES,
+  type CliAgents,
+  type HeadlessSandbox,
+  type RawClis,
+} from '@shared/cli-contract';
 import {
   BIND_KEYS,
   JIRA_KEYS,
@@ -1315,7 +1321,7 @@ function optionalSlack(
 }
 
 const CLI_KEYS = ['agents'] as const;
-const CLI_AGENT_KEYS = ['enabled', 'model', 'effort'] as const;
+const CLI_AGENT_KEYS = ['enabled', 'model', 'effort', 'sandbox'] as const;
 
 /**
  * The `clis` block (HIVE-341). Shaped like {@link optionalSlack}, one level deeper: a bad field
@@ -1378,6 +1384,19 @@ function optionalClis(
       if (typeof raw.effort === 'string' && efforts.includes(raw.effort)) {
         agents.effort = raw.effort;
       } else errors.push(`${agentsAt}.effort: expected one of ${efforts.join(', ')} — ignored`);
+    }
+    if (raw.sandbox !== undefined) {
+      if (id !== 'codex') errors.push(`${agentsAt}.sandbox: only codex takes a sandbox — ignored`);
+      else if (
+        typeof raw.sandbox === 'string' &&
+        (HEADLESS_SANDBOXES as readonly string[]).includes(raw.sandbox)
+      ) {
+        agents.sandbox = raw.sandbox as HeadlessSandbox;
+      } else {
+        errors.push(
+          `${agentsAt}.sandbox: expected one of ${HEADLESS_SANDBOXES.join(', ')} — ignored`,
+        );
+      }
     }
 
     clis[id] = { agents };

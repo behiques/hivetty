@@ -48,6 +48,29 @@ describe('the clis block (HIVE-341)', () => {
     ]);
   });
 
+  it('reads a sandbox on codex only, and never danger-full-access (HIVE-342)', () => {
+    const readOnly = parseConfig(doc({ clis: { codex: { agents: { sandbox: 'read-only' } } } }), 'config');
+    const danger = parseConfig(
+      doc({ clis: { codex: { agents: { sandbox: 'danger-full-access' } } } }),
+      'config',
+    );
+    const claude = parseConfig(
+      doc({ clis: { 'claude-code': { agents: { sandbox: 'read-only' } } } }),
+      'config',
+    );
+
+    expect(readOnly.clis).toEqual({ codex: { agents: { sandbox: 'read-only' } } });
+    expect(readOnly.errors).toEqual([]);
+    expect(danger.clis).toEqual({ codex: { agents: {} } });
+    expect(danger.errors).toEqual([
+      'config.clis.codex.agents.sandbox: expected one of read-only, workspace-write — ignored',
+    ]);
+    expect(claude.clis).toEqual({ 'claude-code': { agents: {} } });
+    expect(claude.errors).toEqual([
+      'config.clis.claude-code.agents.sandbox: only codex takes a sandbox — ignored',
+    ]);
+  });
+
   it('costs a bad field, never its siblings', () => {
     const parsed = parseConfig(
       doc({ clis: { 'claude-code': { agents: { enabled: 'yes', model: 'gpt-5', effort: 'high' } } } }),
@@ -152,6 +175,21 @@ describe('the snapshot (HIVE-341)', () => {
 
     snapshot = setCliAgents({ cli: 'claude-code', model: 'haiku' });
     expect(snapshot.clis['claude-code'].agents.model).toBe('haiku');
+  });
+
+  it("writes codex's sandbox, and null deletes it (HIVE-342)", () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({}));
+    reloadConfig();
+
+    let snapshot = setCliAgents({ cli: 'codex', sandbox: 'read-only' });
+
+    expect(snapshot.clis.codex.agents).toEqual({ enabled: true, sandbox: 'read-only' });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis).toEqual({
+      codex: { agents: { sandbox: 'read-only' } },
+    });
+
+    snapshot = setCliAgents({ cli: 'codex', sandbox: null });
+    expect(snapshot.clis.codex.agents).toEqual({ enabled: true });
   });
 
   it('replaces a block that is not an object rather than merging into it', () => {

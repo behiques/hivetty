@@ -1995,6 +1995,23 @@ describe('parseSetCliAgentsRequest (HIVE-341)', () => {
     });
   });
 
+  it('takes a sandbox for codex only, and null as a clear (HIVE-342)', () => {
+    expect(parseSetCliAgentsRequest({ cli: 'codex', sandbox: 'read-only' })).toEqual({
+      cli: 'codex',
+      sandbox: 'read-only',
+    });
+    expect(parseSetCliAgentsRequest({ cli: 'codex', sandbox: null })).toEqual({
+      cli: 'codex',
+      sandbox: null,
+    });
+    expect(() => parseSetCliAgentsRequest({ cli: 'codex', sandbox: 'danger-full-access' })).toThrow(
+      /sandbox/,
+    );
+    expect(() => parseSetCliAgentsRequest({ cli: 'claude-code', sandbox: 'read-only' })).toThrow(
+      'setCliAgents.sandbox: only codex takes a sandbox',
+    );
+  });
+
   it("takes codex's own vocabulary (HIVE-342)", () => {
     expect(parseSetCliAgentsRequest({ cli: 'codex', model: 'gpt-6-luna' })).toEqual({
       cli: 'codex',

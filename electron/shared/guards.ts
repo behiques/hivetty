@@ -8,7 +8,7 @@ import type {
   AgentRunRequest,
   AgentWriteRequest,
 } from './agent-contract';
-import { CLI_VOCAB, type SetCliAgentsRequest } from './cli-contract';
+import { CLI_VOCAB, HEADLESS_SANDBOXES, type SetCliAgentsRequest } from './cli-contract';
 import {
   NOTIFICATION_KEYS,
   PROJECT_KEY_HINT,
@@ -1749,7 +1749,7 @@ export function parseSetSlackRequest(input: unknown): SetSlackRequest {
 
 /** Payload of `config:set-cli-agents` (HIVE-341). `null` clears a default; a model is checked against its CLI's list. */
 export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
-  const raw = assertShape(input, ['cli'], 'setCliAgents', ['enabled', 'model', 'effort']);
+  const raw = assertShape(input, ['cli'], 'setCliAgents', ['enabled', 'model', 'effort', 'sandbox']);
   const cli = assertOneOf(raw.cli, HARNESS_IDS, 'setCliAgents.cli');
   const { models, efforts } = CLI_VOCAB[cli];
 
@@ -1765,6 +1765,16 @@ export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
       ? {
           effort:
             raw.effort === null ? null : assertOneOf(raw.effort, efforts, 'setCliAgents.effort'),
+        }
+      : {}),
+    ...(raw.sandbox !== undefined
+      ? {
+          sandbox:
+            raw.sandbox === null
+              ? null
+              : cli === 'codex'
+                ? assertOneOf(raw.sandbox, HEADLESS_SANDBOXES, 'setCliAgents.sandbox')
+                : fail('setCliAgents.sandbox: only codex takes a sandbox'),
         }
       : {}),
   };

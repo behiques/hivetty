@@ -1262,7 +1262,7 @@ export function setCliAgents(request: SetCliAgentsRequest): ConfigSnapshot {
       const agents = objectOrEmpty(cli.agents);
 
       if (request.enabled !== undefined) agents.enabled = request.enabled;
-      for (const key of ['model', 'effort'] as const) {
+      for (const key of ['model', 'effort', 'sandbox'] as const) {
         const next = request[key];
         if (next === null) delete agents[key];
         else if (next !== undefined) agents[key] = next;

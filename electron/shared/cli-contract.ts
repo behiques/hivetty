@@ -14,8 +14,11 @@ export const CODEX_MODELS = ['gpt-6-luna', 'gpt-5.6-terra', 'gpt-5.6-luna'] as c
 /** Codex's `model_reasoning_effort` values at 0.164.0 (HIVE-342). */
 export const CODEX_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
-/** The sandbox a Codex run gets (HIVE-342); `danger-full-access` is never offered. */
-export type HeadlessSandbox = 'read-only' | 'workspace-write';
+/** The sandboxes a Codex run may get (HIVE-342); `danger-full-access` is never offered. */
+export const HEADLESS_SANDBOXES = ['read-only', 'workspace-write'] as const;
+
+/** The sandbox a Codex run gets (HIVE-342). */
+export type HeadlessSandbox = (typeof HEADLESS_SANDBOXES)[number];
 
 /**
  * The models and efforts each CLI accepts: the closed lists the config parser, the IPC guard and
@@ -63,4 +66,6 @@ export interface SetCliAgentsRequest {
   enabled?: boolean;
   model?: string | null;
   effort?: string | null;
+  /** Codex only (HIVE-342). */
+  sandbox?: HeadlessSandbox | null;
 }
