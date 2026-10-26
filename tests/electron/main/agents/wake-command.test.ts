@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createWakeCommand,
@@ -7,8 +7,11 @@ import {
   type WakeFs,
 } from '../../../../electron/main/agents/wake-command';
 import type { AgentState } from '../../../../electron/main/agents/state';
+import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import type { McpServerSpec } from '../../../../electron/main/mcp/agent-config';
 import { STANDING_LANE, type AgentRunState } from '../../../../electron/shared/agent-contract';
+import type { HarnessId } from '../../../../electron/shared/harness-contract';
+import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
 
 /**
  * The seam between a *name* and an argv (HIVE-115, task 9).
@@ -1041,5 +1044,169 @@ describe('a changed system prompt', () => {
     if ('problem' in lane) throw new Error(lane.problem);
     expect(lane.lastTurn).toBe(true);
     expect(standing.lastTurn).toBe(false);
+  });
+});
+
+describe('the CLI a wake runs on (HIVE-340)', () => {
+  const codex = 'codex' as string as HarnessId;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('runs on claude-code and says so, with no gate and no harness:', () => {
+    const built = build()('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built.harness).toBe('claude-code');
+  });
+
+  it('asks the fence about exactly what HIVE_GRANTS carries', () => {
+    const express = vi.spyOn(claudeCodeAdapter.headless.fence, 'express');
+    const built = build({ pendingGrants: () => ['literal:Bash:git push'] })('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(express).toHaveBeenCalledWith(JSON.parse(built.env[HOOK_ENV_GRANTS]!));
+  });
+
+  it('refuses a run no CLI can fence, naming tools and never their arguments', () => {
+    vi.spyOn(claudeCodeAdapter.headless.fence, 'express').mockReturnValue({
+      ok: false,
+      unexpressible: ['Bash(cat /Users/u/secret)'],
+    });
+
+    expect(build()('slack-watcher', 'manual')).toEqual({
+      problem: 'No CLI can run slack-watcher: claude-code cannot enforce Bash.',
+    });
+  });
+
+  it('resolves again on the next wake after a lapse', () => {
+    let allowed = true;
+    const wake = build({
+      gate: {
+        entitled: () => (allowed ? null : 'not in your plan (Starter or higher)'),
+        enabled: () => true,
+        defaultCli: () => undefined,
+      },
+    });
+
+    expect(wake('slack-watcher', 'manual')).not.toHaveProperty('problem');
+    allowed = false;
+    expect(wake('slack-watcher', 'manual')).toEqual({
+      problem: 'No CLI can run slack-watcher: claude-code is not in your plan (Starter or higher).',
+    });
+  });
+
+  it('resumes a lane whose conversation is on the same CLI', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 1, runs: [],
+      sessionUuid: 'earlier-uuid', harness: 'claude-code', promptHash: promptHashNow(),
+    };
+    const built = build()('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built.args.join(' ')).toContain('--resume earlier-uuid');
+  });
+
+  it("starts fresh, without a handoff turn, when the lane's conversation is another CLI's", () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 9, runs: [],
+      sessionUuid: 'codex-thread', harness: codex, promptHash: 'stale', forceRotate: true,
+    };
+    const built = build()('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built.args.join(' ')).not.toContain('--resume');
+    expect(built.args.join(' ')).toContain('--session-id minted-uuid');
+    expect(built.sessionUuid).toBe('minted-uuid');
+    expect(built.lastTurn).toBe(false);
+    expect(built.promptHash).toBeDefined();
+    expect(built.harness).toBe('claude-code');
+    expect(built.args.join('\n')).toContain(
+      'This is a fresh conversation on claude-code: your last one ran on codex, which is not available for this wake.',
+    );
+    expect(stored['slack-watcher']?.forceRotate).toBeUndefined();
+  });
+
+  it('zeroes the rotation counters when the CLI changed, so the fresh conversation is not asked to hand off', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 9, rotateFailures: 2, runs: [],
+      sessionUuid: 'codex-thread', harness: codex, promptHash: promptHashNow(),
+    };
+    const built = build()('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(stored['slack-watcher']?.runsSinceRotate).toBe(0);
+    expect(stored['slack-watcher']?.rotateFailures).toBe(0);
+
+    const next = build()('slack-watcher', 'manual');
+
+    if ('problem' in next) throw new Error(next.problem);
+
+    expect(next.lastTurn).toBe(false);
+  });
+
+  it('keeps the old conversation\'s counters when a switched wake is refused', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = AGENT_MD.replace(
+      'limits:',
+      'container:\n  runtime: docker\n  name: devbox\n  workspace: /work\n  hive_dir: /hive\nlimits:',
+    );
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 9, rotateFailures: 2, runs: [],
+      sessionUuid: 'codex-thread', harness: codex, promptHash: 'stale',
+    };
+    const built = build({
+      userDataPath: () => '/data',
+      hostAlias: () => 'host.docker.internal',
+      agentContainerSettingsPath: () => '/elsewhere/claude-agent.settings.json',
+    })('slack-watcher', 'manual');
+
+    expect('problem' in built && built.problem).toContain('/elsewhere/claude-agent.settings.json');
+    expect(stored['slack-watcher']?.runsSinceRotate).toBe(9);
+    expect(stored['slack-watcher']?.rotateFailures).toBe(2);
+  });
+
+  it('leaves the rotation counters alone when the CLI did not change', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 3, rotateFailures: 1, runs: [],
+      sessionUuid: 'earlier-uuid', harness: 'claude-code', promptHash: promptHashNow(),
+    };
+    build()('slack-watcher', 'manual');
+
+    expect(stored['slack-watcher']?.runsSinceRotate).toBe(3);
+    expect(stored['slack-watcher']?.rotateFailures).toBe(1);
+  });
+
+  it('does not count a lane with no recorded harness as switched', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 3, rotateFailures: 1, runs: [],
+      sessionUuid: 'old-uuid', promptHash: promptHashNow(),
+    };
+    const built = build()('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built.args.join(' ')).toContain('--resume old-uuid');
+    expect(stored['slack-watcher']?.runsSinceRotate).toBe(3);
+  });
+
+  it('still starts a parked rotation with its handoff, on the new CLI', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 0, runs: [],
+      sessionUuid: 'codex-thread', harness: codex,
+      pendingSession: { uuid: 'parked-uuid', handoff: 'Pick up the PR review.' },
+    };
+    const built = build()('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built.sessionUuid).toBe('parked-uuid');
+    expect(built.args.join('\n')).toContain('Pick up the PR review.');
+    expect(built.args.join('\n')).not.toContain('This is a fresh conversation');
   });
 });

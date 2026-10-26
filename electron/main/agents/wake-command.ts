@@ -38,15 +38,19 @@ import {
   type AgentDefinition,
   type RunKind,
 } from '@shared/agent-contract';
+import type { HarnessId } from '@shared/harness-contract';
 
 import { CONTAINER_DIR, CONTAINER_MCP_FILE } from '../container/generated';
+import type { HarnessAdapter } from '../harness/port';
+import { headlessAdapter } from '../harness/registry';
 import { agentMcpConfig, type McpServerSpec } from '../mcp/agent-config';
 
 import { resolveClaude } from './claude-path';
 import { parseAgent } from './definition';
 import { AGENT_PREAMBLE } from './preamble';
+import { resolveHarness, type HarnessGate } from './resolve-harness';
 import type { AgentState } from './state';
-import { systemPromptFor, wakeCommand, type WakeCommand } from './waker';
+import { fencedRules, systemPromptFor, wakeCommand, type WakeCommand } from './waker';
 
 /** The three file operations a wake performs, injected so a test can watch them. */
 export interface WakeFs {
@@ -142,6 +146,10 @@ export interface WakeCommandDeps {
   userDataPath: () => string;
   hostAlias: () => string;
   agentContainerSettingsPath: (config: AgentContainer) => string | null;
+  /** The licence, the per-CLI switch and the Settings default (HIVE-332, HIVE-341). Absent: every CLI allowed, no default. */
+  gate?: HarnessGate;
+  /** The adapter for a CLI. The registry's unless a test swaps it. */
+  adapter?: (id: HarnessId) => HarnessAdapter | undefined;
 }
 
 /**
@@ -170,6 +178,8 @@ type WakeInvocation = WakeCommand & {
    * started with, so a resumed wake has nothing new to record.
    */
   promptHash?: string;
+  /** The CLI this wake resolved to (HIVE-340); the close records it beside the uuid. */
+  harness: HarnessId;
 };
 
 type BuildWakeCommand = (
@@ -296,15 +306,14 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       `claude` on it, or one whose command carries arguments, can still wake
       an agent whose image has one. `wakeCommand` puts `container.command`
       after the container's name; `claudePath` is what a *host* wake spawns.
+      HIVE-332 generalises this per CLI; today every CLI that resolves is Claude's binary.
     */
-    const claude =
+    const binary = () =>
       def.container !== undefined
         ? { path: def.container.command ?? 'claude' }
         : deps.isExecutable === undefined
           ? resolveClaude(deps.claudeCommand(), deps.env()['PATH'])
           : resolveClaude(deps.claudeCommand(), deps.env()['PATH'], deps.isExecutable);
-
-    if ('problem' in claude) return claude;
 
     /*
       What this story does not do for an agent, refused rather than half-done
@@ -393,6 +402,29 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     */
     const task = kind === 'task';
     const pending = previous.pendingSession;
+    const grants = deps.pendingGrants(name, task ? STANDING_LANE : lane);
+    /*
+      Which CLI runs this wake (HIVE-340), once per wake: a lapse moves the next wake, never this
+      one. Before any write, so a refusal leaves nothing behind.
+    */
+    const resolved = resolveHarness(def, fencedRules(def, grants), {
+      adapter: deps.adapter ?? headlessAdapter,
+      binary,
+      ...(deps.gate === undefined ? {} : { gate: deps.gate }),
+    });
+
+    if ('problem' in resolved) return resolved;
+
+    const { adapter } = resolved;
+    /*
+      A conversation belongs to the CLI that started it: Claude cannot `--resume` a Codex thread.
+      So a lane whose CLI changed starts fresh, with no handoff turn on the old CLI (it may be the
+      one that just became unavailable). A parked rotation is not a switch: its handoff is text,
+      and it starts fresh anyway.
+    */
+    const recorded = previous.harness ?? 'claude-code';
+    const switched =
+      !task && pending === undefined && previous.sessionUuid !== undefined && recorded !== adapter.id;
     const prompt = systemPromptFor(AGENT_PREAMBLE, def);
     const promptHash = createHash('sha256').update(prompt).digest('hex');
     /*
@@ -405,6 +437,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     const stalePrompt = previous.promptHash !== promptHash;
     const lastTurn =
       !task &&
+      !switched &&
       pending === undefined &&
       previous.sessionUuid !== undefined &&
       (forced || stalePrompt || previous.runsSinceRotate >= def.limits.rotateAfter);
@@ -452,14 +485,16 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     }
 
     const resuming =
-      task || pending !== undefined ? undefined : previous.sessionUuid;
+      task || pending !== undefined || switched ? undefined : previous.sessionUuid;
     const minted = task ? deps.newUuid() : (pending?.uuid ?? deps.newUuid());
 
     let command: WakeCommand;
 
     try {
       command = wakeCommand({
-        claudePath: claude.path,
+        claudePath: resolved.path,
+        adapter,
+        ...(switched ? { switchedFrom: recorded } : {}),
         def,
         ...(resuming === undefined ? {} : { sessionUuid: resuming }),
         newUuid: minted,
@@ -492,7 +527,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
           hook: deps.hookEnv(name),
           subscriptionAuth: deps.subscriptionAuth(),
         },
-        grants: deps.pendingGrants(name, task ? STANDING_LANE : lane),
+        grants,
         ...(def.container === undefined
           ? {}
           : {
@@ -504,9 +539,17 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
             }),
       });
     } catch (cause) {
-      // The path map's refusal (HIVE-137), or the fence's (HIVE-339): a run with no safe spelling.
+      // The path map's refusal (HIVE-137): a run with no safe spelling.
       return { problem: describe(cause) };
     }
+
+    /*
+      A switch starts a new conversation, so the old one's count and strikes are not its own: left
+      alone, a lane at `rotateAfter` would ask the one-run-old conversation for a handoff. After
+      the try/catch, like the consumption above: a refused wake starts no run, and the old
+      conversation keeps its counters.
+    */
+    if (switched) deps.state.patchLane(name, lane, { runsSinceRotate: 0, rotateFailures: 0 });
 
     // Whichever of the two `wakeCommand` actually spelled — `--resume <uuid>`
     // or `--session-id <uuid>`. The tracker matches a Stop hook against it.
@@ -516,6 +559,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       lastTurn,
       kind,
       ...(resuming === undefined ? { promptHash } : {}),
+      harness: adapter.id,
     };
   };
 }

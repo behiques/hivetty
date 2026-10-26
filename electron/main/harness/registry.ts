@@ -15,6 +15,9 @@ const adapters: Record<HarnessId, HarnessAdapter> = {
  */
 export const sessionAdapter = (): HarnessAdapter => adapters['claude-code'];
 
+/** The adapter a headless run launches with and reads through (HIVE-340). */
+export const headlessAdapter = (id: HarnessId): HarnessAdapter => adapters[id];
+
 export interface HarnessRegistry {
   adapterFor(id: HarnessId): HarnessAdapter;
   /** The harness driving an entity, or `undefined` for a plain terminal or a command. */

@@ -10,6 +10,7 @@ import {
   type RunLine,
   type RunOutcome,
 } from '@shared/agent-contract';
+import type { HarnessId } from '@shared/harness-contract';
 import {
   HOOK_ENV_GRANTS,
   HOOK_ENV_RUN,
@@ -21,7 +22,7 @@ import { SLACK_SERVER_KEY } from '@shared/slack-contract';
 
 import { expandEnvArgv } from '../container/container-command';
 import type { McpServerStatus, RunEnd, RunEvent, RunEventReader } from '../harness/port';
-import { sessionAdapter } from '../harness/registry';
+import { headlessAdapter } from '../harness/registry';
 
 import { NO_EVENTS, foldRunEvents, type EventFold } from './run-log';
 import type { AgentState } from './state';
@@ -147,6 +148,8 @@ export interface RunTrackerDeps {
         lastTurn: boolean;
         kind: RunKind;
         promptHash?: string;
+        /** Absent reads as `claude-code` (HIVE-340). */
+        harness?: HarnessId;
       })
     | { problem: string };
   /**
@@ -329,6 +332,8 @@ interface LiveRun {
   stop: ((signal: 'TERM' | 'KILL') => void) | null;
   /** This run's stdout, read by the harness that launched it (HIVE-338). */
   reader: RunEventReader;
+  /** The CLI that launched this run, and so reads its output (HIVE-340). */
+  harness: HarnessId;
   fold: EventFold;
   closed: boolean;
   reason: string | null;
@@ -390,6 +395,8 @@ interface FinalizeInfo {
   sessionUuid?: string;
   /** The prompt a session-starting run started with; stored beside its uuid. */
   promptHash?: string;
+  /** The CLI that launched this run, and so reads its output (HIVE-340). */
+  harness: HarnessId;
 }
 
 /**
@@ -612,6 +619,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       ...(end?.costUsd === undefined ? {} : { costUsd: end.costUsd }),
       ...(end?.turns === undefined ? {} : { turns: end.turns }),
       ...(end?.usage === undefined ? {} : { usage: end.usage }),
+      harness: info.harness,
       ...(reason === null ? {} : { reason }),
       // Recorded on every run, not only the ones that rotate: "which
       // conversation did run 14 belong to" is the audit trail HIVE-122 needs.
@@ -716,7 +724,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             ? { runsSinceRotate: laneNow.runsSinceRotate + 1 }
             : {}),
         ...(failures === null ? {} : { rotateFailures: failures }),
-        ...(sessionUuid === undefined ? {} : { sessionUuid }),
+        ...(sessionUuid === undefined ? {} : { sessionUuid, harness: info.harness }),
         ...(sessionUuid === undefined || info.promptHash === undefined
           ? {}
           : { promptHash: info.promptHash }),
@@ -1097,7 +1105,15 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
         finalizeRun(
           name,
-          { run, kind, lane, trigger, startedAt, lastTurn: command.lastTurn },
+          {
+            run,
+            kind,
+            lane,
+            trigger,
+            startedAt,
+            lastTurn: command.lastTurn,
+            harness: command.harness ?? 'claude-code',
+          },
           'failed',
           null,
           null,
@@ -1150,7 +1166,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
                   ]);
                 }
               },
-        reader: sessionAdapter().headless.reader(),
+        harness: command.harness ?? 'claude-code',
+        reader: headlessAdapter(command.harness ?? 'claude-code').headless.reader(),
         fold: NO_EVENTS,
         closed: false,
         reason: null,

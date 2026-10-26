@@ -7,11 +7,12 @@ import {
   type RunKind,
 } from '@shared/agent-contract';
 import { DEFAULT_ENV_ARG, isSessionEnvDenied } from '@shared/config-contract';
+import type { HarnessId } from '@shared/harness-contract';
 import { HOOK_ENV_GRANTS, HOOK_ENV_RECEIVER_URL } from '@shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '@shared/ledger-tools';
 
 import { createPathMap } from '../container/path-map';
-import { sessionAdapter } from '../harness/registry';
+import type { HarnessAdapter } from '../harness/port';
 import { withHostAlias } from '../hooks/container-origin';
 
 /**
@@ -45,6 +46,10 @@ interface WakeEnv {
 
 interface WakeInput {
   claudePath: string;
+  /** The CLI this wake runs on, resolved by `createWakeCommand` (HIVE-340). */
+  adapter: HarnessAdapter;
+  /** The CLI the lane's last conversation ran on, when this wake starts fresh on another (HIVE-340). */
+  switchedFrom?: HarnessId;
   def: AgentDefinition;
   /** Absent on the very first run, which mints one instead. */
   sessionUuid?: string;
@@ -272,6 +277,18 @@ export function systemPromptFor(
   return `${preamble.trimEnd()}\n\n${AUTONOMY_CLAUSE[def.autonomy]}\n\n---\n\n${def.body.trim()}\n`;
 }
 
+/**
+ * What the fence enforces, as written (HIVE-339): `HOOK_ENV_GRANTS` carries this same list, and the
+ * adapter narrows only its own `--allowedTools`. `ToolSearch`'s place in it is explained there.
+ * Resolution asks the fence about exactly this list (HIVE-340).
+ */
+export const fencedRules = (def: AgentDefinition, grants: readonly string[] = []): string[] => [
+  ...HIVE_STANDING_GRANTS,
+  'ToolSearch',
+  ...def.tools,
+  ...grants,
+];
+
 export function wakeCommand(input: WakeInput): WakeCommand {
   const { def, paths, env } = input;
 
@@ -310,29 +327,17 @@ export function wakeCommand(input: WakeInput): WakeCommand {
 
     return mapped;
   };
-  const adapter = sessionAdapter();
-  // What the fence enforces, as written: `HOOK_ENV_GRANTS` below carries this same list, and the
-  // adapter narrows only its own `--allowedTools`. `ToolSearch`'s place in it is explained there.
-  const fenced = [...HIVE_STANDING_GRANTS, 'ToolSearch', ...def.tools, ...(input.grants ?? [])];
-  const fence = adapter.headless.fence.express(fenced);
-
-  /*
-    The block rule (HIVE-339). A rule this CLI cannot enforce means the run does not start on it:
-    running it with the rule dropped would leave the call it fenced unfenced. A throw, as the path
-    map's refusal above is, so `createWakeCommand` returns it as the run's problem.
-  */
-  if (!fence.ok) {
-    throw new Error(
-      `${adapter.id} cannot enforce ${fence.unexpressible.join(', ')}, so ${def.name} will not run on it.`,
-    );
-  }
+  const { adapter } = input;
+  const fenced = fencedRules(def, input.grants);
+  // Claude's vocabulary (HIVE-340). Another CLI takes its own defaults, never a translated `opus`.
+  const claude = adapter.id === 'claude-code';
 
   const plan = adapter.headless.launch({
     conversation:
       input.sessionUuid === undefined ? { start: input.newUuid } : { resume: input.sessionUuid },
     name: def.name,
-    ...(def.model === undefined ? {} : { model: def.model }),
-    ...(def.effort === undefined ? {} : { effort: def.effort }),
+    ...(claude && def.model !== undefined ? { model: def.model } : {}),
+    ...(claude && def.effort !== undefined ? { effort: def.effort } : {}),
     limits: {
       turns: def.limits.turns,
       ...(def.limits.budgetUsd === undefined ? {} : { budgetUsd: def.limits.budgetUsd }),
@@ -345,13 +350,17 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     },
     // Narrowed for the CLI by the adapter; `HOOK_ENV_GRANTS` below takes them as written.
     grants: [...HIVE_STANDING_GRANTS, ...def.tools],
-    prompt: wakePrompt(input.trigger, input.extra, {
+    prompt: `${
+      input.switchedFrom === undefined
+        ? ''
+        : `This is a fresh conversation on ${adapter.id}: your last one ran on ${input.switchedFrom}, which is not available for this wake.\n\n`
+    }${wakePrompt(input.trigger, input.extra, {
       ...(input.lastTurn === undefined ? {} : { lastTurn: input.lastTurn }),
       ...(input.handoff === undefined ? {} : { handoff: input.handoff }),
       ...(input.kind === 'task' ? { task: true as const } : {}),
       ...(input.lane === undefined ? {} : { lane: input.lane }),
       ...(input.def.lane === undefined ? {} : { laneMode: input.def.lane, agent: input.def.name }),
-    }),
+    })}`,
     subscriptionAuth: env.subscriptionAuth,
   });
   const args = [...plan.args];

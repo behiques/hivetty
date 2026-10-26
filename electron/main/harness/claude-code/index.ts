@@ -32,6 +32,7 @@ export const claudeCodeAdapter: HarnessAdapter = {
     enforcesTurns: true,
     enforcesBudget: true,
     reportsMcpStatus: true,
+    agentMcp: ['slack'],
   },
   launch,
   prepare: {

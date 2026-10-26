@@ -635,6 +635,7 @@ describe('createDeliver', () => {
         enforcesTurns: false,
         enforcesBudget: false,
         reportsMcpStatus: false,
+        agentMcp: [],
       },
       promptMarker: vi.fn(() => 'never typed'),
     });
