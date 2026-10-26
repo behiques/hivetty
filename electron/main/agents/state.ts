@@ -165,6 +165,7 @@ function seed(path: string): Record<string, AgentRunState> {
 /** The lane fields of the top-level state: the standing lane (HIVE-184). */
 const LANE_KEYS = [
   'sessionUuid',
+  'harness',
   'pendingWake',
   'runsSinceRotate',
   'pendingSession',
