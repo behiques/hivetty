@@ -38,8 +38,9 @@ describe('fork identity (HIVE-242)', () => {
     expect(offenders(shipped, /~\/\.hive\b|\$HOME\/\.hive\b|homedir\(\),\s*'\.hive'/)).toEqual([]);
   });
 
+  // AGENTS.md names `~/.hive` to fence it off: only the importer reads it (HIVE-249).
   it('documents no path into The Hive’s home folder', () => {
-    expect(offenders(docs, /~\/\.hive\b/)).toEqual([]);
+    expect(offenders(docs, /~\/\.hive\b/, (rel) => rel === 'AGENTS.md')).toEqual([]);
   });
 
   it('says HiveTTY, never the old display name', () => {
@@ -47,8 +48,7 @@ describe('fork identity (HIVE-242)', () => {
   });
 
   it('points at behiques/hivetty, not the upstream repo', () => {
-    const upstreamAllowed = (rel: string) =>
-      rel === 'AGENTS.md' || rel === 'README.md' || rel === 'docs/packaging-and-updates.md';
+    const upstreamAllowed = (rel: string) => rel === 'docs/packaging-and-updates.md';
     expect(offenders([...shipped, ...docs], /yunidbauza\/the-hive/, upstreamAllowed)).toEqual([]);
   });
 });
