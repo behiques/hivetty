@@ -82,7 +82,7 @@ export const BRIDGE_CONFIG_KEYS = [
   'renameProject', 'repointProject', 'reorderProjects', 'setProjectKey', 'setProjectAutoMerge',
   'setSessionPlugin', 'startClone', 'cancelClone', 'onCloneDone', 'onConfigChanged',
   'setRuntime', 'setProjectRuntime', 'diagnoseCommand', 'diagnoseEnv', 'setNotifications',
-  'revealConfig', 'resetConfig', 'setJira', 'setSlack', 'setReceiver', 'setServer', 'setRemote',
+  'revealConfig', 'resetConfig', 'setJira', 'setSlack', 'setCliAgents', 'setReceiver', 'setServer', 'setRemote',
   'getRemote',
 ] as const satisfies readonly (keyof HiveBridge['config'])[];
 

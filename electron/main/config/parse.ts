@@ -1,3 +1,4 @@
+import { CLI_VOCAB, type CliAgents, type RawClis } from '@shared/cli-contract';
 import {
   BIND_KEYS,
   JIRA_KEYS,
@@ -40,6 +41,7 @@ import {
   hasControlCharacters,
   MAX_ENV_ENTRIES,
 } from '@shared/guards';
+import { HARNESS_IDS, isHarnessId, type HarnessId } from '@shared/harness-contract';
 import {
   LEGACY_NOTIFICATION_KEYS,
   NOTIFICATION_DELIVERIES,
@@ -210,6 +212,10 @@ export interface ParsedConfig {
    * untouched file from growing a block it never asked for.
    */
   slack?: Partial<SlackConfig>;
+  /** HIVE-341's `clis` block as the file declared it; resolved by `resolveClis`. */
+  clis?: RawClis;
+  /** HIVE-341. Absent when the file names none or names a CLI this build cannot run. */
+  agentsDefaultCli?: HarnessId;
   errors: string[];
   /** The version the file declared, or `null` when it was unreadable. */
   version: number | null;
@@ -281,6 +287,9 @@ const TOP_LEVEL_KEYS = [
   'disabledSessionPlugins',
   // HIVE-84. Whether the app asks the login shell for its `PATH` at startup.
   'importLoginEnv',
+  // HIVE-341. Per-CLI headless agent defaults, and which CLI agents fall back to.
+  'clis',
+  'agentsDefaultCli',
 ];
 /**
  * `shell`, `claudeCommand` and `env` are story 104's per-project overrides.
@@ -1305,6 +1314,91 @@ function optionalSlack(
   return slack;
 }
 
+const CLI_KEYS = ['agents'] as const;
+const CLI_AGENT_KEYS = ['enabled', 'model', 'effort'] as const;
+
+/**
+ * The `clis` block (HIVE-341). Shaped like {@link optionalSlack}, one level deeper: a bad field
+ * costs that field and keeps its siblings, so a mistyped model never turns an agent's CLI off.
+ */
+function optionalClis(
+  record: Record<string, unknown>,
+  label: string,
+  errors: string[],
+): RawClis | undefined {
+  const value = record.clis;
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) {
+    errors.push(`${label}.clis: expected an object — ignored`);
+    return undefined;
+  }
+
+  const at = `${label}.clis`;
+  if (!checkKeys(value, HARNESS_IDS, at, errors)) return undefined;
+
+  const clis: RawClis = {};
+
+  for (const id of HARNESS_IDS) {
+    const entry = value[id];
+    if (entry === undefined) continue;
+
+    const cliAt = `${at}.${id}`;
+    if (!isPlainObject(entry)) {
+      errors.push(`${cliAt}: expected an object — ignored`);
+      continue;
+    }
+    if (!checkKeys(entry, CLI_KEYS, cliAt, errors)) continue;
+    if (entry.agents === undefined) {
+      clis[id] = {};
+      continue;
+    }
+
+    const agentsAt = `${cliAt}.agents`;
+    if (!isPlainObject(entry.agents)) {
+      errors.push(`${agentsAt}: expected an object — ignored`);
+      continue;
+    }
+    if (!checkKeys(entry.agents, CLI_AGENT_KEYS, agentsAt, errors)) continue;
+
+    const raw = entry.agents;
+    const models: readonly string[] = CLI_VOCAB[id].models;
+    const efforts: readonly string[] = CLI_VOCAB[id].efforts;
+    const agents: Partial<CliAgents> = {};
+
+    if (raw.enabled !== undefined) {
+      if (typeof raw.enabled === 'boolean') agents.enabled = raw.enabled;
+      else errors.push(`${agentsAt}.enabled: expected a boolean — ignored`);
+    }
+    if (raw.model !== undefined) {
+      if (typeof raw.model === 'string' && models.includes(raw.model)) {
+        agents.model = raw.model as CliAgents['model'];
+      } else errors.push(`${agentsAt}.model: expected one of ${models.join(', ')} — ignored`);
+    }
+    if (raw.effort !== undefined) {
+      if (typeof raw.effort === 'string' && efforts.includes(raw.effort)) {
+        agents.effort = raw.effort as CliAgents['effort'];
+      } else errors.push(`${agentsAt}.effort: expected one of ${efforts.join(', ')} — ignored`);
+    }
+
+    clis[id] = { agents };
+  }
+
+  return clis;
+}
+
+/** `agentsDefaultCli` (HIVE-341): a CLI this build can run, else ignored (resolution falls back). */
+function optionalAgentsDefaultCli(
+  record: Record<string, unknown>,
+  label: string,
+  errors: string[],
+): HarnessId | undefined {
+  const value = record.agentsDefaultCli;
+  if (value === undefined) return undefined;
+  if (typeof value === 'string' && isHarnessId(value)) return value;
+  errors.push(`${label}.agentsDefaultCli: expected one of ${HARNESS_IDS.join(', ')} — ignored`);
+  return undefined;
+}
+
 export function parseConfig(text: string, label: string): ParsedConfig {
   const errors: string[] = [];
   // Every `return empty` below is a wholesale rejection, so `fatal` is set
@@ -1360,6 +1454,8 @@ export function parseConfig(text: string, label: string): ParsedConfig {
   const server = optionalServer(document, label, errors);
   const remote = optionalRemote(document, label, errors);
   const slack = optionalSlack(document, label, errors);
+  const clis = optionalClis(document, label, errors);
+  const agentsDefaultCli = optionalAgentsDefaultCli(document, label, errors);
   const subscriptionAuth = optionalBoolean(
     document,
     'subscriptionAuth',
@@ -1401,6 +1497,8 @@ export function parseConfig(text: string, label: string): ParsedConfig {
       server,
       remote,
       slack,
+      ...(clis === undefined ? {} : { clis }),
+      ...(agentsDefaultCli === undefined ? {} : { agentsDefaultCli }),
       projects: [],
       errors,
       version,
@@ -1423,6 +1521,8 @@ export function parseConfig(text: string, label: string): ParsedConfig {
       server,
       remote,
       slack,
+      ...(clis === undefined ? {} : { clis }),
+      ...(agentsDefaultCli === undefined ? {} : { agentsDefaultCli }),
       projects: [],
       errors,
       version,
@@ -1541,6 +1641,8 @@ export function parseConfig(text: string, label: string): ParsedConfig {
     server,
     remote,
     slack,
+    ...(clis === undefined ? {} : { clis }),
+    ...(agentsDefaultCli === undefined ? {} : { agentsDefaultCli }),
     projects,
     errors,
     version,

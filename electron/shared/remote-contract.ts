@@ -70,8 +70,9 @@ import { isThisMachineAction } from './notification-contract';
  * 14 → 15: `CH` gained `jira:issue-changed`.
  * 15 → 16: `CH` gained `github:user-repos` (the clone picker).
  * 16 → 17 (HIVE-340): `RunSummary` (on `agents:list` and `agents:status`) gained `harness`.
+ * 17 → 18 (HIVE-341): `CH` gained `config:set-cli-agents`; `ConfigSnapshot` gained `clis` and `agentsDefaultCli`.
  */
-export const REMOTE_PROTOCOL_VERSION = 17;
+export const REMOTE_PROTOCOL_VERSION = 18;
 
 /**
  * What a frame is for.
@@ -157,6 +158,7 @@ export const FRAME_KIND = {
   [CH.integrationsLoginEnv]: 'call',
   [CH.configSetJira]: 'call',
   [CH.configSetSlack]: 'call',
+  [CH.configSetCliAgents]: 'call',
   [CH.configSetReceiver]: 'call',
   [CH.configSetServer]: 'call',
   [CH.serverPair]: 'call',
@@ -457,6 +459,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.integrationsLoginEnv]: 'execute',
   [CH.configSetJira]: 'mutate',
   [CH.configSetSlack]: 'mutate',
+  [CH.configSetCliAgents]: 'mutate',
   [CH.configSetReceiver]: 'mutate',
   [CH.configSetServer]: 'mutate',
   [CH.serverPair]: 'execute',

@@ -70,6 +70,8 @@ Any key not in this list makes the whole file invalid, and Settings says which.
 | `notifications` | kind → `off`, `inbox`, `both` | [The inbox](inbox.md#choosing-what-reaches-you) |
 | `jira` | `site`, `email`, `jql`, `workflow` | [Jira and pull requests](work-and-prs.md#connect-jira) · [Ticket workflow](work-and-prs.md#the-ticket-workflow) |
 | `slack` | `socketMode`, `commanders` | [Slack](slack.md) |
+| `clis` | per CLI, `agents`: `enabled`, `model`, `effort` | [Settings › CLIs](settings.md#clis) |
+| `agentsDefaultCli` | the CLI an agent with no `harness:` falls back to; default `claude-code` | [Settings › CLIs](settings.md#clis) |
 | `receiver` | `hostAlias`, `bind` for containers | [Containers](containers.md) |
 | `server` | serve this machine | [Remote](remote.md#serve-from-an-always-on-mac) |
 | `remote` | attach to a server | [Remote](remote.md#attach-from-a-laptop) |

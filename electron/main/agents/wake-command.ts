@@ -494,6 +494,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       command = wakeCommand({
         claudePath: resolved.path,
         adapter,
+        defaults: deps.gate?.defaults(adapter.id) ?? {},
         ...(switched ? { switchedFrom: recorded } : {}),
         def,
         ...(resuming === undefined ? {} : { sessionUuid: resuming }),

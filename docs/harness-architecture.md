@@ -193,6 +193,12 @@ neutral `SessionMetrics`. Claude Code's live in `claude-code/{record,title-origi
   its fence is `approve`. Resolution asks it (HIVE-340): `resolve-harness.ts` calls
   `fence.express` on the full `HIVE_GRANTS` list, and a CLI that cannot express a rule is skipped,
   never run unfenced.
+- `HarnessGate` (`agents/resolve-harness.ts`) is what the licence and Settings › CLIs say about a
+  CLI. It is wired as `createCliGate(getConfig)` (`agents/cli-gate.ts`, HIVE-341): `enabled`,
+  `defaultCli` and `defaults` (the card's model and effort, under `AGENT.md`'s) read the config
+  per call, and `entitled` allows every CLI until HIVE-332. A new CLI adds its models and efforts
+  as a row of `CLI_VOCAB` in `@shared/cli-contract`, which the config parser, the IPC guard and
+  the card all read.
 - `prepare: HarnessFiles`, a property reached through `sessionAdapter()`, whose result travels as
   `PreparedFiles` on `OpenRequest.files`.
 - `readHook(input): HookReading`, `contextReply(text)`, `promptMarker(entry)`,

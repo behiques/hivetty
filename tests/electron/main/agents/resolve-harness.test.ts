@@ -51,6 +51,7 @@ const deps = (adapters: Record<string, HarnessAdapter>, over: Partial<ResolveDep
 const gate = (over: Partial<HarnessGate> = {}): HarnessGate => ({
   entitled: () => null,
   enabled: () => true,
+  defaults: () => ({}),
   defaultCli: () => undefined,
   ...over,
 });

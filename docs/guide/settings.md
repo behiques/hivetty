@@ -39,6 +39,20 @@ found, and which variables your rc file overrode.
 { "id": "nova-web", "path": "~/repos/nova-web", "claudeCommand": "~/bin/claude-nova" }
 ```
 
+## CLIs
+
+How each agent CLI runs [agents](agents.md). Claude Code's **Headless agents** group has
+**Enabled for agents**, and a default **Model** and **Effort** for agent runs. An agent's own
+`model:` or `effort:` in its `AGENT.md` wins; **CLI default** leaves the flag off so the CLI
+picks. Turn a CLI off and agents skip it; with no other CLI enabled, they refuse to run and
+their row says why.
+
+**Example.** Run agents on Haiku unless they ask for something else:
+
+```json
+"clis": { "claude-code": { "agents": { "enabled": true, "model": "haiku" } } }
+```
+
 ## Skills
 
 Create, import and edit [custom skills](skills.md).
