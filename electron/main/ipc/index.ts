@@ -188,6 +188,7 @@ import {
   type AutoMergeGrants,
 } from '../agents/auto-merge';
 import { resolveClaude } from '../agents/claude-path';
+import { createCliGate } from '../agents/cli-gate';
 import {
   agentsDirectoryFor,
   projectAutoMergeFor,
@@ -2729,6 +2730,8 @@ export function registerIpcHandlers(
     hookEnv: (name) => hooks.envFor(name),
     claudeCommand,
     subscriptionAuth: () => getConfig().subscriptionAuth,
+    // HIVE-341. Settings › CLIs: which CLI agents fall back to, whether each may run them, and its defaults.
+    gate: createCliGate(getConfig),
     state: agentState,
     env: () => process.env,
     newUuid,
