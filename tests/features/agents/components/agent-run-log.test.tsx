@@ -7,6 +7,7 @@ import {
   type LiveRunSummary,
   type RunSummary,
 } from '@shared/agent-contract';
+import type { HarnessId } from '@shared/harness-contract';
 import { useAppearanceStore, useTerminalAppearance } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 
@@ -1213,5 +1214,26 @@ describe('AgentRunLog', () => {
       ).not.toBeNull();
       expect(within(receipts).getByTitle('standing run')).toBeInTheDocument();
     });
+  });
+});
+
+describe('the CLI a run ran on (HIVE-340)', () => {
+  const receipts = (container: HTMLElement): HTMLElement =>
+    container.querySelector('[data-region="run-receipts"]') as HTMLElement;
+
+  it('chips a run that ran on another CLI', () => {
+    seed({ runs: [run(1, { harness: 'codex' as string as HarnessId })] });
+
+    const { container } = render(<AgentRunLog name="watcher" />);
+
+    expect(within(receipts(container)).getByTitle('Ran on codex')).toHaveTextContent('codex');
+  });
+
+  it('draws nothing for claude-code, or for a run recorded before HIVE-340', () => {
+    seed({ runs: [run(1, { harness: 'claude-code' }), run(2)] });
+
+    const { container } = render(<AgentRunLog name="watcher" />);
+
+    expect(within(receipts(container)).queryByTitle(/^Ran on/)).toBeNull();
   });
 });
