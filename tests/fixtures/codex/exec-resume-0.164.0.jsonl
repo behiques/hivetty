@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a178e2-2b11-7922-a954-a48393594ae6"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"TANGERINE"}}
+{"type":"turn.completed","usage":{"input_tokens":112380,"cached_input_tokens":85120,"cache_write_input_tokens":0,"output_tokens":260,"reasoning_output_tokens":42}}
