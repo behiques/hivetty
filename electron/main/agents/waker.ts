@@ -340,7 +340,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   /*
     `AGENT.md`'s model and effort are Claude's vocabulary (HIVE-340), so they apply only there, ahead
     of the card; every CLI takes its own card's (HIVE-341, HIVE-342), never a translated `opus`.
-    Neither, and the flag is omitted.
+    With neither, the flag is omitted.
   */
   const claude = adapter.id === 'claude-code';
   const model = (claude ? def.model : undefined) ?? input.defaults?.model;
