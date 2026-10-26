@@ -484,6 +484,12 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       if (forced) deps.state.patch(name, { forceRotate: undefined });
     }
 
+    /*
+      A switch starts a new conversation, so the old one's count and strikes are not its own: left
+      alone, a lane at `rotateAfter` would ask the one-run-old conversation for a handoff.
+    */
+    if (switched) deps.state.patchLane(name, lane, { runsSinceRotate: 0, rotateFailures: 0 });
+
     const resuming =
       task || pending !== undefined || switched ? undefined : previous.sessionUuid;
     const minted = task ? deps.newUuid() : (pending?.uuid ?? deps.newUuid());

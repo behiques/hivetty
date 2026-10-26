@@ -123,5 +123,5 @@ export function resolveHarness(
 
   return 'pass' in result
     ? result.pass
-    : { problem: `No CLI can run ${def.name}: ${result.fail.join('; ')}.` };
+    : { problem: `No CLI can run ${def.name}: ${result.fail.map((reason) => reason.replace(/\.$/, '')).join('; ')}.` };
 }

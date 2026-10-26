@@ -122,7 +122,7 @@ describe('resolveHarness: availability (HIVE-340)', () => {
 
     expect(result).toEqual({
       problem:
-        'No CLI can run reviewer: codex cannot start: claude was not found on PATH.; claude-code cannot start: claude was not found on PATH..',
+        'No CLI can run reviewer: codex cannot start: claude was not found on PATH; claude-code cannot start: claude was not found on PATH.',
     });
   });
 

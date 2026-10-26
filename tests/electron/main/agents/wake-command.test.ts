@@ -1132,6 +1132,49 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
     expect(stored['slack-watcher']?.forceRotate).toBeUndefined();
   });
 
+  it('zeroes the rotation counters when the CLI changed, so the fresh conversation is not asked to hand off', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 9, rotateFailures: 2, runs: [],
+      sessionUuid: 'codex-thread', harness: codex, promptHash: promptHashNow(),
+    };
+    const built = build()('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(stored['slack-watcher']?.runsSinceRotate).toBe(0);
+    expect(stored['slack-watcher']?.rotateFailures).toBe(0);
+
+    const next = build()('slack-watcher', 'manual');
+
+    if ('problem' in next) throw new Error(next.problem);
+
+    expect(next.lastTurn).toBe(false);
+  });
+
+  it('leaves the rotation counters alone when the CLI did not change', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 3, rotateFailures: 1, runs: [],
+      sessionUuid: 'earlier-uuid', harness: 'claude-code', promptHash: promptHashNow(),
+    };
+    build()('slack-watcher', 'manual');
+
+    expect(stored['slack-watcher']?.runsSinceRotate).toBe(3);
+    expect(stored['slack-watcher']?.rotateFailures).toBe(1);
+  });
+
+  it('does not count a lane with no recorded harness as switched', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 3, rotateFailures: 1, runs: [],
+      sessionUuid: 'old-uuid', promptHash: promptHashNow(),
+    };
+    const built = build()('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built.args.join(' ')).toContain('--resume old-uuid');
+    expect(stored['slack-watcher']?.runsSinceRotate).toBe(3);
+  });
+
   it('still starts a parked rotation with its handoff, on the new CLI', () => {
     stored['slack-watcher'] = {
       status: 'sleeping', runsSinceRotate: 0, runs: [],
