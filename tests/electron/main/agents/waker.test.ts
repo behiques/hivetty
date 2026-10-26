@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import type { HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
-import type { HarnessId } from '../../../../electron/shared/harness-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '../../../../electron/shared/ledger-tools';
 import { matches } from '../../../../electron/shared/permission-rules';
@@ -722,7 +721,7 @@ describe('the command line an agent wake runs (HIVE-337 pin)', () => {
 });
 
 describe('the adapter a wake runs on (HIVE-340)', () => {
-  const other = { ...claudeCodeAdapter, id: 'codex' as string as HarnessId };
+  const other = { ...claudeCodeAdapter, id: 'codex' as const };
 
   it('lists exactly what HIVE_GRANTS carries', () => {
     const command = build({ grants: ['literal:Bash:git push'] });
@@ -763,7 +762,7 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
   });
 
   it('opens a fresh conversation on a new CLI by saying so first', () => {
-    const prompt = build({ switchedFrom: 'codex' as string as HarnessId }).args.join('\n');
+    const prompt = build({ switchedFrom: 'codex' }).args.join('\n');
 
     expect(prompt).toContain(
       'This is a fresh conversation on claude-code: your last one ran on codex, which is not available for this wake.\n\nYou woke because: ledger.',

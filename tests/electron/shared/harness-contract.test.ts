@@ -8,8 +8,12 @@ describe('isHarnessId (HIVE-340)', () => {
     for (const id of HARNESS_IDS) expect(isHarnessId(id)).toBe(true);
   });
 
+  it('knows codex (HIVE-342)', () => {
+    expect(isHarnessId('codex')).toBe(true);
+  });
+
   it('refuses a CLI with no adapter yet, and a near-miss spelling', () => {
-    expect(isHarnessId('codex')).toBe(false);
+    expect(isHarnessId('copilot')).toBe(false);
     expect(isHarnessId('claude')).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +15,9 @@ vi.mock('@/lib/project-config', async (importOriginal) => {
   return { ...actual, setCliAgentsConfig: (request: unknown) => setCliAgentsConfig(request) };
 });
 
+/** The Claude Code card: since HIVE-342 there is a card per CLI. */
+const claude = () => within(screen.getByRole('region', { name: 'Claude Code' }));
+
 const seed = (agents: Parameters<typeof resolveClis>[0]) =>
   setProjectConfigForTest({ ...emptySnapshot('/home/dev/.hive/config.json'), clis: resolveClis(agents) });
 
@@ -27,17 +30,18 @@ describe('ClisSection (HIVE-341)', () => {
     render(<ClisSection />);
 
     expect(screen.getByRole('region', { name: 'Claude Code' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Headless agents' })).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Enabled for agents' })).toBeChecked();
-    expect(screen.getByLabelText('Model')).toHaveValue('');
-    expect(screen.getByLabelText('Model')).toBeEnabled();
+    expect(screen.getByRole('region', { name: 'Codex' })).toBeInTheDocument();
+    expect(claude().getByRole('heading', { name: 'Headless agents' })).toBeInTheDocument();
+    expect(claude().getByRole('switch', { name: 'Enabled for agents' })).toBeChecked();
+    expect(claude().getByLabelText('Model')).toHaveValue('');
+    expect(claude().getByLabelText('Model')).toBeEnabled();
   });
 
   it('turning it off writes enabled: false', async () => {
     seed(undefined);
     render(<ClisSection />);
 
-    await userEvent.click(screen.getByRole('switch', { name: 'Enabled for agents' }));
+    await userEvent.click(claude().getByRole('switch', { name: 'Enabled for agents' }));
 
     expect(setCliAgentsConfig).toHaveBeenCalledWith({ cli: 'claude-code', enabled: false });
   });
@@ -46,16 +50,16 @@ describe('ClisSection (HIVE-341)', () => {
     seed({ 'claude-code': { agents: { effort: 'high' } } });
     render(<ClisSection />);
 
-    await userEvent.selectOptions(screen.getByLabelText('Model'), 'haiku');
+    await userEvent.selectOptions(claude().getByLabelText('Model'), 'haiku');
     expect(setCliAgentsConfig).toHaveBeenCalledWith({ cli: 'claude-code', model: 'haiku' });
 
-    await userEvent.selectOptions(screen.getByLabelText('Effort'), '');
+    await userEvent.selectOptions(claude().getByLabelText('Effort'), '');
     expect(setCliAgentsConfig).toHaveBeenCalledWith({ cli: 'claude-code', effort: null });
 
-    await userEvent.selectOptions(screen.getByLabelText('Effort'), 'max');
+    await userEvent.selectOptions(claude().getByLabelText('Effort'), 'max');
     expect(setCliAgentsConfig).toHaveBeenCalledWith({ cli: 'claude-code', effort: 'max' });
 
-    await userEvent.selectOptions(screen.getByLabelText('Model'), '');
+    await userEvent.selectOptions(claude().getByLabelText('Model'), '');
     expect(setCliAgentsConfig).toHaveBeenCalledWith({ cli: 'claude-code', model: null });
   });
 
@@ -63,8 +67,8 @@ describe('ClisSection (HIVE-341)', () => {
     seed({ 'claude-code': { agents: { enabled: false } } });
     render(<ClisSection />);
 
-    expect(screen.getByLabelText('Model')).toBeDisabled();
-    expect(screen.getByLabelText('Effort')).toBeDisabled();
+    expect(claude().getByLabelText('Model')).toBeDisabled();
+    expect(claude().getByLabelText('Effort')).toBeDisabled();
     expect(screen.getByText(/agents skip Claude Code/)).toBeInTheDocument();
   });
 

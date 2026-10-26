@@ -1995,8 +1995,16 @@ describe('parseSetCliAgentsRequest (HIVE-341)', () => {
     });
   });
 
+  it("takes codex's own vocabulary (HIVE-342)", () => {
+    expect(parseSetCliAgentsRequest({ cli: 'codex', model: 'gpt-6-luna' })).toEqual({
+      cli: 'codex',
+      model: 'gpt-6-luna',
+    });
+  });
+
   it.each([
-    [{ cli: 'codex', enabled: true }, /cli/],
+    [{ cli: 'copilot', enabled: true }, /cli/],
+    [{ cli: 'codex', model: 'opus' }, /model/],
     [{ cli: 'claude-code', model: 'gpt-5' }, /model/],
     [{ cli: 'claude-code', effort: 'extreme' }, /effort/],
     [{ cli: 'claude-code', enabled: 'yes' }, /enabled/],

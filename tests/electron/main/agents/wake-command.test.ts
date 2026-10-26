@@ -1049,7 +1049,7 @@ describe('a changed system prompt', () => {
 });
 
 describe('the CLI a wake runs on (HIVE-340)', () => {
-  const codex = 'codex' as string as HarnessId;
+  const codex: HarnessId = 'codex';
 
   afterEach(() => {
     vi.restoreAllMocks();
