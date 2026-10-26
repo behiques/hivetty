@@ -184,6 +184,7 @@ neutral `SessionMetrics`. Claude Code's live in `claude-code/{record,title-origi
 ## The port as built
 
 - `launch(spec): LaunchPlan`.
+- `headless.launch(spec): HeadlessPlan` — an agent run's argv, the env it adds and strips, the container's default binary and the `pkill -f` stop pattern (HIVE-337). `agents/waker.ts` keeps the prompt, the path map, the env filter and the `HIVE_*` identity.
 - `prepare: HarnessFiles`, a property reached through `sessionAdapter()`, whose result travels as
   `PreparedFiles` on `OpenRequest.files`.
 - `readHook(input): HookReading`, `contextReply(text)`, `promptMarker(entry)`,
@@ -210,6 +211,7 @@ The checklist, member by member, with the live suite that proves each:
 - [ ] An adapter in `electron/main/harness/<id>/`, registered in `registry.ts` (`adapters` is a
   `Record<HarnessId, …>`, so a missing one fails to compile).
 - [ ] `launch` (`test:pty` for the spawn, `test:ready` for boot).
+- [ ] `headless.launch` (`test:agent`).
 - [ ] `prepare` (`test:hooks`, `test:skills`, `test:mcp-http`, `test:container`).
 - [ ] `readHook` (`test:hooks`, `test:plan`, `test:done`).
 - [ ] `contextReply` (`test:hook-context`).

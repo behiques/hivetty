@@ -19,7 +19,7 @@ import type { SkillsRead } from '../skills/read';
  * (HIVE-234, landed), `prepare` (HIVE-235, landed), `readHook` (HIVE-236, landed;
  * HIVE-237 normalised its signals, HIVE-238 its plan ops), `foldEdits` (HIVE-238),
  * `record` and `meters` (HIVE-239, landed),
- * `promptMarker` (HIVE-240, landed), `installed` (HIVE-345). See
+ * `promptMarker` (HIVE-240, landed), `installed` (HIVE-345), `headless` (HIVE-337). See
  * `docs/harness-architecture.md`.
  */
 export interface HarnessAdapter {
@@ -43,6 +43,8 @@ export interface HarnessAdapter {
   readonly record: HarnessRecord;
   /** What the user installed for the harness themselves, which HiveTTY reads and never manages (HIVE-345). */
   readonly installed: HarnessInstalled;
+  /** Agent runs (HIVE-337). */
+  readonly headless: HeadlessHarness;
 }
 
 /** What wrote a title, as far as the harness's own record can say (HIVE-239). */
@@ -314,6 +316,41 @@ export interface LaunchPlan {
   stripEnv: readonly string[];
   /** The bootstrap's gap between the text and its `\r` (HIVE-63). */
   submitDelayMs: number;
+}
+
+/** Agent runs: no tty, one turn per process (HIVE-337). */
+export interface HeadlessHarness {
+  launch(spec: HeadlessSpec): HeadlessPlan;
+}
+
+/** What the core knows about one headless wake, harness-neutral (HIVE-337). */
+export interface HeadlessSpec {
+  /** Start a fresh conversation with this id, or resume this one. */
+  conversation: { start: string } | { resume: string };
+  name: string;
+  model?: SessionModel;
+  effort?: SessionEffort;
+  limits: { turns: number; budgetUsd?: number };
+  /** Already in the container's spelling for a container run. */
+  files: { settings: string; pluginDir: string; mcpConfig: string; systemPrompt: string };
+  /** Raw, unnarrowed: the standing Hive grants plus the definition's tools. */
+  grants: readonly string[];
+  /** The core's `wakePrompt()` output: what the agent is told. */
+  prompt: string;
+  subscriptionAuth: boolean;
+}
+
+/** What a harness answers a {@link HeadlessSpec} with (HIVE-337). */
+export interface HeadlessPlan {
+  args: readonly string[];
+  /** Env the harness adds, written after everything but the container's hook identity. */
+  addEnv: Record<string, string>;
+  /** Env the harness removes from a host run's environment. A container's is built from scratch. */
+  stripEnv: readonly string[];
+  /** The binary inside a container whose block names none. */
+  defaultContainerCommand: string;
+  /** What `pkill -f` matches inside a container to stop this run. */
+  stopPattern: string;
 }
 
 /** Which side of the receiver a hook arrived on: an entity session, or an agent's headless run (HIVE-236). */

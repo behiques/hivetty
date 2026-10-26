@@ -6,12 +6,12 @@ import {
   type Autonomy,
   type RunKind,
 } from '@shared/agent-contract';
-import { AUTH_ENV_KEYS, DEFAULT_ENV_ARG, isSessionEnvDenied } from '@shared/config-contract';
+import { DEFAULT_ENV_ARG, isSessionEnvDenied } from '@shared/config-contract';
 import { HOOK_ENV_GRANTS, HOOK_ENV_RECEIVER_URL } from '@shared/hook-contract';
-import { HIVE_CONSENT_TOOLS, HIVE_STANDING_GRANTS } from '@shared/ledger-tools';
-import { namesTool, ONCE_ONLY_TOOLS } from '@shared/permission-rules';
+import { HIVE_STANDING_GRANTS } from '@shared/ledger-tools';
 
 import { createPathMap } from '../container/path-map';
+import { sessionAdapter } from '../harness/registry';
 import { withHostAlias } from '../hooks/container-origin';
 
 /**
@@ -22,37 +22,11 @@ import { withHostAlias } from '../hooks/container-origin';
  * sure of and most expensive to get wrong — is assertable in a unit test
  * rather than only observable in a live run.
  *
- * ## Why `--setting-sources ""`
- *
- * Without it the run loads the user's own `~/.claude/settings.json`. On a
- * developer machine that routinely carries `permissions.defaultMode: "auto"`,
- * which would auto-approve every tool an unattended agent asked for, and would
- * fire the user's personal hooks inside the agent's turn. Verified that
- * `--settings` still applies alongside it, so the Hive's own hooks — the ones
- * that close a run — keep firing.
- *
- * ## Why `--allowedTools` is a grant and not a fence
- *
- * Measured at 2.1.251: the flag is additive. Asked for Bash with
- * `--allowedTools "Read"`, the model used Bash — with or without
- * `--setting-sources ""`, and under `--permission-mode dontAsk` too. There is
- * no default-deny in `-p`. `def.tools` therefore *grants*; confinement is
- * HIVE-119's permission-prompt tool, which is the mechanism built for it.
+ * The harness-neutral half lives here: what the agent is told, the container
+ * path map, the env filter, the grants the fence reads and the `HIVE_*`
+ * identity. The CLI's own spelling — flags, its env switches, its binary — is
+ * the adapter's `headless.launch` (HIVE-337).
  */
-
-/**
- * Every subagent an agent dispatches runs in the foreground.
- *
- * Measured at 2.1.269: under `-p` the model picks foreground or background per
- * `Agent` call, and a background subagent never calls
- * `--permission-prompt-tool`. Behind `permissions.ask: ["*"]` every one of its
- * calls is denied on the spot, granted tool or not, with no ask on the ledger.
- * That is how acr's reviewers lost every tool, eight in a row. Foreground
- * subagents route through `mcp__hive__approve` like the agent itself.
- *
- * It also turns off background Bash, which a headless turn cannot wait on.
- */
-const FOREGROUND_ONLY = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' };
 
 interface WakePaths {
   settings: string;
@@ -298,29 +272,6 @@ export function systemPromptFor(
   return `${preamble.trimEnd()}\n\n${AUTONOMY_CLAUSE[def.autonomy]}\n\n---\n\n${def.body.trim()}\n`;
 }
 
-/**
- * `def.tools` less anything that would grant a once-only tool (retro B).
- *
- * The CLI grants what `--allowedTools` names without consulting the fence, so
- * a definition naming `project_auto_merge`, `mcp__hive__*` / `mcp__hive`, or
- * the blanket `*` would merge unattended with nobody asked. A rule that names
- * one is dropped, and a wide one is replaced by the consent tools it named:
- * every other hive tool is already in {@link HIVE_STANDING_GRANTS}.
- *
- * `--allowedTools` only. `HIVE_GRANTS` takes `def.tools` as written, because
- * the fence's `matches` refuses a once-only tool to every rule but a one-shot
- * literal; narrowing it too would leave a `*` agent asking about every `Bash`
- * call once the blanket left the argv.
- */
-function grantableTools(tools: readonly string[]): string[] {
-  const onceOnly = [...ONCE_ONLY_TOOLS];
-  return tools.flatMap((rule) =>
-    onceOnly.some((tool) => namesTool(rule, tool))
-      ? HIVE_CONSENT_TOOLS.filter((tool) => !ONCE_ONLY_TOOLS.has(tool) && namesTool(rule, tool))
-      : [rule],
-  );
-}
-
 export function wakeCommand(input: WakeInput): WakeCommand {
   const { def, paths, env } = input;
 
@@ -359,55 +310,34 @@ export function wakeCommand(input: WakeInput): WakeCommand {
 
     return mapped;
   };
-  const args = [
-    '-p',
-    ...(input.sessionUuid === undefined
-      ? ['--session-id', input.newUuid]
-      : ['--resume', input.sessionUuid]),
-    '--name',
-    def.name,
-    ...(def.model === undefined ? [] : ['--model', def.model]),
-    ...(def.effort === undefined ? [] : ['--effort', def.effort]),
-    '--settings',
-    inside(paths.settings),
-    // The isolation flag. See the module comment.
-    '--setting-sources',
-    '',
-    '--plugin-dir',
-    inside(paths.pluginDir),
-    '--mcp-config',
-    inside(paths.mcpConfig),
-    '--strict-mcp-config',
-    '--allowedTools',
-    [...HIVE_STANDING_GRANTS, ...grantableTools(def.tools)].join(','),
-    /*
-      The fence (HIVE-119). `--allowedTools` above is a grant and cannot deny;
-      what actually stops an ungranted call is the `permissions.ask: ["*"]` rule
-      in the agent settings file, which routes every call here. Measured: the
-      flag is hidden from `--help` but real, and does nothing without that rule.
-
-      Never add `--permission-mode`: `dontAsk` skips this tool and auto-denies.
-    */
-    '--permission-prompt-tool',
-    'mcp__hive__approve',
-    '--max-turns',
-    String(def.limits.turns),
-    ...(def.limits.budgetUsd === undefined
-      ? []
-      : ['--max-budget-usd', String(def.limits.budgetUsd)]),
-    '--append-system-prompt-file',
-    inside(paths.systemPrompt),
-    '--output-format',
-    'stream-json',
-    '--verbose',
-    wakePrompt(input.trigger, input.extra, {
+  const plan = sessionAdapter().headless.launch({
+    conversation:
+      input.sessionUuid === undefined ? { start: input.newUuid } : { resume: input.sessionUuid },
+    name: def.name,
+    ...(def.model === undefined ? {} : { model: def.model }),
+    ...(def.effort === undefined ? {} : { effort: def.effort }),
+    limits: {
+      turns: def.limits.turns,
+      ...(def.limits.budgetUsd === undefined ? {} : { budgetUsd: def.limits.budgetUsd }),
+    },
+    files: {
+      settings: inside(paths.settings),
+      pluginDir: inside(paths.pluginDir),
+      mcpConfig: inside(paths.mcpConfig),
+      systemPrompt: inside(paths.systemPrompt),
+    },
+    // Narrowed for the CLI by the adapter; `HOOK_ENV_GRANTS` below takes them as written.
+    grants: [...HIVE_STANDING_GRANTS, ...def.tools],
+    prompt: wakePrompt(input.trigger, input.extra, {
       ...(input.lastTurn === undefined ? {} : { lastTurn: input.lastTurn }),
       ...(input.handoff === undefined ? {} : { handoff: input.handoff }),
       ...(input.kind === 'task' ? { task: true as const } : {}),
       ...(input.lane === undefined ? {} : { lane: input.lane }),
       ...(input.def.lane === undefined ? {} : { laneMode: input.def.lane, agent: input.def.name }),
     }),
-  ];
+    subscriptionAuth: env.subscriptionAuth,
+  });
+  const args = [...plan.args];
 
   const merged: Record<string, string> = {};
 
@@ -434,16 +364,8 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     if (value !== undefined && !isSessionEnvDenied(key)) merged[key] = value;
   }
 
-  /*
-    Deletion, not a shell `unset` prefix.
-
-    `bootstrap.ts` prefixes `unset …` because a session runs inside a login
-    shell that re-sources the user's rc files and could export the key again.
-    There is no shell here, so the key simply never exists.
-  */
-  if (env.subscriptionAuth) {
-    for (const key of AUTH_ENV_KEYS) delete merged[key];
-  }
+  // What the harness says must not reach the CLI (HIVE-79's subscription auth).
+  for (const key of plan.stripEnv) delete merged[key];
 
   /*
     the standing Hive grants (`HIVE_STANDING_GRANTS`) is first and unconditional: an agent that cannot call
@@ -467,7 +389,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   merged[HOOK_ENV_GRANTS] = JSON.stringify([
     ...HIVE_STANDING_GRANTS,
     'ToolSearch',
-    // As written, not narrowed: see `grantableTools`.
+    // As written, not narrowed: the adapter narrows only its own `--allowedTools`.
     ...def.tools,
     ...(input.grants ?? []),
   ]);
@@ -488,29 +410,29 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     }
 
     return {
-      file: config.command ?? 'claude',
+      file: config.command ?? plan.defaultContainerCommand,
       args,
       /*
         Only what a container may know: the grants, the identity, the marker
         — and the identity last, so nothing can spoof it. Nothing from
         `merged` beyond the grants: that is main's own environment, filtered
         for a host process, and a container's environment is the image's.
-        `AUTH_ENV_KEYS` are therefore absent by construction, not by deletion.
+        What `plan.stripEnv` names is therefore absent by construction, not by deletion.
       */
       env: {
         [HOOK_ENV_GRANTS]: merged[HOOK_ENV_GRANTS] as string,
         HIVE_AGENT: '1',
-        ...FOREGROUND_ONLY,
+        ...plan.addEnv,
         ...hook,
       },
       cwd: paths.workdir,
       container: {
         runtime: config.runtime,
         name: config.name,
-        command: config.command ?? 'claude',
+        command: config.command ?? plan.defaultContainerCommand,
         envArg: config.envArg ?? DEFAULT_ENV_ARG,
         workspace: config.workspace,
-        sessionUuid: input.sessionUuid ?? input.newUuid,
+        sessionUuid: plan.stopPattern,
       },
     };
   }
@@ -518,7 +440,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   return {
     file: input.claudePath,
     args,
-    env: { ...merged, ...env.hook, HIVE_AGENT: '1', ...FOREGROUND_ONLY },
+    env: { ...merged, ...env.hook, HIVE_AGENT: '1', ...plan.addEnv },
     cwd: paths.workdir,
   };
 }
