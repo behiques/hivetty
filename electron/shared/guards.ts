@@ -8,6 +8,7 @@ import type {
   AgentRunRequest,
   AgentWriteRequest,
 } from './agent-contract';
+import { CLI_VOCAB, type SetCliAgentsRequest } from './cli-contract';
 import {
   NOTIFICATION_KEYS,
   PROJECT_KEY_HINT,
@@ -78,6 +79,7 @@ import type {
   PrViewedRequest,
   RunRef,
 } from './github-contract';
+import { HARNESS_IDS } from './harness-contract';
 import type {
   AckRequest,
   PromptReport,
@@ -1742,6 +1744,32 @@ export function parseSetSlackRequest(input: unknown): SetSlackRequest {
   if (Object.keys(request).length === 0) {
     return fail('setSlack: nothing to change');
   }
+  return request;
+}
+
+/** Payload of `config:set-cli-agents` (HIVE-341). `null` clears a default; a model is checked against its CLI's list. */
+export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
+  const raw = assertShape(input, ['cli'], 'setCliAgents', ['enabled', 'model', 'effort']);
+  const cli = assertOneOf(raw.cli, HARNESS_IDS, 'setCliAgents.cli');
+  const { models, efforts } = CLI_VOCAB[cli];
+
+  const request: SetCliAgentsRequest = {
+    cli,
+    ...(raw.enabled !== undefined
+      ? { enabled: assertBoolean(raw.enabled, 'setCliAgents.enabled') }
+      : {}),
+    ...(raw.model !== undefined
+      ? { model: raw.model === null ? null : assertOneOf(raw.model, models, 'setCliAgents.model') }
+      : {}),
+    ...(raw.effort !== undefined
+      ? {
+          effort:
+            raw.effort === null ? null : assertOneOf(raw.effort, efforts, 'setCliAgents.effort'),
+        }
+      : {}),
+  };
+
+  if (Object.keys(request).length === 1) return fail('setCliAgents: nothing to change');
   return request;
 }
 
