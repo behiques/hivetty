@@ -322,6 +322,8 @@ export interface LaunchPlan {
 /** Agent runs: no tty, one turn per process (HIVE-337). */
 export interface HeadlessHarness {
   launch(spec: HeadlessSpec): HeadlessPlan;
+  /** A fresh reader for one run's stdout (HIVE-338). */
+  reader(): RunEventReader;
 }
 
 /** What the core knows about one headless wake, harness-neutral (HIVE-337). */
