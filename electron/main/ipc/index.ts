@@ -110,6 +110,7 @@ import {
   parseSetRuntimeRequest,
   parseSetServerRequest,
   parseSetSessionPluginRequest,
+  parseSetCliAgentsRequest,
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
   parseSkillDropRequest,
@@ -187,6 +188,7 @@ import {
   type AutoMergeGrants,
 } from '../agents/auto-merge';
 import { resolveClaude } from '../agents/claude-path';
+import { createCliGate } from '../agents/cli-gate';
 import {
   agentsDirectoryFor,
   projectAutoMergeFor,
@@ -233,6 +235,7 @@ import {
   setRuntime,
   setServer,
   setSlack,
+  setCliAgents,
 } from '../config';
 import { diagnoseEnv } from '../config/env-diagnostic';
 import { loginEnvStatus } from '../config/login-env';
@@ -2727,6 +2730,8 @@ export function registerIpcHandlers(
     hookEnv: (name) => hooks.envFor(name),
     claudeCommand,
     subscriptionAuth: () => getConfig().subscriptionAuth,
+    // HIVE-341. Settings › CLIs: which CLI agents fall back to, whether each may run them, and its defaults.
+    gate: createCliGate(getConfig),
     state: agentState,
     env: () => process.env,
     newUuid,
@@ -4209,6 +4214,10 @@ export function registerIpcHandlers(
 
     return snapshot;
   });
+  // HIVE-341. An ordinary settings write; the next wake reads it through the gate.
+  handle(CH.configSetCliAgents, (_event, payload): ConfigSnapshot =>
+    setCliAgents(parseSetCliAgentsRequest(payload)),
+  );
   // HIVE-131. The container host alias — an ordinary settings write.
   handle(CH.configSetReceiver, (_event, payload): ConfigSnapshot =>
     setReceiver(parseSetReceiverRequest(payload)),

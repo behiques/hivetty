@@ -31,6 +31,7 @@ import {
   parseSetReceiverRequest,
   parseSetRemoteRequest,
   parseSetServerRequest,
+  parseSetCliAgentsRequest,
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
   parseSpawnRequest,
@@ -1978,5 +1979,31 @@ describe('hasControlCharacters', () => {
     expect(hasControlCharactersOutsideWhitespace('a\tb\nc\r\n')).toBe(false);
     expect(hasControlCharactersOutsideWhitespace('a\u0000b')).toBe(true);
     expect(hasControlCharactersOutsideWhitespace('a\u0085b')).toBe(true);
+  });
+});
+
+describe('parseSetCliAgentsRequest (HIVE-341)', () => {
+  it('accepts each field, and null as a clear', () => {
+    expect(parseSetCliAgentsRequest({ cli: 'claude-code', enabled: false })).toEqual({
+      cli: 'claude-code',
+      enabled: false,
+    });
+    expect(parseSetCliAgentsRequest({ cli: 'claude-code', model: 'haiku', effort: null })).toEqual({
+      cli: 'claude-code',
+      model: 'haiku',
+      effort: null,
+    });
+  });
+
+  it.each([
+    [{ cli: 'codex', enabled: true }, /cli/],
+    [{ cli: 'claude-code', model: 'gpt-5' }, /model/],
+    [{ cli: 'claude-code', effort: 'extreme' }, /effort/],
+    [{ cli: 'claude-code', enabled: 'yes' }, /enabled/],
+    [{ cli: 'claude-code' }, /nothing to change/],
+    [{ cli: 'claude-code', enabled: true, sandbox: 'danger-full-access' }, /sandbox/],
+    [{ enabled: true }, /cli/],
+  ])('refuses %j', (input, message) => {
+    expect(() => parseSetCliAgentsRequest(input)).toThrow(message);
   });
 });

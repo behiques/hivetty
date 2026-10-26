@@ -1692,9 +1692,15 @@ for example: "No CLI can run reviewer: codex is not in your plan (Starter or hig
 claude-code is turned off for agents in Settings › CLIs." A fence reason names tools,
 never a rule's argument.
 
-An id the build does not know is a definition problem. Until HIVE-332 and HIVE-341
-wire the gate, every CLI counts as entitled and enabled, and there is no Settings
-default. `model:` and `effort:` are Claude's vocabulary and apply only on `claude-code`.
+An id the build does not know is a definition problem. Settings › CLIs (HIVE-341) is the
+gate, read from `config.json` on every wake so an edit reaches the next one with no restart.
+Turning **Enabled for agents** off skips that CLI during resolution. `agentsDefaultCli` in
+`config.json` is the fallback candidate when a definition names no `harness:`; its select
+ships with HIVE-342. Until HIVE-332, every CLI counts as entitled.
+
+`model:` and `effort:` are Claude's vocabulary and apply only on `claude-code`. Each one is
+taken from `AGENT.md` first, then from the CLI's card in Settings › CLIs, and when neither
+names it the flag is omitted and the CLI picks.
 
 A conversation belongs to its CLI. The lane records `harness` beside `sessionUuid`;
 absent means `claude-code`. A wake that resolves to a different CLI starts a fresh

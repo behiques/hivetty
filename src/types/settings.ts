@@ -13,6 +13,7 @@
 export type SettingsSection =
   | 'projects'
   | 'runtime'
+  | 'clis'
   | 'skills'
   | 'agents'
   | 'appearance'

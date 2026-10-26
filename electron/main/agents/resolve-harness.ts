@@ -1,4 +1,5 @@
 import type { AgentDefinition } from '@shared/agent-contract';
+import type { CliAgents } from '@shared/cli-contract';
 import type { HarnessId } from '@shared/harness-contract';
 
 import type { HarnessAdapter } from '../harness/port';
@@ -17,6 +18,8 @@ export interface HarnessGate {
   enabled(id: HarnessId): boolean;
   /** "Default CLI for agents", when the person chose one. */
   defaultCli(): HarnessId | undefined;
+  /** The card's model and effort for agents on this CLI (HIVE-341); `AGENT.md` wins over both. */
+  defaults(id: HarnessId): Pick<CliAgents, 'model' | 'effort'>;
 }
 
 export interface ResolveDeps {

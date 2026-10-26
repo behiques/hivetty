@@ -128,6 +128,23 @@ describe('wakeCommand', () => {
     expect(args[args.indexOf('--effort') + 1]).toBe('high');
   });
 
+  it('falls back to the card defaults when the definition names neither (HIVE-341)', () => {
+    const args = build({ def: def({}), defaults: { model: 'haiku', effort: 'low' } }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('haiku');
+    expect(args[args.indexOf('--effort') + 1]).toBe('low');
+  });
+
+  it("the definition's model and effort win over the card's", () => {
+    const args = build({
+      def: def({ model: 'opus', effort: 'high' }),
+      defaults: { model: 'haiku', effort: 'low' },
+    }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('opus');
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
   it('asks for stream-json so the run log can be built', () => {
     const args = build().args;
 
@@ -706,6 +723,12 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
     const command = build({ grants: ['literal:Bash:git push'] });
 
     expect(fencedRules(def(), ['literal:Bash:git push'])).toEqual(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
+  });
+
+  it('drops the card defaults on another CLI too (HIVE-341)', () => {
+    const args = build({ adapter: other, def: def({}), defaults: { model: 'haiku' } }).args;
+
+    expect(args).not.toContain('--model');
   });
 
   it("drops Claude's model and effort on another CLI", () => {

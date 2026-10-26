@@ -12,6 +12,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 
+import { resolveClis } from '@shared/cli-contract';
 import {
   CONFIG_VERSION,
   DEFAULT_BIND,
@@ -352,6 +353,11 @@ export function writeConfig(
         `slack`.
       */
       slack: { ...DEFAULT_SLACK, ...validated.slack },
+      // HIVE-341. Resolved here too, for the reason `slack` gives above.
+      clis: resolveClis(validated.clis),
+      ...(validated.agentsDefaultCli === undefined
+        ? {}
+        : { agentsDefaultCli: validated.agentsDefaultCli }),
       errors: validated.errors,
     },
   };

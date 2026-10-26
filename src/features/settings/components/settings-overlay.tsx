@@ -8,6 +8,7 @@ import type { SettingsSection } from '@/types/settings';
 import { AdvancedSection } from '@features/settings/components/advanced-section';
 import { AgentsSection } from '@features/settings/components/agents-section';
 import { AppearanceSection } from '@features/settings/components/appearance-section';
+import { ClisSection } from '@features/settings/components/clis-section';
 import { EditorSection } from '@features/settings/components/editor-section';
 import { IntegrationsSection } from '@features/settings/components/integrations-section';
 import { NotificationsSection } from '@features/settings/components/notifications-section';
@@ -54,9 +55,10 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
  * Sections stay **absent rather than disabled** until they exist: a nav full of
  * dead items teaches the user that settings are broken.
  *
- * Skills sits directly after Runtime because both answer "what does a session I
- * start actually run?" — Runtime decides the binary and its environment, Skills
- * decides the commands it comes with. Appearance onwards is about the app.
+ * CLIs (HIVE-341) and then Skills sit directly after Runtime because all three
+ * answer "what does a session I start actually run?" — Runtime decides the binary
+ * and its environment, CLIs how each agent CLI runs headless, Skills the commands
+ * a session comes with. Appearance onwards is about the app.
  *
  * Advanced sits last deliberately. It is the only section that answers
  * questions about the app rather than setting anything in it, and the
@@ -65,6 +67,7 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
 const SECTIONS: readonly { id: SettingsSection; label: string }[] = [
   { id: 'projects', label: 'Projects' },
   { id: 'runtime', label: 'Runtime' },
+  { id: 'clis', label: 'CLIs' },
   { id: 'skills', label: 'Skills' },
   { id: 'agents', label: 'Agents' },
   { id: 'appearance', label: 'Appearance' },
@@ -91,6 +94,7 @@ type SectionId = SettingsSection;
 const PANES: Record<SectionId, ComponentType> = {
   projects: ProjectsSection,
   runtime: RuntimeSection,
+  clis: ClisSection,
   skills: SkillsSection,
   agents: AgentsSection,
   appearance: AppearanceSection,

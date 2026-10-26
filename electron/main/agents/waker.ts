@@ -6,6 +6,7 @@ import {
   type Autonomy,
   type RunKind,
 } from '@shared/agent-contract';
+import type { CliAgents } from '@shared/cli-contract';
 import { DEFAULT_ENV_ARG, isSessionEnvDenied } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
 import { HOOK_ENV_GRANTS, HOOK_ENV_RECEIVER_URL } from '@shared/hook-contract';
@@ -51,6 +52,8 @@ interface WakeInput {
   /** The CLI the lane's last conversation ran on, when this wake starts fresh on another (HIVE-340). */
   switchedFrom?: HarnessId;
   def: AgentDefinition;
+  /** Settings › CLIs' model and effort for this CLI, under the definition's own (HIVE-341). */
+  defaults?: Pick<CliAgents, 'model' | 'effort'>;
   /** Absent on the very first run, which mints one instead. */
   sessionUuid?: string;
   newUuid: string;
@@ -331,13 +334,16 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   const fenced = fencedRules(def, input.grants);
   // Claude's vocabulary (HIVE-340). Another CLI takes its own defaults, never a translated `opus`.
   const claude = adapter.id === 'claude-code';
+  // HIVE-341. `AGENT.md` first, then the Settings › CLIs card; neither, and the flag is omitted.
+  const model = def.model ?? input.defaults?.model;
+  const effort = def.effort ?? input.defaults?.effort;
 
   const plan = adapter.headless.launch({
     conversation:
       input.sessionUuid === undefined ? { start: input.newUuid } : { resume: input.sessionUuid },
     name: def.name,
-    ...(claude && def.model !== undefined ? { model: def.model } : {}),
-    ...(claude && def.effort !== undefined ? { effort: def.effort } : {}),
+    ...(claude && model !== undefined ? { model } : {}),
+    ...(claude && effort !== undefined ? { effort } : {}),
     limits: {
       turns: def.limits.turns,
       ...(def.limits.budgetUsd === undefined ? {} : { budgetUsd: def.limits.budgetUsd }),
