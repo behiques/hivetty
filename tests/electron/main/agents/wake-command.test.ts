@@ -1151,6 +1151,26 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
     expect(next.lastTurn).toBe(false);
   });
 
+  it('keeps the old conversation\'s counters when a switched wake is refused', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = AGENT_MD.replace(
+      'limits:',
+      'container:\n  runtime: docker\n  name: devbox\n  workspace: /work\n  hive_dir: /hive\nlimits:',
+    );
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 9, rotateFailures: 2, runs: [],
+      sessionUuid: 'codex-thread', harness: codex, promptHash: 'stale',
+    };
+    const built = build({
+      userDataPath: () => '/data',
+      hostAlias: () => 'host.docker.internal',
+      agentContainerSettingsPath: () => '/elsewhere/claude-agent.settings.json',
+    })('slack-watcher', 'manual');
+
+    expect('problem' in built && built.problem).toContain('/elsewhere/claude-agent.settings.json');
+    expect(stored['slack-watcher']?.runsSinceRotate).toBe(9);
+    expect(stored['slack-watcher']?.rotateFailures).toBe(2);
+  });
+
   it('leaves the rotation counters alone when the CLI did not change', () => {
     stored['slack-watcher'] = {
       status: 'sleeping', runsSinceRotate: 3, rotateFailures: 1, runs: [],

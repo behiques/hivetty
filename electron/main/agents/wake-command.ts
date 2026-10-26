@@ -484,12 +484,6 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       if (forced) deps.state.patch(name, { forceRotate: undefined });
     }
 
-    /*
-      A switch starts a new conversation, so the old one's count and strikes are not its own: left
-      alone, a lane at `rotateAfter` would ask the one-run-old conversation for a handoff.
-    */
-    if (switched) deps.state.patchLane(name, lane, { runsSinceRotate: 0, rotateFailures: 0 });
-
     const resuming =
       task || pending !== undefined || switched ? undefined : previous.sessionUuid;
     const minted = task ? deps.newUuid() : (pending?.uuid ?? deps.newUuid());
@@ -548,6 +542,14 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       // The path map's refusal (HIVE-137): a run with no safe spelling.
       return { problem: describe(cause) };
     }
+
+    /*
+      A switch starts a new conversation, so the old one's count and strikes are not its own: left
+      alone, a lane at `rotateAfter` would ask the one-run-old conversation for a handoff. After
+      the try/catch, like the consumption above: a refused wake starts no run, and the old
+      conversation keeps its counters.
+    */
+    if (switched) deps.state.patchLane(name, lane, { runsSinceRotate: 0, rotateFailures: 0 });
 
     // Whichever of the two `wakeCommand` actually spelled — `--resume <uuid>`
     // or `--session-id <uuid>`. The tracker matches a Stop hook against it.
