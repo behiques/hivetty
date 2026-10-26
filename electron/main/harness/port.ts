@@ -1,3 +1,4 @@
+import type { RunUsage } from '@shared/agent-contract';
 import type { ChangeMark } from '@shared/changed-files-contract';
 import type { ContainerFreshness, ResolvedContainer } from '@shared/config-contract';
 import type { Capabilities, HarnessId } from '@shared/harness-contract';
@@ -321,6 +322,8 @@ export interface LaunchPlan {
 /** Agent runs: no tty, one turn per process (HIVE-337). */
 export interface HeadlessHarness {
   launch(spec: HeadlessSpec): HeadlessPlan;
+  /** A fresh reader for one run's stdout (HIVE-338). */
+  reader(): RunEventReader;
 }
 
 /** What the core knows about one headless wake, harness-neutral (HIVE-337). */
@@ -351,6 +354,50 @@ export interface HeadlessPlan {
   defaultContainerCommand: string;
   /** What `pkill -f` matches inside a container to stop this run. */
   stopPattern: string;
+}
+
+/** One MCP server a headless run started with, and what the CLI said about it (HIVE-123). */
+export interface McpServerStatus {
+  name: string;
+  status: string;
+}
+
+/**
+ * How a headless turn stopped, in the core's words (HIVE-338). `error` is any stop the CLI
+ * called a failure; the exit code still decides whether the run failed.
+ */
+export type RunStop = 'done' | 'turns' | 'budget' | 'error';
+
+/** A headless turn's end (HIVE-338). `detail` is the CLI's own word for it, shown on the run line. */
+export interface RunEnd {
+  kind: 'end';
+  stop: RunStop;
+  detail: string;
+  costUsd?: number;
+  turns?: number;
+  usage?: RunUsage;
+}
+
+/** What a headless run's output says, whatever CLI wrote it (HIVE-338). */
+export type RunEvent =
+  /** The conversation this run is part of; a later one replaces an earlier one. */
+  | { kind: 'conversation'; id: string }
+  | { kind: 'mcp'; servers: McpServerStatus[] }
+  /** The agent speaking. Trimmed, never empty. */
+  | { kind: 'say'; text: string }
+  /** `args`: what a reader recognises the call by, uncut. `ask`: the ledger ask tool. */
+  | { kind: 'tool'; name: string; args: string; ask?: true }
+  | RunEnd;
+
+/**
+ * One run's stdout read into events (HIVE-338). Chunk-safe: a pipe splits wherever it likes, so
+ * the reader carries an unterminated tail between pushes. Never throws: it runs inside a stdout
+ * handler, and a throw would take the rest of the run's log with it.
+ */
+export interface RunEventReader {
+  push(chunk: string): RunEvent[];
+  /** The carried tail, read as a final line, at close. */
+  flush(): RunEvent[];
 }
 
 /** Which side of the receiver a hook arrived on: an entity session, or an agent's headless run (HIVE-236). */

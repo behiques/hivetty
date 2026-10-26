@@ -26,6 +26,19 @@ export interface Capabilities {
    * `none`: nothing is typed; the session reads the ledger through its tools.
    */
   contextDelivery: 'prompt-marker' | 'none';
+  /**
+   * What a headless run reports and enforces (HIVE-338). They feed which CLI an agent may run on
+   * (HIVE-340): an agent with a USD limit needs `reportsCostUsd`, and a meter a CLI does not report
+   * is absent, never `0`.
+   */
+  /** The run's end carries its cost in USD. */
+  reportsCostUsd: boolean;
+  /** The CLI stops a run at the definition's turn limit. */
+  enforcesTurns: boolean;
+  /** The CLI stops a run at the definition's USD budget. */
+  enforcesBudget: boolean;
+  /** The run's output says which MCP servers connected (the Slack chip, HIVE-123). */
+  reportsMcpStatus: boolean;
 }
 
 /** Why a session is blocked on a human (HIVE-237): a tool wants a yes, the agent asked, or a server wants input. */
