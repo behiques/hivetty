@@ -627,7 +627,15 @@ describe('createDeliver', () => {
 
   describe('a harness that does not take a prompt marker (HIVE-240)', () => {
     const none = (): Pick<HarnessAdapter, 'capabilities' | 'promptMarker'> => ({
-      capabilities: { resume: 'none', meters: false, contextDelivery: 'none' },
+      capabilities: {
+        resume: 'none',
+        meters: false,
+        contextDelivery: 'none',
+        reportsCostUsd: false,
+        enforcesTurns: false,
+        enforcesBudget: false,
+        reportsMcpStatus: false,
+      },
       promptMarker: vi.fn(() => 'never typed'),
     });
 

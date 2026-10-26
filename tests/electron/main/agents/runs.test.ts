@@ -851,6 +851,46 @@ describe('createRunTracker', () => {
     expect(childInstances[1]?.killSignals).toEqual([]);
   });
 
+  /**
+   * A CLI can name its conversation only once it has started (HIVE-338): the id on the
+   * argv is then not the one its hooks report. The run must answer to the id its own
+   * output named, and persist it.
+   */
+  it('answers a Stop by the conversation its output named, and persists that id', () => {
+    tracker.run('a', 'ledger'); // argv: sess-1
+    childInstances[0]?.emitStdout(
+      `${JSON.stringify({ type: 'system', subtype: 'init', session_id: 'thread-9' })}\n`,
+    );
+
+    tracker.noteTurnEnded('a', 'thread-9');
+    vi.advanceTimersByTime(AGENT_STALL_GRACE_MS);
+
+    expect(childInstances[0]?.killSignals).toContain('SIGTERM');
+
+    childInstances[0]?.emitClose(null, 'SIGTERM');
+
+    expect(state.read('a').runs.at(-1)?.sessionUuid).toBe('thread-9');
+  });
+
+  /**
+   * The window before the id is known: a Stop naming it arms nothing, and kills no
+   * other run. Holding it for replay is HIVE-342's, if real ordering ever needs it.
+   */
+  it('arms nothing for a Stop that names the conversation before the output does', () => {
+    parallel = 2;
+    tracker.run('a', 'ledger', undefined, { job: true }); // sess-1
+    tracker.run('a', 'ledger', undefined, { job: true }); // sess-2
+
+    tracker.noteTurnEnded('a', 'thread-9');
+    childInstances[0]?.emitStdout(
+      `${JSON.stringify({ type: 'system', subtype: 'init', session_id: 'thread-9' })}\n`,
+    );
+    vi.advanceTimersByTime(AGENT_STALL_GRACE_MS);
+
+    expect(childInstances[0]?.killSignals).toEqual([]);
+    expect(childInstances[1]?.killSignals).toEqual([]);
+  });
+
   it('escalates SIGTERM to SIGKILL after the grace', () => {
     tracker.run('a', 'ledger');
     tracker.kill('a');

@@ -20,23 +20,19 @@ import { OVERMIND } from '@shared/ledger-contract';
 import { SLACK_SERVER_KEY } from '@shared/slack-contract';
 
 import { expandEnvArgv } from '../container/container-command';
+import type { McpServerStatus, RunEnd, RunEvent, RunEventReader } from '../harness/port';
+import { sessionAdapter } from '../harness/registry';
 
-import {
-  NO_LOG,
-  foldRunLog,
-  type LogFold,
-  type McpServerStatus,
-  type RunResult,
-} from './run-log';
+import { NO_EVENTS, foldRunEvents, type EventFold } from './run-log';
 import type { AgentState } from './state';
 import type { WakeCommand } from './waker';
 
 /**
- * What this run's `init` event said about Slack, in `RunSummary`'s two words
+ * What this run's MCP report said about Slack, in `RunSummary`'s two words
  * (HIVE-123).
  *
  * `undefined` covers three cases the scheduler treats alike: the agent's `mcp:`
- * never named `slack`, the run never reached an `init` event at all (a spawn
+ * never named `slack`, the run never reached its MCP report at all (a spawn
  * failure), and the server reported a status this app does not recognise.
  *
  * That third case is why both words are matched exactly rather than reading
@@ -70,9 +66,9 @@ const slackStatus = (
  *
  * ## Why 'close' finalizes a run, and 'exit' only backstops it
  *
- * Node's `'exit'` can fire before stdio is drained — and the `result` JSON is
- * the LAST thing `claude` writes, exactly the bytes at risk of still being in
- * flight. Finalizing on `'exit'` risks reading `fold.result` before it has
+ * Node's `'exit'` can fire before stdio is drained — and the end is the LAST
+ * thing a CLI writes, exactly the bytes at risk of still being in flight.
+ * Finalizing on `'exit'` risks reading `fold.end` before it has
  * been folded, recording a healthy run as `failed` with no cost, no turns and
  * no session uuid persisted, which silently breaks `--resume` continuity on
  * the agent's next wake.
@@ -93,7 +89,7 @@ const slackStatus = (
  * the run is killed by the same escalation `kill` uses and closes
  * `failed (stalled)`. That budget is its own constant and not the kill grace:
  * one is how long a process told to die gets, the other is how long a healthy
- * run gets to emit its `result` and reap its MCP child. See the two doc
+ * run gets to emit its end and reap its MCP child. See the two doc
  * comments in `agent-contract.ts`.
  *
  * Because the Stop hook is keyed by agent name only, a Stop delivered late —
@@ -327,10 +323,13 @@ interface LiveRun {
    * inside, with or without a TTY. So `child.kill` alone would orphan every
    * wedged container run, and this runs `<runtime> exec <name> pkill -<SIG>
    * -f <session uuid>` beside it — the uuid is on every wake's argv and unique
-   * per run, so `-f` is a precise handle.
+   * per run, so `-f` is a precise handle. The argv's id, not the run's: a
+   * conversation the output names later is not on the argv.
    */
   stop: ((signal: 'TERM' | 'KILL') => void) | null;
-  fold: LogFold;
+  /** This run's stdout, read by the harness that launched it (HIVE-338). */
+  reader: RunEventReader;
+  fold: EventFold;
   closed: boolean;
   reason: string | null;
   /** False only for a run that never reached the model: a spawn failure. */
@@ -385,7 +384,7 @@ interface FinalizeInfo {
   /**
    * The conversation this run invoked — absent only when there was no process.
    *
-   * Carried so that a run which ends without a `result` still persists it; see
+   * Carried so that a run which ends without an end still persists it; see
    * the comment on the `sessionUuid` line in {@link finalizeRun}.
    */
   sessionUuid?: string;
@@ -512,11 +511,26 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     live.endedTurn = lines[lines.length - 1]?.endsTurn === true;
   };
 
+  /**
+   * Fold a batch of events into the run (HIVE-338). A conversation the output
+   * named re-targets the run, so a Stop hook naming it finds this run
+   * ({@link RunTracker.noteTurnEnded}).
+   */
+  const foldInto = (name: string, live: LiveRun, events: readonly RunEvent[]): void => {
+    const step = foldRunEvents(live.fold, events);
+
+    live.fold = step.state;
+    if (step.conversation !== undefined) live.sessionUuid = step.conversation;
+    pushRunLines(name, live, step.lines);
+  };
+
   const finalizeRun = (
     name: string,
     info: FinalizeInfo,
     outcome: RunOutcome,
-    result: RunResult | null,
+    end: RunEnd | null,
+    /** The last conversation the run's output named, which beats the argv's. */
+    conversation: string | null,
     reason: string | null,
     reachedModel: boolean,
     asking: boolean,
@@ -532,12 +546,12 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
   ) => {
     const endedAt = deps.now();
     /*
-      The uuid the run actually invoked, not only the one the `result` echoed
+      The uuid the run actually invoked, not only the one its output echoed
       back.
 
       It is known at spawn — `wake-command.ts` decides it, either by minting one
       for `--session-id` or by choosing the one to `--resume` — and taking it
-      from `result` alone meant a first wake interrupted by a quit, a kill, a
+      from the output alone meant a first wake interrupted by a quit, a kill, a
       stall or a crash persisted **nothing**. The next wake then minted a fresh
       uuid and the whole conversation was orphaned, which is exactly what the
       shutdown hook's "their `sessionUuid` is untouched, so the next wake resumes
@@ -548,8 +562,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       persisting a uuid no session file backs would fail the *next* wake instead
       of this one.
     */
-    const sessionUuid =
-      result?.sessionUuid ?? (reachedModel ? info.sessionUuid : undefined);
+    const sessionUuid = conversation ?? (reachedModel ? info.sessionUuid : undefined);
     const slack = slackStatus(mcpServers);
 
     /*
@@ -558,12 +571,12 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       without writing one has its output joined to the next run's.
 
       Two paths end without one, and the condition is `endedTurn` rather than
-      `result === null` because only the first of them is about the result:
+      `end === null` because only the first of them is about the end:
 
-      - No `result` at all — a kill, the stall watchdog, `killAll` at quit, a
+      - No end at all — a kill, the stall watchdog, `killAll` at quit, a
         child that raised `'error'`. All reach here through `escalate`, which
         sends a signal and nothing else.
-      - A `result` **followed by more output**. stderr is flushed on the way
+      - An end **followed by more output**. stderr is flushed on the way
         out, so a node or CLI warning lands after the fold; the fold is then no
         longer the tail, and those bytes belong to this run rather than opening
         the next one.
@@ -596,8 +609,9 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       startedAt: info.startedAt,
       endedAt,
       outcome,
-      ...(result?.costUsd === undefined ? {} : { costUsd: result.costUsd }),
-      ...(result?.turns === undefined ? {} : { turns: result.turns }),
+      ...(end?.costUsd === undefined ? {} : { costUsd: end.costUsd }),
+      ...(end?.turns === undefined ? {} : { turns: end.turns }),
+      ...(end?.usage === undefined ? {} : { usage: end.usage }),
       ...(reason === null ? {} : { reason }),
       // Recorded on every run, not only the ones that rotate: "which
       // conversation did run 14 belong to" is the audit trail HIVE-122 needs.
@@ -791,43 +805,37 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     forget(name, live);
 
     /*
-      Fold whatever is left in `partial` before reading the result.
+      Read the reader's unterminated tail before reading the end.
 
-      The fold only reads a line once a `\n` terminates it, and no `\n` is ever
-      coming now. The bytes at risk are precisely the ones that matter: `result`
-      is the LAST thing `claude` writes, so a SIGKILL mid-write — or the flush
-      window firing with a tail still buffered — leaves it sitting here
-      unterminated. Dropping it records a healthy run `failed`, with no cost, no
-      turns and no uuid, which is the exact failure `'close'`-over-`'exit'` was
-      chosen to prevent.
+      Nothing terminates it now, and the bytes at risk are the ones that
+      matter: the end is the last thing a CLI writes, so a SIGKILL mid-write —
+      or the flush window firing with a tail still buffered — leaves it here.
+      Dropping it records a healthy run `failed`, with no cost, no turns and no
+      uuid, which is the exact failure `'close'`-over-`'exit'` was chosen to
+      prevent.
 
       The lines it yields are pushed like any others; `live.closed` is already
       set, so the stdout handler cannot race this.
     */
-    if (live.fold.partial !== '') {
-      const step = foldRunLog(live.fold, '\n');
+    foldInto(name, live, live.reader.flush());
 
-      live.fold = step.state;
-      pushRunLines(name, live, step.lines);
-    }
-
-    const result = live.fold.result;
+    const end = live.fold.end;
     const asking = deps.openAsksFor(name, live.run);
 
-    // A recognised terminal subtype beats the exit code: --max-turns and
-    // --max-budget-usd both exit non-zero (measured against 2.1.251), so a
-    // capped run would otherwise be recorded failed.
+    // A cap beats the exit code: a CLI that stops a run at its turn or budget
+    // limit may exit non-zero, and a capped run would otherwise be recorded
+    // failed.
     let outcome: RunOutcome;
 
     if (live.reason !== null) {
       outcome = 'failed'; // killed / stalled / spawn error
-    } else if (result === null) {
+    } else if (end === null) {
       outcome = 'failed'; // died before saying anything
     } else if (asking) {
       outcome = 'asking';
-    } else if (result.subtype === 'error_max_turns') {
+    } else if (end.stop === 'turns') {
       outcome = 'turns';
-    } else if (result.subtype.includes('budget')) {
+    } else if (end.stop === 'budget') {
       outcome = 'budget';
     } else if (code !== 0) {
       outcome = 'failed';
@@ -839,7 +847,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       name,
       live,
       outcome,
-      result,
+      end,
+      live.fold.conversation,
       live.reason,
       live.reachedModel,
       asking,
@@ -1091,6 +1100,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
           { run, kind, lane, trigger, startedAt, lastTurn: command.lastTurn },
           'failed',
           null,
+          null,
           message,
           false,
           false,
@@ -1140,7 +1150,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
                   ]);
                 }
               },
-        fold: NO_LOG,
+        reader: sessionAdapter().headless.reader(),
+        fold: NO_EVENTS,
         closed: false,
         reason: null,
         reachedModel: true,
@@ -1188,15 +1199,12 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         the guard that output folds into a run that is already finalized, and
         then reaches the renderer interleaved with the NEXT run's lines: the
         `run` tag would still be this run's, but the fold state it is folded
-        against belongs to a run that has already had its result read.
+        against belongs to a run that has already had its end read.
       */
       child.stdout.on('data', (chunk: Buffer) => {
         if (started.closed) return;
 
-        const step = foldRunLog(started.fold, chunk.toString('utf8'));
-
-        started.fold = step.state;
-        pushRunLines(name, started, step.lines);
+        foldInto(name, started, started.reader.push(chunk.toString('utf8')));
       });
 
       child.stderr.on('data', (chunk: Buffer) => {
