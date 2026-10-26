@@ -1,8 +1,13 @@
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   CODEX_AUTH_ENV_KEYS,
   CODEX_SESSION_ENV_KEYS,
+  fenceCommand,
   launchCodexHeadless,
   toml,
 } from '../../../../../electron/main/harness/codex/headless';
@@ -132,3 +137,94 @@ describe('launchCodexHeadless', () => {
   });
 });
 
+
+/** Runs a hook command as codex does: through a shell, the payload on stdin, the run's env. */
+const runHook = (command: string, env: Record<string, string>): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const child = spawn('sh', ['-c', command], { env: { PATH: process.env['PATH'] ?? '', ...env } });
+    let out = '';
+    child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString()));
+    child.on('error', reject);
+    child.on('close', () => resolve(out));
+    child.stdin.end('{"tool_name":"Bash","tool_input":{"command":"ls"}}');
+  });
+
+/** A receiver stand-in answering every POST with one status and body, and recording headers. */
+const serve = async (status: number, body: string) => {
+  const seen: Record<string, string | string[] | undefined>[] = [];
+  const server = createServer((req, res) => {
+    seen.push(req.headers);
+    req.resume();
+    req.on('end', () => res.writeHead(status, { 'content-type': 'application/json' }).end(body));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
+  return { url, seen, close: () => new Promise((resolve) => server.close(resolve)) };
+};
+
+const ENV = {
+  HIVE_SESSION_ID: 'watcher',
+  HIVE_HOOK_TOKEN: 'tok',
+  HIVE_RUN_ID: 'run-1',
+  HIVE_RUN_TOKEN: 'run-tok',
+};
+
+const decisionOf = (out: string) =>
+  (JSON.parse(out) as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput
+    ?.permissionDecision;
+
+describe('the PreToolUse fence hook (HIVE-342)', () => {
+  it('is on every wake, for every tool', () => {
+    for (const conversation of [{ start: 'u' }, { resume: 't' }]) {
+      const args = launchCodexHeadless(spec({ conversation })).args;
+      expect(args).toContain(
+        `hooks.PreToolUse=[{matcher="*",hooks=[{type="command",command=${toml(fenceCommand())}}]}]`,
+      );
+    }
+  });
+
+  it('posts to /fence with the identity and the run, all read from the env', async () => {
+    const receiver = await serve(200, '{}');
+    const out = await runHook(fenceCommand(), { ...ENV, HIVE_RECEIVER_URL: receiver.url });
+    await receiver.close();
+
+    expect(out).toBe('{}');
+    expect(receiver.seen[0]).toMatchObject({
+      'x-hive-session': 'watcher',
+      'x-hive-token': 'tok',
+      'x-hive-run': 'run-1',
+      'x-hive-run-token': 'run-tok',
+    });
+    expect(fenceCommand()).toContain('/fence');
+    expect(fenceCommand()).not.toMatch(/watcher|run-1/);
+  });
+
+  it('passes the receiver\'s deny through as it came', async () => {
+    const deny = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"no"}}';
+    const receiver = await serve(200, deny);
+    const out = await runHook(fenceCommand(), { ...ENV, HIVE_RECEIVER_URL: receiver.url });
+    await receiver.close();
+
+    expect(out).toBe(deny);
+  });
+
+  it('fails closed: a refusal or a receiver that is not there is a deny, never an empty allow', async () => {
+    const refusing = await serve(403, '{}');
+    expect(decisionOf(await runHook(fenceCommand(), { ...ENV, HIVE_RECEIVER_URL: refusing.url }))).toBe(
+      'deny',
+    );
+    await refusing.close();
+
+    // A 2xx with nothing in it would read as "no decision", which codex runs.
+    const empty = await serve(204, '');
+    expect(decisionOf(await runHook(fenceCommand(), { ...ENV, HIVE_RECEIVER_URL: empty.url }))).toBe(
+      'deny',
+    );
+    await empty.close();
+
+    expect(
+      decisionOf(await runHook(fenceCommand(), { ...ENV, HIVE_RECEIVER_URL: 'http://127.0.0.1:9' })),
+    ).toBe('deny');
+    expect(decisionOf(await runHook(fenceCommand(), { ...ENV, HIVE_RECEIVER_URL: '' }))).toBe('deny');
+  });
+});

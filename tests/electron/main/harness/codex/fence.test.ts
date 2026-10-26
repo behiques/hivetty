@@ -218,8 +218,9 @@ describe('CODEX_RULE_TABLE', () => {
 });
 
 describe('codexFence', () => {
-  it('translates for decide, and still refuses until the PreToolUse hook is on the argv', () => {
-    expect(codexFence.express([])).toEqual({ ok: false, unexpressible: ['*'] });
+  it('expresses every rule set: decide enforces them on the translated calls', () => {
+    expect(codexFence.express([])).toEqual({ ok: true });
+    expect(codexFence.express(['Read', 'Bash(git *)', '*'])).toEqual({ ok: true });
     expect(codexFence.translate).toBe(translateCodexCall);
   });
 });

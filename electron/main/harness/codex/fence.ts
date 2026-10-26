@@ -108,10 +108,11 @@ export const CODEX_RULE_TABLE = {
 } as const;
 
 /**
- * Refuses every rule set until the PreToolUse hook that calls `/fence` is on the argv (HIVE-342):
- * a fence that said yes before then would let a Codex run start with nothing checking its calls.
+ * Total (HIVE-342): every rule is enforced by `decide` on the translated calls, through the
+ * PreToolUse hook `launchCodexHeadless` puts on every wake (`fenceCommand`) and the receiver's
+ * `/fence` route.
  */
 export const codexFence: PermissionFence = {
-  express: () => ({ ok: false, unexpressible: ['*'] }),
+  express: () => ({ ok: true }),
   translate: translateCodexCall,
 };

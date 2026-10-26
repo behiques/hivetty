@@ -5,6 +5,9 @@ import {
   HOOK_ENV_RUN_TOKEN,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
+  FENCE_PATH,
+  HOOK_HEADER_RUN,
+  HOOK_HEADER_RUN_TOKEN,
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
   HOOK_PATH,
@@ -73,6 +76,32 @@ export const hookCommand = (): string =>
   ` -H "${HOOK_HEADER_TOKEN}: $${HOOK_ENV_TOKEN}"` +
   ` --data-binary @- >/dev/null 2>&1 || true`;
 
+/** What the fence hook prints when it cannot get an answer: codex stops the call. */
+const FENCE_DOWN = JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: 'PreToolUse',
+    permissionDecision: 'deny',
+    permissionDecisionReason:
+      'HiveTTY could not be reached to check this call, so it was not run. End your turn.',
+  },
+});
+
+/** Single quotes for `sh`, a `'` inside written as `'\''`. */
+const shellQuote = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * The fence (HIVE-342): every tool call's `PreToolUse` goes to the receiver's `/fence`, which
+ * answers as `approve` does. Fails closed: a receiver that is down, slow, refusing or silent gives
+ * a deny, never the empty reply codex would run. The identity and run come from the env by name.
+ */
+export const fenceCommand = (): string =>
+  `out=$(curl -sf -m 30 -X POST "$${HOOK_ENV_RECEIVER_URL}${FENCE_PATH}"` +
+  ` -H 'content-type: application/json'` +
+  ` -H "${HOOK_HEADER_SESSION}: $${HOOK_ENV_SESSION}" -H "${HOOK_HEADER_TOKEN}: $${HOOK_ENV_TOKEN}"` +
+  ` -H "${HOOK_HEADER_RUN}: $${HOOK_ENV_RUN}" -H "${HOOK_HEADER_RUN_TOKEN}: $${HOOK_ENV_RUN_TOKEN}"` +
+  ` --data-binary @- 2>/dev/null) && [ -n "$out" ] && printf '%s' "$out"` +
+  ` || printf '%s' ${shellQuote(FENCE_DOWN)}`;
+
 const hooks = (event: string, command: string, matcher?: string): string =>
   `hooks.${event}=[{${matcher === undefined ? '' : `matcher=${toml(matcher)},`}hooks=[{type="command",command=${toml(command)}}]}]`;
 
@@ -104,9 +133,10 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
       // On the argv as written: `hiveServer.env` must never carry a secret, which goes by name below.
       ...config(`mcp_servers.hive.env=${tomlTable(hiveServer.env)}`),
       ...config(`mcp_servers.hive.env_vars=${tomlList(HIVE_SERVER_ENV)}`),
-      // Codex's own approval off for hive: the fence is the PreToolUse hook (PR2), never this.
+      // Codex's own approval off for hive: the fence is the PreToolUse hook below, never this.
       ...config('mcp_servers.hive.default_tools_approval_mode="approve"'),
       ...config(hooks('Stop', hookCommand())),
+      ...config(hooks('PreToolUse', fenceCommand(), '*')),
       // The stop marker: a disabled server, so it is on the argv with no warning and no effect.
       ...config('mcp_servers.hive_wake.enabled=false'),
       ...config(`mcp_servers.hive_wake.command=${toml(id)}`),
