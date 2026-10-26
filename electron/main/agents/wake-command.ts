@@ -40,6 +40,7 @@ import {
 } from '@shared/agent-contract';
 
 import { CONTAINER_DIR, CONTAINER_MCP_FILE } from '../container/generated';
+import { headlessAdapter } from '../harness/registry';
 import { agentMcpConfig, type McpServerSpec } from '../mcp/agent-config';
 
 import { resolveClaude } from './claude-path';
@@ -460,6 +461,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     try {
       command = wakeCommand({
         claudePath: claude.path,
+        adapter: headlessAdapter('claude-code'),
         def,
         ...(resuming === undefined ? {} : { sessionUuid: resuming }),
         newUuid: minted,
