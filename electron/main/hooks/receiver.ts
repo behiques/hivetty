@@ -29,6 +29,8 @@ import {
   parseProjectAutoMergeRequest,
 } from '@shared/guards';
 import {
+  FENCE_MAX_BODY_BYTES,
+  FENCE_PATH,
   HOOK_HEADER_RUN,
   HOOK_HEADER_RUN_TOKEN,
   HOOK_HEADER_SESSION,
@@ -78,10 +80,11 @@ import {
   METRICS_PATH,
   type SessionMetrics,
 } from '@shared/metrics-contract';
+import { PERMISSION_DENY_MESSAGE } from '@shared/permission-rules';
 import type { PlanUpdate } from '@shared/plan-contract';
 import { sessionNameFromPrompt } from '@shared/session-contract';
 
-import type { HarnessAdapter, HookLane } from '../harness/port';
+import type { FenceCall, HarnessAdapter, HookLane } from '../harness/port';
 import { sessionAdapter, type HarnessRegistry } from '../harness/registry';
 import { entryContext } from '../ledger/context';
 
@@ -301,6 +304,12 @@ export interface ReceiverOptions {
    * `sessionAdapter()`, which wrote every hook setting there is in phase 1.
    */
   harnesses?: HarnessRegistry;
+  /**
+   * A hook-based fence's translation into Claude's vocabulary (HIVE-342), so `POST /fence` answers
+   * through `decide` and `approve` and never a matcher of its own. Without it a call is checked as
+   * it came.
+   */
+  fenceTranslate?: (tool: string, input: Record<string, unknown>, cwd: string) => FenceCall[];
   /**
    * A hook event from an agent's headless turn (HIVE-115).
    *
@@ -557,6 +566,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     knowsSession,
     knowsAgent,
     harnesses,
+    fenceTranslate,
     onAgentEvent,
     port = 0,
     host = '127.0.0.1',
@@ -1284,6 +1294,76 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     return reply === null ? 202 : { status: 200, json: reply };
   }
 
+  /** Codex's `PreToolUse` reply: `{}` lets the call run; a deny carries the reason to the model. */
+  const fenceReply = (reason?: string) =>
+    reason === undefined
+      ? {}
+      : {
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'deny',
+            permissionDecisionReason: reason,
+          },
+        };
+
+  /**
+   * A hook-based fence (HIVE-342). The CLI's call is translated by its adapter, then each translated
+   * call goes through `approve`, in order: `decide` inside it allows, denies without posting, or
+   * posts the one ask and denies. The first call not allowed answers for the whole tool call.
+   *
+   * Authenticated like `/mcp`, and the agent lane's alone: a pty session's CLI fences itself.
+   * Anything this cannot answer is a non-2xx, which the hook's `curl -f` turns into a deny.
+   */
+  async function handleFence(
+    headers: Record<string, string | string[] | undefined>,
+    body: string,
+    truncated: boolean,
+  ): Promise<Reply> {
+    const refusal = reject(headers);
+    if (refusal !== null) return refusal;
+    if (headers['origin'] !== undefined) return 403;
+    const caller = headers[HOOK_HEADER_SESSION] as string;
+    if (knowsSession(caller) || !knowsAgent(caller)) return 403;
+
+    if (truncated) {
+      return {
+        status: 200,
+        json: fenceReply(
+          `This call is over ${String(FENCE_MAX_BODY_BYTES)} bytes, too large for HiveTTY to check, so it was not run. Make it smaller.`,
+        ),
+      };
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(body);
+    } catch (cause) {
+      return { status: 400, json: { reason: describeCause(cause) } };
+    }
+    const record = (value: unknown): value is Record<string, unknown> =>
+      typeof value === 'object' && value !== null && !Array.isArray(value);
+    if (!record(payload) || typeof payload['tool_name'] !== 'string') {
+      return { status: 400, json: { reason: 'body must be a PreToolUse payload with a tool_name' } };
+    }
+    const tool = payload['tool_name'];
+    const input = record(payload['tool_input']) ? payload['tool_input'] : {};
+    const cwd = typeof payload['cwd'] === 'string' ? payload['cwd'] : '';
+
+    const handlers = handlersFor(headers);
+    for (const call of fenceTranslate?.(tool, input, cwd) ?? [{ tool, input }]) {
+      const result = await handlers.callTool('approve', { tool_name: call.tool, input: call.input });
+      const first = result.content[0];
+      const verdict = JSON.parse(first?.type === 'text' ? first.text : '{}') as {
+        behavior?: string;
+        message?: string;
+      };
+      if (verdict.behavior !== 'allow') {
+        return { status: 200, json: fenceReply(verdict.message ?? PERMISSION_DENY_MESSAGE) };
+      }
+    }
+    return { status: 200, json: fenceReply() };
+  }
+
   /**
    * One handler set per request, over a cursor that outlives it (HIVE-130).
    *
@@ -1693,6 +1773,8 @@ export function createReceiver(options: ReceiverOptions): Receiver {
           { path: JIRA_COMMENT_PATH, cap: JIRA_TOOL_MAX_BYTES, handle: handleJiraComment },
           { path: JIRA_USERS_PATH, cap: JIRA_TOOL_MAX_BYTES, handle: handleJiraUsers },
           { path: MCP_PATH, cap: MCP_MAX_BODY_BYTES, handle: handleMcp },
+          // HIVE-342: a hook-based CLI's permission fence.
+          { path: FENCE_PATH, cap: FENCE_MAX_BODY_BYTES, handle: handleFence },
         ];
 
         const created = createServer((req, res) => {

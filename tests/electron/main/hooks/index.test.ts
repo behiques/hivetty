@@ -16,6 +16,7 @@ import {
 import { PR_PATH } from '../../../../electron/shared/github-contract';
 import { JIRA_GET_PATH } from '../../../../electron/shared/jira-contract';
 import {
+  FENCE_PATH,
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_TOKEN,
   HOOK_HEADER_SESSION,
@@ -1155,5 +1156,43 @@ describe('the receiver reads hooks through the harness registry (HIVE-236)', () 
 
     expect(res.status).toBe(204);
     expect(harnessOf).toHaveBeenCalledWith('sess-a');
+  });
+});
+
+describe('the fence route reads Codex calls through Codex\'s translator (HIVE-342)', () => {
+  let dir: string;
+  let runtime: HookRuntime | undefined;
+
+  afterEach(async () => {
+    await runtime?.stop();
+    runtime = undefined;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('asks about the file a patch writes, not about apply_patch', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-hooks-fence-'));
+    const ledger = createLedger({ dir, knowsParty: () => true });
+    runtime = createHookRuntime({ userDataPath: dir, sessionMetrics: () => false, ledger });
+    await runtime.start({ ...noopHandlers, knowsSession: () => false, knowsAgent: (id) => id === 'cx' });
+
+    const env = runtime.envFor('cx');
+    const res = await fetch(`${env[HOOK_ENV_RECEIVER_URL] as string}${FENCE_PATH}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [HOOK_HEADER_TOKEN]: env[HOOK_ENV_TOKEN] as string,
+        [HOOK_HEADER_SESSION]: 'cx',
+      },
+      body: JSON.stringify({
+        tool_name: 'apply_patch',
+        tool_input: { command: '*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch' },
+        cwd: '/w',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(ledger.read({}).openAsks.map((ask) => ask.meta)).toEqual([
+      expect.objectContaining({ kind: 'permission', tool: 'Write', input: { file_path: '/w/a.txt' } }),
+    ]);
   });
 });
