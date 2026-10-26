@@ -79,6 +79,53 @@ describe('translateCodexCall', () => {
       { tool: 'Edit', input: { file_path: '/w/src/a.ts' } },
     ]);
   });
+
+  it('asks about the whole patch when any header is not one it can read', () => {
+    const wrap = (...lines: string[]) =>
+      ['*** Begin Patch', '*** Add File: src/ok.ts', '+x', ...lines, '*** End Patch'].join('\n');
+    for (const patch of [
+      // a path codex reads to the end of the line, which `.` would stop short of
+      wrap('*** Add File: /etc/x\u2029y', '+y'),
+      wrap('*** Add File: /etc/x\u2028y', '+y'),
+      wrap('*** Add File: /etc/x\ry', '+y'),
+      wrap('*** Add File: /etc/x\u0085y', '+y'),
+      wrap('*** Delete File: /etc/x\u0000'),
+      // a header this reader does not know
+      wrap('*** Frobnicate File: /etc/x'),
+      wrap('*** add file: /etc/x', '+y'),
+      wrap('***\tAdd File: /etc/x', '+y'),
+      wrap('*** Add File:  /etc/x', '+y'),
+      wrap('*** Add File: '),
+      wrap('*** Delete File: b '),
+      // a move with no file to move
+      wrap('*** Move to: /etc/x'),
+      // a second patch, or anything after the end
+      ['*** Begin Patch', '*** End Patch', '*** Add File: /etc/x', '+y'].join('\n'),
+      wrap('*** Begin Patch'),
+    ]) {
+      expect(translateCodexCall('apply_patch', { command: patch }, '/w'), JSON.stringify(patch)).toEqual([
+        { tool: 'apply_patch', input: { command: patch } },
+      ]);
+    }
+  });
+
+  it('asks about a patch whose cwd is not absolute', () => {
+    const patch = '*** Begin Patch\n*** Add File: a\n+x\n*** End Patch';
+    for (const cwd of ['', 'w', './w']) {
+      expect(translateCodexCall('apply_patch', { command: patch }, cwd)).toEqual([
+        { tool: 'apply_patch', input: { command: patch } },
+      ]);
+    }
+  });
+
+  it('reads a CRLF patch as codex does, and an indented header', () => {
+    const patch =
+      '*** Begin Patch\r\n*** Add File: a.txt\r\n+x\r\n  *** Delete File: b\r\n*** End Patch\r\n';
+    expect(translateCodexCall('apply_patch', { command: patch }, '/w')).toEqual([
+      { tool: 'Write', input: { file_path: '/w/a.txt' } },
+      { tool: 'Write', input: { file_path: '/w/b' } },
+    ]);
+  });
 });
 
 /** mulberry32: a seeded PRNG, so a failing case reproduces. */
@@ -171,9 +218,8 @@ describe('CODEX_RULE_TABLE', () => {
 });
 
 describe('codexFence', () => {
-  it('expresses every rule set: decide enforces them on the translated calls', () => {
-    expect(codexFence.express([])).toEqual({ ok: true });
-    expect(codexFence.express(['Read', 'Bash(git *)', '*'])).toEqual({ ok: true });
+  it('translates for decide, and still refuses until the PreToolUse hook is on the argv', () => {
+    expect(codexFence.express([])).toEqual({ ok: false, unexpressible: ['*'] });
     expect(codexFence.translate).toBe(translateCodexCall);
   });
 });

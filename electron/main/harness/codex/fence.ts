@@ -2,26 +2,57 @@ import { isAbsolute } from 'node:path';
 
 import type { FenceCall, PermissionFence } from '../port';
 
-const HEADER = /^\*\*\* (Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$/;
+const HEADER = /^\*\*\* (Add File|Update File|Delete File|Move to): ([^]*)$/;
+const MARKER = /^\*\*\* (?:End of File|End Patch)$/;
+/** What `trim` strips, plus the U+0085 Rust's `trim` also strips: a header codex sees is one this sees. */
+const EDGE = /^[\s\u0085]+|[\s\u0085]+$/g;
+const INDENT = /^[\s\u0085]+/;
+/** A path codex would write that a `.`-based reader would cut short, or that only differs by a blank. */
+const unsafePath = (path: string): boolean =>
+  /^\s|\s$/.test(path) ||
+  [...path].some((char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return code < 0x20 || code === 0x7f || code === 0x85 || code === 0x2028 || code === 0x2029;
+  });
 
 /**
- * Every file a patch touches, as Claude's Write/Edit; `null` when it is not a patch we can read.
+ * Every file a patch touches, as Claude's Write/Edit; `null` when it is not a patch we can read, so
+ * the whole patch is asked about. Strict on purpose: any `***` line that is not a header this knows,
+ * a path holding a control or line-separator character, a `Move to` with no file before it, or
+ * anything after `*** End Patch` gives `null`, because a header skipped here is a file written
+ * unchecked.
+ *
  * A relative path is joined to `cwd` and never normalised: `decide` refuses a `..` segment rather
  * than resolving it, and `path.join` would turn `/w/a/../x` into `/w/x`, which a grant can allow.
  */
 export function patchTargets(patch: string, cwd: string): FenceCall[] | null {
-  const lines = patch.split('\n');
-  if (lines[0]?.trim() !== '*** Begin Patch') return null;
+  if (!isAbsolute(cwd)) return null;
+  // Codex splits on `\n` and drops one trailing `\r` (Rust's `lines`), nothing else.
+  const lines = patch.split('\n').map((line) => line.replace(/\r$/, ''));
+  if (lines[0]?.replace(EDGE, '') !== '*** Begin Patch') return null;
   const at = (path: string) => (isAbsolute(path) ? path : `${cwd.replace(/\/+$/, '')}/${path}`);
   const calls: FenceCall[] = [];
-  for (const line of lines) {
-    const match = HEADER.exec(line.trim());
-    if (match === null) continue;
-    const [, op, path, moved] = match;
-    if (moved !== undefined) calls.push({ tool: 'Edit', input: { file_path: at(moved) } });
-    else if (path !== undefined) {
-      calls.push({ tool: op === 'Update' ? 'Edit' : 'Write', input: { file_path: at(path) } });
+  let updating = false;
+  let ended = false;
+  for (const line of lines.slice(1)) {
+    if (ended) {
+      if (line.replace(EDGE, '') !== '') return null;
+      continue;
     }
+    // Only the indent: a trailing blank stays on the path, where `unsafePath` refuses it.
+    const text = line.replace(INDENT, '');
+    if (!text.startsWith('***')) continue;
+    if (MARKER.test(text)) {
+      ended = text === '*** End Patch';
+      continue;
+    }
+    const match = HEADER.exec(text);
+    if (match === null) return null;
+    const [, op, path] = match as unknown as [string, string, string];
+    if (path === '' || unsafePath(path)) return null;
+    if (op === 'Move to' && !updating) return null;
+    updating = op === 'Update File';
+    calls.push({ tool: op === 'Add File' || op === 'Delete File' ? 'Write' : 'Edit', input: { file_path: at(path) } });
   }
   return calls.length === 0 ? null : calls;
 }
@@ -76,8 +107,11 @@ export const CODEX_RULE_TABLE = {
   ],
 } as const;
 
-/** Total: every rule is enforced by `decide` on the translated calls (HIVE-342). */
+/**
+ * Refuses every rule set until the PreToolUse hook that calls `/fence` is on the argv (HIVE-342):
+ * a fence that said yes before then would let a Codex run start with nothing checking its calls.
+ */
 export const codexFence: PermissionFence = {
-  express: () => ({ ok: true }),
+  express: () => ({ ok: false, unexpressible: ['*'] }),
   translate: translateCodexCall,
 };
