@@ -5356,10 +5356,12 @@ describe('the fence route (HIVE-342)', () => {
   const AGENT = 'codex-agent';
   const PTY = 'sess-pty';
   const RUN = 'run-fence';
+  let translate: typeof translateCodexCall = translateCodexCall;
 
   beforeEach(async () => {
     posted = [];
     failPosts = false;
+    translate = translateCodexCall;
     dir = mkdtempSync(join(tmpdir(), 'hive-receiver-fence-'));
     ledger = createLedger({ dir, knowsParty: () => true });
     receiver = createReceiver({
@@ -5375,7 +5377,7 @@ describe('the fence route (HIVE-342)', () => {
       onAgentsList: async () => ({ agents: [] }) as AgentsDirectory,
       knowsSession: (id) => id === PTY,
       knowsAgent: (id) => id === AGENT,
-      fenceTranslate: translateCodexCall,
+      fenceTranslate: (tool, input, cwd) => translate(tool, input, cwd),
       onLedgerRead: (_caller, query) => ledger.read(query),
       onLedgerPost: (caller, request) => {
         if (failPosts) return { ok: false as const, status: 503, reason: 'the ledger is down' };
@@ -5455,6 +5457,15 @@ describe('the fence route (HIVE-342)', () => {
       tool: 'Write',
       input: { file_path: '/w/notes.md' },
     });
+  });
+
+  it('asks about the raw call when a translation comes back empty, never allows it', async () => {
+    translate = () => [];
+    const response = await fence(preToolUse('Bash', { command: 'echo hi' }));
+
+    expect(await response.json()).toEqual(denied(PERMISSION_DENY_MESSAGE));
+    expect(posted).toHaveLength(1);
+    expect(posted[0]!.request.meta).toMatchObject({ kind: 'permission', tool: 'Bash' });
   });
 
   it('lets a patch run when every file it touches is granted', async () => {

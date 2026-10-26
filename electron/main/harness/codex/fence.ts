@@ -5,7 +5,15 @@ import type { FenceCall, PermissionFence } from '../port';
 const HEADER = /^\*\*\* (Add File|Update File|Delete File|Move to): ([^]*)$/;
 const MARKER = /^\*\*\* (?:End of File|End Patch)$/;
 /** What `trim` strips, plus the U+0085 Rust's `trim` also strips: a header codex sees is one this sees. */
-const EDGE = /^[\s\u0085]+|[\s\u0085]+$/g;
+const SPACE = /^[\s\u0085]$/;
+/** Both edges trimmed in one pass: a `/[\s]+$/` regex backtracks quadratically on a long run of spaces. */
+const trimEdges = (line: string): string => {
+  let start = 0;
+  let end = line.length;
+  while (start < end && SPACE.test(line[start]!)) start += 1;
+  while (end > start && SPACE.test(line[end - 1]!)) end -= 1;
+  return line.slice(start, end);
+};
 const INDENT = /^[\s\u0085]+/;
 /** A path codex would write that a `.`-based reader would cut short, or that only differs by a blank. */
 const unsafePath = (path: string): boolean =>
@@ -29,14 +37,14 @@ export function patchTargets(patch: string, cwd: string): FenceCall[] | null {
   if (!isAbsolute(cwd)) return null;
   // Codex splits on `\n` and drops one trailing `\r` (Rust's `lines`), nothing else.
   const lines = patch.split('\n').map((line) => line.replace(/\r$/, ''));
-  if (lines[0]?.replace(EDGE, '') !== '*** Begin Patch') return null;
+  if (lines[0] === undefined ? undefined : trimEdges(lines[0]) !== '*** Begin Patch') return null;
   const at = (path: string) => (isAbsolute(path) ? path : `${cwd.replace(/\/+$/, '')}/${path}`);
   const calls: FenceCall[] = [];
   let updating = false;
   let ended = false;
   for (const line of lines.slice(1)) {
     if (ended) {
-      if (line.replace(EDGE, '') !== '') return null;
+      if (trimEdges(line) !== '') return null;
       continue;
     }
     // Only the indent: a trailing blank stays on the path, where `unsafePath` refuses it.

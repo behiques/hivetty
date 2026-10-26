@@ -1350,7 +1350,9 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     const cwd = typeof payload['cwd'] === 'string' ? payload['cwd'] : '';
 
     const handlers = handlersFor(headers);
-    for (const call of fenceTranslate?.(tool, input, cwd) ?? [{ tool, input }]) {
+    // An empty translation would allow without asking anything: fall back to the raw call.
+    const translated = fenceTranslate?.(tool, input, cwd) ?? [];
+    for (const call of translated.length > 0 ? translated : [{ tool, input }]) {
       const result = await handlers.callTool('approve', { tool_name: call.tool, input: call.input });
       const first = result.content[0];
       const verdict = JSON.parse(first?.type === 'text' ? first.text : '{}') as {

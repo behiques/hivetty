@@ -13,6 +13,18 @@ import {
 import type { FenceCall } from '../../../../../electron/main/harness/port';
 
 describe('translateCodexCall', () => {
+  it('reads a patch line of 100k spaces in linear time, with the same decision', () => {
+    const pad = ' '.repeat(100_000);
+    const started = performance.now();
+    const calls = translateCodexCall(
+      'apply_patch',
+      { command: `*** Begin Patch${pad}\n${pad}+x\n*** Add File: a.txt\n+y\n*** End Patch\n${pad}` },
+      '/w',
+    );
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(calls).toEqual([{ tool: 'Write', input: { file_path: '/w/a.txt' } }]);
+  });
+
   it('passes Bash and MCP calls through unchanged', () => {
     expect(translateCodexCall('Bash', { command: 'git status' }, '/w')).toEqual([
       { tool: 'Bash', input: { command: 'git status' } },
