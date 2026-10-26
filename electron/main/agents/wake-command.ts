@@ -504,7 +504,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
             }),
       });
     } catch (cause) {
-      // The path map's refusal (HIVE-137): a flag with no spelling inside.
+      // The path map's refusal (HIVE-137), or the fence's (HIVE-339): a run with no safe spelling.
       return { problem: describe(cause) };
     }
 

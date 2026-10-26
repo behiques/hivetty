@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
+import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '../../../../electron/shared/ledger-tools';
 import { matches } from '../../../../electron/shared/permission-rules';
 import {
@@ -691,5 +693,31 @@ describe('the command line an agent wake runs (HIVE-337 pin)', () => {
     ['a wide grant narrowed', { def: def({ tools: ['*', 'mcp__hive__project_auto_merge'] }) }],
   ] as const)('%s', (_name, over) => {
     expect(build(over as Partial<Parameters<typeof wakeCommand>[0]>)).toMatchSnapshot();
+  });
+});
+
+describe('the permission fence blocks a CLI that cannot express a rule (HIVE-339)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('asks the fence about exactly the rules HIVE_GRANTS carries', () => {
+    const express = vi.spyOn(claudeCodeAdapter.headless.fence, 'express');
+    const command = build({ grants: ['literal:Bash:git push'] });
+
+    expect(express).toHaveBeenCalledWith(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
+  });
+
+  it('refuses the run naming the rule, and never builds a command line', () => {
+    vi.spyOn(claudeCodeAdapter.headless.fence, 'express').mockReturnValue({
+      ok: false,
+      unexpressible: ['Bash(git:*)'],
+    });
+    const launch = vi.spyOn(claudeCodeAdapter.headless, 'launch');
+
+    expect(() => build({ def: def({ tools: ['Bash(git:*)'] }) })).toThrow(
+      'claude-code cannot enforce Bash(git:*), so slack-watcher will not run on it.',
+    );
+    expect(launch).not.toHaveBeenCalled();
   });
 });

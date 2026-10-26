@@ -2,7 +2,7 @@ import { AUTH_ENV_KEYS } from '@shared/config-contract';
 import { HIVE_CONSENT_TOOLS } from '@shared/ledger-tools';
 import { namesTool, ONCE_ONLY_TOOLS } from '@shared/permission-rules';
 
-import type { HeadlessPlan, HeadlessSpec } from '../port';
+import type { HeadlessPlan, HeadlessSpec, PermissionFence } from '../port';
 
 /**
  * The command line one agent wake runs, in Claude Code's spelling (HIVE-115, HIVE-337).
@@ -123,3 +123,10 @@ export function launchHeadless(spec: HeadlessSpec): HeadlessPlan {
     stopPattern: id,
   };
 }
+
+/**
+ * Total, by construction (HIVE-339). Claude's fence is `approve` itself: `permissions.ask: ["*"]`
+ * routes every call to it and it runs `decide`, so every rule the grammar has is enforced as
+ * written, and one `matches` refuses is narrower, never wider.
+ */
+export const claudeFence: PermissionFence = { express: () => ({ ok: true }) };
