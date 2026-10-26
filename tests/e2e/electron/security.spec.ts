@@ -1021,6 +1021,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'setServer',
     'setSessionPlugin',
     'setSlack',
+    'setCliAgents',
     'startClone',
   ]);
   /**

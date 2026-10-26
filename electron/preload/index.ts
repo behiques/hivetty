@@ -15,6 +15,7 @@ import type {
   AgentWriteResult,
 } from '@shared/agent-contract';
 import type { ChangedFilesEvent, ChangedFilesSnapshot } from '@shared/changed-files-contract';
+import type { SetCliAgentsRequest } from '@shared/cli-contract';
 import type {
   AddProjectRequest,
   BrowseDirRequest,
@@ -333,6 +334,9 @@ const bridge: HiveBridge = {
     // reason Jira's token is on its own.
     setSlack: (request: SetSlackRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetSlack, request),
+    // HIVE-341. One CLI's headless agent defaults (Settings › CLIs).
+    setCliAgents: (request: SetCliAgentsRequest): Promise<ConfigSnapshot> =>
+      ipcRenderer.invoke(CH.configSetCliAgents, request),
     // HIVE-131. The name a container resolves to reach this host.
     setReceiver: (request: SetReceiverRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetReceiver, request),
