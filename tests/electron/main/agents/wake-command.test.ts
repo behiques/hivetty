@@ -1089,6 +1089,7 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
         entitled: () => (allowed ? null : 'not in your plan (Starter or higher)'),
         enabled: () => true,
         defaultCli: () => undefined,
+        defaults: () => ({}),
       },
     });
 
@@ -1097,6 +1098,26 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
     expect(wake('slack-watcher', 'manual')).toEqual({
       problem: 'No CLI can run slack-watcher: claude-code is not in your plan (Starter or higher).',
     });
+  });
+
+  it("passes the card's model to a definition that names none, and AGENT.md's wins (HIVE-341)", () => {
+    const wake = build({
+      gate: {
+        entitled: () => null,
+        enabled: () => true,
+        defaultCli: () => undefined,
+        defaults: () => ({ model: 'haiku' }),
+      },
+    });
+
+    const named = wake('slack-watcher', 'manual');
+    if ('problem' in named) throw new Error(named.problem);
+    expect(named.args[named.args.indexOf('--model') + 1]).toBe('sonnet');
+
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = AGENT_MD.replace('model: sonnet\n', '');
+    const unnamed = wake('slack-watcher', 'manual');
+    if ('problem' in unnamed) throw new Error(unnamed.problem);
+    expect(unnamed.args[unnamed.args.indexOf('--model') + 1]).toBe('haiku');
   });
 
   it('resumes a lane whose conversation is on the same CLI', () => {
