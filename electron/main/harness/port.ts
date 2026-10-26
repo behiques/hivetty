@@ -324,6 +324,17 @@ export interface HeadlessHarness {
   launch(spec: HeadlessSpec): HeadlessPlan;
   /** A fresh reader for one run's stdout (HIVE-338). */
   reader(): RunEventReader;
+  /** The permission fence (HIVE-339). */
+  fence: PermissionFence;
+}
+
+/**
+ * Can this CLI enforce these rules (HIVE-339)? `permission-rules.ts` stays their only parser;
+ * an adapter answers whether its own mechanism can route every call they do not allow to
+ * `decide`. A rule it cannot express blocks the CLI for the run: never dropped, never widened.
+ */
+export interface PermissionFence {
+  express(rules: readonly string[]): { ok: true } | { ok: false; unexpressible: string[] };
 }
 
 /** What the core knows about one headless wake, harness-neutral (HIVE-337). */
