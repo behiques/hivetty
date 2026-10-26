@@ -8,6 +8,7 @@ import {
 } from '../../../../electron/main/agents/wake-command';
 import type { AgentState } from '../../../../electron/main/agents/state';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
+import type { HarnessAdapter, HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { McpServerSpec } from '../../../../electron/main/mcp/agent-config';
 import { STANDING_LANE, type AgentRunState } from '../../../../electron/shared/agent-contract';
 import type { HarnessId } from '../../../../electron/shared/harness-contract';
@@ -114,8 +115,8 @@ const build = (over: Partial<WakeCommandDeps> = {}) =>
     pluginDir: () => '/data/hive/plugin',
     agentSettingsPath: () => '/data/hive/claude-agent.settings.json',
     mcpConfig: () => '/data/hive/hive.mcp.json',
-    // Unused by every test below: `AGENT_MD` has no `mcp:` field, so
-    // `def.mcp.length > 0` never fires and neither dep is ever called.
+    // Handed to every wake's adapter (HIVE-342). `AGENT_MD` has no `mcp:` field,
+    // so no per-agent file is written from it.
     hiveServer: () => ({
       command: '/App',
       args: ['/host.js'],
@@ -1229,5 +1230,45 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
     expect(built.sessionUuid).toBe('parked-uuid');
     expect(built.args.join('\n')).toContain('Pick up the PR review.');
     expect(built.args.join('\n')).not.toContain('This is a fresh conversation');
+  });
+});
+
+describe('what a CLI without a settings file is handed (HIVE-342)', () => {
+  const recording = () => {
+    const seen: HeadlessSpec[] = [];
+    const adapter: HarnessAdapter = {
+      ...claudeCodeAdapter,
+      headless: {
+        ...claudeCodeAdapter.headless,
+        launch: (spec) => {
+          seen.push(spec);
+          return claudeCodeAdapter.headless.launch(spec);
+        },
+      },
+    };
+    return { seen, adapter };
+  };
+
+  it('hands the adapter the system prompt text and the hive server', () => {
+    const { seen, adapter } = recording();
+    const built = build({ adapter: () => adapter })('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(seen[0]?.instructions).toBe(written['/data/hive/agents/slack-watcher.system.md']);
+    expect(seen[0]?.instructions).toContain('Read the channel and report.');
+    expect(seen[0]?.hiveServer).toEqual({
+      command: '/App',
+      args: ['/host.js'],
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+    });
+  });
+
+  it('refuses the wake when the hive descriptor is unavailable, with no mcp: at all', () => {
+    expect(build({ hiveServer: () => null })('slack-watcher', 'manual')).toEqual({
+      problem:
+        'The ledger tools are not configured yet, and an agent reads its ' +
+        'inbox before anything else. Try again in a moment.',
+    });
   });
 });

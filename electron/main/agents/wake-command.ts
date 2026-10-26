@@ -94,7 +94,8 @@ export interface WakeCommandDeps {
   /**
    * `mcp.hiveServerSpec()`. `null` on the same condition `mcpConfig` is.
    *
-   * Needed only for an agent that names an integration: its file is written
+   * Every wake hands it to the adapter, for a CLI that takes the server inline
+   * (HIVE-342). An agent that names an integration also gets a file: it is written
    * here rather than by the runtime, because it is per-wake content and this
    * is where per-wake files are written — the same place, and the same `fs`,
    * as `<name>.system.md`.
@@ -403,6 +404,11 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     const task = kind === 'task';
     const pending = previous.pendingSession;
     const grants = deps.pendingGrants(name, task ? STANDING_LANE : lane);
+    // Every CLI is handed the hive server (HIVE-342); `null` is the condition `mcpConfig` guards.
+    const hive = deps.hiveServer();
+
+    if (hive === null) return { problem: MCP_NOT_READY };
+
     /*
       Which CLI runs this wake (HIVE-340), once per wake: a lapse moves the next wake, never this
       one. Before any write, so a refusal leaves nothing behind.
@@ -459,10 +465,6 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
         and a second file per agent is a second thing to go stale.
       */
       if (def.mcp.length > 0) {
-        const hive = deps.hiveServer();
-
-        if (hive === null) return { problem: MCP_NOT_READY };
-
         agentMcp = deps.agentMcpFile(name);
         fs.mkdir(dirname(agentMcp));
         fs.write(agentMcp, agentMcpConfig(hive, def.mcp));
@@ -529,6 +531,8 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
           subscriptionAuth: deps.subscriptionAuth(),
         },
         grants,
+        instructions: prompt,
+        hiveServer: hive,
         ...(def.container === undefined
           ? {}
           : {

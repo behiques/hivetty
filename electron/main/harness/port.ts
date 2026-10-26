@@ -10,6 +10,7 @@ import type { SessionEffort, SessionModel } from '@shared/session-contract';
 
 import type { ContainerOrigins } from '../container/layout';
 import type { PathMap } from '../container/path-map';
+import type { McpServerSpec } from '../mcp/agent-config';
 import type { McpConfigOptions } from '../mcp/config';
 import type { SkillsRead } from '../skills/read';
 
@@ -337,13 +338,17 @@ export interface PermissionFence {
   express(rules: readonly string[]): { ok: true } | { ok: false; unexpressible: string[] };
 }
 
+/** The sandbox a Codex run gets (HIVE-342); `danger-full-access` is never offered. */
+export type HeadlessSandbox = 'read-only' | 'workspace-write';
+
 /** What the core knows about one headless wake, harness-neutral (HIVE-337). */
 export interface HeadlessSpec {
   /** Start a fresh conversation with this id, or resume this one. */
   conversation: { start: string } | { resume: string };
   name: string;
-  model?: SessionModel;
-  effort?: SessionEffort;
+  /** Each CLI's own vocabulary (HIVE-342): the core passes what the definition or the card named. */
+  model?: string;
+  effort?: string;
   limits: { turns: number; budgetUsd?: number };
   /** Already in the container's spelling for a container run. */
   files: { settings: string; pluginDir: string; mcpConfig: string; systemPrompt: string };
@@ -352,6 +357,11 @@ export interface HeadlessSpec {
   /** The core's `wakePrompt()` output: what the agent is told. */
   prompt: string;
   subscriptionAuth: boolean;
+  /** The system prompt's text, for a CLI that takes it inline. `files.systemPrompt` is the same text on disk. */
+  instructions: string;
+  sandbox?: HeadlessSandbox;
+  /** The hive MCP server, for a CLI that takes it inline (`mcp.hiveServerSpec()`). */
+  hiveServer: McpServerSpec;
 }
 
 /** What a harness answers a {@link HeadlessSpec} with (HIVE-337). */
@@ -365,6 +375,11 @@ export interface HeadlessPlan {
   defaultContainerCommand: string;
   /** What `pkill -f` matches inside a container to stop this run. */
   stopPattern: string;
+  /**
+   * Whether the argv names the conversation (HIVE-342). Claude always does; a first Codex wake
+   * learns its id only from `thread.started`, so the argv's uuid must never be persisted for it.
+   */
+  namesConversation: boolean;
 }
 
 /** One MCP server a headless run started with, and what the CLI said about it (HIVE-123). */

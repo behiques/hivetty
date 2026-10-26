@@ -121,6 +121,8 @@ export function launchHeadless(spec: HeadlessSpec): HeadlessPlan {
     defaultContainerCommand: 'claude',
     // On the argv of every wake and unique per run, so it stops only this one (HIVE-137).
     stopPattern: id,
+    // `--session-id` or `--resume` names it on every wake (HIVE-342).
+    namesConversation: true,
   };
 }
 

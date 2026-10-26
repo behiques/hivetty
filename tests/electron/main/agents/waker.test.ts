@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
+import type { HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
 import type { HarnessId } from '../../../../electron/shared/harness-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
@@ -45,6 +46,8 @@ const env = {
   subscriptionAuth: true,
 };
 
+const HIVE_SERVER = { command: '/App', args: ['/host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } };
+
 const build = (over: Partial<Parameters<typeof wakeCommand>[0]> = {}) =>
   wakeCommand({
     claudePath: '/opt/bin/claude',
@@ -54,6 +57,8 @@ const build = (over: Partial<Parameters<typeof wakeCommand>[0]> = {}) =>
     trigger: 'ledger',
     paths,
     env,
+    instructions: 'You are slack-watcher.',
+    hiveServer: HIVE_SERVER,
     ...over,
   });
 
@@ -736,6 +741,25 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
 
     expect(args).not.toContain('--model');
     expect(args).not.toContain('--effort');
+  });
+
+  it('hands the adapter the instructions and the hive server it carried (HIVE-342)', () => {
+    const seen: HeadlessSpec[] = [];
+    const recording = {
+      ...claudeCodeAdapter,
+      headless: {
+        ...claudeCodeAdapter.headless,
+        launch: (spec: HeadlessSpec) => {
+          seen.push(spec);
+          return claudeCodeAdapter.headless.launch(spec);
+        },
+      },
+    };
+
+    build({ adapter: recording, instructions: 'Be brief.' });
+
+    expect(seen[0]?.instructions).toBe('Be brief.');
+    expect(seen[0]?.hiveServer).toEqual(HIVE_SERVER);
   });
 
   it('opens a fresh conversation on a new CLI by saying so first', () => {

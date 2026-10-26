@@ -15,6 +15,7 @@ import { HIVE_STANDING_GRANTS } from '@shared/ledger-tools';
 import { createPathMap } from '../container/path-map';
 import type { HarnessAdapter } from '../harness/port';
 import { withHostAlias } from '../hooks/container-origin';
+import type { McpServerSpec } from '../mcp/agent-config';
 
 /**
  * The command line one wake runs (HIVE-115).
@@ -61,6 +62,10 @@ interface WakeInput {
   extra?: string;
   paths: WakePaths;
   env: WakeEnv;
+  /** The system prompt's text, for a CLI that takes it inline (HIVE-342). */
+  instructions: string;
+  /** The hive MCP server, for a CLI that takes it inline (HIVE-342). */
+  hiveServer: McpServerSpec;
   /**
    * Grants that apply to **this wake only** — an answered `allow-once`.
    *
@@ -368,6 +373,8 @@ export function wakeCommand(input: WakeInput): WakeCommand {
       ...(input.def.lane === undefined ? {} : { laneMode: input.def.lane, agent: input.def.name }),
     })}`,
     subscriptionAuth: env.subscriptionAuth,
+    instructions: input.instructions,
+    hiveServer: input.hiveServer,
   });
   const args = [...plan.args];
 
