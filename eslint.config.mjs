@@ -511,9 +511,12 @@ export default tseslint.config(
                 './electron/!(main)/**/*',
                 './src/**/*',
               ],
-              from: './electron/main/harness/claude-code/**/*',
+              from: [
+                './electron/main/harness/claude-code/**/*',
+                './electron/main/harness/codex/**/*',
+              ],
               message:
-                'Only electron/main/harness/ may import an adapter. Reach Claude Code through the registry: adapterFor() and harnessOf().',
+                'Only electron/main/harness/ may import an adapter. Reach Claude Code or Codex through the registry: adapterFor(), headlessAdapter() and harnessOf().',
             },
           ],
         },
