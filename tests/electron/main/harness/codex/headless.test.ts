@@ -11,7 +11,7 @@ import {
   launchCodexHeadless,
   toml,
 } from '../../../../../electron/main/harness/codex/headless';
-import type { HeadlessSpec } from '../../../../../electron/main/harness/port';
+import type { HeadlessSandbox, HeadlessSpec } from '../../../../../electron/main/harness/port';
 
 const spec = (over: Partial<HeadlessSpec> = {}): HeadlessSpec => ({
   conversation: { start: 'new-uuid' },
@@ -91,6 +91,71 @@ describe('launchCodexHeadless', () => {
     expect(toml('x\ud800y')).toBe('"x\ufffdy"');
     expect(toml('\udc00')).toBe('"\ufffd"');
     expect(toml('😀')).toBe('"😀"');
+  });
+
+  it('refuses a sandbox outside HEADLESS_SANDBOXES rather than putting it on the argv', () => {
+    for (const sandbox of ['danger-full-access', 'workspace-write" -c x="y', '']) {
+      expect(() => launchCodexHeadless(spec({ sandbox: sandbox as HeadlessSandbox }))).toThrow(
+        /sandbox/,
+      );
+    }
+  });
+
+  /*
+    TOML v1.0.0's basic string, as a grammar: '"', then unescaped characters or escapes, then '"'.
+    Unescaped is tab, 0x20-0x21, 0x23-0x5B, 0x5D-0x7E, or any non-ASCII scalar value. Decoding
+    it back by that grammar must give the input, a lone surrogate excepted (it becomes U+FFFD).
+  */
+  const BASIC =
+    /^"(?:[\t\x20\x21\x23-\x5b\x5d-\x7e\u0080-퟿-￿]|[\ud800-\udbff][\udc00-\udfff]|\\[btnfr"\\]|\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8})*"$/;
+  const ESCAPES: Record<string, string> = {
+    b: '\b',
+    t: '\t',
+    n: '\n',
+    f: '\f',
+    r: '\r',
+    '"': '"',
+    '\\': '\\',
+  };
+  const decode = (quoted: string): string =>
+    quoted
+      .slice(1, -1)
+      .replace(
+        /\\(?:u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})|(.))/g,
+        (_, u4?: string, u8?: string, c?: string) =>
+          u4 !== undefined || u8 !== undefined
+            ? String.fromCodePoint(parseInt(u4 ?? u8 ?? '', 16))
+            : (ESCAPES[c ?? ''] ?? ''),
+      );
+  const NASTY = [
+    '',
+    'plain',
+    'a"b',
+    'back\\slash',
+    'line\nbreak\r\n',
+    '\t\b\f',
+    '\u0000\u001f',
+    'del\u007fmid',
+    'é ü 中 🐝',
+    '\ud83d',
+    'x\udc00y',
+    '"""',
+    "'''",
+    '${HOME} $(id) `id`',
+    '# not a comment',
+    'key = "value"\n[table]\n[[hooks.Stop]]',
+    '  \u0085',
+  ];
+  const scalar = (text: string) =>
+    text.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '�');
+
+  it('writes every string as a TOML basic string that decodes back to it', () => {
+    for (const text of NASTY) {
+      const quoted = toml(text);
+      expect(quoted, JSON.stringify(text)).toMatch(BASIC);
+      expect(quoted).not.toMatch(/\\u[dD][89a-fA-F][0-9a-fA-F]{2}/);
+      expect(decode(quoted), JSON.stringify(text)).toBe(scalar(text));
+    }
   });
 
   it('never puts a token on the argv: the identity is forwarded by name', () => {

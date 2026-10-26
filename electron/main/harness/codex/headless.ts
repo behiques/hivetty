@@ -1,3 +1,4 @@
+import { HEADLESS_SANDBOXES } from '@shared/cli-contract';
 import {
   HOOK_ENV_GRANTS,
   HOOK_ENV_RECEIVER_URL,
@@ -116,6 +117,15 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
     throw new Error('codex agents cannot run in a container yet: the hive server there is HTTP.');
   }
 
+  /*
+    Checked here as well as where the setting is read: this is the last place before the argv,
+    and `danger-full-access` (or anything else codex accepts) must not arrive by a forged spec.
+  */
+  const sandbox = spec.sandbox ?? 'workspace-write';
+  if (!(HEADLESS_SANDBOXES as readonly string[]).includes(sandbox)) {
+    throw new Error(`codex: refusing sandbox ${JSON.stringify(sandbox)}; only ${HEADLESS_SANDBOXES.join(', ')} are allowed.`);
+  }
+
   return {
     args: [
       'exec',
@@ -126,7 +136,7 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
       '--dangerously-bypass-hook-trust',
       ...(spec.model === undefined ? [] : ['-m', spec.model]),
       ...(spec.effort === undefined ? [] : config(`model_reasoning_effort=${toml(spec.effort)}`)),
-      ...config(`sandbox_mode=${toml(spec.sandbox ?? 'workspace-write')}`),
+      ...config(`sandbox_mode=${toml(sandbox)}`),
       ...(start ? config(`developer_instructions=${toml(spec.instructions)}`) : []),
       ...config(`mcp_servers.hive.command=${toml(hiveServer.command)}`),
       ...config(`mcp_servers.hive.args=${tomlList(hiveServer.args)}`),
