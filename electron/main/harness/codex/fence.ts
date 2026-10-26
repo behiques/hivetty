@@ -37,7 +37,7 @@ export function patchTargets(patch: string, cwd: string): FenceCall[] | null {
   if (!isAbsolute(cwd)) return null;
   // Codex splits on `\n` and drops one trailing `\r` (Rust's `lines`), nothing else.
   const lines = patch.split('\n').map((line) => line.replace(/\r$/, ''));
-  if (lines[0] === undefined ? undefined : trimEdges(lines[0]) !== '*** Begin Patch') return null;
+  if (trimEdges(lines[0] ?? '') !== '*** Begin Patch') return null;
   const at = (path: string) => (isAbsolute(path) ? path : `${cwd.replace(/\/+$/, '')}/${path}`);
   const calls: FenceCall[] = [];
   let updating = false;
