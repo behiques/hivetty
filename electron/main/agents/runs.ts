@@ -150,6 +150,8 @@ export interface RunTrackerDeps {
         promptHash?: string;
         /** Absent reads as `claude-code` (HIVE-340). */
         harness?: HarnessId;
+        /** See {@link FinalizeInfo.startsRotation}. */
+        startsRotation?: true;
       })
     | { problem: string };
   /**
@@ -320,6 +322,8 @@ interface LiveRun {
   sessionUuid: string;
   /** See {@link FinalizeInfo.namesConversation}. */
   namesConversation: boolean;
+  /** See {@link FinalizeInfo.startsRotation}. */
+  startsRotation: boolean;
   child: ChildLike;
   /**
    * Stop the run *inside* the container (HIVE-137), or `null` for a host run.
@@ -400,6 +404,11 @@ interface FinalizeInfo {
    * first Codex wake's argv id is only a stop marker, so it is never persisted.
    */
   namesConversation: boolean;
+  /**
+   * This run starts a rotation the wake left parked (HIVE-353): its argv names no conversation, so
+   * the close clears `pendingSession` only once the output has named one.
+   */
+  startsRotation: boolean;
   /** The prompt a session-starting run started with; stored beside its uuid. */
   promptHash?: string;
   /** The CLI that launched this run, and so reads its output (HIVE-340). */
@@ -733,6 +742,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             ? { runsSinceRotate: laneNow.runsSinceRotate + 1 }
             : {}),
         ...(failures === null ? {} : { rotateFailures: failures }),
+        ...(info.startsRotation && sessionUuid !== undefined ? { pendingSession: undefined } : {}),
         ...(sessionUuid === undefined ? {} : { sessionUuid, harness: info.harness }),
         ...(sessionUuid === undefined || info.promptHash === undefined
           ? {}
@@ -1123,6 +1133,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             lastTurn: command.lastTurn,
             harness: command.harness ?? 'claude-code',
             namesConversation: command.namesConversation,
+            startsRotation: command.startsRotation === true,
           },
           'failed',
           null,
@@ -1152,6 +1163,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         startedAt,
         sessionUuid: command.sessionUuid,
         namesConversation: command.namesConversation,
+        startsRotation: command.startsRotation === true,
         child,
         stop:
           container === undefined
