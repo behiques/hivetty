@@ -33,10 +33,10 @@ describe('the clis block (HIVE-341)', () => {
   });
 
   it('ignores an unknown CLI id and says so', () => {
-    const parsed = parseConfig(doc({ clis: { copilot: { agents: { enabled: true } } } }), 'config');
+    const parsed = parseConfig(doc({ clis: { gemini: { agents: { enabled: true } } } }), 'config');
 
     expect(parsed.clis).toEqual({});
-    expect(parsed.errors).toContain('config.clis: unknown key "copilot" — ignored');
+    expect(parsed.errors).toContain('config.clis: unknown key "gemini" — ignored');
   });
 
   it("checks codex's fields against codex's vocabulary (HIVE-342)", () => {
@@ -115,11 +115,15 @@ describe('the clis block (HIVE-341)', () => {
 
     expect(parseConfig(doc({ agentsDefaultCli: 'codex' }), 'config').agentsDefaultCli).toBe('codex');
 
-    const bad = parseConfig(doc({ agentsDefaultCli: 'copilot' }), 'config');
+    expect(parseConfig(doc({ agentsDefaultCli: 'copilot' }), 'config').agentsDefaultCli).toBe(
+      'copilot',
+    );
+
+    const bad = parseConfig(doc({ agentsDefaultCli: 'gemini' }), 'config');
 
     expect(bad.agentsDefaultCli).toBeUndefined();
     expect(bad.errors).toEqual([
-      'config.agentsDefaultCli: expected one of claude-code, codex — ignored',
+      'config.agentsDefaultCli: expected one of claude-code, codex, copilot — ignored',
     ]);
   });
 });
@@ -147,6 +151,7 @@ describe('the snapshot (HIVE-341)', () => {
     expect(snapshot.clis).toEqual({
       'claude-code': { agents: { enabled: true } },
       codex: { agents: { enabled: true } },
+      copilot: { agents: { enabled: true } },
     });
     expect(snapshot.agentsDefaultCli).toBeUndefined();
   });
@@ -228,6 +233,7 @@ describe('the snapshot (HIVE-341)', () => {
     expect(emptySnapshot('/tmp/config.json').clis).toEqual({
       'claude-code': { agents: { enabled: true } },
       codex: { agents: { enabled: true } },
+      copilot: { agents: { enabled: true } },
     });
   });
 });

@@ -102,6 +102,7 @@ describe('ClisSection (HIVE-341)', () => {
     expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
       'Claude Code',
       'Codex',
+      'Copilot',
     ]);
 
     await userEvent.selectOptions(select, 'codex');

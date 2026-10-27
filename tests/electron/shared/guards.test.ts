@@ -1986,10 +1986,11 @@ describe('hasControlCharacters', () => {
 describe('parseSetAgentsDefaultCliRequest (HIVE-342)', () => {
   it('accepts a known CLI, and null as a clear', () => {
     expect(parseSetAgentsDefaultCliRequest({ cli: 'codex' })).toEqual({ cli: 'codex' });
+    expect(parseSetAgentsDefaultCliRequest({ cli: 'copilot' })).toEqual({ cli: 'copilot' });
     expect(parseSetAgentsDefaultCliRequest({ cli: null })).toEqual({ cli: null });
   });
 
-  it.each([[{ cli: 'copilot' }], [{}], [{ cli: 'codex', extra: 1 }]])('refuses %j', (input) => {
+  it.each([[{ cli: 'gemini' }], [{}], [{ cli: 'codex', extra: 1 }]])('refuses %j', (input) => {
     expect(() => parseSetAgentsDefaultCliRequest(input)).toThrow();
   });
 });
@@ -2029,10 +2030,15 @@ describe('parseSetCliAgentsRequest (HIVE-341)', () => {
       cli: 'codex',
       model: 'gpt-6-luna',
     });
+    expect(parseSetCliAgentsRequest({ cli: 'copilot', model: 'claude-sonnet-5.5' })).toEqual({
+      cli: 'copilot',
+      model: 'claude-sonnet-5.5',
+    });
   });
 
   it.each([
-    [{ cli: 'copilot', enabled: true }, /cli/],
+    [{ cli: 'gemini', enabled: true }, /cli/],
+    [{ cli: 'copilot', model: 'opus' }, /model/],
     [{ cli: 'codex', model: 'opus' }, /model/],
     [{ cli: 'claude-code', model: 'gpt-5' }, /model/],
     [{ cli: 'claude-code', effort: 'extreme' }, /effort/],
