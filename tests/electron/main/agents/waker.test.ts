@@ -497,6 +497,33 @@ describe("a CLI's secrets (HIVE-343)", () => {
     expect(command.args.join(' ')).not.toContain('t0k');
   });
 
+  it('strips every inherited COPILOT_PROVIDER_ key, a future one included, and keeps the host (HIVE-357)', () => {
+    const command = build({
+      adapter: copilotAdapter,
+      env: {
+        ...env,
+        base: {
+          ...env.base,
+          COPILOT_PROVIDER_BASE_URL: 'https://elsewhere',
+          COPILOT_PROVIDER_SOMETHING_NEW: 'x',
+          GITHUB_ENTERPRISE_TOKEN: 'ghe',
+          GH_HOST: 'corp.ghe.com',
+        },
+      },
+    });
+
+    expect(command.env['COPILOT_PROVIDER_BASE_URL']).toBeUndefined();
+    expect(command.env['COPILOT_PROVIDER_SOMETHING_NEW']).toBeUndefined();
+    expect(command.env['GITHUB_ENTERPRISE_TOKEN']).toBeUndefined();
+    expect(command.env['GH_HOST']).toBe('corp.ghe.com');
+  });
+
+  it('strips by prefix only for a plan that names one', () => {
+    const command = build({ env: { ...env, base: { ...env.base, COPILOT_PROVIDER_TYPE: 'openai' } } });
+
+    expect(command.env['COPILOT_PROVIDER_TYPE']).toBe('openai');
+  });
+
   it("carries the plan's usage file and files", () => {
     const command = build({ adapter: copilotAdapter, paths: { ...paths, cliHome: '/h/cli/copilot' } });
     const plan = copilotAdapter.headless.launch({

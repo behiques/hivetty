@@ -631,7 +631,13 @@ describe('createRunTracker', () => {
     beforeEach(() => {
       usageFile = join(mkdtempSync(join(tmpdir(), 'runs-cop-')), 'u.json');
       copyFileSync(join(FIX, 'usage-1.0.104.json'), usageFile);
-      commandOver = { sessionUuid: 'minted', namesConversation: true, harness: 'copilot', usageFile };
+      commandOver = {
+        sessionUuid: 'minted',
+        namesConversation: true,
+        outputConfirmsStart: true,
+        harness: 'copilot',
+        usageFile,
+      };
     });
     afterEach(() => {
       readerOverride.current = null;
@@ -695,6 +701,55 @@ describe('createRunTracker', () => {
 
       await vi.waitFor(() => expect(closed).toEqual(['a']));
       expect(state.read('a').runs.at(-1)).toMatchObject({ outcome: 'failed' });
+    });
+
+    describe('that dies before Copilot takes the prompt (HIVE-357)', () => {
+      beforeEach(() => {
+        copyFileSync(join(FIX, 'usage-failed-auth-1.0.104.json'), usageFile);
+      });
+
+      it('counts nothing against rotation', async () => {
+        state.patch('a', { sessionUuid: 'minted', runsSinceRotate: 3 });
+        tracker.run('a', 'ledger');
+        childInstances[0]?.emitStderr(readFileSync(join(FIX, 'stderr-network-1.0.104.txt'), 'utf8'));
+        childInstances[0]?.emitClose(1, null);
+
+        await vi.waitFor(() => expect(closed).toEqual(['a']));
+        expect(state.lane('a', 'standing').runsSinceRotate).toBe(3);
+      });
+
+      it('keeps a parked rotation parked, for the next wake to start again', async () => {
+        const PARKED = { uuid: 'minted', handoff: 'what I know' };
+
+        commandOver = { ...commandOver, startsRotation: true };
+        state.patch('a', { sessionUuid: 'old', pendingSession: PARKED });
+        tracker.run('a', 'ledger');
+        childInstances[0]?.emitClose(1, null);
+
+        await vi.waitFor(() => expect(closed).toEqual(['a']));
+        expect(state.read('a').pendingSession).toEqual(PARKED);
+      });
+    });
+
+    it('settles a parked rotation and counts the run once the prompt was taken (HIVE-357)', async () => {
+      commandOver = { ...commandOver, startsRotation: true };
+      state.patch('a', { sessionUuid: 'old', runsSinceRotate: 0, pendingSession: { uuid: 'minted', handoff: 'h' } });
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitStdout('DONE\n');
+      childInstances[0]?.emitClose(0, null);
+
+      await vi.waitFor(() => expect(closed).toEqual(['a']));
+      expect(state.read('a').pendingSession).toBeUndefined();
+      expect(state.lane('a', 'standing')).toMatchObject({ sessionUuid: 'minted', runsSinceRotate: 1 });
+    });
+
+    it('keeps the argv id on a run it killed, whose usage it never read', () => {
+      tracker.run('a', 'ledger');
+      tracker.kill('a');
+      childInstances[0]?.emitClose(null, 'SIGTERM');
+
+      // A stalled first wake may have done a whole turn: its conversation must not be orphaned.
+      expect(state.lane('a', 'standing').sessionUuid).toBe('minted');
     });
 
     const hanging = () => ({
@@ -774,6 +829,14 @@ describe('createRunTracker', () => {
       // A hash with no uuid would describe a conversation that does not exist.
       expect(state.lane('a', 'standing').promptHash).toBeUndefined();
       expect(state.read('a').runs.at(-1)?.sessionUuid).toBeUndefined();
+    });
+
+    it('counts nothing against rotation when the child dies before naming one (HIVE-357)', () => {
+      state.patch('a', { runsSinceRotate: 3 });
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitClose(1, null);
+
+      expect(state.lane('a', 'standing').runsSinceRotate).toBe(3);
     });
 
     it('persists the thread its output named', () => {
