@@ -76,6 +76,13 @@ describe('codex session command (HIVE-279)', () => {
     expect(line({ sessionUuid: id })).not.toContain(id);
   });
 
+  it('keeps every flag on a resume, after the id (`codex resume --help` at 0.164)', () => {
+    const id = '0199a2b3-4c5d-7e6f-8a9b-0c1d2e3f4a5b';
+    expect(line({ sessionUuid: id, resume: true, model: 'gpt-6-luna', bypassHookTrust: true })).toMatch(
+      new RegExp(`^codex resume ${id} -m gpt-6-luna .*hooks\\.Stop.* --dangerously-bypass-hook-trust && exit$`),
+    );
+  });
+
   it('starts fresh rather than type an id that is not a uuid', () => {
     expect(line({ sessionUuid: 'x; rm -rf ~', resume: true })).not.toContain('rm -rf');
   });

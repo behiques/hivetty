@@ -31,7 +31,7 @@ under `--bypass --project-hook`.
 bypass and says why.
 
 What that session gets, measured (`--no-bypass --project-hook --task-argv`): Codex shows the
-"Hooks need review" dialog for **all** hooks, HiveTTY's six `-c` hooks with the repo's. A task passed
+"Hooks need review" dialog for **all** hooks, six in all, HiveTTY's five `-c` hooks and the repo's one. A task passed
 after `--` on the argv still ran (plan, `touch`, reply), but **no hook fired**: no working, idle,
 needs-you or plan from that session until the user trusts the hooks in that dialog, which Codex
 then records in `$CODEX_HOME/config.toml` (`hooks.state`, its own write).
