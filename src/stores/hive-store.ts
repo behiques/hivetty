@@ -2405,7 +2405,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           `❯ ${harness === 'claude-code' ? 'claude' : harness} --model ${resolvedModel} --effort ${resolvedEffort} — new session on ${projectId}`,
           'green',
         ),
-        line('● Reading CLAUDE.md, mapping repo…', 'blue'),
+        // The instructions file the CLI reads: Codex reads AGENTS.md (HIVE-279).
+        line(`● Reading ${harness === 'codex' ? 'AGENTS.md' : 'CLAUDE.md'}, mapping repo…`, 'blue'),
         task
           ? line(`✱ ${pickPhrase('working.session')} ${task}`, 'amber')
           : line('· Ready — type below to give this session its task', 'dim'),

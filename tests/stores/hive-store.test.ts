@@ -373,6 +373,19 @@ describe('hive-store', () => {
       });
     });
 
+    it('seeds the console with the file the CLI reads, AGENTS.md for Codex (HIVE-279)', () => {
+      const lines = (id: string) => {
+        const entity = useHiveStore.getState().entities[id];
+        return isSession(entity) ? entity.lines.map((l) => l.text) : [];
+      };
+      const codex = useHiveStore.getState().spawnSession('nova-web', '', 'codex');
+      const claude = useHiveStore.getState().spawnSession('nova-web', '');
+
+      expect(lines(codex)).toContain('● Reading AGENTS.md, mapping repo…');
+      expect(lines(codex).some((text) => text.includes('CLAUDE.md'))).toBe(false);
+      expect(lines(claude)).toContain('● Reading CLAUDE.md, mapping repo…');
+    });
+
     it('starts another CLI on its own default model at medium', () => {
       const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex');
 
