@@ -5,8 +5,8 @@
  * module follows `electron/shared`'s rule and drags nothing in.
  */
 
-/** Every CLI the app can drive (HIVE-342 added codex, headless only; HIVE-343 adds the next). */
-export const HARNESS_IDS = ['claude-code', 'codex'] as const;
+/** Every CLI the app can drive (HIVE-342 added codex, HIVE-343 copilot; both headless only). */
+export const HARNESS_IDS = ['claude-code', 'codex', 'copilot'] as const;
 
 /** Which CLI drives an agent session. */
 export type HarnessId = (typeof HARNESS_IDS)[number];

@@ -14,6 +14,45 @@ export const CODEX_MODELS = ['gpt-6-luna', 'gpt-5.6-terra', 'gpt-5.6-luna'] as c
 /** Codex's `model_reasoning_effort` values at 0.164.0 (HIVE-342). */
 export const CODEX_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
+/** Copilot's models, from `copilot help config` at 1.0.104 (HIVE-343). `auto` lets Copilot pick. */
+export const COPILOT_MODELS = [
+  'auto',
+  'claude-sonnet-5.5',
+  'claude-sonnet-5',
+  'claude-fable-5.1',
+  'claude-fable-5',
+  'claude-opus-5.5',
+  'claude-opus-5',
+  'claude-opus-4.8',
+  'claude-opus-4.8-fast',
+  'claude-sonnet-4.6',
+  'claude-haiku-5.5',
+  'claude-haiku-4.5',
+  'gpt-6.1-sol',
+  'gpt-6-sol',
+  'gpt-6-luna',
+  'gpt-6-astra',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+  'gpt-5.5',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.3-codex',
+  'gpt-5-mini',
+  'mai-code-1.1-flash',
+  'gemini-4-argon',
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'grok-4.7',
+  'grok-4.6',
+  'grok-4.5',
+  'kimi-k3',
+] as const;
+
+/** `--reasoning-effort`'s values at 1.0.104 (HIVE-343). */
+export const COPILOT_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+
 /** The sandboxes a Codex run may get (HIVE-342); `danger-full-access` is never offered. */
 export const HEADLESS_SANDBOXES = ['read-only', 'workspace-write'] as const;
 
@@ -27,6 +66,7 @@ export type HeadlessSandbox = (typeof HEADLESS_SANDBOXES)[number];
 export const CLI_VOCAB = {
   'claude-code': { models: SESSION_MODELS, efforts: SESSION_EFFORTS },
   codex: { models: CODEX_MODELS, efforts: CODEX_EFFORTS },
+  copilot: { models: COPILOT_MODELS, efforts: COPILOT_EFFORTS },
 } as const satisfies Record<HarnessId, { models: readonly string[]; efforts: readonly string[] }>;
 
 /**

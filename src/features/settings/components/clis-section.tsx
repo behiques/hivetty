@@ -15,7 +15,11 @@ import {
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
 /** A CLI's name as a person reads it. A new CLI adds a row (HIVE-342, HIVE-343). */
-const CLI_NAMES: Record<HarnessId, string> = { 'claude-code': 'Claude Code', codex: 'Codex' };
+const CLI_NAMES: Record<HarnessId, string> = {
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  copilot: 'Copilot',
+};
 
 const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli] }));
 // workspace-write first: it is what an unset card runs (HIVE-342). No "CLI default": codex's own is not ours.
