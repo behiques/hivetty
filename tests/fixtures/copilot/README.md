@@ -17,6 +17,8 @@ them) asked to find `envcheck` with its tool search: the `tool_search_tool` call
 `stderr-bad-token-1.0.104.txt` is the stderr of a run with a refused token (exit 1). `stderr-network-1.0.104.txt` is the same run on 2026-10-27 with `HTTPS_PROXY` at a closed port
 (the same headline, a network detail line), and `stderr-classic-pat-1.0.104.txt` a run whose token
 was a classic `ghp_` PAT (HIVE-357).
+`usage-failed-auth-1.0.104.json` is the usage file the network run above still wrote (HIVE-357): no
+request, no `tokenDetails`.
 
 Scrubbed, consistently across every file, and nothing else:
 

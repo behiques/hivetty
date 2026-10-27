@@ -28,6 +28,25 @@ describe('readCopilotHeadless', () => {
     expect(readCopilotHeadless().flush()).toEqual([]);
   });
 
+  it('names the conversation when the usage file shows the prompt was taken (HIVE-357)', async () => {
+    const events = await readCopilotHeadless(usageAt(), 'pinned').finish!(0, '');
+
+    expect(events[0]).toEqual({ kind: 'conversation', id: 'pinned' });
+    expect(events[1]).toMatchObject({ kind: 'end', stop: 'done' });
+  });
+
+  it('names none when the run failed before taking it, or there is no file', async () => {
+    const failed = join(mkdtempSync(join(tmpdir(), 'cop-')), 'u.json');
+
+    copyFileSync(join(FIX, 'usage-failed-auth-1.0.104.json'), failed);
+    expect(await readCopilotHeadless(failed, 'pinned').finish!(1, '')).toEqual([
+      { kind: 'end', stop: 'error', detail: 'copilot exited 1' },
+    ]);
+    expect(await readCopilotHeadless('/nope/u.json', 'pinned').finish!(1, '')).toEqual([
+      { kind: 'end', stop: 'error', detail: 'copilot exited 1' },
+    ]);
+  });
+
   it('ends done with the usage file read, then deletes it', async () => {
     const file = usageAt();
     const events = await readCopilotHeadless(file).finish!(0, '');

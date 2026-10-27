@@ -1301,7 +1301,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
                 }
               },
         harness: command.harness ?? 'claude-code',
-        reader: headlessAdapter(command.harness ?? 'claude-code').headless.reader(command.usageFile),
+        reader: headlessAdapter(command.harness ?? 'claude-code').headless.reader(command.usageFile, command.sessionUuid),
         stderrTail: '',
         fold: NO_EVENTS,
         closed: false,

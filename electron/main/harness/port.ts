@@ -324,8 +324,11 @@ export interface LaunchPlan {
 /** Agent runs: no tty, one turn per process (HIVE-337). */
 export interface HeadlessHarness {
   launch(spec: HeadlessSpec): HeadlessPlan;
-  /** A fresh reader for one run's stdout (HIVE-338); `usageFile` is the plan's (HIVE-343). */
-  reader(usageFile?: string): RunEventReader;
+  /**
+   * A fresh reader for one run's stdout (HIVE-338); `usageFile` is the plan's (HIVE-343).
+   * `sessionUuid` is the argv's id, for a reader that names it only on proof (HIVE-357).
+   */
+  reader(usageFile?: string, sessionUuid?: string): RunEventReader;
   /** The permission fence (HIVE-339). */
   fence: PermissionFence;
 }

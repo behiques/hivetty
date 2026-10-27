@@ -6,7 +6,8 @@ import type { RunEvent, RunEventReader } from '../port';
 
 /**
  * `copilot -p -s` read into run events (HIVE-343). Under `-s` stdout is the answer and nothing
- * else, so it is one `say`. The id is pinned on the argv (`namesConversation`), the turn's end
+ * else, so it is one `say`. The id is pinned on the argv (`namesConversation`), and named as the
+ * conversation only once the usage file shows the prompt was taken (HIVE-357). The turn's end
  * comes from the hooks, and the usage comes from `--usage-output-file`, which only the exit makes
  * final. Recorded against 1.0.104 (`tests/fixtures/copilot/`).
  */
@@ -56,34 +57,40 @@ const count = (value: unknown): number | undefined => {
   return typeof tokens === 'number' ? tokens : undefined;
 };
 
-async function usageOf(file: string | undefined): Promise<RunUsage | undefined> {
-  if (file === undefined) return undefined;
+async function usageOf(file: string | undefined): Promise<{ usage?: RunUsage; requests: number }> {
+  if (file === undefined) return { requests: 0 };
 
   try {
-    const details = (
-      JSON.parse(await readFile(file, 'utf8')) as { tokenDetails?: Record<string, unknown> }
-    ).tokenDetails;
+    const parsed = JSON.parse(await readFile(file, 'utf8')) as {
+      tokenDetails?: Record<string, unknown>;
+      totalUserRequests?: unknown;
+    };
+    const details = parsed.tokenDetails;
+    const requests = typeof parsed.totalUserRequests === 'number' ? parsed.totalUserRequests : 0;
     const inputTokens = count(details?.['input']);
     const outputTokens = count(details?.['output']);
     const cachedTokens = count(details?.['cache_read']);
 
     if (inputTokens === undefined && outputTokens === undefined && cachedTokens === undefined) {
-      return undefined;
+      return { requests };
     }
     return {
-      ...(inputTokens === undefined ? {} : { inputTokens }),
-      ...(outputTokens === undefined ? {} : { outputTokens }),
-      ...(cachedTokens === undefined ? {} : { cachedTokens }),
+      requests,
+      usage: {
+        ...(inputTokens === undefined ? {} : { inputTokens }),
+        ...(outputTokens === undefined ? {} : { outputTokens }),
+        ...(cachedTokens === undefined ? {} : { cachedTokens }),
+      },
     };
   } catch {
-    return undefined;
+    return { requests: 0 };
   } finally {
     // Read once: a later wake on this conversation that dies first must not report this one's usage.
     await rm(file, { force: true }).catch(() => undefined);
   }
 }
 
-export function readCopilotHeadless(usageFile?: string): RunEventReader {
+export function readCopilotHeadless(usageFile?: string, sessionUuid?: string): RunEventReader {
   let said = '';
 
   return {
@@ -98,7 +105,13 @@ export function readCopilotHeadless(usageFile?: string): RunEventReader {
       return text === '' ? [] : [{ kind: 'say', text }];
     },
     async finish(exit, stderr) {
-      const usage = await usageOf(usageFile);
+      const { usage, requests } = await usageOf(usageFile);
+      /*
+        The proof the session started (HIVE-357): a failed auth still writes `session-state/<id>/`
+        and a usage file, but one with no request in it.
+      */
+      const started: RunEvent[] =
+        sessionUuid !== undefined && requests > 0 ? [{ kind: 'conversation', id: sessionUuid }] : [];
       const end: RunEvent =
         exit === 0
           ? { kind: 'end', stop: 'done', detail: 'completed', ...(usage === undefined ? {} : { usage }) }
@@ -109,7 +122,7 @@ export function readCopilotHeadless(usageFile?: string): RunEventReader {
               ...(usage === undefined ? {} : { usage }),
             };
 
-      return [end];
+      return [...started, end];
     },
   };
 }
