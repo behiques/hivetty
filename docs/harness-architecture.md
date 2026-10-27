@@ -207,6 +207,149 @@ neutral `SessionMetrics`. Claude Code's live in `claude-code/{record,title-origi
 - `record: { transcriptPath, hasTranscript, titleOrigin, nameFromTitle }`.
 - `capabilities: { resume, meters, contextDelivery }`.
 
+## Headless runs (phase 2)
+
+Epic HIVE-336 moved an agent's headless run behind the port. The core decides what a wake is;
+the adapter decides how its CLI is asked to run it.
+
+### The seam
+
+`runs.run` → `createWakeCommand` (`agents/wake-command.ts`) → `resolveHarness`
+(`agents/resolve-harness.ts`) → `wakeCommand` (`agents/waker.ts`) → `adapter.headless.launch`.
+The tracker feeds the run's stdout to `adapter.headless.reader()`, and every tool call meets
+`headless.fence`.
+
+The core keeps the prompt (`wakePrompt()`), the host↔container path map, the environment filter
+(`isSessionEnvDenied`), the `HIVE_*` identity and the grants (`fencedRules`, written to
+`HIVE_GRANTS`). The adapter returns a `HeadlessPlan`: the argv, the env it adds and strips, the
+files it needs written, and how to stop and recognise the run. A container's default binary is
+`headless.containerCommand`.
+
+### `HeadlessSpec` and `HeadlessPlan`
+
+`HeadlessSpec`, what the core knows (`port.ts`):
+
+| Field | Decided by |
+| --- | --- |
+| `conversation` (`start` or `resume`) | the core: a fresh uuid, or the lane's recorded conversation |
+| `name` | the core: the agent's name |
+| `model`, `effort` | the CLI card's defaults; on Claude, `AGENT.md`'s ahead of the card |
+| `limits` (`turns`, `budgetUsd`) | the definition |
+| `files` (`settings`, `pluginDir`, `mcpConfig`, `systemPrompt`) | the core, in the container's spelling for a container run |
+| `grants` | the core: the standing Hive grants plus the definition's tools, unnarrowed |
+| `prompt` | the core's `wakePrompt()` |
+| `subscriptionAuth` | the config |
+| `instructions` | the core: the system prompt's text, for a CLI that takes it inline |
+| `sandbox` | the CLI card (Codex) |
+| `hiveServer` | `mcp.hiveServerSpec()`, for a CLI that takes the server inline |
+| `stateDir` | the core: `~/.hivetty/cli/<id>` (Copilot's home) |
+| `workdir` | the core: the run's cwd |
+| `deny` | the CLI card's deny patterns (Copilot) |
+
+`HeadlessPlan`, what the adapter answers:
+
+| Field | What it is |
+| --- | --- |
+| `args` | the argv |
+| `addEnv` | env the adapter adds, written after everything but a container's hook identity |
+| `stripEnv`, `stripPrefixes` | env removed from a host run (a container's env is built from scratch) |
+| `stopPattern` | what `pkill -f` matches inside a container to stop this run |
+| `namesConversation` | whether the argv names the conversation |
+| `outputConfirmsStart` | the run's output, not the argv, proves it started (Copilot) |
+| `usageFile` | a file the CLI writes its usage to, read by the reader's `finish` |
+| `files` | absolute paths the core writes before the spawn, only when the bytes differ |
+
+### `RunEvent`
+
+`conversation` (the id), `mcp` (each server's status), `say` (what the agent says), `tool` (a
+call, `ask` set for the ledger ask tool) and `end`: `RunEnd`, whose `stop` is a `RunStop` (`done`,
+`turns`, `budget`, `error`) with `costUsd`, `turns` and `usage` when the CLI reports them. A
+reader's optional `finish(exit, stderr)` runs after the exit flush, for facts only the exit can
+tell (Copilot's usage file).
+
+**The late-id rule, as built.** The run's id is the argv's until the output names one, and a later
+`conversation` replaces an earlier one (`runs.ts`, `foldInto`). A Stop hook is matched to a live run
+by the conversation it names (`noteTurnEnded`). A Stop naming an id no run holds yet matches
+nothing: it is dropped, and nothing is held for replay. `namesConversation: false` (a first Codex
+wake) means the id comes only from `thread.started`, and a run killed before that line persists
+none. Open gap: HIVE-353.
+
+### The fence port
+
+`PermissionFence`:
+
+- `express(rules)`: can this CLI route every call the rules do not allow to `decide`?
+- `translate(tool, input, cwd)`: a hook-fenced CLI's call in `decide`'s vocabulary.
+- `read(body)`: the CLI's `PreToolUse` body as one call. Absent: Claude's shape.
+- `reply(reason?)`: the CLI's answer on `/fence`. Absent: the CLI is not hook-fenced, and `/fence`
+  answers `400`.
+- `grants`: built-ins every run on this CLI needs, granted whatever the definition says
+  (`ToolSearch` on Claude and Copilot, none on Codex).
+
+`decide` in `@shared/permission-rules` is the only matcher; the translating fences map calls into
+its vocabulary. **Can't express means not a candidate:** resolution skips the CLI and never runs
+it unfenced. `HIVE_STANDING_GRANTS` (`@shared/ledger-tools`) is spelled `mcp__hive__*` and lives
+outside the agents grep. The translating fences (HIVE-342 Codex, HIVE-343 Copilot) map each CLI's
+hive calls onto those names, which is what keeps the list valid for every CLI.
+
+### Resolution
+
+Which CLI runs a wake (candidate order, the seven checks, a conversation per CLI) is
+[`harness:` — which CLI runs the agent](agents-and-ledger.md#harness--which-cli-runs-the-agent-hive-340)
+in `agents-and-ledger.md`. It is not repeated here.
+
+### The mechanisms
+
+From the shipped values: the Codex and Copilot sections below, and `claude-code/headless.ts`.
+
+| | Claude Code | Codex | Copilot |
+| --- | --- | --- | --- |
+| Id | `--session-id <uuid>` on a first wake | none on a first wake; `thread.started` names it | pinned `--session-id <uuid>` |
+| Resume | `--resume <id>` | `exec resume <thread_id>` | the same `--session-id` |
+| Fence | `permissions.ask: ["*"]` + `--permission-prompt-tool` to MCP `approve`; `--allowedTools` grants | `PreToolUse` hook (`matcher="*"`) to `POST /fence`, `codexFence.translate`, then `decide`/`approve`; fails closed | `--allow-tool` shell, write, hive + fail-closed `preToolUse` hook to `/fence` + Settings `--deny-tool` patterns |
+| Hooks | the agent settings file (`--settings`, `--setting-sources ''`) | `-c hooks.*` on the argv, `--dangerously-bypass-hook-trust` | `$COPILOT_HOME/settings.json` |
+| MCP | `--mcp-config` + `--strict-mcp-config` | `-c mcp_servers.hive.*`, `--ignore-user-config` | `--additional-mcp-config` with `${VAR}` refs, `--disable-builtin-mcps` |
+| System prompt | `--append-system-prompt-file` | `-c developer_instructions` on a first wake only | `AGENTS.md` in the workdir |
+| Limits | `--max-turns`, `--max-budget-usd` | none enforced | none enforced |
+| Cost | `total_cost_usd` in the result line | tokens only (`turn.completed`) | tokens from `--usage-output-file` |
+| Stop marker | the session id on the argv | a disabled `hive_wake` MCP server named by the id | the pinned session id |
+| Containers | yes | refused | refused |
+| Live suite | `test:agent` | `test:agent:codex` (0.164.x) | `test:agent:copilot` (1.0.104) |
+
+The Limits and Cost rows follow each adapter's `capabilities` (`enforcesTurns`, `enforcesBudget`,
+`reportsCostUsd`).
+
+### The grep
+
+Both must print nothing. Re-run both before closing a phase.
+
+The agents grep (HIVE-344):
+
+```bash
+rg -n --type ts -e "'claude'" -e "'-p'" -e "--permission-prompt-tool" -e "'--resume'" -e "'--session-id'" \
+   -e "stream-json" -e "CLAUDE_CODE_" -e "mcp__hive__" -e "total_cost_usd" -e "error_max_turns" \
+   -e "'(Bash|Read|Edit|Write|ToolSearch|TaskCreate)['(]" electron/main/agents/ \
+   | rg -v "^\S+:\d+:\s*(\*|//)" || true
+```
+
+Phase 1's core grep:
+
+```bash
+rg -n --type ts -e "'(PreToolUse|PostToolUse|Stop|SubagentStop|SessionStart|SessionEnd|UserPromptSubmit|Notification|PreCompact|PermissionRequest)'" \
+   -e "'(Bash|Read|Edit|Write|MultiEdit|Glob|Grep|Task|TaskCreate|TaskUpdate|TodoWrite|AskUserQuestion|ExitPlanMode|ToolSearch|WebFetch)'" \
+   -e "\.claude/" -e "\.claude-plugin" -e "CLAUDE_CODE_" -e "'claude'" -e "mcp__hive__" \
+   electron/main/sessions electron/main/hooks electron/main/plans electron/main/notifications \
+   | rg -v "^\S+:\d+:\s*(\*|//)" || true
+```
+
+### Follow-ups
+
+- HIVE-279, HIVE-280: interactive Codex and Copilot sessions.
+- HIVE-352, HIVE-358: plans (interactive Codex; agent runs).
+- HIVE-353: the rotation handoff's late-id gap.
+- HIVE-354: the `approve` hang.
+- HIVE-332: entitlement, and each CLI's binary setting.
+
 ## Codex (headless, HIVE-342)
 
 Adapter #2 lives in `electron/main/harness/codex/` and is headless only: every interactive member
