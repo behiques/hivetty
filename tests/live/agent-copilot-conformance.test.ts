@@ -218,6 +218,8 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
         fenceMd(
           SUB,
           `The task tool, starting one subagent whose only job is the shell command: touch ${subMarker}. Do not run the command yourself.`,
+          // Granted, so the fence's ask is the subagent's shell call, not the `task` call that starts it.
+          '[Task]',
         ),
       ],
     ] as const) {
@@ -694,12 +696,20 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     if (skipReason !== undefined) ctx.skip(skipReason);
     await fenceCase(SUB, 'Bash', () => existsSync(subMarker));
 
-    // The call the fence asked about was the subagent's: Copilot names its parent on the body.
+    /*
+      The shell call the fence asked about was a subagent's: Copilot names its parent on the body. A
+      `task` body can name the marker too (its prompt), and a model may nest one, so look for the bash.
+    */
     const sub = fenceBodies.find(
-      (body) => typeof body['parentAgentId'] === 'string' && JSON.stringify(body['toolArgs'] ?? {}).includes(subMarker),
+      (body) =>
+        body['toolName'] === 'bash' &&
+        typeof body['parentAgentId'] === 'string' &&
+        JSON.stringify(body['toolArgs'] ?? {}).includes(subMarker),
     );
-    expect(sub, JSON.stringify(fenceBodies.map((body) => body['toolName']))).toBeDefined();
-    expect(sub?.['toolName']).toBe('bash');
+    expect(
+      sub,
+      JSON.stringify(fenceBodies.map((body) => [body['toolName'], typeof body['parentAgentId']])),
+    ).toBeDefined();
   }, 2 * TURN_MS);
 
   it('a --deny-tool pattern from Settings blocks even a granted call', async (ctx) => {
