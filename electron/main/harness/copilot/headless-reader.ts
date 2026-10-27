@@ -12,8 +12,10 @@ import type { RunEvent, RunEventReader } from '../port';
  */
 
 // Copilot's own wording only: a bare 401 can be any server's (an MCP server's, say).
-const TOKEN_REFUSED =
-  /Authentication token found but could not be validated|Bad credentials|PAT user login \(401\)/;
+// The 401 detail line only (HIVE-357): a network failure prints the same headline above its own.
+const TOKEN_REFUSED = /PAT user login \(401\)|Bad credentials/;
+const TOKEN_UNCHECKED = /Authentication token found but could not be validated/;
+const CLASSIC_TOKEN = /Classic Personal Access Tokens \(ghp_\) are not supported/;
 // These two are unverified (no account to produce them on); upgrade from a real failure's text.
 const NO_SUBSCRIPTION =
   /(no|not have an) active (copilot )?subscription|not (entitled|licensed) (to|for) copilot/i;
@@ -22,6 +24,19 @@ const ORG_DISABLED = /disabled by (your |an )?(organization|enterprise|admin)|or
 /** The reason a person reads on a failed run: a licence problem by name, else stderr's last line. */
 export function classifyFailure(stderr: string, exit: number | null): string {
   if (TOKEN_REFUSED.test(stderr)) return 'the Copilot token was refused: replace it in Settings › CLIs';
+  if (CLASSIC_TOKEN.test(stderr)) {
+    return 'Copilot does not accept classic tokens (ghp_): store a fine-grained token in Settings › CLIs';
+  }
+  if (TOKEN_UNCHECKED.test(stderr)) {
+    // Its last line is a sign-in hint that reads as advice; the detail line is what happened.
+    const detail = stderr
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.startsWith('Failed to fetch'));
+    const unchecked = 'could not check the Copilot token (it may still be valid)';
+
+    return detail === undefined ? unchecked : `${unchecked}: ${detail}`.slice(0, 200);
+  }
   if (NO_SUBSCRIPTION.test(stderr)) return 'no active Copilot subscription for this token';
   if (ORG_DISABLED.test(stderr)) return 'Copilot CLI is disabled by an organization admin';
 
