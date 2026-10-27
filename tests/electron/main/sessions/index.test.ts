@@ -18,6 +18,7 @@ import type {
 } from '../../../../electron/shared/hook-contract';
 import type { StatusSignal } from '../../../../electron/shared/harness-contract';
 import { CH } from '../../../../electron/shared/ipc-contract';
+import type { SessionRecord } from '../../../../electron/shared/session-history-contract';
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { sessionAdapter } from '../../../../electron/main/harness/registry';
@@ -3952,6 +3953,8 @@ describe('codex sessions (HIVE-279)', () => {
     over: {
       /** Fixed ids, or `recorded`: the last id the history was handed, as the real one answers. */
       resumable?: Record<string, string> | 'recorded';
+      /** `recorded`: `all()` folds every patch it was handed per id, as the real one holds them. */
+      all?: 'recorded';
       hiveServer?: () => typeof HIVE | null;
       config?: ConfigSnapshot;
     } = {},
@@ -3985,7 +3988,13 @@ describe('codex sessions (HIVE-279)', () => {
             ? (written.filter((entry) => entry.id === id && 'sessionUuid' in entry.patch).at(-1)?.patch
                 .sessionUuid as string | undefined)
             : over.resumable?.[id],
-        all: () => [],
+        all: () =>
+          over.all === 'recorded'
+            ? [...new Set(written.map((entry) => entry.id))].map(
+                (id) =>
+                  Object.assign({ id }, ...patchesFor(written, id)) as unknown as SessionRecord,
+              )
+            : [],
         flush: () => {},
         dispose: () => {},
       },
@@ -4068,6 +4077,24 @@ describe('codex sessions (HIVE-279)', () => {
     expect(begun).toHaveLength(2);
     expect(begun.at(-1)).toMatchObject({ harness: 'codex', resume: true });
     expect(typed().some((line) => new RegExp(`(^|; )codex resume ${CODEX_ID} `).test(line))).toBe(true);
+  });
+
+  it('restarts an exited codex session into codex when the restart names no CLI', async () => {
+    instance = build([], { all: 'recorded' });
+    instance.open(codexOpen);
+    bootTo(mintedFor('hero-refresh'));
+    // The session ends on its own: `settleExit` drops it from the live map before any restart.
+    emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 0 });
+    vi.advanceTimersByTime(8);
+    vi.mocked(supervisor.write).mockClear();
+
+    await instance.restart({ ...OPEN });
+    bootTo(mintedFor('hero-refresh'));
+
+    expect(spawned).toHaveLength(2);
+    // Read back from the history: a defaulted CLI would have typed claude.
+    expect(typed().some((line) => /(^|; )codex /.test(line))).toBe(true);
+    expect(typed().some((line) => line.includes('claude'))).toBe(false);
   });
 
   it('starts a fresh restart with no id, not the last generation’s', async () => {

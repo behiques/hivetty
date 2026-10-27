@@ -2054,9 +2054,14 @@ export function createSessions(options: SessionsOptions): Sessions {
     forgetFinish(request.entityId);
     /*
       The CLI the session runs, captured before the kill (HIVE-279): `settleExit` drops the entity
-      from `agentSessions`, and a restart that does not name a CLI keeps the one it had.
+      from `agentSessions`, and a restart that does not name a CLI keeps the one it had. A session
+      that already exited is gone from that map, so its history record answers instead: without it
+      an exited Codex session would restart as Claude.
     */
-    const harness = request.harness ?? agentSessions.get(request.entityId);
+    const harness =
+      request.harness ??
+      agentSessions.get(request.entityId) ??
+      history?.all().find((record) => record.id === request.entityId)?.harness;
     // Before the kill too: a restart refused after it would leave the row dead.
     if (harness !== undefined) refuseUnlaunchable(harness, inContainer(request.projectId));
 
