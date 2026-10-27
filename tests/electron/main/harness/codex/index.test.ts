@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
@@ -60,7 +63,11 @@ describe('codexAdapter', () => {
   });
 
   it('reads an agent-lane hook as Claude-shaped, since codex payloads are', () => {
-    expect(codexAdapter.readHook).toBe(claudeCodeAdapter.readHook);
+    const lines = readFileSync(join(__dirname, '../../../../fixtures/codex/hooks-0.164.0.jsonl'), 'utf8').split('\n');
+    for (const body of lines.filter((line) => line !== '')) {
+      const input = { lane: 'agent' as const, entityId: 'a', body, truncated: false };
+      expect(codexAdapter.readHook(input)).toEqual(claudeCodeAdapter.readHook(input));
+    }
     expect(codexAdapter.contextReply).toBe(claudeCodeAdapter.contextReply);
   });
 });

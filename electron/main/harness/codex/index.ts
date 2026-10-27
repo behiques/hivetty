@@ -4,6 +4,7 @@ import type { HarnessAdapter } from '../port';
 import { codexFence } from './fence';
 import { launchCodexHeadless } from './headless';
 import { readCodexHeadless } from './headless-reader';
+import { readCodexHook } from './hooks';
 
 const NO_SESSIONS = 'codex has no interactive sessions yet (HIVE-279).';
 
@@ -15,7 +16,7 @@ const later = (): Promise<never> => Promise.reject(new Error(NO_SESSIONS));
 /**
  * Adapter #2, headless only (HIVE-342). The interactive half is HIVE-279's: `sessionAdapter()`
  * and `harnessOf` answer Claude, so nothing interactive reaches these refusals. `readHook` is
- * Claude's because codex 0.164 sends Claude-shaped payloads (`tests/fixtures/codex/hooks-*`).
+ * Claude's, because codex 0.164 sends Claude-shaped payloads, plus `update_plan` (`./hooks`).
  */
 export const codexAdapter: HarnessAdapter = {
   id: 'codex',
@@ -37,7 +38,7 @@ export const codexAdapter: HarnessAdapter = {
     containerSet: later,
     mcpConfig: later,
   },
-  readHook: claudeCodeAdapter.readHook,
+  readHook: readCodexHook,
   contextReply: claudeCodeAdapter.contextReply,
   promptMarker: interactive,
   foldEdits: () => new Map(),
