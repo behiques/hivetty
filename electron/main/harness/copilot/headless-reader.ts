@@ -17,6 +17,8 @@ import type { RunEvent, RunEventReader } from '../port';
 const TOKEN_REFUSED = /PAT user login \(401\)|Bad credentials/;
 const TOKEN_UNCHECKED = /Authentication token found but could not be validated/;
 const CLASSIC_TOKEN = /Classic Personal Access Tokens \(ghp_\) are not supported/;
+// Any value Copilot does not recognise as a token (HIVE-357): its last line is a sign-in hint.
+const NO_TOKEN = /No authentication information found/;
 // These two are unverified (no account to produce them on); upgrade from a real failure's text.
 const NO_SUBSCRIPTION =
   /(no|not have an) active (copilot )?subscription|not (entitled|licensed) (to|for) copilot/i;
@@ -27,6 +29,9 @@ export function classifyFailure(stderr: string, exit: number | null): string {
   if (TOKEN_REFUSED.test(stderr)) return 'the Copilot token was refused: replace it in Settings › CLIs';
   if (CLASSIC_TOKEN.test(stderr)) {
     return 'Copilot does not accept classic tokens (ghp_): store a fine-grained token in Settings › CLIs';
+  }
+  if (NO_TOKEN.test(stderr)) {
+    return 'Copilot found no token it could use: store an OAuth or fine-grained token in Settings › CLIs';
   }
   if (TOKEN_UNCHECKED.test(stderr)) {
     // Its last line is a sign-in hint that reads as advice; the detail line is what happened.
@@ -108,10 +113,13 @@ export function readCopilotHeadless(usageFile?: string, sessionUuid?: string): R
       const { usage, requests } = await usageOf(usageFile);
       /*
         The proof the session started (HIVE-357): a failed auth still writes `session-state/<id>/`
-        and a usage file, but one with no request in it.
+        and a usage file, but one with no request in it. A clean exit is proof on its own, so a
+        usage file that is missing or unreadable never leaves a rotation parked.
       */
       const started: RunEvent[] =
-        sessionUuid !== undefined && requests > 0 ? [{ kind: 'conversation', id: sessionUuid }] : [];
+        sessionUuid !== undefined && (exit === 0 || requests > 0)
+          ? [{ kind: 'conversation', id: sessionUuid }]
+          : [];
       const end: RunEvent =
         exit === 0
           ? { kind: 'end', stop: 'done', detail: 'completed', ...(usage === undefined ? {} : { usage }) }

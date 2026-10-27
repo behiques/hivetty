@@ -47,6 +47,14 @@ describe('readCopilotHeadless', () => {
     ]);
   });
 
+  it('names the conversation on a clean exit whose usage file is missing or unread (HIVE-357)', async () => {
+    // A clean exit is a run that started: only a failed one is in doubt.
+    expect((await readCopilotHeadless('/nope/u.json', 'pinned').finish!(0, ''))[0]).toEqual({
+      kind: 'conversation',
+      id: 'pinned',
+    });
+  });
+
   it('ends done with the usage file read, then deletes it', async () => {
     const file = usageAt();
     const events = await readCopilotHeadless(file).finish!(0, '');
@@ -136,6 +144,12 @@ describe('classifyFailure', () => {
   it('names a classic token by what to store instead', () => {
     expect(classifyFailure(readFileSync(join(FIX, 'stderr-classic-pat-1.0.104.txt'), 'utf8'), 1)).toBe(
       'Copilot does not accept classic tokens (ghp_): store a fine-grained token in Settings › CLIs',
+    );
+  });
+
+  it('names a token Copilot could not use at all, rather than its sign-in hint (HIVE-357)', () => {
+    expect(classifyFailure(readFileSync(join(FIX, 'stderr-no-auth-1.0.104.txt'), 'utf8'), 1)).toBe(
+      'Copilot found no token it could use: store an OAuth or fine-grained token in Settings › CLIs',
     );
   });
 

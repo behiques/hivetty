@@ -323,9 +323,10 @@ plugin data land there; the user's `~/.copilot` (plugins, MCP servers, hooks, lo
 an agent, and HiveTTY never writes there. The package cache and managed settings stay in
 `~/Library/Caches/copilot`, shared with the user's CLI. `stripEnv` removes the six `COPILOT_*` keys
 a parent Copilot session exports; `GH_TOKEN`, `GITHUB_TOKEN` and `COPILOT_ALLOW_ALL`, which
-would outrank or widen the stored token; and `COPILOT_ROUTING_ENV_KEYS` (the `COPILOT_PROVIDER_*`
-BYOK keys, `COPILOT_OFFLINE`, `COPILOT_MODEL`, `COPILOT_AUTO_TIER`, `COPILOT_ASSISTED_APPROVAL`,
-`GH_ENTERPRISE_TOKEN`), which would change who pays, which model answers or what is approved.
+would outrank or widen the stored token; `COPILOT_ROUTING_ENV_KEYS` (`COPILOT_OFFLINE`,
+`COPILOT_MODEL`, `COPILOT_AUTO_TIER`, `COPILOT_ASSISTED_APPROVAL`, `GH_ENTERPRISE_TOKEN`,
+`GITHUB_ENTERPRISE_TOKEN`); and, through `stripPrefixes`, every `COPILOT_PROVIDER_` BYOK key, a
+future one included (HIVE-357). Each would change who pays, which model answers or what is approved.
 `GH_HOST` and `COPILOT_GH_HOST` stay, for an Enterprise user's stored token.
 
 **Two hooks**, in the home's `settings.json` (the same bytes for every run; identity comes from the
