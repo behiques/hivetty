@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,9 +20,20 @@ vi.mock('@/lib/project-config', async (importOriginal) => {
   };
 });
 
+const cliTokensState = vi.fn();
+const setCliToken = vi.fn();
+const clearCliToken = vi.fn();
+
+vi.mock('@lib/cli-tokens', () => ({
+  cliTokensState: () => cliTokensState(),
+  setCliToken: (request: unknown) => setCliToken(request),
+  clearCliToken: (request: unknown) => clearCliToken(request),
+}));
+
 /** The Claude Code card: since HIVE-342 there is a card per CLI. */
 const claude = () => within(screen.getByRole('region', { name: 'Claude Code' }));
 const codex = () => within(screen.getByRole('region', { name: 'Codex' }));
+const copilot = () => within(screen.getByRole('region', { name: 'Copilot' }));
 
 const seed = (agents: Parameters<typeof resolveClis>[0], over: Partial<ConfigSnapshot> = {}) =>
   setProjectConfigForTest({
@@ -35,6 +46,9 @@ describe('ClisSection (HIVE-341)', () => {
   beforeEach(() => {
     setCliAgentsConfig.mockReset();
     setAgentsDefaultCliConfig.mockReset();
+    cliTokensState.mockReset().mockResolvedValue({ copilot: false, encryptionAvailable: true });
+    setCliToken.mockReset().mockResolvedValue({ copilot: true, encryptionAvailable: true });
+    clearCliToken.mockReset().mockResolvedValue({ copilot: false, encryptionAvailable: true });
   });
   afterEach(() => resetProjectConfig());
 
@@ -153,5 +167,137 @@ describe('ClisSection (HIVE-341)', () => {
     render(<ClisSection />);
 
     expect(screen.getByText('CLI settings are only available in the desktop app.')).toBeInTheDocument();
+  });
+});
+
+describe('the Copilot card (HIVE-343)', () => {
+  beforeEach(() => {
+    setCliAgentsConfig.mockReset();
+    cliTokensState.mockReset().mockResolvedValue({ copilot: false, encryptionAvailable: true });
+    setCliToken.mockReset().mockResolvedValue({ copilot: true, encryptionAvailable: true });
+    clearCliToken.mockReset().mockResolvedValue({ copilot: false, encryptionAvailable: true });
+  });
+  afterEach(() => resetProjectConfig());
+
+  it('renders a card per CLI, Copilot third', () => {
+    seed(undefined);
+    render(<ClisSection />);
+
+    expect(screen.getByRole('region', { name: 'Claude Code' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Codex' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Copilot' })).toBeInTheDocument();
+  });
+
+  it('has a token field with its hint, and stores what is typed on Enter', async () => {
+    seed(undefined);
+    render(<ClisSection />);
+
+    const field = await copilot().findByLabelText('Token');
+
+    expect(
+      copilot().getByText(
+        'A fine-grained PAT with Copilot Requests, or an OAuth token (gho_…). Stored encrypted; agents get it as COPILOT_GITHUB_TOKEN.',
+      ),
+    ).toBeInTheDocument();
+    expect(field).toHaveAttribute('placeholder', 'gho_… or github_pat_…');
+
+    await userEvent.type(field, 'gho_abc{Enter}');
+
+    expect(setCliToken).toHaveBeenCalledWith({ cli: 'copilot', token: 'gho_abc' });
+    expect(field).toHaveValue('');
+    await waitFor(() => expect(field).toHaveAttribute('placeholder', 'Replace the stored token'));
+  });
+
+  it('commits nothing for an empty field', async () => {
+    seed(undefined);
+    render(<ClisSection />);
+
+    await userEvent.type(await copilot().findByLabelText('Token'), '   {Enter}');
+
+    expect(setCliToken).not.toHaveBeenCalled();
+  });
+
+  it('offers to replace and clear a stored token', async () => {
+    cliTokensState.mockResolvedValue({ copilot: true, encryptionAvailable: true });
+    seed(undefined);
+    render(<ClisSection />);
+
+    expect(await copilot().findByLabelText('Token')).toHaveAttribute(
+      'placeholder',
+      'Replace the stored token',
+    );
+    await userEvent.click(copilot().getByRole('button', { name: 'Clear token' }));
+
+    expect(clearCliToken).toHaveBeenCalledWith({ cli: 'copilot' });
+    await waitFor(() =>
+      expect(copilot().queryByRole('button', { name: 'Clear token' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('says so when there is no keyring, and shows no field', async () => {
+    cliTokensState.mockResolvedValue({ copilot: false, encryptionAvailable: false });
+    seed(undefined);
+    render(<ClisSection />);
+
+    expect(
+      await copilot().findByText('This system has no keyring, so no token can be stored.'),
+    ).toBeInTheDocument();
+    expect(copilot().queryByLabelText('Token')).not.toBeInTheDocument();
+  });
+
+  it('shows no token field while the state is unknown', () => {
+    cliTokensState.mockResolvedValue(null);
+    seed(undefined);
+    render(<ClisSection />);
+
+    expect(copilot().queryByLabelText('Token')).not.toBeInTheDocument();
+  });
+
+  it('adds a deny pattern and writes it on blur', async () => {
+    seed(undefined);
+    render(<ClisSection />);
+
+    expect(copilot().getByText('Each one becomes --deny-tool, and wins over every grant.')).toBeInTheDocument();
+    await userEvent.click(copilot().getByRole('button', { name: 'Add pattern' }));
+    await userEvent.type(copilot().getByLabelText('Deny pattern 1'), 'shell(rm:*)');
+    await userEvent.tab();
+
+    expect(setCliAgentsConfig).toHaveBeenCalledWith({ cli: 'copilot', deny: ['shell(rm:*)'] });
+  });
+
+  it('removes a pattern, and an empty list writes null', async () => {
+    seed({ copilot: { agents: { enabled: true, deny: ['shell(rm:*)'] } } });
+    render(<ClisSection />);
+
+    expect(copilot().getByLabelText('Deny pattern 1')).toHaveValue('shell(rm:*)');
+    await userEvent.click(copilot().getByRole('button', { name: 'Remove deny pattern 1' }));
+
+    expect(setCliAgentsConfig).toHaveBeenCalledWith({ cli: 'copilot', deny: null });
+    expect(copilot().queryByLabelText('Deny pattern 1')).not.toBeInTheDocument();
+  });
+
+  it('flags a row that is not a pattern and commits nothing', async () => {
+    seed(undefined);
+    render(<ClisSection />);
+
+    await userEvent.click(copilot().getByRole('button', { name: 'Add pattern' }));
+    await userEvent.type(copilot().getByLabelText('Deny pattern 1'), 'not valid');
+    await userEvent.tab();
+
+    expect(
+      copilot().getByText('Use kind(argument), like shell(git push) or write(.env)'),
+    ).toBeInTheDocument();
+    expect(setCliAgentsConfig).not.toHaveBeenCalled();
+  });
+
+  it('puts neither the token nor the deny list on Claude Code or Codex', async () => {
+    seed(undefined);
+    render(<ClisSection />);
+
+    await copilot().findByLabelText('Token');
+    for (const card of [claude(), codex()]) {
+      expect(card.queryByLabelText('Token')).not.toBeInTheDocument();
+      expect(card.queryByRole('button', { name: 'Add pattern' })).not.toBeInTheDocument();
+    }
   });
 });
