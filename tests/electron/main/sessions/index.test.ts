@@ -3888,7 +3888,7 @@ describe('createSessions forwards the Jira tools (HIVE-174)', () => {
  * and re-read, still confined, when the row is resumed.
  */
 describe('a restored plan', () => {
-  it('re-reads the plan file a resumed session last read', async () => {
+  it('re-reads every plan file a resumed session read', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'hive-plan-restart-'));
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'hive-plan-root-')));
     const historyFile = join(dir, 'sessions.json');
@@ -3896,6 +3896,8 @@ describe('a restored plan', () => {
       mkdirSync(join(root, '.hive', 'plans'), { recursive: true });
       const file = join(root, '.hive', 'plans', 'p.md');
       writeFileSync(file, '## Task 1: A\n- [ ] one\n');
+      const other = join(root, '.hive', 'plans', 'q.md');
+      writeFileSync(other, '## Task 1: B\n- [ ] two\n');
       const open = (history: ReturnType<typeof createSessionHistory>, onPlanRestored?: (id: string) => void) =>
         createSessions({
           supervisor,
@@ -3912,6 +3914,7 @@ describe('a restored plan', () => {
       first.open(OPEN);
       firstHistory.record('hero-refresh', { cwd: root });
       await first.planStore().apply({ entityId: 'hero-refresh', op: { kind: 'plan-file-touched', path: file }, cwd: root });
+      await first.planStore().apply({ entityId: 'hero-refresh', op: { kind: 'plan-file-touched', path: other }, cwd: root });
       firstHistory.flush();
       first.dispose();
 
@@ -3923,7 +3926,8 @@ describe('a restored plan', () => {
       second.open({ ...OPEN, resume: true });
 
       expect(await restored).toBe('hero-refresh');
-      expect(second.plans().plans[0]).toMatchObject({ entityId: 'hero-refresh', source: 'plan-file', file });
+      expect(second.planStore().files('hero-refresh').map((read) => read.file)).toEqual([file, other]);
+      expect(second.plans().plans[0]).toMatchObject({ entityId: 'hero-refresh', source: 'plan-file', file: other });
       second.dispose();
     } finally {
       rmSync(dir, { recursive: true, force: true });

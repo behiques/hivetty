@@ -74,8 +74,9 @@ import { isThisMachineAction } from './notification-contract';
  * 18 → 19 (HIVE-342): `CH` gained `config:set-agents-default-cli`; `CliAgents` gained `sandbox` and Codex's vocabulary; `RunSummary.usage` is sent for the first time.
  * 19 → 20 (HIVE-343): `CH` gained `cli:tokens-state`, `cli:set-token` and `cli:clear-token`; `CliAgents` gained `deny`; `HARNESS_IDS` gained `copilot`.
  * 20 → 21 (HIVE-279): `SpawnRequest` gained `harness`; its `model` and `effort` take that CLI's vocabulary.
+ * 21 → 22 (HIVE-359): `plan:changed` and `plans:list`'s plan gained `part` (`index`, `of`) and `build.startedAt`, and `build.state` gained `done`.
  */
-export const REMOTE_PROTOCOL_VERSION = 21;
+export const REMOTE_PROTOCOL_VERSION = 22;
 
 /**
  * What a frame is for.
