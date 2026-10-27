@@ -37,4 +37,12 @@ describe('createCliGate (HIVE-341)', () => {
 
     expect(gate.defaults('codex')).toEqual({ model: 'gpt-6-luna', sandbox: 'read-only' });
   });
+
+  it("reads copilot's deny patterns from its card (HIVE-343)", () => {
+    const gate = createCliGate(() => ({
+      clis: resolveClis({ copilot: { agents: { enabled: true, deny: ['shell(rm:*)'] } } }),
+    }));
+
+    expect(gate.defaults('copilot')).toEqual({ deny: ['shell(rm:*)'] });
+  });
 });

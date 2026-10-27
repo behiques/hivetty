@@ -72,8 +72,9 @@ import { isThisMachineAction } from './notification-contract';
  * 16 → 17 (HIVE-340): `RunSummary` (on `agents:list` and `agents:status`) gained `harness`.
  * 17 → 18 (HIVE-341): `CH` gained `config:set-cli-agents`; `ConfigSnapshot` gained `clis` and `agentsDefaultCli`.
  * 18 → 19 (HIVE-342): `CH` gained `config:set-agents-default-cli`; `CliAgents` gained `sandbox` and Codex's vocabulary; `RunSummary.usage` is sent for the first time.
+ * 19 → 20 (HIVE-343): `CH` gained `cli:tokens-state`, `cli:set-token` and `cli:clear-token`; `CliAgents` gained `deny`; `HARNESS_IDS` gained `copilot`.
  */
-export const REMOTE_PROTOCOL_VERSION = 19;
+export const REMOTE_PROTOCOL_VERSION = 20;
 
 /**
  * What a frame is for.
@@ -161,6 +162,9 @@ export const FRAME_KIND = {
   [CH.configSetSlack]: 'call',
   [CH.configSetCliAgents]: 'call',
   [CH.configSetAgentsDefaultCli]: 'call',
+  [CH.cliTokensState]: 'call',
+  [CH.cliSetToken]: 'call',
+  [CH.cliClearToken]: 'call',
   [CH.configSetReceiver]: 'call',
   [CH.configSetServer]: 'call',
   [CH.serverPair]: 'call',
@@ -463,6 +467,9 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.configSetSlack]: 'mutate',
   [CH.configSetCliAgents]: 'mutate',
   [CH.configSetAgentsDefaultCli]: 'mutate',
+  [CH.cliTokensState]: 'read',
+  [CH.cliSetToken]: 'mutate',
+  [CH.cliClearToken]: 'mutate',
   [CH.configSetReceiver]: 'mutate',
   [CH.configSetServer]: 'mutate',
   [CH.serverPair]: 'execute',

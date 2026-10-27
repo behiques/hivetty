@@ -22,6 +22,7 @@ describe('cli-contract (HIVE-341)', () => {
     expect(resolveClis(undefined)).toEqual({
       'claude-code': { agents: { enabled: true } },
       codex: { agents: { enabled: true } },
+      copilot: { agents: { enabled: true } },
     });
   });
 
@@ -31,6 +32,7 @@ describe('cli-contract (HIVE-341)', () => {
     ).toEqual({
       'claude-code': { agents: { enabled: false, model: 'haiku' } },
       codex: { agents: { enabled: true } },
+      copilot: { agents: { enabled: true } },
     });
   });
 

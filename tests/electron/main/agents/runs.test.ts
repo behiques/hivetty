@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,13 +11,33 @@ import {
   spawnCalls,
 } from '../../../../__mocks__/child-process';
 import { createAgentState } from '../../../../electron/main/agents/state';
-import { createRunTracker } from '../../../../electron/main/agents/runs';
+import { createRunTracker, FINISH_WINDOW_MS } from '../../../../electron/main/agents/runs';
 import {
   AGENT_KILL_GRACE_MS,
   AGENT_STALL_GRACE_MS,
   type RunLine,
 } from '../../../../electron/shared/agent-contract';
 import { OVERMIND } from '../../../../electron/shared/ledger-contract';
+import type { RunEventReader } from '../../../../electron/main/harness/port';
+
+/** A test's stand-in reader for the next run, or `null` for the registry's own (HIVE-343). */
+const readerOverride = vi.hoisted(() => ({
+  current: null as null | ((usageFile?: string) => RunEventReader),
+}));
+
+vi.mock('../../../../electron/main/harness/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../electron/main/harness/registry')>();
+  return {
+    ...actual,
+    headlessAdapter: (id: Parameters<typeof actual.headlessAdapter>[0]) => {
+      const adapter = actual.headlessAdapter(id);
+      const override = readerOverride.current;
+      return override === null
+        ? adapter
+        : { ...adapter, headless: { ...adapter.headless, reader: override } };
+    },
+  };
+});
 
 const resultLine = (over: Record<string, unknown> = {}) =>
   `${JSON.stringify({
@@ -601,6 +622,134 @@ describe('createRunTracker', () => {
     expect(state.read('a').runs).toHaveLength(runsAfterClose);
     expect(state.read('a').runsSinceRotate).toBe(rotateAfterClose);
     expect(childInstances[0]?.killSignals).toEqual([]);
+  });
+
+  describe('a copilot wake, whose reader finishes after the exit (HIVE-343)', () => {
+    const FIX = join(__dirname, '../../../fixtures/copilot');
+    let usageFile: string;
+
+    beforeEach(() => {
+      usageFile = join(mkdtempSync(join(tmpdir(), 'runs-cop-')), 'u.json');
+      copyFileSync(join(FIX, 'usage-1.0.104.json'), usageFile);
+      commandOver = { sessionUuid: 'minted', namesConversation: true, harness: 'copilot', usageFile };
+    });
+    afterEach(() => {
+      readerOverride.current = null;
+    });
+
+    it('closes done with the usage file read, the answer said, the minted id kept', async () => {
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitStdout('DONE\n');
+      childInstances[0]?.emitClose(0, null);
+
+      await vi.waitFor(() => expect(closed).toEqual(['a']));
+
+      const summary = state.read('a').runs.at(-1);
+      expect(summary).toMatchObject({
+        harness: 'copilot',
+        outcome: 'done',
+        usage: { inputTokens: 6, outputTokens: 85, cachedTokens: 23244 },
+      });
+      expect(summary).not.toHaveProperty('costUsd');
+      expect(lines.flatMap((entry) => entry.pushed).map((line) => line.text)).toContain('DONE');
+      expect(state.lane('a', 'standing').sessionUuid).toBe('minted');
+    });
+
+    it('closes failed on a refused token, and says what to do', async () => {
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitStderr(readFileSync(join(FIX, 'stderr-bad-token-1.0.104.txt'), 'utf8'));
+      childInstances[0]?.emitClose(1, null);
+
+      await vi.waitFor(() => expect(closed).toEqual(['a']));
+
+      expect(state.read('a').runs.at(-1)).toMatchObject({ outcome: 'failed' });
+      expect(lines.flatMap((entry) => entry.pushed).map((line) => line.text).join('\n')).toContain(
+        'the Copilot token was refused: replace it in Settings › CLIs',
+      );
+    });
+
+    it('hands finish the last 4 KiB of stderr', async () => {
+      const finish = vi.fn(() => Promise.resolve([]));
+      readerOverride.current = () => ({ push: () => [], flush: () => [], finish });
+
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitStderr(`${'x'.repeat(10 * 1024 - 4)}TAIL`);
+      childInstances[0]?.emitClose(0, null);
+
+      await vi.waitFor(() => expect(closed).toEqual(['a']));
+
+      const stderr = (finish.mock.calls[0] as unknown as [number, string])[1];
+      expect(stderr).toHaveLength(4096);
+      expect(stderr.endsWith('TAIL')).toBe(true);
+    });
+
+    it('still finalizes failed when finish rejects', async () => {
+      readerOverride.current = () => ({
+        push: () => [],
+        flush: () => [],
+        finish: () => Promise.reject(new Error('boom')),
+      });
+
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitClose(0, null);
+
+      await vi.waitFor(() => expect(closed).toEqual(['a']));
+      expect(state.read('a').runs.at(-1)).toMatchObject({ outcome: 'failed' });
+    });
+
+    const hanging = () => ({
+      push: () => [],
+      flush: () => [],
+      finish: () => new Promise<never>(() => undefined),
+    });
+
+    it('a finish that never resolves blocks no run on another lane', () => {
+      parallel = 2;
+      readerOverride.current = hanging;
+
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitClose(0, null);
+      readerOverride.current = null;
+
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:x' })).toMatchObject({ started: true });
+    });
+
+    it('holds its own lane until finish settles, so a wake cannot mint over its conversation', async () => {
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitClose(0, null);
+
+      expect(tracker.run('a', 'ledger')).toEqual({ started: false, refused: 'working' });
+      await vi.waitFor(() => expect(closed).toEqual(['a']));
+      expect(state.lane('a', 'standing').sessionUuid).toBe('minted');
+    });
+
+    it('settles without finish once the window passes', () => {
+      readerOverride.current = hanging;
+
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitClose(0, null);
+      expect(closed).toEqual([]);
+
+      vi.advanceTimersByTime(FINISH_WINDOW_MS);
+
+      expect(closed).toEqual(['a']);
+      expect(state.read('a').runs.at(-1)).toMatchObject({ outcome: 'failed' });
+    });
+
+    it('closeAll settles a run waiting on finish, and a live one, before it returns', () => {
+      parallel = 2;
+      readerOverride.current = hanging;
+
+      tracker.run('a', 'ledger');
+      childInstances[0]?.emitClose(0, null);
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:x' });
+
+      tracker.closeAll('app-closed');
+
+      expect(state.read('a').runs).toHaveLength(2);
+      expect(tracker.live()).toEqual([]);
+      expect(state.lane('a', 'standing').sessionUuid).toBe('minted');
+    });
   });
 
   /**

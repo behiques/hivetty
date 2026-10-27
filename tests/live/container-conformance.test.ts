@@ -16,7 +16,7 @@ import {
   writeSessionContainerFiles,
   writeSharedContainerFiles,
 } from '../../electron/main/container/generated';
-import { agentPromptFile, agentWorkdir, agentsRoot } from '../../electron/main/agents/paths';
+import { agentPromptFile, agentWorkdir, agentsRoot, cliHome } from '../../electron/main/agents/paths';
 import { createRunTracker, type ChildLike, type RunTracker } from '../../electron/main/agents/runs';
 import { createAgentState, type AgentState } from '../../electron/main/agents/state';
 import { createWakeCommand } from '../../electron/main/agents/wake-command';
@@ -819,6 +819,8 @@ tool it names, and nothing more. Never ask a question.
     const buildWakeCommand = createWakeCommand({
       agentsRoot,
       workdir: agentWorkdir,
+      cliHome,
+      cliToken: () => null,
       promptFile: (name) => agentPromptFile(userData, name),
       pluginDir: () => join(userData, PLUGIN_DIR),
       agentSettingsPath: () => hooks.agentSettingsPathFor(),

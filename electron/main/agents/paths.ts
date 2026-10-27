@@ -51,6 +51,9 @@ export const agentStateFile = (): string =>
 export const agentWorkdir = (name: string): string =>
   join(dirname(configPath()), 'work', name);
 
+/** `~/.hivetty/cli/<id>`: a CLI's app-owned home (HIVE-343). Derived from `configPath()` so a test relocates it. */
+export const cliHome = (id: string): string => join(dirname(configPath()), 'cli', id);
+
 /**
  * A lane's working directory (HIVE-188). The standing lane keeps the agent's
  * own, so files already there (the shipper's `prs.json`) become the standing

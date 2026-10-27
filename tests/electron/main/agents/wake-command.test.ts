@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  CLI_TOKEN_ENV,
   createWakeCommand,
   type WakeCommandDeps,
   type WakeFs,
@@ -9,6 +10,8 @@ import {
 import type { AgentState } from '../../../../electron/main/agents/state';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
+import { copilotAdapter } from '../../../../electron/main/harness/copilot';
+import { COPILOT_TOKEN_ENV, copilotSettings } from '../../../../electron/main/harness/copilot/headless';
 import type { HarnessAdapter, HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { McpServerSpec } from '../../../../electron/main/mcp/agent-config';
 import { STANDING_LANE, type AgentRunState } from '../../../../electron/shared/agent-contract';
@@ -110,6 +113,7 @@ const state = (): AgentState => ({
 const build = (over: Partial<WakeCommandDeps> = {}) =>
   createWakeCommand({
     agentsRoot: () => '/home/u/.hive/agents',
+    cliHome: (id) => `/home/u/.hive/cli/${id}`,
     workdir: (name, lane) =>
       lane === 'standing' ? `/home/u/.hive/work/${name}` : `/home/u/.hive/work/${name}/lanes/${lane}`,
     promptFile: (name) => `/data/hive/agents/${name}.system.md`,
@@ -126,6 +130,7 @@ const build = (over: Partial<WakeCommandDeps> = {}) =>
     agentMcpFile: (name) => `/data/hive/agents/${name}.mcp.json`,
     hookEnv: (name) => ({ HIVE_SESSION_ID: name, HIVE_HOOK_TOKEN: 'tok' }),
     claudeCommand: () => '/usr/local/bin/claude',
+    cliToken: () => null,
     subscriptionAuth: () => true,
     state: state(),
     env: () => ({ PATH: '/usr/local/bin', HOME: '/home/u' }),
@@ -653,6 +658,7 @@ Read the channel and report.
 
     return {
       agentsRoot: () => '/home/u/.hive/agents',
+      cliHome: (id) => `/home/u/.hive/cli/${id}`,
       workdir: (name) => `/home/u/.hive/work/${name}`,
       promptFile: (name) => `/userData/hive/agents/${name}.system.md`,
       pluginDir: () => '/userData/hive/plugin',
@@ -662,6 +668,7 @@ Read the channel and report.
       agentMcpFile: (name) => `/userData/hive/agents/${name}.mcp.json`,
       hookEnv: (name) => ({ HIVE_SESSION_ID: name, HIVE_HOOK_TOKEN: 'tok' }),
       claudeCommand: () => '/usr/local/bin/claude',
+      cliToken: () => null,
       subscriptionAuth: () => true,
       // HIVE-137. Host agents only in this describe.
       userDataPath: () => '/userData',
@@ -1362,3 +1369,121 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
     });
   });
 });
+
+describe('a copilot wake (HIVE-343)', () => {
+  const COPILOT_MD = AGENT_MD.replace('limits:', 'harness: [copilot]\nlimits:');
+  // PR1's copilot fence refuses everything; these tests stand in PR2's, which passes.
+  const fenced: HarnessAdapter = {
+    ...copilotAdapter,
+    headless: { ...copilotAdapter.headless, fence: { express: () => ({ ok: true }) } },
+  };
+  const HOME = '/home/u/.hive/cli/copilot';
+  const WORKDIR = '/home/u/.hive/work/slack-watcher';
+  const copilot = (over: Partial<WakeCommandDeps> = {}) =>
+    build({
+      adapter: (id) => (id === 'copilot' ? fenced : claudeCodeAdapter),
+      env: () => ({ PATH: '/opt/bin', HOME: '/home/u', GH_TOKEN: 'gh-leak' }),
+      isExecutable: (path) => path === '/opt/bin/copilot',
+      cliToken: (id) => (id === 'copilot' ? 'gho_stored' : null),
+      ...over,
+    });
+
+  beforeEach(() => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = COPILOT_MD;
+  });
+
+  it('resolves copilot on PATH, with its home and its token on the env only', () => {
+    const built = copilot()('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built.file).toBe('/opt/bin/copilot');
+    expect(built.harness).toBe('copilot');
+    expect(built.env[COPILOT_TOKEN_ENV]).toBe('gho_stored');
+    expect(built.env['COPILOT_HOME']).toBe(HOME);
+    expect(built.env['GH_TOKEN']).toBeUndefined();
+    expect(built.args.join(' ')).not.toContain('gho_stored');
+    expect(built.usageFile).toBe(`${HOME}/usage/minted-uuid.json`);
+  });
+
+  it('writes the hooks and AGENTS.md, and makes the usage folder', () => {
+    const built = copilot()('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(written[`${HOME}/settings.json`]).toBe(copilotSettings());
+    expect(written[`${WORKDIR}/AGENTS.md`]).toContain('Read the channel and report.');
+    expect(made).toEqual(expect.arrayContaining([HOME, WORKDIR, `${HOME}/usage`]));
+    expect(Object.values(written).join('\n')).not.toContain('gho_stored');
+  });
+
+  it('does not rewrite a file that already holds the same bytes', () => {
+    files[`${HOME}/settings.json`] = copilotSettings();
+    copilot()('slack-watcher', 'manual');
+
+    expect(written).not.toHaveProperty(`${HOME}/settings.json`);
+    expect(written).toHaveProperty(`${WORKDIR}/AGENTS.md`);
+  });
+
+  it('refuses with no stored token, and says where to add one', () => {
+    expect(copilot({ cliToken: () => null })('slack-watcher', 'manual')).toEqual({
+      problem:
+        'No CLI can run slack-watcher: copilot cannot start: no Copilot token: add one in Settings › CLIs.',
+    });
+  });
+
+  it("is refused by PR1's own fence", () => {
+    expect(
+      copilot({ adapter: (id) => (id === 'copilot' ? copilotAdapter : claudeCodeAdapter) })(
+        'slack-watcher',
+        'manual',
+      ),
+    ).toEqual({ problem: 'No CLI can run slack-watcher: copilot cannot enforce *.' });
+  });
+
+  it('refuses a copilot agent that runs in a container', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = COPILOT_MD.replace(
+      'limits:',
+      'container:\n  runtime: docker\n  name: devbox\n  workspace: /work\n  hive_dir: /hive\nlimits:',
+    );
+    const built = copilot({
+      agentContainerSettingsPath: () => '/data/hive/container/claude-agent.settings.json',
+    })('slack-watcher', 'manual');
+
+    expect(built).toEqual({
+      problem:
+        'slack-watcher runs in a container, and copilot agents cannot yet — run it on the host, or name claude-code first in harness:.',
+    });
+  });
+
+  it('says why when a file cannot be written', () => {
+    const built = copilot({
+      fs: {
+        ...fs,
+        write: (path, text) => {
+          if (path.endsWith('settings.json')) throw new Error('EACCES');
+          written[path] = text;
+        },
+      },
+    })('slack-watcher', 'manual');
+
+    expect(built).toEqual({ problem: 'Could not prepare the run: EACCES' });
+  });
+
+  it('refuses when the token is cleared between resolving and spawning', () => {
+    let reads = 0;
+    const built = copilot({ cliToken: () => (reads++ === 0 ? 'gho_stored' : null) })(
+      'slack-watcher',
+      'manual',
+    );
+
+    expect(built).toEqual({
+      problem: 'No CLI can run slack-watcher: copilot cannot start: its token was just cleared.',
+    });
+  });
+
+  it('names the same token variable as the adapter', () => {
+    expect(CLI_TOKEN_ENV.copilot).toBe(COPILOT_TOKEN_ENV);
+  });
+});
+

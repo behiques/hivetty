@@ -94,7 +94,11 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     remote: Object.keys(window.hive!.remote).sort(),
     updates: Object.keys(window.hive!.updates).sort(),
     ui: Object.keys(window.hive!.ui).sort(),
+    cli: Object.keys(window.hive!.cli).sort(),
   }));
+
+  // HIVE-343. A fourth verb here would be one that reads a stored token back.
+  expect(surface.cli).toEqual(['clearToken', 'setToken', 'tokensState']);
 
   // Widening any of these lists is the alarm this test exists to raise.
   /**
@@ -300,6 +304,11 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'appInfo',
     // HIVE-201: read-only, like `plans`: a session's changed files, listed and pushed.
     'changedFiles',
+    /*
+      HIVE-343: a CLI agent's token, the second secret after `jira`'s, held the same way. Three
+      verbs: presence, store, forget. None returns a token; `surface.cli` below pins the three.
+    */
+    'cli',
     'config',
     'fs',
     'github',

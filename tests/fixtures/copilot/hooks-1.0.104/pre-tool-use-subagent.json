@@ -1,0 +1,1 @@
+{"sessionId":"00000000-0000-4000-8000-000000000001","timestamp":1793072940210,"cwd":"/tmp/copilot-fixture/wd","toolName":"bash","toolArgs":{"command":"echo from-sub","description":"Run requested echo command","mode":"sync","initial_wait":30},"agentId":"00000000-0000-4000-8000-000000000001","agentType":"task","parentAgentId":"11111111-2222-4333-8444-555555555553"}

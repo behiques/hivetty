@@ -324,8 +324,8 @@ export interface LaunchPlan {
 /** Agent runs: no tty, one turn per process (HIVE-337). */
 export interface HeadlessHarness {
   launch(spec: HeadlessSpec): HeadlessPlan;
-  /** A fresh reader for one run's stdout (HIVE-338). */
-  reader(): RunEventReader;
+  /** A fresh reader for one run's stdout (HIVE-338); `usageFile` is the plan's (HIVE-343). */
+  reader(usageFile?: string): RunEventReader;
   /** The permission fence (HIVE-339). */
   fence: PermissionFence;
 }
@@ -370,6 +370,12 @@ export interface HeadlessSpec {
   sandbox?: HeadlessSandbox;
   /** The hive MCP server, for a CLI that takes it inline (`mcp.hiveServerSpec()`). */
   hiveServer: McpServerSpec;
+  /** The CLI's app-owned home (`~/.hivetty/cli/<id>`, HIVE-343). Claude and Codex ignore it. */
+  stateDir: string;
+  /** The run's cwd, for a CLI that reads its instructions from there (HIVE-343). */
+  workdir: string;
+  /** The card's deny patterns, in the CLI's own spelling (HIVE-343, copilot only). */
+  deny?: readonly string[];
 }
 
 /** What a harness answers a {@link HeadlessSpec} with (HIVE-337). */
@@ -388,6 +394,10 @@ export interface HeadlessPlan {
    * learns its id only from `thread.started`, so the argv's uuid must never be persisted for it.
    */
   namesConversation: boolean;
+  /** A file the CLI writes its usage to, read by the reader's `finish` (HIVE-343). */
+  usageFile?: string;
+  /** Absolute paths the core writes before the spawn, only when the bytes differ (HIVE-343). */
+  files?: readonly { path: string; text: string }[];
 }
 
 /** One MCP server a headless run started with, and what the CLI said about it (HIVE-123). */
@@ -432,6 +442,11 @@ export interface RunEventReader {
   push(chunk: string): RunEvent[];
   /** The carried tail, read as a final line, at close. */
   flush(): RunEvent[];
+  /**
+   * After the exit flush, before the run is finalized (HIVE-343): what only the exit can tell.
+   * `stderr` is the run's last 4 KiB of stderr. Never rejects.
+   */
+  finish?(exit: number | null, stderr: string): Promise<RunEvent[]>;
 }
 
 /** Which side of the receiver a hook arrived on: an entity session, or an agent's headless run (HIVE-236). */

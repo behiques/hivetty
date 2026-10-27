@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
+import { copilotAdapter } from '../../../../electron/main/harness/copilot';
 import {
   createHarnessRegistry,
   headlessAdapter,
@@ -62,5 +63,11 @@ describe('headless runs (HIVE-340)', () => {
     expect(registry.adapterFor('codex')).toBe(codexAdapter);
     expect(sessionAdapter()).toBe(claudeCodeAdapter);
     expect(registry.harnessOf('sess-01')).toBe('claude-code');
+  });
+
+  it('runs a copilot agent on the copilot adapter, and every session still on claude (HIVE-343)', () => {
+    expect(headlessAdapter('copilot')).toBe(copilotAdapter);
+    expect(registry.adapterFor('copilot')).toBe(copilotAdapter);
+    expect(sessionAdapter()).toBe(claudeCodeAdapter);
   });
 });
