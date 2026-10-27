@@ -92,13 +92,13 @@ export function OvermindHead() {
 /** Starts one directly in the filtered project, as `NewSessionLink` does (spec, Decisions). */
 function NewSessionHere({ projectId, projectName }: { projectId: string; projectName: string }) {
   const spawnSession = useSpawnSession();
-  const { newModel, newEffort } = useNewSessionDefaults();
+  const { newCli, newModel, newEffort } = useNewSessionDefaults();
   const access = useProjectAccess(projectId);
 
   return (
     <Button
       variant="primary"
-      onClick={() => spawnSession(projectId, '', newModel, newEffort)}
+      onClick={() => spawnSession(projectId, '', newCli, newModel, newEffort)}
       disabled={!access.spawnable}
       title={access.reason ?? `Starts on ${newModel} · ${newEffort}`}
       className="flex items-center gap-1.5 rounded-r-none"

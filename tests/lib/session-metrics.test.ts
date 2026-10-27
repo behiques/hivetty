@@ -223,3 +223,8 @@ describe('timeLeftLabel / resetsDayLabel (HIVE-200)', () => {
     expect(resetsDayLabel(0)).toBeNull();
   });
 });
+
+it('labels a model that is not Claude’s by its own id (HIVE-279)', () => {
+  expect(modelLabel('gpt-6-luna')).toBe('gpt-6-luna');
+  expect(modelLabel('opus')).toBe('Opus 4.5');
+});

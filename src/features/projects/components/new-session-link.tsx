@@ -50,14 +50,14 @@ export function NewSessionLink({
 }: NewSessionLinkProps) {
   const access = useProjectAccess(projectId);
   const spawnSession = useSpawnSession();
-  const { newModel, newEffort } = useNewSessionDefaults();
+  const { newCli, newModel, newEffort } = useNewSessionDefaults();
 
   return (
     <button
       type="button"
       // Empty task, exactly as the picker passes: the session opens ready and
       // the first message gives it its job (story 043).
-      onClick={() => spawnSession(projectId, '', newModel, newEffort)}
+      onClick={() => spawnSession(projectId, '', newCli, newModel, newEffort)}
       disabled={!access.spawnable}
       /*
         The refusal when there is one; otherwise what the click is about to

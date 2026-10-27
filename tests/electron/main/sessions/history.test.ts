@@ -818,7 +818,7 @@ describe('session history', () => {
       const history = createSessionHistory(file, () => 5000, hasTranscript);
 
       expect(history.resumable('sess-01')).toBeUndefined();
-      expect(hasTranscript).toHaveBeenCalledWith('/repo', 'ghost');
+      expect(hasTranscript).toHaveBeenCalledWith('claude-code', '/repo', 'ghost');
 
       // A resume request against it starts over, as any unresumable id does.
       history.begin('sess-01', { project: 'p', task: 'new', sessionUuid: 'new' }, { resume: true });
@@ -1185,6 +1185,39 @@ describe('session history', () => {
       history.record('sess-01', { project: 'p', task: '', status: 'working' });
 
       expect(() => history.flush()).not.toThrow();
+    });
+  });
+
+  describe('harness (HIVE-279)', () => {
+    it('round-trips the CLI a session ran, and asks that CLI about its transcript', () => {
+      const first = createSessionHistory(file, () => 1000);
+      first.begin('sess-01', { project: 'p', task: '', sessionUuid: 'uuid-1', harness: 'codex' });
+      first.begin('sess-02', { project: 'p', task: '', sessionUuid: 'uuid-2' });
+      first.flush();
+      expect(readHistory(file).find((r) => r.id === 'sess-01')?.harness).toBe('codex');
+
+      // A later run: only sessions an earlier run began are resumable.
+      const asked: string[] = [];
+      const second = createSessionHistory(file, () => 2000, (harness) => {
+        asked.push(harness);
+        return true;
+      });
+      second.resumable('sess-01');
+      // A record with no harness is every record before this story: Claude's.
+      second.resumable('sess-02');
+      expect(asked).toEqual(['codex', 'claude-code']);
+    });
+
+    it('drops a harness it does not know when reading the file', () => {
+      // Written by hand or by a later build: a guess would resume the wrong CLI.
+      writeFileSync(
+        file,
+        JSON.stringify([
+          { id: 'sess-01', project: 'p', task: '', status: 'working', createdAt: 1, harness: 'gemini' },
+        ]),
+        'utf8',
+      );
+      expect(readHistory(file)[0]).not.toHaveProperty('harness');
     });
   });
 });

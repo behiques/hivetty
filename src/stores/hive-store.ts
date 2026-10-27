@@ -122,6 +122,7 @@ import type {
   ChangedFilesEvent,
   ChangedFilesSnapshot,
 } from '@shared/changed-files-contract';
+import { CLI_VOCAB } from '@shared/cli-contract';
 import type { ModeChange } from '@shared/config-contract';
 import type {
   GhResult,
@@ -135,6 +136,7 @@ import type {
   WorkflowDef,
   WorkflowRun,
 } from '@shared/github-contract';
+import type { HarnessId } from '@shared/harness-contract';
 import type { IdleDetail } from '@shared/hook-contract';
 import {
   CH,
@@ -188,8 +190,6 @@ import type { PlansSnapshot, SessionPlan } from '@shared/plan-contract';
 import {
   hiveNameFromTitle,
   soleTicketKeyIn,
-  SESSION_EFFORTS,
-  SESSION_MODELS,
   type SessionNameOrigin,
 } from '@shared/session-contract';
 import type {
@@ -683,6 +683,8 @@ interface HiveState {
      */
     projectId: string,
     task?: string,
+    /** The CLI to run (HIVE-279); absent is Claude Code. */
+    cli?: HarnessId,
     model?: Model,
     effort?: Effort,
     /** The Jira issue this session is being started for (HIVE-73). */
@@ -1606,11 +1608,11 @@ let terminalCounter = 0;
  * re-check them — it points here instead. These are what make that pointer
  * true.
  */
-const isKnownModel = (value: string | undefined): value is Model =>
-  value !== undefined && (SESSION_MODELS as readonly string[]).includes(value);
+const isKnownModel = (harness: HarnessId, value: string | undefined): value is Model =>
+  value !== undefined && (CLI_VOCAB[harness].models as readonly string[]).includes(value);
 
-const isKnownEffort = (value: string | undefined): value is Effort =>
-  value !== undefined && (SESSION_EFFORTS as readonly string[]).includes(value);
+const isKnownEffort = (harness: HarnessId, value: string | undefined): value is Effort =>
+  value !== undefined && (CLI_VOCAB[harness].efforts as readonly string[]).includes(value);
 
 /**
  * How a stored record reads once the app it described is gone (HIVE-93).
@@ -2306,12 +2308,15 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * no store subscribes to the other. That keeps the dependency one-way and
    * makes the cross-store effect visible at the call site.
    */
-  spawnSession: (projectId, task, model, effort, ticket) => {
+  spawnSession: (projectId, task, cli, model, effort, ticket) => {
     const id = nextSessionId(get().entities);
+    const harness = cli ?? 'claude-code';
     // Resolved once: the seed transcript quotes them back, so a default applied
-    // in two places could print one model and record another.
-    const resolvedModel = model ?? 'opus';
-    const resolvedEffort = effort ?? 'high';
+    // in two places could print one model and record another. Claude keeps the
+    // opus/high it has always defaulted to; another CLI starts on its own first
+    // model (CLI_VOCAB lists the CLI's default first) at medium (HIVE-279).
+    const resolvedModel = model ?? (harness === 'claude-code' ? 'opus' : CLI_VOCAB[harness].models[0]);
+    const resolvedEffort = effort ?? (harness === 'claude-code' ? 'high' : 'medium');
 
     /**
      * A session started from a ticket card is called after its issue (HIVE-78).
@@ -2335,7 +2340,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     const session: Session = {
       kind: 'session',
       id,
-      harness: 'claude-code',
+      harness,
       project: projectId,
       /**
        * Only present when the picker was opened from a ticket card, which is
@@ -2397,7 +2402,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       effort: resolvedEffort,
       lines: [
         line(
-          `❯ claude --model ${resolvedModel} --effort ${resolvedEffort} — new session on ${projectId}`,
+          `❯ ${harness === 'claude-code' ? 'claude' : harness} --model ${resolvedModel} --effort ${resolvedEffort} — new session on ${projectId}`,
           'green',
         ),
         line('● Reading CLAUDE.md, mapping repo…', 'blue'),
@@ -2450,6 +2455,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
        */
       void requestSpawn(id, projectId, {
         ...(task === undefined ? {} : { task }),
+        harness,
         model: resolvedModel,
         effort: resolvedEffort,
         /*
@@ -4142,7 +4148,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         entities[item.id] = stampLifecycle({
           kind: 'session',
           id: item.id,
-          harness: 'claude-code',
+          // The CLI the record ran (HIVE-279); a record with none predates the field and is Claude's.
+          harness: item.harness ?? 'claude-code',
           project: item.project,
           status,
           task: item.task,
@@ -4217,8 +4224,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
             model a finished session ran under is a nice-to-have, and losing the
             row over it would not be.
           */
-          ...(isKnownModel(item.model) ? { model: item.model } : {}),
-          ...(isKnownEffort(item.effort) ? { effort: item.effort } : {}),
+          ...(isKnownModel(item.harness ?? 'claude-code', item.model) ? { model: item.model } : {}),
+          ...(isKnownEffort(item.harness ?? 'claude-code', item.effort) ? { effort: item.effort } : {}),
         });
         order.push(item.id);
         restored += 1;
@@ -4990,6 +4997,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     const terminalId = terminalOf(current);
     reopenChannel(terminalId);
     void requestSpawn(terminalId, current.project, {
+      // The CLI whose conversation this is (HIVE-279): another would find no transcript.
+      ...(current.harness === undefined ? {} : { harness: current.harness }),
       ...(current.model === undefined ? {} : { model: current.model }),
       ...(current.effort === undefined ? {} : { effort: current.effort }),
       resume: true,
@@ -5106,7 +5115,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     const successor: Session = {
       kind: 'session',
       id: successorId,
-      harness: 'claude-code',
+      // Same pty, so the same CLI (HIVE-279); a fixture with none is Claude's, as it always was.
+      harness: current.harness ?? 'claude-code',
       terminalId: terminalOf(current),
       project: current.project,
       status: 'idle',

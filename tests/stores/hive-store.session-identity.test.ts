@@ -329,7 +329,7 @@ describe('setSessionTicket', () => {
   it('de-duplicates against a session already named for the ticket', () => {
     const first = useHiveStore
       .getState()
-      .spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
+      .spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
     const second = spawn();
 
     useHiveStore.getState().setSessionTicket(second, 'HIVE-73');
@@ -412,7 +412,7 @@ describe('setSessionTicket', () => {
      */
     const id = useHiveStore
       .getState()
-      .spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
+      .spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
 
     useHiveStore.getState().setSessionTicket(id, 'HIVE-99');
 
@@ -657,7 +657,7 @@ describe('a pinned name outranks the agent', () => {
   it('pins a ticket-card spawn, so its key survives the agent’s first title', () => {
     const id = useHiveStore
       .getState()
-      .spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
+      .spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
     expect(sessionAt(id).namePinned).toBe(true);
 
     // Under first-prompt naming the key survives by itself: the row is already named, so

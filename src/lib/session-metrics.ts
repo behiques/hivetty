@@ -40,7 +40,7 @@ import type { SessionMetrics } from '@shared/metrics-contract';
  */
 
 /** Model id → the name shown to the user, for a session that has not reported one. */
-const MODEL_LABELS: Record<Model, string> = {
+const MODEL_LABELS: Partial<Record<Model, string>> = {
   opus: 'Opus 4.5',
   sonnet: 'Sonnet 4.5',
   haiku: 'Haiku 4.5',
@@ -75,8 +75,9 @@ const EXTENDED_WINDOW_TOKENS = 600_000;
  */
 const EARLIEST_PLAUSIBLE_RESET = 1_577_836_800;
 
+/** Claude's ids get their product name; every other CLI's model is shown as it is spelled (HIVE-279). */
 export function modelLabel(model: Model = DEFAULT_MODEL): string {
-  return MODEL_LABELS[model];
+  return MODEL_LABELS[model] ?? model;
 }
 
 /**

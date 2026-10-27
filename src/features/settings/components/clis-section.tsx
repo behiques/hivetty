@@ -12,6 +12,7 @@ import { SettingsSectionHeader } from '@features/settings/components/settings-se
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useProjectConfig } from '@hooks/use-project-config';
 import { clearCliToken, cliTokensState, setCliToken } from '@lib/cli-tokens';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import { setAgentsDefaultCliConfig, setCliAgentsConfig } from '@lib/project-config';
 import {
   CLI_VOCAB,
@@ -22,13 +23,6 @@ import {
   type HeadlessSandbox,
 } from '@shared/cli-contract';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
-
-/** A CLI's name as a person reads it. A new CLI adds a row (HIVE-342, HIVE-343). */
-const CLI_NAMES: Record<HarnessId, string> = {
-  'claude-code': 'Claude Code',
-  codex: 'Codex',
-  copilot: 'Copilot',
-};
 
 const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli] }));
 // workspace-write first: it is what an unset card runs (HIVE-342). No "CLI default": codex's own is not ours.

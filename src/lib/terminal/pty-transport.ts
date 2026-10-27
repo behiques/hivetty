@@ -11,10 +11,7 @@ import type {
 } from '@lib/terminal/terminal-transport';
 import { flattenLines } from '@lib/terminal/text';
 import { CLONE_ENTITY_ID } from '@shared/config-contract';
-import type {
-  SessionEffort,
-  SessionModel,
-} from '@shared/session-contract';
+import type { HarnessId } from '@shared/harness-contract';
 
 /**
  * The desktop transport: a real PTY, behind the same three methods (story 094).
@@ -343,8 +340,11 @@ type SpawnOutcome = { ok: true } | { ok: false; reason: string };
  */
 export interface SpawnOptions {
   task?: string;
-  model?: SessionModel;
-  effort?: SessionEffort;
+  // A word from CLI_VOCAB[harness]; the IPC guard checked it (HIVE-279).
+  model?: string;
+  effort?: string;
+  /** The CLI (HIVE-279); main reads absent as Claude Code. */
+  harness?: HarnessId;
   /**
    * What the agent should call itself (HIVE-78).
    *
@@ -447,7 +447,7 @@ function withSpawnChannel(
 export function requestSpawn(
   entityId: string,
   projectId: string,
-  { task, model, effort, name, resume }: SpawnOptions = {},
+  { task, model, effort, harness, name, resume }: SpawnOptions = {},
 ): Promise<SpawnOutcome> {
   /** See the spread below for why this is flattened rather than passed as typed. */
   const wireTask = flattenLines(task ?? '');
@@ -495,6 +495,8 @@ export function requestSpawn(
        */
       ...(model === undefined ? {} : { model }),
       ...(effort === undefined ? {} : { effort }),
+      // Same spread (HIVE-279): absent is Claude Code on main's side.
+      ...(harness === undefined ? {} : { harness }),
       /**
        * Same spread, same reason (HIVE-78). No empty case to normalise here
        * either: the store only ever builds this from a Jira key, so it is

@@ -5371,7 +5371,9 @@ describe('hook receiver: a copilot hook by its harness header (HIVE-343)', () =>
   beforeEach(async () => {
     agentEvents = [];
     sessionEvents = [];
-    const real = createHarnessRegistry({ isAgentSession: (id) => id === SESSION });
+    const real = createHarnessRegistry({
+      sessionHarness: (id) => (id === SESSION ? 'claude-code' : undefined),
+    });
     receiver = createReceiver({
       knowsSession: (entityId) => entityId === SESSION,
       knowsAgent: (entityId) => entityId === AGENT,

@@ -104,14 +104,26 @@ describe('ui-store — view state', () => {
   });
 
   it('defaults new sessions to opus / high and lets both change', () => {
-    expect(useUiStore.getState().newModel).toBe('opus');
-    expect(useUiStore.getState().newEffort).toBe('high');
+    expect(useUiStore.getState().newPicks['claude-code']).toEqual({ model: 'opus', effort: 'high' });
 
     useUiStore.getState().setNewModel('haiku');
     useUiStore.getState().setNewEffort('low');
 
-    expect(useUiStore.getState().newModel).toBe('haiku');
-    expect(useUiStore.getState().newEffort).toBe('low');
+    expect(useUiStore.getState().newPicks['claude-code']).toEqual({ model: 'haiku', effort: 'low' });
+  });
+
+  it('keeps model and effort per CLI, and finds them again on the way back (HIVE-279)', () => {
+    const ui = useUiStore.getState();
+    expect(useUiStore.getState().newCli).toBe('claude-code');
+    ui.setNewModel('haiku');
+    ui.setNewCli('codex');
+    expect(useUiStore.getState().newPicks.codex).toEqual({ model: 'gpt-6-luna', effort: 'medium' });
+    ui.setNewEffort('xhigh');
+    ui.setNewCli('claude-code');
+    expect(useUiStore.getState().newPicks).toEqual({
+      'claude-code': { model: 'haiku', effort: 'high' },
+      codex: { model: 'gpt-6-luna', effort: 'xhigh' },
+    });
   });
 
   it('tracks the orchestrator table selection by id', () => {

@@ -1935,6 +1935,49 @@ describe('the history', () => {
     });
   });
 
+  it('records the CLI a session runs, Claude when none was named (HIVE-279)', () => {
+    const written: Written[] = [];
+    withHistory(written).open(OPEN);
+
+    expect(patchesFor(written, 'hero-refresh')[0]).toMatchObject({ harness: 'claude-code' });
+  });
+
+  it('refuses a CLI that has no interactive sessions yet, before spawning anything', () => {
+    const written: Written[] = [];
+    expect(() => withHistory(written).open({ ...OPEN, harness: 'codex' })).toThrow(
+      /Codex sessions are not available yet/,
+    );
+    expect(spawned).toHaveLength(0);
+    // Refused before the history heard of it: no row claims a session that never started.
+    expect(patchesFor(written, 'hero-refresh')).toEqual([]);
+  });
+
+  it('keeps the CLI across a restart that does not name one', async () => {
+    const written: Written[] = [];
+    const sessions = withHistory(written);
+    sessions.open(OPEN);
+
+    const restarting = sessions.restart({ ...OPEN });
+    await Promise.resolve();
+    emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 0 });
+    vi.advanceTimersByTime(8);
+    await restarting;
+
+    expect(spawned).toHaveLength(2);
+    expect(patchesFor(written, 'hero-refresh').at(-1)).toMatchObject({ harness: 'claude-code' });
+  });
+
+  it('refuses a restart into a CLI it cannot launch before killing the session it has', async () => {
+    const sessions = withHistory([]);
+    sessions.open(OPEN);
+
+    await expect(sessions.restart({ ...OPEN, harness: 'codex' })).rejects.toThrow(
+      /Codex sessions are not available yet/,
+    );
+    expect(killed).toEqual([]);
+    expect(spawned).toHaveLength(1);
+  });
+
   it('omits a name nobody supplied rather than storing an empty one', () => {
     const written: Written[] = [];
     withHistory(written).open(OPEN);

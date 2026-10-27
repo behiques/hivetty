@@ -106,7 +106,7 @@ describe('hydrateTickets', () => {
    * the read that silently erased it.
    */
   it('leaves a ticket’s sessions intact — the link is on the session', () => {
-    state().spawnSession('nova-web', '', 'opus', 'high', 'HIVE-1');
+    state().spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-1');
     state().hydrateTickets([issue()], false);
 
     const linked = Object.values(state().entities).filter(
@@ -319,7 +319,7 @@ describe('updateTicket (HIVE-70)', () => {
 
   it('leaves the ticket’s sessions alone', () => {
     state().hydrateTickets([issue()], false);
-    const sessionId = state().spawnSession('nova-web', '', 'opus', 'high', 'HIVE-1');
+    const sessionId = state().spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-1');
 
     state().updateTicket(issue({ status: 'Done' }));
 

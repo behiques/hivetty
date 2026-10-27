@@ -69,6 +69,24 @@ test('the model and effort steppers are on the picker', async ({ page }) => {
   await expect(picker.getByRole('radio', { name: 'high' })).toBeChecked();
 });
 
+/**
+ * The CLI switch (HIVE-279). Claude Code is the only CLI a session can start on
+ * in this release; the others are drawn, disabled, with the reason beside them.
+ *
+ * The plan's subtitle assertion is not here: the browser target has no
+ * projects, so the picker shows its first-run block and no subtitle. The
+ * subtitle is covered in the unit test.
+ */
+test('shows the CLI switch, Claude Code on, the others saying why (HIVE-279)', async ({ page }) => {
+  await overmindNewSession(page).click();
+
+  const cli = page.getByRole('dialog').getByRole('radiogroup', { name: 'cli' });
+  await expect(cli.getByRole('radio', { name: /Claude Code/ })).toBeChecked();
+  await expect(cli.getByRole('radio', { name: /Codex/ })).toBeDisabled();
+  await expect(cli.getByRole('radio', { name: /Copilot/ })).toBeDisabled();
+  await expect(page.getByText('Codex · next release · Copilot · HIVE-280')).toBeVisible();
+});
+
 test('escape closes it', async ({ page }) => {
   await overmindNewSession(page).click();
   await expect(page.getByRole('dialog')).toBeVisible();

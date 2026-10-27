@@ -244,12 +244,38 @@ describe('ModelChip', () => {
   it('reads the model and effort a spawned session was given', () => {
     const id = useHiveStore
       .getState()
-      .spawnSession('nova-web', 'ship it', 'haiku', 'low');
+      .spawnSession('nova-web', 'ship it', 'claude-code', 'haiku', 'low');
     useUiStore.setState({ activeTab: id });
 
     render(<ModelChip />);
 
     expect(screen.getByText(/Haiku 4.5 · low/)).toBeInTheDocument();
+  });
+
+  it('leads with the CLI for a session that is not Claude’s, and draws no gauges without metrics (HIVE-279)', () => {
+    const id = useHiveStore
+      .getState()
+      .spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
+    useUiStore.setState({ activeTab: id });
+
+    const { container } = render(<ModelChip />);
+
+    expect(screen.getByText('Codex · gpt-6-luna · high')).toBeInTheDocument();
+    // The mark beside it, decorative: the name is already written out.
+    expect(container.querySelector('[aria-hidden="true"].bg-green')).toHaveTextContent('X');
+    expect(screen.queryByText('ctx')).not.toBeInTheDocument();
+  });
+
+  it('says what it always said for Claude, with no mark', () => {
+    const id = useHiveStore
+      .getState()
+      .spawnSession('nova-web', '', 'claude-code', 'opus', 'high');
+    useUiStore.setState({ activeTab: id });
+
+    const { container } = render(<ModelChip />);
+
+    expect(screen.getByText('Opus 4.5 · high')).toBeInTheDocument();
+    expect(container.querySelector('.bg-brand-fill')).toBeNull();
   });
 
   it('swaps when the active tab moves from one session to another', () => {

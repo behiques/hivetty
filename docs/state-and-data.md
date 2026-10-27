@@ -32,8 +32,10 @@ the picker from re-rendering thirteen live terminals.
   orchestrator daemon: `spawnSession`, `sendToEntity`, `runOrchCommand`,
   `markAllRead`, `markRead`, `pushNotif`, `appendEntityLines`. It also holds the
   **ledger** and **plans** slices — see below.
-- `src/stores/ui-store.ts` — view state: `activeTab`, `selId`, picker fields,
-  `settings`, `explorerExpanded`, the search boxes, and the place machine —
+- `src/stores/ui-store.ts` — view state: `activeTab`, `selId`, picker fields
+  (among them `newCli` and `newPicks`, one model/effort pair per CLI;
+  `useNewSessionDefaults()` derives `newModel`/`newEffort` for the current CLI,
+  HIVE-279), `settings`, `explorerExpanded`, the search boxes, and the place machine —
   `place` (`'home'` on every launch), `panelOpen` (`true`) and `narrow`
   (HIVE-195, HIVE-211). None persists: a launch always opens on Home with its
   panel open.
