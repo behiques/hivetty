@@ -12,7 +12,8 @@ linked, never written back). Nothing is written under ~/.codex.
     python3 probe.py --bypass                     # P1, P3, P4, P6, P7
     python3 probe.py --no-bypass                  # P1 without the bypass
     python3 probe.py --bypass --project-hook      # P2 -> D4
-    python3 probe.py --bypass --user-config       # P5
+    python3 probe.py --bypass --user-config --hive-mcp    # P5, with MCP servers
+    python3 probe.py --no-bypass --project-hook --task-argv  # what a no-bypass session gets
 """
 
 import argparse
@@ -34,6 +35,8 @@ QUERIES = [
     (b'\x1b[6n', b'\x1b[1;1R'),
     (b'\x1b]10;?\x1b\\', b'\x1b]10;rgb:d8d8/d8d8/d8d8\x1b\\'),
     (b'\x1b]11;?\x1b\\', b'\x1b]11;rgb:1818/1818/1818\x1b\\'),
+    (b'\x1b]10;?\x07', b'\x1b]10;rgb:d8d8/d8d8/d8d8\x07'),
+    (b'\x1b]11;?\x07', b'\x1b]11;rgb:1818/1818/1818\x07'),
     (b'\x1b[?u', b'\x1b[?0u'),
     (b'\x1b[c', b'\x1b[?62;22c'),
 ]
@@ -63,6 +66,8 @@ def main():
     ap.add_argument('--user-config', action='store_true')
     ap.add_argument('--plan-flag', action='store_true', help='add -c tools.update_plan.enabled=true')
     ap.add_argument('--ask', action='store_true', help='on-request in a read-only sandbox, so the touch asks')
+    ap.add_argument('--hive-mcp', action='store_true', help='a -c mcp_servers.hive that touches a marker')
+    ap.add_argument('--task-argv', action='store_true', help='pass the task after -- instead of typing it')
     ap.add_argument('--newline-probe', action='store_true', help='type a Ctrl+J between two lines')
     ap.add_argument('--seconds', type=int, default=60)
     ap.set_defaults(bypass=True)
@@ -86,6 +91,9 @@ def main():
             + user_config
             + f'\n[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = "command"\n'
             + f'command = {toml("touch " + os.path.join(out, "user-hook-ran"))}\n'
+            # A user MCP server: started at all is what is asked (it never answers initialize).
+            + '\n[mcp_servers.probe]\ncommand = "sh"\n'
+            + f'args = ["-c", {toml("touch " + os.path.join(out, "user-mcp-ran") + "; exec cat")}]\n'
         )
     with open(os.path.join(home, 'config.toml'), 'w') as f:
         f.write(user_config)
@@ -128,8 +136,13 @@ def main():
     if a.ask:
         # 0.164 refuses "untrusted"; a write in a read-only sandbox is what asks.
         argv += ['-c', 'approval_policy="on-request"', '-c', 'sandbox_mode="read-only"']
+    if a.hive_mcp:
+        argv += ['-c', 'mcp_servers.hive.command="sh"']
+        argv += ['-c', f'mcp_servers.hive.args=["-c",{toml("touch " + os.path.join(out, "hive-mcp-ran") + "; exec cat")}]']
     if a.bypass:
         argv += ['--dangerously-bypass-hook-trust']
+    if a.task_argv:
+        argv += ['--', PROMPT]
 
     env = {k: v for k, v in os.environ.items() if not k.startswith(('CODEX_', 'HIVE_', 'OPENAI_'))}
     env.update(CODEX_HOME=home, TERM='xterm-256color')
@@ -145,7 +158,7 @@ def main():
     output = bytearray()
     replied = 0
     start = time.time()
-    step = 0
+    step = 2 if a.task_argv else 0
     answered = False
     while time.time() - start < a.seconds + 12:
         r, _, _ = select.select([fd], [], [], 0.3)
@@ -224,6 +237,8 @@ def main():
         'session_id': session_id,
         'project_hook_ran': os.path.exists(os.path.join(out, 'project-hook-ran')),
         'user_hook_ran': os.path.exists(os.path.join(out, 'user-hook-ran')),
+        'user_mcp_ran': os.path.exists(os.path.join(out, 'user-mcp-ran')),
+        'hive_mcp_ran': os.path.exists(os.path.join(out, 'hive-mcp-ran')),
         'models_named': sorted(
             {json.loads(b).get('model') for b in first.values() if b.startswith('{')} - {None}
         ),

@@ -17,7 +17,8 @@ server (`--bypass --plan-flag --ask`).
 (review / trust all / continue without trusting). Nothing fires until it is answered, and the typed
 task is swallowed by the dialog's menu. Trusting writes `[hooks.state."/<session-flags>/config.toml:<event>:0:0"]
 trusted_hash = …` into `$CODEX_HOME/config.toml` (codex's write, on the user's choice). `hookCommand()`
-reads its identity from the env, so its text, and that hash, are the same on every launch.
+reads its identity from the env, so its text is the same on every launch, and so (reasoned, not
+measured) is that hash.
 
 Decision: `-c` hooks are the right transport; the bypass is what makes them fire unattended.
 
@@ -27,7 +28,13 @@ Decision: `-c` hooks are the right transport; the bypass is what makes them fire
 under `--bypass --project-hook`.
 
 **D4: `bypass: unless-project-hooks`.** A session in a repo with its own `.codex` starts without the
-bypass and says why; Codex then shows its own hook-trust dialog for that repo.
+bypass and says why.
+
+What that session gets, measured (`--no-bypass --project-hook --task-argv`): Codex shows the
+"Hooks need review" dialog for **all** hooks, HiveTTY's six `-c` hooks with the repo's. A task passed
+after `--` on the argv still ran (plan, `touch`, reply), but **no hook fired**: no working, idle,
+needs-you or plan from that session until the user trusts the hooks in that dialog, which Codex
+then records in `$CODEX_HOME/config.toml` (`hooks.state`, its own write).
 
 ## P3: payloads
 
@@ -51,10 +58,12 @@ every UUID → `00000000-0000-7000-8000-00000000000N` by first appearance (the s
 
 ## P5: does the user's config still apply beside our `-c` overrides?
 
-**Yes, both.** With `$CODEX_HOME/config.toml` setting `model = "gpt-5.6-terra"` and a user
-`[[hooks.Stop]]`, and our `-c hooks.Stop=[…]` on the argv: the user's hook wrote `user-hook-ran`,
-our `Stop` reached the server, and every hook body named `"model": "gpt-5.6-terra"`. A `-c` hook
-list is added beside the user's, not over it.
+**Yes: model, hooks and MCP servers.** With `$CODEX_HOME/config.toml` setting `model = "gpt-5.6-terra"`,
+a user `[[hooks.Stop]]` and a user `[mcp_servers.probe]`, and on the argv our `-c hooks.Stop=[…]` and a
+`-c mcp_servers.hive.*` (`--bypass --user-config --hive-mcp`): the user's hook wrote `user-hook-ran`,
+our `Stop` reached the server, both MCP servers were started (`user-mcp-ran`, `hive-mcp-ran`), and
+every hook body named `"model": "gpt-5.6-terra"`. A `-c` hook list is added beside the user's, not
+over it, and a `-c mcp_servers.<name>` is added beside the user's servers.
 
 **P5: `user-hooks: kept`.** The model is carried in every hook body's `model` (the `SessionStart` one first).
 
@@ -70,7 +79,12 @@ the same path every hook body gives as `transcript_path`.
 **Ctrl+J (`\n`) is a newline in the input box:** typing `…see.`, `\n`, `FIRST then SECOND` and then
 `\r` submitted one message whose text is `Reply with the two lines you see.\nFIRST then SECOND` (from
 the rollout). **The split `\r`, written 300 ms after the text with `tui.disable_paste_burst=true`,
-submitted** in every run. No title marks were seen in the output; `nameFromTitle` stays the identity.
+submitted** in every run. **Title marks** (OSC 0/2, from the full saved `out/pty.log`,
+not the 2 KB tail): Codex titles the terminal `<name> | <dir>`, where `<dir>` is the cwd's basename
+and `<name>` is the thread's name once it has one (`Create probe file | repo`; just `repo` before).
+While a turn runs the title leads with a braille spinner frame and a space (`⠏ Create probe file |
+repo`); while it waits on an approval it leads with `[ ! ] Action Required | `. `nameFromTitle`
+strips the spinner, the `[ ! ] Action Required | ` lead and the trailing ` | <dir>`.
 
 `approval_policy = "untrusted"` is refused at 0.164 ("no longer supported"). A permission prompt
 comes from `approval_policy="on-request"` with `sandbox_mode="read-only"` and a task that asks to
