@@ -10,8 +10,10 @@ import {
 } from '@/lib/session-metrics';
 import { isSession } from '@/types/entity';
 
+import { CliMark } from '@components/ui/cli-mark';
 import { GaugeRing, gaugeTone } from '@components/ui/gauge-ring';
 import { TONE_TEXT } from '@components/ui/tag';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import { useActiveEntity, useSessionMetrics } from '@stores/hive-store';
 
 interface StatProps {
@@ -174,7 +176,14 @@ export function ModelChip() {
   const sevenDay = pctOrNull(metrics?.sevenDayPct);
 
   const parts = chipParts(metrics, entity.model, entity.effort);
-  const label = chipLabel(metrics, entity.model, entity.effort);
+  /*
+    Led by the CLI only when it is not Claude's (HIVE-279): every Claude chip on
+    screen reads exactly as it did, and a Codex one says so before its model id.
+  */
+  const cli = entity.harness ?? 'claude-code';
+  const label =
+    (cli === 'claude-code' ? '' : `${CLI_NAMES[cli]} · `) +
+    chipLabel(metrics, entity.model, entity.effort);
   const fiveHourReset = clockLabel(metrics?.fiveHourResetsAt);
   const sevenDayReset = dayClockLabel(metrics?.sevenDayResetsAt);
 
@@ -226,6 +235,7 @@ export function ModelChip() {
       className="flex items-center gap-1.5 whitespace-nowrap tabular-nums text-xs text-muted"
     >
       <Brain size={13} weight="regular" className="shrink-0 text-brand" />
+      {cli === 'claude-code' ? null : <CliMark cli={cli} />}
       <span className="flex items-center gap-2">
         {/* Both render; the header's width picks one, or neither (HIVE-220). */}
         <span data-label="full" className="shrink-0 @max-[700px]:hidden">
