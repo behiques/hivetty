@@ -597,7 +597,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       back.
 
       It is known at spawn — `wake-command.ts` decides it, either by minting one
-      for `--session-id` or by choosing the one to `--resume` — and taking it
+      for `--session-id` or by choosing the one to resume (`--resume` for
+      Claude; Copilot passes `--session-id` again) — and taking it
       from the output alone meant a first wake interrupted by a quit, a kill, a
       stall or a crash persisted **nothing**. The next wake then minted a fresh
       uuid and the whole conversation was orphaned, which is exactly what the
@@ -607,7 +608,9 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       `reachedModel` still gates it: a spawn that threw, or a child that raised
       `'error'`, never started a conversation for `--resume` to find, and
       persisting a uuid no session file backs would fail the *next* wake instead
-      of this one.
+      of this one. Copilot is the exception that tolerates it: its resume is
+      `--session-id <uuid>` too, so one with no `session-state/<uuid>/` starts
+      fresh under the same id.
     */
     // A first Codex wake's argv uuid is a stop marker, not a conversation (HIVE-342): only its output names one.
     const sessionUuid =

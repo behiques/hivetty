@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   COPILOT_AUTH_ENV_KEYS,
+  COPILOT_ROUTING_ENV_KEYS,
   COPILOT_SESSION_ENV_KEYS,
   copilotSettings,
   launchCopilotHeadless,
@@ -37,13 +38,15 @@ describe('launchCopilotHeadless', () => {
     ).toMatchSnapshot();
   });
 
-  it('pins the id on a start and resumes it after', () => {
+  // `--session-id` resumes a session that exists and starts one that does not (probed at 1.0.104),
+  // so a first wake that died before Copilot made its session can still be resumed.
+  it('pins the id with --session-id on a start and on a resume', () => {
     expect(launchCopilotHeadless(spec()).args).toEqual(expect.arrayContaining(['--session-id', U]));
 
     const resumed = launchCopilotHeadless(spec({ conversation: { resume: U } })).args;
 
-    expect(resumed).toContain(`--resume=${U}`);
-    expect(resumed).not.toContain('--session-id');
+    expect(resumed).toEqual(expect.arrayContaining(['--session-id', U]));
+    expect(resumed.some((arg) => arg.startsWith('--resume'))).toBe(false);
   });
 
   it('always runs non-interactive, silent, with no ask_user and no built-in MCP', () => {
@@ -131,7 +134,11 @@ describe('launchCopilotHeadless', () => {
     const plan = launchCopilotHeadless(spec());
 
     expect(plan.addEnv).toEqual({ COPILOT_HOME: '/h/cli/copilot' });
-    expect(plan.stripEnv).toEqual([...COPILOT_SESSION_ENV_KEYS, ...COPILOT_AUTH_ENV_KEYS]);
+    expect(plan.stripEnv).toEqual([
+      ...COPILOT_SESSION_ENV_KEYS,
+      ...COPILOT_AUTH_ENV_KEYS,
+      ...COPILOT_ROUTING_ENV_KEYS,
+    ]);
     expect(COPILOT_AUTH_ENV_KEYS).toEqual(['GH_TOKEN', 'GITHUB_TOKEN', 'COPILOT_ALLOW_ALL']);
     expect(COPILOT_SESSION_ENV_KEYS).toEqual([
       'COPILOT_AGENT_SESSION_ID',
@@ -142,6 +149,36 @@ describe('launchCopilotHeadless', () => {
       'COPILOT_CUSTOM_INSTRUCTIONS_DIRS',
     ]);
     expect(plan.args).toEqual(expect.arrayContaining(['--secret-env-vars', 'COPILOT_GITHUB_TOKEN']));
+  });
+
+  it('strips every key that changes who pays, which model answers or what is approved', () => {
+    const { stripEnv } = launchCopilotHeadless(spec());
+
+    for (const key of [
+      'COPILOT_PROVIDER_BASE_URL',
+      'COPILOT_PROVIDER_TYPE',
+      'COPILOT_PROVIDER_API_KEY',
+      'COPILOT_PROVIDER_API_KEY_COMMAND',
+      'COPILOT_PROVIDER_BEARER_TOKEN',
+      'COPILOT_PROVIDER_WIRE_API',
+      'COPILOT_PROVIDER_TRANSPORT',
+      'COPILOT_PROVIDER_AZURE_API_VERSION',
+      'COPILOT_PROVIDER_MODEL_ID',
+      'COPILOT_PROVIDER_WIRE_MODEL',
+      'COPILOT_PROVIDER_MAX_PROMPT_TOKENS',
+      'COPILOT_PROVIDER_MAX_OUTPUT_TOKENS',
+      'COPILOT_PROVIDER_HEADERS',
+      'COPILOT_OFFLINE',
+      'COPILOT_MODEL',
+      'COPILOT_AUTO_TIER',
+      'COPILOT_ASSISTED_APPROVAL',
+      'GH_ENTERPRISE_TOKEN',
+    ]) {
+      expect(stripEnv).toContain(key);
+    }
+    // An Enterprise user's stored token authenticates against these hosts.
+    expect(stripEnv).not.toContain('GH_HOST');
+    expect(stripEnv).not.toContain('COPILOT_GH_HOST');
   });
 
   it('names its conversation and stops on it', () => {

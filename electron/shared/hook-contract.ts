@@ -70,6 +70,12 @@ export const HOOK_HEADER_SESSION = 'x-hive-session';
 export const HOOK_HEADER_TOKEN = 'x-hive-token';
 
 /**
+ * The CLI an agent-lane hook came from, sent only when its body is not Claude's (HIVE-343).
+ * Absent means Claude-shaped (Claude Code, Codex); a name the build does not know is a 400.
+ */
+export const HOOK_HEADER_HARNESS = 'x-hive-harness';
+
+/**
  * The header carrying the run a `POST /mcp` caller belongs to (HIVE-130).
  *
  * The stdio host reads {@link HOOK_ENV_RUN} from its own environment and stamps

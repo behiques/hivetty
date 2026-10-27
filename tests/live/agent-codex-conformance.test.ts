@@ -203,7 +203,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
         users: () => Promise.reject(new Error('not exercised')),
       },
       // As `hooks/index.ts` wires it.
-      fenceTranslate: headlessAdapter('codex').headless.fence.translate,
+      fenceFor: (harness) => (harness === undefined ? headlessAdapter('codex').headless.fence : null),
       onPlan: () => {},
       onTicketIntent: () => undefined,
       onPromptName: () => {},

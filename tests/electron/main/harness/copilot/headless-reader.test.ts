@@ -111,4 +111,8 @@ describe('classifyFailure', () => {
     expect(classifyFailure('', 3)).toBe('copilot exited 3');
     expect(classifyFailure('', null)).toBe('copilot was stopped');
   });
+
+  it('reads a 401 from anything but the token as the last line', () => {
+    expect(classifyFailure('MCP server foo returned HTTP 401', 1)).toBe('MCP server foo returned HTTP 401');
+  });
 });

@@ -59,6 +59,7 @@ draws cannot be faked. Each costs time, some cost tokens.
 | `pnpm test:ledger` · `:mcp-http` | the ledger MCP tools, stdio and HTTP |
 | `pnpm test:agent` | headless agent runs end to end |
 | `pnpm test:agent:codex` | headless Codex agent runs end to end: thread, resume, the fence, receipts (codex 0.164.x, signed in) |
+| `pnpm test:agent:copilot` | headless Copilot agent runs end to end: pinned id, resume, the fence, receipts, `~/.copilot` untouched (copilot 1.0.104, `COPILOT_GITHUB_TOKEN` set) |
 | `pnpm test:container` | containerised sessions and agents |
 | `pnpm test:server` | server mode across two real app processes |
 

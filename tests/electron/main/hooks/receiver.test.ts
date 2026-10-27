@@ -32,6 +32,7 @@ import {
   HOOK_HEADER_SESSION,
   FENCE_MAX_BODY_BYTES,
   FENCE_PATH,
+  HOOK_HEADER_HARNESS,
   HOOK_HEADER_TOKEN,
   HOOK_MAX_BODY_BYTES,
   type HookAgentEvent,
@@ -57,10 +58,16 @@ import {
   type SessionMetrics,
 } from '../../../../electron/shared/metrics-contract';
 import { translateCodexCall } from '../../../../electron/main/harness/codex/fence';
+import { copilotFence } from '../../../../electron/main/harness/copilot';
+import type { copilotFenceReply } from '../../../../electron/main/harness/copilot/fence';
 import { createLedger, type Ledger } from '../../../../electron/main/ledger';
 import type { HookContextReply } from '../../../../electron/main/harness/claude-code/hook-vocabulary';
 import { createReceiver, type Receiver } from '../../../../electron/main/hooks/receiver';
-import { sessionAdapter, type HarnessRegistry } from '../../../../electron/main/harness/registry';
+import {
+  createHarnessRegistry,
+  sessionAdapter,
+  type HarnessRegistry,
+} from '../../../../electron/main/harness/registry';
 import type { PlanUpdate } from '../../../../electron/shared/plan-contract';
 
 /**
@@ -5341,6 +5348,103 @@ describe('hook receiver: reads through the harness registry (HIVE-236)', () => {
 });
 
 /**
+ * An agent-lane hook names its CLI in `x-hive-harness` when its body is not Claude's (HIVE-343).
+ * The registry here is the real one with copilot's reader in place, which `copilotAdapter` adopts
+ * when its fence goes live; until then no copilot run starts.
+ */
+describe('hook receiver: a copilot hook by its harness header (HIVE-343)', () => {
+  const AGENT = 'copilot-agent';
+  const SESSION = 'sess-01';
+  const stop = JSON.stringify({
+    event: 'agentStop',
+    payload: JSON.parse(
+      readFileSync(join(__dirname, '../../../fixtures/copilot/hooks-1.0.104/agent-stop.json'), 'utf8'),
+    ) as unknown,
+  });
+
+  let receiver: Receiver;
+  let url: string;
+  let agentEvents: HookAgentEvent[];
+  let sessionEvents: HookStatusEvent[];
+
+  beforeEach(async () => {
+    agentEvents = [];
+    sessionEvents = [];
+    const real = createHarnessRegistry({ isAgentSession: (id) => id === SESSION });
+    receiver = createReceiver({
+      knowsSession: (entityId) => entityId === SESSION,
+      knowsAgent: (entityId) => entityId === AGENT,
+      onEvent: (event) => sessionEvents.push(event),
+      onAgentEvent: (event) => agentEvents.push(event),
+      onAgentsList: () => Promise.reject(new Error('not exercised by this suite')),
+      onCleared: () => {},
+      onPlan: () => {},
+      onTicketIntent: () => {},
+      onPromptName: () => {},
+      onDone: () => {},
+      onReady: () => {},
+      onMetrics: () => {},
+      ...noLedger,
+      harnesses: real,
+    });
+    url = (await receiver.start()) as string;
+  });
+
+  afterEach(async () => {
+    await receiver.stop();
+  });
+
+  const post = (entityId: string, body: string, harness?: string) =>
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [HOOK_HEADER_TOKEN]: receiver.tokenFor(entityId),
+        [HOOK_HEADER_SESSION]: entityId,
+        ...(harness === undefined ? {} : { [HOOK_HEADER_HARNESS]: harness }),
+      },
+      body,
+    });
+
+  it("reads copilot's recorded agentStop as a turn end on its session", async () => {
+    const response = await post(AGENT, stop, 'copilot');
+
+    expect(response.status).toBe(204);
+    expect(agentEvents).toEqual([
+      { entityId: AGENT, signal: { kind: 'turn-end' }, sessionUuid: '11111111-2222-4333-8444-555555555551' },
+    ]);
+    expect(sessionEvents).toEqual([]);
+  });
+
+  it("publishes nothing for the same body with no header: Claude's reader finds no hook_event_name", async () => {
+    const response = await post(AGENT, stop);
+
+    expect(response.status).toBe(204);
+    expect(agentEvents).toEqual([]);
+  });
+
+  // A refused hook still answers 204 on the wire (HIVE-138); the 400 is the refusal it logs.
+  it('refuses a harness it does not know as a 400', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const response = await post(AGENT, stop, 'gemini');
+
+    expect(response.status).toBe(204);
+    expect(warn).toHaveBeenCalledWith(`[hooks] hook from ${AGENT} refused (400); answered 204`);
+    expect(agentEvents).toEqual([]);
+    warn.mockRestore();
+  });
+
+  it('reads a session by the session path, whatever the header says: it never moves a body across lanes', async () => {
+    const response = await post(SESSION, JSON.stringify({ hook_event_name: 'Stop' }), 'copilot');
+
+    expect(response.status).toBe(204);
+    expect(sessionEvents.map((event) => event.signal)).toEqual([{ kind: 'turn-end' }]);
+    expect(agentEvents).toEqual([]);
+  });
+});
+
+/**
  * `POST /fence` (HIVE-342): a hook-based CLI's `PreToolUse`, answered exactly as `approve` answers.
  * The call is translated into Claude's vocabulary by the adapter, `decide` runs first so a deny never
  * posts, then `approve` posts the one ask. The reply is the CLI's hook JSON: `{}` lets the call run.
@@ -5377,7 +5481,13 @@ describe('the fence route (HIVE-342)', () => {
       onAgentsList: async () => ({ agents: [] }) as AgentsDirectory,
       knowsSession: (id) => id === PTY,
       knowsAgent: (id) => id === AGENT,
-      fenceTranslate: (tool, input, cwd) => translate(tool, input, cwd),
+      // Codex's fence answers a header-less hook; Copilot's is its adapter's own.
+      fenceFor: (harness) => {
+        if (harness === undefined) {
+          return { express: () => ({ ok: true }), translate: (tool, input, cwd) => translate(tool, input, cwd) };
+        }
+        return harness === 'copilot' ? copilotFence : null;
+      },
       onLedgerRead: (_caller, query) => ledger.read(query),
       onLedgerPost: (caller, request) => {
         if (failPosts) return { ok: false as const, status: 503, reason: 'the ledger is down' };
@@ -5517,5 +5627,59 @@ describe('the fence route (HIVE-342)', () => {
 
   it('is bounded by its own cap, which is larger than a hook body', () => {
     expect(FENCE_MAX_BODY_BYTES).toBeGreaterThan(HOOK_MAX_BODY_BYTES);
+  });
+
+  describe('a copilot preToolUse by its harness header (HIVE-343)', () => {
+    const COPILOT = { [HOOK_HEADER_HARNESS]: 'copilot' };
+    const bash = (): Record<string, unknown> =>
+      JSON.parse(
+        readFileSync(join(__dirname, '../../../fixtures/copilot/hooks-1.0.104/pre-tool-use-bash.json'), 'utf8'),
+      ) as Record<string, unknown>;
+
+    it('lets a granted call run with an empty reply and posts nothing', async () => {
+      receiver.grants.set(RUN, AGENT, ['Bash(echo *)']);
+      const response = await fence(bash(), AGENT, COPILOT);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({});
+      expect(posted).toEqual([]);
+    });
+
+    it("denies an ungranted call in copilot's shape and posts exactly one permission ask", async () => {
+      const response = await fence(bash(), AGENT, COPILOT);
+
+      expect(await response.json()).toEqual({
+        permissionDecision: 'deny',
+        permissionDecisionReason: PERMISSION_DENY_MESSAGE,
+      });
+      expect(posted).toHaveLength(1);
+      expect(posted[0]!.request.meta).toMatchObject({ kind: 'permission', tool: 'Bash', run: RUN });
+    });
+
+    it('refuses a body that names no toolName', async () => {
+      const { toolName: _dropped, ...body } = bash();
+
+      expect((await fence(body, AGENT, COPILOT)).status).toBe(400);
+      expect(posted).toEqual([]);
+    });
+
+    it('refuses a harness with no fence', async () => {
+      expect((await fence(bash(), AGENT, { [HOOK_HEADER_HARNESS]: 'gemini' })).status).toBe(400);
+      expect(posted).toEqual([]);
+    });
+
+    it("denies a body over the cap in copilot's shape, saying why", async () => {
+      receiver.grants.set(RUN, AGENT, ['*']);
+      const response = await fence(
+        { ...bash(), toolArgs: { command: `echo ${'x'.repeat(FENCE_MAX_BODY_BYTES)}` } },
+        AGENT,
+        COPILOT,
+      );
+      const body = (await response.json()) as ReturnType<typeof copilotFenceReply>;
+
+      expect(body['permissionDecision']).toBe('deny');
+      expect(body['permissionDecisionReason']).toMatch(/too large for HiveTTY to check/);
+      expect(posted).toEqual([]);
+    });
   });
 });
