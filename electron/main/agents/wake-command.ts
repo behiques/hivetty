@@ -69,6 +69,21 @@ const REAL_FS: WakeFs = {
   },
 };
 
+/**
+ * The env variable each token-holding CLI reads its token from (HIVE-343). The core's own spelling,
+ * since nothing outside `harness/**` imports an adapter; a unit test pins it to the adapter's.
+ */
+export const CLI_TOKEN_ENV: Partial<Record<HarnessId, string>> = { copilot: 'COPILOT_GITHUB_TOKEN' };
+
+/** `fs.read`, with a missing file as `null`. */
+const readOrNull = (fs: WakeFs, path: string): string | null => {
+  try {
+    return fs.read(path);
+  } catch {
+    return null;
+  }
+};
+
 export interface WakeCommandDeps {
   /** `~/.hivetty/agents`. Read per call, so a relocated config is honoured. */
   agentsRoot: () => string;
@@ -77,6 +92,8 @@ export interface WakeCommandDeps {
   workdir: (name: string, lane: string) => string;
   /** `~/.hivetty/cli/<id>`: the CLI's app-owned home (HIVE-343). */
   cliHome: (id: HarnessId) => string;
+  /** The token HiveTTY holds for a CLI's agents, `null` when none is stored (HIVE-343). */
+  cliToken: (id: HarnessId) => string | null;
   /** `<userData>/hive/agents/<name>.system.md`, rewritten before the spawn. */
   promptFile: (name: string) => string;
   /** `<userData>/hive/plugin` — the skills HiveTTY generates. */
@@ -316,7 +333,10 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     */
     const binary = (id: HarnessId) => {
       if (def.container !== undefined) return { path: def.container.command ?? 'claude' };
-      const command = id === 'codex' ? 'codex' : deps.claudeCommand();
+      if (id === 'copilot' && deps.cliToken('copilot') === null) {
+        return { problem: 'no Copilot token: add one in Settings › CLIs' };
+      }
+      const command = id === 'claude-code' ? deps.claudeCommand() : id;
       return deps.isExecutable === undefined
         ? resolveClaude(command, deps.env()['PATH'])
         : resolveClaude(command, deps.env()['PATH'], deps.isExecutable);
@@ -429,10 +449,10 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
 
     const { adapter } = resolved;
 
-    // The container's hive server is HTTP and its image has no signed-in codex (HIVE-342).
-    if (def.container !== undefined && adapter.id === 'codex') {
+    // The container's hive server is HTTP and its image has no signed-in codex or copilot (HIVE-342, HIVE-343).
+    if (def.container !== undefined && adapter.id !== 'claude-code') {
       return {
-        problem: `${name} runs in a container, and codex agents cannot yet — run it on the host, or name claude-code first in harness:.`,
+        problem: `${name} runs in a container, and ${adapter.id} agents cannot yet — run it on the host, or name claude-code first in harness:.`,
       };
     }
     /*
@@ -490,6 +510,14 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       task || pending !== undefined || switched ? undefined : previous.sessionUuid;
     const minted = task ? deps.newUuid() : (pending?.uuid ?? deps.newUuid());
 
+    // The CLI's own token (HIVE-343), on the child's env and nowhere else.
+    const tokenEnv = CLI_TOKEN_ENV[adapter.id];
+    const token = tokenEnv === undefined ? null : deps.cliToken(adapter.id);
+    // Cleared since `binary()` looked: never start on whatever token the inherited env carries.
+    if (tokenEnv !== undefined && token === null) {
+      return { problem: `No CLI can run ${name}: ${adapter.id} cannot start: its token was just cleared.` };
+    }
+
     let command: WakeCommand;
 
     try {
@@ -530,6 +558,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
           base: deps.env(),
           hook: deps.hookEnv(name),
           subscriptionAuth: deps.subscriptionAuth(),
+          ...(tokenEnv === undefined || token === null ? {} : { secrets: { [tokenEnv]: token } }),
         },
         grants,
         instructions: prompt,
@@ -547,6 +576,21 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     } catch (cause) {
       // The path map's refusal (HIVE-137): a run with no safe spelling.
       return { problem: describe(cause) };
+    }
+
+    /*
+      The files the CLI reads before it starts (HIVE-343): Copilot's hooks in its home, its
+      instructions in the workdir. Written only when the bytes differ, so two Copilot wakes at once
+      never rewrite `settings.json` under each other.
+    */
+    try {
+      for (const file of command.files ?? []) {
+        fs.mkdir(dirname(file.path));
+        if (readOrNull(fs, file.path) !== file.text) fs.write(file.path, file.text);
+      }
+      if (command.usageFile !== undefined) fs.mkdir(dirname(command.usageFile));
+    } catch (cause) {
+      return { problem: `Could not prepare the run: ${describe(cause)}` };
     }
 
     /*

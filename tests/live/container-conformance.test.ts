@@ -820,6 +820,7 @@ tool it names, and nothing more. Never ask a question.
       agentsRoot,
       workdir: agentWorkdir,
       cliHome,
+      cliToken: () => null,
       promptFile: (name) => agentPromptFile(userData, name),
       pluginDir: () => join(userData, PLUGIN_DIR),
       agentSettingsPath: () => hooks.agentSettingsPathFor(),

@@ -2725,10 +2725,18 @@ export function registerIpcHandlers(
    */
   const claudeCommand = (): string => getConfig().claudeCommand;
 
+  // HIVE-343. Copilot's agent token, stored as Slack's are. `read()` reaches the wake, never a channel.
+  const cliTokens = createCliTokens({
+    store: safeStorage,
+    file: credentialFile(join(app.getPath('userData'), CLI_TOKENS_FILE)),
+  });
+
   const buildWakeCommand = createWakeCommand({
     agentsRoot,
     workdir: laneWorkdir,
     cliHome,
+    // HIVE-343. The only reader of a stored CLI token: it reaches the child's env, never a channel.
+    cliToken: (id) => (id === 'copilot' ? cliTokens.read('copilot') : null),
     promptFile: (name) => agentPromptFile(app.getPath('userData'), name),
     pluginDir: () => join(app.getPath('userData'), PLUGIN_DIR),
     // The agent-space file, never `hooks.settingsPathFor()`: that one carries
@@ -3065,11 +3073,6 @@ export function registerIpcHandlers(
   const slackTokens = createSlackTokens({
     store: safeStorage,
     file: credentialFile(join(app.getPath('userData'), SLACK_TOKENS_FILE)),
-  });
-  // HIVE-343. Copilot's agent token, the same custody. `read()` reaches the wake, never a channel.
-  const cliTokens = createCliTokens({
-    store: safeStorage,
-    file: credentialFile(join(app.getPath('userData'), CLI_TOKENS_FILE)),
   });
 
   /**

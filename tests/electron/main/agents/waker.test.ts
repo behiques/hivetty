@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
+import { copilotAdapter } from '../../../../electron/main/harness/copilot';
 import type { HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
@@ -477,6 +478,50 @@ describe('systemPromptFor', () => {
     expect(text.trimEnd().endsWith('Watch the channel and report mentions.')).toBe(
       true,
     );
+  });
+});
+
+describe("a CLI's secrets (HIVE-343)", () => {
+  it('lands after the strip, so a strip list naming the key keeps ours, and never on the argv', () => {
+    const command = build({
+      adapter: copilotAdapter,
+      env: {
+        ...env,
+        base: { ...env.base, GH_TOKEN: 'inherited', COPILOT_GITHUB_TOKEN: 'inherited' },
+        secrets: { COPILOT_GITHUB_TOKEN: 't0k', GH_TOKEN: 'ours' },
+      },
+    });
+
+    expect(command.env['COPILOT_GITHUB_TOKEN']).toBe('t0k');
+    expect(command.env['GH_TOKEN']).toBe('ours');
+    expect(command.args.join(' ')).not.toContain('t0k');
+  });
+
+  it("carries the plan's usage file and files", () => {
+    const command = build({ adapter: copilotAdapter, paths: { ...paths, cliHome: '/h/cli/copilot' } });
+    const plan = copilotAdapter.headless.launch({
+      conversation: { start: '11111111-2222-3333-4444-555555555555' },
+      name: 'slack-watcher',
+      limits: { turns: 40 },
+      files: { settings: '', pluginDir: '', mcpConfig: '', systemPrompt: '' },
+      grants: [],
+      prompt: '',
+      subscriptionAuth: true,
+      instructions: 'You are slack-watcher.',
+      hiveServer: HIVE_SERVER,
+      stateDir: '/h/cli/copilot',
+      workdir: paths.workdir,
+    });
+
+    expect(command.usageFile).toBe(plan.usageFile);
+    expect(command.files).toEqual(plan.files);
+  });
+
+  it('carries neither for a CLI whose plan has none', () => {
+    const command = build();
+
+    expect(command).not.toHaveProperty('usageFile');
+    expect(command).not.toHaveProperty('files');
   });
 });
 

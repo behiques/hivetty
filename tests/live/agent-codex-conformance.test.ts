@@ -233,6 +233,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
       agentsRoot,
       workdir: laneWorkdir,
       cliHome,
+      cliToken: () => null,
       promptFile: (name) => agentPromptFile(userDataPath, name),
       pluginDir: () => join(userDataPath, 'plugin'),
       agentSettingsPath: () => settingsPath,

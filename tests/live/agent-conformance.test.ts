@@ -1277,6 +1277,7 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
       // Each lane in its own directory, as `ipc/index.ts` wires it (HIVE-188).
       workdir: laneWorkdir,
       cliHome,
+      cliToken: () => null,
       promptFile: (name) => agentPromptFile(userDataPath, name),
       pluginDir: () => pluginDir ?? '',
       agentSettingsPath: () => settingsPath,
