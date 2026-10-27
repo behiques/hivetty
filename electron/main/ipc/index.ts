@@ -3304,6 +3304,8 @@ export function registerIpcHandlers(
     */
     onAgentTurnEnded: (name, sessionUuid, backgroundWork) =>
       runs?.noteTurnEnded(name, sessionUuid, backgroundWork),
+    // A Codex session's ledger tools ride its argv (HIVE-279), from the getter agent wakes use.
+    hiveServer: () => mcp.hiveServerSpec(),
   });
 
   /*

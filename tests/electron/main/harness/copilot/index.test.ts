@@ -26,6 +26,7 @@ describe('copilotAdapter', () => {
       enforcesBudget: false,
       reportsMcpStatus: false,
       agentMcp: [],
+      conversationId: 'argv',
     });
   });
 

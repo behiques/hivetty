@@ -51,6 +51,12 @@ export interface Capabilities {
    * one that is not here does not resolve to this CLI.
    */
   agentMcp: readonly string[];
+  /**
+   * Who names a session's conversation (HIVE-279). `argv`: the core mints the id and hands it to
+   * the launch (`claude --session-id`). `first-hook`: the CLI picks it, so the core records the
+   * first hook's `session_id` as the resume id (`codex` takes no id on a fresh start).
+   */
+  conversationId: 'argv' | 'first-hook';
 }
 
 /** Why a session is blocked on a human (HIVE-237): a tool wants a yes, the agent asked, or a server wants input. */

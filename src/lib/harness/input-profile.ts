@@ -35,8 +35,8 @@ export const DEFAULT_INPUT_PROFILE: InputProfile = {
 /** Keyed by every `HarnessId`, so a harness without a profile fails to compile. */
 const PROFILES: Record<HarnessId, InputProfile> = {
   'claude-code': DEFAULT_INPUT_PROFILE,
-  // No codex session yet (HIVE-279); its newline is Ctrl+J when it lands.
-  codex: DEFAULT_INPUT_PROFILE,
+  // Ctrl+J, measured at 0.164 (HIVE-279; tests/fixtures/codex/interactive-0.164/FINDINGS.md P7).
+  codex: { ...DEFAULT_INPUT_PROFILE, newline: '\n' },
   // No copilot session yet (HIVE-280); its newline is Alt+Enter (ESC CR) when it lands.
   copilot: DEFAULT_INPUT_PROFILE,
 };

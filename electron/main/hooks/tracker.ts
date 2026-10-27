@@ -340,10 +340,23 @@ export function createStatusTracker(): StatusTracker {
           s.postToolUseSincePermissionRequest = true;
 
           if (input.toolUseId !== undefined) {
+            /**
+             * An id nothing recorded: Codex has no `PreToolUse`, and its `PermissionRequest` has no
+             * `tool_use_id`, so the block it raised is `UNPAIRED` and this id matches nothing. Then
+             * the id is no better than none, and the block clears by name, as below (HIVE-279).
+             */
+            const unknownId = !s.outstanding.has(input.toolUseId) && !s.blocked.has(input.toolUseId);
             s.outstanding.delete(input.toolUseId);
             s.blocked.delete(input.toolUseId);
             s.blockedNames.delete(input.toolUseId);
             if (input.runInBackground === true) s.bgShells.add(input.toolUseId);
+            if (unknownId && input.toolName !== undefined) {
+              const matches = [...s.blocked].filter((key) => s.blockedNames.get(key) === input.toolName);
+              if (matches.length === 1) {
+                s.blocked.delete(matches[0]);
+                s.blockedNames.delete(matches[0]);
+              }
+            }
           } else if (input.toolName !== undefined) {
             /**
              * A body over `HOOK_MAX_BODY_BYTES` truncates `tool_use_id` off the

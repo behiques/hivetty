@@ -105,8 +105,8 @@ settings, the status line script), `plugin.ts` and `done-skill.ts`, `mcp-config.
 `harnessOf` answers the CLI a session was opened with: `SpawnRequest.harness` (absent is
 Claude Code), checked with its `CLI_VOCAB` row by `parseSpawnRequest`, held per entity in the
 sessions closure, recorded in the session history and forwarded on restart and resume
-(HIVE-279). Only Claude Code launches until HIVE-279's second PR: `spawn` and `restart`
-refuse any other CLI with a reason, before anything starts. `harnessOf` answers `undefined`
+(HIVE-279). Claude Code and Codex launch; `spawn` and `restart` refuse Copilot (HIVE-280) and
+a Codex session in a container project with a reason, before anything starts or is killed. `harnessOf` answers `undefined`
 for a plain terminal or a command (story 102). Only the sessions closure knows which an
 entity is: ids are minted by the renderer, so a prefix proves nothing. The fence below stops
 `harness/**` from importing `sessions/**`, so the core passes the fact in as
@@ -352,18 +352,18 @@ rg -n --type ts -e "'(PreToolUse|PostToolUse|Stop|SubagentStop|SessionStart|Sess
 
 ### Follow-ups
 
-- HIVE-279, HIVE-280: interactive Codex and Copilot sessions.
-- HIVE-352, HIVE-358: plans (interactive Codex; agent runs).
+- HIVE-279's follow-up: HiveTTY skills and prompt markers in Codex sessions (D1). HIVE-280:
+  interactive Copilot sessions.
+- HIVE-358: plans in agent runs.
 - HIVE-353: the rotation handoff's late-id gap.
 - HIVE-354: the `approve` hang.
 - HIVE-332: entitlement, and each CLI's binary setting.
 
-## Codex (headless, HIVE-342)
+## Codex (headless, HIVE-342; sessions, HIVE-279)
 
-Adapter #2 lives in `electron/main/harness/codex/` and is headless only: every interactive member
-refuses with "codex has no interactive sessions yet (HIVE-279)", `record` answers `null`/`false`/
-`'unknown'`, `installed` answers `[]`/`{}`, and `sessionAdapter()` and `harnessOf` stay Claude, so
-nothing interactive reaches the refusals. Measured against `codex-cli 0.164.0`; the recorded
+Adapter #2 lives in `electron/main/harness/codex/`: headless runs (below) and, since HIVE-279,
+interactive sessions (**Sessions**, after them). `installed` answers `[]`/`{}`, and
+`sessionAdapter()` stays Claude, so the shared runtimes still write Claude's files. Measured against `codex-cli 0.164.0`; the recorded
 output and hook payloads are in `tests/fixtures/codex/`.
 
 **The argv** (`codex/headless.ts`), flag by flag:
@@ -442,11 +442,48 @@ status}], explanation?}`, the whole list on every call and no ids, so `readCodex
 Claude's `TodoWrite`: one `tasks-replaced`, ids `"1".."n"` by position. Main thread, session lane,
 whole bodies only: a subagent's call carries `agent_id` under its parent's `session_id`. The
 `exec --json` stream's `todo_list` item has only `completed: bool`, so it is not read. Nothing
-reaches the mapping yet: interactive Codex is HIVE-279, which routes a session to this adapter
-through `harnessOf`, and no CLI's agent run has a plan (HIVE-358, which also turns the tool on for
-wakes and lets it through `/fence`; today `decide` would ask).
+reaches it from an agent run yet (HIVE-358, which also turns the tool on for wakes and lets it
+through `/fence`; today `decide` would ask); a Codex session reaches it through `harnessOf`.
 
-Interactive: HIVE-279 (plumbing landed; the adapter's half is the second PR). Meters: HIVE-334. Agent-run plans: HIVE-358. Containers: refused.
+**Sessions** (`codex/launch.ts`, `codex/record.ts`, HIVE-279). Measured against a real 0.164.0 TUI on
+a pty in `tests/fixtures/codex/interactive-0.164/` (`probe.py`, `FINDINGS.md` P1–P7). The line a
+login shell is typed, as Claude's is (`&& exit`, the task after `--`), flag by flag:
+
+- `codex [resume <id>]`: a fresh start names no id (`codex` takes none); a resume names the
+  recorded one, and `resume` takes every flag below after it.
+- `-m <model>` and `-c model_reasoning_effort="…"`, both re-checked against `CLI_VOCAB.codex`.
+- `-c tui.disable_paste_burst=true`: an injected Enter is a keystroke, not the tail of a paste, so
+  the bootstrap's split `\r` submits (P7).
+- `-c tools.update_plan.enabled=true`: the TUI has no plan tool without it (P4).
+- `-c hooks.<E>=[…]` for `SessionStart`, `UserPromptSubmit`, `PermissionRequest` and `Stop`, and
+  `PostToolUse` with `matcher="*"` (as Claude's sessions do: a finished tool is what clears an
+  approved `PermissionRequest`, since `Stop` does not; `update_plan` is the only one read for a
+  plan), each running `hookCommand()`. No `Notification`:
+  idle is `Stop`, and a permission is `PermissionRequest`, which is Claude's shape (P3). `/fence`
+  is not used: a session's TUI asks for itself (D5).
+- `-c mcp_servers.hive.*`: the stdio host, `env_vars` forwarding the session's identity by name,
+  so no token is on the argv. Omitted before the host script is written.
+- `--dangerously-bypass-hook-trust`: `-c` hooks fire only with it (P1); without it a "Hooks need
+  review" dialog holds every hook. It also runs a repository's own `.codex` hooks (P2), so a
+  session in a repository with its own `.codex` starts **without** it (D4): Codex shows its trust
+  dialog there, and main logs why. Status from hooks is missing until the user trusts them.
+- **No `--ignore-user-config`** (D2): the user's `config.toml` applies, its model, MCP servers and
+  hooks included, and every `-c` above is added beside it, not over it (P5), as `--settings` merges
+  over Claude's own settings.
+- Under subscription auth the line starts `unset OPENAI_API_KEY CODEX_API_KEY;` as Claude's does
+  (HIVE-79), and `stripEnv` is headless's.
+
+`capabilities.conversationId: 'first-hook'`: codex picks the conversation id, so the core mints
+none and records the first hook's `session_id` into the history and `transcripts`; a later
+different one (`/new`) replaces it, and a fresh restart clears it until its own first hook.
+`record` finds a conversation by its rollout, `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<id>.jsonl`
+(P6), whatever the cwd, newest day first; `titleOrigin` is `'unknown'`, and `nameFromTitle` strips
+the title's spinner frame, `[ ! ] Action Required | ` lead and trailing ` | <dir>` (P7). `prepare`
+writes nothing: everything is on the argv. `promptMarker` still refuses (D1, the follow-up). The
+renderer's input profile makes Shift+Enter type Ctrl+J, Codex's newline (P7). The binary is
+`codex` on `PATH` until HIVE-332 (D7). `pnpm test:session:codex` holds all of it against the binary.
+
+Interactive: HIVE-279 (sessions; skills and markers are its follow-up). Meters: HIVE-334. Agent-run plans: HIVE-358. Containers: refused.
 
 ## Copilot (headless, HIVE-343)
 

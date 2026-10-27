@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -65,6 +66,7 @@ import { ticketKeysFromBranch } from '../hooks/ticket-intent';
 import { createStatusTracker } from '../hooks/tracker';
 import { createPtyIpc, type PtyIpc, type ResumeResult } from '../ipc/pty';
 import type { SurfaceId } from '../ipc/surfaces';
+import type { StdioServerSpec } from '../mcp/agent-config';
 import { createPlans, type Plans } from '../plans';
 import type { PtyHostSupervisor } from '../pty-host/supervisor';
 import type { SkillsRuntime } from '../skills';
@@ -246,6 +248,12 @@ export interface SessionsOptions {
    * `backgroundWork` is {@link HookAgentEvent.backgroundWork}, forwarded as is.
    */
   onAgentTurnEnded?: (name: string, sessionUuid?: string, backgroundWork?: boolean) => void;
+  /**
+   * The stdio hive MCP server, for a session whose CLI takes it on its argv (Codex, HIVE-279):
+   * `mcp.hiveServerSpec()`, the getter agent wakes use. `null` before the host script is written,
+   * and then the session starts without the ledger tools rather than not at all.
+   */
+  hiveServer?: () => StdioServerSpec | null;
 }
 
 interface OpenRequest {
@@ -543,13 +551,16 @@ const CLI_LABELS: Record<HarnessId, string> = {
 };
 
 /**
- * PR A carries the CLI end to end; only Claude can be launched until HIVE-279's second PR lands
- * the Codex adapter's interactive half. A thrown refusal names the reason, where a pty that never
- * started would not.
+ * What a session cannot run on yet (HIVE-279): Copilot has no interactive half (HIVE-280), and a
+ * Codex session in a container has no hive server there (D7). A thrown refusal names the reason,
+ * where a pty that never started would not.
  */
-function refuseUnlaunchable(harness: HarnessId): void {
-  if (harness !== 'claude-code') {
-    throw new Error(`${CLI_LABELS[harness]} sessions are not available yet (HIVE-279).`);
+function refuseUnlaunchable(harness: HarnessId, inContainer: boolean): void {
+  if (harness === 'copilot') {
+    throw new Error(`${CLI_LABELS[harness]} sessions are not available yet (HIVE-280).`);
+  }
+  if (harness !== 'claude-code' && inContainer) {
+    throw new Error(`${CLI_LABELS[harness]} sessions cannot run in a container yet.`);
   }
 }
 
@@ -585,6 +596,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     onPrLookup,
     onJira,
     onAgentTurnEnded,
+    hiveServer,
   } = options;
 
   /** Every session's plan (HIVE-179). Main owns the rules; the renderer mirrors them. */
@@ -842,6 +854,8 @@ export function createSessions(options: SessionsOptions): Sessions {
    * build that has none.
    */
   const transcripts = new Map<string, { cwd: string; sessionUuid: string }>();
+  /** A first-hook session's cwd before its first hook names the conversation (HIVE-279). */
+  const unnamedCwds = new Map<string, string>();
 
   /**
    * The Files tree's root for a session: its proved worktree, else its
@@ -1176,7 +1190,20 @@ export function createSessions(options: SessionsOptions): Sessions {
        */
       if (event.sessionUuid !== undefined) {
         const transcript = transcripts.get(event.entityId);
-        if (transcript !== undefined && transcript.sessionUuid !== event.sessionUuid) {
+        const unnamedCwd = unnamedCwds.get(event.entityId);
+        if (adapterOf(event.entityId).capabilities.conversationId === 'first-hook') {
+          /*
+            The CLI named its conversation (HIVE-279): the first hook's id is the resume id, and a
+            later different one (a `/new`) is the conversation a resume should open now.
+          */
+          const cwd = transcript?.cwd ?? unnamedCwd;
+          if (cwd !== undefined && transcript?.sessionUuid !== event.sessionUuid) {
+            transcripts.set(event.entityId, { cwd, sessionUuid: event.sessionUuid });
+            unnamedCwds.delete(event.entityId);
+            titleOrigins.delete(event.entityId);
+            history?.record(event.entityId, { sessionUuid: event.sessionUuid });
+          }
+        } else if (transcript !== undefined && transcript.sessionUuid !== event.sessionUuid) {
           transcripts.set(event.entityId, {
             cwd: transcript.cwd,
             sessionUuid: event.sessionUuid,
@@ -1873,6 +1900,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       titles.
     */
     transcripts.delete(entityId);
+    unnamedCwds.delete(entityId);
     titleOrigins.delete(entityId);
     /*
       Per-generation for the same reason (HIVE-113). A restart reuses the entity
@@ -2001,6 +2029,13 @@ export function createSessions(options: SessionsOptions): Sessions {
     for (const resolve of waiters) resolve();
   }
 
+  /** Whether a project's sessions run in a container; `false` for one `spawn` will refuse anyway. */
+  function inContainer(projectId: string): boolean {
+    const snapshot = config();
+    const project = snapshot.projects.find((entry) => entry.id === projectId);
+    return project !== undefined && effectiveRuntime(snapshot, project).container !== undefined;
+  }
+
   /**
    * Kill, **wait for the exit**, then spawn. An ordering, not a set.
    *
@@ -2019,11 +2054,16 @@ export function createSessions(options: SessionsOptions): Sessions {
     forgetFinish(request.entityId);
     /*
       The CLI the session runs, captured before the kill (HIVE-279): `settleExit` drops the entity
-      from `agentSessions`, and a restart that does not name a CLI keeps the one it had.
+      from `agentSessions`, and a restart that does not name a CLI keeps the one it had. A session
+      that already exited is gone from that map, so its history record answers instead: without it
+      an exited Codex session would restart as Claude.
     */
-    const harness = request.harness ?? agentSessions.get(request.entityId);
+    const harness =
+      request.harness ??
+      agentSessions.get(request.entityId) ??
+      history?.all().find((record) => record.id === request.entityId)?.harness;
     // Before the kill too: a restart refused after it would leave the row dead.
-    if (harness !== undefined) refuseUnlaunchable(harness);
+    if (harness !== undefined) refuseUnlaunchable(harness, inContainer(request.projectId));
 
     const sessionId = registry.sessionFor(request.entityId);
 
@@ -2220,12 +2260,16 @@ export function createSessions(options: SessionsOptions): Sessions {
   /** Refuse with a message the user can act on, never a generic failure. */
   function spawn(request: OpenRequest): void {
     const harness = request.harness ?? 'claude-code';
-    // Refused first, before anything is registered or recorded: see `refuseUnlaunchable`.
-    refuseUnlaunchable(harness);
-
     const snapshot = config();
 
     const project = requireMappedProject(snapshot, request.projectId);
+    /*
+      Per-project overrides win over the top-level values (story 104); see the comment where
+      `runtime` is read below. Resolved here because the refusal needs its container.
+    */
+    const runtime = effectiveRuntime(snapshot, project);
+    // Refused first, before anything is registered or recorded: see `refuseUnlaunchable`.
+    refuseUnlaunchable(harness, runtime.container !== undefined);
 
     /**
      * A new generation starts with no status history.
@@ -2259,8 +2303,6 @@ export function createSessions(options: SessionsOptions): Sessions {
      * that computed its own answer would eventually reassure the user about an
      * environment no session runs in.
      */
-    const runtime = effectiveRuntime(snapshot, project);
-
     /*
       The hook settings file, resolved by `prepareSession` (`ipc/index.ts`)
       after its writes and carried on the request (HIVE-235), so the path this
@@ -2455,7 +2497,25 @@ export function createSessions(options: SessionsOptions): Sessions {
         ? history?.resumable(request.entityId)
         : undefined;
     const resume = resumeUuid !== undefined;
-    const sessionUuid = resumeUuid ?? newSessionUuid();
+    /*
+      A CLI that picks its own id (Codex, HIVE-279) gets none: its first hook reports it, and the
+      hook handler records it as the resume id. `undefined` until then.
+    */
+    const sessionUuid =
+      resumeUuid ?? (adapter.capabilities.conversationId === 'argv' ? newSessionUuid() : undefined);
+    /*
+      D4 (HIVE-279): `--dangerously-bypass-hook-trust` is what makes Codex's `-c` hooks fire, and it
+      also runs a repository's own `.codex` hooks (tests/fixtures/codex/interactive-0.164/FINDINGS.md
+      P2). So a repository with its own `.codex` starts without it, and Codex asks there.
+    */
+    const ownCodexConfig = harness === 'codex' && existsSync(join(project.path, '.codex'));
+    if (ownCodexConfig) {
+      console.warn(
+        `[hive] ${request.projectId}: this repository has its own .codex config, so its hooks are ` +
+          'not trusted on your behalf; status from Codex hooks may be missing until you trust them in Codex',
+      );
+    }
+    const hive = harness === 'codex' ? (hiveServer?.() ?? null) : null;
     /**
      * `sessionCommand` wraps the configured binary so a clean `/exit` takes the
      * login shell with it and the session settles to `done`. See its own
@@ -2469,7 +2529,8 @@ export function createSessions(options: SessionsOptions): Sessions {
      * Opus and said so on the meta bar.
      */
     const plan = adapter.launch({
-      command: runtime.claudeCommand,
+      // `codex` on PATH until HIVE-332 (D7); Claude's is the configured `claudeCommand`.
+      command: harness === 'claude-code' ? runtime.claudeCommand : harness,
       ...(request.model === undefined ? {} : { model: request.model }),
       ...(request.effort === undefined ? {} : { effort: request.effort }),
       /**
@@ -2528,8 +2589,10 @@ export function createSessions(options: SessionsOptions): Sessions {
        * a flag that would cost it the inference.
        */
       ...(request.name === undefined ? {} : { name: request.name }),
-      sessionUuid,
+      ...(sessionUuid === undefined ? {} : { sessionUuid }),
       resume,
+      ...(hive === null ? {} : { hiveServer: hive }),
+      ...(harness === 'codex' ? { bypassHookTrust: !ownCodexConfig } : {}),
       /*
         One file for every session since HIVE-82: nothing in it varies by
         theme any more, because Claude's is pinned to `dark-ansi` and the
@@ -2636,7 +2699,14 @@ export function createSessions(options: SessionsOptions): Sessions {
      * conversation's transcript would answer about a file that has stopped
      * growing. The stale origin cache goes with it, for the same reason.
      */
-    transcripts.set(request.entityId, { cwd: project.path, sessionUuid });
+    if (sessionUuid === undefined) {
+      transcripts.delete(request.entityId);
+      // Where the first hook's conversation lives, until that hook names it (HIVE-279).
+      unnamedCwds.set(request.entityId, project.path);
+    } else {
+      transcripts.set(request.entityId, { cwd: project.path, sessionUuid });
+      unnamedCwds.delete(request.entityId);
+    }
     titleOrigins.delete(request.entityId);
 
     /**
@@ -2655,6 +2725,11 @@ export function createSessions(options: SessionsOptions): Sessions {
         // A resumed row keeps the task it was opened with; see `resume` below.
         ...(resume ? {} : { task: request.task ?? '' }),
         status: 'working',
+        /*
+          Written even when `undefined` (HIVE-279): a fresh first-hook generation must not inherit
+          the previous generation's id from a restart's kept record, or a resume before its first
+          hook (a repository whose hooks Codex was never told to trust, D4) reopens the old one.
+        */
         sessionUuid,
         ...(request.name === undefined ? {} : { name: request.name }),
         ...(request.model === undefined ? {} : { model: request.model }),

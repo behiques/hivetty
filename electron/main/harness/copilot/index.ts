@@ -42,6 +42,7 @@ export const copilotAdapter: HarnessAdapter = {
     enforcesBudget: false,
     reportsMcpStatus: false,
     agentMcp: [],
+    conversationId: 'argv',
   },
   launch: interactive,
   prepare: {

@@ -11,8 +11,10 @@ import type { HookInput, HookReading } from '../port';
  * read as one, ids `"1".."n"` by position. `explanation` has nowhere to go on a plan task.
  *
  * Session lane, main thread, whole bodies only, as Claude's plan ops are: a subagent's call carries
- * `agent_id` under its parent's `session_id`. Interactive Codex is HIVE-279's, and an agent run has
- * no plan for any CLI yet, so nothing reaches this today but a test.
+ * `agent_id` under its parent's `session_id`. An interactive session sends it, among every other
+ * tool's: `launch.ts` hooks `PostToolUse` with `matcher="*"` (HIVE-279), so a tool ending clears
+ * its permission block, and only `update_plan` is read for a plan here. An agent run has no plan
+ * for any CLI yet.
  */
 export function readCodexHook(input: HookInput): HookReading {
   const reading = claudeCodeAdapter.readHook(input);
