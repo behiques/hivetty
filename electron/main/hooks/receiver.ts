@@ -86,7 +86,7 @@ import { PERMISSION_DENY_MESSAGE } from '@shared/permission-rules';
 import type { PlanUpdate } from '@shared/plan-contract';
 import { sessionNameFromPrompt } from '@shared/session-contract';
 
-import type { FenceCall, HarnessAdapter, HookLane } from '../harness/port';
+import type { HarnessAdapter, HookLane, PermissionFence } from '../harness/port';
 import { sessionAdapter, type HarnessRegistry } from '../harness/registry';
 import { entryContext } from '../ledger/context';
 
@@ -307,11 +307,12 @@ export interface ReceiverOptions {
    */
   harnesses?: HarnessRegistry;
   /**
-   * A hook-based fence's translation into Claude's vocabulary (HIVE-342), so `POST /fence` answers
-   * through `decide` and `approve` and never a matcher of its own. Without it a call is checked as
-   * it came.
+   * The fence of the CLI that sent this hook; `undefined` names no CLI (a header-less Codex hook).
+   * Its translation into Claude's vocabulary (HIVE-342) keeps `POST /fence` answering through
+   * `decide` and `approve` and never a matcher of its own; its `read` and `reply` are the CLI's
+   * own body and answer (HIVE-343). Without it a call is checked as it came, in Claude's shape.
    */
-  fenceTranslate?: (tool: string, input: Record<string, unknown>, cwd: string) => FenceCall[];
+  fenceFor?: (harness: string | undefined) => PermissionFence | null;
   /**
    * A hook event from an agent's headless turn (HIVE-115).
    *
@@ -568,7 +569,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     knowsSession,
     knowsAgent,
     harnesses,
-    fenceTranslate,
+    fenceFor,
     onAgentEvent,
     port = 0,
     host = '127.0.0.1',
@@ -1327,10 +1328,16 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     const caller = headers[HOOK_HEADER_SESSION] as string;
     if (knowsSession(caller) || !knowsAgent(caller)) return 403;
 
+    const harness = headers[HOOK_HEADER_HARNESS];
+    const fence = fenceFor?.(typeof harness === 'string' ? harness : undefined) ?? null;
+    // A header naming a CLI with no fence, or not one CLI: nothing here can read or answer it.
+    if (harness !== undefined && fence === null) return 400;
+    const answer = (reason?: string) => fence?.reply?.(reason) ?? fenceReply(reason);
+
     if (truncated) {
       return {
         status: 200,
-        json: fenceReply(
+        json: answer(
           `This call is over ${String(FENCE_MAX_BODY_BYTES)} bytes, too large for HiveTTY to check, so it was not run. Make it smaller.`,
         ),
       };
@@ -1344,28 +1351,36 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     }
     const record = (value: unknown): value is Record<string, unknown> =>
       typeof value === 'object' && value !== null && !Array.isArray(value);
-    if (!record(payload) || typeof payload['tool_name'] !== 'string') {
-      return { status: 400, json: { reason: 'body must be a PreToolUse payload with a tool_name' } };
+    if (!record(payload)) return { status: 400, json: { reason: 'body must be a JSON object' } };
+    const call = fence?.read
+      ? fence.read(payload)
+      : typeof payload['tool_name'] === 'string'
+        ? {
+            tool: payload['tool_name'],
+            input: record(payload['tool_input']) ? payload['tool_input'] : {},
+            cwd: typeof payload['cwd'] === 'string' ? payload['cwd'] : '',
+          }
+        : null;
+    if (call === null) {
+      return { status: 400, json: { reason: 'body must be a PreToolUse payload that names its tool' } };
     }
-    const tool = payload['tool_name'];
-    const input = record(payload['tool_input']) ? payload['tool_input'] : {};
-    const cwd = typeof payload['cwd'] === 'string' ? payload['cwd'] : '';
+    const { tool, input, cwd } = call;
 
     const handlers = handlersFor(headers);
     // An empty translation would allow without asking anything: fall back to the raw call.
-    const translated = fenceTranslate?.(tool, input, cwd) ?? [];
-    for (const call of translated.length > 0 ? translated : [{ tool, input }]) {
-      const result = await handlers.callTool('approve', { tool_name: call.tool, input: call.input });
+    const translated = fence?.translate?.(tool, input, cwd) ?? [];
+    for (const step of translated.length > 0 ? translated : [{ tool, input }]) {
+      const result = await handlers.callTool('approve', { tool_name: step.tool, input: step.input });
       const first = result.content[0];
       const verdict = JSON.parse(first?.type === 'text' ? first.text : '{}') as {
         behavior?: string;
         message?: string;
       };
       if (verdict.behavior !== 'allow') {
-        return { status: 200, json: fenceReply(verdict.message ?? PERMISSION_DENY_MESSAGE) };
+        return { status: 200, json: answer(verdict.message ?? PERMISSION_DENY_MESSAGE) };
       }
     }
-    return { status: 200, json: fenceReply() };
+    return { status: 200, json: answer() };
   }
 
   /**

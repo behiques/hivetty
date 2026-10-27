@@ -58,6 +58,11 @@ import {
   type SessionMetrics,
 } from '../../../../electron/shared/metrics-contract';
 import { translateCodexCall } from '../../../../electron/main/harness/codex/fence';
+import {
+  copilotFenceReply,
+  readCopilotFence,
+  translateCopilotCall,
+} from '../../../../electron/main/harness/copilot/fence';
 import { createLedger, type Ledger } from '../../../../electron/main/ledger';
 import type { HookContextReply } from '../../../../electron/main/harness/claude-code/hook-vocabulary';
 import { createReceiver, type Receiver } from '../../../../electron/main/hooks/receiver';
@@ -5464,6 +5469,12 @@ describe('the fence route (HIVE-342)', () => {
   const PTY = 'sess-pty';
   const RUN = 'run-fence';
   let translate: typeof translateCodexCall = translateCodexCall;
+  const copilotFence = {
+    express: () => ({ ok: true }) as const,
+    translate: translateCopilotCall,
+    read: readCopilotFence,
+    reply: copilotFenceReply,
+  };
 
   beforeEach(async () => {
     posted = [];
@@ -5484,7 +5495,13 @@ describe('the fence route (HIVE-342)', () => {
       onAgentsList: async () => ({ agents: [] }) as AgentsDirectory,
       knowsSession: (id) => id === PTY,
       knowsAgent: (id) => id === AGENT,
-      fenceTranslate: (tool, input, cwd) => translate(tool, input, cwd),
+      // Codex's fence answers a header-less hook; Copilot's is built by hand until its adapter fences.
+      fenceFor: (harness) => {
+        if (harness === undefined) {
+          return { express: () => ({ ok: true }), translate: (tool, input, cwd) => translate(tool, input, cwd) };
+        }
+        return harness === 'copilot' ? copilotFence : null;
+      },
       onLedgerRead: (_caller, query) => ledger.read(query),
       onLedgerPost: (caller, request) => {
         if (failPosts) return { ok: false as const, status: 503, reason: 'the ledger is down' };
@@ -5624,5 +5641,59 @@ describe('the fence route (HIVE-342)', () => {
 
   it('is bounded by its own cap, which is larger than a hook body', () => {
     expect(FENCE_MAX_BODY_BYTES).toBeGreaterThan(HOOK_MAX_BODY_BYTES);
+  });
+
+  describe('a copilot preToolUse by its harness header (HIVE-343)', () => {
+    const COPILOT = { [HOOK_HEADER_HARNESS]: 'copilot' };
+    const bash = (): Record<string, unknown> =>
+      JSON.parse(
+        readFileSync(join(__dirname, '../../../fixtures/copilot/hooks-1.0.104/pre-tool-use-bash.json'), 'utf8'),
+      ) as Record<string, unknown>;
+
+    it('lets a granted call run with an empty reply and posts nothing', async () => {
+      receiver.grants.set(RUN, AGENT, ['Bash(echo *)']);
+      const response = await fence(bash(), AGENT, COPILOT);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({});
+      expect(posted).toEqual([]);
+    });
+
+    it("denies an ungranted call in copilot's shape and posts exactly one permission ask", async () => {
+      const response = await fence(bash(), AGENT, COPILOT);
+
+      expect(await response.json()).toEqual({
+        permissionDecision: 'deny',
+        permissionDecisionReason: PERMISSION_DENY_MESSAGE,
+      });
+      expect(posted).toHaveLength(1);
+      expect(posted[0]!.request.meta).toMatchObject({ kind: 'permission', tool: 'Bash', run: RUN });
+    });
+
+    it('refuses a body that names no toolName', async () => {
+      const { toolName: _dropped, ...body } = bash();
+
+      expect((await fence(body, AGENT, COPILOT)).status).toBe(400);
+      expect(posted).toEqual([]);
+    });
+
+    it('refuses a harness with no fence', async () => {
+      expect((await fence(bash(), AGENT, { [HOOK_HEADER_HARNESS]: 'gemini' })).status).toBe(400);
+      expect(posted).toEqual([]);
+    });
+
+    it("denies a body over the cap in copilot's shape, saying why", async () => {
+      receiver.grants.set(RUN, AGENT, ['*']);
+      const response = await fence(
+        { ...bash(), toolArgs: { command: `echo ${'x'.repeat(FENCE_MAX_BODY_BYTES)}` } },
+        AGENT,
+        COPILOT,
+      );
+      const body = (await response.json()) as ReturnType<typeof copilotFenceReply>;
+
+      expect(body['permissionDecision']).toBe('deny');
+      expect(body['permissionDecisionReason']).toMatch(/too large for HiveTTY to check/);
+      expect(posted).toEqual([]);
+    });
   });
 });
