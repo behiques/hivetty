@@ -37,14 +37,11 @@ export interface HarnessRegistry {
  * and `harness/**` may not import `sessions/**`, so the fact comes in here.
  */
 export interface HarnessRegistryDeps {
-  /** True for an agent session; false for a plain terminal or a command. */
-  isAgentSession(entityId: string): boolean;
+  /** The CLI an agent session was opened with; `undefined` for a plain terminal or a command. */
+  sessionHarness(entityId: string): HarnessId | undefined;
 }
 
-export function createHarnessRegistry({ isAgentSession }: HarnessRegistryDeps): HarnessRegistry {
-  return {
-    adapterFor,
-    // Phase 1: every agent session is Claude Code.
-    harnessOf: (entityId) => (isAgentSession(entityId) ? 'claude-code' : undefined),
-  };
+export function createHarnessRegistry({ sessionHarness }: HarnessRegistryDeps): HarnessRegistry {
+  // The sessions closure holds each session's CLI from its spawn (HIVE-279); nothing is assumed here.
+  return { adapterFor, harnessOf: sessionHarness };
 }
