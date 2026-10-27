@@ -426,6 +426,9 @@ export function wakeCommand(input: WakeInput): WakeCommand {
 
   // What the harness says must not reach the CLI (HIVE-79's subscription auth).
   for (const key of plan.stripEnv) delete merged[key];
+  for (const key of Object.keys(merged)) {
+    if (plan.stripPrefixes?.some((prefix) => key.startsWith(prefix)) === true) delete merged[key];
+  }
 
   // After the strip on purpose: the strip removes the inherited tokens, and this one is ours.
   for (const [key, value] of Object.entries(env.secrets ?? {})) merged[key] = value;

@@ -38,30 +38,22 @@ export const COPILOT_AUTH_ENV_KEYS = ['GH_TOKEN', 'GITHUB_TOKEN', 'COPILOT_ALLOW
 
 /**
  * Change who pays, which model or provider answers, or what is approved (`copilot help environment`
- * at 1.0.104, plus `COPILOT_ASSISTED_APPROVAL` and `GH_ENTERPRISE_TOKEN`), so they never reach a run.
+ * at 1.0.104, plus `COPILOT_ASSISTED_APPROVAL`, `GH_ENTERPRISE_TOKEN` and `GITHUB_ENTERPRISE_TOKEN`;
+ * every `COPILOT_PROVIDER_` key goes by prefix (HIVE-357)), so they never reach a run.
  * `GH_HOST` and `COPILOT_GH_HOST` stay: a GitHub Enterprise user needs them for the stored token to
  * authenticate.
  */
 export const COPILOT_ROUTING_ENV_KEYS = [
-  'COPILOT_PROVIDER_BASE_URL',
-  'COPILOT_PROVIDER_TYPE',
-  'COPILOT_PROVIDER_API_KEY',
-  'COPILOT_PROVIDER_API_KEY_COMMAND',
-  'COPILOT_PROVIDER_BEARER_TOKEN',
-  'COPILOT_PROVIDER_WIRE_API',
-  'COPILOT_PROVIDER_TRANSPORT',
-  'COPILOT_PROVIDER_AZURE_API_VERSION',
-  'COPILOT_PROVIDER_MODEL_ID',
-  'COPILOT_PROVIDER_WIRE_MODEL',
-  'COPILOT_PROVIDER_MAX_PROMPT_TOKENS',
-  'COPILOT_PROVIDER_MAX_OUTPUT_TOKENS',
-  'COPILOT_PROVIDER_HEADERS',
   'COPILOT_OFFLINE',
   'COPILOT_MODEL',
   'COPILOT_AUTO_TIER',
   'COPILOT_ASSISTED_APPROVAL',
   'GH_ENTERPRISE_TOKEN',
+  'GITHUB_ENTERPRISE_TOKEN',
 ] as const;
+
+/** Every BYOK provider key, by prefix: a key a later Copilot adds is stripped too (HIVE-357). */
+export const COPILOT_ROUTING_PREFIXES = ['COPILOT_PROVIDER_'] as const;
 
 export const COPILOT_TOKEN_ENV = 'COPILOT_GITHUB_TOKEN';
 
@@ -166,6 +158,7 @@ export function launchCopilotHeadless(spec: HeadlessSpec): HeadlessPlan {
     ],
     addEnv: { COPILOT_HOME: spec.stateDir },
     stripEnv: [...COPILOT_SESSION_ENV_KEYS, ...COPILOT_AUTH_ENV_KEYS, ...COPILOT_ROUTING_ENV_KEYS],
+    stripPrefixes: COPILOT_ROUTING_PREFIXES,
     defaultContainerCommand: 'copilot',
     stopPattern: id,
     namesConversation: true,

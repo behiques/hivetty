@@ -389,6 +389,8 @@ export interface HeadlessPlan {
   addEnv: Record<string, string>;
   /** Env the harness removes from a host run's environment. A container's is built from scratch. */
   stripEnv: readonly string[];
+  /** Prefixes the harness removes, for a family whose next member it cannot name yet (HIVE-357). */
+  stripPrefixes?: readonly string[];
   /** The binary inside a container whose block names none. */
   defaultContainerCommand: string;
   /** What `pkill -f` matches inside a container to stop this run. */
