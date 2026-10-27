@@ -64,7 +64,39 @@ describe('translateCopilotCall', () => {
     expect(decide('Edit', edit[0]!.input, ['Edit(/w/**)'])).toEqual({ behavior: 'ask' });
   });
 
-  it('passes an unknown tool through raw, which decide denies', () => {
+  it('passes a relative path through raw when the cwd is not absolute', () => {
+    for (const [tool, claude] of [
+      ['create', 'Write'],
+      ['edit', 'Edit'],
+      ['view', 'Read'],
+    ] as const) {
+      for (const cwd of ['', 'w', './w']) {
+        const calls = translateCopilotCall(tool, { path: 'tmp/x' }, cwd);
+        expect(calls).toEqual([{ tool, input: { path: 'tmp/x' } }]);
+        expect(decide(calls[0]!.tool, calls[0]!.input, [`${claude}(/tmp/**)`]).behavior).not.toBe('allow');
+      }
+    }
+    // An absolute path needs no cwd.
+    expect(translateCopilotCall('create', { path: '/tmp/x' }, '')).toEqual([
+      { tool: 'Write', input: { file_path: '/tmp/x' } },
+    ]);
+  });
+
+  it('reads an empty path as no path', () => {
+    expect(translateCopilotCall('view', { path: '' }, '/w')).toEqual([{ tool: 'view', input: { path: '' } }]);
+    expect(translateCopilotCall('edit', { path: '', file_path: 'a' }, '/w')).toEqual([
+      { tool: 'Edit', input: { file_path: '/w/a' } },
+    ]);
+  });
+
+  it('names only a hive tool as mcp__hive__, never another server whose name starts hive-', () => {
+    const calls = translateCopilotCall('hive-extra-foo', {}, '/w');
+    expect(calls).toEqual([{ tool: 'hive-extra-foo', input: {} }]);
+    expect(decide(calls[0]!.tool, calls[0]!.input, ['mcp__hive__*']).behavior).not.toBe('allow');
+    expect(translateCopilotCall('hive-', {}, '/w')).toEqual([{ tool: 'hive-', input: {} }]);
+  });
+
+  it('passes an unknown tool through raw, which decide asks about', () => {
     expect(translateCopilotCall('mystery', { a: 1 }, '/w')).toEqual([{ tool: 'mystery', input: { a: 1 } }]);
     // `*` grants every name by definition; any narrower grant set leaves an unknown name to be asked.
     expect(decide('mystery', {}, ['Read', 'Bash', 'Write(/w/**)', 'mcp__hive__*']).behavior).not.toBe(
@@ -127,7 +159,11 @@ const INSTANCES: Record<string, readonly string[]> = {
   '<malformed>': ['', 'Bash(', 'literal:', 'literal:Bash'],
 };
 
-/** Each recorded Copilot call, beside the Claude call it names (written out, not derived). */
+/**
+ * Each recorded Copilot call, beside the Claude call it names (written out, not derived). Not what
+ * the translator emits, on purpose: `probe-envcheck` passing raw must never be allowed where
+ * `mcp__probe__envcheck` is not, and `Task`'s input is `{}` because `decide` reads none of it.
+ */
 const NAMED: readonly { copilot: FenceCall & { cwd: string }; claude: FenceCall }[] = [
   ...(
     [

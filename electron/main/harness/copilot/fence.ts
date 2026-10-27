@@ -2,9 +2,20 @@ import { isAbsolute } from 'node:path';
 
 import type { FenceCall } from '../port';
 
-/** A relative path joined to the cwd and never normalised: `decide` refuses a `..` rather than resolving it. */
-const at = (path: string, cwd: string) => (isAbsolute(path) ? path : `${cwd.replace(/\/+$/, '')}/${path}`);
-const str = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
+/**
+ * A relative path joined to the cwd and never normalised: `decide` refuses a `..` rather than
+ * resolving it. `undefined` when the path is relative and the cwd is not absolute, as Codex's
+ * `patchTargets` does: a path joined to `''` would read as rooted somewhere it does not land.
+ */
+const at = (path: string, cwd: string): string | undefined => {
+  if (isAbsolute(path)) return path;
+  return isAbsolute(cwd) ? `${cwd.replace(/\/+$/, '')}/${path}` : undefined;
+};
+/** An empty string is no value, as `decide` reads one. */
+const str = (value: unknown): string | undefined =>
+  typeof value === 'string' && value !== '' ? value : undefined;
+/** `hive-<tool>`: a hive tool name holds no `-`, so `hive-extra-foo` is another server's. */
+const HIVE_TOOL = /^hive-([A-Za-z0-9_]+)$/;
 
 /** Copilot's path tools, and the Claude tool each one is (probed at 1.0.104). */
 const PATH_TOOLS: Record<string, string> = { create: 'Write', edit: 'Edit', view: 'Read' };
@@ -19,19 +30,21 @@ export function translateCopilotCall(
   input: Record<string, unknown>,
   cwd: string,
 ): FenceCall[] {
-  const path = str(input['path']) ?? str(input['file_path']);
+  const raw = str(input['path']) ?? str(input['file_path']);
+  const path = raw === undefined ? undefined : at(raw, cwd);
   const pathTool = Object.hasOwn(PATH_TOOLS, tool) ? PATH_TOOLS[tool] : undefined;
   const command = str(input['command']);
   const url = str(input['url']);
   if (tool === 'bash' && command !== undefined) return [{ tool: 'Bash', input: { command } }];
   if (pathTool !== undefined && path !== undefined) {
-    return [{ tool: pathTool, input: { file_path: at(path, cwd) } }];
+    return [{ tool: pathTool, input: { file_path: path } }];
   }
   if (tool === 'glob') return [{ tool: 'Glob', input }];
   if (tool === 'grep') return [{ tool: 'Grep', input }];
   if (tool === 'web_fetch' && url !== undefined) return [{ tool: 'WebFetch', input: { url } }];
   if (tool === 'task') return [{ tool: 'Task', input }];
-  if (tool.startsWith('hive-')) return [{ tool: `mcp__hive__${tool.slice('hive-'.length)}`, input }];
+  const hive = HIVE_TOOL.exec(tool);
+  if (hive !== null) return [{ tool: `mcp__hive__${hive[1]!}`, input }];
   return [{ tool, input }];
 }
 
