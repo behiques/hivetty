@@ -1944,8 +1944,8 @@ describe('the history', () => {
 
   it('refuses a CLI that has no interactive sessions yet, before spawning anything', () => {
     const written: Written[] = [];
-    expect(() => withHistory(written).open({ ...OPEN, harness: 'codex' })).toThrow(
-      /Codex sessions are not available yet/,
+    expect(() => withHistory(written).open({ ...OPEN, harness: 'copilot' })).toThrow(
+      /Copilot sessions are not available yet \(HIVE-280\)/,
     );
     expect(spawned).toHaveLength(0);
     // Refused before the history heard of it: no row claims a session that never started.
@@ -1971,8 +1971,8 @@ describe('the history', () => {
     const sessions = withHistory([]);
     sessions.open(OPEN);
 
-    await expect(sessions.restart({ ...OPEN, harness: 'codex' })).rejects.toThrow(
-      /Codex sessions are not available yet/,
+    await expect(sessions.restart({ ...OPEN, harness: 'copilot' })).rejects.toThrow(
+      /Copilot sessions are not available yet/,
     );
     expect(killed).toEqual([]);
     expect(spawned).toHaveLength(1);
@@ -3928,5 +3928,200 @@ describe('a restored plan', () => {
       rmSync(dir, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+/**
+ * Codex sessions (HIVE-279 PR B): the core types `codex`, records the conversation id its first
+ * hook reports (codex picks it; nothing on the argv can), and resumes by it.
+ */
+describe('codex sessions (HIVE-279)', () => {
+  interface Written {
+    id: string;
+    patch: Record<string, unknown>;
+  }
+
+  const CODEX_ID = '0199a2b3-4c5d-7e6f-8a9b-0c1d2e3f4a5b';
+  const HIVE = { command: '/app/electron', args: ['/app/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } };
+  const codexOpen = { ...OPEN, harness: 'codex' as const, model: 'gpt-6-luna' };
+
+  let onEvent: ((event: HookStatusEvent) => void) | undefined;
+
+  const build = (
+    written: Written[],
+    over: {
+      resumable?: Record<string, string>;
+      hiveServer?: () => typeof HIVE | null;
+      config?: ConfigSnapshot;
+    } = {},
+  ) =>
+    createSessions({
+      supervisor,
+      send: (channel, payload) => sent.push({ channel, payload: payload as Record<string, unknown> }),
+      config: () => over.config ?? CONFIG,
+      userDataPath: USER_DATA_PATH,
+      newSessionUuid: () => TEST_UUID,
+      ...(over.hiveServer === undefined ? {} : { hiveServer: over.hiveServer }),
+      hooks: {
+        settingsPathFor: () => undefined,
+        envFor: () => ({}),
+        start: (opts: { onEvent: (event: HookStatusEvent) => void }) => {
+          onEvent = opts.onEvent;
+          return Promise.resolve();
+        },
+        stop: () => Promise.resolve(),
+        writeContainerSession: () => Promise.resolve(null),
+      } as unknown as Parameters<typeof createSessions>[0]['hooks'],
+      history: {
+        begin: (id, patch, options) => {
+          written.push({ id, patch: { ...patch, ...(options ?? {}) } });
+        },
+        record: (id, patch) => {
+          written.push({ id, patch: { ...patch } });
+        },
+        resumable: (id) => over.resumable?.[id],
+        all: () => [],
+        flush: () => {},
+        dispose: () => {},
+      },
+    });
+
+  const patchesFor = (written: Written[], id: string) =>
+    written.filter((entry) => entry.id === id).map((entry) => entry.patch);
+
+  /** Let the shell speak and the bootstrap type its line, as the BOOT tests do. */
+  const bootTo = (sessionId: string) => {
+    emitData({ sessionId, chunk: '$ ' });
+    vi.advanceTimersByTime(8);
+    vi.advanceTimersByTime(150);
+    vi.advanceTimersByTime(SUBMIT);
+  };
+
+  const typed = () => vi.mocked(supervisor.write).mock.calls.map((call) => String(call[1]));
+
+  const hook = (sessionUuid: string) =>
+    onEvent!({ entityId: 'hero-refresh', signal: { kind: 'turn-end' }, sessionUuid } as unknown as HookStatusEvent);
+
+  let instance: Sessions | undefined;
+  afterEach(() => {
+    instance?.dispose();
+    instance = undefined;
+    onEvent = undefined;
+  });
+
+  it('types codex, not claude, into the login shell', () => {
+    instance = build([]);
+    instance.open(codexOpen);
+    bootTo(mintedFor('hero-refresh'));
+
+    expect(typed().some((line) => /^(unset [A-Z_ ]+; )?codex -m gpt-6-luna .* && exit$/.test(line))).toBe(true);
+    expect(typed().some((line) => line.includes('claude'))).toBe(false);
+  });
+
+  it('mints no conversation id; the first hook’s becomes the resume id', () => {
+    const written: Written[] = [];
+    instance = build(written);
+    instance.open(codexOpen);
+
+    expect(patchesFor(written, 'hero-refresh')[0]).not.toHaveProperty('sessionUuid');
+    expect(patchesFor(written, 'hero-refresh')[0]).toMatchObject({ harness: 'codex' });
+
+    hook(CODEX_ID);
+    const ids = () => patchesFor(written, 'hero-refresh').filter((patch) => 'sessionUuid' in patch);
+    expect(ids()).toEqual([{ sessionUuid: CODEX_ID }]);
+
+    // The same id again is not news: one record, not one per hook.
+    hook(CODEX_ID);
+    expect(ids()).toHaveLength(1);
+  });
+
+  it('resumes by the recorded id', () => {
+    instance = build([], { resumable: { 'hero-refresh': CODEX_ID } });
+    instance.open({ ...codexOpen, resume: true });
+    bootTo(mintedFor('hero-refresh'));
+
+    expect(typed().some((line) => new RegExp(`(^|; )codex resume ${CODEX_ID} `).test(line))).toBe(true);
+  });
+
+  it('restarts into codex, resuming by the id the first hook reported', async () => {
+    const written: Written[] = [];
+    instance = build(written, { resumable: { 'hero-refresh': CODEX_ID } });
+    instance.open(codexOpen);
+    hook(CODEX_ID);
+
+    const restarting = instance.restart({ ...OPEN, resume: true });
+    await Promise.resolve();
+    emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 0 });
+    vi.advanceTimersByTime(8);
+    await restarting;
+    bootTo(mintedFor('hero-refresh'));
+
+    expect(spawned).toHaveLength(2);
+    // Kept, not defaulted: a defaulted CLI would have typed claude.
+    const begun = patchesFor(written, 'hero-refresh').filter((patch) => 'harness' in patch);
+    expect(begun).toHaveLength(2);
+    expect(begun.at(-1)).toMatchObject({ harness: 'codex', resume: true });
+    expect(typed().some((line) => new RegExp(`(^|; )codex resume ${CODEX_ID} `).test(line))).toBe(true);
+  });
+
+  it('hands the launch the hive server main offers', () => {
+    instance = build([], { hiveServer: () => HIVE });
+    instance.open(codexOpen);
+    bootTo(mintedFor('hero-refresh'));
+
+    expect(typed().some((line) => line.includes('mcp_servers.hive.command'))).toBe(true);
+  });
+
+  it('bypasses hook trust where the repository has no .codex of its own (D4)', () => {
+    instance = build([]);
+    instance.open(codexOpen);
+    bootTo(mintedFor('hero-refresh'));
+
+    expect(typed().some((line) => line.includes('--dangerously-bypass-hook-trust'))).toBe(true);
+  });
+
+  it('does not bypass hook trust in a repository with its own .codex, and says why (D4)', () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'codex-repo-')));
+    mkdirSync(join(root, '.codex'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      instance = build([], {
+        config: { ...CONFIG, projects: [{ ...CONFIG.projects[0]!, path: root }] },
+      });
+      instance.open(codexOpen);
+      bootTo(mintedFor('hero-refresh'));
+
+      expect(typed().some((line) => line.startsWith('codex') || line.includes('; codex'))).toBe(true);
+      expect(typed().some((line) => line.includes('--dangerously-bypass-hook-trust'))).toBe(false);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/own \.codex config/));
+    } finally {
+      warn.mockRestore();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a codex session in a container project, before spawning anything', () => {
+    const written: Written[] = [];
+    instance = build(written, {
+      config: {
+        ...CONFIG,
+        projects: [{ ...CONFIG.projects[0]!, container: { name: 'dev' } as unknown as ResolvedContainer }],
+      },
+    });
+
+    expect(() => instance!.open(codexOpen)).toThrow(/Codex sessions cannot run in a container yet/);
+    expect(spawned).toHaveLength(0);
+    expect(patchesFor(written, 'hero-refresh')).toEqual([]);
+  });
+
+  it('leaves a Claude session’s id exactly as before', () => {
+    const written: Written[] = [];
+    instance = build(written);
+    instance.open(OPEN);
+
+    expect(patchesFor(written, 'hero-refresh')[0]).toMatchObject({ sessionUuid: TEST_UUID });
+    hook('0199a2b3-4c5d-7e6f-8a9b-999999999999');
+    // A Claude hook's id moves the transcript (`/clear`), never the history's resume id.
+    expect(written.filter((entry) => 'sessionUuid' in entry.patch)).toHaveLength(1);
   });
 });
