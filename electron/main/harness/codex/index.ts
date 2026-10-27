@@ -5,18 +5,24 @@ import { codexFence } from './fence';
 import { launchCodexHeadless } from './headless';
 import { readCodexHeadless } from './headless-reader';
 import { readCodexHook } from './hooks';
+import { launchCodexSession } from './launch';
+import { codexRecord } from './record';
 
-const NO_SESSIONS = 'codex has no interactive sessions yet (HIVE-279).';
+/*
+  A Codex session's hooks and MCP server are `-c` overrides on its argv (`./launch`); nothing is
+  written, and the shared runtimes calling `sessionAdapter()` still write Claude's (HIVE-279).
+*/
+const noSettings = (): Promise<string> => Promise.resolve('');
+const noFile = (): Promise<void> => Promise.resolve();
 
-const interactive = (): never => {
-  throw new Error(NO_SESSIONS);
+const noMarkers = (): never => {
+  throw new Error('codex sessions take no markers yet (HIVE-279 follow-up).');
 };
-const later = (): Promise<never> => Promise.reject(new Error(NO_SESSIONS));
 
 /**
- * Adapter #2, headless only (HIVE-342). The interactive half is HIVE-279's: `sessionAdapter()`
- * and `harnessOf` answer Claude, so nothing interactive reaches these refusals. `readHook` is
- * Claude's, because codex 0.164 sends Claude-shaped payloads, plus `update_plan` (`./hooks`).
+ * Adapter #2: headless (HIVE-342) and interactive (HIVE-279). `readHook` is Claude's, because
+ * codex 0.164 sends Claude-shaped payloads, plus `update_plan` (`./hooks`). HiveTTY's skills and
+ * prompt markers in a Codex session are HIVE-279's follow-up (D1).
  */
 export const codexAdapter: HarnessAdapter = {
   id: 'codex',
@@ -31,25 +37,20 @@ export const codexAdapter: HarnessAdapter = {
     agentMcp: [],
     conversationId: 'first-hook',
   },
-  launch: interactive,
+  launch: launchCodexSession,
   prepare: {
-    sessionSettings: later,
-    agentSettings: later,
-    plugin: later,
-    containerSet: later,
-    mcpConfig: later,
+    sessionSettings: noSettings,
+    agentSettings: noSettings,
+    plugin: noFile,
+    containerSet: noFile,
+    mcpConfig: noFile,
   },
   readHook: readCodexHook,
   contextReply: claudeCodeAdapter.contextReply,
-  promptMarker: interactive,
+  promptMarker: noMarkers,
   foldEdits: () => new Map(),
   meters: () => null,
-  record: {
-    transcriptPath: () => null,
-    hasTranscript: () => false,
-    titleOrigin: () => 'unknown',
-    nameFromTitle: (title) => title,
-  },
+  record: codexRecord(),
   installed: {
     skillNames: () => Promise.resolve([]),
     pluginNames: () => Promise.resolve([]),
