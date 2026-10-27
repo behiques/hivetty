@@ -32,6 +32,7 @@ import {
   HOOK_HEADER_SESSION,
   FENCE_MAX_BODY_BYTES,
   FENCE_PATH,
+  HOOK_HEADER_HARNESS,
   HOOK_HEADER_TOKEN,
   HOOK_MAX_BODY_BYTES,
   type HookAgentEvent,
@@ -60,7 +61,12 @@ import { translateCodexCall } from '../../../../electron/main/harness/codex/fenc
 import { createLedger, type Ledger } from '../../../../electron/main/ledger';
 import type { HookContextReply } from '../../../../electron/main/harness/claude-code/hook-vocabulary';
 import { createReceiver, type Receiver } from '../../../../electron/main/hooks/receiver';
-import { sessionAdapter, type HarnessRegistry } from '../../../../electron/main/harness/registry';
+import { readCopilotHook } from '../../../../electron/main/harness/copilot/hooks';
+import {
+  createHarnessRegistry,
+  sessionAdapter,
+  type HarnessRegistry,
+} from '../../../../electron/main/harness/registry';
 import type { PlanUpdate } from '../../../../electron/shared/plan-contract';
 
 /**
@@ -5337,6 +5343,107 @@ describe('hook receiver: reads through the harness registry (HIVE-236)', () => {
     expect(status).toBe(404);
     expect(meters).not.toHaveBeenCalled();
     expect(metrics).toEqual([]);
+  });
+});
+
+/**
+ * An agent-lane hook names its CLI in `x-hive-harness` when its body is not Claude's (HIVE-343).
+ * The registry here is the real one with copilot's reader in place, which `copilotAdapter` adopts
+ * when its fence goes live; until then no copilot run starts.
+ */
+describe('hook receiver: a copilot hook by its harness header (HIVE-343)', () => {
+  const AGENT = 'copilot-agent';
+  const SESSION = 'sess-01';
+  const stop = JSON.stringify({
+    event: 'agentStop',
+    payload: JSON.parse(
+      readFileSync(join(__dirname, '../../../fixtures/copilot/hooks-1.0.104/agent-stop.json'), 'utf8'),
+    ) as unknown,
+  });
+
+  let receiver: Receiver;
+  let url: string;
+  let agentEvents: HookAgentEvent[];
+  let sessionEvents: HookStatusEvent[];
+
+  beforeEach(async () => {
+    agentEvents = [];
+    sessionEvents = [];
+    const real = createHarnessRegistry({ isAgentSession: (id) => id === SESSION });
+    receiver = createReceiver({
+      knowsSession: (entityId) => entityId === SESSION,
+      knowsAgent: (entityId) => entityId === AGENT,
+      onEvent: (event) => sessionEvents.push(event),
+      onAgentEvent: (event) => agentEvents.push(event),
+      onAgentsList: () => Promise.reject(new Error('not exercised by this suite')),
+      onCleared: () => {},
+      onPlan: () => {},
+      onTicketIntent: () => {},
+      onPromptName: () => {},
+      onDone: () => {},
+      onReady: () => {},
+      onMetrics: () => {},
+      ...noLedger,
+      harnesses: {
+        harnessOf: real.harnessOf,
+        adapterFor: (id) =>
+          id === 'copilot' ? { ...real.adapterFor(id), readHook: readCopilotHook } : real.adapterFor(id),
+      },
+    });
+    url = (await receiver.start()) as string;
+  });
+
+  afterEach(async () => {
+    await receiver.stop();
+  });
+
+  const post = (entityId: string, body: string, harness?: string) =>
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [HOOK_HEADER_TOKEN]: receiver.tokenFor(entityId),
+        [HOOK_HEADER_SESSION]: entityId,
+        ...(harness === undefined ? {} : { [HOOK_HEADER_HARNESS]: harness }),
+      },
+      body,
+    });
+
+  it("reads copilot's recorded agentStop as a turn end on its session", async () => {
+    const response = await post(AGENT, stop, 'copilot');
+
+    expect(response.status).toBe(204);
+    expect(agentEvents).toEqual([
+      { entityId: AGENT, signal: { kind: 'turn-end' }, sessionUuid: '11111111-2222-4333-8444-555555555551' },
+    ]);
+    expect(sessionEvents).toEqual([]);
+  });
+
+  it("publishes nothing for the same body with no header: Claude's reader finds no hook_event_name", async () => {
+    const response = await post(AGENT, stop);
+
+    expect(response.status).toBe(204);
+    expect(agentEvents).toEqual([]);
+  });
+
+  // A refused hook still answers 204 on the wire (HIVE-138); the 400 is the refusal it logs.
+  it('refuses a harness it does not know as a 400', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const response = await post(AGENT, stop, 'gemini');
+
+    expect(response.status).toBe(204);
+    expect(warn).toHaveBeenCalledWith(`[hooks] hook from ${AGENT} refused (400); answered 204`);
+    expect(agentEvents).toEqual([]);
+    warn.mockRestore();
+  });
+
+  it('reads a session by the session path, whatever the header says: it never moves a body across lanes', async () => {
+    const response = await post(SESSION, JSON.stringify({ hook_event_name: 'Stop' }), 'copilot');
+
+    expect(response.status).toBe(204);
+    expect(sessionEvents.map((event) => event.signal)).toEqual([{ kind: 'turn-end' }]);
+    expect(agentEvents).toEqual([]);
   });
 });
 

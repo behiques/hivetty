@@ -28,9 +28,11 @@ import {
   parsePrLookup,
   parseProjectAutoMergeRequest,
 } from '@shared/guards';
+import { isHarnessId } from '@shared/harness-contract';
 import {
   FENCE_MAX_BODY_BYTES,
   FENCE_PATH,
+  HOOK_HEADER_HARNESS,
   HOOK_HEADER_RUN,
   HOOK_HEADER_RUN_TOKEN,
   HOOK_HEADER_SESSION,
@@ -1551,11 +1553,26 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * them. A session with no harness is only reachable in the window after its pty exits.
    * In phase 1 every hook setting is `sessionAdapter()`'s, so it reads that too; with a second
    * harness this becomes a refusal.
+   *
+   * An agent's hook names its CLI in {@link HOOK_HEADER_HARNESS} when its body is not Claude's
+   * (HIVE-343); a name this build does not know is `null`, a refusal. The header is read on the
+   * agent lane only, so it never moves a body across the lanes.
    */
-  function readerFor(lane: HookLane, entityId: string): HarnessAdapter {
-    if (lane === 'agent' || harnesses === undefined) return sessionAdapter();
-    const harness = harnesses.harnessOf(entityId);
-    return harness === undefined ? sessionAdapter() : harnesses.adapterFor(harness);
+  function readerFor(lane: 'session', entityId: string): HarnessAdapter;
+  function readerFor(lane: HookLane, entityId: string, harness: string | string[] | undefined): HarnessAdapter | null;
+  function readerFor(
+    lane: HookLane,
+    entityId: string,
+    harness?: string | string[],
+  ): HarnessAdapter | null {
+    if (lane === 'agent') {
+      // A hook names its CLI when its body is not Claude's (HIVE-343); none is Claude-shaped (Claude, Codex).
+      if (harness === undefined || harnesses === undefined) return sessionAdapter();
+      return typeof harness === 'string' && isHarnessId(harness) ? harnesses.adapterFor(harness) : null;
+    }
+    if (harnesses === undefined) return sessionAdapter();
+    const driving = harnesses.harnessOf(entityId);
+    return driving === undefined ? sessionAdapter() : harnesses.adapterFor(driving);
   }
 
   function handle(
@@ -1586,7 +1603,8 @@ export function createReceiver(options: ReceiverOptions): Receiver {
      * have to stay truthful.
      */
     const lane: HookLane = !knowsSession(entityId) && knowsAgent(entityId) ? 'agent' : 'session';
-    const adapter = readerFor(lane, entityId);
+    const adapter = readerFor(lane, entityId, headers[HOOK_HEADER_HARNESS]);
+    if (adapter === null) return refusedHook(400, headers);
     const reading = adapter.readHook({ lane, entityId, body, truncated });
     if (reading.malformed) return refusedHook(400, headers);
     for (const type of reading.unknownTaskTypes ?? []) noteUnknownTaskType(type);
