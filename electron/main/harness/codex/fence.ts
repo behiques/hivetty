@@ -119,6 +119,18 @@ export const CODEX_RULE_TABLE = {
   ],
 } as const;
 
+/** Codex's `PreToolUse` reply: `{}` lets the call run; a deny carries the reason to the model. */
+export const codexFenceReply = (reason?: string): Record<string, unknown> =>
+  reason === undefined
+    ? {}
+    : {
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: reason,
+        },
+      };
+
 /**
  * Total (HIVE-342): every rule is enforced by `decide` on the translated calls, through the
  * PreToolUse hook `launchCodexHeadless` puts on every wake (`fenceCommand`) and the receiver's
@@ -127,4 +139,5 @@ export const CODEX_RULE_TABLE = {
 export const codexFence: PermissionFence = {
   express: () => ({ ok: true }),
   translate: translateCodexCall,
+  reply: codexFenceReply,
 };

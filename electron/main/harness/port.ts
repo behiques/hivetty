@@ -346,7 +346,7 @@ export interface PermissionFence {
   translate?(tool: string, input: Record<string, unknown>, cwd: string): FenceCall[];
   /** The CLI's PreToolUse body as one call (HIVE-343). Absent: Claude's shape (`tool_name`, `tool_input`). */
   read?(body: Record<string, unknown>): { tool: string; input: Record<string, unknown>; cwd: string } | null;
-  /** The CLI's answer (HIVE-343). Absent: Claude's `hookSpecificOutput` shape. */
+  /** The CLI's answer (HIVE-343). Absent: the CLI is not hook-fenced, and `/fence` refuses it. */
   reply?(reason?: string): Record<string, unknown>;
   /**
    * Built-ins every run on this CLI needs, granted on each wake whatever the definition says, in
