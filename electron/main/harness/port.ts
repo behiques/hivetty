@@ -79,6 +79,8 @@ export interface HarnessInstalled {
   pluginNames(): Promise<string[]>;
   /** `enabledPlugins` overrides that keep the `disabled` plugins out of a session; `{}` with no registry. */
   sessionOverrides(disabled: readonly string[]): Promise<Record<string, false>>;
+  /** Where `skillNames` looks, for a message naming it; '' when nowhere (HIVE-344). */
+  readonly skillPlaces: string;
 }
 
 /** One file's edits in a session, as the changed-files list counts them (HIVE-201). */

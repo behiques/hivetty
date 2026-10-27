@@ -27,6 +27,10 @@ describe('codexAdapter', () => {
     });
   });
 
+  it('reads no skills of its own (HIVE-344)', () => {
+    expect(codexAdapter.installed.skillPlaces).toBe('');
+  });
+
   it('wires the headless members', () => {
     expect(codexAdapter.headless).toEqual({
       launch: launchCodexHeadless,

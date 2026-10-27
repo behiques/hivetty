@@ -66,6 +66,7 @@ export const copilotAdapter: HarnessAdapter = {
     skillNames: () => Promise.resolve([]),
     pluginNames: () => Promise.resolve([]),
     sessionOverrides: () => Promise.resolve({}),
+    skillPlaces: '',
   },
   headless: { launch: launchCopilotHeadless, reader: readCopilotHeadless, fence: copilotFence, containerCommand: 'copilot' },
 };

@@ -29,6 +29,10 @@ describe('copilotAdapter', () => {
     });
   });
 
+  it('reads no skills of its own (HIVE-344)', () => {
+    expect(copilotAdapter.installed.skillPlaces).toBe('');
+  });
+
   it('wires the headless members', () => {
     expect(copilotAdapter.headless).toEqual({
       launch: launchCopilotHeadless,

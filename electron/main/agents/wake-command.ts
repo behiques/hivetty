@@ -235,7 +235,7 @@ const MCP_NOT_READY =
  * that question belongs is the editor, where the author is still present and
  * `readAvailableSkillNames` has scanned the machine. At wake time it answers a
  * different and worse question: a skill folder renamed, a plugin uninstalled,
- * or a `~/.claude` that has simply not been scanned yet would make this refuse
+ * or a harness's skills folder not yet scanned would make this refuse
  * to wake the agent **at all** — where the honest consequence of a missing
  * skill is an agent that runs without it. The same goes for the name-clash rule
  * `hiveSkillNames` drives: it stops a *new* agent taking a skill's name, and
