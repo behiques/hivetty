@@ -342,11 +342,11 @@ describe('buildTrayTemplate', () => {
     ).toBeDefined();
   });
 
-  it('Open HiveTTY calls onOpenConsole', () => {
+  it('Open HiveTTY Pro calls onOpenConsole', () => {
     const deps = makeDeps();
     const template = buildTrayTemplate(deps) as MenuItem[];
 
-    template.find((item) => item.label === 'Open HiveTTY')?.click?.();
+    template.find((item) => item.label === 'Open HiveTTY Pro')?.click?.();
 
     expect(deps.onOpenConsole).toHaveBeenCalledTimes(1);
   });
@@ -406,7 +406,7 @@ describe('createServerTray', () => {
 
     expect(FakeTray.instances).toHaveLength(1);
     const tray = FakeTray.instances[0]!;
-    expect(tray.toolTip).toBe('HiveTTY · serving');
+    expect(tray.toolTip).toBe('HiveTTY Pro · serving');
 
     tray.handlers.get('click')?.();
     expect(tray.popUpContextMenu).toHaveBeenCalledTimes(1);

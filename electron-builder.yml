@@ -1,19 +1,25 @@
-# How HiveTTY becomes something you can install.
+# How HiveTTY Pro becomes something you can install.
 #
 # `electron-vite` already produces `out/{main,preload,renderer}`; this turns that
 # into a `.app` inside a `.dmg`, plus the `.zip` and `latest-mac.yml` that
 # `electron-updater` needs to find a newer one. See `docs/packaging-and-updates.md`.
 
-# HiveTTY's own identifier (HIVE-242). It is part of the designated requirement,
-# so it differs from The Hive's `com.behiques.the-hive` on purpose: the two
-# install side by side and neither updates the other. Changing it after signed
-# releases begin breaks in-place updating across exactly one release.
-appId: com.behiques.hivetty
+# HiveTTY Pro's own identifier (HIVE-350). It is part of the designated
+# requirement, so it differs from the public HiveTTY's `com.behiques.hivetty`
+# and The Hive's `com.behiques.the-hive` on purpose: they install side by side
+# and none updates another. Changing it after signed releases begin breaks
+# in-place updating across exactly one release.
+appId: com.behiques.hivetty-pro
 
 # The app's one name (`electron/shared/app-name.ts`): it names the bundle
-# (`HiveTTY.app`), its executable and helper apps, and the dmg and zip the
-# updater fetches. See "The app's name" in `docs/packaging-and-updates.md`.
-productName: HiveTTY
+# (`HiveTTY Pro.app`), its executable and helper apps. See "The app's name" in
+# `docs/packaging-and-updates.md`.
+productName: HiveTTY Pro
+
+# The dmg and zip the updater fetches. Not the default `${productName}-…`:
+# GitHub turns the space in an asset name into a dot, and `latest-mac.yml`
+# would name files the release does not have.
+artifactName: HiveTTY-Pro-${version}-${arch}.${ext}
 
 copyright: Copyright © 2026 Behiques Consulting LLC
 
