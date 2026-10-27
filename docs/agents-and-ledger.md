@@ -1226,8 +1226,9 @@ failed — surfaces this way, worded with the receiver's own `reason` (`client.t
 falls back to a transport-failure sentence if the receiver couldn't be reached
 at all, and to a generic one if a refusal came back with no `reason` field).
 
-**Naming: `mcp__hive__<tool>`, not `mcp__plugin_hive_hive__<tool>`.** On Claude Code (the adapter's `headless.ts`; every CLI's is in [harness-architecture.md › Headless runs](harness-architecture.md#headless-runs-phase-2)):
-Claude Code derives the middle segment of every tool's fully-qualified name from how
+**Naming: `mcp__hive__<tool>`, not `mcp__plugin_hive_hive__<tool>`.** This is
+Claude Code's delivery (the adapter's `headless.ts`; every CLI's is in
+[harness-architecture.md › Headless runs](harness-architecture.md#headless-runs-phase-2)). Claude Code derives the middle segment of every tool's fully-qualified name from how
 the server was delivered — the short form is what a server named in
 `--mcp-config` gets; a server delivered through `--plugin-dir` would double the
 name (`hive` as the plugin, `hive` again as the server inside it). The agent
