@@ -244,7 +244,7 @@ describe('ModelChip', () => {
   it('reads the model and effort a spawned session was given', () => {
     const id = useHiveStore
       .getState()
-      .spawnSession('nova-web', 'ship it', 'haiku', 'low');
+      .spawnSession('nova-web', 'ship it', 'claude-code', 'haiku', 'low');
     useUiStore.setState({ activeTab: id });
 
     render(<ModelChip />);

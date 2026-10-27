@@ -683,6 +683,8 @@ interface HiveState {
      */
     projectId: string,
     task?: string,
+    /** The CLI to run (HIVE-279); absent is Claude Code. */
+    cli?: HarnessId,
     model?: Model,
     effort?: Effort,
     /** The Jira issue this session is being started for (HIVE-73). */
@@ -2306,12 +2308,15 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * no store subscribes to the other. That keeps the dependency one-way and
    * makes the cross-store effect visible at the call site.
    */
-  spawnSession: (projectId, task, model, effort, ticket) => {
+  spawnSession: (projectId, task, cli, model, effort, ticket) => {
     const id = nextSessionId(get().entities);
+    const harness = cli ?? 'claude-code';
     // Resolved once: the seed transcript quotes them back, so a default applied
-    // in two places could print one model and record another.
-    const resolvedModel = model ?? 'opus';
-    const resolvedEffort = effort ?? 'high';
+    // in two places could print one model and record another. Claude keeps the
+    // opus/high it has always defaulted to; another CLI starts on its own first
+    // model (CLI_VOCAB lists the CLI's default first) at medium (HIVE-279).
+    const resolvedModel = model ?? (harness === 'claude-code' ? 'opus' : CLI_VOCAB[harness].models[0]);
+    const resolvedEffort = effort ?? (harness === 'claude-code' ? 'high' : 'medium');
 
     /**
      * A session started from a ticket card is called after its issue (HIVE-78).
@@ -2335,7 +2340,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     const session: Session = {
       kind: 'session',
       id,
-      harness: 'claude-code',
+      harness,
       project: projectId,
       /**
        * Only present when the picker was opened from a ticket card, which is
@@ -2397,7 +2402,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       effort: resolvedEffort,
       lines: [
         line(
-          `❯ claude --model ${resolvedModel} --effort ${resolvedEffort} — new session on ${projectId}`,
+          `❯ ${harness === 'claude-code' ? 'claude' : harness} --model ${resolvedModel} --effort ${resolvedEffort} — new session on ${projectId}`,
           'green',
         ),
         line('● Reading CLAUDE.md, mapping repo…', 'blue'),
@@ -2450,6 +2455,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
        */
       void requestSpawn(id, projectId, {
         ...(task === undefined ? {} : { task }),
+        harness,
         model: resolvedModel,
         effort: resolvedEffort,
         /*

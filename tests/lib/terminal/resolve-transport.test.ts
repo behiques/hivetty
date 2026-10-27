@@ -106,7 +106,7 @@ describe('resolveTransport', () => {
      */
     const id = useHiveStore
       .getState()
-      .spawnSession(SESSION_PROJECT, 'a task', 'haiku', 'low');
+      .spawnSession(SESSION_PROJECT, 'a task', 'claude-code', 'haiku', 'low');
 
     resolveTransport(id);
 
@@ -144,7 +144,7 @@ describe('resolveTransport', () => {
 
   it('never asks to resume a session this run started', () => {
     withBridge();
-    const id = useHiveStore.getState().spawnSession(SESSION_PROJECT, '', 'haiku', 'low');
+    const id = useHiveStore.getState().spawnSession(SESSION_PROJECT, '', 'claude-code', 'haiku', 'low');
 
     resolveTransport(id);
 

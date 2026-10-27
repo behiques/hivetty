@@ -214,9 +214,9 @@ describe('hive-store', () => {
        * reading `HIVE-73` is the ambiguity the suffix removes.
        */
       const store = useHiveStore.getState();
-      const first = store.spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
-      const second = store.spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
-      const third = store.spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
+      const first = store.spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
+      const second = store.spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
+      const third = store.spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
 
       const nameOf = (id: string) => {
         const entity = useHiveStore.getState().entities[id];
@@ -239,12 +239,12 @@ describe('hive-store', () => {
        */
       const first = useHiveStore
         .getState()
-        .spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
+        .spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
       useHiveStore.getState().setSessionStatus(first, 'terminated');
 
       const second = useHiveStore
         .getState()
-        .spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
+        .spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
 
       const entity = useHiveStore.getState().entities[second];
       expect(isSession(entity) && entity.name).toBe('HIVE-73-2');
@@ -264,7 +264,7 @@ describe('hive-store', () => {
 
       const id = useHiveStore
         .getState()
-        .spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
+        .spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
 
       // Nothing yet: the spawn has been asked for but has not answered.
       expect(noteSessionTicket).not.toHaveBeenCalled();
@@ -296,7 +296,7 @@ describe('hive-store', () => {
 
       useHiveStore
         .getState()
-        .spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
+        .spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
 
       await Promise.resolve();
       await Promise.resolve();
@@ -354,11 +354,43 @@ describe('hive-store', () => {
     it('honours an explicit model and effort', () => {
       const id = useHiveStore
         .getState()
-        .spawnSession('nova-web', 'Spike', 'haiku', 'low');
+        .spawnSession('nova-web', 'Spike', 'claude-code', 'haiku', 'low');
       const session = useHiveStore.getState().entities[id];
 
       expect(isSession(session) && session.model).toBe('haiku');
       expect(isSession(session) && session.effort).toBe('low');
+    });
+
+    it('stamps the CLI it was asked for (HIVE-279)', () => {
+      const id = useHiveStore
+        .getState()
+        .spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
+
+      expect(useHiveStore.getState().entities[id]).toMatchObject({
+        harness: 'codex',
+        model: 'gpt-6-luna',
+        effort: 'high',
+      });
+    });
+
+    it('starts another CLI on its own default model at medium', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex');
+
+      expect(useHiveStore.getState().entities[id]).toMatchObject({
+        harness: 'codex',
+        model: 'gpt-6-luna',
+        effort: 'medium',
+      });
+    });
+
+    it('defaults to Claude at opus/high, as before', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web', '');
+
+      expect(useHiveStore.getState().entities[id]).toMatchObject({
+        harness: 'claude-code',
+        model: 'opus',
+        effort: 'high',
+      });
     });
 
     it('gives each session a distinct id', () => {
@@ -847,7 +879,7 @@ describe('hive-store', () => {
       const ticketSession = () =>
         useHiveStore
           .getState()
-          .spawnSession('nova-web', '', 'opus', 'high', 'INCORP-455');
+          .spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'INCORP-455');
 
       it('routes to a ticket session by its key', () => {
         const id = ticketSession();
@@ -908,7 +940,7 @@ describe('hive-store', () => {
         // path is the only thing needed — no rename, so no title-stream guards.
         useHiveStore
           .getState()
-          .spawnSession('nova-web', '', 'opus', 'high', 'lead-form');
+          .spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'lead-form');
 
         run('send lead-form hello');
 
@@ -929,8 +961,8 @@ describe('hive-store', () => {
         // `ticketSessionName` de-duplicates case-*sensitively*, so two keys that
         // differ only in case both keep their name — and both then answer to one
         // case-insensitive target.
-        const first = store.spawnSession('nova-web', '', 'opus', 'high', 'Duplicate');
-        const second = store.spawnSession('nova-web', '', 'opus', 'high', 'duplicate');
+        const first = store.spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'Duplicate');
+        const second = store.spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'duplicate');
 
         run('send DUPLICATE hello');
 
@@ -1544,6 +1576,16 @@ describe('hive-store', () => {
           );
         });
 
+        it('sends the CLI it stamped (HIVE-279)', () => {
+          const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
+
+          expect(requestSpawn).toHaveBeenCalledWith(
+            id,
+            'nova-web',
+            expect.objectContaining({ harness: 'codex', model: 'gpt-6-luna', effort: 'high' }),
+          );
+        });
+
         /**
          * The app's theme no longer rides along (HIVE-82).
          *
@@ -1572,7 +1614,7 @@ describe('hive-store', () => {
         it('sends the picker’s choice, not the defaults', () => {
           useHiveStore
             .getState()
-            .spawnSession('nova-web', 'tidy the footer', 'haiku', 'low');
+            .spawnSession('nova-web', 'tidy the footer', 'claude-code', 'haiku', 'low');
 
           expect(requestSpawn).toHaveBeenCalledWith(
             expect.any(String),
@@ -5265,7 +5307,7 @@ describe('renameSession and where a name came from', () => {
       frequently is not.
     */
     it('keeps its key rather than taking a late description', () => {
-      const id = useHiveStore.getState().spawnSession('nova-web', '', 'opus', 'high', 'HIVE-73');
+      const id = useHiveStore.getState().spawnSession('nova-web', '', 'claude-code', 'opus', 'high', 'HIVE-73');
       expect(nameOf(id)).toBe('HIVE-73');
 
       useHiveStore.getState().renameSession(id, 'PR 157 merge check', 'agent');

@@ -872,7 +872,7 @@ describe('NewSessionPicker — the ticket workflow', () => {
     expect(firstMessage()).toHaveValue('');
     await userEvent.click(rowsFor(/^nova-web/)[0]);
     expect(taskOf()).toBe('');
-    expect(spawnSession.mock.lastCall?.[4]).toBe('HIVE-226');
+    expect(spawnSession.mock.lastCall?.[5]).toBe('HIVE-226');
   });
 
   it('types the skill on the ticket as the session’s first message', async () => {

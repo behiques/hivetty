@@ -74,7 +74,7 @@ export function NewSessionPicker() {
   /** One creature per opening, drawn at random from the picker's four. */
   const [creature] = useState(() => PICKER_CREATURES[Math.floor(Math.random() * PICKER_CREATURES.length)]!);
   const spawnSession = useSpawnSession();
-  const { pickerQuery, pickerTicket, newModel, newEffort } = usePickerState();
+  const { pickerQuery, pickerTicket, newCli, newModel, newEffort } = usePickerState();
   const ticket = useTicket(pickerTicket);
   const { closePicker, setPickerQuery, setNewModel, setNewEffort } =
     usePickerActions();
@@ -162,7 +162,7 @@ export function NewSessionPicker() {
     //
     // From a ticket, the first message is the workflow's (or the edit made
     // here); ⌥↵ and the wake card's projects start empty.
-    spawnSession(projectId, empty || wake !== null ? '' : firstMessage.trim(), newModel, newEffort, pickerTicket ?? undefined);
+    spawnSession(projectId, empty || wake !== null ? '' : firstMessage.trim(), newCli, newModel, newEffort, pickerTicket ?? undefined);
   };
 
   return (
