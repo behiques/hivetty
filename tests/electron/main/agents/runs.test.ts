@@ -685,6 +685,52 @@ describe('createRunTracker', () => {
         reason: 'stalled',
       });
     });
+
+    /*
+      The wake that starts a parked rotation (HIVE-353). Its argv names no conversation, so the
+      rotation stays parked until the output names one: a wake that dies first starts it again.
+    */
+    describe('that starts a parked rotation (HIVE-353)', () => {
+      const PARKED = { uuid: 'minted', handoff: 'what I know' };
+
+      beforeEach(() => {
+        commandOver = { ...commandOver, startsRotation: true };
+        state.patch('a', { sessionUuid: 'old-thread', pendingSession: PARKED });
+      });
+
+      it('keeps the rotation parked when the run is killed before naming a thread', () => {
+        tracker.run('a', 'ledger');
+        tracker.kill('a');
+        childInstances[0]?.emitClose(null, 'SIGTERM');
+
+        expect(state.read('a')).toMatchObject({ sessionUuid: 'old-thread', pendingSession: PARKED });
+      });
+
+      it('keeps the rotation parked when the child never started', () => {
+        tracker.run('a', 'ledger');
+        childInstances[0]?.emitError(new Error('spawn ENOENT'));
+
+        expect(state.read('a')).toMatchObject({ sessionUuid: 'old-thread', pendingSession: PARKED });
+      });
+
+      it('clears the rotation once the output names the new thread', () => {
+        tracker.run('a', 'ledger');
+        childInstances[0]?.emitStdout(THREAD);
+        childInstances[0]?.emitClose(0, null);
+
+        expect(state.read('a').sessionUuid).toBe('t-1');
+        expect(state.read('a').pendingSession).toBeUndefined();
+      });
+
+      it('leaves the rotation to the standing run when a task run names a thread (HIVE-128)', () => {
+        parallel = 2;
+        tracker.run('a', 'manual', 'one job', { job: true });
+        childInstances[0]?.emitStdout(THREAD);
+        childInstances[0]?.emitClose(0, null);
+
+        expect(state.read('a')).toMatchObject({ sessionUuid: 'old-thread', pendingSession: PARKED });
+      });
+    });
   });
 
   it('persists the session uuid it invoked even when no result ever arrived', () => {
