@@ -341,6 +341,8 @@ interface LiveRun {
   namesConversation: boolean;
   /** See {@link FinalizeInfo.startsRotation}. */
   startsRotation: boolean;
+  /** See HeadlessPlan.outputConfirmsStart (HIVE-357). */
+  outputConfirmsStart: boolean;
   child: ChildLike;
   /**
    * Stop the run *inside* the container (HIVE-137), or `null` for a host run.
@@ -433,6 +435,8 @@ interface FinalizeInfo {
    * the close clears `pendingSession` only once the output has named one.
    */
   startsRotation: boolean;
+  /** See HeadlessPlan.outputConfirmsStart (HIVE-357). */
+  outputConfirmsStart: boolean;
   /** The prompt a session-starting run started with; stored beside its uuid. */
   promptHash?: string;
   /** The CLI that launched this run, and so reads its output (HIVE-340). */
@@ -610,11 +614,19 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       persisting a uuid no session file backs would fail the *next* wake instead
       of this one. Copilot is the exception that tolerates it: its resume is
       `--session-id <uuid>` too, so one with no `session-state/<uuid>/` starts
-      fresh under the same id.
+      fresh under the same id. What it does not prove is that the run started, which `established`
+      below reads off the usage file (HIVE-357).
     */
     // A first Codex wake's argv uuid is a stop marker, not a conversation (HIVE-342): only its output names one.
     const sessionUuid =
       conversation ?? (reachedModel && info.namesConversation ? info.sessionUuid : undefined);
+    /*
+      The run is known to have started its conversation (HIVE-357): its output named it, or its argv
+      did and nothing more is needed to prove it. A Copilot run proves it only in its usage file, so
+      one that died at auth, or that main killed before `finish` was read, counts towards nothing.
+    */
+    const established =
+      conversation !== null || (reachedModel && info.namesConversation && !info.outputConfirmsStart);
     const slack = slackStatus(mcpServers);
 
     /*
@@ -721,7 +733,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       standing &&
       info.lastTurn &&
       handoff === undefined &&
-      reachedModel &&
+      established &&
       reason === null;
     /*
       Sized inside the strike, not beside it: `rotateFailures + 1` is only ever
@@ -753,7 +765,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         /*
           A rotation zeroes the counter instead of advancing it — the run that
           just closed belongs to the session being left behind. A run that never
-          reached the model cost nothing and should not pull rotation forward.
+          reached the model cost nothing and should not pull rotation forward, nor did one that
+          never established its conversation (HIVE-357).
 
           Keyed off `handoff !== undefined` rather than a `rotated` boolean:
           TypeScript narrows the former and not the latter, and
@@ -765,11 +778,11 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
               rotateFailures: 0,
               pendingSession: { uuid: deps.newUuid(), handoff },
             }
-          : reachedModel
+          : established
             ? { runsSinceRotate: laneNow.runsSinceRotate + 1 }
             : {}),
         ...(failures === null ? {} : { rotateFailures: failures }),
-        ...(info.startsRotation && sessionUuid !== undefined ? { pendingSession: undefined } : {}),
+        ...(info.startsRotation && established ? { pendingSession: undefined } : {}),
         ...(sessionUuid === undefined ? {} : { sessionUuid, harness: info.harness }),
         ...(sessionUuid === undefined || info.promptHash === undefined
           ? {}
@@ -1245,6 +1258,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             harness: command.harness ?? 'claude-code',
             namesConversation: command.namesConversation,
             startsRotation: command.startsRotation === true,
+            outputConfirmsStart: command.outputConfirmsStart === true,
           },
           'failed',
           null,
@@ -1275,6 +1289,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         sessionUuid: command.sessionUuid,
         namesConversation: command.namesConversation,
         startsRotation: command.startsRotation === true,
+        outputConfirmsStart: command.outputConfirmsStart === true,
         child,
         stop:
           container === undefined
