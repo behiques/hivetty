@@ -19,6 +19,9 @@ const adapters: Record<HarnessId, HarnessAdapter> = {
  */
 export const sessionAdapter = (): HarnessAdapter => adapters['claude-code'];
 
+/** The adapter for one CLI (HIVE-279): what a session's own record and launch go through. */
+export const adapterFor = (id: HarnessId): HarnessAdapter => adapters[id];
+
 /** The adapter a headless run launches with and reads through (HIVE-340). */
 export const headlessAdapter = (id: HarnessId): HarnessAdapter => adapters[id];
 
@@ -40,7 +43,7 @@ export interface HarnessRegistryDeps {
 
 export function createHarnessRegistry({ isAgentSession }: HarnessRegistryDeps): HarnessRegistry {
   return {
-    adapterFor: (id) => adapters[id],
+    adapterFor,
     // Phase 1: every agent session is Claude Code.
     harnessOf: (entityId) => (isAgentSession(entityId) ? 'claude-code' : undefined),
   };
