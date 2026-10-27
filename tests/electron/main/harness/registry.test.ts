@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { HarnessId } from '../../../../electron/shared/harness-contract';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
 import { copilotAdapter } from '../../../../electron/main/harness/copilot';
@@ -9,15 +10,19 @@ import {
   sessionAdapter,
 } from '../../../../electron/main/harness/registry';
 
-/** Stands in for the sessions closure, which alone knows what an entity is. */
-const agentSessions = new Set(['sess-01']);
+/** Stands in for the sessions closure, which alone knows what an entity is and what it runs. */
+const agentSessions = new Map<string, HarnessId>([
+  ['sess-01', 'claude-code'],
+  ['sess-02', 'codex'],
+]);
 const registry = createHarnessRegistry({
-  isAgentSession: (entityId) => agentSessions.has(entityId),
+  sessionHarness: (entityId) => agentSessions.get(entityId),
 });
 
 describe('harness registry', () => {
-  it('resolves an agent session to claude-code', () => {
+  it('resolves a session to the CLI it was opened with (HIVE-279)', () => {
     expect(registry.harnessOf('sess-01')).toBe('claude-code');
+    expect(registry.harnessOf('sess-02')).toBe('codex');
   });
 
   it('resolves a plain terminal to no harness', () => {

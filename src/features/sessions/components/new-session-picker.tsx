@@ -5,19 +5,19 @@ import { useRef, useState } from 'react';
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 import { cn } from '@/lib/utils';
 // `ProjectRow` is aliased because this file declares a component of that name.
-import type {
-  Effort,
-  Model,
-  ProjectRow as ProjectRowData,
-} from '@/types/entity';
+import type { ProjectRow as ProjectRowData } from '@/types/entity';
 
 import { Button } from '@components/ui/button';
 import { Icon } from '@components/ui/icon';
 import { ProjectKey } from '@components/ui/project-key';
+import { SegmentedControl } from '@components/ui/segmented-control';
 import { SwarmCreature, type Creature } from '@components/ui/swarm-creature';
 import { can } from '@config/runtime';
 import { OptionStepper } from '@features/sessions/components/option-stepper';
 import { useProjectAccess, useProjectConfig } from '@hooks/use-project-config';
+import { CLI_NAMES } from '@lib/harness/cli-names';
+import { CLI_VOCAB, cliTakesEffort } from '@shared/cli-contract';
+import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 import { ticketStart, type TicketFacts } from '@shared/ticket-workflow';
 import {
   useProjectLiveCount,
@@ -30,10 +30,24 @@ import {
   usePickerActions,
   usePickerState,
   useSettingsActions,
+  type SessionCli,
 } from '@stores/ui-store';
 
-const MODELS: readonly Model[] = ['haiku', 'sonnet', 'opus', 'fable'];
-const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'max'];
+/**
+ * The CLIs a session can start on now, and why the others cannot (HIVE-279). Codex's interactive
+ * half is HIVE-279's second PR; Copilot's is HIVE-280. Data rather than a branch, so PR B
+ * enables Codex by deleting one entry.
+ */
+const UNAVAILABLE: Partial<Record<HarnessId, string>> = { codex: 'next release', copilot: 'HIVE-280' };
+/*
+  No CliMark in the segments: `SegmentedControl` takes an icon *name*, not a node, so the mark lives
+  on the header chip instead (HIVE-279).
+*/
+const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli] }));
+const UNAVAILABLE_CLIS = Object.keys(UNAVAILABLE) as HarnessId[];
+const UNAVAILABLE_NOTE = Object.entries(UNAVAILABLE)
+  .map(([cli, why]) => `${CLI_NAMES[cli as HarnessId]} · ${why}`)
+  .join(' · ');
 
 /** The concept pins the first four projects as one-click starts. */
 const PINNED_COUNT = 4;
@@ -74,9 +88,9 @@ export function NewSessionPicker() {
   /** One creature per opening, drawn at random from the picker's four. */
   const [creature] = useState(() => PICKER_CREATURES[Math.floor(Math.random() * PICKER_CREATURES.length)]!);
   const spawnSession = useSpawnSession();
-  const { pickerQuery, pickerTicket, newModel, newEffort } = usePickerState();
+  const { pickerQuery, pickerTicket, newCli, newModel, newEffort } = usePickerState();
   const ticket = useTicket(pickerTicket);
-  const { closePicker, setPickerQuery, setNewModel, setNewEffort } =
+  const { closePicker, setPickerQuery, setNewCli, setNewModel, setNewEffort } =
     usePickerActions();
   const { openSettings } = useSettingsActions();
   /**
@@ -162,7 +176,7 @@ export function NewSessionPicker() {
     //
     // From a ticket, the first message is the workflow's (or the edit made
     // here); ⌥↵ and the wake card's projects start empty.
-    spawnSession(projectId, empty || wake !== null ? '' : firstMessage.trim(), newModel, newEffort, pickerTicket ?? undefined);
+    spawnSession(projectId, empty || wake !== null ? '' : firstMessage.trim(), newCli, newModel, newEffort, pickerTicket ?? undefined);
   };
 
   return (
@@ -230,7 +244,7 @@ export function NewSessionPicker() {
               </DialogPrimitive.Title>
               <span className="text-ui text-subtle">
                 {ticket?.title ??
-                  'Pick a project — a Claude Code terminal will open for it'}
+                  `Pick a project — a ${CLI_NAMES[newCli]} terminal will open for it`}
               </span>
             </div>
           </>
@@ -275,15 +289,30 @@ export function NewSessionPicker() {
           ))}
         </div>
 
+        <div className="flex w-[560px] max-w-[92%] flex-col gap-1.5">
+          <SegmentedControl
+            label="cli"
+            options={CLI_OPTIONS}
+            value={newCli}
+            // Copilot is always among the disabled values, so the cast is safe until HIVE-280 widens `SessionCli`.
+            onChange={(cli) => setNewCli(cli as SessionCli)}
+            disabledValues={UNAVAILABLE_CLIS}
+            wrap
+          />
+          <span className="text-ui-sm text-subtle">{UNAVAILABLE_NOTE}</span>
+        </div>
+
         <div className="flex w-[560px] max-w-[92%] flex-wrap gap-6">
+          {/* The CLI's own words (HIVE-279): Claude's list is not Codex's. */}
           <OptionStepper
             label="model"
-            options={MODELS}
+            options={CLI_VOCAB[newCli].models}
             value={newModel}
             onChange={setNewModel}
           />
           {/*
-            Haiku does not think, so the scale beside it does not apply
+            A model whose CLI says it does not think (`CLI_VOCAB.noEffort`,
+            which is Claude's haiku), so the scale beside it does not apply
             (HIVE-100). Faded and out of reach rather than hidden: a control
             that vanishes takes the layout with it and leaves the user wondering
             what they did, where one that dims in place explains itself and
@@ -295,11 +324,11 @@ export function NewSessionPicker() {
           */}
           <OptionStepper
             label="thinking effort"
-            options={EFFORTS}
+            options={CLI_VOCAB[newCli].efforts}
             value={newEffort}
             onChange={setNewEffort}
-            disabled={newModel === 'haiku'}
-            disabledReason="not for haiku"
+            disabled={!cliTakesEffort(newCli, newModel)}
+            disabledReason={`not for ${newModel}`}
           />
         </div>
 

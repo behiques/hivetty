@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 import { SESSION_ID_PREFIX_PATTERN } from '@shared/agent-contract';
 import { isRecord } from '@shared/guards';
+import { isHarnessId, type HarnessId } from '@shared/harness-contract';
 import {
   hiveNameFromTitle,
   type SessionNameOrigin,
@@ -11,7 +12,7 @@ import {
   type SessionRecord,
 } from '@shared/session-history-contract';
 
-import { sessionAdapter } from '../harness/registry';
+import { adapterFor, sessionAdapter } from '../harness/registry';
 
 /**
  * What the fleet looked like last time (HIVE-87).
@@ -254,6 +255,8 @@ function reviveRecord(raw: unknown): SessionRecord | undefined {
     */
     model: text(raw.model) as SessionRecord['model'],
     effort: text(raw.effort) as SessionRecord['effort'],
+    // Checked, unlike the model: a harness this build does not know would resume the wrong CLI.
+    harness: typeof raw.harness === 'string' && isHarnessId(raw.harness) ? raw.harness : undefined,
   };
 
   return {
@@ -329,11 +332,14 @@ export function createSessionHistory(
   now: () => number = Date.now,
   /**
    * Whether the harness wrote a transcript for this conversation (HIVE-239: the
-   * adapter's record). Injected so tests do not depend on the developer's real
-   * home directory.
+   * adapter's record). Asked of the CLI the record ran (HIVE-279). Injected so
+   * tests do not depend on the developer's real home directory.
    */
-  hasTranscript: (cwd: string, sessionUuid: string) => boolean = (cwd, sessionUuid) =>
-    sessionAdapter().record.hasTranscript(cwd, sessionUuid),
+  hasTranscript: (harness: HarnessId, cwd: string, sessionUuid: string) => boolean = (
+    harness,
+    cwd,
+    sessionUuid,
+  ) => adapterFor(harness).record.hasTranscript(cwd, sessionUuid),
 ): SessionHistory {
   /**
    * Seeded from the file, **not empty**.
@@ -448,7 +454,9 @@ export function createSessionHistory(
       last: it is the only check that touches the disk.
     */
     const uuid = record.sessionUuid;
-    if (uuid === undefined || !hasTranscript(record.cwd ?? '', uuid)) return undefined;
+    if (uuid === undefined) return undefined;
+    // The CLI the record ran is the one whose transcript to look for; none named is Claude's.
+    if (!hasTranscript(record.harness ?? 'claude-code', record.cwd ?? '', uuid)) return undefined;
     return uuid;
   };
 

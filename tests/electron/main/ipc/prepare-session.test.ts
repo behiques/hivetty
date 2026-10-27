@@ -221,6 +221,23 @@ describe('prepareSession (HIVE-235)', () => {
     });
   });
 
+  it('forwards the CLI to the session it opens and to the one it restarts (HIVE-279)', async () => {
+    await invoke(CH.ptySpawn, { ...REQUEST, harness: 'claude-code' });
+    await invoke(CH.ptyRestart, { ...REQUEST, harness: 'claude-code' });
+
+    expect(open.mock.calls[0]![0]).toMatchObject({ harness: 'claude-code' });
+    expect(restart.mock.calls[0]![0]).toMatchObject({ harness: 'claude-code' });
+  });
+
+  it('says nothing of a CLI the request did not name, so main reads it as Claude', async () => {
+    await invoke(CH.ptySpawn, REQUEST);
+    await invoke(CH.ptyRestart, REQUEST);
+
+    expect(open.mock.calls[0]![0]).not.toHaveProperty('harness');
+    // On a restart, absent is what lets main keep the CLI the session already had.
+    expect(restart.mock.calls[0]![0]).not.toHaveProperty('harness');
+  });
+
   it('omits a path its runtime has none for, so spawn omits the flag', async () => {
     paths.settings = null;
     paths.plugin = null;

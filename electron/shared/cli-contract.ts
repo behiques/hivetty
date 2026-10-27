@@ -70,10 +70,18 @@ export type HeadlessSandbox = (typeof HEADLESS_SANDBOXES)[number];
  * the card all read. A CLI adds a row here (HIVE-342, HIVE-343); nothing translates between rows.
  */
 export const CLI_VOCAB = {
-  'claude-code': { models: SESSION_MODELS, efforts: SESSION_EFFORTS },
-  codex: { models: CODEX_MODELS, efforts: CODEX_EFFORTS },
-  copilot: { models: COPILOT_MODELS, efforts: COPILOT_EFFORTS },
-} as const satisfies Record<HarnessId, { models: readonly string[]; efforts: readonly string[] }>;
+  // Haiku does not think, so the effort scale beside it does not apply (HIVE-100).
+  'claude-code': { models: SESSION_MODELS, efforts: SESSION_EFFORTS, noEffort: ['haiku'] },
+  codex: { models: CODEX_MODELS, efforts: CODEX_EFFORTS, noEffort: [] },
+  copilot: { models: COPILOT_MODELS, efforts: COPILOT_EFFORTS, noEffort: [] },
+} as const satisfies Record<
+  HarnessId,
+  { models: readonly string[]; efforts: readonly string[]; noEffort: readonly string[] }
+>;
+
+/** Whether `model`'s effort scale applies on `cli` (HIVE-279): the picker dims it when not. */
+export const cliTakesEffort = (cli: HarnessId, model: string): boolean =>
+  !(CLI_VOCAB[cli].noEffort as readonly string[]).includes(model);
 
 /**
  * A CLI's headless agent defaults. An absent model or effort omits the flag: the CLI picks. Each is

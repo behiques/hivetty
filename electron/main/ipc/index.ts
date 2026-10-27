@@ -5400,6 +5400,8 @@ export function registerIpcHandlers(
       task: request.task,
       model: request.model,
       effort: request.effort,
+      // HIVE-279: absent stays absent, which main reads as Claude Code.
+      ...(request.harness === undefined ? {} : { harness: request.harness }),
       name: request.name,
       // HIVE-88. Forwarded only here — a restart is never a resume.
       resume: request.resume,
@@ -5462,6 +5464,8 @@ export function registerIpcHandlers(
       rows: request.rows,
       model: request.model,
       effort: request.effort,
+      // The CLI, for the model's reason (HIVE-279); absent lets main keep the one the session had.
+      ...(request.harness === undefined ? {} : { harness: request.harness }),
       /**
        * Forwarded with `model` and `effort`, for their reason (HIVE-78): a name
        * describes the session, not the turn. A restarted `HIVE-73` that came

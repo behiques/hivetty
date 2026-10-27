@@ -112,8 +112,6 @@ import {
   isNotificationDelivery,
 } from './notification-contract';
 import {
-  SESSION_EFFORTS,
-  SESSION_MODELS,
   SESSION_NAME_DISPLAY_MAX,
   SESSION_NAME_MAX,
   isSendableSessionName,
@@ -377,8 +375,12 @@ export function parseSpawnRequest(input: unknown): SpawnRequest {
     input,
     ['sessionId', 'projectId', 'cols', 'rows'],
     'spawn',
-    ['task', 'model', 'effort', 'name', 'resume'],
+    ['task', 'model', 'effort', 'harness', 'name', 'resume'],
   );
+  // The harness first: it picks the closed lists the model and effort are checked against.
+  const harness =
+    raw.harness === undefined ? undefined : assertOneOf(raw.harness, HARNESS_IDS, 'spawn.harness');
+  const vocab = CLI_VOCAB[harness ?? 'claude-code'];
   return {
     sessionId: assertId(raw.sessionId, 'spawn.sessionId'),
     projectId: assertId(raw.projectId, 'spawn.projectId'),
@@ -395,10 +397,11 @@ export function parseSpawnRequest(input: unknown): SpawnRequest {
       : { task: assertText(raw.task, 'spawn.task') }),
     ...(raw.model === undefined
       ? {}
-      : { model: assertOneOf(raw.model, SESSION_MODELS, 'spawn.model') }),
+      : { model: assertOneOf(raw.model, vocab.models, 'spawn.model') }),
     ...(raw.effort === undefined
       ? {}
-      : { effort: assertOneOf(raw.effort, SESSION_EFFORTS, 'spawn.effort') }),
+      : { effort: assertOneOf(raw.effort, vocab.efforts, 'spawn.effort') }),
+    ...(harness === undefined ? {} : { harness }),
     /**
      * The display name, when the renderer has a better one than the id
      * (HIVE-78).
