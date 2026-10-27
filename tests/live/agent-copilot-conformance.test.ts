@@ -696,7 +696,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
 
     // The call the fence asked about was the subagent's: Copilot names its parent on the body.
     const sub = fenceBodies.find(
-      (body) => typeof body['parentAgentId'] === 'string' && JSON.stringify(body['toolArgs']).includes(subMarker),
+      (body) => typeof body['parentAgentId'] === 'string' && JSON.stringify(body['toolArgs'] ?? {}).includes(subMarker),
     );
     expect(sub, JSON.stringify(fenceBodies.map((body) => body['toolName']))).toBeDefined();
     expect(sub?.['toolName']).toBe('bash');
