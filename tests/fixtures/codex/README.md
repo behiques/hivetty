@@ -33,3 +33,12 @@ ids of the `spawn_agent` and `wait_agent` calls → `exec-00000000-0000-7000-800
 
 Every other byte is as recorded, the `error` warning items included. Re-record and re-scrub rather
 than hand-edit a line.
+
+`interactive-0.164/` (HIVE-279, recorded 2026-10-27) holds `probe.py`, `FINDINGS.md` and one `hooks-<event>.json` per
+event: the first body each of `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `PostToolUse` (`update_plan`) and `Stop`
+sent from a real interactive `codex-cli 0.164.0` on a pty. Scrubbed there, and nothing else: the scratch directory →
+`/tmp/codex-fixture` (so `cwd` and `transcript_path` name no home directory or username), every UUID (the session, the turn, the
+`exec-` tool-use id) → `00000000-0000-7000-8000-00000000000N` by first appearance, and the rollout file's timestamp is as
+recorded. Audited for home directories, usernames, hostnames, temp paths, emails, tokens, JWTs, `gAAAAA…` blobs, `call_<hex>`
+ids and IP addresses (only `127.0.0.1` in `probe.py`): none found. `probe.py` is a manual tool no test, script or CI step runs;
+it copies `~/.codex/auth.json` into its own temp `CODEX_HOME` and deletes the copy when the run ends.

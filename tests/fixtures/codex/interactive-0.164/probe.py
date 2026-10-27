@@ -207,6 +207,8 @@ def main():
     except Exception:
         pass
     server.shutdown()
+    # The copy of auth.json is a credential: it does not outlive the run in the scratch dir.
+    os.remove(os.path.join(home, 'auth.json'))
 
     with open(os.path.join(out, 'pty.log'), 'wb') as f:
         f.write(bytes(output))
