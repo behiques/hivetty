@@ -603,9 +603,11 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
 
       An argv that does not name the conversation (a Codex start, HIVE-353) leaves it parked: the
       new thread exists only once `thread.started` arrives, so a wake that dies first must start
-      it again. The close clears it once the output names one (`startsRotation`).
+      it again. The close clears it once the output names one (`startsRotation`). So does a Copilot
+      start (HIVE-357): its argv names the id, but a wake that dies at auth has started nothing.
     */
-    const startsRotation = !task && pending !== undefined && !command.namesConversation;
+    const startsRotation =
+      !task && pending !== undefined && (!command.namesConversation || command.outputConfirmsStart === true);
 
     if (!task && pending !== undefined && !startsRotation) {
       deps.state.patchLane(name, lane, { pendingSession: undefined });

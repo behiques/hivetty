@@ -174,6 +174,7 @@ describe('launchCopilotHeadless', () => {
 
     expect(plan.namesConversation).toBe(true);
     expect(plan.stopPattern).toBe(U);
+    expect(plan.outputConfirmsStart).toBe(true);
   });
 
   it('refuses an http hive server: no containers', () => {

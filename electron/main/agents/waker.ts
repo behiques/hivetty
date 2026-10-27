@@ -153,6 +153,8 @@ export interface WakeCommand {
    * (HIVE-342). False for a first Codex wake, whose id only `thread.started` names.
    */
   namesConversation: boolean;
+  /** See HeadlessPlan.outputConfirmsStart (HIVE-357). */
+  outputConfirmsStart?: true;
   /** The plan's usage file, read by the reader's `finish` (HIVE-343). */
   usageFile?: string;
   /** The plan's files, written by the core before the spawn (HIVE-343). */
@@ -457,6 +459,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   const planFiles = {
     ...(plan.usageFile === undefined ? {} : { usageFile: plan.usageFile }),
     ...(plan.files === undefined ? {} : { files: plan.files }),
+    ...(plan.outputConfirmsStart === true ? { outputConfirmsStart: true as const } : {}),
   };
 
   if (input.container !== undefined) {

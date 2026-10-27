@@ -403,6 +403,12 @@ export interface HeadlessPlan {
    * learns its id only from `thread.started`, so the argv's uuid must never be persisted for it.
    */
   namesConversation: boolean;
+  /**
+   * The argv names the conversation, but only the run's output proves it started (HIVE-357): a
+   * Copilot wake that dies at auth has made no turn. Its close settles a parked rotation and the
+   * counters only once the reader names the conversation.
+   */
+  outputConfirmsStart?: true;
   /** A file the CLI writes its usage to, read by the reader's `finish` (HIVE-343). */
   usageFile?: string;
   /** Absolute paths the core writes before the spawn, only when the bytes differ (HIVE-343). */

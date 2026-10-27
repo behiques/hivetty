@@ -162,6 +162,7 @@ export function launchCopilotHeadless(spec: HeadlessSpec): HeadlessPlan {
     defaultContainerCommand: 'copilot',
     stopPattern: id,
     namesConversation: true,
+    outputConfirmsStart: true,
     usageFile,
     files: [
       { path: `${spec.stateDir}/settings.json`, text: copilotSettings() },
