@@ -84,7 +84,7 @@ test('shows the CLI switch, Claude Code on, Codex offered, Copilot saying why (H
   await expect(cli.getByRole('radio', { name: /Claude Code/ })).toBeChecked();
   await expect(cli.getByRole('radio', { name: /Codex/ })).toBeEnabled();
   await expect(cli.getByRole('radio', { name: /Copilot/ })).toBeDisabled();
-  await expect(page.getByText('Copilot · HIVE-280')).toBeVisible();
+  await expect(page.getByText('Copilot · agents only for now')).toBeVisible();
 });
 
 test('escape closes it', async ({ page }) => {

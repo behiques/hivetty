@@ -154,8 +154,21 @@ describe('NewSessionPicker', () => {
       expect(within(cli).getByRole('radio', { name: /Claude Code/ })).toBeChecked();
       expect(within(cli).getByRole('radio', { name: /Codex/ })).toBeEnabled();
       expect(within(cli).getByRole('radio', { name: /Copilot/ })).toBeDisabled();
-      expect(screen.getByText('Copilot · HIVE-280')).toBeInTheDocument();
+      expect(screen.getByText('Copilot · agents only for now')).toBeInTheDocument();
       expect(screen.getByText('Pick a project — a Claude Code terminal will open for it')).toBeInTheDocument();
+    });
+
+    it('hugs its segments as a pill under a CLI label, as the mockup draws it', () => {
+      render(<NewSessionPicker />);
+
+      const cli = screen.getByRole('radiogroup', { name: 'cli' });
+      // A column wrapper stretches its children unless told otherwise; the mockup's switch does not stretch.
+      expect(cli.parentElement).toHaveClass('items-start');
+      // Three short labels always fit, so the switch never wraps into a rounded box.
+      expect(cli).not.toHaveClass('rounded-xl');
+      expect(cli).toHaveClass('rounded-full');
+      expect(cli.previousElementSibling).toHaveTextContent('cli');
+      expect(cli.previousElementSibling).toHaveClass('uppercase', 'text-micro', 'text-term-head');
     });
 
     it('starts a Codex session on Codex’s own model and effort (HIVE-279 PR B)', async () => {
