@@ -24,6 +24,8 @@ describe('codexAdapter', () => {
       enforcesBudget: false,
       reportsMcpStatus: false,
       agentMcp: [],
+      // Codex picks its own conversation id; the first hook reports it (HIVE-279).
+      conversationId: 'first-hook',
     });
   });
 

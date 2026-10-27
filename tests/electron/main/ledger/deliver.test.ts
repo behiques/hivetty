@@ -636,6 +636,7 @@ describe('createDeliver', () => {
         enforcesBudget: false,
         reportsMcpStatus: false,
         agentMcp: [],
+        conversationId: 'argv',
       },
       promptMarker: vi.fn(() => 'never typed'),
     });

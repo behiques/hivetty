@@ -29,6 +29,7 @@ export const codexAdapter: HarnessAdapter = {
     enforcesBudget: false,
     reportsMcpStatus: false,
     agentMcp: [],
+    conversationId: 'first-hook',
   },
   launch: interactive,
   prepare: {
