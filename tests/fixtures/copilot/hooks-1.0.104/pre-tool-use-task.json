@@ -1,0 +1,1 @@
+{"sessionId":"11111111-2222-4333-8444-555555555553","timestamp":1793072938250,"cwd":"/tmp/copilot-fixture/wd","toolName":"task","toolArgs":{"name":"echo-sub","prompt":"Run the shell command: echo from-sub  and report its output.","agent_type":"task","description":"Run echo command","mode":"sync"}}

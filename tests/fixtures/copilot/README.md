@@ -1,0 +1,22 @@
+# Copilot fixtures
+
+Recorded from a real, signed-in `GitHub Copilot CLI 1.0.104-4` on 2026-10-26 (HIVE-343), with a
+scratch `COPILOT_HOME`, an OAuth token in `COPILOT_GITHUB_TOKEN`, and `GH_TOKEN` and `GITHUB_TOKEN`
+unset. Each run was `copilot -p <prompt> -s --no-ask-user --disable-builtin-mcps --session-id <uuid>`
+(or `--resume=<uuid>`) with `--allow-tool shell|write|<server>`, a probe MCP server on
+`--additional-mcp-config`, `--usage-output-file`, and every hook event in `$COPILOT_HOME/settings.json`
+set to save its stdin. `hooks-1.0.104/` holds the bodies the hooks received, renamed by event:
+`agent-stop.json` and `pre-tool-use-bash.json` from a plain `echo`, `pre-tool-use-create.json` and
+`permission-request-edit.json` from a file write, and `pre-tool-use-{mcp,task,subagent}.json`,
+`agent-stop-subagent.json` and `agent-stop-after-subagent.json` from a run that called the probe
+server and a `task` subagent. `usage-1.0.104.json` is the first run's `--usage-output-file`, and
+`stderr-bad-token-1.0.104.txt` is the stderr of a run with a refused token (exit 1).
+
+Scrubbed, consistently across every file, and nothing else:
+
+- the probe's scratch directory under the macOS temp dir → `/tmp/copilot-fixture`;
+- the home directory → `/Users/me`;
+- the pinned session ids (`11111111-2222-4333-8444-55555555555N`) are already fake and stay; the
+  subagent's real id → `00000000-0000-4000-8000-000000000001`.
+
+Every other byte is as recorded. Re-record and re-scrub rather than hand-edit a line.
