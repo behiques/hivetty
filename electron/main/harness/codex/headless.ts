@@ -11,6 +11,11 @@ import {
 import { fenceCommand as sharedFenceCommand, hookCommand } from '../hook-commands';
 import type { HeadlessPlan, HeadlessSpec } from '../port';
 
+import { hookEntry, toml, tomlList, tomlTable } from './toml';
+
+/** Re-exported: the live suite and the headless tests take it from here. */
+export { toml };
+
 /**
  * The command line one agent wake runs, in Codex's spelling (HIVE-342). Pure: no spawn, no disk.
  * Measured against codex-cli 0.164.0; `docs/harness-architecture.md` has the why of each flag.
@@ -49,21 +54,6 @@ const HIVE_SERVER_ENV = [
   HOOK_ENV_GRANTS,
 ];
 
-/** Half a surrogate pair: JSON escapes it, but TOML holds Unicode scalar values only. */
-const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
-
-/**
- * A TOML basic string. JSON's escapes are a subset of TOML's, so `JSON.stringify` is one, apart
- * from the two strings it writes that TOML refuses: a raw DEL, and an escaped lone surrogate.
- */
-export const toml = (value: string): string =>
-  JSON.stringify(value.replace(LONE_SURROGATE, '�')).replace(/\u007f/g, '\\u007f');
-const tomlList = (values: readonly string[]): string => `[${values.map(toml).join(',')}]`;
-const tomlTable = (record: Record<string, string>): string =>
-  `{${Object.entries(record)
-    .map(([key, value]) => `${toml(key)}=${toml(value)}`)
-    .join(',')}}`;
-
 /** What the fence hook prints when it cannot get an answer: codex stops the call. */
 const FENCE_DOWN = JSON.stringify({
   hookSpecificOutput: {
@@ -80,9 +70,6 @@ const FENCE_DOWN = JSON.stringify({
  * a deny, never the empty reply codex would run. The identity and run come from the env by name.
  */
 export const fenceCommand = (): string => sharedFenceCommand({ denyJson: FENCE_DOWN });
-
-const hooks = (event: string, command: string, matcher?: string): string =>
-  `hooks.${event}=[{${matcher === undefined ? '' : `matcher=${toml(matcher)},`}hooks=[{type="command",command=${toml(command)}}]}]`;
 
 const config = (pair: string): string[] => ['-c', pair];
 
@@ -123,8 +110,8 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
       ...config(`mcp_servers.hive.env_vars=${tomlList(HIVE_SERVER_ENV)}`),
       // Codex's own approval off for hive: the fence is the PreToolUse hook below, never this.
       ...config('mcp_servers.hive.default_tools_approval_mode="approve"'),
-      ...config(hooks('Stop', hookCommand())),
-      ...config(hooks('PreToolUse', fenceCommand(), '*')),
+      ...config(hookEntry('Stop', hookCommand())),
+      ...config(hookEntry('PreToolUse', fenceCommand(), '*')),
       // The stop marker: a disabled server, so it is on the argv with no warning and no effect.
       ...config('mcp_servers.hive_wake.enabled=false'),
       ...config(`mcp_servers.hive_wake.command=${toml(id)}`),
