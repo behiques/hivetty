@@ -10,7 +10,7 @@ The driver has to give the pty a size and answer the TUI's start-up queries (`ES
 ## P1: do `-c hooks.<E>` hooks fire in the TUI?
 
 **With `--dangerously-bypass-hook-trust`: yes.** `SessionStart`, `UserPromptSubmit`,
-`PermissionRequest`, `PostToolUse` (`matcher="update_plan"`) and `Stop` all reached the probe's
+`PermissionRequest`, `PostToolUse` (`matcher="update_plan"` in the probe; the product hooks `matcher="*"`, HIVE-279) and `Stop` all reached the probe's
 server (`--bypass --plan-flag --ask`).
 
 **Without it: no.** The TUI opens on a "Hooks need review: 5 hooks are new or changed" dialog

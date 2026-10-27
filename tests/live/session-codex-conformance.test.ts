@@ -280,6 +280,10 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       const waiting = statuses.findIndex((s) => s.status === 'waiting' && s.signal.kind === 'waiting');
       expect(waiting).toBeGreaterThanOrEqual(0);
       expect(statuses[waiting]!.signal).toMatchObject({ reason: 'permission' });
+      // The approval ends the block: the tool's own PostToolUse (matcher "*") moves the row off
+      // waiting before the turn ends, which Stop alone would not do.
+      const after = statuses.slice(waiting + 1).find((s) => s.status !== 'waiting');
+      expect(after?.signal.kind).toBe('tool-end');
       // The card itself, not the idle every finished turn raises.
       expect(raised.map((n) => n.kind)).toContain('session.blocked');
       // Asked before it ran: the wait comes before the turn's end, and the file exists after it.

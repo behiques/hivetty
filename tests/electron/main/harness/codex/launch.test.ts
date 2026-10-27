@@ -32,12 +32,12 @@ describe('codex session command (HIVE-279)', () => {
     expect(() => line({ effort: 'none; rm -rf ~' })).toThrow(/codex: refusing effort/);
   });
 
-  it('reports every session event to the receiver, the plan tool by matcher', () => {
+  it('reports every session event to the receiver, tool ends by matcher', () => {
     const l = line();
     for (const event of ['SessionStart', 'UserPromptSubmit', 'PermissionRequest', 'Stop']) {
       expect(l).toContain(shellQuote(hookEntry(event, hookCommand())));
     }
-    expect(l).toContain(shellQuote(hookEntry('PostToolUse', hookCommand(), 'update_plan')));
+    expect(l).toContain(shellQuote(hookEntry('PostToolUse', hookCommand(), '*')));
   });
 
   it('turns the plan tool on, which the TUI leaves off (FINDINGS P4)', () => {

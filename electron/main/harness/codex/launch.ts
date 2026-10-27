@@ -56,7 +56,7 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
     ...config('tui.disable_paste_burst=true'),
     ...config('tools.update_plan.enabled=true'),
     ...CODEX_SESSION_EVENTS.flatMap((event) => config(hookEntry(event, hookCommand()))),
-    ...config(hookEntry('PostToolUse', hookCommand(), 'update_plan')),
+    ...config(hookEntry('PostToolUse', hookCommand(), '*')),
     ...(hiveServer === undefined
       ? []
       : [

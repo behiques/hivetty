@@ -86,6 +86,21 @@ describe('readCodexHook', () => {
     expect(plans(read(body.slice(0, 80), 'session', true).effects)).toEqual([]);
   });
 
+  it('reads no plan, and does not throw, from the PostToolUse of any other tool', () => {
+    for (const toolInput of [{ command: 'ls' }, {}, null, 'x', { plan: 'not a list' }]) {
+      const body = JSON.stringify({
+        hook_event_name: 'PostToolUse',
+        session_id: 's',
+        cwd: '/w',
+        tool_name: 'Bash',
+        tool_input: toolInput,
+      });
+      const reading = read(body);
+      expect(plans(reading.effects)).toEqual([]);
+      expect(reading).toEqual(claudeCodeAdapter.readHook({ lane: 'session', entityId: 'sess-1', body, truncated: false }));
+    }
+  });
+
   it('reads no plan from a PreToolUse', () => {
     const body = post({ plan: [{ step: 'a', status: 'pending' }] }).replace('PostToolUse', 'PreToolUse');
     expect(plans(read(body).effects)).toEqual([]);

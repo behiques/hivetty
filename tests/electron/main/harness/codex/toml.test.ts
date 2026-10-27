@@ -16,8 +16,8 @@ describe('codex toml (HIVE-279)', () => {
 
   it('builds one hook event entry, with and without a matcher', () => {
     expect(hookEntry('Stop', 'run')).toBe('hooks.Stop=[{hooks=[{type="command",command="run"}]}]');
-    expect(hookEntry('PostToolUse', 'run', 'update_plan')).toBe(
-      'hooks.PostToolUse=[{matcher="update_plan",hooks=[{type="command",command="run"}]}]',
+    expect(hookEntry('PostToolUse', 'run', '*')).toBe(
+      'hooks.PostToolUse=[{matcher="*",hooks=[{type="command",command="run"}]}]',
     );
   });
 });

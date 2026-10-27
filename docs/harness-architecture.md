@@ -456,7 +456,9 @@ login shell is typed, as Claude's is (`&& exit`, the task after `--`), flag by f
   the bootstrap's split `\r` submits (P7).
 - `-c tools.update_plan.enabled=true`: the TUI has no plan tool without it (P4).
 - `-c hooks.<E>=[…]` for `SessionStart`, `UserPromptSubmit`, `PermissionRequest` and `Stop`, and
-  `PostToolUse` with `matcher="update_plan"`, each running `hookCommand()`. No `Notification`:
+  `PostToolUse` with `matcher="*"` (as Claude's sessions do: a finished tool is what clears an
+  approved `PermissionRequest`, since `Stop` does not; `update_plan` is the only one read for a
+  plan), each running `hookCommand()`. No `Notification`:
   idle is `Stop`, and a permission is `PermissionRequest`, which is Claude's shape (P3). `/fence`
   is not used: a session's TUI asks for itself (D5).
 - `-c mcp_servers.hive.*`: the stdio host, `env_vars` forwarding the session's identity by name,
