@@ -2,6 +2,9 @@ import { isAbsolute } from 'node:path';
 
 import type { FenceCall } from '../port';
 
+/** A cwd longer than any real one is unusable, as a relative one is (and a trim of it is never run). */
+const MAX_CWD = 4096;
+
 /**
  * A relative path joined to the cwd and never normalised: `decide` refuses a `..` rather than
  * resolving it. `undefined` when the path is relative and the cwd is not absolute, as Codex's
@@ -9,7 +12,10 @@ import type { FenceCall } from '../port';
  */
 const at = (path: string, cwd: string): string | undefined => {
   if (isAbsolute(path)) return path;
-  return isAbsolute(cwd) ? `${cwd.replace(/\/+$/, '')}/${path}` : undefined;
+  if (cwd.length > MAX_CWD || !isAbsolute(cwd)) return undefined;
+  let end = cwd.length;
+  while (end > 0 && cwd[end - 1] === '/') end--;
+  return `${cwd.slice(0, end)}/${path}`;
 };
 /** An empty string is no value, as `decide` reads one. */
 const str = (value: unknown): string | undefined =>

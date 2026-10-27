@@ -82,6 +82,20 @@ describe('translateCopilotCall', () => {
         expect(decide(calls[0]!.tool, calls[0]!.input, [`${claude}(/tmp/**)`]).behavior).not.toBe('allow');
       }
     }
+    // A cwd too long to be a real one is unusable, as a relative one is: it is never joined.
+    for (const cwd of ['/'.repeat(100_000), `/${' '.repeat(100_000)}`, `/${'a'.repeat(5000)}`]) {
+      const started = performance.now();
+      const calls = translateCopilotCall('view', { path: 'b.txt' }, cwd);
+      expect(performance.now() - started).toBeLessThan(200);
+      expect(calls).toEqual([{ tool: 'view', input: { path: 'b.txt' } }]);
+    }
+    // Trailing slashes of an ordinary cwd are trimmed as before.
+    expect(translateCopilotCall('view', { path: 'b.txt' }, '/w/a///')).toEqual([
+      { tool: 'Read', input: { file_path: '/w/a/b.txt' } },
+    ]);
+    expect(translateCopilotCall('view', { path: 'b.txt' }, '/')).toEqual([
+      { tool: 'Read', input: { file_path: '/b.txt' } },
+    ]);
     // An absolute path needs no cwd.
     expect(translateCopilotCall('create', { path: '/tmp/x' }, '')).toEqual([
       { tool: 'Write', input: { file_path: '/tmp/x' } },
