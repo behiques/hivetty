@@ -15,7 +15,13 @@ import type {
   AgentWriteResult,
 } from '@shared/agent-contract';
 import type { ChangedFilesEvent, ChangedFilesSnapshot } from '@shared/changed-files-contract';
-import type { SetAgentsDefaultCliRequest, SetCliAgentsRequest } from '@shared/cli-contract';
+import type {
+  ClearCliTokenRequest,
+  CliTokensState,
+  SetAgentsDefaultCliRequest,
+  SetCliAgentsRequest,
+  SetCliTokenRequest,
+} from '@shared/cli-contract';
 import type {
   AddProjectRequest,
   BrowseDirRequest,
@@ -740,6 +746,14 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.jiraUsers, request),
     onIssueChanged: (callback: (issue: JiraIssue) => void) =>
       subscribe<JiraIssue>(CH.jiraIssueChanged, callback),
+  },
+  // HIVE-343. A CLI's agent token: presence, store, forget. No verb returns a token.
+  cli: {
+    tokensState: (): Promise<CliTokensState> => ipcRenderer.invoke(CH.cliTokensState),
+    setToken: (request: SetCliTokenRequest): Promise<CliTokensState> =>
+      ipcRenderer.invoke(CH.cliSetToken, request),
+    clearToken: (request: ClearCliTokenRequest): Promise<CliTokensState> =>
+      ipcRenderer.invoke(CH.cliClearToken, request),
   },
   /*
     HIVE-123. Four verbs, none of them returning a credential — see the

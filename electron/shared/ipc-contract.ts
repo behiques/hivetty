@@ -31,7 +31,13 @@ import type {
   AgentWriteResult,
 } from './agent-contract';
 import type { ChangedFilesEvent, ChangedFilesSnapshot } from './changed-files-contract';
-import type { SetAgentsDefaultCliRequest, SetCliAgentsRequest } from './cli-contract';
+import type {
+  ClearCliTokenRequest,
+  CliTokensState,
+  SetAgentsDefaultCliRequest,
+  SetCliAgentsRequest,
+  SetCliTokenRequest,
+} from './cli-contract';
 import type {
   AddProjectRequest,
   BrowseDirRequest,
@@ -304,6 +310,14 @@ export const CH = {
   configSetCliAgents: 'config:set-cli-agents',
   /** HIVE-342. The CLI an agent whose `AGENT.md` names no harness runs on. An ordinary settings write. */
   configSetAgentsDefaultCli: 'config:set-agents-default-cli',
+  /**
+   * A CLI's agent token (HIVE-343): presence, store, forget. Slack's rule: every answer is
+   * presence only, and `CliTokens.read()` is main-internal with no channel. A `cli:` namespace
+   * rather than `config:` because the token never touches the config file.
+   */
+  cliTokensState: 'cli:tokens-state',
+  cliSetToken: 'cli:set-token',
+  cliClearToken: 'cli:clear-token',
   /**
    * The container host alias, and where the receiver listens (HIVE-131, HIVE-134).
    *
@@ -2708,6 +2722,13 @@ export interface HiveBridge {
     users(request: JiraUsersRequest): Promise<JiraResult<JiraUser[]>>;
     /** Every issue a transition or an assign re-read, whoever asked: an agent, a session, this window. */
     onIssueChanged(callback: (issue: JiraIssue) => void): () => void;
+  };
+  /** A CLI's agent token (HIVE-343). Every answer is presence only. */
+  cli: {
+    tokensState(): Promise<CliTokensState>;
+    /** Store one CLI's token, replacing what it held. Throws when there is no keyring. */
+    setToken(request: SetCliTokenRequest): Promise<CliTokensState>;
+    clearToken(request: ClearCliTokenRequest): Promise<CliTokensState>;
   };
   /**
    * Slack — the MCP server (HIVE-123) and socket mode (HIVE-124).

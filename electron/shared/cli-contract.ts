@@ -120,6 +120,28 @@ export interface SetCliAgentsRequest {
   deny?: string[] | null;
 }
 
+/** The CLIs whose agents sign in with a token HiveTTY holds (HIVE-343). */
+export const CLI_TOKEN_IDS = ['copilot'] as const;
+
+export type CliTokenId = (typeof CLI_TOKEN_IDS)[number];
+
+/** Presence only: no answer ever carries a token (HIVE-343, Slack's rule). */
+export interface CliTokensState {
+  copilot: boolean;
+  encryptionAvailable: boolean;
+}
+
+/** Payload of `cli:set-token` (HIVE-343). */
+export interface SetCliTokenRequest {
+  cli: CliTokenId;
+  token: string;
+}
+
+/** Payload of `cli:clear-token` (HIVE-343). */
+export interface ClearCliTokenRequest {
+  cli: CliTokenId;
+}
+
 /** Payload of `config:set-agents-default-cli` (HIVE-342). `null` clears it: resolution falls back to claude-code. */
 export interface SetAgentsDefaultCliRequest {
   cli: HarnessId | null;

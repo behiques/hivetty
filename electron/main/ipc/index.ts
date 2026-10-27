@@ -29,6 +29,7 @@ import {
   type AgentStatusPush,
   type WakeSpec,
 } from '@shared/agent-contract';
+import type { CliTokensState } from '@shared/cli-contract';
 import { AUTH_ENV_KEYS } from '@shared/config-contract';
 import type {
   BrowseListing,
@@ -111,7 +112,9 @@ import {
   parseSetServerRequest,
   parseSetSessionPluginRequest,
   parseSetAgentsDefaultCliRequest,
+  parseClearCliTokenRequest,
   parseSetCliAgentsRequest,
+  parseSetCliTokenRequest,
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
   parseSkillDropRequest,
@@ -190,6 +193,7 @@ import {
 } from '../agents/auto-merge';
 import { resolveClaude } from '../agents/claude-path';
 import { createCliGate } from '../agents/cli-gate';
+import { CLI_TOKENS_FILE, createCliTokens } from '../agents/cli-tokens';
 import {
   agentsDirectoryFor,
   projectAutoMergeFor,
@@ -3062,6 +3066,11 @@ export function registerIpcHandlers(
     store: safeStorage,
     file: credentialFile(join(app.getPath('userData'), SLACK_TOKENS_FILE)),
   });
+  // HIVE-343. Copilot's agent token, the same custody. `read()` reaches the wake, never a channel.
+  const cliTokens = createCliTokens({
+    store: safeStorage,
+    file: credentialFile(join(app.getPath('userData'), CLI_TOKENS_FILE)),
+  });
 
   /**
    * Slack Socket Mode, as a wake source (HIVE-124).
@@ -4519,6 +4528,15 @@ export function registerIpcHandlers(
   });
   handle(CH.slackTest, (): Promise<SlackStatus> =>
     slackVerb(CH.slackTest, (claude) => probeSlack(claude, runSlack)),
+  );
+
+  // HIVE-343. A CLI's agent token: presence only on every answer; `read()` has no channel.
+  handle(CH.cliTokensState, (): CliTokensState => cliTokens.state());
+  handle(CH.cliSetToken, (_event, payload): CliTokensState =>
+    cliTokens.save(parseSetCliTokenRequest(payload)),
+  );
+  handle(CH.cliClearToken, (_event, payload): CliTokensState =>
+    cliTokens.clear(parseClearCliTokenRequest(payload)),
   );
 
   /**

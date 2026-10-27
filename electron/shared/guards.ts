@@ -9,12 +9,15 @@ import type {
   AgentWriteRequest,
 } from './agent-contract';
 import {
+  CLI_TOKEN_IDS,
   CLI_VOCAB,
   COPILOT_DENY_MAX,
   COPILOT_DENY_PATTERN,
   HEADLESS_SANDBOXES,
+  type ClearCliTokenRequest,
   type SetAgentsDefaultCliRequest,
   type SetCliAgentsRequest,
+  type SetCliTokenRequest,
 } from './cli-contract';
 import {
   NOTIFICATION_KEYS,
@@ -1804,6 +1807,23 @@ export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
 
   if (Object.keys(request).length === 1) return fail('setCliAgents: nothing to change');
   return request;
+}
+
+/** Payload of `cli:set-token` (HIVE-343): a token-holding CLI and one whitespace-free token. */
+export function parseSetCliTokenRequest(input: unknown): SetCliTokenRequest {
+  const raw = assertShape(input, ['cli', 'token'], 'setCliToken');
+  const cli = assertOneOf(raw.cli, CLI_TOKEN_IDS, 'setCliToken.cli');
+  const token = typeof raw.token === 'string' ? raw.token.trim() : '';
+  if (!/^\S{1,512}$/.test(token)) {
+    return fail('setCliToken.token: expected a token with no spaces, at most 512 characters');
+  }
+  return { cli, token };
+}
+
+/** Payload of `cli:clear-token` (HIVE-343). */
+export function parseClearCliTokenRequest(input: unknown): ClearCliTokenRequest {
+  const raw = assertShape(input, ['cli'], 'clearCliToken');
+  return { cli: assertOneOf(raw.cli, CLI_TOKEN_IDS, 'clearCliToken.cli') };
 }
 
 /** Copilot's `--deny-tool` patterns (HIVE-343): a bounded list, each one `kind(argument)`. */
