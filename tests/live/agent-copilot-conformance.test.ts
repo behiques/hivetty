@@ -71,10 +71,11 @@ const SHELL = 'probe-copilot-shell';
 const CREATE = 'probe-copilot-create';
 const MCP = 'probe-copilot-mcp';
 const DENY = 'probe-copilot-deny';
-const AGENTS = [CP, SHELL, CREATE, MCP, DENY];
+const UNTRUSTED = 'probe-copilot-untrusted';
+const AGENTS = [CP, SHELL, CREATE, MCP, DENY, UNTRUSTED];
 
-const CP_MD = `---
-name: ${CP}
+const probeMd = (name: string) => `---
+name: ${name}
 description: Proves a Copilot wake, its resume and its receipt.
 icon: Ghost
 harness: [copilot]
@@ -86,11 +87,12 @@ limits:
   parallel: 2
   rotate_after: 50
 ---
-Your name is ${CP}.
+Your name is ${name}.
 
 This is a conformance probe. Do not read files, run any command your wake prompt does not name, or
 explore. Do exactly what your wake prompt asks, in as few steps as you can, then end your turn.
 `;
+const CP_MD = probeMd(CP);
 
 const fenceMd = (name: string, call: string, tools = '[]') => `---
 name: ${name}
@@ -137,6 +139,9 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
   let shellMarker: string;
   let createMarker: string;
   let denyMarker: string;
+  /** Outside every workdir, so nothing the agent does there can create them (HIVE-357). */
+  let hookMarker: string;
+  let mcpMarker: string;
 
   const spawns: { name: string; args: string[] }[] = [];
   const agentEvents: HookAgentEvent[] = [];
@@ -195,10 +200,34 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       [MCP, fenceMd(MCP, 'The hive MCP tool jira_comment, with key "HIVE-1" and body "probe".')],
       // Granted, so only Copilot's own `--deny-tool` can stop it.
       [DENY, fenceMd(DENY, `The shell command: touch ${denyMarker}`, '[Bash(touch *)]')],
+      [UNTRUSTED, probeMd(UNTRUSTED)],
     ] as const) {
       await mkdir(join(agentsRoot(), name), { recursive: true });
       await writeFile(join(agentsRoot(), name, 'AGENT.md'), body, 'utf8');
     }
+
+    // A workdir's own hooks and MCP servers, which Copilot loads only in a trusted folder (HIVE-357).
+    const untrusted = agentWorkdir(UNTRUSTED);
+    hookMarker = join(dir, 'untrusted-hook-ran');
+    mcpMarker = join(dir, 'untrusted-mcp-ran');
+    await mkdir(join(untrusted, '.github', 'hooks'), { recursive: true });
+    await writeFile(
+      join(untrusted, '.github', 'hooks', 'probe.json'),
+      JSON.stringify({
+        version: 1,
+        hooks: { sessionStart: [{ type: 'command', bash: `touch ${hookMarker}`, timeoutSec: 10 }] },
+      }),
+      'utf8',
+    );
+    await writeFile(
+      join(untrusted, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          planted: { type: 'local', command: 'sh', args: ['-c', `touch ${mcpMarker}; sleep 5`], tools: ['*'] },
+        },
+      }),
+      'utf8',
+    );
 
     ledger = createLedger({
       dir: join(dirname(process.env[CONFIG_PATH_ENV]), LEDGER_DIR),
@@ -671,6 +700,34 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     }
     expect(buildWakeCommand(CP, 'manual')).not.toHaveProperty('problem');
   });
+
+  it('an untrusted workdir loads neither its hooks nor its MCP servers', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    await wake(UNTRUSTED, 'Reply with "ok" and end your turn.');
+
+    expect((await persisted(UNTRUSTED)).runs.at(-1)?.outcome).toBe('done');
+    expect(existsSync(hookMarker)).toBe(false);
+    expect(existsSync(mcpMarker)).toBe(false);
+
+    // The positive control: the same directory trusted for one prompt does load both.
+    const control = spawnSync(
+      'copilot',
+      ['-p', 'Reply with "ok".', '-s', '--no-ask-user', '--disable-builtin-mcps', '--trust-folder'],
+      {
+        cwd: agentWorkdir(UNTRUSTED),
+        encoding: 'utf8',
+        timeout: TURN_MS,
+        env: {
+          ...process.env,
+          COPILOT_HOME: join(dir as string, 'control-home'),
+          GH_TOKEN: undefined,
+          GITHUB_TOKEN: undefined,
+        },
+      },
+    );
+    expect(control.status, control.stderr).toBe(0);
+    expect(existsSync(hookMarker) || existsSync(mcpMarker)).toBe(true);
+  }, 2 * TURN_MS);
 
   it('nothing is written under ~/.copilot', async (ctx) => {
     if (skipReason !== undefined) ctx.skip(skipReason);
