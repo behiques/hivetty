@@ -34,11 +34,10 @@ import {
 } from '@stores/ui-store';
 
 /**
- * The CLIs a session can start on now, and why the others cannot (HIVE-279). Codex's interactive
- * half is HIVE-279's second PR; Copilot's is HIVE-280. Data rather than a branch, so PR B
- * enables Codex by deleting one entry.
+ * The CLIs a session cannot start on yet, and why (HIVE-279): Copilot's interactive half is
+ * HIVE-280. Data rather than a branch, so enabling a CLI deletes one entry.
  */
-const UNAVAILABLE: Partial<Record<HarnessId, string>> = { codex: 'next release', copilot: 'HIVE-280' };
+const UNAVAILABLE: Partial<Record<HarnessId, string>> = { copilot: 'HIVE-280' };
 /*
   No CliMark in the segments: `SegmentedControl` takes an icon *name*, not a node, so the mark lives
   on the header chip instead (HIVE-279).

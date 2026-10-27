@@ -152,14 +152,29 @@ describe('NewSessionPicker', () => {
 
       const cli = screen.getByRole('radiogroup', { name: 'cli' });
       expect(within(cli).getByRole('radio', { name: /Claude Code/ })).toBeChecked();
-      expect(within(cli).getByRole('radio', { name: /Codex/ })).toBeDisabled();
+      expect(within(cli).getByRole('radio', { name: /Codex/ })).toBeEnabled();
       expect(within(cli).getByRole('radio', { name: /Copilot/ })).toBeDisabled();
-      expect(screen.getByText('Codex · next release · Copilot · HIVE-280')).toBeInTheDocument();
+      expect(screen.getByText('Copilot · HIVE-280')).toBeInTheDocument();
       expect(screen.getByText('Pick a project — a Claude Code terminal will open for it')).toBeInTheDocument();
     });
 
+    it('starts a Codex session on Codex’s own model and effort (HIVE-279 PR B)', async () => {
+      const user = userEvent.setup();
+      render(<NewSessionPicker />);
+
+      await user.click(within(screen.getByRole('radiogroup', { name: 'cli' })).getByRole('radio', { name: /Codex/ }));
+      expect(screen.getByRole('radio', { name: /Codex/ })).toBeChecked();
+      await user.click(screen.getByRole('button', { name: 'design-system' }));
+
+      expect(useHiveStore.getState().entities['sess-01']).toMatchObject({
+        project: 'design-system',
+        harness: 'codex',
+        model: 'gpt-6-luna',
+        effort: 'medium',
+      });
+    });
+
     it('reads the steppers from the CLI it is on', () => {
-      // The store allows it; only the switch is fenced in PR A.
       useUiStore.getState().setNewCli('codex');
       render(<NewSessionPicker />);
 
