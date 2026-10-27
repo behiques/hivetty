@@ -115,6 +115,7 @@ import type {
   RunRef,
   UserReposSnapshot,
 } from './github-contract';
+import type { HarnessId } from './harness-contract';
 import type {
   JiraComment,
   JiraCommentPage,
@@ -144,8 +145,6 @@ import type {
 } from './notification-contract';
 import type { PlanChangedEvent, PlansSnapshot } from './plan-contract';
 import type {
-  SessionEffort,
-  SessionModel,
   SessionBranchEvent,
   SessionClearedEvent,
   SessionFinishedEvent,
@@ -1326,9 +1325,17 @@ export interface SpawnRequest {
    * task is an instruction the previous generation may already have acted on;
    * a model is a property of the session itself, and restarting a session as a
    * different model than the one its row advertises is not a restart.
+   *
+   * Words from `CLI_VOCAB[harness ?? 'claude-code']`, checked by `parseSpawnRequest` (HIVE-279).
    */
-  model?: SessionModel;
-  effort?: SessionEffort;
+  model?: string;
+  effort?: string;
+  /**
+   * The CLI this session runs (HIVE-279). Absent is Claude Code, which is every spawn before this
+   * story, so a caller that never heard of a second CLI is unchanged. Forwarded on a restart, as
+   * the model is: a session restarted as a different CLI is not a restart.
+   */
+  harness?: HarnessId;
   /**
    * What to call the session, when the renderer has a better answer than its
    * id (HIVE-78).

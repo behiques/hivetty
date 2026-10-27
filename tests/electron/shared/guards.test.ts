@@ -66,6 +66,30 @@ describe('parseSpawnRequest', () => {
     ]);
   });
 
+  describe('harness (HIVE-279)', () => {
+    it('is absent when not sent, and the vocabulary is then Claude’s', () => {
+      expect(parseSpawnRequest({ ...validSpawn })).not.toHaveProperty('harness');
+      expect(parseSpawnRequest({ ...validSpawn, model: 'opus' }).model).toBe('opus');
+      expect(() => parseSpawnRequest({ ...validSpawn, model: 'gpt-6-luna' })).toThrow(/spawn\.model/);
+    });
+
+    it('checks model and effort against the named CLI', () => {
+      expect(
+        parseSpawnRequest({ ...validSpawn, harness: 'codex', model: 'gpt-6-luna', effort: 'xhigh' }),
+      ).toEqual({ ...validSpawn, harness: 'codex', model: 'gpt-6-luna', effort: 'xhigh' });
+      // Claude's words are not Codex's: the closed list is what keeps the argv unquoted.
+      expect(() => parseSpawnRequest({ ...validSpawn, harness: 'codex', model: 'opus' })).toThrow(/spawn\.model/);
+      expect(() => parseSpawnRequest({ ...validSpawn, harness: 'claude-code', effort: 'xhigh' })).toThrow(
+        /spawn\.effort/,
+      );
+    });
+
+    it('refuses a harness that is not one', () => {
+      expect(() => parseSpawnRequest({ ...validSpawn, harness: 'gemini' })).toThrow(/spawn\.harness/);
+      expect(() => parseSpawnRequest({ ...validSpawn, harness: 7 })).toThrow(/spawn\.harness/);
+    });
+  });
+
   describe('resume (HIVE-88)', () => {
     it('passes a boolean through', () => {
       expect(parseSpawnRequest({ ...validSpawn, resume: true }).resume).toBe(true);
