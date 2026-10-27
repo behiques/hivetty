@@ -45,10 +45,13 @@ export function createAgentsRuntime(
   return createAgentRegistry({
     root: agentsRoot(),
     // HIVE-345. The user's skills and plugins are the harness's, so the registry answers them.
-    skillNames: async () => ({
-      ...(await readAvailableSkillNames(skillsRoot(), () => sessionAdapter().installed.skillNames())),
-      places: sessionAdapter().installed.skillPlaces,
-    }),
+    skillNames: async () => {
+      const { installed } = sessionAdapter();
+      return {
+        ...(await readAvailableSkillNames(skillsRoot(), () => installed.skillNames())),
+        places: installed.skillPlaces,
+      };
+    },
     ...(options.runFiles === undefined ? {} : { runFiles: options.runFiles }),
   });
 }
