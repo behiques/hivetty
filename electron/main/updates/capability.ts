@@ -41,7 +41,7 @@ import type { UpdateCapability } from '@shared/update-contract';
  * it, `update-downloaded` fired and the app reported the update **ready** — and
  * then the swap failed:
  *
- *     [Error: Code signature at URL file:///…/HiveTTY.app/ did not pass
+ *     [Error: Code signature at URL file:///…/HiveTTY Pro.app/ did not pass
  *      validation: code failed to satisfy specified code requirement(s)]
  *       code: -1, domain: 'SQRLCodeSignatureErrorDomain'
  *
@@ -93,7 +93,7 @@ function defaultProbeDeps(): CapabilityProbeDeps {
      * Up three levels from the executable.
      *
      * `app.getPath('exe')` inside a packaged mac app is
-     * `…/HiveTTY.app/Contents/MacOS/HiveTTY`, and `codesign` must be handed
+     * `…/HiveTTY Pro.app/Contents/MacOS/HiveTTY Pro`, and `codesign` must be handed
      * the `.app`, not the Mach-O inside it — pointed at the executable it
      * reports on that file's own signature, which is not the thing Squirrel
      * validates.

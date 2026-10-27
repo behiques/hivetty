@@ -38,7 +38,7 @@ import {
  */
 
 /** Where `pnpm desktop:dist` leaves the bundle. */
-const DEFAULT_APP = 'dist/mac-arm64/HiveTTY.app';
+const DEFAULT_APP = 'dist/mac-arm64/HiveTTY Pro.app';
 
 /**
  * Read manifests straight out of the archive.
@@ -104,7 +104,7 @@ export function verifyArchive(archive) {
   return { ok, message, packageCount: closure.packages.length };
 }
 
-/** `dist/mac-arm64/HiveTTY.app` → the archive inside it. */
+/** `dist/mac-arm64/HiveTTY Pro.app` → the archive inside it. */
 function archiveFor(target) {
   if (target.endsWith('.asar')) return target;
   return path.join(target, 'Contents', 'Resources', 'app.asar');

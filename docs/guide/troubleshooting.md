@@ -36,7 +36,7 @@ pnpm check:abi --fix
 macOS says this about a build without a notarized signature. Remove the quarantine flag:
 
 ```sh
-xattr -dr com.apple.quarantine "/Applications/HiveTTY.app"
+xattr -dr com.apple.quarantine "/Applications/HiveTTY Pro.app"
 ```
 
 For a signed but not notarized build, right-click the app and choose **Open** once.
