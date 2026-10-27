@@ -432,11 +432,12 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     agentEvents.some((event) => event.entityId === name && event.signal.kind === 'turn-end');
 
   /**
-   * The calls Copilot refused in a session, from its own `events.jsonl`: the run log carries only
-   * the model's words. At 1.0.104 a `--deny-tool` refusal is a `tool.execution_complete` with
-   * `error.code: 'denied'`, its call named by the `tool.execution_start` with the same id.
+   * The calls a session made, from Copilot's own `events.jsonl`: the run log carries only the
+   * model's words. Each is a `tool.execution_complete` (`success`, `result.content`, `error`), its
+   * call named by the `tool.execution_start` with the same id. At 1.0.104 a `--deny-tool` refusal
+   * is one with `success: false` and `error.code: 'denied'`.
    */
-  const refusedCalls = async (uuid: string) => {
+  const sessionCalls = async (uuid: string) => {
     const file = join(cliHome('copilot'), 'session-state', uuid, 'events.jsonl');
     const events = (await readFile(file, 'utf8'))
       .split('\n')
@@ -448,13 +449,25 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
         .map((event) => [event.data['toolCallId'], event.data] as const),
     );
     return events
-      .filter((event) => event.type === 'tool.execution_complete' && event.data['success'] === false)
+      .filter((event) => event.type === 'tool.execution_complete')
       .map((event) => {
         const start = started.get(event.data['toolCallId']);
         const args = (start?.['arguments'] ?? {}) as Record<string, unknown>;
-        return { tool: start?.['toolName'], command: args['command'], error: event.data['error'] };
+        const result = event.data['result'] as { content?: unknown } | undefined;
+        return {
+          tool: start?.['toolName'],
+          command: args['command'],
+          success: event.data['success'],
+          error: event.data['error'],
+          content: result?.content,
+        };
       });
   };
+
+  const refusedCalls = async (uuid: string) =>
+    (await sessionCalls(uuid))
+      .filter((call) => call.success === false)
+      .map(({ tool, command, error }) => ({ tool, command, error }));
 
   const runLog = (run: string): string => JSON.stringify(lines.filter((line) => line.run === run));
 
@@ -486,6 +499,18 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     // The prompt never names the agent: only `AGENTS.md` does.
     expect(args[args.indexOf('-p') + 1]).not.toContain(CP);
     expect(runLog(run)).toContain(CP);
+    // The awk call really ran and printed 0: at 1.0.104 a shell result's `content` is its stdout,
+    // then a `<shellId: … exit code …>` line. The model's own TOKEN-COUNT line is the second check.
+    const awk = (await sessionCalls(pinned as string)).filter(
+      (call) =>
+        call.tool === 'bash' &&
+        typeof call.command === 'string' &&
+        call.command.includes('awk') &&
+        call.command.includes('ENVIRON'),
+    );
+    expect(awk, JSON.stringify(awk)).toHaveLength(1);
+    expect(awk[0]?.success).toBe(true);
+    expect(String(awk[0]?.content).split('\n')[0]?.trim()).toBe('0');
     expect(runLog(run)).toMatch(/TOKEN-COUNT: 0\b/);
   }, TURN_MS);
 
