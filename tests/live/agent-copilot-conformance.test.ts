@@ -8,7 +8,15 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from 'vitest';
 
-import { agentPromptFile, agentStateFile, agentsRoot, cliHome, laneWorkdir } from '../../electron/main/agents/paths';
+import { createCliGate } from '../../electron/main/agents/cli-gate';
+import {
+  agentPromptFile,
+  agentStateFile,
+  agentsRoot,
+  agentWorkdir,
+  cliHome,
+  laneWorkdir,
+} from '../../electron/main/agents/paths';
 import { createPermissions, type Permissions } from '../../electron/main/agents/permissions';
 import { createAgentRegistry, type AgentRegistry } from '../../electron/main/agents/registry';
 import type { HarnessGate } from '../../electron/main/agents/resolve-harness';
@@ -17,6 +25,7 @@ import { createScheduler, type Scheduler } from '../../electron/main/agents/sche
 import { createAgentState, type AgentState } from '../../electron/main/agents/state';
 import { createWakeCommand } from '../../electron/main/agents/wake-command';
 import { createHarnessRegistry, headlessAdapter } from '../../electron/main/harness/registry';
+import { getConfig, setCliAgents } from '../../electron/main/config';
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
 import { writeAgentSettings } from '../../electron/main/harness/claude-code/settings';
 import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
@@ -58,7 +67,11 @@ const TEARDOWN_WAIT_MS = 10_000;
 const TURN_MS = 240_000;
 
 const CP = 'probe-copilot';
-const AGENTS = [CP];
+const SHELL = 'probe-copilot-shell';
+const CREATE = 'probe-copilot-create';
+const MCP = 'probe-copilot-mcp';
+const DENY = 'probe-copilot-deny';
+const AGENTS = [CP, SHELL, CREATE, MCP, DENY];
 
 const CP_MD = `---
 name: ${CP}
@@ -77,6 +90,26 @@ Your name is ${CP}.
 
 This is a conformance probe. Do not read files, run commands or explore. Do exactly what your
 wake prompt asks, in as few steps as you can, then end your turn.
+`;
+
+const fenceMd = (name: string, call: string, tools = '[]') => `---
+name: ${name}
+description: Proves the Copilot fence asks about one call, and lets it through once answered.
+icon: Ghost
+harness: [copilot]
+wake:
+  on: [ledger]
+tools: ${tools}
+limits:
+  turns: 8
+---
+This is a conformance probe. After your ledger inbox, make exactly this one call and nothing else:
+
+${call}
+
+If it is denied, end your turn at once: you will be woken when it is answered. When you are woken
+again, make the same call again, exactly as written, even if it failed before, then end your turn.
+Never use any other tool, and never try another way to get the same effect.
 `;
 
 /** Each entry's name and mtime, or null when the directory does not exist. */
@@ -101,10 +134,14 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
   let agentRegistry: AgentRegistry;
   let permissions: Permissions;
   let buildWakeCommand: ReturnType<typeof createWakeCommand>;
+  let shellMarker: string;
+  let createMarker: string;
+  let denyMarker: string;
 
   const spawns: { name: string; args: string[] }[] = [];
   const agentEvents: HookAgentEvent[] = [];
   const lines: RunLine[] = [];
+  const jiraComments: unknown[] = [];
   const settlers = new Map<string, () => void>();
   const onRunClosed = vi.fn((name: string) => scheduler?.onRunClosed(name));
   /** Swapped by case 7; every other case runs with Copilot entitled. */
@@ -144,9 +181,24 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     const userDataPath = join(dir, 'userData');
     previousConfigPath = process.env[CONFIG_PATH_ENV];
     process.env[CONFIG_PATH_ENV] = join(dir, '.hive', 'config.json');
+    // Boot, as the app does: the first load writes the config file Settings later edits.
+    getConfig();
 
-    await mkdir(join(agentsRoot(), CP), { recursive: true });
-    await writeFile(join(agentsRoot(), CP, 'AGENT.md'), CP_MD, 'utf8');
+    // Each inside its own agent's workdir, where Copilot writes without a path prompt of its own.
+    shellMarker = join(agentWorkdir(SHELL), 'made-by-shell');
+    createMarker = join(agentWorkdir(CREATE), 'made-by-create.txt');
+    denyMarker = join(agentWorkdir(DENY), 'made-by-denied-shell');
+    for (const [name, body] of [
+      [CP, CP_MD],
+      [SHELL, fenceMd(SHELL, `The shell command: touch ${shellMarker}`)],
+      [CREATE, fenceMd(CREATE, `Create the file ${createMarker} with your create tool, containing the one line: made`)],
+      [MCP, fenceMd(MCP, 'The hive MCP tool jira_comment, with key "HIVE-1" and body "probe".')],
+      // Granted, so only Copilot's own `--deny-tool` can stop it.
+      [DENY, fenceMd(DENY, `The shell command: touch ${denyMarker}`, '[Bash(touch *)]')],
+    ] as const) {
+      await mkdir(join(agentsRoot(), name), { recursive: true });
+      await writeFile(join(agentsRoot(), name, 'AGENT.md'), body, 'utf8');
+    }
 
     ledger = createLedger({
       dir: join(dirname(process.env[CONFIG_PATH_ENV]), LEDGER_DIR),
@@ -180,7 +232,11 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       onJira: {
         get: () => Promise.reject(new Error('not exercised')),
         transition: () => Promise.reject(new Error('not exercised')),
-        comment: () => Promise.reject(new Error('not exercised')),
+        // The MCP fence case's effect: the one call it is fenced on, reaching the tool once answered.
+        comment: (request) => {
+          jiraComments.push(request);
+          return Promise.resolve({ ok: true, value: { id: '1', author: 'probe', created: 'now', body: [] } });
+        },
         users: () => Promise.reject(new Error('not exercised')),
       },
       // As `hooks/index.ts` wires it: a hook names its CLI by the `x-hive-harness` header.
@@ -212,7 +268,8 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       entitled: (id) => entitled(id),
       enabled: () => true,
       defaultCli: () => 'copilot',
-      defaults: () => ({}),
+      // Settings › CLIs, read per call as `ipc/index.ts` reads it: the deny case writes it.
+      defaults: (id) => createCliGate(getConfig).defaults(id),
     };
 
     /*
@@ -363,6 +420,17 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     }
   };
 
+  const settled = (name: string): Promise<void> =>
+    new Promise((resolve) => {
+      settlers.set(name, resolve);
+    });
+
+  const permissionAsks = (name: string) =>
+    ledger.read({}).openAsks.filter((ask) => ask.from === name && ask.meta?.['kind'] === 'permission');
+
+  const endedTurn = (name: string): boolean =>
+    agentEvents.some((event) => event.entityId === name && event.signal.kind === 'turn-end');
+
   const runLog = (run: string): string => JSON.stringify(lines.filter((line) => line.run === run));
 
   const lastArgs = (name: string): string[] => spawns.filter((spawn) => spawn.name === name).at(-1)?.args ?? [];
@@ -427,7 +495,70 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     expect((await persisted(CP)).sessionUuid).toBe(uuid);
   }, 2 * TURN_MS);
 
-  // Case 4, the fence (HIVE-343 Task 19), lands here.
+  /**
+   * Case 4: the fence. Each call kind is denied with one permission ask and no effect, then an
+   * `allow-once` answer wakes the agent with that one-shot grant and the call runs.
+   */
+  const fenceCase = async (name: string, tool: string, effect: () => boolean) => {
+    await wake(name);
+
+    const asks = permissionAsks(name);
+    expect(asks, JSON.stringify(ledger.read({ from: name }).entries.map((entry) => entry.body))).toHaveLength(1);
+    expect(asks[0]?.kind).toBe('ask');
+    expect(asks[0]?.meta?.['tool']).toBe(tool);
+    expect(effect()).toBe(false);
+    expect(endedTurn(name)).toBe(true);
+    expect((await persisted(name)).runs.at(-1)?.outcome).toBe('asking');
+
+    const second = settled(name);
+    expect(ledger.answer({ thread: asks[0]?.id ?? '', body: 'allow-once' }, OVERMIND).ok).toBe(true);
+    await second;
+
+    expect(effect()).toBe(true);
+    expect(permissionAsks(name)).toEqual([]);
+  };
+
+  it('the fence asks about a shell call, and allow-once lets it run', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    await fenceCase(SHELL, 'Bash', () => existsSync(shellMarker));
+  }, 2 * TURN_MS);
+
+  it('the fence asks about a file create, and allow-once lets it run', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    await fenceCase(CREATE, 'Write', () => existsSync(createMarker));
+  }, 2 * TURN_MS);
+
+  it('the fence asks about an MCP call, and allow-once lets it run', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    await fenceCase(MCP, 'mcp__hive__jira_comment', () => jiraComments.length > 0);
+  }, 2 * TURN_MS);
+
+  it('a --deny-tool pattern from Settings blocks even a granted call', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    // Copilot's own `--deny-tool` grammar, written the way Settings writes it.
+    expect(setCliAgents({ cli: 'copilot', deny: ['shell(touch:*)'] }).clis.copilot.agents.deny).toEqual([
+      'shell(touch:*)',
+    ]);
+    try {
+      await wake(DENY);
+
+      const args = lastArgs(DENY);
+      expect(args[args.indexOf('--deny-tool') + 1]).toBe('shell(touch:*)');
+      expect(existsSync(denyMarker)).toBe(false);
+      // Copilot refused it before the hook: the fence never saw the call, so nothing asked.
+      expect(permissionAsks(DENY)).toEqual([]);
+      expect(runs.liveRuns(DENY)).toEqual([]);
+    } finally {
+      setCliAgents({ cli: 'copilot', deny: null });
+    }
+
+    // The positive control: the same grant, with the pattern cleared, does create the file.
+    await wake(DENY, 'The deny pattern is gone now: make the call again, exactly as written.');
+    expect(lastArgs(DENY)).not.toContain('--deny-tool');
+    expect(existsSync(denyMarker)).toBe(true);
+    expect(permissionAsks(DENY)).toEqual([]);
+  }, 2 * TURN_MS);
+
 
   it('a task run starts a fresh session', async (ctx) => {
     if (skipReason !== undefined) ctx.skip(skipReason);
