@@ -58,15 +58,11 @@ import {
   type SessionMetrics,
 } from '../../../../electron/shared/metrics-contract';
 import { translateCodexCall } from '../../../../electron/main/harness/codex/fence';
-import {
-  copilotFenceReply,
-  readCopilotFence,
-  translateCopilotCall,
-} from '../../../../electron/main/harness/copilot/fence';
+import { copilotFence } from '../../../../electron/main/harness/copilot';
+import type { copilotFenceReply } from '../../../../electron/main/harness/copilot/fence';
 import { createLedger, type Ledger } from '../../../../electron/main/ledger';
 import type { HookContextReply } from '../../../../electron/main/harness/claude-code/hook-vocabulary';
 import { createReceiver, type Receiver } from '../../../../electron/main/hooks/receiver';
-import { readCopilotHook } from '../../../../electron/main/harness/copilot/hooks';
 import {
   createHarnessRegistry,
   sessionAdapter,
@@ -5389,11 +5385,7 @@ describe('hook receiver: a copilot hook by its harness header (HIVE-343)', () =>
       onReady: () => {},
       onMetrics: () => {},
       ...noLedger,
-      harnesses: {
-        harnessOf: real.harnessOf,
-        adapterFor: (id) =>
-          id === 'copilot' ? { ...real.adapterFor(id), readHook: readCopilotHook } : real.adapterFor(id),
-      },
+      harnesses: real,
     });
     url = (await receiver.start()) as string;
   });
@@ -5469,12 +5461,6 @@ describe('the fence route (HIVE-342)', () => {
   const PTY = 'sess-pty';
   const RUN = 'run-fence';
   let translate: typeof translateCodexCall = translateCodexCall;
-  const copilotFence = {
-    express: () => ({ ok: true }) as const,
-    translate: translateCopilotCall,
-    read: readCopilotFence,
-    reply: copilotFenceReply,
-  };
 
   beforeEach(async () => {
     posted = [];
@@ -5495,7 +5481,7 @@ describe('the fence route (HIVE-342)', () => {
       onAgentsList: async () => ({ agents: [] }) as AgentsDirectory,
       knowsSession: (id) => id === PTY,
       knowsAgent: (id) => id === AGENT,
-      // Codex's fence answers a header-less hook; Copilot's is built by hand until its adapter fences.
+      // Codex's fence answers a header-less hook; Copilot's is its adapter's own.
       fenceFor: (harness) => {
         if (harness === undefined) {
           return { express: () => ({ ok: true }), translate: (tool, input, cwd) => translate(tool, input, cwd) };
