@@ -1298,6 +1298,45 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
     expect(built.harness).toBe('codex');
   });
 
+  /*
+    A first codex wake learns its thread only from `thread.started` (HIVE-353), so the rotation
+    it starts stays parked until the close records one; the run carries `startsRotation` there.
+  */
+  it('leaves a parked rotation for the close when codex starts it', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD;
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 0, runs: [], sessionUuid: 'old-thread', harness: 'codex',
+      pendingSession: { uuid: 'b2e1-new', handoff: 'I watch #ops.' },
+    };
+    const built = build({
+      adapter,
+      env: () => ({ PATH: '/opt/bin', HOME: '/home/u' }),
+      isExecutable: (path) => path === '/opt/bin/codex',
+    })('slack-watcher', 'schedule');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built.namesConversation).toBe(false);
+    expect(built.startsRotation).toBe(true);
+    expect(built.args.at(-1)).toContain('I watch #ops.');
+    expect(stored['slack-watcher']?.pendingSession).toEqual({
+      uuid: 'b2e1-new',
+      handoff: 'I watch #ops.',
+    });
+  });
+
+  it('marks no rotation for the close when Claude starts it', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 0, runs: [], sessionUuid: 'old',
+      pendingSession: { uuid: 'b2e1-new', handoff: 'I watch #ops.' },
+    };
+    const built = build()('slack-watcher', 'schedule');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built).not.toHaveProperty('startsRotation');
+  });
+
   it('says codex was not found when it is not on PATH', () => {
     files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD;
     const built = build({ adapter })('slack-watcher', 'manual');

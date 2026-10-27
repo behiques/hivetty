@@ -181,6 +181,8 @@ type WakeInvocation = WakeCommand & {
   promptHash?: string;
   /** The CLI this wake resolved to (HIVE-340); the close records it beside the uuid. */
   harness: HarnessId;
+  /** This wake starts a rotation it left parked, for the close to clear (HIVE-353). */
+  startsRotation?: true;
 };
 
 type BuildWakeCommand = (
@@ -482,19 +484,6 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       return { problem: `Could not prepare the run: ${describe(cause)}` };
     }
 
-    /*
-      Consumed **after** the writes that can fail, and only on the path that
-      returns a command — the same ordering the rotation record already used,
-      for a sharper version of the same reason. Clearing `pendingSession` before
-      a transient fs error would discard the handoff permanently: no run, and
-      the agent's memory gone anyway, which is strictly worse than the stale
-      counter that ordering was originally written to prevent.
-    */
-    if (!task && (pending !== undefined || forced)) {
-      deps.state.patchLane(name, lane, { pendingSession: undefined });
-      if (forced) deps.state.patch(name, { forceRotate: undefined });
-    }
-
     const resuming =
       task || pending !== undefined || switched ? undefined : previous.sessionUuid;
     const minted = task ? deps.newUuid() : (pending?.uuid ?? deps.newUuid());
@@ -558,6 +547,25 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     }
 
     /*
+      Consumed **after** the writes that can fail, and only on the path that
+      returns a command — the same ordering the rotation record already used,
+      for a sharper version of the same reason. Clearing `pendingSession` before
+      a transient fs error would discard the handoff permanently: no run, and
+      the agent's memory gone anyway, which is strictly worse than the stale
+      counter that ordering was originally written to prevent.
+
+      An argv that does not name the conversation (a Codex start, HIVE-353) leaves it parked: the
+      new thread exists only once `thread.started` arrives, so a wake that dies first must start
+      it again. The close clears it once the output names one (`startsRotation`).
+    */
+    const startsRotation = !task && pending !== undefined && !command.namesConversation;
+
+    if (!task && pending !== undefined && !startsRotation) {
+      deps.state.patchLane(name, lane, { pendingSession: undefined });
+    }
+    if (!task && forced) deps.state.patch(name, { forceRotate: undefined });
+
+    /*
       A switch starts a new conversation, so the old one's count and strikes are not its own: left
       alone, a lane at `rotateAfter` would ask the one-run-old conversation for a handoff. After
       the try/catch, like the consumption above: a refused wake starts no run, and the old
@@ -573,6 +581,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       lastTurn,
       kind,
       ...(resuming === undefined ? { promptHash } : {}),
+      ...(startsRotation ? { startsRotation: true as const } : {}),
       harness: adapter.id,
     };
   };
