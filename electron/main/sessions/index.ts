@@ -12,7 +12,7 @@ import {
   type ProjectConfig,
 } from '@shared/config-contract';
 import type { PrLookup, PrLookupReply } from '@shared/github-contract';
-import type { StatusSignal } from '@shared/harness-contract';
+import type { HarnessId, StatusSignal } from '@shared/harness-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   type IdleDetail,
@@ -279,6 +279,11 @@ interface OpenRequest {
   model?: string;
   effort?: string;
   /**
+   * The CLI to run (HIVE-279); absent is Claude Code. Forwarded on a restart for the reason the
+   * model is: a session relaunched as another CLI is not a restart.
+   */
+  harness?: HarnessId;
+  /**
    * What to call the session inside Claude (HIVE-78).
    *
    * Absent for every ordinary spawn, which falls back to the entity id — the
@@ -527,6 +532,16 @@ const LOGIN_SHELL_ARGS = ['-l'];
  */
 const RESTART_EXIT_TIMEOUT_MS = 10_000;
 
+/**
+ * What each CLI is called in a refusal (HIVE-279). Main's own copy: `src/lib/harness/cli-names.ts`
+ * is the renderer's, and main may not import it.
+ */
+const CLI_LABELS: Record<HarnessId, string> = {
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  copilot: 'Copilot',
+};
+
 export function createSessions(options: SessionsOptions): Sessions {
   const {
     supervisor,
@@ -653,9 +668,10 @@ export function createSessions(options: SessionsOptions): Sessions {
    * `settleExit` — **not** on a failed spawn, because a session whose spawn
    * failed was never a terminal, and a late host error must not read it as one.
    */
-  const agentSessions = new Set<string>();
+  // Keyed by entity, valued by the CLI it was opened with (HIVE-279): `harnessOf` reads it.
+  const agentSessions = new Map<string, HarnessId>();
   const harnesses = createHarnessRegistry({
-    isAgentSession: (entityId) => agentSessions.has(entityId),
+    sessionHarness: (entityId) => agentSessions.get(entityId),
   });
   /**
    * A plain terminal (terminals): no harness, and not a command (story 102).
@@ -1990,6 +2006,11 @@ export function createSessions(options: SessionsOptions): Sessions {
       restart is not an ending; withdrawing here is what keeps the two apart.
     */
     forgetFinish(request.entityId);
+    /*
+      The CLI the session runs, captured before the kill (HIVE-279): `settleExit` drops the entity
+      from `agentSessions`, and a restart that does not name a CLI keeps the one it had.
+    */
+    const harness = request.harness ?? agentSessions.get(request.entityId);
 
     const sessionId = registry.sessionFor(request.entityId);
 
@@ -2073,7 +2094,7 @@ export function createSessions(options: SessionsOptions): Sessions {
      * one on restart either; this is the belt to that braces, because
      * `restartOnce` takes the same `OpenRequest` shape as `open`.
      */
-    spawn({ ...request, task: undefined });
+    spawn({ ...request, task: undefined, ...(harness === undefined ? {} : { harness }) });
   }
 
   /**
@@ -2185,6 +2206,16 @@ export function createSessions(options: SessionsOptions): Sessions {
 
   /** Refuse with a message the user can act on, never a generic failure. */
   function spawn(request: OpenRequest): void {
+    const harness = request.harness ?? 'claude-code';
+    /*
+      PR A carries the CLI end to end; only Claude can be launched until HIVE-279's second PR lands
+      the Codex adapter's interactive half. Refused first, before anything is registered or
+      recorded, so the row fails with a reason rather than a pty that never started.
+    */
+    if (harness !== 'claude-code') {
+      throw new Error(`${CLI_LABELS[harness]} sessions are not available yet (HIVE-279).`);
+    }
+
     const snapshot = config();
 
     const project = requireMappedProject(snapshot, request.projectId);
@@ -2392,8 +2423,8 @@ export function createSessions(options: SessionsOptions): Sessions {
       containerSet === null ? mcpConfig : join(containerSet, CONTAINER_MCP_FILE);
 
     // An agent session from here on, spawn failed or not — see `agentSessions`.
-    agentSessions.add(request.entityId);
-    const adapter = harnesses.adapterFor(harnesses.harnessOf(request.entityId)!);
+    agentSessions.set(request.entityId, harness);
+    const adapter = harnesses.adapterFor(harness);
 
     /**
      * Hoisted out of the `sessionCommand` call it used to sit inside (HIVE-87).
@@ -2621,6 +2652,7 @@ export function createSessions(options: SessionsOptions): Sessions {
         ...(request.name === undefined ? {} : { name: request.name }),
         ...(request.model === undefined ? {} : { model: request.model }),
         ...(request.effort === undefined ? {} : { effort: request.effort }),
+        harness,
       },
       { resume },
     );

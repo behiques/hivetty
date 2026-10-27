@@ -268,7 +268,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       knowsSession: () => false,
       knowsAgent: (id) => AGENTS.includes(id),
       // As `sessions/index.ts` wires it: an agent hook's `x-hive-harness` picks the reader.
-      harnesses: createHarnessRegistry({ isAgentSession: () => false }),
+      harnesses: createHarnessRegistry({ sessionHarness: () => undefined }),
       onAgentEvent: (event) => {
         agentEvents.push(event);
         if (event.signal.kind === 'turn-end') {
