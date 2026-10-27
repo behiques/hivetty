@@ -283,7 +283,7 @@ export interface RunTracker {
    * live the uuid is the only handle that picks one of them.
    *
    * `backgroundWork` true arms nothing: the turn left a workflow or subagent
-   * running, so `claude -p` stays alive and takes another turn when it lands,
+   * running, so the CLI stays alive and takes another turn when it lands,
    * and that turn's `Stop` arms the watchdog instead.
    */
   noteTurnEnded(name: string, sessionUuid?: string, backgroundWork?: boolean): void;
@@ -1168,7 +1168,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       });
 
       /*
-        The run's own identity, for the MCP host `claude` starts from this
+        The run's own identity, for the MCP host the CLI starts from this
         environment (HIVE-128). The host stamps `meta.run` on every entry
         the run writes, which is the only way main can later tell one
         run's asks and handoff from a concurrent neighbour's.
@@ -1199,7 +1199,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         because the exec's cwd is the container's. The runtime *client*
         inherits main's environment — it has to, to find `docker` on `PATH`
         and honour `DOCKER_HOST` — and hands none of it on: what reaches the
-        container is the `-e` set on the argv and nothing else, so `claude`
+        container is the `-e` set on the argv and nothing else, so the CLI
         inside is found by the container's own `PATH`.
       */
       const container = command.container;

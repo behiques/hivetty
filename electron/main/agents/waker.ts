@@ -128,7 +128,7 @@ interface WakeInput {
 interface ContainerWake {
   runtime: string;
   name: string;
-  /** The binary inside; `claude` unless the block says otherwise. */
+  /** The binary inside; the adapter's `headless.containerCommand` unless the block says otherwise. */
   command: string;
   envArg: string;
   /** The cwd inside — `--workdir` on the exec. */
@@ -325,7 +325,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     A throw rather than a `{ problem }`, because this function returns a
     command and has no problem shape; `createWakeCommand` catches it into
     one. Guessing a path would produce a flag naming a file the container
-    cannot open — an error at `claude` startup about a file, which is further
+    cannot open — an error at the CLI's startup about a file, which is further
     from the cause than a refusal naming the path.
   */
   const map =
@@ -411,14 +411,13 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     headless child with no tty. What a headless child does need is
     `isSessionEnvDenied`, and it needs it more than a pty does.
 
-    Launch HiveTTY with `pnpm desktop:dev` from inside a Claude Code session —
-    which is how it gets developed — and main inherits `CLAUDECODE=1`,
-    `CLAUDE_CODE_SESSION_ID` and `CLAUDE_CODE_CHILD_SESSION=1`. Handed on, every
-    agent **joins the launching session instead of starting its own**: `--name`
-    is ignored, `Stop` reports the launching session's `session_id` so
-    `noteTurnEnded` discards it and the stall watchdog can never arm, and the
-    inherited child-session marker turns transcript saving off, which is what
-    `--resume` reads on the next wake. `ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS`
+    Launch HiveTTY with `pnpm desktop:dev` from inside a CLI session, which is
+    how it gets developed, and main inherits that CLI's session-identity
+    variables (the deny list in `isSessionEnvDenied`). Handed on, every agent
+    joins the launching session instead of starting its own: its Stop reports
+    the launching session's id, so `noteTurnEnded` discards it and the stall
+    watchdog never arms, and the inherited child marker can turn transcript
+    saving off, which a resume reads. `ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS`
     and `NODE_PATH` are the other half: Electron's own wiring, meaningless to a
     node CLI started from it and actively harmful to one.
   */

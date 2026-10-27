@@ -151,7 +151,7 @@ export interface WakeCommandDeps {
    * How `resolveCommand` decides a candidate is runnable.
    *
    * Injected for the reason {@link WakeFs} is: without it, every test in this
-   * module would depend on a `claude` binary being installed at whatever path
+   * module would depend on a CLI binary being installed at whatever path
    * the fixture invented, and would then be asserting on the developer's
    * machine rather than on this function.
    */
@@ -347,7 +347,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     /*
       What this story does not do for an agent, refused rather than half-done
       (HIVE-137, recorded as a deviation). `rewrite` needs a per-run set
-      written before `claude` starts and carrying the run id, which only the
+      written before the CLI starts and carrying the run id, which only the
       synchronous tracker knows; an integration's MCP server is a binary on
       this machine, unreachable from inside a container. Both are said plainly
       at the one moment the author is around to act on it.
