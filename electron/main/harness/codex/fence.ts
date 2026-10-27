@@ -38,7 +38,11 @@ export function patchTargets(patch: string, cwd: string): FenceCall[] | null {
   // Codex splits on `\n` and drops one trailing `\r` (Rust's `lines`), nothing else.
   const lines = patch.split('\n').map((line) => line.replace(/\r$/, ''));
   if (trimEdges(lines[0] ?? '') !== '*** Begin Patch') return null;
-  const at = (path: string) => (isAbsolute(path) ? path : `${cwd.replace(/\/+$/, '')}/${path}`);
+  // Trimmed once, by a loop: `/\/+$/` backtracks quadratically on a long run of slashes (HIVE-356).
+  let end = cwd.length;
+  while (end > 0 && cwd[end - 1] === '/') end--;
+  const base = cwd.slice(0, end);
+  const at = (path: string) => (isAbsolute(path) ? path : `${base}/${path}`);
   const calls: FenceCall[] = [];
   let updating = false;
   let ended = false;

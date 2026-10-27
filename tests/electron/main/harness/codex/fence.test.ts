@@ -25,6 +25,22 @@ describe('translateCodexCall', () => {
     expect(calls).toEqual([{ tool: 'Write', input: { file_path: '/w/a.txt' } }]);
   });
 
+  it('joins against a cwd of 100k slashes in linear time, once per patch', () => {
+    const cwd = `${'/'.repeat(100_000)}w`;
+    const patch = '*** Begin Patch\n*** Add File: a.txt\n+x\n*** Delete File: b\n*** End Patch';
+    const started = performance.now();
+    const calls = translateCodexCall('apply_patch', { command: patch }, cwd);
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(calls).toEqual([
+      { tool: 'Write', input: { file_path: `${cwd}/a.txt` } },
+      { tool: 'Write', input: { file_path: `${cwd}/b` } },
+    ]);
+    expect(translateCodexCall('apply_patch', { command: patch }, '/w//')).toEqual([
+      { tool: 'Write', input: { file_path: '/w/a.txt' } },
+      { tool: 'Write', input: { file_path: '/w/b' } },
+    ]);
+  });
+
   it('passes Bash and MCP calls through unchanged', () => {
     expect(translateCodexCall('Bash', { command: 'git status' }, '/w')).toEqual([
       { tool: 'Bash', input: { command: 'git status' } },
