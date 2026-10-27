@@ -60,6 +60,7 @@
     "test:mcp-host": "electron-vite build && HIVE_LIVE_MCP_HOST_PROOF=1 vitest run tests/live/mcp-host-conformance.test.ts",
     "test:agent": "HIVE_LIVE_AGENT_PROOF=1 vitest run tests/live/agent-conformance.test.ts",
     "test:agent:codex": "HIVE_LIVE_AGENT_CODEX_PROOF=1 vitest run tests/live/agent-codex-conformance.test.ts",
+    "test:session:codex": "HIVE_LIVE_SESSION_CODEX_PROOF=1 vitest run tests/live/session-codex-conformance.test.ts",
     "test:agent:copilot": "HIVE_LIVE_AGENT_COPILOT_PROOF=1 vitest run tests/live/agent-copilot-conformance.test.ts",
     "test:container": "HIVE_LIVE_CONTAINER_PROOF=1 vitest run tests/live/container-conformance.test.ts",
     "test:server": "HIVE_LIVE_SERVER_PROOF=1 vitest run tests/live/server-conformance.test.ts",
