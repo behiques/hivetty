@@ -5,7 +5,9 @@ import type { Effort, Model } from '@/types/entity';
 import type { HatcheryRow } from '@/types/pull-request';
 import type { SettingsSection } from '@/types/settings';
 
+import { CODEX_MODELS } from '@shared/cli-contract';
 import type { FsSearchMode } from '@shared/fs-contract';
+import type { HarnessId } from '@shared/harness-contract';
 import type { JiraStatusCategory } from '@shared/jira-contract';
 
 
@@ -155,8 +157,13 @@ interface UiState {
   whatsNewOpen: boolean;
   /** The pane `openSettings` was asked for, or `null` for the default. */
   settingsSection: SettingsSection | null;
-  newModel: Model;
-  newEffort: Effort;
+  /**
+   * The CLI the picker starts, and what was last picked on each one it can start (HIVE-279).
+   * Not persisted. Copilot joins with its sessions (HIVE-280); until then it cannot be picked,
+   * so it has no entry.
+   */
+  newCli: SessionCli;
+  newPicks: Record<SessionCli, { model: Model; effort: Effort }>;
   /** Which place the round-two bar has open (HIVE-195). Every launch starts on Home. */
   place: Place;
   /**
@@ -298,6 +305,8 @@ interface UiState {
   /** Opening closes Settings, so the card never sits under the overlay it was opened from. */
   setWhatsNewOpen: (open: boolean) => void;
   setPickerQuery: (query: string) => void;
+  setNewCli: (cli: SessionCli) => void;
+  /** Both act on the CLI the picker is on (HIVE-279). */
   setNewModel: (model: Model) => void;
   setNewEffort: (effort: Effort) => void;
   toggleExplorerDir: (projectId: string, relPath: string) => void;
@@ -379,6 +388,17 @@ interface UiState {
  */
 export const NEWS_SECTION = '#news';
 
+/** The CLIs a session can be started on (HIVE-279). Widen with HIVE-280. */
+export type SessionCli = Exclude<HarnessId, 'copilot'>;
+
+/** What the picker starts each CLI on (HIVE-279), until the user picks otherwise. */
+const INITIAL_PICKS: Record<SessionCli, { model: Model; effort: Effort }> = {
+  // Unchanged from before this story: what every Claude chip has said since story 044.
+  'claude-code': { model: 'opus', effort: 'high' },
+  // Codex's own default model (CLI_VOCAB lists it first) at a middle effort.
+  codex: { model: CODEX_MODELS[0], effort: 'medium' },
+};
+
 const initialUiState = {
   activeTab: 'orch' as 'orch' | string,
   selId: null as string | null,
@@ -400,8 +420,8 @@ const initialUiState = {
    * so the rule below still holds for every route that does not name a pane.
    */
   settingsSection: null as SettingsSection | null,
-  newModel: 'opus' as Model,
-  newEffort: 'high' as Effort,
+  newCli: 'claude-code' as SessionCli,
+  newPicks: INITIAL_PICKS,
   place: 'home' as Place,
   sessionsTab: 'orch' as 'orch' | string,
   panelOpen: true,
@@ -634,8 +654,11 @@ export const useUiStore = create<UiState>()((set) => ({
   clearSettingsSection: () => set({ settingsSection: null }),
   setPickerQuery: (query) => set({ pickerQuery: query }),
 
-  setNewModel: (model) => set({ newModel: model }),
-  setNewEffort: (effort) => set({ newEffort: effort }),
+  setNewCli: (cli) => set({ newCli: cli }),
+  setNewModel: (model) =>
+    set((s) => ({ newPicks: { ...s.newPicks, [s.newCli]: { ...s.newPicks[s.newCli], model } } })),
+  setNewEffort: (effort) =>
+    set((s) => ({ newPicks: { ...s.newPicks, [s.newCli]: { ...s.newPicks[s.newCli], effort } } })),
 
   toggleExplorerDir: (projectId, relPath) =>
     set((state) => {
@@ -759,17 +782,18 @@ export const useUiStore = create<UiState>()((set) => ({
  * Every consumer goes through a named hook so a change to one slice of state
  * cannot re-render everything subscribed to the store.
  */
+const newSessionDefaultsSelector = (state: UiState) => ({
+  newCli: state.newCli,
+  // Derived, not stored twice: the pick for the CLI the picker is on.
+  newModel: state.newPicks[state.newCli].model,
+  newEffort: state.newPicks[state.newCli].effort,
+});
+
 const pickerStateSelector = (state: UiState) => ({
   picker: state.picker,
   pickerQuery: state.pickerQuery,
   pickerTicket: state.pickerTicket,
-  newModel: state.newModel,
-  newEffort: state.newEffort,
-});
-
-const newSessionDefaultsSelector = (state: UiState) => ({
-  newModel: state.newModel,
-  newEffort: state.newEffort,
+  ...newSessionDefaultsSelector(state),
 });
 
 const settingsActionsSelector = (state: UiState) => ({
@@ -790,6 +814,7 @@ const pickerActionsSelector = (state: UiState) => ({
   openPicker: state.openPicker,
   closePicker: state.closePicker,
   setPickerQuery: state.setPickerQuery,
+  setNewCli: state.setNewCli,
   setNewModel: state.setNewModel,
   setNewEffort: state.setNewEffort,
 });
