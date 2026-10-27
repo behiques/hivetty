@@ -16,11 +16,14 @@ import { createRunTracker, type ChildLike, type RunTracker } from '../../electro
 import { createScheduler, type Scheduler } from '../../electron/main/agents/scheduler';
 import { createAgentState, type AgentState } from '../../electron/main/agents/state';
 import { createWakeCommand } from '../../electron/main/agents/wake-command';
+import { toml } from '../../electron/main/harness/codex/headless';
+import { hookCommand } from '../../electron/main/harness/hook-commands';
 import { headlessAdapter } from '../../electron/main/harness/registry';
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
 import { writeAgentSettings } from '../../electron/main/harness/claude-code/settings';
 import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
 import { createLedger, type Ledger } from '../../electron/main/ledger';
+import { createPlans } from '../../electron/main/plans';
 import { agentMcpConfigFile } from '../../electron/main/mcp';
 import { hiveServerSpec } from '../../electron/main/mcp/config';
 import type { AgentRunState, RunLine } from '../../electron/shared/agent-contract';
@@ -31,7 +34,9 @@ import {
   HOOK_ENV_TOKEN,
   type HookAgentEvent,
 } from '../../electron/shared/hook-contract';
+import { CH } from '../../electron/shared/ipc-contract';
 import { LEDGER_DIR, OVERMIND } from '../../electron/shared/ledger-contract';
+import type { PlanChangedEvent } from '../../electron/shared/plan-contract';
 
 /**
  * What only a real `codex` can prove about a Codex wake (HIVE-342).
@@ -491,4 +496,127 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
     if (skipReason !== undefined) ctx.skip(skipReason);
     await fenceCase(MCP, 'mcp__hive__jira_comment', () => jiraComments.length > 0);
   }, 2 * TURN_MS);
+
+  /*
+    HIVE-352: what `update_plan` does in the plan panel, end to end on the session lane, the one a
+    Codex session will use (HIVE-279). A real `codex exec` with the plan tool on and a
+    `PostToolUse` hook built by `hookCommand`, posting to a real receiver that routes this entity
+    to the Codex adapter, feeding the real plans store. A subagent plans first: its calls carry
+    `agent_id` under the parent's `session_id`, and must never reach the session's plan.
+  */
+  it("update_plan builds a session's plan in order, and a subagent's stays out", async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    const entity = 'sess-live-codex-plan';
+    const sent: PlanChangedEvent[] = [];
+    const plans = createPlans({
+      send: (channel, payload) => {
+        if (channel === CH.planChanged) sent.push(payload as PlanChangedEvent);
+      },
+    });
+    const planReceiver = createReceiver({
+      knowsSession: (id) => id === entity,
+      harnesses: { adapterFor: headlessAdapter, harnessOf: (id) => (id === entity ? 'codex' : undefined) },
+      onPlan: (update) => plans.apply(update),
+      onEvent: () => {},
+      onTicketIntent: () => {},
+      onPromptName: () => {},
+      onCleared: () => {},
+      onMetrics: () => {},
+      onDone: () => {},
+      onReady: () => {},
+      onLedgerRead: () => ({ entries: [], openAsks: [], claims: {} }),
+      onLedgerPost: () => ({ ok: false as const, status: 503, reason: 'not exercised' }),
+      knowsAgent: () => false,
+      onAgentEvent: () => {},
+      onAgentsList: () => Promise.resolve({ agents: [] }),
+    });
+    expect(await planReceiver.start()).not.toBeNull();
+
+    try {
+      const cwd = join(dir ?? tmpdir(), 'plan-work');
+      await mkdir(cwd, { recursive: true });
+      // Every PostToolUse body, as codex sent it: the receiver drops a subagent's, so only this shows it ran.
+      const bodies = join(dir ?? tmpdir(), 'plan-hook-bodies.jsonl');
+      await writeFile(bodies, '');
+      const ambient = Object.fromEntries(
+        Object.entries(process.env).filter(
+          (entry): entry is [string, string] => !entry[0].startsWith('HIVE_') && entry[1] !== undefined,
+        ),
+      );
+      // Async: the receiver answering the hook's POSTs runs on this same event loop.
+      const run = await new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve) => {
+        const child = spawnProcess(
+          'codex',
+          [
+            'exec',
+            '--json',
+            '--skip-git-repo-check',
+            '--ignore-user-config',
+            '--dangerously-bypass-hook-trust',
+            '-s',
+            'read-only',
+            '-c',
+            'tools.update_plan.enabled=true',
+            '-c',
+            'features.multi_agent=true',
+            '-c',
+            `hooks.PostToolUse=[{matcher="update_plan",hooks=[{type="command",command=${toml(hookCommand())}},{type="command",command=${toml(`{ cat; echo; } >> ${bodies}`)}}]}]`,
+            'First, spawn one subagent with spawn_agent and tell it exactly: "Call update_plan with one step, ' +
+              'Delta, in_progress. Then call update_plan marking Delta completed. Then reply done." Wait for it ' +
+              'to finish. Then, yourself, call update_plan three times, one call at a time: (1) Alpha in_progress, ' +
+              'Beta pending; (2) Alpha completed, Beta in_progress; (3) both completed. No shell commands. Then stop.',
+          ],
+          {
+            cwd,
+            env: {
+              ...ambient,
+              [HOOK_ENV_SESSION]: entity,
+              [HOOK_ENV_TOKEN]: planReceiver.tokenFor(entity),
+              [HOOK_ENV_RECEIVER_URL]: planReceiver.origin as string,
+            },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          },
+        );
+        let stdout = '';
+        let stderr = '';
+        child.stdout?.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString();
+        });
+        child.stderr?.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString();
+        });
+        const timer = setTimeout(() => child.kill('SIGKILL'), TURN_MS);
+        child.on('close', (status) => {
+          clearTimeout(timer);
+          resolve({ status, stdout, stderr });
+        });
+      });
+      const finding = join(dir ?? tmpdir(), 'plan-finding.json');
+      await writeFile(finding, JSON.stringify({ status: run.status, stdout: run.stdout, stderr: run.stderr, sent }, null, 2));
+      const why = `what codex did is in ${finding}`;
+      const steps = sent.map((event) => event.plan?.tasks.map((task) => `${task.title}:${task.status}`).join(',') ?? null);
+
+      const hookBodies = (await readFile(bodies, 'utf8'))
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line) => JSON.parse(line) as { agent_id?: string; tool_input?: { plan?: { step?: string }[] } });
+      const subagentPlans = hookBodies.filter((body) => typeof body.agent_id === 'string' && body.agent_id !== '');
+
+      expect(run.status, why).toBe(0);
+      expect(subagentPlans.length, `codex never ran the subagent, so nothing proves it stays out: ${why}`).toBeGreaterThan(0);
+      expect(
+        subagentPlans.some((body) => body.tool_input?.plan?.some((item) => item.step === 'Delta')),
+        why,
+      ).toBe(true);
+      expect(steps.join(' '), why).not.toContain('Delta');
+      expect(steps, why).toEqual([
+        'Alpha:in_progress,Beta:pending',
+        'Alpha:completed,Beta:in_progress',
+        'Alpha:completed,Beta:completed',
+      ]);
+      expect(sent.at(-1)?.plan?.allDone, why).toBe(true);
+    } finally {
+      await planReceiver.stop();
+    }
+  }, TURN_MS + 10_000);
 });
