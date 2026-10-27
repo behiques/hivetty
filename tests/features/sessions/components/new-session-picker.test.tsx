@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -144,6 +144,33 @@ describe('NewSessionPicker', () => {
     expect(
       screen.queryAllByRole('button', { name: /the-hive/ }),
     ).toHaveLength(0);
+  });
+
+  describe('the CLI switch (HIVE-279)', () => {
+    it('offers every CLI and says why the unavailable ones are off', () => {
+      render(<NewSessionPicker />);
+
+      const cli = screen.getByRole('radiogroup', { name: 'cli' });
+      expect(within(cli).getByRole('radio', { name: /Claude Code/ })).toBeChecked();
+      expect(within(cli).getByRole('radio', { name: /Codex/ })).toBeDisabled();
+      expect(within(cli).getByRole('radio', { name: /Copilot/ })).toBeDisabled();
+      expect(screen.getByText('Codex · next release · Copilot · HIVE-280')).toBeInTheDocument();
+      expect(screen.getByText('Pick a project — a Claude Code terminal will open for it')).toBeInTheDocument();
+    });
+
+    it('reads the steppers from the CLI it is on', () => {
+      // The store allows it; only the switch is fenced in PR A.
+      useUiStore.getState().setNewCli('codex');
+      render(<NewSessionPicker />);
+
+      expect(within(screen.getByRole('radiogroup', { name: 'model' })).getAllByRole('radio')).toHaveLength(3);
+      expect(
+        within(screen.getByRole('radiogroup', { name: /thinking effort/ })).getAllByRole('radio'),
+      ).toHaveLength(5);
+      expect(screen.getByRole('radio', { name: 'gpt-6-luna' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'medium' })).toBeChecked();
+      expect(screen.getByText('Pick a project — a Codex terminal will open for it')).toBeInTheDocument();
+    });
   });
 
   describe('search', () => {
