@@ -12,6 +12,9 @@ Code stays fully functional, exactly as before. Existing tests keep their assert
 test may move to mirror a moved file, and any changed assertion is called out in its PR
 with why it is not a behaviour change.
 
+Phase 2, headless runs through the adapter, is Epic HIVE-336 and is done: see
+[Headless runs](#headless-runs-phase-2).
+
 ## The pieces
 
 | Piece | Path | What it is |
@@ -31,7 +34,7 @@ with why it is not a behaviour change.
 | `foldEdits` | HIVE-238 (landed) |
 | `record`, `meters` | HIVE-239 (landed) |
 | `promptMarker` | HIVE-240 (landed) |
-| `installed` | HIVE-345: the user's own skills and plugins (`skillNames`, `pluginNames`, `sessionOverrides`), reached through `sessionAdapter()` by the agents runtime, the skills snapshot and the hook settings' `enabledPlugins`. |
+| `installed` | HIVE-345: the user's own skills and plugins (`skillNames`, `pluginNames`, `sessionOverrides`), reached through `sessionAdapter()` by the agents runtime, the skills snapshot and the hook settings' `enabledPlugins`. `skillPlaces` (HIVE-344) words where `skillNames` looks, for the agents' missing-skill message. |
 
 ### Capabilities: build one, shape for three
 
@@ -184,15 +187,16 @@ neutral `SessionMetrics`. Claude Code's live in `claude-code/{record,title-origi
 ## The port as built
 
 - `launch(spec): LaunchPlan`.
-- `headless.launch(spec): HeadlessPlan` — an agent run's argv, the env it adds and strips, the container's default binary and the `pkill -f` stop pattern (HIVE-337). `agents/waker.ts` keeps the prompt, the path map, the env filter and the `HIVE_*` identity.
+- `headless.launch(spec): HeadlessPlan` — an agent run's argv, the env it adds and strips, and the `pkill -f` stop pattern (HIVE-337). The default container binary is `headless.containerCommand` (HIVE-344). `agents/waker.ts` keeps the prompt, the path map, the env filter and the `HIVE_*` identity.
 - `headless.reader(): RunEventReader` — one run's stdout read into `RunEvent`s: the conversation id, MCP status, what the agent says, its tool calls, and the end with its stop, cost, turns and usage (HIVE-338). `agents/run-log.ts` folds events into run lines; `agents/runs.ts` decides the outcome from `end.stop`. Capabilities `reportsCostUsd`, `enforcesTurns`, `enforcesBudget` and `reportsMcpStatus` say which of those a CLI reports. Capability `agentMcp` lists the `mcp:` integrations a headless run on the CLI can be given (HIVE-340); an agent naming one it lacks does not resolve to it.
 - `headless.fence: PermissionFence` — the permission fence (not the import fences below).
   `express(rules)` answers whether this CLI can route every call the rules do not allow to
   `decide()` in `@shared/permission-rules`, the one decision MCP `approve` and the receiver both
   make; `{ ok: false, unexpressible }` blocks the CLI for that run (HIVE-339). Claude's is total:
   its fence is `approve`. Resolution asks it (HIVE-340): `resolve-harness.ts` calls
-  `fence.express` on the full `HIVE_GRANTS` list, and a CLI that cannot express a rule is skipped,
-  never run unfenced.
+  `fence.express` on the `HIVE_GRANTS` list less the fence's own `grants`, and a CLI that cannot
+  express a rule is skipped, never run unfenced. A hook-fenced CLI adds `translate`, `read` and
+  `reply` (HIVE-342, HIVE-343); `grants` names the built-ins every run on the CLI needs (HIVE-344).
 - `HarnessGate` (`agents/resolve-harness.ts`) is what the licence and Settings › CLIs say about a
   CLI. It is wired as `createCliGate(getConfig)` (`agents/cli-gate.ts`, HIVE-341): `enabled`,
   `defaultCli` and `defaults` (the card's model, effort and Codex's sandbox; on Claude under
@@ -575,9 +579,15 @@ The checklist, member by member, with the live suite that proves each:
 - [ ] An adapter in `electron/main/harness/<id>/`, registered in `registry.ts` (`adapters` is a
   `Record<HarnessId, …>`, so a missing one fails to compile).
 - [ ] `launch` (`test:pty` for the spawn, `test:ready` for boot).
-- [ ] `headless.launch` (`test:agent`).
-- [ ] `headless.reader` (`test:agent`).
-- [ ] `headless.fence` (`test:agent`'s fence case for Claude; HIVE-342/343's suites prove an ungranted shell command, file write and MCP call each ask).
+- [ ] `headless.launch` and `headless.containerCommand` (`test:agent:<id>`).
+- [ ] `headless.reader` (a unit fixture recorded from a real run, under `tests/fixtures/<id>/`).
+- [ ] `headless.fence`, with `grants` for any built-in its runs need (the live fence case: an ungranted shell call, file write and MCP call each ask).
+- [ ] A `test:agent:<id>` script with a pinned CLI version, skipped when the CLI is absent or signed out.
+- [ ] The entitlement key: what `HarnessGate.entitled` answers for it (pending HIVE-332; every CLI is entitled today).
+- [ ] A row in `CLI_VOCAB` (`electron/shared/cli-contract.ts`).
+- [ ] The `clis.<id>.agents` fields in `electron/main/config/parse.ts`, `parseSetCliAgentsRequest` and `setCliAgents`, and a band in `src/features/settings/components/clis-section.tsx`.
+- [ ] What `createCliGate` (`electron/main/agents/cli-gate.ts`) answers for the new CLI.
+- [ ] `installed.skillPlaces`, '' when it reads no skills of its own.
 - [ ] `prepare` (`test:hooks`, `test:skills`, `test:mcp-http`, `test:container`).
 - [ ] `readHook` (`test:hooks`, `test:plan`, `test:done`).
 - [ ] `contextReply` (`test:hook-context`).
@@ -588,7 +598,7 @@ The checklist, member by member, with the live suite that proves each:
 - [ ] An `InputProfile` in `PROFILES` in `src/lib/harness/input-profile.ts`, keyed by `HarnessId`,
   so a missing one fails to compile (`test:back` for `claimsBareBack`; `test:pty` for the bytes).
 - [ ] Stamp the new `harness` where the store mints that kind of session.
-- [ ] Re-run the Epic grep.
+- [ ] Re-run both greps (phase 1's and the agents grep, [Headless runs](#headless-runs-phase-2)).
 
 The wiring, in order:
 

@@ -1226,8 +1226,8 @@ failed — surfaces this way, worded with the receiver's own `reason` (`client.t
 falls back to a transport-failure sentence if the receiver couldn't be reached
 at all, and to a generic one if a refusal came back with no `reason` field).
 
-**Naming: `mcp__hive__<tool>`, not `mcp__plugin_hive_hive__<tool>`.** Claude
-Code derives the middle segment of every tool's fully-qualified name from how
+**Naming: `mcp__hive__<tool>`, not `mcp__plugin_hive_hive__<tool>`.** On Claude Code (the adapter's `headless.ts`; every CLI's is in [harness-architecture.md › Headless runs](harness-architecture.md#headless-runs-phase-2)):
+Claude Code derives the middle segment of every tool's fully-qualified name from how
 the server was delivered — the short form is what a server named in
 `--mcp-config` gets; a server delivered through `--plugin-dir` would double the
 name (`hive` as the plugin, `hive` again as the server inside it). The agent
@@ -1382,8 +1382,8 @@ frontmatter over a markdown body, sitting beside `config.json`, `skills/` and
 is invited to open, `grep` and back up, not an app-private artifact.
 
 Main reads, validates and watches a folder of these files, and Settings is where
-they are authored. The **waker** runs them:
-one headless `claude -p` child per wake (`electron/main/agents/waker.ts` spells
+they are authored. The **waker** runs them. On Claude Code (the adapter's `headless.ts`; every CLI's is in [harness-architecture.md › Headless runs](harness-architecture.md#headless-runs-phase-2)), that is
+one headless `claude -p` child per wake (`harness/claude-code/headless.ts` spells
 the argv, `runs.ts` tracks the process), its `stream-json` stdout folded into
 run-log lines by `run-log.ts`, the run closed on the child's `'close'` event,
 and the session uuid, cost, turn count and outcome persisted to
@@ -1489,6 +1489,8 @@ different way.
 | `skills` | Which skills this agent may invoke | Names checked against what exists on the machine |
 | `mcp` | Which outside systems are plugged in, and as whom | Entries in the agent's `--mcp-config`; whose OAuth token is used |
 | `tools` | Which calls proceed **without stopping to ask** | `--allowedTools` grants; `permissions.ask` + `--permission-prompt-tool` fence |
+
+The Mechanism column is Claude Code's (the adapter's `headless.ts`); every CLI's is in [harness-architecture.md › Headless runs](harness-architecture.md#headless-runs-phase-2).
 
 `mcp` decides whether a system's tools exist in the process at all, and on whose
 behalf — Claude Code holds the user's Slack OAuth **not** in the Keychain but in
@@ -1739,6 +1741,8 @@ arrive through a repository name. A project whose repository is not known yet
 grants nothing and schedules a refresh; its merge raises the card, once.
 
 ### The fence, measured
+
+On Claude Code (the adapter's `headless.ts`; every CLI's is in [harness-architecture.md › Headless runs](harness-architecture.md#headless-runs-phase-2)). The measurements below are Claude Code's, and stay as measured.
 
 A fence needs **two halves**, and neither works alone. `permissions.ask:
 ["*"]`, written into the agent-only settings file (`agentSettings`,
