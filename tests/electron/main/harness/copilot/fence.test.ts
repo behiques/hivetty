@@ -52,6 +52,12 @@ describe('translateCopilotCall', () => {
     ]);
   });
 
+  it('reads tool_search_tool as ToolSearch, which the standing grants allow', () => {
+    const calls = call('pre-tool-use-tool-search');
+    expect(calls).toEqual([{ tool: 'ToolSearch', input: { pattern: 'envcheck' } }]);
+    expect(decide(calls[0]!.tool, calls[0]!.input, ['ToolSearch'])).toEqual({ behavior: 'allow' });
+  });
+
   it('joins a relative path to the cwd and never normalises it', () => {
     expect(translateCopilotCall('create', { path: '../x/.env', file_text: '' }, '/w/a')).toEqual([
       { tool: 'Write', input: { file_path: '/w/a/../x/.env' } },
@@ -147,6 +153,7 @@ const INSTANCES: Record<string, readonly string[]> = {
   WebFetch: ['WebFetch'],
   'WebFetch(domain:<d>)': ['WebFetch(domain:example.com)', 'WebFetch(domain:github.com)', 'WebFetch(domain:*)'],
   Task: ['Task'],
+  ToolSearch: ['ToolSearch'],
   'mcp__<server>__<tool>': ['mcp__hive__ledger_read', 'mcp__probe__envcheck'],
   'mcp__<server>__*': ['mcp__hive__*', 'mcp__probe__*'],
   'literal:Bash:<text>': ['literal:Bash:echo probe-ok', 'literal:Bash:echo other'],
@@ -177,6 +184,7 @@ const NAMED: readonly { copilot: FenceCall & { cwd: string }; claude: FenceCall 
       ['pre-tool-use-glob', { tool: 'Glob', input: { pattern: '*.txt' } }],
       ['pre-tool-use-grep', { tool: 'Grep', input: { pattern: 'bye' } }],
       ['pre-tool-use-web-fetch', { tool: 'WebFetch', input: { url: 'https://example.com' } }],
+      ['pre-tool-use-tool-search', { tool: 'ToolSearch', input: {} }],
     ] as const
   ).map(([name, claude]) => {
     const body = fx(name);
@@ -194,6 +202,7 @@ const NAMED: readonly { copilot: FenceCall & { cwd: string }; claude: FenceCall 
 
 describe('the translated call, against decide', () => {
   it('instantiates every expressed shape with rules of that shape', () => {
+    expect(COPILOT_RULE_TABLE.expressed).toContain('ToolSearch');
     for (const shape of COPILOT_RULE_TABLE.expressed) {
       const rules = INSTANCES[shape] ?? [];
       expect(rules.length, shape).toBeGreaterThan(0);

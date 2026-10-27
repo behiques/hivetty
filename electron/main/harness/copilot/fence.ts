@@ -43,6 +43,8 @@ export function translateCopilotCall(
   if (tool === 'grep') return [{ tool: 'Grep', input }];
   if (tool === 'web_fetch' && url !== undefined) return [{ tool: 'WebFetch', input: { url } }];
   if (tool === 'task') return [{ tool: 'Task', input }];
+  // Copilot's search for a deferred tool's schema; `decide` reads no input of `ToolSearch`'s.
+  if (tool === 'tool_search_tool') return [{ tool: 'ToolSearch', input }];
   const hive = HIVE_TOOL.exec(tool);
   if (hive !== null) return [{ tool: `mcp__hive__${hive[1]!}`, input }];
   return [{ tool, input }];
@@ -76,8 +78,8 @@ export const copilotFenceReply = (reason?: string): Record<string, unknown> =>
 /**
  * Each rule shape in Claude's grammar, and what it governs on Copilot (doc table, and a test).
  * `expressed`: `decide` meets it on a translated call (bash, create, edit, view, glob, grep,
- * web_fetch, task and `hive-*` were all recorded). `neverProduced`: Copilot makes no call by that
- * name, so the rule allows nothing and widens nothing.
+ * web_fetch, task, tool_search_tool and `hive-*` were all recorded). `neverProduced`: Copilot
+ * makes no call by that name, so the rule allows nothing and widens nothing.
  */
 export const COPILOT_RULE_TABLE = {
   expressed: [
@@ -95,6 +97,7 @@ export const COPILOT_RULE_TABLE = {
     'WebFetch',
     'WebFetch(domain:<d>)',
     'Task',
+    'ToolSearch',
     'mcp__<server>__<tool>',
     'mcp__<server>__*',
     'literal:Bash:<text>',
