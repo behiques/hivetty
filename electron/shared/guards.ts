@@ -10,6 +10,8 @@ import type {
 } from './agent-contract';
 import {
   CLI_VOCAB,
+  COPILOT_DENY_MAX,
+  COPILOT_DENY_PATTERN,
   HEADLESS_SANDBOXES,
   type SetAgentsDefaultCliRequest,
   type SetCliAgentsRequest,
@@ -1754,7 +1756,13 @@ export function parseSetSlackRequest(input: unknown): SetSlackRequest {
 
 /** Payload of `config:set-cli-agents` (HIVE-341). `null` clears a default; a model is checked against its CLI's list. */
 export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
-  const raw = assertShape(input, ['cli'], 'setCliAgents', ['enabled', 'model', 'effort', 'sandbox']);
+  const raw = assertShape(input, ['cli'], 'setCliAgents', [
+    'enabled',
+    'model',
+    'effort',
+    'sandbox',
+    'deny',
+  ]);
   const cli = assertOneOf(raw.cli, HARNESS_IDS, 'setCliAgents.cli');
   const { models, efforts } = CLI_VOCAB[cli];
 
@@ -1782,10 +1790,33 @@ export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
                 : fail('setCliAgents.sandbox: only codex takes a sandbox'),
         }
       : {}),
+    ...(raw.deny !== undefined
+      ? {
+          deny:
+            raw.deny === null
+              ? null
+              : cli !== 'copilot'
+                ? fail('setCliAgents.deny: only copilot takes deny patterns')
+                : assertDenyList(raw.deny),
+        }
+      : {}),
   };
 
   if (Object.keys(request).length === 1) return fail('setCliAgents: nothing to change');
   return request;
+}
+
+/** Copilot's `--deny-tool` patterns (HIVE-343): a bounded list, each one `kind(argument)`. */
+function assertDenyList(value: unknown): string[] {
+  if (!Array.isArray(value)) return fail('setCliAgents.deny: expected a list');
+  if (value.length > COPILOT_DENY_MAX) {
+    return fail(`setCliAgents.deny: at most ${String(COPILOT_DENY_MAX)} patterns`);
+  }
+  return value.map((pattern: unknown, index) =>
+    typeof pattern === 'string' && COPILOT_DENY_PATTERN.test(pattern)
+      ? pattern
+      : fail(`setCliAgents.deny[${String(index)}]: expected kind(argument)`),
+  );
 }
 
 /** The CLI an agent whose `AGENT.md` names no harness runs on (HIVE-342). `null` clears it. */

@@ -2008,6 +2008,29 @@ describe('parseSetCliAgentsRequest (HIVE-341)', () => {
     });
   });
 
+  it('takes deny patterns for copilot only, and null as a clear (HIVE-343)', () => {
+    expect(parseSetCliAgentsRequest({ cli: 'copilot', deny: ['shell(rm:*)'] })).toEqual({
+      cli: 'copilot',
+      deny: ['shell(rm:*)'],
+    });
+    expect(parseSetCliAgentsRequest({ cli: 'copilot', deny: null })).toEqual({
+      cli: 'copilot',
+      deny: null,
+    });
+    expect(() => parseSetCliAgentsRequest({ cli: 'copilot', deny: ['bad pattern'] })).toThrow(
+      'setCliAgents.deny[0]: expected kind(argument)',
+    );
+    expect(() => parseSetCliAgentsRequest({ cli: 'copilot', deny: 'shell(rm)' })).toThrow(
+      'setCliAgents.deny: expected a list',
+    );
+    expect(() =>
+      parseSetCliAgentsRequest({ cli: 'copilot', deny: Array.from({ length: 51 }, () => 'shell') }),
+    ).toThrow('setCliAgents.deny: at most 50 patterns');
+    expect(() => parseSetCliAgentsRequest({ cli: 'codex', deny: [] })).toThrow(
+      'setCliAgents.deny: only copilot takes deny patterns',
+    );
+  });
+
   it('takes a sandbox for codex only, and null as a clear (HIVE-342)', () => {
     expect(parseSetCliAgentsRequest({ cli: 'codex', sandbox: 'read-only' })).toEqual({
       cli: 'codex',

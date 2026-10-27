@@ -15,11 +15,12 @@ export function createCliGate(
     enabled: (id) => read().clis[id].agents.enabled,
     defaultCli: () => read().agentsDefaultCli,
     defaults: (id) => {
-      const { model, effort, sandbox } = read().clis[id].agents;
+      const { model, effort, sandbox, deny } = read().clis[id].agents;
       return {
         ...(model === undefined ? {} : { model }),
         ...(effort === undefined ? {} : { effort }),
         ...(sandbox === undefined ? {} : { sandbox }),
+        ...(deny === undefined ? {} : { deny }),
       };
     },
   };

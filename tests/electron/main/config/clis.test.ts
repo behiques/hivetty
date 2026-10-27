@@ -75,6 +75,34 @@ describe('the clis block (HIVE-341)', () => {
     ]);
   });
 
+  it('reads deny patterns on copilot only, keeping the good ones (HIVE-343)', () => {
+    const good = parseConfig(
+      doc({ clis: { copilot: { agents: { deny: ['shell(rm:*)', 'write(.env)'] } } } }),
+      'config',
+    );
+    const mixed = parseConfig(
+      doc({ clis: { copilot: { agents: { deny: ['shell(rm:*)', 'not a pattern'] } } } }),
+      'config',
+    );
+    const codex = parseConfig(doc({ clis: { codex: { agents: { deny: ['shell(rm)'] } } } }), 'config');
+    const notList = parseConfig(doc({ clis: { copilot: { agents: { deny: 'shell(rm)' } } } }), 'config');
+
+    expect(good.clis).toEqual({ copilot: { agents: { deny: ['shell(rm:*)', 'write(.env)'] } } });
+    expect(good.errors).toEqual([]);
+    expect(mixed.clis).toEqual({ copilot: { agents: { deny: ['shell(rm:*)'] } } });
+    expect(mixed.errors).toEqual([
+      'config.clis.copilot.agents.deny[1]: expected kind(argument), like shell(git push) — ignored',
+    ]);
+    expect(codex.clis).toEqual({ codex: { agents: {} } });
+    expect(codex.errors).toEqual([
+      'config.clis.codex.agents.deny: only copilot takes deny patterns — ignored',
+    ]);
+    expect(notList.clis).toEqual({ copilot: { agents: {} } });
+    expect(notList.errors).toEqual([
+      'config.clis.copilot.agents.deny: expected a list of patterns — ignored',
+    ]);
+  });
+
   it('costs a bad field, never its siblings', () => {
     const parsed = parseConfig(
       doc({ clis: { 'claude-code': { agents: { enabled: 'yes', model: 'gpt-5', effort: 'high' } } } }),
@@ -90,13 +118,13 @@ describe('the clis block (HIVE-341)', () => {
 
   it('reports an unknown key inside a CLI and inside agents', () => {
     const parsed = parseConfig(
-      doc({ clis: { 'claude-code': { sandbox: 'read-only', agents: { deny: [] } } } }),
+      doc({ clis: { 'claude-code': { sandbox: 'read-only', agents: { allow: [] } } } }),
       'config',
     );
 
     expect(parsed.errors).toEqual([
       'config.clis.claude-code: unknown key "sandbox" — ignored',
-      'config.clis.claude-code.agents: unknown key "deny" — ignored',
+      'config.clis.claude-code.agents: unknown key "allow" — ignored',
     ]);
   });
 
@@ -203,6 +231,21 @@ describe('the snapshot (HIVE-341)', () => {
     expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8'))).not.toHaveProperty(
       'agentsDefaultCli',
     );
+  });
+
+  it("writes copilot's deny patterns, and null deletes them (HIVE-343)", () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({}));
+    reloadConfig();
+
+    let snapshot = setCliAgents({ cli: 'copilot', deny: ['shell(rm:*)'] });
+
+    expect(snapshot.clis.copilot.agents).toEqual({ enabled: true, deny: ['shell(rm:*)'] });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis).toEqual({
+      copilot: { agents: { deny: ['shell(rm:*)'] } },
+    });
+
+    snapshot = setCliAgents({ cli: 'copilot', deny: null });
+    expect(snapshot.clis.copilot.agents).toEqual({ enabled: true });
   });
 
   it("writes codex's sandbox, and null deletes it (HIVE-342)", () => {

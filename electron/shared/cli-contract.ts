@@ -53,6 +53,12 @@ export const COPILOT_MODELS = [
 /** `--reasoning-effort`'s values at 1.0.104 (HIVE-343). */
 export const COPILOT_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 
+/** One `--deny-tool` pattern: `kind(arg?)`, kind `shell`, `write`, `url` or an MCP server's name (HIVE-343). */
+export const COPILOT_DENY_PATTERN = /^[A-Za-z][\w.-]*(\([^()\n]{0,200}\))?$/;
+
+/** The most deny patterns one Copilot card holds (HIVE-343). */
+export const COPILOT_DENY_MAX = 50;
+
 /** The sandboxes a Codex run may get (HIVE-342); `danger-full-access` is never offered. */
 export const HEADLESS_SANDBOXES = ['read-only', 'workspace-write'] as const;
 
@@ -110,6 +116,8 @@ export interface SetCliAgentsRequest {
   effort?: string | null;
   /** Codex only (HIVE-342). */
   sandbox?: HeadlessSandbox | null;
+  /** Copilot only (HIVE-343). `null` clears the list. */
+  deny?: string[] | null;
 }
 
 /** Payload of `config:set-agents-default-cli` (HIVE-342). `null` clears it: resolution falls back to claude-code. */
