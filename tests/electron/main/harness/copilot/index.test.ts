@@ -29,11 +29,16 @@ describe('copilotAdapter', () => {
     });
   });
 
+  it('reads no skills of its own (HIVE-344)', () => {
+    expect(copilotAdapter.installed.skillPlaces).toBe('');
+  });
+
   it('wires the headless members', () => {
     expect(copilotAdapter.headless).toEqual({
       launch: launchCopilotHeadless,
       reader: readCopilotHeadless,
       fence: copilotFence,
+      containerCommand: 'copilot',
     });
   });
 
@@ -46,6 +51,7 @@ describe('copilotAdapter', () => {
     expect(copilotFence.translate).toBe(translateCopilotCall);
     expect(copilotFence.read).toBe(readCopilotFence);
     expect(copilotFence.reply).toBe(copilotFenceReply);
+    expect(copilotFence.grants).toEqual(['ToolSearch']);
   });
 
   it('refuses every interactive member (HIVE-280)', () => {

@@ -46,7 +46,7 @@ import { launchHive } from './fixtures/hive-app';
  * it and fail on a count of one. Nothing waits for the sleep to finish — the
  * app tears the runs down at quit.
  *
- * `#!/bin/sh` and no arguments read: `resolveClaude` accepts an **absolute path
+ * `#!/bin/sh` and no arguments read: `resolveCommand` accepts an **absolute path
  * to an executable file**, which is exactly what this is, and refuses anything
  * carrying arguments — an agent is spawned without a shell, so the fixture's
  * `'true; false'` session stub could never stand in here.

@@ -47,7 +47,7 @@ const BASE = {
   integrations: ['slack'],
 };
 
-const problems = (source: string, over: Partial<typeof BASE> = {}) => {
+const problems = (source: string, over: Partial<typeof BASE & { skillPlaces: string }> = {}) => {
   const result = parseAgent(source, { ...BASE, ...over });
 
   if ('def' in result) throw new Error('expected problems, got a definition');
@@ -211,11 +211,16 @@ describe('parseAgent — refusals', () => {
     ).toContainEqual({ field: 'name', reason: 'A skill already uses this name.' });
   });
 
-  it('refuses a skill that does not exist, naming it', () => {
+  it('refuses a skill that does not exist, naming where it looked', () => {
+    expect(
+      problems(GOOD, { skillNames: ['jira-writer'], skillPlaces: '~/.claude/skills and your installed plugins' }),
+    ).toContainEqual({
+      field: 'skills',
+      reason: 'No skill called release-notes — looked in ~/.hivetty/skills, ~/.claude/skills and your installed plugins.',
+    });
     expect(problems(GOOD, { skillNames: ['jira-writer'] })).toContainEqual({
       field: 'skills',
-      reason:
-        'No skill called release-notes — looked in ~/.hivetty/skills, ~/.claude/skills and your installed plugins.',
+      reason: 'No skill called release-notes — looked in ~/.hivetty/skills.',
     });
   });
 

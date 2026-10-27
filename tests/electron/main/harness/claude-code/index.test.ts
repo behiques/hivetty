@@ -210,3 +210,17 @@ describe('what is installed for Claude Code (HIVE-345)', () => {
     ]);
   });
 });
+
+describe('the headless members (HIVE-344)', () => {
+  it('runs claude inside a container that names no command', () => {
+    expect(claudeCodeAdapter.headless.containerCommand).toBe('claude');
+  });
+
+  it('names where its skills come from (HIVE-344)', () => {
+    expect(claudeCodeAdapter.installed.skillPlaces).toBe('~/.claude/skills and your installed plugins');
+  });
+
+  it('grants ToolSearch on every run, which loads the deferred MCP schemas', () => {
+    expect(claudeCodeAdapter.headless.fence.grants).toEqual(['ToolSearch']);
+  });
+});

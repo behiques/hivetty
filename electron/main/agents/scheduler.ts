@@ -369,7 +369,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
    *
    * Disarming the interval alone is not enough to stop this module. Shutdown
    * calls `RunTracker.closeAll`, which finalizes each live run synchronously and
-   * so re-enters `onRunClosed` — where a flush would spawn a fresh `claude` that
+   * so re-enters `onRunClosed` — where a flush would spawn a fresh CLI process that
    * `closeAll` has already finished iterating past, leaving an orphan with
    * nobody left to signal it. That is the exact process the quit hook exists to
    * prevent, so the gate has to cover the callbacks and not just the timer.
@@ -1444,7 +1444,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
 
         Shutdown calls `RunTracker.closeAll`, which finalizes every live run
         synchronously and so re-enters `onRunClosed` from inside the teardown.
-        With only the interval disarmed, that flush would spawn a fresh `claude`
+        With only the interval disarmed, that flush would spawn a fresh CLI process
         after `closeAll` had already finished iterating the runs it knew about —
         an orphan with nobody left to signal it, which is precisely what the quit
         hook exists to prevent.

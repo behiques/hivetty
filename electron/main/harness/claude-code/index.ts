@@ -49,5 +49,5 @@ export const claudeCodeAdapter: HarnessAdapter = {
   meters: parseMetrics,
   record: createClaudeRecord(),
   installed: createClaudeInstalled(),
-  headless: { launch: launchHeadless, reader: readClaudeHeadless, fence: claudeFence },
+  headless: { launch: launchHeadless, reader: readClaudeHeadless, fence: claudeFence, containerCommand: 'claude' },
 };

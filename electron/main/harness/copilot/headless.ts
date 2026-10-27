@@ -159,7 +159,6 @@ export function launchCopilotHeadless(spec: HeadlessSpec): HeadlessPlan {
     addEnv: { COPILOT_HOME: spec.stateDir },
     stripEnv: [...COPILOT_SESSION_ENV_KEYS, ...COPILOT_AUTH_ENV_KEYS, ...COPILOT_ROUTING_ENV_KEYS],
     stripPrefixes: COPILOT_ROUTING_PREFIXES,
-    defaultContainerCommand: 'copilot',
     stopPattern: id,
     namesConversation: true,
     outputConfirmsStart: true,

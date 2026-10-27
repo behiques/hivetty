@@ -57,7 +57,8 @@ import {
   METRICS_PATH,
   type SessionMetrics,
 } from '../../../../electron/shared/metrics-contract';
-import { translateCodexCall } from '../../../../electron/main/harness/codex/fence';
+import { claudeFence } from '../../../../electron/main/harness/claude-code/headless';
+import { codexFenceReply, translateCodexCall } from '../../../../electron/main/harness/codex/fence';
 import { copilotFence } from '../../../../electron/main/harness/copilot';
 import type { copilotFenceReply } from '../../../../electron/main/harness/copilot/fence';
 import { createLedger, type Ledger } from '../../../../electron/main/ledger';
@@ -5484,8 +5485,13 @@ describe('the fence route (HIVE-342)', () => {
       // Codex's fence answers a header-less hook; Copilot's is its adapter's own.
       fenceFor: (harness) => {
         if (harness === undefined) {
-          return { express: () => ({ ok: true }), translate: (tool, input, cwd) => translate(tool, input, cwd) };
+          return {
+            express: () => ({ ok: true }),
+            translate: (tool, input, cwd) => translate(tool, input, cwd),
+            reply: codexFenceReply,
+          };
         }
+        if (harness === 'claude-code') return claudeFence;
         return harness === 'copilot' ? copilotFence : null;
       },
       onLedgerRead: (_caller, query) => ledger.read(query),
@@ -5535,6 +5541,12 @@ describe('the fence route (HIVE-342)', () => {
       permissionDecision: 'deny',
       permissionDecisionReason: reason,
     },
+  });
+
+  it('is 400 for a fence that cannot answer (HIVE-344)', async () => {
+    // claude-code's fence routes through `approve`, not /fence, so it has no reply.
+    const response = await fence(preToolUse('Bash', { command: 'ls' }), AGENT, { [HOOK_HEADER_HARNESS]: 'claude-code' });
+    expect(response.status).toBe(400);
   });
 
   it('lets a granted call run and posts nothing', async () => {

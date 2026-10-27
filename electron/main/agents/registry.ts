@@ -115,7 +115,7 @@ interface RegistryOptions {
    * runs, and an agent naming one added a minute ago must validate against the
    * folders as they are now.
    */
-  skillNames: () => Promise<{ all: readonly string[]; hive: readonly string[] }>;
+  skillNames: () => Promise<{ all: readonly string[]; hive: readonly string[]; places?: string }>;
   watch?: WatchFactory;
 }
 
@@ -201,8 +201,8 @@ export function createAgentRegistry({
   /*
     Resolved once per call and passed down, never fetched per folder.
 
-    `skillNames()` now walks `~/.hivetty/skills`, `~/.claude/skills` and every
-    installed plugin. `list()` calls `parse` once per agent folder and re-runs
+    `skillNames()` now walks `~/.hivetty/skills`, the harness's own skills and
+    every installed plugin. `list()` calls `parse` once per agent folder and re-runs
     on every debounced watcher event — and a single save fires the watcher
     twice, for the temp write and the rename. Fetching inside `parse` therefore
     multiplied a whole-machine scan by the size of the fleet, on every
@@ -212,13 +212,14 @@ export function createAgentRegistry({
   const parse = (
     folder: string,
     source: string,
-    skills: { all: readonly string[]; hive: readonly string[] },
+    skills: { all: readonly string[]; hive: readonly string[]; places?: string },
   ) =>
     parseAgent(source, {
       folder,
       skillNames: skills.all,
       hiveSkillNames: skills.hive,
       integrations: KNOWN_AGENT_MCP,
+      ...(skills.places === undefined ? {} : { skillPlaces: skills.places }),
     });
 
   const read = async (name: string): Promise<string | null> => {

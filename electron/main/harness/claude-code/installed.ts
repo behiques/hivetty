@@ -199,4 +199,5 @@ export const createClaudeInstalled = (): HarnessInstalled => ({
   skillNames: () => readClaudeSkillNames(userSkillsRoot(), installedPluginsFile()),
   pluginNames: () => readInstalledPluginNames(installedPluginsFile()),
   sessionOverrides: (disabled) => readSessionPluginOverrides(installedPluginsFile(), disabled),
+  skillPlaces: '~/.claude/skills and your installed plugins',
 });

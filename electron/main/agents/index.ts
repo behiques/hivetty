@@ -11,9 +11,8 @@
  * validate against the folder as it is now, not as it was at boot.
  *
  * It reads **three** roots: HiveTTY's, and the two the harness answers through
- * `installed`. An agent is a `claude -p` process on
- * this machine, so it already loads the user's `~/.claude/skills` and their
- * installed plugins; validating against `~/.hivetty/skills` alone refused names
+ * `installed`. An agent runs the harness's CLI on this machine, which already
+ * loads the user's own skills and plugins; validating against `~/.hivetty/skills` alone refused names
  * the agent could reach anyway, and refused every name at all on the fresh
  * install where that folder is empty. `available.ts` carries the argument in
  * full.
@@ -46,8 +45,13 @@ export function createAgentsRuntime(
   return createAgentRegistry({
     root: agentsRoot(),
     // HIVE-345. The user's skills and plugins are the harness's, so the registry answers them.
-    skillNames: () =>
-      readAvailableSkillNames(skillsRoot(), () => sessionAdapter().installed.skillNames()),
+    skillNames: async () => {
+      const { installed } = sessionAdapter();
+      return {
+        ...(await readAvailableSkillNames(skillsRoot(), () => installed.skillNames())),
+        places: installed.skillPlaces,
+      };
+    },
     ...(options.runFiles === undefined ? {} : { runFiles: options.runFiles }),
   });
 }

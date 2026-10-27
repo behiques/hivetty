@@ -51,7 +51,7 @@ interface WakeEnv {
 }
 
 interface WakeInput {
-  claudePath: string;
+  binaryPath: string;
   /** The CLI this wake runs on, resolved by `createWakeCommand` (HIVE-340). */
   adapter: HarnessAdapter;
   /** The CLI the lane's last conversation ran on, when this wake starts fresh on another (HIVE-340). */
@@ -128,7 +128,7 @@ interface WakeInput {
 interface ContainerWake {
   runtime: string;
   name: string;
-  /** The binary inside; `claude` unless the block says otherwise. */
+  /** The binary inside; the adapter's `headless.containerCommand` unless the block says otherwise. */
   command: string;
   envArg: string;
   /** The cwd inside — `--workdir` on the exec. */
@@ -302,15 +302,15 @@ export function systemPromptFor(
 
 /**
  * What the fence enforces, as written (HIVE-339): `HOOK_ENV_GRANTS` carries this same list, and the
- * adapter narrows only its own `--allowedTools`. `ToolSearch`'s place in it is explained there.
- * Resolution asks the fence about exactly this list (HIVE-340).
+ * adapter narrows only its own grant flag. `standing` is the adapter's `fence.grants` (HIVE-344).
+ * Resolution asks the fence about this list without them (HIVE-340): an adapter's own grants are
+ * expressible by construction.
  */
-export const fencedRules = (def: AgentDefinition, grants: readonly string[] = []): string[] => [
-  ...HIVE_STANDING_GRANTS,
-  'ToolSearch',
-  ...def.tools,
-  ...grants,
-];
+export const fencedRules = (
+  def: AgentDefinition,
+  grants: readonly string[] = [],
+  standing: readonly string[] = [],
+): string[] => [...HIVE_STANDING_GRANTS, ...standing, ...def.tools, ...grants];
 
 export function wakeCommand(input: WakeInput): WakeCommand {
   const { def, paths, env } = input;
@@ -325,7 +325,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     A throw rather than a `{ problem }`, because this function returns a
     command and has no problem shape; `createWakeCommand` catches it into
     one. Guessing a path would produce a flag naming a file the container
-    cannot open — an error at `claude` startup about a file, which is further
+    cannot open — an error at the CLI's startup about a file, which is further
     from the cause than a refusal naming the path.
   */
   const map =
@@ -351,7 +351,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     return mapped;
   };
   const { adapter } = input;
-  const fenced = fencedRules(def, input.grants);
+  const fenced = fencedRules(def, input.grants, adapter.headless.fence.grants);
   /*
     `AGENT.md`'s model and effort are Claude's vocabulary (HIVE-340), so they apply only there, ahead
     of the card; every CLI takes its own card's (HIVE-341, HIVE-342), never a translated `opus`.
@@ -411,14 +411,13 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     headless child with no tty. What a headless child does need is
     `isSessionEnvDenied`, and it needs it more than a pty does.
 
-    Launch HiveTTY with `pnpm desktop:dev` from inside a Claude Code session —
-    which is how it gets developed — and main inherits `CLAUDECODE=1`,
-    `CLAUDE_CODE_SESSION_ID` and `CLAUDE_CODE_CHILD_SESSION=1`. Handed on, every
-    agent **joins the launching session instead of starting its own**: `--name`
-    is ignored, `Stop` reports the launching session's `session_id` so
-    `noteTurnEnded` discards it and the stall watchdog can never arm, and the
-    inherited child-session marker turns transcript saving off, which is what
-    `--resume` reads on the next wake. `ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS`
+    Launch HiveTTY with `pnpm desktop:dev` from inside a CLI session, which is
+    how it gets developed, and main inherits that CLI's session-identity
+    variables (the deny list in `isSessionEnvDenied`). Handed on, every agent
+    joins the launching session instead of starting its own: its Stop reports
+    the launching session's id, so `noteTurnEnded` discards it and the stall
+    watchdog never arms, and the inherited child marker can turn transcript
+    saving off, which a resume reads. `ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS`
     and `NODE_PATH` are the other half: Electron's own wiring, meaningless to a
     node CLI started from it and actively harmful to one.
   */
@@ -439,20 +438,8 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     the standing Hive grants (`HIVE_STANDING_GRANTS`) is first and unconditional: an agent that cannot call
     `ledger_read` cannot read the inbox that would tell it why it was woken,
     and would deadlock on its own fence. `input.grants` is a one-shot
-    `allow-once` for this wake only — never merged into `def.tools`.
-
-    `ToolSearch` sits beside it, unconditional for the same reason and found
-    the same way — a live run, not a unit test. MCP tool schemas are
-    deferred: the model sees `mcp__hive__ledger_read` by name in its tool
-    list, but must call the *built-in* `ToolSearch` to fetch that schema
-    before it can invoke it. `ToolSearch` never appears in any `def.tools` —
-    nobody would think to grant a built-in — so without this the fence denies
-    the very first thing an agent's preamble tells it to do: read its ledger
-    inbox. Granting the standing Hive grants (`HIVE_STANDING_GRANTS`) is worthless if nothing can load the
-    schema to call it. This grants no *capability*: `ToolSearch` only reveals
-    tool schemas, and every tool it surfaces is still checked by the fence
-    the moment it is actually called — so widening this list widens nothing
-    an agent can do, only what it can find out it could ask to do.
+    `allow-once` for this wake only — never merged into `def.tools` — and the
+    adapter's own `fence.grants` after them.
   */
   merged[HOOK_ENV_GRANTS] = JSON.stringify(fenced);
 
@@ -478,7 +465,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     }
 
     return {
-      file: config.command ?? plan.defaultContainerCommand,
+      file: config.command ?? adapter.headless.containerCommand,
       args,
       /*
         Only what a container may know: the grants, the identity, the marker
@@ -499,7 +486,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
       container: {
         runtime: config.runtime,
         name: config.name,
-        command: config.command ?? plan.defaultContainerCommand,
+        command: config.command ?? adapter.headless.containerCommand,
         envArg: config.envArg ?? DEFAULT_ENV_ARG,
         workspace: config.workspace,
         sessionUuid: plan.stopPattern,
@@ -508,7 +495,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   }
 
   return {
-    file: input.claudePath,
+    file: input.binaryPath,
     args,
     env: { ...merged, ...env.hook, HIVE_AGENT: '1', ...plan.addEnv },
     cwd: paths.workdir,

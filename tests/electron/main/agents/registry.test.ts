@@ -249,6 +249,21 @@ describe('write', () => {
     );
   });
 
+  it("names the harness's own skill places in a missing skill's refusal (HIVE-344)", async () => {
+    const made = createAgentRegistry({
+      root,
+      skillNames: async () => ({ all: [], hive: [], places: 'X' }),
+    });
+    open.push(made);
+
+    const result = await made.write('slack-watcher', GOOD.replace('icon: ChatCircleDots', 'icon: ChatCircleDots\nskills: [ghost]'));
+
+    expect(result.ok ? [] : result.problems).toContainEqual({
+      field: 'skills',
+      reason: 'No skill called ghost — looked in ~/.hivetty/skills, X.',
+    });
+  });
+
   it('refuses an invalid definition and writes nothing', async () => {
     const bad = GOOD.replace('icon: ChatCircleDots', 'icon: ChatCircleDots\nnope: 1');
 

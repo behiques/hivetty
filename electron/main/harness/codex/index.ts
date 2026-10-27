@@ -53,6 +53,7 @@ export const codexAdapter: HarnessAdapter = {
     skillNames: () => Promise.resolve([]),
     pluginNames: () => Promise.resolve([]),
     sessionOverrides: () => Promise.resolve({}),
+    skillPlaces: '',
   },
-  headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence },
+  headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence, containerCommand: 'codex' },
 };
