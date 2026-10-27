@@ -11,7 +11,9 @@ import type { RunEvent, RunEventReader } from '../port';
  * final. Recorded against 1.0.104 (`tests/fixtures/copilot/`).
  */
 
-const TOKEN_REFUSED = /could not be validated|Bad credentials|\b401\b/;
+// Copilot's own wording only: a bare 401 can be any server's (an MCP server's, say).
+const TOKEN_REFUSED =
+  /Authentication token found but could not be validated|Bad credentials|PAT user login \(401\)/;
 // These two are unverified (no account to produce them on); upgrade from a real failure's text.
 const NO_SUBSCRIPTION =
   /(no|not have an) active (copilot )?subscription|not (entitled|licensed) (to|for) copilot/i;

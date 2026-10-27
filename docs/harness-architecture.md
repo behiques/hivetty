@@ -300,8 +300,9 @@ the fence translates are in `tests/fixtures/copilot/hooks-1.0.104/`.
 - `-p <prompt> -s`: one non-interactive turn; under `-s` stdout is the answer and nothing else.
 - `--no-ask-user`: no `ask_user` tool, so a run never waits on a person it cannot reach.
 - `--disable-builtin-mcps`: drops github-mcp-server, so the only MCP server is `hive`.
-- `--session-id <uuid>` on a first wake, `--resume=<uuid>` after: the id is pinned, so
-  `namesConversation` is true and the uuid is the stop marker.
+- `--session-id <uuid>` on every wake: it resumes the session when it exists and starts one under
+  that id when it does not (probed), so a first wake that died before Copilot made its session is
+  resumed cleanly. The id is pinned, so `namesConversation` is true and the uuid is the stop marker.
 - `--model` and `--reasoning-effort` from the Copilot card, omitted when it names none.
 - `--allow-tool shell`, `write` and `hive`: Copilot's own layer must allow a kind before a call can
   run at all, and the `preToolUse` hook decides each call. A hook's allow grants nothing. Never
@@ -317,15 +318,18 @@ the fence translates are in `tests/fixtures/copilot/hooks-1.0.104/`.
   user's own `copilot`.
 
 **Isolation is `COPILOT_HOME`**, set to the app-owned `~/.hivetty/cli/copilot` and shared by every
-Copilot run so `--resume` finds its session. Config, `settings.json`, `session-state/`, logs and
+Copilot run so `--session-id` finds its session. Config, `settings.json`, `session-state/`, logs and
 plugin data land there; the user's `~/.copilot` (plugins, MCP servers, hooks, login) never reaches
 an agent, and HiveTTY never writes there. The package cache and managed settings stay in
 `~/Library/Caches/copilot`, shared with the user's CLI. `stripEnv` removes the six `COPILOT_*` keys
-a parent Copilot session exports, and `GH_TOKEN`, `GITHUB_TOKEN` and `COPILOT_ALLOW_ALL`, which
-would outrank or widen the stored token.
+a parent Copilot session exports; `GH_TOKEN`, `GITHUB_TOKEN` and `COPILOT_ALLOW_ALL`, which
+would outrank or widen the stored token; and `COPILOT_ROUTING_ENV_KEYS` (the `COPILOT_PROVIDER_*`
+BYOK keys, `COPILOT_OFFLINE`, `COPILOT_MODEL`, `COPILOT_AUTO_TIER`, `COPILOT_ASSISTED_APPROVAL`,
+`GH_ENTERPRISE_TOKEN`), which would change who pays, which model answers or what is approved.
+`GH_HOST` and `COPILOT_GH_HOST` stay, for an Enterprise user's stored token.
 
 **Two hooks**, in the home's `settings.json` (the same bytes for every run; identity comes from the
-env), which fire under `-p` on a start and on `--resume` with no folder trust:
+env), which fire under `-p` on a start and on a resume with no folder trust:
 
 - `agentStop` → `/hook`, arming the stall watchdog. Copilot's bodies name no event, so the `sh`
   command wraps each as `{"event":"agentStop","payload":…}` and sends `x-hive-harness: copilot`;
@@ -358,8 +362,9 @@ one's. The tracker holds the run's lane until `finish` settles, bounds it at `FI
 finalizes every run before its caller flushes state. Claude and Codex have no `finish`; their close
 stays synchronous.
 
-**Failures** (`classifyFailure`, over the last 4 KiB of stderr): a refused token ("could not be
-validated", "Bad credentials", 401) reads "the Copilot token was refused: replace it in Settings ›
+**Failures** (`classifyFailure`, over the last 4 KiB of stderr): a refused token (Copilot's own
+"Authentication token found but could not be validated", "Bad credentials" or "PAT user login
+(401)"; a bare 401 is any server's, so it is not one) reads "the Copilot token was refused: replace it in Settings ›
 CLIs". A missing subscription and an org-disabled CLI have their own lines, but their patterns are
 **unverified**: no account could produce them, so they are upgraded from the first real failure's
 text. Anything else is stderr's last line, else the exit.

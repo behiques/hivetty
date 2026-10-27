@@ -80,7 +80,7 @@ icon: Ghost
 harness: [copilot]
 wake:
   on: [ledger]
-tools: []
+tools: [Bash(awk *)]
 limits:
   turns: 10
   parallel: 2
@@ -88,8 +88,8 @@ limits:
 ---
 Your name is ${CP}.
 
-This is a conformance probe. Do not read files, run commands or explore. Do exactly what your
-wake prompt asks, in as few steps as you can, then end your turn.
+This is a conformance probe. Do not read files, run any command your wake prompt does not name, or
+explore. Do exactly what your wake prompt asks, in as few steps as you can, then end your turn.
 `;
 
 const fenceMd = (name: string, call: string, tools = '[]') => `---
@@ -466,9 +466,13 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     if (skipReason !== undefined) ctx.skip(skipReason);
     noteTurnEnded = vi.spyOn(runs, 'noteTurnEnded');
 
+    // `--secret-env-vars` keeps the token out of the agent's own shell. The plan's
+    // `env | grep -c` is a pipe, which no `Bash(...)` rule ever matches, so this counts it pipe-free.
     const run = await wake(
       CP,
-      'State your name exactly as your instructions give it, in one short sentence, then end your turn.',
+      'State your name exactly as your instructions give it, in one short sentence. Then run exactly ' +
+        `this shell command, once: awk 'BEGIN { print ("COPILOT_GITHUB_TOKEN" in ENVIRON) }' ` +
+        'and reply with one more line, TOKEN-COUNT: followed by the number it printed. Then end your turn.',
     );
 
     const state = await persisted(CP);
@@ -482,6 +486,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     // The prompt never names the agent: only `AGENTS.md` does.
     expect(args[args.indexOf('-p') + 1]).not.toContain(CP);
     expect(runLog(run)).toContain(CP);
+    expect(runLog(run)).toMatch(/TOKEN-COUNT: 0\b/);
   }, TURN_MS);
 
   it('agentStop arms the watchdog and the run closes done', async (ctx) => {
@@ -515,7 +520,9 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       'What was the exact word you were asked to remember? Reply with only that word, then end your turn.',
     );
 
-    expect(lastArgs(CP)).toContain(`--resume=${uuid}`);
+    // One flag starts and resumes (HIVE-343 Task 21): `--resume=` is gone.
+    expect(lastArgs(CP)).toEqual(expect.arrayContaining(['--session-id', uuid]));
+    expect(lastArgs(CP).some((arg) => arg.startsWith('--resume'))).toBe(false);
     expect(runLog(run)).toContain(word);
     expect((await persisted(CP)).sessionUuid).toBe(uuid);
   }, 2 * TURN_MS);
