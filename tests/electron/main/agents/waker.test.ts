@@ -34,6 +34,7 @@ const paths = {
   mcpConfig: '/u/hive/hive.mcp.json',
   systemPrompt: '/u/hive/agents/slack-watcher.system.md',
   workdir: '/home/me/.hive/work/slack-watcher',
+  cliHome: '/h/cli/fake',
 };
 
 const env = {
@@ -479,6 +480,48 @@ describe('systemPromptFor', () => {
   });
 });
 
+describe('what the launch is told (HIVE-343)', () => {
+  it('passes the CLI home, the workdir and the card deny list to the adapter', () => {
+    const seen: HeadlessSpec[] = [];
+    const adapter = {
+      ...codexAdapter,
+      headless: {
+        ...codexAdapter.headless,
+        launch: (spec: HeadlessSpec) => {
+          seen.push(spec);
+          return codexAdapter.headless.launch(spec);
+        },
+      },
+    };
+
+    build({ adapter, defaults: { deny: ['shell(rm)'] } });
+
+    expect(seen[0]).toMatchObject({
+      stateDir: '/h/cli/fake',
+      workdir: '/home/me/.hive/work/slack-watcher',
+      deny: ['shell(rm)'],
+    });
+  });
+
+  it('passes no deny when the card has none', () => {
+    const seen: HeadlessSpec[] = [];
+    const adapter = {
+      ...codexAdapter,
+      headless: {
+        ...codexAdapter.headless,
+        launch: (spec: HeadlessSpec) => {
+          seen.push(spec);
+          return codexAdapter.headless.launch(spec);
+        },
+      },
+    };
+
+    build({ adapter });
+
+    expect(seen[0]).not.toHaveProperty('deny');
+  });
+});
+
 describe('a container wake (HIVE-137)', () => {
   const container = {
     config: { runtime: 'docker', name: 'devbox', workspace: '/work', hiveDir: '/hive' },
@@ -491,6 +534,7 @@ describe('a container wake (HIVE-137)', () => {
     mcpConfig: '/u/hive/container/hive.mcp.json',
     systemPrompt: '/u/hive/agents/slack-watcher.system.md',
     workdir: '/home/me/.hive/work/slack-watcher',
+    cliHome: '/h/cli/fake',
   };
   const built = () => build({ container, paths: containerPaths });
 

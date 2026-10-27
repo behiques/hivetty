@@ -37,6 +37,8 @@ interface WakePaths {
   mcpConfig: string;
   systemPrompt: string;
   workdir: string;
+  /** The CLI's app-owned home (HIVE-343). */
+  cliHome: string;
 }
 
 interface WakeEnv {
@@ -53,8 +55,8 @@ interface WakeInput {
   /** The CLI the lane's last conversation ran on, when this wake starts fresh on another (HIVE-340). */
   switchedFrom?: HarnessId;
   def: AgentDefinition;
-  /** Settings › CLIs' model, effort and sandbox for this CLI (HIVE-341, HIVE-342). */
-  defaults?: Pick<CliAgents, 'model' | 'effort' | 'sandbox'>;
+  /** Settings › CLIs' model, effort, sandbox and deny for this CLI (HIVE-341, HIVE-342, HIVE-343). */
+  defaults?: Pick<CliAgents, 'model' | 'effort' | 'sandbox' | 'deny'>;
   /** Absent on the very first run, which mints one instead. */
   sessionUuid?: string;
   newUuid: string;
@@ -385,6 +387,9 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     subscriptionAuth: env.subscriptionAuth,
     instructions: input.instructions,
     hiveServer: input.hiveServer,
+    stateDir: paths.cliHome,
+    workdir: paths.workdir,
+    ...(input.defaults?.deny === undefined ? {} : { deny: input.defaults.deny }),
   });
   const args = [...plan.args];
 

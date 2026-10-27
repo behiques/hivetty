@@ -199,6 +199,7 @@ import {
   agentPromptFile,
   agentStateFile,
   agentWorkdir,
+  cliHome,
   laneWorkdir,
   agentsRoot,
 } from '../agents/paths';
@@ -2723,6 +2724,7 @@ export function registerIpcHandlers(
   const buildWakeCommand = createWakeCommand({
     agentsRoot,
     workdir: laneWorkdir,
+    cliHome,
     promptFile: (name) => agentPromptFile(app.getPath('userData'), name),
     pluginDir: () => join(app.getPath('userData'), PLUGIN_DIR),
     // The agent-space file, never `hooks.settingsPathFor()`: that one carries

@@ -39,6 +39,8 @@ export interface CliAgents {
   effort?: string;
   /** Codex only (HIVE-342). Absent runs `workspace-write`. */
   sandbox?: HeadlessSandbox;
+  /** Copilot only (HIVE-343). */
+  deny?: string[];
 }
 
 export interface CliConfig {

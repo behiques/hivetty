@@ -13,6 +13,7 @@ import {
   agentPromptFile,
   agentStateFile,
   agentsRoot,
+  cliHome,
   laneWorkdir,
 } from '../../electron/main/agents/paths';
 import { parseAgent } from '../../electron/main/agents/definition';
@@ -1275,6 +1276,7 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
       agentsRoot,
       // Each lane in its own directory, as `ipc/index.ts` wires it (HIVE-188).
       workdir: laneWorkdir,
+      cliHome,
       promptFile: (name) => agentPromptFile(userDataPath, name),
       pluginDir: () => pluginDir ?? '',
       agentSettingsPath: () => settingsPath,

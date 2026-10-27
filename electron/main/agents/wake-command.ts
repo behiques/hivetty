@@ -75,6 +75,8 @@ export interface WakeCommandDeps {
   /** `~/.hivetty/work/<name>`, created before the spawn. */
   /** The lane's working directory (HIVE-188); `standing` is the agent's own. */
   workdir: (name: string, lane: string) => string;
+  /** `~/.hivetty/cli/<id>`: the CLI's app-owned home (HIVE-343). */
+  cliHome: (id: HarnessId) => string;
   /** `<userData>/hive/agents/<name>.system.md`, rewritten before the spawn. */
   promptFile: (name: string) => string;
   /** `<userData>/hive/plugin` — the skills HiveTTY generates. */
@@ -522,6 +524,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
               : join(deps.userDataPath(), CONTAINER_DIR, CONTAINER_MCP_FILE),
           systemPrompt,
           workdir,
+          cliHome: deps.cliHome(adapter.id),
         },
         env: {
           base: deps.env(),

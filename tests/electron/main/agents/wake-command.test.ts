@@ -110,6 +110,7 @@ const state = (): AgentState => ({
 const build = (over: Partial<WakeCommandDeps> = {}) =>
   createWakeCommand({
     agentsRoot: () => '/home/u/.hive/agents',
+    cliHome: (id) => `/home/u/.hive/cli/${id}`,
     workdir: (name, lane) =>
       lane === 'standing' ? `/home/u/.hive/work/${name}` : `/home/u/.hive/work/${name}/lanes/${lane}`,
     promptFile: (name) => `/data/hive/agents/${name}.system.md`,
@@ -653,6 +654,7 @@ Read the channel and report.
 
     return {
       agentsRoot: () => '/home/u/.hive/agents',
+      cliHome: (id) => `/home/u/.hive/cli/${id}`,
       workdir: (name) => `/home/u/.hive/work/${name}`,
       promptFile: (name) => `/userData/hive/agents/${name}.system.md`,
       pluginDir: () => '/userData/hive/plugin',
