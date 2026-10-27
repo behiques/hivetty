@@ -292,9 +292,8 @@ Interactive: HIVE-279. Meters: HIVE-334. Plans: HIVE-352. Containers: refused.
 Adapter #3 lives in `electron/main/harness/copilot/` and is headless only, shaped as Codex's is:
 every interactive member refuses with "copilot has no interactive sessions yet (HIVE-280)".
 Measured against `GitHub Copilot CLI 1.0.104-4`; the recorded hook bodies, a usage file and a
-refused token's stderr are in `tests/fixtures/copilot/`. **No Copilot run starts yet:**
-`copilotFence.express` refuses every rule set (resolution reads "copilot cannot enforce *") until
-PR2 gives `/fence` a Copilot reader, exactly as Codex's PR1 did.
+refused token's stderr are in `tests/fixtures/copilot/`; the `preToolUse` bodies for every tool
+the fence translates are in `tests/fixtures/copilot/hooks-1.0.104/`.
 
 **The argv** (`copilot/headless.ts`), flag by flag:
 
@@ -329,7 +328,10 @@ would outrank or widen the stored token.
 env), which fire under `-p` on a start and on `--resume` with no folder trust:
 
 - `agentStop` → `/hook`, arming the stall watchdog. Copilot's bodies name no event, so the `sh`
-  command wraps each as `{"event":"agentStop","payload":…}` and sends `x-hive-harness: copilot`.
+  command wraps each as `{"event":"agentStop","payload":…}` and sends `x-hive-harness: copilot`;
+  the receiver's `readerFor` picks the adapter by that header, and `readCopilotHook` reads the
+  envelope as Claude's `Stop`. **A subagent's `agentStop` (`agentId` set) never arms it**: a `task`
+  subagent fires its own mid-turn (probed), and the parent is still working.
 - `preToolUse` → `/fence`, failing closed exactly as Codex's does, with a 35 s hook timeout over
   curl's 30 s so the hook's deny is what Copilot sees.
 
@@ -364,6 +366,32 @@ text. Anything else is stderr's last line, else the exit.
 
 **Settings › CLIs** gives the Copilot card a write-only Token field and a Deny patterns list
 (`kind(argument)`, at most 50, each a `--deny-tool`). **Containers are refused**, as for Codex.
+
+**The fence** (`copilot/fence.ts`, the receiver's `POST /fence`), Codex's in all but its reader:
+
+1. The `preToolUse` command is the shared `fenceCommand` with `x-hive-harness: copilot`, so
+   `handleFence` picks `copilotFence` by header (a header naming a CLI with no fence is `400`). It
+   **fails closed** as Codex's does: `curl -sf` turns a non-2xx, a timeout, a down receiver or an
+   empty reply into `FENCE_DOWN`, a `permissionDecision: "deny"`.
+2. `readCopilotFence` takes `toolName`, `toolArgs` (a JSON string, parsed; one that does not parse
+   is `400`) and `cwd`.
+3. `translateCopilotCall` maps only names a probe recorded: `bash` → `Bash`, `create` → `Write`,
+   `edit` → `Edit`, `view` → `Read` (a relative path joined to an absolute `cwd`, never
+   normalised), `glob` → `Glob`, `grep` → `Grep`, `web_fetch` → `WebFetch`, `task` → `Task`,
+   `tool_search_tool` → `ToolSearch` (Copilot's deferred-tool search, recorded by the live suite:
+   without it a standing run ends asking on the standing `ToolSearch` grant), and `hive-<tool>` →
+   `mcp__hive__<tool>`. Anything else **passes raw**, so `decide` meets a name it does not know and
+   asks: a relative path with no absolute `cwd`, and a `hive-x-y` name (a hive tool holds no `-`,
+   so that is another server's).
+4. `approve` decides as for Claude and Codex. The reply is Copilot's: `{}` leaves the call to
+   `--allow-tool`, or a deny carrying the reason. A hook's allow grants nothing, and a card's
+   `--deny-tool` pattern wins over a granted call.
+
+`COPILOT_RULE_TABLE` files every rule shape under `expressed` (`*`, `Bash`, `Write`, `Edit`,
+`Read` and their globs, `Glob`, `Grep`, `WebFetch` and `WebFetch(domain:…)`, `Task`, `ToolSearch`,
+MCP names and wildcards, their `literal:` forms) or `neverProduced` (`NotebookEdit`, `Agent`):
+Copilot makes no call by those names, so a rule naming them allows nothing and widens nothing. The
+fence is total: `express` accepts every rule set.
 
 Interactive: HIVE-280. Meters: HIVE-335. Plans: HIVE-352. Containers: refused.
 
