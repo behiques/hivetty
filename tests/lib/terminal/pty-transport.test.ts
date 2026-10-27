@@ -693,6 +693,20 @@ describe('requestSpawn', () => {
     );
   });
 
+  it('sends the CLI with the spawn (HIVE-279)', async () => {
+    await requestSpawn('sess-a', 'nova-web', { harness: 'codex', model: 'gpt-6-luna' });
+
+    expect(bridge.spawn).toHaveBeenCalledWith(
+      expect.objectContaining({ harness: 'codex', model: 'gpt-6-luna' }),
+    );
+  });
+
+  it('says nothing of a CLI nobody named, which main reads as Claude', async () => {
+    await requestSpawn('sess-a', 'nova-web');
+
+    expect(bridge.spawn.mock.calls[0]![0]).not.toHaveProperty('harness');
+  });
+
   it('omits an empty task, so the picker can start a task-less session', async () => {
     /**
      * The picker passes `''` on purpose — it starts a session and the first

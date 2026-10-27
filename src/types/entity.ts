@@ -75,7 +75,7 @@ export interface Session {
   id: string; // 'hero-refresh'
   /**
    * The harness driving this session (HIVE-240). Stamped where the store mints a session; absent on
-   * fixtures and reads as the default input profile. Phase 1: always `claude-code`.
+   * fixtures and reads as the default input profile. Sent on every spawn of the row (HIVE-279).
    */
   harness?: HarnessId;
   /**

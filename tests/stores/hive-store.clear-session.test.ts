@@ -74,6 +74,16 @@ describe('clearSession', () => {
     expect(sessionAt(successorId).harness).toBe('claude-code');
   });
 
+  it('runs the successor on the CLI its predecessor ran (HIVE-279)', () => {
+    useHiveStore.setState((s) => ({
+      entities: { ...s.entities, 'hero-refresh': { ...sessionAt('hero-refresh'), harness: 'codex' } },
+    }));
+
+    const successorId = state().clearSession('hero-refresh')!;
+
+    expect(sessionAt(successorId).harness).toBe('codex');
+  });
+
   /**
    * The load-bearing assertion. Both rows name one pty, which is what stops the
    * successor spawning a second process in the same directory — and what lets

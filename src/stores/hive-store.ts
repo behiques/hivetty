@@ -122,6 +122,7 @@ import type {
   ChangedFilesEvent,
   ChangedFilesSnapshot,
 } from '@shared/changed-files-contract';
+import { CLI_VOCAB } from '@shared/cli-contract';
 import type { ModeChange } from '@shared/config-contract';
 import type {
   GhResult,
@@ -135,6 +136,7 @@ import type {
   WorkflowDef,
   WorkflowRun,
 } from '@shared/github-contract';
+import type { HarnessId } from '@shared/harness-contract';
 import type { IdleDetail } from '@shared/hook-contract';
 import {
   CH,
@@ -188,8 +190,6 @@ import type { PlansSnapshot, SessionPlan } from '@shared/plan-contract';
 import {
   hiveNameFromTitle,
   soleTicketKeyIn,
-  SESSION_EFFORTS,
-  SESSION_MODELS,
   type SessionNameOrigin,
 } from '@shared/session-contract';
 import type {
@@ -1606,11 +1606,11 @@ let terminalCounter = 0;
  * re-check them — it points here instead. These are what make that pointer
  * true.
  */
-const isKnownModel = (value: string | undefined): value is Model =>
-  value !== undefined && (SESSION_MODELS as readonly string[]).includes(value);
+const isKnownModel = (harness: HarnessId, value: string | undefined): value is Model =>
+  value !== undefined && (CLI_VOCAB[harness].models as readonly string[]).includes(value);
 
-const isKnownEffort = (value: string | undefined): value is Effort =>
-  value !== undefined && (SESSION_EFFORTS as readonly string[]).includes(value);
+const isKnownEffort = (harness: HarnessId, value: string | undefined): value is Effort =>
+  value !== undefined && (CLI_VOCAB[harness].efforts as readonly string[]).includes(value);
 
 /**
  * How a stored record reads once the app it described is gone (HIVE-93).
@@ -4142,7 +4142,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         entities[item.id] = stampLifecycle({
           kind: 'session',
           id: item.id,
-          harness: 'claude-code',
+          // The CLI the record ran (HIVE-279); a record with none predates the field and is Claude's.
+          harness: item.harness ?? 'claude-code',
           project: item.project,
           status,
           task: item.task,
@@ -4217,8 +4218,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
             model a finished session ran under is a nice-to-have, and losing the
             row over it would not be.
           */
-          ...(isKnownModel(item.model) ? { model: item.model } : {}),
-          ...(isKnownEffort(item.effort) ? { effort: item.effort } : {}),
+          ...(isKnownModel(item.harness ?? 'claude-code', item.model) ? { model: item.model } : {}),
+          ...(isKnownEffort(item.harness ?? 'claude-code', item.effort) ? { effort: item.effort } : {}),
         });
         order.push(item.id);
         restored += 1;
@@ -4990,6 +4991,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     const terminalId = terminalOf(current);
     reopenChannel(terminalId);
     void requestSpawn(terminalId, current.project, {
+      // The CLI whose conversation this is (HIVE-279): another would find no transcript.
+      ...(current.harness === undefined ? {} : { harness: current.harness }),
       ...(current.model === undefined ? {} : { model: current.model }),
       ...(current.effort === undefined ? {} : { effort: current.effort }),
       resume: true,
@@ -5106,7 +5109,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     const successor: Session = {
       kind: 'session',
       id: successorId,
-      harness: 'claude-code',
+      // Same pty, so the same CLI (HIVE-279); a fixture with none is Claude's, as it always was.
+      harness: current.harness ?? 'claude-code',
       terminalId: terminalOf(current),
       project: current.project,
       status: 'idle',

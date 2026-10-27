@@ -111,6 +111,7 @@ describe('resolveTransport', () => {
     resolveTransport(id);
 
     expect(createPtyTransport).toHaveBeenCalledWith(id, SESSION_PROJECT, {
+      harness: 'claude-code',
       model: 'haiku',
       effort: 'low',
     });
@@ -135,6 +136,7 @@ describe('resolveTransport', () => {
     resolveTransport('old-01');
 
     expect(createPtyTransport).toHaveBeenCalledWith('old-01', SESSION_PROJECT, {
+      harness: 'claude-code',
       model: 'haiku',
       resume: true,
     });

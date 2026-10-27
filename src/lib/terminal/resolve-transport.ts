@@ -191,6 +191,8 @@ export function resolveTransport(entityId: string): TerminalTransport {
    * a new process by definition.
    */
   return createPtyTransport(terminalOf(session), session.project, {
+    // The CLI the row runs (HIVE-279): a mount that spawns starts the same one. A fixture has none.
+    ...(session.harness === undefined ? {} : { harness: session.harness }),
     ...(session.model === undefined ? {} : { model: session.model }),
     ...(session.effort === undefined ? {} : { effort: session.effort }),
     /**

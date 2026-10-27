@@ -3580,6 +3580,27 @@ describe('hive-store', () => {
       });
     });
 
+    it('hydrates a record’s CLI, and Claude for one that names none (HIVE-279)', () => {
+      useHiveStore.getState().hydrateSessions([
+        record({ id: 'x', harness: 'codex', model: 'gpt-6-luna', effort: 'xhigh' }),
+        record({ id: 'y' }),
+      ]);
+
+      // Checked against the record's own CLI: Codex's words survive, as Claude's do for Claude.
+      expect(useHiveStore.getState().entities['x']).toMatchObject({
+        harness: 'codex',
+        model: 'gpt-6-luna',
+        effort: 'xhigh',
+      });
+      expect(useHiveStore.getState().entities['y']).toMatchObject({ harness: 'claude-code' });
+    });
+
+    it('drops a model that is not the record’s CLI’s', () => {
+      useHiveStore.getState().hydrateSessions([record({ id: 'z', model: 'gpt-6-luna' })]);
+
+      expect(useHiveStore.getState().entities['z']).not.toHaveProperty('model');
+    });
+
     it('seeds the counter from an id it skipped as a collision', () => {
       /**
        * The narrow race the counter has to survive: a spawn lands between boot
@@ -4031,6 +4052,20 @@ describe('hive-store', () => {
         'closed-01',
         expect.any(String),
         expect.objectContaining({ resume: true }),
+      );
+    });
+
+    it('resumes on the CLI the row ran (HIVE-279)', () => {
+      vi.mocked(requestSpawn).mockClear();
+      useHiveStore.getState().hydrateSessions([
+        record({ id: 'closed-02', resumable: true, harness: 'codex' }),
+      ]);
+      useHiveStore.getState().resumeSession('closed-02');
+
+      expect(requestSpawn).toHaveBeenCalledWith(
+        'closed-02',
+        expect.any(String),
+        expect.objectContaining({ harness: 'codex', resume: true }),
       );
     });
 
