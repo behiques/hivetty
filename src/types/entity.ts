@@ -8,7 +8,6 @@ import type {
 } from '@shared/agent-contract';
 import type { HarnessId } from '@shared/harness-contract';
 import type { IdleDetail } from '@shared/hook-contract';
-import type { SessionEffort, SessionModel } from '@shared/session-contract';
 import type { SessionPrRecord } from '@shared/session-history-contract';
 
 /**
@@ -66,8 +65,9 @@ export type SessionStatus =
  * module both processes read, and this file points at it. Type-only, as the
  * fence requires.
  */
-export type Model = SessionModel;
-export type Effort = SessionEffort;
+// A word from CLI_VOCAB[harness]; the IPC guard checked it (HIVE-279).
+export type Model = string;
+export type Effort = string;
 
 /** One agentic terminal session, bound to a project and a branch. */
 export interface Session {

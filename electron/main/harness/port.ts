@@ -7,7 +7,6 @@ import type { HookAgentEvent, HookIdentity, HookStatusEvent } from '@shared/hook
 import type { LedgerEntry } from '@shared/ledger-contract';
 import type { SessionMetrics } from '@shared/metrics-contract';
 import type { PlanUpdate } from '@shared/plan-contract';
-import type { SessionEffort, SessionModel } from '@shared/session-contract';
 
 import type { ContainerOrigins } from '../container/layout';
 import type { PathMap } from '../container/path-map';
@@ -194,8 +193,9 @@ export interface LaunchSpec {
    * reads the config and passes it.
    */
   subscriptionAuth?: boolean;
-  model?: SessionModel;
-  effort?: SessionEffort;
+  // A word from CLI_VOCAB[harness]; the IPC guard checked it (HIVE-279).
+  model?: string;
+  effort?: string;
   /**
    * What to call the session inside Claude (HIVE-61).
    *

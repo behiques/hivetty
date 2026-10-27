@@ -11,10 +11,6 @@ import type {
 } from '@lib/terminal/terminal-transport';
 import { flattenLines } from '@lib/terminal/text';
 import { CLONE_ENTITY_ID } from '@shared/config-contract';
-import type {
-  SessionEffort,
-  SessionModel,
-} from '@shared/session-contract';
 
 /**
  * The desktop transport: a real PTY, behind the same three methods (story 094).
@@ -343,8 +339,9 @@ type SpawnOutcome = { ok: true } | { ok: false; reason: string };
  */
 export interface SpawnOptions {
   task?: string;
-  model?: SessionModel;
-  effort?: SessionEffort;
+  // A word from CLI_VOCAB[harness]; the IPC guard checked it (HIVE-279).
+  model?: string;
+  effort?: string;
   /**
    * What the agent should call itself (HIVE-78).
    *

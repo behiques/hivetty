@@ -32,8 +32,6 @@ import { MAX_SESSIONS } from '@shared/pty-host-protocol';
 import type { ResumePoint } from '@shared/remote-contract';
 import {
   spawnRefusal,
-  type SessionEffort,
-  type SessionModel,
   SESSION_NAME_DISPLAY_MAX,
   type SessionBranchEvent,
   type SessionClearedEvent,
@@ -277,8 +275,9 @@ interface OpenRequest {
    * silently dropped it would relaunch the session as a different model than
    * the one its own row advertises.
    */
-  model?: SessionModel;
-  effort?: SessionEffort;
+  // A word from CLI_VOCAB[harness]; the IPC guard checked it (HIVE-279).
+  model?: string;
+  effort?: string;
   /**
    * What to call the session inside Claude (HIVE-78).
    *

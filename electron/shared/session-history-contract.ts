@@ -1,4 +1,3 @@
-import type { SessionEffort, SessionModel } from './session-contract';
 
 /**
  * What survives a quit (HIVE-87).
@@ -109,8 +108,9 @@ export interface SessionRecord {
    */
   planFile?: string;
   task: string;
-  model?: SessionModel;
-  effort?: SessionEffort;
+  // A word from CLI_VOCAB[harness]; the IPC guard checked it (HIVE-279).
+  model?: string;
+  effort?: string;
   /**
    * The **last known** status, and never an app-close.
    *
