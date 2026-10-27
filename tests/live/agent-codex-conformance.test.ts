@@ -535,6 +535,9 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
     try {
       const cwd = join(dir ?? tmpdir(), 'plan-work');
       await mkdir(cwd, { recursive: true });
+      // Every PostToolUse body, as codex sent it: the receiver drops a subagent's, so only this shows it ran.
+      const bodies = join(dir ?? tmpdir(), 'plan-hook-bodies.jsonl');
+      await writeFile(bodies, '');
       const ambient = Object.fromEntries(
         Object.entries(process.env).filter(
           (entry): entry is [string, string] => !entry[0].startsWith('HIVE_') && entry[1] !== undefined,
@@ -557,7 +560,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
             '-c',
             'features.multi_agent=true',
             '-c',
-            `hooks.PostToolUse=[{matcher="update_plan",hooks=[{type="command",command=${toml(hookCommand())}}]}]`,
+            `hooks.PostToolUse=[{matcher="update_plan",hooks=[{type="command",command=${toml(hookCommand())}},{type="command",command=${toml(`{ cat; echo; } >> ${bodies}`)}}]}]`,
             'First, spawn one subagent with spawn_agent and tell it exactly: "Call update_plan with one step, ' +
               'Delta, in_progress. Then call update_plan marking Delta completed. Then reply done." Wait for it ' +
               'to finish. Then, yourself, call update_plan three times, one call at a time: (1) Alpha in_progress, ' +
@@ -593,7 +596,19 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
       const why = `what codex did is in ${finding}`;
       const steps = sent.map((event) => event.plan?.tasks.map((task) => `${task.title}:${task.status}`).join(',') ?? null);
 
+      const hookBodies = (await readFile(bodies, 'utf8'))
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line) => JSON.parse(line) as { agent_id?: string; tool_input?: { plan?: { step?: string }[] } });
+      const subagentPlans = hookBodies.filter((body) => typeof body.agent_id === 'string' && body.agent_id !== '');
+
       expect(run.status, why).toBe(0);
+      expect(subagentPlans.length, `codex never ran the subagent, so nothing proves it stays out: ${why}`).toBeGreaterThan(0);
+      expect(
+        subagentPlans.some((body) => body.tool_input?.plan?.some((item) => item.step === 'Delta')),
+        why,
+      ).toBe(true);
+      expect(steps.join(' '), why).not.toContain('Delta');
       expect(steps, why).toEqual([
         'Alpha:in_progress,Beta:pending',
         'Alpha:completed,Beta:in_progress',
