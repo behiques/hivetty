@@ -431,6 +431,31 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
   const endedTurn = (name: string): boolean =>
     agentEvents.some((event) => event.entityId === name && event.signal.kind === 'turn-end');
 
+  /**
+   * The calls Copilot refused in a session, from its own `events.jsonl`: the run log carries only
+   * the model's words. At 1.0.104 a `--deny-tool` refusal is a `tool.execution_complete` with
+   * `error.code: 'denied'`, its call named by the `tool.execution_start` with the same id.
+   */
+  const refusedCalls = async (uuid: string) => {
+    const file = join(cliHome('copilot'), 'session-state', uuid, 'events.jsonl');
+    const events = (await readFile(file, 'utf8'))
+      .split('\n')
+      .filter((line) => line !== '')
+      .map((line) => JSON.parse(line) as { type: string; data: Record<string, unknown> });
+    const started = new Map(
+      events
+        .filter((event) => event.type === 'tool.execution_start')
+        .map((event) => [event.data['toolCallId'], event.data] as const),
+    );
+    return events
+      .filter((event) => event.type === 'tool.execution_complete' && event.data['success'] === false)
+      .map((event) => {
+        const start = started.get(event.data['toolCallId']);
+        const args = (start?.['arguments'] ?? {}) as Record<string, unknown>;
+        return { tool: start?.['toolName'], command: args['command'], error: event.data['error'] };
+      });
+  };
+
   const runLog = (run: string): string => JSON.stringify(lines.filter((line) => line.run === run));
 
   const lastArgs = (name: string): string[] => spawns.filter((spawn) => spawn.name === name).at(-1)?.args ?? [];
@@ -542,6 +567,15 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     try {
       await wake(DENY);
 
+      // The model really made the call, and Copilot refused it by the pattern.
+      const uuid = (await persisted(DENY)).sessionUuid ?? '';
+      expect(await refusedCalls(uuid)).toContainEqual({
+        tool: 'bash',
+        command: `touch ${denyMarker}`,
+        error: { code: 'denied', message: 'Permission to run this tool was denied due to the following rules: `shell(touch:*)`' },
+      });
+      expect(endedTurn(DENY)).toBe(true);
+
       const args = lastArgs(DENY);
       expect(args[args.indexOf('--deny-tool') + 1]).toBe('shell(touch:*)');
       expect(existsSync(denyMarker)).toBe(false);
@@ -558,7 +592,6 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     expect(existsSync(denyMarker)).toBe(true);
     expect(permissionAsks(DENY)).toEqual([]);
   }, 2 * TURN_MS);
-
 
   it('a task run starts a fresh session', async (ctx) => {
     if (skipReason !== undefined) ctx.skip(skipReason);
