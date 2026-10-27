@@ -72,7 +72,8 @@ const CREATE = 'probe-copilot-create';
 const MCP = 'probe-copilot-mcp';
 const DENY = 'probe-copilot-deny';
 const UNTRUSTED = 'probe-copilot-untrusted';
-const AGENTS = [CP, SHELL, CREATE, MCP, DENY, UNTRUSTED];
+const SUB = 'probe-copilot-subagent';
+const AGENTS = [CP, SHELL, CREATE, MCP, DENY, UNTRUSTED, SUB];
 
 const probeMd = (name: string) => `---
 name: ${name}
@@ -142,9 +143,12 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
   /** Outside every workdir, so nothing the agent does there can create them (HIVE-357). */
   let hookMarker: string;
   let mcpMarker: string;
+  let subMarker: string;
 
   const spawns: { name: string; args: string[] }[] = [];
   const agentEvents: HookAgentEvent[] = [];
+  /** Every Copilot hook body the fence read, so a case can say whose call it was (HIVE-357). */
+  const fenceBodies: Record<string, unknown>[] = [];
   const lines: RunLine[] = [];
   const jiraComments: unknown[] = [];
   const settlers = new Map<string, () => void>();
@@ -193,6 +197,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     shellMarker = join(agentWorkdir(SHELL), 'made-by-shell');
     createMarker = join(agentWorkdir(CREATE), 'made-by-create.txt');
     denyMarker = join(agentWorkdir(DENY), 'made-by-denied-shell');
+    subMarker = join(agentWorkdir(SUB), 'made-by-subagent');
     for (const [name, body] of [
       [CP, CP_MD],
       [SHELL, fenceMd(SHELL, `The shell command: touch ${shellMarker}`)],
@@ -201,6 +206,13 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       // Granted, so only Copilot's own `--deny-tool` can stop it.
       [DENY, fenceMd(DENY, `The shell command: touch ${denyMarker}`, '[Bash(touch *)]')],
       [UNTRUSTED, probeMd(UNTRUSTED)],
+      [
+        SUB,
+        fenceMd(
+          SUB,
+          `The task tool, starting one subagent whose only job is the shell command: touch ${subMarker}. Do not run the command yourself.`,
+        ),
+      ],
     ] as const) {
       await mkdir(join(agentsRoot(), name), { recursive: true });
       await writeFile(join(agentsRoot(), name, 'AGENT.md'), body, 'utf8');
@@ -269,12 +281,23 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
         users: () => Promise.reject(new Error('not exercised')),
       },
       // As `hooks/index.ts` wires it: a hook names its CLI by the `x-hive-harness` header.
-      fenceFor: (harness) =>
-        harness === undefined
-          ? headlessAdapter('codex').headless.fence
-          : isHarnessId(harness)
-            ? headlessAdapter(harness).headless.fence
-            : null,
+      fenceFor: (harness) => {
+        const fence =
+          harness === undefined
+            ? headlessAdapter('codex').headless.fence
+            : isHarnessId(harness)
+              ? headlessAdapter(harness).headless.fence
+              : null;
+        if (fence === null || fence.read === undefined) return fence;
+        const read = fence.read.bind(fence);
+        return {
+          ...fence,
+          read: (body) => {
+            fenceBodies.push(body);
+            return read(body);
+          },
+        };
+      },
       onPlan: () => {},
       onTicketIntent: () => undefined,
       onPromptName: () => {},
@@ -617,6 +640,18 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
   it('the fence asks about an MCP call, and allow-once lets it run', async (ctx) => {
     if (skipReason !== undefined) ctx.skip(skipReason);
     await fenceCase(MCP, 'mcp__hive__jira_comment', () => jiraComments.length > 0);
+  }, 2 * TURN_MS);
+
+  it('the fence asks about a subagent’s shell call, and allow-once lets it run', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    await fenceCase(SUB, 'Bash', () => existsSync(subMarker));
+
+    // The call the fence asked about was the subagent's: Copilot names its parent on the body.
+    const sub = fenceBodies.find(
+      (body) => typeof body['parentAgentId'] === 'string' && JSON.stringify(body['toolArgs']).includes(subMarker),
+    );
+    expect(sub, JSON.stringify(fenceBodies.map((body) => body['toolName']))).toBeDefined();
+    expect(sub?.['toolName']).toBe('bash');
   }, 2 * TURN_MS);
 
   it('a --deny-tool pattern from Settings blocks even a granted call', async (ctx) => {
