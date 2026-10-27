@@ -1,6 +1,15 @@
 // @vitest-environment node
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,7 +40,8 @@ import type { PlanUpdate } from '../../electron/shared/plan-contract';
  * the receiver. This holds them against the binary on a real pty: the argv is
  * **`launchCodexSession`'s own**, split the way the login shell would, so a flag the TUI refuses
  * fails here. The receiver, tracker and notifier are the real ones `sessions/index.ts` drives, with
- * a registry answering `codex` for the session.
+ * a registry answering `codex` for the session. The one part of the production line not typed here is
+ * the `unset …;` prefix subscription auth adds, which the login shell runs and codex never sees.
  *
  * Every case gets a scratch git repo and a scratch `CODEX_HOME` holding a **copy** of
  * `~/.codex/auth.json`; nothing is written under `~/.codex`. Every ambient `HIVE_*`, `CODEX_*` and
@@ -188,6 +198,8 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
 
   afterEach(async () => {
     await receiver.stop();
+    // The evidence stays; the credential copy does not.
+    rmSync(join(home, 'auth.json'), { force: true });
   });
 
   /** The user's own config.toml, in the scratch home: the repo trusted, as a user's own repo is. */
@@ -232,12 +244,22 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     'reports working, then idle, from its own hooks',
     async () => {
       userConfig();
-      await run('status', {}, 'Reply with the single word READY.');
+      /*
+        A stand-in hive server, so the argv's most quoted part (`mcp_servers.hive.*`, an inline
+        table with a space in a value) goes through the real binary: codex starting it is the proof
+        it parsed. The real host needs the desktop build, and the ledger tools are test:agent:codex's.
+      */
+      const marker = join(scratch, 'hive-mcp-ran');
+      const hiveServer = { command: 'sh', args: ['-c', `touch ${marker}; exec cat`], env: { HIVE_PROBE: 'a b' } };
+      await run('status', { hiveServer }, 'Reply with the single word READY.');
       finding('status', {});
 
       const seen = statuses.map((s) => s.status);
       expect(seen).toContain('working');
-      expect(seen.lastIndexOf('idle')).toBeGreaterThan(seen.indexOf('working'));
+      const idle = seen.lastIndexOf('idle');
+      expect(idle).toBeGreaterThan(seen.indexOf('working'));
+      expect(statuses[idle]!.signal.kind).toBe('turn-end');
+      expect(existsSync(marker)).toBe(true);
     },
     CASE_MS,
   );
@@ -258,7 +280,10 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       const waiting = statuses.findIndex((s) => s.status === 'waiting' && s.signal.kind === 'waiting');
       expect(waiting).toBeGreaterThanOrEqual(0);
       expect(statuses[waiting]!.signal).toMatchObject({ reason: 'permission' });
-      expect(raised.length).toBeGreaterThan(0);
+      // The card itself, not the idle every finished turn raises.
+      expect(raised.map((n) => n.kind)).toContain('session.blocked');
+      // Asked before it ran: the wait comes before the turn's end, and the file exists after it.
+      expect(statuses.findLastIndex((s) => s.signal.kind === 'turn-end')).toBeGreaterThan(waiting);
       expect(existsSync(join(repo, 'probe.txt'))).toBe(true);
     },
     CASE_MS,
