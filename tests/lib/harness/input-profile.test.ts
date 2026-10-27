@@ -20,4 +20,12 @@ describe('input profiles (HIVE-240)', () => {
     expect(inputProfileFor('claude-code')).toBe(DEFAULT_INPUT_PROFILE);
     expect(inputProfileFor(undefined)).toBe(DEFAULT_INPUT_PROFILE);
   });
+
+  it('gives Codex its Ctrl+J newline and the default for the rest (HIVE-279, FINDINGS P7)', () => {
+    const codex = inputProfileFor('codex');
+    expect(codex.newline).toBe('\n');
+    expect(codex.lineKill).toBe(DEFAULT_INPUT_PROFILE.lineKill);
+    expect(codex.lineMotion).toBe(DEFAULT_INPUT_PROFILE.lineMotion);
+    expect(codex.claimsBareBack).toBe(DEFAULT_INPUT_PROFILE.claimsBareBack);
+  });
 });

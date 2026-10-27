@@ -1,0 +1,14 @@
+{
+  "session_id": "00000000-0000-7000-8000-000000000001",
+  "turn_id": "00000000-0000-7000-8000-000000000002",
+  "transcript_path": "/tmp/codex-fixture/codex-home/sessions/2026/10/27/rollout-2026-10-27T17-24-49-00000000-0000-7000-8000-000000000001.jsonl",
+  "cwd": "/tmp/codex-fixture/repo",
+  "hook_event_name": "PermissionRequest",
+  "model": "gpt-6-luna",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "touch probe.txt",
+    "description": "May I run `touch probe.txt` with escalated permissions to create the requested file?"
+  }
+}

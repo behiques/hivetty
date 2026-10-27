@@ -34,11 +34,11 @@ import {
 } from '@stores/ui-store';
 
 /**
- * The CLIs a session can start on now, and why the others cannot (HIVE-279). Codex's interactive
- * half is HIVE-279's second PR; Copilot's is HIVE-280. Data rather than a branch, so PR B
- * enables Codex by deleting one entry.
+ * The CLIs a session cannot start on yet, and why (HIVE-279): Copilot's interactive half is
+ * HIVE-280. The reason is what is true today, not a ticket or a release date. Data rather than
+ * a branch, so enabling a CLI deletes one entry.
  */
-const UNAVAILABLE: Partial<Record<HarnessId, string>> = { codex: 'next release', copilot: 'HIVE-280' };
+const UNAVAILABLE: Partial<Record<HarnessId, string>> = { copilot: 'agents only for now' };
 /*
   No CliMark in the segments: `SegmentedControl` takes an icon *name*, not a node, so the mark lives
   on the header chip instead (HIVE-279).
@@ -289,7 +289,11 @@ export function NewSessionPicker() {
           ))}
         </div>
 
-        <div className="flex w-[560px] max-w-[92%] flex-col gap-1.5">
+        {/* `items-start`: a column stretches its children, and the switch hugs its segments. */}
+        <div className="flex w-[560px] max-w-[92%] flex-col items-start gap-1.5">
+          {/* Set like the steppers' labels below, so the three controls read as one form. */}
+          <span className="text-micro tracking-[0.06em] uppercase text-term-head">cli</span>
+          {/* No `wrap`: three short labels always fit, and a wrapped switch loses its pill. */}
           <SegmentedControl
             label="cli"
             options={CLI_OPTIONS}
@@ -297,7 +301,6 @@ export function NewSessionPicker() {
             // Copilot is always among the disabled values, so the cast is safe until HIVE-280 widens `SessionCli`.
             onChange={(cli) => setNewCli(cli as SessionCli)}
             disabledValues={UNAVAILABLE_CLIS}
-            wrap
           />
           <span className="text-ui-sm text-subtle">{UNAVAILABLE_NOTE}</span>
         </div>

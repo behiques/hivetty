@@ -1,0 +1,24 @@
+{
+  "session_id": "00000000-0000-7000-8000-000000000001",
+  "turn_id": "00000000-0000-7000-8000-000000000002",
+  "transcript_path": "/tmp/codex-fixture/codex-home/sessions/2026/10/27/rollout-2026-10-27T17-24-49-00000000-0000-7000-8000-000000000001.jsonl",
+  "cwd": "/tmp/codex-fixture/repo",
+  "hook_event_name": "PostToolUse",
+  "model": "gpt-6-luna",
+  "permission_mode": "default",
+  "tool_name": "update_plan",
+  "tool_input": {
+    "plan": [
+      {
+        "step": "A",
+        "status": "in_progress"
+      },
+      {
+        "step": "B",
+        "status": "pending"
+      }
+    ]
+  },
+  "tool_response": "Plan updated",
+  "tool_use_id": "exec-00000000-0000-7000-8000-000000000003"
+}

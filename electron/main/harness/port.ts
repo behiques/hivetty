@@ -10,7 +10,7 @@ import type { PlanUpdate } from '@shared/plan-contract';
 
 import type { ContainerOrigins } from '../container/layout';
 import type { PathMap } from '../container/path-map';
-import type { McpServerSpec } from '../mcp/agent-config';
+import type { McpServerSpec, StdioServerSpec } from '../mcp/agent-config';
 import type { McpConfigOptions } from '../mcp/config';
 import type { SkillsRead } from '../skills/read';
 
@@ -311,6 +311,10 @@ export interface LaunchSpec {
    *   the container.
    */
   container?: ContainerSpawn;
+  /** The stdio hive MCP server, for a CLI whose MCP config is on its argv (Codex, HIVE-279). */
+  hiveServer?: StdioServerSpec;
+  /** Codex: pass `--dangerously-bypass-hook-trust` (D4, measured in tests/fixtures/codex/interactive-0.164). */
+  bypassHookTrust?: boolean;
 }
 
 /** What a harness answers a {@link LaunchSpec} with (HIVE-234). */

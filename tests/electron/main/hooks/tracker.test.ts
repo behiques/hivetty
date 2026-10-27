@@ -467,6 +467,46 @@ describe('createStatusTracker', () => {
     ).toEqual({ status: 'waiting' });
   });
 
+  /**
+   * Codex (HIVE-279): no PreToolUse, and a PermissionRequest carries no `tool_use_id`, so its block
+   * is `UNPAIRED`; the session hooks PostToolUse for every tool (`matcher="*"`), and that call's
+   * `tool-end` arrives *with* an id nothing recorded. It clears the block by name, as an id-less one
+   * does. `Stop` alone deliberately does not.
+   */
+  it('clears a Codex permission block when the approved tool ends', () => {
+    const t = createStatusTracker();
+    const e = 'sess-codex-1';
+
+    t.apply({ entityId: e, signal: { kind: 'prompt' } });
+    expect(t.apply({ entityId: e, signal: { kind: 'waiting', reason: 'permission' }, toolName: 'Bash' })).toEqual({
+      status: 'waiting',
+    });
+    expect(t.apply({ entityId: e, signal: { kind: 'tool-end' }, toolUseId: 'call-1', toolName: 'Bash' })).toEqual({
+      status: 'working',
+    });
+    expect(t.apply({ entityId: e, signal: { kind: 'turn-end' } })).toEqual({ status: 'idle' });
+  });
+
+  it('keeps a Codex permission block through Stop, which does not clear it', () => {
+    const t = createStatusTracker();
+    const e = 'sess-codex-2';
+
+    t.apply({ entityId: e, signal: { kind: 'prompt' } });
+    t.apply({ entityId: e, signal: { kind: 'waiting', reason: 'permission' }, toolName: 'Bash' });
+    expect(t.apply({ entityId: e, signal: { kind: 'turn-end' } })).toEqual({ status: 'waiting' });
+  });
+
+  it('keeps a Codex permission block when another tool ends', () => {
+    const t = createStatusTracker();
+    const e = 'sess-codex-3';
+
+    t.apply({ entityId: e, signal: { kind: 'prompt' } });
+    t.apply({ entityId: e, signal: { kind: 'waiting', reason: 'permission' }, toolName: 'Bash' });
+    expect(t.apply({ entityId: e, signal: { kind: 'tool-end' }, toolUseId: 'call-2', toolName: 'apply_patch' })).toEqual({
+      status: 'waiting',
+    });
+  });
+
   it('drops phantom agents on reset, so a cleared session starts clean', () => {
     const t = createStatusTracker();
     const e = 'sess-8';
