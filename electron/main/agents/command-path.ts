@@ -40,10 +40,13 @@ export function resolveCommand(
   command: string,
   pathVar: string | undefined,
   isExecutable: (path: string) => boolean = isExecutableFile,
+  /** The CLI's name, for the two refusals that speak of its configured command. */
+  name?: string,
 ): CommandResolution {
+  const named = name === undefined ? '' : `${name} `;
   const trimmed = command.trim();
 
-  if (trimmed === '') return { problem: 'No command is configured.' };
+  if (trimmed === '') return { problem: `No ${named}command is configured.` };
 
   /*
     The disk gets asked before the whitespace rule does, and the order matters.
@@ -64,7 +67,7 @@ export function resolveCommand(
   if (/\s/.test(trimmed)) {
     return {
       problem:
-        `The configured command \`${trimmed}\` carries arguments. ` +
+        `The configured ${named}command \`${trimmed}\` carries arguments. ` +
         'An agent is spawned without a shell, so it needs a single ' +
         'executable — set Settings › Runtime to a plain path.',
     };

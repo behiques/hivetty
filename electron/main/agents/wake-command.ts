@@ -332,16 +332,18 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       PATH until HIVE-332 adds its setting (HIVE-342).
     */
     const binary = (id: HarnessId) => {
+      const cli = id === 'claude-code' ? 'claude' : id;
+
       if (def.container !== undefined) {
-        return { path: def.container.command ?? (deps.adapter ?? headlessAdapter)(id)?.headless.containerCommand ?? id };
+        return { path: def.container.command ?? (deps.adapter ?? headlessAdapter)(id)?.headless.containerCommand ?? cli };
       }
       if (id === 'copilot' && deps.cliToken('copilot') === null) {
         return { problem: 'no Copilot token: add one in Settings › CLIs' };
       }
       const command = id === 'claude-code' ? deps.claudeCommand() : id;
       return deps.isExecutable === undefined
-        ? resolveCommand(command, deps.env()['PATH'])
-        : resolveCommand(command, deps.env()['PATH'], deps.isExecutable);
+        ? resolveCommand(command, deps.env()['PATH'], undefined, cli)
+        : resolveCommand(command, deps.env()['PATH'], deps.isExecutable, cli);
     };
 
     /*

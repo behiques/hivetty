@@ -63,7 +63,22 @@ describe('resolveCommand', () => {
     expect(result).toEqual({ problem: expect.stringContaining('claude') });
   });
 
-  it('names no CLI in its refusals', () => {
+  it("names the CLI in its refusals when told which one (byte-identical to main's Claude strings)", () => {
+    expect(resolveCommand('', '/a', executable(), 'claude')).toEqual({
+      problem: 'No claude command is configured.',
+    });
+    expect(resolveCommand('claude --tel', '/a', executable(), 'claude')).toEqual({
+      problem:
+        'The configured claude command `claude --tel` carries arguments. ' +
+        'An agent is spawned without a shell, so it needs a single ' +
+        'executable — set Settings › Runtime to a plain path.',
+    });
+    expect(resolveCommand('', '/a', executable(), 'codex')).toEqual({
+      problem: 'No codex command is configured.',
+    });
+  });
+
+  it('names no CLI in its refusals when not told which', () => {
     expect(resolveCommand('', '/a')).toEqual({ problem: 'No command is configured.' });
     expect(resolveCommand('claude --tel', '/a', executable())).toEqual({
       problem: expect.stringMatching(/^The configured command `claude --tel` carries arguments\./),

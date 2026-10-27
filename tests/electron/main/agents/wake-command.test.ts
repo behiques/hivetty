@@ -17,6 +17,7 @@ import type { McpServerSpec } from '../../../../electron/main/mcp/agent-config';
 import { STANDING_LANE, type AgentRunState } from '../../../../electron/shared/agent-contract';
 import type { HarnessId } from '../../../../electron/shared/harness-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
+import { HIVE_STANDING_GRANTS } from '../../../../electron/shared/ledger-tools';
 
 /**
  * The seam between a *name* and an argv (HIVE-115, task 9).
@@ -309,6 +310,15 @@ describe('createWakeCommand', () => {
 
     expect(built).toMatchObject({
       problem: expect.stringContaining('carries arguments'),
+    });
+  });
+
+  it("keeps main's Claude wording when the claude command is empty or carries arguments", () => {
+    expect(build({ claudeCommand: () => '' })('slack-watcher', 'manual')).toMatchObject({
+      problem: expect.stringContaining('No claude command is configured.'),
+    });
+    expect(build({ claudeCommand: () => 'claude --tel' })('slack-watcher', 'manual')).toMatchObject({
+      problem: expect.stringContaining('The configured claude command `claude --tel` carries arguments.'),
     });
   });
 
@@ -1077,10 +1087,15 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
 
     if ('problem' in built) throw new Error(built.problem);
 
-    const own = claudeCodeAdapter.headless.fence.grants ?? [];
     const carried = JSON.parse(built.env[HOOK_ENV_GRANTS]!) as string[];
-    expect(own).not.toHaveLength(0);
-    expect(express).toHaveBeenCalledWith(carried.filter((rule) => !own.includes(rule)));
+    const asked = express.mock.calls[0]![0] as string[];
+
+    // `ToolSearch` is carried but never asked about; everything else, including the one-shot grant, is.
+    expect(carried).toContain('ToolSearch');
+    expect(asked).not.toContain('ToolSearch');
+    expect(asked).toContain('literal:Bash:git push');
+    expect(asked).toEqual(expect.arrayContaining([...HIVE_STANDING_GRANTS]));
+    expect(asked).toHaveLength(carried.length - 1);
   });
 
   it('refuses a run no CLI can fence, naming tools and never their arguments', () => {

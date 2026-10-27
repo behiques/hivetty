@@ -4480,7 +4480,7 @@ export function registerIpcHandlers(
 
     if (running !== undefined) return running;
 
-    const claude = resolveCommand(claudeCommand(), process.env['PATH']);
+    const claude = resolveCommand(claudeCommand(), process.env['PATH'], undefined, 'claude');
 
     if ('problem' in claude) {
       return Promise.resolve({ kind: 'error', message: claude.problem });
@@ -4523,7 +4523,7 @@ export function registerIpcHandlers(
     }),
   );
   handle(CH.slackSignOut, (): SlackStatus => {
-    const claude = resolveCommand(claudeCommand(), process.env['PATH']);
+    const claude = resolveCommand(claudeCommand(), process.env['PATH'], undefined, 'claude');
 
     if ('problem' in claude) return { kind: 'error', message: claude.problem };
 
