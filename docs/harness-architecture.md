@@ -285,7 +285,17 @@ fire for `Bash`, `apply_patch` and MCP calls, and its deny to block each):
 Codex reads and searches through the shell, so a rule naming those allows nothing and widens
 nothing. The fence is total: `express` accepts every rule set.
 
-Interactive: HIVE-279. Meters: HIVE-334. Plans: HIVE-352. Containers: refused.
+**Plans** (`codex/hooks.ts`, HIVE-352). Codex's plan tool is `update_plan`, off in `exec` until
+`-c tools.update_plan.enabled=true`. Its hooks are Claude-shaped, `tool_input: {plan: [{step,
+status}], explanation?}`, the whole list on every call and no ids, so `readCodexHook` reads it as
+Claude's `TodoWrite`: one `tasks-replaced`, ids `"1".."n"` by position. Main thread, session lane,
+whole bodies only: a subagent's call carries `agent_id` under its parent's `session_id`. The
+`exec --json` stream's `todo_list` item has only `completed: bool`, so it is not read. Nothing
+reaches the mapping yet: interactive Codex is HIVE-279, which routes a session to this adapter
+through `harnessOf`, and no CLI's agent run has a plan (HIVE-358, which also turns the tool on for
+wakes and lets it through `/fence`; today `decide` would ask).
+
+Interactive: HIVE-279. Meters: HIVE-334. Agent-run plans: HIVE-358. Containers: refused.
 
 ## Copilot (headless, HIVE-343)
 
@@ -340,7 +350,7 @@ env), which fire under `-p` on a start and on a resume with no folder trust:
 - `preToolUse` → `/fence`, failing closed exactly as Codex's does, with a 35 s hook timeout over
   curl's 30 s so the hook's deny is what Copilot sees.
 
-Only two because only these act: tool events for the plan panel are HIVE-352's, as for Codex. The
+Only two because only these act: tool events for the plan panel are HIVE-358's, as for Codex. The
 commands are `hook-commands.ts`, shared with Codex.
 
 **Files the core writes** (`HeadlessPlan.files`): `<home>/settings.json` and `AGENTS.md` in the

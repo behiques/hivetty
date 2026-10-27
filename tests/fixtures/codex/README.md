@@ -17,5 +17,13 @@ Scrubbed, consistently across all three files, and nothing else:
   numbered by first appearance (exec, then hooks, then resume), the same id mapped the same way in
   every file.
 
+`hooks-update-plan-0.164.0.jsonl` (HIVE-352, recorded 2026-10-27) is every `PostToolUse` body of
+`codex exec --json --skip-git-repo-check --ignore-user-config --dangerously-bypass-hook-trust -s
+read-only -c tools.update_plan.enabled=true -c features.multi_agent=true`, with `-c
+hooks.PostToolUse` (`matcher="*"`) appending each body and a newline to the file, and a prompt
+asking for one subagent that plans "Child step" in progress then completed, then three main-thread
+`update_plan` calls over "write tests" and "make them pass". The subagent's bodies carry
+`agent_id` and `agent_type`. Its UUIDs are numbered on their own, from 1.
+
 Every other byte is as recorded, the `error` warning items included. Re-record and re-scrub rather
 than hand-edit a line.
