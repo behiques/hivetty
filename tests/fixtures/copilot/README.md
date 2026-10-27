@@ -9,7 +9,9 @@ set to save its stdin. `hooks-1.0.104/` holds the bodies the hooks received, ren
 `agent-stop.json` and `pre-tool-use-bash.json` from a plain `echo`, `pre-tool-use-create.json` and
 `permission-request-edit.json` from a file write, and `pre-tool-use-{mcp,task,subagent}.json`,
 `agent-stop-subagent.json` and `agent-stop-after-subagent.json` from a run that called the probe
-server and a `task` subagent. `usage-1.0.104.json` is the first run's `--usage-output-file`, and
+server and a `task` subagent. `pre-tool-use-{view,edit,glob,grep,web-fetch}.json` are from one run on
+2026-10-27 (session `…555555555555`, `--allow-tool shell --allow-tool write --allow-all-urls`) asked to
+view, edit, glob, grep and fetch, one file per `toolName` (`web_fetch` → `web-fetch`). `usage-1.0.104.json` is the first run's `--usage-output-file`, and
 `stderr-bad-token-1.0.104.txt` is the stderr of a run with a refused token (exit 1).
 
 Scrubbed, consistently across every file, and nothing else:
