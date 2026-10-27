@@ -2029,13 +2029,6 @@ export function createSessions(options: SessionsOptions): Sessions {
     for (const resolve of waiters) resolve();
   }
 
-  /**
-   * Kill, **wait for the exit**, then spawn. An ordering, not a set.
-   *
-   * Spawning before the old process is reaped means two `claude` instances in
-   * one repository writing the same files. Waiting is what makes the new
-   * generation genuinely new.
-   */
   /** Whether a project's sessions run in a container; `false` for one `spawn` will refuse anyway. */
   function inContainer(projectId: string): boolean {
     const snapshot = config();
@@ -2043,6 +2036,13 @@ export function createSessions(options: SessionsOptions): Sessions {
     return project !== undefined && effectiveRuntime(snapshot, project).container !== undefined;
   }
 
+  /**
+   * Kill, **wait for the exit**, then spawn. An ordering, not a set.
+   *
+   * Spawning before the old process is reaped means two `claude` instances in
+   * one repository writing the same files. Waiting is what makes the new
+   * generation genuinely new.
+   */
   async function restartOnce(request: OpenRequest): Promise<void> {
     /*
       Before the kill, not after it (HIVE-93). A restart while a `/done` is
@@ -2510,7 +2510,7 @@ export function createSessions(options: SessionsOptions): Sessions {
           'not trusted on your behalf; status from Codex hooks may be missing until you trust them in Codex',
       );
     }
-    const hive = harness === 'claude-code' ? null : (hiveServer?.() ?? null);
+    const hive = harness === 'codex' ? (hiveServer?.() ?? null) : null;
     /**
      * `sessionCommand` wraps the configured binary so a clean `/exit` takes the
      * login shell with it and the session settles to `done`. See its own
@@ -2720,7 +2720,12 @@ export function createSessions(options: SessionsOptions): Sessions {
         // A resumed row keeps the task it was opened with; see `resume` below.
         ...(resume ? {} : { task: request.task ?? '' }),
         status: 'working',
-        ...(sessionUuid === undefined ? {} : { sessionUuid }),
+        /*
+          Written even when `undefined` (HIVE-279): a fresh first-hook generation must not inherit
+          the previous generation's id from a restart's kept record, or a resume before its first
+          hook (a repository whose hooks Codex was never told to trust, D4) reopens the old one.
+        */
+        sessionUuid,
         ...(request.name === undefined ? {} : { name: request.name }),
         ...(request.model === undefined ? {} : { model: request.model }),
         ...(request.effort === undefined ? {} : { effort: request.effort }),

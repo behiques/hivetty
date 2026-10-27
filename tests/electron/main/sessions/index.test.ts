@@ -3950,7 +3950,8 @@ describe('codex sessions (HIVE-279)', () => {
   const build = (
     written: Written[],
     over: {
-      resumable?: Record<string, string>;
+      /** Fixed ids, or `recorded`: the last id the history was handed, as the real one answers. */
+      resumable?: Record<string, string> | 'recorded';
       hiveServer?: () => typeof HIVE | null;
       config?: ConfigSnapshot;
     } = {},
@@ -3979,7 +3980,11 @@ describe('codex sessions (HIVE-279)', () => {
         record: (id, patch) => {
           written.push({ id, patch: { ...patch } });
         },
-        resumable: (id) => over.resumable?.[id],
+        resumable: (id) =>
+          over.resumable === 'recorded'
+            ? (written.filter((entry) => entry.id === id && 'sessionUuid' in entry.patch).at(-1)?.patch
+                .sessionUuid as string | undefined)
+            : over.resumable?.[id],
         all: () => [],
         flush: () => {},
         dispose: () => {},
@@ -4023,11 +4028,12 @@ describe('codex sessions (HIVE-279)', () => {
     instance = build(written);
     instance.open(codexOpen);
 
-    expect(patchesFor(written, 'hero-refresh')[0]).not.toHaveProperty('sessionUuid');
+    expect(patchesFor(written, 'hero-refresh')[0]?.sessionUuid).toBeUndefined();
     expect(patchesFor(written, 'hero-refresh')[0]).toMatchObject({ harness: 'codex' });
 
     hook(CODEX_ID);
-    const ids = () => patchesFor(written, 'hero-refresh').filter((patch) => 'sessionUuid' in patch);
+    const ids = () =>
+      patchesFor(written, 'hero-refresh').filter((patch) => typeof patch.sessionUuid === 'string');
     expect(ids()).toEqual([{ sessionUuid: CODEX_ID }]);
 
     // The same id again is not news: one record, not one per hook.
@@ -4045,7 +4051,7 @@ describe('codex sessions (HIVE-279)', () => {
 
   it('restarts into codex, resuming by the id the first hook reported', async () => {
     const written: Written[] = [];
-    instance = build(written, { resumable: { 'hero-refresh': CODEX_ID } });
+    instance = build(written, { resumable: 'recorded' });
     instance.open(codexOpen);
     hook(CODEX_ID);
 
@@ -4062,6 +4068,25 @@ describe('codex sessions (HIVE-279)', () => {
     expect(begun).toHaveLength(2);
     expect(begun.at(-1)).toMatchObject({ harness: 'codex', resume: true });
     expect(typed().some((line) => new RegExp(`(^|; )codex resume ${CODEX_ID} `).test(line))).toBe(true);
+  });
+
+  it('starts a fresh restart with no id, not the last generation’s', async () => {
+    const written: Written[] = [];
+    instance = build(written, { resumable: 'recorded' });
+    instance.open(codexOpen);
+    hook(CODEX_ID);
+
+    const restarting = instance.restart({ ...OPEN });
+    await Promise.resolve();
+    emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 0 });
+    vi.advanceTimersByTime(8);
+    await restarting;
+    bootTo(mintedFor('hero-refresh'));
+
+    const begun = patchesFor(written, 'hero-refresh').filter((patch) => 'harness' in patch);
+    // Cleared on the record: a resume before this generation's first hook opens nothing old.
+    expect(begun.at(-1)).toHaveProperty('sessionUuid', undefined);
+    expect(typed().filter((line) => line.includes('codex resume'))).toEqual([]);
   });
 
   it('hands the launch the hive server main offers', () => {
