@@ -2918,7 +2918,7 @@ export interface HiveBridge {
    * could honestly report. Main then reads the definition off a folder it chose,
    * resolves `claudeCommand` from *its own* config, and builds the argv as an
    * array handed straight to `spawn`. There is no shell anywhere on that path —
-   * `claude-path.ts` refuses a command carrying arguments rather than splitting
+   * `command-path.ts` refuses a command carrying arguments rather than splitting
    * one — so there is no quoting to get wrong and no alias to inherit.
    *
    * What `run` therefore widens is **timing, not reach**. A renderer that can

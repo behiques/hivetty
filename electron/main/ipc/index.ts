@@ -191,9 +191,9 @@ import {
   createAutoMergeGrants,
   type AutoMergeGrants,
 } from '../agents/auto-merge';
-import { resolveClaude } from '../agents/claude-path';
 import { createCliGate } from '../agents/cli-gate';
 import { CLI_TOKENS_FILE, createCliTokens } from '../agents/cli-tokens';
+import { resolveCommand } from '../agents/command-path';
 import {
   agentsDirectoryFor,
   projectAutoMergeFor,
@@ -4435,7 +4435,7 @@ export function registerIpcHandlers(
    * `claudeCommand` is the same resolver `buildWakeCommand` above reads —
    * `getConfig().claudeCommand`, read fresh on every call so a binary edited
    * in Settings reaches the next status read without a restart — and it goes
-   * through the same {@link resolveClaude} every agent wake does. `gh.ts` wrote
+   * through the same {@link resolveCommand} every agent wake does. `gh.ts` wrote
    * the rule these four had been the only callers to skip: "the resolved
    * absolute path is what runs, never the bare name". A `claudeCommand` that is
    * a shell function, or that carries arguments, is unreachable from a child
@@ -4480,7 +4480,7 @@ export function registerIpcHandlers(
 
     if (running !== undefined) return running;
 
-    const claude = resolveClaude(claudeCommand(), process.env['PATH']);
+    const claude = resolveCommand(claudeCommand(), process.env['PATH']);
 
     if ('problem' in claude) {
       return Promise.resolve({ kind: 'error', message: claude.problem });
@@ -4523,7 +4523,7 @@ export function registerIpcHandlers(
     }),
   );
   handle(CH.slackSignOut, (): SlackStatus => {
-    const claude = resolveClaude(claudeCommand(), process.env['PATH']);
+    const claude = resolveCommand(claudeCommand(), process.env['PATH']);
 
     if ('problem' in claude) return { kind: 'error', message: claude.problem };
 

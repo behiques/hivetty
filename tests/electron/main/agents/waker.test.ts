@@ -52,7 +52,7 @@ const HIVE_SERVER = { command: '/App', args: ['/host.js'], env: { ELECTRON_RUN_A
 
 const build = (over: Partial<Parameters<typeof wakeCommand>[0]> = {}) =>
   wakeCommand({
-    claudePath: '/opt/bin/claude',
+    binaryPath: '/opt/bin/claude',
     adapter: claudeCodeAdapter,
     def: def(),
     newUuid: '11111111-2222-3333-4444-555555555555',

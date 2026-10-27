@@ -51,7 +51,7 @@ interface WakeEnv {
 }
 
 interface WakeInput {
-  claudePath: string;
+  binaryPath: string;
   /** The CLI this wake runs on, resolved by `createWakeCommand` (HIVE-340). */
   adapter: HarnessAdapter;
   /** The CLI the lane's last conversation ran on, when this wake starts fresh on another (HIVE-340). */
@@ -508,7 +508,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   }
 
   return {
-    file: input.claudePath,
+    file: input.binaryPath,
     args,
     env: { ...merged, ...env.hook, HIVE_AGENT: '1', ...plan.addEnv },
     cwd: paths.workdir,

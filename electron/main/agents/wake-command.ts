@@ -45,7 +45,7 @@ import type { HarnessAdapter } from '../harness/port';
 import { headlessAdapter } from '../harness/registry';
 import { agentMcpConfig, type McpServerSpec } from '../mcp/agent-config';
 
-import { resolveClaude } from './claude-path';
+import { resolveCommand } from './command-path';
 import { parseAgent } from './definition';
 import { AGENT_PREAMBLE } from './preamble';
 import { resolveHarness, type HarnessGate } from './resolve-harness';
@@ -148,7 +148,7 @@ export interface WakeCommandDeps {
   pendingGrants: (name: string, lane: string) => string[];
   fs?: WakeFs;
   /**
-   * How `resolveClaude` decides a candidate is runnable.
+   * How `resolveCommand` decides a candidate is runnable.
    *
    * Injected for the reason {@link WakeFs} is: without it, every test in this
    * module would depend on a `claude` binary being installed at whatever path
@@ -327,7 +327,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       host's `claudeCommand` is not consulted at all: a machine with no
       `claude` on it, or one whose command carries arguments, can still wake
       an agent whose image has one. `wakeCommand` puts `container.command`
-      after the container's name; `claudePath` is what a *host* wake spawns.
+      after the container's name; `binaryPath` is what a *host* wake spawns.
       On the host each CLI resolves its own: Claude through `claudeCommand`, Codex as `codex` on
       PATH until HIVE-332 adds its setting (HIVE-342).
     */
@@ -338,8 +338,8 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       }
       const command = id === 'claude-code' ? deps.claudeCommand() : id;
       return deps.isExecutable === undefined
-        ? resolveClaude(command, deps.env()['PATH'])
-        : resolveClaude(command, deps.env()['PATH'], deps.isExecutable);
+        ? resolveCommand(command, deps.env()['PATH'])
+        : resolveCommand(command, deps.env()['PATH'], deps.isExecutable);
     };
 
     /*
@@ -522,7 +522,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
 
     try {
       command = wakeCommand({
-        claudePath: resolved.path,
+        binaryPath: resolved.path,
         adapter,
         defaults: deps.gate?.defaults(adapter.id) ?? {},
         ...(switched ? { switchedFrom: recorded } : {}),
