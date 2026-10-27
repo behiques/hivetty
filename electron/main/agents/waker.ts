@@ -302,15 +302,15 @@ export function systemPromptFor(
 
 /**
  * What the fence enforces, as written (HIVE-339): `HOOK_ENV_GRANTS` carries this same list, and the
- * adapter narrows only its own `--allowedTools`. `ToolSearch`'s place in it is explained there.
- * Resolution asks the fence about exactly this list (HIVE-340).
+ * adapter narrows only its own grant flag. `standing` is the adapter's `fence.grants` (HIVE-344).
+ * Resolution asks the fence about this list without them (HIVE-340): an adapter's own grants are
+ * expressible by construction.
  */
-export const fencedRules = (def: AgentDefinition, grants: readonly string[] = []): string[] => [
-  ...HIVE_STANDING_GRANTS,
-  'ToolSearch',
-  ...def.tools,
-  ...grants,
-];
+export const fencedRules = (
+  def: AgentDefinition,
+  grants: readonly string[] = [],
+  standing: readonly string[] = [],
+): string[] => [...HIVE_STANDING_GRANTS, ...standing, ...def.tools, ...grants];
 
 export function wakeCommand(input: WakeInput): WakeCommand {
   const { def, paths, env } = input;
@@ -351,7 +351,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     return mapped;
   };
   const { adapter } = input;
-  const fenced = fencedRules(def, input.grants);
+  const fenced = fencedRules(def, input.grants, adapter.headless.fence.grants);
   /*
     `AGENT.md`'s model and effort are Claude's vocabulary (HIVE-340), so they apply only there, ahead
     of the card; every CLI takes its own card's (HIVE-341, HIVE-342), never a translated `opus`.
@@ -439,20 +439,8 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     the standing Hive grants (`HIVE_STANDING_GRANTS`) is first and unconditional: an agent that cannot call
     `ledger_read` cannot read the inbox that would tell it why it was woken,
     and would deadlock on its own fence. `input.grants` is a one-shot
-    `allow-once` for this wake only — never merged into `def.tools`.
-
-    `ToolSearch` sits beside it, unconditional for the same reason and found
-    the same way — a live run, not a unit test. MCP tool schemas are
-    deferred: the model sees `mcp__hive__ledger_read` by name in its tool
-    list, but must call the *built-in* `ToolSearch` to fetch that schema
-    before it can invoke it. `ToolSearch` never appears in any `def.tools` —
-    nobody would think to grant a built-in — so without this the fence denies
-    the very first thing an agent's preamble tells it to do: read its ledger
-    inbox. Granting the standing Hive grants (`HIVE_STANDING_GRANTS`) is worthless if nothing can load the
-    schema to call it. This grants no *capability*: `ToolSearch` only reveals
-    tool schemas, and every tool it surfaces is still checked by the fence
-    the moment it is actually called — so widening this list widens nothing
-    an agent can do, only what it can find out it could ask to do.
+    `allow-once` for this wake only — never merged into `def.tools` — and the
+    adapter's own `fence.grants` after them.
   */
   merged[HOOK_ENV_GRANTS] = JSON.stringify(fenced);
 

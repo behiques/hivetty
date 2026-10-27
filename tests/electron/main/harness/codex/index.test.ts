@@ -36,6 +36,10 @@ describe('codexAdapter', () => {
     });
   });
 
+  it('grants no built-in of its own (HIVE-344)', () => {
+    expect(codexFence.grants).toBeUndefined();
+  });
+
   it('refuses every interactive member (HIVE-279)', () => {
     expect(() => codexAdapter.launch({ command: 'codex' })).toThrow(/HIVE-279/);
     expect(() => codexAdapter.promptMarker({} as never)).toThrow(/HIVE-279/);

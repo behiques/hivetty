@@ -23,6 +23,8 @@ export const copilotFence: PermissionFence = {
   translate: translateCopilotCall,
   read: readCopilotFence,
   reply: copilotFenceReply,
+  // Its `tool_search_tool` translates to `ToolSearch` (live suite, HIVE-343), deferred schemas as on Claude.
+  grants: ['ToolSearch'],
 };
 
 /**

@@ -47,6 +47,7 @@ describe('copilotAdapter', () => {
     expect(copilotFence.translate).toBe(translateCopilotCall);
     expect(copilotFence.read).toBe(readCopilotFence);
     expect(copilotFence.reply).toBe(copilotFenceReply);
+    expect(copilotFence.grants).toEqual(['ToolSearch']);
   });
 
   it('refuses every interactive member (HIVE-280)', () => {

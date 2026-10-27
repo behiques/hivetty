@@ -1071,13 +1071,16 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
     expect(built.harness).toBe('claude-code');
   });
 
-  it('asks the fence about exactly what HIVE_GRANTS carries', () => {
+  it("asks the fence about what HIVE_GRANTS carries, less the fence's own grants (HIVE-344)", () => {
     const express = vi.spyOn(claudeCodeAdapter.headless.fence, 'express');
     const built = build({ pendingGrants: () => ['literal:Bash:git push'] })('slack-watcher', 'manual');
 
     if ('problem' in built) throw new Error(built.problem);
 
-    expect(express).toHaveBeenCalledWith(JSON.parse(built.env[HOOK_ENV_GRANTS]!));
+    const own = claudeCodeAdapter.headless.fence.grants ?? [];
+    const carried = JSON.parse(built.env[HOOK_ENV_GRANTS]!) as string[];
+    expect(own).not.toHaveLength(0);
+    expect(express).toHaveBeenCalledWith(carried.filter((rule) => !own.includes(rule)));
   });
 
   it('refuses a run no CLI can fence, naming tools and never their arguments', () => {

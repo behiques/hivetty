@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
 import { copilotAdapter } from '../../../../electron/main/harness/copilot';
-import type { HeadlessSpec } from '../../../../electron/main/harness/port';
+import type { HarnessAdapter, HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '../../../../electron/shared/ledger-tools';
@@ -284,9 +284,21 @@ describe('wakeCommand', () => {
    * inbox. Pinned here so the next reader who wants to "tidy" this list finds
    * out why before removing it.
    */
-  it('grants ToolSearch unconditionally, for a definition that never lists it', () => {
-    const { env } = build({ def: def({ tools: ['Read'] }) });
+  it("grants ToolSearch on Claude Code, through its fence's own grants, for a definition that never lists it", () => {
+    const { env } = build({ adapter: claudeCodeAdapter, def: def({ tools: ['Read'] }) });
     expect(JSON.parse(env['HIVE_GRANTS']!)).toContain('ToolSearch');
+  });
+
+  it('grants ToolSearch where the adapter asks for it, and only there (HIVE-344)', () => {
+    const grants = (adapter: HarnessAdapter) =>
+      JSON.parse(
+        build({ adapter, def: def({ tools: ['Read'] }), paths: { ...paths, cliHome: '/h/cli/copilot' } }).env[
+          'HIVE_GRANTS'
+        ]!,
+      ) as string[];
+    expect(grants(claudeCodeAdapter)).toContain('ToolSearch');
+    expect(grants(copilotAdapter)).toContain('ToolSearch');
+    expect(grants(codexAdapter)).not.toContain('ToolSearch');
   });
 
   it('carries a last-turn prompt onto the command line', () => {
@@ -843,7 +855,7 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
   it('lists exactly what HIVE_GRANTS carries', () => {
     const command = build({ grants: ['literal:Bash:git push'] });
 
-    expect(fencedRules(def(), ['literal:Bash:git push'])).toEqual(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
+    expect(fencedRules(def(), ['literal:Bash:git push'], claudeCodeAdapter.headless.fence.grants)).toEqual(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
   });
 
   it("hands another CLI its own card's defaults (HIVE-342, replacing HIVE-341's drop)", () => {

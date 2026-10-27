@@ -215,4 +215,8 @@ describe('the headless members (HIVE-344)', () => {
   it('runs claude inside a container that names no command', () => {
     expect(claudeCodeAdapter.headless.containerCommand).toBe('claude');
   });
+
+  it('grants ToolSearch on every run, which loads the deferred MCP schemas', () => {
+    expect(claudeCodeAdapter.headless.fence.grants).toEqual(['ToolSearch']);
+  });
 });

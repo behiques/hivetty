@@ -348,6 +348,11 @@ export interface PermissionFence {
   read?(body: Record<string, unknown>): { tool: string; input: Record<string, unknown>; cwd: string } | null;
   /** The CLI's answer (HIVE-343). Absent: Claude's `hookSpecificOutput` shape. */
   reply?(reason?: string): Record<string, unknown>;
+  /**
+   * Built-ins every run on this CLI needs, granted on each wake whatever the definition says, in
+   * `decide`'s vocabulary (HIVE-344). Absent: none.
+   */
+  grants?: readonly string[];
 }
 
 /** One call as `decide` reads it. */

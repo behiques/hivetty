@@ -129,5 +129,11 @@ export function launchHeadless(spec: HeadlessSpec): HeadlessPlan {
  * Total, by construction (HIVE-339). Claude's fence is `approve` itself: `permissions.ask: ["*"]`
  * routes every call to it and it runs `decide`, so every rule the grammar has is enforced as
  * written, and one `matches` refuses is narrower, never wider.
+ *
+ * `ToolSearch` is granted on every wake (HIVE-344), found by a live run rather than a unit test. MCP
+ * tool schemas are deferred: the model sees `mcp__hive__ledger_read` by name but must call the
+ * built-in `ToolSearch` to fetch the schema. No `def.tools` names a built-in, so without this the
+ * fence denies the first thing the preamble asks for. It grants no capability: every tool it
+ * surfaces is still fenced when called.
  */
-export const claudeFence: PermissionFence = { express: () => ({ ok: true }) };
+export const claudeFence: PermissionFence = { express: () => ({ ok: true }), grants: ['ToolSearch'] };
