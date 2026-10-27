@@ -32,7 +32,7 @@ import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
 import { createLedger, type Ledger } from '../../electron/main/ledger';
 import { agentMcpConfigFile } from '../../electron/main/mcp';
 import { hiveServerSpec } from '../../electron/main/mcp/config';
-import type { AgentRunState, RunLine } from '../../electron/shared/agent-contract';
+import type { AgentRunState, RunLine, WakeSpec } from '../../electron/shared/agent-contract';
 import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
 import { isHarnessId } from '../../electron/shared/harness-contract';
 import {
@@ -73,15 +73,16 @@ const MCP = 'probe-copilot-mcp';
 const DENY = 'probe-copilot-deny';
 const UNTRUSTED = 'probe-copilot-untrusted';
 const SUB = 'probe-copilot-subagent';
-const AGENTS = [CP, SHELL, CREATE, MCP, DENY, UNTRUSTED, SUB];
+const INTERVAL = 'probe-copilot-interval';
+const AGENTS = [CP, SHELL, CREATE, MCP, DENY, UNTRUSTED, SUB, INTERVAL];
 
-const probeMd = (name: string) => `---
+const probeMd = (name: string, on = '[ledger]') => `---
 name: ${name}
 description: Proves a Copilot wake, its resume and its receipt.
 icon: Ghost
 harness: [copilot]
 wake:
-  on: [ledger]
+  on: ${on}
 tools: [Bash(awk *)]
 limits:
   turns: 10
@@ -152,6 +153,10 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
   const lines: RunLine[] = [];
   const jiraComments: unknown[] = [];
   const settlers = new Map<string, () => void>();
+  /** What `schedules` answers, filled by the interval case alone (HIVE-357). */
+  const schedules = new Map<string, { wake: WakeSpec; dailyUsd?: number }>();
+  /** The scheduler's tick, captured off its injected interval. */
+  let fireTick: (() => void) | undefined;
   const onRunClosed = vi.fn((name: string) => scheduler?.onRunClosed(name));
   /** Swapped by case 7; every other case runs with Copilot entitled. */
   let entitled: HarnessGate['entitled'] = () => null;
@@ -206,6 +211,8 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       // Granted, so only Copilot's own `--deny-tool` can stop it.
       [DENY, fenceMd(DENY, `The shell command: touch ${denyMarker}`, '[Bash(touch *)]')],
       [UNTRUSTED, probeMd(UNTRUSTED)],
+      // Nothing but the captured tick wakes it.
+      [INTERVAL, probeMd(INTERVAL, '[]')],
       [
         SUB,
         fenceMd(
@@ -407,17 +414,24 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       state: agentState,
       isAgent: (id) => AGENTS.includes(id),
       parallelFor: () => 2,
-      wakesOnLedger: (id) => AGENTS.includes(id),
+      // The interval probe's `wake.on` is empty: only its schedule wakes it (HIVE-357).
+      wakesOnLedger: (id) => AGENTS.includes(id) && id !== INTERVAL,
       laneOf: () => undefined,
       laneLive: (name, lane) =>
         runs.liveRuns(name).some((run) => run.kind === 'standing' && (run.lane ?? 'standing') === lane),
       removeLaneDir: () => undefined,
-      schedules: () => new Map(),
+      schedules: () => schedules,
       pushStatus: () => {},
       ledger: { read: () => ledger.read({}), append: (request) => ledger.append(request) },
       now: () => Date.now(),
-      setIntervalFn: (() => 0) as unknown as typeof setInterval,
-      clearIntervalFn: (() => undefined) as unknown as typeof clearInterval,
+      // Captured rather than armed, as `agent-conformance.test.ts` does: a case fires the tick itself.
+      setIntervalFn: ((handler: () => void) => {
+        fireTick = handler;
+        return 0 as unknown as ReturnType<typeof setInterval>;
+      }) as unknown as typeof setInterval,
+      clearIntervalFn: (() => {
+        fireTick = undefined;
+      }) as unknown as typeof clearInterval,
     });
     scheduler.start();
 
@@ -602,6 +616,40 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     expect(lastArgs(CP).some((arg) => arg.startsWith('--resume'))).toBe(false);
     expect(runLog(run)).toContain(word);
     expect((await persisted(CP)).sessionUuid).toBe(uuid);
+  }, 2 * TURN_MS);
+
+  it('wakes on its own schedule twice, resuming the same session', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    schedules.set(INTERVAL, { wake: { everyMs: 60_000, check: 'always', on: [] } });
+    // Due now: a first tick only seeds `nextRunAt` for an agent never scheduled.
+    agentState.patch(INTERVAL, { nextRunAt: Date.now() - 1 });
+
+    const first = settled(INTERVAL);
+    fireTick?.();
+    await first;
+
+    const after = await persisted(INTERVAL);
+    expect(after.runs).toHaveLength(1);
+    expect(after.runs[0]?.trigger).toBe('interval');
+    expect(after.runs[0]?.harness).toBe('copilot');
+    expect(after.runs[0]?.outcome).not.toBe('failed');
+    const uuid = after.sessionUuid ?? '';
+    expect(uuid).not.toBe('');
+    expect(after.runsSinceRotate).toBe(1);
+
+    agentState.patch(INTERVAL, { nextRunAt: Date.now() - 1 });
+    const second = settled(INTERVAL);
+    fireTick?.();
+    await second;
+
+    const twice = await persisted(INTERVAL);
+    expect(twice.runs).toHaveLength(2);
+    expect(twice.runs[1]?.outcome).not.toBe('failed');
+    expect(lastArgs(INTERVAL)).toEqual(expect.arrayContaining(['--session-id', uuid]));
+    expect(twice.sessionUuid).toBe(uuid);
+    // Both counted: each run's usage file named a request (HIVE-357).
+    expect(twice.runsSinceRotate).toBe(2);
+    schedules.delete(INTERVAL);
   }, 2 * TURN_MS);
 
   /**
