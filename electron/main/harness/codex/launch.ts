@@ -69,13 +69,17 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
     ...(spec.bypassHookTrust === true ? ['--dangerously-bypass-hook-trust'] : []),
   ];
 
+  // As Claude's `sessionCommand` does (HIVE-79): the login shell re-sources the user's profile
+  // after `stripEnv`, so a key exported there would otherwise come back and bill the API.
+  const prefix = spec.subscriptionAuth === true ? [`unset ${CODEX_AUTH_ENV_KEYS.join(' ')};`] : [];
+
   const initialPrompt =
     task === undefined || task.trim() === '' || resuming
       ? []
       : ['--', shellQuote(task.replaceAll(/[\r\n]+/g, ' ').trim())];
 
   return {
-    command: [spec.command, ...(resuming ? ['resume', sessionUuid] : []), ...flags, ...initialPrompt, '&& exit'].join(
+    command: [...prefix, spec.command, ...(resuming ? ['resume', sessionUuid] : []), ...flags, ...initialPrompt, '&& exit'].join(
       ' ',
     ),
     stripEnv: [...CODEX_SESSION_ENV_KEYS, ...(spec.subscriptionAuth === true ? CODEX_AUTH_ENV_KEYS : [])],

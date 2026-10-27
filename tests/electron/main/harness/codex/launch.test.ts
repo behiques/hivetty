@@ -105,6 +105,14 @@ describe('codex session command (HIVE-279)', () => {
     ]);
   });
 
+  it('unsets the API keys in the login shell too, under subscription auth (HIVE-79)', () => {
+    // The shell re-sources the user's profile after stripEnv, so a key exported there comes back.
+    expect(launchCodexSession({ command: 'codex', subscriptionAuth: true }).command).toMatch(
+      /^unset OPENAI_API_KEY CODEX_API_KEY; codex .* && exit$/,
+    );
+    expect(line()).toMatch(/^codex /);
+  });
+
   it('splits text and Enter the way Claude’s sessions do (HIVE-63)', () => {
     expect(launchCodexSession({ command: 'codex' }).submitDelayMs).toBe(300);
   });
