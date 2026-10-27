@@ -499,6 +499,15 @@ const CASES = [
     },
   },
   {
+    name: 'zone: electron/main/agents/ may not import electron/main/harness/copilot/ (HIVE-343)',
+    rule: 'import/no-restricted-paths',
+    files: {
+      'electron/main/harness/copilot/probe-target.ts': 'export const adapter = 1;\n',
+      'electron/main/agents/probe.ts':
+        "import { adapter } from '../harness/copilot/probe-target';\nexport const probe = adapter;\n",
+    },
+  },
+  {
     name: 'zone: electron/main/hooks/ may not import the Claude hook vocabulary (HIVE-236)',
     rule: 'import/no-restricted-paths',
     files: {

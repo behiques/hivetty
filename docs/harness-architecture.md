@@ -287,13 +287,94 @@ nothing. The fence is total: `express` accepts every rule set.
 
 Interactive: HIVE-279. Meters: HIVE-334. Plans: HIVE-352. Containers: refused.
 
+## Copilot (headless, HIVE-343)
+
+Adapter #3 lives in `electron/main/harness/copilot/` and is headless only, shaped as Codex's is:
+every interactive member refuses with "copilot has no interactive sessions yet (HIVE-280)".
+Measured against `GitHub Copilot CLI 1.0.104-4`; the recorded hook bodies, a usage file and a
+refused token's stderr are in `tests/fixtures/copilot/`. **No Copilot run starts yet:**
+`copilotFence.express` refuses every rule set (resolution reads "copilot cannot enforce *") until
+PR2 gives `/fence` a Copilot reader, exactly as Codex's PR1 did.
+
+**The argv** (`copilot/headless.ts`), flag by flag:
+
+- `-p <prompt> -s`: one non-interactive turn; under `-s` stdout is the answer and nothing else.
+- `--no-ask-user`: no `ask_user` tool, so a run never waits on a person it cannot reach.
+- `--disable-builtin-mcps`: drops github-mcp-server, so the only MCP server is `hive`.
+- `--session-id <uuid>` on a first wake, `--resume=<uuid>` after: the id is pinned, so
+  `namesConversation` is true and the uuid is the stop marker.
+- `--model` and `--reasoning-effort` from the Copilot card, omitted when it names none.
+- `--allow-tool shell`, `write` and `hive`: Copilot's own layer must allow a kind before a call can
+  run at all, and the `preToolUse` hook decides each call. A hook's allow grants nothing. Never
+  `--allow-all*` or `--yolo`.
+- `--deny-tool <pattern>` per card pattern, last among the permission flags; a deny wins over
+  every grant.
+- `--additional-mcp-config <json>`: the stdio hive host, its identity forwarded **by reference**
+  (`"HIVE_HOOK_TOKEN": "${HIVE_HOOK_TOKEN}"`), which Copilot expands from the run's env, so no
+  value lands on the argv.
+- `--secret-env-vars COPILOT_GITHUB_TOKEN`: Copilot redacts the token from its own output too.
+- `--usage-output-file <home>/usage/<uuid>.json`, read once the run exits (below).
+- Never `--no-auto-update`: it makes the loader run the executable's bundled build, older than the
+  user's own `copilot`.
+
+**Isolation is `COPILOT_HOME`**, set to the app-owned `~/.hivetty/cli/copilot` and shared by every
+Copilot run so `--resume` finds its session. Config, `settings.json`, `session-state/`, logs and
+plugin data land there; the user's `~/.copilot` (plugins, MCP servers, hooks, login) never reaches
+an agent, and HiveTTY never writes there. The package cache and managed settings stay in
+`~/Library/Caches/copilot`, shared with the user's CLI. `stripEnv` removes the six `COPILOT_*` keys
+a parent Copilot session exports, and `GH_TOKEN`, `GITHUB_TOKEN` and `COPILOT_ALLOW_ALL`, which
+would outrank or widen the stored token.
+
+**Two hooks**, in the home's `settings.json` (the same bytes for every run; identity comes from the
+env), which fire under `-p` on a start and on `--resume` with no folder trust:
+
+- `agentStop` → `/hook`, arming the stall watchdog. Copilot's bodies name no event, so the `sh`
+  command wraps each as `{"event":"agentStop","payload":…}` and sends `x-hive-harness: copilot`.
+- `preToolUse` → `/fence`, failing closed exactly as Codex's does, with a 35 s hook timeout over
+  curl's 30 s so the hook's deny is what Copilot sees.
+
+Only two because only these act: tool events for the plan panel are HIVE-352's, as for Codex. The
+commands are `hook-commands.ts`, shared with Codex.
+
+**Files the core writes** (`HeadlessPlan.files`): `<home>/settings.json` and `AGENTS.md` in the
+lane's workdir, each only when its bytes differ, so two Copilot wakes never rewrite a file under
+each other. **`AGENTS.md` is the system prompt**: Copilot reads it from the cwd, and a resumed
+session re-reads a changed one (probed).
+
+**The token.** `cli-tokens.ts` holds it as Slack's are held: `safeStorage`-encrypted in
+`userData/cli-tokens.bin`, set and cleared through `cli:set-token` and `cli:clear-token`, every
+answer presence only (`CliTokensState`); `read()` has no channel. A wake gets it as
+`COPILOT_GITHUB_TOKEN` on the child's env, written after the strip, and nowhere else: never in
+`config.json`, on the argv or in a log line. No stored token refuses the run: "copilot cannot
+start: no Copilot token: add one in Settings › CLIs".
+
+**`finish()` and the usage file.** `RunEventReader.finish(exit, stderrTail)` runs after the exit
+flush, for what only the exit can tell. Copilot's reads `tokenDetails` from the usage file into
+`RunUsage` and **deletes the file**, so a later wake that dies before writing one never reports this
+one's. The tracker holds the run's lane until `finish` settles, bounds it at `FINISH_WINDOW_MS`
+(5 s), and settles a run it ended itself (killed, stalled, quit) at once, so `closeAll` still
+finalizes every run before its caller flushes state. Claude and Codex have no `finish`; their close
+stays synchronous.
+
+**Failures** (`classifyFailure`, over the last 4 KiB of stderr): a refused token ("could not be
+validated", "Bad credentials", 401) reads "the Copilot token was refused: replace it in Settings ›
+CLIs". A missing subscription and an org-disabled CLI have their own lines, but their patterns are
+**unverified**: no account could produce them, so they are upgraded from the first real failure's
+text. Anything else is stderr's last line, else the exit.
+
+**Settings › CLIs** gives the Copilot card a write-only Token field and a Deny patterns list
+(`kind(argument)`, at most 50, each a `--deny-tool`). **Containers are refused**, as for Codex.
+
+Interactive: HIVE-280. Meters: HIVE-335. Plans: HIVE-352. Containers: refused.
+
 ## The fences
 
 Both are `import/no-restricted-paths` zones in `eslint.config.mjs`, and
 `pnpm verify:boundaries` plants a violation for each.
 
 1. **The driven side stays sealed.** Nothing outside `electron/main/harness/**` may import
-   `electron/main/harness/claude-code/**` or `electron/main/harness/codex/**`. Everyone else goes
+   `electron/main/harness/claude-code/**`, `electron/main/harness/codex/**` or
+   `electron/main/harness/copilot/**`. Everyone else goes
    through the registry.
 2. **Adapters don't reach the core.** `electron/main/harness/**` may not import
    `electron/main/{sessions,ipc,notifications,plans}/**`. The core passes what an adapter
