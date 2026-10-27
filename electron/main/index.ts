@@ -45,7 +45,7 @@ import { createWindow } from './window';
  */
 
 /**
- * The app's one name, `APP_NAME` ("HiveTTY"; `@shared/app-name` says what it
+ * The app's one name, `APP_NAME` ("HiveTTY Pro"; `@shared/app-name` says what it
  * decides). The menu is built with it, and this decides `userData` and the
  * Keychain item `safeStorage` uses.
  *
@@ -57,7 +57,7 @@ import { createWindow } from './window';
  * takes that from `CFBundleName` in the running bundle's `Info.plist`, and
  * under `pnpm desktop:dev` the running bundle is Electron's own — so dev shows
  * `Electron` no matter what any API says. The packaged app's `CFBundleName` is
- * `productName` (`HiveTTY`), the same string `APP_NAME` sets, and Electron finds
+ * `productName` (`HiveTTY Pro`), the same string `APP_NAME` sets, and Electron finds
  * its helper apps by that key. Patching Electron's `Info.plist` in
  * `node_modules` would make dev *look* right while changing nothing about what
  * ships. See `docs/packaging-and-updates.md`.
@@ -65,9 +65,9 @@ import { createWindow } from './window';
 app.setName(APP_NAME);
 
 /**
- * Development pins its own userData directory, `hivetty-dev`.
+ * Development pins its own userData directory, `hivetty-pro-dev`.
  *
- * The packaged app resolves `userData` from `setName` to `HiveTTY`, so the two
+ * The packaged app resolves `userData` from `setName` to `HiveTTY Pro`, so the two
  * stay **separate instances**. They can run side by side. Had both landed on
  * one directory, `requestSingleInstanceLock` would treat a development run and
  * the installed app as the same app, and launching one while the other was open
@@ -224,9 +224,9 @@ if (!app.requestSingleInstanceLock()) {
   */
   const hiveLock = claimServerLock(hiveLockPath());
   if (hiveLock.kind === 'active') {
-    const message = `Another copy of HiveTTY (pid ${hiveLock.pid === null ? 'unknown' : String(hiveLock.pid)}) is using ${dirname(configPath())}. Quit it first, or point this one at another folder with HIVE_CONFIG_PATH.`;
+    const message = `Another copy of ${APP_NAME} (pid ${hiveLock.pid === null ? 'unknown' : String(hiveLock.pid)}) is using ${dirname(configPath())}. Quit it first, or point this one at another folder with HIVE_CONFIG_PATH.`;
     console.error(`[hive] ${message}`);
-    if (!serverMode) dialog.showErrorBox('HiveTTY is already running', message);
+    if (!serverMode) dialog.showErrorBox(`${APP_NAME} is already running`, message);
     process.exit(1);
   }
   process.on('exit', hiveLock.release);

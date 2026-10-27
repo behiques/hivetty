@@ -110,7 +110,7 @@ digest of each, in the config file, and needs no keychain to check one.
    sudo mkdir -p /usr/local/bin
    sudo tee /usr/local/bin/hivetty >/dev/null <<'EOF'
    #!/bin/sh
-   exec "/Applications/HiveTTY.app/Contents/MacOS/HiveTTY" "$@"
+   exec "/Applications/HiveTTY Pro.app/Contents/MacOS/HiveTTY Pro" "$@"
    EOF
    sudo chmod 755 /usr/local/bin/hivetty
    ```
@@ -165,18 +165,18 @@ item needs a menu bar.
 
 ```sh
 mkdir -p ~/Library/LaunchAgents ~/Library/Logs
-cat > ~/Library/LaunchAgents/com.behiques.hivetty.server.plist <<EOF
+cat > ~/Library/LaunchAgents/com.behiques.hivetty-pro.server.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.behiques.hivetty.server</string>
+  <string>com.behiques.hivetty-pro.server</string>
   <key>ProgramArguments</key>
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>sleep 20; exec "/Applications/HiveTTY.app/Contents/MacOS/HiveTTY"</string>
+    <string>sleep 20; exec "/Applications/HiveTTY Pro.app/Contents/MacOS/HiveTTY Pro"</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -191,8 +191,8 @@ cat > ~/Library/LaunchAgents/com.behiques.hivetty.server.plist <<EOF
 </dict>
 </plist>
 EOF
-plutil -lint ~/Library/LaunchAgents/com.behiques.hivetty.server.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty.server.plist
+plutil -lint ~/Library/LaunchAgents/com.behiques.hivetty-pro.server.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty-pro.server.plist
 ```
 
 The heredoc is unquoted on purpose: `$HOME` is expanded when the file is
@@ -217,11 +217,11 @@ What each part is for:
 Day to day:
 
 ```sh
-launchctl print gui/$(id -u)/com.behiques.hivetty.server | head -20   # state and pid
+launchctl print gui/$(id -u)/com.behiques.hivetty-pro.server | head -20   # state and pid
 lsof -nP -iTCP:7434 -sTCP:LISTEN                                         # the socket
 tail -f ~/Library/Logs/hivetty-server.log                               # the log
-launchctl bootout gui/$(id -u)/com.behiques.hivetty.server             # stop
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty.server.plist  # start
+launchctl bootout gui/$(id -u)/com.behiques.hivetty-pro.server             # stop
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty-pro.server.plist  # start
 ```
 
 A running server has a menu-bar item whose tooltip reads *HiveTTY · serving*.
@@ -301,9 +301,9 @@ row pointing at the release page instead, and changes nothing.
 ### By hand, over SSH
 
 ```sh
-launchctl bootout gui/$(id -u)/com.behiques.hivetty.server
+launchctl bootout gui/$(id -u)/com.behiques.hivetty-pro.server
 hivetty --update
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty.server.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty-pro.server.plist
 ```
 
 `--update` refuses while the server is running, so installation cannot drop

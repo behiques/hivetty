@@ -19,7 +19,7 @@ names any field that only takes effect after a restart.
 ├── work/<agent>/             each agent's working folder
 └── ledger/YYYY-MM-DD.jsonl   the ledger, one file per day
 
-~/Library/Application Support/HiveTTY/      the app's own data folder
+~/Library/Application Support/HiveTTY Pro/  the app's own data folder
 ├── sessions.json             session history
 ├── jira-credential.bin       encrypted with the Keychain
 ├── slack-tokens.bin          encrypted with the Keychain

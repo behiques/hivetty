@@ -51,9 +51,9 @@ hivetty --update
 On a server, stop the LaunchAgent, update, then start it again:
 
 ```sh
-launchctl bootout gui/$(id -u)/com.behiques.hivetty.server
+launchctl bootout gui/$(id -u)/com.behiques.hivetty-pro.server
 hivetty --update
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty.server.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.behiques.hivetty-pro.server.plist
 ```
 
 `hivetty` is a small shim for the app binary; [Server mode](../server-mode.md) shows how to

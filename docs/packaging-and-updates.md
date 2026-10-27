@@ -43,8 +43,8 @@ publishes three assets to a GitHub Release:
 
 | Asset | For |
 | --- | --- |
-| `HiveTTY-<v>-arm64.dmg` | A human downloading the app. |
-| `HiveTTY-<v>-arm64-mac.zip` | **The updater.** Squirrel.Mac swaps a zip, never a dmg. |
+| `HiveTTY-Pro-<v>-arm64.dmg` | A human downloading the app. |
+| `HiveTTY-Pro-<v>-arm64.zip` | **The updater.** Squirrel.Mac swaps a zip, never a dmg. |
 | `latest-mac.yml` | How a running app learns a newer version exists, and its SHA-512. |
 
 **Never move a published tag.** `latest-mac.yml` pins a checksum per asset, so
@@ -154,7 +154,7 @@ v0.10.0 shipped an app that died before it drew a window:
 Uncaught Exception:
 Error: Cannot find module 'undici'
 Require stack:
-- /Applications/HiveTTY.app/Contents/Resources/app.asar/
+- /Applications/HiveTTY Pro.app/Contents/Resources/app.asar/
   node_modules/@slack/socket-mode/dist/src/SocketModeClient.js
 ```
 
@@ -193,8 +193,8 @@ ad-hoc signer, because there is no point signing a bundle that cannot launch.
 Run it against any build, or against an installed copy, without rebuilding:
 
 ```
-pnpm verify:bundle                          # dist/mac-arm64/HiveTTY.app
-pnpm verify:bundle "/Applications/HiveTTY.app"
+pnpm verify:bundle                          # dist/mac-arm64/HiveTTY Pro.app
+pnpm verify:bundle "/Applications/HiveTTY Pro.app"
 ```
 
 ## The app's name
@@ -202,33 +202,37 @@ pnpm verify:bundle "/Applications/HiveTTY.app"
 The screenshot that started this: the menu bar read **Electron**, and the
 submenu read **About the-hive**. Those were two different bugs.
 
-HiveTTY has **one name everywhere** (HIVE-242): `APP_NAME` in
+HiveTTY Pro has **one name everywhere** (HIVE-242): `APP_NAME` in
 `electron/shared/app-name.ts` and `productName` in `electron-builder.yml` are
-both `HiveTTY`.
+both `HiveTTY Pro` (HIVE-350; the public app is `HiveTTY`, HIVE-326). The dmg
+and zip are named by `artifactName` instead, `HiveTTY-Pro-<v>-arm64`, because
+GitHub turns the space in an asset name into a dot and `latest-mac.yml` would
+name files the release does not have.
 
 | What you see | Where it comes from | Set by |
 | --- | --- | --- |
-| Leftmost menu title | `CFBundleName` in the **running bundle's** `Info.plist` | `productName`: **HiveTTY** |
-| `About …`, `Hide …`, `Quit …` | the menu template's labels | `APP_NAME`: **HiveTTY** |
-| About window, update dialogs, the server's tray | their own strings | `APP_NAME`: **HiveTTY** |
-| Dock, Cmd-Tab, Launchpad, Finder, the file on disk | `CFBundleName` and the bundle's **file name** | `productName`: **HiveTTY** |
+| Leftmost menu title | `CFBundleName` in the **running bundle's** `Info.plist` | `productName`: **HiveTTY Pro** |
+| `About …`, `Hide …`, `Quit …` | the menu template's labels | `APP_NAME`: **HiveTTY Pro** |
+| About window, update dialogs, the server's tray | their own strings | `APP_NAME`: **HiveTTY Pro** |
+| Dock, Cmd-Tab, Launchpad, Finder, the file on disk | `CFBundleName` and the bundle's **file name** | `productName`: **HiveTTY Pro** |
 
-HiveTTY runs **beside The Hive** on one Mac, as its own app, and starts fresh:
+HiveTTY Pro runs **beside the public HiveTTY and The Hive** on one Mac, as its
+own app, and starts fresh:
 
-- **Identity.** Its own bundle identifier, `com.behiques.hivetty`. It is part of
-  the designated requirement, so neither app can update the other.
+- **Identity.** Its own bundle identifier, `com.behiques.hivetty-pro`. It is
+  part of the designated requirement, so no app can update another.
 - **Data.** `app.setName(APP_NAME)` derives `userData`
-  (`~/Library/Application Support/HiveTTY`): the window state, the hook
+  (`~/Library/Application Support/HiveTTY Pro`): the window state, the hook
   settings, the session history, and the generated plugin every session loads.
   Electron names the Keychain item `safeStorage` encrypts with after the same
-  name, so HiveTTY's stored Jira and remote credentials are its own.
+  name, so HiveTTY Pro's stored Jira and remote credentials are its own.
 - **The hive folder.** `~/.hivetty` (`~/.hivetty-dev` for an unpackaged build)
   holds the config, skills, agents, goals and the ledger.
 - **Server mode.** The default port is 7434 and the LaunchAgent label is
-  `com.behiques.hivetty.server`, running
-  `/Applications/HiveTTY.app/Contents/MacOS/HiveTTY`, so both apps can serve at once.
+  `com.behiques.hivetty-pro.server`, running
+  `/Applications/HiveTTY Pro.app/Contents/MacOS/HiveTTY Pro`, so both apps can serve at once.
 - **No in-place upgrade from The Hive.** The designated requirement and the
-  release feed (`behiques/hivetty`) both differ, so HiveTTY is installed fresh
+  release feed (`behiques/hivetty`) both differ, so HiveTTY Pro is installed fresh
   from its own dmg. Nothing is migrated; credentials are entered once.
 
 Before HIVE-242 the app had two names: a display name, what people read
@@ -251,18 +255,18 @@ a build that never starts, so before pushing a tag, launch the packaged app once
 
 ```sh
 pnpm desktop:dist
-timeout 5 "dist/mac-arm64/HiveTTY.app/Contents/MacOS/HiveTTY"; echo $?   # 124 = still alive
+timeout 5 "dist/mac-arm64/HiveTTY Pro.app/Contents/MacOS/HiveTTY Pro"; echo $?   # 124 = still alive
 ```
 
 `app.setName` cannot fix the first. Under `pnpm desktop:dev` the running bundle
 is `node_modules/electron/dist/Electron.app`, and macOS reads that title from
 the bundle before any JavaScript runs. **Dev will always say `Electron`, and the
-packaged app says `HiveTTY`.** Patching Electron's `Info.plist` from a
+packaged app says `HiveTTY Pro`.** Patching Electron's `Info.plist` from a
 postinstall would make dev *look* right while changing nothing that ships; it is
 deliberately not done.
 
-`electron/main/index.ts` pins the development `userData` to `hivetty-dev`, which
-keeps a development run and the installed app (`HiveTTY`) as two separate
+`electron/main/index.ts` pins the development `userData` to `hivetty-pro-dev`, which
+keeps a development run and the installed app (`HiveTTY Pro`) as two separate
 instances that can run side by side. Sharing
 one `userData` would make `requestSingleInstanceLock` treat them as the same app.
 
@@ -309,7 +313,7 @@ requirement**. For a Developer ID that names the certificate and holds across
 every build you ever sign. For an ad-hoc signature it is the binary's cdhash:
 
 ```
-$ codesign -d -r- "HiveTTY.app"
+$ codesign -d -r- "HiveTTY Pro.app"
 # designated => cdhash H"4070118b4071c5c37facee2a4e06c36b9a79dd4c"
 ```
 
@@ -322,7 +326,7 @@ packaged 0.1.0 was driven through the whole flow. The check found 0.1.1, the
 reported the update **ready** — and the swap failed:
 
 ```
-[Error: Code signature at URL file:///…/HiveTTY.app/ did not pass validation:
+[Error: Code signature at URL file:///…/HiveTTY Pro.app/ did not pass validation:
  code failed to satisfy specified code requirement(s)]
   code: -1, domain: 'SQRLCodeSignatureErrorDomain'
 ```
@@ -403,9 +407,9 @@ Only a Developer ID build proves this. `pnpm desktop:dev` runs Electron's own
 `Electron.app`, ad-hoc signed without the hardened runtime, so voice mode works
 there with or without the entitlement; an ad-hoc `desktop:dist` is the same.
 After installing a signed build, holding space in a session should raise
-"HiveTTY would like to access the microphone"; if an earlier build was already
-refused, `tccutil reset Microphone com.behiques.hivetty` clears it, and
-`codesign -d --entitlements - "/Applications/HiveTTY.app"` lists what shipped.
+"HiveTTY Pro would like to access the microphone"; if an earlier build was already
+refused, `tccutil reset Microphone com.behiques.hivetty-pro` clears it, and
+`codesign -d --entitlements - "/Applications/HiveTTY Pro.app"` lists what shipped.
 
 `scripts/adhoc-sign.mjs` skips itself when a real identity is available. It runs
 in `afterPack`, which electron-builder documents as happening *before* signing,
@@ -449,8 +453,8 @@ half-configured repository is the case worth failing on.
 Verify a build rather than trusting it:
 
 ```bash
-codesign -d --verbose=2 "dist/mac-arm64/HiveTTY.app"   # Authority=Developer ID Application: …
-xcrun stapler validate  "dist/mac-arm64/HiveTTY.app"   # the notarization ticket
+codesign -d --verbose=2 "dist/mac-arm64/HiveTTY Pro.app"   # Authority=Developer ID Application: …
+xcrun stapler validate  "dist/mac-arm64/HiveTTY Pro.app"   # the notarization ticket
 ```
 
 And then verify the thing those two cannot prove: publish a later version and
@@ -460,7 +464,8 @@ it.
 
 #### The bundle identifier is part of this
 
-`appId` is `com.behiques.hivetty` (HIVE-242), HiveTTY's own. The Hive's
+`appId` is `com.behiques.hivetty-pro` (HIVE-350), HiveTTY Pro's own; the public
+HiveTTY takes `com.behiques.hivetty` (HIVE-326). The Hive's
 `com.behiques.the-hive` replaced `dev.yunidbauza.the-hive` in the release that
 introduced signing. For a Developer ID build the identifier is part
 of the designated requirement Squirrel enforces, so changing it breaks in-place
@@ -489,7 +494,7 @@ browser is quarantined, and macOS then checks what is inside it:
   load-bearing one. The escape:
 
 ```bash
-xattr -dr com.apple.quarantine "/Applications/HiveTTY.app"
+xattr -dr com.apple.quarantine "/Applications/HiveTTY Pro.app"
 ```
 
 An update the app fetches itself is never quarantined, which was a real argument

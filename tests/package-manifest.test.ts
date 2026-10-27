@@ -94,11 +94,16 @@ describe('electron-builder.yml', () => {
     expect(config).toMatch(/^ {2}entitlementsInherit: resources\/entitlements\.mac\.plist$/m);
   });
 
-  /** HIVE-242: HiveTTY is its own app, so it can run beside The Hive. */
-  it('names the bundle HiveTTY under its own identifier', () => {
-    expect(config).toMatch(/^appId: com\.behiques\.hivetty$/m);
-    expect(config).toMatch(/^productName: HiveTTY$/m);
+  /** HIVE-350: Pro is its own app, so it can run beside the public HiveTTY and The Hive. */
+  it('names the bundle HiveTTY Pro under its own identifier', () => {
+    expect(config).toMatch(/^appId: com\.behiques\.hivetty-pro$/m);
+    expect(config).toMatch(/^productName: HiveTTY Pro$/m);
     expect(config).not.toMatch(/CFBundleDisplayName:/);
+  });
+
+  /** HIVE-350: GitHub turns a space in an asset name into a dot, so `latest-mac.yml` would name files that are not there. */
+  it('names the dmg and zip without the space in productName', () => {
+    expect(config).toMatch(/^artifactName: HiveTTY-Pro-\$\{version\}-\$\{arch\}\.\$\{ext\}$/m);
   });
 
   /** HIVE-242: HiveTTY looks for its updates on its own repo, never upstream. */
