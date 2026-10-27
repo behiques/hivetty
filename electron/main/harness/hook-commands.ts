@@ -5,6 +5,7 @@ import {
   HOOK_ENV_RUN_TOKEN,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
+  HOOK_HEADER_HARNESS,
   HOOK_HEADER_RUN,
   HOOK_HEADER_RUN_TOKEN,
   HOOK_HEADER_SESSION,
@@ -21,9 +22,8 @@ import {
 /** Single quotes for `sh`, a `'` inside written as `'\''`. */
 export const shellQuote = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`;
 
-// HOOK_HEADER_HARNESS once the receiver reads it (HIVE-343 PR2).
 const harnessHeader = (harness?: string): string =>
-  harness === undefined ? '' : ` -H 'x-hive-harness: ${harness}'`;
+  harness === undefined ? '' : ` -H '${HOOK_HEADER_HARNESS}: ${harness}'`;
 
 /** POSTs stdin to `/hook`. `wrap` names the event for a CLI whose bodies do not (copilot). */
 export const hookCommand = (opts: { harness?: string; wrap?: string } = {}): string =>

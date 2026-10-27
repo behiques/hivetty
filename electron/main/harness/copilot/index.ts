@@ -1,8 +1,10 @@
 import { claudeCodeAdapter } from '../claude-code';
 import type { HarnessAdapter, PermissionFence } from '../port';
 
+import { copilotFenceReply, readCopilotFence, translateCopilotCall } from './fence';
 import { launchCopilotHeadless } from './headless';
 import { readCopilotHeadless } from './headless-reader';
+import { readCopilotHook } from './hooks';
 
 const NO_SESSIONS = 'copilot has no interactive sessions yet (HIVE-280).';
 
@@ -11,8 +13,17 @@ const interactive = (): never => {
 };
 const later = (): Promise<never> => Promise.reject(new Error(NO_SESSIONS));
 
-/** Refuses every rule set: no Copilot run may start before its `/fence` reader exists (HIVE-343 PR2). */
-export const copilotFence: PermissionFence = { express: () => ({ ok: false, unexpressible: ['*'] }) };
+/**
+ * Total (HIVE-343): every rule is enforced by `decide` on the translated call, through the
+ * `preToolUse` hook in the home's `settings.json` and the receiver's `/fence`. Copilot's own layer
+ * allows only the kinds (`--allow-tool shell|write|hive`); `--deny-tool` wins over both.
+ */
+export const copilotFence: PermissionFence = {
+  express: () => ({ ok: true }),
+  translate: translateCopilotCall,
+  read: readCopilotFence,
+  reply: copilotFenceReply,
+};
 
 /**
  * Adapter #3, headless only (HIVE-343). The interactive half is HIVE-280's: `sessionAdapter()`
@@ -38,8 +49,7 @@ export const copilotAdapter: HarnessAdapter = {
     containerSet: later,
     mcpConfig: later,
   },
-  // Claude's until PR2 gives copilot its own (HIVE-343): no copilot run starts before then.
-  readHook: claudeCodeAdapter.readHook,
+  readHook: readCopilotHook,
   contextReply: claudeCodeAdapter.contextReply,
   promptMarker: interactive,
   foldEdits: () => new Map(),

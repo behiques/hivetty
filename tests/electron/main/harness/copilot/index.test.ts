@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
 import { copilotAdapter, copilotFence } from '../../../../../electron/main/harness/copilot';
+import {
+  copilotFenceReply,
+  readCopilotFence,
+  translateCopilotCall,
+} from '../../../../../electron/main/harness/copilot/fence';
 import { launchCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless';
 import { readCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless-reader';
+import { readCopilotHook } from '../../../../../electron/main/harness/copilot/hooks';
 
 describe('copilotAdapter', () => {
   it('is copilot', () => {
@@ -31,9 +37,15 @@ describe('copilotAdapter', () => {
     });
   });
 
-  it('refuses every rule set until the fence lands (PR2)', () => {
-    expect(copilotFence.express([])).toEqual({ ok: false, unexpressible: ['*'] });
-    expect(copilotFence.express(['Read'])).toEqual({ ok: false, unexpressible: ['*'] });
+  it('expresses every rule set: decide enforces each rule through /fence (PR2)', () => {
+    expect(copilotFence.express([])).toEqual({ ok: true });
+    expect(copilotFence.express(['Bash(git:*)', 'mcp__hive__*'])).toEqual({ ok: true });
+  });
+
+  it("answers /fence with Task 15's translator, reader and reply", () => {
+    expect(copilotFence.translate).toBe(translateCopilotCall);
+    expect(copilotFence.read).toBe(readCopilotFence);
+    expect(copilotFence.reply).toBe(copilotFenceReply);
   });
 
   it('refuses every interactive member (HIVE-280)', () => {
@@ -63,8 +75,8 @@ describe('copilotAdapter', () => {
     await expect(copilotAdapter.installed.sessionOverrides([])).resolves.toEqual({});
   });
 
-  it("reads hooks with Claude's reader until PR2 gives copilot its own", () => {
-    expect(copilotAdapter.readHook).toBe(claudeCodeAdapter.readHook);
+  it('reads hooks with its own reader', () => {
+    expect(copilotAdapter.readHook).toBe(readCopilotHook);
     expect(copilotAdapter.contextReply).toBe(claudeCodeAdapter.contextReply);
   });
 });

@@ -10,6 +10,7 @@ import {
   type ResolvedContainer,
 } from '@shared/config-contract';
 import type { PrLookup, PrLookupReply } from '@shared/github-contract';
+import { isHarnessId } from '@shared/harness-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
@@ -500,8 +501,13 @@ export function createHookRuntime(options: HookRuntimeOptions): HookRuntime {
         knowsSession,
         knowsAgent,
         ...(harnesses === undefined ? {} : { harnesses }),
-        // HIVE-342: Codex is the one hook-fenced CLI; its PreToolUse reaches `/fence`.
-        fenceTranslate: headlessAdapter('codex').headless.fence.translate,
+        // HIVE-343: a hook names its CLI by header; a header-less one is Codex's, the first hook-fenced CLI.
+        fenceFor: (harness) =>
+          harness === undefined
+            ? headlessAdapter('codex').headless.fence
+            : isHarnessId(harness)
+              ? headlessAdapter(harness).headless.fence
+              : null,
         /*
           `port` stays the test override it has always been and wins when given,
           so a spec that pins a port is not fighting a config default. Config

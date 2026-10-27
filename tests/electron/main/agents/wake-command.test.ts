@@ -1372,16 +1372,11 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
 
 describe('a copilot wake (HIVE-343)', () => {
   const COPILOT_MD = AGENT_MD.replace('limits:', 'harness: [copilot]\nlimits:');
-  // PR1's copilot fence refuses everything; these tests stand in PR2's, which passes.
-  const fenced: HarnessAdapter = {
-    ...copilotAdapter,
-    headless: { ...copilotAdapter.headless, fence: { express: () => ({ ok: true }) } },
-  };
   const HOME = '/home/u/.hive/cli/copilot';
   const WORKDIR = '/home/u/.hive/work/slack-watcher';
   const copilot = (over: Partial<WakeCommandDeps> = {}) =>
     build({
-      adapter: (id) => (id === 'copilot' ? fenced : claudeCodeAdapter),
+      adapter: (id) => (id === 'copilot' ? copilotAdapter : claudeCodeAdapter),
       env: () => ({ PATH: '/opt/bin', HOME: '/home/u', GH_TOKEN: 'gh-leak' }),
       isExecutable: (path) => path === '/opt/bin/copilot',
       cliToken: (id) => (id === 'copilot' ? 'gho_stored' : null),
@@ -1432,13 +1427,11 @@ describe('a copilot wake (HIVE-343)', () => {
     });
   });
 
-  it("is refused by PR1's own fence", () => {
-    expect(
-      copilot({ adapter: (id) => (id === 'copilot' ? copilotAdapter : claudeCodeAdapter) })(
-        'slack-watcher',
-        'manual',
-      ),
-    ).toEqual({ problem: 'No CLI can run slack-watcher: copilot cannot enforce *.' });
+  it("resolves under copilot's own fence, which enforces every rule (PR2)", () => {
+    const built = copilot()('slack-watcher', 'manual');
+
+    expect(built).not.toHaveProperty('problem');
+    expect(built).toMatchObject({ harness: 'copilot' });
   });
 
   it('refuses a copilot agent that runs in a container', () => {

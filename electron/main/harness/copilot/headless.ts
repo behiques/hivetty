@@ -16,11 +16,11 @@ import type { HeadlessPlan, HeadlessSpec } from '../port';
  *
  * - `COPILOT_HOME` is app-owned: the user's `~/.copilot` (plugins, MCP servers, hooks, login) never
  *   reaches an agent, and its `settings.json` carries the hive hooks, which fire under `-p` on a
- *   start and on `--resume` with no folder trust.
+ *   start and on a resume with no folder trust.
  * - `--allow-tool shell|write|hive`: Copilot's own layer must allow a kind before a call can run at
  *   all; the `preToolUse` hook (`/fence`) decides each call. A hook's allow grants nothing.
  * - No `--no-auto-update`: it runs the executable's bundled build, older than the user's own.
- * - The system prompt is `AGENTS.md` in the cwd, re-read on `--resume` (probed).
+ * - The system prompt is `AGENTS.md` in the cwd, re-read on a resume (probed).
  */
 
 /** What a parent Copilot session exports to its children (probed at 1.0.104). */
@@ -35,6 +35,33 @@ export const COPILOT_SESSION_ENV_KEYS = [
 
 /** Outrank or widen the stored token, so they never reach a run (HIVE-343). */
 export const COPILOT_AUTH_ENV_KEYS = ['GH_TOKEN', 'GITHUB_TOKEN', 'COPILOT_ALLOW_ALL'] as const;
+
+/**
+ * Change who pays, which model or provider answers, or what is approved (`copilot help environment`
+ * at 1.0.104, plus `COPILOT_ASSISTED_APPROVAL` and `GH_ENTERPRISE_TOKEN`), so they never reach a run.
+ * `GH_HOST` and `COPILOT_GH_HOST` stay: a GitHub Enterprise user needs them for the stored token to
+ * authenticate.
+ */
+export const COPILOT_ROUTING_ENV_KEYS = [
+  'COPILOT_PROVIDER_BASE_URL',
+  'COPILOT_PROVIDER_TYPE',
+  'COPILOT_PROVIDER_API_KEY',
+  'COPILOT_PROVIDER_API_KEY_COMMAND',
+  'COPILOT_PROVIDER_BEARER_TOKEN',
+  'COPILOT_PROVIDER_WIRE_API',
+  'COPILOT_PROVIDER_TRANSPORT',
+  'COPILOT_PROVIDER_AZURE_API_VERSION',
+  'COPILOT_PROVIDER_MODEL_ID',
+  'COPILOT_PROVIDER_WIRE_MODEL',
+  'COPILOT_PROVIDER_MAX_PROMPT_TOKENS',
+  'COPILOT_PROVIDER_MAX_OUTPUT_TOKENS',
+  'COPILOT_PROVIDER_HEADERS',
+  'COPILOT_OFFLINE',
+  'COPILOT_MODEL',
+  'COPILOT_AUTO_TIER',
+  'COPILOT_ASSISTED_APPROVAL',
+  'GH_ENTERPRISE_TOKEN',
+] as const;
 
 export const COPILOT_TOKEN_ENV = 'COPILOT_GITHUB_TOKEN';
 
@@ -87,8 +114,7 @@ const envReference = (key: string): string => '${' + key + '}';
 
 export function launchCopilotHeadless(spec: HeadlessSpec): HeadlessPlan {
   const { conversation, hiveServer } = spec;
-  const start = 'start' in conversation;
-  const id = start ? conversation.start : conversation.resume;
+  const id = 'start' in conversation ? conversation.start : conversation.resume;
 
   if (!('command' in hiveServer)) {
     throw new Error('copilot agents cannot run in a container yet: the hive server there is HTTP.');
@@ -118,7 +144,10 @@ export function launchCopilotHeadless(spec: HeadlessSpec): HeadlessPlan {
       '-s',
       '--no-ask-user',
       '--disable-builtin-mcps',
-      ...(start ? ['--session-id', id] : [`--resume=${id}`]),
+      // One flag for both: it resumes the session if it exists, else starts one with this id
+      // (probed), so a first wake that died before Copilot made its session resumes cleanly.
+      '--session-id',
+      id,
       ...(spec.model === undefined ? [] : ['--model', spec.model]),
       ...(spec.effort === undefined ? [] : ['--reasoning-effort', spec.effort]),
       '--allow-tool',
@@ -136,7 +165,7 @@ export function launchCopilotHeadless(spec: HeadlessSpec): HeadlessPlan {
       usageFile,
     ],
     addEnv: { COPILOT_HOME: spec.stateDir },
-    stripEnv: [...COPILOT_SESSION_ENV_KEYS, ...COPILOT_AUTH_ENV_KEYS],
+    stripEnv: [...COPILOT_SESSION_ENV_KEYS, ...COPILOT_AUTH_ENV_KEYS, ...COPILOT_ROUTING_ENV_KEYS],
     defaultContainerCommand: 'copilot',
     stopPattern: id,
     namesConversation: true,

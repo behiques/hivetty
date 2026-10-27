@@ -339,6 +339,10 @@ export interface PermissionFence {
   express(rules: readonly string[]): { ok: true } | { ok: false; unexpressible: string[] };
   /** A hook-based fence's calls in Claude's vocabulary, so `decide` stays the only matcher (HIVE-342). */
   translate?(tool: string, input: Record<string, unknown>, cwd: string): FenceCall[];
+  /** The CLI's PreToolUse body as one call (HIVE-343). Absent: Claude's shape (`tool_name`, `tool_input`). */
+  read?(body: Record<string, unknown>): { tool: string; input: Record<string, unknown>; cwd: string } | null;
+  /** The CLI's answer (HIVE-343). Absent: Claude's `hookSpecificOutput` shape. */
+  reply?(reason?: string): Record<string, unknown>;
 }
 
 /** One call as `decide` reads it. */
