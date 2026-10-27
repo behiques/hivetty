@@ -1967,6 +1967,17 @@ describe('the history', () => {
     expect(patchesFor(written, 'hero-refresh').at(-1)).toMatchObject({ harness: 'claude-code' });
   });
 
+  it('refuses a restart into a CLI it cannot launch before killing the session it has', async () => {
+    const sessions = withHistory([]);
+    sessions.open(OPEN);
+
+    await expect(sessions.restart({ ...OPEN, harness: 'codex' })).rejects.toThrow(
+      /Codex sessions are not available yet/,
+    );
+    expect(killed).toEqual([]);
+    expect(spawned).toHaveLength(1);
+  });
+
   it('omits a name nobody supplied rather than storing an empty one', () => {
     const written: Written[] = [];
     withHistory(written).open(OPEN);

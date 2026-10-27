@@ -542,6 +542,17 @@ const CLI_LABELS: Record<HarnessId, string> = {
   copilot: 'Copilot',
 };
 
+/**
+ * PR A carries the CLI end to end; only Claude can be launched until HIVE-279's second PR lands
+ * the Codex adapter's interactive half. A thrown refusal names the reason, where a pty that never
+ * started would not.
+ */
+function refuseUnlaunchable(harness: HarnessId): void {
+  if (harness !== 'claude-code') {
+    throw new Error(`${CLI_LABELS[harness]} sessions are not available yet (HIVE-279).`);
+  }
+}
+
 export function createSessions(options: SessionsOptions): Sessions {
   const {
     supervisor,
@@ -661,14 +672,14 @@ export function createSessions(options: SessionsOptions): Sessions {
   const commandEntities = new Set<string>();
 
   /**
-   * Entities that are agent sessions (HIVE-234): the one positive fact the
-   * harness registry is told. A terminal is neither this nor a command.
+   * Entities that are agent sessions (HIVE-234), each with the CLI it was
+   * opened with (HIVE-279): the one positive fact the harness registry is told,
+   * and what `harnessOf` answers. A terminal is neither this nor a command.
    *
    * Added by `spawn` before its process starts and removed only by
    * `settleExit` — **not** on a failed spawn, because a session whose spawn
    * failed was never a terminal, and a late host error must not read it as one.
    */
-  // Keyed by entity, valued by the CLI it was opened with (HIVE-279): `harnessOf` reads it.
   const agentSessions = new Map<string, HarnessId>();
   const harnesses = createHarnessRegistry({
     sessionHarness: (entityId) => agentSessions.get(entityId),
@@ -2011,6 +2022,8 @@ export function createSessions(options: SessionsOptions): Sessions {
       from `agentSessions`, and a restart that does not name a CLI keeps the one it had.
     */
     const harness = request.harness ?? agentSessions.get(request.entityId);
+    // Before the kill too: a restart refused after it would leave the row dead.
+    if (harness !== undefined) refuseUnlaunchable(harness);
 
     const sessionId = registry.sessionFor(request.entityId);
 
@@ -2207,14 +2220,8 @@ export function createSessions(options: SessionsOptions): Sessions {
   /** Refuse with a message the user can act on, never a generic failure. */
   function spawn(request: OpenRequest): void {
     const harness = request.harness ?? 'claude-code';
-    /*
-      PR A carries the CLI end to end; only Claude can be launched until HIVE-279's second PR lands
-      the Codex adapter's interactive half. Refused first, before anything is registered or
-      recorded, so the row fails with a reason rather than a pty that never started.
-    */
-    if (harness !== 'claude-code') {
-      throw new Error(`${CLI_LABELS[harness]} sessions are not available yet (HIVE-279).`);
-    }
+    // Refused first, before anything is registered or recorded: see `refuseUnlaunchable`.
+    refuseUnlaunchable(harness);
 
     const snapshot = config();
 
