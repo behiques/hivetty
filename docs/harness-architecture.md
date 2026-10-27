@@ -21,7 +21,7 @@ Phase 2, headless runs through the adapter, is Epic HIVE-336 and is done: see
 | --- | --- | --- |
 | The contract | `electron/shared/harness-contract.ts` | `HarnessId` (`'claude-code'` only, for now) and `Capabilities`. Types only. |
 | The port | `electron/main/harness/port.ts` | `HarnessAdapter`: `id`, `capabilities`, and the methods stories add. |
-| The registry | `electron/main/harness/registry.ts` | `createHarnessRegistry({ isAgentSession })` → `{ adapterFor, harnessOf }`, and `sessionAdapter()` for the shared runtimes. |
+| The registry | `electron/main/harness/registry.ts` | `createHarnessRegistry({ sessionHarness })` → `{ adapterFor, harnessOf }`, and `sessionAdapter()` for the shared runtimes. |
 | Adapter #1 | `electron/main/harness/claude-code/` | `claudeCodeAdapter`. |
 
 ### The port grows by story
@@ -102,15 +102,19 @@ settings, the status line script), `plugin.ts` and `done-skill.ts`, `mcp-config.
 
 ### The registry
 
-`harnessOf(entityId)` answers `'claude-code'` for an agent session and `undefined` for a
-plain terminal or a command (story 102). Only the sessions closure knows which an entity
-is: ids are minted by the renderer, so a prefix proves nothing. The fence below stops
+`harnessOf` answers the CLI a session was opened with: `SpawnRequest.harness` (absent is
+Claude Code), checked with its `CLI_VOCAB` row by `parseSpawnRequest`, held per entity in the
+sessions closure, recorded in the session history and forwarded on restart and resume
+(HIVE-279). Only Claude Code launches until HIVE-279's second PR: `spawn` and `restart`
+refuse any other CLI with a reason, before anything starts. `harnessOf` answers `undefined`
+for a plain terminal or a command (story 102). Only the sessions closure knows which an
+entity is: ids are minted by the renderer, so a prefix proves nothing. The fence below stops
 `harness/**` from importing `sessions/**`, so the core passes the fact in as
-`isAgentSession`. HIVE-234 made that the single source for the distinction, replacing
+`sessionHarness`. HIVE-234 made that the single source for the distinction, replacing
 `terminalEntities` in `electron/main/sessions/index.ts`.
 
-`sessions/index.ts` answers `isAgentSession` from a positive `agentSessions` set: `spawn`
-adds the entity before its process starts, and `settleExit` removes it. A failed spawn
+`sessions/index.ts` answers `sessionHarness` from a positive `agentSessions` map, entity to
+CLI: `spawn` adds the entity before its process starts, and `settleExit` removes it. A failed spawn
 does not remove it, because a session whose spawn failed was never a terminal. A
 terminal is `harnessOf(id) === undefined` and not a command, since `harnessOf` is
 `undefined` for both. So the `ptySpawn`/`ptySpawnTerminal` split now means harness
@@ -442,7 +446,7 @@ reaches the mapping yet: interactive Codex is HIVE-279, which routes a session t
 through `harnessOf`, and no CLI's agent run has a plan (HIVE-358, which also turns the tool on for
 wakes and lets it through `/fence`; today `decide` would ask).
 
-Interactive: HIVE-279. Meters: HIVE-334. Agent-run plans: HIVE-358. Containers: refused.
+Interactive: HIVE-279 (plumbing landed; the adapter's half is the second PR). Meters: HIVE-334. Agent-run plans: HIVE-358. Containers: refused.
 
 ## Copilot (headless, HIVE-343)
 
@@ -607,7 +611,7 @@ The wiring, in order:
 3. Add it to the registry's `adapters` table (the compiler insists).
 4. Add its folder to fence 1's `from` in `eslint.config.mjs`, and a planted case to
    `scripts/verify-boundaries.mjs`.
-5. Teach `harnessOf` how the core says which harness an entity runs. Phase 1 answers
-   `'claude-code'` for every agent session.
+5. Add the harness to `HARNESS_IDS` and a `CLI_VOCAB` row: `SpawnRequest.harness` carries it
+   to `harnessOf` (HIVE-279), and the picker's switch lists it.
 6. Implement `prepare`: a `HarnessFiles` table writing the files the harness reads at
    launch. `sessionAdapter()` decides which adapter the shared runtimes write for.
