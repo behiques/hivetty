@@ -152,33 +152,21 @@ describe('launchCopilotHeadless', () => {
   });
 
   it('strips every key that changes who pays, which model answers or what is approved', () => {
-    const { stripEnv } = launchCopilotHeadless(spec());
+    const plan = launchCopilotHeadless(spec());
 
-    for (const key of [
-      'COPILOT_PROVIDER_BASE_URL',
-      'COPILOT_PROVIDER_TYPE',
-      'COPILOT_PROVIDER_API_KEY',
-      'COPILOT_PROVIDER_API_KEY_COMMAND',
-      'COPILOT_PROVIDER_BEARER_TOKEN',
-      'COPILOT_PROVIDER_WIRE_API',
-      'COPILOT_PROVIDER_TRANSPORT',
-      'COPILOT_PROVIDER_AZURE_API_VERSION',
-      'COPILOT_PROVIDER_MODEL_ID',
-      'COPILOT_PROVIDER_WIRE_MODEL',
-      'COPILOT_PROVIDER_MAX_PROMPT_TOKENS',
-      'COPILOT_PROVIDER_MAX_OUTPUT_TOKENS',
-      'COPILOT_PROVIDER_HEADERS',
+    expect(plan.stripPrefixes).toEqual(['COPILOT_PROVIDER_']);
+    expect(COPILOT_ROUTING_ENV_KEYS).toEqual([
       'COPILOT_OFFLINE',
       'COPILOT_MODEL',
       'COPILOT_AUTO_TIER',
       'COPILOT_ASSISTED_APPROVAL',
       'GH_ENTERPRISE_TOKEN',
-    ]) {
-      expect(stripEnv).toContain(key);
-    }
+      'GITHUB_ENTERPRISE_TOKEN',
+    ]);
+    expect(plan.stripEnv).toEqual(expect.arrayContaining([...COPILOT_ROUTING_ENV_KEYS]));
     // An Enterprise user's stored token authenticates against these hosts.
-    expect(stripEnv).not.toContain('GH_HOST');
-    expect(stripEnv).not.toContain('COPILOT_GH_HOST');
+    expect(plan.stripEnv).not.toContain('GH_HOST');
+    expect(plan.stripEnv).not.toContain('COPILOT_GH_HOST');
   });
 
   it('names its conversation and stops on it', () => {
@@ -186,6 +174,7 @@ describe('launchCopilotHeadless', () => {
 
     expect(plan.namesConversation).toBe(true);
     expect(plan.stopPattern).toBe(U);
+    expect(plan.outputConfirmsStart).toBe(true);
   });
 
   it('refuses an http hive server: no containers', () => {

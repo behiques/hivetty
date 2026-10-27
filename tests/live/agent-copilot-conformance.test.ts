@@ -32,7 +32,7 @@ import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
 import { createLedger, type Ledger } from '../../electron/main/ledger';
 import { agentMcpConfigFile } from '../../electron/main/mcp';
 import { hiveServerSpec } from '../../electron/main/mcp/config';
-import type { AgentRunState, RunLine } from '../../electron/shared/agent-contract';
+import type { AgentRunState, RunLine, WakeSpec } from '../../electron/shared/agent-contract';
 import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
 import { isHarnessId } from '../../electron/shared/harness-contract';
 import {
@@ -71,26 +71,30 @@ const SHELL = 'probe-copilot-shell';
 const CREATE = 'probe-copilot-create';
 const MCP = 'probe-copilot-mcp';
 const DENY = 'probe-copilot-deny';
-const AGENTS = [CP, SHELL, CREATE, MCP, DENY];
+const UNTRUSTED = 'probe-copilot-untrusted';
+const SUB = 'probe-copilot-subagent';
+const INTERVAL = 'probe-copilot-interval';
+const AGENTS = [CP, SHELL, CREATE, MCP, DENY, UNTRUSTED, SUB, INTERVAL];
 
-const CP_MD = `---
-name: ${CP}
+const probeMd = (name: string, on = '[ledger]') => `---
+name: ${name}
 description: Proves a Copilot wake, its resume and its receipt.
 icon: Ghost
 harness: [copilot]
 wake:
-  on: [ledger]
+  on: ${on}
 tools: [Bash(awk *)]
 limits:
   turns: 10
   parallel: 2
   rotate_after: 50
 ---
-Your name is ${CP}.
+Your name is ${name}.
 
 This is a conformance probe. Do not read files, run any command your wake prompt does not name, or
 explore. Do exactly what your wake prompt asks, in as few steps as you can, then end your turn.
 `;
+const CP_MD = probeMd(CP);
 
 const fenceMd = (name: string, call: string, tools = '[]') => `---
 name: ${name}
@@ -137,12 +141,22 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
   let shellMarker: string;
   let createMarker: string;
   let denyMarker: string;
+  /** Outside every workdir, so nothing the agent does there can create them (HIVE-357). */
+  let hookMarker: string;
+  let mcpMarker: string;
+  let subMarker: string;
 
   const spawns: { name: string; args: string[] }[] = [];
   const agentEvents: HookAgentEvent[] = [];
+  /** Every Copilot hook body the fence read, so a case can say whose call it was (HIVE-357). */
+  const fenceBodies: Record<string, unknown>[] = [];
   const lines: RunLine[] = [];
   const jiraComments: unknown[] = [];
   const settlers = new Map<string, () => void>();
+  /** What `schedules` answers, filled by the interval case alone (HIVE-357). */
+  const schedules = new Map<string, { wake: WakeSpec; dailyUsd?: number }>();
+  /** The scheduler's tick, captured off its injected interval. */
+  let fireTick: (() => void) | undefined;
   const onRunClosed = vi.fn((name: string) => scheduler?.onRunClosed(name));
   /** Swapped by case 7; every other case runs with Copilot entitled. */
   let entitled: HarnessGate['entitled'] = () => null;
@@ -188,6 +202,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     shellMarker = join(agentWorkdir(SHELL), 'made-by-shell');
     createMarker = join(agentWorkdir(CREATE), 'made-by-create.txt');
     denyMarker = join(agentWorkdir(DENY), 'made-by-denied-shell');
+    subMarker = join(agentWorkdir(SUB), 'made-by-subagent');
     for (const [name, body] of [
       [CP, CP_MD],
       [SHELL, fenceMd(SHELL, `The shell command: touch ${shellMarker}`)],
@@ -195,10 +210,45 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       [MCP, fenceMd(MCP, 'The hive MCP tool jira_comment, with key "HIVE-1" and body "probe".')],
       // Granted, so only Copilot's own `--deny-tool` can stop it.
       [DENY, fenceMd(DENY, `The shell command: touch ${denyMarker}`, '[Bash(touch *)]')],
+      [UNTRUSTED, probeMd(UNTRUSTED)],
+      // Nothing but the captured tick wakes it.
+      [INTERVAL, probeMd(INTERVAL, '[]')],
+      [
+        SUB,
+        fenceMd(
+          SUB,
+          `The task tool, starting one subagent whose only job is the shell command: touch ${subMarker}. Do not run the command yourself.`,
+          // Granted, so the fence's ask is the subagent's shell call, not the `task` call that starts it.
+          '[Task]',
+        ),
+      ],
     ] as const) {
       await mkdir(join(agentsRoot(), name), { recursive: true });
       await writeFile(join(agentsRoot(), name, 'AGENT.md'), body, 'utf8');
     }
+
+    // A workdir's own hooks and MCP servers, which Copilot loads only in a trusted folder (HIVE-357).
+    const untrusted = agentWorkdir(UNTRUSTED);
+    hookMarker = join(dir, 'untrusted-hook-ran');
+    mcpMarker = join(dir, 'untrusted-mcp-ran');
+    await mkdir(join(untrusted, '.github', 'hooks'), { recursive: true });
+    await writeFile(
+      join(untrusted, '.github', 'hooks', 'probe.json'),
+      JSON.stringify({
+        version: 1,
+        hooks: { sessionStart: [{ type: 'command', bash: `touch ${hookMarker}`, timeoutSec: 10 }] },
+      }),
+      'utf8',
+    );
+    await writeFile(
+      join(untrusted, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          planted: { type: 'local', command: 'sh', args: ['-c', `touch ${mcpMarker}; sleep 5`], tools: ['*'] },
+        },
+      }),
+      'utf8',
+    );
 
     ledger = createLedger({
       dir: join(dirname(process.env[CONFIG_PATH_ENV]), LEDGER_DIR),
@@ -240,12 +290,23 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
         users: () => Promise.reject(new Error('not exercised')),
       },
       // As `hooks/index.ts` wires it: a hook names its CLI by the `x-hive-harness` header.
-      fenceFor: (harness) =>
-        harness === undefined
-          ? headlessAdapter('codex').headless.fence
-          : isHarnessId(harness)
-            ? headlessAdapter(harness).headless.fence
-            : null,
+      fenceFor: (harness) => {
+        const fence =
+          harness === undefined
+            ? headlessAdapter('codex').headless.fence
+            : isHarnessId(harness)
+              ? headlessAdapter(harness).headless.fence
+              : null;
+        if (fence === null || fence.read === undefined) return fence;
+        const read = fence.read.bind(fence);
+        return {
+          ...fence,
+          read: (body) => {
+            fenceBodies.push(body);
+            return read(body);
+          },
+        };
+      },
       onPlan: () => {},
       onTicketIntent: () => undefined,
       onPromptName: () => {},
@@ -355,17 +416,24 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       state: agentState,
       isAgent: (id) => AGENTS.includes(id),
       parallelFor: () => 2,
-      wakesOnLedger: (id) => AGENTS.includes(id),
+      // The interval probe's `wake.on` is empty: only its schedule wakes it (HIVE-357).
+      wakesOnLedger: (id) => AGENTS.includes(id) && id !== INTERVAL,
       laneOf: () => undefined,
       laneLive: (name, lane) =>
         runs.liveRuns(name).some((run) => run.kind === 'standing' && (run.lane ?? 'standing') === lane),
       removeLaneDir: () => undefined,
-      schedules: () => new Map(),
+      schedules: () => schedules,
       pushStatus: () => {},
       ledger: { read: () => ledger.read({}), append: (request) => ledger.append(request) },
       now: () => Date.now(),
-      setIntervalFn: (() => 0) as unknown as typeof setInterval,
-      clearIntervalFn: (() => undefined) as unknown as typeof clearInterval,
+      // Captured rather than armed, as `agent-conformance.test.ts` does: a case fires the tick itself.
+      setIntervalFn: ((handler: () => void) => {
+        fireTick = handler;
+        return 0 as unknown as ReturnType<typeof setInterval>;
+      }) as unknown as typeof setInterval,
+      clearIntervalFn: (() => {
+        fireTick = undefined;
+      }) as unknown as typeof clearInterval,
     });
     scheduler.start();
 
@@ -552,6 +620,40 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     expect((await persisted(CP)).sessionUuid).toBe(uuid);
   }, 2 * TURN_MS);
 
+  it('wakes on its own schedule twice, resuming the same session', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    schedules.set(INTERVAL, { wake: { everyMs: 60_000, check: 'always', on: [] } });
+    // Due now: a first tick only seeds `nextRunAt` for an agent never scheduled.
+    agentState.patch(INTERVAL, { nextRunAt: Date.now() - 1 });
+
+    const first = settled(INTERVAL);
+    fireTick?.();
+    await first;
+
+    const after = await persisted(INTERVAL);
+    expect(after.runs).toHaveLength(1);
+    expect(after.runs[0]?.trigger).toBe('interval');
+    expect(after.runs[0]?.harness).toBe('copilot');
+    expect(after.runs[0]?.outcome).not.toBe('failed');
+    const uuid = after.sessionUuid ?? '';
+    expect(uuid).not.toBe('');
+    expect(after.runsSinceRotate).toBe(1);
+
+    agentState.patch(INTERVAL, { nextRunAt: Date.now() - 1 });
+    const second = settled(INTERVAL);
+    fireTick?.();
+    await second;
+
+    const twice = await persisted(INTERVAL);
+    expect(twice.runs).toHaveLength(2);
+    expect(twice.runs[1]?.outcome).not.toBe('failed');
+    expect(lastArgs(INTERVAL)).toEqual(expect.arrayContaining(['--session-id', uuid]));
+    expect(twice.sessionUuid).toBe(uuid);
+    // Both counted: each run's usage file named a request (HIVE-357).
+    expect(twice.runsSinceRotate).toBe(2);
+    schedules.delete(INTERVAL);
+  }, 2 * TURN_MS);
+
   /**
    * Case 4: the fence. Each call kind is denied with one permission ask and no effect, then an
    * `allow-once` answer wakes the agent with that one-shot grant and the call runs.
@@ -588,6 +690,26 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
   it('the fence asks about an MCP call, and allow-once lets it run', async (ctx) => {
     if (skipReason !== undefined) ctx.skip(skipReason);
     await fenceCase(MCP, 'mcp__hive__jira_comment', () => jiraComments.length > 0);
+  }, 2 * TURN_MS);
+
+  it('the fence asks about a subagent’s shell call, and allow-once lets it run', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    await fenceCase(SUB, 'Bash', () => existsSync(subMarker));
+
+    /*
+      The shell call the fence asked about was a subagent's: Copilot names its parent on the body. A
+      `task` body can name the marker too (its prompt), and a model may nest one, so look for the bash.
+    */
+    const sub = fenceBodies.find(
+      (body) =>
+        body['toolName'] === 'bash' &&
+        typeof body['parentAgentId'] === 'string' &&
+        JSON.stringify(body['toolArgs'] ?? {}).includes(subMarker),
+    );
+    expect(
+      sub,
+      JSON.stringify(fenceBodies.map((body) => [body['toolName'], typeof body['parentAgentId']])),
+    ).toBeDefined();
   }, 2 * TURN_MS);
 
   it('a --deny-tool pattern from Settings blocks even a granted call', async (ctx) => {
@@ -671,6 +793,34 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     }
     expect(buildWakeCommand(CP, 'manual')).not.toHaveProperty('problem');
   });
+
+  it('an untrusted workdir loads neither its hooks nor its MCP servers', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    await wake(UNTRUSTED, 'Reply with "ok" and end your turn.');
+
+    expect((await persisted(UNTRUSTED)).runs.at(-1)?.outcome).toBe('done');
+    expect(existsSync(hookMarker)).toBe(false);
+    expect(existsSync(mcpMarker)).toBe(false);
+
+    // The positive control: the same directory trusted for one prompt does load both.
+    const control = spawnSync(
+      'copilot',
+      ['-p', 'Reply with "ok".', '-s', '--no-ask-user', '--disable-builtin-mcps', '--trust-folder'],
+      {
+        cwd: agentWorkdir(UNTRUSTED),
+        encoding: 'utf8',
+        timeout: TURN_MS,
+        env: {
+          ...process.env,
+          COPILOT_HOME: join(dir as string, 'control-home'),
+          GH_TOKEN: undefined,
+          GITHUB_TOKEN: undefined,
+        },
+      },
+    );
+    expect(control.status, control.stderr).toBe(0);
+    expect(existsSync(hookMarker) || existsSync(mcpMarker)).toBe(true);
+  }, 2 * TURN_MS);
 
   it('nothing is written under ~/.copilot', async (ctx) => {
     if (skipReason !== undefined) ctx.skip(skipReason);

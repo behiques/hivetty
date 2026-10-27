@@ -1387,6 +1387,26 @@ describe('a copilot wake (HIVE-343)', () => {
     files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = COPILOT_MD;
   });
 
+  /*
+    Copilot's argv names the id, but a wake that dies at auth has started nothing (HIVE-357), so
+    the rotation stays parked for the close, as a codex start's does.
+  */
+  it('leaves a parked rotation for the close when copilot starts it (HIVE-357)', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 0, runs: [], sessionUuid: 'old', harness: 'copilot',
+      pendingSession: { uuid: 'b2e1-new', handoff: 'I watch #ops.' },
+    };
+    const built = copilot()('slack-watcher', 'schedule');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    // The argv names the id, and the id is the parked one.
+    expect(built.namesConversation).toBe(true);
+    expect(built.sessionUuid).toBe('b2e1-new');
+    expect(built.startsRotation).toBe(true);
+    expect(stored['slack-watcher']?.pendingSession).toEqual({ uuid: 'b2e1-new', handoff: 'I watch #ops.' });
+  });
+
   it('resolves copilot on PATH, with its home and its token on the env only', () => {
     const built = copilot()('slack-watcher', 'manual');
 
