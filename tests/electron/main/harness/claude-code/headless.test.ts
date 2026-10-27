@@ -129,8 +129,8 @@ describe('launchHeadless', () => {
     expect(launchHeadless(spec({ subscriptionAuth: false })).stripEnv).toEqual([]);
   });
 
-  it('runs claude inside a container that names no command', () => {
-    expect(launchHeadless(spec()).defaultContainerCommand).toBe('claude');
+  it('leaves the container binary to the adapter (HIVE-344)', () => {
+    expect(launchHeadless(spec())).not.toHaveProperty('defaultContainerCommand');
   });
 });
 

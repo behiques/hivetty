@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
 import { copilotAdapter } from '../../../../electron/main/harness/copilot';
-import type { HeadlessSpec } from '../../../../electron/main/harness/port';
+import type { HarnessAdapter, HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '../../../../electron/shared/ledger-tools';
@@ -52,7 +52,7 @@ const HIVE_SERVER = { command: '/App', args: ['/host.js'], env: { ELECTRON_RUN_A
 
 const build = (over: Partial<Parameters<typeof wakeCommand>[0]> = {}) =>
   wakeCommand({
-    claudePath: '/opt/bin/claude',
+    binaryPath: '/opt/bin/claude',
     adapter: claudeCodeAdapter,
     def: def(),
     newUuid: '11111111-2222-3333-4444-555555555555',
@@ -279,14 +279,26 @@ describe('wakeCommand', () => {
    * its own: MCP tool schemas are deferred, so the model must call the
    * built-in `ToolSearch` to load `mcp__hive__ledger_read`'s schema before it
    * can call the tool itself. No `def.tools` ever names a built-in, so
-   * without an unconditional grant here the fence denied the very first thing
+   * without the Claude fence's own `grants` (HIVE-344) the fence denied the very first thing
    * every agent's preamble tells it to do, and no agent could ever read its
    * inbox. Pinned here so the next reader who wants to "tidy" this list finds
    * out why before removing it.
    */
-  it('grants ToolSearch unconditionally, for a definition that never lists it', () => {
-    const { env } = build({ def: def({ tools: ['Read'] }) });
+  it("grants ToolSearch on Claude Code, through its fence's own grants, for a definition that never lists it", () => {
+    const { env } = build({ adapter: claudeCodeAdapter, def: def({ tools: ['Read'] }) });
     expect(JSON.parse(env['HIVE_GRANTS']!)).toContain('ToolSearch');
+  });
+
+  it('grants ToolSearch where the adapter asks for it, and only there (HIVE-344)', () => {
+    const grants = (adapter: HarnessAdapter) =>
+      JSON.parse(
+        build({ adapter, def: def({ tools: ['Read'] }), paths: { ...paths, cliHome: '/h/cli/copilot' } }).env[
+          'HIVE_GRANTS'
+        ]!,
+      ) as string[];
+    expect(grants(claudeCodeAdapter)).toContain('ToolSearch');
+    expect(grants(copilotAdapter)).toContain('ToolSearch');
+    expect(grants(codexAdapter)).not.toContain('ToolSearch');
   });
 
   it('carries a last-turn prompt onto the command line', () => {
@@ -843,7 +855,7 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
   it('lists exactly what HIVE_GRANTS carries', () => {
     const command = build({ grants: ['literal:Bash:git push'] });
 
-    expect(fencedRules(def(), ['literal:Bash:git push'])).toEqual(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
+    expect(fencedRules(def(), ['literal:Bash:git push'], claudeCodeAdapter.headless.fence.grants)).toEqual(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
   });
 
   it("hands another CLI its own card's defaults (HIVE-342, replacing HIVE-341's drop)", () => {

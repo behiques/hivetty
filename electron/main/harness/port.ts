@@ -79,6 +79,8 @@ export interface HarnessInstalled {
   pluginNames(): Promise<string[]>;
   /** `enabledPlugins` overrides that keep the `disabled` plugins out of a session; `{}` with no registry. */
   sessionOverrides(disabled: readonly string[]): Promise<Record<string, false>>;
+  /** Where `skillNames` looks, for a message naming it; '' when nowhere (HIVE-344). */
+  readonly skillPlaces: string;
 }
 
 /** One file's edits in a session, as the changed-files list counts them (HIVE-201). */
@@ -324,6 +326,8 @@ export interface LaunchPlan {
 /** Agent runs: no tty, one turn per process (HIVE-337). */
 export interface HeadlessHarness {
   launch(spec: HeadlessSpec): HeadlessPlan;
+  /** The binary inside a container whose block names none. */
+  containerCommand: string;
   /**
    * A fresh reader for one run's stdout (HIVE-338); `usageFile` is the plan's (HIVE-343).
    * `sessionUuid` is the argv's id, for a reader that names it only on proof (HIVE-357).
@@ -344,8 +348,13 @@ export interface PermissionFence {
   translate?(tool: string, input: Record<string, unknown>, cwd: string): FenceCall[];
   /** The CLI's PreToolUse body as one call (HIVE-343). Absent: Claude's shape (`tool_name`, `tool_input`). */
   read?(body: Record<string, unknown>): { tool: string; input: Record<string, unknown>; cwd: string } | null;
-  /** The CLI's answer (HIVE-343). Absent: Claude's `hookSpecificOutput` shape. */
+  /** The CLI's answer (HIVE-343). Absent: the CLI is not hook-fenced, and `/fence` refuses it. */
   reply?(reason?: string): Record<string, unknown>;
+  /**
+   * Built-ins every run on this CLI needs, granted on each wake whatever the definition says, in
+   * `decide`'s vocabulary (HIVE-344). Absent: none.
+   */
+  grants?: readonly string[];
 }
 
 /** One call as `decide` reads it. */
@@ -394,8 +403,6 @@ export interface HeadlessPlan {
   stripEnv: readonly string[];
   /** Prefixes the harness removes, for a family whose next member it cannot name yet (HIVE-357). */
   stripPrefixes?: readonly string[];
-  /** The binary inside a container whose block names none. */
-  defaultContainerCommand: string;
   /** What `pkill -f` matches inside a container to stop this run. */
   stopPattern: string;
   /**

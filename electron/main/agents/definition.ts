@@ -59,19 +59,21 @@ interface ParseContext {
    * Every skill name this machine can offer — Hive, personal, and plugin.
    *
    * What `skills:` is checked against. As wide as the runtime, because an agent
-   * is a `claude -p` process that loads all of these whether or not the file
-   * names them.
+   * runs as the harness's process, which loads all of these whether or not the
+   * file names them.
    */
   skillNames: readonly string[];
+  /** Where `skillNames` came from beyond `~/.hivetty/skills`, as the harness words it (HIVE-344). */
+  skillPlaces?: string;
   /**
    * The subset HiveTTY itself manages, for the *name* clash alone.
    *
    * Deliberately narrower than `skillNames`, and the two must not be merged.
    * An agent may not take the name of a skill HiveTTY manages because those
    * two share a namespace — but checking the wide set instead reserved every
-   * name in the user's own `~/.claude/skills`, so a machine with a personal
-   * `graphify` skill could not have an agent called `graphify`, refused on
-   * account of a folder HiveTTY neither manages nor mentions.
+   * name in the harness's own skills, so a machine with a personal `graphify`
+   * skill could not have an agent called `graphify`, refused on account of a
+   * folder HiveTTY neither manages nor mentions.
    */
   hiveSkillNames: readonly string[];
   integrations: readonly string[];
@@ -322,9 +324,9 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
     /*
       Named against everything on the machine, not only `~/.hivetty/skills`.
 
-      An agent runs as a `claude -p` process on this machine, which loads the
-      user's own `~/.claude/skills` and their installed plugins whether or not
-      this file names them. Refusing `jira-writer:jira-writer` here therefore
+      An agent runs as the harness's process on this machine, which loads the
+      harness's own skills and the user's plugins whether or not this file
+      names them. Refusing `jira-writer:jira-writer` here therefore
       refused a skill the agent could reach anyway — a validator holding an
       opinion the runtime does not share, and on a machine with an empty
       `~/.hivetty/skills` (the default) it refused *every* name.
@@ -335,7 +337,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
     */
     problems.push({
       field: 'skills',
-      reason: `No skill called ${skill} — looked in ~/.hivetty/skills, ~/.claude/skills and your installed plugins.`,
+      reason: `No skill called ${skill} — looked in ~/.hivetty/skills${ctx.skillPlaces ? `, ${ctx.skillPlaces}` : ''}.`,
     });
   }
 

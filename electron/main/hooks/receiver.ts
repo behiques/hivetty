@@ -1297,18 +1297,6 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     return reply === null ? 202 : { status: 200, json: reply };
   }
 
-  /** Codex's `PreToolUse` reply: `{}` lets the call run; a deny carries the reason to the model. */
-  const fenceReply = (reason?: string) =>
-    reason === undefined
-      ? {}
-      : {
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            permissionDecision: 'deny',
-            permissionDecisionReason: reason,
-          },
-        };
-
   /**
    * A hook-based fence (HIVE-342). The CLI's call is translated by its adapter, then each translated
    * call goes through `approve`, in order: `decide` inside it allows, denies without posting, or
@@ -1330,9 +1318,10 @@ export function createReceiver(options: ReceiverOptions): Receiver {
 
     const harness = headers[HOOK_HEADER_HARNESS];
     const fence = fenceFor?.(typeof harness === 'string' ? harness : undefined) ?? null;
-    // A header naming a CLI with no fence, or not one CLI: nothing here can read or answer it.
-    if (harness !== undefined && fence === null) return 400;
-    const answer = (reason?: string) => fence?.reply?.(reason) ?? fenceReply(reason);
+    // No fence for the header, or one that answers through `approve` alone: nothing here can reply.
+    if (fence?.reply === undefined) return 400;
+    const { reply } = fence;
+    const answer = (reason?: string) => reply(reason);
 
     if (truncated) {
       return {
@@ -1352,7 +1341,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     const record = (value: unknown): value is Record<string, unknown> =>
       typeof value === 'object' && value !== null && !Array.isArray(value);
     if (!record(payload)) return { status: 400, json: { reason: 'body must be a JSON object' } };
-    const call = fence?.read
+    const call = fence.read
       ? fence.read(payload)
       : typeof payload['tool_name'] === 'string'
         ? {
@@ -1368,7 +1357,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
 
     const handlers = handlersFor(headers);
     // An empty translation would allow without asking anything: fall back to the raw call.
-    const translated = fence?.translate?.(tool, input, cwd) ?? [];
+    const translated = fence.translate?.(tool, input, cwd) ?? [];
     for (const step of translated.length > 0 ? translated : [{ tool, input }]) {
       const result = await handlers.callTool('approve', { tool_name: step.tool, input: step.input });
       const first = result.content[0];

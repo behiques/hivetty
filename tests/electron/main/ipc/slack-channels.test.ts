@@ -24,7 +24,7 @@ import type {
  *
  * - each channel calls the right function;
  * - the `claude` it is handed is `getConfig().claudeCommand` **through
- *   `resolveClaude`**, the same resolver every agent wake goes through — these
+ *   `resolveCommand`**, the same resolver every agent wake goes through — these
  *   four were the only callers in the app that ran the bare configured name;
  * - each verb gets the right runner — the synchronous `runCommand` for the one
  *   local file edit, the async one for the three that wait on a browser, a
@@ -121,7 +121,7 @@ const teardownOrder: string[] = [];
  * hard-coded string the brief warned off would fail loudly instead of passing
  * by coincidence.
  *
- * `process.execPath` because the handlers now put it through `resolveClaude`,
+ * `process.execPath` because the handlers now put it through `resolveCommand`,
  * which asks the disk: a made-up path is refused, with a sentence, and that
  * refusal is its own test below. This is the node binary running the suite —
  * absolute, executable, and different on every machine, which is exactly what
@@ -546,7 +546,7 @@ describe('slack channels (HIVE-123)', () => {
   /**
    * `gh.ts` wrote the rule and these four were the only callers skipping it:
    * "the resolved absolute path is what runs, never the bare name". Every agent
-   * wake goes through `resolveClaude`; a `claudeCommand` that is a shell
+   * wake goes through `resolveCommand`; a `claudeCommand` that is a shell
    * function or that carries arguments is unreachable from a child spawned
    * without a shell, and the resolver's refusal *says which* — where the bare
    * name gave the pane a raw `spawn ENOENT`.

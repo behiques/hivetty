@@ -23,6 +23,8 @@ export const copilotFence: PermissionFence = {
   translate: translateCopilotCall,
   read: readCopilotFence,
   reply: copilotFenceReply,
+  // Its `tool_search_tool` translates to `ToolSearch` (live suite, HIVE-343), deferred schemas as on Claude.
+  grants: ['ToolSearch'],
 };
 
 /**
@@ -64,6 +66,7 @@ export const copilotAdapter: HarnessAdapter = {
     skillNames: () => Promise.resolve([]),
     pluginNames: () => Promise.resolve([]),
     sessionOverrides: () => Promise.resolve({}),
+    skillPlaces: '',
   },
-  headless: { launch: launchCopilotHeadless, reader: readCopilotHeadless, fence: copilotFence },
+  headless: { launch: launchCopilotHeadless, reader: readCopilotHeadless, fence: copilotFence, containerCommand: 'copilot' },
 };

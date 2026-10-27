@@ -8,6 +8,7 @@ import { decide } from '@shared/permission-rules';
 import {
   CODEX_RULE_TABLE,
   codexFence,
+  codexFenceReply,
   translateCodexCall,
 } from '../../../../../electron/main/harness/codex/fence';
 import type { FenceCall } from '../../../../../electron/main/harness/port';
@@ -250,5 +251,13 @@ describe('codexFence', () => {
     expect(codexFence.express([])).toEqual({ ok: true });
     expect(codexFence.express(['Read', 'Bash(git *)', '*'])).toEqual({ ok: true });
     expect(codexFence.translate).toBe(translateCodexCall);
+  });
+
+  it("answers Codex's PreToolUse shape (HIVE-344, byte-identical to the receiver's old default)", () => {
+    expect(codexFence.reply).toBe(codexFenceReply);
+    expect(codexFenceReply()).toEqual({});
+    expect(codexFenceReply('no')).toEqual({
+      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'no' },
+    });
   });
 });

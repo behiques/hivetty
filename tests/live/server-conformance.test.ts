@@ -1496,7 +1496,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       started at the top of the file and collected at the bottom rather than
       inside the case that asserts on it. Its own app, its own config and its
       own device: `slack:test` needs a `claudeCommand` that resolves to a
-      single executable (`resolveClaude`), and the HIVE-143 block's
+      single executable (`resolveCommand`), and the HIVE-143 block's
       `stubClaudeCommand` is a shell fragment that deliberately does not.
     */
     const dir = mkdtempSync(join(tmpdir(), 'hive-live-server-deadline-'));

@@ -27,12 +27,21 @@ describe('codexAdapter', () => {
     });
   });
 
+  it('reads no skills of its own (HIVE-344)', () => {
+    expect(codexAdapter.installed.skillPlaces).toBe('');
+  });
+
   it('wires the headless members', () => {
     expect(codexAdapter.headless).toEqual({
       launch: launchCodexHeadless,
       reader: readCodexHeadless,
       fence: codexFence,
+      containerCommand: 'codex',
     });
+  });
+
+  it('grants no built-in of its own (HIVE-344)', () => {
+    expect(codexFence.grants).toBeUndefined();
   });
 
   it('refuses every interactive member (HIVE-279)', () => {

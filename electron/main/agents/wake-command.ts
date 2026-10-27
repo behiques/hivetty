@@ -45,7 +45,7 @@ import type { HarnessAdapter } from '../harness/port';
 import { headlessAdapter } from '../harness/registry';
 import { agentMcpConfig, type McpServerSpec } from '../mcp/agent-config';
 
-import { resolveClaude } from './claude-path';
+import { resolveCommand } from './command-path';
 import { parseAgent } from './definition';
 import { AGENT_PREAMBLE } from './preamble';
 import { resolveHarness, type HarnessGate } from './resolve-harness';
@@ -148,10 +148,10 @@ export interface WakeCommandDeps {
   pendingGrants: (name: string, lane: string) => string[];
   fs?: WakeFs;
   /**
-   * How `resolveClaude` decides a candidate is runnable.
+   * How `resolveCommand` decides a candidate is runnable.
    *
    * Injected for the reason {@link WakeFs} is: without it, every test in this
-   * module would depend on a `claude` binary being installed at whatever path
+   * module would depend on a CLI binary being installed at whatever path
    * the fixture invented, and would then be asserting on the developer's
    * machine rather than on this function.
    */
@@ -235,7 +235,7 @@ const MCP_NOT_READY =
  * that question belongs is the editor, where the author is still present and
  * `readAvailableSkillNames` has scanned the machine. At wake time it answers a
  * different and worse question: a skill folder renamed, a plugin uninstalled,
- * or a `~/.claude` that has simply not been scanned yet would make this refuse
+ * or a harness's skills folder not yet scanned would make this refuse
  * to wake the agent **at all** — where the honest consequence of a missing
  * skill is an agent that runs without it. The same goes for the name-clash rule
  * `hiveSkillNames` drives: it stops a *new* agent taking a skill's name, and
@@ -325,27 +325,31 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     /*
       A container agent's binary is inside the container (HIVE-137), so the
       host's `claudeCommand` is not consulted at all: a machine with no
-      `claude` on it, or one whose command carries arguments, can still wake
+      host binary, or one whose command carries arguments, can still wake
       an agent whose image has one. `wakeCommand` puts `container.command`
-      after the container's name; `claudePath` is what a *host* wake spawns.
+      after the container's name; `binaryPath` is what a *host* wake spawns.
       On the host each CLI resolves its own: Claude through `claudeCommand`, Codex as `codex` on
       PATH until HIVE-332 adds its setting (HIVE-342).
     */
     const binary = (id: HarnessId) => {
-      if (def.container !== undefined) return { path: def.container.command ?? 'claude' };
+      const cli = id === 'claude-code' ? 'claude' : id;
+
+      if (def.container !== undefined) {
+        return { path: def.container.command ?? (deps.adapter ?? headlessAdapter)(id)?.headless.containerCommand ?? cli };
+      }
       if (id === 'copilot' && deps.cliToken('copilot') === null) {
         return { problem: 'no Copilot token: add one in Settings › CLIs' };
       }
       const command = id === 'claude-code' ? deps.claudeCommand() : id;
       return deps.isExecutable === undefined
-        ? resolveClaude(command, deps.env()['PATH'])
-        : resolveClaude(command, deps.env()['PATH'], deps.isExecutable);
+        ? resolveCommand(command, deps.env()['PATH'], undefined, cli)
+        : resolveCommand(command, deps.env()['PATH'], deps.isExecutable, cli);
     };
 
     /*
       What this story does not do for an agent, refused rather than half-done
       (HIVE-137, recorded as a deviation). `rewrite` needs a per-run set
-      written before `claude` starts and carrying the run id, which only the
+      written before the CLI starts and carrying the run id, which only the
       synchronous tracker knows; an integration's MCP server is a binary on
       this machine, unreachable from inside a container. Both are said plainly
       at the one moment the author is around to act on it.
@@ -522,7 +526,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
 
     try {
       command = wakeCommand({
-        claudePath: resolved.path,
+        binaryPath: resolved.path,
         adapter,
         defaults: deps.gate?.defaults(adapter.id) ?? {},
         ...(switched ? { switchedFrom: recorded } : {}),
