@@ -37,6 +37,8 @@ interface WakePaths {
   mcpConfig: string;
   systemPrompt: string;
   workdir: string;
+  /** The CLI's app-owned home (HIVE-343). */
+  cliHome: string;
 }
 
 interface WakeEnv {
@@ -44,6 +46,8 @@ interface WakeEnv {
   /** `HIVE_SESSION_ID`, `HIVE_HOOK_TOKEN`, `HIVE_RECEIVER_URL`. */
   hook: Record<string, string>;
   subscriptionAuth: boolean;
+  /** A CLI's own token, by its env name (HIVE-343): written after the strip, never on the argv. */
+  secrets?: Record<string, string>;
 }
 
 interface WakeInput {
@@ -53,8 +57,8 @@ interface WakeInput {
   /** The CLI the lane's last conversation ran on, when this wake starts fresh on another (HIVE-340). */
   switchedFrom?: HarnessId;
   def: AgentDefinition;
-  /** Settings › CLIs' model, effort and sandbox for this CLI (HIVE-341, HIVE-342). */
-  defaults?: Pick<CliAgents, 'model' | 'effort' | 'sandbox'>;
+  /** Settings › CLIs' model, effort, sandbox and deny for this CLI (HIVE-341, HIVE-342, HIVE-343). */
+  defaults?: Pick<CliAgents, 'model' | 'effort' | 'sandbox' | 'deny'>;
   /** Absent on the very first run, which mints one instead. */
   sessionUuid?: string;
   newUuid: string;
@@ -149,6 +153,10 @@ export interface WakeCommand {
    * (HIVE-342). False for a first Codex wake, whose id only `thread.started` names.
    */
   namesConversation: boolean;
+  /** The plan's usage file, read by the reader's `finish` (HIVE-343). */
+  usageFile?: string;
+  /** The plan's files, written by the core before the spawn (HIVE-343). */
+  files?: readonly { path: string; text: string }[];
 }
 
 export function wakePrompt(
@@ -385,6 +393,9 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     subscriptionAuth: env.subscriptionAuth,
     instructions: input.instructions,
     hiveServer: input.hiveServer,
+    stateDir: paths.cliHome,
+    workdir: paths.workdir,
+    ...(input.defaults?.deny === undefined ? {} : { deny: input.defaults.deny }),
   });
   const args = [...plan.args];
 
@@ -416,6 +427,9 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   // What the harness says must not reach the CLI (HIVE-79's subscription auth).
   for (const key of plan.stripEnv) delete merged[key];
 
+  // After the strip on purpose: the strip removes the inherited tokens, and this one is ours.
+  for (const [key, value] of Object.entries(env.secrets ?? {})) merged[key] = value;
+
   /*
     the standing Hive grants (`HIVE_STANDING_GRANTS`) is first and unconditional: an agent that cannot call
     `ledger_read` cannot read the inbox that would tell it why it was woken,
@@ -436,6 +450,11 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     an agent can do, only what it can find out it could ask to do.
   */
   merged[HOOK_ENV_GRANTS] = JSON.stringify(fenced);
+
+  const planFiles = {
+    ...(plan.usageFile === undefined ? {} : { usageFile: plan.usageFile }),
+    ...(plan.files === undefined ? {} : { files: plan.files }),
+  };
 
   if (input.container !== undefined) {
     const { config, hostAlias } = input.container;
@@ -470,6 +489,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
       },
       cwd: paths.workdir,
       namesConversation: plan.namesConversation,
+      ...planFiles,
       container: {
         runtime: config.runtime,
         name: config.name,
@@ -487,5 +507,6 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     env: { ...merged, ...env.hook, HIVE_AGENT: '1', ...plan.addEnv },
     cwd: paths.workdir,
     namesConversation: plan.namesConversation,
+    ...planFiles,
   };
 }

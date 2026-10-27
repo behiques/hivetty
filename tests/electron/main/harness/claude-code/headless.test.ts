@@ -23,6 +23,8 @@ const spec = (over: Partial<HeadlessSpec> = {}): HeadlessSpec => ({
   subscriptionAuth: true,
   instructions: 'p',
   hiveServer: { command: '/e', args: ['/h.js'], env: {} },
+  stateDir: '/h/cli',
+  workdir: '/w',
   ...over,
 });
 const flag = (args: readonly string[], name: string) => args[args.indexOf(name) + 1];
@@ -30,6 +32,12 @@ const flag = (args: readonly string[], name: string) => args[args.indexOf(name) 
 describe('launchHeadless', () => {
   it('is the adapter member', () => {
     expect(claudeCodeAdapter.headless.launch).toBe(launchHeadless);
+  });
+
+  it('ignores the CLI home and the workdir (HIVE-343)', () => {
+    expect(launchHeadless(spec({ stateDir: '/other', workdir: '/x' })).args).toEqual(
+      launchHeadless(spec()).args,
+    );
   });
 
   it('starts with --session-id and stops on that id', () => {

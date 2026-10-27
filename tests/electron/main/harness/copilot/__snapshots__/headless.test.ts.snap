@@ -1,0 +1,31 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`launchCopilotHeadless > spells a first wake 1`] = `
+[
+  "-p",
+  "You were woken.",
+  "-s",
+  "--no-ask-user",
+  "--disable-builtin-mcps",
+  "--session-id",
+  "11111111-2222-4333-8444-555555555551",
+  "--model",
+  "claude-sonnet-5.5",
+  "--reasoning-effort",
+  "high",
+  "--allow-tool",
+  "shell",
+  "--allow-tool",
+  "write",
+  "--allow-tool",
+  "hive",
+  "--deny-tool",
+  "shell(rm:*)",
+  "--additional-mcp-config",
+  "{"mcpServers":{"hive":{"type":"local","command":"/Apps/HiveTTY","args":["/u/mcp-host.js"],"env":{"ELECTRON_RUN_AS_NODE":"1","HIVE_RECEIVER_URL":"\${HIVE_RECEIVER_URL}","HIVE_SESSION_ID":"\${HIVE_SESSION_ID}","HIVE_HOOK_TOKEN":"\${HIVE_HOOK_TOKEN}","HIVE_RUN_ID":"\${HIVE_RUN_ID}","HIVE_RUN_TOKEN":"\${HIVE_RUN_TOKEN}","HIVE_GRANTS":"\${HIVE_GRANTS}"},"tools":["*"]}}}",
+  "--secret-env-vars",
+  "COPILOT_GITHUB_TOKEN",
+  "--usage-output-file",
+  "/h/cli/copilot/usage/11111111-2222-4333-8444-555555555551.json",
+]
+`;

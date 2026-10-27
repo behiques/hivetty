@@ -32,7 +32,9 @@ import {
   parseSetRemoteRequest,
   parseSetServerRequest,
   parseSetAgentsDefaultCliRequest,
+  parseClearCliTokenRequest,
   parseSetCliAgentsRequest,
+  parseSetCliTokenRequest,
   parseSetSlackRequest,
   parseSetSlackTokensRequest,
   parseSpawnRequest,
@@ -1986,11 +1988,41 @@ describe('hasControlCharacters', () => {
 describe('parseSetAgentsDefaultCliRequest (HIVE-342)', () => {
   it('accepts a known CLI, and null as a clear', () => {
     expect(parseSetAgentsDefaultCliRequest({ cli: 'codex' })).toEqual({ cli: 'codex' });
+    expect(parseSetAgentsDefaultCliRequest({ cli: 'copilot' })).toEqual({ cli: 'copilot' });
     expect(parseSetAgentsDefaultCliRequest({ cli: null })).toEqual({ cli: null });
   });
 
-  it.each([[{ cli: 'copilot' }], [{}], [{ cli: 'codex', extra: 1 }]])('refuses %j', (input) => {
+  it.each([[{ cli: 'gemini' }], [{}], [{ cli: 'codex', extra: 1 }]])('refuses %j', (input) => {
     expect(() => parseSetAgentsDefaultCliRequest(input)).toThrow();
+  });
+});
+
+describe('the cli: token requests (HIVE-343)', () => {
+  it('takes a copilot token, trimmed', () => {
+    expect(parseSetCliTokenRequest({ cli: 'copilot', token: 'gho_x' })).toEqual({
+      cli: 'copilot',
+      token: 'gho_x',
+    });
+    expect(parseSetCliTokenRequest({ cli: 'copilot', token: ' gho_x\n' })).toEqual({
+      cli: 'copilot',
+      token: 'gho_x',
+    });
+    expect(parseClearCliTokenRequest({ cli: 'copilot' })).toEqual({ cli: 'copilot' });
+  });
+
+  it.each([
+    [{ cli: 'codex', token: 'x' }],
+    [{ cli: 'copilot', token: '' }],
+    [{ cli: 'copilot', token: 'a b' }],
+    [{ cli: 'copilot', token: 7 }],
+    [{ cli: 'copilot', token: 'x'.repeat(513) }],
+    [{ cli: 'copilot', token: 'x', extra: 1 }],
+  ])('refuses %j', (input) => {
+    expect(() => parseSetCliTokenRequest(input)).toThrow();
+  });
+
+  it('refuses to clear a CLI that holds no token', () => {
+    expect(() => parseClearCliTokenRequest({ cli: 'codex' })).toThrow(/clearCliToken.cli/);
   });
 });
 
@@ -2005,6 +2037,29 @@ describe('parseSetCliAgentsRequest (HIVE-341)', () => {
       model: 'haiku',
       effort: null,
     });
+  });
+
+  it('takes deny patterns for copilot only, and null as a clear (HIVE-343)', () => {
+    expect(parseSetCliAgentsRequest({ cli: 'copilot', deny: ['shell(rm:*)'] })).toEqual({
+      cli: 'copilot',
+      deny: ['shell(rm:*)'],
+    });
+    expect(parseSetCliAgentsRequest({ cli: 'copilot', deny: null })).toEqual({
+      cli: 'copilot',
+      deny: null,
+    });
+    expect(() => parseSetCliAgentsRequest({ cli: 'copilot', deny: ['bad pattern'] })).toThrow(
+      'setCliAgents.deny[0]: expected kind(argument)',
+    );
+    expect(() => parseSetCliAgentsRequest({ cli: 'copilot', deny: 'shell(rm)' })).toThrow(
+      'setCliAgents.deny: expected a list',
+    );
+    expect(() =>
+      parseSetCliAgentsRequest({ cli: 'copilot', deny: Array.from({ length: 51 }, () => 'shell') }),
+    ).toThrow('setCliAgents.deny: at most 50 patterns');
+    expect(() => parseSetCliAgentsRequest({ cli: 'codex', deny: [] })).toThrow(
+      'setCliAgents.deny: only copilot takes deny patterns',
+    );
   });
 
   it('takes a sandbox for codex only, and null as a clear (HIVE-342)', () => {
@@ -2029,10 +2084,15 @@ describe('parseSetCliAgentsRequest (HIVE-341)', () => {
       cli: 'codex',
       model: 'gpt-6-luna',
     });
+    expect(parseSetCliAgentsRequest({ cli: 'copilot', model: 'claude-sonnet-5.5' })).toEqual({
+      cli: 'copilot',
+      model: 'claude-sonnet-5.5',
+    });
   });
 
   it.each([
-    [{ cli: 'copilot', enabled: true }, /cli/],
+    [{ cli: 'gemini', enabled: true }, /cli/],
+    [{ cli: 'copilot', model: 'opus' }, /model/],
     [{ cli: 'codex', model: 'opus' }, /model/],
     [{ cli: 'claude-code', model: 'gpt-5' }, /model/],
     [{ cli: 'claude-code', effort: 'extreme' }, /effort/],

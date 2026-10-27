@@ -12,8 +12,12 @@ describe('isHarnessId (HIVE-340)', () => {
     expect(isHarnessId('codex')).toBe(true);
   });
 
+  it('knows copilot (HIVE-343)', () => {
+    expect(isHarnessId('copilot')).toBe(true);
+  });
+
   it('refuses a CLI with no adapter yet, and a near-miss spelling', () => {
-    expect(isHarnessId('copilot')).toBe(false);
+    expect(isHarnessId('gemini')).toBe(false);
     expect(isHarnessId('claude')).toBe(false);
   });
 });

@@ -32,6 +32,8 @@ const spec = (over: Partial<HeadlessSpec> = {}): HeadlessSpec => ({
     args: ['/u/hive/mcp-host.js'],
     env: { ELECTRON_RUN_AS_NODE: '1' },
   },
+  stateDir: '/h/cli',
+  workdir: '/w',
   ...over,
 });
 

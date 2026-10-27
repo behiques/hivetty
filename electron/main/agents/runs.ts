@@ -105,6 +105,12 @@ const slackStatus = (
 /** How long 'exit' waits for 'close' before finalizing anyway. */
 const FLUSH_WINDOW_MS = 500;
 
+/** How much of a run's stderr its reader's `finish` sees (HIVE-343): enough for a CLI's last error. */
+const STDERR_TAIL = 4096;
+
+/** How long a closed run waits on its reader's `finish` before it settles without it (HIVE-343). */
+export const FINISH_WINDOW_MS = 5_000;
+
 export type RunStart =
   | { started: true; run: string; kind: RunKind }
   | {
@@ -349,6 +355,13 @@ interface LiveRun {
   stop: ((signal: 'TERM' | 'KILL') => void) | null;
   /** This run's stdout, read by the harness that launched it (HIVE-338). */
   reader: RunEventReader;
+  /** The run's last {@link STDERR_TAIL} characters of stderr, for the reader's `finish` (HIVE-343). */
+  stderrTail: string;
+  /**
+   * Set while a closed run waits on its reader's `finish` (HIVE-343): settles it now, once. The run
+   * stays in `running` until then, so its lane is still held and `closeAll` can settle it in step.
+   */
+  settleNow?: () => void;
   /** The CLI that launched this run, and so reads its output (HIVE-340). */
   harness: HarnessId;
   fold: EventFold;
@@ -879,9 +892,6 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     clearTimers(live);
     // The run's grants die with it (HIVE-137); a later run registers its own.
     deps.grants?.delete(live.run);
-    // This run only — a neighbour under the same name is still in flight, and
-    // `finalizeRun` reads what is left to decide the agent's status (HIVE-128).
-    forget(name, live);
 
     /*
       Read the reader's unterminated tail before reading the end.
@@ -897,6 +907,52 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       set, so the stdout handler cannot race this.
     */
     foldInto(name, live, live.reader.flush());
+
+    const finish = live.reader.finish;
+
+    /*
+      A run the tracker ended (killed, stalled, quit, reset) is `failed` whatever its end says, and
+      `closeAll`'s callers flush state the moment it returns: it settles now. Its `finish` still runs,
+      unread, so a usage file it left is deleted rather than reported by a later wake.
+    */
+    if (finish === undefined || live.reason !== null) {
+      if (finish !== undefined) void finish.call(live.reader, code, live.stderrTail).catch(() => undefined);
+      settle(name, live, code);
+      return;
+    }
+
+    /*
+      After the exit (HIVE-343): Copilot's end and usage exist only once it has exited. `closed` is
+      already set, so no stdout can race this. The run settles once, on whichever comes first: the
+      reader's answer, its rejection, or {@link FINISH_WINDOW_MS}. Until then it holds its lane.
+    */
+    let settled = false;
+    const settleNow = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      delete live.settleNow;
+      settle(name, live, code);
+    };
+    const timer = setTimeout(settleNow, FINISH_WINDOW_MS);
+    timer.unref?.();
+    live.settleNow = settleNow;
+
+    void finish
+      .call(live.reader, code, live.stderrTail)
+      .then((events) => {
+        if (!settled) foldInto(name, live, events);
+      })
+      .catch(() => undefined)
+      .finally(settleNow)
+      .catch(() => undefined);
+  };
+
+  /** The outcome, read off the folded end, and the run finalized with it. */
+  const settle = (name: string, live: LiveRun, code: number | null) => {
+    // This run only — a neighbour under the same name is still in flight, and
+    // `finalizeRun` reads what is left to decide the agent's status (HIVE-128).
+    forget(name, live);
 
     const end = live.fold.end;
     const asking = deps.openAsksFor(name, live.run);
@@ -1242,7 +1298,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
                 }
               },
         harness: command.harness ?? 'claude-code',
-        reader: headlessAdapter(command.harness ?? 'claude-code').headless.reader(),
+        reader: headlessAdapter(command.harness ?? 'claude-code').headless.reader(command.usageFile),
+        stderrTail: '',
         fold: NO_EVENTS,
         closed: false,
         reason: null,
@@ -1301,6 +1358,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
       child.stderr.on('data', (chunk: Buffer) => {
         if (started.closed) return;
+
+        started.stderrTail = (started.stderrTail + chunk.toString('utf8')).slice(-STDERR_TAIL);
 
         const text = chunk.toString('utf8').trim();
 
@@ -1383,6 +1442,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       // would otherwise be iterating.
       for (const [name, runs] of [...running]) {
         for (const live of [...runs]) {
+          // A run already closed and waiting on its reader's `finish` settles now (HIVE-343).
+          live.settleNow?.();
           escalate(live, reason);
           close(name, live, null);
         }

@@ -1,5 +1,7 @@
 import {
   CLI_VOCAB,
+  COPILOT_DENY_MAX,
+  COPILOT_DENY_PATTERN,
   HEADLESS_SANDBOXES,
   type CliAgents,
   type HeadlessSandbox,
@@ -1321,7 +1323,7 @@ function optionalSlack(
 }
 
 const CLI_KEYS = ['agents'] as const;
-const CLI_AGENT_KEYS = ['enabled', 'model', 'effort', 'sandbox'] as const;
+const CLI_AGENT_KEYS = ['enabled', 'model', 'effort', 'sandbox', 'deny'] as const;
 
 /**
  * The `clis` block (HIVE-341). Shaped like {@link optionalSlack}, one level deeper: a bad field
@@ -1396,6 +1398,24 @@ function optionalClis(
         errors.push(
           `${agentsAt}.sandbox: expected one of ${HEADLESS_SANDBOXES.join(', ')} — ignored`,
         );
+      }
+    }
+    if (raw.deny !== undefined) {
+      if (id !== 'copilot') errors.push(`${agentsAt}.deny: only copilot takes deny patterns — ignored`);
+      else if (!Array.isArray(raw.deny)) {
+        errors.push(`${agentsAt}.deny: expected a list of patterns — ignored`);
+      } else {
+        agents.deny = (raw.deny as unknown[])
+          .slice(0, COPILOT_DENY_MAX)
+          .filter((pattern, index): pattern is string => {
+            const ok = typeof pattern === 'string' && COPILOT_DENY_PATTERN.test(pattern);
+            if (!ok) {
+              errors.push(
+                `${agentsAt}.deny[${String(index)}]: expected kind(argument), like shell(git push) — ignored`,
+              );
+            }
+            return ok;
+          });
       }
     }
 

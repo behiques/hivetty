@@ -6,14 +6,9 @@ import {
   HOOK_ENV_RUN_TOKEN,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
-  FENCE_PATH,
-  HOOK_HEADER_RUN,
-  HOOK_HEADER_RUN_TOKEN,
-  HOOK_HEADER_SESSION,
-  HOOK_HEADER_TOKEN,
-  HOOK_PATH,
 } from '@shared/hook-contract';
 
+import { fenceCommand as sharedFenceCommand, hookCommand } from '../hook-commands';
 import type { HeadlessPlan, HeadlessSpec } from '../port';
 
 /**
@@ -69,14 +64,6 @@ const tomlTable = (record: Record<string, string>): string =>
     .map(([key, value]) => `${toml(key)}=${toml(value)}`)
     .join(',')}}`;
 
-/** The hook's POST, reading the identity from the run's environment as the container transport does. */
-export const hookCommand = (): string =>
-  `curl -sS -m 3 -X POST "$${HOOK_ENV_RECEIVER_URL}${HOOK_PATH}"` +
-  ` -H 'content-type: application/json'` +
-  ` -H "${HOOK_HEADER_SESSION}: $${HOOK_ENV_SESSION}"` +
-  ` -H "${HOOK_HEADER_TOKEN}: $${HOOK_ENV_TOKEN}"` +
-  ` --data-binary @- >/dev/null 2>&1 || true`;
-
 /** What the fence hook prints when it cannot get an answer: codex stops the call. */
 const FENCE_DOWN = JSON.stringify({
   hookSpecificOutput: {
@@ -87,21 +74,12 @@ const FENCE_DOWN = JSON.stringify({
   },
 });
 
-/** Single quotes for `sh`, a `'` inside written as `'\''`. */
-const shellQuote = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`;
-
 /**
  * The fence (HIVE-342): every tool call's `PreToolUse` goes to the receiver's `/fence`, which
  * answers as `approve` does. Fails closed: a receiver that is down, slow, refusing or silent gives
  * a deny, never the empty reply codex would run. The identity and run come from the env by name.
  */
-export const fenceCommand = (): string =>
-  `out=$(curl -sf -m 30 -X POST "$${HOOK_ENV_RECEIVER_URL}${FENCE_PATH}"` +
-  ` -H 'content-type: application/json'` +
-  ` -H "${HOOK_HEADER_SESSION}: $${HOOK_ENV_SESSION}" -H "${HOOK_HEADER_TOKEN}: $${HOOK_ENV_TOKEN}"` +
-  ` -H "${HOOK_HEADER_RUN}: $${HOOK_ENV_RUN}" -H "${HOOK_HEADER_RUN_TOKEN}: $${HOOK_ENV_RUN_TOKEN}"` +
-  ` --data-binary @- 2>/dev/null) && [ -n "$out" ] && printf '%s' "$out"` +
-  ` || printf '%s' ${shellQuote(FENCE_DOWN)}`;
+export const fenceCommand = (): string => sharedFenceCommand({ denyJson: FENCE_DOWN });
 
 const hooks = (event: string, command: string, matcher?: string): string =>
   `hooks.${event}=[{${matcher === undefined ? '' : `matcher=${toml(matcher)},`}hooks=[{type="command",command=${toml(command)}}]}]`;

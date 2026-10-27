@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { agentPromptFile, agentStateFile, agentsRoot, laneWorkdir } from '../../electron/main/agents/paths';
+import { agentPromptFile, agentStateFile, agentsRoot, cliHome, laneWorkdir } from '../../electron/main/agents/paths';
 import { createPermissions, type Permissions } from '../../electron/main/agents/permissions';
 import { createAgentRegistry, type AgentRegistry } from '../../electron/main/agents/registry';
 import type { HarnessGate } from '../../electron/main/agents/resolve-harness';
@@ -232,6 +232,8 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
     const buildWakeCommand = createWakeCommand({
       agentsRoot,
       workdir: laneWorkdir,
+      cliHome,
+      cliToken: () => null,
       promptFile: (name) => agentPromptFile(userDataPath, name),
       pluginDir: () => join(userDataPath, 'plugin'),
       agentSettingsPath: () => settingsPath,

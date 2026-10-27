@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
+import { copilotAdapter } from '../../../../electron/main/harness/copilot';
 import type { HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
@@ -34,6 +35,7 @@ const paths = {
   mcpConfig: '/u/hive/hive.mcp.json',
   systemPrompt: '/u/hive/agents/slack-watcher.system.md',
   workdir: '/home/me/.hive/work/slack-watcher',
+  cliHome: '/h/cli/fake',
 };
 
 const env = {
@@ -479,6 +481,92 @@ describe('systemPromptFor', () => {
   });
 });
 
+describe("a CLI's secrets (HIVE-343)", () => {
+  it('lands after the strip, so a strip list naming the key keeps ours, and never on the argv', () => {
+    const command = build({
+      adapter: copilotAdapter,
+      env: {
+        ...env,
+        base: { ...env.base, GH_TOKEN: 'inherited', COPILOT_GITHUB_TOKEN: 'inherited' },
+        secrets: { COPILOT_GITHUB_TOKEN: 't0k', GH_TOKEN: 'ours' },
+      },
+    });
+
+    expect(command.env['COPILOT_GITHUB_TOKEN']).toBe('t0k');
+    expect(command.env['GH_TOKEN']).toBe('ours');
+    expect(command.args.join(' ')).not.toContain('t0k');
+  });
+
+  it("carries the plan's usage file and files", () => {
+    const command = build({ adapter: copilotAdapter, paths: { ...paths, cliHome: '/h/cli/copilot' } });
+    const plan = copilotAdapter.headless.launch({
+      conversation: { start: '11111111-2222-3333-4444-555555555555' },
+      name: 'slack-watcher',
+      limits: { turns: 40 },
+      files: { settings: '', pluginDir: '', mcpConfig: '', systemPrompt: '' },
+      grants: [],
+      prompt: '',
+      subscriptionAuth: true,
+      instructions: 'You are slack-watcher.',
+      hiveServer: HIVE_SERVER,
+      stateDir: '/h/cli/copilot',
+      workdir: paths.workdir,
+    });
+
+    expect(command.usageFile).toBe(plan.usageFile);
+    expect(command.files).toEqual(plan.files);
+  });
+
+  it('carries neither for a CLI whose plan has none', () => {
+    const command = build();
+
+    expect(command).not.toHaveProperty('usageFile');
+    expect(command).not.toHaveProperty('files');
+  });
+});
+
+describe('what the launch is told (HIVE-343)', () => {
+  it('passes the CLI home, the workdir and the card deny list to the adapter', () => {
+    const seen: HeadlessSpec[] = [];
+    const adapter = {
+      ...codexAdapter,
+      headless: {
+        ...codexAdapter.headless,
+        launch: (spec: HeadlessSpec) => {
+          seen.push(spec);
+          return codexAdapter.headless.launch(spec);
+        },
+      },
+    };
+
+    build({ adapter, defaults: { deny: ['shell(rm)'] } });
+
+    expect(seen[0]).toMatchObject({
+      stateDir: '/h/cli/fake',
+      workdir: '/home/me/.hive/work/slack-watcher',
+      deny: ['shell(rm)'],
+    });
+  });
+
+  it('passes no deny when the card has none', () => {
+    const seen: HeadlessSpec[] = [];
+    const adapter = {
+      ...codexAdapter,
+      headless: {
+        ...codexAdapter.headless,
+        launch: (spec: HeadlessSpec) => {
+          seen.push(spec);
+          return codexAdapter.headless.launch(spec);
+        },
+      },
+    };
+
+    build({ adapter });
+
+    expect(seen[0]).not.toHaveProperty('deny');
+  });
+});
+
 describe('a container wake (HIVE-137)', () => {
   const container = {
     config: { runtime: 'docker', name: 'devbox', workspace: '/work', hiveDir: '/hive' },
@@ -491,6 +579,7 @@ describe('a container wake (HIVE-137)', () => {
     mcpConfig: '/u/hive/container/hive.mcp.json',
     systemPrompt: '/u/hive/agents/slack-watcher.system.md',
     workdir: '/home/me/.hive/work/slack-watcher',
+    cliHome: '/h/cli/fake',
   };
   const built = () => build({ container, paths: containerPaths });
 

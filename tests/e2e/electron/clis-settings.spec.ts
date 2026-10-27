@@ -101,6 +101,70 @@ test("the default CLI and codex's sandbox write the file (HIVE-342)", async ({},
   }
 });
 
+/** Settings › Appearance › Mode, then back to CLIs. */
+const setMode = async (page: Page, mode: 'Light' | 'Dark'): Promise<void> => {
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Appearance', exact: true })
+    .click();
+  await page.getByRole('radiogroup', { name: 'Mode' }).getByRole('radio', { name: mode }).click();
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'CLIs' })
+    .click();
+};
+
+/**
+ * The Copilot card (HIVE-343). The token is shown in its empty state only: storing one would write
+ * through the runner's real keychain, which `jira-settings.spec.ts` declines for the same reason.
+ * The store and the clear are proven against an injected store in `cli-tokens.test.ts`.
+ */
+test("copilot's deny patterns write the file, and its token field is write-only (HIVE-343)", async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeFileSync(configPath, JSON.stringify({ version: 2, projects: [] }));
+
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  const page = await app.firstWindow();
+
+  try {
+    await page.waitForSelector('nav[aria-label="Places"]');
+    await openClis(page);
+
+    const copilot = page.getByRole('region', { name: 'Copilot' });
+    await expect(copilot.getByRole('textbox', { name: 'Token' })).toHaveAttribute('placeholder', 'gho_… or github_pat_…');
+    await expect(copilot.getByRole('textbox', { name: 'Token' })).toHaveAttribute('type', 'password');
+    await expect(copilot.getByRole('button', { name: 'Clear token' })).toHaveCount(0);
+
+    await copilot.getByRole('button', { name: 'Add pattern' }).click();
+    await copilot.getByRole('textbox', { name: 'Deny pattern 1', exact: true }).fill('shell(rm:*)');
+    await copilot.getByRole('textbox', { name: 'Deny pattern 1', exact: true }).blur();
+    await expect.poll(() => read(configPath).clis?.copilot?.agents?.deny).toEqual(['shell(rm:*)']);
+
+    await copilot.getByRole('button', { name: 'Add pattern' }).click();
+    await copilot.getByRole('textbox', { name: 'Deny pattern 2', exact: true }).fill('not valid');
+    await copilot.getByRole('textbox', { name: 'Deny pattern 2', exact: true }).blur();
+    await expect(copilot.getByText('Use kind(argument), like shell(git push) or write(.env)')).toBeVisible();
+    expect(read(configPath).clis.copilot.agents.deny).toEqual(['shell(rm:*)']);
+
+    for (const mode of ['Dark', 'Light'] as const) {
+      await setMode(page, mode);
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      await page
+        .getByRole('region', { name: 'Copilot' })
+        .screenshot({ path: testInfo.outputPath(`clis-copilot-${mode.toLowerCase()}.png`) });
+    }
+
+    // The mode switch remounted the card from the file, so the unsaved invalid row is gone.
+    // Removing the last pattern writes an empty list, which deletes the key.
+    const card = page.getByRole('region', { name: 'Copilot' });
+    await expect(card.getByRole('textbox', { name: 'Deny pattern 2', exact: true })).toHaveCount(0);
+    await card.getByRole('button', { name: 'Remove deny pattern 1' }).click();
+    await expect.poll(() => read(configPath).clis.copilot.agents.deny).toBeUndefined();
+  } finally {
+    await app.close();
+  }
+});
+
 /** A `claude` that records its argv and answers with the `stream-json` lines the fold reads. */
 const stub = (argvFile: string) => `#!/bin/sh
 printf '%s\\n' "$@" > '${argvFile}'

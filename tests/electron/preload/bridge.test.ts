@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BRIDGE_AGENTS_KEYS,
+  BRIDGE_CLI_KEYS,
   BRIDGE_CONFIG_KEYS,
   BRIDGE_INTEGRATIONS_KEYS,
   BRIDGE_JIRA_KEYS,
@@ -91,6 +92,8 @@ const jira = () =>
   exposed.jira as Record<string, (...args: unknown[]) => unknown>;
 const slack = () =>
   exposed.slack as Record<string, (...args: unknown[]) => unknown>;
+const cli = () =>
+  exposed.cli as Record<string, (...args: unknown[]) => unknown>;
 const github = () =>
   exposed.github as Record<string, (...args: unknown[]) => unknown>;
 const fs = () =>
@@ -189,6 +192,11 @@ describe('exposed surface', () => {
      * exposes.
      */
     expect(Object.keys(slack()).sort()).toEqual([...BRIDGE_SLACK_KEYS].sort());
+    /*
+      HIVE-343's: a CLI agent token, presence, store and forget. A fourth verb here would be one
+      that reads a token back, which no channel does.
+    */
+    expect(Object.keys(cli()).sort()).toEqual([...BRIDGE_CLI_KEYS].sort());
     /**
      * The fourth time, avoided. `BRIDGE_UPDATES_KEYS` shipped exported and
      * unimported — exactly the shape the note above describes — and was caught
@@ -437,6 +445,22 @@ describe('exposed surface', () => {
 
     await slack().test();
     expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.slackTest);
+  });
+
+  it('sends each cli: token verb on its own channel, and none reads a token (HIVE-343)', async () => {
+    const { ipcRenderer } = await import('electron');
+
+    expect(Object.keys(cli())).not.toContain('read');
+    expect(Object.keys(cli())).not.toContain('getToken');
+
+    await cli().tokensState();
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.cliTokensState);
+
+    await cli().setToken({ cli: 'copilot', token: 'gho_x' });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.cliSetToken, { cli: 'copilot', token: 'gho_x' });
+
+    await cli().clearToken({ cli: 'copilot' });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.cliClearToken, { cli: 'copilot' });
   });
 
   it('passes no payload to any slack verb, whatever the caller tries to smuggle in', async () => {
