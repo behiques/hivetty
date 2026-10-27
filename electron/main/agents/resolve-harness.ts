@@ -89,7 +89,8 @@ function check(
   }
 
   /*
-    The fence (HIVE-339), asked about exactly what `HIVE_GRANTS` carries. A rule this CLI cannot
+    The fence (HIVE-339), asked about what `HIVE_GRANTS` carries less its own `grants` (HIVE-344),
+    which it can express by construction. A rule this CLI cannot
     enforce skips it: running with the rule dropped would leave the call it fenced unfenced.
   */
   const fence = adapter.headless.fence.express(rules);

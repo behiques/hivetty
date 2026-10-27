@@ -279,7 +279,7 @@ describe('wakeCommand', () => {
    * its own: MCP tool schemas are deferred, so the model must call the
    * built-in `ToolSearch` to load `mcp__hive__ledger_read`'s schema before it
    * can call the tool itself. No `def.tools` ever names a built-in, so
-   * without an unconditional grant here the fence denied the very first thing
+   * without the Claude fence's own `grants` (HIVE-344) the fence denied the very first thing
    * every agent's preamble tells it to do, and no agent could ever read its
    * inbox. Pinned here so the next reader who wants to "tidy" this list finds
    * out why before removing it.
