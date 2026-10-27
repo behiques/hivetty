@@ -132,7 +132,6 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
     ],
     addEnv: {},
     stripEnv: [...CODEX_SESSION_ENV_KEYS, ...(spec.subscriptionAuth ? CODEX_AUTH_ENV_KEYS : [])],
-    defaultContainerCommand: 'codex',
     stopPattern: id,
     // A first wake's id is the marker's; the conversation's own comes from `thread.started`.
     namesConversation: !start,

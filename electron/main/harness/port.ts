@@ -324,6 +324,8 @@ export interface LaunchPlan {
 /** Agent runs: no tty, one turn per process (HIVE-337). */
 export interface HeadlessHarness {
   launch(spec: HeadlessSpec): HeadlessPlan;
+  /** The binary inside a container whose block names none. */
+  containerCommand: string;
   /**
    * A fresh reader for one run's stdout (HIVE-338); `usageFile` is the plan's (HIVE-343).
    * `sessionUuid` is the argv's id, for a reader that names it only on proof (HIVE-357).
@@ -394,8 +396,6 @@ export interface HeadlessPlan {
   stripEnv: readonly string[];
   /** Prefixes the harness removes, for a family whose next member it cannot name yet (HIVE-357). */
   stripPrefixes?: readonly string[];
-  /** The binary inside a container whose block names none. */
-  defaultContainerCommand: string;
   /** What `pkill -f` matches inside a container to stop this run. */
   stopPattern: string;
   /**

@@ -54,5 +54,5 @@ export const codexAdapter: HarnessAdapter = {
     pluginNames: () => Promise.resolve([]),
     sessionOverrides: () => Promise.resolve({}),
   },
-  headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence },
+  headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence, containerCommand: 'codex' },
 };

@@ -210,3 +210,9 @@ describe('what is installed for Claude Code (HIVE-345)', () => {
     ]);
   });
 });
+
+describe('the headless members (HIVE-344)', () => {
+  it('runs claude inside a container that names no command', () => {
+    expect(claudeCodeAdapter.headless.containerCommand).toBe('claude');
+  });
+});

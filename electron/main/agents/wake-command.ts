@@ -325,14 +325,16 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     /*
       A container agent's binary is inside the container (HIVE-137), so the
       host's `claudeCommand` is not consulted at all: a machine with no
-      `claude` on it, or one whose command carries arguments, can still wake
+      host binary, or one whose command carries arguments, can still wake
       an agent whose image has one. `wakeCommand` puts `container.command`
       after the container's name; `binaryPath` is what a *host* wake spawns.
       On the host each CLI resolves its own: Claude through `claudeCommand`, Codex as `codex` on
       PATH until HIVE-332 adds its setting (HIVE-342).
     */
     const binary = (id: HarnessId) => {
-      if (def.container !== undefined) return { path: def.container.command ?? 'claude' };
+      if (def.container !== undefined) {
+        return { path: def.container.command ?? (deps.adapter ?? headlessAdapter)(id)?.headless.containerCommand ?? id };
+      }
       if (id === 'copilot' && deps.cliToken('copilot') === null) {
         return { problem: 'no Copilot token: add one in Settings › CLIs' };
       }

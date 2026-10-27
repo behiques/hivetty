@@ -32,6 +32,7 @@ describe('codexAdapter', () => {
       launch: launchCodexHeadless,
       reader: readCodexHeadless,
       fence: codexFence,
+      containerCommand: 'codex',
     });
   });
 

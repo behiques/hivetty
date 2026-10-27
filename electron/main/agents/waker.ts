@@ -478,7 +478,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     }
 
     return {
-      file: config.command ?? plan.defaultContainerCommand,
+      file: config.command ?? adapter.headless.containerCommand,
       args,
       /*
         Only what a container may know: the grants, the identity, the marker
@@ -499,7 +499,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
       container: {
         runtime: config.runtime,
         name: config.name,
-        command: config.command ?? plan.defaultContainerCommand,
+        command: config.command ?? adapter.headless.containerCommand,
         envArg: config.envArg ?? DEFAULT_ENV_ARG,
         workspace: config.workspace,
         sessionUuid: plan.stopPattern,

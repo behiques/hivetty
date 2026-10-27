@@ -65,5 +65,5 @@ export const copilotAdapter: HarnessAdapter = {
     pluginNames: () => Promise.resolve([]),
     sessionOverrides: () => Promise.resolve({}),
   },
-  headless: { launch: launchCopilotHeadless, reader: readCopilotHeadless, fence: copilotFence },
+  headless: { launch: launchCopilotHeadless, reader: readCopilotHeadless, fence: copilotFence, containerCommand: 'copilot' },
 };

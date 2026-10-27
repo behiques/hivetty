@@ -34,6 +34,7 @@ describe('copilotAdapter', () => {
       launch: launchCopilotHeadless,
       reader: readCopilotHeadless,
       fence: copilotFence,
+      containerCommand: 'copilot',
     });
   });
 
