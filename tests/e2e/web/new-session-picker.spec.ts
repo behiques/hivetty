@@ -77,14 +77,19 @@ test('the model and effort steppers are on the picker', async ({ page }) => {
  * projects, so the picker shows its first-run block and no subtitle. The
  * subtitle is covered in the unit test.
  */
-test('shows the CLI switch, Claude Code on, Codex offered, Copilot saying why (HIVE-279)', async ({ page }) => {
+test('shows the CLI switch, Claude Code on, Codex and Copilot offered (HIVE-279, HIVE-280)', async ({ page }) => {
   await overmindNewSession(page).click();
 
   const cli = page.getByRole('dialog').getByRole('radiogroup', { name: 'cli' });
   await expect(cli.getByRole('radio', { name: /Claude Code/ })).toBeChecked();
   await expect(cli.getByRole('radio', { name: /Codex/ })).toBeEnabled();
-  await expect(cli.getByRole('radio', { name: /Copilot/ })).toBeDisabled();
-  await expect(page.getByText('Copilot · agents only for now')).toBeVisible();
+  await expect(cli.getByRole('radio', { name: /Copilot/ })).toBeEnabled();
+  await expect(page.getByText(/agents only for now/)).toHaveCount(0);
+
+  // Picking Copilot puts its own words on the steppers: `auto` first, at medium.
+  await cli.getByRole('radio', { name: /Copilot/ }).click();
+  await expect(cli.getByRole('radio', { name: /Copilot/ })).toBeChecked();
+  await expect(page.getByRole('dialog').getByRole('radio', { name: 'auto' })).toBeChecked();
 });
 
 test('escape closes it', async ({ page }) => {
