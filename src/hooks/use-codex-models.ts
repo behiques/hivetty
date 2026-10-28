@@ -17,7 +17,12 @@ export function useCodexModels(
 ): { models: readonly CliModel[]; settled: boolean } {
   const [answer, setAnswer] = useState(lastCodexModels);
   useEffect(() => {
-    if (!enabled || (!fresh && lastCodexModels() !== undefined)) return;
+    if (!enabled) return;
+    const last = lastCodexModels();
+    if (!fresh && last !== undefined) {
+      setAnswer(last); // a row that mounted off Codex missed the cache being filled
+      return;
+    }
     let current = true;
     void codexModels().then((models) => {
       if (current) setAnswer(models);

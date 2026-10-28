@@ -56,4 +56,15 @@ describe('useCodexModels', () => {
     expect(result.current.models).toEqual([LUNA]);
     await waitFor(() => expect(result.current.models).toEqual([SOL]));
   });
+
+  it('picks up a cache filled while it was off Codex once it is enabled, without reading', () => {
+    lastCodexModels.mockReturnValue(undefined);
+    const { result, rerender } = renderHook(({ enabled }) => useCodexModels(enabled), { initialProps: { enabled: false } });
+    expect(result.current.settled).toBe(false);
+
+    lastCodexModels.mockReturnValue([LUNA]);
+    rerender({ enabled: true });
+    expect(result.current).toEqual({ models: [LUNA], settled: true });
+    expect(codexModels).not.toHaveBeenCalled();
+  });
 });
