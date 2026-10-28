@@ -47,6 +47,10 @@ describe('harness registry', () => {
       reportsMcpStatus: true,
       agentMcp: ['slack'],
       conversationId: 'argv',
+      hooks: true,
+      permissionCards: true,
+      plan: true,
+      skills: true,
     });
   });
 

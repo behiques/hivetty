@@ -145,6 +145,26 @@ describe('SessionHeader (HIVE-197)', () => {
       expect.stringContaining('482'),
     );
   });
+
+  it('the menu says what a Codex session supports (HIVE-281)', async () => {
+    const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
+    const session = useHiveStore.getState().entities[id] as Session;
+    render(<SessionHeader entity={session} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Session menu' }));
+    const group = screen.getByRole('group', { name: 'Codex supports' });
+    expect(within(group).getByText('Plan: supported')).toBeInTheDocument();
+    expect(within(group).getByText('Skills: not supported')).toBeInTheDocument();
+    // Read-only: the rows are not menu items, so the keyboard does not step through them.
+    expect(within(group).queryAllByRole('menuitem')).toHaveLength(0);
+  });
+
+  it('a session with no harness reads as Claude Code, everything supported (HIVE-281)', async () => {
+    render(<SessionHeader entity={hero()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Session menu' }));
+    const group = screen.getByRole('group', { name: 'Claude Code supports' });
+    expect(within(group).queryByText(/not supported/)).not.toBeInTheDocument();
+    expect(within(group).getAllByText(/: supported$/)).toHaveLength(5);
+  });
 });
 
 describe('SessionHeader, an ended session (HIVE-211)', () => {

@@ -1,3 +1,5 @@
+import { CAPABILITIES } from '@shared/harness-contract';
+
 import { claudeCodeAdapter } from '../claude-code';
 import type { HarnessAdapter } from '../port';
 
@@ -26,17 +28,7 @@ const noMarkers = (): never => {
  */
 export const codexAdapter: HarnessAdapter = {
   id: 'codex',
-  capabilities: {
-    resume: 'by-id',
-    meters: false,
-    contextDelivery: 'none',
-    reportsCostUsd: false,
-    enforcesTurns: false,
-    enforcesBudget: false,
-    reportsMcpStatus: false,
-    agentMcp: [],
-    conversationId: 'first-hook',
-  },
+  capabilities: CAPABILITIES.codex,
   launch: launchCodexSession,
   prepare: {
     sessionSettings: noSettings,

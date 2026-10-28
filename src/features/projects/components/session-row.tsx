@@ -2,9 +2,11 @@ import { cn } from '@/lib/utils';
 import { branchLabel, entityLabel, isSession, terminalOf } from '@/types/entity';
 
 import { Badge } from '@components/ui/badge';
+import { CliMark } from '@components/ui/cli-mark';
 import { StatusComb } from '@components/ui/status-comb';
 import { statusLabel, statusText } from '@components/ui/status-dot';
 import { Tag } from '@components/ui/tag';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import {
   useDelegateTitle,
   useDelegateWord,
@@ -67,6 +69,13 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
         {/* Decoration: the status label sits right beside it. */}
         <StatusComb status={entity.status} detail={entity.idleDetail} />
         <span className="min-w-0 truncate text-left text-ui">{label}</span>
+        {/* The CLI, when it is not Claude's (HIVE-281): the model chip's order, name then mark. */}
+        {entity.harness === undefined || entity.harness === 'claude-code' ? null : (
+          <>
+            <CliMark cli={entity.harness} />
+            <span className="sr-only">{CLI_NAMES[entity.harness]}</span>
+          </>
+        )}
         {/* The id after the name; an unnamed session already reads as its id. */}
         {label === entity.id ? null : (
           <Tag tone="subtle" className="shrink-0 tabular-nums">
