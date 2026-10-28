@@ -315,6 +315,8 @@ export interface LaunchSpec {
   hiveServer?: StdioServerSpec;
   /** Codex: pass `--dangerously-bypass-hook-trust` (D4, measured in tests/fixtures/codex/interactive-0.164). */
   bypassHookTrust?: boolean;
+  /** An app-owned directory for what a launch writes: Copilot's hooks plugin (HIVE-280). */
+  stateDir?: string;
 }
 
 /** What a harness answers a {@link LaunchSpec} with (HIVE-234). */
@@ -325,6 +327,8 @@ export interface LaunchPlan {
   stripEnv: readonly string[];
   /** The bootstrap's gap between the text and its `\r` (HIVE-63). */
   submitDelayMs: number;
+  /** Absolute paths the core writes before the command is typed (HIVE-280), as `HeadlessPlan.files`. */
+  files?: readonly { path: string; text: string }[];
 }
 
 /** Agent runs: no tty, one turn per process (HIVE-337). */

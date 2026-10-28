@@ -4,6 +4,7 @@ import {
   COPILOT_AUTH_ENV_KEYS,
   COPILOT_ROUTING_ENV_KEYS,
   COPILOT_SESSION_ENV_KEYS,
+  copilotMcpConfig,
   copilotSettings,
   launchCopilotHeadless,
 } from '../../../../../electron/main/harness/copilot/headless';
@@ -181,5 +182,23 @@ describe('launchCopilotHeadless', () => {
     expect(() =>
       launchCopilotHeadless(spec({ hiveServer: { type: 'http', url: 'http://h/mcp', headers: {} } })),
     ).toThrow(/container/);
+  });
+});
+
+describe('copilotMcpConfig (HIVE-280)', () => {
+  it('builds the hive server config by ${VAR} reference, no value on the argv', () => {
+    expect(
+      copilotMcpConfig({ command: '/e', args: ['/h.js'], env: { ELECTRON_RUN_AS_NODE: '1' } }, ['HIVE_A']),
+    ).toEqual({
+      mcpServers: {
+        hive: {
+          type: 'local',
+          command: '/e',
+          args: ['/h.js'],
+          env: { ELECTRON_RUN_AS_NODE: '1', HIVE_A: '${HIVE_A}' },
+          tools: ['*'],
+        },
+      },
+    });
   });
 });
