@@ -193,8 +193,8 @@ describe('exposed surface', () => {
      */
     expect(Object.keys(slack()).sort()).toEqual([...BRIDGE_SLACK_KEYS].sort());
     /*
-      HIVE-343's: a CLI agent token, presence, store and forget. A fourth verb here would be one
-      that reads a token back, which no channel does.
+      HIVE-343's: a CLI agent token, presence, store and forget, plus Codex's model list. A fifth
+      verb here would be one that reads a token back, which no channel does.
     */
     expect(Object.keys(cli()).sort()).toEqual([...BRIDGE_CLI_KEYS].sort());
     /**
@@ -461,6 +461,9 @@ describe('exposed surface', () => {
 
     await cli().clearToken({ cli: 'copilot' });
     expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.cliClearToken, { cli: 'copilot' });
+
+    await cli().codexModels();
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.cliCodexModels);
   });
 
   it('passes no payload to any slack verb, whatever the caller tries to smuggle in', async () => {

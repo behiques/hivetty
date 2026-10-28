@@ -97,8 +97,8 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     cli: Object.keys(window.hive!.cli).sort(),
   }));
 
-  // HIVE-343. A fourth verb here would be one that reads a stored token back.
-  expect(surface.cli).toEqual(['clearToken', 'setToken', 'tokensState']);
+  // HIVE-343. A fifth verb here would be one that reads a stored token back.
+  expect(surface.cli).toEqual(['clearToken', 'codexModels', 'setToken', 'tokensState']);
 
   // Widening any of these lists is the alarm this test exists to raise.
   /**

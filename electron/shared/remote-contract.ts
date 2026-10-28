@@ -75,8 +75,9 @@ import { isThisMachineAction } from './notification-contract';
  * 19 → 20 (HIVE-343): `CH` gained `cli:tokens-state`, `cli:set-token` and `cli:clear-token`; `CliAgents` gained `deny`; `HARNESS_IDS` gained `copilot`.
  * 20 → 21 (HIVE-279): `SpawnRequest` gained `harness`; its `model` and `effort` take that CLI's vocabulary.
  * 21 → 22 (HIVE-359): `plan:changed` and `plans:list`'s plan gained `part` (`index`, `of`) and `build.startedAt`, and `build.state` gained `done`.
+ * 22 → 23: `CH` gained `cli:codex-models`; `CODEX_EFFORTS` gained `ultra`, and a Codex model is any `CODEX_MODEL_ID`-shaped id.
  */
-export const REMOTE_PROTOCOL_VERSION = 22;
+export const REMOTE_PROTOCOL_VERSION = 23;
 
 /**
  * What a frame is for.
@@ -167,6 +168,7 @@ export const FRAME_KIND = {
   [CH.cliTokensState]: 'call',
   [CH.cliSetToken]: 'call',
   [CH.cliClearToken]: 'call',
+  [CH.cliCodexModels]: 'call',
   [CH.configSetReceiver]: 'call',
   [CH.configSetServer]: 'call',
   [CH.serverPair]: 'call',
@@ -472,6 +474,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.cliTokensState]: 'read',
   [CH.cliSetToken]: 'mutate',
   [CH.cliClearToken]: 'mutate',
+  [CH.cliCodexModels]: 'read',
   [CH.configSetReceiver]: 'mutate',
   [CH.configSetServer]: 'mutate',
   [CH.serverPair]: 'execute',
