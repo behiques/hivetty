@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
@@ -1765,26 +1765,26 @@ export function createSessions(options: SessionsOptions): Sessions {
   }
 
   /**
-   * A hook reported. Its verdict is authoritative from here on.
-   *
-   * Registered as hook-driven *before* publishing, so the activity tracker's
-   * next tick — which may already be scheduled — is suppressed rather than
-   * racing this event.
-   */
-  /**
    * The user answered the CLI's own prompt in the terminal (HIVE-280). Only for a CLI that says so
    * (`answersBlock`, Copilot's): its Esc fires no hook, so the keystroke is what clears the card and
    * "needs you". Never an app write: the bootstrap and a nudge answer nothing.
    */
   function answerBlock(entityId: string, data: string): void {
     const answersBlock = adapterOf(entityId).answersBlock;
-    if (answersBlock === undefined || statusTracker.held(entityId).blocked === 0) return;
+    if (answersBlock === undefined) return;
     const answer = answersBlock(data);
     if (answer === null) return;
     const derived = statusTracker.release(entityId, { endTurn: answer === 'cancelled' });
-    publishHookStatus(entityId, derived.status, undefined, derived.detail);
+    if (derived !== undefined) publishHookStatus(entityId, derived.status, undefined, derived.detail);
   }
 
+  /**
+   * A hook reported. Its verdict is authoritative from here on.
+   *
+   * Registered as hook-driven *before* publishing, so the activity tracker's
+   * next tick — which may already be scheduled — is suppressed rather than
+   * racing this event.
+   */
   function publishHookStatus(
     entityId: string,
     status: ObservedStatus,
@@ -2687,7 +2687,10 @@ export function createSessions(options: SessionsOptions): Sessions {
     for (const file of plan.files ?? []) {
       try {
         mkdirSync(dirname(file.path), { recursive: true });
-        writeFileSync(file.path, file.text);
+        // Renamed into place: a Copilot starting in another session never reads a half-written file.
+        const partial = `${file.path}.${process.pid}.partial`;
+        writeFileSync(partial, file.text);
+        renameSync(partial, file.path);
       } catch (error) {
         throw new Error(`${CLI_LABELS[harness]}: could not write ${file.path}: ${(error as Error).message}`);
       }

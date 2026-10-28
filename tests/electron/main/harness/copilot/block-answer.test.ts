@@ -10,9 +10,7 @@ describe('copilotBlockAnswer (HIVE-280)', () => {
   it.each([
     ['Enter', '\r'],
     ['a digit', '2'],
-    ['an arrow', '\x1b[B'],
     ['text', 'do it differently'],
-    ['a mouse click', '\x1b[<0;10;5M'],
   ])('reads %s as an answer', (_what, data) => {
     expect(copilotBlockAnswer(data)).toBe('answered');
   });
@@ -25,8 +23,24 @@ describe('copilotBlockAnswer (HIVE-280)', () => {
     ['a BEL colour reply', '\x1b]10;rgb:d8d8/d8d8/d8d8\x07'],
     ['a keyboard flags reply', '\x1b[?0u'],
     ['a mode report', '\x1b[?2026;2$y'],
+    ['a secondary device attributes reply', '\x1b[>0;276;0c'],
+    ['a status report', '\x1b[0n'],
+    ['an ANSI mode report', '\x1b[4;2$y'],
+    ['a DCS reply', '\x1bP>|xterm.js(5.5.0)\x1b\\'],
     ['nothing', ''],
   ])('reads %s as no answer: the terminal said it, not the user', (_what, data) => {
+    expect(copilotBlockAnswer(data)).toBeNull();
+  });
+
+  it.each([
+    ['an arrow', '\x1b[B'],
+    ['an application-mode arrow', '\x1bOA'],
+    ['Home', '\x1b[H'],
+    ['Page Down', '\x1b[6~'],
+    ['a mouse click', '\x1b[<0;10;5M'],
+    ['a wheel scroll', '\x1b[<65;10;5M\x1b[<65;10;5M'],
+    ['a legacy mouse report', '\x1b[M !!'],
+  ])('reads %s as no answer yet: moving through the dialog decides nothing', (_what, data) => {
     expect(copilotBlockAnswer(data)).toBeNull();
   });
 

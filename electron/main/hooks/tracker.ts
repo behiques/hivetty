@@ -36,6 +36,11 @@ interface DerivedState {
 
 interface Session {
   turnActive: boolean;
+  /**
+   * A block the user answered in the terminal that no hook has confirmed yet (HIVE-280). Copilot may
+   * fire nothing after a denial, so a cancel that follows still ends the turn. Any hook clears it.
+   */
+  answeredUnconfirmed: boolean;
   /** Insertion-ordered, which is what makes "most recent match" cheap. */
   outstanding: Map<string, { toolName: string; agentId?: string }>;
   blocked: Set<string>;
@@ -148,13 +153,15 @@ export interface StatusTracker {
    * The user answered the CLI's own prompt in the terminal (HIVE-280): every block goes, and on a
    * cancel the turn too, since a CLI that fires nothing after a denial (Copilot's Esc) leaves no event
    * to do it. Only a harness that opts in through `HarnessAdapter.answersBlock` calls this.
+   * `undefined`, and nothing changed, when there was nothing to answer.
    */
-  release(entityId: string, options: { endTurn: boolean }): DerivedState;
+  release(entityId: string, options: { endTurn: boolean }): DerivedState | undefined;
 }
 
 function empty(): Session {
   return {
     turnActive: false,
+    answeredUnconfirmed: false,
     outstanding: new Map(),
     blocked: new Set(),
     blockedNames: new Map(),
@@ -218,6 +225,7 @@ export function createStatusTracker(): StatusTracker {
   return {
     apply(input) {
       const s = at(input.entityId);
+      s.answeredUnconfirmed = false;
 
       /**
        * An observation outranks the inference (HIVE-90).
@@ -504,10 +512,18 @@ export function createStatusTracker(): StatusTracker {
 
     release(entityId, { endTurn }) {
       const s = sessions.get(entityId);
-      if (s === undefined) return derive(empty());
+      if (s === undefined) return undefined;
+      if (s.blocked.size === 0 && !(endTurn && s.answeredUnconfirmed)) return undefined;
+      if (endTurn) {
+        // The cancelled call never runs, so nothing will end it: as `prompt` does for a block.
+        for (const id of s.blocked) s.outstanding.delete(id);
+        s.turnActive = false;
+        s.answeredUnconfirmed = false;
+      } else {
+        s.answeredUnconfirmed = true;
+      }
       s.blocked.clear();
       s.blockedNames.clear();
-      if (endTurn) s.turnActive = false;
       return derive(s);
     },
 

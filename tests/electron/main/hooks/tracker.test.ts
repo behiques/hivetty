@@ -802,10 +802,33 @@ describe('release (HIVE-280)', () => {
     expect(blocked().release('cop', { endTurn: true })).toEqual({ status: 'idle' });
   });
 
-  it('answers a session it never saw as idle, holding nothing', () => {
+  it('answers nothing for a session it never saw, or one holding no block', () => {
     const t = createStatusTracker();
-    expect(t.release('nobody', { endTurn: true })).toEqual({ status: 'idle' });
-    expect(t.held('nobody').blocked).toBe(0);
+    expect(t.release('nobody', { endTurn: true })).toBeUndefined();
+    t.apply({ entityId: 'cop', signal: { kind: 'prompt' } });
+    expect(t.release('cop', { endTurn: true })).toBeUndefined();
+  });
+
+  it('still takes a cancel after an answer no hook confirmed: Copilot may fire nothing after a denial', () => {
+    const t = blocked();
+    expect(t.release('cop', { endTurn: false })).toEqual({ status: 'working' });
+    expect(t.release('cop', { endTurn: true })).toEqual({ status: 'idle' });
+  });
+
+  it('takes no cancel once a hook confirmed the answer', () => {
+    const t = blocked();
+    t.release('cop', { endTurn: false });
+    t.apply({ entityId: 'cop', signal: { kind: 'tool-end' }, toolName: 'bash' });
+    expect(t.release('cop', { endTurn: true })).toBeUndefined();
+  });
+
+  it('drops the cancelled call from what is outstanding', () => {
+    const t = createStatusTracker();
+    t.apply({ entityId: 'cop', signal: { kind: 'prompt' } });
+    t.apply({ entityId: 'cop', signal: { kind: 'tool-start' }, toolUseId: 'A', toolName: 'bash' });
+    t.apply({ entityId: 'cop', signal: { kind: 'waiting', reason: 'permission' }, toolName: 'bash' });
+    t.release('cop', { endTurn: true });
+    expect(t.held('cop').outstanding).toBe(0);
   });
 });
 

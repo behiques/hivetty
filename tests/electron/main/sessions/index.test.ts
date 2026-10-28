@@ -4349,6 +4349,23 @@ describe('copilot sessions (HIVE-280)', () => {
       expect(statuses().at(-1)).toBe('working');
     });
 
+    it('takes an Esc after moving through the dialog as the cancel it is', () => {
+      const sessions = blockedOn(copilotOpen);
+      const before = statuses().length;
+      sessions.write('hero-refresh', '\x1b[B', 'user');
+      expect(statuses().length).toBe(before);
+      sessions.write('hero-refresh', '\x1b', 'user');
+      expect(statuses().at(-1)).toBe('idle');
+    });
+
+    it('takes an Esc after an Enter no hook confirmed as a cancel', () => {
+      const sessions = blockedOn(copilotOpen);
+      sessions.write('hero-refresh', '\r', 'user');
+      expect(statuses().at(-1)).toBe('working');
+      sessions.write('hero-refresh', '\x1b', 'user');
+      expect(statuses().at(-1)).toBe('idle');
+    });
+
     it('leaves the block alone for an app write: the bootstrap and a nudge answer nothing', () => {
       const sessions = blockedOn(copilotOpen);
       const before = statuses().length;
