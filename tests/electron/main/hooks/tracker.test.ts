@@ -781,3 +781,54 @@ describe('createStatusTracker', () => {
     ).toEqual({ status: 'working' });
   });
 });
+
+describe('release (HIVE-280)', () => {
+  const blocked = () => {
+    const t = createStatusTracker();
+    t.apply({ entityId: 'cop', signal: { kind: 'prompt' } });
+    t.apply({ entityId: 'cop', signal: { kind: 'waiting', reason: 'permission' }, toolName: 'bash' });
+    return t;
+  };
+
+  it('drops every block and leaves the turn running: an approval runs the tool', () => {
+    const t = blocked();
+    expect(t.release('cop', { endTurn: false })).toEqual({ status: 'working' });
+    expect(t.held('cop').blocked).toBe(0);
+    // Nothing is left for a late postToolUse to find.
+    expect(t.apply({ entityId: 'cop', signal: { kind: 'tool-end' }, toolName: 'bash' })).toEqual({ status: 'working' });
+  });
+
+  it('ends the turn too on a cancel: nothing else will', () => {
+    expect(blocked().release('cop', { endTurn: true })).toEqual({ status: 'idle' });
+  });
+
+  it('answers nothing for a session it never saw, or one holding no block', () => {
+    const t = createStatusTracker();
+    expect(t.release('nobody', { endTurn: true })).toBeUndefined();
+    t.apply({ entityId: 'cop', signal: { kind: 'prompt' } });
+    expect(t.release('cop', { endTurn: true })).toBeUndefined();
+  });
+
+  it('still takes a cancel after an answer no hook confirmed: Copilot may fire nothing after a denial', () => {
+    const t = blocked();
+    expect(t.release('cop', { endTurn: false })).toEqual({ status: 'working' });
+    expect(t.release('cop', { endTurn: true })).toEqual({ status: 'idle' });
+  });
+
+  it('takes no cancel once a hook confirmed the answer', () => {
+    const t = blocked();
+    t.release('cop', { endTurn: false });
+    t.apply({ entityId: 'cop', signal: { kind: 'tool-end' }, toolName: 'bash' });
+    expect(t.release('cop', { endTurn: true })).toBeUndefined();
+  });
+
+  it('drops the cancelled call from what is outstanding', () => {
+    const t = createStatusTracker();
+    t.apply({ entityId: 'cop', signal: { kind: 'prompt' } });
+    t.apply({ entityId: 'cop', signal: { kind: 'tool-start' }, toolUseId: 'A', toolName: 'bash' });
+    t.apply({ entityId: 'cop', signal: { kind: 'waiting', reason: 'permission' }, toolName: 'bash' });
+    t.release('cop', { endTurn: true });
+    expect(t.held('cop').outstanding).toBe(0);
+  });
+});
+

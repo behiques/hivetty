@@ -1,0 +1,7 @@
+{
+  "sessionId": "11111111-2222-4333-8444-555555555551",
+  "timestamp": 1793151205988,
+  "cwd": "/tmp/copilot-fixture/work",
+  "source": "new",
+  "initialPrompt": "run the shell command: echo probe > made.txt"
+}

@@ -11,6 +11,7 @@ import { Button } from '@components/ui/button';
 import { Icon } from '@components/ui/icon';
 import { ProjectKey } from '@components/ui/project-key';
 import { SegmentedControl } from '@components/ui/segmented-control';
+import { SelectField } from '@components/ui/select-field';
 import { SwarmCreature, type Creature } from '@components/ui/swarm-creature';
 import { can } from '@config/runtime';
 import { OptionStepper } from '@features/sessions/components/option-stepper';
@@ -30,24 +31,16 @@ import {
   usePickerActions,
   usePickerState,
   useSettingsActions,
-  type SessionCli,
 } from '@stores/ui-store';
 
-/**
- * The CLIs a session cannot start on yet, and why (HIVE-279): Copilot's interactive half is
- * HIVE-280. The reason is what is true today, not a ticket or a release date. Data rather than
- * a branch, so enabling a CLI deletes one entry.
- */
-const UNAVAILABLE: Partial<Record<HarnessId, string>> = { copilot: 'agents only for now' };
 /*
   No CliMark in the segments: `SegmentedControl` takes an icon *name*, not a node, so the mark lives
   on the header chip instead (HIVE-279).
 */
 const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli] }));
-const UNAVAILABLE_CLIS = Object.keys(UNAVAILABLE) as HarnessId[];
-const UNAVAILABLE_NOTE = Object.entries(UNAVAILABLE)
-  .map(([cli, why]) => `${CLI_NAMES[cli as HarnessId]} · ${why}`)
-  .join(' · ');
+
+/** The most models a stepper draws as dots before its labels collide (HIVE-280). */
+const STEPPER_MAX = 8;
 
 /** The concept pins the first four projects as one-click starts. */
 const PINNED_COUNT = 4;
@@ -298,21 +291,32 @@ export function NewSessionPicker() {
             label="cli"
             options={CLI_OPTIONS}
             value={newCli}
-            // Copilot is always among the disabled values, so the cast is safe until HIVE-280 widens `SessionCli`.
-            onChange={(cli) => setNewCli(cli as SessionCli)}
-            disabledValues={UNAVAILABLE_CLIS}
+            // CLI_OPTIONS is HARNESS_IDS.
+            onChange={(cli) => setNewCli(cli as HarnessId)}
           />
-          <span className="text-ui-sm text-subtle">{UNAVAILABLE_NOTE}</span>
         </div>
 
         <div className="flex w-[560px] max-w-[92%] flex-wrap gap-6">
-          {/* The CLI's own words (HIVE-279): Claude's list is not Codex's. */}
-          <OptionStepper
-            label="model"
-            options={CLI_VOCAB[newCli].models}
-            value={newModel}
-            onChange={setNewModel}
-          />
+          {/*
+            The CLI's own words (HIVE-279): Claude's list is not Codex's. A list too long for a
+            stepper's dots (Copilot's 32, HIVE-280) is the platform's select, in the same column.
+          */}
+          {CLI_VOCAB[newCli].models.length > STEPPER_MAX ? (
+            <SelectField
+              className="min-w-0 flex-1"
+              label="Model"
+              value={newModel}
+              options={CLI_VOCAB[newCli].models.map((model) => ({ value: model, label: model }))}
+              onChange={setNewModel}
+            />
+          ) : (
+            <OptionStepper
+              label="model"
+              options={CLI_VOCAB[newCli].models}
+              value={newModel}
+              onChange={setNewModel}
+            />
+          )}
           {/*
             A model whose CLI says it does not think (`CLI_VOCAB.noEffort`,
             which is Claude's haiku), so the scale beside it does not apply

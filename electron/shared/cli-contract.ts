@@ -73,7 +73,8 @@ export const CLI_VOCAB = {
   // Haiku does not think, so the effort scale beside it does not apply (HIVE-100).
   'claude-code': { models: SESSION_MODELS, efforts: SESSION_EFFORTS, noEffort: ['haiku'] },
   codex: { models: CODEX_MODELS, efforts: CODEX_EFFORTS, noEffort: [] },
-  copilot: { models: COPILOT_MODELS, efforts: COPILOT_EFFORTS, noEffort: [] },
+  // kimi-k3 refuses `--reasoning-effort` (HIVE-280, tests/fixtures/copilot/interactive-1.0.105/FINDINGS.md P8).
+  copilot: { models: COPILOT_MODELS, efforts: COPILOT_EFFORTS, noEffort: ['kimi-k3'] },
 } as const satisfies Record<
   HarnessId,
   { models: readonly string[]; efforts: readonly string[]; noEffort: readonly string[] }

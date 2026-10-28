@@ -28,4 +28,11 @@ describe('input profiles (HIVE-240)', () => {
     expect(codex.lineMotion).toBe(DEFAULT_INPUT_PROFILE.lineMotion);
     expect(codex.claimsBareBack).toBe(DEFAULT_INPUT_PROFILE.claimsBareBack);
   });
+
+  it('gives Copilot its Alt+Enter newline and the default for the rest (HIVE-280, FINDINGS P6)', () => {
+    const copilot = inputProfileFor('copilot');
+    expect(copilot.newline).toBe('\x1b\r');
+    expect(copilot.lineKill).toBe(DEFAULT_INPUT_PROFILE.lineKill);
+    expect(copilot.claimsBareBack).toBe(DEFAULT_INPUT_PROFILE.claimsBareBack);
+  });
 });

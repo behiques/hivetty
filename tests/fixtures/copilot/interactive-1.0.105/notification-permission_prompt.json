@@ -1,0 +1,9 @@
+{
+  "sessionId": "11111111-2222-4333-8444-555555555551",
+  "timestamp": 1793151210957,
+  "cwd": "/tmp/copilot-fixture/work",
+  "message": "Run command: echo probe > made.txt",
+  "title": "Permission needed",
+  "hook_event_name": "Notification",
+  "notification_type": "permission_prompt"
+}

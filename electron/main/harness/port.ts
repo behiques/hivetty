@@ -47,7 +47,15 @@ export interface HarnessAdapter {
   readonly installed: HarnessInstalled;
   /** Agent runs (HIVE-337). */
   readonly headless: HeadlessHarness;
+  /**
+   * Whether the user's write into a blocked session answered the CLI's own prompt (HIVE-280), for a
+   * CLI whose hooks cannot say so: `cancelled` also ends the turn. Absent: blocks clear by hooks alone.
+   */
+  answersBlock?(data: string): BlockAnswer | null;
 }
+
+/** How the user answered a CLI's prompt in the terminal (HIVE-280). */
+export type BlockAnswer = 'answered' | 'cancelled';
 
 /** What wrote a title, as far as the harness's own record can say (HIVE-239). */
 export type TitleVerdict =
@@ -315,6 +323,8 @@ export interface LaunchSpec {
   hiveServer?: StdioServerSpec;
   /** Codex: pass `--dangerously-bypass-hook-trust` (D4, measured in tests/fixtures/codex/interactive-0.164). */
   bypassHookTrust?: boolean;
+  /** An app-owned directory for what a launch writes: Copilot's hooks plugin (HIVE-280). */
+  stateDir?: string;
 }
 
 /** What a harness answers a {@link LaunchSpec} with (HIVE-234). */
@@ -325,6 +335,8 @@ export interface LaunchPlan {
   stripEnv: readonly string[];
   /** The bootstrap's gap between the text and its `\r` (HIVE-63). */
   submitDelayMs: number;
+  /** Absolute paths the core writes before the command is typed (HIVE-280), as `HeadlessPlan.files`. */
+  files?: readonly { path: string; text: string }[];
 }
 
 /** Agent runs: no tty, one turn per process (HIVE-337). */

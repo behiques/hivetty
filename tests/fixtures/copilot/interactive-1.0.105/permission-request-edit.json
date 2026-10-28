@@ -1,0 +1,12 @@
+{
+  "hookName": "permissionRequest",
+  "sessionId": "11111111-2222-4333-8444-555555555553",
+  "timestamp": 1793151576607,
+  "cwd": "/tmp/copilot-fixture/work",
+  "toolName": "edit",
+  "toolInput": {
+    "file_path": "/tmp/copilot-fixture/work/edit.txt",
+    "diff": "\ndiff --git a/tmp/copilot-fixture/work/edit.txt b/tmp/copilot-fixture/work/edit.txt\ncreate file mode 100644\nindex 0000000..0000000\n--- a/dev/null\n+++ b/tmp/copilot-fixture/work/edit.txt\n@@ -1,0 +1,2 @@\n+hello\n+\n\n"
+  },
+  "permissionSuggestions": []
+}
