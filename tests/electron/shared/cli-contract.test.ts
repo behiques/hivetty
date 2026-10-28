@@ -24,6 +24,13 @@ describe('cli-contract (HIVE-341)', () => {
     expect(CODEX_MODELS[0]).toBe('gpt-6-luna');
   });
 
+  it("dims Copilot's effort for kimi-k3, which refuses --reasoning-effort (HIVE-280, FINDINGS P8)", () => {
+    expect(CLI_VOCAB.copilot.noEffort).toEqual(['kimi-k3']);
+    expect(cliTakesEffort('copilot', 'kimi-k3')).toBe(false);
+    expect(cliTakesEffort('copilot', 'auto')).toBe(true);
+    for (const model of CLI_VOCAB.copilot.noEffort) expect(CLI_VOCAB.copilot.models).toContain(model);
+  });
+
   it('resolves an absent block to every CLI enabled, with no defaults', () => {
     expect(resolveClis(undefined)).toEqual({
       'claude-code': { agents: { enabled: true } },

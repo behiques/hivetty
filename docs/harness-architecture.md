@@ -105,8 +105,8 @@ settings, the status line script), `plugin.ts` and `done-skill.ts`, `mcp-config.
 `harnessOf` answers the CLI a session was opened with: `SpawnRequest.harness` (absent is
 Claude Code), checked with its `CLI_VOCAB` row by `parseSpawnRequest`, held per entity in the
 sessions closure, recorded in the session history and forwarded on restart and resume
-(HIVE-279). Claude Code and Codex launch; `spawn` and `restart` refuse Copilot (HIVE-280) and
-a Codex session in a container project with a reason, before anything starts or is killed. `harnessOf` answers `undefined`
+(HIVE-279). Claude Code, Codex and Copilot launch (HIVE-280); `spawn` and `restart` refuse
+a non-Claude session in a container project with a reason, before anything starts or is killed. `harnessOf` answers `undefined`
 for a plain terminal or a command (story 102). Only the sessions closure knows which an
 entity is: ids are minted by the renderer, so a prefix proves nothing. The fence below stops
 `harness/**` from importing `sessions/**`, so the core passes the fact in as
@@ -322,7 +322,7 @@ From the shipped values: the Codex and Copilot sections below, and `claude-code/
 | Cost | `total_cost_usd` in the result line | tokens only (`turn.completed`) | tokens from `--usage-output-file` |
 | Stop marker | the session id on the argv | a disabled `hive_wake` MCP server named by the id | the pinned session id |
 | Containers | yes | refused | refused |
-| Live suite | `test:agent` | `test:agent:codex` (0.164.x) | `test:agent:copilot` (1.0.104) |
+| Live suite | `test:agent` | `test:agent:codex` (0.164.x) | `test:agent:copilot` (1.0.104); sessions `test:session:copilot` (1.0.105) |
 
 The Limits and Cost rows follow each adapter's `capabilities` (`enforcesTurns`, `enforcesBudget`,
 `reportsCostUsd`).
@@ -352,8 +352,8 @@ rg -n --type ts -e "'(PreToolUse|PostToolUse|Stop|SubagentStop|SessionStart|Sess
 
 ### Follow-ups
 
-- HIVE-279's follow-up: HiveTTY skills and prompt markers in Codex sessions (D1). HIVE-280:
-  interactive Copilot sessions.
+- HIVE-279's follow-up: HiveTTY skills and prompt markers in Codex sessions (D1), and the same for
+  Copilot sessions (HIVE-280 D1), with Copilot's plan panel (its todo list is SQL, FINDINGS P4).
 - HIVE-358: plans in agent runs.
 - HIVE-353: the rotation handoff's late-id gap.
 - HIVE-354: the `approve` hang.
@@ -485,10 +485,10 @@ renderer's input profile makes Shift+Enter type Ctrl+J, Codex's newline (P7). Th
 
 Interactive: HIVE-279 (sessions; skills and markers are its follow-up). Meters: HIVE-334. Agent-run plans: HIVE-358. Containers: refused.
 
-## Copilot (headless, HIVE-343)
+## Copilot (headless, HIVE-343; sessions, HIVE-280)
 
-Adapter #3 lives in `electron/main/harness/copilot/` and is headless only, shaped as Codex's is:
-every interactive member refuses with "copilot has no interactive sessions yet (HIVE-280)".
+Adapter #3 lives in `electron/main/harness/copilot/`: headless runs (below) and, since HIVE-280,
+interactive sessions (**Sessions**, after them), shaped as Codex's are.
 Measured against `GitHub Copilot CLI 1.0.104-4`; the recorded hook bodies, a usage file and a
 refused token's stderr are in `tests/fixtures/copilot/`; the `preToolUse` bodies for every tool
 the fence translates are in `tests/fixtures/copilot/hooks-1.0.104/`.
@@ -597,7 +597,63 @@ MCP names and wildcards, their `literal:` forms) or `neverProduced` (`NotebookEd
 Copilot makes no call by those names, so a rule naming them allows nothing and widens nothing. The
 fence is total: `express` accepts every rule set.
 
-Interactive: HIVE-280. Meters: HIVE-335. Plans: HIVE-352. Containers: refused.
+**Sessions** (`copilot/launch.ts`, `copilot/record.ts`, `copilot/block-answer.ts`, HIVE-280).
+Measured against a real `copilot` 1.0.105 TUI on a pty, in
+`tests/fixtures/copilot/interactive-1.0.105/` (`FINDINGS.md` P0-P8, the scrubbed hook bodies, the
+`probe.py` driver). **The user's `~/.copilot` is kept** (D2): no `COPILOT_HOME`, so their login,
+model, MCP servers, plugins and trusted folders apply, and HiveTTY writes nothing there. The line,
+typed into the login shell as Codex's is:
+
+```
+unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN; copilot --session-id <uuid> [--model m]
+  [--reasoning-effort e] --plugin-dir '<state>/plugin' [--additional-mcp-config '<hive>'] [-i '<task>'] && exit
+```
+
+- `unset …`, and the same three in `stripEnv` with the six parent-session keys: the user's own
+  login authenticates (D3), so a stale token in the profile cannot 401 the session. The stored
+  agent token is never used.
+- `--session-id` starts and resumes alike (HIVE-343), so the core pins it (`conversationId:
+  'argv'`). `--reasoning-effort` is left off a model in `CLI_VOCAB.copilot.noEffort` (`kimi-k3`
+  refuses it, P8). `-i` carries the task on a fresh start only (P5).
+- `--plugin-dir` names `cliHome('copilot-session')/plugin` (`~/.hivetty/cli/copilot-session/plugin`),
+  beside the headless home and never in it, reaching the adapter as `LaunchSpec.stateDir`. The
+  plugin is `plugin.json` plus `hooks/hooks.json`, one wrapped `hookCommand` per event; it comes
+  back on **`LaunchPlan.files`**, which the core writes (renamed into place) before the first
+  keystroke, failing the spawn with the path when it cannot.
+- `--additional-mcp-config`: the stdio hive host, its identity forwarded by `${VAR}` reference
+  (`copilotMcpConfig`, shared with headless). Both add to the user's own hooks and servers (P7).
+- No `--allow-all`, `--yolo`, `--trust-folder` or `--no-auto-update`: Copilot asks in its own TUI,
+  and an untrusted folder shows its own trust dialog first. `/fence` is not used (D5).
+
+The session lane re-spells each Copilot event as Claude's and hands it to Claude's reader, so
+status, the inbox and the tracker see one shape:
+
+| Copilot | Claude | Note |
+| --- | --- | --- |
+| `sessionStart` | `SessionStart` | fires at the first prompt, not at boot |
+| `userPromptSubmitted` | `UserPromptSubmit` | |
+| `permissionRequest` | `PermissionRequest` | raises the card and "needs you" |
+| `postToolUse` | `PostToolUse` | clears it by tool name: no `tool_use_id` |
+| `agentStop` | `Stop` | a subagent's (`agentId` set) is ignored |
+| `notification` `elicitation_dialog` | `PermissionRequest` for `AskUserQuestion` | an `ask_user` question fires no `permissionRequest` (P2) |
+
+File writes pair by one name, `edit`: the permission names its kind (`edit`) while `postToolUse`
+names the tool (`create`, `edit`, `apply_patch`), so all four are spelled `edit`; `ask_user` is
+spelled `AskUserQuestion` so the answer clears the question. **An Esc denial fires no hook at all**
+(P1), so D5 is amended: Copilot's `answersBlock` reads the user's next write into the pty
+(`ptyWrite` only, never an app write) and the tracker's `release` clears the block; a lone Esc also
+ends the turn, moving through the dialog (arrows, mouse) answers nothing, and terminal reports are
+not input. Claude and Codex have no `answersBlock`.
+
+`record` finds a conversation at `$COPILOT_HOME/session-state/<id>/events.jsonl` (default
+`~/.copilot`). The folder exists from the launch and the file from the first prompt, so a session
+that never got a prompt restarts fresh (P3). A relaunch within seconds of a kill shows Copilot's
+own "Session in use → Resume anyway"; the user answers it, and the live suite waits for the killed
+process to exit. The newline is Alt+Enter (ESC CR, P6); the console's seed reads `AGENTS.md`.
+`pnpm test:session:copilot` holds all of it against the binary.
+
+Interactive: HIVE-280 (skills, prompt markers and the plan panel are its follow-ups). Meters:
+HIVE-335. Plans: HIVE-352. Containers: refused.
 
 ## The fences
 

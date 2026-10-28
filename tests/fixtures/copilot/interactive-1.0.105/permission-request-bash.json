@@ -1,0 +1,11 @@
+{
+  "hookName": "permissionRequest",
+  "sessionId": "11111111-2222-4333-8444-555555555551",
+  "timestamp": 1793151210951,
+  "cwd": "/tmp/copilot-fixture/work",
+  "toolName": "bash",
+  "toolInput": {
+    "command": "echo probe > made.txt"
+  },
+  "permissionSuggestions": []
+}

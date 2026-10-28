@@ -1,0 +1,11 @@
+{
+  "sessionId": "11111111-2222-4333-8444-555555555553",
+  "timestamp": 1793151577153,
+  "cwd": "/tmp/copilot-fixture/work",
+  "toolName": "apply_patch",
+  "toolArgs": "*** Begin Patch\n*** Add File: edit.txt\n+hello\n*** End Patch\n",
+  "toolResult": {
+    "resultType": "success",
+    "textResultForLlm": "Added 1 file(s): /tmp/copilot-fixture/work/edit.txt"
+  }
+}

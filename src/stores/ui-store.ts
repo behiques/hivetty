@@ -5,7 +5,7 @@ import type { Effort, Model } from '@/types/entity';
 import type { HatcheryRow } from '@/types/pull-request';
 import type { SettingsSection } from '@/types/settings';
 
-import { CODEX_MODELS } from '@shared/cli-contract';
+import { CODEX_MODELS, COPILOT_MODELS } from '@shared/cli-contract';
 import type { FsSearchMode } from '@shared/fs-contract';
 import type { HarnessId } from '@shared/harness-contract';
 import type { JiraStatusCategory } from '@shared/jira-contract';
@@ -158,12 +158,10 @@ interface UiState {
   /** The pane `openSettings` was asked for, or `null` for the default. */
   settingsSection: SettingsSection | null;
   /**
-   * The CLI the picker starts, and what was last picked on each one it can start (HIVE-279).
-   * Not persisted. Copilot joins with its sessions (HIVE-280); until then it cannot be picked,
-   * so it has no entry.
+   * The CLI the picker starts, and what was last picked on each (HIVE-279). Not persisted.
    */
-  newCli: SessionCli;
-  newPicks: Record<SessionCli, { model: Model; effort: Effort }>;
+  newCli: HarnessId;
+  newPicks: Record<HarnessId, { model: Model; effort: Effort }>;
   /** Which place the round-two bar has open (HIVE-195). Every launch starts on Home. */
   place: Place;
   /**
@@ -305,7 +303,7 @@ interface UiState {
   /** Opening closes Settings, so the card never sits under the overlay it was opened from. */
   setWhatsNewOpen: (open: boolean) => void;
   setPickerQuery: (query: string) => void;
-  setNewCli: (cli: SessionCli) => void;
+  setNewCli: (cli: HarnessId) => void;
   /** Both act on the CLI the picker is on (HIVE-279). */
   setNewModel: (model: Model) => void;
   setNewEffort: (effort: Effort) => void;
@@ -388,15 +386,14 @@ interface UiState {
  */
 export const NEWS_SECTION = '#news';
 
-/** The CLIs a session can be started on (HIVE-279). Widen with HIVE-280. */
-export type SessionCli = Exclude<HarnessId, 'copilot'>;
-
 /** What the picker starts each CLI on (HIVE-279), until the user picks otherwise. */
-const INITIAL_PICKS: Record<SessionCli, { model: Model; effort: Effort }> = {
+const INITIAL_PICKS: Record<HarnessId, { model: Model; effort: Effort }> = {
   // Unchanged from before this story: what every Claude chip has said since story 044.
   'claude-code': { model: 'opus', effort: 'high' },
   // Codex's own default model (CLI_VOCAB lists it first) at a middle effort.
   codex: { model: CODEX_MODELS[0], effort: 'medium' },
+  // Copilot's `auto` (CLI_VOCAB lists it first) at a middle effort, as Codex's (HIVE-280).
+  copilot: { model: COPILOT_MODELS[0], effort: 'medium' },
 };
 
 const initialUiState = {
@@ -420,7 +417,7 @@ const initialUiState = {
    * so the rule below still holds for every route that does not name a pane.
    */
   settingsSection: null as SettingsSection | null,
-  newCli: 'claude-code' as SessionCli,
+  newCli: 'claude-code' as HarnessId,
   newPicks: INITIAL_PICKS,
   place: 'home' as Place,
   sessionsTab: 'orch' as 'orch' | string,

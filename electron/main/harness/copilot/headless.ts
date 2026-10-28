@@ -7,6 +7,7 @@ import {
   HOOK_ENV_TOKEN,
 } from '@shared/hook-contract';
 
+import type { StdioServerSpec } from '../../mcp/agent-config';
 import { fenceCommand, hookCommand } from '../hook-commands';
 import type { HeadlessPlan, HeadlessSpec } from '../port';
 
@@ -104,6 +105,20 @@ export const copilotSettings = (): string =>
 /** `${VAR}`, which Copilot expands from the run's env (probed). */
 const envReference = (key: string): string => '${' + key + '}';
 
+/** The hive server for `--additional-mcp-config`, its identity forwarded by `${VAR}` name. */
+export const copilotMcpConfig = (server: StdioServerSpec, forward: readonly string[]) => ({
+  mcpServers: {
+    hive: {
+      type: 'local',
+      command: server.command,
+      args: server.args,
+      // By reference, so no value is on the argv.
+      env: { ...server.env, ...Object.fromEntries(forward.map((key) => [key, envReference(key)])) },
+      tools: ['*'],
+    },
+  },
+});
+
 export function launchCopilotHeadless(spec: HeadlessSpec): HeadlessPlan {
   const { conversation, hiveServer } = spec;
   const id = 'start' in conversation ? conversation.start : conversation.resume;
@@ -112,21 +127,7 @@ export function launchCopilotHeadless(spec: HeadlessSpec): HeadlessPlan {
     throw new Error('copilot agents cannot run in a container yet: the hive server there is HTTP.');
   }
 
-  const mcp = {
-    mcpServers: {
-      hive: {
-        type: 'local',
-        command: hiveServer.command,
-        args: hiveServer.args,
-        // By reference, so no value is on the argv.
-        env: {
-          ...hiveServer.env,
-          ...Object.fromEntries(HIVE_SERVER_ENV.map((key) => [key, envReference(key)])),
-        },
-        tools: ['*'],
-      },
-    },
-  };
+  const mcp = copilotMcpConfig(hiveServer, HIVE_SERVER_ENV);
   const usageFile = `${spec.stateDir}/usage/${id}.json`;
 
   return {

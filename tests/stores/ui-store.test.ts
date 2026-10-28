@@ -123,7 +123,18 @@ describe('ui-store — view state', () => {
     expect(useUiStore.getState().newPicks).toEqual({
       'claude-code': { model: 'haiku', effort: 'high' },
       codex: { model: 'gpt-6-luna', effort: 'xhigh' },
+      copilot: { model: 'auto', effort: 'medium' },
     });
+  });
+
+  it('starts copilot on its first model at medium effort, and keeps its pick (HIVE-280)', () => {
+    const ui = useUiStore.getState();
+    ui.setNewCli('copilot');
+    expect(useUiStore.getState().newPicks.copilot).toEqual({ model: 'auto', effort: 'medium' });
+    ui.setNewModel('claude-sonnet-5.5');
+    ui.setNewCli('claude-code');
+    ui.setNewCli('copilot');
+    expect(useUiStore.getState().newPicks.copilot).toEqual({ model: 'claude-sonnet-5.5', effort: 'medium' });
   });
 
   it('tracks the orchestrator table selection by id', () => {

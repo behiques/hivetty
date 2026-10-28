@@ -1,0 +1,9 @@
+{
+  "sessionId": "11111111-2222-4333-8444-555555555555",
+  "timestamp": 1793151786367,
+  "cwd": "/tmp/copilot-fixture/work",
+  "message": "Information requested",
+  "title": "Information requested",
+  "hook_event_name": "Notification",
+  "notification_type": "elicitation_dialog"
+}
