@@ -92,14 +92,15 @@ export function OvermindHead() {
 /** Starts one directly in the filtered project, as `NewSessionLink` does (spec, Decisions). */
 function NewSessionHere({ projectId, projectName }: { projectId: string; projectName: string }) {
   const spawnSession = useSpawnSession();
-  const { cli, model, effort } = useNewSessionPick();
+  const { cli, model, effort, ready } = useNewSessionPick();
   const access = useProjectAccess(projectId);
 
   return (
     <Button
       variant="primary"
       onClick={() => spawnSession(projectId, '', cli, model, effort)}
-      disabled={!access.spawnable}
+      // Off until the account's Codex list answers, so the click never starts on the fallback.
+      disabled={!access.spawnable || !ready}
       title={access.reason ?? `Starts on ${model} · ${effort}`}
       className="flex items-center gap-1.5 rounded-r-none"
     >

@@ -169,6 +169,33 @@ describe('ClisSection (HIVE-341)', () => {
     expect(setCliAgentsConfig).toHaveBeenLastCalledWith({ cli: 'codex', model: 'gpt-6.1-sol' });
   });
 
+  it("reads CLI default as Codex's own first model: its efforts, and a saved effort it lacks cleared", async () => {
+    const user = userEvent.setup();
+    codexModels.mockResolvedValueOnce([
+      { slug: 'gpt-6-luna', description: '', defaultEffort: 'medium', efforts: ['low', 'medium'] },
+      { slug: 'gpt-6.1-sol', description: '', defaultEffort: 'low', efforts: ['low', 'ultra'] },
+    ]);
+    seed({ codex: { agents: { model: 'gpt-6.1-sol', effort: 'ultra' } } });
+    render(<ClisSection />);
+    const model = codex().getByRole('combobox', { name: 'Model' });
+    await waitFor(() => expect(within(model).getAllByRole('option')).toHaveLength(3));
+
+    await user.selectOptions(model, '');
+    expect(setCliAgentsConfig).toHaveBeenLastCalledWith({ cli: 'codex', model: null, effort: null });
+  });
+
+  it("offers Codex's first model's efforts while the model is CLI default", async () => {
+    codexModels.mockResolvedValueOnce([
+      { slug: 'gpt-6-luna', description: '', defaultEffort: 'medium', efforts: ['low', 'medium'] },
+    ]);
+    seed(undefined);
+    render(<ClisSection />);
+    const effort = codex().getByRole('combobox', { name: 'Effort' });
+    await waitFor(() =>
+      expect(within(effort).getAllByRole('option').map((option) => option.getAttribute('value'))).toEqual(['', 'low', 'medium']),
+    );
+  });
+
   it('renders a card per CLI (HIVE-342)', () => {
     seed(undefined);
     render(<ClisSection />);

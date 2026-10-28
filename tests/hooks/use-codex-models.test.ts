@@ -12,17 +12,28 @@ const LUNA = { slug: 'gpt-6-luna', description: 'Fast.', defaultEffort: 'medium'
 describe('useCodexModels', () => {
   beforeEach(() => codexModels.mockReset());
 
-  it("answers the account's list once it arrives", async () => {
+  it("answers the account's list once it arrives, and says when it has", async () => {
     codexModels.mockResolvedValue([LUNA]);
     const { result } = renderHook(() => useCodexModels());
-    expect(result.current).toBe(CODEX_FALLBACK_MODELS);
-    await waitFor(() => expect(result.current).toEqual([LUNA]));
+    expect(result.current).toEqual({ models: CODEX_FALLBACK_MODELS, settled: false });
+    await waitFor(() => expect(result.current).toEqual({ models: [LUNA], settled: true }));
   });
 
-  it.each([[null], [[]]])('keeps the fallback when the answer is %j', async (answer) => {
+  it.each([[null], [[]]])('keeps the fallback, settled, when the answer is %j', async (answer) => {
     codexModels.mockResolvedValue(answer);
     const { result } = renderHook(() => useCodexModels());
-    await waitFor(() => expect(codexModels).toHaveBeenCalled());
-    expect(result.current).toBe(CODEX_FALLBACK_MODELS);
+    await waitFor(() => expect(result.current.settled).toBe(true));
+    expect(result.current.models).toBe(CODEX_FALLBACK_MODELS);
+  });
+
+  it('reads nothing until it is enabled, then reads', async () => {
+    codexModels.mockResolvedValue([LUNA]);
+    const { result, rerender } = renderHook(({ enabled }) => useCodexModels(enabled), { initialProps: { enabled: false } });
+    expect(codexModels).not.toHaveBeenCalled();
+    expect(result.current.settled).toBe(false);
+
+    rerender({ enabled: true });
+    await waitFor(() => expect(result.current).toEqual({ models: [LUNA], settled: true }));
+    expect(codexModels).toHaveBeenCalledTimes(1);
   });
 });

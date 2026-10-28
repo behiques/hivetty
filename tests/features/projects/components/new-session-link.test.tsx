@@ -138,6 +138,19 @@ describe('NewSessionLink', () => {
     expect(lastSession()).toMatchObject({ harness: 'codex', model: 'gpt-6-luna', effort: 'medium' });
   });
 
+  it("waits for the account's Codex models before it starts a Codex session", async () => {
+    let answer!: (models: CliModel[] | null) => void;
+    codexModels.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    setProjectConfigForTest(snapshot([{ id: PROJECT, status: 'ok' }]));
+    useUiStore.getState().setNewCli('codex');
+
+    render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
+    expect(screen.getByRole('button')).toBeDisabled();
+
+    answer(null);
+    await waitFor(() => expect(screen.getByRole('button')).toBeEnabled());
+  });
+
   it('opens the new session, the way every other spawn does', async () => {
     setProjectConfigForTest(snapshot([{ id: PROJECT, status: 'ok' }]));
     render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
