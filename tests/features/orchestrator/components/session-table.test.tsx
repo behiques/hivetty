@@ -132,7 +132,8 @@ describe('SessionTable', () => {
     render(<SessionTable />);
     const ended = rows().find((row) => row.textContent?.includes('tz-fix'))!;
     const name = within(ended).getByText(/tz-fix/);
-    expect(name).toHaveClass('text-subtle');
+    // The cell carries the token; the name sits in it beside the CLI mark.
+    expect(name.parentElement).toHaveClass('text-subtle');
     expect(name.closest('.opacity-60')).toBeNull();
   });
 
@@ -156,6 +157,21 @@ describe('SessionTable', () => {
       the rest.
     */
     expect(within(shellOf(row)).getByText('#482')).toBeInTheDocument();
+  });
+
+  it('marks each row with its CLI, Claude Code included', () => {
+    act(() => {
+      useHiveStore.getState().reset();
+    });
+    useHiveStore.getState().spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
+    useHiveStore.getState().spawnSession('nova-web', '', 'claude-code', 'opus', 'high');
+
+    render(<SessionTable />);
+
+    const marks = rows().map((row) => row.querySelector('svg[data-cli]')?.getAttribute('data-cli'));
+    expect(marks.sort()).toEqual(['claude-code', 'codex']);
+    // Named for a screen reader; the mark is decorative.
+    expect(screen.getByText('Codex')).toHaveClass('sr-only');
   });
 
   it('links the PR to its GitHub page', () => {
