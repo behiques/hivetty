@@ -10,6 +10,7 @@ import { TextField } from '@/components/ui/text-field';
 import { SettingsProviderGroup } from '@features/settings/components/settings-provider-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SettingsGroup } from '@features/shared/components/settings-group';
+import { useCodexModels } from '@hooks/use-codex-models';
 import { useProjectConfig } from '@hooks/use-project-config';
 import { clearCliToken, cliTokensState, setCliToken } from '@lib/cli-tokens';
 import { CLI_NAMES } from '@lib/harness/cli-names';
@@ -19,6 +20,7 @@ import {
   COPILOT_DENY_PATTERN,
   HEADLESS_SANDBOXES,
   type CliAgents,
+  type CliModel,
   type CliTokensState,
   type HeadlessSandbox,
 } from '@shared/cli-contract';
@@ -40,6 +42,7 @@ const options = (values: readonly string[]) => [
  */
 export function ClisSection() {
   const snapshot = useProjectConfig();
+  const codexModels = useCodexModels();
 
   if (!snapshot) {
     return (
@@ -67,15 +70,25 @@ export function ClisSection() {
         hint="For agents whose AGENT.md has no harness: field."
       />
       {HARNESS_IDS.map((cli) => (
-        <CliCard key={cli} cli={cli} agents={snapshot.clis[cli].agents} />
+        <CliCard key={cli} cli={cli} agents={snapshot.clis[cli].agents} codexModels={codexModels} />
       ))}
     </div>
   );
 }
 
-function CliCard({ cli, agents }: { cli: HarnessId; agents: CliAgents }) {
+function CliCard({
+  cli,
+  agents,
+  codexModels,
+}: {
+  cli: HarnessId;
+  agents: CliAgents;
+  codexModels: readonly CliModel[];
+}) {
   const name = CLI_NAMES[cli];
-  const { models, efforts } = CLI_VOCAB[cli];
+  const { efforts } = CLI_VOCAB[cli];
+  // Codex's list is the account's; Claude's and Copilot's are static.
+  const models = cli === 'codex' ? codexModels.map((model) => model.slug) : CLI_VOCAB[cli].models;
 
   return (
     <SettingsProviderGroup name={name}>

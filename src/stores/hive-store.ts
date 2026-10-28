@@ -122,7 +122,7 @@ import type {
   ChangedFilesEvent,
   ChangedFilesSnapshot,
 } from '@shared/changed-files-contract';
-import { CLI_VOCAB } from '@shared/cli-contract';
+import { cliAcceptsModel, CLI_VOCAB } from '@shared/cli-contract';
 import type { ModeChange } from '@shared/config-contract';
 import type {
   GhResult,
@@ -1609,7 +1609,7 @@ let terminalCounter = 0;
  * true.
  */
 const isKnownModel = (harness: HarnessId, value: string | undefined): value is Model =>
-  value !== undefined && (CLI_VOCAB[harness].models as readonly string[]).includes(value);
+  value !== undefined && cliAcceptsModel(harness, value);
 
 const isKnownEffort = (harness: HarnessId, value: string | undefined): value is Effort =>
   value !== undefined && (CLI_VOCAB[harness].efforts as readonly string[]).includes(value);

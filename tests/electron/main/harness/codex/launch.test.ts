@@ -27,8 +27,10 @@ describe('codex session command (HIVE-279)', () => {
     );
   });
 
-  it('refuses a model or effort outside Codex’s vocabulary rather than quote it', () => {
-    expect(() => line({ model: 'opus' })).toThrow(/codex: refusing model/);
+  it('passes any shell-safe model, unquoted, and refuses one a shell would read', () => {
+    expect(line({ model: 'gpt-7-nova' })).toContain('-m gpt-7-nova ');
+    expect(() => line({ model: 'gpt-6 --yolo' })).toThrow(/codex: refusing model/);
+    expect(() => line({ model: "gpt-6'; rm -rf ~" })).toThrow(/codex: refusing model/);
     expect(() => line({ effort: 'none; rm -rf ~' })).toThrow(/codex: refusing effort/);
   });
 

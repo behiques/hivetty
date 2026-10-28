@@ -17,6 +17,7 @@ import type {
 import type { ChangedFilesEvent, ChangedFilesSnapshot } from '@shared/changed-files-contract';
 import type {
   ClearCliTokenRequest,
+  CliModel,
   CliTokensState,
   SetAgentsDefaultCliRequest,
   SetCliAgentsRequest,
@@ -754,6 +755,7 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.cliSetToken, request),
     clearToken: (request: ClearCliTokenRequest): Promise<CliTokensState> =>
       ipcRenderer.invoke(CH.cliClearToken, request),
+    codexModels: (): Promise<CliModel[]> => ipcRenderer.invoke(CH.cliCodexModels),
   },
   /*
     HIVE-123. Four verbs, none of them returning a credential — see the

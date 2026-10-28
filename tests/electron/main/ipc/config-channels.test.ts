@@ -136,6 +136,11 @@ vi.mock('../../../../electron/main/config/index', () => ({
   configPath: vi.fn(() => '/tmp/config.json'),
 }));
 
+vi.mock('../../../../electron/main/harness/codex/models', () => ({
+  readCodexModels: () =>
+    Promise.resolve([{ slug: 'gpt-6-luna', description: 'Fast.', defaultEffort: 'medium', efforts: ['low', 'medium'] }]),
+}));
+
 const { CH } = await import('../../../../electron/shared/ipc-contract');
 const config = await import('../../../../electron/main/config/index');
 const { registerIpcHandlers, resetIpcHandlers } = await import(
@@ -299,5 +304,14 @@ describe('story 103 config channels', () => {
       }),
     ).rejects.toThrow(/unexpected key/);
     expect(config.repointProject).not.toHaveBeenCalled();
+  });
+});
+
+describe('cli:codex-models', () => {
+  it("answers the Codex adapter's models to a trusted sender only", async () => {
+    await expect(invoke(CH.cliCodexModels, trustedEvent, undefined)).resolves.toEqual([
+      { slug: 'gpt-6-luna', description: 'Fast.', defaultEffort: 'medium', efforts: ['low', 'medium'] },
+    ]);
+    await expect(invoke(CH.cliCodexModels, untrustedEvent, undefined)).rejects.toThrow();
   });
 });

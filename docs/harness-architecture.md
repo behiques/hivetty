@@ -35,6 +35,7 @@ Phase 2, headless runs through the adapter, is Epic HIVE-336 and is done: see
 | `record`, `meters` | HIVE-239 (landed) |
 | `promptMarker` | HIVE-240 (landed) |
 | `installed` | HIVE-345: the user's own skills and plugins (`skillNames`, `pluginNames`, `sessionOverrides`), reached through `sessionAdapter()` by the agents runtime, the skills snapshot and the hook settings' `enabledPlugins`. `skillPlaces` (HIVE-344) words where `skillNames` looks, for the agents' missing-skill message. |
+| `models` | Optional. Codex's: the account's models from `$CODEX_HOME/models_cache.json`, for the new-session picker over `cli:codex-models`. Absent on Claude Code and Copilot, whose lists are static. |
 
 ### Capabilities: build one, shape for three
 

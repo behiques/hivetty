@@ -1,6 +1,6 @@
 import type { RunUsage } from '@shared/agent-contract';
 import type { ChangeMark } from '@shared/changed-files-contract';
-import type { HeadlessSandbox } from '@shared/cli-contract';
+import type { CliModel, HeadlessSandbox } from '@shared/cli-contract';
 import type { ContainerFreshness, ResolvedContainer } from '@shared/config-contract';
 import type { Capabilities, HarnessId } from '@shared/harness-contract';
 import type { HookAgentEvent, HookIdentity, HookStatusEvent } from '@shared/hook-contract';
@@ -52,6 +52,8 @@ export interface HarnessAdapter {
    * CLI whose hooks cannot say so: `cancelled` also ends the turn. Absent: blocks clear by hooks alone.
    */
   answersBlock?(data: string): BlockAnswer | null;
+  /** The models this account has, for the picker; `[]` when the CLI cannot say. Absent: the CLI's static list. */
+  models?(): Promise<CliModel[]>;
 }
 
 /** How the user answered a CLI's prompt in the terminal (HIVE-280). */

@@ -14,7 +14,9 @@ import { SelectField } from '@components/ui/select-field';
 import { SwarmCreature, type Creature } from '@components/ui/swarm-creature';
 import { can } from '@config/runtime';
 import { CliDock } from '@features/sessions/components/cli-dock';
+import { CodexModelField } from '@features/sessions/components/codex-model-field';
 import { OptionStepper } from '@features/sessions/components/option-stepper';
+import { useCodexModels } from '@hooks/use-codex-models';
 import { useProjectAccess, useProjectConfig } from '@hooks/use-project-config';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { CLI_VOCAB, cliTakesEffort } from '@shared/cli-contract';
@@ -75,6 +77,16 @@ export function NewSessionPicker() {
   const [creature] = useState(() => PICKER_CREATURES[Math.floor(Math.random() * PICKER_CREATURES.length)]!);
   const spawnSession = useSpawnSession();
   const { pickerQuery, pickerTicket, newCli, newModel, newEffort } = usePickerState();
+  /*
+    Codex's list is the account's (useCodexModels). A stored pick the account lacks shows and starts
+    as its first model, and an effort the picked model lacks as that model's default. Both are
+    resolved here, not written back, so switching back finds the pick where it was (HIVE-100's rule).
+  */
+  const codexModels = useCodexModels();
+  const codexPick = codexModels.find((model) => model.slug === newModel) ?? codexModels[0]!;
+  const model = newCli === 'codex' ? codexPick.slug : newModel;
+  const efforts: readonly string[] = newCli === 'codex' ? codexPick.efforts : CLI_VOCAB[newCli].efforts;
+  const effort = newCli === 'codex' && !efforts.includes(newEffort) ? codexPick.defaultEffort : newEffort;
   const ticket = useTicket(pickerTicket);
   const { closePicker, setPickerQuery, setNewCli, setNewModel, setNewEffort } =
     usePickerActions();
@@ -162,7 +174,7 @@ export function NewSessionPicker() {
     //
     // From a ticket, the first message is the workflow's (or the edit made
     // here); ⌥↵ and the wake card's projects start empty.
-    spawnSession(projectId, empty || wake !== null ? '' : firstMessage.trim(), newCli, newModel, newEffort, pickerTicket ?? undefined);
+    spawnSession(projectId, empty || wake !== null ? '' : firstMessage.trim(), newCli, model, effort, pickerTicket ?? undefined);
   };
 
   return (
@@ -283,7 +295,9 @@ export function NewSessionPicker() {
             The CLI's own words (HIVE-279): Claude's list is not Codex's. A list too long for a
             stepper's dots (Copilot's 32, HIVE-280) is the platform's select, in the same column.
           */}
-          {CLI_VOCAB[newCli].models.length > STEPPER_MAX ? (
+          {newCli === 'codex' ? (
+            <CodexModelField models={codexModels} value={model} onChange={setNewModel} />
+          ) : CLI_VOCAB[newCli].models.length > STEPPER_MAX ? (
             <SelectField
               className="min-w-0 flex-1"
               label="Model"
@@ -313,11 +327,12 @@ export function NewSessionPicker() {
           */}
           <OptionStepper
             label="thinking effort"
-            options={CLI_VOCAB[newCli].efforts}
-            value={newEffort}
+            options={efforts}
+            value={effort}
             onChange={setNewEffort}
-            disabled={!cliTakesEffort(newCli, newModel)}
-            disabledReason={`not for ${newModel}`}
+            marks={newCli === 'codex' ? { [codexPick.defaultEffort]: 'default' } : undefined}
+            disabled={!cliTakesEffort(newCli, model)}
+            disabledReason={`not for ${model}`}
           />
         </div>
 

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { resolveClis } from '@shared/cli-contract';
+import { resolveClis, type CliModel } from '@shared/cli-contract';
 import { emptySnapshot, type ConfigSnapshot } from '@shared/config-contract';
 
 import { ClisSection } from '@features/settings/components/clis-section';
@@ -29,6 +29,9 @@ vi.mock('@lib/cli-tokens', () => ({
   setCliToken: (request: unknown) => setCliToken(request),
   clearCliToken: (request: unknown) => clearCliToken(request),
 }));
+
+const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolve(null));
+vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels() }));
 
 /** The Claude Code card: since HIVE-342 there is a card per CLI. */
 const claude = () => within(screen.getByRole('region', { name: 'Claude Code' }));
@@ -97,6 +100,23 @@ describe('ClisSection (HIVE-341)', () => {
     expect(claude().getByLabelText('Model')).toBeDisabled();
     expect(claude().getByLabelText('Effort')).toBeDisabled();
     expect(screen.getByText(/agents skip Claude Code/)).toBeInTheDocument();
+  });
+
+  it("lists the account's Codex models in Codex's model select", async () => {
+    codexModels.mockResolvedValueOnce([
+      { slug: 'gpt-6.1-sol', description: '', defaultEffort: 'low', efforts: ['low'] },
+      { slug: 'gpt-7-nova', description: '', defaultEffort: 'low', efforts: ['low'] },
+    ]);
+    seed(undefined);
+    render(<ClisSection />);
+    const model = codex().getByRole('combobox', { name: 'Model' });
+    await waitFor(() =>
+      expect(within(model).getAllByRole('option').map((option) => option.getAttribute('value'))).toEqual([
+        '',
+        'gpt-6.1-sol',
+        'gpt-7-nova',
+      ]),
+    );
   });
 
   it('renders a card per CLI (HIVE-342)', () => {

@@ -44,12 +44,14 @@ describe('the clis block (HIVE-341)', () => {
       doc({ clis: { codex: { agents: { model: 'gpt-6-luna', effort: 'xhigh' } } } }),
       'config',
     );
-    const claudeWords = parseConfig(doc({ clis: { codex: { agents: { model: 'opus' } } } }), 'config');
+    const claudeWords = parseConfig(doc({ clis: { codex: { agents: { model: 'gpt 6; rm' } } } }), 'config');
 
     expect(parsed.clis).toEqual({ codex: { agents: { model: 'gpt-6-luna', effort: 'xhigh' } } });
     expect(claudeWords.errors).toEqual([
-      'config.clis.codex.agents.model: expected one of gpt-6-luna, gpt-5.6-terra, gpt-5.6-luna — ignored',
+      'config.clis.codex.agents.model: expected a codex model id — ignored',
     ]);
+    const live = parseConfig(doc({ clis: { codex: { agents: { model: 'gpt-7-nova', effort: 'ultra' } } } }), 'config');
+    expect(live.clis).toEqual({ codex: { agents: { model: 'gpt-7-nova', effort: 'ultra' } } });
   });
 
   it('reads a sandbox on codex only, and never danger-full-access (HIVE-342)', () => {

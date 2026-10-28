@@ -77,8 +77,16 @@ describe('parseSpawnRequest', () => {
       expect(
         parseSpawnRequest({ ...validSpawn, harness: 'codex', model: 'gpt-6-luna', effort: 'xhigh' }),
       ).toEqual({ ...validSpawn, harness: 'codex', model: 'gpt-6-luna', effort: 'xhigh' });
-      // Claude's words are not Codex's: the closed list is what keeps the argv unquoted.
-      expect(() => parseSpawnRequest({ ...validSpawn, harness: 'codex', model: 'opus' })).toThrow(/spawn\.model/);
+      // Codex's list is the account's: any shell-safe slug passes, anything a shell reads does not.
+      expect(parseSpawnRequest({ ...validSpawn, harness: 'codex', model: 'gpt-7-nova', effort: 'ultra' })).toEqual({
+        ...validSpawn,
+        harness: 'codex',
+        model: 'gpt-7-nova',
+        effort: 'ultra',
+      });
+      for (const model of ['gpt-6 --yolo', 'gpt-6;rm -rf ~', 'GPT-6', '', 42]) {
+        expect(() => parseSpawnRequest({ ...validSpawn, harness: 'codex', model })).toThrow(/spawn\.model/);
+      }
       expect(() => parseSpawnRequest({ ...validSpawn, harness: 'claude-code', effort: 'xhigh' })).toThrow(
         /spawn\.effort/,
       );
@@ -2114,10 +2122,18 @@ describe('parseSetCliAgentsRequest (HIVE-341)', () => {
     });
   });
 
+  it("takes any shell-safe codex model, and still only Claude's list for claude-code", () => {
+    expect(parseSetCliAgentsRequest({ cli: 'codex', model: 'gpt-7-nova' })).toEqual({ cli: 'codex', model: 'gpt-7-nova' });
+    expect(() => parseSetCliAgentsRequest({ cli: 'codex', model: 'gpt 7' })).toThrow(/setCliAgents\.model/);
+    expect(() => parseSetCliAgentsRequest({ cli: 'claude-code', model: 'gpt-7-nova' })).toThrow(
+      /setCliAgents\.model: expected one of/,
+    );
+  });
+
   it.each([
     [{ cli: 'gemini', enabled: true }, /cli/],
     [{ cli: 'copilot', model: 'opus' }, /model/],
-    [{ cli: 'codex', model: 'opus' }, /model/],
+    [{ cli: 'codex', model: 'opus; rm' }, /model/],
     [{ cli: 'claude-code', model: 'gpt-5' }, /model/],
     [{ cli: 'claude-code', effort: 'extreme' }, /effort/],
     [{ cli: 'claude-code', enabled: 'yes' }, /enabled/],

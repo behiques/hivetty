@@ -11,7 +11,8 @@ const SPINNER = /^[⠀-⣿] /;
 /** The title's lead while an approval waits (FINDINGS P7). */
 const ACTION_REQUIRED = '[ ! ] Action Required | ';
 
-const defaultHome = (): string => process.env.CODEX_HOME ?? join(homedir(), '.codex');
+/** Codex's home: `$CODEX_HOME`, else `~/.codex`. */
+export const codexHome = (): string => process.env.CODEX_HOME ?? join(homedir(), '.codex');
 
 /** A directory's entries, newest-named first; `[]` for one that is not there. */
 const entries = (dir: string): string[] => {
@@ -37,7 +38,7 @@ const nameFromTitle = (title: string): string => {
  * `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<session_id>.jsonl` (FINDINGS P6), found by its id
  * whatever the cwd, newest day first. `home` is read on every call, the test seam included.
  */
-export function codexRecord(home: () => string = defaultHome): HarnessRecord {
+export function codexRecord(home: () => string = codexHome): HarnessRecord {
   const transcriptPath = (_cwd: string, sessionUuid: string): string | null => {
     // Joined into a filename match: only a uuid gets that far.
     if (!UUID.test(sessionUuid)) return null;

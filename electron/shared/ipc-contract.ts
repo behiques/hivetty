@@ -33,6 +33,7 @@ import type {
 import type { ChangedFilesEvent, ChangedFilesSnapshot } from './changed-files-contract';
 import type {
   ClearCliTokenRequest,
+  CliModel,
   CliTokensState,
   SetAgentsDefaultCliRequest,
   SetCliAgentsRequest,
@@ -317,6 +318,8 @@ export const CH = {
   cliTokensState: 'cli:tokens-state',
   cliSetToken: 'cli:set-token',
   cliClearToken: 'cli:clear-token',
+  /** The models the signed-in Codex account has, from its `models_cache.json`. No payload; `[]` means "use the fallback". */
+  cliCodexModels: 'cli:codex-models',
   /**
    * The container host alias, and where the receiver listens (HIVE-131, HIVE-134).
    *
@@ -2736,6 +2739,8 @@ export interface HiveBridge {
     /** Store one CLI's token, replacing what it held. Throws when there is no keyring. */
     setToken(request: SetCliTokenRequest): Promise<CliTokensState>;
     clearToken(request: ClearCliTokenRequest): Promise<CliTokensState>;
+    /** Codex's models for this account; `[]` when its cache cannot be read. */
+    codexModels(): Promise<CliModel[]>;
   };
   /**
    * Slack — the MCP server (HIVE-123) and socket mode (HIVE-124).
