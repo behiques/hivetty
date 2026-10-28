@@ -162,17 +162,18 @@ describe('NewSessionPicker', () => {
       expect(screen.getByText('Pick a project — a Claude Code terminal will open for it')).toBeInTheDocument();
     });
 
-    it('hugs its segments as a pill under a CLI label, as the mockup draws it', () => {
+    it('docks the CLIs as logos under the title, above the pinned projects (variant F)', () => {
       render(<NewSessionPicker />);
 
       const cli = screen.getByRole('radiogroup', { name: 'cli' });
-      // A column wrapper stretches its children unless told otherwise; the mockup's switch does not stretch.
-      expect(cli.parentElement).toHaveClass('items-start');
-      // Three short labels always fit, so the switch never wraps into a rounded box.
-      expect(cli).not.toHaveClass('rounded-xl');
-      expect(cli).toHaveClass('rounded-full');
-      expect(cli.previousElementSibling).toHaveTextContent('cli');
-      expect(cli.previousElementSibling).toHaveClass('uppercase', 'text-micro', 'text-term-head');
+      expect(cli.querySelectorAll('svg[data-cli]')).toHaveLength(3);
+      // No uppercase CLI label any more: the dock names its choice underneath.
+      expect(screen.queryByText('cli', { exact: true })).not.toBeInTheDocument();
+
+      const title = screen.getByText('Start a new session');
+      const firstPin = screen.getAllByRole('button').find((button) => button.className.includes('rounded-full'))!;
+      expect(title.compareDocumentPosition(cli) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(cli.compareDocumentPosition(firstPin) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it('starts a Codex session on Codex’s own model and effort (HIVE-279 PR B)', async () => {

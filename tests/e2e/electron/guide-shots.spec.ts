@@ -110,6 +110,8 @@ test('guide shots', async ({}, testInfo) => {
   await overmindNewSession(page).click();
   const search = page.getByRole('textbox', { name: 'Search all projects' });
   await expect(search).toBeFocused();
+  // With projects mapped the title draws, and the CLI dock under it offers every CLI.
+  await expect(page.getByRole('radiogroup', { name: 'cli' }).getByRole('radio')).toHaveCount(3);
   await shot(page, '02-new-session-picker.png');
 
   // 03: a live session on the stage, the session panel beside it.

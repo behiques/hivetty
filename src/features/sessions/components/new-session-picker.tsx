@@ -10,17 +10,16 @@ import type { ProjectRow as ProjectRowData } from '@/types/entity';
 import { Button } from '@components/ui/button';
 import { Icon } from '@components/ui/icon';
 import { ProjectKey } from '@components/ui/project-key';
-import { SegmentedControl } from '@components/ui/segmented-control';
 import { SelectField } from '@components/ui/select-field';
 import { SwarmCreature, type Creature } from '@components/ui/swarm-creature';
 import { can } from '@config/runtime';
+import { CliDock } from '@features/sessions/components/cli-dock';
 import { CodexModelField } from '@features/sessions/components/codex-model-field';
 import { OptionStepper } from '@features/sessions/components/option-stepper';
 import { useCodexModels } from '@hooks/use-codex-models';
 import { useProjectAccess, useProjectConfig } from '@hooks/use-project-config';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { CLI_VOCAB, cliTakesEffort } from '@shared/cli-contract';
-import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 import { ticketStart, type TicketFacts } from '@shared/ticket-workflow';
 import {
   useProjectLiveCount,
@@ -34,12 +33,6 @@ import {
   usePickerState,
   useSettingsActions,
 } from '@stores/ui-store';
-
-/*
-  No CliMark in the segments: `SegmentedControl` takes an icon *name*, not a node, so the mark lives
-  on the header chip instead (HIVE-279).
-*/
-const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli] }));
 
 /** The most models a stepper draws as dots before its labels collide (HIVE-280). */
 const STEPPER_MAX = 8;
@@ -252,6 +245,9 @@ export function NewSessionPicker() {
                   `Pick a project — a ${CLI_NAMES[newCli]} terminal will open for it`}
               </span>
             </div>
+
+            {/* The CLI first, under the title (variant F): it decides what the rest of the form offers. */}
+            <CliDock value={newCli} onChange={setNewCli} />
           </>
         )}
 
@@ -292,20 +288,6 @@ export function NewSessionPicker() {
               onSelect={spawn}
             />
           ))}
-        </div>
-
-        {/* `items-start`: a column stretches its children, and the switch hugs its segments. */}
-        <div className="flex w-[560px] max-w-[92%] flex-col items-start gap-1.5">
-          {/* Set like the steppers' labels below, so the three controls read as one form. */}
-          <span className="text-micro tracking-[0.06em] uppercase text-term-head">cli</span>
-          {/* No `wrap`: three short labels always fit, and a wrapped switch loses its pill. */}
-          <SegmentedControl
-            label="cli"
-            options={CLI_OPTIONS}
-            value={newCli}
-            // CLI_OPTIONS is HARNESS_IDS.
-            onChange={(cli) => setNewCli(cli as HarnessId)}
-          />
         </div>
 
         <div className="flex w-[560px] max-w-[92%] flex-wrap gap-6">

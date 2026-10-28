@@ -54,6 +54,7 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
 
   const active = activeTab === id;
   const label = entityLabel(entity);
+  const cli = entity.harness ?? 'claude-code';
 
   return (
     <button
@@ -69,13 +70,9 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
         {/* Decoration: the status label sits right beside it. */}
         <StatusComb status={entity.status} detail={entity.idleDetail} />
         <span className="min-w-0 truncate text-left text-ui">{label}</span>
-        {/* The CLI, when it is not Claude's (HIVE-281): the model chip's order, name then mark. */}
-        {entity.harness === undefined || entity.harness === 'claude-code' ? null : (
-          <>
-            <CliMark cli={entity.harness} />
-            <span className="sr-only">{CLI_NAMES[entity.harness]}</span>
-          </>
-        )}
+        {/* The CLI on every row, Claude's included: the model chip's order, name then mark. */}
+        <CliMark cli={cli} className="text-muted" />
+        <span className="sr-only">{CLI_NAMES[cli]}</span>
         {/* The id after the name; an unnamed session already reads as its id. */}
         {label === entity.id ? null : (
           <Tag tone="subtle" className="shrink-0 tabular-nums">

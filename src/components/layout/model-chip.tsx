@@ -177,8 +177,9 @@ export function ModelChip() {
 
   const parts = chipParts(metrics, entity.model, entity.effort);
   /*
-    Led by the CLI only when it is not Claude's (HIVE-279): every Claude chip on
-    screen reads exactly as it did, and a Codex one says so before its model id.
+    Led by the CLI's name only when it is not Claude's (HIVE-279): every Claude chip
+    reads as it did, and a Codex one says so before its model id. The mark beside it
+    shows for every CLI.
   */
   const cli = entity.harness ?? 'claude-code';
   const label =
@@ -235,7 +236,7 @@ export function ModelChip() {
       className="flex items-center gap-1.5 whitespace-nowrap tabular-nums text-xs text-muted"
     >
       <Brain size={13} weight="regular" className="shrink-0 text-brand" />
-      {cli === 'claude-code' ? null : <CliMark cli={cli} />}
+      <CliMark cli={cli} />
       <span className="flex items-center gap-2">
         {/* Both render; the header's width picks one, or neither (HIVE-220). */}
         <span data-label="full" className="shrink-0 @max-[700px]:hidden">
