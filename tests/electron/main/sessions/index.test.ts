@@ -3877,20 +3877,38 @@ describe('a restored plan', () => {
       writeFileSync(file, '## Task 1: A\n- [ ] one\n');
       const other = join(root, '.hive', 'plans', 'q.md');
       writeFileSync(other, '## Task 1: B\n- [ ] two\n');
+      /*
+        Opening publishes the pty's cwd, the project path, once its branch read lands. That write
+        races the cwd the session later reports, and under a slow run (coverage) it used to land
+        last, so the restore read the plan files against /repos/nova-web and refused them. The
+        reader answers at once rather than spawning git, and the session's own cwd is recorded only
+        after the open's has landed, which is the order a hook's report arrives in.
+      */
+      let branchPublished!: () => void;
+      const published = new Promise<void>((resolve) => {
+        branchPublished = resolve;
+      });
       const open = (history: ReturnType<typeof createSessionHistory>, onPlanRestored?: (id: string) => void) =>
         createSessions({
           supervisor,
-          send: () => {},
+          send: (channel) => {
+            if (channel === CH.sessionBranch) branchPublished();
+          },
           config: () => CONFIG,
           userDataPath: USER_DATA_PATH,
           newSessionUuid: () => TEST_UUID,
           history,
+          branchReader: {
+            run: vi.fn<RunAsync>().mockResolvedValue({ code: 0, stdout: 'main\n', stderr: '', timedOut: false }),
+            gitPath: () => '/usr/bin/git',
+          },
           ...(onPlanRestored === undefined ? {} : { onPlanRestored }),
         });
 
       const firstHistory = createSessionHistory(historyFile, () => 1000, () => true);
       const first = open(firstHistory);
       first.open(OPEN);
+      await published;
       firstHistory.record('hero-refresh', { cwd: root });
       await first.planStore().apply({ entityId: 'hero-refresh', op: { kind: 'plan-file-touched', path: file }, cwd: root });
       await first.planStore().apply({ entityId: 'hero-refresh', op: { kind: 'plan-file-touched', path: other }, cwd: root });

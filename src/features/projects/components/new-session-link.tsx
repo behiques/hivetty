@@ -50,7 +50,7 @@ export function NewSessionLink({
 }: NewSessionLinkProps) {
   const access = useProjectAccess(projectId);
   const spawnSession = useSpawnSession();
-  const { cli, model, effort } = useNewSessionPick();
+  const { cli, model, effort, ready } = useNewSessionPick();
 
   return (
     <button
@@ -58,7 +58,8 @@ export function NewSessionLink({
       // Empty task, exactly as the picker passes: the session opens ready and
       // the first message gives it its job (story 043).
       onClick={() => spawnSession(projectId, '', cli, model, effort)}
-      disabled={!access.spawnable}
+      // Off until the account's Codex list answers, so the click never starts on the fallback.
+      disabled={!access.spawnable || !ready}
       /*
         The refusal when there is one; otherwise what the click is about to
         commit to.

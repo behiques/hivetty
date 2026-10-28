@@ -46,7 +46,7 @@ const options = (values: readonly string[], saved?: string) => [
  */
 export function ClisSection() {
   const snapshot = useProjectConfig();
-  const codexModels = useCodexModels();
+  const { models: codexModels } = useCodexModels();
 
   if (!snapshot) {
     return (
@@ -93,12 +93,18 @@ function CliCard({
   // Codex's list is the account's, and each model takes its own efforts; Claude's and Copilot's are static.
   const live = cli === 'codex' ? codexModels : undefined;
   const models = live?.map((model) => model.slug) ?? CLI_VOCAB[cli].models;
-  const efforts = live?.find((model) => model.slug === agents.model)?.efforts ?? CLI_VOCAB[cli].efforts;
+  // "CLI default" is Codex's own default, the first model it lists.
+  const modelFor = (slug: string | undefined) =>
+    slug === undefined || slug === '' ? live?.[0] : live?.find((model) => model.slug === slug);
+  const efforts = modelFor(agents.model)?.efforts ?? CLI_VOCAB[cli].efforts;
 
-  /** A new Codex model that lacks the saved effort clears it in the same write, or the run would carry both. */
+  /**
+   * A new Codex model that may not take the saved effort clears it in the same write, or the run
+   * would carry both. One off the account's list is unknown, so it clears too.
+   */
   const pickModel = (value: string) => {
-    const next = live?.find((model) => model.slug === value);
-    const stale = next !== undefined && agents.effort !== undefined && !next.efforts.includes(agents.effort);
+    const next = modelFor(value);
+    const stale = live !== undefined && agents.effort !== undefined && !next?.efforts.includes(agents.effort);
     void setCliAgentsConfig({ cli, model: value || null, ...(stale ? { effort: null } : {}) });
   };
 

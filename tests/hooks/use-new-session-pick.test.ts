@@ -17,11 +17,25 @@ describe('useNewSessionPick', () => {
     codexModels.mockReset().mockResolvedValue([SOL, LUNA]);
   });
 
-  it("passes Claude's pick through untouched, with no default mark", () => {
+  it("passes Claude's pick through untouched, ready at once, and never reads Codex's list", () => {
     useUiStore.getState().setNewModel('sonnet');
     useUiStore.getState().setNewEffort('low');
     const { result } = renderHook(() => useNewSessionPick());
-    expect(result.current).toMatchObject({ cli: 'claude-code', model: 'sonnet', effort: 'low', defaultEffort: undefined });
+    expect(result.current).toMatchObject({
+      cli: 'claude-code',
+      model: 'sonnet',
+      effort: 'low',
+      defaultEffort: undefined,
+      ready: true,
+    });
+    expect(codexModels).not.toHaveBeenCalled();
+  });
+
+  it("is not ready on Codex until the account's list has answered", async () => {
+    act(() => useUiStore.getState().setNewCli('codex'));
+    const { result } = renderHook(() => useNewSessionPick());
+    expect(result.current.ready).toBe(false);
+    await waitFor(() => expect(result.current.ready).toBe(true));
   });
 
   it("starts a Codex pick the account lacks on the account's first model", async () => {
