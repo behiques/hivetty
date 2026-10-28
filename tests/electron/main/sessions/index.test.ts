@@ -1,6 +1,6 @@
 // @vitest-environment node
 import type { PlanUpdate } from '../../../../electron/shared/plan-contract';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -1943,16 +1943,6 @@ describe('the history', () => {
     expect(patchesFor(written, 'hero-refresh')[0]).toMatchObject({ harness: 'claude-code' });
   });
 
-  it('refuses a CLI that has no interactive sessions yet, before spawning anything', () => {
-    const written: Written[] = [];
-    expect(() => withHistory(written).open({ ...OPEN, harness: 'copilot' })).toThrow(
-      /Copilot sessions are not available yet \(HIVE-280\)/,
-    );
-    expect(spawned).toHaveLength(0);
-    // Refused before the history heard of it: no row claims a session that never started.
-    expect(patchesFor(written, 'hero-refresh')).toEqual([]);
-  });
-
   it('keeps the CLI across a restart that does not name one', async () => {
     const written: Written[] = [];
     const sessions = withHistory(written);
@@ -1966,17 +1956,6 @@ describe('the history', () => {
 
     expect(spawned).toHaveLength(2);
     expect(patchesFor(written, 'hero-refresh').at(-1)).toMatchObject({ harness: 'claude-code' });
-  });
-
-  it('refuses a restart into a CLI it cannot launch before killing the session it has', async () => {
-    const sessions = withHistory([]);
-    sessions.open(OPEN);
-
-    await expect(sessions.restart({ ...OPEN, harness: 'copilot' })).rejects.toThrow(
-      /Copilot sessions are not available yet/,
-    );
-    expect(killed).toEqual([]);
-    expect(spawned).toHaveLength(1);
   });
 
   it('omits a name nobody supplied rather than storing an empty one', () => {
@@ -4179,5 +4158,161 @@ describe('codex sessions (HIVE-279)', () => {
     hook('0199a2b3-4c5d-7e6f-8a9b-999999999999');
     // A Claude hook's id moves the transcript (`/clear`), never the history's resume id.
     expect(written.filter((entry) => 'sessionUuid' in entry.patch)).toHaveLength(1);
+  });
+});
+
+describe('copilot sessions (HIVE-280)', () => {
+  interface Written {
+    id: string;
+    patch: Record<string, unknown>;
+  }
+
+  const HIVE = { command: '/app/electron', args: ['/app/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } };
+  const copilotOpen = { ...OPEN, harness: 'copilot' as const, model: 'auto' };
+
+  const build = (
+    written: Written[],
+    over: {
+      resumable?: Record<string, string>;
+      harnessStateDir?: (harness: string) => string;
+      hiveServer?: () => typeof HIVE | null;
+      config?: ConfigSnapshot;
+    } = {},
+  ) =>
+    createSessions({
+      supervisor,
+      send: (channel, payload) => sent.push({ channel, payload: payload as Record<string, unknown> }),
+      config: () => over.config ?? CONFIG,
+      userDataPath: USER_DATA_PATH,
+      newSessionUuid: () => TEST_UUID,
+      ...(over.hiveServer === undefined ? {} : { hiveServer: over.hiveServer }),
+      ...(over.harnessStateDir === undefined ? {} : { harnessStateDir: over.harnessStateDir }),
+      hooks: {
+        settingsPathFor: () => undefined,
+        envFor: () => ({}),
+        start: () => Promise.resolve(),
+        stop: () => Promise.resolve(),
+        writeContainerSession: () => Promise.resolve(null),
+      } as unknown as Parameters<typeof createSessions>[0]['hooks'],
+      history: {
+        begin: (id, patch, options) => {
+          written.push({ id, patch: { ...patch, ...(options ?? {}) } });
+        },
+        record: (id, patch) => {
+          written.push({ id, patch: { ...patch } });
+        },
+        resumable: (id) => over.resumable?.[id],
+        all: () => [],
+        flush: () => {},
+        dispose: () => {},
+      },
+    });
+
+  const patchesFor = (written: Written[], id: string) =>
+    written.filter((entry) => entry.id === id).map((entry) => entry.patch);
+
+  const bootTo = (sessionId: string) => {
+    emitData({ sessionId, chunk: '$ ' });
+    vi.advanceTimersByTime(8);
+    vi.advanceTimersByTime(150);
+    vi.advanceTimersByTime(SUBMIT);
+  };
+
+  const typed = () => vi.mocked(supervisor.write).mock.calls.map((call) => String(call[1]));
+
+  const stateDir = () => realpathSync(mkdtempSync(join(tmpdir(), 'cop-state-')));
+
+  let instance: Sessions | undefined;
+  afterEach(() => {
+    instance?.dispose();
+    instance = undefined;
+  });
+
+  it('types copilot with the pinned id and the plugin, and writes the plugin first', () => {
+    const state = stateDir();
+    const asked: string[] = [];
+    const written: Written[] = [];
+    instance = build(written, {
+      harnessStateDir: (harness) => {
+        asked.push(harness);
+        return state;
+      },
+    });
+    instance.open(copilotOpen);
+
+    expect(asked).toEqual(['copilot']);
+    expect(existsSync(join(state, 'plugin', 'plugin.json'))).toBe(true);
+    expect(readFileSync(join(state, 'plugin', 'hooks', 'hooks.json'), 'utf8')).toContain('"agentStop"');
+    // Pinned on the record, as Claude's is: `--session-id` both starts and resumes.
+    expect(patchesFor(written, 'hero-refresh')[0]).toMatchObject({ harness: 'copilot', sessionUuid: TEST_UUID });
+    bootTo(mintedFor('hero-refresh'));
+    expect(
+      typed().some((line) =>
+        new RegExp(
+          `^unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN; copilot --session-id ${TEST_UUID} --model auto .*--plugin-dir .* && exit$`,
+        ).test(line),
+      ),
+    ).toBe(true);
+    expect(typed().some((line) => line.includes('claude'))).toBe(false);
+  });
+
+  it('gives copilot the hive server, as codex', () => {
+    instance = build([], { harnessStateDir: stateDir, hiveServer: () => HIVE });
+    instance.open(copilotOpen);
+    bootTo(mintedFor('hero-refresh'));
+
+    expect(typed().some((line) => line.includes('--additional-mcp-config'))).toBe(true);
+  });
+
+  it('refuses a copilot session in a container project, before spawning anything', () => {
+    const written: Written[] = [];
+    instance = build(written, {
+      harnessStateDir: () => '/unused',
+      config: {
+        ...CONFIG,
+        projects: [{ ...CONFIG.projects[0]!, container: { name: 'dev' } as unknown as ResolvedContainer }],
+      },
+    });
+
+    expect(() => instance!.open(copilotOpen)).toThrow('Copilot sessions cannot run in a container yet.');
+    expect(spawned).toHaveLength(0);
+    expect(patchesFor(written, 'hero-refresh')).toEqual([]);
+  });
+
+  it('fails the spawn, naming the path, when the plugin cannot be written', () => {
+    const file = join(stateDir(), 'a-file');
+    writeFileSync(file, '');
+    instance = build([], { harnessStateDir: () => file });
+
+    expect(() => instance!.open(copilotOpen)).toThrow(/Copilot: could not write .*plugin\.json/);
+    expect(spawned).toHaveLength(0);
+  });
+
+  it('restarts into the same pinned id, with no task', async () => {
+    instance = build([], { harnessStateDir: stateDir, resumable: { 'hero-refresh': TEST_UUID } });
+    instance.open({ ...copilotOpen, task: 'fix the bug' });
+    bootTo(mintedFor('hero-refresh'));
+    expect(typed().some((line) => line.includes("-i 'fix the bug'"))).toBe(true);
+    vi.mocked(supervisor.write).mockClear();
+
+    const restarting = instance.restart({ ...OPEN, resume: true });
+    await Promise.resolve();
+    emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 0 });
+    vi.advanceTimersByTime(8);
+    await restarting;
+    bootTo(mintedFor('hero-refresh'));
+
+    expect(spawned).toHaveLength(2);
+    const line = typed().find((text) => text.includes('copilot --session-id'));
+    expect(line).toContain(`--session-id ${TEST_UUID}`);
+    expect(line).not.toContain(' -i ');
+  });
+
+  it('writes no copilot plugin for a Claude launch', () => {
+    const state = stateDir();
+    instance = build([], { harnessStateDir: () => state });
+    instance.open(OPEN);
+
+    expect(existsSync(join(state, 'plugin'))).toBe(false);
   });
 });

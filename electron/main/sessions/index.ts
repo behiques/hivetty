@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import type { AgentsDirectory } from '@shared/agent-contract';
 import type { ChangedFilesSnapshot } from '@shared/changed-files-contract';
@@ -254,6 +254,11 @@ export interface SessionsOptions {
    * and then the session starts without the ledger tools rather than not at all.
    */
   hiveServer?: () => StdioServerSpec | null;
+  /**
+   * An app-owned directory per CLI for the files its launch writes (HIVE-280): Copilot's hooks
+   * plugin. `cliHome('<id>-session')` in production, beside the headless home and never in it.
+   */
+  harnessStateDir?: (harness: HarnessId) => string;
 }
 
 interface OpenRequest {
@@ -551,14 +556,10 @@ const CLI_LABELS: Record<HarnessId, string> = {
 };
 
 /**
- * What a session cannot run on yet (HIVE-279): Copilot has no interactive half (HIVE-280), and a
- * Codex session in a container has no hive server there (D7). A thrown refusal names the reason,
- * where a pty that never started would not.
+ * What a session cannot run on yet: a non-Claude session in a container has no hive server there
+ * (HIVE-279 D7). A thrown refusal names the reason, where a pty that never started would not.
  */
 function refuseUnlaunchable(harness: HarnessId, inContainer: boolean): void {
-  if (harness === 'copilot') {
-    throw new Error(`${CLI_LABELS[harness]} sessions are not available yet (HIVE-280).`);
-  }
   if (harness !== 'claude-code' && inContainer) {
     throw new Error(`${CLI_LABELS[harness]} sessions cannot run in a container yet.`);
   }
@@ -597,6 +598,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     onJira,
     onAgentTurnEnded,
     hiveServer,
+    harnessStateDir,
   } = options;
 
   /** Every session's plan (HIVE-179). Main owns the rules; the renderer mirrors them. */
@@ -2515,7 +2517,7 @@ export function createSessions(options: SessionsOptions): Sessions {
           'not trusted on your behalf; status from Codex hooks may be missing until you trust them in Codex',
       );
     }
-    const hive = harness === 'codex' ? (hiveServer?.() ?? null) : null;
+    const hive = harness === 'claude-code' ? null : (hiveServer?.() ?? null);
     /**
      * `sessionCommand` wraps the configured binary so a clean `/exit` takes the
      * login shell with it and the session settles to `done`. See its own
@@ -2593,6 +2595,9 @@ export function createSessions(options: SessionsOptions): Sessions {
       resume,
       ...(hive === null ? {} : { hiveServer: hive }),
       ...(harness === 'codex' ? { bypassHookTrust: !ownCodexConfig } : {}),
+      ...(harnessStateDir === undefined || harness === 'claude-code'
+        ? {}
+        : { stateDir: harnessStateDir(harness) }),
       /*
         One file for every session since HIVE-82: nothing in it varies by
         theme any more, because Claude's is pinned to `dark-ansi` and the
@@ -2656,6 +2661,17 @@ export function createSessions(options: SessionsOptions): Sessions {
       */
       ...(request.task === undefined || resume ? {} : { task: request.task }),
     });
+
+    // Before the first keystroke (HIVE-280): the command names these files, so a missing one is a
+    // CLI started without its hooks. Synchronous, as the spawn is, and failing it with the path.
+    for (const file of plan.files ?? []) {
+      try {
+        mkdirSync(dirname(file.path), { recursive: true });
+        writeFileSync(file.path, file.text);
+      } catch (error) {
+        throw new Error(`${CLI_LABELS[harness]}: could not write ${file.path}: ${(error as Error).message}`);
+      }
+    }
 
     startProcess({
       entityId: request.entityId,

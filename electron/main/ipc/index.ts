@@ -3304,8 +3304,10 @@ export function registerIpcHandlers(
     */
     onAgentTurnEnded: (name, sessionUuid, backgroundWork) =>
       runs?.noteTurnEnded(name, sessionUuid, backgroundWork),
-    // A Codex session's ledger tools ride its argv (HIVE-279), from the getter agent wakes use.
+    // A Codex or Copilot session's ledger tools ride its argv (HIVE-279, HIVE-280), from the getter agent wakes use.
     hiveServer: () => mcp.hiveServerSpec(),
+    // Copilot's hooks plugin (HIVE-280): beside the headless home `cliHome('copilot')`, never in it.
+    harnessStateDir: (harness) => cliHome(`${harness}-session`),
   });
 
   /*
