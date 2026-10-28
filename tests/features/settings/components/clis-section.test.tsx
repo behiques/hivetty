@@ -119,6 +119,56 @@ describe('ClisSection (HIVE-341)', () => {
     );
   });
 
+  it('keeps a saved Codex model the account lacks in the select, rather than showing it blank', async () => {
+    codexModels.mockResolvedValueOnce([{ slug: 'gpt-6.1-sol', description: '', defaultEffort: 'low', efforts: ['low'] }]);
+    seed({ codex: { agents: { model: 'gpt-5.6-luna' } } });
+    render(<ClisSection />);
+    const model = codex().getByRole('combobox', { name: 'Model' });
+    await waitFor(() =>
+      expect(within(model).getAllByRole('option').map((option) => option.getAttribute('value'))).toEqual([
+        '',
+        'gpt-6.1-sol',
+        'gpt-5.6-luna',
+      ]),
+    );
+    expect(model).toHaveValue('gpt-5.6-luna');
+  });
+
+  it("offers only the saved Codex model's own efforts", async () => {
+    codexModels.mockResolvedValueOnce([
+      { slug: 'gpt-6-luna', description: '', defaultEffort: 'medium', efforts: ['low', 'medium', 'max'] },
+    ]);
+    seed({ codex: { agents: { model: 'gpt-6-luna' } } });
+    render(<ClisSection />);
+    const effort = codex().getByRole('combobox', { name: 'Effort' });
+    await waitFor(() =>
+      expect(within(effort).getAllByRole('option').map((option) => option.getAttribute('value'))).toEqual([
+        '',
+        'low',
+        'medium',
+        'max',
+      ]),
+    );
+  });
+
+  it('clears a saved Codex effort the newly chosen model lacks, in the same write', async () => {
+    const user = userEvent.setup();
+    codexModels.mockResolvedValueOnce([
+      { slug: 'gpt-6.1-sol', description: '', defaultEffort: 'low', efforts: ['low', 'ultra'] },
+      { slug: 'gpt-6-luna', description: '', defaultEffort: 'medium', efforts: ['low', 'medium'] },
+    ]);
+    seed({ codex: { agents: { model: 'gpt-6.1-sol', effort: 'ultra' } } });
+    render(<ClisSection />);
+    const model = codex().getByRole('combobox', { name: 'Model' });
+    await waitFor(() => expect(within(model).getAllByRole('option')).toHaveLength(3));
+
+    await user.selectOptions(model, 'gpt-6-luna');
+    expect(setCliAgentsConfig).toHaveBeenLastCalledWith({ cli: 'codex', model: 'gpt-6-luna', effort: null });
+
+    await user.selectOptions(model, 'gpt-6.1-sol');
+    expect(setCliAgentsConfig).toHaveBeenLastCalledWith({ cli: 'codex', model: 'gpt-6.1-sol' });
+  });
+
   it('renders a card per CLI (HIVE-342)', () => {
     seed(undefined);
     render(<ClisSection />);
