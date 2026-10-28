@@ -605,13 +605,17 @@ model, MCP servers, plugins and trusted folders apply, and HiveTTY writes nothin
 typed into the login shell as Codex's is:
 
 ```
-unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN; copilot --session-id <uuid> [--model m]
+unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSISTED_APPROVAL;
+  copilot --session-id <uuid> [--model m]
   [--reasoning-effort e] --plugin-dir '<state>/plugin' [--additional-mcp-config '<hive>'] [-i '<task>'] && exit
 ```
 
 - `unset …`, and the same three in `stripEnv` with the six parent-session keys: the user's own
   login authenticates (D3), so a stale token in the profile cannot 401 the session. The stored
   agent token is never used.
+- `COPILOT_ALLOW_ALL` and `COPILOT_ASSISTED_APPROVAL` go the same way (HIVE-363): either approves
+  a call before `permissionRequest` fires, so the "needs you" card would never show. BYOK provider
+  keys and Enterprise hosts stay; they are the user's routing, as their Codex `config.toml` is.
 - `--session-id` starts and resumes alike (HIVE-343), so the core pins it (`conversationId:
   'argv'`). `--reasoning-effort` is left off a model in `CLI_VOCAB.copilot.noEffort` (`kimi-k3`
   refuses it, P8). `-i` carries the task on a fresh start only (P5).

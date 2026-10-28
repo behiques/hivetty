@@ -4271,7 +4271,7 @@ describe('copilot sessions (HIVE-280)', () => {
     expect(
       typed().some((line) =>
         new RegExp(
-          `^unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN; copilot --session-id ${TEST_UUID} --model auto .*--plugin-dir .* && exit$`,
+          `^unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSISTED_APPROVAL; copilot --session-id ${TEST_UUID} --model auto .*--plugin-dir .* && exit$`,
         ).test(line),
       ),
     ).toBe(true);

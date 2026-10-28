@@ -270,7 +270,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       mkdirSync(join(file.path, '..'), { recursive: true });
       writeFileSync(file.path, file.text);
     }
-    const head = 'unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN; ';
+    const head = 'unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSISTED_APPROVAL; ';
     expect(plan.command.startsWith(head)).toBe(true);
     expect(plan.command.endsWith(' && exit')).toBe(true);
     const split = spawnSync('python3', ['-c', 'import json,shlex,sys; print(json.dumps(shlex.split(sys.argv[1])))', plan.command.slice(head.length, -' && exit'.length)], {
