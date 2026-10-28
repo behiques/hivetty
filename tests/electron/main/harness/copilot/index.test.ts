@@ -9,7 +9,9 @@ import {
 } from '../../../../../electron/main/harness/copilot/fence';
 import { launchCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless';
 import { readCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless-reader';
+import { copilotBlockAnswer } from '../../../../../electron/main/harness/copilot/block-answer';
 import { readCopilotHook } from '../../../../../electron/main/harness/copilot/hooks';
+import { codexAdapter } from '../../../../../electron/main/harness/codex';
 import { launchCopilotSession } from '../../../../../electron/main/harness/copilot/launch';
 
 describe('copilotAdapter', () => {
@@ -70,6 +72,12 @@ describe('copilotAdapter', () => {
     await expect(prepare.plugin('/p', '1', {} as never)).resolves.toBeUndefined();
     await expect(prepare.containerSet('/r', {} as never)).resolves.toBeUndefined();
     await expect(prepare.mcpConfig('/m', {} as never)).resolves.toBeUndefined();
+  });
+
+  it('answers its own blocks from the keys the user types; Claude and Codex do not (HIVE-280)', () => {
+    expect(copilotAdapter.answersBlock).toBe(copilotBlockAnswer);
+    expect(claudeCodeAdapter.answersBlock).toBeUndefined();
+    expect(codexAdapter.answersBlock).toBeUndefined();
   });
 
   it('still refuses prompt markers: a follow-up ticket', () => {

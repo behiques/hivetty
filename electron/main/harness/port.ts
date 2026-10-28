@@ -47,7 +47,15 @@ export interface HarnessAdapter {
   readonly installed: HarnessInstalled;
   /** Agent runs (HIVE-337). */
   readonly headless: HeadlessHarness;
+  /**
+   * Whether the user's write into a blocked session answered the CLI's own prompt (HIVE-280), for a
+   * CLI whose hooks cannot say so: `cancelled` also ends the turn. Absent: blocks clear by hooks alone.
+   */
+  answersBlock?(data: string): BlockAnswer | null;
 }
+
+/** How the user answered a CLI's prompt in the terminal (HIVE-280). */
+export type BlockAnswer = 'answered' | 'cancelled';
 
 /** What wrote a title, as far as the harness's own record can say (HIVE-239). */
 export type TitleVerdict =

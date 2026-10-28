@@ -781,3 +781,31 @@ describe('createStatusTracker', () => {
     ).toEqual({ status: 'working' });
   });
 });
+
+describe('release (HIVE-280)', () => {
+  const blocked = () => {
+    const t = createStatusTracker();
+    t.apply({ entityId: 'cop', signal: { kind: 'prompt' } });
+    t.apply({ entityId: 'cop', signal: { kind: 'waiting', reason: 'permission' }, toolName: 'bash' });
+    return t;
+  };
+
+  it('drops every block and leaves the turn running: an approval runs the tool', () => {
+    const t = blocked();
+    expect(t.release('cop', { endTurn: false })).toEqual({ status: 'working' });
+    expect(t.held('cop').blocked).toBe(0);
+    // Nothing is left for a late postToolUse to find.
+    expect(t.apply({ entityId: 'cop', signal: { kind: 'tool-end' }, toolName: 'bash' })).toEqual({ status: 'working' });
+  });
+
+  it('ends the turn too on a cancel: nothing else will', () => {
+    expect(blocked().release('cop', { endTurn: true })).toEqual({ status: 'idle' });
+  });
+
+  it('answers a session it never saw as idle, holding nothing', () => {
+    const t = createStatusTracker();
+    expect(t.release('nobody', { endTurn: true })).toEqual({ status: 'idle' });
+    expect(t.held('nobody').blocked).toBe(0);
+  });
+});
+

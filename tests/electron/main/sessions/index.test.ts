@@ -4190,7 +4190,10 @@ describe('copilot sessions (HIVE-280)', () => {
       hooks: {
         settingsPathFor: () => undefined,
         envFor: () => ({}),
-        start: () => Promise.resolve(),
+        start: (opts: { onEvent: (event: HookStatusEvent) => void }) => {
+          onEvent = opts.onEvent;
+          return Promise.resolve();
+        },
         stop: () => Promise.resolve(),
         writeContainerSession: () => Promise.resolve(null),
       } as unknown as Parameters<typeof createSessions>[0]['hooks'],
@@ -4222,11 +4225,30 @@ describe('copilot sessions (HIVE-280)', () => {
 
   const stateDir = () => realpathSync(mkdtempSync(join(tmpdir(), 'cop-state-')));
 
+  let onEvent: ((event: HookStatusEvent) => void) | undefined;
   let instance: Sessions | undefined;
   afterEach(() => {
     instance?.dispose();
     instance = undefined;
+    onEvent = undefined;
   });
+
+  const signal = (event: Record<string, unknown>) =>
+    onEvent!({ entityId: 'hero-refresh', ...event } as unknown as HookStatusEvent);
+  const statuses = () =>
+    sent
+      .filter((entry) => entry.channel === CH.sessionStatus && entry.payload['entityId'] === 'hero-refresh')
+      .map((entry) => entry.payload['status']);
+  /** A live session blocked on Copilot's own approval prompt, mid-turn. */
+  const blockedOn = (open: typeof OPEN) => {
+    instance = build([], { harnessStateDir: stateDir });
+    instance.open(open);
+    bootTo(mintedFor('hero-refresh'));
+    signal({ signal: { kind: 'prompt' } });
+    signal({ signal: { kind: 'waiting', reason: 'permission' }, toolName: 'bash' });
+    expect(statuses().at(-1)).toBe('waiting');
+    return instance;
+  };
 
   it('types copilot with the pinned id and the plugin, and writes the plugin first', () => {
     const state = stateDir();
@@ -4314,5 +4336,49 @@ describe('copilot sessions (HIVE-280)', () => {
     instance.open(OPEN);
 
     expect(existsSync(join(state, 'plugin'))).toBe(false);
+  });
+
+  describe('an answer typed into the TUI clears the block (HIVE-280, D5 amended)', () => {
+    it('clears the card and ends the turn on an Esc from the user: the denial fires no hook', () => {
+      blockedOn(copilotOpen).write('hero-refresh', '\x1b', 'user');
+      expect(statuses().at(-1)).toBe('idle');
+    });
+
+    it('clears the card and keeps the turn on any other key: the approved tool runs', () => {
+      blockedOn(copilotOpen).write('hero-refresh', '\r', 'user');
+      expect(statuses().at(-1)).toBe('working');
+    });
+
+    it('leaves the block alone for an app write: the bootstrap and a nudge answer nothing', () => {
+      const sessions = blockedOn(copilotOpen);
+      const before = statuses().length;
+      sessions.write('hero-refresh', '\x1b');
+      sessions.write('hero-refresh', '\x1b', 'app');
+      expect(statuses().length).toBe(before);
+    });
+
+    it('leaves the block alone for a terminal report the user did not type', () => {
+      const sessions = blockedOn(copilotOpen);
+      const before = statuses().length;
+      sessions.write('hero-refresh', '\x1b[I', 'user');
+      expect(statuses().length).toBe(before);
+    });
+
+    it("never touches a Claude session's block", () => {
+      const sessions = blockedOn(OPEN);
+      const before = statuses().length;
+      sessions.write('hero-refresh', '\x1b', 'user');
+      expect(statuses().length).toBe(before);
+    });
+
+    it('publishes nothing for a user key when nothing is blocked', () => {
+      instance = build([], { harnessStateDir: stateDir });
+      instance.open(copilotOpen);
+      bootTo(mintedFor('hero-refresh'));
+      signal({ signal: { kind: 'prompt' } });
+      const before = statuses().length;
+      instance.write('hero-refresh', 'x', 'user');
+      expect(statuses().length).toBe(before);
+    });
   });
 });

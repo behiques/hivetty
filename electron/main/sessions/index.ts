@@ -261,6 +261,12 @@ export interface SessionsOptions {
   harnessStateDir?: (harness: HarnessId) => string;
 }
 
+/**
+ * Who wrote into a pty (HIVE-280). `user` is the terminal and the console, through `ptyWrite`;
+ * everything main types itself (the bootstrap, a ledger nudge, `/exit`) is the default, `app`.
+ */
+export type WriteOrigin = 'user' | 'app';
+
 interface OpenRequest {
   entityId: string;
   projectId: string;
@@ -405,7 +411,7 @@ export interface Sessions {
    * something — the ledger's delivery receipt — must gate on this, or they
    * record a write that never happened and never retry it.
    */
-  write(entityId: string, data: string): boolean;
+  write(entityId: string, data: string, origin?: WriteOrigin): boolean;
   resize(entityId: string, cols: number, rows: number): void;
   /**
    * Make Claude re-read its size: SIGWINCH at the size it already has.
@@ -1765,6 +1771,20 @@ export function createSessions(options: SessionsOptions): Sessions {
    * next tick — which may already be scheduled — is suppressed rather than
    * racing this event.
    */
+  /**
+   * The user answered the CLI's own prompt in the terminal (HIVE-280). Only for a CLI that says so
+   * (`answersBlock`, Copilot's): its Esc fires no hook, so the keystroke is what clears the card and
+   * "needs you". Never an app write: the bootstrap and a nudge answer nothing.
+   */
+  function answerBlock(entityId: string, data: string): void {
+    const answersBlock = adapterOf(entityId).answersBlock;
+    if (answersBlock === undefined || statusTracker.held(entityId).blocked === 0) return;
+    const answer = answersBlock(data);
+    if (answer === null) return;
+    const derived = statusTracker.release(entityId, { endTurn: answer === 'cancelled' });
+    publishHookStatus(entityId, derived.status, undefined, derived.detail);
+  }
+
   function publishHookStatus(
     entityId: string,
     status: ObservedStatus,
@@ -2877,7 +2897,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       spawn(request);
     },
 
-    write(entityId, data) {
+    write(entityId, data, origin = 'app') {
       const sessionId = registry.sessionFor(entityId);
       if (sessionId === undefined) return false;
 
@@ -2903,6 +2923,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       }
 
       ptyIpc.write(sessionId, data);
+      if (origin === 'user') answerBlock(entityId, data);
       return true;
     },
 

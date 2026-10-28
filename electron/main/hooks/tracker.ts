@@ -144,6 +144,12 @@ export interface StatusTracker {
   forget(entityId: string): void;
   /** What this session is still holding. See `HeldCounts`. */
   held(entityId: string): HeldCounts;
+  /**
+   * The user answered the CLI's own prompt in the terminal (HIVE-280): every block goes, and on a
+   * cancel the turn too, since a CLI that fires nothing after a denial (Copilot's Esc) leaves no event
+   * to do it. Only a harness that opts in through `HarnessAdapter.answersBlock` calls this.
+   */
+  release(entityId: string, options: { endTurn: boolean }): DerivedState;
 }
 
 function empty(): Session {
@@ -494,6 +500,15 @@ export function createStatusTracker(): StatusTracker {
 
     forget(entityId) {
       sessions.delete(entityId);
+    },
+
+    release(entityId, { endTurn }) {
+      const s = sessions.get(entityId);
+      if (s === undefined) return derive(empty());
+      s.blocked.clear();
+      s.blockedNames.clear();
+      if (endTurn) s.turnActive = false;
+      return derive(s);
     },
 
     held(entityId) {

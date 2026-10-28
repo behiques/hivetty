@@ -1,6 +1,7 @@
 import { claudeCodeAdapter } from '../claude-code';
 import type { HarnessAdapter, PermissionFence } from '../port';
 
+import { copilotBlockAnswer } from './block-answer';
 import { copilotFenceReply, readCopilotFence, translateCopilotCall } from './fence';
 import { launchCopilotHeadless } from './headless';
 import { readCopilotHeadless } from './headless-reader';
@@ -57,6 +58,8 @@ export const copilotAdapter: HarnessAdapter = {
     mcpConfig: noFile,
   },
   readHook: readCopilotHook,
+  // An Esc on Copilot's own prompt fires no hook (FINDINGS P1): the keystroke clears the card.
+  answersBlock: copilotBlockAnswer,
   contextReply: claudeCodeAdapter.contextReply,
   promptMarker: noMarkers,
   foldEdits: () => new Map(),

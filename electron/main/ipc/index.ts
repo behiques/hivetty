@@ -5486,7 +5486,8 @@ export function registerIpcHandlers(
 
   on(CH.ptyWrite, (_event, payload) => {
     const request = parseWriteRequest(payload);
-    sessions?.write(request.sessionId, request.data);
+    // The person at a terminal or the console (HIVE-280): it may answer a CLI's own prompt.
+    sessions?.write(request.sessionId, request.data, 'user');
   });
 
   on(CH.ptyResize, (_event, payload) => {
