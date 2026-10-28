@@ -400,7 +400,7 @@ describe('hive-store', () => {
 
       expect(useHiveStore.getState().entities[id]).toMatchObject({
         harness: 'codex',
-        model: 'gpt-6-luna',
+        model: 'gpt-6.1-sol',
         effort: 'medium',
       });
     });
