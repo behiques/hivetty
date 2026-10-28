@@ -25,6 +25,11 @@ interface OptionStepperProps<T extends string> {
    * are worse than four words of copy.
    */
   disabledReason?: string;
+  /**
+   * A quiet second line under some stops: Codex's default effort, a model class's character. Only
+   * drawn when given, so Claude's steppers keep their height.
+   */
+  marks?: Partial<Record<T, string>>;
 }
 
 /** Keys that step the selection, and which way. */
@@ -57,6 +62,7 @@ export function OptionStepper<T extends string>({
   onChange,
   disabled = false,
   disabledReason,
+  marks,
 }: OptionStepperProps<T>) {
   const index = Math.max(options.indexOf(value), 0);
   const buttons = useRef(new Map<T, HTMLButtonElement | null>());
@@ -151,6 +157,7 @@ export function OptionStepper<T extends string>({
                 type="button"
                 role="radio"
                 aria-checked={selected}
+                aria-label={marks?.[option] === undefined ? undefined : `${option} ${marks[option]}`}
                 /**
                  * Roving tabindex: the group is one tab stop, not four. Without
                  * it, the two steppers would cost eight tab presses to walk
@@ -187,6 +194,9 @@ export function OptionStepper<T extends string>({
                 >
                   {option}
                 </span>
+                {marks === undefined ? null : (
+                  <span className="h-4 text-micro text-subtle">{marks[option]}</span>
+                )}
               </button>
             );
           })}

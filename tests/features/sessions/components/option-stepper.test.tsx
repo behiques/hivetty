@@ -38,6 +38,15 @@ describe('OptionStepper', () => {
     expect(screen.getAllByRole('radio')).toHaveLength(OPTIONS.length);
   });
 
+  it('marks a stop with a quiet line under its label, and leaves the rest blank', () => {
+    render(
+      <OptionStepper label="thinking effort" options={['low', 'medium', 'high']} value="low" onChange={() => {}} marks={{ medium: 'default' }} />,
+    );
+    expect(screen.getByRole('radio', { name: 'medium default' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'low' })).toBeInTheDocument();
+    expect(screen.getByText('default')).toHaveClass('text-subtle');
+  });
+
   it('marks only the current value as checked', () => {
     renderStepper('high');
 
