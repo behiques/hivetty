@@ -9,6 +9,7 @@ import type {
   AgentWriteRequest,
 } from './agent-contract';
 import {
+  cliAcceptsModel,
   CLI_TOKEN_IDS,
   CLI_VOCAB,
   COPILOT_DENY_MAX,
@@ -89,7 +90,7 @@ import type {
   PrViewedRequest,
   RunRef,
 } from './github-contract';
-import { HARNESS_IDS } from './harness-contract';
+import { HARNESS_IDS, type HarnessId } from './harness-contract';
 import type {
   AckRequest,
   PromptReport,
@@ -370,6 +371,24 @@ function assertOneOf<const T extends readonly string[]>(
   return text as T[number];
 }
 
+/**
+ * A model for `cli`. Claude's and Copilot's are checked against their closed lists, as
+ * {@link assertOneOf} does. Codex's list is the account's, so its model is checked by
+ * `CODEX_MODEL_ID`'s shape, which admits no character a shell reads. Either way, the value reaches
+ * a command line unquoted.
+ */
+function assertModel(value: unknown, cli: HarnessId, label: string): string {
+  const text = assertString(value, label);
+  if (!cliAcceptsModel(cli, text)) {
+    return fail(
+      cli === 'codex'
+        ? `${label}: expected a codex model id`
+        : `${label}: expected one of ${CLI_VOCAB[cli].models.join(', ')}`,
+    );
+  }
+  return text;
+}
+
 export function parseSpawnRequest(input: unknown): SpawnRequest {
   const raw = assertShape(
     input,
@@ -397,7 +416,7 @@ export function parseSpawnRequest(input: unknown): SpawnRequest {
       : { task: assertText(raw.task, 'spawn.task') }),
     ...(raw.model === undefined
       ? {}
-      : { model: assertOneOf(raw.model, vocab.models, 'spawn.model') }),
+      : { model: assertModel(raw.model, harness ?? 'claude-code', 'spawn.model') }),
     ...(raw.effort === undefined
       ? {}
       : { effort: assertOneOf(raw.effort, vocab.efforts, 'spawn.effort') }),
@@ -1770,7 +1789,7 @@ export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
     'deny',
   ]);
   const cli = assertOneOf(raw.cli, HARNESS_IDS, 'setCliAgents.cli');
-  const { models, efforts } = CLI_VOCAB[cli];
+  const { efforts } = CLI_VOCAB[cli];
 
   const request: SetCliAgentsRequest = {
     cli,
@@ -1778,7 +1797,7 @@ export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
       ? { enabled: assertBoolean(raw.enabled, 'setCliAgents.enabled') }
       : {}),
     ...(raw.model !== undefined
-      ? { model: raw.model === null ? null : assertOneOf(raw.model, models, 'setCliAgents.model') }
+      ? { model: raw.model === null ? null : assertModel(raw.model, cli, 'setCliAgents.model') }
       : {}),
     ...(raw.effort !== undefined
       ? {

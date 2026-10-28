@@ -1,4 +1,5 @@
 import {
+  cliAcceptsModel,
   CLI_VOCAB,
   COPILOT_DENY_MAX,
   COPILOT_DENY_PATTERN,
@@ -1378,9 +1379,13 @@ function optionalClis(
       else errors.push(`${agentsAt}.enabled: expected a boolean — ignored`);
     }
     if (raw.model !== undefined) {
-      if (typeof raw.model === 'string' && models.includes(raw.model)) {
+      if (typeof raw.model === 'string' && cliAcceptsModel(id, raw.model)) {
         agents.model = raw.model;
-      } else errors.push(`${agentsAt}.model: expected one of ${models.join(', ')} — ignored`);
+      } else {
+        errors.push(
+          `${agentsAt}.model: expected ${id === 'codex' ? 'a codex model id' : `one of ${models.join(', ')}`} — ignored`,
+        );
+      }
     }
     if (raw.effort !== undefined) {
       if (typeof raw.effort === 'string' && efforts.includes(raw.effort)) {

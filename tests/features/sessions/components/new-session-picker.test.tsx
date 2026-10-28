@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CLI_VOCAB } from '@shared/cli-contract';
+import { CLI_VOCAB, type CliModel } from '@shared/cli-contract';
 import {
   emptySnapshot,
   type ConfigSnapshot,
@@ -20,6 +20,9 @@ import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
 
 import { testProjectKey } from '@tests/support/project-key';
+
+const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolve(null));
+vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels() }));
 
 const search = () => screen.getByRole('textbox', { name: 'Search all projects' });
 const rowsFor = (name: RegExp) => screen.getAllByRole('button', { name });
@@ -184,7 +187,7 @@ describe('NewSessionPicker', () => {
       expect(useHiveStore.getState().entities['sess-01']).toMatchObject({
         project: 'design-system',
         harness: 'codex',
-        model: 'gpt-6-luna',
+        model: 'gpt-6.1-sol',
         effort: 'medium',
       });
     });
@@ -239,13 +242,42 @@ describe('NewSessionPicker', () => {
       useUiStore.getState().setNewCli('codex');
       render(<NewSessionPicker />);
 
-      expect(within(screen.getByRole('radiogroup', { name: 'model' })).getAllByRole('radio')).toHaveLength(3);
+      expect(within(screen.getByRole('radiogroup', { name: 'model' })).getAllByRole('radio')).toHaveLength(4);
+      expect(screen.getByRole('radio', { name: 'sol workhorse' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: '6.1 · latest' })).toBeChecked();
       expect(
         within(screen.getByRole('radiogroup', { name: /thinking effort/ })).getAllByRole('radio'),
       ).toHaveLength(5);
-      expect(screen.getByRole('radio', { name: 'gpt-6-luna' })).toBeChecked();
-      expect(screen.getByRole('radio', { name: 'medium' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'medium default' })).toBeChecked();
       expect(screen.getByText('Pick a project — a Codex terminal will open for it')).toBeInTheDocument();
+    });
+
+    it("offers the account's models and each model's own efforts, resolving an effort a model lacks", async () => {
+      const user = userEvent.setup();
+      codexModels.mockResolvedValueOnce([
+        { slug: 'gpt-6.1-sol', description: 'Workhorse.', defaultEffort: 'low', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] },
+        { slug: 'gpt-6-luna', description: 'Fast.', defaultEffort: 'medium', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+      ]);
+      useUiStore.getState().setNewCli('codex');
+      render(<NewSessionPicker />);
+
+      // Two classes on this account: luna and sol.
+      await screen.findByRole('radio', { name: 'luna fast' });
+      expect(within(screen.getByRole('radiogroup', { name: 'model' })).getAllByRole('radio')).toHaveLength(2);
+      expect(screen.getByRole('radio', { name: 'low default' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('radio', { name: 'ultra' }));
+      await user.click(screen.getByRole('radio', { name: 'luna fast' }));
+      // Luna takes no ultra: the scale shows Luna's default, and the spawn uses it.
+      expect(screen.queryByRole('radio', { name: 'ultra' })).not.toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'medium default' })).toBeChecked();
+
+      await user.click(screen.getByRole('button', { name: 'design-system' }));
+      expect(useHiveStore.getState().entities['sess-01']).toMatchObject({
+        harness: 'codex',
+        model: 'gpt-6-luna',
+        effort: 'medium',
+      });
     });
   });
 

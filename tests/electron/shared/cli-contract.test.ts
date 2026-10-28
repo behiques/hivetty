@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  cliAcceptsModel,
   cliTakesEffort,
   CLI_VOCAB,
   CODEX_EFFORTS,
+  CODEX_FALLBACK_MODELS,
   CODEX_MODELS,
+  codexFamily,
   resolveClis,
 } from '../../../electron/shared/cli-contract';
 import { HARNESS_IDS } from '../../../electron/shared/harness-contract';
@@ -21,7 +24,38 @@ describe('cli-contract (HIVE-341)', () => {
 
   it("Codex's vocabulary is its own (HIVE-342)", () => {
     expect(CLI_VOCAB.codex).toEqual({ models: CODEX_MODELS, efforts: CODEX_EFFORTS, noEffort: [] });
-    expect(CODEX_MODELS[0]).toBe('gpt-6-luna');
+    // models_cache.json's priority order at 0.165: the first is Codex's default.
+    expect(CODEX_MODELS[0]).toBe('gpt-6.1-sol');
+    expect(CODEX_EFFORTS).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+  });
+
+  it('accepts a Codex model by its shell-safe shape, and the others by their lists', () => {
+    expect(cliAcceptsModel('codex', 'gpt-7-nova')).toBe(true);
+    expect(cliAcceptsModel('codex', 'codex-auto-review')).toBe(true);
+    for (const bad of ['', 'GPT-6', 'gpt 6', 'gpt-6;rm -rf ~', "gpt-6'", '-m', 'a'.repeat(65)]) {
+      expect(cliAcceptsModel('codex', bad)).toBe(false);
+    }
+    expect(cliAcceptsModel('claude-code', 'opus')).toBe(true);
+    expect(cliAcceptsModel('claude-code', 'gpt-6-luna')).toBe(false);
+    expect(cliAcceptsModel('copilot', 'auto')).toBe(true);
+    expect(cliAcceptsModel('copilot', 'gpt-7-nova')).toBe(false);
+  });
+
+  it('reads a Codex slug as its class and version, and nothing else', () => {
+    expect(codexFamily('gpt-6.1-sol')).toEqual({ cls: 'sol', version: '6.1' });
+    expect(codexFamily('gpt-6-astra')).toEqual({ cls: 'astra', version: '6' });
+    expect(codexFamily('gpt-5.6-luna')).toEqual({ cls: 'luna', version: '5.6' });
+    expect(codexFamily('gpt-reserve')).toBeNull();
+    expect(codexFamily('gpt-6-nova')).toBeNull();
+    expect(codexFamily('codex-auto-review')).toBeNull();
+  });
+
+  it('falls back to every static model at medium, offering no ultra', () => {
+    expect(CODEX_FALLBACK_MODELS.map((model) => model.slug)).toEqual([...CODEX_MODELS]);
+    for (const model of CODEX_FALLBACK_MODELS) {
+      expect(model).toMatchObject({ description: '', defaultEffort: 'medium' });
+      expect(model.efforts).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
+    }
   });
 
   it("dims Copilot's effort for kimi-k3, which refuses --reasoning-effort (HIVE-280, FINDINGS P8)", () => {

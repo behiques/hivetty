@@ -8,6 +8,7 @@ import { launchCodexHeadless } from './headless';
 import { readCodexHeadless } from './headless-reader';
 import { readCodexHook } from './hooks';
 import { launchCodexSession } from './launch';
+import { readCodexModels } from './models';
 import { codexRecord } from './record';
 
 /*
@@ -50,4 +51,5 @@ export const codexAdapter: HarnessAdapter = {
     skillPlaces: '',
   },
   headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence, containerCommand: 'codex' },
+  models: () => readCodexModels(),
 };

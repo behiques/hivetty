@@ -117,12 +117,12 @@ describe('ui-store — view state', () => {
     expect(useUiStore.getState().newCli).toBe('claude-code');
     ui.setNewModel('haiku');
     ui.setNewCli('codex');
-    expect(useUiStore.getState().newPicks.codex).toEqual({ model: 'gpt-6-luna', effort: 'medium' });
+    expect(useUiStore.getState().newPicks.codex).toEqual({ model: 'gpt-6.1-sol', effort: 'medium' });
     ui.setNewEffort('xhigh');
     ui.setNewCli('claude-code');
     expect(useUiStore.getState().newPicks).toEqual({
       'claude-code': { model: 'haiku', effort: 'high' },
-      codex: { model: 'gpt-6-luna', effort: 'xhigh' },
+      codex: { model: 'gpt-6.1-sol', effort: 'xhigh' },
       copilot: { model: 'auto', effort: 'medium' },
     });
   });

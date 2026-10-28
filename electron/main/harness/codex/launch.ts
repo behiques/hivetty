@@ -1,4 +1,4 @@
-import { CLI_VOCAB } from '@shared/cli-contract';
+import { CLI_VOCAB, CODEX_MODEL_ID } from '@shared/cli-contract';
 import { HOOK_ENV_RECEIVER_URL, HOOK_ENV_SESSION, HOOK_ENV_TOKEN } from '@shared/hook-contract';
 
 import { shellQuote } from '../../container/shell-quote';
@@ -33,10 +33,16 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** A `-c` override, quoted: unlike headless's argv, this string is parsed by a login shell. */
 const config = (pair: string): string[] => ['-c', shellQuote(pair)];
 
-/** Closed lists, re-checked here: the guard checked them, and nothing below quotes `-m`. */
+/** Effort's closed list, re-checked here: the guard checked it, and nothing below quotes it. */
 const oneOf = (what: string, value: string, allowed: readonly string[]): string => {
   if (!allowed.includes(value)) throw new Error(`codex: refusing ${what} ${JSON.stringify(value)}.`);
   return value;
+};
+
+/** The account's model list is open, so `-m` is re-checked by shape: `CODEX_MODEL_ID` admits nothing a shell reads. */
+const shaped = (model: string): string => {
+  if (!CODEX_MODEL_ID.test(model)) throw new Error(`codex: refusing model ${JSON.stringify(model)}.`);
+  return model;
 };
 
 /**
@@ -49,7 +55,7 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
   const resuming = resume && sessionUuid !== undefined && UUID.test(sessionUuid);
 
   const flags = [
-    ...(model === undefined ? [] : ['-m', oneOf('model', model, CLI_VOCAB.codex.models)]),
+    ...(model === undefined ? [] : ['-m', shaped(model)]),
     ...(effort === undefined
       ? []
       : config(`model_reasoning_effort=${toml(oneOf('effort', effort, CLI_VOCAB.codex.efforts))}`)),
