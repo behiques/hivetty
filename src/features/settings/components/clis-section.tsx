@@ -31,9 +31,13 @@ const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli
 const SANDBOX_OPTIONS = HEADLESS_SANDBOXES.map((value) => ({ value, label: value })).reverse();
 
 const CLI_DEFAULT = { value: '', label: 'CLI default' };
-const options = (values: readonly string[]) => [
+/** `values` behind "CLI default", plus `saved` when it is not among them, so a saved value never shows blank. */
+const options = (values: readonly string[], saved?: string) => [
   CLI_DEFAULT,
-  ...values.map((value) => ({ value, label: value })),
+  ...(saved === undefined || values.includes(saved) ? values : [...values, saved]).map((value) => ({
+    value,
+    label: value,
+  })),
 ];
 
 /**
@@ -86,9 +90,17 @@ function CliCard({
   codexModels: readonly CliModel[];
 }) {
   const name = CLI_NAMES[cli];
-  const { efforts } = CLI_VOCAB[cli];
-  // Codex's list is the account's; Claude's and Copilot's are static.
-  const models = cli === 'codex' ? codexModels.map((model) => model.slug) : CLI_VOCAB[cli].models;
+  // Codex's list is the account's, and each model takes its own efforts; Claude's and Copilot's are static.
+  const live = cli === 'codex' ? codexModels : undefined;
+  const models = live?.map((model) => model.slug) ?? CLI_VOCAB[cli].models;
+  const efforts = live?.find((model) => model.slug === agents.model)?.efforts ?? CLI_VOCAB[cli].efforts;
+
+  /** A new Codex model that lacks the saved effort clears it in the same write, or the run would carry both. */
+  const pickModel = (value: string) => {
+    const next = live?.find((model) => model.slug === value);
+    const stale = next !== undefined && agents.effort !== undefined && !next.efforts.includes(agents.effort);
+    void setCliAgentsConfig({ cli, model: value || null, ...(stale ? { effort: null } : {}) });
+  };
 
   return (
     <SettingsProviderGroup name={name}>
@@ -125,16 +137,14 @@ function CliCard({
             className="min-w-0 flex-1"
             label="Model"
             value={agents.model ?? ''}
-            options={options(models)}
-            onChange={(value) =>
-              void setCliAgentsConfig({ cli, model: value || null })
-            }
+            options={options(models, agents.model)}
+            onChange={pickModel}
           />
           <SelectField
             className="min-w-0 flex-1"
             label="Effort"
             value={agents.effort ?? ''}
-            options={options(efforts)}
+            options={options(efforts, agents.effort)}
             onChange={(value) =>
               void setCliAgentsConfig({ cli, effort: value || null })
             }
