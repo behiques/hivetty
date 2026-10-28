@@ -1,8 +1,8 @@
 import { Plus } from '@phosphor-icons/react';
 
+import { useNewSessionPick } from '@hooks/use-new-session-pick';
 import { useProjectAccess } from '@hooks/use-project-config';
 import { useSpawnSession } from '@stores/hive-store';
-import { useNewSessionDefaults } from '@stores/ui-store';
 
 interface NewSessionLinkProps {
   /** What the spawn keys on. Never shown. */
@@ -50,14 +50,14 @@ export function NewSessionLink({
 }: NewSessionLinkProps) {
   const access = useProjectAccess(projectId);
   const spawnSession = useSpawnSession();
-  const { newCli, newModel, newEffort } = useNewSessionDefaults();
+  const { cli, model, effort } = useNewSessionPick();
 
   return (
     <button
       type="button"
       // Empty task, exactly as the picker passes: the session opens ready and
       // the first message gives it its job (story 043).
-      onClick={() => spawnSession(projectId, '', newCli, newModel, newEffort)}
+      onClick={() => spawnSession(projectId, '', cli, model, effort)}
       disabled={!access.spawnable}
       /*
         The refusal when there is one; otherwise what the click is about to
@@ -68,7 +68,7 @@ export function NewSessionLink({
         the pair costs a tooltip and removes the only thing the picker offered
         that this does not: sight of the model before you start on it.
       */
-      title={access.reason ?? `Starts on ${newModel} · ${newEffort}`}
+      title={access.reason ?? `Starts on ${model} · ${effort}`}
       aria-label={`New session in ${projectName}`}
       className="rounded-full p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-transparent"
     >

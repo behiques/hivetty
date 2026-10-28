@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isSession } from '@/types/entity';
 
+import type { CliModel } from '@shared/cli-contract';
 import {
   emptySnapshot,
   type ConfigSnapshot,
@@ -25,6 +26,9 @@ import { testProjectKey } from '@tests/support/project-key';
  * model and effort, and only the entity the store actually created can prove
  * that. A spy would prove the arguments and nothing about the result.
  */
+
+const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolve(null));
+vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels() }));
 
 const CONFIG_PATH = '/home/dev/.hive/config.json';
 const PROJECT = 'nova-web';
@@ -115,6 +119,23 @@ describe('NewSessionLink', () => {
     await userEvent.click(screen.getByRole('button'));
 
     expect(lastSession()).toMatchObject({ harness: 'codex', model: 'gpt-6.1-sol', effort: 'medium' });
+  });
+
+  it("resolves a Codex pick against the account's models, as the picker does", async () => {
+    codexModels.mockResolvedValueOnce([
+      { slug: 'gpt-6-luna', description: '', defaultEffort: 'medium', efforts: ['low', 'medium', 'max'] },
+    ]);
+    setProjectConfigForTest(snapshot([{ id: PROJECT, status: 'ok' }]));
+    useUiStore.getState().setNewCli('codex');
+    // The static default, gpt-6.1-sol, is not on this account, and Luna takes no ultra.
+    useUiStore.getState().setNewEffort('ultra');
+
+    render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
+    await waitFor(() => expect(codexModels).toHaveBeenCalled());
+    await screen.findByTitle(/gpt-6-luna · medium/);
+    await userEvent.click(screen.getByRole('button'));
+
+    expect(lastSession()).toMatchObject({ harness: 'codex', model: 'gpt-6-luna', effort: 'medium' });
   });
 
   it('opens the new session, the way every other spawn does', async () => {
