@@ -8,6 +8,8 @@ const CLAUDE_EVENT: Record<string, string> = {
   permissionRequest: 'PermissionRequest',
   postToolUse: 'PostToolUse',
   agentStop: 'Stop',
+  // Only an `ask_user` dialog: it fires no `permissionRequest` (FINDINGS P2). Read below.
+  notification: 'PermissionRequest',
 };
 
 /**
@@ -15,6 +17,15 @@ const CLAUDE_EVENT: Record<string, string> = {
  * every file tool while `postToolUse` names the tool itself, and the tracker clears a block by name.
  */
 const WRITE_TOOLS = new Set(['edit', 'create', 'apply_patch']);
+
+/**
+ * Copilot's own question tool, as Claude's, so its dialog reads as a question and its answer clears it.
+ * The dialog's `notification` names no tool; `ask_user`'s `postToolUse` follows the answer (P2).
+ */
+const QUESTION_TOOL = 'AskUserQuestion';
+
+const claudeToolName = (tool: string | undefined): string | undefined =>
+  tool === undefined ? undefined : WRITE_TOOLS.has(tool) ? 'edit' : tool === 'ask_user' ? QUESTION_TOOL : tool;
 
 const text = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
 
@@ -40,11 +51,12 @@ export function readCopilotHook(input: HookInput): HookReading {
   const name = CLAUDE_EVENT[event];
   if (name === undefined) return { effects: [] };
   if (event === 'agentStop' && payload['agentId'] !== undefined) return { effects: [] };
+  // `permission_prompt` echoes a `permissionRequest` already read; no other type is read (P2).
+  if (event === 'notification' && payload['notification_type'] !== 'elicitation_dialog') return { effects: [] };
 
   const sessionId = text(payload['sessionId']);
   const cwd = text(payload['cwd']);
-  const tool = text(payload['toolName']);
-  const toolName = tool !== undefined && WRITE_TOOLS.has(tool) ? 'edit' : tool;
+  const toolName = event === 'notification' ? QUESTION_TOOL : claudeToolName(text(payload['toolName']));
   const body =
     input.lane === 'agent'
       ? { hook_event_name: name, ...(sessionId === undefined ? {} : { session_id: sessionId }) }

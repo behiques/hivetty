@@ -152,6 +152,42 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
     expect(readCopilotHook({ ...session('{}'), truncated: true })).toEqual({ malformed: true, effects: [] });
   });
 
+  it("raises a question block from an ask_user dialog, read as Claude's AskUserQuestion (FINDINGS P2)", () => {
+    const payload = tui('notification-elicitation_dialog.json');
+    const reading = readCopilotHook(session(wrapped(payload, 'notification')));
+    expect(reading).toEqual(
+      claude({
+        hook_event_name: 'PermissionRequest',
+        session_id: payload['sessionId'],
+        cwd: payload['cwd'],
+        tool_name: 'AskUserQuestion',
+      }),
+    );
+    expect(reading.effects.find((effect) => effect.kind === 'status')?.event.signal).toEqual({
+      kind: 'waiting',
+      reason: 'question',
+    });
+  });
+
+  it("clears the question from ask_user's postToolUse once answered", () => {
+    const asked = readCopilotHook(session(wrapped(tui('notification-elicitation_dialog.json'), 'notification')));
+    const answered = readCopilotHook(session(wrapped(tui('post-tool-use-ask-user.json'), 'postToolUse')));
+    expect(track(asked).held.blocked).toBe(1);
+    expect(track(asked, answered).held.blocked).toBe(0);
+  });
+
+  it('reads a permission_prompt notification as nothing: permissionRequest already raised the card', () => {
+    expect(
+      readCopilotHook(session(wrapped(tui('notification-permission_prompt.json'), 'notification'))),
+    ).toEqual({ effects: [] });
+  });
+
+  it('reads no notification on the agent lane', () => {
+    expect(readCopilotHook(agent(wrapped(tui('notification-elicitation_dialog.json'), 'notification')))).toEqual({
+      effects: [],
+    });
+  });
+
   it('reads nothing on any other lane', () => {
     expect(readCopilotHook({ ...session(wrapped(tui('agent-stop.json'))), lane: 'fence' as never })).toEqual({
       effects: [],

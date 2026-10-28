@@ -19,13 +19,14 @@ import { COPILOT_SESSION_ENV_KEYS, COPILOT_TOKEN_ENV, copilotMcpConfig } from '.
  * - The user's login authenticates (D3): the token keys are unset, in the pty and after the profile.
  */
 
-/** What a session reports (P0, P1). */
+/** What a session reports (P0, P1), and `notification` for an `ask_user` dialog (P2). */
 export const COPILOT_SESSION_EVENTS = [
   'sessionStart',
   'userPromptSubmitted',
   'permissionRequest',
   'postToolUse',
   'agentStop',
+  'notification',
 ] as const;
 
 /** They outrank the user's own login (D3). */

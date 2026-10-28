@@ -68,9 +68,15 @@ No `agent_idle` fired.
 **Evidence.** `notification-permission_prompt.json`, `notification-elicitation_dialog.json`,
 `pre-tool-use-ask-user.json`.
 
-**Consequence.** `elicitation_dialog` → Claude `Notification` `notification_type:
-"elicitation_dialog"` (the `ask_user` question is otherwise invisible). `permission_prompt` is
-left out: `permissionRequest` already gives that signal.
+Answered (a second run typed `blue` into the dialog): `postToolUse` (`ask_user`, `toolResult`
+"User responded: blue") follows, then `agentStop`.
+
+**Evidence.** also `post-tool-use-ask-user.json`.
+
+**Consequence.** Claude's `Notification` vocabulary has no `elicitation_dialog`, so the session lane
+reads that notification as Claude's `PermissionRequest` for `AskUserQuestion` (a question block),
+and spells `ask_user`'s `postToolUse` as `AskUserQuestion` so the answer clears it.
+`permission_prompt` is left out: `permissionRequest` already gives that signal.
 
 ## P3: resume
 

@@ -87,6 +87,7 @@ describe('copilotPluginFiles', () => {
     const parsed = JSON.parse(hooks.text) as { version: number; hooks: Record<string, Array<{ bash: string }>> };
     expect(parsed.version).toBe(1);
     expect(Object.keys(parsed.hooks)).toEqual([...COPILOT_SESSION_EVENTS]);
+    expect(COPILOT_SESSION_EVENTS).toContain('notification');
     for (const event of COPILOT_SESSION_EVENTS) {
       expect(parsed.hooks[event]).toEqual([
         { type: 'command', bash: hookCommand({ harness: 'copilot', wrap: event }), timeoutSec: 10 },
