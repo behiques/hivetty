@@ -1,4 +1,4 @@
-import { CaretLeft, DotsThree, Hexagon, Terminal as TerminalGlyph } from '@phosphor-icons/react';
+import { CaretLeft, Check, DotsThree, Hexagon, Terminal as TerminalGlyph, X } from '@phosphor-icons/react';
 
 import { cn } from '@/lib/utils';
 import {
@@ -18,10 +18,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@components/ui/dropdown-menu';
 import { StatusDot, statusLabel, statusText } from '@components/ui/status-dot';
 import { useProjectContainerised } from '@hooks/use-project-config';
+import { capabilityBadges } from '@lib/harness/capability-badges';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import { isMacPlatform } from '@lib/platform';
 import { backChordLabel } from '@lib/terminal/keymap';
 import { useDelegateTitle, useDelegateWord, useSessionPr, useSpawnTerminalBeside } from '@stores/hive-store';
@@ -128,6 +132,7 @@ function SessionMenu({ session }: { session: Session }) {
   const spawnTerminalBeside = useSpawnTerminalBeside();
   const containerised = useProjectContainerised(session.project);
   const pr = useSessionPr(session.id);
+  const cli = session.harness ?? 'claude-code';
 
   return (
     <DropdownMenu>
@@ -161,6 +166,25 @@ function SessionMenu({ session }: { session: Session }) {
             </a>
           </DropdownMenuItem>
         ) : null}
+        <DropdownMenuSeparator />
+        {/* Read-only, so plain rows rather than items: the keyboard steps over them (HIVE-281). */}
+        <div role="group" aria-labelledby={`caps-${session.id}`}>
+          <DropdownMenuLabel id={`caps-${session.id}`}>{CLI_NAMES[cli]} supports</DropdownMenuLabel>
+          {capabilityBadges(cli).map(({ label, supported }) => (
+            <div
+              key={label}
+              className={cn('flex items-center gap-2 px-2 py-1 text-ui-sm', supported ? 'text-muted' : 'text-subtle')}
+            >
+              {supported ? (
+                <Check size={12} weight="bold" aria-hidden="true" className="shrink-0 text-green" />
+              ) : (
+                <X size={12} weight="bold" aria-hidden="true" className="shrink-0" />
+              )}
+              <span aria-hidden="true">{label}</span>
+              <span className="sr-only">{`${label}: ${supported ? 'supported' : 'not supported'}`}</span>
+            </div>
+          ))}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

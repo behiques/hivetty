@@ -166,6 +166,19 @@ describe('SessionRow', () => {
 
     expect(screen.getByText('needs input')).toBeInTheDocument();
   });
+
+  it('marks a session whose CLI is not Claude’s, and names it for the reader (HIVE-281)', () => {
+    const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
+    const { container } = render(<SessionRow id={id} />);
+    expect(container.querySelector('[aria-hidden="true"].bg-green')).toHaveTextContent('X');
+    expect(screen.getByText('Codex')).toHaveClass('sr-only');
+  });
+
+  it('draws no mark on a Claude Code row (HIVE-281)', () => {
+    const { container } = render(<SessionRow id="hero-refresh" />);
+    expect(container.querySelector('.bg-brand-fill')).toBeNull();
+    expect(screen.queryByText('Claude Code')).not.toBeInTheDocument();
+  });
 });
 
 /**

@@ -1,3 +1,5 @@
+import { CAPABILITIES } from '@shared/harness-contract';
+
 import { claudeCodeAdapter } from '../claude-code';
 import type { HarnessAdapter, PermissionFence } from '../port';
 
@@ -38,17 +40,7 @@ export const copilotFence: PermissionFence = {
  */
 export const copilotAdapter: HarnessAdapter = {
   id: 'copilot',
-  capabilities: {
-    resume: 'by-id',
-    meters: false,
-    contextDelivery: 'none',
-    reportsCostUsd: false,
-    enforcesTurns: false,
-    enforcesBudget: false,
-    reportsMcpStatus: false,
-    agentMcp: [],
-    conversationId: 'argv',
-  },
+  capabilities: CAPABILITIES.copilot,
   launch: launchCopilotSession,
   prepare: {
     sessionSettings: noSettings,
