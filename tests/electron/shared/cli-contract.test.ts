@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  cliAcceptsModel,
   cliTakesEffort,
   CLI_VOCAB,
   CODEX_EFFORTS,
@@ -21,7 +22,21 @@ describe('cli-contract (HIVE-341)', () => {
 
   it("Codex's vocabulary is its own (HIVE-342)", () => {
     expect(CLI_VOCAB.codex).toEqual({ models: CODEX_MODELS, efforts: CODEX_EFFORTS, noEffort: [] });
-    expect(CODEX_MODELS[0]).toBe('gpt-6-luna');
+    // models_cache.json's priority order at 0.165: the first is Codex's default.
+    expect(CODEX_MODELS[0]).toBe('gpt-6.1-sol');
+    expect(CODEX_EFFORTS).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+  });
+
+  it('accepts a Codex model by its shell-safe shape, and the others by their lists', () => {
+    expect(cliAcceptsModel('codex', 'gpt-7-nova')).toBe(true);
+    expect(cliAcceptsModel('codex', 'codex-auto-review')).toBe(true);
+    for (const bad of ['', 'GPT-6', 'gpt 6', 'gpt-6;rm -rf ~', "gpt-6'", '-m', 'a'.repeat(65)]) {
+      expect(cliAcceptsModel('codex', bad)).toBe(false);
+    }
+    expect(cliAcceptsModel('claude-code', 'opus')).toBe(true);
+    expect(cliAcceptsModel('claude-code', 'gpt-6-luna')).toBe(false);
+    expect(cliAcceptsModel('copilot', 'auto')).toBe(true);
+    expect(cliAcceptsModel('copilot', 'gpt-7-nova')).toBe(false);
   });
 
   it("dims Copilot's effort for kimi-k3, which refuses --reasoning-effort (HIVE-280, FINDINGS P8)", () => {

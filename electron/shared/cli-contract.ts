@@ -8,11 +8,24 @@
 import { HARNESS_IDS, type HarnessId } from './harness-contract';
 import { SESSION_EFFORTS, SESSION_MODELS } from './session-contract';
 
-/** Codex's models, from `~/.codex/models_cache.json` at 0.164.0 (HIVE-342). The first is its default. */
-export const CODEX_MODELS = ['gpt-6-luna', 'gpt-5.6-terra', 'gpt-5.6-luna'] as const;
+/**
+ * Codex's models when the account's own list cannot be read: `~/.codex/models_cache.json`'s listed
+ * entries at 0.165, in its priority order. The first is its default. The live list comes from the
+ * Codex adapter's `models()`; this is only the fallback.
+ */
+export const CODEX_MODELS = [
+  'gpt-6.1-sol',
+  'gpt-6-astra',
+  'gpt-6.1-terra',
+  'gpt-6-sol',
+  'gpt-6-luna',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+] as const;
 
-/** Codex's `model_reasoning_effort` values at 0.164.0 (HIVE-342). */
-export const CODEX_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+/** Codex's `model_reasoning_effort` values at 0.165. `ultra` is per model: Luna lacks it. */
+export const CODEX_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
 
 /** Copilot's models, from `copilot help config` at 1.0.104 (HIVE-343). `auto` lets Copilot pick. */
 export const COPILOT_MODELS = [
@@ -83,6 +96,19 @@ export const CLI_VOCAB = {
 /** Whether `model`'s effort scale applies on `cli` (HIVE-279): the picker dims it when not. */
 export const cliTakesEffort = (cli: HarnessId, model: string): boolean =>
   !(CLI_VOCAB[cli].noEffort as readonly string[]).includes(model);
+
+/**
+ * A Codex model as the guard, the parser and the launch accept it. Codex's list is the account's,
+ * so the check is a shape, not membership. No character in it is one a login shell reads, which is
+ * what keeps `-m` unquoted in `launch.ts`.
+ */
+export const CODEX_MODEL_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+/** Whether `model` is one `cli` takes: Codex's by {@link CODEX_MODEL_ID}, the others' by their lists. */
+export const cliAcceptsModel = (cli: HarnessId, model: string): boolean =>
+  cli === 'codex'
+    ? CODEX_MODEL_ID.test(model)
+    : (CLI_VOCAB[cli].models as readonly string[]).includes(model);
 
 /**
  * A CLI's headless agent defaults. An absent model or effort omits the flag: the CLI picks. Each is
