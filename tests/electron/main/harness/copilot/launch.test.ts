@@ -14,7 +14,7 @@ const HIVE = { command: '/app/electron', args: ['/app/mcp-host.js'], env: { ELEC
 describe('launchCopilotSession', () => {
   it('unsets the token keys, pins the id, loads the plugin and exits with the shell', () => {
     expect(launchCopilotSession(BASE).command).toBe(
-      'unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN; copilot --session-id 11111111-2222-4333-8444-555555555551' +
+      'unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSISTED_APPROVAL; copilot --session-id 11111111-2222-4333-8444-555555555551' +
         " --plugin-dir '/Users/x/.hivetty/cli/copilot session/plugin' && exit",
     );
   });
@@ -76,7 +76,17 @@ describe('launchCopilotSession', () => {
       'COPILOT_GITHUB_TOKEN',
       'GH_TOKEN',
       'GITHUB_TOKEN',
+      'COPILOT_ALLOW_ALL',
+      'COPILOT_ASSISTED_APPROVAL',
     ]);
+  });
+
+  it('never lets the user env auto-approve: no permissionRequest would fire, so no card (HIVE-363)', () => {
+    const { command, stripEnv } = launchCopilotSession(BASE);
+    for (const key of ['COPILOT_ALLOW_ALL', 'COPILOT_ASSISTED_APPROVAL']) {
+      expect(stripEnv).toContain(key);
+      expect(command.split('; ')[0]!.split(' ')).toContain(key);
+    }
   });
 
   it('returns the plugin files for the core to write', () => {

@@ -32,6 +32,15 @@ export const COPILOT_SESSION_EVENTS = [
 /** They outrank the user's own login (D3). */
 export const COPILOT_SESSION_TOKEN_KEYS = [COPILOT_TOKEN_ENV, 'GH_TOKEN', 'GITHUB_TOKEN'] as const;
 
+/**
+ * They approve calls before `permissionRequest` can fire, so no "needs you" card would ever show
+ * (HIVE-363). Headless strips both; BYOK provider and Enterprise host keys stay, as the user's routing.
+ */
+export const COPILOT_SESSION_APPROVAL_KEYS = ['COPILOT_ALLOW_ALL', 'COPILOT_ASSISTED_APPROVAL'] as const;
+
+/** Unset in the pty and again after the login shell's profile. */
+const UNSET_KEYS = [...COPILOT_SESSION_TOKEN_KEYS, ...COPILOT_SESSION_APPROVAL_KEYS];
+
 /** The session identity the hive server reads, forwarded by name. No run: a session is not one. */
 const HIVE_SESSION_ENV = [HOOK_ENV_RECEIVER_URL, HOOK_ENV_SESSION, HOOK_ENV_TOKEN];
 
@@ -97,10 +106,10 @@ export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
 
   return {
     // As Codex's: the login shell re-sources the profile after `stripEnv`, so `unset` runs after it.
-    command: [`unset ${COPILOT_SESSION_TOKEN_KEYS.join(' ')};`, spec.command, ...flags, ...initialPrompt, '&& exit'].join(
+    command: [`unset ${UNSET_KEYS.join(' ')};`, spec.command, ...flags, ...initialPrompt, '&& exit'].join(
       ' ',
     ),
-    stripEnv: [...COPILOT_SESSION_ENV_KEYS, ...COPILOT_SESSION_TOKEN_KEYS],
+    stripEnv: [...COPILOT_SESSION_ENV_KEYS, ...UNSET_KEYS],
     submitDelayMs: SUBMIT_DELAY_MS,
     files: copilotPluginFiles(pluginDir),
   };
