@@ -1,0 +1,14 @@
+{
+  "sessionId": "11111111-2222-4333-8444-555555555562",
+  "timestamp": 1793152927376,
+  "cwd": "/tmp/copilot-fixture/work",
+  "toolName": "create",
+  "toolArgs": {
+    "path": "/tmp/copilot-fixture/work/new.txt",
+    "file_text": "hello\n"
+  },
+  "toolResult": {
+    "resultType": "success",
+    "textResultForLlm": "Created file /tmp/copilot-fixture/work/new.txt with 6 characters"
+  }
+}

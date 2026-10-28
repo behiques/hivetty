@@ -1,0 +1,14 @@
+{
+  "sessionId": "11111111-2222-4333-8444-555555555556",
+  "timestamp": 1793151873690,
+  "cwd": "/tmp/copilot-fixture/work",
+  "toolName": "sql",
+  "toolArgs": {
+    "description": "Create writing todos",
+    "query": "INSERT INTO todos (id, title, description, status) VALUES\n  ('hello-step-1', 'Defining hello file content', 'Inspect the workspace and confirm the exact text to place in hello.txt.', 'in_progress'),\n  ('hello-step-2', 'Writing hello text file', 'Create hello.txt with the confirmed content.', 'pending'),\n  ('hello-step-3', 'Verifying hello text file', 'Read hello.txt and confirm its content.', 'pending');\nINSERT INTO todo_deps (todo_id, depends_on) VALUES\n  ('hello-step-2', 'hello-step-1'),\n  ('hello-step-3', 'hello-step-2');"
+  },
+  "toolResult": {
+    "resultType": "success",
+    "textResultForLlm": "Executed 2 statement(s):\n\n1. INSERT\n   3 row(s) inserted. Last inserted row ID: 3.\n\n2. INSERT\n   2 row(s) inserted. Last inserted row ID: 2."
+  }
+}
