@@ -1,4 +1,4 @@
-import { CLI_VOCAB } from '@shared/cli-contract';
+import { CLI_VOCAB, cliTakesEffort } from '@shared/cli-contract';
 import { HOOK_ENV_RECEIVER_URL, HOOK_ENV_SESSION, HOOK_ENV_TOKEN } from '@shared/hook-contract';
 
 import { shellQuote } from '../../container/shell-quote';
@@ -80,7 +80,10 @@ export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
     '--session-id',
     sessionUuid,
     ...(model === undefined ? [] : ['--model', oneOf('model', model, CLI_VOCAB.copilot.models)]),
-    ...(effort === undefined ? [] : ['--reasoning-effort', oneOf('effort', effort, CLI_VOCAB.copilot.efforts)]),
+    // A model with no effort scale refuses the flag (P8), so it is left off rather than refused here.
+    ...(effort === undefined || (model !== undefined && !cliTakesEffort('copilot', model))
+      ? []
+      : ['--reasoning-effort', oneOf('effort', effort, CLI_VOCAB.copilot.efforts)]),
     '--plugin-dir',
     shellQuote(pluginDir),
     ...(hiveServer === undefined

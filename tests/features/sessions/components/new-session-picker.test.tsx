@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { CLI_VOCAB } from '@shared/cli-contract';
 import {
   emptySnapshot,
   type ConfigSnapshot,
@@ -147,14 +148,14 @@ describe('NewSessionPicker', () => {
   });
 
   describe('the CLI switch (HIVE-279)', () => {
-    it('offers every CLI and says why the unavailable ones are off', () => {
+    it('offers every CLI, Copilot included (HIVE-280)', () => {
       render(<NewSessionPicker />);
 
       const cli = screen.getByRole('radiogroup', { name: 'cli' });
       expect(within(cli).getByRole('radio', { name: /Claude Code/ })).toBeChecked();
       expect(within(cli).getByRole('radio', { name: /Codex/ })).toBeEnabled();
-      expect(within(cli).getByRole('radio', { name: /Copilot/ })).toBeDisabled();
-      expect(screen.getByText('Copilot · agents only for now')).toBeInTheDocument();
+      expect(within(cli).getByRole('radio', { name: /Copilot/ })).toBeEnabled();
+      expect(screen.queryByText(/agents only for now/)).not.toBeInTheDocument();
       expect(screen.getByText('Pick a project — a Claude Code terminal will open for it')).toBeInTheDocument();
     });
 
@@ -183,6 +184,25 @@ describe('NewSessionPicker', () => {
         project: 'design-system',
         harness: 'codex',
         model: 'gpt-6-luna',
+        effort: 'medium',
+      });
+    });
+
+    it('starts a Copilot session on its first model at medium (HIVE-280)', async () => {
+      const user = userEvent.setup();
+      render(<NewSessionPicker />);
+
+      await user.click(within(screen.getByRole('radiogroup', { name: 'cli' })).getByRole('radio', { name: /Copilot/ }));
+      expect(screen.getByRole('radio', { name: /Copilot/ })).toBeChecked();
+      expect(within(screen.getByRole('radiogroup', { name: 'model' })).getAllByRole('radio')).toHaveLength(
+        CLI_VOCAB.copilot.models.length,
+      );
+      await user.click(screen.getByRole('button', { name: 'design-system' }));
+
+      expect(useHiveStore.getState().entities['sess-01']).toMatchObject({
+        project: 'design-system',
+        harness: 'copilot',
+        model: 'auto',
         effort: 'medium',
       });
     });

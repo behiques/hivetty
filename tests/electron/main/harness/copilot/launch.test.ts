@@ -27,6 +27,12 @@ describe('launchCopilotSession', () => {
     expect(() => launchCopilotSession({ ...BASE, effort: 'turbo' })).toThrow(/refusing effort/);
   });
 
+  it('leaves the effort off a model with no effort scale: kimi-k3 refuses it (FINDINGS P8)', () => {
+    const { command } = launchCopilotSession({ ...BASE, model: 'kimi-k3', effort: 'medium' });
+    expect(command).toContain('--model kimi-k3');
+    expect(command).not.toContain('--reasoning-effort');
+  });
+
   it('adds the hive server by ${VAR} reference, shell-quoted', () => {
     const { command } = launchCopilotSession({ ...BASE, hiveServer: HIVE });
     expect(command).toContain(`--additional-mcp-config '{"mcpServers":{"hive":`);

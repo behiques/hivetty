@@ -37,8 +37,8 @@ const PROFILES: Record<HarnessId, InputProfile> = {
   'claude-code': DEFAULT_INPUT_PROFILE,
   // Ctrl+J, measured at 0.164 (HIVE-279; tests/fixtures/codex/interactive-0.164/FINDINGS.md P7).
   codex: { ...DEFAULT_INPUT_PROFILE, newline: '\n' },
-  // No copilot session yet (HIVE-280); its newline is Alt+Enter (ESC CR) when it lands.
-  copilot: DEFAULT_INPUT_PROFILE,
+  // Alt+Enter (ESC CR), measured at 1.0.105 (HIVE-280; tests/fixtures/copilot/interactive-1.0.105/FINDINGS.md P6).
+  copilot: { ...DEFAULT_INPUT_PROFILE, newline: '\x1b\r' },
 };
 
 /** The profile for an entity's harness; `undefined` (a terminal, a command, the console) is the default. */

@@ -386,6 +386,15 @@ describe('hive-store', () => {
       expect(lines(claude)).toContain('● Reading CLAUDE.md, mapping repo…');
     });
 
+    it('seeds a Copilot session with AGENTS.md too (HIVE-280)', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web', '', 'copilot');
+      const entity = useHiveStore.getState().entities[id];
+      const text = isSession(entity) ? entity.lines.map((l) => l.text) : [];
+
+      expect(text).toContain('● Reading AGENTS.md, mapping repo…');
+      expect(text.some((line) => line.includes('CLAUDE.md'))).toBe(false);
+    });
+
     it('starts another CLI on its own default model at medium', () => {
       const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex');
 
