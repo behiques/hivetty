@@ -29,7 +29,7 @@ import {
   type AgentStatusPush,
   type WakeSpec,
 } from '@shared/agent-contract';
-import type { CliTokensState } from '@shared/cli-contract';
+import type { CliModel, CliTokensState } from '@shared/cli-contract';
 import { AUTH_ENV_KEYS } from '@shared/config-contract';
 import type {
   BrowseListing,
@@ -264,7 +264,7 @@ import {
   type FsWatchLayer,
 } from '../fs';
 import type { PreparedFiles } from '../harness/port';
-import { sessionAdapter } from '../harness/registry';
+import { adapterFor, sessionAdapter } from '../harness/registry';
 import { createHookRuntime } from '../hooks';
 import { readGhStatus, runCommand } from '../integrations/gh';
 import { createGithub } from '../integrations/github';
@@ -4545,6 +4545,8 @@ export function registerIpcHandlers(
   handle(CH.cliClearToken, (_event, payload): CliTokensState =>
     cliTokens.clear(parseClearCliTokenRequest(payload)),
   );
+  // The account's Codex models for the picker; `[]` sends the renderer to its fallback list.
+  handle(CH.cliCodexModels, (): Promise<CliModel[]> => adapterFor('codex').models?.() ?? Promise.resolve([]));
 
   /**
    * Socket mode's own verbs (HIVE-124) — and the invariant they must not break.
