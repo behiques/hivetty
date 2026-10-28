@@ -110,6 +110,36 @@ export const cliAcceptsModel = (cli: HarnessId, model: string): boolean =>
     ? CODEX_MODEL_ID.test(model)
     : (CLI_VOCAB[cli].models as readonly string[]).includes(model);
 
+/** One model a CLI offers this account, as the picker draws it. Codex's come from its `models_cache.json`. */
+export interface CliModel {
+  slug: string;
+  /** Codex's own one line on it; `''` when there is none. */
+  description: string;
+  defaultEffort: string;
+  efforts: string[];
+}
+
+/** Codex's model classes, cheapest to most capable: the picker's stepper order. */
+export const CODEX_CLASSES = ['luna', 'terra', 'sol', 'astra'] as const;
+
+export type CodexClass = (typeof CODEX_CLASSES)[number];
+
+const CODEX_FAMILY = /^gpt-(\d+(?:\.\d+)*)-(luna|terra|sol|astra)$/;
+
+/** `gpt-<version>-<class>` read apart; `null` for a slug that is not one. */
+export function codexFamily(slug: string): { cls: CodexClass; version: string } | null {
+  const match = CODEX_FAMILY.exec(slug);
+  return match === null ? null : { cls: match[2] as CodexClass, version: match[1]! };
+}
+
+/** The picker's list when Codex's own cannot be read. No `ultra`: only the live list says who takes it. */
+export const CODEX_FALLBACK_MODELS: readonly CliModel[] = CODEX_MODELS.map((slug) => ({
+  slug,
+  description: '',
+  defaultEffort: 'medium',
+  efforts: CODEX_EFFORTS.filter((effort) => effort !== 'ultra'),
+}));
+
 /**
  * A CLI's headless agent defaults. An absent model or effort omits the flag: the CLI picks. Each is
  * a member of `CLI_VOCAB[cli]`, which the parser and the guard check (HIVE-342).

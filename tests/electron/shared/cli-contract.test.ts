@@ -5,7 +5,9 @@ import {
   cliTakesEffort,
   CLI_VOCAB,
   CODEX_EFFORTS,
+  CODEX_FALLBACK_MODELS,
   CODEX_MODELS,
+  codexFamily,
   resolveClis,
 } from '../../../electron/shared/cli-contract';
 import { HARNESS_IDS } from '../../../electron/shared/harness-contract';
@@ -37,6 +39,23 @@ describe('cli-contract (HIVE-341)', () => {
     expect(cliAcceptsModel('claude-code', 'gpt-6-luna')).toBe(false);
     expect(cliAcceptsModel('copilot', 'auto')).toBe(true);
     expect(cliAcceptsModel('copilot', 'gpt-7-nova')).toBe(false);
+  });
+
+  it('reads a Codex slug as its class and version, and nothing else', () => {
+    expect(codexFamily('gpt-6.1-sol')).toEqual({ cls: 'sol', version: '6.1' });
+    expect(codexFamily('gpt-6-astra')).toEqual({ cls: 'astra', version: '6' });
+    expect(codexFamily('gpt-5.6-luna')).toEqual({ cls: 'luna', version: '5.6' });
+    expect(codexFamily('gpt-reserve')).toBeNull();
+    expect(codexFamily('gpt-6-nova')).toBeNull();
+    expect(codexFamily('codex-auto-review')).toBeNull();
+  });
+
+  it('falls back to every static model at medium, offering no ultra', () => {
+    expect(CODEX_FALLBACK_MODELS.map((model) => model.slug)).toEqual([...CODEX_MODELS]);
+    for (const model of CODEX_FALLBACK_MODELS) {
+      expect(model).toMatchObject({ description: '', defaultEffort: 'medium' });
+      expect(model.efforts).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
+    }
   });
 
   it("dims Copilot's effort for kimi-k3, which refuses --reasoning-effort (HIVE-280, FINDINGS P8)", () => {
