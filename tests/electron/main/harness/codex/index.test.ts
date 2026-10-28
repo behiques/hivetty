@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../../electron/main/harness/codex';
@@ -9,6 +9,7 @@ import { codexFence } from '../../../../../electron/main/harness/codex/fence';
 import { launchCodexHeadless } from '../../../../../electron/main/harness/codex/headless';
 import { launchCodexSession } from '../../../../../electron/main/harness/codex/launch';
 import { readCodexHeadless } from '../../../../../electron/main/harness/codex/headless-reader';
+import { copilotAdapter } from '../../../../../electron/main/harness/copilot';
 
 describe('codexAdapter', () => {
   it('is codex', () => {
@@ -94,5 +95,19 @@ describe('codexAdapter', () => {
       expect(codexAdapter.readHook(input)).toEqual(claudeCodeAdapter.readHook(input));
     }
     expect(codexAdapter.contextReply).toBe(claudeCodeAdapter.contextReply);
+  });
+});
+
+vi.mock('../../../../../electron/main/harness/codex/models', () => ({
+  readCodexModels: () => Promise.resolve([{ slug: 'gpt-6-luna', description: '', defaultEffort: 'medium', efforts: ['medium'] }]),
+}));
+
+describe('codex adapter models', () => {
+  it("answers the account's models through the port; the other adapters have none", async () => {
+    expect(await codexAdapter.models?.()).toEqual([
+      { slug: 'gpt-6-luna', description: '', defaultEffort: 'medium', efforts: ['medium'] },
+    ]);
+    expect(claudeCodeAdapter.models).toBeUndefined();
+    expect(copilotAdapter.models).toBeUndefined();
   });
 });
