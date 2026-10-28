@@ -194,9 +194,7 @@ describe('NewSessionPicker', () => {
 
       await user.click(within(screen.getByRole('radiogroup', { name: 'cli' })).getByRole('radio', { name: /Copilot/ }));
       expect(screen.getByRole('radio', { name: /Copilot/ })).toBeChecked();
-      expect(within(screen.getByRole('radiogroup', { name: 'model' })).getAllByRole('radio')).toHaveLength(
-        CLI_VOCAB.copilot.models.length,
-      );
+      expect(screen.getByRole('combobox', { name: 'Model' })).toHaveValue('auto');
       await user.click(screen.getByRole('button', { name: 'design-system' }));
 
       expect(useHiveStore.getState().entities['sess-01']).toMatchObject({
@@ -205,6 +203,35 @@ describe('NewSessionPicker', () => {
         model: 'auto',
         effort: 'medium',
       });
+    });
+
+    it("draws Copilot's long model list as a select; Claude and Codex keep their steppers (HIVE-280)", async () => {
+      const user = userEvent.setup();
+      render(<NewSessionPicker />);
+      expect(screen.getByRole('radiogroup', { name: 'model' })).toBeInTheDocument();
+      expect(screen.queryByRole('combobox', { name: 'Model' })).not.toBeInTheDocument();
+
+      const cli = screen.getByRole('radiogroup', { name: 'cli' });
+      await user.click(within(cli).getByRole('radio', { name: /Codex/ }));
+      expect(screen.getByRole('radiogroup', { name: 'model' })).toBeInTheDocument();
+
+      await user.click(within(cli).getByRole('radio', { name: /Copilot/ }));
+      const model = screen.getByRole('combobox', { name: 'Model' });
+      expect(screen.queryByRole('radiogroup', { name: 'model' })).not.toBeInTheDocument();
+      expect(within(model).getAllByRole('option')).toHaveLength(CLI_VOCAB.copilot.models.length);
+      expect(model).toHaveValue('auto');
+
+      await user.selectOptions(model, 'claude-sonnet-5.5');
+      expect(useUiStore.getState().newPicks.copilot).toEqual({ model: 'claude-sonnet-5.5', effort: 'medium' });
+    });
+
+    it('dims the effort beside the select for a Copilot model with no effort scale (FINDINGS P8)', async () => {
+      const user = userEvent.setup();
+      useUiStore.getState().setNewCli('copilot');
+      render(<NewSessionPicker />);
+
+      await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), 'kimi-k3');
+      expect(screen.getByText(/not for kimi-k3/)).toBeInTheDocument();
     });
 
     it('reads the steppers from the CLI it is on', () => {

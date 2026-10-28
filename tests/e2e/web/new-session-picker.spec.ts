@@ -89,7 +89,11 @@ test('shows the CLI switch, Claude Code on, Codex and Copilot offered (HIVE-279,
   // Picking Copilot puts its own words on the steppers: `auto` first, at medium.
   await cli.getByRole('radio', { name: /Copilot/ }).click();
   await expect(cli.getByRole('radio', { name: /Copilot/ })).toBeChecked();
-  await expect(page.getByRole('dialog').getByRole('radio', { name: 'auto' })).toBeChecked();
+  // 32 models: a select, not a stepper (HIVE-280).
+  const model = page.getByRole('dialog').getByRole('combobox', { name: 'Model' });
+  await expect(model).toHaveValue('auto');
+  await model.selectOption('claude-sonnet-5.5');
+  await expect(model).toHaveValue('claude-sonnet-5.5');
 });
 
 test('escape closes it', async ({ page }) => {
