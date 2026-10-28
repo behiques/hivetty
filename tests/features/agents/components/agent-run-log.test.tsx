@@ -1220,19 +1220,21 @@ describe('the CLI a run ran on (HIVE-340)', () => {
   const receipts = (container: HTMLElement): HTMLElement =>
     container.querySelector('[data-region="run-receipts"]') as HTMLElement;
 
-  it('chips a run that ran on another CLI', () => {
+  it('marks a run that ran on another CLI with its logo, and says which on hover', () => {
     seed({ runs: [run(1, { harness: 'codex' })] });
 
     const { container } = render(<AgentRunLog name="watcher" />);
 
-    expect(within(receipts(container)).getByTitle('Ran on codex')).toHaveTextContent('codex');
+    const mark = within(receipts(container)).getByTitle('Ran on Codex');
+    expect(mark.querySelector('svg[data-cli="codex"]')).toBeInTheDocument();
+    expect(within(mark).getByText('Codex')).toHaveClass('sr-only');
   });
 
-  it('draws nothing for claude-code, or for a run recorded before HIVE-340', () => {
+  it('marks a claude-code run too, and a run recorded before HIVE-340 as Claude Code', () => {
     seed({ runs: [run(1, { harness: 'claude-code' }), run(2)] });
 
     const { container } = render(<AgentRunLog name="watcher" />);
 
-    expect(within(receipts(container)).queryByTitle(/^Ran on/)).toBeNull();
+    expect(within(receipts(container)).getAllByTitle('Ran on Claude Code')).toHaveLength(2);
   });
 });
