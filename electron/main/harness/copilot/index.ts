@@ -5,13 +5,16 @@ import { copilotFenceReply, readCopilotFence, translateCopilotCall } from './fen
 import { launchCopilotHeadless } from './headless';
 import { readCopilotHeadless } from './headless-reader';
 import { readCopilotHook } from './hooks';
+import { launchCopilotSession } from './launch';
+import { copilotRecord } from './record';
 
-const NO_SESSIONS = 'copilot has no interactive sessions yet (HIVE-280).';
+/* A Copilot session's hooks plugin is its launch's own `files` (`./launch`); nothing shared is written. */
+const noSettings = (): Promise<string> => Promise.resolve('');
+const noFile = (): Promise<void> => Promise.resolve();
 
-const interactive = (): never => {
-  throw new Error(NO_SESSIONS);
+const noMarkers = (): never => {
+  throw new Error('copilot sessions take no prompt markers yet.');
 };
-const later = (): Promise<never> => Promise.reject(new Error(NO_SESSIONS));
 
 /**
  * Total (HIVE-343): every rule is enforced by `decide` on the translated call, through the
@@ -28,8 +31,9 @@ export const copilotFence: PermissionFence = {
 };
 
 /**
- * Adapter #3, headless only (HIVE-343). The interactive half is HIVE-280's: `sessionAdapter()`
- * and `harnessOf` answer Claude, so nothing interactive reaches these refusals.
+ * Adapter #3 (HIVE-343 headless, HIVE-280 sessions). Sessions write no shared file: their hooks
+ * plugin is `launch`'s own `files`. HiveTTY's skills and prompt markers in a Copilot session are a
+ * follow-up, as for Codex.
  */
 export const copilotAdapter: HarnessAdapter = {
   id: 'copilot',
@@ -44,25 +48,20 @@ export const copilotAdapter: HarnessAdapter = {
     agentMcp: [],
     conversationId: 'argv',
   },
-  launch: interactive,
+  launch: launchCopilotSession,
   prepare: {
-    sessionSettings: later,
-    agentSettings: later,
-    plugin: later,
-    containerSet: later,
-    mcpConfig: later,
+    sessionSettings: noSettings,
+    agentSettings: noSettings,
+    plugin: noFile,
+    containerSet: noFile,
+    mcpConfig: noFile,
   },
   readHook: readCopilotHook,
   contextReply: claudeCodeAdapter.contextReply,
-  promptMarker: interactive,
+  promptMarker: noMarkers,
   foldEdits: () => new Map(),
   meters: () => null,
-  record: {
-    transcriptPath: () => null,
-    hasTranscript: () => false,
-    titleOrigin: () => 'unknown',
-    nameFromTitle: (title) => title,
-  },
+  record: copilotRecord(),
   installed: {
     skillNames: () => Promise.resolve([]),
     pluginNames: () => Promise.resolve([]),

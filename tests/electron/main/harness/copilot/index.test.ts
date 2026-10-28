@@ -10,6 +10,7 @@ import {
 import { launchCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless';
 import { readCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless-reader';
 import { readCopilotHook } from '../../../../../electron/main/harness/copilot/hooks';
+import { launchCopilotSession } from '../../../../../electron/main/harness/copilot/launch';
 
 describe('copilotAdapter', () => {
   it('is copilot', () => {
@@ -55,25 +56,24 @@ describe('copilotAdapter', () => {
     expect(copilotFence.grants).toEqual(['ToolSearch']);
   });
 
-  it('refuses every interactive member (HIVE-280)', () => {
-    expect(() => copilotAdapter.launch({ command: 'copilot' })).toThrow(/HIVE-280/);
-    expect(() => copilotAdapter.promptMarker({} as never)).toThrow(/HIVE-280/);
+  it('launches a session with launchCopilotSession (HIVE-280)', () => {
+    expect(copilotAdapter.launch).toBe(launchCopilotSession);
     expect(copilotAdapter.meters('{}')).toBeNull();
     expect(copilotAdapter.record.transcriptPath('/c', 'u')).toBeNull();
-    expect(copilotAdapter.record.hasTranscript('/c', 'u')).toBe(false);
-    expect(copilotAdapter.record.titleOrigin('/c', 'u', 'n')).toBe('unknown');
-    expect(copilotAdapter.record.nameFromTitle('t')).toBe('t');
     expect(copilotAdapter.foldEdits(new Map(), ['x']).size).toBe(0);
   });
 
-  it('refuses to write any session file (HIVE-280)', async () => {
+  it('writes no shared session file: the plugin is its own launch files (HIVE-280)', async () => {
     const { prepare } = copilotAdapter;
+    await expect(prepare.sessionSettings('/u', 'http://h')).resolves.toBe('');
+    await expect(prepare.agentSettings('/u', 'http://h')).resolves.toBe('');
+    await expect(prepare.plugin('/p', '1', {} as never)).resolves.toBeUndefined();
+    await expect(prepare.containerSet('/r', {} as never)).resolves.toBeUndefined();
+    await expect(prepare.mcpConfig('/m', {} as never)).resolves.toBeUndefined();
+  });
 
-    await expect(prepare.sessionSettings('/u', 'http://h')).rejects.toThrow(/HIVE-280/);
-    await expect(prepare.agentSettings('/u', 'http://h')).rejects.toThrow(/HIVE-280/);
-    await expect(prepare.plugin('/p', '1', {} as never)).rejects.toThrow(/HIVE-280/);
-    await expect(prepare.containerSet('/r', {} as never)).rejects.toThrow(/HIVE-280/);
-    await expect(prepare.mcpConfig('/m', {} as never)).rejects.toThrow(/HIVE-280/);
+  it('still refuses prompt markers: a follow-up ticket', () => {
+    expect(() => copilotAdapter.promptMarker({} as never)).toThrow(/copilot sessions take no prompt markers yet/);
   });
 
   it('reports nothing installed', async () => {
