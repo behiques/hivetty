@@ -3,11 +3,11 @@ import { Plus } from '@phosphor-icons/react';
 import { Button } from '@components/ui/button';
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { TerminalMenu } from '@features/orchestrator/components/terminal-menu';
+import { useNewSessionPick } from '@hooks/use-new-session-pick';
 import { useProjectAccess } from '@hooks/use-project-config';
 import { useAgentsWorkingIn, useOvermindHeadCounts, useProjects, useSpawnSession } from '@stores/hive-store';
 import {
   type TableFilter,
-  useNewSessionDefaults,
   usePickerActions,
   useSessionsFilter,
   useSessionsProject,
@@ -92,15 +92,15 @@ export function OvermindHead() {
 /** Starts one directly in the filtered project, as `NewSessionLink` does (spec, Decisions). */
 function NewSessionHere({ projectId, projectName }: { projectId: string; projectName: string }) {
   const spawnSession = useSpawnSession();
-  const { newCli, newModel, newEffort } = useNewSessionDefaults();
+  const { cli, model, effort } = useNewSessionPick();
   const access = useProjectAccess(projectId);
 
   return (
     <Button
       variant="primary"
-      onClick={() => spawnSession(projectId, '', newCli, newModel, newEffort)}
+      onClick={() => spawnSession(projectId, '', cli, model, effort)}
       disabled={!access.spawnable}
-      title={access.reason ?? `Starts on ${newModel} · ${newEffort}`}
+      title={access.reason ?? `Starts on ${model} · ${effort}`}
       className="flex items-center gap-1.5 rounded-r-none"
     >
       <Plus size={13} weight="bold" aria-hidden="true" />

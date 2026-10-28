@@ -16,7 +16,7 @@ import { can } from '@config/runtime';
 import { CliDock } from '@features/sessions/components/cli-dock';
 import { CodexModelField } from '@features/sessions/components/codex-model-field';
 import { OptionStepper } from '@features/sessions/components/option-stepper';
-import { useCodexModels } from '@hooks/use-codex-models';
+import { useNewSessionPick } from '@hooks/use-new-session-pick';
 import { useProjectAccess, useProjectConfig } from '@hooks/use-project-config';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { CLI_VOCAB, cliTakesEffort } from '@shared/cli-contract';
@@ -76,17 +76,9 @@ export function NewSessionPicker() {
   /** One creature per opening, drawn at random from the picker's four. */
   const [creature] = useState(() => PICKER_CREATURES[Math.floor(Math.random() * PICKER_CREATURES.length)]!);
   const spawnSession = useSpawnSession();
-  const { pickerQuery, pickerTicket, newCli, newModel, newEffort } = usePickerState();
-  /*
-    Codex's list is the account's (useCodexModels). A stored pick the account lacks shows and starts
-    as its first model, and an effort the picked model lacks as that model's default. Both are
-    resolved here, not written back, so switching back finds the pick where it was (HIVE-100's rule).
-  */
-  const codexModels = useCodexModels();
-  const codexPick = codexModels.find((model) => model.slug === newModel) ?? codexModels[0]!;
-  const model = newCli === 'codex' ? codexPick.slug : newModel;
-  const efforts: readonly string[] = newCli === 'codex' ? codexPick.efforts : CLI_VOCAB[newCli].efforts;
-  const effort = newCli === 'codex' && !efforts.includes(newEffort) ? codexPick.defaultEffort : newEffort;
+  const { pickerQuery, pickerTicket, newCli, newModel } = usePickerState();
+  // Resolved against the account's Codex models, as the quick-start buttons resolve it.
+  const { model, effort, efforts, defaultEffort, codexModels } = useNewSessionPick();
   const ticket = useTicket(pickerTicket);
   const { closePicker, setPickerQuery, setNewCli, setNewModel, setNewEffort } =
     usePickerActions();
@@ -330,7 +322,7 @@ export function NewSessionPicker() {
             options={efforts}
             value={effort}
             onChange={setNewEffort}
-            marks={newCli === 'codex' ? { [codexPick.defaultEffort]: 'default' } : undefined}
+            marks={defaultEffort === undefined ? undefined : { [defaultEffort]: 'default' }}
             disabled={!cliTakesEffort(newCli, model)}
             disabledReason={`not for ${model}`}
           />

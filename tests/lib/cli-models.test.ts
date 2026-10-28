@@ -29,4 +29,13 @@ describe('codexModels', () => {
     expect(await codexModels()).toBeNull();
     expect(log).toHaveBeenCalledTimes(1);
   });
+
+  it('shares one read between callers that ask at once, and reads afresh after', async () => {
+    const read = vi.fn().mockResolvedValue([LUNA]);
+    bridge({ codexModels: read });
+    expect(await Promise.all([codexModels(), codexModels(), codexModels()])).toEqual([[LUNA], [LUNA], [LUNA]]);
+    expect(read).toHaveBeenCalledTimes(1);
+    await codexModels();
+    expect(read).toHaveBeenCalledTimes(2);
+  });
 });
