@@ -31,7 +31,7 @@ vi.mock('@lib/cli-tokens', () => ({
 }));
 
 const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolve(null));
-vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels() }));
+vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels(), lastCodexModels: () => undefined }));
 
 /** The Claude Code card: since HIVE-342 there is a card per CLI. */
 const claude = () => within(screen.getByRole('region', { name: 'Claude Code' }));
@@ -194,6 +194,18 @@ describe('ClisSection (HIVE-341)', () => {
     await waitFor(() =>
       expect(within(effort).getAllByRole('option').map((option) => option.getAttribute('value'))).toEqual(['', 'low', 'medium']),
     );
+  });
+
+  it("holds Codex's fields until the account's list answers, so a pick is never judged against the fallback", async () => {
+    let answer!: (models: CliModel[] | null) => void;
+    codexModels.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    seed(undefined);
+    render(<ClisSection />);
+    expect(codex().getByRole('combobox', { name: 'Model' })).toBeDisabled();
+    expect(claude().getByRole('combobox', { name: 'Model' })).toBeEnabled();
+
+    answer(null);
+    await waitFor(() => expect(codex().getByRole('combobox', { name: 'Model' })).toBeEnabled());
   });
 
   it('renders a card per CLI (HIVE-342)', () => {

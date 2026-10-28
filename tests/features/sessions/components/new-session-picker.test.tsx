@@ -22,7 +22,7 @@ import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet'
 import { testProjectKey } from '@tests/support/project-key';
 
 const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolve(null));
-vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels() }));
+vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels(), lastCodexModels: () => undefined }));
 
 const search = () => screen.getByRole('textbox', { name: 'Search all projects' });
 const rowsFor = (name: RegExp) => screen.getAllByRole('button', { name });

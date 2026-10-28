@@ -78,7 +78,7 @@ export function NewSessionPicker() {
   const spawnSession = useSpawnSession();
   const { pickerQuery, pickerTicket, newCli, newModel } = usePickerState();
   // Resolved against the account's Codex models, as the quick-start buttons resolve it.
-  const { model, effort, efforts, defaultEffort, codexModels } = useNewSessionPick();
+  const { model, effort, efforts, defaultEffort, codexModels } = useNewSessionPick(true);
   const ticket = useTicket(pickerTicket);
   const { closePicker, setPickerQuery, setNewCli, setNewModel, setNewEffort } =
     usePickerActions();

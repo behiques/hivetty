@@ -28,7 +28,7 @@ import { testProjectKey } from '@tests/support/project-key';
  */
 
 const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolve(null));
-vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels() }));
+vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels(), lastCodexModels: () => undefined }));
 
 const CONFIG_PATH = '/home/dev/.hive/config.json';
 const PROJECT = 'nova-web';
@@ -146,6 +146,8 @@ describe('NewSessionLink', () => {
 
     render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
     expect(screen.getByRole('button')).toBeDisabled();
+    // Says why it waits, rather than naming a model it cannot start yet.
+    expect(screen.getByRole('button')).toHaveAttribute('title', 'Reading your Codex models…');
 
     answer(null);
     await waitFor(() => expect(screen.getByRole('button')).toBeEnabled());

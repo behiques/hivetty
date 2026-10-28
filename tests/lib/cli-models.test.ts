@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { codexModels } from '@lib/cli-models';
+import { codexModels, lastCodexModels } from '@lib/cli-models';
 
 const LUNA = { slug: 'gpt-6-luna', description: '', defaultEffort: 'medium', efforts: ['medium'] };
 
@@ -37,5 +37,11 @@ describe('codexModels', () => {
     expect(read).toHaveBeenCalledTimes(1);
     await codexModels();
     expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the last answer for a later mount to start on', async () => {
+    bridge({ codexModels: vi.fn().mockResolvedValue([LUNA]) });
+    await codexModels();
+    expect(lastCodexModels()).toEqual([LUNA]);
   });
 });

@@ -6,7 +6,7 @@ import type { CliModel } from '@shared/cli-contract';
 import { useUiStore } from '@stores/ui-store';
 
 const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolve(null));
-vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels() }));
+vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels(), lastCodexModels: () => undefined }));
 
 const SOL: CliModel = { slug: 'gpt-6.1-sol', description: '', defaultEffort: 'low', efforts: ['low', 'medium', 'ultra'] };
 const LUNA: CliModel = { slug: 'gpt-6-luna', description: '', defaultEffort: 'medium', efforts: ['low', 'medium'] };
