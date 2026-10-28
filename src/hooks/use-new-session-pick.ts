@@ -9,12 +9,13 @@ import { useNewSessionDefaults } from '@stores/ui-store';
  * A Codex pick the account lacks starts as its first model, and an effort the picked model lacks
  * as that model's default. Both are resolved here, not written back, so switching back finds the
  * pick where it was (HIVE-100's rule). Claude's and Copilot's picks pass through untouched, and
- * Codex's list is read only while Codex is the pick.
+ * Codex's list is read only while Codex is the pick. `fresh` is the picker's: it re-reads the list
+ * where a quick-start button starts on the last answer.
  */
-export function useNewSessionPick() {
+export function useNewSessionPick(fresh = false) {
   const { newCli, newModel, newEffort } = useNewSessionDefaults();
   const codex = newCli === 'codex';
-  const { models: codexModels, settled } = useCodexModels(codex);
+  const { models: codexModels, settled } = useCodexModels(codex, fresh);
   const codexPick = codexModels.find((model) => model.slug === newModel) ?? codexModels[0]!;
   const efforts: readonly string[] = codex ? codexPick.efforts : CLI_VOCAB[newCli].efforts;
 

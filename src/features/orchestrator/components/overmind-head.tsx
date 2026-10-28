@@ -101,7 +101,7 @@ function NewSessionHere({ projectId, projectName }: { projectId: string; project
       onClick={() => spawnSession(projectId, '', cli, model, effort)}
       // Off until the account's Codex list answers, so the click never starts on the fallback.
       disabled={!access.spawnable || !ready}
-      title={access.reason ?? `Starts on ${model} · ${effort}`}
+      title={access.reason ?? (ready ? `Starts on ${model} · ${effort}` : 'Reading your Codex models…')}
       className="flex items-center gap-1.5 rounded-r-none"
     >
       <Plus size={13} weight="bold" aria-hidden="true" />

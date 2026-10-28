@@ -46,7 +46,8 @@ const options = (values: readonly string[], saved?: string) => [
  */
 export function ClisSection() {
   const snapshot = useProjectConfig();
-  const { models: codexModels } = useCodexModels();
+  // Fresh: Settings is where the user chooses, so it reads the account as it is now.
+  const { models: codexModels, settled: codexSettled } = useCodexModels(true, true);
 
   if (!snapshot) {
     return (
@@ -74,7 +75,7 @@ export function ClisSection() {
         hint="For agents whose AGENT.md has no harness: field."
       />
       {HARNESS_IDS.map((cli) => (
-        <CliCard key={cli} cli={cli} agents={snapshot.clis[cli].agents} codexModels={codexModels} />
+        <CliCard key={cli} cli={cli} agents={snapshot.clis[cli].agents} codexModels={codexModels} codexSettled={codexSettled} />
       ))}
     </div>
   );
@@ -84,10 +85,12 @@ function CliCard({
   cli,
   agents,
   codexModels,
+  codexSettled,
 }: {
   cli: HarnessId;
   agents: CliAgents;
   codexModels: readonly CliModel[];
+  codexSettled: boolean;
 }) {
   const name = CLI_NAMES[cli];
   // Codex's list is the account's, and each model takes its own efforts; Claude's and Copilot's are static.
@@ -139,6 +142,11 @@ function CliCard({
         />
         {/* A native fieldset disables both selects at once; the dim says they are inert. */}
         <fieldset disabled={!agents.enabled} className="flex gap-3 disabled:opacity-50">
+          {/*
+            Codex's model and effort also wait for the account's list, so a pick is never judged
+            against the fallback's efforts. `contents` keeps the row's layout; the sandbox stays free.
+          */}
+          <fieldset disabled={cli === 'codex' && !codexSettled} className="contents">
           <SelectField
             className="min-w-0 flex-1"
             label="Model"
@@ -155,6 +163,7 @@ function CliCard({
               void setCliAgentsConfig({ cli, effort: value || null })
             }
           />
+          </fieldset>
           {cli === 'codex' && (
             <SelectField
               className="min-w-0 flex-1"
