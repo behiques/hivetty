@@ -114,7 +114,7 @@ describe('NewSessionLink', () => {
     render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
     await userEvent.click(screen.getByRole('button'));
 
-    expect(lastSession()).toMatchObject({ harness: 'codex', model: 'gpt-6-luna', effort: 'medium' });
+    expect(lastSession()).toMatchObject({ harness: 'codex', model: 'gpt-6.1-sol', effort: 'medium' });
   });
 
   it('opens the new session, the way every other spawn does', async () => {
