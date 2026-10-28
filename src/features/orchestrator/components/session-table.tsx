@@ -14,11 +14,13 @@ import {
   recencyOf,
 } from '@/types/entity';
 
+import { CliMark } from '@components/ui/cli-mark';
 import { StatusComb } from '@components/ui/status-comb';
 import { statusLabel, statusText } from '@components/ui/status-dot';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { effectiveSelId } from '@features/orchestrator/utils/selection';
 import { prStateText } from '@features/shared/pr-presentation';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import {
   useAgentAskRef,
   useAgentLiveCount,
@@ -767,8 +769,14 @@ function SessionTableRow({
         still readable on hover. Without it the ellipsis is a dead end — the
         agent picks these names and they can be longer than any column.
       */}
-      <span className={cn(COL.session, ended ? 'text-subtle' : 'text-ink')} title={entityLabel(entity)}>
-        {entityLabel(entity)}
+      <span
+        className={cn(COL.session, 'flex items-center gap-1.5', ended ? 'text-subtle' : 'text-ink')}
+        title={entityLabel(entity)}
+      >
+        {/* The CLI first, Claude's included: a mixed fleet reads at a glance. */}
+        <CliMark cli={entity.harness ?? 'claude-code'} className="text-muted" />
+        <span className="sr-only">{CLI_NAMES[entity.harness ?? 'claude-code']}</span>
+        <span className="min-w-0 truncate">{entityLabel(entity)}</span>
       </span>
       <span className={cn(COL.project, 'text-subtle')} title={entity.project}>
         {entity.project}

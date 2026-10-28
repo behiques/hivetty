@@ -167,17 +167,18 @@ describe('SessionRow', () => {
     expect(screen.getByText('needs input')).toBeInTheDocument();
   });
 
-  it('marks a session whose CLI is not Claude’s, and names it for the reader (HIVE-281)', () => {
+  it('marks a Codex session with its logo, and names it for the reader', () => {
     const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
     const { container } = render(<SessionRow id={id} />);
-    expect(container.querySelector('[aria-hidden="true"].bg-green')).toHaveTextContent('X');
+    expect(container.querySelector('svg[data-cli="codex"]')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByText('Codex')).toHaveClass('sr-only');
   });
 
-  it('draws no mark on a Claude Code row (HIVE-281)', () => {
+  it('marks a Claude Code row too, one with no harness recorded included', () => {
+    // `hero-refresh` is a fixture session with no `harness` field: it predates HIVE-279.
     const { container } = render(<SessionRow id="hero-refresh" />);
-    expect(container.querySelector('.bg-brand-fill')).toBeNull();
-    expect(screen.queryByText('Claude Code')).not.toBeInTheDocument();
+    expect(container.querySelector('svg[data-cli="claude-code"]')).toBeInTheDocument();
+    expect(screen.getByText('Claude Code')).toHaveClass('sr-only');
   });
 });
 

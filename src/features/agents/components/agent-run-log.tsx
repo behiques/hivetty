@@ -4,9 +4,10 @@ import { laneLabel } from '@/lib/agents';
 import { cn } from '@/lib/utils';
 import type { TermLine } from '@/types/terminal';
 
-import { Chip } from '@components/ui/chip';
+import { CliMark } from '@components/ui/cli-mark';
 import { SplitHandle } from '@components/ui/split-handle';
 import { formatDuration } from '@lib/format-duration';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import type { LiveRunSummary, RunSummary } from '@shared/agent-contract';
 import { formatRunCost } from '@shared/agent-contract';
 import {
@@ -1052,12 +1053,11 @@ function RunHeader({ run, dim, brand, first, selected, amber, red, onJump }: Run
       */}
       <span className="flex min-w-0 items-baseline gap-1.5" style={{ color: brand }} title={run.run}>
         <span className="truncate">{`#${run.run.slice(0, 8)}`}</span>
-        {/* The CLI, only when it is not the default one: a chip on every row says nothing (HIVE-340). */}
-        {run.harness === undefined || run.harness === 'claude-code' ? null : (
-          <Chip title={`Ran on ${run.harness}`} className="shrink-0 px-1.5 py-0">
-            {run.harness}
-          </Chip>
-        )}
+        {/* The CLI on every run, Claude's included; a run from before HIVE-340 ran on Claude. */}
+        <span className="flex shrink-0 self-center" title={`Ran on ${CLI_NAMES[run.harness ?? 'claude-code']}`}>
+          <CliMark cli={run.harness ?? 'claude-code'} className="size-3.5" />
+          <span className="sr-only">{CLI_NAMES[run.harness ?? 'claude-code']}</span>
+        </span>
       </span>
       <span className="truncate" title={run.trigger}>
         {run.trigger}

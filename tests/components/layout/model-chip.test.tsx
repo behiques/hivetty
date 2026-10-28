@@ -262,11 +262,11 @@ describe('ModelChip', () => {
 
     expect(screen.getByText('Codex · gpt-6-luna · high')).toBeInTheDocument();
     // The mark beside it, decorative: the name is already written out.
-    expect(container.querySelector('[aria-hidden="true"].bg-green')).toHaveTextContent('X');
+    expect(container.querySelector('svg[data-cli="codex"]')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.queryByText('ctx')).not.toBeInTheDocument();
   });
 
-  it('says what it always said for Claude, with no mark', () => {
+  it('says what it always said for Claude, now beside its mark', () => {
     const id = useHiveStore
       .getState()
       .spawnSession('nova-web', '', 'claude-code', 'opus', 'high');
@@ -275,7 +275,7 @@ describe('ModelChip', () => {
     const { container } = render(<ModelChip />);
 
     expect(screen.getByText('Opus 4.5 · high')).toBeInTheDocument();
-    expect(container.querySelector('.bg-brand-fill')).toBeNull();
+    expect(container.querySelector('svg[data-cli="claude-code"]')).toBeInTheDocument();
   });
 
   it('swaps when the active tab moves from one session to another', () => {

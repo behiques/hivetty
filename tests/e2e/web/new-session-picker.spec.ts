@@ -70,30 +70,16 @@ test('the model and effort steppers are on the picker', async ({ page }) => {
 });
 
 /**
- * The CLI switch (HIVE-279). Claude Code and Codex can start a session; Copilot
- * is drawn, disabled, with the reason beside it.
- *
- * The plan's subtitle assertion is not here: the browser target has no
- * projects, so the picker shows its first-run block and no subtitle. The
- * subtitle is covered in the unit test.
+ * The CLI dock sits under the title, and the title is drawn only when a
+ * project exists. The browser target has no projects, so the picker shows its
+ * first-run block and no dock. The dock itself, and Copilot's model select
+ * (HIVE-280), are covered in `new-session-picker.test.tsx`.
  */
-test('shows the CLI switch, Claude Code on, Codex and Copilot offered (HIVE-279, HIVE-280)', async ({ page }) => {
+test('draws no CLI dock in the first-run picker, which has no project to start', async ({ page }) => {
   await overmindNewSession(page).click();
 
-  const cli = page.getByRole('dialog').getByRole('radiogroup', { name: 'cli' });
-  await expect(cli.getByRole('radio', { name: /Claude Code/ })).toBeChecked();
-  await expect(cli.getByRole('radio', { name: /Codex/ })).toBeEnabled();
-  await expect(cli.getByRole('radio', { name: /Copilot/ })).toBeEnabled();
-  await expect(page.getByText(/agents only for now/)).toHaveCount(0);
-
-  // Picking Copilot puts its own words on the steppers: `auto` first, at medium.
-  await cli.getByRole('radio', { name: /Copilot/ }).click();
-  await expect(cli.getByRole('radio', { name: /Copilot/ })).toBeChecked();
-  // 32 models: a select, not a stepper (HIVE-280).
-  const model = page.getByRole('dialog').getByRole('combobox', { name: 'Model' });
-  await expect(model).toHaveValue('auto');
-  await model.selectOption('claude-sonnet-5.5');
-  await expect(model).toHaveValue('claude-sonnet-5.5');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('radiogroup', { name: 'cli' })).toHaveCount(0);
 });
 
 test('escape closes it', async ({ page }) => {
