@@ -637,6 +637,10 @@ describe('createDeliver', () => {
         reportsMcpStatus: false,
         agentMcp: [],
         conversationId: 'argv',
+        hooks: true,
+        permissionCards: true,
+        plan: false,
+        skills: false,
       },
       promptMarker: vi.fn(() => 'never typed'),
     });

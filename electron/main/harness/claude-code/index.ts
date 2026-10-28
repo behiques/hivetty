@@ -1,3 +1,5 @@
+import { CAPABILITIES } from '@shared/harness-contract';
+
 import type { HarnessAdapter } from '../port';
 
 import { writeContainerSet } from './container-files';
@@ -24,17 +26,7 @@ import { foldTranscriptLines } from './transcript-edits';
  */
 export const claudeCodeAdapter: HarnessAdapter = {
   id: 'claude-code',
-  capabilities: {
-    resume: 'by-id',
-    meters: true,
-    contextDelivery: 'prompt-marker',
-    reportsCostUsd: true,
-    enforcesTurns: true,
-    enforcesBudget: true,
-    reportsMcpStatus: true,
-    agentMcp: ['slack'],
-    conversationId: 'argv',
-  },
+  capabilities: CAPABILITIES['claude-code'],
   launch,
   prepare: {
     sessionSettings: writeHookSettings,
