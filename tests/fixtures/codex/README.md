@@ -46,3 +46,22 @@ it copies `~/.codex/auth.json` into its own temp `CODEX_HOME` and deletes the co
 Re-proved, not re-recorded, against `codex-cli 0.165.0` on 2026-10-29 (HIVE-282): `test:agent:codex` and
 `test:session:codex` pass on these fixtures unchanged. One new finding: an Esc on the interactive approval
 prompt fires no hook (HIVE-365).
+
+Three rollout records pin the meters fold (HIVE-334, recorded 2026-10-29 from `codex-cli 0.165.0` unless named otherwise).
+`rollout-0.165.0.jsonl` is the rollout of one `python3 tests/fixtures/codex/interactive-0.164/probe.py --bypass --seconds 90`
+run (a real interactive TUI on a pty, Plus plan). `rollout-exec-0.165.0.jsonl` is the rollout of one `codex exec --json
+--skip-git-repo-check -s read-only "Reply with the single word DONE."` run in a scratch directory outside any repo, taken from
+`~/.codex/sessions` by its first line's `"originator":"codex_exec"` and `"cli_version":"0.165.0"`. Both were filtered with
+
+```sh
+rg '^\{"timestamp":"[^"]*",("ordinal":[0-9]+,)?"type":"(turn_context|event_msg)"' <rollout>
+```
+
+because `session_meta` carries account ids and the full base instructions, and `response_item` carries encrypted reasoning.
+The `event_msg` kinds that are not `token_count` stay, so the fold is seen to skip them. `token-count-free-0.164.0.jsonl` is
+one `token_count` line with `"plan_type":"free"` (a single `"window_minutes":43200` window, `"secondary":null`), taken from
+a `codex-cli 0.164.0` rollout already in `~/.codex/sessions`. All three are scrubbed by the rules above, and nothing else: the
+home directory → `/Users/me`, the scratch directory → `/tmp/codex-fixture`, every UUID → `00000000-0000-7000-8000-00000000000N`
+by first appearance per file, any `user-…` or account id → `user-0000` (none were present after the filter). Credits present
+or unlimited cannot be recorded on this account (`has_credits: false`), so the tests that need them edit only
+`rate_limits.credits` of a recorded line.
