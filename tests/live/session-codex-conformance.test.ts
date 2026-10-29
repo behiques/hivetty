@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { launchCodexSession } from '../../electron/main/harness/codex/launch';
+import { foldCodexMeters } from '../../electron/main/harness/codex/meters';
 import { codexRecord } from '../../electron/main/harness/codex/record';
 import type { LaunchSpec } from '../../electron/main/harness/port';
 import { createHarnessRegistry } from '../../electron/main/harness/registry';
@@ -132,6 +133,8 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   let statuses: Array<{ status: string; signal: HookStatusEvent['signal']; sessionUuid?: string }>;
   let raised: HiveNotification[];
   let plans: PlanUpdate[];
+  /** The rollout folded inside each Stop hook, while codex waits on its reply (HIVE-334, D1). */
+  let stopReadings: (ReturnType<typeof foldCodexMeters> | null)[];
   let scratch: string;
   let repo: string;
   let home: string;
@@ -140,6 +143,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     statuses = [];
     raised = [];
     plans = [];
+    stopReadings = [];
     scratch = realpathSync(mkdtempSync(join(tmpdir(), 'codex-session-live-')));
     repo = join(scratch, 'repo');
     home = join(scratch, 'codex-home');
@@ -179,6 +183,11 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
           ...(e.sessionUuid === undefined ? {} : { sessionUuid: e.sessionUuid }),
         };
         statuses.push(event);
+        if (e.signal.kind === 'turn-end' && e.sessionUuid !== undefined) {
+          // Synchronously, before the hook is answered: what a Stop-triggered read would see.
+          const rollout = codexRecord(() => home).transcriptPath(repo, e.sessionUuid);
+          stopReadings.push(rollout === null ? null : foldCodexMeters(readFileSync(rollout, 'utf8').split('\n')));
+        }
         notifier.observe(CH.sessionStatus, event as unknown as Record<string, unknown>);
       },
       onPlan: (update) => plans.push(update),
@@ -386,6 +395,33 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       expect(statuses.some((s) => s.signal.kind === 'turn-end')).toBe(true);
       expect(rollout).not.toBeNull();
       expect(readFileSync(rollout!, 'utf8')).toContain('"model":"gpt-5.6-terra"');
+    },
+    CASE_MS,
+  );
+
+  it(
+    'reads its meters from the rollout, already written when Stop fires (HIVE-334)',
+    async () => {
+      userConfig();
+      await run('meters', {}, 'Reply with the single word READY.');
+      const id = statuses.find((s) => s.sessionUuid !== undefined)?.sessionUuid;
+      const rollout = id === undefined ? null : codexRecord(() => home).transcriptPath(repo, id);
+      const text = rollout === null ? '' : readFileSync(rollout, 'utf8');
+      const whole = rollout === null ? null : foldCodexMeters(text.split('\n'));
+      const free = text.includes('"plan_type":"free"');
+      finding('meters', { id, free, whole, atStop: stopReadings });
+
+      expect(whole?.model).toMatch(/\S/);
+      expect(typeof whole?.contextPct).toBe('number');
+      if (free) {
+        // A Free plan reports only its 30-day window, which shows no gauge (D6).
+        expect(whole?.fiveHourPct ?? whole?.sevenDayPct).toBeUndefined();
+      } else {
+        // ChatGPT sign-in reports limit windows; which ones depends on the plan (D6), so at least one.
+        expect(whole?.fiveHourPct ?? whole?.sevenDayPct).toEqual(expect.any(Number));
+      }
+      // D1: the Stop hook's read already saw this turn's usage.
+      expect(stopReadings.at(-1)?.contextPct).toEqual(whole?.contextPct);
     },
     CASE_MS,
   );
