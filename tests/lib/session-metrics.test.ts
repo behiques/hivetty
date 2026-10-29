@@ -4,6 +4,7 @@ import {
   chipLabel,
   chipParts,
   clockLabel,
+  creditsLabel,
   dayClockLabel,
   declaredMetrics,
   DEFAULT_EFFORT,
@@ -270,5 +271,24 @@ describe('declaredMetrics (HIVE-333)', () => {
 
   it('passes no metrics through as none', () => {
     expect(declaredMetrics(undefined, ['model'])).toBeUndefined();
+  });
+});
+
+describe('creditsLabel (HIVE-334)', () => {
+  it('is ∞ for unlimited credits', () => {
+    expect(creditsLabel({ creditsUnlimited: true })).toBe('∞');
+    expect(creditsLabel({ creditsUnlimited: true, creditsBalance: '5' })).toBe('∞');
+  });
+  it('groups a balance’s digits', () => {
+    expect(creditsLabel({ creditsBalance: '1234' })).toBe('1,234');
+    expect(creditsLabel({ creditsBalance: '1234.5' })).toBe('1,234.5');
+  });
+  it('shows a balance that is not a number as Codex spelled it', () => {
+    expect(creditsLabel({ creditsBalance: 'n/a' })).toBe('n/a');
+    expect(creditsLabel({ creditsBalance: '' })).toBe('');
+  });
+  it('is null with no credits', () => {
+    expect(creditsLabel(undefined)).toBeNull();
+    expect(creditsLabel({ creditsUnlimited: false })).toBeNull();
   });
 });

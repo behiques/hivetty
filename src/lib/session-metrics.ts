@@ -101,6 +101,17 @@ export function declaredMetrics(
   ) as SessionMetrics;
 }
 
+/** The credits stat's text: `∞` when unlimited, the balance digit-grouped, `null` with no credits (HIVE-334). */
+export function creditsLabel(metrics: SessionMetrics | undefined): string | null {
+  if (metrics?.creditsUnlimited === true) return '∞';
+  const balance = metrics?.creditsBalance;
+  if (balance === undefined) return null;
+  const value = Number(balance);
+  return balance.trim() === '' || !Number.isFinite(value)
+    ? balance
+    : value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
 /** Claude's ids get their product name; every other CLI's model is shown as it is spelled (HIVE-279). */
 export function modelLabel(model: Model = DEFAULT_MODEL): string {
   return MODEL_LABELS[model] ?? model;
