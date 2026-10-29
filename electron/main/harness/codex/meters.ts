@@ -53,6 +53,9 @@ function readLimits(out: SessionMetrics, limits: unknown): void {
   }
   const credits = limits.credits;
   if (!isObject(credits)) return;
+  // The later line wins here too: credits spent or withdrawn leave no earlier balance behind.
+  delete out.creditsBalance;
+  delete out.creditsUnlimited;
   const unlimited = credits.unlimited === true;
   if (credits.has_credits !== true && !unlimited) return;
   out.creditsUnlimited = unlimited;

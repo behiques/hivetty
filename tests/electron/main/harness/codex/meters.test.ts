@@ -71,6 +71,29 @@ describe('foldCodexMeters (HIVE-334)', () => {
     expect(withCredits({ has_credits: false, unlimited: true, balance: null })).not.toHaveProperty('creditsBalance');
   });
 
+  it('lets a later line without credits clear an earlier one’s', () => {
+    const credits = (value: unknown) => tokenCount({ ...plusLimits, credits: value });
+    const folded = foldCodexMeters([
+      credits({ has_credits: true, unlimited: false, balance: '5' }),
+      credits({ has_credits: false, unlimited: false, balance: '0' }),
+    ]);
+    expect(folded).not.toHaveProperty('creditsBalance');
+    expect(folded).not.toHaveProperty('creditsUnlimited');
+  });
+
+  it('lets a later token_count win, and skips any other window length', () => {
+    const info = (tokens: number) => ({ last_token_usage: { total_tokens: tokens }, model_context_window: 112_000 });
+    const hour = { primary: { used_percent: 9, window_minutes: 60, resets_at: 1 }, secondary: null, credits: null };
+    expect(foldCodexMeters([tokenCount(plusLimits, info(12_000)), tokenCount(hour, info(62_000))])).toEqual({
+      contextWindow: 112_000,
+      contextPct: 50,
+      fiveHourPct: 18,
+      fiveHourResetsAt: 1793306416,
+      sevenDayPct: 3,
+      sevenDayResetsAt: 1793800556,
+    });
+  });
+
   it('skips lines that are not JSON objects or not its kinds', () => {
     expect(foldCodexMeters(['', 'not json', '[]', '{"type":"response_item","payload":{}}'])).toEqual({});
   });
