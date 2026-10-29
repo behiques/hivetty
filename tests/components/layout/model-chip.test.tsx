@@ -296,8 +296,8 @@ describe('ModelChip', () => {
       sevenDayPct: 71,
     };
 
-    const show = (id: string) => {
-      useHiveStore.getState().setSessionMetrics(id, FULL);
+    const show = (id: string, metrics: SessionMetrics = FULL) => {
+      useHiveStore.getState().setSessionMetrics(id, metrics);
       useUiStore.setState({ activeTab: id });
       render(<ModelChip />);
       return screen.getByTestId('model-chip');
@@ -326,17 +326,9 @@ describe('ModelChip', () => {
       expect(show(id).getAttribute('title')).toBe('Copilot · gpt-5.2');
     });
 
-    /** The chip for `id` given only `metrics`, where `show` would seed FULL over them. */
-    const showOnly = (id: string, metrics: SessionMetrics) => {
-      useHiveStore.getState().setSessionMetrics(id, metrics);
-      useUiStore.setState({ activeTab: id });
-      render(<ModelChip />);
-      return screen.getByTestId('model-chip');
-    };
-
     it('shows a Codex session what it reported, credits included (HIVE-334)', () => {
       const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
-      const chip = showOnly(id, {
+      const chip = show(id, {
         model: 'gpt-6.1-sol',
         effort: 'medium',
         contextPct: 12,
