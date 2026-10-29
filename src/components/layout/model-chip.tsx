@@ -5,6 +5,7 @@ import {
   chipParts,
   clockLabel,
   dayClockLabel,
+  declaredMetrics,
   pctLabel,
   pctOrNull,
 } from '@/lib/session-metrics';
@@ -14,7 +15,9 @@ import { CliMark } from '@components/ui/cli-mark';
 import { GaugeRing, gaugeTone } from '@components/ui/gauge-ring';
 import { TONE_TEXT } from '@components/ui/tag';
 import { CLI_NAMES } from '@lib/harness/cli-names';
+import { CAPABILITIES } from '@shared/harness-contract';
 import { useActiveEntity, useSessionMetrics } from '@stores/hive-store';
+
 
 interface StatProps {
   pct: number;
@@ -167,24 +170,29 @@ function Stat({ pct, detail, short, label }: StatProps) {
  */
 export function ModelChip() {
   const entity = useActiveEntity();
-  const metrics = useSessionMetrics(entity?.id);
+  const reported = useSessionMetrics(entity?.id);
 
   if (!entity || !isSession(entity)) return null;
+
+  const cli = entity.harness ?? 'claude-code';
+  // Only what this CLI declares it reports (HIVE-333): the rest is absent, so it shows nothing.
+  const metrics = declaredMetrics(reported, CAPABILITIES[cli].meters);
+  // Claude's `high` is its documented default; another CLI given no effort shows none.
+  const fallbackEffort = cli === 'claude-code' ? undefined : null;
 
   const context = pctOrNull(metrics?.contextPct);
   const fiveHour = pctOrNull(metrics?.fiveHourPct);
   const sevenDay = pctOrNull(metrics?.sevenDayPct);
 
-  const parts = chipParts(metrics, entity.model, entity.effort);
+  const parts = chipParts(metrics, entity.model, entity.effort, fallbackEffort);
   /*
     Led by the CLI's name only when it is not Claude's (HIVE-279): every Claude chip
     reads as it did, and a Codex one says so before its model id. The mark beside it
     shows for every CLI.
   */
-  const cli = entity.harness ?? 'claude-code';
   const label =
     (cli === 'claude-code' ? '' : `${CLI_NAMES[cli]} · `) +
-    chipLabel(metrics, entity.model, entity.effort);
+    chipLabel(metrics, entity.model, entity.effort, fallbackEffort);
   const fiveHourReset = clockLabel(metrics?.fiveHourResetsAt);
   const sevenDayReset = dayClockLabel(metrics?.sevenDayResetsAt);
 

@@ -19,7 +19,7 @@ describe('codexAdapter', () => {
   it('declares what codex exec can and cannot do', () => {
     expect(codexAdapter.capabilities).toEqual({
       resume: 'by-id',
-      meters: false,
+      meters: [],
       contextDelivery: 'none',
       reportsCostUsd: false,
       enforcesTurns: false,

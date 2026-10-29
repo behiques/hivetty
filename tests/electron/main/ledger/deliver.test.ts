@@ -629,7 +629,7 @@ describe('createDeliver', () => {
     const none = (): Pick<HarnessAdapter, 'capabilities' | 'promptMarker'> => ({
       capabilities: {
         resume: 'none',
-        meters: false,
+        meters: [],
         contextDelivery: 'none',
         reportsCostUsd: false,
         enforcesTurns: false,

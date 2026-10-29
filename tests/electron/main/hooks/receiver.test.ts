@@ -5338,7 +5338,7 @@ describe('hook receiver: reads through the harness registry (HIVE-236)', () => {
     const meters = vi.fn(sessionAdapter().meters);
     const adapterFor = vi.fn(() => ({
       ...sessionAdapter(),
-      capabilities: { ...sessionAdapter().capabilities, meters: false },
+      capabilities: { ...sessionAdapter().capabilities, meters: [] },
       meters,
     }));
     const { metrics, status } = await postMetrics({ adapterFor, harnessOf: () => 'claude-code' as const });

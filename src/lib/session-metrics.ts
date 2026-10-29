@@ -1,5 +1,6 @@
 import type { Model } from '@/types/entity';
 
+import type { MeterKind } from '@shared/harness-contract';
 import type { SessionMetrics } from '@shared/metrics-contract';
 
 
@@ -75,6 +76,30 @@ const EXTENDED_WINDOW_TOKENS = 600_000;
  */
 const EARLIEST_PLAUSIBLE_RESET = 1_577_836_800;
 
+/** The {@link SessionMetrics} fields each meter fills. */
+const METER_FIELDS: Record<MeterKind, readonly (keyof SessionMetrics)[]> = {
+  model: ['model'],
+  effort: ['effort'],
+  context: ['contextPct', 'contextWindow'],
+  fiveHour: ['fiveHourPct', 'fiveHourResetsAt'],
+  sevenDay: ['sevenDayPct', 'sevenDayResetsAt'],
+};
+
+/**
+ * Only the fields of the meters a CLI declares (HIVE-333). The strip shows nothing for an absent
+ * field, so an undeclared meter is hidden by the same rule as an unreported one.
+ */
+export function declaredMetrics(
+  metrics: SessionMetrics | undefined,
+  kinds: readonly MeterKind[],
+): SessionMetrics | undefined {
+  if (metrics === undefined) return undefined;
+  const fields = new Set(kinds.flatMap((kind) => METER_FIELDS[kind]));
+  return Object.fromEntries(
+    Object.entries(metrics).filter(([key]) => fields.has(key as keyof SessionMetrics)),
+  ) as SessionMetrics;
+}
+
 /** Claude's ids get their product name; every other CLI's model is shown as it is spelled (HIVE-279). */
 export function modelLabel(model: Model = DEFAULT_MODEL): string {
   return MODEL_LABELS[model] ?? model;
@@ -92,23 +117,26 @@ export function chipLabel(
   metrics: SessionMetrics | undefined,
   model: Model | undefined,
   effort: string | undefined,
+  fallbackEffort: string | null = DEFAULT_EFFORT,
 ): string {
-  const { name, window, level } = chipParts(metrics, model, effort);
-  return `${name}${window} · ${level}`;
+  const { name, window, level } = chipParts(metrics, model, effort, fallbackEffort);
+  return level === '' ? `${name}${window}` : `${name}${window} · ${level}`;
 }
 
 /**
  * {@link chipLabel}'s three parts, apart: the narrow header shows the model
  * name alone and leaves the window and the effort to the tooltip (HIVE-220).
- * `window` is empty, or carries its leading space: ` (1M)`.
+ * `window` is empty, or carries its leading space: ` (1M)`. `level` is empty when nothing reported or
+ * picked an effort and `fallbackEffort` is `null`: a CLI other than Claude has no default to claim (HIVE-333).
  */
 export function chipParts(
   metrics: SessionMetrics | undefined,
   model: Model | undefined,
   effort: string | undefined,
+  fallbackEffort: string | null = DEFAULT_EFFORT,
 ): { name: string; window: string; level: string } {
   const name = metrics?.model ?? modelLabel(model);
-  const level = metrics?.effort ?? effort ?? DEFAULT_EFFORT;
+  const level = metrics?.effort ?? effort ?? fallbackEffort ?? '';
   /*
     Derived, not the literal `(1M)` this first shipped as. The threshold is
     documented as future-proof — a later window "lands on the right side of it
