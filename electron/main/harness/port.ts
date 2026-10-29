@@ -41,6 +41,8 @@ export interface HarnessAdapter {
   foldEdits(tallies: Map<string, FileTally>, lines: readonly string[]): Map<string, FileTally>;
   /** A status-line body read into metrics; `null` for one that is not an object, which the receiver answers 400 (HIVE-239). */
   meters(body: string): SessionMetrics | null;
+  /** Record lines folded into a metrics patch, the last value each field took (`{}` for none), for a CLI with no status line (HIVE-334). */
+  foldMeters?(lines: readonly string[]): SessionMetrics;
   /** Where the harness keeps a conversation, and what it says about it (HIVE-239). */
   readonly record: HarnessRecord;
   /** What the user installed for the harness themselves, which HiveTTY reads and never manages (HIVE-345). */
