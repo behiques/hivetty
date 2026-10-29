@@ -76,6 +76,7 @@ import { createBootstrap, type Bootstrap } from './bootstrap';
 import { createChangedFiles } from './changed-files';
 import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
 import type { SessionHistory } from './history';
+import { createRecordMeters } from './record-meters';
 import { createSessionRegistry, type SessionRegistry } from './registry';
 import { createTitleReader, type TitleReader } from './title';
 
@@ -886,6 +887,13 @@ export function createSessions(options: SessionsOptions): Sessions {
     adapterOf,
   });
 
+  /** Meters for a CLI with no status line, from its own record (HIVE-334). */
+  const recordMeters = createRecordMeters({
+    send,
+    transcriptOf: (entityId) => transcripts.get(entityId),
+    adapterOf,
+  });
+
   /**
    * The last title classified for each session, and what it was classified as.
    *
@@ -1222,6 +1230,9 @@ export function createSessions(options: SessionsOptions): Sessions {
         }
       }
 
+      // Every hook may follow new usage in the record (HIVE-334); before the first hook there is no record.
+      if (adapterOf(event.entityId).foldMeters !== undefined) void recordMeters.onHook(event.entityId);
+
       if (event.cwd !== undefined) {
         /**
          * A turn's end reads **fresh** (HIVE-78).
@@ -1474,6 +1485,7 @@ export function createSessions(options: SessionsOptions): Sessions {
   function publishFinished(entityId: string): void {
     plans.forget(entityId);
     changedFiles.drop(entityId);
+    recordMeters.drop(entityId);
     /*
       Asked rather than assumed. `history.resumable` is the only thing that knows
       whether a uuid still names this terminal's conversation — a `/clear`
@@ -1513,6 +1525,7 @@ export function createSessions(options: SessionsOptions): Sessions {
   function publishTerminalEnded(entityId: string, ending: TerminalEnding): void {
     plans.forget(entityId);
     changedFiles.drop(entityId);
+    recordMeters.drop(entityId);
     send(CH.sessionTerminalEnded, { entityId, ending } satisfies SessionTerminalEndedEvent);
   }
 
@@ -1941,6 +1954,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     */
     plans.forget(entityId);
     changedFiles.drop(entityId);
+    recordMeters.drop(entityId);
     /**
      * Per-generation too, and for a sharper reason than the other two: a
      * restarted session reuses the entity id, and a retained entry would make
