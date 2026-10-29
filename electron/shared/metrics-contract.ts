@@ -19,6 +19,14 @@
  * one cadence and one moment of observation, so the chip can never show a
  * context percentage from one turn beside a limit from another.
  *
+ * ## A CLI with no status line (HIVE-334)
+ *
+ * Codex has no status line to inject, but it writes its usage, its rate limits
+ * and its credits to its rollout file, a record on disk. So for Codex the
+ * record *is* the source: its adapter's `foldMeters` reads the rollout's lines
+ * into these same fields, on every hook, and the strip cannot tell the two
+ * sources apart.
+ *
  * ## Why every field is optional
  *
  * Because every field is genuinely absent sometimes, and a default would be a
@@ -83,6 +91,10 @@ export interface SessionMetrics {
   sevenDayPct?: number;
   /** `rate_limits.seven_day.resets_at` — **epoch seconds**, not milliseconds. */
   sevenDayResetsAt?: number;
+  /** Codex's `rate_limits.credits.balance`, verbatim: a decimal string, set only when the plan has credits (HIVE-334). */
+  creditsBalance?: string;
+  /** Codex's `rate_limits.credits.unlimited` (HIVE-334). */
+  creditsUnlimited?: boolean;
 }
 
 /**

@@ -8,6 +8,7 @@ import { launchCodexHeadless } from './headless';
 import { readCodexHeadless } from './headless-reader';
 import { readCodexHook } from './hooks';
 import { launchCodexSession } from './launch';
+import { foldCodexMeters } from './meters';
 import { readCodexModels } from './models';
 import { codexRecord } from './record';
 
@@ -43,6 +44,7 @@ export const codexAdapter: HarnessAdapter = {
   promptMarker: noMarkers,
   foldEdits: () => new Map(),
   meters: () => null,
+  foldMeters: foldCodexMeters,
   record: codexRecord(),
   installed: {
     skillNames: () => Promise.resolve([]),

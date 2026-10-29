@@ -5,7 +5,6 @@
  * transcript says exactly what; its format is the adapter's (`foldEdits`).
  * So main reads the transcript itself, from where the last read stopped.
  */
-import { open } from 'node:fs/promises';
 import { isAbsolute, relative } from 'node:path';
 
 import type { ChangedFile, ChangedFilesEvent, ChangedFilesSnapshot } from '@shared/changed-files-contract';
@@ -13,6 +12,8 @@ import { CH } from '@shared/ipc-contract';
 
 import type { FileTally, HarnessAdapter } from '../harness/port';
 import { sessionAdapter } from '../harness/registry';
+
+import { readAppended } from './read-appended';
 
 export type { FileTally };
 
@@ -87,21 +88,10 @@ export function createChangedFiles({
       state.uuid = transcript.sessionUuid;
       state.offset = 0;
     }
-    const handle = await open(path, 'r');
-    let text: string;
-    try {
-      const { size } = await handle.stat();
-      if (size <= state.offset) return;
-      const buffer = Buffer.alloc(size - state.offset);
-      await handle.read(buffer, 0, buffer.length, state.offset);
-      // Only up to the last newline: a torn last line is the writer mid-append, not a record.
-      const end = buffer.lastIndexOf(0x0a);
-      if (end === -1) return;
-      text = buffer.subarray(0, end).toString('utf8');
-      state.offset += end + 1;
-    } finally {
-      await handle.close();
-    }
+    const read = await readAppended(path, state.offset);
+    if (read === null) return;
+    state.offset = read.offset;
+    const text = read.text;
     if (sessions.get(entityId) !== state) return;
     adapterOf(entityId).foldEdits(state.tallies, text.split('\n'));
     await publish(entityId, state);

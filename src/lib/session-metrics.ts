@@ -83,6 +83,7 @@ const METER_FIELDS: Record<MeterKind, readonly (keyof SessionMetrics)[]> = {
   context: ['contextPct', 'contextWindow'],
   fiveHour: ['fiveHourPct', 'fiveHourResetsAt'],
   sevenDay: ['sevenDayPct', 'sevenDayResetsAt'],
+  credits: ['creditsBalance', 'creditsUnlimited'],
 };
 
 /**
@@ -98,6 +99,17 @@ export function declaredMetrics(
   return Object.fromEntries(
     Object.entries(metrics).filter(([key]) => fields.has(key as keyof SessionMetrics)),
   ) as SessionMetrics;
+}
+
+/** The credits stat's text: `∞` when unlimited, the balance digit-grouped, `null` with no credits (HIVE-334). */
+export function creditsLabel(metrics: SessionMetrics | undefined): string | null {
+  if (metrics?.creditsUnlimited === true) return '∞';
+  const balance = metrics?.creditsBalance;
+  if (balance === undefined) return null;
+  const value = Number(balance);
+  return balance.trim() === '' || !Number.isFinite(value)
+    ? balance
+    : value.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
 /** Claude's ids get their product name; every other CLI's model is shown as it is spelled (HIVE-279). */

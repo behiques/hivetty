@@ -3022,6 +3022,47 @@ describe('Home strip selectors (HIVE-200)', () => {
       });
     });
 
+    it('belong to the Claude account: a Codex session never supplies a window (HIVE-334)', () => {
+      const metrics = {
+        claude: { fiveHourPct: 30, fiveHourResetsAt: 1_900_000_000, sevenDayPct: 10 },
+        codex: {
+          fiveHourPct: 80,
+          fiveHourResetsAt: 1_900_100_000,
+          sevenDayPct: 70,
+          sevenDayResetsAt: 1_900_900_000,
+        },
+      } as never;
+      const entities = {
+        claude: { harness: 'claude-code' },
+        codex: { harness: 'codex' },
+      } as never;
+      expect(accountLimitsOf(metrics, entities)).toEqual({
+        fiveHourPct: 30,
+        fiveHourResetsAt: 1_900_000_000,
+        sevenDayPct: 10,
+      });
+    });
+
+    it('useAccountLimits ignores a Codex session with the later reset', () => {
+      setMetrics({
+        codex: { fiveHourPct: 99, fiveHourResetsAt: 1_900_100_000 },
+        claude: { fiveHourPct: 30, fiveHourResetsAt: 1_900_000_000 },
+      });
+      act(() =>
+        useHiveStore.setState({
+          entities: {
+            ...useHiveStore.getState().entities,
+            codex: { harness: 'codex' } as never,
+            claude: { harness: 'claude-code' } as never,
+          },
+        }),
+      );
+      expect(renderHook(() => useAccountLimits()).result.current).toEqual({
+        fiveHourPct: 30,
+        fiveHourResetsAt: 1_900_000_000,
+      });
+    });
+
     it('a pct with no reset still shows when nothing better exists', () => {
       expect(accountLimitsOf({ c: { sevenDayPct: 12 } } as never)).toEqual({ sevenDayPct: 12 });
     });

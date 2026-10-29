@@ -4,6 +4,7 @@ import {
   chipLabel,
   chipParts,
   clockLabel,
+  creditsLabel,
   dayClockLabel,
   declaredMetrics,
   DEFAULT_EFFORT,
@@ -13,6 +14,7 @@ import {
   resetsDayLabel,
   timeLeftLabel,
 } from '@/lib/session-metrics';
+import { CAPABILITIES } from '@shared/harness-contract';
 
 /**
  * These used to assert a *derivation* — that `contextPct('sess-01')` was stable
@@ -236,6 +238,12 @@ it('labels a model that is not Claude’s by its own id (HIVE-279)', () => {
 });
 
 describe('declaredMetrics (HIVE-333)', () => {
+  it('keeps credits only for a CLI that declares them (HIVE-334)', () => {
+    const reported = { model: 'gpt-6.1-sol', creditsBalance: '1234', creditsUnlimited: false };
+    expect(declaredMetrics(reported, ['model', 'credits'])).toEqual(reported);
+    expect(declaredMetrics(reported, CAPABILITIES['claude-code'].meters)).toEqual({ model: 'gpt-6.1-sol' });
+  });
+
   const full = {
     model: 'Opus 4.5',
     effort: 'high',
@@ -263,5 +271,24 @@ describe('declaredMetrics (HIVE-333)', () => {
 
   it('passes no metrics through as none', () => {
     expect(declaredMetrics(undefined, ['model'])).toBeUndefined();
+  });
+});
+
+describe('creditsLabel (HIVE-334)', () => {
+  it('is ∞ for unlimited credits', () => {
+    expect(creditsLabel({ creditsUnlimited: true })).toBe('∞');
+    expect(creditsLabel({ creditsUnlimited: true, creditsBalance: '5' })).toBe('∞');
+  });
+  it('groups a balance’s digits', () => {
+    expect(creditsLabel({ creditsBalance: '1234' })).toBe('1,234');
+    expect(creditsLabel({ creditsBalance: '1234.5' })).toBe('1,234.5');
+  });
+  it('shows a balance that is not a number as Codex spelled it', () => {
+    expect(creditsLabel({ creditsBalance: 'n/a' })).toBe('n/a');
+    expect(creditsLabel({ creditsBalance: '' })).toBe('');
+  });
+  it('is null with no credits', () => {
+    expect(creditsLabel(undefined)).toBeNull();
+    expect(creditsLabel({ creditsUnlimited: false })).toBeNull();
   });
 });

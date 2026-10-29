@@ -4051,6 +4051,79 @@ describe('codex sessions (HIVE-279)', () => {
     expect(ids()).toHaveLength(1);
   });
 
+  describe('meters from the rollout (HIVE-334)', () => {
+    let codexHome: string;
+    let rollout: string;
+    const turnContext = (model: string, effort: string) =>
+      JSON.stringify({ type: 'turn_context', payload: { model, effort } }) + '\n';
+    const metrics = () => on(CH.sessionMetrics).map((entry) => entry.payload);
+    /** Captured before `beforeEach` fakes the timers: the fs callbacks need the real loop. */
+    const realImmediate = setImmediate;
+    /** Long enough for a read in flight to have landed, had it been going to. */
+    const settle = async () => {
+      for (let i = 0; i < 20; i++) await new Promise((resolve) => realImmediate(resolve));
+    };
+
+    beforeEach(() => {
+      codexHome = mkdtempSync(join(tmpdir(), 'hive-codex-home-'));
+      const day = join(codexHome, 'sessions', '2026', '10', '29');
+      mkdirSync(day, { recursive: true });
+      rollout = join(day, `rollout-2026-10-29T12-00-00-${CODEX_ID}.jsonl`);
+      writeFileSync(rollout, turnContext('gpt-6.1-sol', 'medium'));
+      vi.stubEnv('CODEX_HOME', codexHome);
+    });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      rmSync(codexHome, { recursive: true, force: true });
+    });
+
+    it('reads a codex session’s meters from its rollout on every hook', async () => {
+      instance = build([]);
+      instance.open(codexOpen);
+      hook(CODEX_ID);
+      await vi.waitFor(() =>
+        expect(metrics().at(-1)).toMatchObject({
+          entityId: 'hero-refresh',
+          metrics: { model: 'gpt-6.1-sol', effort: 'medium' },
+        }),
+      );
+
+      // The next hook reads what the rollout gained since.
+      writeFileSync(rollout, turnContext('gpt-6.1-sol', 'medium') + turnContext('gpt-6.2-sol', 'high'));
+      hook(CODEX_ID);
+      await vi.waitFor(() =>
+        expect(metrics().at(-1)).toMatchObject({ metrics: { model: 'gpt-6.2-sol', effort: 'high' } }),
+      );
+    });
+
+    it('reads no record for a claude session’s hooks', async () => {
+      instance = build([]);
+      instance.open(OPEN);
+      hook(TEST_UUID);
+      await settle();
+      expect(metrics()).toEqual([]);
+    });
+
+    it('drops the reader at the end, so a restart reads its rollout from the start', async () => {
+      instance = build([], { resumable: 'recorded' });
+      instance.open(codexOpen);
+      hook(CODEX_ID);
+      await vi.waitFor(() => expect(metrics()).toHaveLength(1));
+
+      const restarting = instance.restart({ ...OPEN, resume: true });
+      await Promise.resolve();
+      emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 0 });
+      vi.advanceTimersByTime(8);
+      await restarting;
+      bootTo(mintedFor('hero-refresh'));
+      hook(CODEX_ID);
+
+      // A reader kept from the last generation would start at its old offset and find nothing new.
+      await vi.waitFor(() => expect(metrics()).toHaveLength(2));
+      expect(metrics().at(-1)).toMatchObject({ metrics: { model: 'gpt-6.1-sol', effort: 'medium' } });
+    });
+  });
+
   it('resumes by the recorded id', () => {
     instance = build([], { resumable: { 'hero-refresh': CODEX_ID } });
     instance.open({ ...codexOpen, resume: true });

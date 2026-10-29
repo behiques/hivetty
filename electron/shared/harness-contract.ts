@@ -16,10 +16,10 @@ export const isHarnessId = (value: string): value is HarnessId =>
   (HARNESS_IDS as readonly string[]).includes(value);
 
 /**
- * The meters the session strip can show (HIVE-333). Tokens and credits join with the stories that
- * read them (HIVE-334, HIVE-335).
+ * The meters the session strip can show (HIVE-333). Credits joined with HIVE-334; tokens join with
+ * the story that reads them.
  */
-export const METER_KINDS = ['model', 'effort', 'context', 'fiveHour', 'sevenDay'] as const;
+export const METER_KINDS = ['model', 'effort', 'context', 'fiveHour', 'sevenDay', 'credits'] as const;
 
 /** One meter a harness reports. */
 export type MeterKind = (typeof METER_KINDS)[number];
@@ -35,8 +35,8 @@ export interface Capabilities {
    */
   resume: 'by-id' | 'none';
   /**
-   * The meters the harness reports, through the receiver's `/statusline` route (HIVE-333). The strip
-   * shows only these; empty means the route refuses the harness.
+   * The meters the harness reports (HIVE-333): through the receiver's `/statusline` route, or read
+   * from its own record by `foldMeters` (HIVE-334). The strip shows only these.
    */
   meters: readonly MeterKind[];
   /**
@@ -87,7 +87,8 @@ export interface Capabilities {
 export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   'claude-code': {
     resume: 'by-id',
-    meters: METER_KINDS,
+    // A status line carries no credits (HIVE-334).
+    meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay'],
     contextDelivery: 'prompt-marker',
     reportsCostUsd: true,
     enforcesTurns: true,
@@ -102,7 +103,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   },
   codex: {
     resume: 'by-id',
-    meters: [],
+    meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay', 'credits'],
     contextDelivery: 'none',
     reportsCostUsd: false,
     enforcesTurns: false,

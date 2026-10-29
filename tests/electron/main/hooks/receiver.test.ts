@@ -58,6 +58,7 @@ import {
   type SessionMetrics,
 } from '../../../../electron/shared/metrics-contract';
 import { claudeFence } from '../../../../electron/main/harness/claude-code/headless';
+import { codexAdapter } from '../../../../electron/main/harness/codex';
 import { codexFenceReply, translateCodexCall } from '../../../../electron/main/harness/codex/fence';
 import { copilotFence } from '../../../../electron/main/harness/copilot';
 import type { copilotFenceReply } from '../../../../electron/main/harness/copilot/fence';
@@ -5342,6 +5343,15 @@ describe('hook receiver: reads through the harness registry (HIVE-236)', () => {
       meters,
     }));
     const { metrics, status } = await postMetrics({ adapterFor, harnessOf: () => 'claude-code' as const });
+    expect(status).toBe(404);
+    expect(meters).not.toHaveBeenCalled();
+    expect(metrics).toEqual([]);
+  });
+
+  it('refuses a status line from a CLI that reads its record (HIVE-334)', async () => {
+    const meters = vi.fn(codexAdapter.meters);
+    const adapterFor = vi.fn(() => ({ ...codexAdapter, meters }));
+    const { metrics, status } = await postMetrics({ adapterFor, harnessOf: () => 'codex' as const });
     expect(status).toBe(404);
     expect(meters).not.toHaveBeenCalled();
     expect(metrics).toEqual([]);

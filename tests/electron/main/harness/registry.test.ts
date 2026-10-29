@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { METER_KINDS, type HarnessId } from '../../../../electron/shared/harness-contract';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
 import { copilotAdapter } from '../../../../electron/main/harness/copilot';
@@ -9,6 +8,7 @@ import {
   headlessAdapter,
   sessionAdapter,
 } from '../../../../electron/main/harness/registry';
+import type { HarnessId } from '../../../../electron/shared/harness-contract';
 
 /** Stands in for the sessions closure, which alone knows what an entity is and what it runs. */
 const agentSessions = new Map<string, HarnessId>([
@@ -39,7 +39,8 @@ describe('harness registry', () => {
     expect(adapter.id).toBe('claude-code');
     expect(adapter.capabilities).toEqual({
       resume: 'by-id',
-      meters: METER_KINDS,
+      // Its five, listed: `credits` is a meter kind Claude does not report (HIVE-334).
+      meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay'],
       contextDelivery: 'prompt-marker',
       reportsCostUsd: true,
       enforcesTurns: true,
