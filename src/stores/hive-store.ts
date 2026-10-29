@@ -7493,12 +7493,14 @@ const LIMIT_WINDOWS = {
  */
 function bestWindow(
   metrics: Record<string, SessionMetrics>,
+  claudeOnly: (id: string) => boolean,
   window: keyof typeof LIMIT_WINDOWS,
 ): AccountLimits {
   const [pctKey, resetKey] = LIMIT_WINDOWS[window];
   let pct: number | undefined;
   let at: number | undefined;
-  for (const m of Object.values(metrics)) {
+  for (const [id, m] of Object.entries(metrics)) {
+    if (!claudeOnly(id)) continue;
     const p = m[pctKey];
     if (p === undefined) continue;
     const r = m[resetKey];
@@ -7513,14 +7515,28 @@ function bestWindow(
   return at === undefined ? { [pctKey]: pct } : { [pctKey]: pct, [resetKey]: at };
 }
 
-export const accountLimitsOf = (metrics: Record<string, SessionMetrics>): AccountLimits => ({
-  ...bestWindow(metrics, 'fiveHour'),
-  ...bestWindow(metrics, 'sevenDay'),
-});
+/**
+ * The limits are the Claude account's, so only a Claude session speaks for them (HIVE-334:
+ * Codex sessions fill the same fields from their own plan). A session with no entity or no
+ * stamped harness is Claude, as everywhere else.
+ */
+export const accountLimitsOf = (
+  metrics: Record<string, SessionMetrics>,
+  entities: Record<string, Entity> = {},
+): AccountLimits => {
+  const claudeOnly = (id: string): boolean => {
+    const e = entities[id];
+    return !e || !('harness' in e) || (e.harness ?? 'claude-code') === 'claude-code';
+  };
+  return {
+    ...bestWindow(metrics, claudeOnly, 'fiveHour'),
+    ...bestWindow(metrics, claudeOnly, 'sevenDay'),
+  };
+};
 
 /** Home's Limits (HIVE-200). Four primitives under `useShallow`, so only a moved number re-renders. */
 export const useAccountLimits = (): AccountLimits =>
-  useHiveStore(useShallow((state) => accountLimitsOf(state.metrics)));
+  useHiveStore(useShallow((state) => accountLimitsOf(state.metrics, state.entities)));
 
 /** One Coming up row (HIVE-200): a scheduled wake (`at`, ms) or a held pickup (no `at`). */
 export interface ComingUpRow {
