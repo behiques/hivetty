@@ -1,4 +1,4 @@
-import { Brain } from '@phosphor-icons/react';
+import { Brain, Coins } from '@phosphor-icons/react';
 
 import {
   chipLabel,
@@ -146,7 +146,9 @@ function Stat({ pct, detail, short, label }: StatProps) {
  * gives way in order as the stage narrows (HIVE-213, HIVE-220; widths are the
  * header's):
  *
- * 1. the title truncates;
+ * 1. the title truncates; ≤ 1040px, credits give way to their coin, the balance
+ *    left to its label and the tooltip (HIVE-334: measured, the full row with a
+ *    balance needs ~980px; at 1100px the slot was 30px short);
  * 2. ≤ 880px, the resets give way to `5h` / `wk` (both spans render; the
  *    container picks one);
  * 3. ≤ 720px, the header's status word hides (its dot keeps it as a title);
@@ -155,15 +157,16 @@ function Stat({ pct, detail, short, label }: StatProps) {
  * 4. ≤ 700px, the label shortens to the model name, window and effort left to
  *    the tooltip;
  * 5. ≤ 620px, the detail words go: each stat is its ring and percentage;
- * 6. ≤ 560px, the label goes: the brain icon alone;
+ * 6. ≤ 560px, the label goes: the brain icon alone; credits go too, to the
+ *    tooltip (HIVE-334: measured, the coin was 7px over at 1200px);
  * 7. ≤ 500px, the title column's floor drops from 140px to 96px.
  *
  * Each breakpoint sits above the width its row needs with the steps before it
  * (690, 603, 541, 475px), so the header at 1200px with both panels open (452px, the rails' grip gutters included)
  * fits with the icon alone and room to spare.
  *
- * The three percentages never go. The full string, model, window, effort and
- * both resets included, stays in `title` at every step. The header's model slot
+ * The three percentages never go. The full string, model, window, effort,
+ * both resets and credits included, stays in `title` at every step. The header's model slot
  * clips at its end only if these steps ever miss, so the menu stays reachable.
  *
  * The separators are hairline borders rather than `│` glyphs so they do not
@@ -291,11 +294,26 @@ export function ModelChip() {
         {credits === null ? null : (
           /*
             A balance, not a share of anything, so no ring (D4). It owns its separator, as a Stat
-            does, and its word gives way at the width the other details do.
+            does. The balance and its word need a wide header (≤ 1040px they go, the coin's label
+            carrying both): measured, the full row with a balance needs ~980px, and at 1440px with
+            the session panel open the slot has about 56px for a fourth stat, too little for any
+            balance beside a coin. At 560px, where the label goes, the coin goes too.
           */
-          <span className="flex shrink-0 items-center gap-1 border-l border-border pl-2">
-            <span className="text-ink">{credits}</span>
-            <span data-detail="only" className="text-subtle @max-[620px]:hidden">
+          <span
+            data-stat="credits"
+            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[560px]:hidden"
+          >
+            <Coins
+              size={13}
+              weight="regular"
+              role="img"
+              aria-label={`credits: ${credits}`}
+              className="shrink-0 text-subtle"
+            />
+            <span data-detail="credits" className="text-ink @max-[1040px]:hidden">
+              {credits}
+            </span>
+            <span data-detail="credits" className="text-subtle @max-[1040px]:hidden">
               credits
             </span>
           </span>

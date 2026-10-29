@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
+import { goToOvermind, overmindNewSession } from '../fixtures/places';
+
 import { launchHive, writeProjectConfig } from './fixtures/hive-app';
 
 /**
@@ -226,6 +228,77 @@ test('with both panels open the header gives way and keeps the menu, down to 110
       expect(button.x + button.width, `menu inside the header at ${width}px`).toBeLessThanOrEqual(row.x + row.width);
       for (const pct of await chip.getByText(/%$/).all()) await expect(pct).toBeVisible();
       await expect(chip).toHaveAttribute('title', /Opus 4\.5 \(1M\) · high · context 46% · session limit 12%, resets .+ · weekly limit 63%, resets /);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test('a Codex strip with credits gives way like Claude\'s, down to 1100px (HIVE-334)', async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeProjectConfig(configPath, { id: PROJECT, path: longBranchRepo(testInfo.outputPath('repo')) });
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  try {
+    const page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    await resizeTo(app, page, 1440);
+
+    // Codex from the picker: the strip draws credits only for a CLI that declares them.
+    await goToOvermind(page);
+    await overmindNewSession(page).click();
+    const picker = page.getByRole('dialog', { name: 'Start a new session' });
+    await picker.getByRole('radio', { name: 'Codex' }).click();
+    await picker.getByRole('button', { name: PROJECT, exact: true }).click();
+    const terminal = page.locator('[data-terminal-id^="sess-"]').last();
+    await expect(terminal).toBeVisible();
+    const entityId = await terminal.getAttribute('data-terminal-id');
+
+    const header = page.getByTestId('session-header');
+    await expect(page.getByRole('tablist')).toBeVisible();
+    const now = Math.floor(Date.now() / 1000);
+    // What the record reader sends for a Plus session with credits bought: every stat at once.
+    await app.evaluate(
+      ({ BrowserWindow }, payload) => {
+        BrowserWindow.getAllWindows()[0]!.webContents.send('session:metrics', payload);
+      },
+      {
+        entityId,
+        metrics: {
+          model: 'gpt-6.1-sol',
+          effort: 'medium',
+          contextPct: 12,
+          contextWindow: 475_000,
+          fiveHourPct: 24,
+          fiveHourResetsAt: now + 3 * 3600,
+          sevenDayPct: 4,
+          sevenDayResetsAt: now + 5 * 86400,
+          creditsBalance: '123456',
+          creditsUnlimited: false,
+        },
+      },
+    );
+
+    const chip = header.getByTestId('model-chip');
+    const slot = header.locator('[data-slot="model"]');
+    await expect(chip.getByText(/%$/)).toHaveCount(3);
+
+    /*
+      What credits show at each width (header content in brackets): the balance only on a wide
+      header (1920 [~1170]); the coin alone below 1040px (1440 [~690], 1100 [~950], where the
+      list panel folds and the header grows); nothing under 560px, where the label goes too
+      (1300, 1200). The tooltip keeps the balance at every width.
+    */
+    const coin = chip.getByRole('img', { name: 'credits: 123,456' });
+    const balance = chip.getByText('123,456', { exact: true });
+    const shows = { 1920: [true, true], 1440: [true, false], 1300: [false, false], 1200: [false, false], 1100: [true, false] } as const;
+    for (const [width, [coinShown, balanceShown]] of Object.entries(shows).sort(([a], [b]) => Number(b) - Number(a))) {
+      await resizeTo(app, page, Number(width));
+      await expect.poll(() => overflows(header), { message: `header overflows at ${width}px` }).toBe(false);
+      await expect.poll(() => overflows(slot), { message: `model slot clips at ${width}px` }).toBe(false);
+      for (const pct of await chip.getByText(/%$/).all()) await expect(pct).toBeVisible();
+      await (coinShown ? expect(coin).toBeVisible() : expect(coin).toBeHidden());
+      await (balanceShown ? expect(balance).toBeVisible() : expect(balance).toBeHidden());
+      await expect(chip).toHaveAttribute('title', / · credits 123,456$/);
     }
   } finally {
     await app.close();

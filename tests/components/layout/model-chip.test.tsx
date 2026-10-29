@@ -342,6 +342,14 @@ describe('ModelChip', () => {
         'Codex · gpt-6.1-sol · medium · context 12% · session limit 18% · weekly limit 3% · credits 1,234',
       );
       expect(chip.textContent).toContain('1,234credits');
+      // The coin says the balance; number and word show only on a wide header
+      // (measured in session-header-metrics.spec.ts).
+      expect(screen.getByRole('img', { name: 'credits: 1,234' })).toBeInTheDocument();
+      const details = chip.querySelectorAll('[data-detail="credits"]');
+      expect(details).toHaveLength(2);
+      for (const detail of details) expect(detail).toHaveClass('@max-[1040px]:hidden');
+      // Where the label goes, the coin goes too: the tooltip keeps the balance.
+      expect(chip.querySelector('[data-stat="credits"]')).toHaveClass('@max-[560px]:hidden');
     });
 
     it('shows ∞ for unlimited credits (HIVE-334)', () => {
