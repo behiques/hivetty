@@ -33,6 +33,7 @@ Phase 2, headless runs through the adapter, is Epic HIVE-336 and is done: see
 | `readHook`, `contextReply` | HIVE-236 (landed); HIVE-237 and HIVE-238 (landed) change what it says |
 | `foldEdits` | HIVE-238 (landed) |
 | `record`, `meters` | HIVE-239 (landed) |
+| `foldMeters` | Optional, HIVE-334. Codex's: its rollout's lines folded into `SessionMetrics`, for a CLI with no status line. Absent on Claude Code, whose meters come from `meters(body)`. |
 | `promptMarker` | HIVE-240 (landed) |
 | `installed` | HIVE-345: the user's own skills and plugins (`skillNames`, `pluginNames`, `sessionOverrides`), reached through `sessionAdapter()` by the agents runtime, the skills snapshot and the hook settings' `enabledPlugins`. `skillPlaces` (HIVE-344) words where `skillNames` looks, for the agents' missing-skill message. |
 | `models` | Optional. Codex's: the account's models from `$CODEX_HOME/models_cache.json`, for the new-session picker over `cli:codex-models`. Absent on Claude Code and Copilot, whose lists are static. |
@@ -42,7 +43,8 @@ Phase 2, headless runs through the adapter, is Epic HIVE-336 and is done: see
 `Capabilities` is an interface; each field landed with the story whose core code reads it.
 `resume: 'by-id' | 'none'` (HIVE-239) gates the spawn's `history.resumable` lookup;
 `meters: readonly MeterKind[]` (HIVE-239, a list since HIVE-333) gates the receiver's `/statusline`
-route (404 when empty), and the session strip shows only the meters listed;
+route (404 when empty, or when the adapter reads its meters from its record with `foldMeters`), and the
+session strip shows only the meters listed;
 `contextDelivery: 'prompt-marker' | 'none'` (HIVE-240) gates `deliver.ts`'s write; `none` types
 nothing and records no receipt.
 No field is added for a harness that does not exist yet.
@@ -162,8 +164,17 @@ The changed-files reader keeps its incremental transcript read and hands the lin
 `hasTranscript(cwd, uuid)` (the history's `--resume` check, through `sessionAdapter()` because history rows
 carry no harness), `titleOrigin(cwd, uuid, name)` (rename or the harness's own guess) and `nameFromTitle(title)`
 (the harness's reading of an OSC title; the scanner in `sessions/title.ts` stays generic and takes it as an
-argument, since `harness/**` may not import `sessions/**`). `meters(body)` reads a status-line body into the
-neutral `SessionMetrics`. Claude Code's live in `claude-code/{record,title-origin,title,metrics}.ts`.
+argument, since `harness/**` may not import `sessions/**`). Claude Code's live in
+`claude-code/{record,title-origin,title,metrics}.ts`.
+
+Meters have two sources, and an adapter has one of them:
+
+- **A status line:** `meters(body)` reads a status-line POST into the neutral `SessionMetrics` (Claude Code).
+- **The CLI's own record:** the optional `foldMeters(lines)` folds record lines into a `SessionMetrics` patch,
+  the last value each field took (Codex, HIVE-334). `sessions/record-meters.ts` calls it on every hook from such a
+  session, with what the record gained since the last read (the offset read it shares with the changed-files reader,
+  `sessions/read-appended.ts`). There is no watcher: the CLI writes usage when it hears from the API, and a hook
+  fires around every such moment. Before the first hook there is no record, so no meters.
 
 ## Context delivery (HIVE-240)
 
@@ -485,7 +496,13 @@ writes nothing: everything is on the argv. `promptMarker` still refuses (D1, the
 renderer's input profile makes Shift+Enter type Ctrl+J, Codex's newline (P7). The binary is
 `codex` on `PATH` until HIVE-332 (D7). `pnpm test:session:codex` holds all of it against the binary.
 
-Interactive: HIVE-279 (sessions; skills and markers are its follow-up). Meters: HIVE-334. Agent-run plans: HIVE-358. Containers: refused.
+Meters (HIVE-334) come from the rollout through `foldMeters` (`codex/meters.ts`): the model and effort from
+`turn_context`; context from `token_count`'s `last_token_usage` by Codex's own formula (a 12,000-token baseline),
+so the strip agrees with the TUI's "% context left"; the 5-hour and weekly limits by their `window_minutes` (300
+and 10080), never by slot, since the slots differ by plan; and credits as a text stat. A Free plan's 30-day
+window shows no gauge. `codex exec` gets the parser only, with no UI. `/statusline` stays 404 for Codex.
+
+Interactive: HIVE-279 (sessions; skills and markers are its follow-up). Meters: HIVE-334 (done). Agent-run plans: HIVE-358. Containers: refused.
 
 ## Copilot (headless, HIVE-343; sessions, HIVE-280)
 
@@ -696,7 +713,7 @@ The checklist, member by member, with the live suite that proves each:
 - [ ] `contextReply` (`test:hook-context`).
 - [ ] `promptMarker`, if `contextDelivery: 'prompt-marker'` (`test:marker`, `test:nudge`).
 - [ ] `foldEdits` (unit; transcript fixtures).
-- [ ] `meters`, if `meters` lists any kind (`test:statusline`).
+- [ ] `meters`, if `meters` lists any kind and the CLI has a status line (`test:statusline`); or `foldMeters`, if it reads its meters from its record (unit, on pinned records, plus its live session suite, e.g. `test:session:codex`).
 - [ ] `record` (`test:title`, plus `test:back` for resume, if `resume: 'by-id'`).
 - [ ] An `InputProfile` in `PROFILES` in `src/lib/harness/input-profile.ts`, keyed by `HarnessId`,
   so a missing one fails to compile (`test:back` for `claimsBareBack`; `test:pty` for the bytes).
