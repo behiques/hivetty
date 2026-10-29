@@ -35,8 +35,8 @@ export interface Capabilities {
    */
   resume: 'by-id' | 'none';
   /**
-   * The meters the harness reports, through the receiver's `/statusline` route (HIVE-333). The strip
-   * shows only these; empty means the route refuses the harness.
+   * The meters the harness reports (HIVE-333): through the receiver's `/statusline` route, or read
+   * from its own record by `foldMeters` (HIVE-334). The strip shows only these.
    */
   meters: readonly MeterKind[];
   /**
@@ -103,7 +103,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   },
   codex: {
     resume: 'by-id',
-    meters: [],
+    meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay', 'credits'],
     contextDelivery: 'none',
     reportsCostUsd: false,
     enforcesTurns: false,

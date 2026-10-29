@@ -8,6 +8,7 @@ import { codexAdapter } from '../../../../../electron/main/harness/codex';
 import { codexFence } from '../../../../../electron/main/harness/codex/fence';
 import { launchCodexHeadless } from '../../../../../electron/main/harness/codex/headless';
 import { launchCodexSession } from '../../../../../electron/main/harness/codex/launch';
+import { foldCodexMeters } from '../../../../../electron/main/harness/codex/meters';
 import { readCodexHeadless } from '../../../../../electron/main/harness/codex/headless-reader';
 import { copilotAdapter } from '../../../../../electron/main/harness/copilot';
 
@@ -19,7 +20,7 @@ describe('codexAdapter', () => {
   it('declares what codex exec can and cannot do', () => {
     expect(codexAdapter.capabilities).toEqual({
       resume: 'by-id',
-      meters: [],
+      meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay', 'credits'],
       contextDelivery: 'none',
       reportsCostUsd: false,
       enforcesTurns: false,
@@ -63,8 +64,9 @@ describe('codexAdapter', () => {
     expect(codexAdapter.record.nameFromTitle('Fix it | repo')).toBe('Fix it');
   });
 
-  it('draws no meters and folds no edits', () => {
+  it('reads its meters from the rollout, not a status line (HIVE-334)', () => {
     expect(codexAdapter.meters('{}')).toBeNull();
+    expect(codexAdapter.foldMeters).toBe(foldCodexMeters);
     expect(codexAdapter.foldEdits(new Map(), ['x']).size).toBe(0);
   });
 
