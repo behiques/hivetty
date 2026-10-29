@@ -57,7 +57,7 @@ import type { PlanChangedEvent } from '../../electron/shared/plan-contract';
  */
 
 const LIVE = process.env['HIVE_LIVE_AGENT_CODEX_PROOF'] === '1';
-const PINNED = '0.164';
+const PINNED = '0.165';
 const TEARDOWN_WAIT_MS = 10_000;
 const TURN_MS = 240_000;
 
@@ -163,7 +163,8 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
         PATCH,
         fenceMd(PATCH, `apply_patch adding the file ${patchMarker} containing the one line: made`),
       ],
-      [MCP, fenceMd(MCP, 'The hive MCP tool jira_comment, with key "HIVE-1" and body "probe".')],
+      // The tool's own field names: told `body`, 0.165's model passes `body`, which the tool refuses.
+      [MCP, fenceMd(MCP, 'The hive MCP tool jira_comment, with key "HIVE-1" and markdown "probe".')],
     ] as const) {
       await mkdir(join(agentsRoot(), name), { recursive: true });
       await writeFile(join(agentsRoot(), name, 'AGENT.md'), body, 'utf8');

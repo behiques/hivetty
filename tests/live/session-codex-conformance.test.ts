@@ -48,7 +48,7 @@ import type { PlanUpdate } from '../../electron/shared/plan-contract';
  * `OPENAI_*` is stripped before the case sets its own. Each case writes `finding.json` beside its
  * scratch repo, and logs where.
  *
- * Opt-in: `pnpm test:session:codex`. Skipped unless `codex --version` is 0.164.x and
+ * Opt-in: `pnpm test:session:codex`. Skipped unless `codex --version` is 0.165.x and
  * `~/.codex/auth.json` exists; about five minutes.
  */
 
@@ -57,7 +57,7 @@ const AUTH = join(homedir(), '.codex', 'auth.json');
 const READY =
   LIVE &&
   existsSync(AUTH) &&
-  /^codex-cli 0\.164\./.test(spawnSync('codex', ['--version'], { encoding: 'utf8' }).stdout ?? '');
+  /^codex-cli 0\.165\./.test(spawnSync('codex', ['--version'], { encoding: 'utf8' }).stdout ?? '');
 const SESSION = 'sess-cx';
 const CASE_MS = 240_000;
 
@@ -65,8 +65,8 @@ const CASE_MS = 240_000;
  * The pty driver, `tests/fixtures/codex/interactive-0.164/probe.py`'s loop. It splits the production
  * line with `shlex` and drops its `&& exit` (the driver is the shell), sizes the pty and
  * answers the TUI's start-up queries as xterm.js does (without either codex draws nothing), types
- * the prompt and its `\r` 300 ms apart (HIVE-63), presses Enter on an approval when asked to, and
- * `/exit`s once the turn reports `Worked for`. Its config is one JSON argument.
+ * the prompt and its `\r` 300 ms apart (HIVE-63), answers an approval with `answer` when given, and
+ * `/exit`s once the turn reports `Worked for`, or soon after an Esc. Its config is one JSON argument.
  */
 const DRIVER = String.raw`
 import fcntl, json, os, pty, select, shlex, struct, sys, termios, time
@@ -84,7 +84,7 @@ if pid == 0:
     try: os.execvpe(argv[0], argv, c['env'])
     finally: os._exit(127)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 120, 0, 0))
-out = bytearray(); replied = 0; start = time.time(); step = 0; submitted = 0; approved = False; done_at = None
+out = bytearray(); replied = 0; start = time.time(); step = 0; submitted = 0; answered = False; done_at = None
 while time.time() - start < c['seconds']:
     r, _, _ = select.select([fd], [], [], 0.3)
     if r:
@@ -104,8 +104,9 @@ while time.time() - start < c['seconds']:
         os.write(fd, b'\r'); step = 2; submitted = len(out)
     elif step == 2:
         since = bytes(out[submitted:])
-        if c['approve'] and not approved and b'Would you like to run' in since:
-            time.sleep(0.5); os.write(fd, b'\r'); approved = True
+        if c['answer'] and not answered and b'Would you like to run' in since:
+            time.sleep(0.5); os.write(fd, c['answer'].encode()); answered = True
+            if c['answer'] == '\x1b': done_at = now + 4
         if done_at is None and b'Worked for' in since: done_at = now
         if done_at is not None and now > done_at + 2:
             os.write(fd, b'/exit'); time.sleep(0.3); os.write(fd, b'\r'); step = 3
@@ -208,7 +209,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   };
 
   /** One launch, one prompt, one turn. Resolves with the pty log's path. */
-  const run = async (name: string, spec: Partial<LaunchSpec>, prompt: string, approve = false): Promise<string> => {
+  const run = async (name: string, spec: Partial<LaunchSpec>, prompt: string, answer?: string): Promise<string> => {
     const env: Record<string, string> = Object.fromEntries(
       Object.entries(process.env).filter(
         (entry): entry is [string, string] =>
@@ -223,7 +224,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       [HOOK_ENV_TOKEN]: receiver.tokenFor(SESSION),
     });
     const log = join(scratch, `${name}.pty.log`);
-    const config = { line: lineOf(spec), env, cwd: repo, prompt, approve, seconds: 180, log };
+    const config = { line: lineOf(spec), env, cwd: repo, prompt, answer: answer ?? null, seconds: 180, log };
     const stderr: Buffer[] = [];
     await new Promise<void>((resolve) => {
       const child = spawn('python3', ['-c', DRIVER, JSON.stringify(config)], { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -273,7 +274,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
         'permission',
         {},
         'Run the shell command: touch probe.txt. If the sandbox blocks it, request approval to run it with escalated permissions.',
-        true,
+        '\r',
       );
       finding('permission', {});
 
@@ -289,6 +290,33 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       // Asked before it ran: the wait comes before the turn's end, and the file exists after it.
       expect(statuses.findLastIndex((s) => s.signal.kind === 'turn-end')).toBeGreaterThan(waiting);
       expect(existsSync(join(repo, 'probe.txt'))).toBe(true);
+    },
+    CASE_MS,
+  );
+
+  /*
+    Measured at 0.165.0: an Esc on the approval prompt prints "Conversation interrupted" and fires no
+    hook, neither PostToolUse nor Stop, so the row stays waiting and the card stays up. Copilot's
+    FINDINGS P1 has the same shape; HIVE-365 gives Codex an `answersBlock` and drops `.fails`.
+  */
+  it.fails(
+    'clears the card and needs-you on an Esc denial (HIVE-365)',
+    async () => {
+      userConfig('approval_policy = "on-request"\nsandbox_mode = "read-only"');
+      await run(
+        'denial',
+        {},
+        'Run the shell command: touch nope.txt. If the sandbox blocks it, request approval to run it with escalated permissions.',
+        '\x1b',
+      );
+      finding('denial', {});
+
+      const waiting = statuses.findIndex((s) => s.status === 'waiting' && s.signal.kind === 'waiting');
+      expect(waiting).toBeGreaterThanOrEqual(0);
+      expect(raised.map((n) => n.kind)).toContain('session.blocked');
+      // Denied, the row leaves waiting: nothing else would take "needs you" off a session left idle.
+      expect(statuses.at(-1)?.status).toBe('idle');
+      expect(existsSync(join(repo, 'nope.txt'))).toBe(false);
     },
     CASE_MS,
   );

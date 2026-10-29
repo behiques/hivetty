@@ -323,7 +323,7 @@ From the shipped values: the Codex and Copilot sections below, and `claude-code/
 | Cost | `total_cost_usd` in the result line | tokens only (`turn.completed`) | tokens from `--usage-output-file` |
 | Stop marker | the session id on the argv | a disabled `hive_wake` MCP server named by the id | the pinned session id |
 | Containers | yes | refused | refused |
-| Live suite | `test:agent` | `test:agent:codex` (0.164.x) | `test:agent:copilot` (1.0.104); sessions `test:session:copilot` (1.0.105) |
+| Live suite | `test:agent` | `test:agent:codex` (0.165.x); sessions `test:session:codex` (0.165.x) | `test:agent:copilot` (1.0.105); sessions `test:session:copilot` (1.0.105) |
 
 The Limits and Cost rows follow each adapter's `capabilities` (`enforcesTurns`, `enforcesBudget`,
 `reportsCostUsd`).

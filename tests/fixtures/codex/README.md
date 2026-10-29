@@ -42,3 +42,7 @@ sent from a real interactive `codex-cli 0.164.0` on a pty. Scrubbed there, and n
 recorded. Audited for home directories, usernames, hostnames, temp paths, emails, tokens, JWTs, `gAAAAA…` blobs, `call_<hex>`
 ids and IP addresses (only `127.0.0.1` in `probe.py`): none found. `probe.py` is a manual tool no test, script or CI step runs;
 it copies `~/.codex/auth.json` into its own temp `CODEX_HOME` and deletes the copy when the run ends.
+
+Re-proved, not re-recorded, against `codex-cli 0.165.0` on 2026-10-29 (HIVE-282): `test:agent:codex` and
+`test:session:codex` pass on these fixtures unchanged. One new finding: an Esc on the interactive approval
+prompt fires no hook (HIVE-365).
