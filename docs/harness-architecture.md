@@ -41,7 +41,8 @@ Phase 2, headless runs through the adapter, is Epic HIVE-336 and is done: see
 
 `Capabilities` is an interface; each field landed with the story whose core code reads it.
 `resume: 'by-id' | 'none'` (HIVE-239) gates the spawn's `history.resumable` lookup;
-`meters: boolean` (HIVE-239) gates the receiver's `/statusline` route (404 when false);
+`meters: readonly MeterKind[]` (HIVE-239, a list since HIVE-333) gates the receiver's `/statusline`
+route (404 when empty), and the session strip shows only the meters listed;
 `contextDelivery: 'prompt-marker' | 'none'` (HIVE-240) gates `deliver.ts`'s write; `none` types
 nothing and records no receipt.
 No field is added for a harness that does not exist yet.
@@ -695,7 +696,7 @@ The checklist, member by member, with the live suite that proves each:
 - [ ] `contextReply` (`test:hook-context`).
 - [ ] `promptMarker`, if `contextDelivery: 'prompt-marker'` (`test:marker`, `test:nudge`).
 - [ ] `foldEdits` (unit; transcript fixtures).
-- [ ] `meters`, if `meters: true` (`test:statusline`).
+- [ ] `meters`, if `meters` lists any kind (`test:statusline`).
 - [ ] `record` (`test:title`, plus `test:back` for resume, if `resume: 'by-id'`).
 - [ ] An `InputProfile` in `PROFILES` in `src/lib/harness/input-profile.ts`, keyed by `HarnessId`,
   so a missing one fails to compile (`test:back` for `claimsBareBack`; `test:pty` for the bytes).
