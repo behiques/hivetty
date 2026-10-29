@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Session } from '@/types/entity';
 
 import { ModelChip } from '@components/layout/model-chip';
+import type { SessionMetrics } from '@shared/metrics-contract';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
@@ -323,6 +324,54 @@ describe('ModelChip', () => {
         entities: { ...state.entities, [id]: { ...(state.entities[id] as Session), effort: undefined } },
       }));
       expect(show(id).getAttribute('title')).toBe('Copilot · gpt-5.2');
+    });
+
+    /** The chip for `id` given only `metrics`, where `show` would seed FULL over them. */
+    const showOnly = (id: string, metrics: SessionMetrics) => {
+      useHiveStore.getState().setSessionMetrics(id, metrics);
+      useUiStore.setState({ activeTab: id });
+      render(<ModelChip />);
+      return screen.getByTestId('model-chip');
+    };
+
+    it('shows a Codex session what it reported, credits included (HIVE-334)', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
+      const chip = showOnly(id, {
+        model: 'gpt-6.1-sol',
+        effort: 'medium',
+        contextPct: 12,
+        contextWindow: 475_000,
+        fiveHourPct: 18,
+        sevenDayPct: 3,
+        creditsBalance: '1234',
+        creditsUnlimited: false,
+      });
+      expect(chip.getAttribute('title')).toBe(
+        'Codex · gpt-6.1-sol · medium · context 12% · session limit 18% · weekly limit 3% · credits 1,234',
+      );
+      expect(chip.textContent).toContain('1,234credits');
+    });
+
+    it('shows ∞ for unlimited credits (HIVE-334)', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
+      useHiveStore.getState().setSessionMetrics(id, { creditsUnlimited: true });
+      expect(show(id).textContent).toContain('∞credits');
+    });
+
+    it('shows no credits stat for a Codex session without credits (HIVE-334)', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
+      const chip = show(id);
+      expect(chip.textContent).toContain('12%');
+      expect(chip.textContent).not.toContain('credits');
+      expect(chip.getAttribute('title')).not.toContain('credits');
+    });
+
+    it('never shows credits on a Claude session (HIVE-334)', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web', '', 'claude-code', 'opus', 'high');
+      useHiveStore.getState().setSessionMetrics(id, { creditsBalance: '5' });
+      const chip = show(id);
+      expect(chip.textContent).not.toContain('credits');
+      expect(chip.getAttribute('title')).not.toContain('credits');
     });
   });
 

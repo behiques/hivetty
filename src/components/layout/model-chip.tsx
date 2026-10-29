@@ -4,6 +4,7 @@ import {
   chipLabel,
   chipParts,
   clockLabel,
+  creditsLabel,
   dayClockLabel,
   declaredMetrics,
   pctLabel,
@@ -183,6 +184,7 @@ export function ModelChip() {
   const context = pctOrNull(metrics?.contextPct);
   const fiveHour = pctOrNull(metrics?.fiveHourPct);
   const sevenDay = pctOrNull(metrics?.sevenDayPct);
+  const credits = creditsLabel(metrics);
 
   const parts = chipParts(metrics, entity.model, entity.effort, fallbackEffort);
   /*
@@ -214,6 +216,7 @@ export function ModelChip() {
     sevenDay === null
       ? null
       : `weekly limit ${pctLabel(sevenDay)}${sevenDayReset === null ? '' : `, resets ${sevenDayReset}`}`,
+    credits === null ? null : `credits ${credits}`,
   ]
     .filter((part): part is string => part !== null)
     .join(' · ');
@@ -283,6 +286,19 @@ export function ModelChip() {
             short="wk"
             detail={sevenDayReset === null ? 'week' : `↻ ${sevenDayReset}`}
           />
+        )}
+
+        {credits === null ? null : (
+          /*
+            A balance, not a share of anything, so no ring (D4). It owns its separator, as a Stat
+            does, and its word gives way at the width the other details do.
+          */
+          <span className="flex shrink-0 items-center gap-1 border-l border-border pl-2">
+            <span className="text-ink">{credits}</span>
+            <span data-detail="only" className="text-subtle @max-[620px]:hidden">
+              credits
+            </span>
+          </span>
         )}
       </span>
     </span>
