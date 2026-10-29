@@ -1,0 +1,26 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`foldCodexMeters (HIVE-334) > folds the pinned interactive and exec records 1`] = `
+{
+  "contextPct": 1,
+  "contextWindow": 475000,
+  "fiveHourPct": 18,
+  "fiveHourResetsAt": 1793306416,
+  "model": "gpt-6.1-sol",
+  "sevenDayPct": 3,
+  "sevenDayResetsAt": 1793800556,
+}
+`;
+
+exports[`foldCodexMeters (HIVE-334) > folds the pinned interactive and exec records 2`] = `
+{
+  "contextPct": 2,
+  "contextWindow": 258400,
+  "effort": "medium",
+  "fiveHourPct": 18,
+  "fiveHourResetsAt": 1793306416,
+  "model": "gpt-6-luna",
+  "sevenDayPct": 3,
+  "sevenDayResetsAt": 1793800556,
+}
+`;
