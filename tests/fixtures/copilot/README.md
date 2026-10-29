@@ -29,3 +29,6 @@ Scrubbed, consistently across every file, and nothing else:
   subagent's real id → `00000000-0000-4000-8000-000000000001`.
 
 Every other byte is as recorded. Re-record and re-scrub rather than hand-edit a line.
+
+Re-proved, not re-recorded, against `GitHub Copilot CLI 1.0.105` on 2026-10-29 (HIVE-282): `test:agent:copilot`
+passes on these fixtures unchanged.

@@ -62,7 +62,7 @@ import { LEDGER_DIR, OVERMIND } from '../../electron/shared/ledger-contract';
  */
 
 const LIVE = process.env['HIVE_LIVE_AGENT_COPILOT_PROOF'] === '1';
-const PINNED = /^GitHub Copilot CLI 1\.0\.104\b/;
+const PINNED = /^GitHub Copilot CLI 1\.0\.105\b/;
 const TEARDOWN_WAIT_MS = 10_000;
 const TURN_MS = 240_000;
 
@@ -183,7 +183,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     const found = version.stdout.trim();
     if (!PINNED.test(found)) {
       throw new Error(
-        `test:agent:copilot was proven against copilot 1.0.104; found ${found}. Re-record tests/fixtures/copilot and re-prove before changing the pin.`,
+        `test:agent:copilot was proven against copilot 1.0.105; found ${found}. Re-record tests/fixtures/copilot and re-prove before changing the pin.`,
       );
     }
 
@@ -207,7 +207,8 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       [CP, CP_MD],
       [SHELL, fenceMd(SHELL, `The shell command: touch ${shellMarker}`)],
       [CREATE, fenceMd(CREATE, `Create the file ${createMarker} with your create tool, containing the one line: made`)],
-      [MCP, fenceMd(MCP, 'The hive MCP tool jira_comment, with key "HIVE-1" and body "probe".')],
+      // The tool's own field names: a model told `body` may pass `body`, which the tool refuses.
+      [MCP, fenceMd(MCP, 'The hive MCP tool jira_comment, with key "HIVE-1" and markdown "probe".')],
       // Granted, so only Copilot's own `--deny-tool` can stop it.
       [DENY, fenceMd(DENY, `The shell command: touch ${denyMarker}`, '[Bash(touch *)]')],
       [UNTRUSTED, probeMd(UNTRUSTED)],

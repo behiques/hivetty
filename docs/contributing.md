@@ -58,9 +58,9 @@ draws cannot be faked. Each costs time, some cost tokens.
 | `pnpm test:hook-context` · `:marker` | hook context reaches the model |
 | `pnpm test:ledger` · `:mcp-http` | the ledger MCP tools, stdio and HTTP |
 | `pnpm test:agent` | headless agent runs end to end |
-| `pnpm test:agent:codex` | headless Codex agent runs end to end: thread, resume, the fence, receipts (codex 0.164.x, signed in) |
+| `pnpm test:agent:codex` | headless Codex agent runs end to end: thread, resume, the fence, receipts (codex 0.165.x, signed in) |
 | `pnpm test:session:copilot` | interactive Copilot sessions: status, a permission card, an Esc denial, resume by the pinned id, the user's own hooks and MCP servers, the home untouched (copilot 1.0.105, signed in) |
-| `pnpm test:agent:copilot` | headless Copilot agent runs end to end: pinned id, resume, the fence, receipts, `~/.copilot` untouched (copilot 1.0.104, `COPILOT_GITHUB_TOKEN` set) |
+| `pnpm test:agent:copilot` | headless Copilot agent runs end to end: pinned id, resume, the fence, receipts, `~/.copilot` untouched (copilot 1.0.105, `COPILOT_GITHUB_TOKEN` set) |
 | `pnpm test:container` | containerised sessions and agents |
 | `pnpm test:server` | server mode across two real app processes |
 
