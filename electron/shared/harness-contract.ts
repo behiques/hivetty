@@ -16,6 +16,15 @@ export const isHarnessId = (value: string): value is HarnessId =>
   (HARNESS_IDS as readonly string[]).includes(value);
 
 /**
+ * The meters the session strip can show (HIVE-333). Tokens and credits join with the stories that
+ * read them (HIVE-334, HIVE-335).
+ */
+export const METER_KINDS = ['model', 'effort', 'context', 'fiveHour', 'sevenDay'] as const;
+
+/** One meter a harness reports. */
+export type MeterKind = (typeof METER_KINDS)[number];
+
+/**
  * What a harness can do ("build one, shape for three"). A field lands only with the
  * story whose core code reads it (HIVE-239 brought the first two, HIVE-240 the third).
  */
@@ -25,8 +34,11 @@ export interface Capabilities {
    * spawn asks the history for one. `none`: every spawn starts a new conversation.
    */
   resume: 'by-id' | 'none';
-  /** The harness posts a status line that the receiver's `/statusline` route reads into metrics. */
-  meters: boolean;
+  /**
+   * The meters the harness reports, through the receiver's `/statusline` route (HIVE-333). The strip
+   * shows only these; empty means the route refuses the harness.
+   */
+  meters: readonly MeterKind[];
   /**
    * How a ledger entry reaches the agent (HIVE-240). `prompt-marker`: a marker typed at an idle,
    * empty prompt, which the prompt hook answers with the entry as context (`contextReply`).
@@ -75,7 +87,7 @@ export interface Capabilities {
 export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   'claude-code': {
     resume: 'by-id',
-    meters: true,
+    meters: METER_KINDS,
     contextDelivery: 'prompt-marker',
     reportsCostUsd: true,
     enforcesTurns: true,
@@ -90,7 +102,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   },
   codex: {
     resume: 'by-id',
-    meters: false,
+    meters: [],
     contextDelivery: 'none',
     reportsCostUsd: false,
     enforcesTurns: false,
@@ -105,7 +117,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   },
   copilot: {
     resume: 'by-id',
-    meters: false,
+    meters: [],
     contextDelivery: 'none',
     reportsCostUsd: false,
     enforcesTurns: false,

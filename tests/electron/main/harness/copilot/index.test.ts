@@ -22,7 +22,7 @@ describe('copilotAdapter', () => {
   it('declares what copilot -p can and cannot do', () => {
     expect(copilotAdapter.capabilities).toEqual({
       resume: 'by-id',
-      meters: false,
+      meters: [],
       contextDelivery: 'none',
       reportsCostUsd: false,
       enforcesTurns: false,

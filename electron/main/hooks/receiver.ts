@@ -882,7 +882,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     const entityId = headers[HOOK_HEADER_SESSION] as string;
     // A harness that reports no status line has no such route (HIVE-239).
     const adapter = readerFor('session', entityId);
-    if (!adapter.capabilities.meters) return 404;
+    if (adapter.capabilities.meters.length === 0) return 404;
 
     /*
       A truncated status line body is not a payload this endpoint is for — see

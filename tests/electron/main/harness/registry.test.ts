@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { HarnessId } from '../../../../electron/shared/harness-contract';
+import { METER_KINDS, type HarnessId } from '../../../../electron/shared/harness-contract';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
 import { copilotAdapter } from '../../../../electron/main/harness/copilot';
@@ -39,7 +39,7 @@ describe('harness registry', () => {
     expect(adapter.id).toBe('claude-code');
     expect(adapter.capabilities).toEqual({
       resume: 'by-id',
-      meters: true,
+      meters: METER_KINDS,
       contextDelivery: 'prompt-marker',
       reportsCostUsd: true,
       enforcesTurns: true,

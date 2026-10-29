@@ -5,6 +5,7 @@ import {
   chipParts,
   clockLabel,
   dayClockLabel,
+  declaredMetrics,
   DEFAULT_EFFORT,
   modelLabel,
   pctLabel,
@@ -162,6 +163,11 @@ describe('chipLabel', () => {
     );
   });
 
+  it('takes no effort fallback for a CLI that has none to invent (HIVE-333)', () => {
+    expect(chipLabel(undefined, 'gpt-6-luna', undefined, null)).toBe('gpt-6-luna');
+    expect(chipLabel(undefined, 'gpt-6-luna', 'low', null)).toBe('gpt-6-luna · low');
+  });
+
   /**
    * `(1M)` used to be hardcoded into the chip and was therefore wrong for every
    * 200k session. It is now a fact the session reports.
@@ -227,4 +233,35 @@ describe('timeLeftLabel / resetsDayLabel (HIVE-200)', () => {
 it('labels a model that is not Claude’s by its own id (HIVE-279)', () => {
   expect(modelLabel('gpt-6-luna')).toBe('gpt-6-luna');
   expect(modelLabel('opus')).toBe('Opus 4.5');
+});
+
+describe('declaredMetrics (HIVE-333)', () => {
+  const full = {
+    model: 'Opus 4.5',
+    effort: 'high',
+    contextPct: 46,
+    contextWindow: 1_000_000,
+    fiveHourPct: 12,
+    fiveHourResetsAt: 1_800_000_000,
+    sevenDayPct: 71,
+    sevenDayResetsAt: 1_800_000_000,
+  };
+
+  it('keeps every field when every meter is declared', () => {
+    expect(declaredMetrics(full, ['model', 'effort', 'context', 'fiveHour', 'sevenDay'])).toEqual(full);
+  });
+
+  it('drops each undeclared meter with its companion fields', () => {
+    expect(declaredMetrics(full, ['fiveHour'])).toEqual({ fiveHourPct: 12, fiveHourResetsAt: 1_800_000_000 });
+    expect(declaredMetrics(full, ['context'])).toEqual({ contextPct: 46, contextWindow: 1_000_000 });
+    expect(declaredMetrics(full, [])).toEqual({});
+  });
+
+  it('keeps a declared null, which clears the context', () => {
+    expect(declaredMetrics({ contextPct: null }, ['context'])).toEqual({ contextPct: null });
+  });
+
+  it('passes no metrics through as none', () => {
+    expect(declaredMetrics(undefined, ['model'])).toBeUndefined();
+  });
 });
