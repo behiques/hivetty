@@ -83,6 +83,7 @@ const METER_FIELDS: Record<MeterKind, readonly (keyof SessionMetrics)[]> = {
   context: ['contextPct', 'contextWindow'],
   fiveHour: ['fiveHourPct', 'fiveHourResetsAt'],
   sevenDay: ['sevenDayPct', 'sevenDayResetsAt'],
+  credits: ['creditsBalance', 'creditsUnlimited'],
 };
 
 /**

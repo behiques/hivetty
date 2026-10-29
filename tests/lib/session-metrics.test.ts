@@ -13,6 +13,7 @@ import {
   resetsDayLabel,
   timeLeftLabel,
 } from '@/lib/session-metrics';
+import { CAPABILITIES } from '@shared/harness-contract';
 
 /**
  * These used to assert a *derivation* — that `contextPct('sess-01')` was stable
@@ -236,6 +237,12 @@ it('labels a model that is not Claude’s by its own id (HIVE-279)', () => {
 });
 
 describe('declaredMetrics (HIVE-333)', () => {
+  it('keeps credits only for a CLI that declares them (HIVE-334)', () => {
+    const reported = { model: 'gpt-6.1-sol', creditsBalance: '1234', creditsUnlimited: false };
+    expect(declaredMetrics(reported, ['model', 'credits'])).toEqual(reported);
+    expect(declaredMetrics(reported, CAPABILITIES['claude-code'].meters)).toEqual({ model: 'gpt-6.1-sol' });
+  });
+
   const full = {
     model: 'Opus 4.5',
     effort: 'high',

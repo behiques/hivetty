@@ -83,6 +83,10 @@ export interface SessionMetrics {
   sevenDayPct?: number;
   /** `rate_limits.seven_day.resets_at` — **epoch seconds**, not milliseconds. */
   sevenDayResetsAt?: number;
+  /** Codex's `rate_limits.credits.balance`, verbatim: a decimal string, set only when the plan has credits (HIVE-334). */
+  creditsBalance?: string;
+  /** Codex's `rate_limits.credits.unlimited` (HIVE-334). */
+  creditsUnlimited?: boolean;
 }
 
 /**
