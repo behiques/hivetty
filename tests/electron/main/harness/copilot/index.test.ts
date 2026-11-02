@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { blockAnswer } from '../../../../../electron/main/harness/block-answer';
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
+import { codexAdapter } from '../../../../../electron/main/harness/codex';
+import { codexRecordAborted } from '../../../../../electron/main/harness/codex/record';
 import { copilotAdapter, copilotFence } from '../../../../../electron/main/harness/copilot';
 import {
   copilotFenceReply,
@@ -11,8 +13,8 @@ import {
 import { launchCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless';
 import { readCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless-reader';
 import { readCopilotHook } from '../../../../../electron/main/harness/copilot/hooks';
-import { codexAdapter } from '../../../../../electron/main/harness/codex';
 import { launchCopilotSession } from '../../../../../electron/main/harness/copilot/launch';
+import { copilotRecordAborted } from '../../../../../electron/main/harness/copilot/record';
 
 describe('copilotAdapter', () => {
   it('is copilot', () => {
@@ -82,6 +84,12 @@ describe('copilotAdapter', () => {
     expect(copilotAdapter.answersBlock).toBe(blockAnswer);
     expect(codexAdapter.answersBlock).toBe(blockAnswer);
     expect(claudeCodeAdapter.answersBlock).toBeUndefined();
+  });
+
+  it("reads aborts from each CLI's own record; Claude reads none (HIVE-365)", () => {
+    expect(codexAdapter.recordAborted).toBe(codexRecordAborted);
+    expect(copilotAdapter.recordAborted).toBe(copilotRecordAborted);
+    expect(claudeCodeAdapter.recordAborted).toBeUndefined();
   });
 
   it('still refuses prompt markers: a follow-up ticket', () => {

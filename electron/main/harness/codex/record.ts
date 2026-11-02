@@ -64,3 +64,19 @@ export function codexRecord(home: () => string = codexHome): HarnessRecord {
     nameFromTitle,
   };
 }
+
+/**
+ * Whether rollout lines hold Codex's `turn_aborted` (HIVE-365): an Esc, or a declined approval
+ * by any key (option 3, `n`, `3`), all of which fire no hook. The substring test only spares a
+ * parse of every line; the parse decides.
+ */
+export const codexRecordAborted = (lines: readonly string[]): boolean =>
+  lines.some((line) => {
+    if (!line.includes('"turn_aborted"')) return false;
+    try {
+      const parsed = JSON.parse(line) as { type?: unknown; payload?: { type?: unknown } };
+      return parsed.type === 'event_msg' && parsed.payload?.type === 'turn_aborted';
+    } catch {
+      return false;
+    }
+  });

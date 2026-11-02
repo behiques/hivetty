@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { codexRecord } from '../../../../../electron/main/harness/codex/record';
+import { codexRecord, codexRecordAborted } from '../../../../../electron/main/harness/codex/record';
 
 const ID = '0199a2b3-4c5d-7e6f-8a9b-0c1d2e3f4a5b';
 
@@ -74,5 +74,24 @@ describe('codex record (HIVE-279)', () => {
     // Before the thread has a name the title is the directory alone: unnamed.
     expect(nameFromTitle('repo')).toBe('');
     expect(nameFromTitle('⠙ repo')).toBe('');
+  });
+});
+
+describe('codexRecordAborted (HIVE-365)', () => {
+  // Scrubbed from the 0.165.0 probe: an Esc, option 3, `n` and `3` all write this, and no hook fires.
+  const ABORTED = '{"timestamp":"2026-11-02T15:20:28.337Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"t1","reason":"interrupted"}}';
+  const COMPLETE = '{"timestamp":"2026-11-02T15:20:29.817Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1"}}';
+
+  it('finds the turn_aborted the TUI writes on a decline or an interrupt', () => {
+    expect(codexRecordAborted([COMPLETE, ABORTED])).toBe(true);
+  });
+
+  it.each([
+    ['a finished turn', [COMPLETE]],
+    ['the word in a tool output', ['{"type":"response_item","payload":{"type":"function_call_output","output":"turn_aborted"}}']],
+    ['a torn line', ['{"type":"event_msg","payload":{"type":"turn_ab']],
+    ['an empty line', ['']],
+  ])('finds nothing in %s', (_what, lines) => {
+    expect(codexRecordAborted(lines)).toBe(false);
   });
 });

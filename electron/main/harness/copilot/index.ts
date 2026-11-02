@@ -9,7 +9,7 @@ import { launchCopilotHeadless } from './headless';
 import { readCopilotHeadless } from './headless-reader';
 import { readCopilotHook } from './hooks';
 import { launchCopilotSession } from './launch';
-import { copilotRecord } from './record';
+import { copilotRecord, copilotRecordAborted } from './record';
 
 /* A Copilot session's hooks plugin is its launch's own `files` (`./launch`); nothing shared is written. */
 const noSettings = (): Promise<string> => Promise.resolve('');
@@ -52,6 +52,7 @@ export const copilotAdapter: HarnessAdapter = {
   readHook: readCopilotHook,
   // An Esc on Copilot's own prompt fires no hook (FINDINGS P1): the keystroke clears the card.
   answersBlock: blockAnswer,
+  recordAborted: copilotRecordAborted,
   contextReply: claudeCodeAdapter.contextReply,
   promptMarker: noMarkers,
   foldEdits: () => new Map(),

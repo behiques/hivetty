@@ -27,3 +27,18 @@ export function copilotRecord(home: () => string = defaultHome): HarnessRecord {
     nameFromTitle: (title) => title,
   };
 }
+
+/**
+ * Whether `events.jsonl` lines hold Copilot's `abort` (HIVE-365): an Esc on its prompt, or Esc Esc
+ * mid-turn, neither of which fires `agentStop`. "No, and tell Copilot…" writes none: that turn
+ * goes on. The substring test only spares a parse of every line; the parse decides.
+ */
+export const copilotRecordAborted = (lines: readonly string[]): boolean =>
+  lines.some((line) => {
+    if (!line.includes('"abort"')) return false;
+    try {
+      return (JSON.parse(line) as { type?: unknown }).type === 'abort';
+    } catch {
+      return false;
+    }
+  });

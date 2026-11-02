@@ -43,6 +43,11 @@ export interface HarnessAdapter {
   meters(body: string): SessionMetrics | null;
   /** Record lines folded into a metrics patch, the last value each field took (`{}` for none), for a CLI with no status line (HIVE-334). */
   foldMeters?(lines: readonly string[]): SessionMetrics;
+  /**
+   * Whether these record lines say the user aborted the turn (HIVE-365), for a CLI that fires no
+   * hook on an Esc or a declined approval. Absent: only hooks and `answersBlock` end a turn.
+   */
+  recordAborted?(lines: readonly string[]): boolean;
   /** Where the harness keeps a conversation, and what it says about it (HIVE-239). */
   readonly record: HarnessRecord;
   /** What the user installed for the harness themselves, which HiveTTY reads and never manages (HIVE-345). */
