@@ -109,11 +109,12 @@ test('start a session, quit, relaunch — it is still listed, under ENDED', asyn
       session: HIVE-93 put a `resume` control beside it, whose accessible name
       is `resume <id>`. An unanchored pattern matches both and Playwright's
       strict mode — correctly — refuses to guess which one the test meant.
+      The row's name leads with its CLI's name (#169), so the anchor does too.
     */
     // The fleet table's row: the Sessions list draws one for it too.
     const row = secondWindow
       .getByTestId('session-table')
-      .getByRole('button', { name: new RegExp(`^${id}\\b`) });
+      .getByRole('button', { name: new RegExp(`^Claude Code ${id}\\b`) });
     await expect(row).toBeVisible();
 
     /*

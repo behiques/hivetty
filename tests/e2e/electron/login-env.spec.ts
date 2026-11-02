@@ -195,7 +195,8 @@ test('names an imported token but never renders its value', async ({}, testInfo)
     timeout: 15_000,
   });
 
-  await expect(page.getByText('GH_TOKEN')).toBeVisible();
+  // Exact: the switch's description names GH_TOKEN too.
+  await expect(page.getByText('GH_TOKEN', { exact: true })).toBeVisible();
 
   // The security property, asserted against the whole rendered pane rather
   // than one element: a credential must not reach the renderer at all.
