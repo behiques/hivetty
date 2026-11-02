@@ -65,3 +65,15 @@ home directory → `/Users/me`, the scratch directory → `/tmp/codex-fixture`, 
 by first appearance per file, any `user-…` or account id → `user-0000` (none were present after the filter). Credits present
 or unlimited cannot be recorded on this account (`has_credits: false`), so the tests that need them edit only
 `rate_limits.credits` of a recorded line.
+
+`fanout-0.165.0/` (HIVE-371, recorded 2026-11-02 against `codex-cli 0.165.0`) is the subagent fan-out probe. `codex_probe.py`
+runs `codex exec --json --skip-git-repo-check --ignore-user-config --dangerously-bypass-hook-trust -s workspace-write` with every
+`PreToolUse`, `PostToolUse`, `SubagentStart`, `SubagentStop` and `Stop` body appended to `hooks.jsonl`, and `probe_mcp.py` as
+`mcp_servers.probe`. The prompt asks for two parallel subagents, each running an `echo` and the probe's `ping`, one of them on
+another model. `hooks-fanout.jsonl` is that run's bodies. `hooks-denied.jsonl` is the same run with `--deny-spawn`, where
+`deny_spawn.py` as the `PreToolUse` hook denies every `spawn_agent` call the way HiveTTY's fence replies.
+`rollout-denied-outputs.jsonl` holds the two `function_call_output` lines of that run's rollout that carry the deny text the
+model saw. Scrubbed, per directory and nothing else: the scratch directory → `/tmp/codex-fixture`, the home directory →
+`/Users/me`, every UUID → `00000000-0000-7000-8000-00000000000N` by first appearance, every `call_<32 hex>` →
+`call_<N as 32 hex>` on the same counter, and every encrypted `gAAAAA…` `message` → a same-length
+`SYNTHETIC-ENCRYPTED-PLACEHOLDER-…==`.
