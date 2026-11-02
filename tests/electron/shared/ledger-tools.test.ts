@@ -10,6 +10,7 @@ import {
   ASK_INTENT_GUIDANCE,
   HIVE_CONSENT_TOOLS,
   HIVE_STANDING_GRANTS,
+  HIVE_TOOL_NAMES,
   LEDGER_TOOLS,
   LEDGER_TOOL_NAMES,
   JIRA_COMMENT_TOOL,
@@ -387,5 +388,14 @@ describe('PROJECT_AUTO_MERGE_TOOL', () => {
     const rungs = rungsFor(qualified, { project: 'hive', on: true });
     expect(rungs.map((rung) => rung.id)).toEqual(['allow-once']);
     expect(rungs.every((rung) => rung.rule === undefined)).toBe(true);
+  });
+});
+
+describe('HIVE_TOOL_NAMES (HIVE-369)', () => {
+  it('names every tool the hive server serves', () => {
+    expect(HIVE_TOOL_NAMES).toContain('ledger_ask');
+    expect(HIVE_TOOL_NAMES).toContain('jira_get');
+    expect(HIVE_TOOL_NAMES).toContain('approve');
+    expect(new Set(HIVE_TOOL_NAMES).size).toBe(HIVE_TOOL_NAMES.length);
   });
 });

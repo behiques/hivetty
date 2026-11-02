@@ -2,18 +2,7 @@ import type { ProjectsDirectory } from './config-contract';
 import type { AdfBlock, JiraError, JiraMention, JiraToolIssue } from './jira-contract';
 import type { LedgerKind, LedgerReadQuery } from './ledger-contract';
 import { asInbound } from './ledger-derive';
-import {
-  AGENTS_TOOL,
-  APPROVE_TOOL,
-  JIRA_COMMENT_TOOL,
-  JIRA_USERS_TOOL,
-  JIRA_GET_TOOL,
-  JIRA_TRANSITION_TOOL,
-  LEDGER_TOOLS,
-  PR_TOOL,
-  PROJECT_AUTO_MERGE_TOOL,
-  PROJECTS_TOOL,
-} from './ledger-tools';
+import { HIVE_TOOLS } from './ledger-tools';
 import {
   LEDGER_READ_DEFAULT_LIMIT,
   ReceiverError,
@@ -620,18 +609,7 @@ export function createToolHandlers(
   return {
     // `approve` stays last: the tools a model is meant to call come first, and
     // that one is only ever reached by the CLI on its behalf.
-    listTools: (): readonly McpToolDefinition[] => [
-      ...LEDGER_TOOLS,
-      AGENTS_TOOL,
-      PROJECTS_TOOL,
-      PR_TOOL,
-      JIRA_GET_TOOL,
-      JIRA_TRANSITION_TOOL,
-      JIRA_COMMENT_TOOL,
-      JIRA_USERS_TOOL,
-      PROJECT_AUTO_MERGE_TOOL,
-      APPROVE_TOOL,
-    ],
+    listTools: (): readonly McpToolDefinition[] => [...HIVE_TOOLS],
 
     async callTool(name, args): Promise<CallToolResult> {
       // `approve` must never surface as `isError` or throw — the CLI can only

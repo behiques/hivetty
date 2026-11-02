@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { dropKeysFor, fillPlaceholders, renderSkillText, typedSkill } from '../../../electron/shared/skill-render';
+import {
+  dropKeysFor,
+  fillPlaceholders,
+  makePortable,
+  portabilityIssues,
+  renderSkillText,
+  typedSkill,
+} from '../../../electron/shared/skill-render';
 
 const SOURCE = 'Call {{tool:ledger_ask}}, then {{skill:plan}} from "{{plugin_root}}/x".';
 
@@ -84,5 +91,78 @@ describe('dropKeysFor', () => {
   it('keeps Claude-only keys for Claude Code', () => {
     expect(dropKeysFor('claude-code')).toEqual([]);
     expect(dropKeysFor('copilot')).toEqual(['hooks', 'allowed-tools']);
+  });
+});
+
+const KNOWN = { tools: ['ledger_ask', 'jira_get'], skills: ['plan', 'done'] };
+
+describe('portabilityIssues', () => {
+  it('flags every CLI-specific literal with its fix', () => {
+    const text = [
+      'Call mcp__hive__ledger_ask first.',
+      'Copilot calls hive-jira_get.',
+      'Then run `hive:plan` or /hive:plan.',
+      'node "$CLAUDE_PLUGIN_ROOT/x.mjs"',
+    ].join('\n');
+    expect(portabilityIssues(text, KNOWN)).toEqual([
+      {
+        line: 1,
+        found: 'mcp__hive__ledger_ask',
+        fix: '{{tool:ledger_ask}}',
+        message: '`mcp__hive__ledger_ask` only works in Claude Code and Codex. Write `{{tool:ledger_ask}}`.',
+      },
+      {
+        line: 2,
+        found: 'hive-jira_get',
+        fix: '{{tool:jira_get}}',
+        message: '`hive-jira_get` only works in Copilot. Write `{{tool:jira_get}}`.',
+      },
+      {
+        line: 3,
+        found: 'hive:plan',
+        fix: '{{skill:plan}}',
+        message: '`hive:plan` only works in Claude Code. Write `{{skill:plan}}`.',
+      },
+      {
+        line: 3,
+        found: '/hive:plan',
+        fix: '{{skill:plan}}',
+        message: '`/hive:plan` only works in Claude Code. Write `{{skill:plan}}`.',
+      },
+      {
+        line: 4,
+        found: '$CLAUDE_PLUGIN_ROOT',
+        fix: '{{plugin_root}}',
+        message: '`$CLAUDE_PLUGIN_ROOT` is only set in Claude Code. Write `{{plugin_root}}`.',
+      },
+    ]);
+  });
+
+  it('names a placeholder that points nowhere', () => {
+    expect(portabilityIssues('{{tool:ledger_asks}} then {{skill:plann}}', KNOWN)).toEqual([
+      { line: 1, found: '{{tool:ledger_asks}}', fix: null, message: 'No hive tool is called `ledger_asks`.' },
+      { line: 1, found: '{{skill:plann}}', fix: null, message: 'No skill is called `plann`.' },
+    ]);
+  });
+
+  it('leaves alone what it cannot be sure of', () => {
+    const text =
+      'Run /plan or $plan; hive-unknown_tool; hive:other-plugin; {{tool:ledger_ask}} {{skill:plan}} {{plugin_root}}';
+    expect(portabilityIssues(text, KNOWN)).toEqual([]);
+  });
+});
+
+describe('makePortable', () => {
+  it('rewrites every fixable literal and nothing else', () => {
+    const text =
+      'mcp__hive__ledger_ask, hive-jira_get, `hive:plan`, /hive:plan, $CLAUDE_PLUGIN_ROOT, {{skill:plann}}, /plan';
+    expect(makePortable(text, KNOWN)).toBe(
+      '{{tool:ledger_ask}}, {{tool:jira_get}}, `{{skill:plan}}`, {{skill:plan}}, {{plugin_root}}, {{skill:plann}}, /plan',
+    );
+  });
+  it('is a fixed point on portable text', () => {
+    const text = makePortable('mcp__hive__ledger_ask', KNOWN);
+    expect(makePortable(text, KNOWN)).toBe(text);
+    expect(portabilityIssues(text, KNOWN)).toEqual([]);
   });
 });

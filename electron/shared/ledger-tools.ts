@@ -507,3 +507,20 @@ export const AGENTS_TOOL: McpToolDefinition = {
     properties: {},
   },
 };
+
+/** Every tool the hive MCP server serves (HIVE-369): the host lists these, and a skill's `{{tool:x}}` names one. */
+export const HIVE_TOOLS: readonly McpToolDefinition[] = [
+  ...LEDGER_TOOLS,
+  AGENTS_TOOL,
+  PROJECTS_TOOL,
+  PR_TOOL,
+  JIRA_GET_TOOL,
+  JIRA_TRANSITION_TOOL,
+  JIRA_COMMENT_TOOL,
+  JIRA_USERS_TOOL,
+  PROJECT_AUTO_MERGE_TOOL,
+  APPROVE_TOOL,
+];
+
+/** `HIVE_TOOLS` by name. */
+export const HIVE_TOOL_NAMES: readonly string[] = HIVE_TOOLS.map((tool) => tool.name);

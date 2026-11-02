@@ -33,6 +33,7 @@ import { SettingsSectionHeader } from '@features/settings/components/settings-se
 import { SkillBundle } from '@features/settings/components/skill-bundle';
 import { SkillEditor } from '@features/settings/components/skill-editor';
 import { SkillPathPrompt } from '@features/settings/components/skill-path-prompt';
+import { SkillPortability } from '@features/settings/components/skill-portability';
 import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import {
   HeldBanner,
@@ -43,6 +44,9 @@ import { useRemoteCapabilities } from '@hooks/use-project-config';
 import { useShipped } from '@hooks/use-shipped';
 import { useSkills } from '@hooks/use-skills';
 import type { FsRefusalReason } from '@shared/fs-contract';
+import { HIVE_TOOL_NAMES } from '@shared/ledger-tools';
+import { makePortable, portabilityIssues } from '@shared/skill-render';
+import { RESERVED_SKILL_NAME } from '@shared/skills-contract';
 
 /**
  * The Skills section of settings (HIVE-96).
@@ -221,6 +225,14 @@ export function SkillsSection() {
     .filter((name) => name !== open);
   const typed = buffer === null ? '' : frontmatterName(buffer);
   const problem = buffer === null ? null : skillNameProblem(typed, taken);
+
+  /*
+    What a skill's placeholders may name (HIVE-369), and the open markdown file's CLI-specific
+    names. Computed from the buffer, so the list follows typing; never stored.
+  */
+  const known = { tools: HIVE_TOOL_NAMES, skills: [RESERVED_SKILL_NAME, ...skills.map((skill) => skill.name)] };
+  const markdown = (openPath ?? 'SKILL.md').endsWith('.md');
+  const issues = buffer !== null && markdown ? portabilityIssues(buffer, known) : [];
 
   /** Type into the buffer, retiring any question that quoted it (HIVE-99). */
   const edit = (next: string): void => {
@@ -1073,6 +1085,8 @@ export function SkillsSection() {
               actionsHidden={pending !== null || prompt !== null}
             />
           )}
+
+          <SkillPortability issues={issues} onFixAll={() => edit(makePortable(buffer ?? '', known))} />
 
           {prompt === null ? null : (
             <SkillPathPrompt

@@ -4,7 +4,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { renderSkillText } from '../../../../electron/shared/skill-render';
+import { HIVE_TOOL_NAMES } from '../../../../electron/shared/ledger-tools';
+import { portabilityIssues, renderSkillText } from '../../../../electron/shared/skill-render';
 
 const ROOT = join(process.cwd(), 'resources', 'skills');
 
@@ -14,12 +15,11 @@ const md = async (): Promise<string[]> => {
 };
 
 describe('shipped skills (HIVE-369)', () => {
-  it('write hive tools and skills only as placeholders', async () => {
+  it('are portable: no CLI-specific name and no dangling placeholder', async () => {
+    const skills = ['done', ...(await readdir(ROOT))];
     for (const path of await md()) {
       const text = await readFile(join(ROOT, path), 'utf8');
-      expect(text, path).not.toMatch(/mcp__hive__[a-z]/);
-      expect(text, path).not.toMatch(/`hive:[a-z]/);
-      expect(text, path).not.toContain('$CLAUDE_PLUGIN_ROOT');
+      expect(portabilityIssues(text, { tools: HIVE_TOOL_NAMES, skills }), path).toEqual([]);
     }
   });
 

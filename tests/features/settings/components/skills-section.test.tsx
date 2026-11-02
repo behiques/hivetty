@@ -336,6 +336,54 @@ describe('SkillsSection', () => {
       await screen.findByLabelText('Skill source');
     };
 
+    describe('portability (HIVE-369)', () => {
+      const openStandup = async (): Promise<void> => {
+        setSkillsForTest(withSkills('standup'));
+        render(<SkillsSection />);
+        await userEvent.click(screen.getByRole('button', { name: '/standup' }));
+        await screen.findByLabelText('Skill source');
+      };
+
+      it('flags a CLI-specific name as it is typed', async () => {
+        await openStandup();
+        expect(screen.queryByRole('region', { name: 'Works in one CLI only' })).toBeNull();
+
+        appendSurfaceText('Skill source', 'Call mcp__hive__ledger_ask.');
+
+        const warning = screen.getByRole('region', { name: 'Works in one CLI only' });
+        expect(within(warning).getByText(/`mcp__hive__ledger_ask` only works in Claude Code and Codex/)).toBeInTheDocument();
+      });
+
+      it('rewrites the buffer on Fix all, unsaved, and the warning goes', async () => {
+        await openStandup();
+        appendSurfaceText('Skill source', 'Call mcp__hive__ledger_ask.');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Fix all' }));
+
+        expect(surfaceText('Skill source')).toBe(`${file('standup')}Call {{tool:ledger_ask}}.`);
+        expect(screen.getByText('unsaved')).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Works in one CLI only' })).toBeNull();
+        expect(saveSkill).not.toHaveBeenCalled();
+      });
+
+      it('never blocks Save', async () => {
+        await openStandup();
+        appendSurfaceText('Skill source', 'Call mcp__hive__ledger_ask.');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        expect(saveSkill).toHaveBeenCalledWith('standup', `${file('standup')}Call mcp__hive__ledger_ask.`);
+      });
+
+      it('checks markdown only, not a script in the bundle', async () => {
+        setSkillsForTest(bundled());
+        await openBuildPy();
+        appendSurfaceText('Skill source', 'mcp__hive__x');
+
+        expect(screen.queryByRole('region', { name: 'Works in one CLI only' })).toBeNull();
+      });
+    });
+
     it('saves the open file through the file verb, not the skill verb', async () => {
       setSkillsForTest(bundled());
       await openBuildPy();
