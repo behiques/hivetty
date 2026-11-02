@@ -1328,3 +1328,22 @@ describe('the snapshot lists the installed plugins (HIVE-176)', () => {
     expect((await runtime().list()).plugins).toEqual([]);
   });
 });
+
+describe('createSkillsRuntime per CLI (HIVE-369)', () => {
+  it('renders a folder per CLI', async () => {
+    const skills = runtime();
+    await skills.sync();
+    expect(skills.pluginDirPath('codex')).toBe(join(userDataPath, 'hive', 'plugins', 'codex'));
+    expect(skills.pluginDirPath('copilot')).toBe(join(userDataPath, 'hive', 'plugins', 'copilot'));
+    expect(skills.pluginDirPath()).toBe(join(userDataPath, 'hive', 'plugin'));
+  });
+
+  it("keeps Claude's folder when another CLI's cannot be written", async () => {
+    await mkdir(join(userDataPath, 'hive', 'plugins'), { recursive: true });
+    await writeFile(join(userDataPath, 'hive', 'plugins', 'codex'), 'not a dir', 'utf8');
+    const skills = runtime();
+    await skills.sync();
+    expect(skills.pluginDirPath('codex')).toBeNull();
+    expect(skills.pluginDirPath()).toBe(join(userDataPath, 'hive', 'plugin'));
+  });
+});
