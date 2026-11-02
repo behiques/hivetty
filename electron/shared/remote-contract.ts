@@ -77,8 +77,9 @@ import { isThisMachineAction } from './notification-contract';
  * 21 → 22 (HIVE-359): `plan:changed` and `plans:list`'s plan gained `part` (`index`, `of`) and `build.startedAt`, and `build.state` gained `done`.
  * 22 → 23: `CH` gained `cli:codex-models`; `CODEX_EFFORTS` gained `ultra`, and a Codex model is any `CODEX_MODEL_ID`-shaped id.
  * 23 → 24 (HIVE-334): `SessionMetrics` (on `session:metrics`) gained `creditsBalance` and `creditsUnlimited`.
+ * 24 → 25 (HIVE-381): `SessionMetrics.creditsBalance` and `creditsUnlimited` may be `null`, which clears them.
  */
-export const REMOTE_PROTOCOL_VERSION = 24;
+export const REMOTE_PROTOCOL_VERSION = 25;
 
 /**
  * What a frame is for.

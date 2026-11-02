@@ -105,7 +105,7 @@ export function declaredMetrics(
 export function creditsLabel(metrics: SessionMetrics | undefined): string | null {
   if (metrics?.creditsUnlimited === true) return '∞';
   const balance = metrics?.creditsBalance;
-  if (balance === undefined) return null;
+  if (balance === undefined || balance === null) return null;
   const value = Number(balance);
   return balance.trim() === '' || !Number.isFinite(value)
     ? balance

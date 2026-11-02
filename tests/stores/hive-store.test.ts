@@ -2932,6 +2932,17 @@ describe('hive-store', () => {
       expect(useHiveStore.getState().metrics[id]?.contextPct).toBeNull();
     });
 
+    it('clears a Codex balance reported as null, and keeps one a payload did not mention (HIVE-381)', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web');
+      useHiveStore.getState().setSessionMetrics(id, { creditsBalance: '5', creditsUnlimited: false });
+
+      useHiveStore.getState().setSessionMetrics(id, { fiveHourPct: 12 });
+      expect(useHiveStore.getState().metrics[id]).toMatchObject({ creditsBalance: '5', creditsUnlimited: false });
+
+      useHiveStore.getState().setSessionMetrics(id, { creditsBalance: null, creditsUnlimited: null });
+      expect(useHiveStore.getState().metrics[id]).toMatchObject({ creditsBalance: null, creditsUnlimited: null });
+    });
+
     it('ignores a report for an id that is not a session', () => {
       useHiveStore.getState().setSessionMetrics('slack-agent', {
         contextPct: 46,
