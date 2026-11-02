@@ -77,10 +77,10 @@ forbids it `sessions/**`, and the headless agent waker uses them too.
 ### prepare
 
 `prepare: HarnessFiles` (HIVE-235) is the files a harness needs on disk before it starts,
-named by purpose: `sessionSettings`, `agentSettings`, `plugin`, `containerSet` and
-`mcpConfig`. Claude Code's table points at the writers that moved into
-`harness/claude-code/` with byte-identical output: `settings.ts` (session and agent
-settings, the status line script), `plugin.ts` and `done-skill.ts`, `mcp-config.ts`
+named by purpose: `sessionSettings`, `agentSettings`, `containerSet` and
+`mcpConfig` (`plugin` left with HIVE-369 for the adapter's `skills` part, below). Claude Code's
+table points at the writers that moved into `harness/claude-code/` with byte-identical output:
+`settings.ts` (session and agent settings, the status line script), `done-skill.ts`, `mcp-config.ts`
 (the host stdio and container HTTP `--mcp-config` files), and `container-files.ts`
 (what each file in a container set says).
 
@@ -755,6 +755,58 @@ Both are `import/no-restricted-paths` zones in `eslint.config.mjs`, and
 2. **Adapters don't reach the core.** `electron/main/harness/**` may not import
    `electron/main/{sessions,ipc,notifications,plans}/**`. The core passes what an adapter
    needs in as arguments.
+
+## Skills per CLI (HIVE-369)
+
+HiveTTY's skills are written once, in `~/.hivetty/skills`, and rendered into one folder per CLI
+under `<userData>/hive`. Every skill reaches every CLI; only its wording changes.
+
+**The vocabulary** lives in `CAPABILITIES[cli].skills` (`electron/shared/harness-contract.ts`), so
+the renderer reads it too:
+
+| | claude-code | codex | copilot |
+|---|---|---|---|
+| `{{tool:x}}` → | `mcp__hive__x` | `mcp__hive__x` | `hive-x` |
+| `{{skill:x}}` → | `hive:x` | `$x` | `/x` |
+| a ticket session types | `/hive:x` | `$x` | `/x` |
+| `{{plugin_root}}` → | `$CLAUDE_PLUGIN_ROOT` | `$HIVE_PLUGIN_ROOT` | `$HIVE_PLUGIN_ROOT` |
+
+Copilot's `/x` is provisional until HIVE-362's probe.
+
+**Rendering** is `electron/shared/skill-render.ts`, pure, so main and the renderer share it.
+`renderSkillText(text, cli)` fills the three placeholders (`<name>` is `[a-z0-9_-]+`; any other
+text in braces is left alone) and drops the frontmatter keys `dropKeysFor(cli)` names: none for
+Claude Code, `hooks` and `allowed-tools` for Codex and Copilot, each with its indented block,
+blank lines included. A skill with no placeholder and none of those keys renders byte for byte as
+written. The shipped skills in `resources/skills` use placeholders; Claude's rendering of them
+equals what they said before this story, byte for byte.
+
+**The folders.** `electron/main/skills/render.ts`'s `renderSkills(root, cli, read, { version,
+doneUrl })` mirrors every valid skill into `<root>/skills/`, rendering each `.md` file through
+`renderSkillText` and copying the rest with `copyIfChanged`. It keeps the mirror's old rules: diff
+rather than wipe, stale-kind repair, no write through a symlink. Each adapter's `skills` part
+names its folder and the files beside `skills/`:
+
+| adapter | `skills.dir` | extras |
+|---|---|---|
+| claude-code | `plugin` (the `--plugin-dir`) | `.claude-plugin/plugin.json`, `skills/done/SKILL.md` |
+| codex | `plugins/codex` | `catalog.md`, the block HIVE-360 hands the model as instructions |
+| copilot | `plugins/copilot` | `.claude-plugin/plugin.json` (its own string) |
+
+The runtime (`skills/index.ts`) renders all three on every `sync()`, each in its own `try`: one
+CLI's folder failing never drops another's, and `pluginDirPath(cli)` is `null` only for the one
+that failed. `/done` stays Claude-only until HIVE-368.
+
+**The portability check.** Settings › Skills runs `portabilityIssues(buffer, known)` over the open
+markdown file as it is typed. It flags `mcp__hive__x`, `hive-x` (a hive tool), `hive:x` or
+`/hive:x` (a known skill), `$CLAUDE_PLUGIN_ROOT`, and a placeholder that names no tool or skill.
+**Fix all** applies `makePortable`, which rewrites the buffer, unsaved. Save is never blocked: a
+skill may be meant for one CLI. `known.tools` is `HIVE_TOOL_NAMES` (`electron/shared/ledger-tools.ts`),
+the same `HIVE_TOOLS` list the MCP host serves.
+
+**Next.** HIVE-360 hands Codex `catalog.md` and maps its paths into containers; HIVE-362 passes
+Copilot's folder as a second `--plugin-dir`; HIVE-368 brings `/done` to both; HIVE-370 gives them
+goal-on's stop hook; HIVE-371 words subagent dispatch per CLI.
 
 ## Adding a second harness
 
