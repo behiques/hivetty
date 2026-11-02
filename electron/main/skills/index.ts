@@ -274,11 +274,12 @@ export function createSkillsRuntime({
     trip. What still never crosses this boundary is a file's *body*.
   */
   const snapshot = async (read: SkillsRead): Promise<SkillsSnapshot> => ({
-    skills: read.skills.map(({ name, description, manifest }) => ({
+    skills: read.skills.map(({ name, description, manifest, requires }) => ({
       name,
       description,
       valid: true,
       manifest,
+      requires,
     })),
     invalid: read.invalid.map(({ name, reason }) => ({
       name,

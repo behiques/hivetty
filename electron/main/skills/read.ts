@@ -2,6 +2,8 @@ import type { Dirent } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import type { SkillFeature } from '@shared/harness-contract';
+import { parseRequires } from '@shared/skill-render';
 import {
   RESERVED_SKILL_NAME,
   SKILL_NAME_PATTERN,
@@ -48,6 +50,8 @@ interface UserSkill {
    * the pane would then dim a row the mirror had just copied.
    */
   manifest: BundleManifest;
+  /** The features the skill needs from a CLI (HIVE-369), from `requires:`. */
+  requires: SkillFeature[];
 }
 
 export interface InvalidSkill {
@@ -210,6 +214,12 @@ export async function readUserSkills(root: string): Promise<SkillsRead> {
       continue;
     }
 
+    const requires = parseRequires(keys.requires);
+    if (typeof requires === 'string') {
+      reject(requires);
+      continue;
+    }
+
     const dir = join(root, name);
     skills.push({
       name,
@@ -218,6 +228,7 @@ export async function readUserSkills(root: string): Promise<SkillsRead> {
       path,
       dir,
       manifest: await readBundle(dir),
+      requires,
     });
   }
 

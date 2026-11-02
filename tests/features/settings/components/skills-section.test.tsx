@@ -80,6 +80,7 @@ const withSkills = (...names: string[]): SkillsSnapshot =>
       name,
       description: 'does a thing',
       valid: true as const,
+      requires: [],
       manifest: { entries: [], capped: null },
     })),
   });
@@ -318,6 +319,7 @@ describe('SkillsSection', () => {
             name: 'graphify',
             description: 'does a thing',
             valid: true as const,
+            requires: [],
             manifest: {
               entries: [
                 { path: 'SKILL.md', kind: 'file', size: 10, executable: false, excluded: null },
@@ -489,6 +491,7 @@ describe('SkillsSection', () => {
               name: 'graphify',
               description: 'does a thing',
               valid: true as const,
+              requires: [],
               manifest: {
                 entries: [
                   { path: 'SKILL.md', kind: 'file', size: 10, executable: false, excluded: null },
@@ -655,6 +658,7 @@ describe('SkillsSection', () => {
             name: 'graphify',
             description: 'does a thing',
             valid: true as const,
+            requires: [],
             manifest: {
               entries: [
                 { path: 'SKILL.md', kind: 'file', size: 10, executable: false, excluded: null },
@@ -696,6 +700,7 @@ describe('SkillsSection', () => {
             name: 'graphify',
             description: 'does a thing',
             valid: true as const,
+            requires: [],
             manifest: { entries: [], capped: null },
           },
         ],
@@ -736,6 +741,7 @@ describe('SkillsSection', () => {
             name: 'graphify',
             description: 'does a thing',
             valid: true as const,
+            requires: [],
             manifest: {
               entries: [
                 { path: 'SKILL.md', kind: 'file', size: 10, executable: false, excluded: null },
@@ -784,6 +790,7 @@ describe('SkillsSection', () => {
             name: 'graphify',
             description: 'does a thing',
             valid: true as const,
+            requires: [],
             manifest: {
               entries: [
                 { path: 'SKILL.md', kind: 'file', size: 10, executable: false, excluded: null },

@@ -200,11 +200,18 @@ describe('createSkillsRuntime', () => {
         description: 'does standup',
         valid: true,
         manifest: oneFileManifest(skill('standup')),
+        requires: [],
       },
     ]);
     expect(snapshot.invalid[0]?.name).toBe('Bad Name');
     expect(snapshot.invalid[0]?.valid).toBe(false);
     expect(snapshot.skillsRoot).toBe(join(hiveDir, 'skills'));
+  });
+
+  it('lists what a skill requires (HIVE-369)', async () => {
+    await writeSkill('review', '---\nname: review\ndescription: d\nrequires: [subagents]\n---\nbody\n');
+
+    expect((await runtime().list()).skills[0]?.requires).toEqual(['subagents']);
   });
 
   it('never lists the built-in, which the pane must not offer to edit', async () => {
@@ -234,6 +241,7 @@ describe('createSkillsRuntime', () => {
         description: 'does standup',
         valid: true,
         manifest: oneFileManifest(skill('standup')),
+        requires: [],
       },
     ]);
     expect(await pluginSkills()).toEqual(['done', 'standup']);

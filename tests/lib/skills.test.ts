@@ -39,6 +39,7 @@ const snapshot = (names: string[]): SkillsSnapshot => ({
     name,
     description: 'does a thing',
     valid: true as const,
+    requires: [],
     manifest: { entries: [], capped: null },
   })),
   invalid: [],
