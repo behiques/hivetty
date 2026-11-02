@@ -34,6 +34,7 @@ Phase 2, headless runs through the adapter, is Epic HIVE-336 and is done: see
 | `foldEdits` | HIVE-238 (landed) |
 | `record`, `meters` | HIVE-239 (landed) |
 | `foldMeters` | Optional, HIVE-334. Codex's: its rollout's lines folded into `SessionMetrics`, for a CLI with no status line. Absent on Claude Code, whose meters come from `meters(body)`. |
+| `recordAborted` | Optional, HIVE-365. Codex's (`turn_aborted`) and Copilot's (`abort`): whether record lines say the user aborted the turn, which fires no hook. `sessions/record-aborts.ts` reads what the record gained 500 ms and 2 s after a deciding key on a busy session, and `tracker.abort` ends the turn. Absent on Claude Code, whose hooks report every end. |
 | `promptMarker` | HIVE-240 (landed) |
 | `installed` | HIVE-345: the user's own skills and plugins (`skillNames`, `pluginNames`, `sessionOverrides`), reached through `sessionAdapter()` by the agents runtime, the skills snapshot and the hook settings' `enabledPlugins`. `skillPlaces` (HIVE-344) words where `skillNames` looks, for the agents' missing-skill message. |
 | `models` | Optional. Codex's: the account's models from `$CODEX_HOME/models_cache.json`, for the new-session picker over `cli:codex-models`. Absent on Claude Code and Copilot, whose lists are static. |
@@ -502,6 +503,8 @@ so the strip agrees with the TUI's "% context left"; the 5-hour and weekly limit
 and 10080), never by slot, since the slots differ by plan; and credits as a text stat. A Free plan's 30-day
 window shows no gauge. `codex exec` gets the parser only, with no UI. `/statusline` stays 404 for Codex.
 
+**Declines and interrupts** (HIVE-365) fire no hook at 0.165: an Esc, option 3 (by arrows, wrap included), `n` or `3` on the approval prompt, and Esc mid-turn, all print `■ Conversation interrupted` and write `event_msg` `turn_aborted` to the rollout. `answersBlock` clears the card on the key and `recordAborted` ends the turn (`interactive-0.164/FINDINGS.md`, P8).
+
 Interactive: HIVE-279 (sessions; skills and markers are its follow-up). Meters: HIVE-334 (done). Agent-run plans: HIVE-358. Containers: refused.
 
 ## Copilot (headless, HIVE-343; sessions, HIVE-280)
@@ -666,7 +669,7 @@ spelled `AskUserQuestion` so the answer clears the question. **An Esc denial fir
 (P1), so D5 is amended: Copilot's `answersBlock` reads the user's next write into the pty
 (`ptyWrite` only, never an app write) and the tracker's `release` clears the block; a lone Esc also
 ends the turn, moving through the dialog (arrows, mouse) answers nothing, and terminal reports are
-not input. Claude and Codex have no `answersBlock`.
+not input. Codex shares the classifier (`harness/block-answer.ts`, HIVE-365); Claude has no `answersBlock`. A decline the keystroke cannot see, Codex's option 3 or `n`, and an interrupt mid-turn (Codex's Esc, Copilot's Esc Esc) end through `recordAborted`.
 
 `record` finds a conversation at `$COPILOT_HOME/session-state/<id>/events.jsonl` (default
 `~/.copilot`). The folder exists from the launch and the file from the first prompt, so a session
@@ -713,7 +716,7 @@ The checklist, member by member, with the live suite that proves each:
 - [ ] `contextReply` (`test:hook-context`).
 - [ ] `promptMarker`, if `contextDelivery: 'prompt-marker'` (`test:marker`, `test:nudge`).
 - [ ] `foldEdits` (unit; transcript fixtures).
-- [ ] `meters`, if `meters` lists any kind and the CLI has a status line (`test:statusline`); or `foldMeters`, if it reads its meters from its record (unit, on pinned records, plus its live session suite, e.g. `test:session:codex`).
+- [ ] `meters`, if `meters` lists any kind and the CLI has a status line (`test:statusline`); or `foldMeters`, if it reads its meters from its record (unit, on pinned records, plus its live session suite, e.g. `test:session:codex`); and `recordAborted`, if the CLI fires no hook on an interrupt or a decline (unit, on pinned record lines, plus its live session suite).
 - [ ] `record` (`test:title`, plus `test:back` for resume, if `resume: 'by-id'`).
 - [ ] An `InputProfile` in `PROFILES` in `src/lib/harness/input-profile.ts`, keyed by `HarnessId`,
   so a missing one fails to compile (`test:back` for `claimsBareBack`; `test:pty` for the bytes).

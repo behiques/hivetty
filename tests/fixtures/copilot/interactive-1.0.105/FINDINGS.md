@@ -158,3 +158,19 @@ gpt-5.4-mini, gpt-5-mini, gemini-4-argon, gemini-3.7-flash, grok-4.5). `kimi-k3`
 
 **Consequence.** No vocabulary model is refused; availability is per account and Copilot falls
 back on its own, visibly.
+
+## P9: declines and interrupts (HIVE-365)
+
+The shell dialog offers two or three options depending on the command (`1. Yes` · [`2. Yes, and
+approve … for this location`] · `No, and tell Copilot what to do differently (Esc to stop)`).
+
+| Input | Record (`events.jsonl`) | Turn |
+| --- | --- | --- |
+| Esc on the dialog | `permission.completed` `cancelled`, `assistant.turn_end`, `abort` `reason:"user_initiated"` | ends, no hook (FINDINGS P1) |
+| ↓ Enter on "No, and tell Copilot…" | nothing yet: a feedback box opens | — |
+| …feedback typed + Enter | `denied-interactively`, `tool.execution_complete`, the turn goes on | continues |
+| Esc Esc mid-turn (`esc esc interrupt`) | `assistant.turn_end`, `abort` `reason:"user_abort"` | ends |
+
+**Consequence.** "No, and tell Copilot…" is not a cancel: the turn continues once the feedback is sent, so `answersBlock`'s `answered` is right for it. The shell prompt offers two or three options depending on the command. Esc Esc mid-turn ends through `recordAborted`.
+
+Measured in the live suite: Esc Esc four seconds after the submit, before the reply began streaming, wrote no `abort`; the first Esc offered "Esc again to edit prompt" and the turn went on. Ten seconds in, mid-stream, it wrote `abort` and the turn ended.
