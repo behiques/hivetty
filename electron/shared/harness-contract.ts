@@ -69,18 +69,6 @@ export interface Capabilities {
    * first hook's `session_id` as the resume id (`codex` takes no id on a fresh start).
    */
   conversationId: 'argv' | 'first-hook';
-  /*
-    What an interactive session on this CLI offers (HIVE-281), shown in the session menu. Prompt
-    markers are `contextDelivery` above, so they have no field of their own.
-  */
-  /** The CLI's hooks reach the receiver: status, the inbox, `/done`. */
-  hooks: boolean;
-  /** A tool waiting on a yes raises a "needs you" card (Codex and Copilot ask in their own TUI). */
-  permissionCards: boolean;
-  /** The session's own task list builds the Plan tab (Copilot's SQL todos do not yet: FINDINGS P4). */
-  plan: boolean;
-  /** HiveTTY's skills load in the session (Codex and Copilot: HIVE-360). */
-  skills: boolean;
 }
 
 /** Each CLI's capabilities, here rather than in its adapter so the renderer can read them (HIVE-281). */
@@ -96,10 +84,6 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     reportsMcpStatus: true,
     agentMcp: ['slack'],
     conversationId: 'argv',
-    hooks: true,
-    permissionCards: true,
-    plan: true,
-    skills: true,
   },
   codex: {
     resume: 'by-id',
@@ -111,10 +95,6 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     reportsMcpStatus: false,
     agentMcp: [],
     conversationId: 'first-hook',
-    hooks: true,
-    permissionCards: true,
-    plan: true,
-    skills: false,
   },
   copilot: {
     resume: 'by-id',
@@ -126,10 +106,6 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     reportsMcpStatus: false,
     agentMcp: [],
     conversationId: 'argv',
-    hooks: true,
-    permissionCards: true,
-    plan: false,
-    skills: false,
   },
 };
 
