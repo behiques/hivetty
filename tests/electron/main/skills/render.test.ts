@@ -668,3 +668,78 @@ describe('renderSkills', () => {
     ).resolves.toBeDefined();
   });
 });
+
+describe('per CLI (HIVE-369)', () => {
+  const body = (name: string, extra = ''): string =>
+    `---\nname: ${name}\ndescription: d\n${extra}---\nCall {{tool:ledger_ask}}, then {{skill:plan}}.\n`;
+
+  it('fills each CLI its own names', async () => {
+    await writeSkill('flow', body('flow'));
+    const read = await readUserSkills(source);
+    const out = await mkdtemp(join(tmpdir(), 'hive-cli-'));
+    for (const cli of ['claude-code', 'codex', 'copilot'] as const) {
+      await renderSkills(join(out, cli), cli, read, { version: '1', doneUrl: null });
+    }
+    const text = (cli: string) => readFile(join(out, cli, 'skills', 'flow', 'SKILL.md'), 'utf8');
+    expect(await text('claude-code')).toContain('Call mcp__hive__ledger_ask, then hive:plan.');
+    expect(await text('codex')).toContain('Call mcp__hive__ledger_ask, then $plan.');
+    expect(await text('copilot')).toContain('Call hive-ledger_ask, then /plan.');
+  });
+
+  it('leaves a skill out of a CLI that lacks what it requires', async () => {
+    await writeSkill('review', body('review', 'requires: [subagents]\n'));
+    const read = await readUserSkills(source);
+    await renderSkills(pluginRoot, 'codex', read, { version: '1', doneUrl: null });
+    expect(await readdir(join(pluginRoot, 'skills'))).toEqual([]);
+    expect(await readFile(join(pluginRoot, 'catalog.md'), 'utf8')).not.toContain('review');
+  });
+
+  it('keeps it for Claude Code, without the requires: line', async () => {
+    await writeSkill('review', body('review', 'requires: [subagents]\n'));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1', doneUrl: null });
+    expect(await readFile(join(pluginRoot, 'skills', 'review', 'SKILL.md'), 'utf8')).not.toContain('requires:');
+  });
+
+  it('copies a skill with no placeholder exactly as written', async () => {
+    const literal = '---\nname: mine\ndescription: d\n---\nUse mcp__hive__ledger_ask.\n';
+    await writeSkill('mine', literal);
+    await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
+    expect(await readFile(join(pluginRoot, 'skills', 'mine', 'SKILL.md'), 'utf8')).toBe(literal);
+  });
+
+  it('renders a bundle markdown file and copies the rest', async () => {
+    await writeSkill('flow', body('flow'));
+    await mkdir(join(source, 'flow', 'prompts'), { recursive: true });
+    await writeFile(join(source, 'flow', 'prompts', 'p.md'), 'ask {{tool:pr}}', 'utf8');
+    await writeFile(join(source, 'flow', 'prompts', 'p.txt'), 'ask {{tool:pr}}', 'utf8');
+    await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
+    expect(await readFile(join(pluginRoot, 'skills', 'flow', 'prompts', 'p.md'), 'utf8')).toBe('ask hive-pr');
+    expect(await readFile(join(pluginRoot, 'skills', 'flow', 'prompts', 'p.txt'), 'utf8')).toBe('ask {{tool:pr}}');
+  });
+
+  it('rewrites an unchanged extra never, and a tampered one every run', async () => {
+    const manifestPath = join(pluginRoot, '.claude-plugin', 'plugin.json');
+    const writes = (): number => writeFileSpy.mock.calls.filter(([path]) => path === manifestPath).length;
+    await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
+    writeFileSpy.mockClear();
+    await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
+    expect(writes()).toBe(0);
+    await writeFile(manifestPath, 'tampered', 'utf8');
+    writeFileSpy.mockClear();
+    await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
+    expect(writes()).toBe(1);
+    expect(await readFile(manifestPath, 'utf8')).toContain('"name": "hive"');
+  });
+
+  it('is idempotent for every CLI', async () => {
+    await writeSkill('flow', body('flow'));
+    const read = await readUserSkills(source);
+    for (const cli of ['claude-code', 'codex', 'copilot'] as const) {
+      const root = join(pluginRoot, cli);
+      await renderSkills(root, cli, read, { version: '1', doneUrl: null });
+      const first = await readdir(root, { recursive: true });
+      await renderSkills(root, cli, read, { version: '1', doneUrl: null });
+      expect(await readdir(root, { recursive: true })).toEqual(first);
+    }
+  });
+});
