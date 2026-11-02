@@ -291,4 +291,7 @@ describe('creditsLabel (HIVE-334)', () => {
     expect(creditsLabel(undefined)).toBeNull();
     expect(creditsLabel({ creditsUnlimited: false })).toBeNull();
   });
+  it('is null when the credits were cleared (HIVE-381)', () => {
+    expect(creditsLabel({ creditsBalance: null, creditsUnlimited: null })).toBeNull();
+  });
 });

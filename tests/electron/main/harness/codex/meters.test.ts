@@ -36,6 +36,8 @@ describe('foldCodexMeters (HIVE-334)', () => {
       fiveHourResetsAt: 1793306416,
       sevenDayPct: 3,
       sevenDayResetsAt: 1793800556,
+      creditsBalance: null,
+      creditsUnlimited: null,
     });
     // Pro: no five-hour limit, the week in `primary`.
     const pro = { primary: plusLimits.secondary, secondary: null, credits: null };
@@ -59,26 +61,45 @@ describe('foldCodexMeters (HIVE-334)', () => {
     });
   });
 
-  it('reads credits only when the plan has them (D4, D5)', () => {
+  it('reads credits, clearing both fields with null when the plan has none (D4, D5, HIVE-381)', () => {
     const withCredits = (credits: unknown) => foldCodexMeters([tokenCount({ ...plusLimits, credits })]);
-    expect(withCredits({ has_credits: false, unlimited: false, balance: '0' })).not.toHaveProperty('creditsBalance');
-    expect(withCredits({ has_credits: false, unlimited: false, balance: '0' })).not.toHaveProperty('creditsUnlimited');
+    expect(withCredits({ has_credits: false, unlimited: false, balance: '0' })).toMatchObject({
+      creditsBalance: null,
+      creditsUnlimited: null,
+    });
     expect(withCredits({ has_credits: true, unlimited: false, balance: '1234.5' })).toMatchObject({
       creditsBalance: '1234.5',
       creditsUnlimited: false,
     });
-    expect(withCredits({ has_credits: false, unlimited: true, balance: null })).toMatchObject({ creditsUnlimited: true });
-    expect(withCredits({ has_credits: false, unlimited: true, balance: null })).not.toHaveProperty('creditsBalance');
+    expect(withCredits({ has_credits: false, unlimited: true, balance: null })).toMatchObject({
+      creditsBalance: null,
+      creditsUnlimited: true,
+    });
   });
 
-  it('lets a later line without credits clear an earlier one’s', () => {
+  it('clears an earlier balance when the recorded rollout says the credits are spent (HIVE-381)', () => {
+    const balance = tokenCount({ ...plusLimits, credits: { has_credits: true, unlimited: false, balance: '5' } });
+    expect(foldCodexMeters([balance, ...fixture('rollout-0.165.0.jsonl')])).toMatchObject({
+      creditsBalance: null,
+      creditsUnlimited: null,
+    });
+  });
+
+  it('moves between unlimited, spent and a balance, the later line winning (HIVE-381)', () => {
     const credits = (value: unknown) => tokenCount({ ...plusLimits, credits: value });
-    const folded = foldCodexMeters([
-      credits({ has_credits: true, unlimited: false, balance: '5' }),
-      credits({ has_credits: false, unlimited: false, balance: '0' }),
-    ]);
-    expect(folded).not.toHaveProperty('creditsBalance');
-    expect(folded).not.toHaveProperty('creditsUnlimited');
+    const unlimited = credits({ has_credits: false, unlimited: true, balance: null });
+    const spent = credits({ has_credits: false, unlimited: false, balance: '0' });
+    const five = credits({ has_credits: true, unlimited: false, balance: '5' });
+    expect(foldCodexMeters([unlimited, spent])).toMatchObject({ creditsBalance: null, creditsUnlimited: null });
+    expect(foldCodexMeters([five, unlimited])).toMatchObject({ creditsBalance: null, creditsUnlimited: true });
+    expect(foldCodexMeters([unlimited, five])).toMatchObject({ creditsBalance: '5', creditsUnlimited: false });
+  });
+
+  it('leaves credits out when a reading carries none: absence is not a spent balance (HIVE-381)', () => {
+    expect(foldCodexMeters([tokenCount(null)])).not.toHaveProperty('creditsBalance');
+    expect(foldCodexMeters([tokenCount({ ...plusLimits, credits: null })])).not.toHaveProperty('creditsBalance');
+    const { credits: _omitted, ...noCredits } = plusLimits;
+    expect(foldCodexMeters([tokenCount(noCredits)])).not.toHaveProperty('creditsUnlimited');
   });
 
   it('lets a later token_count win, and skips any other window length', () => {
@@ -91,6 +112,8 @@ describe('foldCodexMeters (HIVE-334)', () => {
       fiveHourResetsAt: 1793306416,
       sevenDayPct: 3,
       sevenDayResetsAt: 1793800556,
+      creditsBalance: null,
+      creditsUnlimited: null,
     });
   });
 

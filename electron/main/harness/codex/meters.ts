@@ -53,13 +53,14 @@ function readLimits(out: SessionMetrics, limits: unknown): void {
   }
   const credits = limits.credits;
   if (!isObject(credits)) return;
-  // The later line wins here too: credits spent or withdrawn leave no earlier balance behind.
-  delete out.creditsBalance;
-  delete out.creditsUnlimited;
+  /*
+    The later line wins here too, and a `credits` object with none clears both fields with null, so
+    the store drops a spent or withdrawn balance (HIVE-381). No `credits` object leaves them out.
+  */
   const unlimited = credits.unlimited === true;
-  if (credits.has_credits !== true && !unlimited) return;
-  out.creditsUnlimited = unlimited;
-  if (credits.has_credits === true && typeof credits.balance === 'string') out.creditsBalance = credits.balance;
+  const { balance } = credits;
+  out.creditsUnlimited = credits.has_credits === true || unlimited ? unlimited : null;
+  out.creditsBalance = credits.has_credits === true && typeof balance === 'string' ? balance : null;
 }
 
 /** Rollout lines folded into a metrics patch: the last value each field took, `{}` for none (HIVE-334). */
