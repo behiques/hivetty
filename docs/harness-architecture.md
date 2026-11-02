@@ -505,6 +505,40 @@ window shows no gauge. `codex exec` gets the parser only, with no UI. `/statusli
 
 **Declines and interrupts** (HIVE-365) fire no hook at 0.165: an Esc, option 3 (by arrows, wrap included), `n` or `3` on the approval prompt, and Esc mid-turn, all print `■ Conversation interrupted` and write `event_msg` `turn_aborted` to the rollout. `answersBlock` clears the card on the key and `recordAborted` ends the turn (`interactive-0.164/FINDINGS.md`, P8).
 
+**Subagent fan-out** (HIVE-371, probed 2026-11-02 against `codex-cli 0.165.0`, fixtures in
+`tests/fixtures/codex/fanout-0.165.0/`). Verdict: Codex can run `hive:execute`'s and
+`hive:pr-review`'s dispatches, so `subagents` belongs in its `skillFeatures` (HIVE-369).
+
+- **Parallel, collected.** The tools are in a `collaboration` namespace: `spawn_agent {task_name,
+  message, model?, reasoning_effort?, fork_turns?}`, `wait_agent {timeout_ms}`, `send_message`,
+  `followup_task`, `interrupt_agent`, `list_agents`. Two `spawn_agent` calls in a row both start,
+  and `wait_agent` returns each agent's reply to the parent turn. `fork_turns` defaults to `"all"`,
+  the parent's whole history. A skill's dispatch has to say `"none"` to get a fresh context, which
+  is what Claude's `Agent` tool gives.
+- **Model, yes. Tools, no.** `model` is an enum of the account's models, and the subagent's hook
+  bodies report it (`gpt-6.1-terra` against the parent's `gpt-6-luna`). Nothing narrows a
+  subagent's tools, sandbox or approvals. A read-only reviewer is read-only by its prompt alone, as
+  `pr-review`'s are on Claude today.
+- **Hooks tell them apart.** A subagent's `PreToolUse` and `PostToolUse` carry `agent_id` and
+  `agent_type` under the parent's `session_id`, as the plan reader already relies on.
+  `SubagentStart` and `SubagentStop` fire with the same pair, and `SubagentStop` adds
+  `last_assistant_message` and `agent_transcript_path`. The spawn and wait calls reach the hooks as
+  `collaborationspawn_agent` and `collaborationwait_agent`, with the namespace glued on and no
+  separator. Each subagent writes a rollout of its own, named by its `agent_id`.
+- **MCP is inherited, one server per agent.** Both subagents called the probe server. Codex
+  started a new server process for each of them, from the parent's config and env. A hive MCP host
+  under a subagent therefore carries the parent session's identity.
+- **A refusal is a `PreToolUse` deny.** `features.multi_agent=false` leaves the tools in place at
+  0.165, even though `codex features list` shows the flag turned off. HiveTTY's own way to switch
+  them off is the fence. A deny on `collaborationspawn_agent` produces no `PostToolUse` and no
+  `SubagentStart`. The model receives `Tool call blocked by PreToolUse hook: <reason>. Tool:
+  collaborationspawn_agent`, reports that no subagent started, and `pr-review` can answer
+  `failedAt: "dispatch"` from that.
+- **Follow-up for the fence.** `CODEX_RULE_TABLE` lists `Task` and `Agent` as `neverProduced`,
+  and `translateCodexCall` passes `collaborationspawn_agent` through under its own name. That means
+  an agent's `Task` deny rule does not stop a Codex spawn. The subagent's own calls do go through
+  the fence's `PreToolUse`.
+
 Interactive: HIVE-279 (sessions; skills and markers are its follow-up). Meters: HIVE-334 (done). Agent-run plans: HIVE-358. Containers: refused.
 
 ## Copilot (headless, HIVE-343; sessions, HIVE-280)
@@ -677,6 +711,34 @@ that never got a prompt restarts fresh (P3). A relaunch within seconds of a kill
 own "Session in use → Resume anyway"; the user answers it, and the live suite waits for the killed
 process to exit. The newline is Alt+Enter (ESC CR, P6); the console's seed reads `AGENTS.md`.
 `pnpm test:session:copilot` holds all of it against the binary.
+
+**Subagent fan-out** (HIVE-371, probed 2026-11-02 against `copilot 1.0.105` under `-p`, fixtures in
+`tests/fixtures/copilot/fanout-1.0.105/`). Verdict: Copilot can run `hive:execute`'s and
+`hive:pr-review`'s dispatches, so `subagents` belongs in its `skillFeatures` (HIVE-369).
+
+- **Parallel, collected.** The tool is `task {name, description, agent_type, prompt, mode?, model?,
+  reasoning_effort?, context_tier?}`. With `mode: "background"`, two calls in one block both return
+  an agent id at once. `read_agent {agent_id, wait: true, timeout}` then returns each agent's reply
+  to the parent turn. `list_agents` and `write_agent` cover the rest.
+- **Model and tools, both.** `model` is an enum per call. `agent_type` takes the built-in agents
+  (`explore`, `task`, `general-purpose`, `code-review`, `research`, `security-review`,
+  `rubber-duck`) or a custom agent from `$COPILOT_HOME/agents/<name>.agent.md`. A custom agent's
+  `model:` applied: `subagent.started` in `events.jsonl` records `claude-sonnet-5` with
+  `modelSelectionSource: agent_definition_default`. Its `tools:` applied as well: the
+  `view`/`grep`/`glob` agent had no shell, and no MCP tool either, because none was listed.
+- **Hooks tell them apart, with a twist.** A subagent's `preToolUse` and `postToolUse` carry
+  `agentId`, `agentType` and `parentAgentId`. **Their `sessionId` is the subagent's own id**, and
+  the parent's id is in `parentAgentId`. `subagentStart` and `subagentStop` fire under the parent's
+  `sessionId`. `readCopilotHook` drops a subagent's `agentStop` and nothing else, so a subagent's
+  `postToolUse` reaches Claude's reader under another session id and with no `agent_id`. This
+  needs fixing before plan or tool events are read off the session lane (HIVE-358). Identity comes
+  from the hook command's env, so the receiver still routes the event to the right session.
+- **MCP is inherited and shared.** The subagent called the probe server as `probe-ping` through
+  the parent's single server process. No second process was started.
+- **A refusal is a `preToolUse` deny.** A deny on `task` produces no `postToolUse` and no
+  `subagentStart`. `events.jsonl` records `{"message":"Denied by preToolUse hook: <reason>",
+  "code":"denied"}`, and the model reports that neither agent started. The fence already
+  translates `task` to `Task`, so an agent's `Task` deny rule holds.
 
 Interactive: HIVE-280 (skills, prompt markers and the plan panel are its follow-ups). Meters:
 HIVE-335. Plans: HIVE-352. Containers: refused.

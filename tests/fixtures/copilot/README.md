@@ -32,3 +32,17 @@ Every other byte is as recorded. Re-record and re-scrub rather than hand-edit a 
 
 Re-proved, not re-recorded, against `GitHub Copilot CLI 1.0.105` on 2026-10-29 (HIVE-282): `test:agent:copilot`
 passes on these fixtures unchanged.
+
+`fanout-1.0.105/` (HIVE-371, recorded 2026-11-02 against `GitHub Copilot CLI 1.0.105`) is the subagent fan-out probe.
+`copilot_probe.py` runs `copilot -p <prompt> -s --no-ask-user --disable-builtin-mcps --allow-all-tools --session-id <uuid>`
+with a scratch `COPILOT_HOME` and the `gh` login's token in `COPILOT_GITHUB_TOKEN`. The home's `settings.json` saves every
+`sessionStart`, `preToolUse`, `postToolUse`, `subagentStart`, `subagentStop`, `agentStop` and `sessionEnd` body, and
+`probe_mcp.py` is on `--additional-mcp-config`. Two custom agents sit in `$COPILOT_HOME/agents`: `pinned` (`model:
+claude-sonnet-5`) and `reader` (`tools: ["view", "grep", "glob"]`). The prompt asks for both as parallel background
+subagents, each running an `echo` and the probe's `ping`. `hooks-fanout.jsonl` is that run's bodies in time order, each
+wrapped as HiveTTY's hook command wraps them (`{"event":…,"payload":…}`). `events-fanout.jsonl` is its two
+`subagent.started` lines from `events.jsonl`, which record each agent's model. `hooks-denied.jsonl` and `events-denied.jsonl`
+(the two `tool.execution_complete` lines) are the same run with `--deny-spawn`, where `deny_spawn.py` as the `preToolUse`
+hook denies every `task` call. Scrubbed, per directory and nothing else: the scratch directory → `/tmp/copilot-fixture`,
+the home directory → `/Users/me`, every UUID → `00000000-0000-4000-8000-00000000000N` by first appearance, and every
+`toolu_<24>` id → `toolu_<N as 24 hex>` on the same counter.
