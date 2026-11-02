@@ -94,8 +94,11 @@ export function createRecordAborts({
       let baseline: number;
       try {
         baseline = statSync(path).size;
-      } catch {
-        // No record yet: there is nothing an abort could have been written to.
+      } catch (cause) {
+        // No record yet: there is nothing an abort could have been written to. Anything else is worth a line.
+        if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') {
+          console.warn(`[hive] record not read for an abort (${entityId}):`, cause);
+        }
         return Promise.resolve();
       }
       const controller = new AbortController();

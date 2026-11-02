@@ -76,13 +76,91 @@ describe('createRecordAborts (HIVE-365)', () => {
     ['navigation through the dialog', () => {}, '\x1b[B'],
     ['a terminal report', () => {}, '\x1b[I'],
     ['a session no hook has named yet', () => (transcript = undefined), '\r'],
-    ['a record not written yet', () => (file = join(tmpdir(), 'hive-aborts-missing.jsonl')), '\r'],
+    ['a record not written yet', () => (file = join(mkdtempSync(join(tmpdir(), 'hive-aborts-')), 'missing.jsonl')), '\r'],
   ])('watches nothing for %s', async (_what, arrange, data) => {
     arrange();
     const { aborts, read } = make();
     await aborts.onKey('s', data);
     await vi.advanceTimersByTimeAsync(2000);
     expect(read).not.toHaveBeenCalled();
+  });
+
+  it('reads again at 2 s for an abort recorded after the first read', async () => {
+    const { aborts, onAbort, read } = make();
+    const done = aborts.onKey('s', '\r');
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    await read.mock.results[0]!.value;
+    appendFileSync(file, ABORTED);
+    await vi.advanceTimersByTimeAsync(1500);
+    await done;
+    expect(onAbort).toHaveBeenCalledExactlyOnceWith('s');
+  });
+
+  it('keeps one watch per session: a second key adds no reads', async () => {
+    const { aborts, read } = make();
+    const first = aborts.onKey('s', '\x1b');
+    await aborts.onKey('s', '\x1b');
+    await vi.advanceTimersByTimeAsync(2000);
+    await first;
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('ends nothing once the session is dropped', async () => {
+    const { aborts, onAbort, read } = make();
+    const done = aborts.onKey('s', '\r');
+    appendFileSync(file, ABORTED);
+    aborts.drop('s');
+    await vi.advanceTimersByTimeAsync(2000);
+    await done;
+    expect(read).not.toHaveBeenCalled();
+    expect(onAbort).not.toHaveBeenCalled();
+  });
+
+  it('ends nothing when the session is dropped while a read is in flight', async () => {
+    let finish: (value: { text: string; offset: number }) => void = () => {};
+    const read = vi.fn(() => new Promise<{ text: string; offset: number }>((resolve) => (finish = resolve)));
+    const { aborts, onAbort } = make(onRecord(codexAdapter), read);
+    const done = aborts.onKey('s', '\r');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(read).toHaveBeenCalledOnce();
+    aborts.drop('s');
+    finish({ text: ABORTED, offset: 0 });
+    await done;
+    expect(onAbort).not.toHaveBeenCalled();
+  });
+
+  it('warns and ends nothing when the record cannot be read', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { aborts, onAbort } = make(onRecord(codexAdapter), vi.fn().mockRejectedValue(new Error('EACCES')));
+    const done = aborts.onKey('s', '\r');
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+    expect(onAbort).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  it('warns and watches nothing when the record cannot be stat-ed (spec, Error handling)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    file = join(file, 'not-a-dir.jsonl');
+    const { aborts, read } = make();
+    await aborts.onKey('s', '\r');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(read).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  it('watches again after a watch ends', async () => {
+    const { aborts, read } = make();
+    const first = aborts.onKey('s', '\r');
+    await vi.advanceTimersByTimeAsync(2000);
+    await first;
+    const second = aborts.onKey('s', '\r');
+    await vi.advanceTimersByTimeAsync(2000);
+    await second;
+    expect(read).toHaveBeenCalledTimes(4);
   });
 
   it('watches nothing for a CLI whose hooks report every end', async () => {
