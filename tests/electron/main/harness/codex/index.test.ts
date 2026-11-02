@@ -29,7 +29,7 @@ describe('codexAdapter', () => {
       agentMcp: [],
       // Codex picks its own conversation id; the first hook reports it (HIVE-279).
       conversationId: 'first-hook',
-      skills: { features: [], toolPrefix: 'mcp__hive__', refPrefix: '$', typedPrefix: '$', pluginRoot: '$HIVE_PLUGIN_ROOT' },
+      skills: { toolPrefix: 'mcp__hive__', refPrefix: '$', typedPrefix: '$', pluginRoot: '$HIVE_PLUGIN_ROOT' },
     });
   });
 

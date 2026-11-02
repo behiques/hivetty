@@ -13,7 +13,7 @@ import {
 import { dirname, join } from 'node:path';
 
 import type { HarnessId } from '@shared/harness-contract';
-import { missingFeatures, renderSkillText } from '@shared/skill-render';
+import { renderSkillText } from '@shared/skill-render';
 
 import { adapterFor } from '../harness/registry';
 
@@ -195,8 +195,8 @@ async function prune(
  * ## One folder per CLI (HIVE-369)
  *
  * `cli`'s adapter names the files beside `skills/` (`adapterFor(cli).skills.extras`), every
- * markdown file is rendered for `cli` through `renderSkillText`, and a skill whose `requires:` the
- * CLI lacks is left out. A skill with no placeholder renders byte for byte as written.
+ * markdown file is rendered for `cli` through `renderSkillText`, and every skill reaches every CLI.
+ * A skill with no placeholder renders byte for byte as written.
  */
 export async function renderSkills(
   root: string,
@@ -225,10 +225,8 @@ export async function renderSkills(
 
   // Only the valid ones. An invalid skill is reported to the pane and left out
   // of every folder entirely — no CLI sees a file this app could not explain.
-  // A skill whose `requires:` this CLI lacks is left out too; Settings says why.
-  const skills = read.skills.filter(
-    (skill) => missingFeatures(skill.requires, cli).length === 0,
-  );
+  // Every skill reaches every CLI (HIVE-369's ruling); only its wording changes.
+  const { skills } = read;
 
   const extras = adapterFor(cli).skills.extras({
     version,

@@ -103,7 +103,6 @@ Reply with exactly this text and nothing else: ${MARKER}
       path: '/fixture/hive-marker/SKILL.md',
       dir: '/fixture/hive-marker',
       manifest: { entries: [], capped: null },
-      requires: [],
     },
   ],
   invalid: [],

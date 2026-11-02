@@ -1,7 +1,6 @@
 ---
 name: goal-on
 description: Use when a request is vague, broad or ad hoc and has no Jira ticket. "figure out X and do it", "sort out this mess", "look into Y and fix whatever's wrong". Turns the prompt into a Task/Scope/Constraints/Outcome brief, gets approval once, then holds the session to the Outcome with a Stop hook until the evidence exists. Use work-on when a ticket exists.
-requires: [stop-hook]
 hooks:
   Stop:
     - hooks:

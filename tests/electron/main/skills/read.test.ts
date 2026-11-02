@@ -277,25 +277,3 @@ describe('readUserSkills', () => {
     expect(vi.mocked(readBundle)).not.toHaveBeenCalledWith(join(root, 'Broken'));
   });
 });
-
-describe('readUserSkills requires: (HIVE-369)', () => {
-  it('reads requires: from the frontmatter', async () => {
-    await write('review', '---\nname: review\ndescription: d\nrequires: [subagents]\n---\nbody\n');
-    const read = await readUserSkills(root);
-    expect(read.skills[0]?.requires).toEqual(['subagents']);
-  });
-
-  it('is [] when the skill requires nothing', async () => {
-    await write('plain', '---\nname: plain\ndescription: d\n---\nbody\n');
-    expect((await readUserSkills(root)).skills[0]?.requires).toEqual([]);
-  });
-
-  it('reports an unknown feature as an invalid skill', async () => {
-    await write('odd', '---\nname: odd\ndescription: d\nrequires: [teleport]\n---\nbody\n');
-    const read = await readUserSkills(root);
-    expect(read.skills).toEqual([]);
-    expect(read.invalid[0]?.reason).toBe(
-      'requires: "teleport" is not one of subagents, stop-hook, ask-tool, artifact.',
-    );
-  });
-});

@@ -686,18 +686,28 @@ describe('per CLI (HIVE-369)', () => {
     expect(await text('copilot')).toContain('Call hive-ledger_ask, then /plan.');
   });
 
-  it('leaves a skill out of a CLI that lacks what it requires', async () => {
-    await writeSkill('review', body('review', 'requires: [subagents]\n'));
+  it('gives every CLI every skill, and lists each in the Codex catalog', async () => {
+    await writeSkill('flow', body('flow'));
+    await writeSkill('review', body('review'));
     const read = await readUserSkills(source);
-    await renderSkills(pluginRoot, 'codex', read, { version: '1', doneUrl: null });
-    expect(await readdir(join(pluginRoot, 'skills'))).toEqual([]);
-    expect(await readFile(join(pluginRoot, 'catalog.md'), 'utf8')).not.toContain('review');
+    for (const cli of ['claude-code', 'codex', 'copilot'] as const) {
+      await renderSkills(join(pluginRoot, cli), cli, read, { version: '1', doneUrl: null });
+    }
+    expect((await readdir(join(pluginRoot, 'codex', 'skills'))).sort()).toEqual(['flow', 'review']);
+    expect((await readdir(join(pluginRoot, 'copilot', 'skills'))).sort()).toEqual(['flow', 'review']);
+    expect(await readFile(join(pluginRoot, 'codex', 'catalog.md'), 'utf8')).toContain('- review: d (file: ');
   });
 
-  it('keeps it for Claude Code, without the requires: line', async () => {
-    await writeSkill('review', body('review', 'requires: [subagents]\n'));
-    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1', doneUrl: null });
-    expect(await readFile(join(pluginRoot, 'skills', 'review', 'SKILL.md'), 'utf8')).not.toContain('requires:');
+  it("drops goal-on's hooks: for Codex and keeps them for Claude Code", async () => {
+    const goal = '---\nname: goal\ndescription: d\nhooks:\n  Stop:\n    - type: command\n---\nbody\n';
+    await writeSkill('goal', goal);
+    const read = await readUserSkills(source);
+    await renderSkills(join(pluginRoot, 'claude-code'), 'claude-code', read, { version: '1', doneUrl: null });
+    await renderSkills(join(pluginRoot, 'codex'), 'codex', read, { version: '1', doneUrl: null });
+    expect(await readFile(join(pluginRoot, 'claude-code', 'skills', 'goal', 'SKILL.md'), 'utf8')).toBe(goal);
+    expect(await readFile(join(pluginRoot, 'codex', 'skills', 'goal', 'SKILL.md'), 'utf8')).toBe(
+      '---\nname: goal\ndescription: d\n---\nbody\n',
+    );
   });
 
   it('copies a skill with no placeholder exactly as written', async () => {

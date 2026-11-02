@@ -637,7 +637,7 @@ describe('createDeliver', () => {
         reportsMcpStatus: false,
         agentMcp: [],
         conversationId: 'argv',
-        skills: { features: [], toolPrefix: 'hive-', refPrefix: '/', typedPrefix: '/', pluginRoot: '$HIVE_PLUGIN_ROOT' },
+        skills: { toolPrefix: 'hive-', refPrefix: '/', typedPrefix: '/', pluginRoot: '$HIVE_PLUGIN_ROOT' },
       },
       promptMarker: vi.fn(() => 'never typed'),
     });

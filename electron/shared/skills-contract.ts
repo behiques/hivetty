@@ -1,6 +1,5 @@
 import { HIDDEN_ENTRIES } from './fs-contract';
 import type { FsRefusalReason } from './fs-contract';
-import type { SkillFeature } from './harness-contract';
 
 /**
  * Custom skills — the slash commands HiveTTY gives the sessions it starts
@@ -79,8 +78,6 @@ export interface SkillSummary {
   valid: true;
   /** Everything in the folder, including what will not be sent (HIVE-148). */
   manifest: BundleManifest;
-  /** The features the skill needs from a CLI (HIVE-369); a CLI lacking one leaves it out. */
-  requires: SkillFeature[];
 }
 
 /**

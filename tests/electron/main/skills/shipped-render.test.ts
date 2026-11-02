@@ -4,7 +4,6 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { frontmatter } from '../../../../electron/main/skills/read';
 import { renderSkillText } from '../../../../electron/shared/skill-render';
 
 const ROOT = join(process.cwd(), 'resources', 'skills');
@@ -24,17 +23,12 @@ describe('shipped skills (HIVE-369)', () => {
     }
   });
 
-  it('render for Claude Code with no placeholder or requires: left', async () => {
+  it('render for every CLI with no placeholder left', async () => {
     for (const path of await md()) {
-      const out = renderSkillText(await readFile(join(ROOT, path), 'utf8'), 'claude-code');
-      expect(out, path).not.toMatch(/\{\{(tool|skill):|\{\{plugin_root\}\}/);
-      expect(out, path).not.toMatch(/^requires:/m);
+      const text = await readFile(join(ROOT, path), 'utf8');
+      for (const cli of ['claude-code', 'codex', 'copilot'] as const) {
+        expect(renderSkillText(text, cli), `${cli} ${path}`).not.toMatch(/\{\{(tool|skill):|\{\{plugin_root\}\}/);
+      }
     }
-  });
-
-  it('declare what pr-review and goal-on need', async () => {
-    const keys = async (name: string) => frontmatter(await readFile(join(ROOT, name, 'SKILL.md'), 'utf8'));
-    expect((await keys('pr-review'))?.requires).toBe('[subagents]');
-    expect((await keys('goal-on'))?.requires).toBe('[stop-hook]');
   });
 });

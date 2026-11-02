@@ -37,7 +37,6 @@ const skill = (manifest: BundleManifest): SkillSummary => ({
   name: 'graphify',
   description: 'builds a graph',
   valid: true,
-  requires: [],
   manifest,
 });
 

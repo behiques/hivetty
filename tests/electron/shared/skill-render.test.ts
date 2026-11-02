@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  dropKeysFor,
-  fillPlaceholders,
-  missingFeatures,
-  parseRequires,
-  renderSkillText,
-  typedSkill,
-} from '../../../electron/shared/skill-render';
+import { dropKeysFor, fillPlaceholders, renderSkillText, typedSkill } from '../../../electron/shared/skill-render';
 
 const SOURCE = 'Call {{tool:ledger_ask}}, then {{skill:plan}} from "{{plugin_root}}/x".';
 
@@ -61,17 +54,16 @@ const GOAL = [
 ].join('\n');
 
 describe('renderSkillText', () => {
-  it('drops only requires: for Claude Code', () => {
-    expect(renderSkillText(GOAL, 'claude-code')).toBe(
-      GOAL.replace('requires: [stop-hook]\n', '').replace('{{skill:plan}}', 'hive:plan'),
-    );
+  it('leaves Claude Code its frontmatter whole', () => {
+    expect(renderSkillText(GOAL, 'claude-code')).toBe(GOAL.replace('{{skill:plan}}', 'hive:plan'));
   });
-  it('drops requires:, hooks: (blank lines included) and allowed-tools for Codex', () => {
+  it('drops hooks: (blank lines included) and allowed-tools for Codex', () => {
     expect(renderSkillText(GOAL, 'codex')).toBe(
       [
         '---',
         'name: goal-on',
         'description: holds a session',
+        'requires: [stop-hook]',
         '---',
         '',
         'Body names $plan.',
@@ -90,30 +82,7 @@ describe('renderSkillText', () => {
 
 describe('dropKeysFor', () => {
   it('keeps Claude-only keys for Claude Code', () => {
-    expect(dropKeysFor('claude-code')).toEqual(['requires']);
-    expect(dropKeysFor('codex')).toEqual(['requires', 'hooks', 'allowed-tools']);
-  });
-});
-
-describe('parseRequires', () => {
-  it('reads every flat form', () => {
-    expect(parseRequires(undefined)).toEqual([]);
-    expect(parseRequires('')).toEqual([]);
-    expect(parseRequires('[subagents, stop-hook]')).toEqual(['subagents', 'stop-hook']);
-    expect(parseRequires('subagents')).toEqual(['subagents']);
-  });
-  it('names an unknown feature', () => {
-    expect(parseRequires('[teleport]')).toBe(
-      'requires: "teleport" is not one of subagents, stop-hook, ask-tool, artifact.',
-    );
-  });
-});
-
-describe('missingFeatures', () => {
-  it('is empty where the CLI has them all', () => {
-    expect(missingFeatures(['subagents'], 'claude-code')).toEqual([]);
-  });
-  it('lists what the CLI lacks', () => {
-    expect(missingFeatures(['subagents', 'stop-hook'], 'codex')).toEqual(['subagents', 'stop-hook']);
+    expect(dropKeysFor('claude-code')).toEqual([]);
+    expect(dropKeysFor('copilot')).toEqual(['hooks', 'allowed-tools']);
   });
 });
