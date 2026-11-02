@@ -507,7 +507,7 @@ window shows no gauge. `codex exec` gets the parser only, with no UI. `/statusli
 
 **Subagent fan-out** (HIVE-371, probed 2026-11-02 against `codex-cli 0.165.0`, fixtures in
 `tests/fixtures/codex/fanout-0.165.0/`). Verdict: Codex can run `hive:execute`'s and
-`hive:pr-review`'s dispatches, so `subagents` belongs in its `skillFeatures` (HIVE-369).
+`hive:pr-review`'s dispatches, which is why HIVE-369 renders every skill for every CLI with no feature gate.
 
 - **Parallel, collected.** The tools are in a `collaboration` namespace: `spawn_agent {task_name,
   message, model?, reasoning_effort?, fork_turns?}`, `wait_agent {timeout_ms}`, `send_message`,
@@ -714,7 +714,7 @@ process to exit. The newline is Alt+Enter (ESC CR, P6); the console's seed reads
 
 **Subagent fan-out** (HIVE-371, probed 2026-11-02 against `copilot 1.0.105` under `-p`, fixtures in
 `tests/fixtures/copilot/fanout-1.0.105/`). Verdict: Copilot can run `hive:execute`'s and
-`hive:pr-review`'s dispatches, so `subagents` belongs in its `skillFeatures` (HIVE-369).
+`hive:pr-review`'s dispatches, which is why HIVE-369 renders every skill for every CLI with no feature gate.
 
 - **Parallel, collected.** The tool is `task {name, description, agent_type, prompt, mode?, model?,
   reasoning_effort?, context_tier?}`. With `mode: "background"`, two calls in one block both return
