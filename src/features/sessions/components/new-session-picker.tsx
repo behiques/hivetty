@@ -113,7 +113,7 @@ export function NewSessionPicker() {
           ...(ticket?.issueType === undefined ? {} : { type: ticket.issueType }),
           ...(ticket?.url === undefined ? {} : { url: ticket.url }),
         };
-  const start = facts === null ? null : ticketStart(workflow, facts);
+  const start = facts === null ? null : ticketStart(workflow, facts, newCli);
   const [edited, setEdited] = useState<string | null>(null);
   const [sessionInstead, setSessionInstead] = useState(false);
   const [wakeProblem, setWakeProblem] = useState<string | null>(null);

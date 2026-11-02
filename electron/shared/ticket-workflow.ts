@@ -1,3 +1,6 @@
+import type { HarnessId } from './harness-contract';
+import { typedSkill } from './skill-render';
+
 /**
  * What a session started from a ticket does first (Settings › Jira › Ticket
  * workflow).
@@ -109,12 +112,15 @@ const jobFor = (ticket: TicketFacts, prompt: string | undefined): string =>
     .filter((part) => part !== '')
     .join(' ');
 
-/** What starting a session from `ticket` does under `workflow` (`null`: just open). */
-export function ticketStart(workflow: TicketWorkflow | null, ticket: TicketFacts): TicketStart {
+/**
+ * What starting a session from `ticket` does under `workflow` (`null`: just open). `cli` is the
+ * session's CLI, so the skill is typed its way (HIVE-369).
+ */
+export function ticketStart(workflow: TicketWorkflow | null, ticket: TicketFacts, cli: HarnessId): TicketStart {
   if (workflow === null) return { kind: 'message', text: '' };
   if (workflow.kind === 'skill') {
     const extra = workflow.prompt === undefined ? '' : fillTicket(workflow.prompt, ticket);
-    return { kind: 'message', text: [`/${workflow.skill}`, ticket.key, extra].filter((p) => p !== '').join(' ') };
+    return { kind: 'message', text: [typedSkill(workflow.skill, cli), ticket.key, extra].filter((p) => p !== '').join(' ') };
   }
   const job = jobFor(ticket, workflow.prompt);
   if (workflow.via === 'wake') return { kind: 'wake', agent: workflow.agent, body: job };

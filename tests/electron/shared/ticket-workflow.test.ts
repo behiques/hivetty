@@ -48,19 +48,27 @@ describe('fillTicket', () => {
 
 describe('ticketStart', () => {
   it('just opens with no workflow', () => {
-    expect(ticketStart(null, ticket)).toEqual({ kind: 'message', text: '' });
+    expect(ticketStart(null, ticket, 'claude-code')).toEqual({ kind: 'message', text: '' });
   });
 
   it('runs a skill on the key, with the prompt after it', () => {
-    expect(ticketStart({ kind: 'skill', skill: 'hive:work-on' }, ticket)).toEqual({ kind: 'message', text: '/hive:work-on HIVE-226' });
-    expect(ticketStart({ kind: 'skill', skill: 'hive:work-on', prompt: 'keep {key} to one PR' }, ticket)).toEqual({
+    expect(ticketStart({ kind: 'skill', skill: 'hive:work-on' }, ticket, 'claude-code')).toEqual({ kind: 'message', text: '/hive:work-on HIVE-226' });
+    expect(ticketStart({ kind: 'skill', skill: 'hive:work-on', prompt: 'keep {key} to one PR' }, ticket, 'claude-code')).toEqual({
       kind: 'message',
       text: '/hive:work-on HIVE-226 keep HIVE-226 to one PR',
     });
   });
 
+  it.each([
+    ['claude-code', '/hive:work-on HIVE-1'],
+    ['codex', '$work-on HIVE-1'],
+    ['copilot', '/work-on HIVE-1'],
+  ] as const)('types the skill as %s does (HIVE-369)', (cli, text) => {
+    expect(ticketStart({ kind: 'skill', skill: 'hive:work-on' }, { key: 'HIVE-1' }, cli)).toEqual({ kind: 'message', text });
+  });
+
   it('wakes an agent with the job, and no message', () => {
-    expect(ticketStart({ kind: 'agent', agent: 'builder', via: 'wake', prompt: 'one PR' }, ticket)).toEqual({
+    expect(ticketStart({ kind: 'agent', agent: 'builder', via: 'wake', prompt: 'one PR' }, ticket, 'claude-code')).toEqual({
       kind: 'wake',
       agent: 'builder',
       body: 'Work HIVE-226: Ticket workflow. one PR https://behiques.atlassian.net/browse/HIVE-226',
@@ -68,7 +76,7 @@ describe('ticketStart', () => {
   });
 
   it('has the session ask the agent itself, as its first message', () => {
-    const start = ticketStart({ kind: 'agent', agent: 'builder', via: 'session' }, { key: 'HIVE-226' });
+    const start = ticketStart({ kind: 'agent', agent: 'builder', via: 'session' }, { key: 'HIVE-226' }, 'claude-code');
     expect(start.kind).toBe('message');
     expect(start.kind === 'message' && start.text).toBe(
       'Hand HIVE-226 to the builder agent: call ledger_ask with to "builder" and this body, then wait for its answer. Work HIVE-226.',
