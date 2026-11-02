@@ -549,6 +549,28 @@ describe('renderSkills', () => {
     expect(await readdir(outside)).toEqual([]);
   });
 
+  it("never lets a symlinked extra's folder escape the plugin root (HIVE-369)", async () => {
+    // `/done` is an extra under `skills/done/`; a stale symlink there must not
+    // carry its write outside pluginRoot.
+    const outside = await mkdtemp(join(tmpdir(), 'hive-outside-'));
+    await mkdir(join(pluginRoot, 'skills'), { recursive: true });
+    await symlink(outside, join(pluginRoot, 'skills', 'done'));
+
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
+
+    expect((await lstat(join(pluginRoot, 'skills', 'done'))).isSymbolicLink()).toBe(false);
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  it("repairs a file where an extra's folder belongs (HIVE-369)", async () => {
+    await mkdir(join(pluginRoot, 'skills'), { recursive: true });
+    await writeFile(join(pluginRoot, 'skills', 'done'), 'stale', 'utf8');
+
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
+
+    expect((await lstat(join(pluginRoot, 'skills', 'done'))).isDirectory()).toBe(true);
+  });
+
   it('never lets a symlinked SKILL.md escape the plugin root', async () => {
     await writeSkill('standup');
 

@@ -13,7 +13,6 @@ import {
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
 import { readHook } from '../../../../../electron/main/harness/claude-code/hooks';
 import { writeMcpConfig } from '../../../../../electron/main/harness/claude-code/mcp-config';
-import { renderSkills } from '../../../../../electron/main/skills/render';
 import { foldTranscriptLines } from '../../../../../electron/main/harness/claude-code/transcript-edits';
 import {
   writeAgentSettings,
@@ -21,6 +20,7 @@ import {
 } from '../../../../../electron/main/harness/claude-code/settings';
 import { readAvailableSkillNames } from '../../../../../electron/main/skills/available';
 import { readUserSkills } from '../../../../../electron/main/skills/read';
+import { renderSkills } from '../../../../../electron/main/skills/render';
 
 /**
  * HIVE-235's byte-identity pin. Recorded before the Claude writers moved behind the adapter;

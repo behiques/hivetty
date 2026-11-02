@@ -243,6 +243,13 @@ export async function renderSkills(
   */
   for (const [path, body] of Object.entries(extras)) {
     const to = join(root, path);
+    // Every folder on the way, not only the leaf: a symlink at `skills/done`
+    // would carry the write outside `root`, and a file there would make the
+    // `mkdir` throw `EEXIST` on every regeneration.
+    const segments = path.split('/').slice(0, -1);
+    for (let depth = 1; depth <= segments.length; depth += 1) {
+      await ensureKind(join(root, ...segments.slice(0, depth)), 'directory');
+    }
     await mkdir(dirname(to), { recursive: true });
     await ensureKind(to, 'file');
     await writeIfChanged(to, body);

@@ -18,7 +18,6 @@ import {
   type SkillsSnapshot,
 } from '@shared/skills-contract';
 
-
 import { copyInto } from './import';
 import { importSkill as importPackage, isSkillPackage } from './import-skill';
 import { PLUGIN_DIR, isSkillManifest, resolveInSkill, skillsRoot } from './paths';
