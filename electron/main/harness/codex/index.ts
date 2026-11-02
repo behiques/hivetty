@@ -1,5 +1,6 @@
 import { CAPABILITIES } from '@shared/harness-contract';
 
+import { blockAnswer } from '../block-answer';
 import { claudeCodeAdapter } from '../claude-code';
 import type { HarnessAdapter } from '../port';
 
@@ -54,4 +55,5 @@ export const codexAdapter: HarnessAdapter = {
   },
   headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence, containerCommand: 'codex' },
   models: () => readCodexModels(),
+  answersBlock: blockAnswer,
 };

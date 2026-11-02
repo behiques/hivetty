@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { copilotBlockAnswer } from '../../../../../electron/main/harness/copilot/block-answer';
+import { blockAnswer } from '../../../../electron/main/harness/block-answer';
 
-describe('copilotBlockAnswer (HIVE-280)', () => {
+describe('blockAnswer (HIVE-280, HIVE-365)', () => {
   it('reads a lone Esc as a cancel: the dialog says "esc to cancel" and no hook follows (FINDINGS P1)', () => {
-    expect(copilotBlockAnswer('\x1b')).toBe('cancelled');
+    expect(blockAnswer('\x1b')).toBe('cancelled');
   });
 
   it.each([
@@ -12,7 +12,7 @@ describe('copilotBlockAnswer (HIVE-280)', () => {
     ['a digit', '2'],
     ['text', 'do it differently'],
   ])('reads %s as an answer', (_what, data) => {
-    expect(copilotBlockAnswer(data)).toBe('answered');
+    expect(blockAnswer(data)).toBe('answered');
   });
 
   it.each([
@@ -29,7 +29,7 @@ describe('copilotBlockAnswer (HIVE-280)', () => {
     ['a DCS reply', '\x1bP>|xterm.js(5.5.0)\x1b\\'],
     ['nothing', ''],
   ])('reads %s as no answer: the terminal said it, not the user', (_what, data) => {
-    expect(copilotBlockAnswer(data)).toBeNull();
+    expect(blockAnswer(data)).toBeNull();
   });
 
   it.each([
@@ -41,10 +41,10 @@ describe('copilotBlockAnswer (HIVE-280)', () => {
     ['a wheel scroll', '\x1b[<65;10;5M\x1b[<65;10;5M'],
     ['a legacy mouse report', '\x1b[M !!'],
   ])('reads %s as no answer yet: moving through the dialog decides nothing', (_what, data) => {
-    expect(copilotBlockAnswer(data)).toBeNull();
+    expect(blockAnswer(data)).toBeNull();
   });
 
   it('reads a key beside a report as an answer', () => {
-    expect(copilotBlockAnswer('\x1b[I\r')).toBe('answered');
+    expect(blockAnswer('\x1b[I\r')).toBe('answered');
   });
 });

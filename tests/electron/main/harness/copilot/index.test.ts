@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { blockAnswer } from '../../../../../electron/main/harness/block-answer';
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
 import { copilotAdapter, copilotFence } from '../../../../../electron/main/harness/copilot';
 import {
@@ -9,7 +10,6 @@ import {
 } from '../../../../../electron/main/harness/copilot/fence';
 import { launchCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless';
 import { readCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless-reader';
-import { copilotBlockAnswer } from '../../../../../electron/main/harness/copilot/block-answer';
 import { readCopilotHook } from '../../../../../electron/main/harness/copilot/hooks';
 import { codexAdapter } from '../../../../../electron/main/harness/codex';
 import { launchCopilotSession } from '../../../../../electron/main/harness/copilot/launch';
@@ -78,10 +78,10 @@ describe('copilotAdapter', () => {
     await expect(prepare.mcpConfig('/m', {} as never)).resolves.toBeUndefined();
   });
 
-  it('answers its own blocks from the keys the user types; Claude and Codex do not (HIVE-280)', () => {
-    expect(copilotAdapter.answersBlock).toBe(copilotBlockAnswer);
+  it('answers its blocks from the keys the user types, as Codex does; Claude does not (HIVE-280, HIVE-365)', () => {
+    expect(copilotAdapter.answersBlock).toBe(blockAnswer);
+    expect(codexAdapter.answersBlock).toBe(blockAnswer);
     expect(claudeCodeAdapter.answersBlock).toBeUndefined();
-    expect(codexAdapter.answersBlock).toBeUndefined();
   });
 
   it('still refuses prompt markers: a follow-up ticket', () => {

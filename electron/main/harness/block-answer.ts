@@ -1,4 +1,4 @@
-import type { BlockAnswer } from '../port';
+import type { BlockAnswer } from './port';
 
 const ESC = '\u001b';
 const BEL = '\u0007';
@@ -31,12 +31,14 @@ const NAVIGATION = new RegExp(
 );
 
 /**
- * Whether a write into a Copilot session answered the prompt it is blocked on (HIVE-280, FINDINGS P1).
- * An approval fires `postToolUse`, but an Esc fires nothing at all and cancels the turn, so the user's
- * own keystroke is the only thing left to clear the card: a lone Esc is a cancel, any other key an
- * answer, and a write that is only terminal reports or moves through the dialog is neither.
+ * Whether a write into a Copilot or Codex session answered the prompt it is blocked on (HIVE-280
+ * FINDINGS P1, HIVE-365). An approval fires a tool hook, but an Esc fires nothing at all and
+ * cancels the turn, so the user's own keystroke is the only thing left to clear the card: a lone
+ * Esc is a cancel, any other key an answer, and a write that is only terminal reports or moves
+ * through the dialog is neither. A decline the keystroke cannot see (Codex's option 3) is the
+ * record's to report (`recordAborted`).
  */
-export function copilotBlockAnswer(data: string): BlockAnswer | null {
+export function blockAnswer(data: string): BlockAnswer | null {
   const typed = data.replace(TERMINAL_REPORTS, '').replace(NAVIGATION, '');
   if (typed === '') return null;
   return typed === ESC ? 'cancelled' : 'answered';

@@ -4430,6 +4430,8 @@ describe('copilot sessions (HIVE-280)', () => {
   });
 
   describe('an answer typed into the TUI clears the block (HIVE-280, D5 amended)', () => {
+    const codexOpen = { ...OPEN, harness: 'codex' as const, model: 'gpt-6-luna' };
+
     it('clears the card and ends the turn on an Esc from the user: the denial fires no hook', () => {
       blockedOn(copilotOpen).write('hero-refresh', '\x1b', 'user');
       expect(statuses().at(-1)).toBe('idle');
@@ -4477,6 +4479,11 @@ describe('copilot sessions (HIVE-280)', () => {
       const before = statuses().length;
       sessions.write('hero-refresh', '\x1b', 'user');
       expect(statuses().length).toBe(before);
+    });
+
+    it("clears a Codex block on the user's Esc too: its decline fires no hook either (HIVE-365)", () => {
+      blockedOn(codexOpen).write('hero-refresh', '\x1b', 'user');
+      expect(statuses().at(-1)).toBe('idle');
     });
 
     it('publishes nothing for a user key when nothing is blocked', () => {

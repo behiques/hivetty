@@ -1779,8 +1779,8 @@ export function createSessions(options: SessionsOptions): Sessions {
 
   /**
    * The user answered the CLI's own prompt in the terminal (HIVE-280). Only for a CLI that says so
-   * (`answersBlock`, Copilot's): its Esc fires no hook, so the keystroke is what clears the card and
-   * "needs you". Never an app write: the bootstrap and a nudge answer nothing.
+   * (`answersBlock`, Copilot's and Codex's): its Esc fires no hook, so the keystroke is what clears
+   * the card and "needs you". Never an app write: the bootstrap and a nudge answer nothing.
    */
   function answerBlock(entityId: string, data: string): void {
     const answersBlock = adapterOf(entityId).answersBlock;
