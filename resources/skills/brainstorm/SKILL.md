@@ -22,7 +22,7 @@ can be overridden:
 | --- | --- | --- |
 | **Spike** | a feasibility question: "can we", "is it possible", "quick and dirty is fine" | a recommendation; anything built is labelled throwaway |
 | **Bounded** | a change to a flow that already exists in this repo: a flag, a small endpoint, a one-file fix | a short design in chat, an explicit yes, then implementation with no plan document |
-| **Architectural** | a new subsystem, an interface others depend on, anything that restructures how components fit, anything across processes | a spec file, then `hive:plan` |
+| **Architectural** | a new subsystem, an interface others depend on, anything that restructures how components fit, anything across processes | a spec file, then `{{skill:plan}}` |
 
 Bounded measures the repo, not your familiarity: if there is no existing flow to
 change, it is architectural. In doubt, take the heavier path. The ratchet is one
@@ -43,7 +43,7 @@ way: complexity found mid-task upgrades the path; nothing downgrades.
 3. Present the design in chat: approach, files touched, how it is tested.
 4. STOP and wait for an explicit yes. Presenting and starting in one breath is
    skipping the gate.
-5. Implement with `hive:tdd`; no plan document.
+5. Implement with `{{skill:tdd}}`; no plan document.
 
 ## Architectural
 
@@ -76,7 +76,7 @@ way: complexity found mid-task upgrades the path; nothing downgrades.
    requirement readable two ways. Fix and move on.
 9. **The person reads the spec.** "Spec written to `<path>`. Read it and tell me
    what to change before I plan." Wait.
-10. **`hive:plan`**, and nothing else.
+10. **`{{skill:plan}}`**, and nothing else.
 
 ## Design for isolation
 

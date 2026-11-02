@@ -21,7 +21,7 @@ findings. The workspace is yours to make:
   first entry is the person's own checkout and is never an agent's, whatever
   branch it holds. A later entry on `refs/heads/<PR branch>` is the builder's
   linked worktree: work **there** after `git -C <that path> pull --ff-only`.
-  Otherwise `hive:worktree`, agent path, **detached** at `origin/<PR branch>`
+  Otherwise `{{skill:worktree}}`, agent path, **detached** at `origin/<PR branch>`
   under `<hive>/work/fixer/<repo-name>-pr<N>`, pushing each round as
   `git push origin HEAD:<PR branch>`; git allows one worktree per branch and
   the person may hold it.
@@ -88,7 +88,7 @@ the PR and the finding; END TURN. The answer wakes you here.
 
 ## Step 4: act
 
-- **VALID:** fix it. A behaviour change goes through `hive:tdd`: the test
+- **VALID:** fix it. A behaviour change goes through `{{skill:tdd}}`: the test
   first. Then only the tests covering the touched modules, never the bare full
   suite. After the push, reply `Fixed in <short sha>: <what changed>` and
   resolve the thread.
@@ -123,7 +123,7 @@ the ledger file. The end-of-round summary comment opens with
 
 ## Step 6: verify, push once, loop
 
-`hive:verify`: scoped lint, targeted tests, type-check, build only when the
+`{{skill:verify}}`: scoped lint, targeted tests, type-check, build only when the
 change makes build-only errors likely, and a real browser drive for any UI
 surface. Commit every fix of the round, then **one push**, then the Step 5
 replies. Re-run Step 1. When CI is green, no thread is open and every ledger

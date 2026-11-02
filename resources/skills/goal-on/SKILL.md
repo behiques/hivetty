@@ -7,13 +7,13 @@ hooks:
         # THE FLOOR. A plain Node process that opens the brief with readFileSync,
         # so nothing can deny it the way the agent hook below gets denied. It is
         # the only hook that writes brief state: last_verified, turns_used, DONE,
-        # FAILED. `$CLAUDE_PLUGIN_ROOT` is the generated Hive plugin; it is
+        # FAILED. `{{plugin_root}}` is the generated Hive plugin; it is
         # exported into the hook's environment, not interpolated, so the shell
         # expands it here.
         - type: command
           timeout: 30
           statusMessage: "verifying goal"
-          command: node "$CLAUDE_PLUGIN_ROOT/skills/goal-on/scripts/verify-goal.mjs" --harness=claude
+          command: node "{{plugin_root}}/skills/goal-on/scripts/verify-goal.mjs" --harness=claude
         # THE CEILING. Judges meaning, writes nothing. Loses its tools in a
         # bypass-permissions session, which is why it may not own state.
         - type: agent
@@ -161,13 +161,13 @@ writes `DONE`.
 
 1. `git fetch origin`. `workspace: current` needs a clean tree; dirty →
    `status: NEEDS-DECISION`, ask.
-2. `hive:worktree` (or, for `current`, `git checkout -b goal/<slug>
+2. `{{skill:worktree}}` (or, for `current`, `git checkout -b goal/<slug>
    origin/<default>`). Record `branch:`, `repo:` and `worktree:` as absolute
    paths: the verifier's PR check runs `gh` from `worktree:` or `repo:`.
 3. Plan, always: the plan file is what HiveTTY's plan panel reads, and a
    terminal session has no task tools to fall back on. Big enough to plan?
-   `hive:plan` straight from the brief (no brainstorm: the brief is the
-   design, and every question was asked in Phase 1), then `hive:execute`
+   `{{skill:plan}}` straight from the brief (no brainstorm: the brief is the
+   design, and every question was asked in Phase 1), then `{{skill:execute}}`
    inline. Otherwise write a short one yourself, a `## Task N: <name>` per
    Outcome item with its `- [ ]` steps, and tick each step as it lands.
    Either way it goes in `.hive/plans/YYYY-MM-DD-goal-<slug>.md` under the
@@ -175,7 +175,7 @@ writes `DONE`.
    reads a plan file only from under the session's own cwd. Record its
    absolute path as the brief's `plan:`: the verifier holds `DONE` until
    every step in it is ticked, so a finished goal never leaves the panel at 0/N.
-4. `hive:verify`: the repository's gates, a browser drive for any UI surface.
+4. `{{skill:verify}}`: the repository's gates, a browser drive for any UI surface.
 5. Append the output. Push. `gh pr create --draft`. Record the PR URL in
    the evidence and **tick both files now**: the brief's Outcome items and
    any plan step still open. `ledger_ask` ends the turn, so anything written
@@ -183,7 +183,7 @@ writes `DONE`.
    unticked boxes in between. **Do not write `status: DONE` yourself.** The
    verifier writes it once the boxes in both files, the evidence and a real
    PR on `branch:` agree.
-6. `mcp__hive__agents` lists `shipper`: `ledger_ask to: shipper` with the
+6. `{{tool:agents}}` lists `shipper`: `ledger_ask to: shipper` with the
    intake shape from `ship`, `reply-to: $HIVE_SESSION_ID` (this session's
    `sess-…` party name, never the brief's `session:` UUID, which no party
    answers to), `ticket: none`. It
@@ -211,11 +211,11 @@ is not there costs nothing.
 | `DONE` | verifier confirmed the Outcome | report what was produced |
 | `FAILED` | budget spent, or an unresolvable conflict | report what was achieved and the gap |
 | `NEEDS-DECISION` | a decision blocks progress | verifier releases; ask, set `ACTIVE`, continue |
-| `CLEARED` | the goal is abandoned | `hive:goal-on clear` |
+| `CLEARED` | the goal is abandoned | `{{skill:goal-on}} clear` |
 
 ## Clearing a goal
 
-`hive:goal-on clear` sets `status: CLEARED` on this session's brief and
+`{{skill:goal-on}} clear` sets `status: CLEARED` on this session's brief and
 reports it; the same happens when the person says the goal is off. The hook
 stays registered for the rest of the session and short-circuits on the
 terminal status, one cheap read per turn end. A new session starts clean.

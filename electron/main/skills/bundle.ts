@@ -14,7 +14,7 @@ import {
  * Reading a skill folder as the bundle it is (HIVE-148).
  *
  * Pure over a directory handed in, with no `app` import, so its tests run
- * under plain Node — the arrangement `read.ts` and `plugin.ts` already use.
+ * under plain Node — the arrangement `read.ts` and `render.ts` already use.
  *
  * ## Why every rejected entry is still listed
  *

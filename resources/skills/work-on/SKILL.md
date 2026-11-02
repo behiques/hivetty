@@ -29,7 +29,7 @@ overmind instead of this session.
 
 ## Steps
 
-**1. Fetch the ticket.** `mcp__hive__jira_get { key }` when this session has
+**1. Fetch the ticket.** `{{tool:jira_get}} { key }` when this session has
 HiveTTY's tools: the description, the parent, every comment and link in one
 call, through the token the Work tab holds. Otherwise `jira-writer get_issue
 <KEY>` (the `jira-writer` skill; the Atlassian MCP tools if it is not
@@ -64,8 +64,8 @@ whole message. Never continue into step 4 in the same turn as the report. A
 confirmed deviation is propagated later by `spec-deviation`.
 
 **4. Claim and design.** `ledger_claim <KEY>` so the fleet knows the ticket is
-held. Then `hive:brainstorm` with the reconciliation findings as its input, then
-`hive:plan`. Every question the design needs goes out in **one**
+held. Then `{{skill:brainstorm}}` with the reconciliation findings as its input, then
+`{{skill:plan}}`. Every question the design needs goes out in **one**
 `AskUserQuestion` call, four questions at most, recommended option first. A
 lone follow-up is allowed only when an answer changes what the next question
 is.
@@ -76,7 +76,7 @@ new to the app or the user asks. Show variants before writing any code.
 
 **5. Dispatch.** The plan is approved; the terminal's job is done.
 
-Call `mcp__hive__agents` first. The builder path below needs `builder`
+Call `{{tool:agents}}` first. The builder path below needs `builder`
 listed, and the shipper handoff needs `shipper`; a machine without them
 (they ship in later stories) runs inline, and an ask to a party that does
 not exist wakes nothing.
@@ -103,7 +103,7 @@ ledger_ask
           intent: "wait for the builder; answer its questions from the spec" }
 ```
 
-**Preflight, before the first ask.** `mcp__hive__projects`: find the project
+**Preflight, before the first ask.** `{{tool:projects}}`: find the project
 whose `path` is this repo. `autoMerge: false` → tell the person in the
 dispatch message: "this project merges only on your inbox card: each clean PR
 will raise one. To merge unattended, turn on Settings › Projects › ⋯ › Merge
@@ -135,8 +135,8 @@ back to the overmind.
 *Detached (`--detach`).* `reply-to: overmind`, then `/done` now.
 
 *Inline (`--inline`, no `builder` on this machine, or a plan of one task).*
-`hive:worktree` on `feat/<key>-<slug>`, Jira → In Progress and assigned to
-you (`mcp__hive__jira_transition { key, status: "In Progress", from: "To Do",
+`{{skill:worktree}}` on `feat/<key>-<slug>`, Jira → In Progress and assigned to
+you (`{{tool:jira_transition}} { key, status: "In Progress", from: "To Do",
 assignToMe: true }`, where `from` leaves a ticket already past To Do alone and
 `assignToMe` fills an empty assignee with the Jira token's owner, moved or not;
 someone else's ticket keeps its assignee and the answer names them. Without
@@ -145,13 +145,13 @@ HiveTTY's tools, read the status and assignee with `jira-writer get_issue
 `jira-writer get_transitions <KEY>` and call `jira-writer transition_issue
 <KEY> <id>`; if it is unassigned, take your `accountId` from `jira-writer
 lookup_user "$JIRA_EMAIL"` and call `jira-writer update_issue <KEY>
-'{"assignee":{"accountId":"<id>"}}'`), `hive:execute`, `hive:verify`, then:
+'{"assignee":{"accountId":"<id>"}}'`), `{{skill:execute}}`, `{{skill:verify}}`, then:
 
 1. The full gate on the exact tree you will push: lint, type-check, the unit
    suite, and e2e or a browser drive when the change has a UI surface.
 2. `git push -u origin <branch>`.
 3. `gh pr create --draft` with what changed and how it was verified.
-4. `shipper` listed by `mcp__hive__agents`: `ledger_ask to: shipper` (see
+4. `shipper` listed by `{{tool:agents}}`: `ledger_ask to: shipper` (see
    `ship` for the intake shape) with `reply-to: $HIVE_SESSION_ID` and
    `key-confirmed: yes` (the key came from this invocation), then stay for
    the shipper's final ask, or `/done`. No shipper on this machine: say the

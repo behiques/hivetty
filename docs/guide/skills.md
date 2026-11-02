@@ -77,6 +77,16 @@ enabled. A hand edit of `disabledSessionPlugins` or a plugin installed while the
 reaches the next session too: the settings file is rewritten before every spawn. Agents load
 none of your plugins either way.
 
+### Skills in every CLI (HIVE-369)
+
+HiveTTY renders each skill once for Claude Code, Codex and Copilot. Write a hive tool as
+`{{tool:ledger_ask}}`, another skill as `{{skill:plan}}` and the skill's own folder as
+`{{plugin_root}}`, and each CLI gets its own spelling. A skill with none of these reaches every
+CLI exactly as you wrote it. When the file you are editing names something only one CLI
+understands, such as `mcp__hive__ledger_ask` or `hive:plan`, Settings › Skills lists it under the
+editor with its neutral form, and **Fix all** rewrites the file for you (unsaved, so you see the
+change first). Saving is never blocked.
+
 ## Skills the app ships
 
 Some skills come with HiveTTY: the app's own `resources/skills/` is copied into

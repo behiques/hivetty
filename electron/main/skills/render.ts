@@ -10,41 +10,22 @@ import {
   utimes,
   writeFile,
 } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
-import { RESERVED_SKILL_NAME } from '@shared/skills-contract';
+import type { HarnessId } from '@shared/harness-contract';
+import { renderSkillText } from '@shared/skill-render';
 
-import type { SkillsRead } from '../../skills/read';
+import { adapterFor } from '../harness/registry';
 
-import { doneSkill } from './done-skill';
+import type { SkillsRead } from './read';
 
 /**
- * Generating the plugin directory `--plugin-dir` points at (HIVE-96).
+ * Generating the folders each CLI loads HiveTTY's skills from (HIVE-96, HIVE-369).
  *
- * The directory is the app's, not the user's: regenerated from
+ * The folders are the app's, not the user's: regenerated from
  * `~/.hivetty/skills` at launch and again before every spawn, and safe to delete.
- * Nothing reads it but `claude`, and nothing writes it but this module.
+ * Nothing reads them but the CLIs, and nothing writes them but this module.
  */
-
-/**
- * The manifest that makes a directory a plugin.
- *
- * `skills: ['./skills/']` is declared rather than left to auto-discovery.
- * Auto-discovery may well work, but every real installed plugin on this machine
- * declares the field — matching what the binary is demonstrably given beats
- * relying on a default that is not ours to guarantee and would fail silently.
- */
-const manifest = (version: string): string =>
-  `${JSON.stringify(
-    {
-      name: 'hive',
-      version,
-      description: 'Skills HiveTTY injects into the sessions it starts.',
-      skills: ['./skills/'],
-    },
-    null,
-    2,
-  )}\n`;
 
 /**
  * Copy one file only when the destination differs, preserving its mode.
@@ -129,7 +110,7 @@ async function writeIfChanged(to: string, body: string): Promise<void> {
  * `lstat`, not `stat`: a symlink is not a `kind` either way, which is what
  * stops a destination symlink named like an admitted path from surviving to
  * let `mkdir({ recursive: true })` or `copyFile` resolve through it and write
- * outside `pluginRoot`.
+ * outside `root`.
  */
 async function ensureKind(
   path: string,
@@ -210,64 +191,83 @@ async function prune(
  * see `writeIfChanged` for why the write itself is still conditional on
  * content) makes "the file a session executes is missing from the mirror"
  * impossible instead of dependent on another module's walk order or size cap.
+ *
+ * ## One folder per CLI (HIVE-369)
+ *
+ * `cli`'s adapter names the files beside `skills/` (`adapterFor(cli).skills.extras`), every
+ * markdown file is rendered for `cli` through `renderSkillText`, and every skill reaches every CLI.
+ * A skill with no placeholder renders byte for byte as written.
  */
-export async function writePluginDir(
-  pluginRoot: string,
-  version: string,
+export async function renderSkills(
+  root: string,
+  cli: HarnessId,
   read: SkillsRead,
-  /**
-   * Where `/done` reports to, or `null` when nothing is listening (HIVE-93).
-   *
-   * Passed per call rather than captured once, because this runs before every
-   * spawn and the receiver's port is only known after it binds. A directory
-   * written during a launch whose receiver never came up holds the inert
-   * built-in, and the next regeneration replaces it with the live one — which
-   * is why the write below is unconditional rather than skipped when the file
-   * already exists.
-   */
-  doneUrl: string | null = null,
+  {
+    version,
+    doneUrl,
+  }: {
+    version: string;
+    /**
+     * Where `/done` reports to, or `null` when nothing is listening (HIVE-93).
+     *
+     * Passed per call rather than captured once, because this runs before every
+     * spawn and the receiver's port is only known after it binds. A directory
+     * written during a launch whose receiver never came up holds the inert
+     * built-in, and the next regeneration replaces it with the live one — which
+     * is why the write below is reached on every call rather than skipped when
+     * the file already exists.
+     */
+    doneUrl: string | null;
+  },
 ): Promise<void> {
-  const skillsDir = join(pluginRoot, 'skills');
-
-  await mkdir(join(pluginRoot, '.claude-plugin'), { recursive: true });
+  const skillsDir = join(root, 'skills');
   await mkdir(skillsDir, { recursive: true });
 
-  await writeFile(
-    join(pluginRoot, '.claude-plugin', 'plugin.json'),
-    manifest(version),
-    'utf8',
-  );
-
-  /*
-    Unconditionally, and over whatever is already there. The app owns `/done`,
-    and a copy edited inside userData surviving a launch would make the built-in
-    mean something different on one machine than on every other.
-  */
-  await mkdir(join(skillsDir, RESERVED_SKILL_NAME), { recursive: true });
-  await writeFile(
-    join(skillsDir, RESERVED_SKILL_NAME, 'SKILL.md'),
-    doneSkill(doneUrl),
-    'utf8',
-  );
-
   // Only the valid ones. An invalid skill is reported to the pane and left out
-  // of the plugin entirely — Claude Code never sees a file this app could not
-  // explain.
-  for (const skill of read.skills) {
+  // of every folder entirely — no CLI sees a file this app could not explain.
+  // Every skill reaches every CLI (HIVE-369's ruling); only its wording changes.
+  const { skills } = read;
+
+  const extras = adapterFor(cli).skills.extras({
+    version,
+    doneUrl,
+    root,
+    skills: skills.map(({ name, description }) => ({ name, description })),
+  });
+  /*
+    Unconditionally reached, and compared by content: the app owns these, and a
+    copy edited inside userData surviving a launch would make `/done` mean
+    something different on one machine than on every other.
+  */
+  for (const [path, body] of Object.entries(extras)) {
+    const to = join(root, path);
+    // Every folder on the way, not only the leaf: a symlink at `skills/done`
+    // would carry the write outside `root`, and a file there would make the
+    // `mkdir` throw `EEXIST` on every regeneration.
+    const segments = path.split('/').slice(0, -1);
+    for (let depth = 1; depth <= segments.length; depth += 1) {
+      await ensureKind(join(root, ...segments.slice(0, depth)), 'directory');
+    }
+    await mkdir(dirname(to), { recursive: true });
+    await ensureKind(to, 'file');
+    await writeIfChanged(to, body);
+  }
+
+  for (const skill of skills) {
     const destination = join(skillsDir, skill.name);
     // A symlinked skill root would let the recursive `mkdir` below (and every
-    // write under it) resolve through it and land outside `pluginRoot`.
+    // write under it) resolve through it and land outside `root`.
     await ensureKind(destination, 'directory');
     await mkdir(destination, { recursive: true });
 
     const skillMdPath = join(destination, 'SKILL.md');
-    // A symlink here would let the write below land outside `pluginRoot`
+    // A symlink here would let the write below land outside `root`
     // with no error; a directory here would throw `EISDIR` forever, since
     // `prune` runs after this and never gets the chance to clear it.
     await ensureKind(skillMdPath, 'file');
     // Written directly from `skill.body`, not mirrored below — see the
     // docblock's "SKILL.md itself" paragraph for why.
-    await writeIfChanged(skillMdPath, skill.body);
+    await writeIfChanged(skillMdPath, renderSkillText(skill.body, cli, root));
 
     const admitted = skill.manifest.entries.filter(
       (entry) => entry.excluded === null && entry.path !== 'SKILL.md',
@@ -282,7 +282,7 @@ export async function writePluginDir(
       `copyIfChanged` now `stat`s and `copyFile`s a file this app did not
       write, from a tree the user hand-edits (mode `000`, a file deleted
       between the walk above and this copy), and an uncaught throw here
-      propagated out of `writePluginDir` into `regenerate`'s `catch`, which
+      propagated out of `renderSkills` into `regenerate`'s `catch`, which
       sets `written` back to `false` — dropping `--plugin-dir` from *every*
       spawn, including `/done`'s, over one unreadable file in one bundle.
 
@@ -310,7 +310,19 @@ export async function writePluginDir(
         const to = join(destination, entry.path);
         try {
           await ensureKind(to, 'file');
-          await copyIfChanged(join(skill.dir, entry.path), to);
+          if (entry.path.endsWith('.md')) {
+            // A bundle's other markdown names tools too (pr-review's prompts).
+            await writeIfChanged(
+              to,
+              renderSkillText(
+                await readFile(join(skill.dir, entry.path), 'utf8'),
+                cli,
+                root,
+              ),
+            );
+          } else {
+            await copyIfChanged(join(skill.dir, entry.path), to);
+          }
         } catch (cause) {
           console.info(
             `[hive] the skill "${skill.name}" could not mirror "${entry.path}" — that file is missing from the session's copy (${String(cause)})`,
@@ -326,8 +338,11 @@ export async function writePluginDir(
   }
 
   const expected = new Set([
-    RESERVED_SKILL_NAME,
-    ...read.skills.map((skill) => skill.name),
+    ...skills.map((skill) => skill.name),
+    // Extras under `skills/` (Claude's `/done`) are expected there too.
+    ...Object.keys(extras)
+      .filter((path) => path.startsWith('skills/'))
+      .map((path) => path.split('/')[1] ?? ''),
   ]);
 
   for (const entry of await readdir(skillsDir)) {

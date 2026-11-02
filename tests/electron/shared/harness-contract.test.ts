@@ -27,3 +27,26 @@ describe('CAPABILITIES', () => {
     expect(Object.keys(CAPABILITIES).sort()).toEqual([...HARNESS_IDS].sort());
   });
 });
+
+describe('skills vocabulary (HIVE-369)', () => {
+  it('gives each CLI its prefixes', () => {
+    expect(CAPABILITIES['claude-code'].skills).toEqual({
+      toolPrefix: 'mcp__hive__',
+      refPrefix: 'hive:',
+      typedPrefix: '/hive:',
+      pluginRoot: '$CLAUDE_PLUGIN_ROOT',
+    });
+    expect(CAPABILITIES.codex.skills).toEqual({
+      toolPrefix: 'mcp__hive__',
+      refPrefix: '$',
+      typedPrefix: '$',
+      pluginRoot: null,
+    });
+    expect(CAPABILITIES.copilot.skills).toEqual({
+      toolPrefix: 'hive-',
+      refPrefix: '/',
+      typedPrefix: '/',
+      pluginRoot: null,
+    });
+  });
+});

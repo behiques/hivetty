@@ -10,6 +10,7 @@ import { readCopilotHeadless } from './headless-reader';
 import { readCopilotHook } from './hooks';
 import { launchCopilotSession } from './launch';
 import { copilotRecord, copilotRecordAborted } from './record';
+import { copilotSkills } from './skills';
 
 /* A Copilot session's hooks plugin is its launch's own `files` (`./launch`); nothing shared is written. */
 const noSettings = (): Promise<string> => Promise.resolve('');
@@ -45,7 +46,6 @@ export const copilotAdapter: HarnessAdapter = {
   prepare: {
     sessionSettings: noSettings,
     agentSettings: noSettings,
-    plugin: noFile,
     containerSet: noFile,
     mcpConfig: noFile,
   },
@@ -64,5 +64,6 @@ export const copilotAdapter: HarnessAdapter = {
     sessionOverrides: () => Promise.resolve({}),
     skillPlaces: '',
   },
+  skills: copilotSkills,
   headless: { launch: launchCopilotHeadless, reader: readCopilotHeadless, fence: copilotFence, containerCommand: 'copilot' },
 };

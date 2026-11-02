@@ -75,7 +75,8 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
     void setJiraConnection({ workflow: built });
   };
 
-  const start = typeof current === 'string' ? null : ticketStart(current, EXAMPLE);
+  // The preview shows the default CLI's form of the skill (HIVE-369).
+  const start = typeof current === 'string' ? null : ticketStart(current, EXAMPLE, 'claude-code');
   // The saved skill stays listed even when its folder has gone, so the select never shows a value it lacks.
   const skillOptions = [...new Set([FIRST_SKILL, ...skillNames, ...(skillChoice === TYPED ? [] : [skillChoice])])].map((name) => ({
     value: name,

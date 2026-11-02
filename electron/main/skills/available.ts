@@ -75,7 +75,7 @@ export async function skillsUnder(root: string): Promise<string[]> {
     if (!(await isSkillFolder(root, entry))) continue;
 
     try {
-      // The literal, as `read.ts`, `index.ts` and `plugin.ts` all spell it.
+      // The literal, as `read.ts`, `index.ts` and `render.ts` all spell it.
       await access(join(root, entry.name, 'SKILL.md'));
       names.push(entry.name);
     } catch {

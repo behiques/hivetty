@@ -69,6 +69,18 @@ export interface Capabilities {
    * first hook's `session_id` as the resume id (`codex` takes no id on a fresh start).
    */
   conversationId: 'argv' | 'first-hook';
+  /**
+   * How a HiveTTY skill is written for this CLI (HIVE-369): what `{{tool:x}}`, `{{skill:x}}` and
+   * `{{plugin_root}}` become, and what a ticket session types. Every skill reaches every CLI; only
+   * its wording changes. Copilot's `/x` stands until HIVE-362's probe.
+   */
+  skills: {
+    toolPrefix: string;
+    refPrefix: string;
+    typedPrefix: string;
+    /** `null` when no variable names the folder: the renderer writes the folder's own path instead. */
+    pluginRoot: string | null;
+  };
 }
 
 /** Each CLI's capabilities, here rather than in its adapter so the renderer can read them (HIVE-281). */
@@ -84,6 +96,12 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     reportsMcpStatus: true,
     agentMcp: ['slack'],
     conversationId: 'argv',
+    skills: {
+      toolPrefix: 'mcp__hive__',
+      refPrefix: 'hive:',
+      typedPrefix: '/hive:',
+      pluginRoot: '$CLAUDE_PLUGIN_ROOT',
+    },
   },
   codex: {
     resume: 'by-id',
@@ -95,6 +113,12 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     reportsMcpStatus: false,
     agentMcp: [],
     conversationId: 'first-hook',
+    skills: {
+      toolPrefix: 'mcp__hive__',
+      refPrefix: '$',
+      typedPrefix: '$',
+      pluginRoot: null,
+    },
   },
   copilot: {
     resume: 'by-id',
@@ -106,6 +130,12 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     reportsMcpStatus: false,
     agentMcp: [],
     conversationId: 'argv',
+    skills: {
+      toolPrefix: 'hive-',
+      refPrefix: '/',
+      typedPrefix: '/',
+      pluginRoot: null,
+    },
   },
 };
 

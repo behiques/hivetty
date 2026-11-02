@@ -48,6 +48,12 @@ describe('harness registry', () => {
       reportsMcpStatus: true,
       agentMcp: ['slack'],
       conversationId: 'argv',
+      skills: {
+        toolPrefix: 'mcp__hive__',
+        refPrefix: 'hive:',
+        typedPrefix: '/hive:',
+        pluginRoot: '$CLAUDE_PLUGIN_ROOT',
+      },
     });
   });
 

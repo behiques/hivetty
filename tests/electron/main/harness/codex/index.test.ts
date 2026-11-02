@@ -29,6 +29,7 @@ describe('codexAdapter', () => {
       agentMcp: [],
       // Codex picks its own conversation id; the first hook reports it (HIVE-279).
       conversationId: 'first-hook',
+      skills: { toolPrefix: 'mcp__hive__', refPrefix: '$', typedPrefix: '$', pluginRoot: null },
     });
   });
 
@@ -71,9 +72,12 @@ describe('codexAdapter', () => {
 
     await expect(prepare.sessionSettings('/u', 'http://x')).resolves.toBe('');
     await expect(prepare.agentSettings('/u', 'http://x')).resolves.toBe('');
-    await expect(prepare.plugin('/p', '1', {} as never)).resolves.toBeUndefined();
     await expect(prepare.containerSet('/r', {} as never)).resolves.toBeUndefined();
     await expect(prepare.mcpConfig('/u/m.json', {} as never)).resolves.toBeUndefined();
+  });
+
+  it('renders its skills into its own folder (HIVE-369)', () => {
+    expect(codexAdapter.skills.dir).toBe('plugins/codex');
   });
 
   it('still refuses prompt markers, which are the follow-up’s (D1)', () => {

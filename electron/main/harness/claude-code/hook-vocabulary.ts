@@ -313,7 +313,7 @@ export function noticeSignal(notificationType: unknown): StatusSignal | undefine
  * A containerised session cannot reach the loopback origin a host session would
  * bake, and the plugin directory is **one** directory shared by every session —
  * so a baked URL would force a second plugin root and a second copy of
- * `writePluginDir`'s regenerate-and-prune machinery, to vary one line of one
+ * `renderSkills`'s regenerate-and-prune machinery, to vary one line of one
  * file. {@link HOOK_ENV_RECEIVER_URL} is already in every pty for the MCP host,
  * so reading it here adds nothing to the environment and lets one directory
  * serve the host and container flavours both.

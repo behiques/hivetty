@@ -32,6 +32,7 @@ describe('copilotAdapter', () => {
       reportsMcpStatus: false,
       agentMcp: [],
       conversationId: 'argv',
+      skills: { toolPrefix: 'hive-', refPrefix: '/', typedPrefix: '/', pluginRoot: null },
     });
   });
 
@@ -67,11 +68,14 @@ describe('copilotAdapter', () => {
     expect(copilotAdapter.foldEdits(new Map(), ['x']).size).toBe(0);
   });
 
+  it('renders its skills into its own folder (HIVE-369)', () => {
+    expect(copilotAdapter.skills.dir).toBe('plugins/copilot');
+  });
+
   it('writes no shared session file: the plugin is its own launch files (HIVE-280)', async () => {
     const { prepare } = copilotAdapter;
     await expect(prepare.sessionSettings('/u', 'http://h')).resolves.toBe('');
     await expect(prepare.agentSettings('/u', 'http://h')).resolves.toBe('');
-    await expect(prepare.plugin('/p', '1', {} as never)).resolves.toBeUndefined();
     await expect(prepare.containerSet('/r', {} as never)).resolves.toBeUndefined();
     await expect(prepare.mcpConfig('/m', {} as never)).resolves.toBeUndefined();
   });

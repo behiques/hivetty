@@ -44,7 +44,7 @@ it. A hypothesis you cannot falsify is a story.
 
 ## Phase 4: fix
 
-`hive:tdd`: the test that reproduces the bug first, red; then one fix; then
+`{{skill:tdd}}`: the test that reproduces the bug first, red; then one fix; then
 green; then the surrounding suite.
 
 **Three failed fixes means the architecture is wrong,** not the fourth fix.

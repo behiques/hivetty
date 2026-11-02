@@ -12,6 +12,7 @@ import { launchCodexSession } from './launch';
 import { foldCodexMeters } from './meters';
 import { readCodexModels } from './models';
 import { codexRecord, codexRecordAborted } from './record';
+import { codexSkills } from './skills';
 
 /*
   A Codex session's hooks and MCP server are `-c` overrides on its argv (`./launch`); nothing is
@@ -36,7 +37,6 @@ export const codexAdapter: HarnessAdapter = {
   prepare: {
     sessionSettings: noSettings,
     agentSettings: noSettings,
-    plugin: noFile,
     containerSet: noFile,
     mcpConfig: noFile,
   },
@@ -53,6 +53,7 @@ export const codexAdapter: HarnessAdapter = {
     sessionOverrides: () => Promise.resolve({}),
     skillPlaces: '',
   },
+  skills: codexSkills,
   headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence, containerCommand: 'codex' },
   models: () => readCodexModels(),
   answersBlock: blockAnswer,

@@ -11,6 +11,7 @@ import {
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
+import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 import {
   MAX_BUNDLE_FILE_BYTES,
   type SkillFile,
@@ -18,12 +19,13 @@ import {
   type SkillsSnapshot,
 } from '@shared/skills-contract';
 
-import { sessionAdapter } from '../harness/registry';
+import { adapterFor } from '../harness/registry';
 
 import { copyInto } from './import';
 import { importSkill as importPackage, isSkillPackage } from './import-skill';
-import { PLUGIN_DIR, isSkillManifest, resolveInSkill, skillsRoot } from './paths';
+import { isSkillManifest, resolveInSkill, skillsRoot } from './paths';
 import { readUserSkills, type SkillsRead } from './read';
+import { renderSkills } from './render';
 
 /**
  * The skills runtime (HIVE-96).
@@ -47,14 +49,15 @@ export interface SkillsRuntime {
    */
   sync(): Promise<SkillsRead>;
   /**
-   * The `--plugin-dir` argument, or `null` when the directory has never been
+   * The folder `cli`'s sessions load HiveTTY's skills from (HIVE-369; Claude
+   * Code's `--plugin-dir` by default), or `null` when it has never been
    * written successfully.
    *
    * `null` is the honest answer rather than an optimistic path: `bootstrap.ts`
    * omits the flag for it, and a session with no extra skills is strictly
    * better than a session pointed at a directory that is not there.
    */
-  pluginDirPath(): string | null;
+  pluginDirPath(cli?: HarnessId): string | null;
   /** The snapshot the Settings pane renders. */
   list(): Promise<SkillsSnapshot>;
   /** One file, for the editor. */
@@ -192,8 +195,10 @@ export function createSkillsRuntime({
   ready,
   installedPlugins,
 }: SkillsRuntimeOptions): SkillsRuntime {
-  const pluginRoot = join(userDataPath, PLUGIN_DIR);
-  let written = false;
+  const hiveRoot = join(userDataPath, 'hive');
+  const folderFor = (cli: HarnessId): string =>
+    join(hiveRoot, adapterFor(cli).skills.dir);
+  const written = new Set<HarnessId>();
 
   /**
    * Every path this module touches is built here, from a name.
@@ -210,7 +215,7 @@ export function createSkillsRuntime({
   /**
    * The regeneration in flight, so two never interleave.
    *
-   * `writePluginDir` ends by diffing the directory against the set it just
+   * `renderSkills` ends by diffing the directory against the set it just
    * wrote and removing everything else. Two concurrent runs make that diff
    * lie: run A snapshots `{x}`, the user saves `y` and run B writes it, then
    * A's prune finds `y` absent from *its* expected set and deletes it. The
@@ -230,27 +235,34 @@ export function createSkillsRuntime({
   const regenerate = async (): Promise<SkillsRead> => {
     const read = await readUserSkills(skillsRoot());
 
-    try {
-      await sessionAdapter().prepare.plugin(pluginRoot, version, read, doneUrl?.() ?? null);
-      written = true;
-    } catch (cause) {
-      /**
-       * Non-fatal, and this is the one place that decision is made.
-       *
-       * A session that starts without its custom skills is a session that
-       * works. A session that does not start because a directory could not be
-       * written is not, and nothing on screen would connect the two. The hook
-       * runtime reports its own failures the same way, and for the same reason.
-       *
-       * `written` goes back to `false`, so this stays true to
-       * {@link SkillsRuntime.pluginDirPath}'s contract. Latching it on the
-       * first success meant a directory removed or broken later still produced
-       * a `--plugin-dir` pointing at nothing.
-       */
-      written = false;
-      console.info(
-        `[hive] the skills plugin could not be written — sessions start without custom skills (${String(cause)})`,
-      );
+    for (const cli of HARNESS_IDS) {
+      try {
+        await renderSkills(folderFor(cli), cli, read, {
+          version,
+          doneUrl: doneUrl?.() ?? null,
+        });
+        written.add(cli);
+      } catch (cause) {
+        /**
+         * Non-fatal, and this is the one place that decision is made.
+         *
+         * A session that starts without its custom skills is a session that
+         * works. A session that does not start because a directory could not be
+         * written is not, and nothing on screen would connect the two. The hook
+         * runtime reports its own failures the same way, and for the same reason.
+         *
+         * Per CLI: one CLI's folder failing never drops another's (HIVE-369).
+         *
+         * `written` loses the CLI, so this stays true to
+         * {@link SkillsRuntime.pluginDirPath}'s contract. Latching it on the
+         * first success meant a directory removed or broken later still produced
+         * a `--plugin-dir` pointing at nothing.
+         */
+        written.delete(cli);
+        console.info(
+          `[hive] the ${cli} skills folder could not be written — its sessions start without HiveTTY's skills (${String(cause)})`,
+        );
+      }
     }
 
     return read;
@@ -367,8 +379,8 @@ export function createSkillsRuntime({
   return {
     sync,
 
-    pluginDirPath(): string | null {
-      return written ? pluginRoot : null;
+    pluginDirPath(cli: HarnessId = 'claude-code'): string | null {
+      return written.has(cli) ? folderFor(cli) : null;
     },
 
     async list(): Promise<SkillsSnapshot> {

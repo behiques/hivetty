@@ -12,7 +12,6 @@ import type { ContainerOrigins } from '../container/layout';
 import type { PathMap } from '../container/path-map';
 import type { McpServerSpec, StdioServerSpec } from '../mcp/agent-config';
 import type { McpConfigOptions } from '../mcp/config';
-import type { SkillsRead } from '../skills/read';
 
 /**
  * The port every harness adapter implements (HIVE-233).
@@ -54,6 +53,8 @@ export interface HarnessAdapter {
   readonly installed: HarnessInstalled;
   /** Agent runs (HIVE-337). */
   readonly headless: HeadlessHarness;
+  /** HiveTTY's skills rendered for this CLI (HIVE-369). */
+  readonly skills: HarnessSkills;
   /**
    * Whether the user's write into a blocked session answered the CLI's own prompt (HIVE-280), for a
    * CLI whose hooks cannot say so: `cancelled` also ends the turn. Absent: blocks clear by hooks alone.
@@ -136,6 +137,27 @@ export interface ContainerSetInput {
   run?: string;
 }
 
+/** One skill as an extra file sees it (HIVE-369). */
+export interface RenderedSkillInfo {
+  name: string;
+  description: string;
+}
+
+/** Where a CLI's rendering of HiveTTY's skills lands and what sits beside `skills/` (HIVE-369). */
+export interface HarnessSkills {
+  /** The folder under `<userData>/hive`. */
+  readonly dir: string;
+  /** Files beside `skills/`, by path relative to the folder. */
+  extras(input: {
+    version: string;
+    doneUrl: string | null;
+    /** The folder's absolute path. */
+    root: string;
+    /** The skills this CLI receives, in name order. */
+    skills: readonly RenderedSkillInfo[];
+  }): Record<string, string>;
+}
+
 /**
  * The files a harness needs on disk before it starts (HIVE-235), by purpose. The core's runtimes
  * call these at the moments they always have; they own when, the adapter owns what.
@@ -157,8 +179,6 @@ export interface HarnessFiles {
     readyUrl?: string,
     transport?: HookTransport,
   ): Promise<string>;
-  /** The skills source rendered into the harness's plugin directory, `/done` included. */
-  plugin(pluginRoot: string, version: string, read: SkillsRead, doneUrl?: string | null): Promise<void>;
   /** One container set's harness files. */
   containerSet(root: string, input: ContainerSetInput): Promise<void>;
   /** The session `--mcp-config` file. */

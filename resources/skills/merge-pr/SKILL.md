@@ -6,7 +6,7 @@ description: Use when a PR is approved and green and it is time to merge it, "me
 # Merge a PR
 
 Whoever runs this reads nothing from the conversation: the arguments are the
-whole input. `hive:merge-pr <owner>/<repo>#<N> [<workspace>] [KEY]`. No
+whole input. `{{skill:merge-pr}} <owner>/<repo>#<N> [<workspace>] [KEY]`. No
 arguments at all means cwd is a candidate to verify (below), never an answer.
 
 ## Step 0: the target
@@ -101,7 +101,7 @@ then `gh pr checks <N> --repo <owner>/<repo>`, then `git -C <workspace> rev-pars
 apply. `gh pr view` cannot see review threads, so the shipper reads two more
 in the same round, and each is a HOLD:
 
-- `mcp__hive__pr { repo, number }`. Its `findings` is unresolved threads,
+- `{{tool:pr}} { repo, number }`. Its `findings` is unresolved threads,
   outdated ones included, capped at a hundred. Above zero is
   `<n> unresolved review thread(s)`. Outdated counts: the fixer resolves
   every thread it answers, so an unresolved outdated thread is one nobody
@@ -114,7 +114,7 @@ in the same round, and each is a HOLD:
   answers at once. A thread opened in the last ninety seconds can read as
   zero; the `findings` gather that `merge` runs in the same wake is the live
   read that covers it.
-- `mcp__hive__ledger_read { limit: 0 }`. A holder of
+- `{{tool:ledger_read}} { limit: 0 }`. A holder of
   `claims["<owner>/<repo>#<N> findings"]` is `fix in flight: <holder>`: the
   fixer is landing a change on this PR, and merging now turns it into a
   follow-up PR.
@@ -150,7 +150,7 @@ what makes it a gate rather than a collection of readings.
 | any `latestReviews.nodes[]` with `state: CHANGES_REQUESTED` | `CHANGES_REQUESTED standing from: <logins>` |
 | `mergeable` is `CONFLICTING` | `mergeable=CONFLICTING` |
 | `mergeable` is `UNKNOWN` | `mergeable=UNKNOWN: re-query` |
-| with HiveTTY's tools: `mcp__hive__ledger_read { limit: 0 }` shows `claims["<owner>/<repo>#<N> findings"]` held | `fix in flight: <holder>` |
+| with HiveTTY's tools: `{{tool:ledger_read}} { limit: 0 }` shows `claims["<owner>/<repo>#<N> findings"]` held | `fix in flight: <holder>` |
 
 No line applies: CLEAR. Empty output from either command is a stop; empty is
 not a pass, and neither is a JSON you did not read to the end.
@@ -272,11 +272,11 @@ Then exactly one rule:
 | P1 | any | one, matching one of them or the branch has none | transition it |
 | P2 | one or more | one, matching none | transition nothing; report both |
 | P3 | none | none | skip; note it |
-| P4 | one | none | remote-link check on that key through `mcp__hive__jira_get { key }` (its `links`; `jira-writer get_remote_links` without HiveTTY's tools): a link naming this PR or branch confirms; otherwise transition nothing, report the candidate |
+| P4 | one | none | remote-link check on that key through `{{tool:jira_get}} { key }` (its `links`; `jira-writer get_remote_links` without HiveTTY's tools): a link naming this PR or branch confirms; otherwise transition nothing, report the candidate |
 | P5 | two or more | none | transition nothing; report all |
 
-Transition to **Done**: `mcp__hive__jira_transition { key, status: "Done" }`,
-then read the status back with `mcp__hive__jira_get { key }`. Without the
+Transition to **Done**: `{{tool:jira_transition}} { key, status: "Done" }`,
+then read the status back with `{{tool:jira_get}} { key }`. Without the
 Hive's tools: `jira-writer get_transitions <KEY>` gives the id of the Done
 transition, then `jira-writer transition_issue <KEY> <id>`, then read the
 status back with `jira-writer get_issue <KEY> status`. Print, and repeat in
@@ -286,7 +286,7 @@ the report:
 step 5: rule <P#>: supplied key: <KEY|none>, branch keys: [<K1>, …|none], action: <…>
 ```
 
-An unconfirmed key never blocks the merge. The recovery is `hive:merge-pr
+An unconfirmed key never blocks the merge. The recovery is `{{skill:merge-pr}}
 <owner>/<repo>#<N> <KEY>`, which finds the PR already merged in Step 0 and
 goes straight to the Jira write.
 

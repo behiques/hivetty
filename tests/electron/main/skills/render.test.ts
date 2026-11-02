@@ -17,8 +17,8 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { writePluginDir } from '../../../../../electron/main/harness/claude-code/plugin';
-import { readUserSkills } from '../../../../../electron/main/skills/read';
+import { renderSkills } from '../../../../electron/main/skills/render';
+import { readUserSkills } from '../../../../electron/main/skills/read';
 
 /**
  * Pass-through spies on `copyFile` and `writeFile`, in the shape
@@ -67,9 +67,22 @@ async function writeSkill(name: string, body?: string): Promise<void> {
 const skillsIn = (root: string): Promise<string[]> =>
   readdir(join(root, 'skills')).then((names) => names.sort());
 
-describe('writePluginDir', () => {
+describe('renderSkills', () => {
+  it('writes the folder it renders into as {{plugin_root}} for Codex and Copilot, and the env var for Claude', async () => {
+    await writeSkill('rooted', '---\nname: rooted\ndescription: d\n---\nRun {{plugin_root}}/x.mjs\n');
+    const read = await readUserSkills(source);
+    for (const [cli, expected] of [
+      ['codex', `Run ${pluginRoot}/x.mjs`],
+      ['copilot', `Run ${pluginRoot}/x.mjs`],
+      ['claude-code', 'Run $CLAUDE_PLUGIN_ROOT/x.mjs'],
+    ] as const) {
+      await renderSkills(pluginRoot, cli, read, { version: '1.0.0', doneUrl: null });
+      expect(await readFile(join(pluginRoot, 'skills', 'rooted', 'SKILL.md'), 'utf8')).toContain(expected);
+    }
+  });
+
   it('writes a manifest Claude Code can load', async () => {
-    await writePluginDir(pluginRoot, '9.9.9', await readUserSkills(source));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '9.9.9', doneUrl: null });
 
     const manifest: unknown = JSON.parse(
       await readFile(
@@ -86,7 +99,7 @@ describe('writePluginDir', () => {
   });
 
   it('always writes the app-owned /done skill', async () => {
-    await writePluginDir(pluginRoot, '1.0.0', await readUserSkills(source));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     const body = await readFile(
       join(pluginRoot, 'skills', 'done', 'SKILL.md'),
@@ -100,7 +113,7 @@ describe('writePluginDir', () => {
   it('copies each user skill verbatim', async () => {
     await writeSkill('standup');
 
-    await writePluginDir(pluginRoot, '1.0.0', await readUserSkills(source));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     const body = await readFile(
       join(pluginRoot, 'skills', 'standup', 'SKILL.md'),
@@ -113,10 +126,10 @@ describe('writePluginDir', () => {
   it('removes a skill the user deleted, so the command goes away', async () => {
     await writeSkill('standup');
     await writeSkill('triage');
-    await writePluginDir(pluginRoot, '1.0.0', await readUserSkills(source));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     await rm(join(source, 'standup'), { recursive: true, force: true });
-    await writePluginDir(pluginRoot, '1.0.0', await readUserSkills(source));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     expect(await skillsIn(pluginRoot)).toEqual(['done', 'triage']);
   });
@@ -129,7 +142,7 @@ describe('writePluginDir', () => {
       'utf8',
     );
 
-    await writePluginDir(pluginRoot, '1.0.0', await readUserSkills(source));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     expect(await skillsIn(pluginRoot)).toEqual(['done']);
   });
@@ -137,14 +150,14 @@ describe('writePluginDir', () => {
   it('rewrites /done every time, so tampering cannot persist', async () => {
     // The app owns this file. A copy edited in userData surviving a launch
     // would make the built-in mean something different per machine.
-    await writePluginDir(pluginRoot, '1.0.0', await readUserSkills(source));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
     await writeFile(
       join(pluginRoot, 'skills', 'done', 'SKILL.md'),
       'tampered',
       'utf8',
     );
 
-    await writePluginDir(pluginRoot, '1.0.0', await readUserSkills(source));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     const body = await readFile(
       join(pluginRoot, 'skills', 'done', 'SKILL.md'),
@@ -158,7 +171,7 @@ describe('writePluginDir', () => {
     // reports it through `invalid`, not `skills`.
     await mkdir(join(source, 'bad'), { recursive: true });
 
-    await writePluginDir(pluginRoot, '1.0.0', await readUserSkills(source));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     expect(await skillsIn(pluginRoot)).toEqual(['done']);
   });
@@ -166,8 +179,8 @@ describe('writePluginDir', () => {
   it('is idempotent, because it runs before every spawn', async () => {
     await writeSkill('standup');
 
-    await writePluginDir(pluginRoot, '1.0.0', await readUserSkills(source));
-    await writePluginDir(pluginRoot, '1.0.0', await readUserSkills(source));
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     expect(await skillsIn(pluginRoot)).toEqual(['done', 'standup']);
   });
@@ -185,12 +198,7 @@ describe('writePluginDir', () => {
       'utf8',
     );
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     const copied = join(
       pluginRoot,
@@ -216,12 +224,7 @@ describe('writePluginDir', () => {
     );
     await chmod(join(source, 'graphify', 'scripts', 'run.sh'), 0o755);
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     const mode = (
       await stat(join(pluginRoot, 'skills', 'graphify', 'scripts', 'run.sh'))
@@ -242,12 +245,7 @@ describe('writePluginDir', () => {
       'utf8',
     );
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
     const copied = join(pluginRoot, 'skills', 'graphify', 'scripts', 'run.sh');
     expect((await stat(copied)).mode & 0o100).toBe(0);
 
@@ -259,12 +257,7 @@ describe('writePluginDir', () => {
       fixed on its own.
     */
     await chmod(join(source, 'graphify', 'scripts', 'run.sh'), 0o755);
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     expect((await stat(copied)).mode & 0o100).not.toBe(0);
   });
@@ -284,12 +277,7 @@ describe('writePluginDir', () => {
       'utf8',
     );
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     await expect(
       stat(join(pluginRoot, 'skills', 'graphify', 'node_modules')),
@@ -315,20 +303,10 @@ describe('writePluginDir', () => {
     // first: earlier tests in this file also call `copyFile`.
     copyFileSpy.mockClear();
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -345,12 +323,7 @@ describe('writePluginDir', () => {
       'utf8',
     );
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
     const copied = join(
       pluginRoot,
       'skills',
@@ -374,12 +347,7 @@ describe('writePluginDir', () => {
     await writeFile(copied, corrupted, 'utf8');
     await utimes(copied, stamp.atime, stamp.mtime);
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     expect(await readFile(copied, 'utf8')).toBe(corrupted);
   });
@@ -397,12 +365,7 @@ describe('writePluginDir', () => {
       'utf8',
     );
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     // Pairs with the previous test: proves the skip is real rather than a
     // mirror that never copies at all, by showing a genuine source edit
@@ -412,12 +375,7 @@ describe('writePluginDir', () => {
       'print(2)\n',
       'utf8',
     );
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     const copied = join(
       pluginRoot,
@@ -441,20 +399,10 @@ describe('writePluginDir', () => {
       'x',
       'utf8',
     );
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     await rm(join(source, 'graphify', 'scripts', 'old.py'));
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     await expect(
       stat(join(pluginRoot, 'skills', 'graphify', 'scripts', 'old.py')),
@@ -487,7 +435,7 @@ describe('writePluginDir', () => {
       ),
     ).toBe(false);
 
-    await writePluginDir(pluginRoot, '1.0.0', read, null);
+    await renderSkills(pluginRoot, 'claude-code', read, { version: '1.0.0', doneUrl: null });
 
     const body = await readFile(
       join(pluginRoot, 'skills', 'graphify', 'SKILL.md'),
@@ -504,12 +452,7 @@ describe('writePluginDir', () => {
       'utf8',
     );
     await writeFile(join(source, 'graphify', 'notes', 'a.txt'), 'a', 'utf8');
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
     const flipped = join(pluginRoot, 'skills', 'graphify', 'notes');
     expect((await stat(flipped)).isDirectory()).toBe(true);
 
@@ -525,12 +468,7 @@ describe('writePluginDir', () => {
 
     // Must not throw `EISDIR` and must not leave every later regeneration
     // throwing the same way.
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     expect((await stat(flipped)).isFile()).toBe(true);
     expect(await readFile(flipped, 'utf8')).toBe('now a file\n');
@@ -544,12 +482,7 @@ describe('writePluginDir', () => {
       'utf8',
     );
     await writeFile(join(source, 'graphify', 'notes'), 'a file\n', 'utf8');
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
     const flipped = join(pluginRoot, 'skills', 'graphify', 'notes');
     expect((await stat(flipped)).isFile()).toBe(true);
 
@@ -559,12 +492,7 @@ describe('writePluginDir', () => {
 
     // Must not throw `EEXIST` and must not leave every later regeneration
     // throwing the same way.
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     expect((await stat(flipped)).isDirectory()).toBe(true);
     expect(await readFile(join(flipped, 'a.txt'), 'utf8')).toBe('a');
@@ -586,12 +514,7 @@ describe('writePluginDir', () => {
     await mkdir(join(pluginRoot, 'skills', 'graphify'), { recursive: true });
     await symlink(outside, join(pluginRoot, 'skills', 'graphify', 'assets'));
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     const dest = join(pluginRoot, 'skills', 'graphify', 'assets');
     expect((await lstat(dest)).isSymbolicLink()).toBe(false);
@@ -612,20 +535,10 @@ describe('writePluginDir', () => {
     // manifest and `/done` writes are not what this test is about.
     writeFileSpy.mockClear();
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
     expect(callsToTarget()).toBe(1);
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
     expect(callsToTarget()).toBe(1);
   });
 
@@ -638,12 +551,7 @@ describe('writePluginDir', () => {
     await mkdir(join(pluginRoot, 'skills'), { recursive: true });
     await symlink(outside, join(pluginRoot, 'skills', 'standup'));
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     const dest = join(pluginRoot, 'skills', 'standup');
     expect((await lstat(dest)).isSymbolicLink()).toBe(false);
@@ -652,6 +560,28 @@ describe('writePluginDir', () => {
     );
     // Nothing was ever written through the old symlink target.
     expect(await readdir(outside)).toEqual([]);
+  });
+
+  it("never lets a symlinked extra's folder escape the plugin root (HIVE-369)", async () => {
+    // `/done` is an extra under `skills/done/`; a stale symlink there must not
+    // carry its write outside pluginRoot.
+    const outside = await mkdtemp(join(tmpdir(), 'hive-outside-'));
+    await mkdir(join(pluginRoot, 'skills'), { recursive: true });
+    await symlink(outside, join(pluginRoot, 'skills', 'done'));
+
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
+
+    expect((await lstat(join(pluginRoot, 'skills', 'done'))).isSymbolicLink()).toBe(false);
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  it("repairs a file where an extra's folder belongs (HIVE-369)", async () => {
+    await mkdir(join(pluginRoot, 'skills'), { recursive: true });
+    await writeFile(join(pluginRoot, 'skills', 'done'), 'stale', 'utf8');
+
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
+
+    expect((await lstat(join(pluginRoot, 'skills', 'done'))).isDirectory()).toBe(true);
   });
 
   it('never lets a symlinked SKILL.md escape the plugin root', async () => {
@@ -668,12 +598,7 @@ describe('writePluginDir', () => {
       join(pluginRoot, 'skills', 'standup', 'SKILL.md'),
     );
 
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     const target = join(pluginRoot, 'skills', 'standup', 'SKILL.md');
     expect((await lstat(target)).isSymbolicLink()).toBe(false);
@@ -698,12 +623,7 @@ describe('writePluginDir', () => {
 
     // Must not throw `EISDIR` and must not leave every later regeneration
     // throwing the same way.
-    await writePluginDir(
-      pluginRoot,
-      '1.0.0',
-      await readUserSkills(source),
-      null,
-    );
+    await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '1.0.0', doneUrl: null });
 
     const target = join(pluginRoot, 'skills', 'standup', 'SKILL.md');
     expect((await stat(target)).isFile()).toBe(true);
@@ -722,7 +642,7 @@ describe('writePluginDir', () => {
    * copy, since `~/.hivetty/skills` is hand-editable by design — rather than a
    * permission bit, which a test running as root would not reproduce at all.
    *
-   * Before the fix this `writePluginDir` call rejected outright: `stat` on
+   * Before the fix this `renderSkills` call rejected outright: `stat` on
    * the vanished source threw inside `copyIfChanged`, uncaught, straight out
    * of the function. `regenerate`'s own `catch` (`electron/main/skills/index.ts`)
    * is what turns that into `written = false` and drops `--plugin-dir` from
@@ -743,7 +663,7 @@ describe('writePluginDir', () => {
     await rm(join(source, 'graphify', 'gone.txt'));
 
     await expect(
-      writePluginDir(pluginRoot, '1.0.0', read),
+      renderSkills(pluginRoot, 'claude-code', read, { version: '1.0.0', doneUrl: null }),
     ).resolves.toBeUndefined();
 
     expect(
@@ -759,5 +679,90 @@ describe('writePluginDir', () => {
     await expect(
       stat(join(pluginRoot, 'skills', 'done', 'SKILL.md')),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('per CLI (HIVE-369)', () => {
+  const body = (name: string, extra = ''): string =>
+    `---\nname: ${name}\ndescription: d\n${extra}---\nCall {{tool:ledger_ask}}, then {{skill:plan}}.\n`;
+
+  it('fills each CLI its own names', async () => {
+    await writeSkill('flow', body('flow'));
+    const read = await readUserSkills(source);
+    const out = await mkdtemp(join(tmpdir(), 'hive-cli-'));
+    for (const cli of ['claude-code', 'codex', 'copilot'] as const) {
+      await renderSkills(join(out, cli), cli, read, { version: '1', doneUrl: null });
+    }
+    const text = (cli: string) => readFile(join(out, cli, 'skills', 'flow', 'SKILL.md'), 'utf8');
+    expect(await text('claude-code')).toContain('Call mcp__hive__ledger_ask, then hive:plan.');
+    expect(await text('codex')).toContain('Call mcp__hive__ledger_ask, then $plan.');
+    expect(await text('copilot')).toContain('Call hive-ledger_ask, then /plan.');
+  });
+
+  it('gives every CLI every skill, and lists each in the Codex catalog', async () => {
+    await writeSkill('flow', body('flow'));
+    await writeSkill('review', body('review'));
+    const read = await readUserSkills(source);
+    for (const cli of ['claude-code', 'codex', 'copilot'] as const) {
+      await renderSkills(join(pluginRoot, cli), cli, read, { version: '1', doneUrl: null });
+    }
+    expect((await readdir(join(pluginRoot, 'codex', 'skills'))).sort()).toEqual(['flow', 'review']);
+    expect((await readdir(join(pluginRoot, 'copilot', 'skills'))).sort()).toEqual(['flow', 'review']);
+    expect(await readFile(join(pluginRoot, 'codex', 'catalog.md'), 'utf8')).toContain('- review: d (file: ');
+  });
+
+  it("drops goal-on's hooks: for Codex and keeps them for Claude Code", async () => {
+    const goal = '---\nname: goal\ndescription: d\nhooks:\n  Stop:\n    - type: command\n---\nbody\n';
+    await writeSkill('goal', goal);
+    const read = await readUserSkills(source);
+    await renderSkills(join(pluginRoot, 'claude-code'), 'claude-code', read, { version: '1', doneUrl: null });
+    await renderSkills(join(pluginRoot, 'codex'), 'codex', read, { version: '1', doneUrl: null });
+    expect(await readFile(join(pluginRoot, 'claude-code', 'skills', 'goal', 'SKILL.md'), 'utf8')).toBe(goal);
+    expect(await readFile(join(pluginRoot, 'codex', 'skills', 'goal', 'SKILL.md'), 'utf8')).toBe(
+      '---\nname: goal\ndescription: d\n---\nbody\n',
+    );
+  });
+
+  it('copies a skill with no placeholder exactly as written', async () => {
+    const literal = '---\nname: mine\ndescription: d\n---\nUse mcp__hive__ledger_ask.\n';
+    await writeSkill('mine', literal);
+    await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
+    expect(await readFile(join(pluginRoot, 'skills', 'mine', 'SKILL.md'), 'utf8')).toBe(literal);
+  });
+
+  it('renders a bundle markdown file and copies the rest', async () => {
+    await writeSkill('flow', body('flow'));
+    await mkdir(join(source, 'flow', 'prompts'), { recursive: true });
+    await writeFile(join(source, 'flow', 'prompts', 'p.md'), 'ask {{tool:pr}}', 'utf8');
+    await writeFile(join(source, 'flow', 'prompts', 'p.txt'), 'ask {{tool:pr}}', 'utf8');
+    await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
+    expect(await readFile(join(pluginRoot, 'skills', 'flow', 'prompts', 'p.md'), 'utf8')).toBe('ask hive-pr');
+    expect(await readFile(join(pluginRoot, 'skills', 'flow', 'prompts', 'p.txt'), 'utf8')).toBe('ask {{tool:pr}}');
+  });
+
+  it('rewrites an unchanged extra never, and a tampered one every run', async () => {
+    const manifestPath = join(pluginRoot, '.claude-plugin', 'plugin.json');
+    const writes = (): number => writeFileSpy.mock.calls.filter(([path]) => path === manifestPath).length;
+    await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
+    writeFileSpy.mockClear();
+    await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
+    expect(writes()).toBe(0);
+    await writeFile(manifestPath, 'tampered', 'utf8');
+    writeFileSpy.mockClear();
+    await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
+    expect(writes()).toBe(1);
+    expect(await readFile(manifestPath, 'utf8')).toContain('"name": "hive"');
+  });
+
+  it('is idempotent for every CLI', async () => {
+    await writeSkill('flow', body('flow'));
+    const read = await readUserSkills(source);
+    for (const cli of ['claude-code', 'codex', 'copilot'] as const) {
+      const root = join(pluginRoot, cli);
+      await renderSkills(root, cli, read, { version: '1', doneUrl: null });
+      const first = await readdir(root, { recursive: true });
+      await renderSkills(root, cli, read, { version: '1', doneUrl: null });
+      expect(await readdir(root, { recursive: true })).toEqual(first);
+    }
   });
 });

@@ -13,7 +13,6 @@ import {
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
 import { readHook } from '../../../../../electron/main/harness/claude-code/hooks';
 import { writeMcpConfig } from '../../../../../electron/main/harness/claude-code/mcp-config';
-import { writePluginDir } from '../../../../../electron/main/harness/claude-code/plugin';
 import { foldTranscriptLines } from '../../../../../electron/main/harness/claude-code/transcript-edits';
 import {
   writeAgentSettings,
@@ -21,6 +20,7 @@ import {
 } from '../../../../../electron/main/harness/claude-code/settings';
 import { readAvailableSkillNames } from '../../../../../electron/main/skills/available';
 import { readUserSkills } from '../../../../../electron/main/skills/read';
+import { renderSkills } from '../../../../../electron/main/skills/render';
 
 /**
  * HIVE-235's byte-identity pin. Recorded before the Claude writers moved behind the adapter;
@@ -89,7 +89,7 @@ describe('the files a Claude Code session is launched with', () => {
         '---\nname: review\ndescription: Review the diff\n---\nRead it closely.\n',
         'utf8',
       );
-      await writePluginDir(join(root, 'plugin'), '1.2.3', await readUserSkills(source), doneUrl);
+      await renderSkills(join(root, 'plugin'), 'claude-code', await readUserSkills(source), { version: '1.2.3', doneUrl: doneUrl });
       expect(await tree()).toMatchSnapshot();
     });
   }
