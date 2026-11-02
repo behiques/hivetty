@@ -72,9 +72,12 @@ describe('codexAdapter', () => {
 
     await expect(prepare.sessionSettings('/u', 'http://x')).resolves.toBe('');
     await expect(prepare.agentSettings('/u', 'http://x')).resolves.toBe('');
-    await expect(prepare.plugin('/p', '1', {} as never)).resolves.toBeUndefined();
     await expect(prepare.containerSet('/r', {} as never)).resolves.toBeUndefined();
     await expect(prepare.mcpConfig('/u/m.json', {} as never)).resolves.toBeUndefined();
+  });
+
+  it('renders its skills into its own folder (HIVE-369)', () => {
+    expect(codexAdapter.skills.dir).toBe('plugins/codex');
   });
 
   it('still refuses prompt markers, which are the follow-up’s (D1)', () => {

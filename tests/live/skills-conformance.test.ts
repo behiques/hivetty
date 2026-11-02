@@ -15,7 +15,7 @@ import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { writePluginDir } from '../../electron/main/harness/claude-code/plugin';
+import { renderSkills } from '../../electron/main/skills/render';
 import { readUserSkills, type SkillsRead } from '../../electron/main/skills/read';
 
 /**
@@ -190,7 +190,7 @@ describe.skipIf(!enabled)('custom skills conformance', () => {
     cwd = mkdtempSync(join(tmpdir(), 'hive-skills-cwd-'));
     pluginRoot = join(mkdtempSync(join(tmpdir(), 'hive-skills-plugin-')), 'plugin');
 
-    await writePluginDir(pluginRoot, '0.0.0-test', FIXTURE);
+    await renderSkills(pluginRoot, 'claude-code', FIXTURE, { version: '0.0.0-test', doneUrl: null });
   });
 
   it(
@@ -297,7 +297,7 @@ describe.skipIf(!enabled)('custom skills conformance', () => {
         mkdtempSync(join(tmpdir(), 'hive-bundle-plugin-')),
         'plugin',
       );
-      await writePluginDir(bundleRoot, '0.0.0-test', await readUserSkills(source));
+      await renderSkills(bundleRoot, 'claude-code', await readUserSkills(source), { version: '0.0.0-test', doneUrl: null });
 
       // The mirror's own half of the claim, checked before spending a turn on
       // the model: the script is there, and it is still executable.

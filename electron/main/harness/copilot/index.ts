@@ -46,7 +46,6 @@ export const copilotAdapter: HarnessAdapter = {
   prepare: {
     sessionSettings: noSettings,
     agentSettings: noSettings,
-    plugin: noFile,
     containerSet: noFile,
     mcpConfig: noFile,
   },

@@ -18,12 +18,12 @@ import {
   type SkillsSnapshot,
 } from '@shared/skills-contract';
 
-import { sessionAdapter } from '../harness/registry';
 
 import { copyInto } from './import';
 import { importSkill as importPackage, isSkillPackage } from './import-skill';
 import { PLUGIN_DIR, isSkillManifest, resolveInSkill, skillsRoot } from './paths';
 import { readUserSkills, type SkillsRead } from './read';
+import { renderSkills } from './render';
 
 /**
  * The skills runtime (HIVE-96).
@@ -210,7 +210,7 @@ export function createSkillsRuntime({
   /**
    * The regeneration in flight, so two never interleave.
    *
-   * `writePluginDir` ends by diffing the directory against the set it just
+   * `renderSkills` ends by diffing the directory against the set it just
    * wrote and removing everything else. Two concurrent runs make that diff
    * lie: run A snapshots `{x}`, the user saves `y` and run B writes it, then
    * A's prune finds `y` absent from *its* expected set and deletes it. The
@@ -231,7 +231,7 @@ export function createSkillsRuntime({
     const read = await readUserSkills(skillsRoot());
 
     try {
-      await sessionAdapter().prepare.plugin(pluginRoot, version, read, doneUrl?.() ?? null);
+      await renderSkills(pluginRoot, 'claude-code', read, { version, doneUrl: doneUrl?.() ?? null });
       written = true;
     } catch (cause) {
       /**

@@ -14,7 +14,7 @@ import {
 
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
 import { writeHookSettings } from '../../electron/main/harness/claude-code/settings';
-import { writePluginDir } from '../../electron/main/harness/claude-code/plugin';
+import { renderSkills } from '../../electron/main/skills/render';
 import type { SkillsRead } from '../../electron/main/skills/read';
 
 /** Not exercised by this suite — `/done`, not the ledger. */
@@ -133,7 +133,7 @@ describe.skipIf(!enabled)('/done conformance', () => {
       is actually listening — a hand-written skill or a hand-written settings
       file would test this file's idea of the app rather than the app.
     */
-    await writePluginDir(pluginRoot, '0.0.0-test', NO_SKILLS, receiver.doneUrl);
+    await renderSkills(pluginRoot, 'claude-code', NO_SKILLS, { version: '0.0.0-test', doneUrl: receiver.doneUrl });
     settingsPath = await writeHookSettings(userData, url as string);
   });
 

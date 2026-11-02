@@ -116,7 +116,7 @@ export const doneSkill = (doneUrl: string | null): string =>
  * `/done` is never registered at all — and because the built-in shares
  * `skills/` with the user's own custom skills, a plugin-level rejection takes
  * those down too. The app validates user skills and refuses to emit one it
- * cannot explain (`plugin.ts`); emitting an invalid one of its own would be the
+ * cannot explain (`render.ts`); emitting an invalid one of its own would be the
  * same failure with none of the reporting.
  *
  * Single-quoted rather than double-quoted because its escaping rule is the

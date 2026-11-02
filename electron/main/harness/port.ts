@@ -12,7 +12,6 @@ import type { ContainerOrigins } from '../container/layout';
 import type { PathMap } from '../container/path-map';
 import type { McpServerSpec, StdioServerSpec } from '../mcp/agent-config';
 import type { McpConfigOptions } from '../mcp/config';
-import type { SkillsRead } from '../skills/read';
 
 /**
  * The port every harness adapter implements (HIVE-233).
@@ -180,8 +179,6 @@ export interface HarnessFiles {
     readyUrl?: string,
     transport?: HookTransport,
   ): Promise<string>;
-  /** The skills source rendered into the harness's plugin directory, `/done` included. */
-  plugin(pluginRoot: string, version: string, read: SkillsRead, doneUrl?: string | null): Promise<void>;
   /** One container set's harness files. */
   containerSet(root: string, input: ContainerSetInput): Promise<void>;
   /** The session `--mcp-config` file. */

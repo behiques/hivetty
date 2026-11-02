@@ -11,7 +11,6 @@ import { createClaudeInstalled } from './installed';
 import { launch } from './launch';
 import { writeMcpConfig } from './mcp-config';
 import { parseMetrics } from './metrics';
-import { writePluginDir } from './plugin';
 import { promptMarker } from './prompt-marker';
 import { createClaudeRecord } from './record';
 import { writeAgentSettings, writeHookSettings } from './settings';
@@ -32,7 +31,6 @@ export const claudeCodeAdapter: HarnessAdapter = {
   prepare: {
     sessionSettings: writeHookSettings,
     agentSettings: writeAgentSettings,
-    plugin: writePluginDir,
     containerSet: writeContainerSet,
     mcpConfig: writeMcpConfig,
   },

@@ -37,7 +37,6 @@ export const codexAdapter: HarnessAdapter = {
   prepare: {
     sessionSettings: noSettings,
     agentSettings: noSettings,
-    plugin: noFile,
     containerSet: noFile,
     mcpConfig: noFile,
   },

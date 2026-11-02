@@ -26,7 +26,7 @@ import { createLedger, type Ledger } from '../../electron/main/ledger';
 import { agentMcpConfigFile } from '../../electron/main/mcp';
 import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
 import { PLUGIN_DIR } from '../../electron/main/skills/paths';
-import { writePluginDir } from '../../electron/main/harness/claude-code/plugin';
+import { renderSkills } from '../../electron/main/skills/render';
 import type { SkillsRead } from '../../electron/main/skills/read';
 import type { RunLine } from '../../electron/shared/agent-contract';
 import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
@@ -149,7 +149,7 @@ describe.skipIf(!RUN)('container conformance — mechanism', () => {
       url: 'http://127.0.0.1:0/hook',
       origin: 'http://127.0.0.1:0',
     });
-    await writePluginDir(join(userData, PLUGIN_DIR), '0.0.0-test', NO_SKILLS);
+    await renderSkills(join(userData, PLUGIN_DIR), 'claude-code', NO_SKILLS, { version: '0.0.0-test', doneUrl: null });
 
     execFileSync('docker', [
       'run', '-d', '--name', NAME,
@@ -191,7 +191,7 @@ describe.skipIf(!RUN)('container conformance — mechanism', () => {
   });
 
   it('names generated files at paths that resolve inside the container', () => {
-    // Written by `writeSharedContainerFiles` and `writePluginDir` above, under
+    // Written by `writeSharedContainerFiles` and `renderSkills` above, under
     // `<userData>/hive`, mounted here at `/hive`.
     for (const file of [
       '/hive/container/claude-hooks.settings.json',
@@ -395,7 +395,7 @@ describe.skipIf(!RUN || CLAUDE_IMAGE === undefined)('container conformance — c
       `hooks/index.ts` does before calling the same writer.
     */
     await writeSharedContainerFiles(dir, aliased(receiver));
-    await writePluginDir(join(dir, PLUGIN_DIR), '0.0.0-test', NO_SKILLS);
+    await renderSkills(join(dir, PLUGIN_DIR), 'claude-code', NO_SKILLS, { version: '0.0.0-test', doneUrl: null });
 
     /* The host session's own config: stdio, through the built MCP host. */
     hostMcpConfig = join(dir, 'host.mcp.json');
@@ -795,7 +795,7 @@ tool it names, and nothing more. Never ask a question.
       onDone: () => {},
       onReady: () => {},
     });
-    await writePluginDir(join(userData, PLUGIN_DIR), '0.0.0-test', NO_SKILLS);
+    await renderSkills(join(userData, PLUGIN_DIR), 'claude-code', NO_SKILLS, { version: '0.0.0-test', doneUrl: null });
 
     const credential = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']
       .filter((name) => process.env[name] !== undefined && process.env[name] !== '')

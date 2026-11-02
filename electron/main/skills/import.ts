@@ -374,7 +374,7 @@ async function pathExists(path: string): Promise<boolean> {
  * five with nothing to enforce the cap the manifest itself is bound by: it
  * writes, but `readBundle` cannot list it, no bundle verb can reach it to
  * move or delete it, and — because `readBundle` then reports the *bundle* as
- * `capped` at that folder — the mirror stops listing, and `writePluginDir`'s
+ * `capped` at that folder — the mirror stops listing, and `renderSkills`'s
  * prune stops shipping, everything the walk did not reach first, including
  * files that were already there before this call. Checked here, against
  * every planned destination, before any of them is written.

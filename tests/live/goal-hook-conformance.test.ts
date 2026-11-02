@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { writePluginDir } from '../../electron/main/harness/claude-code/plugin';
+import { renderSkills } from '../../electron/main/skills/render';
 import { readUserSkills } from '../../electron/main/skills/read';
 
 /**
@@ -98,7 +98,7 @@ describe.skipIf(!enabled)('goal-on Stop hook through the generated plugin (HIVE-
     const read = await readUserSkills(join(resources, 'skills'));
     expect(read.invalid).toEqual([]);
     pluginRoot = join(mkdtempSync(join(tmpdir(), 'hive-goal-plugin-')), 'plugin');
-    await writePluginDir(pluginRoot, '0.0.0-test', read);
+    await renderSkills(pluginRoot, 'claude-code', read, { version: '0.0.0-test', doneUrl: null });
     goals = mkdtempSync(join(tmpdir(), 'hive-goals-'));
     cwd = mkdtempSync(join(tmpdir(), 'hive-goal-cwd-'));
     receiver = await stub();

@@ -173,7 +173,7 @@ describe('createSkillsRuntime', () => {
 
   it('serialises concurrent syncs, so a prune cannot eat a fresh write', async () => {
     /*
-      `writePluginDir` ends by diffing the directory against the set it wrote.
+      `renderSkills` ends by diffing the directory against the set it wrote.
       Two runs in flight make that diff lie: A snapshots {}, B writes standup,
       A's prune then finds standup absent from *its* expected set and removes
       it — losing a skill that exists on disk.

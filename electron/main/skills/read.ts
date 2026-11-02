@@ -34,9 +34,11 @@ interface UserSkill {
    * The file, verbatim.
    *
    * Main never rewrites what the user typed — not to normalise the frontmatter,
-   * not to add a trailing newline. The bytes that reach Claude Code are the
-   * bytes in `~/.hivetty/skills`, which is what makes "edit it in a text editor"
-   * and "edit it in Settings" the same feature.
+   * not to add a trailing newline. The generator fills `{{…}}` placeholders and
+   * drops keys a CLI must not read (HIVE-369, `skills/render.ts`), and nothing
+   * else: a file with neither reaches every CLI as the bytes in
+   * `~/.hivetty/skills`, which is what makes "edit it in a text editor" and
+   * "edit it in Settings" the same feature.
    */
   body: string;
   path: string;

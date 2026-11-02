@@ -70,7 +70,7 @@ import { baseOf, mergeParts, parseParts, type PartBase } from './merge';
  *
  * A file's mode travels with it. `writeFile` creates at 0644, and a shipped
  * script that lands non-executable fails the first session that runs it, the
- * same failure `import-skill.ts` and `plugin.ts` each already guard against.
+ * same failure `import-skill.ts` and `render.ts` each already guard against.
  *
  * `done` is never seeded: it is generated into the plugin directly and is
  * reserved in `~/.hivetty/skills` (`RESERVED_SKILL_NAME`).
