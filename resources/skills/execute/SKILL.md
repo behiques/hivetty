@@ -117,6 +117,6 @@ logged.
 
 ## Exit
 
-All tasks committed on the branch, `hive:verify` green on the tree as it
+All tasks committed on the branch, `{{skill:verify}}` green on the tree as it
 stands, rulings collected under "Rulings I made" in `progress.md`. Return to
 the caller, which pushes and opens the draft PR.

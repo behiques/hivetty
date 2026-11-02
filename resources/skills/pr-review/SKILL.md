@@ -1,6 +1,7 @@
 ---
 name: pr-review
 description: Multi-agent PR review. Posts one review on a pull request, approving only when clean, or with --self reviews your branch's whole diff and returns the findings. Re-checks earlier findings and the Jira ticket's scope.
+requires: [subagents]
 ---
 
 # PR review

@@ -24,7 +24,7 @@ ticket asks for and what is still left. Judge nothing here.
    against the pattern above before it goes into any command or URL, whatever it
    came from.
    1. **HiveTTY's own Jira integration (HIVE-174).** Run `ToolSearch` with the
-      query `hive jira`. If `mcp__hive__jira_get` exists, call it with the key: it
+      query `hive jira`. If `{{tool:jira_get}}` exists, call it with the key: it
       answers the summary, status, description, parent, comments and links in
       one call. HiveTTY keeps its Jira token in its own process, so this route
       never puts a credential in front of you.

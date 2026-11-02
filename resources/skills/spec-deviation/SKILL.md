@@ -12,7 +12,7 @@ missed, and then sibling stories are built on the old spec.
 Session only: step 4 needs a person to confirm. When the builder agent
 discovers a deviation mid-build it does not run this skill; it asks its
 `reply-to` party with the statement and continues on the answer, and the
-person runs `hive:spec-deviation` when the tickets should be updated.
+person runs `{{skill:spec-deviation}}` when the tickets should be updated.
 
 Every Jira write goes through `jira-writer` (the Atlassian MCP tools when it
 is not installed); never raw REST. Workspace-agnostic: nothing here touches a
