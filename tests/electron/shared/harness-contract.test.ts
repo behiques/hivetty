@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 
-import { CAPABILITIES, HARNESS_IDS, isHarnessId } from '../../../electron/shared/harness-contract';
+import { CAPABILITIES, HARNESS_IDS, isHarnessId, SKILL_FEATURES } from '../../../electron/shared/harness-contract';
 
 describe('isHarnessId (HIVE-340)', () => {
   it('accepts every id the app can drive', () => {
@@ -25,5 +25,35 @@ describe('isHarnessId (HIVE-340)', () => {
 describe('CAPABILITIES', () => {
   it('has a table for every CLI', () => {
     expect(Object.keys(CAPABILITIES).sort()).toEqual([...HARNESS_IDS].sort());
+  });
+});
+
+describe('skills vocabulary (HIVE-369)', () => {
+  it('names the four features', () => {
+    expect(SKILL_FEATURES).toEqual(['subagents', 'stop-hook', 'ask-tool', 'artifact']);
+  });
+
+  it('gives each CLI its prefixes', () => {
+    expect(CAPABILITIES['claude-code'].skills).toEqual({
+      features: ['subagents', 'stop-hook', 'ask-tool', 'artifact'],
+      toolPrefix: 'mcp__hive__',
+      refPrefix: 'hive:',
+      typedPrefix: '/hive:',
+      pluginRoot: '$CLAUDE_PLUGIN_ROOT',
+    });
+    expect(CAPABILITIES.codex.skills).toEqual({
+      features: [],
+      toolPrefix: 'mcp__hive__',
+      refPrefix: '$',
+      typedPrefix: '$',
+      pluginRoot: '$HIVE_PLUGIN_ROOT',
+    });
+    expect(CAPABILITIES.copilot.skills).toEqual({
+      features: [],
+      toolPrefix: 'hive-',
+      refPrefix: '/',
+      typedPrefix: '/',
+      pluginRoot: '$HIVE_PLUGIN_ROOT',
+    });
   });
 });

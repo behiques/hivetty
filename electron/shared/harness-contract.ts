@@ -25,6 +25,15 @@ export const METER_KINDS = ['model', 'effort', 'context', 'fiveHour', 'sevenDay'
 export type MeterKind = (typeof METER_KINDS)[number];
 
 /**
+ * What a HiveTTY skill may need from its CLI (HIVE-369). A skill names these in `requires:`; a CLI
+ * that lacks one leaves the skill out of its folder.
+ */
+export const SKILL_FEATURES = ['subagents', 'stop-hook', 'ask-tool', 'artifact'] as const;
+
+/** One feature a skill may require. */
+export type SkillFeature = (typeof SKILL_FEATURES)[number];
+
+/**
  * What a harness can do ("build one, shape for three"). A field lands only with the
  * story whose core code reads it (HIVE-239 brought the first two, HIVE-240 the third).
  */
@@ -69,6 +78,19 @@ export interface Capabilities {
    * first hook's `session_id` as the resume id (`codex` takes no id on a fresh start).
    */
   conversationId: 'argv' | 'first-hook';
+  /**
+   * How a HiveTTY skill is written for this CLI (HIVE-369): what `{{tool:x}}`, `{{skill:x}}` and
+   * `{{plugin_root}}` become, what a ticket session types, and the features its skills may require.
+   * Codex and Copilot gain `stop-hook` with HIVE-370 and `subagents` with HIVE-371; Copilot's `/x`
+   * stands until HIVE-362's probe.
+   */
+  skills: {
+    features: readonly SkillFeature[];
+    toolPrefix: string;
+    refPrefix: string;
+    typedPrefix: string;
+    pluginRoot: string;
+  };
 }
 
 /** Each CLI's capabilities, here rather than in its adapter so the renderer can read them (HIVE-281). */
@@ -84,6 +106,13 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     reportsMcpStatus: true,
     agentMcp: ['slack'],
     conversationId: 'argv',
+    skills: {
+      features: SKILL_FEATURES,
+      toolPrefix: 'mcp__hive__',
+      refPrefix: 'hive:',
+      typedPrefix: '/hive:',
+      pluginRoot: '$CLAUDE_PLUGIN_ROOT',
+    },
   },
   codex: {
     resume: 'by-id',
@@ -95,6 +124,13 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     reportsMcpStatus: false,
     agentMcp: [],
     conversationId: 'first-hook',
+    skills: {
+      features: [],
+      toolPrefix: 'mcp__hive__',
+      refPrefix: '$',
+      typedPrefix: '$',
+      pluginRoot: '$HIVE_PLUGIN_ROOT',
+    },
   },
   copilot: {
     resume: 'by-id',
@@ -106,6 +142,13 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     reportsMcpStatus: false,
     agentMcp: [],
     conversationId: 'argv',
+    skills: {
+      features: [],
+      toolPrefix: 'hive-',
+      refPrefix: '/',
+      typedPrefix: '/',
+      pluginRoot: '$HIVE_PLUGIN_ROOT',
+    },
   },
 };
 
