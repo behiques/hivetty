@@ -267,7 +267,7 @@ export async function renderSkills(
     await ensureKind(skillMdPath, 'file');
     // Written directly from `skill.body`, not mirrored below — see the
     // docblock's "SKILL.md itself" paragraph for why.
-    await writeIfChanged(skillMdPath, renderSkillText(skill.body, cli));
+    await writeIfChanged(skillMdPath, renderSkillText(skill.body, cli, root));
 
     const admitted = skill.manifest.entries.filter(
       (entry) => entry.excluded === null && entry.path !== 'SKILL.md',
@@ -317,6 +317,7 @@ export async function renderSkills(
               renderSkillText(
                 await readFile(join(skill.dir, entry.path), 'utf8'),
                 cli,
+                root,
               ),
             );
           } else {

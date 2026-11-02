@@ -40,13 +40,13 @@ describe('skills vocabulary (HIVE-369)', () => {
       toolPrefix: 'mcp__hive__',
       refPrefix: '$',
       typedPrefix: '$',
-      pluginRoot: '$HIVE_PLUGIN_ROOT',
+      pluginRoot: null,
     });
     expect(CAPABILITIES.copilot.skills).toEqual({
       toolPrefix: 'hive-',
       refPrefix: '/',
       typedPrefix: '/',
-      pluginRoot: '$HIVE_PLUGIN_ROOT',
+      pluginRoot: null,
     });
   });
 });

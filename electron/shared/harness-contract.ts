@@ -78,7 +78,8 @@ export interface Capabilities {
     toolPrefix: string;
     refPrefix: string;
     typedPrefix: string;
-    pluginRoot: string;
+    /** `null` when no variable names the folder: the renderer writes the folder's own path instead. */
+    pluginRoot: string | null;
   };
 }
 
@@ -116,7 +117,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
       toolPrefix: 'mcp__hive__',
       refPrefix: '$',
       typedPrefix: '$',
-      pluginRoot: '$HIVE_PLUGIN_ROOT',
+      pluginRoot: null,
     },
   },
   copilot: {
@@ -133,7 +134,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
       toolPrefix: 'hive-',
       refPrefix: '/',
       typedPrefix: '/',
-      pluginRoot: '$HIVE_PLUGIN_ROOT',
+      pluginRoot: null,
     },
   },
 };

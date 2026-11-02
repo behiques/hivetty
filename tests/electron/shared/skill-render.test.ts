@@ -17,11 +17,22 @@ describe('fillPlaceholders', () => {
       'Call mcp__hive__ledger_ask, then hive:plan from "$CLAUDE_PLUGIN_ROOT/x".',
     );
   });
-  it('fills Codex', () => {
-    expect(fillPlaceholders(SOURCE, 'codex')).toBe('Call mcp__hive__ledger_ask, then $plan from "$HIVE_PLUGIN_ROOT/x".');
+  it('fills Codex, with its folder as the plugin root', () => {
+    expect(fillPlaceholders(SOURCE, 'codex', '/ud/hive/plugins/codex')).toBe(
+      'Call mcp__hive__ledger_ask, then $plan from "/ud/hive/plugins/codex/x".',
+    );
   });
-  it('fills Copilot', () => {
-    expect(fillPlaceholders(SOURCE, 'copilot')).toBe('Call hive-ledger_ask, then /plan from "$HIVE_PLUGIN_ROOT/x".');
+  it('fills Copilot, with its folder as the plugin root', () => {
+    expect(fillPlaceholders(SOURCE, 'copilot', '/ud/hive/plugins/copilot')).toBe(
+      'Call hive-ledger_ask, then /plan from "/ud/hive/plugins/copilot/x".',
+    );
+  });
+  it('leaves {{plugin_root}} alone for Codex and Copilot when no folder is known, rather than name an unset variable', () => {
+    expect(fillPlaceholders('{{plugin_root}}/x', 'codex')).toBe('{{plugin_root}}/x');
+    expect(fillPlaceholders('{{plugin_root}}/x', 'copilot')).toBe('{{plugin_root}}/x');
+  });
+  it('ignores the folder for Claude Code, whose variable is set', () => {
+    expect(fillPlaceholders('{{plugin_root}}/x', 'claude-code', '/elsewhere')).toBe('$CLAUDE_PLUGIN_ROOT/x');
   });
   it('leaves text without placeholders exactly as it is', () => {
     const text = 'Use mcp__hive__x and {{ other }} and {{tool:Bad Name}}.';
@@ -96,6 +107,18 @@ describe('dropKeysFor', () => {
 
 const KNOWN = { tools: ['ledger_ask', 'jira_get'], skills: ['plan', 'done'] };
 
+describe('makePortable', () => {
+  it('keeps the slash when it rewrites /hive:x', () => {
+    expect(makePortable('Run /hive:plan now.', KNOWN)).toBe('Run /{{skill:plan}} now.');
+  });
+  it('does not match inside a longer word', () => {
+    expect(makePortable('see foohive:plan and my-hive:plan', KNOWN)).toBe('see foohive:plan and my-hive:plan');
+  });
+  it('flags nothing mid-word either', () => {
+    expect(portabilityIssues('see foohive:plan', KNOWN)).toEqual([]);
+  });
+});
+
 describe('portabilityIssues', () => {
   it('flags every CLI-specific literal with its fix', () => {
     const text = [
@@ -125,9 +148,9 @@ describe('portabilityIssues', () => {
       },
       {
         line: 3,
-        found: '/hive:plan',
+        found: 'hive:plan',
         fix: '{{skill:plan}}',
-        message: '`/hive:plan` only works in Claude Code. Write `{{skill:plan}}`.',
+        message: '`hive:plan` only works in Claude Code. Write `{{skill:plan}}`.',
       },
       {
         line: 4,
@@ -157,7 +180,7 @@ describe('makePortable', () => {
     const text =
       'mcp__hive__ledger_ask, hive-jira_get, `hive:plan`, /hive:plan, $CLAUDE_PLUGIN_ROOT, {{skill:plann}}, /plan';
     expect(makePortable(text, KNOWN)).toBe(
-      '{{tool:ledger_ask}}, {{tool:jira_get}}, `{{skill:plan}}`, {{skill:plan}}, {{plugin_root}}, {{skill:plann}}, /plan',
+      '{{tool:ledger_ask}}, {{tool:jira_get}}, `{{skill:plan}}`, /{{skill:plan}}, {{plugin_root}}, {{skill:plann}}, /plan',
     );
   });
   it('is a fixed point on portable text', () => {

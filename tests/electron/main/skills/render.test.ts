@@ -68,6 +68,19 @@ const skillsIn = (root: string): Promise<string[]> =>
   readdir(join(root, 'skills')).then((names) => names.sort());
 
 describe('renderSkills', () => {
+  it('writes the folder it renders into as {{plugin_root}} for Codex and Copilot, and the env var for Claude', async () => {
+    await writeSkill('rooted', '---\nname: rooted\ndescription: d\n---\nRun {{plugin_root}}/x.mjs\n');
+    const read = await readUserSkills(source);
+    for (const [cli, expected] of [
+      ['codex', `Run ${pluginRoot}/x.mjs`],
+      ['copilot', `Run ${pluginRoot}/x.mjs`],
+      ['claude-code', 'Run $CLAUDE_PLUGIN_ROOT/x.mjs'],
+    ] as const) {
+      await renderSkills(pluginRoot, cli, read, { version: '1.0.0', doneUrl: null });
+      expect(await readFile(join(pluginRoot, 'skills', 'rooted', 'SKILL.md'), 'utf8')).toContain(expected);
+    }
+  });
+
   it('writes a manifest Claude Code can load', async () => {
     await renderSkills(pluginRoot, 'claude-code', await readUserSkills(source), { version: '9.9.9', doneUrl: null });
 

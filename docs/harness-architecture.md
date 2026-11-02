@@ -769,9 +769,11 @@ the renderer reads it too:
 | `{{tool:x}}` → | `mcp__hive__x` | `mcp__hive__x` | `hive-x` |
 | `{{skill:x}}` → | `hive:x` | `$x` | `/x` |
 | a ticket session types | `/hive:x` | `$x` | `/x` |
-| `{{plugin_root}}` → | `$CLAUDE_PLUGIN_ROOT` | `$HIVE_PLUGIN_ROOT` | `$HIVE_PLUGIN_ROOT` |
+| `{{plugin_root}}` → | `$CLAUDE_PLUGIN_ROOT` | the folder's own path | the folder's own path |
 
-Copilot's `/x` is provisional until HIVE-362's probe.
+Copilot's `/x` is provisional until HIVE-362's probe. Codex and Copilot set no variable for their
+folder, so `renderSkills` writes its `root` where `{{plugin_root}}` stood (a host path, like
+`catalog.md`'s; HIVE-360 maps it for a container).
 
 **Rendering** is `electron/shared/skill-render.ts`, pure, so main and the renderer share it.
 `renderSkillText(text, cli)` fills the three placeholders (`<name>` is `[a-z0-9_-]+`; any other

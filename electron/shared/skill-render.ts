@@ -10,13 +10,17 @@ import { CAPABILITIES, type HarnessId } from './harness-contract';
 
 const PLACEHOLDER = /\{\{(?:(tool|skill):([a-z0-9_-]+)|plugin_root)\}\}/g;
 
-/** `{{tool:x}}`, `{{skill:x}}` and `{{plugin_root}}` filled for `cli`; any other text untouched. */
-export function fillPlaceholders(text: string, cli: HarnessId): string {
+/**
+ * `{{tool:x}}`, `{{skill:x}}` and `{{plugin_root}}` filled for `cli`; any other text untouched.
+ * Claude Code sets `$CLAUDE_PLUGIN_ROOT`; no variable names Codex's or Copilot's folder, so their
+ * `{{plugin_root}}` becomes `root`, the folder being rendered, and stays as written without one.
+ */
+export function fillPlaceholders(text: string, cli: HarnessId, root?: string): string {
   const names = CAPABILITIES[cli].skills;
-  return text.replace(PLACEHOLDER, (_match, kind: string | undefined, name: string | undefined) => {
+  return text.replace(PLACEHOLDER, (match, kind: string | undefined, name: string | undefined) => {
     if (kind === 'tool') return `${names.toolPrefix}${name ?? ''}`;
     if (kind === 'skill') return `${names.refPrefix}${name ?? ''}`;
-    return names.pluginRoot;
+    return names.pluginRoot ?? root ?? match;
   });
 }
 
@@ -56,8 +60,8 @@ function dropFrontmatterKeys(text: string, keys: readonly string[]): string {
 }
 
 /** One skill file as `cli` receives it: Claude-only keys dropped, placeholders filled. */
-export function renderSkillText(text: string, cli: HarnessId): string {
-  return fillPlaceholders(dropFrontmatterKeys(text, dropKeysFor(cli)), cli);
+export function renderSkillText(text: string, cli: HarnessId, root?: string): string {
+  return fillPlaceholders(dropFrontmatterKeys(text, dropKeysFor(cli)), cli, root);
 }
 
 /** The names a skill may point at: hive tools and skills, `done` included. */
@@ -101,7 +105,7 @@ const RULES: readonly Rule[] = [
     message: (found, fix) => `\`${found}\` only works in Copilot. Write \`${fix}\`.`,
   },
   {
-    pattern: /\/?hive:([a-z0-9-]+)/g,
+    pattern: /(?<![\w-])hive:([a-z0-9-]+)/g,
     fix: (name, known) => (known.skills.includes(name) ? `{{skill:${name}}}` : null),
     message: (found, fix) => `\`${found}\` only works in Claude Code. Write \`${fix}\`.`,
   },
