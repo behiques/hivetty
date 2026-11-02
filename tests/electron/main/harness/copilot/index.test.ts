@@ -32,10 +32,6 @@ describe('copilotAdapter', () => {
       reportsMcpStatus: false,
       agentMcp: [],
       conversationId: 'argv',
-      hooks: true,
-      permissionCards: true,
-      plan: false,
-      skills: false,
     });
   });
 
