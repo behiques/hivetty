@@ -17,6 +17,7 @@ import { RESERVED_SKILL_NAME } from '@shared/skills-contract';
 import type { SkillsRead } from '../../skills/read';
 
 import { doneSkill } from './done-skill';
+import { manifest } from './skills';
 
 /**
  * Generating the plugin directory `--plugin-dir` points at (HIVE-96).
@@ -25,26 +26,6 @@ import { doneSkill } from './done-skill';
  * `~/.hivetty/skills` at launch and again before every spawn, and safe to delete.
  * Nothing reads it but `claude`, and nothing writes it but this module.
  */
-
-/**
- * The manifest that makes a directory a plugin.
- *
- * `skills: ['./skills/']` is declared rather than left to auto-discovery.
- * Auto-discovery may well work, but every real installed plugin on this machine
- * declares the field — matching what the binary is demonstrably given beats
- * relying on a default that is not ours to guarantee and would fail silently.
- */
-const manifest = (version: string): string =>
-  `${JSON.stringify(
-    {
-      name: 'hive',
-      version,
-      description: 'Skills HiveTTY injects into the sessions it starts.',
-      skills: ['./skills/'],
-    },
-    null,
-    2,
-  )}\n`;
 
 /**
  * Copy one file only when the destination differs, preserving its mode.

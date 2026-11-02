@@ -53,6 +53,7 @@ export const codexAdapter: HarnessAdapter = {
     sessionOverrides: () => Promise.resolve({}),
     skillPlaces: '',
   },
+  skills: { dir: 'plugins/codex', extras: () => ({}) },
   headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence, containerCommand: 'codex' },
   models: () => readCodexModels(),
   answersBlock: blockAnswer,

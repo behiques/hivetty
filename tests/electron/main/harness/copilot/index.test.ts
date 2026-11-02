@@ -32,6 +32,7 @@ describe('copilotAdapter', () => {
       reportsMcpStatus: false,
       agentMcp: [],
       conversationId: 'argv',
+      skills: { features: [], toolPrefix: 'hive-', refPrefix: '/', typedPrefix: '/', pluginRoot: '$HIVE_PLUGIN_ROOT' },
     });
   });
 

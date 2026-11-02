@@ -15,6 +15,7 @@ import { writePluginDir } from './plugin';
 import { promptMarker } from './prompt-marker';
 import { createClaudeRecord } from './record';
 import { writeAgentSettings, writeHookSettings } from './settings';
+import { claudeSkills } from './skills';
 import { foldTranscriptLines } from './transcript-edits';
 
 /**
@@ -42,5 +43,6 @@ export const claudeCodeAdapter: HarnessAdapter = {
   meters: parseMetrics,
   record: createClaudeRecord(),
   installed: createClaudeInstalled(),
+  skills: claudeSkills,
   headless: { launch: launchHeadless, reader: readClaudeHeadless, fence: claudeFence, containerCommand: 'claude' },
 };

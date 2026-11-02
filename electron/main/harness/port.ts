@@ -54,6 +54,8 @@ export interface HarnessAdapter {
   readonly installed: HarnessInstalled;
   /** Agent runs (HIVE-337). */
   readonly headless: HeadlessHarness;
+  /** HiveTTY's skills rendered for this CLI (HIVE-369). */
+  readonly skills: HarnessSkills;
   /**
    * Whether the user's write into a blocked session answered the CLI's own prompt (HIVE-280), for a
    * CLI whose hooks cannot say so: `cancelled` also ends the turn. Absent: blocks clear by hooks alone.
@@ -134,6 +136,27 @@ export interface ContainerSetInput {
   containerRoot?: string;
   /** The run a `rewrite` set belongs to, when it is an agent's. */
   run?: string;
+}
+
+/** One skill as an extra file sees it (HIVE-369). */
+export interface RenderedSkillInfo {
+  name: string;
+  description: string;
+}
+
+/** Where a CLI's rendering of HiveTTY's skills lands and what sits beside `skills/` (HIVE-369). */
+export interface HarnessSkills {
+  /** The folder under `<userData>/hive`. */
+  readonly dir: string;
+  /** Files beside `skills/`, by path relative to the folder. */
+  extras(input: {
+    version: string;
+    doneUrl: string | null;
+    /** The folder's absolute path. */
+    root: string;
+    /** The skills this CLI receives, in name order. */
+    skills: readonly RenderedSkillInfo[];
+  }): Record<string, string>;
 }
 
 /**
