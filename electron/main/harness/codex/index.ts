@@ -1,5 +1,6 @@
 import { CAPABILITIES } from '@shared/harness-contract';
 
+import { blockAnswer } from '../block-answer';
 import { claudeCodeAdapter } from '../claude-code';
 import type { HarnessAdapter } from '../port';
 
@@ -10,7 +11,7 @@ import { readCodexHook } from './hooks';
 import { launchCodexSession } from './launch';
 import { foldCodexMeters } from './meters';
 import { readCodexModels } from './models';
-import { codexRecord } from './record';
+import { codexRecord, codexRecordAborted } from './record';
 
 /*
   A Codex session's hooks and MCP server are `-c` overrides on its argv (`./launch`); nothing is
@@ -54,4 +55,6 @@ export const codexAdapter: HarnessAdapter = {
   },
   headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence, containerCommand: 'codex' },
   models: () => readCodexModels(),
+  answersBlock: blockAnswer,
+  recordAborted: codexRecordAborted,
 };

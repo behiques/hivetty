@@ -832,3 +832,49 @@ describe('release (HIVE-280)', () => {
   });
 });
 
+
+describe('abort and busy (HIVE-365)', () => {
+  const running = () => {
+    const t = createStatusTracker();
+    t.apply({ entityId: 'cx', signal: { kind: 'prompt' } });
+    return t;
+  };
+
+  it('ends a running turn the record says was interrupted', () => {
+    const t = running();
+    expect(t.busy('cx')).toBe(true);
+    expect(t.abort('cx')).toEqual({ status: 'idle' });
+    expect(t.busy('cx')).toBe(false);
+  });
+
+  it('drops the block and the turn on a declined approval', () => {
+    const t = running();
+    t.apply({ entityId: 'cx', signal: { kind: 'waiting', reason: 'permission' }, toolName: 'Bash' });
+    expect(t.abort('cx')).toEqual({ status: 'idle' });
+    expect(t.held('cx').blocked).toBe(0);
+    // Nothing is left for a late PostToolUse to find.
+    expect(t.apply({ entityId: 'cx', signal: { kind: 'tool-end' }, toolName: 'Bash' })).toEqual({ status: 'idle' });
+  });
+
+  it('keeps a background agent: the interrupt stops the turn, not what it launched', () => {
+    const t = running();
+    t.apply({ entityId: 'cx', signal: { kind: 'subagent-start' }, agentId: 'A' });
+    expect(t.abort('cx')).toEqual({ status: 'idle', detail: 'agents' });
+  });
+
+  it('answers nothing for a session that is idle, or one it never saw', () => {
+    const t = running();
+    t.apply({ entityId: 'cx', signal: { kind: 'turn-end' } });
+    expect(t.busy('cx')).toBe(false);
+    expect(t.abort('cx')).toBeUndefined();
+    expect(t.busy('nobody')).toBe(false);
+    expect(t.abort('nobody')).toBeUndefined();
+  });
+
+  it('counts a block alone as busy', () => {
+    const t = createStatusTracker();
+    t.apply({ entityId: 'cx', signal: { kind: 'waiting', reason: 'permission' }, toolName: 'Bash' });
+    t.apply({ entityId: 'cx', signal: { kind: 'turn-end' } });
+    expect(t.busy('cx')).toBe(true);
+  });
+});

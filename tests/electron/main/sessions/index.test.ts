@@ -1,6 +1,6 @@
 // @vitest-environment node
 import type { PlanUpdate } from '../../../../electron/shared/plan-contract';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -4430,6 +4430,8 @@ describe('copilot sessions (HIVE-280)', () => {
   });
 
   describe('an answer typed into the TUI clears the block (HIVE-280, D5 amended)', () => {
+    const codexOpen = { ...OPEN, harness: 'codex' as const, model: 'gpt-6-luna' };
+
     it('clears the card and ends the turn on an Esc from the user: the denial fires no hook', () => {
       blockedOn(copilotOpen).write('hero-refresh', '\x1b', 'user');
       expect(statuses().at(-1)).toBe('idle');
@@ -4479,6 +4481,11 @@ describe('copilot sessions (HIVE-280)', () => {
       expect(statuses().length).toBe(before);
     });
 
+    it("clears a Codex block on the user's Esc too: its decline fires no hook either (HIVE-365)", () => {
+      blockedOn(codexOpen).write('hero-refresh', '\x1b', 'user');
+      expect(statuses().at(-1)).toBe('idle');
+    });
+
     it('publishes nothing for a user key when nothing is blocked', () => {
       instance = build([], { harnessStateDir: stateDir });
       instance.open(copilotOpen);
@@ -4487,6 +4494,43 @@ describe('copilot sessions (HIVE-280)', () => {
       const before = statuses().length;
       instance.write('hero-refresh', 'x', 'user');
       expect(statuses().length).toBe(before);
+    });
+  });
+
+  describe('a turn only the record shows aborted ends (HIVE-365)', () => {
+    let home: string;
+    const events = () => join(home, 'session-state', TEST_UUID, 'events.jsonl');
+    beforeEach(() => {
+      home = realpathSync(mkdtempSync(join(tmpdir(), 'cop-home-')));
+      vi.stubEnv('COPILOT_HOME', home);
+      mkdirSync(join(home, 'session-state', TEST_UUID), { recursive: true });
+      writeFileSync(events(), '{"type":"session.start"}\n');
+    });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('ends the turn when Copilot records the Esc Esc the user typed', async () => {
+      instance = build([], { harnessStateDir: stateDir });
+      instance.open(copilotOpen);
+      bootTo(mintedFor('hero-refresh'));
+      signal({ signal: { kind: 'prompt' } });
+      instance.write('hero-refresh', '\x1b', 'user');
+      instance.write('hero-refresh', '\x1b', 'user');
+      appendFileSync(events(), '{"type":"abort","data":{"reason":"user_abort"}}\n');
+      await vi.advanceTimersByTimeAsync(500);
+      await vi.waitFor(() => expect(statuses().at(-1)).toBe('idle'));
+    });
+
+    it('reads nothing for an app write: a nudge aborts nothing', async () => {
+      instance = build([], { harnessStateDir: stateDir });
+      instance.open(copilotOpen);
+      bootTo(mintedFor('hero-refresh'));
+      signal({ signal: { kind: 'prompt' } });
+      instance.write('hero-refresh', '\x1b', 'app');
+      appendFileSync(events(), '{"type":"abort","data":{"reason":"user_abort"}}\n');
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(statuses().at(-1)).toBe('working');
     });
   });
 });

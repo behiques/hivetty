@@ -12,17 +12,20 @@ import {
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { codexAdapter } from '../../electron/main/harness/codex';
 import { launchCodexSession } from '../../electron/main/harness/codex/launch';
 import { foldCodexMeters } from '../../electron/main/harness/codex/meters';
 import { codexRecord } from '../../electron/main/harness/codex/record';
 import type { LaunchSpec } from '../../electron/main/harness/port';
 import { createHarnessRegistry } from '../../electron/main/harness/registry';
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
-import { createStatusTracker } from '../../electron/main/hooks/tracker';
+import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
 import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
+import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
@@ -50,7 +53,7 @@ import type { PlanUpdate } from '../../electron/shared/plan-contract';
  * scratch repo, and logs where.
  *
  * Opt-in: `pnpm test:session:codex`. Skipped unless `codex --version` is 0.165.x and
- * `~/.codex/auth.json` exists; about five minutes.
+ * `~/.codex/auth.json` exists; about seven minutes.
  */
 
 const LIVE = process.env['HIVE_LIVE_SESSION_CODEX_PROOF'] === '1';
@@ -66,8 +69,11 @@ const CASE_MS = 240_000;
  * The pty driver, `tests/fixtures/codex/interactive-0.164/probe.py`'s loop. It splits the production
  * line with `shlex` and drops its `&& exit` (the driver is the shell), sizes the pty and
  * answers the TUI's start-up queries as xterm.js does (without either codex draws nothing), types
- * the prompt and its `\r` 300 ms apart (HIVE-63), answers an approval with `answer` when given, and
- * `/exit`s once the turn reports `Worked for`, or soon after an Esc. Its config is one JSON argument.
+ * the prompt and its `\r` 300 ms apart (HIVE-63), and `/exit`s once the turn reports `Worked for`.
+ * Every key it types goes through `key()`, which prints it as a JSON line first, for the test to read
+ * as the user's (HIVE-365); the start-up replies are the terminal's and are written plainly.
+ * `answer` is a list of keys 0.6 s apart, sent on the approval prompt or `answerAfter` seconds after
+ * the submit; `cancels` ends the drive soon after the answer. Its config is one JSON argument.
  */
 const DRIVER = String.raw`
 import fcntl, json, os, pty, select, shlex, struct, sys, termios, time
@@ -85,7 +91,10 @@ if pid == 0:
     try: os.execvpe(argv[0], argv, c['env'])
     finally: os._exit(127)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 120, 0, 0))
-out = bytearray(); replied = 0; start = time.time(); step = 0; submitted = 0; answered = False; done_at = None
+out = bytearray(); replied = 0; start = time.time(); step = 0; submitted = 0; submitted_at = 0; answered = False; done_at = None
+def key(text):
+    # Reported before it is written, as ptyWrite reads the record's size before the write.
+    print(json.dumps({'key': text}), flush=True); time.sleep(0.1); os.write(fd, text.encode())
 while time.time() - start < c['seconds']:
     r, _, _ = select.select([fd], [], [], 0.3)
     if r:
@@ -100,17 +109,20 @@ while time.time() - start < c['seconds']:
             at, q, a = min(hits); os.write(fd, a); replied += at + len(q)
     now = time.time() - start
     if step == 0 and now > 8:
-        os.write(fd, c['prompt'].encode()); step = 1
+        key(c['prompt']); step = 1
     elif step == 1 and now > 8.3:
-        os.write(fd, b'\r'); step = 2; submitted = len(out)
+        key('\r'); step = 2; submitted = len(out); submitted_at = now
     elif step == 2:
         since = bytes(out[submitted:])
-        if c['answer'] and not answered and b'Would you like to run' in since:
-            time.sleep(0.5); os.write(fd, c['answer'].encode()); answered = True
-            if c['answer'] == '\x1b': done_at = now + 4
+        due = now > submitted_at + c['answerAfter'] if c.get('answerAfter') else b'Would you like to run' in since
+        if c['answer'] and not answered and due:
+            time.sleep(0.5)
+            for k in c['answer']: key(k); time.sleep(0.6)
+            answered = True
+            if c.get('cancels'): done_at = now + 4
         if done_at is None and b'Worked for' in since: done_at = now
         if done_at is not None and now > done_at + 2:
-            os.write(fd, b'/exit'); time.sleep(0.3); os.write(fd, b'\r'); step = 3
+            key('/exit'); time.sleep(0.3); key('\r'); step = 3
     elif step == 3 and now > (done_at or 0) + 8: break
 try: os.kill(pid, 9)
 except Exception: pass
@@ -130,7 +142,7 @@ const flat = (path: string): string =>
 describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   let receiver: Receiver;
   let url: string;
-  let statuses: Array<{ status: string; signal: HookStatusEvent['signal']; sessionUuid?: string }>;
+  let statuses: Array<{ status: string; signal?: HookStatusEvent['signal']; sessionUuid?: string }>;
   let raised: HiveNotification[];
   let plans: PlanUpdate[];
   /** The rollout folded inside each Stop hook, while codex waits on its reply (HIVE-334, D1). */
@@ -138,6 +150,9 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   let scratch: string;
   let repo: string;
   let home: string;
+  let tracker: StatusTracker;
+  let aborts: RecordAborts;
+  let transcript: { cwd: string; sessionUuid: string } | undefined;
 
   beforeEach(async () => {
     statuses = [];
@@ -152,7 +167,8 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     spawnSync('git', ['init', '-q', repo]);
     copyFileSync(AUTH, join(home, 'auth.json'));
 
-    const tracker = createStatusTracker();
+    tracker = createStatusTracker();
+    transcript = undefined;
     const hub = createNotificationHub({
       prefs: () => ({}),
       present: () => {},
@@ -183,6 +199,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
           ...(e.sessionUuid === undefined ? {} : { sessionUuid: e.sessionUuid }),
         };
         statuses.push(event);
+        if (e.sessionUuid !== undefined) transcript = { cwd: repo, sessionUuid: e.sessionUuid };
         if (e.signal.kind === 'turn-end' && e.sessionUuid !== undefined) {
           // Synchronously, before the hook is answered: what a Stop-triggered read would see.
           const rollout = codexRecord(() => home).transcriptPath(repo, e.sessionUuid);
@@ -201,6 +218,16 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       onLedgerPost: () => ({ ok: false as const, status: 503, reason: 'not exercised by this suite' }),
       onAgentsList: () => Promise.reject(new Error('not exercised by this suite')),
     });
+    // The real watch `sessions/index.ts` runs, on this case's scratch home.
+    aborts = createRecordAborts({
+      transcriptOf: () => transcript,
+      adapterOf: () => ({ ...codexAdapter, record: codexRecord(() => home) }),
+      busy: (id) => tracker.busy(id),
+      onAbort: (id) => {
+        const derived = tracker.abort(id);
+        if (derived !== undefined) statuses.push({ status: derived.status });
+      },
+    });
     const started = await receiver.start();
     expect(started).not.toBeNull();
     url = started as string;
@@ -218,7 +245,13 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   };
 
   /** One launch, one prompt, one turn. Resolves with the pty log's path. */
-  const run = async (name: string, spec: Partial<LaunchSpec>, prompt: string, answer?: string): Promise<string> => {
+  const run = async (
+    name: string,
+    spec: Partial<LaunchSpec>,
+    prompt: string,
+    answer?: string[],
+    drive: { answerAfter?: number; cancels?: boolean } = {},
+  ): Promise<string> => {
     const env: Record<string, string> = Object.fromEntries(
       Object.entries(process.env).filter(
         (entry): entry is [string, string] =>
@@ -233,13 +266,23 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       [HOOK_ENV_TOKEN]: receiver.tokenFor(SESSION),
     });
     const log = join(scratch, `${name}.pty.log`);
-    const config = { line: lineOf(spec), env, cwd: repo, prompt, answer: answer ?? null, seconds: 180, log };
+    const config = { line: lineOf(spec), env, cwd: repo, prompt, answer: answer ?? null, seconds: 180, log, ...drive };
     const stderr: Buffer[] = [];
     await new Promise<void>((resolve) => {
-      const child = spawn('python3', ['-c', DRIVER, JSON.stringify(config)], { stdio: ['ignore', 'ignore', 'pipe'] });
+      const child = spawn('python3', ['-c', DRIVER, JSON.stringify(config)], { stdio: ['ignore', 'pipe', 'pipe'] });
+      // Each key the driver types reaches the session as the user's, as `ptyWrite` does (`sessions/index.ts`).
+      createInterface({ input: child.stdout }).on('line', (line) => {
+        const typed = (JSON.parse(line) as { key: string }).key;
+        void aborts.onKey(SESSION, typed);
+        const answer = codexAdapter.answersBlock?.(typed) ?? null;
+        if (answer === null) return;
+        const derived = tracker.release(SESSION, { endTurn: answer === 'cancelled' });
+        if (derived !== undefined) statuses.push({ status: derived.status });
+      });
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
       child.on('exit', () => resolve());
     });
+    aborts.drop(SESSION);
     if (stderr.length > 0) console.info('DRIVER   ', Buffer.concat(stderr).toString('utf8'));
     return log;
   };
@@ -268,7 +311,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       expect(seen).toContain('working');
       const idle = seen.lastIndexOf('idle');
       expect(idle).toBeGreaterThan(seen.indexOf('working'));
-      expect(statuses[idle]!.signal.kind).toBe('turn-end');
+      expect(statuses[idle]!.signal?.kind).toBe('turn-end');
       expect(existsSync(marker)).toBe(true);
     },
     CASE_MS,
@@ -283,49 +326,87 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
         'permission',
         {},
         'Run the shell command: touch probe.txt. If the sandbox blocks it, request approval to run it with escalated permissions.',
-        '\r',
+        ['\r'],
       );
       finding('permission', {});
 
-      const waiting = statuses.findIndex((s) => s.status === 'waiting' && s.signal.kind === 'waiting');
+      const waiting = statuses.findIndex((s) => s.status === 'waiting' && s.signal?.kind === 'waiting');
       expect(waiting).toBeGreaterThanOrEqual(0);
       expect(statuses[waiting]!.signal).toMatchObject({ reason: 'permission' });
-      // The approval ends the block: the tool's own PostToolUse (matcher "*") moves the row off
-      // waiting before the turn ends, which Stop alone would not do.
+      // The user's Enter ends the block on the key (HIVE-365, `answersBlock`), and the tool's own
+      // PostToolUse (matcher "*") still follows it before the turn ends.
       const after = statuses.slice(waiting + 1).find((s) => s.status !== 'waiting');
-      expect(after?.signal.kind).toBe('tool-end');
+      expect(after?.status).toBe('working');
+      expect(after?.signal).toBeUndefined();
+      const toolEnd = statuses.findIndex((s, i) => i > waiting && s.signal?.kind === 'tool-end');
+      expect(toolEnd).toBeGreaterThan(waiting);
       // The card itself, not the idle every finished turn raises.
       expect(raised.map((n) => n.kind)).toContain('session.blocked');
       // Asked before it ran: the wait comes before the turn's end, and the file exists after it.
-      expect(statuses.findLastIndex((s) => s.signal.kind === 'turn-end')).toBeGreaterThan(waiting);
+      expect(statuses.findLastIndex((s) => s.signal?.kind === 'turn-end')).toBeGreaterThan(toolEnd);
       expect(existsSync(join(repo, 'probe.txt'))).toBe(true);
     },
     CASE_MS,
   );
 
-  /*
-    Measured at 0.165.0: an Esc on the approval prompt prints "Conversation interrupted" and fires no
-    hook, neither PostToolUse nor Stop, so the row stays waiting and the card stays up. Copilot's
-    FINDINGS P1 has the same shape; HIVE-365 gives Codex an `answersBlock` and drops `.fails`.
-  */
-  it.fails(
-    'clears the card and needs-you on an Esc denial (HIVE-365)',
+  it(
+    'clears the card and needs-you on an Esc denial, which fires no hook (HIVE-365)',
     async () => {
       userConfig('approval_policy = "on-request"\nsandbox_mode = "read-only"');
       await run(
         'denial',
         {},
         'Run the shell command: touch nope.txt. If the sandbox blocks it, request approval to run it with escalated permissions.',
-        '\x1b',
+        ['\x1b'],
+        { cancels: true },
       );
       finding('denial', {});
 
-      const waiting = statuses.findIndex((s) => s.status === 'waiting' && s.signal.kind === 'waiting');
+      const waiting = statuses.findIndex((s) => s.status === 'waiting' && s.signal?.kind === 'waiting');
       expect(waiting).toBeGreaterThanOrEqual(0);
       expect(raised.map((n) => n.kind)).toContain('session.blocked');
       // Denied, the row leaves waiting: nothing else would take "needs you" off a session left idle.
       expect(statuses.at(-1)?.status).toBe('idle');
+      expect(statuses.at(-1)?.signal).toBeUndefined();
       expect(existsSync(join(repo, 'nope.txt'))).toBe(false);
+    },
+    CASE_MS,
+  );
+
+  it(
+    'ends the turn on option 3, a decline only the rollout shows (HIVE-365)',
+    async () => {
+      userConfig('approval_policy = "on-request"\nsandbox_mode = "read-only"');
+      await run(
+        'decline',
+        {},
+        'Run the shell command: touch nope.txt. If the sandbox blocks it, request approval to run it with escalated permissions.',
+        ['\x1b[B', '\x1b[B', '\r'],
+        { cancels: true },
+      );
+      finding('decline', {});
+
+      expect(statuses.some((s) => s.status === 'waiting')).toBe(true);
+      expect(raised.map((n) => n.kind)).toContain('session.blocked');
+      // The Enter cleared the card and kept the turn; the rollout's turn_aborted ended it.
+      expect(statuses.at(-1)?.status).toBe('idle');
+      expect(statuses.at(-1)?.signal).toBeUndefined();
+      expect(statuses.some((s) => s.signal?.kind === 'turn-end')).toBe(false);
+      expect(existsSync(join(repo, 'nope.txt'))).toBe(false);
+    },
+    CASE_MS,
+  );
+
+  it(
+    'ends the turn on an Esc while it runs, which fires no Stop (HIVE-365)',
+    async () => {
+      userConfig();
+      await run('interrupt', {}, 'Run the shell command: sleep 30, then reply DONE.', ['\x1b'], { answerAfter: 6, cancels: true });
+      finding('interrupt', {});
+
+      expect(statuses.some((s) => s.status === 'working')).toBe(true);
+      expect(statuses.at(-1)?.status).toBe('idle');
+      expect(statuses.some((s) => s.signal?.kind === 'turn-end')).toBe(false);
     },
     CASE_MS,
   );
@@ -392,7 +473,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       finding('config', { id, rollout });
 
       expect(existsSync(marker)).toBe(true);
-      expect(statuses.some((s) => s.signal.kind === 'turn-end')).toBe(true);
+      expect(statuses.some((s) => s.signal?.kind === 'turn-end')).toBe(true);
       expect(rollout).not.toBeNull();
       expect(readFileSync(rollout!, 'utf8')).toContain('"model":"gpt-5.6-terra"');
     },

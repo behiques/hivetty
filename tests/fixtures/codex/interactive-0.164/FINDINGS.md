@@ -89,3 +89,23 @@ strips the spinner, the `[ ! ] Action Required | ` lead and the trailing ` | <di
 `approval_policy = "untrusted"` is refused at 0.164 ("no longer supported"). A permission prompt
 comes from `approval_policy="on-request"` with `sandbox_mode="read-only"` and a task that asks to
 escalate; Enter on the highlighted option approves it.
+
+## P8: declines and interrupts (0.165.0, HIVE-365)
+
+`approval_policy="on-request"`, `sandbox_mode="read-only"`. The command dialog and the patch dialog
+both offer `1. Yes, proceed (y)` · `2. Yes, and don't ask again… (p|a)` · `3. No, and tell Codex
+what to do differently (esc)`.
+
+| Input on the dialog | TUI | Hooks after `PermissionRequest` | Rollout |
+| --- | --- | --- | --- |
+| ↓ / ↑ | moves the highlight, decides nothing | — | — |
+| Enter on 1, `y` | runs | `PostToolUse`, `Stop` | `task_complete` |
+| Esc | `✗ You canceled…` `■ Conversation interrupted` | none | `event_msg` `turn_aborted` `reason:"interrupted"` |
+| ↓↓ Enter (option 3) | same as Esc | none | `turn_aborted` |
+| ↑ Enter (wraps 1 → 3) | same as Esc | none | `turn_aborted` |
+| ↓↓↓ Enter (wraps back to 1) | runs | `PostToolUse`, `Stop` | `task_complete` |
+| `3`, `n` | same as Esc | none | `turn_aborted` |
+
+Esc while a turn is running, no dialog: `■ Conversation interrupted`, no `Stop`, `turn_aborted`.
+
+**Consequence.** No hook can end these turns, and the highlight wraps, so a keystroke model cannot tell option 3 from option 1 without knowing how many options a dialog has. The rollout can: `recordAborted`. Probe artefact to avoid: a driver's own `/exit` + Enter answers a dialog still open, which reads like an approval nobody gave.

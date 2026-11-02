@@ -156,6 +156,14 @@ export interface StatusTracker {
    * `undefined`, and nothing changed, when there was nothing to answer.
    */
   release(entityId: string, options: { endTurn: boolean }): DerivedState | undefined;
+  /** A block held or a turn running: what a key could still abort (HIVE-365). */
+  busy(entityId: string): boolean;
+  /**
+   * The CLI's own record says the user aborted the turn (HIVE-365): an Esc or a declined approval
+   * that fired no hook. Blocks and the turn go; agents and background shells stay, since an
+   * interrupt stops the turn, not what it already launched. `undefined` when neither was held.
+   */
+  abort(entityId: string): DerivedState | undefined;
 }
 
 function empty(): Session {
@@ -524,6 +532,23 @@ export function createStatusTracker(): StatusTracker {
       }
       s.blocked.clear();
       s.blockedNames.clear();
+      return derive(s);
+    },
+
+    busy(entityId) {
+      const s = sessions.get(entityId);
+      return s !== undefined && (s.turnActive || s.blocked.size > 0);
+    },
+
+    abort(entityId) {
+      const s = sessions.get(entityId);
+      if (s === undefined || (!s.turnActive && s.blocked.size === 0)) return undefined;
+      // The aborted call never runs, so nothing will end it: as `release` does on a cancel.
+      for (const id of s.blocked) s.outstanding.delete(id);
+      s.blocked.clear();
+      s.blockedNames.clear();
+      s.turnActive = false;
+      s.answeredUnconfirmed = false;
       return derive(s);
     },
 

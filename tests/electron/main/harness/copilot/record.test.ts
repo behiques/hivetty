@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { copilotRecord } from '../../../../../electron/main/harness/copilot/record';
+import { copilotRecord, copilotRecordAborted } from '../../../../../electron/main/harness/copilot/record';
 
 const UUID = '11111111-2222-4333-8444-555555555551';
 
@@ -43,5 +43,24 @@ describe('copilotRecord', () => {
     expect(copilotRecord().transcriptPath('/c', UUID)).toBe(
       join(homedir(), '.copilot', 'session-state', UUID, 'events.jsonl'),
     );
+  });
+});
+
+describe('copilotRecordAborted (HIVE-365)', () => {
+  // Scrubbed from the 1.0.105 probe: Esc on the dialog, and Esc Esc mid-turn.
+  it.each([
+    ['an Esc on the dialog', '{"type":"abort","data":{"reason":"user_initiated"},"id":"e1","timestamp":"2026-11-02T15:27:02.265Z"}'],
+    ['an Esc Esc mid-turn', '{"type":"abort","data":{"reason":"user_abort"},"id":"e2","timestamp":"2026-11-02T15:30:47.763Z"}'],
+  ])('finds the abort written by %s', (_what, line) => {
+    expect(copilotRecordAborted(['{"type":"assistant.turn_end","data":{"turnId":"0"}}', line])).toBe(true);
+  });
+
+  it.each([
+    ['a turn that ended', ['{"type":"assistant.turn_end","data":{"turnId":"0"}}']],
+    ['a declined call the turn goes on from', ['{"type":"permission.completed","data":{"result":{"kind":"denied-interactively"}}}']],
+    ['the word in a message', ['{"type":"user.message","data":{"content":"abort"}}']],
+    ['a torn line', ['{"type":"abo']],
+  ])('finds nothing in %s', (_what, lines) => {
+    expect(copilotRecordAborted(lines)).toBe(false);
   });
 });

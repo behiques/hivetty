@@ -16,6 +16,7 @@ import { createReceiver, type Receiver } from '../../electron/main/hooks/receive
 import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
 import type { StdioServerSpec } from '../../electron/main/mcp/agent-config';
 import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
+import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
@@ -64,7 +65,9 @@ const CASE_MS = 240_000;
  * turn's drive when the test writes `stop` (a turn-end reached the receiver) or, after an Esc, when
  * the TUI says the operation was cancelled; then types `after`, and `/exit`s, or kills the process
  * and waits for it to be gone (`kill`). A "Session in use" dialog is answered "Resume anyway".
- * Every key it types is printed as a JSON line, for the test to read as the user's.
+ * Every key it types is printed as a JSON line before it is written, for the test to read as the
+ * user's. `interrupt` types Esc Esc that many seconds after the submit, Copilot's own interrupt, and
+ * gives the record six seconds before moving on (HIVE-365).
  */
 const DRIVER = String.raw`
 import fcntl, json, os, pty, select, struct, sys, termios, time
@@ -81,7 +84,8 @@ if pid == 0:
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 120, 0, 0))
 out = bytearray(); replied = 0; start = time.time()
 def key(text):
-    os.write(fd, text.encode()); print(json.dumps({'key': text}), flush=True)
+    # Reported before it is written, as ptyWrite reads the record's size before the write.
+    print(json.dumps({'key': text}), flush=True); time.sleep(0.1); os.write(fd, text.encode())
 def pump(seconds):
     global replied, out
     end = time.time() + seconds
@@ -105,6 +109,9 @@ pump(4)
 for line in c['prompts']:
     mark = len(out)
     key(line); pump(0.3); key('\r')
+    if c.get('interrupt'):
+        pump(c['interrupt']); key('\x1b'); pump(0.15); key('\x1b'); pump(6)
+        continue
     answered = c.get('answer') is None; cancelled_at = None
     while time.time() - start < c['seconds']:
         if not pump(0.5): break
@@ -167,6 +174,8 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
   let home: string;
   let stop: string;
   let observe: (status: string, signal?: HookStatusEvent['signal'], sessionUuid?: string) => void;
+  let aborts: RecordAborts;
+  let transcript: { cwd: string; sessionUuid: string } | undefined;
 
   beforeEach(async () => {
     statuses = [];
@@ -187,6 +196,17 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     writeFileSync(join(scratch, 'mcp-stub.py'), MCP_STUB);
 
     tracker = createStatusTracker();
+    transcript = undefined;
+    // The real watch `sessions/index.ts` runs, on this case's scratch home.
+    aborts = createRecordAborts({
+      transcriptOf: () => transcript,
+      adapterOf: () => ({ ...copilotAdapter, record: copilotRecord(() => home) }),
+      busy: (id) => tracker.busy(id),
+      onAbort: (id) => {
+        const derived = tracker.abort(id);
+        if (derived !== undefined) observe(derived.status);
+      },
+    });
     const hub = createNotificationHub({
       prefs: () => ({}),
       present: () => {},
@@ -260,6 +280,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     answer?: string;
     after?: string[];
     kill?: boolean;
+    interrupt?: number;
   }
 
   /** One launch, its prompts, one turn each. Resolves with the pty log's path. */
@@ -294,11 +315,13 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     const log = join(scratch, `${name}.pty.log`);
     const config = { argv, env, cwd: repo, seconds: 180, log, stop, ...drive };
     const stderr: Buffer[] = [];
+    transcript = { cwd: repo, sessionUuid };
     await new Promise<void>((resolve) => {
       const child = spawn('python3', ['-c', DRIVER, JSON.stringify(config)], { stdio: ['ignore', 'pipe', 'pipe'] });
       // Each key the driver types reaches the session as the user's, as `ptyWrite` does (`sessions/index.ts`).
       createInterface({ input: child.stdout }).on('line', (line) => {
         const typed = (JSON.parse(line) as { key: string }).key;
+        void aborts.onKey(SESSION, typed);
         const answer = copilotAdapter.answersBlock?.(typed) ?? null;
         if (answer === null) return;
         const derived = tracker.release(SESSION, { endTurn: answer === 'cancelled' });
@@ -307,6 +330,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
       child.on('exit', () => resolve());
     });
+    aborts.drop(SESSION);
     if (stderr.length > 0) console.info('DRIVER   ', Buffer.concat(stderr).toString('utf8'));
     return log;
   };
@@ -373,6 +397,23 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       expect(statuses.at(-1)?.signal).toBeUndefined();
       expect(dismissed.length).toBeGreaterThan(0);
       expect(existsSync(join(repo, 'nope.txt'))).toBe(false);
+    },
+    CASE_MS,
+  );
+
+  it(
+    'ends the turn on an Esc Esc interrupt, which fires no agentStop (HIVE-365)',
+    async () => {
+      // Ten seconds in, the reply is streaming. Four seconds in (1.0.105), Copilot had not started it:
+      // its first Esc offered "Esc again to edit prompt" and the pair wrote no abort.
+      await run('interrupt', UUID, { prompts: ['Write a 600-word essay about bees, then reply DONE.'], interrupt: 10 });
+      finding('interrupt', {});
+
+      expect(statuses.some((s) => s.status === 'working')).toBe(true);
+      // Copilot's own abort in events.jsonl ended it; a finished essay would have ended on agentStop.
+      expect(statuses.at(-1)?.status).toBe('idle');
+      expect(statuses.at(-1)?.signal).toBeUndefined();
+      expect(statuses.some((s) => s.signal?.kind === 'turn-end')).toBe(false);
     },
     CASE_MS,
   );

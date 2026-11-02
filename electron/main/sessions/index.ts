@@ -76,6 +76,7 @@ import { createBootstrap, type Bootstrap } from './bootstrap';
 import { createChangedFiles } from './changed-files';
 import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
 import type { SessionHistory } from './history';
+import { createRecordAborts } from './record-aborts';
 import { createRecordMeters } from './record-meters';
 import { createSessionRegistry, type SessionRegistry } from './registry';
 import { createTitleReader, type TitleReader } from './title';
@@ -894,6 +895,17 @@ export function createSessions(options: SessionsOptions): Sessions {
     adapterOf,
   });
 
+  /** A turn the user aborted with no hook to say so, from the CLI's own record (HIVE-365). */
+  const recordAborts = createRecordAborts({
+    transcriptOf: (entityId) => transcripts.get(entityId),
+    adapterOf,
+    busy: (entityId) => statusTracker.busy(entityId),
+    onAbort: (entityId) => {
+      const derived = statusTracker.abort(entityId);
+      if (derived !== undefined) publishHookStatus(entityId, derived.status, undefined, derived.detail);
+    },
+  });
+
   /**
    * The last title classified for each session, and what it was classified as.
    *
@@ -1486,6 +1498,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     plans.forget(entityId);
     changedFiles.drop(entityId);
     recordMeters.drop(entityId);
+    recordAborts.drop(entityId);
     /*
       Asked rather than assumed. `history.resumable` is the only thing that knows
       whether a uuid still names this terminal's conversation — a `/clear`
@@ -1526,6 +1539,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     plans.forget(entityId);
     changedFiles.drop(entityId);
     recordMeters.drop(entityId);
+    recordAborts.drop(entityId);
     send(CH.sessionTerminalEnded, { entityId, ending } satisfies SessionTerminalEndedEvent);
   }
 
@@ -1779,8 +1793,8 @@ export function createSessions(options: SessionsOptions): Sessions {
 
   /**
    * The user answered the CLI's own prompt in the terminal (HIVE-280). Only for a CLI that says so
-   * (`answersBlock`, Copilot's): its Esc fires no hook, so the keystroke is what clears the card and
-   * "needs you". Never an app write: the bootstrap and a nudge answer nothing.
+   * (`answersBlock`, Copilot's and Codex's): its Esc fires no hook, so the keystroke is what clears
+   * the card and "needs you". Never an app write: the bootstrap and a nudge answer nothing.
    */
   function answerBlock(entityId: string, data: string): void {
     const answersBlock = adapterOf(entityId).answersBlock;
@@ -1955,6 +1969,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     plans.forget(entityId);
     changedFiles.drop(entityId);
     recordMeters.drop(entityId);
+    recordAborts.drop(entityId);
     /**
      * Per-generation too, and for a sharper reason than the other two: a
      * restarted session reuses the entity id, and a retained entry would make
@@ -2939,6 +2954,8 @@ export function createSessions(options: SessionsOptions): Sessions {
         return false;
       }
 
+      // Before the write: the record's size is read ahead of the abort this key may cause.
+      if (origin === 'user') void recordAborts.onKey(entityId, data);
       ptyIpc.write(sessionId, data);
       if (origin === 'user') answerBlock(entityId, data);
       return true;
