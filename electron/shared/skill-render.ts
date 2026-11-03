@@ -26,12 +26,14 @@ export function fillPlaceholders(text: string, cli: HarnessId, root?: string): s
 
 /**
  * What a session on `cli` types to run `skill`, stored as Claude names it (`hive:work-on`).
- * Claude keeps the plugin's namespace and Copilot types it as `/hive:<name>` (HIVE-362); Codex loads
- * HiveTTY's skills by their bare name.
+ * Claude keeps the plugin's namespace, Copilot types `/hive:hive-<name>` (HIVE-382) and Codex loads
+ * HiveTTY's skills by their bare name. A skill outside hive keeps only the CLI's sigil.
  */
 export function typedSkill(skill: string, cli: HarnessId): string {
   if (cli === 'claude-code') return `/${skill}`;
-  return `${CAPABILITIES[cli].skills.typedPrefix}${skill.replace(/^hive:/, '')}`;
+  const { typedPrefix } = CAPABILITIES[cli].skills;
+  if (skill.startsWith('hive:')) return `${typedPrefix}${skill.slice('hive:'.length)}`;
+  return `${typedPrefix.charAt(0)}${skill}`;
 }
 
 /** Frontmatter keys `cli` must not read: Claude Code's own hook and tool grants. */
@@ -60,9 +62,24 @@ function dropFrontmatterKeys(text: string, keys: readonly string[]): string {
   return [...kept, ...lines.slice(close)].join('\n');
 }
 
-/** One skill file as `cli` receives it: Claude-only keys dropped, placeholders filled. */
+/** The frontmatter's top-level `name:` given `prefix`, its quotes dropped; anything else untouched. */
+function prefixFrontmatterName(text: string, prefix: string): string {
+  if (prefix === '') return text;
+  const lines = text.split('\n');
+  if (lines[0]?.trim() !== '---') return text;
+  const close = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
+  if (close === -1) return text;
+  const at = lines.findIndex((line, index) => index < close && line.startsWith('name:'));
+  if (at === -1) return text;
+  const name = lines[at].slice('name:'.length).trim().replace(/^(["'])(.*)\1$/, '$2');
+  lines[at] = `name: ${prefix}${name}`;
+  return lines.join('\n');
+}
+
+/** One skill file as `cli` receives it: Claude-only keys dropped, its name prefixed, placeholders filled. */
 export function renderSkillText(text: string, cli: HarnessId, root?: string): string {
-  return fillPlaceholders(dropFrontmatterKeys(text, dropKeysFor(cli)), cli, root);
+  const kept = dropFrontmatterKeys(text, dropKeysFor(cli));
+  return fillPlaceholders(prefixFrontmatterName(kept, CAPABILITIES[cli].skills.namePrefix), cli, root);
 }
 
 /** The names a skill may point at: hive tools and skills, `done` included. */

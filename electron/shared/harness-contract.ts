@@ -72,12 +72,14 @@ export interface Capabilities {
   /**
    * How a HiveTTY skill is written for this CLI (HIVE-369): what `{{tool:x}}`, `{{skill:x}}` and
    * `{{plugin_root}}` become, and what a ticket session types. Every skill reaches every CLI; only
-   * its wording changes. Copilot's `/x` stands until HIVE-362's probe.
+   * its wording changes.
    */
   skills: {
     toolPrefix: string;
     refPrefix: string;
     typedPrefix: string;
+    /** Prepended to a skill's frontmatter `name:`, for a CLI that keys skills on it (HIVE-382). */
+    namePrefix: string;
     /** `null` when no variable names the folder: the renderer writes the folder's own path instead. */
     pluginRoot: string | null;
   };
@@ -100,6 +102,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
       toolPrefix: 'mcp__hive__',
       refPrefix: 'hive:',
       typedPrefix: '/hive:',
+      namePrefix: '',
       pluginRoot: '$CLAUDE_PLUGIN_ROOT',
     },
   },
@@ -117,6 +120,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
       toolPrefix: 'mcp__hive__',
       refPrefix: '$',
       typedPrefix: '$',
+      namePrefix: '',
       pluginRoot: null,
     },
   },
@@ -133,9 +137,12 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     conversationId: 'argv',
     skills: {
       toolPrefix: 'hive-',
-      // HIVE-362: Copilot prefixes a plugin skill only on a name collision; /hive:<name> loads either way (FINDINGS P10).
-      refPrefix: '/hive:',
-      typedPrefix: '/hive:',
+      // HIVE-382: Copilot keys a skill on its frontmatter name, and a repository skill of the same bare
+      // name hides a plugin's outright, so each is named hive-<name>. Typed with an argument, the TUI
+      // resolves only <plugin>:<name>, hence /hive:hive-<name> (FINDINGS P10).
+      refPrefix: '/hive:hive-',
+      typedPrefix: '/hive:hive-',
+      namePrefix: 'hive-',
       pluginRoot: null,
     },
   },

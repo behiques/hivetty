@@ -24,7 +24,7 @@ describe('fillPlaceholders', () => {
   });
   it('fills Copilot, with its folder as the plugin root', () => {
     expect(fillPlaceholders(SOURCE, 'copilot', '/ud/hive/plugins/copilot')).toBe(
-      'Call hive-ledger_ask, then /hive:plan from "/ud/hive/plugins/copilot/x".',
+      'Call hive-ledger_ask, then /hive:hive-plan from "/ud/hive/plugins/copilot/x".',
     );
   });
   it('leaves {{plugin_root}} alone for Codex and Copilot when no folder is known, rather than name an unset variable', () => {
@@ -44,11 +44,12 @@ describe('typedSkill', () => {
   it('types each CLI its own way', () => {
     expect(typedSkill('hive:work-on', 'claude-code')).toBe('/hive:work-on');
     expect(typedSkill('hive:work-on', 'codex')).toBe('$work-on');
-    expect(typedSkill('hive:work-on', 'copilot')).toBe('/hive:work-on');
+    expect(typedSkill('hive:work-on', 'copilot')).toBe('/hive:hive-work-on');
   });
   it('keeps a name outside hive as stored', () => {
     expect(typedSkill('graphify', 'claude-code')).toBe('/graphify');
     expect(typedSkill('graphify', 'codex')).toBe('$graphify');
+    expect(typedSkill('graphify', 'copilot')).toBe('/graphify');
   });
 });
 
@@ -94,6 +95,19 @@ describe('renderSkillText', () => {
   });
   it('leaves an unterminated header alone', () => {
     const text = '---\nname: x\nrequires: [subagents]\n';
+    expect(renderSkillText(text, 'codex')).toBe(text);
+    expect(renderSkillText(text, 'copilot')).toBe(text);
+  });
+  it('names a Copilot skill hive-<name>, which no repository skill can hide (HIVE-382)', () => {
+    expect(renderSkillText('---\nname: work-on\ndescription: d\n---\nname: prose\n', 'copilot')).toBe(
+      '---\nname: hive-work-on\ndescription: d\n---\nname: prose\n',
+    );
+    expect(renderSkillText('---\nname: "work-on"\n---\n', 'copilot')).toBe('---\nname: hive-work-on\n---\n');
+    expect(renderSkillText("---\nname: 'work-on'  \n---\n", 'copilot')).toBe('---\nname: hive-work-on\n---\n');
+  });
+  it('keeps the bare name for Claude Code, whose plugin namespaces it, and Codex (HIVE-382)', () => {
+    const text = '---\nname: work-on\n---\n';
+    expect(renderSkillText(text, 'claude-code')).toBe(text);
     expect(renderSkillText(text, 'codex')).toBe(text);
   });
 });

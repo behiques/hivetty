@@ -34,18 +34,21 @@ describe('skills vocabulary (HIVE-369)', () => {
       toolPrefix: 'mcp__hive__',
       refPrefix: 'hive:',
       typedPrefix: '/hive:',
+      namePrefix: '',
       pluginRoot: '$CLAUDE_PLUGIN_ROOT',
     });
     expect(CAPABILITIES.codex.skills).toEqual({
       toolPrefix: 'mcp__hive__',
       refPrefix: '$',
       typedPrefix: '$',
+      namePrefix: '',
       pluginRoot: null,
     });
     expect(CAPABILITIES.copilot.skills).toEqual({
       toolPrefix: 'hive-',
-      refPrefix: '/hive:',
-      typedPrefix: '/hive:',
+      refPrefix: '/hive:hive-',
+      typedPrefix: '/hive:hive-',
+      namePrefix: 'hive-',
       pluginRoot: null,
     });
   });

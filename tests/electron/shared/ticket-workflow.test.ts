@@ -62,7 +62,7 @@ describe('ticketStart', () => {
   it.each([
     ['claude-code', '/hive:work-on HIVE-1'],
     ['codex', '$work-on HIVE-1'],
-    ['copilot', '/hive:work-on HIVE-1'],
+    ['copilot', '/hive:hive-work-on HIVE-1'],
   ] as const)('types the skill as %s does (HIVE-369)', (cli, text) => {
     expect(ticketStart({ kind: 'skill', skill: 'hive:work-on' }, { key: 'HIVE-1' }, cli)).toEqual({ kind: 'message', text });
   });

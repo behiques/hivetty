@@ -178,8 +178,8 @@ Measured in the live suite: Esc Esc four seconds after the submit, before the re
 ## P10: HiveTTY's skills and the instructions dir (HIVE-362)
 
 **Answer.**
-- A `--plugin-dir` plugin's skill lists as `hive:<name>` only when its bare name collides with another skill.
-- Typed in the TUI, `/hive:<name>` loads the plugin's skill whether or not the name collides.
+- A `--plugin-dir` plugin's skill lists as `hive:<name>` only when its bare name collides with a personal skill. A repository skill hides it instead (below).
+- Typed in the TUI, `/hive:<name>` loads the plugin's skill when the name collides with a personal skill.
 - `COPILOT_CUSTOM_INSTRUCTIONS_DIRS=<dir>` loads `<dir>/instructions/*.instructions.md`. A `--plugin-dir`'s own instruction files are not sources.
 - A slash-typed skill fires no hook. `events.jsonl` records only an internal `skill` event.
 
@@ -187,6 +187,12 @@ Three more facts came out of the live suite:
 - Copilot's YAML is strict. It refused `review-pr-findings`, `ship` and `spec-deviation`, whose one-line descriptions held an unquoted `: `. Their descriptions are now `>-` folded blocks.
 - A personal skill under the scratch `$COPILOT_HOME/skills`, or under `~/.agents/skills` with a scratch `HOME`, is not read. So the suite cannot stage a user-skill collision without writing to the real home.
 - A repository `.github/skills/<name>` (`source: "project"`) **shadows** a plugin skill of the same name. The plugin's is not listed as `hive:<name>`; it disappears.
+
+HIVE-382 probed the rest (`copilot --plugin-dir <p> skill list --json` in a scratch repo, 3 Nov 2026):
+- `.agents/skills/<name>` and `.claude/skills/<name>` in the repository hide a plugin skill of the same name, as `.github/skills` does. A personal `~/.agents/skills/<name>` renames it `hive:<name>` instead.
+- Copilot keys a skill on its frontmatter `name:`, not its folder. A plugin folder `x` named `hive-x` lists as `hive-x` beside a repository `x`.
+- Typed with an argument after it, the TUI resolves only `/<plugin>:<name>`. With `name: hive:x`, `/hive:x` loads but `/hive:x now` answers `Unknown command`. With `name: hive-x`, `/hive-x now` is unknown too, and `/hive:hive-x now` loads.
+- So the Copilot rendering names every skill `hive-<name>` (`namePrefix`) and types it `/hive:hive-<name>` (`typedPrefix`, `refPrefix`). No bare name is left to collide. `pnpm test:session:copilot` stages `zz-repo` in all three repository roots and types two of the probes with an argument.
 
 **Evidence.** The live suite's `typed-form` and `skill-list` cases (`pnpm test:session:copilot`).
 
