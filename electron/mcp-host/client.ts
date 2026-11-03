@@ -6,6 +6,7 @@ import {
 } from '@shared/config-contract';
 import { PR_PATH, type PrLookupReply } from '@shared/github-contract';
 import {
+  DONE_PATH,
   HOOK_HEADER_RUN_TOKEN,
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
@@ -131,6 +132,8 @@ export function createReceiverClient({
       throw new ReceiverError(response.status, reason);
     }
 
+    // `/done` answers 204 and nothing else: there is no body to parse (HIVE-368).
+    if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
   };
 
@@ -171,5 +174,7 @@ export function createReceiverClient({
     jiraUsers: (request) => call<JiraResult<JiraUser[]>>(JIRA_USERS_PATH, request),
     // Retro B: a small body; a refusal arrives as a 409 and its reason.
     projectAutoMerge: (request) => call<ProjectsDirectory>(PROJECT_AUTO_MERGE_PATH, request),
+    // HIVE-368: the same empty body as `agents`; the session header is the whole message.
+    done: () => call<undefined>(DONE_PATH, {}),
   };
 }

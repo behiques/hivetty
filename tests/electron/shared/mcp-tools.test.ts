@@ -25,6 +25,7 @@ const stub = (overrides: Partial<ReceiverClient> = {}): ReceiverClient => ({
   projectAutoMerge: vi.fn(async () => {
     throw new ReceiverError(409, 'auto-merge switching is not wired to this receiver; nothing was changed');
   }),
+  done: vi.fn(async () => {}),
   ...overrides,
 });
 

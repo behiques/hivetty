@@ -1501,6 +1501,11 @@ export function createReceiver(options: ReceiverOptions): Receiver {
         ),
       jiraUsers: async (request) =>
         unwrap<JiraResult<JiraUser[]>>(await handleJiraUsers(headers, JSON.stringify(request), false)),
+      // HIVE-368: `/done`'s own handler, so a container's finish is the same arming a curl's is.
+      done: async () => {
+        const status = handleDone(headers);
+        if (status !== 204) throw new ReceiverError(status, `the Hive refused the request (${status})`);
+      },
     };
   }
 
