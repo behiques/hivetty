@@ -215,3 +215,17 @@ HIVE-382 probed the rest (`copilot --plugin-dir <p> skill list --json` in a scra
 **Consequence.**
 - `promptMarker` is Claude's.
 - `contextDelivery` is `'prompt-marker'`.
+- The launch's `--allow-tool` list and the filter are one list, `COPILOT_SESSION_PREAPPROVED`, in one spelling: the filter derives `server/tool` from `server(tool)`, and a unit test reads every `--allow-tool` off a real launch line and checks each is dropped (HIVE-383).
+
+## P12: the user's own approvals (HIVE-383)
+
+**Answer.** Every approval the user makes still fires `permissionRequest`, with no prompt drawn. The reader raises a card, and that card is cleared at tool-end: a needs-you flash per call.
+- **Don't ask again in this repo**: option 2 on a plain command's prompt, "Yes, and don't ask again for `mkdir` in this repo". A shell redirect (`echo x > f`) gets only Yes and No. The approval is kept in `$COPILOT_HOME/permissions-config.json`, under `locations.<repo>.tool_approvals`. This file is the config allow-list. The next `mkdir` draws no prompt and still fires the hook.
+- **`/allow-all`**: "Allow All for this session", with no confirmation. The next call draws no prompt and still fires the hook.
+- **`defaultPermissionMode: "allow-all"`**: `copilot config` writes this to `$COPILOT_HOME/settings.json`, not `config.json`. A session starts in Allow All, draws no prompt, and still fires the hook.
+
+**Evidence.** The live suite's three P12 cases: the prompts drawn in the pty log against the `session.blocked` count.
+
+**Consequence.**
+- A fixed list cannot see these approvals: they live in Copilot's own state, and two of them change mid-session. `COPILOT_SESSION_PREAPPROVED` stays HiveTTY's own launch list.
+- Stopping the flash is a follow-up story. The lead: the prompt Copilot actually draws is the `notification` of type `permission_prompt` (P2), which the reader skips today.
