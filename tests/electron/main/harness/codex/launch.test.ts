@@ -8,7 +8,7 @@ import { shellQuote } from '../../../../../electron/main/container/shell-quote';
 import { CODEX_AUTH_ENV_KEYS, CODEX_SESSION_ENV_KEYS } from '../../../../../electron/main/harness/codex/headless';
 import { launchCodexSession } from '../../../../../electron/main/harness/codex/launch';
 import { hookEntry, toml, tomlList } from '../../../../../electron/main/harness/codex/toml';
-import { hookCommand } from '../../../../../electron/main/harness/hook-commands';
+import { contextCommand, hookCommand } from '../../../../../electron/main/harness/hook-commands';
 import type { LaunchSpec } from '../../../../../electron/main/harness/port';
 import type { StdioServerSpec } from '../../../../../electron/main/mcp/agent-config';
 
@@ -40,9 +40,12 @@ describe('codex session command (HIVE-279)', () => {
 
   it('reports every session event to the receiver, tool ends by matcher', () => {
     const l = line();
-    for (const event of ['SessionStart', 'UserPromptSubmit', 'PermissionRequest', 'Stop']) {
+    for (const event of ['SessionStart', 'PermissionRequest', 'Stop']) {
       expect(l).toContain(shellQuote(hookEntry(event, hookCommand())));
     }
+    // HIVE-360: the prompt hook prints the receiver's reply, which is how a marker's entry reaches the model.
+    expect(l).toContain(shellQuote(hookEntry('UserPromptSubmit', contextCommand())));
+    expect(l).not.toContain(shellQuote(hookEntry('UserPromptSubmit', hookCommand())));
     expect(l).toContain(shellQuote(hookEntry('PostToolUse', hookCommand(), '*')));
   });
 

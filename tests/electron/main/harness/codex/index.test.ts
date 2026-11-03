@@ -21,7 +21,7 @@ describe('codexAdapter', () => {
     expect(codexAdapter.capabilities).toEqual({
       resume: 'by-id',
       meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay', 'credits'],
-      contextDelivery: 'none',
+      contextDelivery: 'prompt-marker',
       reportsCostUsd: false,
       enforcesTurns: false,
       enforcesBudget: false,
@@ -80,8 +80,8 @@ describe('codexAdapter', () => {
     expect(codexAdapter.skills.dir).toBe('plugins/codex');
   });
 
-  it('still refuses prompt markers, which are the follow-up’s (D1)', () => {
-    expect(() => codexAdapter.promptMarker({} as never)).toThrow(/codex sessions take no markers yet/);
+  it('types Claude’s marker bytes, answered as hook context the same way (HIVE-360)', () => {
+    expect(codexAdapter.promptMarker).toBe(claudeCodeAdapter.promptMarker);
   });
 
   it('reports nothing installed', async () => {

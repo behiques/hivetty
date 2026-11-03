@@ -27,7 +27,6 @@ import { toml } from '../../electron/main/harness/codex/toml';
 import { shellQuote } from '../../electron/main/container/shell-quote';
 import type { LaunchSpec } from '../../electron/main/harness/port';
 import { createHarnessRegistry } from '../../electron/main/harness/registry';
-import { promptMarker } from '../../electron/main/harness/claude-code/prompt-marker';
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
 import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
 import { createLedger } from '../../electron/main/ledger';
@@ -461,14 +460,13 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   );
 
   /*
-    D6, measured 2026-11-03 at codex-cli 0.165.0: the receiver resolves the marker and answers
-    `UserPromptSubmit` with Claude's `hookSpecificOutput.additionalContext`, and the model gets only
-    the typed `📒 <ref>`. So Codex's `contextDelivery` stays 'none' and its adapter keeps refusing
-    markers. This case pins that measurement: when the word starts arriving it fails, and the
-    switch (the plan's Task 9) is due.
+    D6, measured 2026-11-03 at codex-cli 0.165.0, and fixed: codex reads a command hook's stdout
+    for `additionalContext`, and the prompt hook used to send the receiver's reply to /dev/null.
+    `contextCommand` prints it, so the entry the marker names reaches the model whole, as it does
+    for Claude (HIVE-138). The marker is the adapter's own bytes.
   */
   it(
-    'a typed ledger marker does not yet reach the model as hook context (HIVE-360 D6, measured as HIVE-138)',
+    'a typed ledger marker reaches the model as hook context (HIVE-360 D6, measured as HIVE-138)',
     async () => {
       userConfig();
       const word = `ORCHID-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
@@ -482,21 +480,18 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       });
       expect(asked.ok).toBe(true);
       const entry = ledger.read({}).entries.find((e) => asked.ok && e.id === asked.id)!;
-      // Claude's bytes, imported directly: Codex's own adapter still refuses markers (D6).
-      const typed = promptMarker(entry);
+      const typed = codexAdapter.promptMarker(entry);
       expect(typed.endsWith('\r')).toBe(true);
       const log = await run('marker', {}, typed.slice(0, -1)); // the driver types the \r itself
       const id = statuses.find((s) => s.sessionUuid !== undefined)?.sessionUuid;
       const rollout = id === undefined ? null : codexRecord(() => home).transcriptPath(repo, id);
       finding('marker', { word, marker: typed, ledgerReads, rollout });
 
-      // Our half works: the hook fired, the receiver looked the marker up, and the turn ran.
+      // The hook fired, the receiver looked the marker up, and the model answered from the entry.
       expect(ledgerReads).toContain(SESSION);
       expect(statuses.some((s) => s.signal?.kind === 'turn-end')).toBe(true);
       expect(rollout).not.toBeNull();
-      // Codex's half does not: the context never reached the model.
-      expect(readFileSync(rollout!, 'utf8')).not.toContain(word);
-      expect(flat(log)).not.toContain(word);
+      expect(flat(log)).toContain(word);
     },
     CASE_MS,
   );

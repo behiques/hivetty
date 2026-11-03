@@ -52,8 +52,9 @@ describe('skills vocabulary (HIVE-369)', () => {
 });
 
 describe('context delivery', () => {
-  it('delivers markers to Claude and Copilot, not yet Codex (HIVE-362)', () => {
+  it('delivers markers to every CLI (HIVE-362, HIVE-360)', () => {
     expect(CAPABILITIES['claude-code'].contextDelivery).toBe('prompt-marker');
     expect(CAPABILITIES.copilot.contextDelivery).toBe('prompt-marker');
+    expect(CAPABILITIES.codex.contextDelivery).toBe('prompt-marker');
   });
 });

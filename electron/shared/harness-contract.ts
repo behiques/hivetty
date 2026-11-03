@@ -106,7 +106,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   codex: {
     resume: 'by-id',
     meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay', 'credits'],
-    contextDelivery: 'none',
+    contextDelivery: 'prompt-marker',
     reportsCostUsd: false,
     enforcesTurns: false,
     enforcesBudget: false,

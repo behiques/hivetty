@@ -366,9 +366,8 @@ rg -n --type ts -e "'(PreToolUse|PostToolUse|Stop|SubagentStop|SessionStart|Sess
 
 ### Follow-ups
 
-- HIVE-279's follow-up: HiveTTY skills in Codex sessions landed with HIVE-360; prompt markers
-  wait on Codex handing `UserPromptSubmit` context to the model (HIVE-360 D6). The same for
-  Copilot sessions (HIVE-280 D1), with Copilot's plan panel (its todo list is SQL, FINDINGS P4).
+- HIVE-279's follow-up: HiveTTY skills and prompt markers in Codex sessions landed with HIVE-360.
+  The same for Copilot sessions (HIVE-280 D1), with Copilot's plan panel (its todo list is SQL, FINDINGS P4).
 - HIVE-358: plans in agent runs.
 - HIVE-353: the rotation handoff's late-id gap.
 - HIVE-354: the `approve` hang.
@@ -478,7 +477,9 @@ login shell is typed, as Claude's is (`&& exit`, the task after `--`), flag by f
 - `-c hooks.<E>=[…]` for `SessionStart`, `UserPromptSubmit`, `PermissionRequest` and `Stop`, and
   `PostToolUse` with `matcher="*"` (as Claude's sessions do: a finished tool is what clears an
   approved `PermissionRequest`, since `Stop` does not; `update_plan` is the only one read for a
-  plan), each running `hookCommand()`. No `Notification`:
+  plan), each running `hookCommand()`, except `UserPromptSubmit`, which runs `contextCommand()`:
+  it prints the receiver's reply, because a command hook's stdout is where codex reads
+  `additionalContext` (HIVE-360 D6). No `Notification`:
   idle is `Stop`, and a permission is `PermissionRequest`, which is Claude's shape (P3). `/fence`
   is not used: a session's TUI asks for itself (D5).
 - `-c mcp_servers.hive.*`: the stdio host, `env_vars` forwarding the session's identity by name,
@@ -501,10 +502,11 @@ different one (`/new`) replaces it, and a fresh restart clears it until its own 
 `record` finds a conversation by its rollout, `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<id>.jsonl`
 (P6), whatever the cwd, newest day first; `titleOrigin` is `'unknown'`, and `nameFromTitle` strips
 the title's spinner frame, `[ ! ] Action Required | ` lead and trailing ` | <dir>` (P7). `prepare`
-writes nothing: everything is on the argv. `promptMarker` still refuses and `contextDelivery` is
-`'none'`: the receiver answers a typed marker's `UserPromptSubmit` with `additionalContext`, and
-codex 0.165.0 does not hand it to the model (HIVE-360 D6, measured live). Were markers on, a
-focused Codex session would hold them anyway: `claimBareBack` knows only Claude's rule-`❯`-rule
+writes nothing: everything is on the argv. `promptMarker` is Claude's and `contextDelivery` is
+`'prompt-marker'`: the receiver answers a typed marker's `UserPromptSubmit` with
+`additionalContext`, and `contextCommand` prints it for codex to hand the model (HIVE-360 D6; the
+first measurement failed only because the hook sent the reply to `/dev/null`). A focused Codex
+session holds its markers until it loses focus: `claimBareBack` knows only Claude's rule-`❯`-rule
 frame, so a Codex box always reads `draft`. The
 renderer's input profile makes Shift+Enter type Ctrl+J, Codex's newline (P7). The binary is
 `codex` on `PATH` until HIVE-332 (D7). `pnpm test:session:codex` holds all of it against the binary.
@@ -551,7 +553,7 @@ window shows no gauge. `codex exec` gets the parser only, with no UI. `/statusli
   an agent's `Task` deny rule does not stop a Codex spawn. The subagent's own calls do go through
   the fence's `PreToolUse`.
 
-Interactive: HIVE-279 (sessions); skills HIVE-360; markers wait on Codex taking hook context (HIVE-360 D6). Meters: HIVE-334 (done). Agent-run plans: HIVE-358. Containers: refused.
+Interactive: HIVE-279 (sessions); skills and markers HIVE-360. Meters: HIVE-334 (done). Agent-run plans: HIVE-358. Containers: refused.
 
 ## Copilot (headless, HIVE-343; sessions, HIVE-280)
 
