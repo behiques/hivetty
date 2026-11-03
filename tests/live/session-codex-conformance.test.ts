@@ -31,6 +31,7 @@ import { promptMarker } from '../../electron/main/harness/claude-code/prompt-mar
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
 import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
 import { createLedger } from '../../electron/main/ledger';
+import { hiveServerSpec } from '../../electron/main/mcp/config';
 import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
 import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
 import { createSkillsRuntime } from '../../electron/main/skills';
@@ -63,6 +64,8 @@ import { ticketStart } from '../../electron/shared/ticket-workflow';
  *
  * Every case runs with HiveTTY's real skill catalog on the argv (HIVE-360), as production does, and
  * after each one the scratch home and repo are checked for anything HiveTTY wrote into them (L4).
+ *
+ * The `$done` case needs the hive server's script, so it runs after a `pnpm desktop:build`.
  *
  * Opt-in: `pnpm test:session:codex`. Skipped unless `codex --version` is 0.165.x and
  * `~/.codex/auth.json` exists; about seven minutes.
@@ -190,6 +193,8 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   let ledger: ReturnType<typeof createLedger>;
   /** Each ledger read the receiver made, by caller: the marker's lookup is one (L3). */
   let ledgerReads: string[];
+  /** Sessions `session_done` closed through the receiver (HIVE-368, L2). */
+  let dones: string[];
   /** `~/.agents/skills` before the case, for L4: it is the user's, and may hold their own skills. */
   let agentsBefore: string[];
 
@@ -218,6 +223,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
 
     ledger = createLedger({ dir: join(scratch, 'hive'), knowsParty: () => true });
     ledgerReads = [];
+    dones = [];
     tracker = createStatusTracker();
     transcript = undefined;
     const hub = createNotificationHub({
@@ -262,7 +268,9 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       onTicketIntent: () => undefined,
       onPromptName: () => {},
       onCleared: () => undefined,
-      onDone: () => {},
+      onDone: (entityId) => {
+        dones.push(entityId);
+      },
       onReady: () => {},
       onMetrics: () => {},
       onLedgerRead: (caller, query) => {
@@ -466,6 +474,26 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       // Codex's half does not: the context never reached the model.
       expect(readFileSync(rollout!, 'utf8')).not.toContain(word);
       expect(flat(log)).not.toContain(word);
+    },
+    CASE_MS,
+  );
+
+  it(
+    '$done closes a real session through session_done (HIVE-360, HIVE-368)',
+    async () => {
+      const host = join(process.cwd(), 'out', 'main', 'mcp-host.js');
+      if (!existsSync(host)) throw new Error(`${host} is missing. Run \`pnpm desktop:build\` first.`);
+      userConfig();
+      /*
+        The trailing space is deliberate (measured 2026-11-03, codex-cli 0.165.0): a bare `$` word opens
+        Codex's own skill picker, which lists only the skills Codex discovers (`~/.agents/skills`,
+        `$CODEX_HOME/skills`), not the catalog's, so a bare `$done` and Enter inserts the nearest
+        match it has instead of submitting. A space closes the picker. Putting HiveTTY's skills in
+        that picker is `$` completion's (HIVE-372).
+      */
+      await run('done', { hiveServer: hiveServerSpec({ execPath: process.execPath, scriptPath: host }) }, '$done ');
+      finding('done', { dones });
+      expect(dones).toContain(SESSION);
     },
     CASE_MS,
   );
