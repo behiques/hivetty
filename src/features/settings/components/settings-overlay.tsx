@@ -217,7 +217,39 @@ export function SettingsOverlay() {
   const Pane = PANES[section];
 
   const navRef = useRef<HTMLElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
   const groupId = useId();
+
+  /**
+   * Narrow, opening a pane hides the list and Back hides the pane, so the
+   * focused control vanishes with its half and focus falls to the body. Each
+   * user move names where focus goes next, and this hands it over once the
+   * other half has rendered. Wide, the back control is itself hidden, so
+   * focusing it does nothing and focus stays on the clicked row. A pane a
+   * caller named moves nothing: no user move set a target.
+   */
+  const handoff = useRef<'back' | 'nav' | null>(null);
+
+  useEffect(() => {
+    const target = handoff.current;
+    handoff.current = null;
+
+    if (target === 'back') backRef.current?.focus();
+    if (target === 'nav') {
+      navRef.current?.querySelector<HTMLElement>(`[data-pane="${section}"]`)?.focus();
+    }
+  }, [paneOpen, section]);
+
+  const openPane = (id: SectionId) => {
+    if (!paneOpen) handoff.current = 'back';
+    setSection(id);
+    setPaneOpen(true);
+  };
+
+  const backToList = () => {
+    handoff.current = 'nav';
+    setPaneOpen(false);
+  };
 
   /**
    * One tab stop, roving: the current pane is the only button Tab reaches.
@@ -358,10 +390,7 @@ export function SettingsOverlay() {
                         // settings is showing, which is what the token means.
                         aria-current={active ? 'page' : undefined}
                         onKeyDown={onNavKeyDown}
-                        onClick={() => {
-                          setSection(pane.id);
-                          setPaneOpen(true);
-                        }}
+                        onClick={() => openPane(pane.id)}
                         className={cn(
                           'flex items-center justify-between rounded-md px-2.5 py-1 text-left text-ui outline-none',
                           'focus-visible:ring-1 focus-visible:ring-brand',
@@ -384,9 +413,10 @@ export function SettingsOverlay() {
 
           <div className={cn('flex min-h-0 min-w-0 flex-col', !paneOpen && '@max-xl:hidden')}>
             <button
+              ref={backRef}
               type="button"
               aria-label={`Back to ${groupOf(section)}`}
-              onClick={() => setPaneOpen(false)}
+              onClick={backToList}
               className="flex min-h-11 items-center gap-1 self-start px-4 text-control text-muted outline-none hover:text-ink focus-visible:ring-1 focus-visible:ring-brand @xl:hidden"
             >
               <CaretLeft size={12} aria-hidden />

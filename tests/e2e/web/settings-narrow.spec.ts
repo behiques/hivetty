@@ -61,6 +61,23 @@ test('a pane opens full width, and back returns to the list', async ({ page }) =
 });
 
 /**
+ * Keyboard only: focus crosses with each half, never dropping to the body
+ * when the half that held it is hidden.
+ */
+test('focus moves to the back control on open, and back to the row on back', async ({ page }) => {
+  const row = nav(page).getByRole('button', { name: 'Appearance' });
+  await row.focus();
+  await page.keyboard.press('Enter');
+
+  const back = page.getByRole('button', { name: 'Back to Workspace' });
+  await expect(back).toBeFocused();
+
+  await page.keyboard.press('Enter');
+
+  await expect(row).toBeFocused();
+});
+
+/**
  * The window, not only the overlay. The centre stage never draws narrower than
  * `STAGE_MIN` (520px, HIVE-223), so below the activity bar plus that floor the
  * shell scrolls with or without Settings open; the 400px tests above can only
@@ -87,4 +104,9 @@ test('wide, both halves show and there is no back control', async ({ page }) => 
   await expect(nav(page)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Projects', level: 2 })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Back to / })).toBeHidden();
+
+  // Wide, the hidden back control cannot take focus: it stays on the row.
+  const editor = nav(page).getByRole('button', { name: 'Editor' });
+  await editor.click();
+  await expect(editor).toBeFocused();
 });

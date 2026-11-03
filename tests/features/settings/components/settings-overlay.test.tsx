@@ -224,6 +224,34 @@ describe('SettingsOverlay', () => {
       expect(view()).toBe('list');
     });
 
+    /**
+     * Opening a pane hides the list, and Back hides the pane, with
+     * `display: none` under the breakpoint. Focus sitting in the half that hid
+     * would fall to the body, so each move hands it across. Wide, the back
+     * control is hidden itself, so focusing it is a no-op and focus stays
+     * on the row that was clicked.
+     */
+    it('hands focus to the back control on open, and to the row on back', async () => {
+      const user = userEvent.setup();
+      render(<SettingsOverlay />);
+
+      const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+      await user.click(within(nav).getByRole('button', { name: 'Editor' }));
+
+      expect(screen.getByRole('button', { name: 'Back to Workspace' })).toHaveFocus();
+
+      await user.click(screen.getByRole('button', { name: 'Back to Workspace' }));
+
+      expect(within(nav).getByRole('button', { name: 'Editor' })).toHaveFocus();
+    });
+
+    it('leaves focus alone when a caller opens a pane by name', () => {
+      useUiStore.getState().openSettings('integrations');
+      render(<SettingsOverlay />);
+
+      expect(screen.getByRole('button', { name: 'Back to Workspace' })).not.toHaveFocus();
+    });
+
     it('moves on the arrows without leaving the list', async () => {
       const user = userEvent.setup();
       render(<SettingsOverlay />);
