@@ -31,8 +31,10 @@ hooks:
             MEANING, and you write NOTHING. Never edit the brief.
 
             1. Read session_id from $ARGUMENTS.
-            2. Read ~/.hivetty/goals/<session_id>.md. Missing, denied or erroring:
-               return ok:true and say which. The floor has the session covered.
+            2. Read ~/.hivetty/goals/<session_id>.md; if there is none, the
+               `.md` there whose header has `cli_session: <session_id>`.
+               Missing, denied or erroring: return ok:true and say which. The
+               floor has the session covered.
             3. Return ok:true unless status is ACTIVE, or DONE with done_at
                equal to last_verified: the turn the floor settled it (the two
                hooks run concurrently, so you may be reading as it writes). A
@@ -74,9 +76,12 @@ blocks turn-end, so every question is asked in Phase 1.
 
 ## The brief
 
-`~/.hivetty/goals/<session-id>.md`, named exactly that, with the id repeated in
-the header's `session:` field. The verifier tries the filename first and falls
-back to the header; a brief it cannot find reads as "no goal here".
+`~/.hivetty/goals/<$HIVE_SESSION_ID>.md`. `echo $HIVE_SESSION_ID` gives this
+session's `sess-…` id, the same on every CLI; name the file exactly that and
+repeat it in the header's `session:`. The verifier tries the filename first and
+falls back to the header; a brief it cannot find reads as "no goal here". The
+verifier binds the brief to this CLI session on its first turn end
+(`cli_session:`), so a later session that reuses the id is never held by it.
 
 ```markdown
 ---
@@ -85,7 +90,8 @@ route: code                # artifact | code
 turns_used: 0
 turn_budget: 8
 created: 2026-09-11T14:30:00Z
-session: <session id>
+session: <$HIVE_SESSION_ID>
+cli_session:               # written by the verifier, never by you
 last_verified:             # written by the verifier, never by you
 done_at:                   # written by the verifier with DONE, never by you
 branch: goal/<slug>        # code route
@@ -114,11 +120,16 @@ Stop and report if verification fails after 8 turns, or on an unresolvable confl
 (none yet)
 ```
 
+On Claude Code a second, semantic verifier also judges the evidence;
+on Codex and Copilot only the command verifier runs.
+
 A line that is only a parenthetical is a placeholder to the verifier, never
 evidence. Replace it with command output as work proceeds.
 
-`turn_budget` stays at 8: `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` defaults to 8
-consecutive blocks and the harness abandons the loop above it.
+`turn_budget` stays at 8: on Claude Code `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`
+defaults to 8 consecutive blocks and the harness abandons the loop above it;
+Copilot stops honouring a block after 8 in a row; on Codex the budget is the
+only stop.
 
 ## Phase 1 (interactive)
 
@@ -185,8 +196,7 @@ writes `DONE`.
    PR on `branch:` agree.
 6. `{{tool:agents}}` lists `shipper`: `ledger_ask to: shipper` with the
    intake shape from `ship`, `reply-to: $HIVE_SESSION_ID` (this session's
-   `sess-…` party name, never the brief's `session:` UUID, which no party
-   answers to), `ticket: none`. It
+   `sess-…` party name, also the brief's `session:`), `ticket: none`. It
    does not: say the draft PR is ready and stop; the tail is the person's.
 
 The goal is met at draft PR raised, plus the shipper woken when there is one.
@@ -217,7 +227,8 @@ is not there costs nothing.
 
 `{{skill:goal-on}} clear` sets `status: CLEARED` on this session's brief and
 reports it; the same happens when the person says the goal is off. The hook
-stays registered for the rest of the session and short-circuits on the
+stays registered for the rest of the session (on Codex and Copilot it is
+registered on every session) and short-circuits on the
 terminal status, one cheap read per turn end. A new session starts clean.
 
 ## Red flags
@@ -228,8 +239,8 @@ terminal status, one cheap read per turn end. A new session starts clean.
   `plan:` omitted from the header is the same miss, with nothing to catch it.
 - `repo:` omitted on a code-route goal outside this cwd: the PR check runs in
   the wrong repository and blocks every turn until the budget is spent.
-- A brief under any other name than `<session-id>.md`.
+- A brief under any other name than `<$HIVE_SESSION_ID>.md`.
 - `turn_budget` above 8 without raising the harness cap.
 - Waiting for the merge. The shipper owns it.
-- Re-invoking `goal-on` while a goal is active: each invocation registers
-  another verifier. Amend the brief instead.
+- Re-invoking `goal-on` while a goal is active rewrites the brief (and on
+  Claude Code registers another verifier). Amend the brief instead.
