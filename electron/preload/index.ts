@@ -168,6 +168,7 @@ import type {
 } from '@shared/session-history-contract';
 import type { ShippedRequest, ShippedStatus } from '@shared/shipped-contract';
 import type {
+  CliSkills,
   SkillDropRequest,
   SkillFile,
   SkillFileRead,
@@ -509,6 +510,7 @@ const bridge: HiveBridge = {
   */
   skills: {
     list: (): Promise<SkillsSnapshot> => ipcRenderer.invoke(CH.skillsList),
+    cliSkills: (): Promise<CliSkills> => ipcRenderer.invoke(CH.skillsCliSkills),
     read: (request: SkillNameRequest): Promise<SkillFile> =>
       ipcRenderer.invoke(CH.skillsRead, request),
     write: (request: SkillWriteRequest): Promise<SkillsSnapshot> =>

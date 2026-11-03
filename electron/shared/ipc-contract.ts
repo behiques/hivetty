@@ -163,6 +163,7 @@ import type {
 } from './session-history-contract';
 import type { ShippedRequest, ShippedStatus } from './shipped-contract';
 import type {
+  CliSkills,
   SkillFile,
   SkillFileRead,
   SkillFileWriteRequest,
@@ -1113,6 +1114,7 @@ export const CH = {
    * only writer, so there is no second party to notify.
    */
   skillsList: 'skills:list',
+  skillsCliSkills: 'skills:cli-skills',
   skillsRead: 'skills:read',
   skillsWrite: 'skills:write',
   skillsRemove: 'skills:remove',
@@ -2531,6 +2533,8 @@ export interface HiveBridge {
    */
   skills: {
     list(): Promise<SkillsSnapshot>;
+    /** The user's own skills per CLI (HIVE-367); not in the snapshot, because reading spawns CLIs. */
+    cliSkills(): Promise<CliSkills>;
     read(request: SkillNameRequest): Promise<SkillFile>;
     /** Write, regenerate the plugin, and answer with the fresh snapshot. */
     write(request: SkillWriteRequest): Promise<SkillsSnapshot>;
