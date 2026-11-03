@@ -157,6 +157,14 @@ describe('TicketWorkflowGroup', () => {
       expect((screen.getByLabelText('Skill') as HTMLSelectElement).value).toBe('workstream:work-on');
     });
 
+    it('never promotes while the person types a name a CLI lists', async () => {
+      cli.skills = CLI;
+      render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'hive:work-on' }} />);
+      await userEvent.selectOptions(screen.getByLabelText('Skill'), '__typed');
+      await userEvent.type(screen.getByLabelText('Skill name'), 'graphify');
+      expect(screen.getByLabelText('Skill name')).toHaveValue('graphify');
+    });
+
     it('saves a picked CLI skill like any other', async () => {
       cli.skills = CLI;
       render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'hive:work-on' }} />);
