@@ -74,6 +74,10 @@ export interface SkillsRead {
  * holding a second opinion about a format it does not own — which is how a
  * skill the binary would happily run gets refused here.
  *
+ * The one piece of YAML it does read is a `>-` folded value (HIVE-362). Copilot's
+ * strict parser refuses an unquoted `: ` in a one-line description, so those
+ * descriptions are folded, and the pane must still show their text.
+ *
  * `null` means there is no closed header at all. That is worth distinguishing
  * from an empty one: a file that opens with `---` and never closes it is the
  * half-typed state, and Claude Code reads the whole thing as prose, so the
@@ -84,6 +88,8 @@ export function frontmatter(body: string): Record<string, string> | null {
   if (lines[0]?.trim() !== '---') return null;
 
   const keys: Record<string, string> = {};
+  // A `key: >-` folded block (HIVE-362): its indented lines, joined by spaces, are the value.
+  let folding: string | undefined;
 
   for (const line of lines.slice(1)) {
     /*
@@ -96,8 +102,19 @@ export function frontmatter(body: string): Record<string, string> | null {
     */
     if (line.trim() === '---') return keys;
 
+    if (folding !== undefined && /^\s+\S/.test(line)) {
+      keys[folding] = `${keys[folding] ?? ''} ${line.trim()}`.trim();
+      continue;
+    }
+    folding = undefined;
+
     const match = /^([a-z0-9-]+):\s*(.*)$/.exec(line.trim());
-    if (match?.[1] !== undefined) keys[match[1]] = (match[2] ?? '').trim();
+    if (match?.[1] === undefined) continue;
+    const value = (match[2] ?? '').trim();
+    if (value === '>-' || value === '>') {
+      folding = match[1];
+      keys[match[1]] = '';
+    } else keys[match[1]] = value;
   }
 
   // Ran off the end without a closing fence.

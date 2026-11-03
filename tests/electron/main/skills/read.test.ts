@@ -277,3 +277,16 @@ describe('readUserSkills', () => {
     expect(vi.mocked(readBundle)).not.toHaveBeenCalledWith(join(root, 'Broken'));
   });
 });
+
+describe('folded descriptions (HIVE-362)', () => {
+  it('reads a >- description as one line, the way YAML folds it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'skills-folded-'));
+    await mkdir(join(root, 'ship'));
+    await writeFile(
+      join(root, 'ship', 'SKILL.md'),
+      '---\nname: ship\ndescription: >-\n  Drives a draft PR to merge: one stage\n  at a time.\nother: x\n---\n# Ship\n',
+    );
+    const { skills } = await readUserSkills(root);
+    expect(skills.map((s) => [s.name, s.description])).toEqual([['ship', 'Drives a draft PR to merge: one stage at a time.']]);
+  });
+});

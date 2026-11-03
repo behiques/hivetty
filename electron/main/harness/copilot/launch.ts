@@ -7,6 +7,7 @@ import { hookCommand } from '../hook-commands';
 import type { LaunchPlan, LaunchSpec } from '../port';
 
 import { COPILOT_SESSION_ENV_KEYS, COPILOT_TOKEN_ENV, copilotMcpConfig } from './headless';
+import { COPILOT_SESSION_PREAPPROVED } from './preapproved';
 
 /**
  * An interactive Copilot session's command line (HIVE-280), measured against copilot 1.0.105 in
@@ -17,7 +18,12 @@ import { COPILOT_SESSION_ENV_KEYS, COPILOT_TOKEN_ENV, copilotMcpConfig } from '.
  *   server from `--additional-mcp-config` (P7); both add to the user's own.
  * - `--session-id` starts and resumes alike (HIVE-343), so the core pins it (`conversationId: 'argv'`).
  * - The user's login authenticates (D3): the token keys are unset, in the pty and after the profile.
+ * - HiveTTY's rendered skills are a second `--plugin-dir` (HIVE-362), and the same folder is appended to
+ *   `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` so its marker rule stands in the session's instructions.
  */
+
+/** Copilot reads `<dir>/instructions/*.instructions.md` from each listed dir (spec, fact 3). */
+export const COPILOT_INSTRUCTIONS_ENV = 'COPILOT_CUSTOM_INSTRUCTIONS_DIRS';
 
 /** What a session reports (P0, P1), and `notification` for an `ask_user` dialog (P2). */
 export const COPILOT_SESSION_EVENTS = [
@@ -78,12 +84,12 @@ export const copilotPluginFiles = (dir: string): { path: string; text: string }[
 
 /** `unset …; copilot --session-id <id> … [-i '<task>'] && exit`, typed into a login shell like Codex's. */
 export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
-  const { model, effort, sessionUuid, resume = false, task, hiveServer, stateDir } = spec;
+  const { model, effort, sessionUuid, resume = false, task, hiveServer, stateDir, pluginDir: skillsDir } = spec;
   if (sessionUuid === undefined || !UUID.test(sessionUuid)) {
     throw new Error('copilot: a session needs a pinned uuid.');
   }
   if (stateDir === undefined) throw new Error('copilot: a session needs a state directory for its hooks plugin.');
-  const pluginDir = `${stateDir}/plugin`;
+  const hooksDir = `${stateDir}/plugin`;
 
   const flags = [
     '--session-id',
@@ -94,15 +100,16 @@ export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
       ? []
       : ['--reasoning-effort', oneOf('effort', effort, CLI_VOCAB.copilot.efforts)]),
     '--plugin-dir',
-    shellQuote(pluginDir),
+    shellQuote(hooksDir),
+    // HIVE-362: HiveTTY's rendered skills, a second Claude-format plugin (spec, fact 1).
+    ...(skillsDir === undefined ? [] : ['--plugin-dir', shellQuote(skillsDir)]),
     ...(hiveServer === undefined
       ? []
       : [
           '--additional-mcp-config',
           shellQuote(JSON.stringify(copilotMcpConfig(hiveServer, HIVE_SESSION_ENV))),
           // HIVE-368: `done` is this one call, so it must not ask. `server(tool)`, COPILOT_DENY_PATTERN's shape.
-          '--allow-tool',
-          shellQuote('hive(session_done)'),
+          ...COPILOT_SESSION_PREAPPROVED.flatMap((tool) => ['--allow-tool', shellQuote(tool.allowTool)]),
         ]),
   ];
   const initialPrompt =
@@ -110,13 +117,21 @@ export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
       ? []
       : ['-i', shellQuote(task.replaceAll(/[\r\n]+/g, ' ').trim())];
 
+  // A POSIX assignment before the command, so a value the user's profile set survives and stays first.
+  const instructions =
+    skillsDir === undefined
+      ? []
+      : [
+          `${COPILOT_INSTRUCTIONS_ENV}="\${${COPILOT_INSTRUCTIONS_ENV}:+$${COPILOT_INSTRUCTIONS_ENV},}"${shellQuote(skillsDir)}`,
+        ];
+
   return {
     // As Codex's: the login shell re-sources the profile after `stripEnv`, so `unset` runs after it.
-    command: [`unset ${UNSET_KEYS.join(' ')};`, spec.command, ...flags, ...initialPrompt, '&& exit'].join(
+    command: [`unset ${UNSET_KEYS.join(' ')};`, ...instructions, spec.command, ...flags, ...initialPrompt, '&& exit'].join(
       ' ',
     ),
     stripEnv: [...COPILOT_SESSION_ENV_KEYS, ...UNSET_KEYS],
     submitDelayMs: SUBMIT_DELAY_MS,
-    files: copilotPluginFiles(pluginDir),
+    files: copilotPluginFiles(hooksDir),
   };
 }

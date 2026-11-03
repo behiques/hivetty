@@ -174,3 +174,38 @@ approve … for this location`] · `No, and tell Copilot what to do differently 
 **Consequence.** "No, and tell Copilot…" is not a cancel: the turn continues once the feedback is sent, so `answersBlock`'s `answered` is right for it. The shell prompt offers two or three options depending on the command. Esc Esc mid-turn ends through `recordAborted`.
 
 Measured in the live suite: Esc Esc four seconds after the submit, before the reply began streaming, wrote no `abort`; the first Esc offered "Esc again to edit prompt" and the turn went on. Ten seconds in, mid-stream, it wrote `abort` and the turn ended.
+
+## P10: HiveTTY's skills and the instructions dir (HIVE-362)
+
+**Answer.**
+- A `--plugin-dir` plugin's skill lists as `hive:<name>` only when its bare name collides with another skill.
+- Typed in the TUI, `/hive:<name>` loads the plugin's skill whether or not the name collides.
+- `COPILOT_CUSTOM_INSTRUCTIONS_DIRS=<dir>` loads `<dir>/instructions/*.instructions.md`. A `--plugin-dir`'s own instruction files are not sources.
+- A slash-typed skill fires no hook. `events.jsonl` records only an internal `skill` event.
+
+Three more facts came out of the live suite:
+- Copilot's YAML is strict. It refused `review-pr-findings`, `ship` and `spec-deviation`, whose one-line descriptions held an unquoted `: `. Their descriptions are now `>-` folded blocks.
+- A personal skill under the scratch `$COPILOT_HOME/skills`, or under `~/.agents/skills` with a scratch `HOME`, is not read. So the suite cannot stage a user-skill collision without writing to the real home.
+- A repository `.github/skills/<name>` (`source: "project"`) **shadows** a plugin skill of the same name. The plugin's is not listed as `hive:<name>`; it disappears.
+
+**Evidence.** The live suite's `typed-form` and `skill-list` cases (`pnpm test:session:copilot`).
+
+**Consequence.**
+- `refPrefix` and `typedPrefix` are `/hive:`.
+- The marker rule rides the instructions dir.
+- The listing case pins that every rendered skill loads.
+- A repo skill that shares a HiveTTY skill's name hides HiveTTY's.
+
+## P11: done, the typed /exit, and markers (HIVE-362)
+
+**Answer.**
+- `--allow-tool 'hive(session_done)'` stops Copilot drawing the prompt for `/hive:done`. But **Copilot still fires `permissionRequest`**, `toolName: "hive/session_done"` (fixture `permission-request-hive-session-done.json`). HIVE-368 assumed the hook would be skipped too. `readCopilotHook` now drops a request on `COPILOT_SESSION_PREAPPROVED`.
+- `postToolUse` names the same call `hive-session_done`.
+- `/exit\r` written in one write (`EXIT_COMMAND`) closes Copilot by itself.
+- A bare `📒 <ref>`, with the marker rule standing in the instructions, gets the model to call `hive-ledger_read` and act on the entry.
+
+**Evidence.** The live suite's `done` and `marker` cases.
+
+**Consequence.**
+- `promptMarker` is Claude's.
+- `contextDelivery` is `'prompt-marker'`.

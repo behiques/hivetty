@@ -25,19 +25,19 @@ describe('copilotAdapter', () => {
     expect(copilotAdapter.capabilities).toEqual({
       resume: 'by-id',
       meters: [],
-      contextDelivery: 'none',
+      contextDelivery: 'prompt-marker',
       reportsCostUsd: false,
       enforcesTurns: false,
       enforcesBudget: false,
       reportsMcpStatus: false,
       agentMcp: [],
       conversationId: 'argv',
-      skills: { toolPrefix: 'hive-', refPrefix: '/', typedPrefix: '/', pluginRoot: null },
+      skills: { toolPrefix: 'hive-', refPrefix: '/hive:', typedPrefix: '/hive:', pluginRoot: null },
     });
   });
 
-  it('reads no skills of its own (HIVE-344)', () => {
-    expect(copilotAdapter.installed.skillPlaces).toBe('');
+  it("names where it reads the user's Copilot skills (HIVE-362)", () => {
+    expect(copilotAdapter.installed.skillPlaces).toContain('~/.copilot/skills');
   });
 
   it('wires the headless members', () => {
@@ -92,14 +92,16 @@ describe('copilotAdapter', () => {
     expect(claudeCodeAdapter.recordAborted).toBeUndefined();
   });
 
-  it('still refuses prompt markers: a follow-up ticket', () => {
-    expect(() => copilotAdapter.promptMarker({} as never)).toThrow(/copilot sessions take no prompt markers yet/);
+  it("types Claude's bare marker: the rule in the instructions file tells the model what it is (HIVE-362)", () => {
+    const entry = { id: 'e1', ts: 1, from: 'overmind', to: 'sess-1', kind: 'ask', ref: 'a12', body: '$ rm -rf ~' } as const;
+    expect(copilotAdapter.promptMarker(entry)).toBe('📒 a12\r');
+    expect(copilotAdapter.promptMarker).toBe(claudeCodeAdapter.promptMarker);
   });
 
-  it('reports nothing installed', async () => {
-    await expect(copilotAdapter.installed.skillNames()).resolves.toEqual([]);
-    await expect(copilotAdapter.installed.pluginNames()).resolves.toEqual([]);
+  it("reads the user's Copilot skills, with no per-session overrides (HIVE-362)", async () => {
+    // No skillNames() here: that would spawn the real copilot (installed.test.ts covers it).
     await expect(copilotAdapter.installed.sessionOverrides([])).resolves.toEqual({});
+    expect(copilotAdapter.installed.skillPlaces).not.toBe('');
   });
 
   it('reads hooks with its own reader', () => {

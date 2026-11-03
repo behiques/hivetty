@@ -123,7 +123,8 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   copilot: {
     resume: 'by-id',
     meters: [],
-    contextDelivery: 'none',
+    // HIVE-362: the marker rule in COPILOT_CUSTOM_INSTRUCTIONS_DIRS gets the entry read (FINDINGS P11).
+    contextDelivery: 'prompt-marker',
     reportsCostUsd: false,
     enforcesTurns: false,
     enforcesBudget: false,
@@ -132,8 +133,9 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     conversationId: 'argv',
     skills: {
       toolPrefix: 'hive-',
-      refPrefix: '/',
-      typedPrefix: '/',
+      // HIVE-362: Copilot prefixes a plugin skill only on a name collision; /hive:<name> loads either way (FINDINGS P10).
+      refPrefix: '/hive:',
+      typedPrefix: '/hive:',
       pluginRoot: null,
     },
   },

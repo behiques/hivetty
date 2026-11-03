@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -8,15 +8,18 @@ import { createInterface } from 'node:readline';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { copilotAdapter } from '../../electron/main/harness/copilot';
-import { launchCopilotSession } from '../../electron/main/harness/copilot/launch';
+import { COPILOT_INSTRUCTIONS_ENV, launchCopilotSession } from '../../electron/main/harness/copilot/launch';
 import { copilotRecord } from '../../electron/main/harness/copilot/record';
 import type { LaunchSpec } from '../../electron/main/harness/port';
 import { createHarnessRegistry } from '../../electron/main/harness/registry';
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
 import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
 import type { StdioServerSpec } from '../../electron/main/mcp/agent-config';
+import { hiveServerSpec } from '../../electron/main/mcp/config';
 import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
 import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
+import { readUserSkills } from '../../electron/main/skills/read';
+import { renderSkills } from '../../electron/main/skills/render';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
@@ -25,7 +28,9 @@ import {
   type HookStatusEvent,
 } from '../../electron/shared/hook-contract';
 import { CH } from '../../electron/shared/ipc-contract';
+import type { LedgerEntry, LedgerReadQuery, LedgerSnapshot, OpenAsk } from '../../electron/shared/ledger-contract';
 import type { HiveNotification } from '../../electron/shared/notification-contract';
+import { typedSkill } from '../../electron/shared/skill-render';
 
 /**
  * What only a real interactive `copilot` can prove about a Copilot session (HIVE-280).
@@ -57,6 +62,16 @@ const READY =
   /^GitHub Copilot CLI 1\.0\.105\b/.test(spawnSync('copilot', ['--version'], { encoding: 'utf8' }).stdout ?? '');
 const SESSION = 'sess-cp';
 const CASE_MS = 240_000;
+const HOST = join(process.cwd(), 'out', 'main', 'mcp-host.js');
+
+/** Every ambient `HIVE_*`, `COPILOT_*`, `GH_TOKEN` and `GITHUB_TOKEN` out. */
+const strippedEnv = (): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined && !/^(HIVE_|COPILOT_|GH_TOKEN$|GITHUB_TOKEN$)/.test(entry[0]),
+    ),
+  );
 
 /**
  * The pty driver, `tests/fixtures/copilot/interactive-1.0.105/probe.py`'s loop. It sizes the pty
@@ -124,6 +139,13 @@ for text in c.get('after', []):
     key(text); pump(0.3); key('\r'); pump(c.get('afterSeconds', 4))
 if c.get('kill'):
     os.kill(pid, 9); os.waitpid(pid, 0)
+elif c.get('exitRaw'):
+    # As sessions/index.ts writes EXIT_COMMAND: one write, no pause before the CR.
+    print(json.dumps({'key': '/exit\r'}), flush=True); os.write(fd, b'/exit\r')
+    alive = pump(8)
+    print(json.dumps({'exited': not alive}), flush=True)
+    try: os.kill(pid, 9); os.waitpid(pid, 0)
+    except Exception: pass
 else:
     key('/exit'); pump(0.3); key('\r'); pump(6)
     try: os.kill(pid, 9); os.waitpid(pid, 0)
@@ -176,6 +198,11 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
   let observe: (status: string, signal?: HookStatusEvent['signal'], sessionUuid?: string) => void;
   let aborts: RecordAborts;
   let transcript: { cwd: string; sessionUuid: string } | undefined;
+  let source: string;
+  let rendered: string;
+  let tools: string[];
+  let done: string[];
+  let ledgerRead: (caller: string, query: LedgerReadQuery) => LedgerSnapshot;
 
   beforeEach(async () => {
     statuses = [];
@@ -194,6 +221,31 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     config['trustedFolders'] = [...trusted, repo];
     writeFileSync(join(home, 'config.json'), `${JSON.stringify(config, null, 2)}\n`);
     writeFileSync(join(scratch, 'mcp-stub.py'), MCP_STUB);
+
+    // HiveTTY's own skills plus two probes, rendered for Copilot as the app renders them (HIVE-362).
+    source = join(scratch, 'skills-src');
+    cpSync(join(process.cwd(), 'resources', 'skills'), source, { recursive: true });
+    const probe = (name: string, word: string): void => {
+      mkdirSync(join(source, name));
+      writeFileSync(
+        join(source, name, 'SKILL.md'),
+        `---\nname: ${name}\ndescription: A HiveTTY live probe.\n---\nReply with the single word ${word} and nothing else.\n`,
+      );
+    };
+    probe('zz-plain', 'marmalade');
+    probe('zz-collide', 'quince');
+    // The user's own skill of the same name: Copilot must then name ours hive:zz-collide (fact 2).
+    mkdirSync(join(home, 'skills', 'zz-collide'), { recursive: true });
+    writeFileSync(
+      join(home, 'skills', 'zz-collide', 'SKILL.md'),
+      "---\nname: zz-collide\ndescription: The user's own.\n---\nReply with the single word turnip and nothing else.\n",
+    );
+    rendered = join(scratch, 'plugins', 'copilot');
+    await renderSkills(rendered, 'copilot', await readUserSkills(source), { version: '0.0.0-live', doneUrl: null });
+
+    tools = [];
+    done = [];
+    ledgerRead = () => ({ entries: [], openAsks: [], claims: {} });
 
     tracker = createStatusTracker();
     transcript = undefined;
@@ -236,6 +288,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       onAgentEvent: () => {},
       harnesses: createHarnessRegistry({ sessionHarness: (id) => (id === SESSION ? 'copilot' : undefined) }),
       onEvent: (e) => {
+        if (e.toolName !== undefined) tools.push(e.toolName);
         const derived = tracker.apply({
           entityId: e.entityId,
           signal: e.signal,
@@ -249,10 +302,10 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       onTicketIntent: () => undefined,
       onPromptName: () => {},
       onCleared: () => undefined,
-      onDone: () => {},
+      onDone: (id) => done.push(id),
       onReady: () => {},
       onMetrics: () => {},
-      onLedgerRead: () => ({ entries: [], openAsks: [], claims: {} }),
+      onLedgerRead: (caller, query) => ledgerRead(caller, query),
       onLedgerPost: () => ({ ok: false as const, status: 503, reason: 'not exercised by this suite' }),
       onAgentsList: () => Promise.reject(new Error('not exercised by this suite')),
     });
@@ -266,6 +319,14 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     // The evidence stays; the login's copy does not.
     rmSync(join(home, 'config.json'), { force: true });
   });
+
+  /** The real hive server, from the desktop build. */
+  const hive = (): StdioServerSpec => {
+    if (!existsSync(HOST)) {
+      throw new Error(`${HOST} is missing. Run \`pnpm desktop:build\` before \`pnpm test:session:copilot\`.`);
+    }
+    return hiveServerSpec({ execPath: process.execPath, scriptPath: HOST });
+  };
 
   /** A stdio server for `--additional-mcp-config` or the user's `mcp-config.json`. */
   const stub = (name: string, mark?: string): StdioServerSpec => ({
@@ -281,10 +342,12 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     after?: string[];
     kill?: boolean;
     interrupt?: number;
+    /** `/exit\r` in one write, as `EXIT_COMMAND` is, and report whether copilot exited. */
+    exitRaw?: boolean;
   }
 
-  /** One launch, its prompts, one turn each. Resolves with the pty log's path. */
-  const run = async (name: string, sessionUuid: string, drive: Drive): Promise<string> => {
+  /** One launch, its prompts, one turn each. Resolves with the pty log's path, and whether `exitRaw` exited. */
+  const run = async (name: string, sessionUuid: string, drive: Drive): Promise<{ log: string; exited: boolean }> => {
     const plan = launchCopilotSession({ command: 'copilot', sessionUuid, stateDir: join(scratch, 'state'), ...drive.spec });
     // As the core does, before the first keystroke.
     for (const file of plan.files ?? []) {
@@ -299,12 +362,13 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     });
     const argv = JSON.parse(split.stdout) as string[];
 
-    const env: Record<string, string> = Object.fromEntries(
-      Object.entries(process.env).filter(
-        (entry): entry is [string, string] =>
-          entry[1] !== undefined && !/^(HIVE_|COPILOT_|GH_TOKEN$|GITHUB_TOKEN$)/.test(entry[0]),
-      ),
-    );
+    const env = strippedEnv();
+    // The instructions prefix, expanded as the login shell would with no user value (all COPILOT_* are stripped).
+    const assign = /^([A-Z_]+)=(.*)$/s.exec(argv[0] ?? '');
+    if (assign !== null) {
+      argv.shift();
+      env[assign[1]!] = assign[2]!.replace(`\${${COPILOT_INSTRUCTIONS_ENV}:+$${COPILOT_INSTRUCTIONS_ENV},}`, '');
+    }
     Object.assign(env, {
       COPILOT_HOME: home,
       TERM: 'xterm-256color',
@@ -316,11 +380,17 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     const config = { argv, env, cwd: repo, seconds: 180, log, stop, ...drive };
     const stderr: Buffer[] = [];
     transcript = { cwd: repo, sessionUuid };
+    let exited = false;
     await new Promise<void>((resolve) => {
       const child = spawn('python3', ['-c', DRIVER, JSON.stringify(config)], { stdio: ['ignore', 'pipe', 'pipe'] });
       // Each key the driver types reaches the session as the user's, as `ptyWrite` does (`sessions/index.ts`).
       createInterface({ input: child.stdout }).on('line', (line) => {
-        const typed = (JSON.parse(line) as { key: string }).key;
+        const parsed = JSON.parse(line) as { key?: string; exited?: boolean };
+        if (parsed.exited !== undefined) {
+          exited = parsed.exited;
+          return;
+        }
+        const typed = parsed.key ?? '';
         void aborts.onKey(SESSION, typed);
         const answer = copilotAdapter.answersBlock?.(typed) ?? null;
         if (answer === null) return;
@@ -332,14 +402,14 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     });
     aborts.drop(SESSION);
     if (stderr.length > 0) console.info('DRIVER   ', Buffer.concat(stderr).toString('utf8'));
-    return log;
+    return { log, exited };
   };
 
   const finding = (name: string, body: Record<string, unknown>): void => {
     const path = join(scratch, `${name}.finding.json`);
     writeFileSync(
       path,
-      JSON.stringify({ statuses, raised: raised.map((n) => n.kind), dismissed, ...body }, null, 2),
+      JSON.stringify({ statuses, raised: raised.map((n) => n.kind), dismissed, tools, done, ...body }, null, 2),
     );
     console.info('EVIDENCE ', path);
   };
@@ -454,12 +524,11 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
         `${JSON.stringify({ mcpServers: { 'probe-user': { type: 'local', ...stub('probe-user'), tools: ['*'] } } }, null, 2)}\n`,
       );
       // The real host when the desktop build exists, else a stand-in under the same name.
-      const host = join(process.cwd(), 'out', 'main', 'mcp-host.js');
-      const hiveServer = existsSync(host)
-        ? { command: process.execPath, args: [host], env: { ELECTRON_RUN_AS_NODE: '1' } }
+      const hiveServer = existsSync(HOST)
+        ? hiveServerSpec({ execPath: process.execPath, scriptPath: HOST })
         : stub('hive');
-      if (!existsSync(host)) console.info('NOTE     ', `${host} is absent: the hive server is a stand-in`);
-      const log = await run('config', UUID, { spec: { hiveServer }, prompts: ['Reply ok'], after: ['/mcp list'] });
+      if (!existsSync(HOST)) console.info('NOTE     ', `${HOST} is absent: the hive server is a stand-in`);
+      const { log } = await run('config', UUID, { spec: { hiveServer }, prompts: ['Reply ok'], after: ['/mcp list'] });
       finding('config', {});
 
       expect(existsSync(marker)).toBe(true);
@@ -494,6 +563,102 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       // HiveTTY's plugin lives in its own state dir, never in the home.
       expect(added.some((entry) => /hivetty|plugin\.json|hooks\.json/i.test(entry))).toBe(false);
       expect(existsSync(join(scratch, 'state', 'plugin', 'hooks', 'hooks.json'))).toBe(true);
+    },
+    CASE_MS,
+  );
+
+  it(
+    'loads a HiveTTY skill typed /hive:<name>, whether or not the bare name collides (HIVE-362)',
+    async () => {
+      const id = '11111111-2222-4333-8444-5555555555c1';
+      const { log } = await run('typed-form', id, {
+        spec: { pluginDir: rendered },
+        prompts: ['/hive:zz-plain', '/hive:zz-collide'],
+      });
+      finding('typed-form', { log });
+      // From the transcript: the TUI's spinner interleaves its frames with the reply it draws.
+      const replies = readFileSync(copilotRecord(() => home).transcriptPath(repo, id)!, 'utf8');
+      expect(replies).toContain('marmalade');
+      expect(replies).toContain('quince');
+      expect(replies).not.toContain('turnip');
+    },
+    CASE_MS,
+  );
+
+  it(
+    '/hive:done finishes through session_done with no permission prompt, and the typed /exit closes copilot (HIVE-362, HIVE-368)',
+    async () => {
+      const { log, exited } = await run('done', '11111111-2222-4333-8444-5555555555c2', {
+        spec: { pluginDir: rendered, hiveServer: hive() },
+        prompts: [typedSkill('done', 'copilot')],
+        exitRaw: true,
+      });
+      finding('done', { log, exited });
+      expect(done).toEqual([SESSION]);
+      expect(tools.some((t) => /session_done/.test(t))).toBe(true);
+      expect(statuses.some((s) => s.status === 'waiting')).toBe(false);
+      expect(flat(log)).not.toContain('Doyouwant');
+      expect(exited).toBe(true);
+    },
+    CASE_MS,
+  );
+
+  it(
+    'a ticket session types the rendered work-on and the model follows it to hive-jira_get (HIVE-362)',
+    async () => {
+      // ticketWorkflowStart is what the core types; its first step names the Hive's jira tool.
+      const { log } = await run('work-on', '11111111-2222-4333-8444-5555555555c3', {
+        spec: { pluginDir: rendered, hiveServer: hive() },
+        prompts: [`${typedSkill('work-on', 'copilot')} HIVE-1`],
+        answer: '\x1b',
+      });
+      finding('work-on', { log });
+      expect(tools.some((t) => /jira_get/.test(t))).toBe(true);
+    },
+    CASE_MS,
+  );
+
+  it('lists every HiveTTY skill from its --plugin-dir, none refused (HIVE-362, HIVE-369)', () => {
+    const listed = spawnSync('copilot', ['--plugin-dir', rendered, 'skill', 'list', '--json'], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: { ...strippedEnv(), COPILOT_HOME: home },
+    });
+    finding('skill-list', { stdout: listed.stdout, stderr: listed.stderr });
+    // The JSON array first; a refused skill is reported in prose after it.
+    const json = listed.stdout.slice(0, listed.stdout.lastIndexOf(']') + 1);
+    const ours = (JSON.parse(json) as Array<{ name: string; source: string }>)
+      .filter((s) => s.source === 'plugin')
+      .map((s) => s.name.replace(/^hive:/, ''));
+    // Every rendered skill loads: a frontmatter Copilot's YAML refuses is dropped from the list (HIVE-369).
+    expect(ours.sort()).toEqual(readdirSync(join(rendered, 'skills')).sort());
+    expect(`${listed.stdout}${listed.stderr}`).not.toMatch(/failed to load/i);
+  });
+
+  it(
+    'a typed marker reaches the model: it reads the entry with hive-ledger_read and acts on it (HIVE-362)',
+    async () => {
+      const ask: LedgerEntry = {
+        id: 'e-live-1',
+        ts: Date.now(),
+        from: 'overmind',
+        to: SESSION,
+        kind: 'ask',
+        ref: 'a1',
+        body: 'Reply with the single word kumquat and nothing else.',
+      };
+      ledgerRead = () => ({ entries: [ask], openAsks: [{ ...ask, kind: 'ask', open: true, ageMs: 0 } satisfies OpenAsk], claims: {} });
+      const id = '11111111-2222-4333-8444-5555555555c4';
+      const { log } = await run('marker', id, {
+        spec: { pluginDir: rendered, hiveServer: hive() },
+        // The bytes deliver.ts writes, without the CR the driver adds itself.
+        prompts: [copilotAdapter.promptMarker(ask).replace(/\r$/, '')],
+        answer: '\r',
+      });
+      finding('marker', { log });
+      expect(tools.some((t) => /ledger_read/.test(t))).toBe(true);
+      // From the transcript: the TUI's spinner interleaves its frames with the reply it draws.
+      expect(readFileSync(copilotRecord(() => home).transcriptPath(repo, id)!, 'utf8')).toContain('kumquat');
     },
     CASE_MS,
   );

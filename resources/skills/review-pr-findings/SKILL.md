@@ -1,6 +1,11 @@
 ---
 name: review-pr-findings
-description: Use when a PR has feedback to work through: reviewer comments, a review's summary (an approval's included), bot findings, a red check, or the self review's findings. Assesses every finding adversarially, fixes the valid ones behind a test, replies to every finding, pushes once per round, and repeats until green with every thread resolved and every finding answered. Run by the fixer agent; also runs in a session on request.
+description: >-
+  Use when a PR has feedback to work through: reviewer comments, a review's summary (an approval's
+  included), bot findings, a red check, or the self review's findings. Assesses every finding
+  adversarially, fixes the valid ones behind a test, replies to every finding, pushes once per
+  round, and repeats until green with every thread resolved and every finding answered. Run by the
+  fixer agent; also runs in a session on request.
 ---
 
 # Review PR findings

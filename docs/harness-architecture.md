@@ -674,8 +674,9 @@ typed into the login shell as Codex's is:
 
 ```
 unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSISTED_APPROVAL;
+  [COPILOT_CUSTOM_INSTRUCTIONS_DIRS="${COPILOT_CUSTOM_INSTRUCTIONS_DIRS:+$COPILOT_CUSTOM_INSTRUCTIONS_DIRS,}"'<skills>']
   copilot --session-id <uuid> [--model m]
-  [--reasoning-effort e] --plugin-dir '<state>/plugin'
+  [--reasoning-effort e] --plugin-dir '<state>/plugin' [--plugin-dir '<skills>']
   [--additional-mcp-config '<hive>' --allow-tool 'hive(session_done)'] [-i '<task>'] && exit
 ```
 
@@ -695,8 +696,18 @@ unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSIS
   keystroke, failing the spawn with the path when it cannot.
 - `--additional-mcp-config`: the stdio hive host, its identity forwarded by `${VAR}` reference
   (`copilotMcpConfig`, shared with headless). Both add to the user's own hooks and servers (P7).
+- The second `--plugin-dir` is HiveTTY's rendered Copilot folder (`plugins/copilot`, HIVE-362), a
+  Claude-format plugin Copilot reads as it is. Its skills are typed `/hive:<name>`: Copilot prefixes a
+  plugin skill only on a name collision, but `/hive:<name>` loads either way (FINDINGS P10). The same
+  folder is appended to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`, after any value the profile set, so its
+  `instructions/hivetty.instructions.md` stands in the session's instructions. That rule tells the
+  model a bare `📒 <ref>` is a ledger entry to read with `hive-ledger_read`, so `promptMarker` is
+  Claude's and `contextDelivery` is `'prompt-marker'` (P11).
 - `--allow-tool 'hive(session_done)'`, beside the hive server only, for Codex's reason: `done` is
-  one hive call, so it never asks (HIVE-368). It is the one tool approved by name; no other.
+  one hive call, so it never asks (HIVE-368). It is the one tool approved by name; no other. The
+  list is `COPILOT_SESSION_PREAPPROVED` (`copilot/preapproved.ts`). Copilot still fires
+  `permissionRequest` for the call and only skips the prompt, so `readCopilotHook` drops that
+  request by the same list (HIVE-362, P11).
 - No `--allow-all`, `--yolo`, `--trust-folder` or `--no-auto-update`: Copilot asks in its own TUI,
   and an untrusted folder shows its own trust dialog first. `/fence` is not used (D5).
 
@@ -755,7 +766,9 @@ process to exit. The newline is Alt+Enter (ESC CR, P6); the console's seed reads
   "code":"denied"}`, and the model reports that neither agent started. The fence already
   translates `task` to `Task`, so an agent's `Task` deny rule holds.
 
-Interactive: HIVE-280 (skills, prompt markers and the plan panel are its follow-ups). Meters:
+Interactive: HIVE-280. Skills and ledger markers: HIVE-362 (a second `--plugin-dir`, the marker rule in
+`COPILOT_CUSTOM_INSTRUCTIONS_DIRS`; `installed` reads `copilot skill list --json`). Plan panel: its
+follow-up. Meters:
 HIVE-335. Plans: HIVE-352. Containers: refused.
 
 ## The fences
@@ -809,7 +822,7 @@ names its folder and the files beside `skills/`:
 |---|---|---|
 | claude-code | `plugin` (the `--plugin-dir`) | `.claude-plugin/plugin.json`, `skills/done/SKILL.md` |
 | codex | `plugins/codex` | `catalog.md`, the block HIVE-360 hands the model as instructions; `skills/done/SKILL.md` |
-| copilot | `plugins/copilot` | `.claude-plugin/plugin.json` (its own string), `skills/done/SKILL.md` |
+| copilot | `plugins/copilot` | `.claude-plugin/plugin.json` (its own string), `skills/done/SKILL.md`, `instructions/hivetty.instructions.md` (the marker rule, HIVE-362) |
 
 The runtime (`skills/index.ts`) renders all three on every `sync()`, each in its own `try`: one
 CLI's folder failing never drops another's, and `pluginDirPath(cli)` is `null` only for the one
@@ -825,7 +838,7 @@ skill may be meant for one CLI. `known.tools` is `HIVE_TOOL_NAMES` (`electron/sh
 the same `HIVE_TOOLS` list the MCP host serves.
 
 **Next.** HIVE-360 hands Codex `catalog.md` as `developer_instructions` (no container mapping:
-Codex is refused in one); HIVE-362 passes
+Codex is refused in one); HIVE-362 passed
 Copilot's folder as a second `--plugin-dir`; HIVE-368 brought `done` to both; HIVE-370 gives them
 goal-on's stop hook; HIVE-371 words subagent dispatch per CLI.
 

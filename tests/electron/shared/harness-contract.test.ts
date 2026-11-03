@@ -44,9 +44,16 @@ describe('skills vocabulary (HIVE-369)', () => {
     });
     expect(CAPABILITIES.copilot.skills).toEqual({
       toolPrefix: 'hive-',
-      refPrefix: '/',
-      typedPrefix: '/',
+      refPrefix: '/hive:',
+      typedPrefix: '/hive:',
       pluginRoot: null,
     });
+  });
+});
+
+describe('context delivery', () => {
+  it('delivers markers to Claude and Copilot, not yet Codex (HIVE-362)', () => {
+    expect(CAPABILITIES['claude-code'].contextDelivery).toBe('prompt-marker');
+    expect(CAPABILITIES.copilot.contextDelivery).toBe('prompt-marker');
   });
 });
