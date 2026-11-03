@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  cliSkillsSnapshot,
   deleteSkill,
   dropIntoSkill,
   frontmatterName,
   importIntoSkill,
   importNewSkill,
+  loadCliSkills,
   loadSkills,
   makeSkillDir,
   moveSkillFile,
@@ -13,7 +15,9 @@ import {
   readSkillFile,
   removeSkillFile,
   renameSkill,
+  resetSkills,
   saveSkill,
+  setCliSkillsForTest,
   skillDropTokens,
   skillNameProblem,
   skillsSnapshot,
@@ -541,5 +545,33 @@ describe('the bundle verbs', () => {
     expect(await importNewSkill()).toBeNull();
     expect(importVerb).toHaveBeenCalledWith();
     expect(skillsSnapshot()?.skills.map((entry) => entry.name)).toEqual(['pr-review']);
+  });
+});
+
+describe('the CLI skills (HIVE-367)', () => {
+  beforeEach(() => resetSkills());
+
+  it('loads the CLI skills on demand and notifies subscribers; a failing bridge leaves null', async () => {
+    const cliSkills = vi.fn();
+    bridge({ cliSkills });
+    const listener = vi.fn();
+    const off = subscribeSkills(listener);
+    cliSkills.mockResolvedValueOnce([{ cli: 'codex', names: ['find-skills'], places: 'p' }]);
+    await loadCliSkills();
+    expect(cliSkillsSnapshot()).toEqual([{ cli: 'codex', names: ['find-skills'], places: 'p' }]);
+    expect(listener).toHaveBeenCalled();
+    cliSkills.mockRejectedValueOnce(new Error('x'));
+    await loadCliSkills();
+    expect(cliSkillsSnapshot()).toBeNull();
+    off();
+  });
+
+  it('asks nothing without a bridge, and resetSkills clears what a test set', async () => {
+    await loadCliSkills();
+    expect(cliSkillsSnapshot()).toBeNull();
+    setCliSkillsForTest([{ cli: 'codex', names: ['a'], places: 'p' }]);
+    expect(cliSkillsSnapshot()).toHaveLength(1);
+    resetSkills();
+    expect(cliSkillsSnapshot()).toBeNull();
   });
 });

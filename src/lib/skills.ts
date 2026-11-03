@@ -1,5 +1,6 @@
 import {
   RESERVED_SKILL_NAME,
+  type CliSkills,
   SKILL_NAME_PATTERN,
   type SkillFile,
   type SkillFileRead,
@@ -48,6 +49,31 @@ export function subscribeSkills(listener: () => void): () => void {
  */
 export function skillsSnapshot(): SkillsSnapshot | null {
   return snapshot;
+}
+
+let cliSkills: CliSkills | null = null;
+
+/** The user's own skills per CLI (HIVE-367), or `null` before the first answer and in the browser. */
+export function cliSkillsSnapshot(): CliSkills | null {
+  return cliSkills;
+}
+
+/**
+ * Ask main again. Called when a surface that shows them mounts: reading spawns
+ * CLIs, so never on a timer, and never part of the snapshot that re-pushes on
+ * every skills-folder event. A failure leaves `null`, which every surface
+ * renders as nothing.
+ */
+export async function loadCliSkills(): Promise<void> {
+  const bridge = window.hive;
+  if (!bridge) return;
+  cliSkills = await bridge.skills.cliSkills().catch((): null => null);
+  emit();
+}
+
+export function setCliSkillsForTest(next: CliSkills | null): void {
+  cliSkills = next;
+  emit();
 }
 
 /**
@@ -232,6 +258,7 @@ export async function renameSkill(
 /** Test-only: drop the snapshot and every subscriber. */
 export function resetSkills(): void {
   snapshot = null;
+  cliSkills = null;
   listeners.clear();
 }
 

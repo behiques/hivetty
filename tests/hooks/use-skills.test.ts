@@ -1,9 +1,9 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadSkills } from '@/lib/skills';
+import { loadSkills, resetSkills } from '@/lib/skills';
 
-import { useSkills } from '@hooks/use-skills';
+import { useCliSkills, useSkills } from '@hooks/use-skills';
 
 import type { SkillsSnapshot } from '@shared/skills-contract';
 
@@ -61,5 +61,21 @@ describe('useSkills', () => {
         await loadSkills();
       }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('useCliSkills (HIVE-367)', () => {
+  beforeEach(() => resetSkills());
+
+  it('asks main once on mount and answers what came back', async () => {
+    const cliSkills = vi.fn(() => Promise.resolve([{ cli: 'codex', names: ['find-skills'], places: 'p' }]));
+    (window as unknown as { hive?: unknown }).hive = { skills: { cliSkills } };
+    const { result } = renderHook(() => useCliSkills());
+    expect(result.current).toBeNull();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(cliSkills).toHaveBeenCalledTimes(1);
+    expect(result.current).toEqual([{ cli: 'codex', names: ['find-skills'], places: 'p' }]);
   });
 });
