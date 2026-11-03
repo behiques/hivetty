@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, utimesSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, utimesSync, readFileSync, chmodSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -496,6 +496,38 @@ test('findBrief: falls back to the CLI id, and to nothing without a usable hive 
   assert.equal(findBrief(dir, 'cli-uuid', undefined), join(dir, 'cli-uuid.md'));
   assert.equal(findBrief(dir, 'cli-uuid', '../escape'), join(dir, 'cli-uuid.md'));
   assert.equal(findBrief(dir, 'other', 'sess-07'), null);
+});
+
+test('findBrief: the template’s comment-only cli_session is unbound, not another session', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-tpl-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief({ extra: 'cli_session:               # written by the verifier, never by you\n' }));
+  assert.equal(findBrief(dir, 'new-uuid', 'sess-07'), join(dir, 'sess-07.md'));
+});
+
+test('findBrief: a bound cli_session may carry a trailing comment; another session’s is still skipped', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-cmt-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief({ extra: 'cli_session: old-uuid   # stamped\n' }));
+  assert.equal(findBrief(dir, 'old-uuid', 'sess-07'), join(dir, 'sess-07.md'));
+  assert.equal(findBrief(dir, 'new-uuid', 'sess-07'), null);
+});
+
+test('a brief copied verbatim from the template is held', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-tplhold-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief({ extra: 'cli_session:               # written by the verifier, never by you\n' }));
+  const run = runHook({ session_id: 'thread-1' }, { env: { HIVE_GOALS_DIR: dir, HIVE_SESSION_ID: 'sess-07' }, args: ['--harness=codex'] });
+  assert.equal(JSON.parse(run.stdout).decision, 'block');
+});
+
+test('a brief that cannot be written is allowed, never blocked forever', { skip: process.getuid?.() === 0 }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-ro-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief());
+  chmodSync(dir, 0o555);
+  try {
+    const run = runHook({ session_id: 'thread-1' }, { env: { HIVE_GOALS_DIR: dir, HIVE_SESSION_ID: 'sess-07' }, args: ['--harness=codex'] });
+    assert.equal(run.stdout, '');
+  } finally {
+    chmodSync(dir, 0o755);
+  }
 });
 
 test('the hook binds a brief found by $HIVE_SESSION_ID to the CLI session that stamped it', () => {

@@ -129,7 +129,7 @@ export function headerValue(header, key) {
   if (!m) return null;
   // Tolerate trailing `# comments` and quoted values — the brief template in
   // goal-on/SKILL.md demonstrates inline comments on header keys.
-  return m[1].replace(/\s+#.*$/, '').trim().replace(/^["']|["']$/g, '');
+  return m[1].replace(/(^|\s+)#.*$/, '').trim().replace(/^["']|["']$/g, '');
 }
 
 /**
@@ -192,7 +192,7 @@ export function findBrief(dir, cliId, hiveId) {
       try {
         const split = splitFrontmatter(readFileSync(p, 'utf8'));
         const bound = split ? headerValue(split.header, 'cli_session') : null;
-        if (!bound || bound === cliId) return p;
+        if (!bound || bound === cliId) return p; // empty or comment-only (the template's) is unbound
       } catch {
         /* unreadable: try the next */
       }
@@ -608,8 +608,10 @@ function writeAtomic(path, contents) {
   try {
     writeFileSync(tmp, contents, 'utf8');
     renameSync(tmp, path);
+    return true;
   } catch {
     /* a read-only or unwritable brief must not wedge the turn */
+    return false;
   }
 }
 
@@ -631,7 +633,9 @@ function main() {
     if (result.write) {
       // The binding rides on every write, so the Claude ceiling can find a brief named by the hive id.
       const write = setHeaderField(result.write, 'cli_session', sessionId);
-      writeAtomic(briefPath, write);
+      // Turn count and binding that cannot persist would block every turn forever (Codex has no
+      // block cap), so an unwritable brief releases the turn.
+      if (!writeAtomic(briefPath, write)) return emit('allow', undefined, harness);
       postReceipt(write, sessionId, md);
     }
     if (result.action === 'block') return emit('block', result.reason, harness);
