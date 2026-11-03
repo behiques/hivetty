@@ -96,8 +96,8 @@ export interface WakeCommandDeps {
   cliToken: (id: HarnessId) => string | null;
   /** `<userData>/hive/agents/<name>.system.md`, rewritten before the spawn. */
   promptFile: (name: string) => string;
-  /** `<userData>/hive/plugin` — the skills HiveTTY generates. */
-  pluginDir: () => string;
+  /** The skills HiveTTY generates for a CLI: `<userData>/hive/plugin` for Claude, `plugins/<cli>` otherwise (HIVE-360). */
+  pluginDir: (cli: HarnessId) => string;
   /**
    * `hooks.agentSettingsPathFor()`. `null` until the receiver has bound.
    *
@@ -542,7 +542,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
         kind,
         paths: {
           settings: containerSettings ?? settings,
-          pluginDir: deps.pluginDir(),
+          pluginDir: deps.pluginDir(adapter.id),
           /*
             A container agent reads the shared container MCP file — the
             HTTP descriptor with `${VAR}` headers — never the host's stdio

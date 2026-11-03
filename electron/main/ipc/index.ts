@@ -2747,7 +2747,9 @@ export function registerIpcHandlers(
     // HIVE-343. The only reader of a stored CLI token: it reaches the child's env, never a channel.
     cliToken: (id) => (id === 'copilot' ? cliTokens.read('copilot') : null),
     promptFile: (name) => agentPromptFile(app.getPath('userData'), name),
-    pluginDir: () => join(app.getPath('userData'), PLUGIN_DIR),
+    // HIVE-360: the run's own CLI's folder. The fallback is Claude's, which has no catalog.md, so a
+    // CLI whose folder is missing gets no catalog block, and Claude's argv is today's.
+    pluginDir: (cli) => skills?.pluginDirPath(cli) ?? join(app.getPath('userData'), PLUGIN_DIR),
     // The agent-space file, never `hooks.settingsPathFor()`: that one carries
     // no `permissions.ask` rule, and a wake started against it would run with
     // no fence at all (HIVE-119).

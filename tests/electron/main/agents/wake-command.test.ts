@@ -118,7 +118,7 @@ const build = (over: Partial<WakeCommandDeps> = {}) =>
     workdir: (name, lane) =>
       lane === 'standing' ? `/home/u/.hive/work/${name}` : `/home/u/.hive/work/${name}/lanes/${lane}`,
     promptFile: (name) => `/data/hive/agents/${name}.system.md`,
-    pluginDir: () => '/data/hive/plugin',
+    pluginDir: (cli) => (cli === 'codex' ? '/data/hive/plugins/codex' : '/data/hive/plugin'),
     agentSettingsPath: () => '/data/hive/claude-agent.settings.json',
     mcpConfig: () => '/data/hive/hive.mcp.json',
     // Handed to every wake's adapter (HIVE-342). `AGENT_MD` has no `mcp:` field,
@@ -1321,6 +1321,38 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
     expect(built.file).toBe('/opt/bin/codex');
     expect(built.args[0]).toBe('exec');
     expect(built.harness).toBe('codex');
+  });
+
+  it('hands each run its own CLI’s skills folder (HIVE-360)', () => {
+    const seen: HeadlessSpec[] = [];
+    const spying = (base: HarnessAdapter): HarnessAdapter => ({
+      ...base,
+      headless: {
+        ...base.headless,
+        launch: (spec) => {
+          seen.push(spec);
+          return base.headless.launch(spec);
+        },
+      },
+    });
+    const codexSpy = spying(fenced);
+    const claudeSpy = spying(claudeCodeAdapter);
+    const spied = (id: HarnessId) => (id === 'codex' ? codexSpy : claudeSpy);
+    const deps = {
+      adapter: spied,
+      env: () => ({ PATH: '/bin:/opt/bin', HOME: '/home/u' }),
+      isExecutable: (path: string) => path === '/opt/bin/codex' || path === '/usr/local/bin/claude',
+    };
+
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD;
+    const codexRun = build(deps)('slack-watcher', 'manual');
+    if ('problem' in codexRun) throw new Error(codexRun.problem);
+    expect(seen.at(-1)?.files.pluginDir).toBe('/data/hive/plugins/codex');
+
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = AGENT_MD;
+    const claudeRun = build(deps)('slack-watcher', 'manual');
+    if ('problem' in claudeRun) throw new Error(claudeRun.problem);
+    expect(seen.at(-1)?.files.pluginDir).toBe('/data/hive/plugin');
   });
 
   /*
