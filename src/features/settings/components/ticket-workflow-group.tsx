@@ -1,11 +1,12 @@
 import { useState } from 'react';
 
 import { SegmentedControl } from '@components/ui/segmented-control';
-import { SelectField } from '@components/ui/select-field';
+import { SelectField, type SelectFieldOption } from '@components/ui/select-field';
 import { TextField } from '@components/ui/text-field';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useAgents } from '@hooks/use-agents';
-import { useSkills } from '@hooks/use-skills';
+import { useCliSkills, useSkills } from '@hooks/use-skills';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import { setJiraConnection } from '@lib/project-config';
 import { ticketStart, ticketWorkflowOf, type TicketWorkflow } from '@shared/ticket-workflow';
 
@@ -15,6 +16,8 @@ type Via = 'session' | 'wake';
 /** The select's escape hatch: a skill the list does not have, from another plugin. */
 const TYPED = '__typed';
 const FIRST_SKILL = 'hive:work-on';
+/** The select's first group: HiveTTY's own skills, which every CLI's sessions load. */
+const HIVE_GROUP = 'HiveTTY · every CLI';
 /** What the preview runs against. Never sent anywhere. */
 const EXAMPLE = { key: 'PROJ-123', title: 'Example ticket', type: 'Story', url: 'https://example.atlassian.net/browse/PROJ-123' };
 
@@ -37,18 +40,37 @@ const VIAS = [
  *
  * Every choice saves as it is made; the two text fields on blur or Enter. A
  * typed skill that is not a skill name is shown as wrong and not saved.
+ *
+ * The skill select lists HiveTTY's own skills first, then the user's own CLI
+ * skills grouped by CLI (HIVE-367). A CLI skill runs only in that CLI's
+ * sessions, so picking one says which, and the preview types it that CLI's way.
  */
 export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | null }) {
   const skills = useSkills();
+  const cliList = useCliSkills();
+  const cliSkills = cliList ?? [];
   const agents = useAgents();
   const skillNames = (skills?.skills ?? []).map((skill) => `hive:${skill.name}`);
   const agentNames = (agents?.agents ?? []).map((agent) => agent.name);
+  /** The CLIs whose own skills include `skill`, in `HARNESS_IDS` order. */
+  const cliOf = (skill: string) => cliSkills.filter((entry) => entry.names.includes(skill)).map((entry) => entry.cli);
 
   const [mode, setMode] = useState<Mode>(workflow?.kind ?? 'none');
   const savedSkill = workflow?.kind === 'skill' ? workflow.skill : FIRST_SKILL;
   // By namespace, not by the list: the skills snapshot may not have arrived on the first render.
-  const [skillChoice, setSkillChoice] = useState(savedSkill.startsWith('hive:') ? savedSkill : TYPED);
+  const [skillChoice, setSkillChoice] = useState(
+    savedSkill.startsWith('hive:') || cliOf(savedSkill).length > 0 ? savedSkill : TYPED,
+  );
   const [typed, setTyped] = useState(skillChoice === TYPED ? savedSkill : '');
+  // The CLI list arrives after the first render (reading it spawns CLIs): when
+  // it does, a typed skill one of them lists moves into the select. Only on
+  // the list's arrival, so typing a listed name never yanks the field away, and
+  // only ever a promotion. React's "state from the previous render" pattern.
+  const [seenCliList, setSeenCliList] = useState(cliList);
+  if (cliList !== seenCliList) {
+    setSeenCliList(cliList);
+    if (skillChoice === TYPED && cliOf(typed).length > 0) setSkillChoice(typed);
+  }
   const [pickedAgent, setAgent] = useState(workflow?.kind === 'agent' ? workflow.agent : '');
   // Until one is picked, the first listed: the agents snapshot may arrive after the first render.
   const agent = pickedAgent || (agentNames[0] ?? '');
@@ -75,13 +97,25 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
     void setJiraConnection({ workflow: built });
   };
 
-  // The preview shows the default CLI's form of the skill (HIVE-369).
-  const start = typeof current === 'string' ? null : ticketStart(current, EXAMPLE, 'claude-code');
-  // The saved skill stays listed even when its folder has gone, so the select never shows a value it lacks.
-  const skillOptions = [...new Set([FIRST_SKILL, ...skillNames, ...(skillChoice === TYPED ? [] : [skillChoice])])].map((name) => ({
-    value: name,
-    label: name,
-  }));
+  // A CLI's own skill runs only in its sessions; the preview types it that CLI's way (HIVE-367),
+  // and otherwise shows the default CLI's form of the skill (HIVE-369).
+  const only = typeof current === 'string' || current?.kind !== 'skill' ? [] : cliOf(current.skill);
+  const start = typeof current === 'string' ? null : ticketStart(current, EXAMPLE, only[0] ?? 'claude-code');
+  const onlyNames = only.map((id) => CLI_NAMES[id]).join(' and ');
+  const listedByCli = skillChoice !== TYPED && cliOf(skillChoice).length > 0;
+  const skillOptions: SelectFieldOption[] = [
+    // A saved hive skill stays listed even when its folder has gone, so the select never shows a value it lacks.
+    ...[...new Set([FIRST_SKILL, ...skillNames, ...(skillChoice.startsWith('hive:') ? [skillChoice] : [])])].map((name) => ({
+      value: name,
+      label: name,
+      group: HIVE_GROUP,
+    })),
+    ...cliSkills.flatMap((entry) =>
+      entry.names.map((name) => ({ value: name, label: name, group: CLI_NAMES[entry.cli], key: `${entry.cli}:${name}` })),
+    ),
+    // So does a CLI skill the last read no longer lists.
+    ...(skillChoice === TYPED || skillChoice.startsWith('hive:') || listedByCli ? [] : [{ value: skillChoice, label: skillChoice }]),
+  ];
 
   return (
     <SettingsGroup title="Ticket workflow" description="What a session started from a ticket in Work does first.">
@@ -119,6 +153,12 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
               />
             ) : null}
           </div>
+        ) : null}
+
+        {mode === 'skill' && only.length > 0 ? (
+          <p className="rounded-md border border-amber px-2.5 py-1.5 text-ui-sm text-amber-text">
+            {`A ${onlyNames} skill: it runs only in ${onlyNames} sessions. A session on another CLI started from a ticket will not find it.`}
+          </p>
         ) : null}
 
         {mode === 'agent' ? (
