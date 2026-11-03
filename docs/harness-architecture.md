@@ -473,7 +473,11 @@ login shell is typed, as Claude's is (`&& exit`, the task after `--`), flag by f
   from `$CODEX_HOME/config.toml`, a blank line, then `catalog.md`. A `-c` replaces the config's
   value rather than appending to it (probed at 0.165.0), so the user's text is read (with
   `smol-toml`, read-only) and goes first. `model_instructions_file` is never touched. Omitted when
-  there is neither.
+  there is neither. Each catalog entry is named `hive-<name>` and typed `$hive-<name>`
+  (`CAPABILITIES.codex.skills`, HIVE-384): for a typed `$<name>` Codex injects a skill it discovers
+  itself (a repository's `.agents/skills` or `.codex/skills`, `$CODEX_HOME/skills`) before the model
+  runs, so a bare name would load the repository's skill and never read the catalog's file (FINDINGS
+  P9). `.claude/skills` is not one of Codex's roots.
 - `-c hooks.<E>=[…]` for `SessionStart`, `UserPromptSubmit`, `PermissionRequest` and `Stop`, and
   `PostToolUse` with `matcher="*"` (as Claude's sessions do: a finished tool is what clears an
   approved `PermissionRequest`, since `Stop` does not; `update_plan` is the only one read for a

@@ -169,7 +169,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
       // The tool's own field names: told `body`, 0.165's model passes `body`, which the tool refuses.
       [MCP, fenceMd(MCP, 'The hive MCP tool jira_comment, with key "HIVE-1" and markdown "probe".')],
       // HIVE-360: no tools granted, so the fence asks about the read, and the ask names the file.
-      [SKILL, fenceMd(SKILL, 'Before you reply, use $verify: read its SKILL.md and nothing else, then reply DONE.')],
+      [SKILL, fenceMd(SKILL, 'Before you reply, use $hive-verify: read its SKILL.md and nothing else, then reply DONE.')],
     ] as const) {
       await mkdir(join(agentsRoot(), name), { recursive: true });
       await writeFile(join(agentsRoot(), name, 'AGENT.md'), body, 'utf8');
@@ -518,7 +518,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
     await fenceCase(MCP, 'mcp__hive__jira_comment', () => jiraComments.length > 0);
   }, 2 * TURN_MS);
 
-  it('a run told to use $verify reads that skill’s SKILL.md (HIVE-360)', async (ctx) => {
+  it('a run told to use $hive-verify reads that skill’s SKILL.md (HIVE-360, HIVE-384)', async (ctx) => {
     if (skipReason !== undefined) ctx.skip(skipReason);
     await wake(SKILL);
 

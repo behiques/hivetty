@@ -5,7 +5,7 @@ import { DONE_DESCRIPTION, doneToolSkill } from '../../../../electron/main/harne
 describe('doneToolSkill (HIVE-368)', () => {
   it('names the tool as Codex calls it, with no shell and no grant', () => {
     const text = doneToolSkill('codex');
-    expect(text).toMatch(/^---\nname: done\n/);
+    expect(text).toMatch(/^---\nname: hive-done\n/);
     expect(text).toContain('`mcp__hive__session_done`');
     expect(text).not.toContain('allowed-tools');
     expect(text).not.toContain('curl');

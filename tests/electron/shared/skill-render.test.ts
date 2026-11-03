@@ -19,7 +19,7 @@ describe('fillPlaceholders', () => {
   });
   it('fills Codex, with its folder as the plugin root', () => {
     expect(fillPlaceholders(SOURCE, 'codex', '/ud/hive/plugins/codex')).toBe(
-      'Call mcp__hive__ledger_ask, then $plan from "/ud/hive/plugins/codex/x".',
+      'Call mcp__hive__ledger_ask, then $hive-plan from "/ud/hive/plugins/codex/x".',
     );
   });
   it('fills Copilot, with its folder as the plugin root', () => {
@@ -43,7 +43,7 @@ describe('fillPlaceholders', () => {
 describe('typedSkill', () => {
   it('types each CLI its own way', () => {
     expect(typedSkill('hive:work-on', 'claude-code')).toBe('/hive:work-on');
-    expect(typedSkill('hive:work-on', 'codex')).toBe('$work-on');
+    expect(typedSkill('hive:work-on', 'codex')).toBe('$hive-work-on');
     expect(typedSkill('hive:work-on', 'copilot')).toBe('/hive:hive-work-on');
   });
   it('keeps a name outside hive as stored', () => {
@@ -80,12 +80,12 @@ describe('renderSkillText', () => {
     expect(renderSkillText(GOAL, 'codex')).toBe(
       [
         '---',
-        'name: goal-on',
+        'name: hive-goal-on',
         'description: holds a session',
         'requires: [stop-hook]',
         '---',
         '',
-        'Body names $plan.',
+        'Body names $hive-plan.',
         'hooks: this line is prose, not frontmatter',
       ].join('\n'),
     );
@@ -105,10 +105,12 @@ describe('renderSkillText', () => {
     expect(renderSkillText('---\nname: "work-on"\n---\n', 'copilot')).toBe('---\nname: hive-work-on\n---\n');
     expect(renderSkillText("---\nname: 'work-on'  \n---\n", 'copilot')).toBe('---\nname: hive-work-on\n---\n');
   });
-  it('keeps the bare name for Claude Code, whose plugin namespaces it, and Codex (HIVE-382)', () => {
+  it('names a Codex skill hive-<name> too, as its catalog does (HIVE-384)', () => {
+    expect(renderSkillText('---\nname: work-on\n---\n', 'codex')).toBe('---\nname: hive-work-on\n---\n');
+  });
+  it('keeps the bare name for Claude Code, whose plugin namespaces it (HIVE-382)', () => {
     const text = '---\nname: work-on\n---\n';
     expect(renderSkillText(text, 'claude-code')).toBe(text);
-    expect(renderSkillText(text, 'codex')).toBe(text);
   });
 });
 

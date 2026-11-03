@@ -39,9 +39,9 @@ describe('skills vocabulary (HIVE-369)', () => {
     });
     expect(CAPABILITIES.codex.skills).toEqual({
       toolPrefix: 'mcp__hive__',
-      refPrefix: '$',
-      typedPrefix: '$',
-      namePrefix: '',
+      refPrefix: '$hive-',
+      typedPrefix: '$hive-',
+      namePrefix: 'hive-',
       pluginRoot: null,
     });
     expect(CAPABILITIES.copilot.skills).toEqual({

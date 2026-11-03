@@ -27,7 +27,7 @@ export function fillPlaceholders(text: string, cli: HarnessId, root?: string): s
 /**
  * What a session on `cli` types to run `skill`, stored as Claude names it (`hive:work-on`).
  * Claude keeps the plugin's namespace, Copilot types `/hive:hive-<name>` (HIVE-382) and Codex loads
- * HiveTTY's skills by their bare name. A skill outside hive keeps only the CLI's sigil.
+ * `$hive-<name>` (HIVE-384). A skill outside hive keeps only the CLI's sigil.
  */
 export function typedSkill(skill: string, cli: HarnessId): string {
   if (cli === 'claude-code') return `/${skill}`;
