@@ -695,7 +695,7 @@ describe('per CLI (HIVE-369)', () => {
     }
     const text = (cli: string) => readFile(join(out, cli, 'skills', 'flow', 'SKILL.md'), 'utf8');
     expect(await text('claude-code')).toContain('Call mcp__hive__ledger_ask, then hive:plan.');
-    expect(await text('codex')).toContain('Call mcp__hive__ledger_ask, then $plan.');
+    expect(await text('codex')).toContain('Call mcp__hive__ledger_ask, then $hive-plan.');
     expect(await text('copilot')).toContain('Call hive-ledger_ask, then /hive:hive-plan.');
   });
 
@@ -708,8 +708,8 @@ describe('per CLI (HIVE-369)', () => {
     }
     expect((await readdir(join(pluginRoot, 'codex', 'skills'))).sort()).toEqual(['done', 'flow', 'review']);
     expect((await readdir(join(pluginRoot, 'copilot', 'skills'))).sort()).toEqual(['done', 'flow', 'review']);
-    expect(await readFile(join(pluginRoot, 'codex', 'catalog.md'), 'utf8')).toContain('- review: d (file: ');
-    expect(await readFile(join(pluginRoot, 'codex', 'catalog.md'), 'utf8')).toContain('- done: Finish this session');
+    expect(await readFile(join(pluginRoot, 'codex', 'catalog.md'), 'utf8')).toContain('- hive-review: d (file: ');
+    expect(await readFile(join(pluginRoot, 'codex', 'catalog.md'), 'utf8')).toContain('- hive-done: Finish this session');
   });
 
   it("drops goal-on's hooks: for Codex and keeps them for Claude Code", async () => {
@@ -720,7 +720,7 @@ describe('per CLI (HIVE-369)', () => {
     await renderSkills(join(pluginRoot, 'codex'), 'codex', read, { version: '1', doneUrl: null });
     expect(await readFile(join(pluginRoot, 'claude-code', 'skills', 'goal', 'SKILL.md'), 'utf8')).toBe(goal);
     expect(await readFile(join(pluginRoot, 'codex', 'skills', 'goal', 'SKILL.md'), 'utf8')).toBe(
-      '---\nname: goal\ndescription: d\n---\nbody\n',
+      '---\nname: hive-goal\ndescription: d\n---\nbody\n',
     );
   });
 

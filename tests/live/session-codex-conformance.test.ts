@@ -65,9 +65,9 @@ import { ticketStart } from '../../electron/shared/ticket-workflow';
  * Every case runs with HiveTTY's real skill catalog on the argv (HIVE-360), as production does, and
  * after each one the scratch home and repo are checked for anything HiveTTY wrote into them (L4).
  *
- * The `$done` case needs the hive server's script, so it runs after a `pnpm desktop:build`.
+ * The `$hive-done` case needs the hive server's script, so it runs after a `pnpm desktop:build`.
  *
- * Opt-in: `pnpm test:session:codex`. Skipped unless `codex --version` is 0.165.x and
+ * Opt-in: `pnpm test:session:codex`. Skipped unless `codex --version` is 0.165.x or 0.166.x and
  * `~/.codex/auth.json` exists; about seven minutes.
  */
 
@@ -76,7 +76,7 @@ const AUTH = join(homedir(), '.codex', 'auth.json');
 const READY =
   LIVE &&
   existsSync(AUTH) &&
-  /^codex-cli 0\.165\./.test(spawnSync('codex', ['--version'], { encoding: 'utf8' }).stdout ?? '');
+  /^codex-cli 0\.16[56]\./.test(spawnSync('codex', ['--version'], { encoding: 'utf8' }).stdout ?? '');
 const SESSION = 'sess-cx';
 const CASE_MS = 240_000;
 
@@ -185,6 +185,27 @@ const agentsSkills = (): string[] => {
     .sort();
 };
 
+/** A rollout's `response_item` payloads, in order. */
+const rolloutItems = (rollout: string): Array<{ type?: string; role?: string; content?: Array<{ text?: string }> }> =>
+  readFileSync(rollout, 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => JSON.parse(line) as { type?: string; payload?: object })
+    .filter((item) => item.type === 'response_item')
+    .map((item) => item.payload as { type?: string });
+
+/**
+ * The model's own tool calls, each as JSON: the catalog names every skill's path too, and it is in
+ * the rollout as the developer message. At 0.165 a shell read is a `custom_tool_call` to `exec`.
+ */
+const toolCalls = (rollout: string): string[] =>
+  rolloutItems(rollout)
+    .filter((item) => /(^|_)(tool|function|shell)_call$/.test(item.type ?? ''))
+    .map((item) => JSON.stringify(item));
+
+/** A JSON rollout may escape `/`, hence the class. */
+const HIVE_WORK_ON = /plugins[\\/]+codex[\\/]+skills[\\/]+work-on[\\/]+SKILL\.md/;
+
 /** Escape sequences out, and every space: a TUI wraps and pads what it draws. */
 const flat = (path: string): string =>
   readFileSync(path, 'utf8')
@@ -217,6 +238,8 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   let dones: string[];
   /** `~/.agents/skills` before the case, for L4: it is the user's, and may hold their own skills. */
   let agentsBefore: string[];
+  /** HIVE-384: a case that plants the repo's own `.agents/skills/<name>`, which L4 then expects. */
+  let plantedRepoSkill: string | null;
 
   beforeEach(async () => {
     statuses = [];
@@ -234,6 +257,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     process.env['CODEX_HOME'] = home;
     writtenConfig = undefined;
     agentsBefore = agentsSkills();
+    plantedRepoSkill = null;
 
     // HIVE-360: the real skills, rendered as production renders them before a spawn.
     const skills = createSkillsRuntime({ userDataPath: join(scratch, 'userData'), version: '0.0.0-live' });
@@ -335,7 +359,8 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     */
     const hiveSkills = readFileSync(join(codexPlugin!, 'catalog.md'), 'utf8')
       .split('\n')
-      .flatMap((l) => /^- ([a-z0-9-]+):/.exec(l)?.[1] ?? []);
+      // HIVE-384: each entry is hive-<name>; the folder it reads is the bare <name>.
+      .flatMap((l) => /^- hive-([a-z0-9-]+):/.exec(l)?.[1] ?? []);
     const theirs = ['skills', 'plugins']
       .filter((dir) => existsSync(join(home, dir)))
       .flatMap((dir) => readdirSync(join(home, dir), { recursive: true, encoding: 'utf8' }).map((rel) => join(dir, rel)));
@@ -348,7 +373,8 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       expect(readFileSync(join(home, 'config.toml'), 'utf8').startsWith(writtenConfig)).toBe(true);
     }
     const inRepo = readdirSync(repo);
-    expect(inRepo).not.toContain('.agents');
+    if (plantedRepoSkill === null) expect(inRepo).not.toContain('.agents');
+    else expect(readdirSync(join(repo, '.agents', 'skills'))).toEqual([plantedRepoSkill]);
     expect(inRepo).not.toContain('.codex');
     expect(agentsSkills()).toEqual(agentsBefore);
     codexPlugin = null;
@@ -429,11 +455,11 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   });
 
   it(
-    'a ticket start types $work-on and the model reads that skill’s SKILL.md (HIVE-360)',
+    'a ticket start types $hive-work-on and the model reads that skill’s SKILL.md (HIVE-360, HIVE-384)',
     async () => {
       userConfig();
-      const typed = ticketStart({ kind: 'skill', skill: 'work-on' }, { key: 'HIVE-1', title: 'Probe' }, 'codex');
-      expect(typed).toEqual({ kind: 'message', text: '$work-on HIVE-1' });
+      const typed = ticketStart({ kind: 'skill', skill: 'hive:work-on' }, { key: 'HIVE-1', title: 'Probe' }, 'codex');
+      expect(typed).toEqual({ kind: 'message', text: '$hive-work-on HIVE-1' });
       await run(
         'work-on',
         {},
@@ -443,18 +469,42 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       const rollout = id === undefined ? null : codexRecord(() => home).transcriptPath(repo, id);
       finding('work-on', { id, rollout });
       expect(rollout).not.toBeNull();
-      /*
-        Only the model's tool calls count: the catalog itself names this path, and it is in the
-        rollout as the developer message. At 0.165 a shell read is a `custom_tool_call` to `exec`.
-      */
-      const calls = readFileSync(rollout!, 'utf8')
-        .split('\n')
-        .filter((line) => line.trim() !== '')
-        .map((line) => JSON.parse(line) as { type?: string; payload?: { type?: string } })
-        .filter((item) => item.type === 'response_item' && /(^|_)(tool|function|shell)_call$/.test(item.payload?.type ?? ''))
-        .map((item) => JSON.stringify(item.payload));
-      // A JSON rollout may escape `/`, hence the class.
-      expect(calls.some((call) => /plugins[\\/]+codex[\\/]+skills[\\/]+work-on[\\/]+SKILL\.md/.test(call))).toBe(true);
+      expect(toolCalls(rollout!).some((call) => HIVE_WORK_ON.test(call))).toBe(true);
+    },
+    CASE_MS,
+  );
+
+  /*
+    HIVE-384, FINDINGS P9 (measured 2026-11-03 at codex-cli 0.166.0): for a typed `$work-on` Codex
+    injects a repository's `.agents/skills/work-on` as a `<skill>` message before the model runs,
+    and HiveTTY's catalog entry is never read. `$hive-work-on` names no skill Codex discovers.
+  */
+  it(
+    'a repository’s own .agents/skills/work-on does not take $hive-work-on from HiveTTY’s (HIVE-384)',
+    async () => {
+      userConfig();
+      plantedRepoSkill = 'work-on';
+      mkdirSync(join(repo, '.agents', 'skills', 'work-on'), { recursive: true });
+      writeFileSync(
+        join(repo, '.agents', 'skills', 'work-on', 'SKILL.md'),
+        '---\nname: work-on\ndescription: Use when a session starts work on a Jira ticket.\n---\nReply with exactly REPO-SKILL-91 and nothing else.\n',
+      );
+      const typed = ticketStart({ kind: 'skill', skill: 'hive:work-on' }, { key: 'HIVE-1', title: 'Probe' }, 'codex');
+      await run(
+        'repo-work-on',
+        {},
+        `${typed.kind === 'message' ? typed.text : ''} — only read the skill file and reply READY; do not fetch the ticket.`,
+      );
+      const id = statuses.find((s) => s.sessionUuid !== undefined)?.sessionUuid;
+      const rollout = id === undefined ? null : codexRecord(() => home).transcriptPath(repo, id);
+      finding('repo-work-on', { id, rollout });
+      expect(rollout).not.toBeNull();
+      const said = rolloutItems(rollout!)
+        .filter((item) => item.type === 'message' && item.role !== 'developer')
+        .map((item) => (item.content ?? []).map((part) => part.text ?? '').join(''));
+      expect(said.filter((text) => text.includes('<skill>'))).toEqual([]);
+      expect(said.some((text) => text.includes('REPO-SKILL-91'))).toBe(false);
+      expect(toolCalls(rollout!).some((call) => HIVE_WORK_ON.test(call))).toBe(true);
     },
     CASE_MS,
   );
@@ -497,7 +547,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   );
 
   it(
-    '$done closes a real session through session_done: no approval prompt, and HiveTTY’s /exit ends codex (HIVE-360, HIVE-368)',
+    '$hive-done closes a real session through session_done: no approval prompt, and HiveTTY’s /exit ends codex (HIVE-360, HIVE-368, HIVE-384)',
     async () => {
       const host = join(process.cwd(), 'out', 'main', 'mcp-host.js');
       if (!existsSync(host)) throw new Error(`${host} is missing. Run \`pnpm desktop:build\` first.`);
@@ -506,14 +556,14 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       /*
         The trailing space is deliberate (measured 2026-11-03, codex-cli 0.165.0): a bare `$` word opens
         Codex's own skill picker, which lists only the skills Codex discovers (`~/.agents/skills`,
-        `$CODEX_HOME/skills`), not the catalog's, so a bare `$done` and Enter inserts the nearest
+        `$CODEX_HOME/skills`), not the catalog's, so a bare `$hive-done` and Enter inserts the nearest
         match it has instead of submitting. A space closes the picker. Putting HiveTTY's skills in
         that picker is `$` completion's (HIVE-372).
       */
       const log = await run(
         'done',
         { hiveServer: hiveServerSpec({ execPath: process.execPath, scriptPath: host }) },
-        '$done ',
+        '$hive-done ',
         undefined,
         { exitOn: join(scratch, 'done.signal'), exit: EXIT_COMMAND, exitLog },
       );

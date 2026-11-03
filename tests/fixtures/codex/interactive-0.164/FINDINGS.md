@@ -109,3 +109,26 @@ what to do differently (esc)`.
 Esc while a turn is running, no dialog: `■ Conversation interrupted`, no `Stop`, `turn_aborted`.
 
 **Consequence.** No hook can end these turns, and the highlight wraps, so a keystroke model cannot tell option 3 from option 1 without knowing how many options a dialog has. The rollout can: `recordAborted`. Probe artefact to avoid: a driver's own `/exit` + Enter answers a dialog still open, which reads like an approval nobody gave.
+
+## P9: a skill of the same name (0.166.0, HIVE-384)
+
+`codex exec` in a scratch git repo with a scratch `CODEX_HOME`, HiveTTY's catalog as
+`developer_instructions` naming a `work-on` whose `SKILL.md` says to reply `HIVE-MARKER-37`, a second
+`work-on` whose `SKILL.md` says `REPO-MARKER-91`, and the prompt `$work-on HIVE-1`.
+
+| The second `work-on` in | Reply | How |
+| --- | --- | --- |
+| nowhere | `HIVE-MARKER-37` | the model reads the catalog's file with a shell call |
+| the repo's `.agents/skills/work-on` | `REPO-MARKER-91` | no tool call: the rollout holds a `<skill>` user message with the repo's file |
+| the repo's `.codex/skills/work-on` | `REPO-MARKER-91` | the same injection |
+| `$CODEX_HOME/skills/work-on` | `REPO-MARKER-91` | the same injection |
+| the repo's `.claude/skills/work-on` | `HIVE-MARKER-37` | not a root Codex reads |
+
+**P9: a typed `$<name>` is Codex's own.** Codex resolves it against the skills it discovers and
+injects the match before the model runs; the catalog is never consulted for it. A personal skill
+Codex fails to parse (a symlinked `~/.agents/skills/work-on` with a folded `description: >-`) is not
+discovered and injects nothing.
+
+**Consequence.** HiveTTY's Codex skills are named `hive-<name>` and typed `$hive-<name>`
+(`CAPABILITIES.codex.skills`). No discovered skill carries the prefix, so nothing is injected and the
+model reads the catalog's file, as in the first row.

@@ -118,9 +118,12 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     conversationId: 'first-hook',
     skills: {
       toolPrefix: 'mcp__hive__',
-      refPrefix: '$',
-      typedPrefix: '$',
-      namePrefix: '',
+      // HIVE-384: Codex injects a skill it discovers itself (a repository's `.agents/skills/<name>`,
+      // `.codex/skills`, `$CODEX_HOME/skills`) for a typed `$<name>`, so a bare name would load the
+      // repository's and never HiveTTY's. No discovered skill is named hive-<name>.
+      refPrefix: '$hive-',
+      typedPrefix: '$hive-',
+      namePrefix: 'hive-',
       pluginRoot: null,
     },
   },

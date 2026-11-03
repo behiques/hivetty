@@ -21,9 +21,9 @@ describe('codexSkills', () => {
       'catalog.md': [
         '### HiveTTY skills',
         'Skills like the ones above. When the user names one with $name or in plain text, read its SKILL.md before acting.',
-        '- plan: Write a plan. (file: /u/hive/plugins/codex/skills/plan/SKILL.md)',
-        '- tdd: (file: /u/hive/plugins/codex/skills/tdd/SKILL.md)',
-        `- done: ${DONE_DESCRIPTION} (file: /u/hive/plugins/codex/skills/done/SKILL.md)`,
+        '- hive-plan: Write a plan. (file: /u/hive/plugins/codex/skills/plan/SKILL.md)',
+        '- hive-tdd: (file: /u/hive/plugins/codex/skills/tdd/SKILL.md)',
+        `- hive-done: ${DONE_DESCRIPTION} (file: /u/hive/plugins/codex/skills/done/SKILL.md)`,
         '',
       ].join('\n'),
       'skills/done/SKILL.md': doneToolSkill('codex'),
