@@ -479,6 +479,16 @@ test('findBrief: a brief bound to another CLI session is someone else’s', () =
   assert.equal(findBrief(dir, 'old-uuid', 'sess-07'), join(dir, 'sess-07.md'));
 });
 
+test("findBrief: a stale brief under the hive id does not hide this session's own", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-find-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief({ extra: 'session: sess-07\ncli_session: old-uuid\n' }));
+  writeFileSync(join(dir, 'sess-07-fix.md'), brief({ extra: 'session: sess-07\n' }));
+  writeFileSync(join(dir, 'sess-07-older.md'), brief({ extra: 'session: sess-07\ncli_session: other-uuid\n' }));
+  assert.equal(findBrief(dir, 'new-uuid', 'sess-07'), join(dir, 'sess-07-fix.md'));
+  assert.equal(findBrief(dir, 'old-uuid', 'sess-07'), join(dir, 'sess-07.md'));
+  assert.equal(resolveBrief(dir, 'sess-07'), join(dir, 'sess-07.md'));
+});
+
 test('findBrief: falls back to the CLI id, and to nothing without a usable hive id', () => {
   const dir = mkdtempSync(join(tmpdir(), 'goal-find-'));
   writeFileSync(join(dir, 'cli-uuid.md'), brief());

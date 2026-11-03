@@ -144,38 +144,36 @@ export function headerValue(header, key) {
  * INSIDE the file and survives any renaming. Newest wins if several match.
  */
 export function resolveBrief(dir, sessionId) {
-  for (const name of [`${sessionId}.md`, `session_${sessionId}.md`]) {
-    const p = join(dir, name);
-    if (existsSync(p)) return p;
-  }
+  return briefCandidates(dir, sessionId)[0] ?? null;
+}
+
+/** Every brief that answers to `sessionId`, in `resolveBrief`'s order: the two names, then header matches, newest first. */
+function briefCandidates(dir, sessionId) {
+  const named = [`${sessionId}.md`, `session_${sessionId}.md`].map((name) => join(dir, name)).filter((p) => existsSync(p));
 
   let names;
   try {
     names = readdirSync(dir);
   } catch {
-    return null; // no brief directory at all — not a goal-on machine yet
+    return named; // no brief directory at all — not a goal-on machine yet
   }
 
   const want = new RegExp(`^session:[ \\t]*["']?${sessionId.replace(/[.]/g, '\\.')}["']?[ \\t]*$`, 'm');
-  let best = null;
-  let bestMtime = -Infinity;
+  const found = [];
 
   for (const name of names) {
     if (!name.endsWith('.md')) continue;
     const p = join(dir, name);
+    if (named.includes(p)) continue;
     try {
       const split = splitFrontmatter(readFileSync(p, 'utf8'));
       if (!split || !want.test(split.header)) continue;
-      const mtime = statSync(p).mtimeMs;
-      if (mtime > bestMtime) {
-        best = p;
-        bestMtime = mtime;
-      }
+      found.push({ p, mtime: statSync(p).mtimeMs });
     } catch {
       /* an unreadable neighbour must not stop the search */
     }
   }
-  return best;
+  return [...named, ...found.sort((a, b) => b.mtime - a.mtime).map((f) => f.p)];
 }
 
 /**
@@ -183,19 +181,20 @@ export function resolveBrief(dir, sessionId) {
  * on Codex or Copilot cannot learn its CLI's own id; the payload's id stays the fallback, the name
  * Claude briefs had before. HiveTTY's ids are a counter that restarts with the app (`sess-07`
  * comes round again), so a brief found by one belongs to the first CLI session that stamped it:
- * a `cli_session:` naming another is a stale brief, never this session's.
+ * a `cli_session:` naming another is a stale brief, never this session's. A stale one does not
+ * end the search: the next brief answering to the hive id (another name, or `session:` in its
+ * header) may be this session's own.
  */
 export function findBrief(dir, cliId, hiveId) {
   const hive = sessionIdOf({ sessionId: hiveId });
   if (hive) {
-    const p = resolveBrief(dir, hive);
-    if (p) {
+    for (const p of briefCandidates(dir, hive)) {
       try {
         const split = splitFrontmatter(readFileSync(p, 'utf8'));
         const bound = split ? headerValue(split.header, 'cli_session') : null;
         if (!bound || bound === cliId) return p;
       } catch {
-        /* unreadable: try the CLI id */
+        /* unreadable: try the next */
       }
     }
   }
