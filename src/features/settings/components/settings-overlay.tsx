@@ -1,6 +1,13 @@
-import { X } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, X } from '@phosphor-icons/react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import { useEffect, useState, type ComponentType } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ComponentType,
+  type KeyboardEvent,
+} from 'react';
 
 import { cn } from '@/lib/utils';
 import type { SettingsSection } from '@/types/settings';
@@ -40,42 +47,77 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
  */
 
 /**
- * The section list.
+ * The nav, in groups (HIVE-374, Epic HIVE-373).
  *
- * Story 101 shipped Projects alone; story 105 adds Appearance and, with it, the
- * switching this nav only ever described. Stories 104 and 106 cost exactly what
- * that promised — a row here and an entry in `PANES`, nothing else — and 107
- * filled the last slot the same way: five rows, five entries, and no control
+ * Six groups in the epic's order: Harnesses, Automation, Workspace, Machines,
+ * Account, General. A group heading is a label, never a button. A group with
+ * no pane yet is simply not listed — Machines and Account arrive with their
+ * panes — the same rule that keeps a pane **absent rather than disabled** until
+ * it exists: a nav full of dead items teaches the user that settings are broken.
+ *
+ * Adding a pane is still a row here and an entry in `PANES`, and no control
  * flow anywhere in this file.
  *
- * HIVE-96's Skills is the first section to arrive from **outside** the epic, and
- * it cost the same two lines — which is the claim above finally being tested by
- * something it did not anticipate rather than merely restated.
+ * The CLIs and Runtime panes keep their labels until HIVE-376 and HIVE-377
+ * replace those sections; their ids already name what replaces them.
  *
- * Sections stay **absent rather than disabled** until they exist: a nav full of
- * dead items teaches the user that settings are broken.
- *
- * CLIs (HIVE-341) and then Skills sit directly after Runtime because all three
- * answer "what does a session I start actually run?" — Runtime decides the binary
- * and its environment, CLIs how each agent CLI runs headless, Skills the commands
- * a session comes with. Appearance onwards is about the app.
- *
- * Advanced sits last deliberately. It is the only section that answers
- * questions about the app rather than setting anything in it, and the
- * destructive verb in the product lives there.
+ * Advanced sits last. It answers questions about the app rather than setting
+ * anything in it, and the destructive verb in the product lives there.
  */
-const SECTIONS: readonly { id: SettingsSection; label: string }[] = [
-  { id: 'projects', label: 'Projects' },
-  { id: 'runtime', label: 'Runtime' },
-  { id: 'clis', label: 'CLIs' },
-  { id: 'skills', label: 'Skills' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'appearance', label: 'Appearance' },
-  { id: 'editor', label: 'Editor' },
-  { id: 'integrations', label: 'Integrations' },
-  { id: 'notifications', label: 'Notifications' },
-  { id: 'advanced', label: 'Advanced' },
-] as const;
+const GROUPS: readonly {
+  group: string;
+  panes: readonly { id: SettingsSection; label: string }[];
+}[] = [
+  {
+    group: 'Harnesses',
+    panes: [
+      { id: 'harnesses-overview', label: 'CLIs' },
+      { id: 'shell', label: 'Runtime' },
+    ],
+  },
+  {
+    group: 'Automation',
+    panes: [
+      { id: 'agents', label: 'Agents' },
+      { id: 'skills', label: 'Skills' },
+    ],
+  },
+  {
+    group: 'Workspace',
+    panes: [
+      { id: 'projects', label: 'Projects' },
+      { id: 'appearance', label: 'Appearance' },
+      { id: 'editor', label: 'Editor' },
+      { id: 'integrations', label: 'Integrations' },
+      { id: 'notifications', label: 'Notifications' },
+    ],
+  },
+  { group: 'General', panes: [{ id: 'advanced', label: 'Advanced' }] },
+];
+
+/** Every pane in nav order, for the arrow keys, which cross group lines. */
+const ORDER = GROUPS.flatMap((entry) => entry.panes.map((pane) => pane.id));
+
+const groupOf = (id: SettingsSection): string =>
+  GROUPS.find((entry) => entry.panes.some((pane) => pane.id === id))?.group ?? '';
+
+/** Arrow keys move one pane and hold at the ends; Home and End jump to them. */
+function step(current: SettingsSection, key: string): SettingsSection | null {
+  const index = ORDER.indexOf(current);
+
+  switch (key) {
+    case 'ArrowDown':
+      return ORDER[Math.min(index + 1, ORDER.length - 1)] ?? null;
+    case 'ArrowUp':
+      return ORDER[Math.max(index - 1, 0)] ?? null;
+    case 'Home':
+      return ORDER[0] ?? null;
+    case 'End':
+      return ORDER.at(-1) ?? null;
+    default:
+      return null;
+  }
+}
 
 /*
   Derived from the shared union rather than declared here: `ui-store` has to
@@ -93,8 +135,8 @@ type SectionId = SettingsSection;
  */
 const PANES: Record<SectionId, ComponentType> = {
   projects: ProjectsSection,
-  runtime: RuntimeSection,
-  clis: ClisSection,
+  shell: RuntimeSection,
+  'harnesses-overview': ClisSection,
   skills: SkillsSection,
   agents: AgentsSection,
   appearance: AppearanceSection,
@@ -157,13 +199,39 @@ export function SettingsOverlay() {
   const requested = useSettingsSection();
   const [section, setSection] = useState<SectionId>(requested ?? 'projects');
 
+  /**
+   * Which half shows below the two-column breakpoint (HIVE-374): the group
+   * list, or one pane full width with a back control. Above it both show and
+   * this is ignored, so it can be set freely. A named pane opens on that pane;
+   * a bare open on the list, the way Projects is the wide default.
+   */
+  const [paneOpen, setPaneOpen] = useState(requested !== null);
+
   useEffect(() => {
     if (requested === null) return;
 
     setSection(requested);
+    setPaneOpen(true);
     clearSettingsSection();
   }, [requested, clearSettingsSection]);
   const Pane = PANES[section];
+
+  const navRef = useRef<HTMLElement>(null);
+  const groupId = useId();
+
+  /**
+   * One tab stop, roving: the current pane is the only button Tab reaches.
+   * The arrows select as they move, which opens the pane beside the nav when
+   * it is wide; narrow, the list stays up and Enter opens what is focused.
+   */
+  const onNavKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const next = step(section, event.key);
+    if (next === null) return;
+
+    event.preventDefault();
+    setSection(next);
+    navRef.current?.querySelector<HTMLElement>(`[data-pane="${next}"]`)?.focus();
+  };
 
   return (
     <DialogPrimitive.Root
@@ -227,10 +295,10 @@ export function SettingsOverlay() {
         onInteractOutside={(event) => {
           event.preventDefault();
         }}
-        className="flex min-h-0 flex-1 flex-col bg-panel-2 outline-none"
+        className="@container flex min-h-0 flex-1 flex-col bg-panel-2 outline-none"
       >
         {/* The Overmind head's own title and padding, so a place and Settings read at the same weight. */}
-        <div className="flex items-center justify-between border-b border-border-soft px-7 pt-4 pb-3">
+        <div className="flex items-center justify-between border-b border-border-soft px-4 pt-4 pb-3 @xl:px-7">
           <DialogPrimitive.Title className="text-[18px] font-semibold text-ink">
             Settings
           </DialogPrimitive.Title>
@@ -242,37 +310,90 @@ export function SettingsOverlay() {
           </DialogPrimitive.Close>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[148px_1fr]">
+        {/*
+          Two columns from `@xl` of the overlay's own width (36rem), not the
+          window's: the overlay is the centre stage, and the rails decide how
+          much of the window that is. Below it one half shows at a time, chosen
+          by `paneOpen`; `data-view` says which, for the tests that cannot lay out.
+        */}
+        <div
+          data-testid="settings-body"
+          data-view={paneOpen ? 'pane' : 'list'}
+          className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] @xl:grid-cols-[148px_1fr]"
+        >
           <nav
+            ref={navRef}
             aria-label="Settings sections"
-            className="flex flex-col gap-0.5 border-r border-border-soft p-3"
+            className={cn(
+              'flex min-h-0 flex-col gap-3.5 overflow-y-auto p-3 @xl:border-r @xl:border-border-soft',
+              paneOpen && '@max-xl:hidden',
+            )}
           >
-            {SECTIONS.map((entry) => {
-              const active = entry.id === section;
+            {GROUPS.map((entry) => {
+              const labelId = `${groupId}-${entry.group}`;
 
               return (
-                <button
-                  key={entry.id}
-                  type="button"
-                  // `page` rather than `true`: this nav selects which page of
-                  // settings is showing, which is what the token means.
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => setSection(entry.id)}
-                  className={cn(
-                    'rounded-md px-2.5 py-1 text-left text-ui outline-none',
-                    'focus-visible:ring-1 focus-visible:ring-brand',
-                    active
-                      ? 'bg-active text-ink'
-                      : 'text-muted hover:bg-hover hover:text-ink',
-                  )}
+                <div
+                  key={entry.group}
+                  role="group"
+                  aria-labelledby={labelId}
+                  className="flex flex-col gap-0.5"
                 >
-                  {entry.label}
-                </button>
+                  <span
+                    id={labelId}
+                    className="px-2.5 pb-1 text-ui-sm font-semibold tracking-[0.06em] text-muted uppercase"
+                  >
+                    {entry.group}
+                  </span>
+                  {entry.panes.map((pane) => {
+                    const active = pane.id === section;
+
+                    return (
+                      <button
+                        key={pane.id}
+                        type="button"
+                        data-pane={pane.id}
+                        tabIndex={active ? 0 : -1}
+                        // `page` rather than `true`: this nav selects which page of
+                        // settings is showing, which is what the token means.
+                        aria-current={active ? 'page' : undefined}
+                        onKeyDown={onNavKeyDown}
+                        onClick={() => {
+                          setSection(pane.id);
+                          setPaneOpen(true);
+                        }}
+                        className={cn(
+                          'flex items-center justify-between rounded-md px-2.5 py-1 text-left text-ui outline-none',
+                          'focus-visible:ring-1 focus-visible:ring-brand',
+                          // A touch-sized row when it is the whole list.
+                          '@max-xl:min-h-11',
+                          active
+                            ? 'bg-active text-ink'
+                            : 'text-muted hover:bg-hover hover:text-ink',
+                        )}
+                      >
+                        {pane.label}
+                        <CaretRight size={12} aria-hidden className="text-subtle @xl:hidden" />
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
           </nav>
 
-          <Pane />
+          <div className={cn('flex min-h-0 min-w-0 flex-col', !paneOpen && '@max-xl:hidden')}>
+            <button
+              type="button"
+              aria-label={`Back to ${groupOf(section)}`}
+              onClick={() => setPaneOpen(false)}
+              className="flex min-h-11 items-center gap-1 self-start px-4 text-control text-muted outline-none hover:text-ink focus-visible:ring-1 focus-visible:ring-brand @xl:hidden"
+            >
+              <CaretLeft size={12} aria-hidden />
+              {groupOf(section)}
+            </button>
+            <Pane />
+          </div>
         </div>
       </DialogPrimitive.Content>
     </DialogPrimitive.Root>

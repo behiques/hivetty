@@ -329,6 +329,19 @@ describe('openSettings and its pane', () => {
     expect(useUiStore.getState().picker).toBe(false);
   });
 
+  /**
+   * The ids the grouped nav retired keep working (HIVE-374): a caller written
+   * before the regroup lands on the pane that took its section's place.
+   */
+  it.each([
+    ['runtime', 'shell'],
+    ['clis', 'harnesses-overview'],
+  ] as const)('stores %s as %s', (legacy, pane) => {
+    useUiStore.getState().openSettings(legacy);
+
+    expect(useUiStore.getState().settingsSection).toBe(pane);
+  });
+
   it('is cleared by reset', () => {
     useUiStore.getState().openSettings('agents');
 

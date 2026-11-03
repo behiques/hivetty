@@ -3,7 +3,11 @@ import { useShallow } from 'zustand/react/shallow';
 
 import type { Effort, Model } from '@/types/entity';
 import type { HatcheryRow } from '@/types/pull-request';
-import type { SettingsSection } from '@/types/settings';
+import {
+  LEGACY_SETTINGS_SECTIONS,
+  type LegacySettingsSection,
+  type SettingsSection,
+} from '@/types/settings';
 
 import { CODEX_MODELS, COPILOT_MODELS } from '@shared/cli-contract';
 import type { FsSearchMode } from '@shared/fs-contract';
@@ -290,7 +294,8 @@ interface UiState {
   openPicker: (ticketKey?: string) => void;
   closePicker: () => void;
   revealStage: () => void;
-  openSettings: (section?: SettingsSection) => void;
+  /** Takes a retired id too (`runtime`, `clis`), stored as the pane that replaced it (HIVE-374). */
+  openSettings: (section?: SettingsSection | LegacySettingsSection) => void;
   /**
    * Mark the requested pane as consumed.
    *
@@ -645,7 +650,16 @@ export const useUiStore = create<UiState>()((set) => ({
    * user to the terminal they were watching.
    */
   openSettings: (section) =>
-    set({ settings: true, picker: false, settingsSection: section ?? null }),
+    set({
+      settings: true,
+      picker: false,
+      settingsSection:
+        section === undefined
+          ? null
+          : section in LEGACY_SETTINGS_SECTIONS
+            ? LEGACY_SETTINGS_SECTIONS[section as LegacySettingsSection]
+            : (section as SettingsSection),
+    }),
   setWhatsNewOpen: (open) => set(open ? { whatsNewOpen: true, settings: false } : { whatsNewOpen: false }),
   closeSettings: () => set({ settings: false, settingsSection: null }),
   clearSettingsSection: () => set({ settingsSection: null }),

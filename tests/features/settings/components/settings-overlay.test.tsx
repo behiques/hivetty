@@ -70,24 +70,6 @@ describe('SettingsOverlay', () => {
     }
   });
 
-  it('puts CLIs, then Skills, right after Runtime (HIVE-96, HIVE-341)', () => {
-    /*
-      All three answer "what does a session I start actually run?" — Runtime decides
-      the binary and its environment, CLIs how each agent CLI runs headless, Skills
-      the commands a session comes with. Appearance onwards is about the app rather
-      than the session.
-    */
-    render(<SettingsOverlay />);
-
-    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
-    const labels = within(nav)
-      .getAllByRole('button')
-      .map((button) => button.textContent);
-
-    expect(labels.indexOf('CLIs')).toBe(labels.indexOf('Runtime') + 1);
-    expect(labels.indexOf('Skills')).toBe(labels.indexOf('CLIs') + 1);
-  });
-
   it('opens the CLIs pane from the nav (HIVE-341)', async () => {
     const user = userEvent.setup();
     render(<SettingsOverlay />);
@@ -98,22 +80,160 @@ describe('SettingsOverlay', () => {
     expect(screen.getByRole('heading', { name: 'CLIs', level: 2 })).toBeInTheDocument();
   });
 
-  it('puts Agents between Skills and Appearance (HIVE-114)', () => {
-    /*
-      It belongs with the session-shaped sections rather than the app-shaped
-      ones: a skill is a command a session comes with, and an agent is a
-      correspondent that runs sessions of its own. Appearance onwards is about
-      the app.
-    */
+  /**
+   * The grouped nav (HIVE-374). Groups are labels, not buttons, and a group
+   * with no pane yet is absent: Machines and Account arrive with their panes.
+   */
+  it('reads in four groups, in the epic order, with no empty group', () => {
     render(<SettingsOverlay />);
 
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
-    const labels = within(nav)
-      .getAllByRole('button')
-      .map((button) => button.textContent);
+    const groups = within(nav).getAllByRole('group');
+    const heading = (group: HTMLElement) =>
+      document.getElementById(group.getAttribute('aria-labelledby') ?? '')?.textContent;
 
-    expect(labels.indexOf('Agents')).toBe(labels.indexOf('Skills') + 1);
-    expect(labels.indexOf('Appearance')).toBe(labels.indexOf('Agents') + 1);
+    expect(groups.map(heading)).toEqual(['Harnesses', 'Automation', 'Workspace', 'General']);
+    expect(
+      groups.map((group) =>
+        within(group)
+          .getAllByRole('button')
+          .map((button) => button.textContent),
+      ),
+    ).toEqual([
+      ['CLIs', 'Runtime'],
+      ['Agents', 'Skills'],
+      ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
+      ['Advanced'],
+    ]);
+    expect(within(nav).queryByText('Machines')).not.toBeInTheDocument();
+    expect(within(nav).queryByText('Account')).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: 'Harnesses' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['harnesses-overview', 'CLIs'],
+    ['shell', 'Runtime'],
+    ['agents', 'Agents'],
+    ['skills', 'Skills'],
+    ['projects', 'Projects'],
+    ['appearance', 'Appearance'],
+    ['editor', 'Editor'],
+    ['integrations', 'Integrations'],
+    ['notifications', 'Notifications'],
+    ['advanced', 'Advanced'],
+  ] as const)('pane id %s renders its section', (id, title) => {
+    useUiStore.getState().openSettings(id);
+    render(<SettingsOverlay />);
+
+    expect(screen.getByRole('heading', { name: title, level: 2 })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['runtime', 'Runtime'],
+    ['clis', 'CLIs'],
+    ['advanced', 'Advanced'],
+  ] as const)('the legacy id %s opens its new pane', (legacy, label) => {
+    useUiStore.getState().openSettings(legacy);
+    render(<SettingsOverlay />);
+
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+
+    expect(within(nav).getByRole('button', { name: label })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  /**
+   * One tab stop, arrows across groups, Home and End (HIVE-374): the nav is a
+   * roving list, so Tab leaves it rather than walking ten buttons.
+   */
+  it('is one tab stop, the current pane', () => {
+    render(<SettingsOverlay />);
+
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+    const reachable = within(nav)
+      .getAllByRole('button')
+      .filter((button) => button.tabIndex === 0);
+
+    expect(reachable.map((button) => button.textContent)).toEqual(['Projects']);
+  });
+
+  it('moves through panes across groups on the arrow keys, and jumps on Home and End', async () => {
+    const user = userEvent.setup();
+    render(<SettingsOverlay />);
+
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+    within(nav).getByRole('button', { name: 'Projects' }).focus();
+
+    await user.keyboard('{ArrowUp}');
+
+    const skills = within(nav).getByRole('button', { name: 'Skills' });
+    expect(skills).toHaveFocus();
+    expect(skills).toHaveAttribute('aria-current', 'page');
+    expect(skills).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('heading', { name: 'Skills', level: 2 })).toBeInTheDocument();
+
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(within(nav).getByRole('button', { name: 'Appearance' })).toHaveFocus();
+
+    await user.keyboard('{End}');
+    expect(within(nav).getByRole('button', { name: 'Advanced' })).toHaveFocus();
+
+    // The ends hold rather than wrap.
+    await user.keyboard('{ArrowDown}');
+    expect(within(nav).getByRole('button', { name: 'Advanced' })).toHaveFocus();
+
+    await user.keyboard('{Home}');
+    expect(within(nav).getByRole('button', { name: 'CLIs' })).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'CLIs', level: 2 })).toBeInTheDocument();
+  });
+
+  /**
+   * The narrow layout (HIVE-374). Which half shows below the breakpoint is a
+   * container query, so happy-dom can only see which view is asked for; the
+   * layout itself is the web spec's (`settings-narrow.spec.ts`).
+   */
+  describe('narrow view', () => {
+    const view = () => screen.getByTestId('settings-body').dataset.view;
+
+    it('opens bare on the group list', () => {
+      render(<SettingsOverlay />);
+
+      expect(view()).toBe('list');
+    });
+
+    it('opens on the pane a caller named', () => {
+      useUiStore.getState().openSettings('integrations');
+      render(<SettingsOverlay />);
+
+      expect(view()).toBe('pane');
+    });
+
+    it('opens a pane on click, and goes back to the list', async () => {
+      const user = userEvent.setup();
+      render(<SettingsOverlay />);
+
+      const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+      await user.click(within(nav).getByRole('button', { name: 'Editor' }));
+
+      expect(view()).toBe('pane');
+
+      await user.click(screen.getByRole('button', { name: 'Back to Workspace' }));
+
+      expect(view()).toBe('list');
+    });
+
+    it('moves on the arrows without leaving the list', async () => {
+      const user = userEvent.setup();
+      render(<SettingsOverlay />);
+
+      const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+      within(nav).getByRole('button', { name: 'Projects' }).focus();
+      await user.keyboard('{ArrowDown}');
+
+      expect(view()).toBe('list');
+    });
   });
 
   it('switches to Advanced (story 107)', async () => {
