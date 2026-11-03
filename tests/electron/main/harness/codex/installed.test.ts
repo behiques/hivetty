@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCodexSkillCatalog } from '../../../../../electron/main/harness/codex/installed';
+import { createCodexInstalled, CODEX_SKILL_PLACES, parseCodexSkillCatalog } from '../../../../../electron/main/harness/codex/installed';
 
 // Trimmed from `codex debug prompt-input x` on codex-cli 0.166.0. A skill disabled by
 // `[[skills.config]] enabled = false` is absent from Codex's own catalog, so it is absent here.
@@ -41,5 +41,21 @@ describe('parseCodexSkillCatalog', () => {
     expect(parseCodexSkillCatalog('not json')).toEqual([]);
     expect(parseCodexSkillCatalog('{"a":1}')).toEqual([]);
     expect(parseCodexSkillCatalog(JSON.stringify([{ content: [{ text: 'no skills here' }] }]))).toEqual([]);
+  });
+});
+
+describe('createCodexInstalled', () => {
+  it('answers the catalog’s skills and the plugins behind the prefixed ones', async () => {
+    const installed = createCodexInstalled(() => Promise.resolve(OUTPUT));
+    expect(await installed.skillNames()).toContain('find-skills');
+    expect(await installed.pluginNames()).toEqual(['visualize', 'workstream']);
+    expect(await installed.sessionOverrides(['x'])).toEqual({});
+    expect(installed.skillPlaces).toBe(CODEX_SKILL_PLACES);
+  });
+
+  it('answers nothing when codex is absent or fails', async () => {
+    const installed = createCodexInstalled(() => Promise.reject(new Error('ENOENT')));
+    expect(await installed.skillNames()).toEqual([]);
+    expect(await installed.pluginNames()).toEqual([]);
   });
 });

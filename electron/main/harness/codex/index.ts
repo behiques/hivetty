@@ -8,6 +8,7 @@ import { codexFence } from './fence';
 import { launchCodexHeadless } from './headless';
 import { readCodexHeadless } from './headless-reader';
 import { readCodexHook } from './hooks';
+import { createCodexInstalled } from './installed';
 import { launchCodexSession } from './launch';
 import { foldCodexMeters } from './meters';
 import { readCodexModels } from './models';
@@ -45,12 +46,7 @@ export const codexAdapter: HarnessAdapter = {
   meters: () => null,
   foldMeters: foldCodexMeters,
   record: codexRecord(),
-  installed: {
-    skillNames: () => Promise.resolve([]),
-    pluginNames: () => Promise.resolve([]),
-    sessionOverrides: () => Promise.resolve({}),
-    skillPlaces: '',
-  },
+  installed: createCodexInstalled(),
   skills: codexSkills,
   headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence, containerCommand: 'codex' },
   models: () => readCodexModels(),
