@@ -696,7 +696,7 @@ describe('per CLI (HIVE-369)', () => {
     const text = (cli: string) => readFile(join(out, cli, 'skills', 'flow', 'SKILL.md'), 'utf8');
     expect(await text('claude-code')).toContain('Call mcp__hive__ledger_ask, then hive:plan.');
     expect(await text('codex')).toContain('Call mcp__hive__ledger_ask, then $plan.');
-    expect(await text('copilot')).toContain('Call hive-ledger_ask, then /plan.');
+    expect(await text('copilot')).toContain('Call hive-ledger_ask, then /hive:plan.');
   });
 
   it('gives every CLI every skill and its done (HIVE-368), and lists each in the Codex catalog', async () => {

@@ -24,7 +24,7 @@ describe('fillPlaceholders', () => {
   });
   it('fills Copilot, with its folder as the plugin root', () => {
     expect(fillPlaceholders(SOURCE, 'copilot', '/ud/hive/plugins/copilot')).toBe(
-      'Call hive-ledger_ask, then /plan from "/ud/hive/plugins/copilot/x".',
+      'Call hive-ledger_ask, then /hive:plan from "/ud/hive/plugins/copilot/x".',
     );
   });
   it('leaves {{plugin_root}} alone for Codex and Copilot when no folder is known, rather than name an unset variable', () => {
@@ -44,7 +44,7 @@ describe('typedSkill', () => {
   it('types each CLI its own way', () => {
     expect(typedSkill('hive:work-on', 'claude-code')).toBe('/hive:work-on');
     expect(typedSkill('hive:work-on', 'codex')).toBe('$work-on');
-    expect(typedSkill('hive:work-on', 'copilot')).toBe('/work-on');
+    expect(typedSkill('hive:work-on', 'copilot')).toBe('/hive:work-on');
   });
   it('keeps a name outside hive as stored', () => {
     expect(typedSkill('graphify', 'claude-code')).toBe('/graphify');
