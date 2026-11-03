@@ -557,4 +557,22 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     },
     CASE_MS,
   );
+
+  it(
+    'loads a HiveTTY skill typed /hive:<name>, whether or not the bare name collides (HIVE-362)',
+    async () => {
+      const id = '11111111-2222-4333-8444-5555555555c1';
+      const { log } = await run('typed-form', id, {
+        spec: { pluginDir: rendered },
+        prompts: ['/hive:zz-plain', '/hive:zz-collide'],
+      });
+      finding('typed-form', { log });
+      // From the transcript: the TUI's spinner interleaves its frames with the reply it draws.
+      const replies = readFileSync(copilotRecord(() => home).transcriptPath(repo, id)!, 'utf8');
+      expect(replies).toContain('marmalade');
+      expect(replies).toContain('quince');
+      expect(replies).not.toContain('turnip');
+    },
+    CASE_MS,
+  );
 });
