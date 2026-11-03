@@ -699,16 +699,17 @@ describe('per CLI (HIVE-369)', () => {
     expect(await text('copilot')).toContain('Call hive-ledger_ask, then /plan.');
   });
 
-  it('gives every CLI every skill, and lists each in the Codex catalog', async () => {
+  it('gives every CLI every skill and its done (HIVE-368), and lists each in the Codex catalog', async () => {
     await writeSkill('flow', body('flow'));
     await writeSkill('review', body('review'));
     const read = await readUserSkills(source);
     for (const cli of ['claude-code', 'codex', 'copilot'] as const) {
       await renderSkills(join(pluginRoot, cli), cli, read, { version: '1', doneUrl: null });
     }
-    expect((await readdir(join(pluginRoot, 'codex', 'skills'))).sort()).toEqual(['flow', 'review']);
-    expect((await readdir(join(pluginRoot, 'copilot', 'skills'))).sort()).toEqual(['flow', 'review']);
+    expect((await readdir(join(pluginRoot, 'codex', 'skills'))).sort()).toEqual(['done', 'flow', 'review']);
+    expect((await readdir(join(pluginRoot, 'copilot', 'skills'))).sort()).toEqual(['done', 'flow', 'review']);
     expect(await readFile(join(pluginRoot, 'codex', 'catalog.md'), 'utf8')).toContain('- review: d (file: ');
+    expect(await readFile(join(pluginRoot, 'codex', 'catalog.md'), 'utf8')).toContain('- done: Finish this session');
   });
 
   it("drops goal-on's hooks: for Codex and keeps them for Claude Code", async () => {
