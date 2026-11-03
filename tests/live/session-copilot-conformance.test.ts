@@ -28,7 +28,7 @@ import {
   type HookStatusEvent,
 } from '../../electron/shared/hook-contract';
 import { CH } from '../../electron/shared/ipc-contract';
-import type { LedgerReadQuery, LedgerSnapshot } from '../../electron/shared/ledger-contract';
+import type { LedgerEntry, LedgerReadQuery, LedgerSnapshot, OpenAsk } from '../../electron/shared/ledger-contract';
 import type { HiveNotification } from '../../electron/shared/notification-contract';
 import { typedSkill } from '../../electron/shared/skill-render';
 
@@ -634,4 +634,32 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     expect(ours.sort()).toEqual(readdirSync(join(rendered, 'skills')).sort());
     expect(`${listed.stdout}${listed.stderr}`).not.toMatch(/failed to load/i);
   });
+
+  it(
+    'a typed marker reaches the model: it reads the entry with hive-ledger_read and acts on it (HIVE-362)',
+    async () => {
+      const ask: LedgerEntry = {
+        id: 'e-live-1',
+        ts: Date.now(),
+        from: 'overmind',
+        to: SESSION,
+        kind: 'ask',
+        ref: 'a1',
+        body: 'Reply with the single word kumquat and nothing else.',
+      };
+      ledgerRead = () => ({ entries: [ask], openAsks: [{ ...ask, kind: 'ask', open: true, ageMs: 0 } satisfies OpenAsk], claims: {} });
+      const id = '11111111-2222-4333-8444-5555555555c4';
+      const { log } = await run('marker', id, {
+        spec: { pluginDir: rendered, hiveServer: hive() },
+        // The bytes deliver.ts writes, without the CR the driver adds itself.
+        prompts: [copilotAdapter.promptMarker(ask).replace(/\r$/, '')],
+        answer: '\r',
+      });
+      finding('marker', { log });
+      expect(tools.some((t) => /ledger_read/.test(t))).toBe(true);
+      // From the transcript: the TUI's spinner interleaves its frames with the reply it draws.
+      expect(readFileSync(copilotRecord(() => home).transcriptPath(repo, id)!, 'utf8')).toContain('kumquat');
+    },
+    CASE_MS,
+  );
 });
