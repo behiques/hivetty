@@ -2137,6 +2137,28 @@ describe('the history', () => {
      * permanently, having survived the quit that was supposed to be the risky
      * part.
      */
+    /**
+     * goal-on's briefs are named by the entity id, which restarts with the app (follow-up to
+     * HIVE-370): a fresh conversation archives an unbound brief left under its id, a resumed one
+     * keeps the brief it may still be working.
+     */
+    it('archives a stale goal brief on a fresh conversation and keeps it on a resume', () => {
+      const goals = mkdtempSync(join(tmpdir(), 'goals-'));
+      vi.stubEnv('HIVE_GOALS_DIR', goals);
+      try {
+        const stale = '---\nstatus: ACTIVE\nsession: hero-refresh\n---\n';
+        writeFileSync(join(goals, 'hero-refresh.md'), stale);
+        withHistory([], { 'hero-refresh': PRIOR }).open({ ...OPEN, resume: true });
+        expect(readFileSync(join(goals, 'hero-refresh.md'), 'utf8')).toBe(stale);
+
+        withHistory([]).open({ ...OPEN, entityId: 'hero-refresh' });
+        expect(existsSync(join(goals, 'hero-refresh.md'))).toBe(false);
+        expect(existsSync(join(goals, 'archive'))).toBe(true);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('leaves the resumed conversation the name it already has', () => {
       const written: Written[] = [];
       withHistory(written, { 'hero-refresh': PRIOR }).open({ ...OPEN, resume: true });

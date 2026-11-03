@@ -81,7 +81,9 @@ session's `sess-…` id, the same on every CLI; name the file exactly that and
 repeat it in the header's `session:`. The verifier tries the filename first and
 falls back to the header; a brief it cannot find reads as "no goal here". The
 verifier binds the brief to this CLI session on its first turn end
-(`cli_session:`), so a later session that reuses the id is never held by it.
+(`cli_session:`), so a later session that reuses the id is never held by it,
+and HiveTTY moves an unbound brief under the id to `archive/` when a fresh
+conversation starts with that id.
 
 ```markdown
 ---
