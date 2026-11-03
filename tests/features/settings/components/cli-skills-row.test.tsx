@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { CliSkills } from '@shared/skills-contract';
@@ -30,5 +31,33 @@ describe('CliSkillsRow', () => {
       expect(container.textContent).toBe('');
       unmount();
     }
+  });
+
+  it('View opens every CLI’s skills, grouped with their places, and filters them', async () => {
+    skills = SOME;
+    render(<CliSkillsRow />);
+    await userEvent.click(screen.getByRole('button', { name: 'View' }));
+    const dialog = screen.getByRole('dialog', { name: 'Your CLI skills' });
+    expect(within(dialog).getByText('HiveTTY reads them and never changes them.', { exact: false })).toBeTruthy();
+    expect(within(dialog).getByText('~/.claude/skills and your installed plugins')).toBeTruthy();
+    expect(within(dialog).getByText('find-skills')).toBeTruthy();
+    await userEvent.type(within(dialog).getByLabelText('Filter skills'), 'pdf');
+    expect(within(dialog).queryByText('find-skills')).toBeNull();
+    expect(within(dialog).getByText('pdf:pdf')).toBeTruthy();
+    expect(within(dialog).queryByText('Claude Code', { exact: false })).toBeNull(); // a CLI with no match hides
+    await userEvent.clear(within(dialog).getByLabelText('Filter skills'));
+    await userEvent.type(within(dialog).getByLabelText('Filter skills'), 'zzz');
+    expect(within(dialog).getByText('No skill matches “zzz”.')).toBeTruthy();
+  });
+
+  it('Done closes the dialog and clears the filter', async () => {
+    skills = SOME;
+    render(<CliSkillsRow />);
+    await userEvent.click(screen.getByRole('button', { name: 'View' }));
+    await userEvent.type(screen.getByLabelText('Filter skills'), 'pdf');
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'View' }));
+    expect((screen.getByLabelText('Filter skills') as HTMLInputElement).value).toBe('');
   });
 });
