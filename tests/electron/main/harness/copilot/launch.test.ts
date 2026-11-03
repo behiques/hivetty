@@ -103,6 +103,33 @@ describe('launchCopilotSession', () => {
   it('returns the plugin files for the core to write', () => {
     expect(launchCopilotSession(BASE).files).toEqual(copilotPluginFiles(`${BASE.stateDir}/plugin`));
   });
+
+  const SKILLS = '/Users/x/Library/Application Support/HiveTTY/hive/plugins/copilot';
+
+  it("adds HiveTTY's skills as a second --plugin-dir after the hooks plugin, quoted (HIVE-362)", () => {
+    const { command } = launchCopilotSession({ ...BASE, pluginDir: SKILLS, hiveServer: HIVE });
+    const hooks = command.indexOf(`--plugin-dir '/Users/x/.hivetty/cli/copilot session/plugin'`);
+    const skills = command.indexOf(`--plugin-dir '${SKILLS}'`);
+    const mcp = command.indexOf('--additional-mcp-config');
+    const allow = command.indexOf(`--allow-tool 'hive(session_done)'`);
+    expect(hooks).toBeGreaterThan(0);
+    expect(skills).toBeGreaterThan(hooks);
+    expect(mcp).toBeGreaterThan(skills);
+    expect(allow).toBeGreaterThan(mcp);
+  });
+
+  it('points the instructions dir at the same folder, after any value the user set (HIVE-362)', () => {
+    const { command } = launchCopilotSession({ ...BASE, pluginDir: SKILLS });
+    expect(command).toContain(
+      `; COPILOT_CUSTOM_INSTRUCTIONS_DIRS="\${COPILOT_CUSTOM_INSTRUCTIONS_DIRS:+$COPILOT_CUSTOM_INSTRUCTIONS_DIRS,}"'${SKILLS}' copilot --session-id`,
+    );
+  });
+
+  it('adds neither without a rendered folder', () => {
+    const { command } = launchCopilotSession(BASE);
+    expect(command.match(/--plugin-dir/g)).toHaveLength(1);
+    expect(command).not.toContain('COPILOT_CUSTOM_INSTRUCTIONS_DIRS');
+  });
 });
 
 describe('copilotPluginFiles', () => {
