@@ -27,8 +27,10 @@ import { toml } from '../../electron/main/harness/codex/toml';
 import { shellQuote } from '../../electron/main/container/shell-quote';
 import type { LaunchSpec } from '../../electron/main/harness/port';
 import { createHarnessRegistry } from '../../electron/main/harness/registry';
+import { promptMarker } from '../../electron/main/harness/claude-code/prompt-marker';
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
 import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
+import { createLedger } from '../../electron/main/ledger';
 import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
 import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
 import { createSkillsRuntime } from '../../electron/main/skills';
@@ -184,6 +186,10 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   let previousCodexHome: string | undefined;
   /** What `userConfig` wrote, for L4: HiveTTY adds nothing to it. */
   let writtenConfig: string | undefined;
+  /** A real ledger behind the receiver, as `hooks/index.ts` wires it (HIVE-360, L3). */
+  let ledger: ReturnType<typeof createLedger>;
+  /** Each ledger read the receiver made, by caller: the marker's lookup is one (L3). */
+  let ledgerReads: string[];
   /** `~/.agents/skills` before the case, for L4: it is the user's, and may hold their own skills. */
   let agentsBefore: string[];
 
@@ -210,6 +216,8 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     codexPlugin = skills.pluginDirPath('codex');
     expect(codexPlugin).not.toBeNull();
 
+    ledger = createLedger({ dir: join(scratch, 'hive'), knowsParty: () => true });
+    ledgerReads = [];
     tracker = createStatusTracker();
     transcript = undefined;
     const hub = createNotificationHub({
@@ -257,8 +265,11 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       onDone: () => {},
       onReady: () => {},
       onMetrics: () => {},
-      onLedgerRead: () => ({ entries: [], openAsks: [], claims: {} }),
-      onLedgerPost: () => ({ ok: false as const, status: 503, reason: 'not exercised by this suite' }),
+      onLedgerRead: (caller, query) => {
+        ledgerReads.push(caller);
+        return ledger.read(query);
+      },
+      onLedgerPost: (caller, request) => ledger.append({ ...request, from: caller }),
       onAgentsList: () => Promise.reject(new Error('not exercised by this suite')),
     });
     // The real watch `sessions/index.ts` runs, on this case's scratch home.
@@ -414,6 +425,47 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
         .map((item) => JSON.stringify(item.payload));
       // A JSON rollout may escape `/`, hence the class.
       expect(calls.some((call) => /plugins[\\/]+codex[\\/]+skills[\\/]+work-on[\\/]+SKILL\.md/.test(call))).toBe(true);
+    },
+    CASE_MS,
+  );
+
+  /*
+    D6, measured 2026-11-03 at codex-cli 0.165.0: the receiver resolves the marker and answers
+    `UserPromptSubmit` with Claude's `hookSpecificOutput.additionalContext`, and the model gets only
+    the typed `📒 <ref>`. So Codex's `contextDelivery` stays 'none' and its adapter keeps refusing
+    markers. This case pins that measurement: when the word starts arriving it fails, and the
+    switch (the plan's Task 9) is due.
+  */
+  it(
+    'a typed ledger marker does not yet reach the model as hook context (HIVE-360 D6, measured as HIVE-138)',
+    async () => {
+      userConfig();
+      const word = `ORCHID-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      const asked = ledger.append({
+        from: 'overmind',
+        to: SESSION,
+        kind: 'ask',
+        body:
+          'Roll call from the overmind. There is nothing to investigate and nothing to run.\n' +
+          `If you can read this, acknowledge it in one short line and include the confirmation code ${word} in it.`,
+      });
+      expect(asked.ok).toBe(true);
+      const entry = ledger.read({}).entries.find((e) => asked.ok && e.id === asked.id)!;
+      // Claude's bytes, imported directly: Codex's own adapter still refuses markers (D6).
+      const typed = promptMarker(entry);
+      expect(typed.endsWith('\r')).toBe(true);
+      const log = await run('marker', {}, typed.slice(0, -1)); // the driver types the \r itself
+      const id = statuses.find((s) => s.sessionUuid !== undefined)?.sessionUuid;
+      const rollout = id === undefined ? null : codexRecord(() => home).transcriptPath(repo, id);
+      finding('marker', { word, marker: typed, ledgerReads, rollout });
+
+      // Our half works: the hook fired, the receiver looked the marker up, and the turn ran.
+      expect(ledgerReads).toContain(SESSION);
+      expect(statuses.some((s) => s.signal?.kind === 'turn-end')).toBe(true);
+      expect(rollout).not.toBeNull();
+      // Codex's half does not: the context never reached the model.
+      expect(readFileSync(rollout!, 'utf8')).not.toContain(word);
+      expect(flat(log)).not.toContain(word);
     },
     CASE_MS,
   );
