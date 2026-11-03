@@ -97,7 +97,13 @@ export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
     shellQuote(pluginDir),
     ...(hiveServer === undefined
       ? []
-      : ['--additional-mcp-config', shellQuote(JSON.stringify(copilotMcpConfig(hiveServer, HIVE_SESSION_ENV)))]),
+      : [
+          '--additional-mcp-config',
+          shellQuote(JSON.stringify(copilotMcpConfig(hiveServer, HIVE_SESSION_ENV))),
+          // HIVE-368: `done` is this one call, so it must not ask. `server(tool)`, COPILOT_DENY_PATTERN's shape.
+          '--allow-tool',
+          shellQuote('hive(session_done)'),
+        ]),
   ];
   const initialPrompt =
     task === undefined || task.trim() === '' || resume

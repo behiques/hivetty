@@ -59,6 +59,7 @@ describe('codex session command (HIVE-279)', () => {
       shellQuote(`mcp_servers.hive.env_vars=${tomlList(['HIVE_RECEIVER_URL', 'HIVE_SESSION_ID', 'HIVE_HOOK_TOKEN'])}`),
     );
     expect(l).not.toMatch(/HIVE_HOOK_TOKEN=/);
+    expect(l).toContain(shellQuote('mcp_servers.hive.tools.session_done.approval_mode="approve"'));
   });
 
   it('omits the hive server when main has none to offer', () => {

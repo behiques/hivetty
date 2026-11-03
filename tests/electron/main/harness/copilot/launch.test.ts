@@ -40,6 +40,15 @@ describe('launchCopilotSession', () => {
     expect(command).not.toMatch(/HIVE_RUN/);
   });
 
+  it('pre-approves session_done alone, so finishing never prompts (HIVE-368)', () => {
+    const { command } = launchCopilotSession({ ...BASE, hiveServer: HIVE });
+    expect(command).toContain(`--allow-tool 'hive(session_done)'`);
+  });
+
+  it('approves nothing without a hive server', () => {
+    expect(launchCopilotSession(BASE).command).not.toContain('--allow-tool');
+  });
+
   it('runs a task with -i on a fresh start only, newlines folded and quoted', () => {
     expect(launchCopilotSession({ ...BASE, task: "fix it's\nbug" }).command).toContain(
       `-i 'fix it'\\''s bug' && exit`,
@@ -54,9 +63,11 @@ describe('launchCopilotSession', () => {
 
   it('never passes a flag that widens trust or approval', () => {
     const { command } = launchCopilotSession({ ...BASE, hiveServer: HIVE, task: 't', model: 'auto', effort: 'low' });
-    for (const flag of ['--allow-all', '--yolo', '--trust-folder', '--no-auto-update', '--allow-tool']) {
+    for (const flag of ['--allow-all', '--yolo', '--trust-folder', '--no-auto-update']) {
       expect(command).not.toContain(flag);
     }
+    // HIVE-368: one exception, by name, and only that one: `done`'s `session_done` never prompts.
+    expect(command.match(/--allow-tool \S+/g)).toEqual([`--allow-tool 'hive(session_done)'`]);
   });
 
   it('refuses without a pinned uuid or a state dir', () => {
