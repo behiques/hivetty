@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
 import { readCopilotHook } from '../../../../../electron/main/harness/copilot/hooks';
+import { launchCopilotSession } from '../../../../../electron/main/harness/copilot/launch';
 import type { HookInput, HookReading } from '../../../../../electron/main/harness/port';
 import { createStatusTracker } from '../../../../../electron/main/hooks/tracker';
 
@@ -199,6 +200,23 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
       session(wrapped(tui('permission-request-hive-session-done.json'), 'permissionRequest')),
     );
     expect(asked).toEqual({ effects: [] });
+  });
+
+  it("reads no block for any tool the launch's --allow-tool approves: one list for both (HIVE-383)", () => {
+    const { command } = launchCopilotSession({
+      command: 'copilot',
+      sessionUuid: '11111111-2222-4333-8444-555555555551',
+      stateDir: '/s',
+      hiveServer: { command: '/app/electron', args: ['/app/mcp-host.js'] },
+    });
+    const allowed = [...command.matchAll(/--allow-tool '([^']+)'/g)].map((match) => match[1]!);
+    expect(allowed).not.toEqual([]);
+    for (const allowTool of allowed) {
+      // Copilot's permissionRequest spells `server(tool)` as `server/tool` (FINDINGS P11).
+      const toolName = allowTool.replace(/^([^(]+)\((.+)\)$/, '$1/$2');
+      const asked = { ...(tui('permission-request-hive-session-done.json') as object), toolName };
+      expect(readCopilotHook(session(wrapped(asked, 'permissionRequest'))), allowTool).toEqual({ effects: [] });
+    }
   });
 
   it('still raises a block for any other hive tool', () => {
