@@ -25,7 +25,7 @@ describe('copilotAdapter', () => {
     expect(copilotAdapter.capabilities).toEqual({
       resume: 'by-id',
       meters: [],
-      contextDelivery: 'none',
+      contextDelivery: 'prompt-marker',
       reportsCostUsd: false,
       enforcesTurns: false,
       enforcesBudget: false,

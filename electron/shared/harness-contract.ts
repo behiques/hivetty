@@ -123,7 +123,8 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   copilot: {
     resume: 'by-id',
     meters: [],
-    contextDelivery: 'none',
+    // HIVE-362: the marker rule in COPILOT_CUSTOM_INSTRUCTIONS_DIRS gets the entry read (FINDINGS P11).
+    contextDelivery: 'prompt-marker',
     reportsCostUsd: false,
     enforcesTurns: false,
     enforcesBudget: false,
