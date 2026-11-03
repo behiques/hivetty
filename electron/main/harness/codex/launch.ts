@@ -3,7 +3,7 @@ import { HOOK_ENV_RECEIVER_URL, HOOK_ENV_SESSION, HOOK_ENV_TOKEN } from '@shared
 
 import { shellQuote } from '../../container/shell-quote';
 import { SUBMIT_DELAY_MS } from '../claude-code/launch';
-import { contextCommand, hookCommand } from '../hook-commands';
+import { contextCommand, goalVerifierCommand, hookCommand } from '../hook-commands';
 import type { LaunchPlan, LaunchSpec } from '../port';
 
 import { CODEX_AUTH_ENV_KEYS, CODEX_SESSION_ENV_KEYS } from './headless';
@@ -24,6 +24,8 @@ import { hookEntry, toml, tomlList, tomlTable } from './toml';
  * - `-c tui.disable_paste_burst=true`: an injected Enter is a keystroke, not the tail of a paste (P7).
  * - `--dangerously-bypass-hook-trust`: `-c` hooks fire only with it (P1). It also runs a repo's own
  *   `.codex` hooks (P2), so the core asks for it only where a repo has none (D4).
+ * - `Stop` runs goal-on's verifier beside the status hook when the skills are rendered (HIVE-370;
+ *   FINDINGS P10: both hooks in one group run, and the verifier's block holds the turn).
  */
 
 /** What a session reports, measured in FINDINGS P3. No Notification: idle is `Stop`. */
@@ -64,6 +66,13 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
     userConfig: true,
   });
 
+  /** HIVE-360: the prompt hook prints the receiver's reply. HIVE-370: Stop also runs goal-on's verifier. */
+  const commandsFor = (event: (typeof CODEX_SESSION_EVENTS)[number]): string | string[] => {
+    if (event === 'UserPromptSubmit') return contextCommand();
+    if (event === 'Stop' && spec.pluginDir !== undefined) return [hookCommand(), goalVerifierCommand(spec.pluginDir, 'codex')];
+    return hookCommand();
+  };
+
   const flags = [
     ...(model === undefined ? [] : ['-m', shaped(model)]),
     ...(effort === undefined
@@ -72,10 +81,7 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
     ...config('tui.disable_paste_burst=true'),
     ...config('tools.update_plan.enabled=true'),
     ...(instructions === undefined ? [] : config(`developer_instructions=${toml(instructions)}`)),
-    // HIVE-360: the prompt hook prints the receiver's reply, so a ledger marker's entry reaches the model.
-    ...CODEX_SESSION_EVENTS.flatMap((event) =>
-      config(hookEntry(event, event === 'UserPromptSubmit' ? contextCommand() : hookCommand())),
-    ),
+    ...CODEX_SESSION_EVENTS.flatMap((event) => config(hookEntry(event, commandsFor(event)))),
     ...config(hookEntry('PostToolUse', hookCommand(), '*')),
     ...(hiveServer === undefined
       ? []
