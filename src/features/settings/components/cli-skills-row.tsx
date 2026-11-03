@@ -92,7 +92,9 @@ export function CliSkillsRow() {
                     <h3 className="text-ui-sm font-semibold uppercase tracking-wide text-term-head">
                       {CLI_NAMES[entry.cli]} · {entry.shown.length}
                     </h3>
-                    <span className="min-w-0 truncate text-ui-sm text-subtle">{entry.places}</span>
+                    <span title={entry.places} className="min-w-0 truncate text-ui-sm text-subtle">
+                      {entry.places}
+                    </span>
                   </div>
                   <ul className="flex flex-col gap-0.5">
                     {entry.shown.map((name) => (
