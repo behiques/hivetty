@@ -11,6 +11,7 @@ import {
 import { fenceCommand as sharedFenceCommand, hookCommand } from '../hook-commands';
 import type { HeadlessPlan, HeadlessSpec } from '../port';
 
+import { codexDeveloperInstructions } from './instructions';
 import { hookEntry, toml, tomlList, tomlTable } from './toml';
 
 /** Re-exported: the live suite and the headless tests take it from here. */
@@ -26,7 +27,8 @@ export { toml };
  *   trusts is this argv's own, since user config is ignored.
  * - `--skip-git-repo-check`: an agent's workdir is not a repo.
  * - `resume` has no `-s`, so the sandbox is `-c sandbox_mode` on both shapes.
- * - `developer_instructions` only on a first wake: a resumed thread keeps them (probed).
+ * - `developer_instructions` only on a first wake: a resumed thread keeps them (probed). They are the
+ *   definition's instructions followed by HiveTTY's `catalog.md` (HIVE-360).
  */
 
 /** What a parent Codex session exports to its children (probed at 0.164.0). Never `CODEX_HOME`. */
@@ -102,7 +104,19 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
       ...(spec.model === undefined ? [] : ['-m', spec.model]),
       ...(spec.effort === undefined ? [] : config(`model_reasoning_effort=${toml(spec.effort)}`)),
       ...config(`sandbox_mode=${toml(sandbox)}`),
-      ...(start ? config(`developer_instructions=${toml(spec.instructions)}`) : []),
+      ...(start
+        ? config(
+            `developer_instructions=${toml(
+              // HIVE-360: the catalog follows the definition's own text; `--ignore-user-config` drops the user's.
+              codexDeveloperInstructions({
+                own: spec.instructions,
+                pluginDir: spec.files.pluginDir,
+                codexHome: '',
+                userConfig: false,
+              }) ?? '',
+            )}`,
+          )
+        : []),
       ...config(`mcp_servers.hive.command=${toml(hiveServer.command)}`),
       ...config(`mcp_servers.hive.args=${tomlList(hiveServer.args)}`),
       // On the argv as written: `hiveServer.env` must never carry a secret, which goes by name below.

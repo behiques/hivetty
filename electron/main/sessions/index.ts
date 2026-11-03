@@ -74,6 +74,7 @@ import type { SkillsRuntime } from '../skills';
 import { createActivityTracker, type ActivityTracker } from './activity';
 import { createBootstrap, type Bootstrap } from './bootstrap';
 import { createChangedFiles } from './changed-files';
+import { EXIT_COMMAND } from './exit-command';
 import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
 import type { SessionHistory } from './history';
 import { createRecordAborts } from './record-aborts';
@@ -1561,9 +1562,6 @@ export function createSessions(options: SessionsOptions): Sessions {
    */
   const DONE_EXIT_TIMEOUT_MS = 10_000;
 
-  /** What `/done` writes into the pty. See {@link closeFinished}. */
-  const EXIT_COMMAND = '/exit\r';
-
   /**
    * Sessions that have declared themselves finished (HIVE-93).
    *
@@ -2373,7 +2371,7 @@ export function createSessions(options: SessionsOptions): Sessions {
      * (`ipc/index.ts`), which is already asynchronous, runs before this is
      * reached, and hands the resolved path in on the request (HIVE-235).
      */
-    const pluginDir = request.files?.pluginDir ?? null;
+    const pluginDir = request.files?.pluginDirs?.[harness] ?? null;
 
     /**
      * The ledger tools (HIVE-112). Resolved by `prepareSession` after

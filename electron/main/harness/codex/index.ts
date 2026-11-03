@@ -27,8 +27,9 @@ const noMarkers = (): never => {
 
 /**
  * Adapter #2: headless (HIVE-342) and interactive (HIVE-279). `readHook` is Claude's, because
- * codex 0.164 sends Claude-shaped payloads, plus `update_plan` (`./hooks`). HiveTTY's skills and
- * prompt markers in a Codex session are HIVE-279's follow-up (D1).
+ * codex 0.164 sends Claude-shaped payloads, plus `update_plan` (`./hooks`). HiveTTY's skills reach
+ * a Codex session as `developer_instructions` (HIVE-360). Prompt markers stay off: codex 0.165 does
+ * not hand a `UserPromptSubmit` hook's context to the model (HIVE-360 D6, measured live).
  */
 export const codexAdapter: HarnessAdapter = {
   id: 'codex',

@@ -132,6 +132,7 @@ import {
   parseWriteFileRequest,
   parseWriteRequest,
 } from '@shared/guards';
+import { HARNESS_IDS } from '@shared/harness-contract';
 import {
   CH,
   type AppInfo,
@@ -2746,7 +2747,9 @@ export function registerIpcHandlers(
     // HIVE-343. The only reader of a stored CLI token: it reaches the child's env, never a channel.
     cliToken: (id) => (id === 'copilot' ? cliTokens.read('copilot') : null),
     promptFile: (name) => agentPromptFile(app.getPath('userData'), name),
-    pluginDir: () => join(app.getPath('userData'), PLUGIN_DIR),
+    // HIVE-360: the run's own CLI's folder. The fallback is Claude's, which has no catalog.md, so a
+    // CLI whose folder is missing gets no catalog block, and Claude's argv is today's.
+    pluginDir: (cli) => skills?.pluginDirPath(cli) ?? join(app.getPath('userData'), PLUGIN_DIR),
     // The agent-space file, never `hooks.settingsPathFor()`: that one carries
     // no `permissions.ask` rule, and a wake started against it would run with
     // no fence at all (HIVE-119).
@@ -5360,11 +5363,17 @@ export function registerIpcHandlers(
       await hooks?.writeContainerSession(sessionId, projectId);
     }
     const settingsPath = hooks.settingsPathFor();
-    const pluginDir = skills?.pluginDirPath() ?? null;
+    // HIVE-360: every CLI's own folder; the session picks its harness's at spawn.
+    const pluginDirs = Object.fromEntries(
+      HARNESS_IDS.flatMap((cli) => {
+        const dir = skills?.pluginDirPath(cli) ?? null;
+        return dir === null ? [] : [[cli, dir]];
+      }),
+    );
     const mcpConfig = mcp.configPathFor();
     return {
       ...(settingsPath == null ? {} : { settingsPath }),
-      ...(pluginDir === null ? {} : { pluginDir }),
+      ...(Object.keys(pluginDirs).length === 0 ? {} : { pluginDirs }),
       ...(mcpConfig === null ? {} : { mcpConfig }),
     };
   };

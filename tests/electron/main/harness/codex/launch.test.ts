@@ -1,3 +1,7 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { shellQuote } from '../../../../../electron/main/container/shell-quote';
@@ -118,5 +122,40 @@ describe('codex session command (HIVE-279)', () => {
 
   it('splits text and Enter the way Claude’s sessions do (HIVE-63)', () => {
     expect(launchCodexSession({ command: 'codex' }).submitDelayMs).toBe(300);
+  });
+
+  it('hands the model the catalog as developer_instructions, the user’s own text first (HIVE-360)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'codex-launch-'));
+    const plugin = join(root, 'plugins', 'codex');
+    const home = join(root, 'home');
+    mkdirSync(plugin, { recursive: true });
+    mkdirSync(home);
+    writeFileSync(join(plugin, 'catalog.md'), '### HiveTTY skills\n- done: Finish. (file: /a b/done/SKILL.md)\n');
+    writeFileSync(join(home, 'config.toml'), 'developer_instructions = "Be terse."\n');
+    const previous = process.env['CODEX_HOME'];
+    process.env['CODEX_HOME'] = home;
+    try {
+      const l = line({ pluginDir: plugin });
+      expect(l).not.toContain('\n');
+      expect(l).toContain(
+        shellQuote(
+          `developer_instructions=${toml('Be terse.\n\n### HiveTTY skills\n- done: Finish. (file: /a b/done/SKILL.md)')}`,
+        ),
+      );
+    } finally {
+      if (previous === undefined) delete process.env['CODEX_HOME'];
+      else process.env['CODEX_HOME'] = previous;
+    }
+  });
+
+  it('passes no developer_instructions when there is no catalog and no user text', () => {
+    const previous = process.env['CODEX_HOME'];
+    process.env['CODEX_HOME'] = mkdtempSync(join(tmpdir(), 'codex-empty-'));
+    try {
+      expect(line({ pluginDir: '/nowhere' })).not.toContain('developer_instructions');
+    } finally {
+      if (previous === undefined) delete process.env['CODEX_HOME'];
+      else process.env['CODEX_HOME'] = previous;
+    }
   });
 });

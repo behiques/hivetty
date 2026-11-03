@@ -120,7 +120,9 @@ vi.mock('../../../../electron/main/skills', async (importOriginal) => {
         calls.push('skills.sync');
         return Promise.resolve({ names: [] });
       },
-      pluginDirPath: () => paths.plugin,
+      // HIVE-360: one folder per CLI; a runtime with no folder has none for any CLI.
+      pluginDirPath: (cli = 'claude-code') =>
+        paths.plugin === null || cli === 'claude-code' ? paths.plugin : `/u/hive/plugins/${cli}`,
     }),
   };
 });
@@ -200,7 +202,7 @@ describe('prepareSession (HIVE-235)', () => {
       projectId: 'hero',
       files: {
         settingsPath: '/u/hive/claude-hooks.settings.json',
-        pluginDir: '/u/hive/plugin',
+        pluginDirs: { 'claude-code': '/u/hive/plugin', codex: '/u/hive/plugins/codex', copilot: '/u/hive/plugins/copilot' },
         mcpConfig: '/u/hive/hive.mcp.json',
       },
     });
@@ -215,7 +217,7 @@ describe('prepareSession (HIVE-235)', () => {
       entityId: 'sess-07',
       files: {
         settingsPath: '/u/hive/claude-hooks.settings.json',
-        pluginDir: '/u/hive/plugin',
+        pluginDirs: { 'claude-code': '/u/hive/plugin', codex: '/u/hive/plugins/codex', copilot: '/u/hive/plugins/copilot' },
         mcpConfig: '/u/hive/hive.mcp.json',
       },
     });
