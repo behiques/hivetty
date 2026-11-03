@@ -25,6 +25,7 @@ import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
 import { createLedger, type Ledger } from '../../electron/main/ledger';
 import { createPlans } from '../../electron/main/plans';
 import { agentMcpConfigFile } from '../../electron/main/mcp';
+import { createSkillsRuntime } from '../../electron/main/skills';
 import { hiveServerSpec } from '../../electron/main/mcp/config';
 import type { AgentRunState, RunLine } from '../../electron/shared/agent-contract';
 import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
@@ -45,7 +46,8 @@ import type { PlanChangedEvent } from '../../electron/shared/plan-contract';
  * them against the binary: that the thread `codex exec --json` names is the one the next wake
  * resumes, that its `Stop` hook reaches the receiver under the agent's name, that its usage lands
  * on the receipt, and that the `PreToolUse` fence asks about a shell call, a patch and an MCP call
- * and lets each through once an `allow-once` answers it.
+ * and lets each through once an `allow-once` answers it, and that a run told to use a HiveTTY skill
+ * reads that skill's `SKILL.md` from the catalog its first wake carries (HIVE-360).
  *
  * Composed the way `ipc/index.ts` composes it (see `agent-conformance.test.ts`, which this
  * follows), with one difference: the gate's default CLI is `codex` and every probe names
@@ -65,7 +67,8 @@ const CX = 'probe-codex';
 const SHELL = 'probe-codex-shell';
 const PATCH = 'probe-codex-patch';
 const MCP = 'probe-codex-mcp';
-const AGENTS = [CX, SHELL, PATCH, MCP];
+const SKILL = 'probe-codex-skill';
+const AGENTS = [CX, SHELL, PATCH, MCP, SKILL];
 
 const CX_MD = `---
 name: ${CX}
@@ -165,6 +168,8 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
       ],
       // The tool's own field names: told `body`, 0.165's model passes `body`, which the tool refuses.
       [MCP, fenceMd(MCP, 'The hive MCP tool jira_comment, with key "HIVE-1" and markdown "probe".')],
+      // HIVE-360: no tools granted, so the fence asks about the read, and the ask names the file.
+      [SKILL, fenceMd(SKILL, 'Before you reply, use $verify: read its SKILL.md and nothing else, then reply DONE.')],
     ] as const) {
       await mkdir(join(agentsRoot(), name), { recursive: true });
       await writeFile(join(agentsRoot(), name, 'AGENT.md'), body, 'utf8');
@@ -235,13 +240,28 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
       defaults: (id) => (id === 'codex' ? { effort: 'low' } : {}),
     };
 
+    /*
+      HIVE-360: the real skills runtime, rendered as production renders it, so a Codex wake carries
+      the catalog. Its source is `<config dir>/skills`, which this suite relocates into `dir`, so
+      the one skill the probe names is written there first.
+    */
+    await mkdir(join(dirname(process.env[CONFIG_PATH_ENV]), 'skills', 'verify'), { recursive: true });
+    await writeFile(
+      join(dirname(process.env[CONFIG_PATH_ENV]), 'skills', 'verify', 'SKILL.md'),
+      '---\nname: verify\ndescription: Use before claiming any work complete. Runs the repository gates.\n---\n\n# Verify\n\nRun the gates.\n',
+      'utf8',
+    );
+    const skills = createSkillsRuntime({ userDataPath, version: '0.0.0-live' });
+    await skills.sync();
+    expect(skills.pluginDirPath('codex')).not.toBeNull();
+
     const buildWakeCommand = createWakeCommand({
       agentsRoot,
       workdir: laneWorkdir,
       cliHome,
       cliToken: () => null,
       promptFile: (name) => agentPromptFile(userDataPath, name),
-      pluginDir: () => join(userDataPath, 'plugin'),
+      pluginDir: (cli) => skills.pluginDirPath(cli) ?? join(userDataPath, 'plugin'),
       agentSettingsPath: () => settingsPath,
       mcpConfig: () => mcpConfigPath,
       hiveServer: () => hiveServerSpec({ execPath: process.execPath, scriptPath: host }),
@@ -497,6 +517,23 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
     if (skipReason !== undefined) ctx.skip(skipReason);
     await fenceCase(MCP, 'mcp__hive__jira_comment', () => jiraComments.length > 0);
   }, 2 * TURN_MS);
+
+  it('a run told to use $verify reads that skill’s SKILL.md (HIVE-360)', async (ctx) => {
+    if (skipReason !== undefined) ctx.skip(skipReason);
+    await wake(SKILL);
+
+    // The fence asks about the read, and the ask names the command: that is the proof.
+    const asks = permissionAsks(SKILL);
+    expect(JSON.stringify(asks), JSON.stringify(ledger.read({ from: SKILL }).entries.map((e) => e.body))).toMatch(
+      /plugins[\\/]+codex[\\/]+skills[\\/]+verify[\\/]+SKILL\.md/,
+    );
+    // Denied, the run is woken once more and told so; let it settle before the next case.
+    for (const ask of asks) {
+      const again = settled(SKILL);
+      expect(ledger.answer({ thread: ask.id, body: 'deny' }, OVERMIND).ok).toBe(true);
+      await again;
+    }
+  }, 3 * TURN_MS);
 
   /*
     HIVE-352: what `update_plan` does in the plan panel, end to end on the session lane, the one a

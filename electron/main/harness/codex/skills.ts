@@ -8,7 +8,9 @@ import type { HarnessSkills } from '../port';
 /**
  * Codex's folder (HIVE-369). Codex has no flag that adds a skills directory, so HIVE-360 hands the
  * model `catalog.md` as session instructions, one line per skill in Codex's own catalog format.
- * Host paths; HIVE-360 maps them for a container.
+ * Host paths. Codex sessions and runs are refused in a container (`sessions/index.ts`
+ * `refuseUnlaunchable`, `headless.ts`), so nothing maps them yet; whoever lifts that refusal maps
+ * these paths (HIVE-360 D5).
  */
 export const codexSkills: HarnessSkills = {
   dir: 'plugins/codex',

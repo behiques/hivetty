@@ -6,6 +6,8 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -17,15 +19,23 @@ import { createInterface } from 'node:readline';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { codexAdapter } from '../../electron/main/harness/codex';
+import { codexDeveloperInstructions } from '../../electron/main/harness/codex/instructions';
 import { launchCodexSession } from '../../electron/main/harness/codex/launch';
 import { foldCodexMeters } from '../../electron/main/harness/codex/meters';
 import { codexRecord } from '../../electron/main/harness/codex/record';
+import { toml } from '../../electron/main/harness/codex/toml';
+import { shellQuote } from '../../electron/main/container/shell-quote';
 import type { LaunchSpec } from '../../electron/main/harness/port';
 import { createHarnessRegistry } from '../../electron/main/harness/registry';
+import { promptMarker } from '../../electron/main/harness/claude-code/prompt-marker';
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
 import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
+import { createLedger } from '../../electron/main/ledger';
+import { hiveServerSpec } from '../../electron/main/mcp/config';
 import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
+import { EXIT_COMMAND } from '../../electron/main/sessions/exit-command';
 import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
+import { createSkillsRuntime } from '../../electron/main/skills';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
@@ -36,6 +46,7 @@ import {
 import { CH } from '../../electron/shared/ipc-contract';
 import type { HiveNotification } from '../../electron/shared/notification-contract';
 import type { PlanUpdate } from '../../electron/shared/plan-contract';
+import { ticketStart } from '../../electron/shared/ticket-workflow';
 
 /**
  * What only a real interactive `codex` can prove about a Codex session (HIVE-279).
@@ -51,6 +62,11 @@ import type { PlanUpdate } from '../../electron/shared/plan-contract';
  * `~/.codex/auth.json`; nothing is written under `~/.codex`. Every ambient `HIVE_*`, `CODEX_*` and
  * `OPENAI_*` is stripped before the case sets its own. Each case writes `finding.json` beside its
  * scratch repo, and logs where.
+ *
+ * Every case runs with HiveTTY's real skill catalog on the argv (HIVE-360), as production does, and
+ * after each one the scratch home and repo are checked for anything HiveTTY wrote into them (L4).
+ *
+ * The `$done` case needs the hive server's script, so it runs after a `pnpm desktop:build`.
  *
  * Opt-in: `pnpm test:session:codex`. Skipped unless `codex --version` is 0.165.x and
  * `~/.codex/auth.json` exists; about seven minutes.
@@ -72,6 +88,8 @@ const CASE_MS = 240_000;
  * the prompt and its `\r` 300 ms apart (HIVE-63), and `/exit`s once the turn reports `Worked for`.
  * Every key it types goes through `key()`, which prints it as a JSON line first, for the test to read
  * as the user's (HIVE-365); the start-up replies are the terminal's and are written plainly.
+ * `exitOn` names a file: once it exists (the receiver's `onDone` wrote it), the driver types `exit` in
+ * one write, as `closeFinished` does, and records in `exitLog` whether codex exited within 10 s.
  * `answer` is a list of keys 0.6 s apart, sent on the approval prompt or `answerAfter` seconds after
  * the submit; `cancels` ends the drive soon after the answer. Its config is one JSON argument.
  */
@@ -114,6 +132,9 @@ while time.time() - start < c['seconds']:
         key('\r'); step = 2; submitted = len(out); submitted_at = now
     elif step == 2:
         since = bytes(out[submitted:])
+        if c.get('exitOn') and done_at is None and os.path.exists(c['exitOn']):
+            key(c['exit']); done_at = now; step = 4   # one write, as closeFinished does
+            continue
         due = now > submitted_at + c['answerAfter'] if c.get('answerAfter') else b'Would you like to run' in since
         if c['answer'] and not answered and due:
             time.sleep(0.5)
@@ -124,14 +145,46 @@ while time.time() - start < c['seconds']:
         if done_at is not None and now > done_at + 2:
             key('/exit'); time.sleep(0.3); key('\r'); step = 3
     elif step == 3 and now > (done_at or 0) + 8: break
+    elif step == 4:
+        exited = False
+        try: exited = os.waitpid(pid, os.WNOHANG)[0] == pid
+        except ChildProcessError: exited = True
+        if exited or now > done_at + 10:
+            open(c['exitLog'], 'w').write(json.dumps({'exited': exited, 'after': round(now - done_at, 2)}))
+            break
+if step == 4 and not os.path.exists(c['exitLog']):
+    # The pty closed under the read (codex exited): settle the wait, still within the 10 s.
+    exited = False
+    while not exited and time.time() - start < done_at + 10:
+        try: exited = os.waitpid(pid, os.WNOHANG)[0] == pid
+        except ChildProcessError: exited = True
+        if not exited: time.sleep(0.1)
+    open(c['exitLog'], 'w').write(json.dumps({'exited': exited, 'after': round(time.time() - start - done_at, 2)}))
 try: os.kill(pid, 9)
 except Exception: pass
 open(c['log'], 'wb').write(bytes(out))
 `;
 
+/** HIVE-360: Codex's rendered skills folder, set per case; every line carries its catalog. */
+let codexPlugin: string | null = null;
+
 /** The line `launchCodexSession` types; the driver splits it with `shlex`, as a shell would. */
 const lineOf = (spec: Partial<LaunchSpec>): string =>
-  launchCodexSession({ command: 'codex', bypassHookTrust: true, ...spec }).command;
+  launchCodexSession({
+    command: 'codex',
+    bypassHookTrust: true,
+    ...(codexPlugin === null ? {} : { pluginDir: codexPlugin }),
+    ...spec,
+  }).command;
+
+/** `~/.agents/skills` as names and link targets: the real HOME is the session's, so L4 compares it. */
+const agentsSkills = (): string[] => {
+  const dir = join(homedir(), '.agents', 'skills');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .map((entry) => `${entry.name}${entry.isSymbolicLink() ? ` -> ${readlinkSync(join(dir, entry.name))}` : ''}`)
+    .sort();
+};
 
 /** Escape sequences out, and every space: a TUI wraps and pads what it draws. */
 const flat = (path: string): string =>
@@ -153,6 +206,18 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   let tracker: StatusTracker;
   let aborts: RecordAborts;
   let transcript: { cwd: string; sessionUuid: string } | undefined;
+  /** `launchCodexSession` reads the user's config through `codexHome()`: the scratch one, never ~/.codex. */
+  let previousCodexHome: string | undefined;
+  /** What `userConfig` wrote, for L4: HiveTTY adds nothing to it. */
+  let writtenConfig: string | undefined;
+  /** A real ledger behind the receiver, as `hooks/index.ts` wires it (HIVE-360, L3). */
+  let ledger: ReturnType<typeof createLedger>;
+  /** Each ledger read the receiver made, by caller: the marker's lookup is one (L3). */
+  let ledgerReads: string[];
+  /** Sessions `session_done` closed through the receiver (HIVE-368, L2). */
+  let dones: string[];
+  /** `~/.agents/skills` before the case, for L4: it is the user's, and may hold their own skills. */
+  let agentsBefore: string[];
 
   beforeEach(async () => {
     statuses = [];
@@ -166,7 +231,20 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     mkdirSync(home);
     spawnSync('git', ['init', '-q', repo]);
     copyFileSync(AUTH, join(home, 'auth.json'));
+    previousCodexHome = process.env['CODEX_HOME'];
+    process.env['CODEX_HOME'] = home;
+    writtenConfig = undefined;
+    agentsBefore = agentsSkills();
 
+    // HIVE-360: the real skills, rendered as production renders them before a spawn.
+    const skills = createSkillsRuntime({ userDataPath: join(scratch, 'userData'), version: '0.0.0-live' });
+    await skills.sync();
+    codexPlugin = skills.pluginDirPath('codex');
+    expect(codexPlugin).not.toBeNull();
+
+    ledger = createLedger({ dir: join(scratch, 'hive'), knowsParty: () => true });
+    ledgerReads = [];
+    dones = [];
     tracker = createStatusTracker();
     transcript = undefined;
     const hub = createNotificationHub({
@@ -211,11 +289,18 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       onTicketIntent: () => undefined,
       onPromptName: () => {},
       onCleared: () => undefined,
-      onDone: () => {},
+      // Where production's `sessions` arms `closeFinished`: here, the driver's cue to type /exit.
+      onDone: (entityId) => {
+        dones.push(entityId);
+        writeFileSync(join(scratch, 'done.signal'), entityId);
+      },
       onReady: () => {},
       onMetrics: () => {},
-      onLedgerRead: () => ({ entries: [], openAsks: [], claims: {} }),
-      onLedgerPost: () => ({ ok: false as const, status: 503, reason: 'not exercised by this suite' }),
+      onLedgerRead: (caller, query) => {
+        ledgerReads.push(caller);
+        return ledger.read(query);
+      },
+      onLedgerPost: (caller, request) => ledger.append({ ...request, from: caller }),
       onAgentsList: () => Promise.reject(new Error('not exercised by this suite')),
     });
     // The real watch `sessions/index.ts` runs, on this case's scratch home.
@@ -237,11 +322,43 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     await receiver.stop();
     // The evidence stays; the credential copy does not.
     rmSync(join(home, 'auth.json'), { force: true });
+    if (previousCodexHome === undefined) delete process.env['CODEX_HOME'];
+    else process.env['CODEX_HOME'] = previousCodexHome;
+
+    /*
+      L4 (HIVE-360): HiveTTY writes nothing into Codex's home, the repo, or ~/.agents. Codex itself
+      may touch its own state files, so this checks HiveTTY's fingerprints, not byte equality.
+    */
+    /*
+      Codex seeds its own `skills/.system` and a remote `plugins/cache` in any home (measured at
+      0.165.0), so both may exist; nothing of HiveTTY's (its catalog, a folder named for one of its
+      skills, or "hivetty") may appear under either.
+    */
+    const hiveSkills = readFileSync(join(codexPlugin!, 'catalog.md'), 'utf8')
+      .split('\n')
+      .flatMap((l) => /^- ([a-z0-9-]+):/.exec(l)?.[1] ?? []);
+    const theirs = ['skills', 'plugins']
+      .filter((dir) => existsSync(join(home, dir)))
+      .flatMap((dir) => readdirSync(join(home, dir), { recursive: true, encoding: 'utf8' }).map((rel) => join(dir, rel)));
+    const ours = theirs.filter((rel) =>
+      rel.split('/').some((part) => part === 'catalog.md' || /hivetty/i.test(part) || hiveSkills.includes(part)),
+    );
+    expect(hiveSkills.length).toBeGreaterThan(5);
+    expect(ours).toEqual([]);
+    if (writtenConfig !== undefined) {
+      expect(readFileSync(join(home, 'config.toml'), 'utf8').startsWith(writtenConfig)).toBe(true);
+    }
+    const inRepo = readdirSync(repo);
+    expect(inRepo).not.toContain('.agents');
+    expect(inRepo).not.toContain('.codex');
+    expect(agentsSkills()).toEqual(agentsBefore);
+    codexPlugin = null;
   });
 
   /** The user's own config.toml, in the scratch home: the repo trusted, as a user's own repo is. */
   const userConfig = (extra = ''): void => {
-    writeFileSync(join(home, 'config.toml'), `${extra}\n[projects.${JSON.stringify(repo)}]\ntrust_level = "trusted"\n`);
+    writtenConfig = `${extra}\n[projects.${JSON.stringify(repo)}]\ntrust_level = "trusted"\n`;
+    writeFileSync(join(home, 'config.toml'), writtenConfig);
   };
 
   /** One launch, one prompt, one turn. Resolves with the pty log's path. */
@@ -250,7 +367,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     spec: Partial<LaunchSpec>,
     prompt: string,
     answer?: string[],
-    drive: { answerAfter?: number; cancels?: boolean } = {},
+    drive: { answerAfter?: number; cancels?: boolean; exitOn?: string; exit?: string; exitLog?: string } = {},
   ): Promise<string> => {
     const env: Record<string, string> = Object.fromEntries(
       Object.entries(process.env).filter(
@@ -292,6 +409,131 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     writeFileSync(path, JSON.stringify({ statuses, raised: raised.map((n) => n.kind), plans, ...body }, null, 2));
     console.info('EVIDENCE ', path);
   };
+
+  it('puts every HiveTTY skill line, after the user’s own text, in the model-visible prompt (HIVE-360)', () => {
+    userConfig('developer_instructions = "USER-OWN-7f3"');
+    const text = codexDeveloperInstructions({ pluginDir: codexPlugin!, codexHome: home, userConfig: true })!;
+    const out = spawnSync('sh', ['-c', `codex debug prompt-input -c ${shellQuote(`developer_instructions=${toml(text)}`)} hi`], {
+      cwd: repo,
+      env: { ...process.env, CODEX_HOME: home },
+      encoding: 'utf8',
+    });
+    finding('prompt-input', { status: out.status, stderr: out.stderr });
+    const catalog = readFileSync(join(codexPlugin!, 'catalog.md'), 'utf8')
+      .split('\n')
+      .filter((l) => l.startsWith('- '));
+    expect(catalog.length).toBeGreaterThan(5);
+    // The output is JSON: compare each line as it is escaped there.
+    for (const entry of catalog) expect(out.stdout).toContain(JSON.stringify(entry).slice(1, -1));
+    expect(out.stdout.indexOf('USER-OWN-7f3')).toBeGreaterThanOrEqual(0);
+    expect(out.stdout.indexOf('USER-OWN-7f3')).toBeLessThan(out.stdout.indexOf('### HiveTTY skills'));
+  });
+
+  it(
+    'a ticket start types $work-on and the model reads that skill’s SKILL.md (HIVE-360)',
+    async () => {
+      userConfig();
+      const typed = ticketStart({ kind: 'skill', skill: 'work-on' }, { key: 'HIVE-1', title: 'Probe' }, 'codex');
+      expect(typed).toEqual({ kind: 'message', text: '$work-on HIVE-1' });
+      await run(
+        'work-on',
+        {},
+        `${typed.kind === 'message' ? typed.text : ''} — only read the skill file and reply READY; do not fetch the ticket.`,
+      );
+      const id = statuses.find((s) => s.sessionUuid !== undefined)?.sessionUuid;
+      const rollout = id === undefined ? null : codexRecord(() => home).transcriptPath(repo, id);
+      finding('work-on', { id, rollout });
+      expect(rollout).not.toBeNull();
+      /*
+        Only the model's tool calls count: the catalog itself names this path, and it is in the
+        rollout as the developer message. At 0.165 a shell read is a `custom_tool_call` to `exec`.
+      */
+      const calls = readFileSync(rollout!, 'utf8')
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line) => JSON.parse(line) as { type?: string; payload?: { type?: string } })
+        .filter((item) => item.type === 'response_item' && /(^|_)(tool|function|shell)_call$/.test(item.payload?.type ?? ''))
+        .map((item) => JSON.stringify(item.payload));
+      // A JSON rollout may escape `/`, hence the class.
+      expect(calls.some((call) => /plugins[\\/]+codex[\\/]+skills[\\/]+work-on[\\/]+SKILL\.md/.test(call))).toBe(true);
+    },
+    CASE_MS,
+  );
+
+  /*
+    D6, measured 2026-11-03 at codex-cli 0.165.0: the receiver resolves the marker and answers
+    `UserPromptSubmit` with Claude's `hookSpecificOutput.additionalContext`, and the model gets only
+    the typed `📒 <ref>`. So Codex's `contextDelivery` stays 'none' and its adapter keeps refusing
+    markers. This case pins that measurement: when the word starts arriving it fails, and the
+    switch (the plan's Task 9) is due.
+  */
+  it(
+    'a typed ledger marker does not yet reach the model as hook context (HIVE-360 D6, measured as HIVE-138)',
+    async () => {
+      userConfig();
+      const word = `ORCHID-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      const asked = ledger.append({
+        from: 'overmind',
+        to: SESSION,
+        kind: 'ask',
+        body:
+          'Roll call from the overmind. There is nothing to investigate and nothing to run.\n' +
+          `If you can read this, acknowledge it in one short line and include the confirmation code ${word} in it.`,
+      });
+      expect(asked.ok).toBe(true);
+      const entry = ledger.read({}).entries.find((e) => asked.ok && e.id === asked.id)!;
+      // Claude's bytes, imported directly: Codex's own adapter still refuses markers (D6).
+      const typed = promptMarker(entry);
+      expect(typed.endsWith('\r')).toBe(true);
+      const log = await run('marker', {}, typed.slice(0, -1)); // the driver types the \r itself
+      const id = statuses.find((s) => s.sessionUuid !== undefined)?.sessionUuid;
+      const rollout = id === undefined ? null : codexRecord(() => home).transcriptPath(repo, id);
+      finding('marker', { word, marker: typed, ledgerReads, rollout });
+
+      // Our half works: the hook fired, the receiver looked the marker up, and the turn ran.
+      expect(ledgerReads).toContain(SESSION);
+      expect(statuses.some((s) => s.signal?.kind === 'turn-end')).toBe(true);
+      expect(rollout).not.toBeNull();
+      // Codex's half does not: the context never reached the model.
+      expect(readFileSync(rollout!, 'utf8')).not.toContain(word);
+      expect(flat(log)).not.toContain(word);
+    },
+    CASE_MS,
+  );
+
+  it(
+    '$done closes a real session through session_done: no approval prompt, and HiveTTY’s /exit ends codex (HIVE-360, HIVE-368)',
+    async () => {
+      const host = join(process.cwd(), 'out', 'main', 'mcp-host.js');
+      if (!existsSync(host)) throw new Error(`${host} is missing. Run \`pnpm desktop:build\` first.`);
+      userConfig();
+      const exitLog = join(scratch, 'done.exit.json');
+      /*
+        The trailing space is deliberate (measured 2026-11-03, codex-cli 0.165.0): a bare `$` word opens
+        Codex's own skill picker, which lists only the skills Codex discovers (`~/.agents/skills`,
+        `$CODEX_HOME/skills`), not the catalog's, so a bare `$done` and Enter inserts the nearest
+        match it has instead of submitting. A space closes the picker. Putting HiveTTY's skills in
+        that picker is `$` completion's (HIVE-372).
+      */
+      const log = await run(
+        'done',
+        { hiveServer: hiveServerSpec({ execPath: process.execPath, scriptPath: host }) },
+        '$done ',
+        undefined,
+        { exitOn: join(scratch, 'done.signal'), exit: EXIT_COMMAND, exitLog },
+      );
+      const exit = existsSync(exitLog) ? (JSON.parse(readFileSync(exitLog, 'utf8')) as { exited: boolean; after: number }) : null;
+      finding('done', { dones, exit });
+      expect(dones).toEqual([SESSION]);
+      // No approval prompt: no card, no needs-you, no prompt drawn.
+      expect(raised.map((n) => n.kind)).not.toContain('session.blocked');
+      expect(statuses.some((s) => s.status === 'waiting' || s.signal?.kind === 'waiting')).toBe(false);
+      expect(flat(log)).not.toContain('Wouldyouliketorun');
+      expect(flat(log)).not.toMatch(/Allow.*session_done/);
+      expect(exit?.exited).toBe(true);
+    },
+    CASE_MS,
+  );
 
   it(
     'reports working, then idle, from its own hooks',

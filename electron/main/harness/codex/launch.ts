@@ -7,6 +7,8 @@ import { hookCommand } from '../hook-commands';
 import type { LaunchPlan, LaunchSpec } from '../port';
 
 import { CODEX_AUTH_ENV_KEYS, CODEX_SESSION_ENV_KEYS } from './headless';
+import { codexDeveloperInstructions } from './instructions';
+import { codexHome } from './record';
 import { hookEntry, toml, tomlList, tomlTable } from './toml';
 
 /**
@@ -17,6 +19,8 @@ import { hookEntry, toml, tomlList, tomlTable } from './toml';
  *   hooks included, and every `-c` here is added beside it (P5), as `--settings` leaves Claude's
  *   own settings alone.
  * - `-c tools.update_plan.enabled=true`: the TUI has no plan tool without it (P4).
+ * - `-c developer_instructions`: HiveTTY's skill catalog (HIVE-360), after the user's own value, which a `-c`
+ *   would otherwise replace.
  * - `-c tui.disable_paste_burst=true`: an injected Enter is a keystroke, not the tail of a paste (P7).
  * - `--dangerously-bypass-hook-trust`: `-c` hooks fire only with it (P1). It also runs a repo's own
  *   `.codex` hooks (P2), so the core asks for it only where a repo has none (D4).
@@ -54,6 +58,12 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
   const { model, effort, sessionUuid, resume = false, task, hiveServer } = spec;
   const resuming = resume && sessionUuid !== undefined && UUID.test(sessionUuid);
 
+  const instructions = codexDeveloperInstructions({
+    ...(spec.pluginDir === undefined ? {} : { pluginDir: spec.pluginDir }),
+    codexHome: codexHome(),
+    userConfig: true,
+  });
+
   const flags = [
     ...(model === undefined ? [] : ['-m', shaped(model)]),
     ...(effort === undefined
@@ -61,6 +71,7 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
       : config(`model_reasoning_effort=${toml(oneOf('effort', effort, CLI_VOCAB.codex.efforts))}`)),
     ...config('tui.disable_paste_burst=true'),
     ...config('tools.update_plan.enabled=true'),
+    ...(instructions === undefined ? [] : config(`developer_instructions=${toml(instructions)}`)),
     ...CODEX_SESSION_EVENTS.flatMap((event) => config(hookEntry(event, hookCommand()))),
     ...config(hookEntry('PostToolUse', hookCommand(), '*')),
     ...(hiveServer === undefined

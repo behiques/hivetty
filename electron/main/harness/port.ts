@@ -120,7 +120,8 @@ export type HookTransport = 'http' | 'command';
 /** The paths `prepareSession` hands `spawn`, for `LaunchSpec` (HIVE-235). Absent means no flag. */
 export interface PreparedFiles {
   settingsPath?: string;
-  pluginDir?: string;
+  /** Each CLI's generated skills folder (HIVE-96, HIVE-369); a CLI missing here gets no flag. */
+  pluginDirs?: Partial<Record<HarnessId, string>>;
   mcpConfig?: string;
 }
 
