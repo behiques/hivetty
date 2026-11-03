@@ -6,6 +6,8 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -17,15 +19,19 @@ import { createInterface } from 'node:readline';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { codexAdapter } from '../../electron/main/harness/codex';
+import { codexDeveloperInstructions } from '../../electron/main/harness/codex/instructions';
 import { launchCodexSession } from '../../electron/main/harness/codex/launch';
 import { foldCodexMeters } from '../../electron/main/harness/codex/meters';
 import { codexRecord } from '../../electron/main/harness/codex/record';
+import { toml } from '../../electron/main/harness/codex/toml';
+import { shellQuote } from '../../electron/main/container/shell-quote';
 import type { LaunchSpec } from '../../electron/main/harness/port';
 import { createHarnessRegistry } from '../../electron/main/harness/registry';
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
 import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
 import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
 import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
+import { createSkillsRuntime } from '../../electron/main/skills';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
@@ -51,6 +57,9 @@ import type { PlanUpdate } from '../../electron/shared/plan-contract';
  * `~/.codex/auth.json`; nothing is written under `~/.codex`. Every ambient `HIVE_*`, `CODEX_*` and
  * `OPENAI_*` is stripped before the case sets its own. Each case writes `finding.json` beside its
  * scratch repo, and logs where.
+ *
+ * Every case runs with HiveTTY's real skill catalog on the argv (HIVE-360), as production does, and
+ * after each one the scratch home and repo are checked for anything HiveTTY wrote into them (L4).
  *
  * Opt-in: `pnpm test:session:codex`. Skipped unless `codex --version` is 0.165.x and
  * `~/.codex/auth.json` exists; about seven minutes.
@@ -129,9 +138,26 @@ except Exception: pass
 open(c['log'], 'wb').write(bytes(out))
 `;
 
+/** HIVE-360: Codex's rendered skills folder, set per case; every line carries its catalog. */
+let codexPlugin: string | null = null;
+
 /** The line `launchCodexSession` types; the driver splits it with `shlex`, as a shell would. */
 const lineOf = (spec: Partial<LaunchSpec>): string =>
-  launchCodexSession({ command: 'codex', bypassHookTrust: true, ...spec }).command;
+  launchCodexSession({
+    command: 'codex',
+    bypassHookTrust: true,
+    ...(codexPlugin === null ? {} : { pluginDir: codexPlugin }),
+    ...spec,
+  }).command;
+
+/** `~/.agents/skills` as names and link targets: the real HOME is the session's, so L4 compares it. */
+const agentsSkills = (): string[] => {
+  const dir = join(homedir(), '.agents', 'skills');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .map((entry) => `${entry.name}${entry.isSymbolicLink() ? ` -> ${readlinkSync(join(dir, entry.name))}` : ''}`)
+    .sort();
+};
 
 /** Escape sequences out, and every space: a TUI wraps and pads what it draws. */
 const flat = (path: string): string =>
@@ -153,6 +179,12 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   let tracker: StatusTracker;
   let aborts: RecordAborts;
   let transcript: { cwd: string; sessionUuid: string } | undefined;
+  /** `launchCodexSession` reads the user's config through `codexHome()`: the scratch one, never ~/.codex. */
+  let previousCodexHome: string | undefined;
+  /** What `userConfig` wrote, for L4: HiveTTY adds nothing to it. */
+  let writtenConfig: string | undefined;
+  /** `~/.agents/skills` before the case, for L4: it is the user's, and may hold their own skills. */
+  let agentsBefore: string[];
 
   beforeEach(async () => {
     statuses = [];
@@ -166,6 +198,16 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     mkdirSync(home);
     spawnSync('git', ['init', '-q', repo]);
     copyFileSync(AUTH, join(home, 'auth.json'));
+    previousCodexHome = process.env['CODEX_HOME'];
+    process.env['CODEX_HOME'] = home;
+    writtenConfig = undefined;
+    agentsBefore = agentsSkills();
+
+    // HIVE-360: the real skills, rendered as production renders them before a spawn.
+    const skills = createSkillsRuntime({ userDataPath: join(scratch, 'userData'), version: '0.0.0-live' });
+    await skills.sync();
+    codexPlugin = skills.pluginDirPath('codex');
+    expect(codexPlugin).not.toBeNull();
 
     tracker = createStatusTracker();
     transcript = undefined;
@@ -237,11 +279,43 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     await receiver.stop();
     // The evidence stays; the credential copy does not.
     rmSync(join(home, 'auth.json'), { force: true });
+    if (previousCodexHome === undefined) delete process.env['CODEX_HOME'];
+    else process.env['CODEX_HOME'] = previousCodexHome;
+
+    /*
+      L4 (HIVE-360): HiveTTY writes nothing into Codex's home, the repo, or ~/.agents. Codex itself
+      may touch its own state files, so this checks HiveTTY's fingerprints, not byte equality.
+    */
+    /*
+      Codex seeds its own `skills/.system` and a remote `plugins/cache` in any home (measured at
+      0.165.0), so both may exist; nothing of HiveTTY's (its catalog, a folder named for one of its
+      skills, or "hivetty") may appear under either.
+    */
+    const hiveSkills = readFileSync(join(codexPlugin!, 'catalog.md'), 'utf8')
+      .split('\n')
+      .flatMap((l) => /^- ([a-z0-9-]+):/.exec(l)?.[1] ?? []);
+    const theirs = ['skills', 'plugins']
+      .filter((dir) => existsSync(join(home, dir)))
+      .flatMap((dir) => readdirSync(join(home, dir), { recursive: true, encoding: 'utf8' }).map((rel) => join(dir, rel)));
+    const ours = theirs.filter((rel) =>
+      rel.split('/').some((part) => part === 'catalog.md' || /hivetty/i.test(part) || hiveSkills.includes(part)),
+    );
+    expect(hiveSkills.length).toBeGreaterThan(5);
+    expect(ours).toEqual([]);
+    if (writtenConfig !== undefined) {
+      expect(readFileSync(join(home, 'config.toml'), 'utf8').startsWith(writtenConfig)).toBe(true);
+    }
+    const inRepo = readdirSync(repo);
+    expect(inRepo).not.toContain('.agents');
+    expect(inRepo).not.toContain('.codex');
+    expect(agentsSkills()).toEqual(agentsBefore);
+    codexPlugin = null;
   });
 
   /** The user's own config.toml, in the scratch home: the repo trusted, as a user's own repo is. */
   const userConfig = (extra = ''): void => {
-    writeFileSync(join(home, 'config.toml'), `${extra}\n[projects.${JSON.stringify(repo)}]\ntrust_level = "trusted"\n`);
+    writtenConfig = `${extra}\n[projects.${JSON.stringify(repo)}]\ntrust_level = "trusted"\n`;
+    writeFileSync(join(home, 'config.toml'), writtenConfig);
   };
 
   /** One launch, one prompt, one turn. Resolves with the pty log's path. */
@@ -292,6 +366,25 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     writeFileSync(path, JSON.stringify({ statuses, raised: raised.map((n) => n.kind), plans, ...body }, null, 2));
     console.info('EVIDENCE ', path);
   };
+
+  it('puts every HiveTTY skill line, after the user’s own text, in the model-visible prompt (HIVE-360)', () => {
+    userConfig('developer_instructions = "USER-OWN-7f3"');
+    const text = codexDeveloperInstructions({ pluginDir: codexPlugin!, codexHome: home, userConfig: true })!;
+    const out = spawnSync('sh', ['-c', `codex debug prompt-input -c ${shellQuote(`developer_instructions=${toml(text)}`)} hi`], {
+      cwd: repo,
+      env: { ...process.env, CODEX_HOME: home },
+      encoding: 'utf8',
+    });
+    finding('prompt-input', { status: out.status, stderr: out.stderr });
+    const catalog = readFileSync(join(codexPlugin!, 'catalog.md'), 'utf8')
+      .split('\n')
+      .filter((l) => l.startsWith('- '));
+    expect(catalog.length).toBeGreaterThan(5);
+    // The output is JSON: compare each line as it is escaped there.
+    for (const entry of catalog) expect(out.stdout).toContain(JSON.stringify(entry).slice(1, -1));
+    expect(out.stdout.indexOf('USER-OWN-7f3')).toBeGreaterThanOrEqual(0);
+    expect(out.stdout.indexOf('USER-OWN-7f3')).toBeLessThan(out.stdout.indexOf('### HiveTTY skills'));
+  });
 
   it(
     'reports working, then idle, from its own hooks',
