@@ -1,6 +1,11 @@
 ---
 name: spec-deviation
-description: Use when an implementation has deviated from its Jira ticket: a design decision changed mid-work, the plan diverged from the ticket, or the user says "update the ticket with the deviation", "add UPDATED SPECS", or "update the downstream tickets". Writes the deviation into the PR body, appends UPDATED SPECS to the ticket, and proposes edits to the downstream tickets for confirmation before writing them.
+description: >-
+  Use when an implementation has deviated from its Jira ticket: a design decision changed mid-work,
+  the plan diverged from the ticket, or the user says "update the ticket with the deviation", "add
+  UPDATED SPECS", or "update the downstream tickets". Writes the deviation into the PR body, appends
+  UPDATED SPECS to the ticket, and proposes edits to the downstream tickets for confirmation before
+  writing them.
 ---
 
 # Spec deviation

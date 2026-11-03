@@ -1,6 +1,10 @@
 ---
 name: ship
-description: The PR endgame, run by the shipper agent on every wake. Drives a draft PR to merge one stage at a time: self review through the reviewer agent, mark ready, CI, findings through fixer, approval or the auto-merge fence, merge-pr, Jira Done. A session hands a PR over with one ledger_ask to shipper; in a terminal this skill only explains how.
+description: >-
+  The PR endgame, run by the shipper agent on every wake. Drives a draft PR to merge one stage at a
+  time: self review through the reviewer agent, mark ready, CI, findings through fixer, approval or
+  the auto-merge fence, merge-pr, Jira Done. A session hands a PR over with one ledger_ask to
+  shipper; in a terminal this skill only explains how.
 ---
 
 # Ship
