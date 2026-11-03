@@ -33,6 +33,7 @@ import { createStatusTracker, type StatusTracker } from '../../electron/main/hoo
 import { createLedger } from '../../electron/main/ledger';
 import { hiveServerSpec } from '../../electron/main/mcp/config';
 import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
+import { EXIT_COMMAND } from '../../electron/main/sessions/exit-command';
 import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
 import { createSkillsRuntime } from '../../electron/main/skills';
 import {
@@ -87,6 +88,8 @@ const CASE_MS = 240_000;
  * the prompt and its `\r` 300 ms apart (HIVE-63), and `/exit`s once the turn reports `Worked for`.
  * Every key it types goes through `key()`, which prints it as a JSON line first, for the test to read
  * as the user's (HIVE-365); the start-up replies are the terminal's and are written plainly.
+ * `exitOn` names a file: once it exists (the receiver's `onDone` wrote it), the driver types `exit` in
+ * one write, as `closeFinished` does, and records in `exitLog` whether codex exited within 10 s.
  * `answer` is a list of keys 0.6 s apart, sent on the approval prompt or `answerAfter` seconds after
  * the submit; `cancels` ends the drive soon after the answer. Its config is one JSON argument.
  */
@@ -129,6 +132,9 @@ while time.time() - start < c['seconds']:
         key('\r'); step = 2; submitted = len(out); submitted_at = now
     elif step == 2:
         since = bytes(out[submitted:])
+        if c.get('exitOn') and done_at is None and os.path.exists(c['exitOn']):
+            key(c['exit']); done_at = now; step = 4   # one write, as closeFinished does
+            continue
         due = now > submitted_at + c['answerAfter'] if c.get('answerAfter') else b'Would you like to run' in since
         if c['answer'] and not answered and due:
             time.sleep(0.5)
@@ -139,6 +145,21 @@ while time.time() - start < c['seconds']:
         if done_at is not None and now > done_at + 2:
             key('/exit'); time.sleep(0.3); key('\r'); step = 3
     elif step == 3 and now > (done_at or 0) + 8: break
+    elif step == 4:
+        exited = False
+        try: exited = os.waitpid(pid, os.WNOHANG)[0] == pid
+        except ChildProcessError: exited = True
+        if exited or now > done_at + 10:
+            open(c['exitLog'], 'w').write(json.dumps({'exited': exited, 'after': round(now - done_at, 2)}))
+            break
+if step == 4 and not os.path.exists(c['exitLog']):
+    # The pty closed under the read (codex exited): settle the wait, still within the 10 s.
+    exited = False
+    while not exited and time.time() - start < done_at + 10:
+        try: exited = os.waitpid(pid, os.WNOHANG)[0] == pid
+        except ChildProcessError: exited = True
+        if not exited: time.sleep(0.1)
+    open(c['exitLog'], 'w').write(json.dumps({'exited': exited, 'after': round(time.time() - start - done_at, 2)}))
 try: os.kill(pid, 9)
 except Exception: pass
 open(c['log'], 'wb').write(bytes(out))
@@ -268,8 +289,10 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       onTicketIntent: () => undefined,
       onPromptName: () => {},
       onCleared: () => undefined,
+      // Where production's `sessions` arms `closeFinished`: here, the driver's cue to type /exit.
       onDone: (entityId) => {
         dones.push(entityId);
+        writeFileSync(join(scratch, 'done.signal'), entityId);
       },
       onReady: () => {},
       onMetrics: () => {},
@@ -344,7 +367,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     spec: Partial<LaunchSpec>,
     prompt: string,
     answer?: string[],
-    drive: { answerAfter?: number; cancels?: boolean } = {},
+    drive: { answerAfter?: number; cancels?: boolean; exitOn?: string; exit?: string; exitLog?: string } = {},
   ): Promise<string> => {
     const env: Record<string, string> = Object.fromEntries(
       Object.entries(process.env).filter(
@@ -479,11 +502,12 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   );
 
   it(
-    '$done closes a real session through session_done (HIVE-360, HIVE-368)',
+    '$done closes a real session through session_done: no approval prompt, and HiveTTY’s /exit ends codex (HIVE-360, HIVE-368)',
     async () => {
       const host = join(process.cwd(), 'out', 'main', 'mcp-host.js');
       if (!existsSync(host)) throw new Error(`${host} is missing. Run \`pnpm desktop:build\` first.`);
       userConfig();
+      const exitLog = join(scratch, 'done.exit.json');
       /*
         The trailing space is deliberate (measured 2026-11-03, codex-cli 0.165.0): a bare `$` word opens
         Codex's own skill picker, which lists only the skills Codex discovers (`~/.agents/skills`,
@@ -491,9 +515,22 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
         match it has instead of submitting. A space closes the picker. Putting HiveTTY's skills in
         that picker is `$` completion's (HIVE-372).
       */
-      await run('done', { hiveServer: hiveServerSpec({ execPath: process.execPath, scriptPath: host }) }, '$done ');
-      finding('done', { dones });
-      expect(dones).toContain(SESSION);
+      const log = await run(
+        'done',
+        { hiveServer: hiveServerSpec({ execPath: process.execPath, scriptPath: host }) },
+        '$done ',
+        undefined,
+        { exitOn: join(scratch, 'done.signal'), exit: EXIT_COMMAND, exitLog },
+      );
+      const exit = existsSync(exitLog) ? (JSON.parse(readFileSync(exitLog, 'utf8')) as { exited: boolean; after: number }) : null;
+      finding('done', { dones, exit });
+      expect(dones).toEqual([SESSION]);
+      // No approval prompt: no card, no needs-you, no prompt drawn.
+      expect(raised.map((n) => n.kind)).not.toContain('session.blocked');
+      expect(statuses.some((s) => s.status === 'waiting' || s.signal?.kind === 'waiting')).toBe(false);
+      expect(flat(log)).not.toContain('Wouldyouliketorun');
+      expect(flat(log)).not.toMatch(/Allow.*session_done/);
+      expect(exit?.exited).toBe(true);
     },
     CASE_MS,
   );
