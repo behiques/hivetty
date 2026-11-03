@@ -3,9 +3,9 @@
  *
  * Here rather than in `settings-overlay.tsx`, where the list itself lives,
  * because `ui-store` has to name one to honour `openSettings('agents')` — and
- * a store may not import a feature slice. The overlay derives its `GROUPS`
- * and `PANES` records from this union, so a pane added there without a member
- * here does not compile, and the two cannot drift.
+ * a store may not import a feature slice. The overlay's `GROUPS` and `PANES`
+ * are typed by this union: a pane id there without a member here does not
+ * compile, and `PANES` must name every member.
  *
  * Stable, kebab-case and group-free (HIVE-374): a pane can change groups
  * without a caller noticing. The order and grouping live in
