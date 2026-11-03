@@ -2,10 +2,13 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { CliSkills } from '@shared/skills-contract';
+
 import { TicketWorkflowGroup } from '@features/settings/components/ticket-workflow-group';
 
 const setJiraConnection = vi.fn((_request: unknown) => Promise.resolve());
 const agents = vi.hoisted(() => ({ names: ['builder', 'shipper'] }));
+const cli = vi.hoisted(() => ({ skills: null as CliSkills | null }));
 
 vi.mock('@lib/project-config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@lib/project-config')>()),
@@ -13,6 +16,7 @@ vi.mock('@lib/project-config', async (importOriginal) => ({
 }));
 vi.mock('@hooks/use-skills', () => ({
   useSkills: () => ({ skills: [{ name: 'work-on' }, { name: 'debug' }], invalid: [], skillsRoot: '' }),
+  useCliSkills: () => cli.skills,
 }));
 vi.mock('@hooks/use-agents', () => ({
   useAgents: () => ({ agents: agents.names.map((name) => ({ name })), agentsRoot: '' }),
@@ -23,6 +27,7 @@ const preview = () => screen.getByTestId('ticket-workflow-preview').textContent;
 beforeEach(() => {
   vi.clearAllMocks();
   agents.names = ['builder', 'shipper'];
+  cli.skills = null;
 });
 
 describe('TicketWorkflowGroup', () => {
@@ -108,5 +113,63 @@ describe('TicketWorkflowGroup', () => {
     render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'hive:debug' }} />);
     await userEvent.click(screen.getByRole('radio', { name: 'Just open' }));
     expect(setJiraConnection).toHaveBeenLastCalledWith({ workflow: null });
+  });
+
+  describe('the user’s own CLI skills (HIVE-367)', () => {
+    const CLI: CliSkills = [
+      { cli: 'claude-code', names: ['graphify'], places: 'x' },
+      { cli: 'codex', names: ['find-skills', 'workstream:work-on'], places: 'y' },
+      { cli: 'copilot', names: ['find-skills'], places: 'z' },
+    ];
+
+    it('groups HiveTTY’s skills first, then each CLI’s own', () => {
+      cli.skills = CLI;
+      render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'hive:work-on' }} />);
+      const labels = [...document.querySelectorAll('optgroup')].map((g) => g.label);
+      expect(labels).toEqual(['HiveTTY · every CLI', 'Claude Code', 'Codex', 'Copilot']);
+    });
+
+    it('selects a saved CLI skill, names the CLIs it runs on, and previews it typed their way', () => {
+      cli.skills = CLI;
+      render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'workstream:work-on' }} />);
+      expect((screen.getByLabelText('Skill') as HTMLSelectElement).value).toBe('workstream:work-on');
+      expect(screen.getByText('A Codex skill: it runs only in Codex sessions.', { exact: false })).toBeTruthy();
+      expect(screen.getByText('$workstream:work-on PROJ-123', { exact: false })).toBeTruthy();
+    });
+
+    it('names both CLIs for a skill two of them have', () => {
+      cli.skills = CLI;
+      render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'find-skills' }} />);
+      expect(screen.getByText('runs only in Codex and Copilot sessions', { exact: false })).toBeTruthy();
+    });
+
+    it('keeps a saved skill no CLI lists in the typed field', () => {
+      cli.skills = CLI;
+      render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'other:thing' }} />);
+      expect(screen.getByDisplayValue('other:thing')).toBeTruthy();
+    });
+
+    it('promotes a typed skill to the select when the CLI list arrives after the first render', () => {
+      const { rerender } = render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'workstream:work-on' }} />);
+      expect(screen.getByLabelText('Skill name')).toHaveValue('workstream:work-on');
+      cli.skills = CLI;
+      rerender(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'workstream:work-on' }} />);
+      expect((screen.getByLabelText('Skill') as HTMLSelectElement).value).toBe('workstream:work-on');
+    });
+
+    it('never promotes while the person types a name a CLI lists', async () => {
+      cli.skills = CLI;
+      render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'hive:work-on' }} />);
+      await userEvent.selectOptions(screen.getByLabelText('Skill'), '__typed');
+      await userEvent.type(screen.getByLabelText('Skill name'), 'graphify');
+      expect(screen.getByLabelText('Skill name')).toHaveValue('graphify');
+    });
+
+    it('saves a picked CLI skill like any other', async () => {
+      cli.skills = CLI;
+      render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'hive:work-on' }} />);
+      await userEvent.selectOptions(screen.getByLabelText('Skill'), 'graphify');
+      expect(setJiraConnection).toHaveBeenLastCalledWith({ workflow: { kind: 'skill', skill: 'graphify' } });
+    });
   });
 });

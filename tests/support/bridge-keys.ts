@@ -15,7 +15,7 @@ export const BRIDGE_KEYS = [
 
 export const BRIDGE_SKILLS_KEYS = [
   'list', 'read', 'write', 'remove', 'rename', 'pathToken', 'fileRead', 'fileWrite',
-  'fileMkdir', 'fileRemove', 'fileMove', 'fileImport', 'fileDrop', 'import',
+  'fileMkdir', 'fileRemove', 'fileMove', 'fileImport', 'fileDrop', 'import', 'cliSkills',
 ] as const satisfies readonly (keyof HiveBridge['skills'])[];
 
 export const BRIDGE_SHIPPED_KEYS = [

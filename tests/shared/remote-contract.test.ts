@@ -81,7 +81,7 @@ const MAIN_ONLY: ReadonlyMap<string, FrameKind> = new Map([
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(167);
+    expect(entries).toHaveLength(168);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -149,11 +149,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 131 call, 6 notify and 30 event', () => {
+  it('splits 132 call, 6 notify and 30 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 131, notify: 6, event: 30 });
+    expect(tally).toEqual({ call: 132, notify: 6, event: 30 });
   });
 
   /**
@@ -226,11 +226,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 167 as 69 read, 49 mutate and 49 execute', () => {
+  it('grades the 168 as 70 read, 49 mutate and 49 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 69, mutate: 49, execute: 49 });
+    expect(tally).toEqual({ read: 70, mutate: 49, execute: 49 });
   });
 
   /**
@@ -591,7 +591,7 @@ describe('remote contract: the version handshake', () => {
   });
 
   it('is protocol 3: 2 carried a generation (HIVE-144), 3 caught up on unbumped channels (HIVE-140 audit)', () => {
-    expect(REMOTE_PROTOCOL_VERSION).toBe(25);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(26);
   });
 });
 
@@ -642,7 +642,7 @@ describe('remote contract: the attach snapshot (HIVE-144)', () => {
     expect(EVENT_CHANNELS).toContain(CH.changedFilesChanged);
     expect(frameKindOf(CH.changedFilesChanged)).toBe('event');
     expect(frameKindOf(CH.changedFilesList)).toBe('call');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(25);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(26);
   });
 
   it('snapshots the plans so a reattaching client sees the current plan (HIVE-179)', () => {

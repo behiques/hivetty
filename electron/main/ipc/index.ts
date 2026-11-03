@@ -329,6 +329,7 @@ import {
 } from '../sessions/history';
 import { onShutdown } from '../shutdown';
 import { createSkillsRuntime, type SkillsRuntime } from '../skills';
+import { readCliSkills } from '../skills/cli-skills';
 import { PLUGIN_DIR } from '../skills/paths';
 import { splashEnabled } from '../splash';
 import {
@@ -4747,6 +4748,7 @@ export function registerIpcHandlers(
    * every `sessions?.` call in this file has it.
    */
   handle(CH.skillsList, () => skills?.list());
+  handle(CH.skillsCliSkills, () => readCliSkills((id) => adapterFor(id).installed));
 
   /*
     What the user changed in the shipped agents and skills. Each waits for the

@@ -1,7 +1,7 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
-import { skillsSnapshot, subscribeSkills } from '@lib/skills';
-import type { SkillsSnapshot } from '@shared/skills-contract';
+import { cliSkillsSnapshot, loadCliSkills, skillsSnapshot, subscribeSkills } from '@lib/skills';
+import type { CliSkills, SkillsSnapshot } from '@shared/skills-contract';
 
 /**
  * Reading the custom skills from a component (HIVE-96).
@@ -16,4 +16,12 @@ import type { SkillsSnapshot } from '@shared/skills-contract';
  */
 export function useSkills(): SkillsSnapshot | null {
   return useSyncExternalStore(subscribeSkills, skillsSnapshot, skillsSnapshot);
+}
+
+/** The user's own skills per CLI (HIVE-367). Loads once per mount of a consumer. */
+export function useCliSkills(): CliSkills | null {
+  useEffect(() => {
+    void loadCliSkills();
+  }, []);
+  return useSyncExternalStore(subscribeSkills, cliSkillsSnapshot, cliSkillsSnapshot);
 }

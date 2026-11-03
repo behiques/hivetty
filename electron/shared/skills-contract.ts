@@ -1,5 +1,6 @@
 import { HIDDEN_ENTRIES } from './fs-contract';
 import type { FsRefusalReason } from './fs-contract';
+import type { HarnessId } from './harness-contract';
 
 /**
  * Custom skills — the slash commands HiveTTY gives the sessions it starts
@@ -109,6 +110,15 @@ export interface SkillsSnapshot {
    */
   plugins?: string[];
 }
+
+/** One CLI's own skills, for Settings › Skills and the ticket picker (HIVE-367). */
+export interface CliSkillsEntry {
+  cli: HarnessId;
+  names: string[];
+  /** Where the CLI looks, worded for a person. */
+  places: string;
+}
+export type CliSkills = CliSkillsEntry[];
 
 /** One file, for the editor. */
 export interface SkillFile {

@@ -73,4 +73,28 @@ describe('SelectField', () => {
     );
     expect(screen.getByText('Falls back.')).toBeInTheDocument();
   });
+
+  it('puts consecutive options of one group in one optgroup, ungrouped ones bare (HIVE-367)', () => {
+    render(
+      <SelectField
+        label="Skill"
+        value="b"
+        onChange={() => {}}
+        options={[
+          { value: 'a', label: 'a', group: 'HiveTTY' },
+          { value: 'b', label: 'b', group: 'Codex' },
+          { value: 'c', label: 'c', group: 'Codex' },
+          { value: 'b', label: 'b', group: 'Copilot', key: 'copilot:b' },
+          { value: 't', label: 'Type another…' },
+        ]}
+      />,
+    );
+    const groups = document.querySelectorAll('optgroup');
+    expect([...groups].map((g) => [g.label, g.querySelectorAll('option').length])).toEqual([
+      ['HiveTTY', 1],
+      ['Codex', 2],
+      ['Copilot', 1],
+    ]);
+    expect(document.querySelector('select > option')?.textContent).toBe('Type another…');
+  });
 });

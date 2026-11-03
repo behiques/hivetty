@@ -78,8 +78,9 @@ import { isThisMachineAction } from './notification-contract';
  * 22 → 23: `CH` gained `cli:codex-models`; `CODEX_EFFORTS` gained `ultra`, and a Codex model is any `CODEX_MODEL_ID`-shaped id.
  * 23 → 24 (HIVE-334): `SessionMetrics` (on `session:metrics`) gained `creditsBalance` and `creditsUnlimited`.
  * 24 → 25 (HIVE-381): `SessionMetrics.creditsBalance` and `creditsUnlimited` may be `null`, which clears them.
+ * 25 → 26 (HIVE-367): `CH` gained `skills:cli-skills`.
  */
-export const REMOTE_PROTOCOL_VERSION = 25;
+export const REMOTE_PROTOCOL_VERSION = 26;
 
 /**
  * What a frame is for.
@@ -292,6 +293,7 @@ export const FRAME_KIND = {
   [CH.fsUnwatch]: 'call',
   [CH.fsChanged]: 'event',
   [CH.skillsList]: 'call',
+  [CH.skillsCliSkills]: 'call',
   [CH.skillsRead]: 'call',
   [CH.skillsWrite]: 'call',
   [CH.skillsRemove]: 'call',
@@ -591,6 +593,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.fsUnwatch]: 'read',
   [CH.fsChanged]: 'read',
   [CH.skillsList]: 'read',
+  [CH.skillsCliSkills]: 'read',
   [CH.skillsRead]: 'read',
   [CH.skillsWrite]: 'execute',
   [CH.skillsRemove]: 'mutate',

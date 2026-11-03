@@ -20,6 +20,10 @@ import { cn } from '@/lib/utils';
 export interface SelectFieldOption {
   value: string;
   label: string;
+  /** Consecutive options sharing a group render in one `<optgroup>` (HIVE-367). */
+  group?: string;
+  /** The React key, when two options share a value. */
+  key?: string;
 }
 
 interface SelectFieldProps {
@@ -42,6 +46,20 @@ export function SelectField({
 }: SelectFieldProps) {
   const id = useId();
   const hintId = `${id}-hint`;
+
+  // Runs of consecutive options with one group become one `<optgroup>`; an
+  // option with no group stays bare, wherever it falls.
+  const runs: { group?: string; options: SelectFieldOption[] }[] = [];
+  for (const option of options) {
+    const last = runs.at(-1);
+    if (last && option.group !== undefined && last.group === option.group) last.options.push(option);
+    else runs.push({ group: option.group, options: [option] });
+  }
+  const item = (option: SelectFieldOption) => (
+    <option key={option.key ?? option.value} value={option.value}>
+      {option.label}
+    </option>
+  );
 
   return (
     /**
@@ -69,11 +87,15 @@ export function SelectField({
             'focus-visible:ring-1 focus-visible:ring-brand',
           )}
         >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          {runs.map((run, index) =>
+            run.group === undefined ? (
+              run.options.map(item)
+            ) : (
+              <optgroup key={`${run.group}-${index}`} label={run.group}>
+                {run.options.map(item)}
+              </optgroup>
+            ),
+          )}
         </select>
 
         <CaretDown
