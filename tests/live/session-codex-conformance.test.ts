@@ -42,6 +42,7 @@ import {
 import { CH } from '../../electron/shared/ipc-contract';
 import type { HiveNotification } from '../../electron/shared/notification-contract';
 import type { PlanUpdate } from '../../electron/shared/plan-contract';
+import { ticketStart } from '../../electron/shared/ticket-workflow';
 
 /**
  * What only a real interactive `codex` can prove about a Codex session (HIVE-279).
@@ -385,6 +386,37 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     expect(out.stdout.indexOf('USER-OWN-7f3')).toBeGreaterThanOrEqual(0);
     expect(out.stdout.indexOf('USER-OWN-7f3')).toBeLessThan(out.stdout.indexOf('### HiveTTY skills'));
   });
+
+  it(
+    'a ticket start types $work-on and the model reads that skill’s SKILL.md (HIVE-360)',
+    async () => {
+      userConfig();
+      const typed = ticketStart({ kind: 'skill', skill: 'work-on' }, { key: 'HIVE-1', title: 'Probe' }, 'codex');
+      expect(typed).toEqual({ kind: 'message', text: '$work-on HIVE-1' });
+      await run(
+        'work-on',
+        {},
+        `${typed.kind === 'message' ? typed.text : ''} — only read the skill file and reply READY; do not fetch the ticket.`,
+      );
+      const id = statuses.find((s) => s.sessionUuid !== undefined)?.sessionUuid;
+      const rollout = id === undefined ? null : codexRecord(() => home).transcriptPath(repo, id);
+      finding('work-on', { id, rollout });
+      expect(rollout).not.toBeNull();
+      /*
+        Only the model's tool calls count: the catalog itself names this path, and it is in the
+        rollout as the developer message. At 0.165 a shell read is a `custom_tool_call` to `exec`.
+      */
+      const calls = readFileSync(rollout!, 'utf8')
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line) => JSON.parse(line) as { type?: string; payload?: { type?: string } })
+        .filter((item) => item.type === 'response_item' && /(^|_)(tool|function|shell)_call$/.test(item.payload?.type ?? ''))
+        .map((item) => JSON.stringify(item.payload));
+      // A JSON rollout may escape `/`, hence the class.
+      expect(calls.some((call) => /plugins[\\/]+codex[\\/]+skills[\\/]+work-on[\\/]+SKILL\.md/.test(call))).toBe(true);
+    },
+    CASE_MS,
+  );
 
   it(
     'reports working, then idle, from its own hooks',
