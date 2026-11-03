@@ -51,7 +51,8 @@ A request with no ticket takes the same road through `goal-on`:
 It turns the sentence into a brief with a checkable outcome, asks what it must ask now, and
 holds itself to that outcome across turns: the turn cannot end until the evidence is in the
 brief. Each check posts a receipt to the [ledger](ledger.md), so the overmind sees the goal's
-progress without opening the session.
+progress without opening the session. It holds Codex and Copilot sessions too, with the command
+verifier only; Claude Code adds a second check that judges the evidence.
 
 ## Plan and build
 
