@@ -39,6 +39,21 @@ export const hookCommand = (opts: { harness?: string; wrap?: string } = {}): str
   ` --data-binary @- >/dev/null 2>&1 || true`;
 
 /**
+ * {@link hookCommand} for a prompt hook whose reply is context (HIVE-360): the receiver's answer is
+ * printed, because a command hook's stdout is the only way its `additionalContext` reaches the CLI
+ * (codex 0.165 reads it; the `>/dev/null` above threw it away, measured live). Fails open: `-f`
+ * drops a refusal's body, and a receiver that is down or slow prints nothing, so the prompt goes on
+ * as typed. Only for `UserPromptSubmit`: a printed reply on `Stop` or `PermissionRequest` would be
+ * read as a decision.
+ */
+export const contextCommand = (opts: { harness?: string } = {}): string =>
+  `curl -sf -m 3 -X POST "$${HOOK_ENV_RECEIVER_URL}${HOOK_PATH}"` +
+  ` -H 'content-type: application/json'` +
+  ` -H "${HOOK_HEADER_SESSION}: $${HOOK_ENV_SESSION}"` +
+  ` -H "${HOOK_HEADER_TOKEN}: $${HOOK_ENV_TOKEN}"${harnessHeader(opts.harness)}` +
+  ` --data-binary @- 2>/dev/null || true`;
+
+/**
  * POSTs stdin to `/fence`; prints `denyJson` when no non-empty answer comes back. Fails closed: a
  * receiver that is down, slow, refusing or silent gives the deny, never the empty reply a CLI would
  * run.

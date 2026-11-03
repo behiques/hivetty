@@ -3,7 +3,7 @@ import { HOOK_ENV_RECEIVER_URL, HOOK_ENV_SESSION, HOOK_ENV_TOKEN } from '@shared
 
 import { shellQuote } from '../../container/shell-quote';
 import { SUBMIT_DELAY_MS } from '../claude-code/launch';
-import { hookCommand } from '../hook-commands';
+import { contextCommand, hookCommand } from '../hook-commands';
 import type { LaunchPlan, LaunchSpec } from '../port';
 
 import { CODEX_AUTH_ENV_KEYS, CODEX_SESSION_ENV_KEYS } from './headless';
@@ -72,7 +72,10 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
     ...config('tui.disable_paste_burst=true'),
     ...config('tools.update_plan.enabled=true'),
     ...(instructions === undefined ? [] : config(`developer_instructions=${toml(instructions)}`)),
-    ...CODEX_SESSION_EVENTS.flatMap((event) => config(hookEntry(event, hookCommand()))),
+    // HIVE-360: the prompt hook prints the receiver's reply, so a ledger marker's entry reaches the model.
+    ...CODEX_SESSION_EVENTS.flatMap((event) =>
+      config(hookEntry(event, event === 'UserPromptSubmit' ? contextCommand() : hookCommand())),
+    ),
     ...config(hookEntry('PostToolUse', hookCommand(), '*')),
     ...(hiveServer === undefined
       ? []

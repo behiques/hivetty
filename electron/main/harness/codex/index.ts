@@ -21,15 +21,12 @@ import { codexSkills } from './skills';
 const noSettings = (): Promise<string> => Promise.resolve('');
 const noFile = (): Promise<void> => Promise.resolve();
 
-const noMarkers = (): never => {
-  throw new Error('codex sessions take no markers yet (HIVE-279 follow-up).');
-};
-
 /**
  * Adapter #2: headless (HIVE-342) and interactive (HIVE-279). `readHook` is Claude's, because
  * codex 0.164 sends Claude-shaped payloads, plus `update_plan` (`./hooks`). HiveTTY's skills reach
- * a Codex session as `developer_instructions` (HIVE-360). Prompt markers stay off: codex 0.165 does
- * not hand a `UserPromptSubmit` hook's context to the model (HIVE-360 D6, measured live).
+ * a Codex session as `developer_instructions` (HIVE-360). Prompt markers are Claude's bytes, and
+ * their entry comes back as Claude's `additionalContext`, printed by the prompt hook's
+ * `contextCommand` (HIVE-360 D6: codex 0.165 reads it from stdout).
  */
 export const codexAdapter: HarnessAdapter = {
   id: 'codex',
@@ -43,7 +40,7 @@ export const codexAdapter: HarnessAdapter = {
   },
   readHook: readCodexHook,
   contextReply: claudeCodeAdapter.contextReply,
-  promptMarker: noMarkers,
+  promptMarker: claudeCodeAdapter.promptMarker,
   foldEdits: () => new Map(),
   meters: () => null,
   foldMeters: foldCodexMeters,
