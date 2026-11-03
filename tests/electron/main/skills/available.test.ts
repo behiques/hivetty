@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { readClaudeSkillNames } from '../../../../electron/main/harness/claude-code/installed';
-import { readAvailableSkillNames } from '../../../../electron/main/skills/available';
+import { readAvailableSkillNames, readCliSkillNames } from '../../../../electron/main/skills/available';
 
 /**
  * Every root is a temp directory, and that is the point rather than hygiene.
@@ -263,5 +263,30 @@ describe('readAvailableSkillNames', () => {
       'alpha',
       'shared',
     ]);
+  });
+});
+
+const fake = (names: string[], places: string) => ({
+  skillNames: () => Promise.resolve(names),
+  pluginNames: () => Promise.resolve([]),
+  sessionOverrides: () => Promise.resolve({}),
+  skillPlaces: places,
+});
+
+describe('readCliSkillNames (HIVE-367)', () => {
+  const byCli = {
+    'claude-code': fake(['graphify'], '~/.claude/skills'),
+    codex: fake(['find-skills', 'graphify'], '~/.agents/skills'),
+    copilot: fake([], ''),
+  } as const;
+
+  it('unions the named CLIs and words each one’s places once', async () => {
+    const got = await readCliSkillNames(at('hive', 'skills'), ['codex', 'claude-code'], (id) => byCli[id]);
+    expect(got.all).toEqual(['find-skills', 'graphify']);
+    expect(got.places).toBe('~/.agents/skills, ~/.claude/skills');
+  });
+
+  it('skips a CLI with no places', async () => {
+    expect((await readCliSkillNames(at('hive', 'skills'), ['copilot'], (id) => byCli[id])).places).toBe('');
   });
 });

@@ -10,15 +10,17 @@
  * the app runs, and an agent naming a skill the user added a minute ago must
  * validate against the folder as it is now, not as it was at boot.
  *
- * It reads **three** roots: HiveTTY's, and the two the harness answers through
- * `installed`. An agent runs the harness's CLI on this machine, which already
+ * It reads HiveTTY's root, and each CLI the agent may run on answers through
+ * its adapter's `installed` (HIVE-367). An agent runs the harness's CLI on this machine, which already
  * loads the user's own skills and plugins; validating against `~/.hivetty/skills` alone refused names
  * the agent could reach anyway, and refused every name at all on the fresh
  * install where that folder is empty. `available.ts` carries the argument in
  * full.
  */
-import { sessionAdapter } from '../harness/registry';
-import { readAvailableSkillNames } from '../skills/available';
+import type { HarnessId } from '@shared/harness-contract';
+
+import { adapterFor } from '../harness/registry';
+import { readCliSkillNames } from '../skills/available';
 import { skillsRoot } from '../skills/paths';
 
 import { agentsRoot } from './paths';
@@ -37,6 +39,8 @@ interface AgentsRuntimeOptions {
    * needs `agents.json`, which only `ipc/index.ts` opens.
    */
   runFiles?: AgentRunFiles;
+  /** Settings › CLIs' agents default (HIVE-341): the CLI a definition with no `harness:` runs on, so its skills are the ones checked (HIVE-367). */
+  defaultCli?: () => HarnessId | undefined;
 }
 
 export function createAgentsRuntime(
@@ -44,14 +48,13 @@ export function createAgentsRuntime(
 ): AgentRegistry {
   return createAgentRegistry({
     root: agentsRoot(),
-    // HIVE-345. The user's skills and plugins are the harness's, so the registry answers them.
-    skillNames: async () => {
-      const { installed } = sessionAdapter();
-      return {
-        ...(await readAvailableSkillNames(skillsRoot(), () => installed.skillNames())),
-        places: installed.skillPlaces,
-      };
-    },
+    // HIVE-345, HIVE-367. The user's skills are each CLI's, so the agent's own CLIs answer them.
+    skillNames: (clis) =>
+      readCliSkillNames(
+        skillsRoot(),
+        clis.length > 0 ? clis : [options.defaultCli?.() ?? 'claude-code'],
+        (id) => adapterFor(id).installed,
+      ),
     ...(options.runFiles === undefined ? {} : { runFiles: options.runFiles }),
   });
 }

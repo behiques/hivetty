@@ -611,3 +611,42 @@ describe('the watcher', () => {
     expect((await reg.list()).agents).toHaveLength(1);
   });
 });
+
+describe('skills per CLI (HIVE-367)', () => {
+  const withFields = (source: string, fields: Record<string, string>) =>
+    source.replace(
+      'icon: ChatCircleDots\n',
+      `icon: ChatCircleDots\n${Object.entries(fields)
+        .map(([key, value]) => `${key}: ${value}\n`)
+        .join('')}`,
+    );
+
+  it('asks for the CLIs the definition names, [] when it names none, once per set in a listing', async () => {
+    const asked: string[][] = [];
+    const made = createAgentRegistry({
+      root,
+      skillNames: async (clis) => {
+        asked.push([...clis]);
+        return clis.includes('codex')
+          ? { all: ['find-skills'], hive: [], places: '~/.agents/skills' }
+          : { all: [], hive: [], places: '~/.claude/skills' };
+      },
+    });
+    open.push(made);
+
+    expect(
+      await made.write('on-codex', withFields(named('on-codex'), { harness: '[codex]', skills: '[find-skills]' })),
+    ).toEqual({ ok: true });
+    const refused = await made.write('on-claude', withFields(named('on-claude'), { skills: '[find-skills]' }));
+    expect(refused).toMatchObject({
+      ok: false,
+      problems: [{ field: 'skills', reason: expect.stringContaining('~/.claude/skills') }],
+    });
+    expect(asked).toEqual([['codex'], []]);
+
+    seed('also-codex', withFields(named('also-codex'), { harness: '[codex, nope]' }));
+    asked.length = 0;
+    await made.list();
+    expect(asked).toEqual([['codex']]);
+  });
+});

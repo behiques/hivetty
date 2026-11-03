@@ -325,7 +325,7 @@ export const FIELD_HELP: Record<string, string> = {
   'wake.on':
     'ledger — anyone addressing it in the log wakes it: you from the console, a session, or another agent. Without it, only the schedule wakes it, and a question addressed to it waits unread until then. slack.mention searches your mentions on wakes it already takes; slack.channel:#name wakes it on anything posted there. Both need the Slack integration, which is not built yet.',
   skills:
-    'Skills it may invoke, from ~/.hivetty/skills, your own ~/.claude/skills, or an installed plugin as plugin:skill. A declaration rather than a sandbox — it catches a name that does not exist; it cannot stop a skill this machine has.',
+    'Skills it may invoke: from ~/.hivetty/skills, or one the CLIs it runs on have themselves (your own skills, or plugin:skill). A declaration rather than a sandbox — it catches a name that does not exist; it cannot stop a skill this machine has.',
   mcp: 'Outside systems it may reach. Naming one does not connect it — signing in happens in Settings › Integrations, and the agent then acts as you, not as a bot.',
   /*
     The widening ladder is spelled out because nothing else on this pane says

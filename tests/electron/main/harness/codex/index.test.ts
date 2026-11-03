@@ -7,6 +7,7 @@ import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-c
 import { codexAdapter } from '../../../../../electron/main/harness/codex';
 import { codexFence } from '../../../../../electron/main/harness/codex/fence';
 import { launchCodexHeadless } from '../../../../../electron/main/harness/codex/headless';
+import { CODEX_SKILL_PLACES } from '../../../../../electron/main/harness/codex/installed';
 import { launchCodexSession } from '../../../../../electron/main/harness/codex/launch';
 import { foldCodexMeters } from '../../../../../electron/main/harness/codex/meters';
 import { readCodexHeadless } from '../../../../../electron/main/harness/codex/headless-reader';
@@ -33,8 +34,8 @@ describe('codexAdapter', () => {
     });
   });
 
-  it('reads no skills of its own (HIVE-344)', () => {
-    expect(codexAdapter.installed.skillPlaces).toBe('');
+  it('reads the user’s own Codex skills (HIVE-367)', () => {
+    expect(codexAdapter.installed.skillPlaces).toBe(CODEX_SKILL_PLACES);
   });
 
   it('wires the headless members', () => {
