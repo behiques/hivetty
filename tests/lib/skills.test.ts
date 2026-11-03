@@ -566,6 +566,12 @@ describe('the CLI skills (HIVE-367)', () => {
     off();
   });
 
+  it('answers null, without throwing, from a bridge that has no cliSkills verb', async () => {
+    bridge({ list: () => Promise.resolve(snapshot([])) });
+    await expect(loadCliSkills()).resolves.toBeUndefined();
+    expect(cliSkillsSnapshot()).toBeNull();
+  });
+
   it('asks nothing without a bridge, and resetSkills clears what a test set', async () => {
     await loadCliSkills();
     expect(cliSkillsSnapshot()).toBeNull();

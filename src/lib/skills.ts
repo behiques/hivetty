@@ -67,7 +67,12 @@ export function cliSkillsSnapshot(): CliSkills | null {
 export async function loadCliSkills(): Promise<void> {
   const bridge = window.hive;
   if (!bridge) return;
-  cliSkills = await bridge.skills.cliSkills().catch((): null => null);
+  try {
+    cliSkills = await bridge.skills.cliSkills();
+  } catch {
+    // A broken channel, or a bridge from before the verb: either way, nothing to show.
+    cliSkills = null;
+  }
   emit();
 }
 
