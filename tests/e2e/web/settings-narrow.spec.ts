@@ -60,6 +60,27 @@ test('a pane opens full width, and back returns to the list', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'Appearance', level: 2 })).toBeHidden();
 });
 
+/**
+ * The window, not only the overlay. The centre stage never draws narrower than
+ * `STAGE_MIN` (520px, HIVE-223), so below the activity bar plus that floor the
+ * shell scrolls with or without Settings open; the 400px tests above can only
+ * claim the overlay itself. At the floor the narrow layout is what shows, and
+ * nothing scrolls.
+ */
+test('at the stage floor the narrow layout shows and the window does not scroll', async ({ page }) => {
+  const floor = await page.evaluate(
+    () => document.querySelector('main')!.getBoundingClientRect().left + 520,
+  );
+  await page.setViewportSize({ width: Math.ceil(floor), height: 800 });
+
+  await expect(nav(page)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Projects', level: 2 })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Close settings' })).toBeInViewport();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true);
+});
+
 test('wide, both halves show and there is no back control', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
 
