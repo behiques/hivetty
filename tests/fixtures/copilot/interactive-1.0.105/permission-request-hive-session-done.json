@@ -1,0 +1,9 @@
+{
+  "hookName": "permissionRequest",
+  "sessionId": "11111111-2222-4333-8444-5555555555c2",
+  "timestamp": 1793714360247,
+  "cwd": "/tmp/copilot-fixture/work",
+  "toolName": "hive/session_done",
+  "toolInput": {},
+  "permissionSuggestions": []
+}

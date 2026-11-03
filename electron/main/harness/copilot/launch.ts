@@ -7,6 +7,7 @@ import { hookCommand } from '../hook-commands';
 import type { LaunchPlan, LaunchSpec } from '../port';
 
 import { COPILOT_SESSION_ENV_KEYS, COPILOT_TOKEN_ENV, copilotMcpConfig } from './headless';
+import { COPILOT_SESSION_PREAPPROVED } from './preapproved';
 
 /**
  * An interactive Copilot session's command line (HIVE-280), measured against copilot 1.0.105 in
@@ -108,8 +109,7 @@ export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
           '--additional-mcp-config',
           shellQuote(JSON.stringify(copilotMcpConfig(hiveServer, HIVE_SESSION_ENV))),
           // HIVE-368: `done` is this one call, so it must not ask. `server(tool)`, COPILOT_DENY_PATTERN's shape.
-          '--allow-tool',
-          shellQuote('hive(session_done)'),
+          ...COPILOT_SESSION_PREAPPROVED.flatMap((tool) => ['--allow-tool', shellQuote(tool.allowTool)]),
         ]),
   ];
   const initialPrompt =

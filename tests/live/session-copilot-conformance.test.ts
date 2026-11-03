@@ -30,6 +30,7 @@ import {
 import { CH } from '../../electron/shared/ipc-contract';
 import type { LedgerReadQuery, LedgerSnapshot } from '../../electron/shared/ledger-contract';
 import type { HiveNotification } from '../../electron/shared/notification-contract';
+import { typedSkill } from '../../electron/shared/skill-render';
 
 /**
  * What only a real interactive `copilot` can prove about a Copilot session (HIVE-280).
@@ -319,6 +320,14 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     rmSync(join(home, 'config.json'), { force: true });
   });
 
+  /** The real hive server, from the desktop build. */
+  const hive = (): StdioServerSpec => {
+    if (!existsSync(HOST)) {
+      throw new Error(`${HOST} is missing. Run \`pnpm desktop:build\` before \`pnpm test:session:copilot\`.`);
+    }
+    return hiveServerSpec({ execPath: process.execPath, scriptPath: HOST });
+  };
+
   /** A stdio server for `--additional-mcp-config` or the user's `mcp-config.json`. */
   const stub = (name: string, mark?: string): StdioServerSpec => ({
     command: 'python3',
@@ -572,6 +581,24 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       expect(replies).toContain('marmalade');
       expect(replies).toContain('quince');
       expect(replies).not.toContain('turnip');
+    },
+    CASE_MS,
+  );
+
+  it(
+    '/hive:done finishes through session_done with no permission prompt, and the typed /exit closes copilot (HIVE-362, HIVE-368)',
+    async () => {
+      const { log, exited } = await run('done', '11111111-2222-4333-8444-5555555555c2', {
+        spec: { pluginDir: rendered, hiveServer: hive() },
+        prompts: [typedSkill('done', 'copilot')],
+        exitRaw: true,
+      });
+      finding('done', { log, exited });
+      expect(done).toEqual([SESSION]);
+      expect(tools.some((t) => /session_done/.test(t))).toBe(true);
+      expect(statuses.some((s) => s.status === 'waiting')).toBe(false);
+      expect(flat(log)).not.toContain('Doyouwant');
+      expect(exited).toBe(true);
     },
     CASE_MS,
   );

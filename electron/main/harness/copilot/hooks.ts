@@ -1,6 +1,8 @@
 import { claudeCodeAdapter } from '../claude-code';
 import type { HookInput, HookReading } from '../port';
 
+import { copilotPreapproved } from './preapproved';
+
 /** Copilot's session events in Claude's spelling (HIVE-280, FINDINGS P0 and P1). */
 const CLAUDE_EVENT: Record<string, string> = {
   sessionStart: 'SessionStart',
@@ -53,6 +55,9 @@ export function readCopilotHook(input: HookInput): HookReading {
   if (event === 'agentStop' && payload['agentId'] !== undefined) return { effects: [] };
   // `permission_prompt` echoes a `permissionRequest` already read; no other type is read (P2).
   if (event === 'notification' && payload['notification_type'] !== 'elicitation_dialog') return { effects: [] };
+
+  // Copilot asks the hook even for a call `--allow-tool` approved; nobody needs to answer it (FINDINGS P11).
+  if (event === 'permissionRequest' && copilotPreapproved(text(payload['toolName']))) return { effects: [] };
 
   const sessionId = text(payload['sessionId']);
   const cwd = text(payload['cwd']);

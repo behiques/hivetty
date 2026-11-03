@@ -193,4 +193,16 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
       effects: [],
     });
   });
+
+  it("reads no block for a call the launch pre-approved: Copilot fires permissionRequest anyway (HIVE-362, FINDINGS P11)", () => {
+    const asked = readCopilotHook(
+      session(wrapped(tui('permission-request-hive-session-done.json'), 'permissionRequest')),
+    );
+    expect(asked).toEqual({ effects: [] });
+  });
+
+  it('still raises a block for any other hive tool', () => {
+    const other = { ...(tui('permission-request-hive-session-done.json') as object), toolName: 'hive/ledger_post' };
+    expect(track(readCopilotHook(session(wrapped(other, 'permissionRequest')))).held.blocked).toBe(1);
+  });
 });
