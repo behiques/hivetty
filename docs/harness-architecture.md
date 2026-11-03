@@ -699,8 +699,11 @@ unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSIS
 - `--additional-mcp-config`: the stdio hive host, its identity forwarded by `${VAR}` reference
   (`copilotMcpConfig`, shared with headless). Both add to the user's own hooks and servers (P7).
 - The second `--plugin-dir` is HiveTTY's rendered Copilot folder (`plugins/copilot`, HIVE-362), a
-  Claude-format plugin Copilot reads as it is. Its skills are typed `/hive:<name>`: Copilot prefixes a
-  plugin skill only on a name collision, but `/hive:<name>` loads either way (FINDINGS P10). The same
+  Claude-format plugin Copilot reads as it is. Each skill is rendered with the frontmatter
+  `name: hive-<name>` (`CAPABILITIES.copilot.skills.namePrefix`, HIVE-382) and typed
+  `/hive:hive-<name>`: Copilot keys a skill on that name, a repository skill of the same bare name
+  (`.github/skills`, `.agents/skills`, `.claude/skills`) would otherwise hide ours outright, and with an
+  argument after it the TUI resolves only `<plugin>:<name>` (FINDINGS P10). The same
   folder is appended to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`, after any value the profile set, so its
   `instructions/hivetty.instructions.md` stands in the session's instructions. That rule tells the
   model a bare `📒 <ref>` is a ledger entry to read with `hive-ledger_read`, so `promptMarker` is

@@ -234,12 +234,22 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     };
     probe('zz-plain', 'marmalade');
     probe('zz-collide', 'quince');
-    // The user's own skill of the same name: Copilot must then name ours hive:zz-collide (fact 2).
+    // The user's own skill of the same name (not read from a scratch home, fact 2; HIVE-382 names ours hive-zz-collide).
     mkdirSync(join(home, 'skills', 'zz-collide'), { recursive: true });
     writeFileSync(
       join(home, 'skills', 'zz-collide', 'SKILL.md'),
       "---\nname: zz-collide\ndescription: The user's own.\n---\nReply with the single word turnip and nothing else.\n",
     );
+    // The repository's own skill of the same name, in each root Copilot reads one from. Before HIVE-382
+    // any one of them hid ours outright (FINDINGS P10); rendered as hive-zz-repo, ours cannot collide.
+    probe('zz-repo', 'damson');
+    for (const [root, word] of [['.github', 'persimmon'], ['.agents', 'loquat'], ['.claude', 'tamarillo']] as const) {
+      mkdirSync(join(repo, root, 'skills', 'zz-repo'), { recursive: true });
+      writeFileSync(
+        join(repo, root, 'skills', 'zz-repo', 'SKILL.md'),
+        `---\nname: zz-repo\ndescription: The repository's own.\n---\nReply with the single word ${word} and nothing else.\n`,
+      );
+    }
     rendered = join(scratch, 'plugins', 'copilot');
     await renderSkills(rendered, 'copilot', await readUserSkills(source), { version: '0.0.0-live', doneUrl: null });
 
@@ -568,12 +578,13 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
   );
 
   it(
-    'loads a HiveTTY skill typed /hive:<name>, whether or not the bare name collides (HIVE-362)',
+    'loads a HiveTTY skill typed /hive:hive-<name>, an argument after it or not, beside a personal or repository skill of its bare name (HIVE-362, HIVE-382)',
     async () => {
       const id = '11111111-2222-4333-8444-5555555555c1';
       const { log } = await run('typed-form', id, {
         spec: { pluginDir: rendered },
-        prompts: ['/hive:zz-plain', '/hive:zz-collide'],
+        // An argument after two of them: a skill whose own name holds a colon resolves only without one (FINDINGS P10).
+        prompts: [typedSkill('hive:zz-plain', 'copilot'), `${typedSkill('hive:zz-collide', 'copilot')} now`, `${typedSkill('hive:zz-repo', 'copilot')} now`],
       });
       finding('typed-form', { log });
       // From the transcript: the TUI's spinner interleaves its frames with the reply it draws.
@@ -581,6 +592,8 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       expect(replies).toContain('marmalade');
       expect(replies).toContain('quince');
       expect(replies).not.toContain('turnip');
+      expect(replies).toContain('damson');
+      for (const theirs of ['persimmon', 'loquat', 'tamarillo']) expect(replies).not.toContain(theirs);
     },
     CASE_MS,
   );
@@ -590,7 +603,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     async () => {
       const { log, exited } = await run('done', '11111111-2222-4333-8444-5555555555c2', {
         spec: { pluginDir: rendered, hiveServer: hive() },
-        prompts: [typedSkill('done', 'copilot')],
+        prompts: [typedSkill('hive:done', 'copilot')],
         exitRaw: true,
       });
       finding('done', { log, exited });
@@ -609,7 +622,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       // ticketWorkflowStart is what the core types; its first step names the Hive's jira tool.
       const { log } = await run('work-on', '11111111-2222-4333-8444-5555555555c3', {
         spec: { pluginDir: rendered, hiveServer: hive() },
-        prompts: [`${typedSkill('work-on', 'copilot')} HIVE-1`],
+        prompts: [`${typedSkill('hive:work-on', 'copilot')} HIVE-1`],
         answer: '\x1b',
       });
       finding('work-on', { log });
@@ -627,9 +640,10 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     finding('skill-list', { stdout: listed.stdout, stderr: listed.stderr });
     // The JSON array first; a refused skill is reported in prose after it.
     const json = listed.stdout.slice(0, listed.stdout.lastIndexOf(']') + 1);
-    const ours = (JSON.parse(json) as Array<{ name: string; source: string }>)
-      .filter((s) => s.source === 'plugin')
-      .map((s) => s.name.replace(/^hive:/, ''));
+    const plugin = (JSON.parse(json) as Array<{ name: string; source: string }>).filter((s) => s.source === 'plugin');
+    // Every one named hive-<name>, so a repository's zz-repo hides none of them (HIVE-382).
+    expect(plugin.every((s) => s.name.startsWith('hive-'))).toBe(true);
+    const ours = plugin.map((s) => s.name.replace(/^hive-/, ''));
     // Every rendered skill loads: a frontmatter Copilot's YAML refuses is dropped from the list (HIVE-369).
     expect(ours.sort()).toEqual(readdirSync(join(rendered, 'skills')).sort());
     expect(`${listed.stdout}${listed.stderr}`).not.toMatch(/failed to load/i);

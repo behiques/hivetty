@@ -696,7 +696,7 @@ describe('per CLI (HIVE-369)', () => {
     const text = (cli: string) => readFile(join(out, cli, 'skills', 'flow', 'SKILL.md'), 'utf8');
     expect(await text('claude-code')).toContain('Call mcp__hive__ledger_ask, then hive:plan.');
     expect(await text('codex')).toContain('Call mcp__hive__ledger_ask, then $plan.');
-    expect(await text('copilot')).toContain('Call hive-ledger_ask, then /hive:plan.');
+    expect(await text('copilot')).toContain('Call hive-ledger_ask, then /hive:hive-plan.');
   });
 
   it('gives every CLI every skill and its done (HIVE-368), and lists each in the Codex catalog', async () => {
@@ -724,11 +724,13 @@ describe('per CLI (HIVE-369)', () => {
     );
   });
 
-  it('copies a skill with no placeholder exactly as written', async () => {
+  it('copies a skill with no placeholder as written, but for its hive- name (HIVE-382)', async () => {
     const literal = '---\nname: mine\ndescription: d\n---\nUse mcp__hive__ledger_ask.\n';
     await writeSkill('mine', literal);
     await renderSkills(pluginRoot, 'copilot', await readUserSkills(source), { version: '1', doneUrl: null });
-    expect(await readFile(join(pluginRoot, 'skills', 'mine', 'SKILL.md'), 'utf8')).toBe(literal);
+    expect(await readFile(join(pluginRoot, 'skills', 'mine', 'SKILL.md'), 'utf8')).toBe(
+      literal.replace('name: mine', 'name: hive-mine'),
+    );
   });
 
   it('renders a bundle markdown file and copies the rest', async () => {

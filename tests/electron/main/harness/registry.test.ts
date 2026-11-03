@@ -52,6 +52,7 @@ describe('harness registry', () => {
         toolPrefix: 'mcp__hive__',
         refPrefix: 'hive:',
         typedPrefix: '/hive:',
+        namePrefix: '',
         pluginRoot: '$CLAUDE_PLUGIN_ROOT',
       },
     });
