@@ -486,6 +486,11 @@ login shell is typed, as Claude's is (`&& exit`, the task after `--`), flag by f
   `additionalContext` (HIVE-360 D6). No `Notification`:
   idle is `Stop`, and a permission is `PermissionRequest`, which is Claude's shape (P3). `/fence`
   is not used: a session's TUI asks for itself (D5).
+  With a rendered skills folder, `Stop` runs a second command in the same group: goal-on's verifier,
+  `goalVerifierCommand` (`node '<folder>/skills/goal-on/scripts/verify-goal.mjs' --harness=codex`,
+  HIVE-370). Codex runs both hooks in the group, continues the turn on the verifier's
+  `{"decision":"block"}`, releases on silence, reports `{"decision":"allow"}` as a failed hook,
+  and has no consecutive-block cap (FINDINGS P10, 0.166.0).
 - `-c mcp_servers.hive.*`: the stdio host, `env_vars` forwarding the session's identity by name,
   so no token is on the argv. Omitted before the host script is written.
 - `-c mcp_servers.hive.tools.session_done.approval_mode="approve"`: `done` is one hive call, so it
@@ -730,6 +735,12 @@ status, the inbox and the tracker see one shape:
 | `permissionRequest` | `PermissionRequest` | raises the card and "needs you" |
 | `postToolUse` | `PostToolUse` | clears it by tool name: no `tool_use_id` |
 | `agentStop` | `Stop` | a subagent's (`agentId` set) is ignored |
+
+With the skills rendered, the hooks plugin's `agentStop` carries a second command after the status
+hook: goal-on's verifier (`goalVerifierCommand`, `--harness=copilot`, 30 s, HIVE-370). Copilot
+continues the turn on its `{"decision":"block"}`, releases on `allow` or silence, and stops honouring
+blocks after 8 in a row (FINDINGS P13). The verifier drops a subagent's stop itself, since it is
+not the receiver.
 | `notification` `elicitation_dialog` | `PermissionRequest` for `AskUserQuestion` | an `ask_user` question fires no `permissionRequest` (P2) |
 
 File writes pair by one name, `edit`: the permission names its kind (`edit`) while `postToolUse`
@@ -804,11 +815,11 @@ the renderer reads it too:
 | | claude-code | codex | copilot |
 |---|---|---|---|
 | `{{tool:x}}` → | `mcp__hive__x` | `mcp__hive__x` | `hive-x` |
-| `{{skill:x}}` → | `hive:x` | `$x` | `/x` |
-| a ticket session types | `/hive:x` | `$x` | `/x` |
+| `{{skill:x}}` → | `hive:x` | `$hive-x` | `/hive:hive-x` |
+| a ticket session types | `/hive:x` | `$hive-x` | `/hive:hive-x` |
 | `{{plugin_root}}` → | `$CLAUDE_PLUGIN_ROOT` | the folder's own path | the folder's own path |
 
-Copilot's `/x` is provisional until HIVE-362's probe. Codex and Copilot set no variable for their
+Codex and Copilot type HiveTTY's skills under a `hive-` name (`typedSkill`, HIVE-382, HIVE-384). Codex and Copilot set no variable for their
 folder, so `renderSkills` writes its `root` where `{{plugin_root}}` stood (a host path, like
 `catalog.md`'s). Nothing maps them for a container: Codex sessions and runs are refused in one,
 and whoever lifts that refusal maps them (HIVE-360 D5).
@@ -848,8 +859,9 @@ the same `HIVE_TOOLS` list the MCP host serves.
 
 **Next.** HIVE-360 hands Codex `catalog.md` as `developer_instructions` (no container mapping:
 Codex is refused in one); HIVE-362 passed
-Copilot's folder as a second `--plugin-dir`; HIVE-368 brought `done` to both; HIVE-370 gives them
-goal-on's stop hook; HIVE-371 words subagent dispatch per CLI.
+Copilot's folder as a second `--plugin-dir`; HIVE-368 brought `done` to both; HIVE-370 gave them
+goal-on's stop hook (the verifier beside each status hook, the brief named by `$HIVE_SESSION_ID`);
+HIVE-371 words subagent dispatch per CLI.
 
 ## Adding a second harness
 

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs';
 import {
   chmod,
   lstat,
@@ -19,6 +20,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderSkills } from '../../../../electron/main/skills/render';
 import { readUserSkills } from '../../../../electron/main/skills/read';
+import { renderSkillText } from '../../../../electron/shared/skill-render';
 
 /**
  * Pass-through spies on `copyFile` and `writeFile`, in the shape
@@ -722,6 +724,15 @@ describe('per CLI (HIVE-369)', () => {
     expect(await readFile(join(pluginRoot, 'codex', 'skills', 'goal', 'SKILL.md'), 'utf8')).toBe(
       '---\nname: hive-goal\ndescription: d\n---\nbody\n',
     );
+  });
+
+  it('tells every CLI how the brief is named and which verifiers run (HIVE-370)', () => {
+    const source = readFileSync(join(process.cwd(), 'resources/skills/goal-on/SKILL.md'), 'utf8');
+    for (const cli of ['claude-code', 'codex', 'copilot'] as const) {
+      const text = renderSkillText(source, cli, '/root');
+      expect(text).toContain('`~/.hivetty/goals/<$HIVE_SESSION_ID>.md`');
+      expect(text).toContain('on Codex and Copilot only the command verifier runs');
+    }
   });
 
   it('copies a skill with no placeholder as written, but for its hive- name (HIVE-382)', async () => {

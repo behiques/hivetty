@@ -19,6 +19,9 @@ export const tomlTable = (record: Record<string, string>): string =>
     .map(([key, value]) => `${toml(key)}=${toml(value)}`)
     .join(',')}}`;
 
-/** One hook event's `-c` value: a single matcher group running `command`. */
-export const hookEntry = (event: string, command: string, matcher?: string): string =>
-  `hooks.${event}=[{${matcher === undefined ? '' : `matcher=${toml(matcher)},`}hooks=[{type="command",command=${toml(command)}}]}]`;
+/** One hook event's `-c` value: a single matcher group running each command, in order. */
+export const hookEntry = (event: string, command: string | readonly string[], matcher?: string): string =>
+  `hooks.${event}=[{${matcher === undefined ? '' : `matcher=${toml(matcher)},`}hooks=[${[command]
+    .flat()
+    .map((c) => `{type="command",command=${toml(c)}}`)
+    .join(',')}]}]`;

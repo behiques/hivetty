@@ -20,4 +20,9 @@ describe('codex toml (HIVE-279)', () => {
       'hooks.PostToolUse=[{matcher="*",hooks=[{type="command",command="run"}]}]',
     );
   });
+
+  it('puts several commands in one matcher group, in order (HIVE-370)', () => {
+    expect(hookEntry('Stop', ['a', 'b'])).toBe('hooks.Stop=[{hooks=[{type="command",command="a"},{type="command",command="b"}]}]');
+    expect(hookEntry('Stop', 'a')).toBe('hooks.Stop=[{hooks=[{type="command",command="a"}]}]');
+  });
 });

@@ -3,7 +3,7 @@ import { HOOK_ENV_RECEIVER_URL, HOOK_ENV_SESSION, HOOK_ENV_TOKEN } from '@shared
 
 import { shellQuote } from '../../container/shell-quote';
 import { SUBMIT_DELAY_MS } from '../claude-code/launch';
-import { hookCommand } from '../hook-commands';
+import { goalVerifierCommand, hookCommand } from '../hook-commands';
 import type { LaunchPlan, LaunchSpec } from '../port';
 
 import { COPILOT_SESSION_ENV_KEYS, COPILOT_TOKEN_ENV, copilotMcpConfig } from './headless';
@@ -20,6 +20,8 @@ import { COPILOT_SESSION_PREAPPROVED } from './preapproved';
  * - The user's login authenticates (D3): the token keys are unset, in the pty and after the profile.
  * - HiveTTY's rendered skills are a second `--plugin-dir` (HIVE-362), and the same folder is appended to
  *   `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` so its marker rule stands in the session's instructions.
+ * - With the skills rendered, `agentStop` also runs goal-on's verifier beside the status hook (HIVE-370;
+ *   FINDINGS P13: the block is honoured, eight in a row at most).
  */
 
 /** Copilot reads `<dir>/instructions/*.instructions.md` from each listed dir (spec, fact 3). */
@@ -58,29 +60,42 @@ const oneOf = (what: string, value: string, allowed: readonly string[]): string 
   return value;
 };
 
-/** The hooks plugin: the same bytes for every session, since identity comes from the env. */
-export const copilotPluginFiles = (dir: string): { path: string; text: string }[] => [
-  {
-    path: `${dir}/plugin.json`,
-    text: `${JSON.stringify({ name: 'hivetty', version: '1.0.0', description: 'HiveTTY session hooks' }, null, 2)}\n`,
-  },
-  {
-    path: `${dir}/hooks/hooks.json`,
-    text: `${JSON.stringify(
-      {
-        version: 1,
-        hooks: Object.fromEntries(
-          COPILOT_SESSION_EVENTS.map((event) => [
-            event,
-            [{ type: 'command', bash: hookCommand({ harness: 'copilot', wrap: event }), timeoutSec: 10 }],
-          ]),
-        ),
-      },
-      null,
-      2,
-    )}\n`,
-  },
-];
+/**
+ * The hooks plugin: the same bytes for every session with the same skills folder, since identity
+ * comes from the env. `agentStop` also runs goal-on's verifier (HIVE-370, FINDINGS P13), which
+ * ignores a subagent's stop itself (`agentId`), because it is not the receiver.
+ */
+export const copilotPluginFiles = (dir: string, skillsDir?: string): { path: string; text: string }[] => {
+  const verifier = (event: string) =>
+    event === 'agentStop' && skillsDir !== undefined
+      ? [{ type: 'command', bash: goalVerifierCommand(skillsDir, 'copilot'), timeoutSec: 30 }]
+      : [];
+  return [
+    {
+      path: `${dir}/plugin.json`,
+      text: `${JSON.stringify({ name: 'hivetty', version: '1.0.0', description: 'HiveTTY session hooks' }, null, 2)}\n`,
+    },
+    {
+      path: `${dir}/hooks/hooks.json`,
+      text: `${JSON.stringify(
+        {
+          version: 1,
+          hooks: Object.fromEntries(
+            COPILOT_SESSION_EVENTS.map((event) => [
+              event,
+              [
+                { type: 'command', bash: hookCommand({ harness: 'copilot', wrap: event }), timeoutSec: 10 },
+                ...verifier(event),
+              ],
+            ]),
+          ),
+        },
+        null,
+        2,
+      )}\n`,
+    },
+  ];
+};
 
 /** `unset …; copilot --session-id <id> … [-i '<task>'] && exit`, typed into a login shell like Codex's. */
 export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
@@ -132,6 +147,6 @@ export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
     ),
     stripEnv: [...COPILOT_SESSION_ENV_KEYS, ...UNSET_KEYS],
     submitDelayMs: SUBMIT_DELAY_MS,
-    files: copilotPluginFiles(hooksDir),
+    files: copilotPluginFiles(hooksDir, skillsDir),
   };
 }

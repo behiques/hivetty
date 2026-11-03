@@ -28,6 +28,7 @@
  * says which one it is (`--harness=claude`) rather than guessing from the payload:
  *   Copilot `agentStop`: {"decision":"allow"} | {"decision":"block","reason":"..."}
  *   Claude Code `Stop`:  {"decision":"block","reason":"..."} to block; silence to release.
+ *   Codex `Stop`:        the same as Claude Code (`--harness=codex`, FINDINGS P10).
  *
  * TWO FAILURE MODES ARE FORBIDDEN, and they pull in opposite directions:
  *   1. Wedging a session. Every unexpected condition must release the turn.
@@ -64,13 +65,16 @@ const GH_TIMEOUT_MS = 10_000;
  * script was born.
  */
 export function harnessOf(argv = process.argv.slice(2)) {
-  return argv.includes('--harness=claude') ? 'claude' : 'copilot';
+  if (argv.includes('--harness=claude')) return 'claude';
+  if (argv.includes('--harness=codex')) return 'codex';
+  return 'copilot';
 }
 
 export function emitFor(harness, decision, reason) {
-  if (harness === 'claude') {
-    // Claude Code blocks on `{"decision":"block"}` and releases on anything else.
-    // The quietest way to release is to say nothing at all.
+  if (harness === 'claude' || harness === 'codex') {
+    // Both block on `{"decision":"block"}` and release on silence. Codex reports
+    // `{"decision":"allow"}` as a failed hook (FINDINGS P10), so the quietest way to
+    // release is to say nothing at all.
     return decision === 'block' ? JSON.stringify({ decision: 'block', reason }) : '';
   }
   return JSON.stringify(reason ? { decision, reason } : { decision });
@@ -103,6 +107,14 @@ export function sessionIdOf(payload) {
   return id;
 }
 
+/**
+ * A subagent's turn end (HIVE-370). Copilot sends `agentStop` with `agentId` for one; Codex
+ * names a subagent `agent_id` (on `SubagentStop`, never on `Stop` as of 0.166, FINDINGS P10).
+ * The receiver drops both (`copilot/hooks.ts`), and this hook, run directly by the CLI, must
+ * too, or it would spend the parent's budget and block a subagent on the parent's Outcome.
+ */
+export const isSubagent = (payload) => payload?.agentId !== undefined || payload?.agent_id !== undefined;
+
 export const briefDir = () => process.env.HIVE_GOALS_DIR || join(homedir(), '.hivetty', 'goals');
 
 /** Split a brief into { header, body }. Returns null if there is no frontmatter. */
@@ -117,7 +129,7 @@ export function headerValue(header, key) {
   if (!m) return null;
   // Tolerate trailing `# comments` and quoted values — the brief template in
   // goal-on/SKILL.md demonstrates inline comments on header keys.
-  return m[1].replace(/\s+#.*$/, '').trim().replace(/^["']|["']$/g, '');
+  return m[1].replace(/(^|\s+)#.*$/, '').trim().replace(/^["']|["']$/g, '');
 }
 
 /**
@@ -132,38 +144,61 @@ export function headerValue(header, key) {
  * INSIDE the file and survives any renaming. Newest wins if several match.
  */
 export function resolveBrief(dir, sessionId) {
-  for (const name of [`${sessionId}.md`, `session_${sessionId}.md`]) {
-    const p = join(dir, name);
-    if (existsSync(p)) return p;
-  }
+  return briefCandidates(dir, sessionId)[0] ?? null;
+}
+
+/** Every brief that answers to `sessionId`, in `resolveBrief`'s order: the two names, then header matches, newest first. */
+function briefCandidates(dir, sessionId) {
+  const named = [`${sessionId}.md`, `session_${sessionId}.md`].map((name) => join(dir, name)).filter((p) => existsSync(p));
 
   let names;
   try {
     names = readdirSync(dir);
   } catch {
-    return null; // no brief directory at all — not a goal-on machine yet
+    return named; // no brief directory at all — not a goal-on machine yet
   }
 
   const want = new RegExp(`^session:[ \\t]*["']?${sessionId.replace(/[.]/g, '\\.')}["']?[ \\t]*$`, 'm');
-  let best = null;
-  let bestMtime = -Infinity;
+  const found = [];
 
   for (const name of names) {
     if (!name.endsWith('.md')) continue;
     const p = join(dir, name);
+    if (named.includes(p)) continue;
     try {
       const split = splitFrontmatter(readFileSync(p, 'utf8'));
       if (!split || !want.test(split.header)) continue;
-      const mtime = statSync(p).mtimeMs;
-      if (mtime > bestMtime) {
-        best = p;
-        bestMtime = mtime;
-      }
+      found.push({ p, mtime: statSync(p).mtimeMs });
     } catch {
       /* an unreadable neighbour must not stop the search */
     }
   }
-  return best;
+  return [...named, ...found.sort((a, b) => b.mtime - a.mtime).map((f) => f.p)];
+}
+
+/**
+ * This hook's brief (HIVE-370). `$HIVE_SESSION_ID` is the standard name on every CLI, since a model
+ * on Codex or Copilot cannot learn its CLI's own id; the payload's id stays the fallback, the name
+ * Claude briefs had before. HiveTTY's ids are a counter that restarts with the app (`sess-07`
+ * comes round again), so a brief found by one belongs to the first CLI session that stamped it:
+ * a `cli_session:` naming another is a stale brief, never this session's. A stale one does not
+ * end the search: the next brief answering to the hive id (another name, or `session:` in its
+ * header) may be this session's own.
+ */
+export function findBrief(dir, cliId, hiveId) {
+  const hive = sessionIdOf({ sessionId: hiveId });
+  if (hive) {
+    for (const p of briefCandidates(dir, hive)) {
+      try {
+        const split = splitFrontmatter(readFileSync(p, 'utf8'));
+        const bound = split ? headerValue(split.header, 'cli_session') : null;
+        if (!bound || bound === cliId) return p; // empty or comment-only (the template's) is unbound
+      } catch {
+        /* unreadable: try the next */
+      }
+    }
+  }
+  return resolveBrief(dir, cliId);
 }
 
 /**
@@ -573,8 +608,10 @@ function writeAtomic(path, contents) {
   try {
     writeFileSync(tmp, contents, 'utf8');
     renameSync(tmp, path);
+    return true;
   } catch {
     /* a read-only or unwritable brief must not wedge the turn */
+    return false;
   }
 }
 
@@ -582,10 +619,11 @@ function main() {
   const harness = harnessOf();
   try {
     const payload = readPayload();
+    if (isSubagent(payload)) return emit('allow', undefined, harness);
     const sessionId = sessionIdOf(payload);
     if (!sessionId) return emit('allow', undefined, harness);
 
-    const briefPath = resolveBrief(briefDir(), sessionId);
+    const briefPath = findBrief(briefDir(), sessionId, process.env.HIVE_SESSION_ID);
     if (!briefPath) return emit('allow', undefined, harness); // not a goal-on session
 
     const md = readFileSync(briefPath, 'utf8');
@@ -593,8 +631,12 @@ function main() {
     const result = decide(md, { checkPr: (header) => ghPrCheck(header, cwd), readPlan: readPlanFile });
 
     if (result.write) {
-      writeAtomic(briefPath, result.write);
-      postReceipt(result.write, sessionId, md);
+      // The binding rides on every write, so the Claude ceiling can find a brief named by the hive id.
+      const write = setHeaderField(result.write, 'cli_session', sessionId);
+      // Turn count and binding that cannot persist would block every turn forever (Codex has no
+      // block cap), so an unwritable brief releases the turn.
+      if (!writeAtomic(briefPath, write)) return emit('allow', undefined, harness);
+      postReceipt(write, sessionId, md);
     }
     if (result.action === 'block') return emit('block', result.reason, harness);
     return emit('allow', undefined, harness);

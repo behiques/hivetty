@@ -229,3 +229,23 @@ HIVE-382 probed the rest (`copilot --plugin-dir <p> skill list --json` in a scra
 **Consequence.**
 - A fixed list cannot see these approvals: they live in Copilot's own state, and two of them change mid-session. `COPILOT_SESSION_PREAPPROVED` stays HiveTTY's own launch list.
 - Stopping the flash is a follow-up story. The lead: the prompt Copilot actually draws is the `notification` of type `permission_prompt` (P2), which the reader skips today.
+
+## P13: agentStop block (HIVE-370), copilot 1.0.105
+
+`copilot -p 'Reply with the word hi.' --allow-all-tools --plugin-dir <probe>` in a scratch git repo, signed in
+through the user's `gh` login, the probe plugin's one `agentStop` hook logging each payload and printing
+`{"decision":"block","reason":"…reply PLUM<n>"}` until a counter reaches `PROBE_MAX`, then either
+`{"decision":"allow"}` (copilot shape) or nothing (claude shape). (Numbered P13 because P10 to P12 were taken;
+the plan's "FINDINGS P10" for Copilot means this section.)
+
+| Probe | Result |
+| --- | --- |
+| `PROBE_MAX=2`, then `allow` | `hi`, `PLUM1`, `PLUM2`; the hook ran 3 times, `stop_hook_active` `false` then `true`, `stopReason: end_turn` on each. |
+| `PROBE_MAX=20`, then `allow` | 9 runs, `PLUM8` last. **Cap of 8 consecutive blocks**: the ninth block is ignored and the turn ends. |
+| `PROBE_MAX=0`, silence | `hi`, one run, the turn ends cleanly. |
+| `PROBE_MAX=1`, then silence | `hi`, `PLUM1`, two runs: silence releases after a block too. |
+| A subagent | Not re-driven: `hooks-1.0.104/agent-stop-subagent.json` already carries `agentId`, `agentType` and `parentAgentId` on a subagent's `agentStop`. |
+
+**P13: Copilot honours the block.** `{"decision":"block","reason"}` on `agentStop` continues the turn with the
+reason as the next prompt; `{"decision":"allow"}` and silence both release. Copilot stops honouring blocks after
+8 in a row, the same as goal-on's default `turn_budget`. Measured under `-p`; the TUI case is HIVE-370's live test.

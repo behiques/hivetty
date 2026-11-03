@@ -6,10 +6,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, utimesSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, utimesSync, readFileSync, chmodSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   decide,
@@ -30,6 +31,8 @@ import {
   setHeaderStatus,
   setHeaderField,
   headerValue,
+  isSubagent,
+  findBrief,
 } from '../../../../resources/skills/goal-on/scripts/verify-goal.mjs';
 
 const brief = ({
@@ -406,8 +409,14 @@ test('stamping leaves the body untouched', () => {
 
 test('the harness is declared by the hook command, never guessed', () => {
   assert.equal(harnessOf(['--harness=claude']), 'claude');
+  assert.equal(harnessOf(['--harness=codex']), 'codex');
   assert.equal(harnessOf([]), 'copilot');
   assert.equal(harnessOf(['--something-else']), 'copilot');
+});
+
+test('Codex gets its Stop shape: JSON to block, silence to release (FINDINGS P10)', () => {
+  assert.deepEqual(JSON.parse(emitFor('codex', 'block', 'because')), { decision: 'block', reason: 'because' });
+  assert.equal(emitFor('codex', 'allow'), '');
 });
 
 test('Claude Code gets its Stop shape: JSON to block, silence to release', () => {
@@ -426,7 +435,117 @@ test('Copilot keeps its agentStop shape unchanged', () => {
   });
 });
 
+// --- subagents ---------------------------------------------------------------
+
+const SCRIPT = fileURLToPath(new URL('../../../../resources/skills/goal-on/scripts/verify-goal.mjs', import.meta.url));
+/** The script as a CLI runs it: payload on stdin, no receiver. */
+const runHook = (payload, { env = {}, args = [] } = {}) =>
+  spawnSync(process.execPath, [SCRIPT, ...args], {
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+    env: { ...process.env, HIVE_RECEIVER_URL: '', HIVE_SESSION_ID: '', ...env },
+  });
+
+test('a subagent is either spelling of the agent id', () => {
+  assert.equal(isSubagent({ sessionId: 's', agentId: 'a1' }), true); // Copilot
+  assert.equal(isSubagent({ session_id: 's', agent_id: 'a1' }), true); // Codex
+  assert.equal(isSubagent({ sessionId: 's' }), false);
+  assert.equal(isSubagent(null), false);
+});
+
+test("a subagent's stop releases at once and leaves the brief alone", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-sub-'));
+  const path = join(dir, 'abc.md');
+  const md = brief({ outcome: '- [ ] not yet\n' });
+  writeFileSync(path, md);
+  const run = runHook({ sessionId: 'abc', agentId: 'sub-1' }, { env: { HIVE_GOALS_DIR: dir } });
+  assert.equal(run.stdout, '{"decision":"allow"}');
+  assert.equal(readFileSync(path, 'utf8'), md);
+});
+
 // --- finding the brief -------------------------------------------------------
+
+test('findBrief: $HIVE_SESSION_ID names the brief first', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-find-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief());
+  writeFileSync(join(dir, 'cli-uuid.md'), brief());
+  assert.equal(findBrief(dir, 'cli-uuid', 'sess-07'), join(dir, 'sess-07.md'));
+});
+
+test('findBrief: a brief bound to another CLI session is someone else’s', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-find-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief({ extra: 'cli_session: old-uuid\n' }));
+  assert.equal(findBrief(dir, 'new-uuid', 'sess-07'), null);
+  assert.equal(findBrief(dir, 'old-uuid', 'sess-07'), join(dir, 'sess-07.md'));
+});
+
+test("findBrief: a stale brief under the hive id does not hide this session's own", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-find-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief({ extra: 'session: sess-07\ncli_session: old-uuid\n' }));
+  writeFileSync(join(dir, 'sess-07-fix.md'), brief({ extra: 'session: sess-07\n' }));
+  writeFileSync(join(dir, 'sess-07-older.md'), brief({ extra: 'session: sess-07\ncli_session: other-uuid\n' }));
+  assert.equal(findBrief(dir, 'new-uuid', 'sess-07'), join(dir, 'sess-07-fix.md'));
+  assert.equal(findBrief(dir, 'old-uuid', 'sess-07'), join(dir, 'sess-07.md'));
+  assert.equal(resolveBrief(dir, 'sess-07'), join(dir, 'sess-07.md'));
+});
+
+test('findBrief: falls back to the CLI id, and to nothing without a usable hive id', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-find-'));
+  writeFileSync(join(dir, 'cli-uuid.md'), brief());
+  assert.equal(findBrief(dir, 'cli-uuid', 'sess-07'), join(dir, 'cli-uuid.md'));
+  assert.equal(findBrief(dir, 'cli-uuid', undefined), join(dir, 'cli-uuid.md'));
+  assert.equal(findBrief(dir, 'cli-uuid', '../escape'), join(dir, 'cli-uuid.md'));
+  assert.equal(findBrief(dir, 'other', 'sess-07'), null);
+});
+
+test('findBrief: the template’s comment-only cli_session is unbound, not another session', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-tpl-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief({ extra: 'cli_session:               # written by the verifier, never by you\n' }));
+  assert.equal(findBrief(dir, 'new-uuid', 'sess-07'), join(dir, 'sess-07.md'));
+});
+
+test('findBrief: a bound cli_session may carry a trailing comment; another session’s is still skipped', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-cmt-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief({ extra: 'cli_session: old-uuid   # stamped\n' }));
+  assert.equal(findBrief(dir, 'old-uuid', 'sess-07'), join(dir, 'sess-07.md'));
+  assert.equal(findBrief(dir, 'new-uuid', 'sess-07'), null);
+});
+
+test('a brief copied verbatim from the template is held', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-tplhold-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief({ extra: 'cli_session:               # written by the verifier, never by you\n' }));
+  const run = runHook({ session_id: 'thread-1' }, { env: { HIVE_GOALS_DIR: dir, HIVE_SESSION_ID: 'sess-07' }, args: ['--harness=codex'] });
+  assert.equal(JSON.parse(run.stdout).decision, 'block');
+});
+
+test('a brief that cannot be written is allowed, never blocked forever', { skip: process.getuid?.() === 0 }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-ro-'));
+  writeFileSync(join(dir, 'sess-07.md'), brief());
+  chmodSync(dir, 0o555);
+  try {
+    const run = runHook({ session_id: 'thread-1' }, { env: { HIVE_GOALS_DIR: dir, HIVE_SESSION_ID: 'sess-07' }, args: ['--harness=codex'] });
+    assert.equal(run.stdout, '');
+  } finally {
+    chmodSync(dir, 0o755);
+  }
+});
+
+test('the hook binds a brief found by $HIVE_SESSION_ID to the CLI session that stamped it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-bind-'));
+  const path = join(dir, 'sess-07.md');
+  writeFileSync(path, brief({ status: 'PENDING-APPROVAL' }));
+  const run = runHook({ session_id: 'thread-1' }, { env: { HIVE_GOALS_DIR: dir, HIVE_SESSION_ID: 'sess-07' }, args: ['--harness=codex'] });
+  assert.equal(run.stdout, '');
+  assert.match(readFileSync(path, 'utf8'), /^cli_session: thread-1$/m);
+  // A later session reusing sess-07 is not held by it.
+  writeFileSync(path, readFileSync(path, 'utf8').replace('PENDING-APPROVAL', 'ACTIVE').replace('- [x] done thing', '- [ ] open'));
+  const other = runHook({ session_id: 'thread-2' }, { env: { HIVE_GOALS_DIR: dir, HIVE_SESSION_ID: 'sess-07' }, args: ['--harness=codex'] });
+  assert.equal(other.stdout, '');
+  assert.doesNotMatch(readFileSync(path, 'utf8'), /thread-2/);
+  // Its own session is.
+  const own = runHook({ session_id: 'thread-1' }, { env: { HIVE_GOALS_DIR: dir, HIVE_SESSION_ID: 'sess-07' }, args: ['--harness=codex'] });
+  assert.equal(JSON.parse(own.stdout).decision, 'block');
+});
 
 // A brief the verifier cannot locate is indistinguishable from no goal at all, and
 // the filename is written by a model. Every drift below was observed in a real

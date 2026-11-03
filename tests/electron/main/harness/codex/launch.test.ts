@@ -8,7 +8,7 @@ import { shellQuote } from '../../../../../electron/main/container/shell-quote';
 import { CODEX_AUTH_ENV_KEYS, CODEX_SESSION_ENV_KEYS } from '../../../../../electron/main/harness/codex/headless';
 import { launchCodexSession } from '../../../../../electron/main/harness/codex/launch';
 import { hookEntry, toml, tomlList } from '../../../../../electron/main/harness/codex/toml';
-import { contextCommand, hookCommand } from '../../../../../electron/main/harness/hook-commands';
+import { contextCommand, goalVerifierCommand, hookCommand } from '../../../../../electron/main/harness/hook-commands';
 import type { LaunchSpec } from '../../../../../electron/main/harness/port';
 import type { StdioServerSpec } from '../../../../../electron/main/mcp/agent-config';
 
@@ -47,6 +47,17 @@ describe('codex session command (HIVE-279)', () => {
     expect(l).toContain(shellQuote(hookEntry('UserPromptSubmit', contextCommand())));
     expect(l).not.toContain(shellQuote(hookEntry('UserPromptSubmit', hookCommand())));
     expect(l).toContain(shellQuote(hookEntry('PostToolUse', hookCommand(), '*')));
+  });
+
+  it("runs goal-on's verifier at turn end beside the status hook, on every spawn with a rendered folder (HIVE-370)", () => {
+    const l = line({ pluginDir: '/p/codex' });
+    expect(l).toContain(shellQuote(hookEntry('Stop', [hookCommand(), goalVerifierCommand('/p/codex', 'codex')])));
+    expect(l).not.toContain(shellQuote(hookEntry('Stop', hookCommand())));
+  });
+
+  it('keeps Stop to the status hook alone without a rendered folder', () => {
+    expect(line()).toContain(shellQuote(hookEntry('Stop', hookCommand())));
+    expect(line()).not.toContain('verify-goal.mjs');
   });
 
   it('turns the plan tool on, which the TUI leaves off (FINDINGS P4)', () => {

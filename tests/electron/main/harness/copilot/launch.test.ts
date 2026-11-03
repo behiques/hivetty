@@ -5,7 +5,7 @@ import {
   copilotPluginFiles,
   launchCopilotSession,
 } from '../../../../../electron/main/harness/copilot/launch';
-import { hookCommand } from '../../../../../electron/main/harness/hook-commands';
+import { goalVerifierCommand, hookCommand } from '../../../../../electron/main/harness/hook-commands';
 
 const UUID = '11111111-2222-4333-8444-555555555551';
 const BASE = { command: 'copilot', sessionUuid: UUID, stateDir: '/Users/x/.hivetty/cli/copilot session' };
@@ -125,6 +125,12 @@ describe('launchCopilotSession', () => {
     );
   });
 
+  it('writes the verifier into the plugin a session launches with (HIVE-370)', () => {
+    expect(launchCopilotSession({ ...BASE, pluginDir: SKILLS }).files).toEqual(
+      copilotPluginFiles(`${BASE.stateDir}/plugin`, SKILLS),
+    );
+  });
+
   it('adds neither without a rendered folder', () => {
     const { command } = launchCopilotSession(BASE);
     expect(command.match(/--plugin-dir/g)).toHaveLength(1);
@@ -133,7 +139,7 @@ describe('launchCopilotSession', () => {
 });
 
 describe('copilotPluginFiles', () => {
-  it('is a manifest and one wrapped hook per session event', () => {
+  it('is a manifest and one wrapped hook per session event without a rendered skills folder', () => {
     const [manifest, hooks] = copilotPluginFiles('/p');
     expect(manifest.path).toBe('/p/plugin.json');
     expect(JSON.parse(manifest.text)).toMatchObject({ name: 'hivetty' });
@@ -147,5 +153,16 @@ describe('copilotPluginFiles', () => {
         { type: 'command', bash: hookCommand({ harness: 'copilot', wrap: event }), timeoutSec: 10 },
       ]);
     }
+  });
+
+  it("adds goal-on's verifier to agentStop, after the status hook, when the skills are rendered (HIVE-370)", () => {
+    const hooks = JSON.parse(copilotPluginFiles('/p', '/skills')[1]!.text) as {
+      hooks: Record<string, Array<{ bash: string; timeoutSec: number }>>;
+    };
+    expect(hooks.hooks['agentStop']).toEqual([
+      { type: 'command', bash: hookCommand({ harness: 'copilot', wrap: 'agentStop' }), timeoutSec: 10 },
+      { type: 'command', bash: goalVerifierCommand('/skills', 'copilot'), timeoutSec: 30 },
+    ]);
+    for (const event of COPILOT_SESSION_EVENTS.filter((e) => e !== 'agentStop')) expect(hooks.hooks[event]).toHaveLength(1);
   });
 });

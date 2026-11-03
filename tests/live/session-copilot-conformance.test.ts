@@ -14,6 +14,7 @@ import type { LaunchSpec } from '../../electron/main/harness/port';
 import { createHarnessRegistry } from '../../electron/main/harness/registry';
 import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
 import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
+import { createLedger } from '../../electron/main/ledger';
 import type { StdioServerSpec } from '../../electron/main/mcp/agent-config';
 import { hiveServerSpec } from '../../electron/main/mcp/config';
 import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
@@ -205,6 +206,10 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
   let tools: string[];
   let done: string[];
   let ledgerRead: (caller: string, query: LedgerReadQuery) => LedgerSnapshot;
+  /** HIVE-370: a real ledger behind `onLedgerPost`, so goal-on's receipts land. */
+  let ledger: ReturnType<typeof createLedger>;
+  /** HIVE-370: goal-on's briefs, inside the repo; every run's verifier reads here, never ~/.hivetty. */
+  let goals: string;
 
   beforeEach(async () => {
     statuses = [];
@@ -217,6 +222,9 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     mkdirSync(repo);
     mkdirSync(home);
     spawnSync('git', ['init', '-q', repo]);
+    goals = join(repo, '.goals');
+    mkdirSync(goals);
+    ledger = createLedger({ dir: join(scratch, 'hive'), knowsParty: () => true });
     const config = readConfig(CONFIG);
     delete config['installedPlugins'];
     const trusted = Array.isArray(config['trustedFolders']) ? (config['trustedFolders'] as string[]) : [];
@@ -318,7 +326,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       onReady: () => {},
       onMetrics: () => {},
       onLedgerRead: (caller, query) => ledgerRead(caller, query),
-      onLedgerPost: () => ({ ok: false as const, status: 503, reason: 'not exercised by this suite' }),
+      onLedgerPost: (caller, request) => ledger.append({ ...request, from: caller }),
       onAgentsList: () => Promise.reject(new Error('not exercised by this suite')),
     });
     const started = await receiver.start();
@@ -358,6 +366,10 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     interrupt?: number;
     /** `/exit\r` in one write, as `EXIT_COMMAND` is, and report whether copilot exited. */
     exitRaw?: boolean;
+    /** The file whose appearance ends a prompt's wait; the first turn end's by default. */
+    stop?: string;
+    /** How long the drive may run, 180 s by default. */
+    seconds?: number;
   }
 
   /** One launch, its prompts, one turn each. Resolves with the pty log's path, and whether `exitRaw` exited. */
@@ -389,6 +401,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       [HOOK_ENV_RECEIVER_URL]: url.slice(0, -HOOK_PATH.length),
       [HOOK_ENV_SESSION]: SESSION,
       [HOOK_ENV_TOKEN]: receiver.tokenFor(SESSION),
+      HIVE_GOALS_DIR: goals,
     });
     const log = join(scratch, `${name}.pty.log`);
     const config = { argv, env, cwd: repo, seconds: 180, log, stop, ...drive };
@@ -448,6 +461,76 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       expect(existsSync(marker)).toBe(true);
     },
     CASE_MS,
+  );
+
+  /*
+    HIVE-370, FINDINGS P13 (copilot 1.0.105): agentStop runs goal-on's verifier after the status hook,
+    and Copilot continues the turn on its block. The brief is written before the spawn, as Phase 1
+    would have left it, named by the session's HIVE_SESSION_ID. Every agentStop ends a turn for the
+    status hook, so the drive waits for the brief to settle instead. No subagent case: driving one
+    from the TUI is not cheap, and `hooks-1.0.104/agent-stop-subagent.json` plus the unit test cover it.
+  */
+  it(
+    'holds a turn end on an unticked Outcome, releases once it is ticked, and posts receipts (HIVE-370)',
+    async () => {
+      plainRepo();
+      const GOAL_UUID = '11111111-2222-4333-8444-5555555555e1';
+      const path = join(goals, `${SESSION}.md`);
+      writeFileSync(
+        path,
+        [
+          '---',
+          'status: ACTIVE',
+          'route: artifact',
+          'turns_used: 0',
+          'turn_budget: 3',
+          `session: ${SESSION}`,
+          '---',
+          '',
+          '## Task',
+          'Prove the goal verifier holds a Copilot turn.',
+          '',
+          '## Outcome',
+          `- [ ] proof.txt in the working directory says OK, and this box is ticked in ${path}`,
+          '',
+          '## Verification evidence',
+          '$ cat proof.txt',
+          'OK',
+          '',
+        ].join('\n'),
+      );
+      const settled = join(scratch, 'goal-settled');
+      const watch = setInterval(() => {
+        if (/^status: (DONE|FAILED)$/m.test(readFileSync(path, 'utf8'))) writeFileSync(settled, '');
+      }, 500);
+      try {
+        await run('goal', GOAL_UUID, {
+          spec: { pluginDir: rendered },
+          before: ['/allow-all'],
+          // Copilot's model otherwise reaches for hive-tdd and a question first, past the drive's budget.
+          prompts: [
+            'Reply with the word hi and nothing else. If a hook then holds the turn, do exactly what it asks: no tests, no questions.',
+          ],
+          stop: settled,
+          seconds: 400,
+        });
+      } finally {
+        clearInterval(watch);
+      }
+      const after = readFileSync(path, 'utf8');
+      const receipts = ledger
+        .read({})
+        .entries.filter((e) => e.kind === 'event' && (e.meta as { goal?: string } | undefined)?.goal !== undefined);
+      finding('goal', { after, receipts: receipts.map((e) => e.body) });
+      expect(after).toMatch(new RegExp(`^cli_session: ${GOAL_UUID}$`, 'm')); // the hook ran and bound the brief
+      expect(after).toMatch(/^turns_used: [1-3]$/m); // it blocked at least once
+      expect(after).toMatch(/^status: DONE$/m); // and released on a ticked Outcome
+      expect(readFileSync(join(repo, 'proof.txt'), 'utf8').trim()).toBe('OK');
+      expect(receipts.map((e) => (e.meta as { status: string }).status)).toEqual(
+        expect.arrayContaining(['ACTIVE', 'DONE']),
+      );
+    },
+    CASE_MS * 2,
   );
 
   it(

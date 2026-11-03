@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { contextCommand, fenceCommand, hookCommand, shellQuote } from '../../../../electron/main/harness/hook-commands';
+import { contextCommand, fenceCommand, goalVerifierCommand, hookCommand, shellQuote } from '../../../../electron/main/harness/hook-commands';
 
 const DENY = JSON.stringify({ permissionDecision: 'deny', permissionDecisionReason: "it's down" });
 const sh = (command: string, input: string) =>
@@ -84,3 +84,13 @@ describe('hook commands', () => {
   });
 });
 
+
+describe('goalVerifierCommand (HIVE-370)', () => {
+  it("runs the rendered skill's verifier by absolute path, quoted, naming the CLI", () => {
+    const dir = '/Users/x/Library/Application Support/HiveTTY/hive/plugins/codex';
+    expect(goalVerifierCommand(dir, 'codex')).toBe(`node '${dir}/skills/goal-on/scripts/verify-goal.mjs' --harness=codex`);
+    expect(goalVerifierCommand("/a'b", 'copilot')).toBe(
+      `node '/a'\\''b/skills/goal-on/scripts/verify-goal.mjs' --harness=copilot`,
+    );
+  });
+});
