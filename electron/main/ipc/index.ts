@@ -132,6 +132,7 @@ import {
   parseWriteFileRequest,
   parseWriteRequest,
 } from '@shared/guards';
+import { HARNESS_IDS } from '@shared/harness-contract';
 import {
   CH,
   type AppInfo,
@@ -5360,11 +5361,17 @@ export function registerIpcHandlers(
       await hooks?.writeContainerSession(sessionId, projectId);
     }
     const settingsPath = hooks.settingsPathFor();
-    const pluginDir = skills?.pluginDirPath() ?? null;
+    // HIVE-360: every CLI's own folder; the session picks its harness's at spawn.
+    const pluginDirs = Object.fromEntries(
+      HARNESS_IDS.flatMap((cli) => {
+        const dir = skills?.pluginDirPath(cli) ?? null;
+        return dir === null ? [] : [[cli, dir]];
+      }),
+    );
     const mcpConfig = mcp.configPathFor();
     return {
       ...(settingsPath == null ? {} : { settingsPath }),
-      ...(pluginDir === null ? {} : { pluginDir }),
+      ...(Object.keys(pluginDirs).length === 0 ? {} : { pluginDirs }),
       ...(mcpConfig === null ? {} : { mcpConfig }),
     };
   };

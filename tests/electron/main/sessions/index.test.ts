@@ -375,7 +375,7 @@ describe('what a session runs', () => {
       ...OPEN,
       files: {
         settingsPath: '/userData/hive/claude-hooks.settings.json',
-        pluginDir: '/userData/hive/plugin',
+        pluginDirs: { 'claude-code': '/userData/hive/plugin' },
         mcpConfig: '/userData/hive/hive.mcp.json',
       },
     });
@@ -3182,7 +3182,7 @@ describe('container spawn (HIVE-133)', () => {
       ...OPEN,
       files: {
         settingsPath: join(USER_DATA_PATH, 'hive', CONTAINER_SETTINGS_FILE),
-        pluginDir: join(USER_DATA_PATH, 'hive', 'plugin'),
+        pluginDirs: { 'claude-code': join(USER_DATA_PATH, 'hive', 'plugin') },
         mcpConfig: join(USER_DATA_PATH, 'hive', CONTAINER_MCP_FILE),
       },
     });
@@ -3489,7 +3489,7 @@ describe('container spawn (HIVE-133)', () => {
       ...OPEN,
       files: {
         settingsPath: join(USER_DATA_PATH, 'hive', CONTAINER_SETTINGS_FILE),
-        pluginDir: join(USER_DATA_PATH, 'hive', 'plugin'),
+        pluginDirs: { 'claude-code': join(USER_DATA_PATH, 'hive', 'plugin') },
         mcpConfig: join(USER_DATA_PATH, 'hive', CONTAINER_MCP_FILE),
       },
     };
@@ -4031,6 +4031,25 @@ describe('codex sessions (HIVE-279)', () => {
 
     expect(typed().some((line) => /^(unset [A-Z_ ]+; )?codex -m gpt-6-luna .* && exit$/.test(line))).toBe(true);
     expect(typed().some((line) => line.includes('claude'))).toBe(false);
+  });
+
+  it('hands codex its own skills folder, not Claude’s (HIVE-360)', () => {
+    const plugin = mkdtempSync(join(tmpdir(), 'codex-plugin-'));
+    writeFileSync(join(plugin, 'catalog.md'), '### HiveTTY skills\n- done: CODEX-FOLDER-MARK\n');
+    const previous = process.env['CODEX_HOME'];
+    process.env['CODEX_HOME'] = mkdtempSync(join(tmpdir(), 'codex-home-'));
+    try {
+      instance = build([]);
+      instance.open({ ...codexOpen, files: { pluginDirs: { 'claude-code': '/c', codex: plugin } } });
+      bootTo(mintedFor('hero-refresh'));
+      const line = typed().find((entry) => entry.includes('codex -m gpt-6-luna'));
+      expect(line).toContain('CODEX-FOLDER-MARK');
+      expect(line).not.toContain("'/c'");
+    } finally {
+      if (previous === undefined) delete process.env['CODEX_HOME'];
+      else process.env['CODEX_HOME'] = previous;
+      rmSync(plugin, { recursive: true, force: true });
+    }
   });
 
   it('mints no conversation id; the first hook’s becomes the resume id', () => {

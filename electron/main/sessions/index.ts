@@ -2373,7 +2373,7 @@ export function createSessions(options: SessionsOptions): Sessions {
      * (`ipc/index.ts`), which is already asynchronous, runs before this is
      * reached, and hands the resolved path in on the request (HIVE-235).
      */
-    const pluginDir = request.files?.pluginDir ?? null;
+    const pluginDir = request.files?.pluginDirs?.[harness] ?? null;
 
     /**
      * The ledger tools (HIVE-112). Resolved by `prepareSession` after
