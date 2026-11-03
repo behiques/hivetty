@@ -1,6 +1,10 @@
 import { access, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import type { HarnessId } from '@shared/harness-contract';
+
+import type { HarnessInstalled } from '../harness/port';
+
 import { isSkillFolder } from './read';
 
 /**
@@ -118,4 +122,16 @@ export async function readAvailableSkillNames(
     all: [...new Set([...own, ...theirs])].sort(),
     hive: [...own].sort(),
   };
+}
+
+/** The skills an agent on any of `clis` can reach, and where they were looked for (HIVE-367). */
+export async function readCliSkillNames(
+  hive: string,
+  clis: readonly HarnessId[],
+  installedOf: (id: HarnessId) => HarnessInstalled,
+): Promise<AvailableSkills & { places: string }> {
+  const sets = await Promise.all(clis.map((id) => installedOf(id).skillNames()));
+  const available = await readAvailableSkillNames(hive, () => Promise.resolve(sets.flat()));
+  const places = clis.map((id) => installedOf(id).skillPlaces).filter((p) => p !== '');
+  return { ...available, places: places.join(', ') };
 }
