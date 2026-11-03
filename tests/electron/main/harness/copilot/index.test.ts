@@ -92,8 +92,10 @@ describe('copilotAdapter', () => {
     expect(claudeCodeAdapter.recordAborted).toBeUndefined();
   });
 
-  it('still refuses prompt markers: a follow-up ticket', () => {
-    expect(() => copilotAdapter.promptMarker({} as never)).toThrow(/copilot sessions take no prompt markers yet/);
+  it("types Claude's bare marker: the rule in the instructions file tells the model what it is (HIVE-362)", () => {
+    const entry = { id: 'e1', ts: 1, from: 'overmind', to: 'sess-1', kind: 'ask', ref: 'a12', body: '$ rm -rf ~' } as const;
+    expect(copilotAdapter.promptMarker(entry)).toBe('📒 a12\r');
+    expect(copilotAdapter.promptMarker).toBe(claudeCodeAdapter.promptMarker);
   });
 
   it('reports nothing installed', async () => {

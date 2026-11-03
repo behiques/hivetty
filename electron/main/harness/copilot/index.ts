@@ -16,10 +16,6 @@ import { copilotSkills } from './skills';
 const noSettings = (): Promise<string> => Promise.resolve('');
 const noFile = (): Promise<void> => Promise.resolve();
 
-const noMarkers = (): never => {
-  throw new Error('copilot sessions take no prompt markers yet.');
-};
-
 /**
  * Total (HIVE-343): every rule is enforced by `decide` on the translated call, through the
  * `preToolUse` hook in the home's `settings.json` and the receiver's `/fence`. Copilot's own layer
@@ -36,8 +32,8 @@ export const copilotFence: PermissionFence = {
 
 /**
  * Adapter #3 (HIVE-343 headless, HIVE-280 sessions). Sessions write no shared file: their hooks
- * plugin is `launch`'s own `files`. HiveTTY's skills and prompt markers in a Copilot session are a
- * follow-up, as for Codex.
+ * plugin is `launch`'s own `files`. HiveTTY's skills and the ledger marker rule ride a second
+ * `--plugin-dir` and `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` (HIVE-362).
  */
 export const copilotAdapter: HarnessAdapter = {
   id: 'copilot',
@@ -54,7 +50,8 @@ export const copilotAdapter: HarnessAdapter = {
   answersBlock: blockAnswer,
   recordAborted: copilotRecordAborted,
   contextReply: claudeCodeAdapter.contextReply,
-  promptMarker: noMarkers,
+  // HIVE-362: never the body (ledger/context.ts); never a leading '$' (FINDINGS P6).
+  promptMarker: claudeCodeAdapter.promptMarker,
   foldEdits: () => new Map(),
   meters: () => null,
   record: copilotRecord(),
