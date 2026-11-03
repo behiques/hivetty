@@ -2638,6 +2638,7 @@ export function registerIpcHandlers(
     `agentState` is set.
   */
   agents = createAgentsRuntime({
+    defaultCli: () => getConfig().agentsDefaultCli,
     runFiles: createAgentRunFiles({
       state: () => agentState,
       workdir: agentWorkdir,
