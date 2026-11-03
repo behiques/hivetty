@@ -132,3 +132,23 @@ discovered and injects nothing.
 **Consequence.** HiveTTY's Codex skills are named `hive-<name>` and typed `$hive-<name>`
 (`CAPABILITIES.codex.skills`). No discovered skill carries the prefix, so nothing is injected and the
 model reads the catalog's file, as in the first row.
+
+## P10 Stop block (HIVE-370), codex-cli 0.166.0
+
+`codex exec --dangerously-bypass-hook-trust` in a scratch git repo, one `-c hooks.Stop=…` group running a
+probe hook that logs each payload and prints `{"decision":"block","reason":"…reply PLUM<n>"}` until a
+counter reaches `PROBE_MAX`, then prints nothing.
+
+| Probe | Result |
+| --- | --- |
+| `PROBE_MAX=2` | `hi`, `Stop Blocked`, `PLUM1`, `Stop Blocked`, `PLUM2`, `Stop Completed`; the hook ran 3 times. `stop_hook_active` is `false` on the first `Stop`, `true` on each after a block, all in one `turn_id`. |
+| `PROBE_MAX=20` | 21 runs, `PLUM20` last, `stop_hook_active: true`. **No cap**: Codex continues as long as the hook blocks. |
+| Two hooks in one group (`true`, then the probe), `PROBE_MAX=1` | Both run on every `Stop`; `PLUM1` appears; the second hook's block holds the turn while the first completes. |
+| Copilot's `{"decision":"allow"}`, `PROBE_MAX=0` | `hook: Stop Failed`. The turn still ends and exit is 0, but Codex counts it as a failed hook. |
+| A subagent spawned from `exec` (`collab: Wait`) | One `Stop` only, the parent's, with no `agent_id`. A subagent's end is `SubagentStop` (with `agent_id`, `fanout-0.165.0/hooks-fanout.jsonl`), never `Stop`. |
+
+**P10: Codex's `Stop` is Claude's shape.** `{"decision":"block","reason"}` continues the turn with the
+reason as the next prompt; silence releases. `{"decision":"allow"}` is not a release Codex knows and reports
+as a failure, so the verifier says nothing to release. There is no consecutive-block cap: the brief's
+`turn_budget` is the only stop. A subagent never reaches a `Stop` hook, so the verifier's `agent_id` guard is
+defence, not a path Codex 0.166 takes.
