@@ -11,6 +11,7 @@ import {
   HIVE_CONSENT_TOOLS,
   HIVE_STANDING_GRANTS,
   HIVE_TOOL_NAMES,
+  HIVE_TOOLS,
   LEDGER_TOOLS,
   LEDGER_TOOL_NAMES,
   JIRA_COMMENT_TOOL,
@@ -20,6 +21,7 @@ import {
   PR_TOOL,
   PROJECT_AUTO_MERGE_TOOL,
   PROJECTS_TOOL,
+  SESSION_DONE_TOOL,
 } from '@shared/ledger-tools';
 import { matches, rungsFor } from '@shared/permission-rules';
 
@@ -397,5 +399,19 @@ describe('HIVE_TOOL_NAMES (HIVE-369)', () => {
     expect(HIVE_TOOL_NAMES).toContain('jira_get');
     expect(HIVE_TOOL_NAMES).toContain('approve');
     expect(new Set(HIVE_TOOL_NAMES).size).toBe(HIVE_TOOL_NAMES.length);
+  });
+});
+
+describe('SESSION_DONE_TOOL (HIVE-368)', () => {
+  it('takes no arguments and says what happens', () => {
+    expect(SESSION_DONE_TOOL.name).toBe('session_done');
+    expect(SESSION_DONE_TOOL.description).toBe(
+      'Finish this session. HiveTTY marks it done and closes its terminal when the turn ends.',
+    );
+    expect(SESSION_DONE_TOOL.inputSchema).toEqual({ type: 'object', properties: {} });
+  });
+  it('is served, just ahead of approve', () => {
+    const names = HIVE_TOOLS.map((tool) => tool.name);
+    expect(names.slice(-2)).toEqual(['session_done', 'approve']);
   });
 });
