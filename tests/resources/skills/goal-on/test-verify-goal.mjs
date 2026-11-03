@@ -406,8 +406,14 @@ test('stamping leaves the body untouched', () => {
 
 test('the harness is declared by the hook command, never guessed', () => {
   assert.equal(harnessOf(['--harness=claude']), 'claude');
+  assert.equal(harnessOf(['--harness=codex']), 'codex');
   assert.equal(harnessOf([]), 'copilot');
   assert.equal(harnessOf(['--something-else']), 'copilot');
+});
+
+test('Codex gets its Stop shape: JSON to block, silence to release (FINDINGS P10)', () => {
+  assert.deepEqual(JSON.parse(emitFor('codex', 'block', 'because')), { decision: 'block', reason: 'because' });
+  assert.equal(emitFor('codex', 'allow'), '');
 });
 
 test('Claude Code gets its Stop shape: JSON to block, silence to release', () => {

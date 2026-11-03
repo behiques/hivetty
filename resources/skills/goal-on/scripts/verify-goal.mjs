@@ -28,6 +28,7 @@
  * says which one it is (`--harness=claude`) rather than guessing from the payload:
  *   Copilot `agentStop`: {"decision":"allow"} | {"decision":"block","reason":"..."}
  *   Claude Code `Stop`:  {"decision":"block","reason":"..."} to block; silence to release.
+ *   Codex `Stop`:        the same as Claude Code (`--harness=codex`, FINDINGS P10).
  *
  * TWO FAILURE MODES ARE FORBIDDEN, and they pull in opposite directions:
  *   1. Wedging a session. Every unexpected condition must release the turn.
@@ -64,13 +65,16 @@ const GH_TIMEOUT_MS = 10_000;
  * script was born.
  */
 export function harnessOf(argv = process.argv.slice(2)) {
-  return argv.includes('--harness=claude') ? 'claude' : 'copilot';
+  if (argv.includes('--harness=claude')) return 'claude';
+  if (argv.includes('--harness=codex')) return 'codex';
+  return 'copilot';
 }
 
 export function emitFor(harness, decision, reason) {
-  if (harness === 'claude') {
-    // Claude Code blocks on `{"decision":"block"}` and releases on anything else.
-    // The quietest way to release is to say nothing at all.
+  if (harness === 'claude' || harness === 'codex') {
+    // Both block on `{"decision":"block"}` and release on silence. Codex reports
+    // `{"decision":"allow"}` as a failed hook (FINDINGS P10), so the quietest way to
+    // release is to say nothing at all.
     return decision === 'block' ? JSON.stringify({ decision: 'block', reason }) : '';
   }
   return JSON.stringify(reason ? { decision, reason } : { decision });
