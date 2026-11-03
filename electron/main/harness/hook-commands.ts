@@ -65,3 +65,11 @@ export const fenceCommand = ({ denyJson, harness }: { denyJson: string; harness?
   ` -H "${HOOK_HEADER_RUN}: $${HOOK_ENV_RUN}" -H "${HOOK_HEADER_RUN_TOKEN}: $${HOOK_ENV_RUN_TOKEN}"${harnessHeader(harness)}` +
   ` --data-binary @- 2>/dev/null) && [ -n "$out" ] && printf '%s' "$out"` +
   ` || printf '%s' ${shellQuote(denyJson)}`;
+
+/**
+ * goal-on's floor (HIVE-370): the rendered skill's own verifier, by absolute path, since the folder
+ * is the host's and no variable names it on Codex or Copilot. It prints the CLI's turn-end decision,
+ * so it runs beside the status hook, never in place of it. Claude registers it from the skill's frontmatter.
+ */
+export const goalVerifierCommand = (pluginDir: string, harness: 'codex' | 'copilot'): string =>
+  `node ${shellQuote(`${pluginDir}/skills/goal-on/scripts/verify-goal.mjs`)} --harness=${harness}`;
