@@ -8,6 +8,7 @@ import { copilotFenceReply, readCopilotFence, translateCopilotCall } from './fen
 import { launchCopilotHeadless } from './headless';
 import { readCopilotHeadless } from './headless-reader';
 import { readCopilotHook } from './hooks';
+import { createCopilotInstalled } from './installed';
 import { launchCopilotSession } from './launch';
 import { copilotRecord, copilotRecordAborted } from './record';
 import { copilotSkills } from './skills';
@@ -55,12 +56,7 @@ export const copilotAdapter: HarnessAdapter = {
   foldEdits: () => new Map(),
   meters: () => null,
   record: copilotRecord(),
-  installed: {
-    skillNames: () => Promise.resolve([]),
-    pluginNames: () => Promise.resolve([]),
-    sessionOverrides: () => Promise.resolve({}),
-    skillPlaces: '',
-  },
+  installed: createCopilotInstalled(),
   skills: copilotSkills,
   headless: { launch: launchCopilotHeadless, reader: readCopilotHeadless, fence: copilotFence, containerCommand: 'copilot' },
 };

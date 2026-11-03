@@ -36,8 +36,8 @@ describe('copilotAdapter', () => {
     });
   });
 
-  it('reads no skills of its own (HIVE-344)', () => {
-    expect(copilotAdapter.installed.skillPlaces).toBe('');
+  it("names where it reads the user's Copilot skills (HIVE-362)", () => {
+    expect(copilotAdapter.installed.skillPlaces).toContain('~/.copilot/skills');
   });
 
   it('wires the headless members', () => {
@@ -98,10 +98,10 @@ describe('copilotAdapter', () => {
     expect(copilotAdapter.promptMarker).toBe(claudeCodeAdapter.promptMarker);
   });
 
-  it('reports nothing installed', async () => {
-    await expect(copilotAdapter.installed.skillNames()).resolves.toEqual([]);
-    await expect(copilotAdapter.installed.pluginNames()).resolves.toEqual([]);
+  it("reads the user's Copilot skills, with no per-session overrides (HIVE-362)", async () => {
+    // No skillNames() here: that would spawn the real copilot (installed.test.ts covers it).
     await expect(copilotAdapter.installed.sessionOverrides([])).resolves.toEqual({});
+    expect(copilotAdapter.installed.skillPlaces).not.toBe('');
   });
 
   it('reads hooks with its own reader', () => {
