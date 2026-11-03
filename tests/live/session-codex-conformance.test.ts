@@ -240,6 +240,8 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
   let agentsBefore: string[];
   /** HIVE-384: a case that plants the repo's own `.agents/skills/<name>`, which L4 then expects. */
   let plantedRepoSkill: string | null;
+  /** HIVE-370: goal-on's briefs, inside the repo; every run's verifier reads here, never ~/.hivetty. */
+  let goals: string;
 
   beforeEach(async () => {
     statuses = [];
@@ -252,6 +254,8 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
     mkdirSync(repo);
     mkdirSync(home);
     spawnSync('git', ['init', '-q', repo]);
+    goals = join(repo, '.goals');
+    mkdirSync(goals);
     copyFileSync(AUTH, join(home, 'auth.json'));
     previousCodexHome = process.env['CODEX_HOME'];
     process.env['CODEX_HOME'] = home;
@@ -406,6 +410,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       [HOOK_ENV_RECEIVER_URL]: url.slice(0, -HOOK_PATH.length),
       [HOOK_ENV_SESSION]: SESSION,
       [HOOK_ENV_TOKEN]: receiver.tokenFor(SESSION),
+      HIVE_GOALS_DIR: goals,
     });
     const log = join(scratch, `${name}.pty.log`);
     const config = { line: lineOf(spec), env, cwd: repo, prompt, answer: answer ?? null, seconds: 180, log, ...drive };
@@ -576,6 +581,61 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       expect(flat(log)).not.toContain('Wouldyouliketorun');
       expect(flat(log)).not.toMatch(/Allow.*session_done/);
       expect(exit?.exited).toBe(true);
+    },
+    CASE_MS,
+  );
+
+  /*
+    HIVE-370, FINDINGS P10 (codex-cli 0.166.0): Stop runs goal-on's verifier beside the status hook,
+    and Codex continues the turn on its block. The brief is written before the spawn, as Phase 1
+    would have left it, and named by the session's HIVE_SESSION_ID.
+  */
+  it(
+    'holds a turn end on an unticked Outcome, releases once it is ticked, and posts receipts (HIVE-370)',
+    async () => {
+      userConfig();
+      const path = join(goals, `${SESSION}.md`);
+      writeFileSync(
+        path,
+        [
+          '---',
+          'status: ACTIVE',
+          'route: artifact',
+          'turns_used: 0',
+          'turn_budget: 3',
+          `session: ${SESSION}`,
+          '---',
+          '',
+          '## Task',
+          'Prove the goal verifier holds a Codex turn.',
+          '',
+          '## Outcome',
+          `- [ ] proof.txt in the working directory says OK, and this box is ticked in ${path}`,
+          '',
+          '## Verification evidence',
+          '$ cat proof.txt',
+          'OK',
+          '',
+        ].join('\n'),
+      );
+      // The suite renders the user's installed skills (`~/.hivetty/skills`); this case needs the branch's verifier.
+      copyFileSync(
+        join(process.cwd(), 'resources', 'skills', 'goal-on', 'scripts', 'verify-goal.mjs'),
+        join(codexPlugin!, 'skills', 'goal-on', 'scripts', 'verify-goal.mjs'),
+      );
+      await run('goal', {}, 'Reply with the word hi and nothing else.');
+      const after = readFileSync(path, 'utf8');
+      const receipts = ledger
+        .read({})
+        .entries.filter((e) => e.kind === 'event' && (e.meta as { goal?: string } | undefined)?.goal !== undefined);
+      finding('goal', { after, receipts: receipts.map((e) => e.body) });
+      expect(after).toMatch(/^cli_session: \S+$/m); // the hook ran and bound the brief
+      expect(after).toMatch(/^turns_used: [1-3]$/m); // it blocked at least once
+      expect(after).toMatch(/^status: DONE$/m); // and released on a ticked Outcome
+      expect(readFileSync(join(repo, 'proof.txt'), 'utf8').trim()).toBe('OK');
+      expect(receipts.map((e) => (e.meta as { status: string }).status)).toEqual(
+        expect.arrayContaining(['ACTIVE', 'DONE']),
+      );
     },
     CASE_MS,
   );
