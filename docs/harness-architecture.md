@@ -366,7 +366,8 @@ rg -n --type ts -e "'(PreToolUse|PostToolUse|Stop|SubagentStop|SessionStart|Sess
 
 ### Follow-ups
 
-- HIVE-279's follow-up: HiveTTY skills and prompt markers in Codex sessions (D1), and the same for
+- HIVE-279's follow-up: HiveTTY skills in Codex sessions landed with HIVE-360; prompt markers
+  wait on Codex handing `UserPromptSubmit` context to the model (HIVE-360 D6). The same for
   Copilot sessions (HIVE-280 D1), with Copilot's plan panel (its todo list is SQL, FINDINGS P4).
 - HIVE-358: plans in agent runs.
 - HIVE-353: the rotation handoff's late-id gap.
@@ -396,8 +397,8 @@ output and hook payloads are in `tests/fixtures/codex/`.
 - `-m <model>` and `-c model_reasoning_effort="…"` from the Codex card, omitted when it names none.
 - `-c sandbox_mode="…"`: `resume` has no `-s`, so both shapes use `-c`. **The sandbox defaults to
   `workspace-write`** when the card sets none; `danger-full-access` is never offered.
-- `-c developer_instructions=…`, the system prompt, on a first wake only: a resumed thread keeps
-  it. Every `-c` value is `JSON.stringify` output, a valid TOML basic string, with DEL escaped and
+- `-c developer_instructions=…`, the system prompt followed by `catalog.md` (HIVE-360), on a
+  first wake only: a resumed thread keeps it. Every `-c` value is `JSON.stringify` output, a valid TOML basic string, with DEL escaped and
   lone surrogates replaced, the two strings JSON writes that TOML refuses.
 - `-c mcp_servers.hive.{command,args,env}` and `env_vars=[…]`: the stdio hive host, its identity
   forwarded **by name** from the run's environment, so no token lands on the argv.
@@ -469,6 +470,11 @@ login shell is typed, as Claude's is (`&& exit`, the task after `--`), flag by f
 - `-c tui.disable_paste_burst=true`: an injected Enter is a keystroke, not the tail of a paste, so
   the bootstrap's split `\r` submits (P7).
 - `-c tools.update_plan.enabled=true`: the TUI has no plan tool without it (P4).
+- `-c developer_instructions=…` (HIVE-360): the user's own top-level `developer_instructions`
+  from `$CODEX_HOME/config.toml`, a blank line, then `catalog.md`. A `-c` replaces the config's
+  value rather than appending to it (probed at 0.165.0), so the user's text is read (with
+  `smol-toml`, read-only) and goes first. `model_instructions_file` is never touched. Omitted when
+  there is neither.
 - `-c hooks.<E>=[…]` for `SessionStart`, `UserPromptSubmit`, `PermissionRequest` and `Stop`, and
   `PostToolUse` with `matcher="*"` (as Claude's sessions do: a finished tool is what clears an
   approved `PermissionRequest`, since `Stop` does not; `update_plan` is the only one read for a
@@ -495,7 +501,11 @@ different one (`/new`) replaces it, and a fresh restart clears it until its own 
 `record` finds a conversation by its rollout, `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<id>.jsonl`
 (P6), whatever the cwd, newest day first; `titleOrigin` is `'unknown'`, and `nameFromTitle` strips
 the title's spinner frame, `[ ! ] Action Required | ` lead and trailing ` | <dir>` (P7). `prepare`
-writes nothing: everything is on the argv. `promptMarker` still refuses (D1, the follow-up). The
+writes nothing: everything is on the argv. `promptMarker` still refuses and `contextDelivery` is
+`'none'`: the receiver answers a typed marker's `UserPromptSubmit` with `additionalContext`, and
+codex 0.165.0 does not hand it to the model (HIVE-360 D6, measured live). Were markers on, a
+focused Codex session would hold them anyway: `claimBareBack` knows only Claude's rule-`❯`-rule
+frame, so a Codex box always reads `draft`. The
 renderer's input profile makes Shift+Enter type Ctrl+J, Codex's newline (P7). The binary is
 `codex` on `PATH` until HIVE-332 (D7). `pnpm test:session:codex` holds all of it against the binary.
 
@@ -541,7 +551,7 @@ window shows no gauge. `codex exec` gets the parser only, with no UI. `/statusli
   an agent's `Task` deny rule does not stop a Codex spawn. The subagent's own calls do go through
   the fence's `PreToolUse`.
 
-Interactive: HIVE-279 (sessions; skills and markers are its follow-up). Meters: HIVE-334 (done). Agent-run plans: HIVE-358. Containers: refused.
+Interactive: HIVE-279 (sessions); skills HIVE-360; markers wait on Codex taking hook context (HIVE-360 D6). Meters: HIVE-334 (done). Agent-run plans: HIVE-358. Containers: refused.
 
 ## Copilot (headless, HIVE-343; sessions, HIVE-280)
 
@@ -778,7 +788,8 @@ the renderer reads it too:
 
 Copilot's `/x` is provisional until HIVE-362's probe. Codex and Copilot set no variable for their
 folder, so `renderSkills` writes its `root` where `{{plugin_root}}` stood (a host path, like
-`catalog.md`'s; HIVE-360 maps it for a container).
+`catalog.md`'s). Nothing maps them for a container: Codex sessions and runs are refused in one,
+and whoever lifts that refusal maps them (HIVE-360 D5).
 
 **Rendering** is `electron/shared/skill-render.ts`, pure, so main and the renderer share it.
 `renderSkillText(text, cli)` fills the three placeholders (`<name>` is `[a-z0-9_-]+`; any other
@@ -813,7 +824,8 @@ markdown file as it is typed. It flags `mcp__hive__x`, `hive-x` (a hive tool), `
 skill may be meant for one CLI. `known.tools` is `HIVE_TOOL_NAMES` (`electron/shared/ledger-tools.ts`),
 the same `HIVE_TOOLS` list the MCP host serves.
 
-**Next.** HIVE-360 hands Codex `catalog.md` and maps its paths into containers; HIVE-362 passes
+**Next.** HIVE-360 hands Codex `catalog.md` as `developer_instructions` (no container mapping:
+Codex is refused in one); HIVE-362 passes
 Copilot's folder as a second `--plugin-dir`; HIVE-368 brought `done` to both; HIVE-370 gives them
 goal-on's stop hook; HIVE-371 words subagent dispatch per CLI.
 
