@@ -1,6 +1,9 @@
 import { spawn } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -38,6 +41,18 @@ const spec = (over: Partial<HeadlessSpec> = {}): HeadlessSpec => ({
 });
 
 describe('launchCodexHeadless', () => {
+  it('joins the definition’s instructions and the catalog on a first wake only (HIVE-360)', () => {
+    const plugin = mkdtempSync(join(tmpdir(), 'codex-headless-'));
+    writeFileSync(join(plugin, 'catalog.md'), '### HiveTTY skills\n- verify: Check. (file: /p/verify/SKILL.md)\n');
+    const files = { ...spec().files, pluginDir: plugin };
+    const first = launchCodexHeadless(spec({ files })).args;
+    expect(first).toContain(
+      `developer_instructions=${toml('You are "watcher".\nBe \\brief\\.\n\n### HiveTTY skills\n- verify: Check. (file: /p/verify/SKILL.md)')}`,
+    );
+    const resumed = launchCodexHeadless(spec({ files, conversation: { resume: 'thread-1' } })).args;
+    expect(resumed.join(' ')).not.toContain('developer_instructions');
+  });
+
   it('spells a first wake', () => {
     expect(
       launchCodexHeadless(spec({ model: 'gpt-6-luna', effort: 'high', sandbox: 'workspace-write' }))
