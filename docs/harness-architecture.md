@@ -860,7 +860,8 @@ the same `HIVE_TOOLS` list the MCP host serves.
 **Next.** HIVE-360 hands Codex `catalog.md` as `developer_instructions` (no container mapping:
 Codex is refused in one); HIVE-362 passed
 Copilot's folder as a second `--plugin-dir`; HIVE-368 brought `done` to both; HIVE-370 gave them
-goal-on's stop hook (the verifier beside each status hook, the brief named by `$HIVE_SESSION_ID`);
+goal-on's stop hook (the verifier beside each status hook, the brief named by `$HIVE_SESSION_ID`,
+and an unbound brief under that id archived when a fresh conversation reuses it: `sessions/goal-briefs.ts`);
 HIVE-371 words subagent dispatch per CLI.
 
 ## Adding a second harness

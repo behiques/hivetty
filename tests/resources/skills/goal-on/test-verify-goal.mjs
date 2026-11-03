@@ -513,7 +513,11 @@ test('findBrief: a bound cli_session may carry a trailing comment; another sessi
 
 test('a brief copied verbatim from the template is held', () => {
   const dir = mkdtempSync(join(tmpdir(), 'goal-tplhold-'));
-  writeFileSync(join(dir, 'sess-07.md'), brief({ extra: 'cli_session:               # written by the verifier, never by you\n' }));
+  // An unticked Outcome blocks on its own: a fully ticked code-route brief would hang the answer on `gh`.
+  writeFileSync(
+    join(dir, 'sess-07.md'),
+    brief({ outcome: '- [ ] open\n', extra: 'cli_session:               # written by the verifier, never by you\n' }),
+  );
   const run = runHook({ session_id: 'thread-1' }, { env: { HIVE_GOALS_DIR: dir, HIVE_SESSION_ID: 'sess-07' }, args: ['--harness=codex'] });
   assert.equal(JSON.parse(run.stdout).decision, 'block');
 });

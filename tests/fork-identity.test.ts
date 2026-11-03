@@ -19,7 +19,8 @@ const TEXT = /\.(md|mjs|js|ts|tsx|json|yml|yaml|mmd|plist)$/;
 const walk = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) return name === 'node_modules' ? [] : walk(path);
+    // `.claude/worktrees/` holds other sessions' whole checkouts (gitignored), not this tree's docs.
+    if (statSync(path).isDirectory()) return name === 'node_modules' || name === 'worktrees' ? [] : walk(path);
     return TEXT.test(name) ? [path] : [];
   });
 

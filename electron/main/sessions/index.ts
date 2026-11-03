@@ -76,6 +76,7 @@ import { createBootstrap, type Bootstrap } from './bootstrap';
 import { createChangedFiles } from './changed-files';
 import { EXIT_COMMAND } from './exit-command';
 import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
+import { archiveStaleBriefs } from './goal-briefs';
 import type { SessionHistory } from './history';
 import { createRecordAborts } from './record-aborts';
 import { createRecordMeters } from './record-meters';
@@ -2546,6 +2547,8 @@ export function createSessions(options: SessionsOptions): Sessions {
         ? history?.resumable(request.entityId)
         : undefined;
     const resume = resumeUuid !== undefined;
+    // A fresh conversation under a reused `sess-NN` must not inherit a dead one's goal (HIVE-370 follow-up).
+    if (!resume) archiveStaleBriefs(request.entityId);
     /*
       A CLI that picks its own id (Codex, HIVE-279) gets none: its first hook reports it, and the
       hook handler records it as the resume id. `undefined` until then.
