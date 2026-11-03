@@ -179,6 +179,30 @@ export function resolveBrief(dir, sessionId) {
 }
 
 /**
+ * This hook's brief (HIVE-370). `$HIVE_SESSION_ID` is the standard name on every CLI, since a model
+ * on Codex or Copilot cannot learn its CLI's own id; the payload's id stays the fallback, the name
+ * Claude briefs had before. HiveTTY's ids are a counter that restarts with the app (`sess-07`
+ * comes round again), so a brief found by one belongs to the first CLI session that stamped it:
+ * a `cli_session:` naming another is a stale brief, never this session's.
+ */
+export function findBrief(dir, cliId, hiveId) {
+  const hive = sessionIdOf({ sessionId: hiveId });
+  if (hive) {
+    const p = resolveBrief(dir, hive);
+    if (p) {
+      try {
+        const split = splitFrontmatter(readFileSync(p, 'utf8'));
+        const bound = split ? headerValue(split.header, 'cli_session') : null;
+        if (!bound || bound === cliId) return p;
+      } catch {
+        /* unreadable: try the CLI id */
+      }
+    }
+  }
+  return resolveBrief(dir, cliId);
+}
+
+/**
  * Blank out `#` characters that sit inside fenced code blocks, preserving offsets.
  * Without this, a line like `## not a heading` inside a fence inside `## Outcome`
  * truncates the section and hides the unchecked items below it.
@@ -598,7 +622,7 @@ function main() {
     const sessionId = sessionIdOf(payload);
     if (!sessionId) return emit('allow', undefined, harness);
 
-    const briefPath = resolveBrief(briefDir(), sessionId);
+    const briefPath = findBrief(briefDir(), sessionId, process.env.HIVE_SESSION_ID);
     if (!briefPath) return emit('allow', undefined, harness); // not a goal-on session
 
     const md = readFileSync(briefPath, 'utf8');
@@ -606,8 +630,10 @@ function main() {
     const result = decide(md, { checkPr: (header) => ghPrCheck(header, cwd), readPlan: readPlanFile });
 
     if (result.write) {
-      writeAtomic(briefPath, result.write);
-      postReceipt(result.write, sessionId, md);
+      // The binding rides on every write, so the Claude ceiling can find a brief named by the hive id.
+      const write = setHeaderField(result.write, 'cli_session', sessionId);
+      writeAtomic(briefPath, write);
+      postReceipt(write, sessionId, md);
     }
     if (result.action === 'block') return emit('block', result.reason, harness);
     return emit('allow', undefined, harness);
