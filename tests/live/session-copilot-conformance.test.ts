@@ -602,4 +602,36 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     },
     CASE_MS,
   );
+
+  it(
+    'a ticket session types the rendered work-on and the model follows it to hive-jira_get (HIVE-362)',
+    async () => {
+      // ticketWorkflowStart is what the core types; its first step names the Hive's jira tool.
+      const { log } = await run('work-on', '11111111-2222-4333-8444-5555555555c3', {
+        spec: { pluginDir: rendered, hiveServer: hive() },
+        prompts: [`${typedSkill('work-on', 'copilot')} HIVE-1`],
+        answer: '\x1b',
+      });
+      finding('work-on', { log });
+      expect(tools.some((t) => /jira_get/.test(t))).toBe(true);
+    },
+    CASE_MS,
+  );
+
+  it('lists every HiveTTY skill from its --plugin-dir, none refused (HIVE-362, HIVE-369)', () => {
+    const listed = spawnSync('copilot', ['--plugin-dir', rendered, 'skill', 'list', '--json'], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: { ...strippedEnv(), COPILOT_HOME: home },
+    });
+    finding('skill-list', { stdout: listed.stdout, stderr: listed.stderr });
+    // The JSON array first; a refused skill is reported in prose after it.
+    const json = listed.stdout.slice(0, listed.stdout.lastIndexOf(']') + 1);
+    const ours = (JSON.parse(json) as Array<{ name: string; source: string }>)
+      .filter((s) => s.source === 'plugin')
+      .map((s) => s.name.replace(/^hive:/, ''));
+    // Every rendered skill loads: a frontmatter Copilot's YAML refuses is dropped from the list (HIVE-369).
+    expect(ours.sort()).toEqual(readdirSync(join(rendered, 'skills')).sort());
+    expect(`${listed.stdout}${listed.stderr}`).not.toMatch(/failed to load/i);
+  });
 });
