@@ -3569,12 +3569,14 @@ describe('the MCP route', () => {
   let ledger: Ledger;
   let posted: { caller: string; request: unknown }[];
   let refusePosts: boolean;
+  let dones: string[];
 
   const CALLER = 'sess-mcp';
 
   beforeEach(async () => {
     posted = [];
     refusePosts = false;
+    dones = [];
     dir = mkdtempSync(join(tmpdir(), 'hive-receiver-mcp-'));
     ledger = createLedger({ dir, knowsParty: () => true });
     receiver = createReceiver({
@@ -3583,7 +3585,7 @@ describe('the MCP route', () => {
       onPlan: () => {},
       onTicketIntent: () => {},
       onPromptName: () => {},
-      onDone: () => {},
+      onDone: (entityId) => dones.push(entityId),
       onReady: () => {},
       onMetrics: () => {},
       knowsSession: () => true,
@@ -3639,6 +3641,36 @@ describe('the MCP route', () => {
       },
       body: JSON.stringify(message),
     });
+
+  it('session_done arms the finish for the calling session (HIVE-368)', async () => {
+    const response = await rpc({
+      jsonrpc: '2.0',
+      id: 40,
+      method: 'tools/call',
+      params: { name: 'session_done', arguments: {} },
+    });
+    const body = (await response.json()) as { result: { isError: boolean } };
+
+    expect(body.result.isError).toBe(false);
+    expect(dones).toEqual([CALLER]);
+  });
+
+  it('lists session_done to a session (HIVE-368)', async () => {
+    const response = await rpc({ jsonrpc: '2.0', id: 42, method: 'tools/list' });
+    const body = (await response.json()) as { result: { tools: { name: string }[] } };
+
+    expect(body.result.tools.map((tool) => tool.name)).toContain('session_done');
+  });
+
+  it('does not list session_done to an agent run (HIVE-368)', async () => {
+    const response = await rpc(
+      { jsonrpc: '2.0', id: 41, method: 'tools/list' },
+      { [HOOK_HEADER_SESSION]: CALLER, [HOOK_HEADER_RUN]: 'run-1' },
+    );
+    const body = (await response.json()) as { result: { tools: { name: string }[] } };
+
+    expect(body.result.tools.map((tool) => tool.name)).not.toContain('session_done');
+  });
 
   it('answers initialize with the pinned protocol version and the hive server name', async () => {
     const response = await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize' });

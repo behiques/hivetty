@@ -192,6 +192,11 @@ export interface ReceiverClient {
    * `projects` returns. A refusal is a `ReceiverError` carrying its reason.
    */
   projectAutoMerge(request: ProjectAutoMergeRequest): Promise<ProjectsDirectory>;
+  /**
+   * This session is finished (HIVE-368): POST `/done`, which arms the close for the end of the
+   * turn. Resolves on the route's 204; a refusal is a `ReceiverError` carrying its reason.
+   */
+  done(): Promise<void>;
 }
 
 /** The path `POST /mcp` is served on (HIVE-130). */

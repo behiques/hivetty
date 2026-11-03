@@ -508,6 +508,17 @@ export const AGENTS_TOOL: McpToolDefinition = {
   },
 };
 
+/**
+ * Finish this session (HIVE-368): the `done` skill's one step on a CLI whose shell cannot reach
+ * the receiver. No arguments, for {@link AGENTS_TOOL}'s reason: the session is the header.
+ * Served to terminal sessions only; an agent run ends by exiting (`mcp-tools.ts`'s lane).
+ */
+export const SESSION_DONE_TOOL: McpToolDefinition = {
+  name: 'session_done',
+  description: 'Finish this session. HiveTTY marks it done and closes its terminal when the turn ends.',
+  inputSchema: { type: 'object', properties: {} },
+};
+
 /** Every tool the hive MCP server serves (HIVE-369): the host lists these, and a skill's `{{tool:x}}` names one. */
 export const HIVE_TOOLS: readonly McpToolDefinition[] = [
   ...LEDGER_TOOLS,
@@ -519,6 +530,7 @@ export const HIVE_TOOLS: readonly McpToolDefinition[] = [
   JIRA_COMMENT_TOOL,
   JIRA_USERS_TOOL,
   PROJECT_AUTO_MERGE_TOOL,
+  SESSION_DONE_TOOL,
   APPROVE_TOOL,
 ];
 

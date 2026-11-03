@@ -1427,7 +1427,9 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     const registered = typeof run === 'string' && run !== '' ? runGrants.get(run) : undefined;
     const grants = registered !== undefined && registered.owner === caller ? registered.grants : [];
 
-    return createToolHandlers(clientFor(headers), grants, store);
+    // A run's header marks an agent lane, which never finishes a session (HIVE-368).
+    const lane = typeof run === 'string' && run !== '' ? 'agent' : 'session';
+    return createToolHandlers(clientFor(headers), grants, store, lane);
   }
 
   /**
@@ -1501,6 +1503,11 @@ export function createReceiver(options: ReceiverOptions): Receiver {
         ),
       jiraUsers: async (request) =>
         unwrap<JiraResult<JiraUser[]>>(await handleJiraUsers(headers, JSON.stringify(request), false)),
+      // HIVE-368: `/done`'s own handler, so a container's finish is the same arming a curl's is.
+      done: async () => {
+        const status = handleDone(headers);
+        if (status !== 204) throw new ReceiverError(status, `the Hive refused the request (${status})`);
+      },
     };
   }
 

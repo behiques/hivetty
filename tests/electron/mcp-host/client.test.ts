@@ -4,7 +4,7 @@ import { AGENTS_PATH } from '@shared/agent-contract';
 import { PROJECT_AUTO_MERGE_PATH, PROJECTS_PATH } from '@shared/config-contract';
 import { PR_PATH } from '@shared/github-contract';
 import { JIRA_COMMENT_PATH, JIRA_GET_PATH, JIRA_TRANSITION_PATH, JIRA_USERS_PATH } from '@shared/jira-contract';
-import { HOOK_HEADER_SESSION, HOOK_HEADER_TOKEN } from '@shared/hook-contract';
+import { DONE_PATH, HOOK_HEADER_SESSION, HOOK_HEADER_TOKEN } from '@shared/hook-contract';
 import {
   LEDGER_POST_PATH,
   LEDGER_READ_PATH,
@@ -295,5 +295,28 @@ describe('projectAutoMerge (retro B)', () => {
     await expect(client(fetchImpl as never).projectAutoMerge({ project: 'nope', on: true })).rejects.toThrow(
       new ReceiverError(409, 'no project "nope" is configured; nothing was changed'),
     );
+  });
+});
+
+describe('createReceiverClient — done (HIVE-368)', () => {
+  it('posts /done with the identity headers and resolves on a bodiless 204', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+
+    await expect(client(fetchImpl as never).done()).resolves.toBeUndefined();
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(`http://127.0.0.1:4100${DONE_PATH}`);
+    expect(init.method).toBe('POST');
+    expect((init.headers as Record<string, string>)[HOOK_HEADER_SESSION]).toBe('sess-a');
+    expect((init.headers as Record<string, string>)[HOOK_HEADER_TOKEN]).toBe('tok-1');
+  });
+
+  it('rejects with the receiver reason on a refusal', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(403, { reason: 'this session token was revoked' }));
+
+    await expect(client(fetchImpl as never).done()).rejects.toMatchObject({
+      status: 403,
+      message: 'this session token was revoked',
+    });
   });
 });

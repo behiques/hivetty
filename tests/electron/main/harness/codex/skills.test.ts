@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { codexSkills } from '../../../../../electron/main/harness/codex/skills';
+import { DONE_DESCRIPTION, doneToolSkill } from '../../../../../electron/main/harness/done-tool-skill';
 
 describe('codexSkills', () => {
   it('lands in its own folder', () => {
@@ -22,8 +23,10 @@ describe('codexSkills', () => {
         'Skills like the ones above. When the user names one with $name or in plain text, read its SKILL.md before acting.',
         '- plan: Write a plan. (file: /u/hive/plugins/codex/skills/plan/SKILL.md)',
         '- tdd: (file: /u/hive/plugins/codex/skills/tdd/SKILL.md)',
+        `- done: ${DONE_DESCRIPTION} (file: /u/hive/plugins/codex/skills/done/SKILL.md)`,
         '',
       ].join('\n'),
+      'skills/done/SKILL.md': doneToolSkill('codex'),
     });
   });
 });

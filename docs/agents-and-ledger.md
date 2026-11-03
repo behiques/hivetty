@@ -1130,9 +1130,15 @@ enough to earn their own schema.
 `--permission-prompt-tool` and the model is never meant to call, and `agents`,
 described next. That array is the ledger vocabulary the agent
 preamble teaches — one entry per ledger kind — and neither of these writes an
-entry. `tools/list` reports eighteen, in that order: the nine, then `agents`,
+entry. `tools/list` reports nineteen, in that order: the nine, then `agents`,
 `projects` and `pr` (HIVE-173), the three Jira tools (HIVE-174) and
-`jira_users` (HIVE-216), `project_auto_merge`, then `approve` last.
+`jira_users` (HIVE-216), `project_auto_merge`, `session_done`, then `approve` last.
+
+`session_done` (HIVE-368): no arguments; POSTs `/done` for the calling session,
+which arms the close exactly as Claude's `curl` does. Listed to terminal
+sessions only: an agent lane (a run id in `HIVE_RUN_ID` or `x-hive-run`)
+neither sees nor may call it, so an agent's `tools/list` has eighteen, and
+`/done`'s own `rejectUnlessSession` still refuses a caller that is not a session.
 
 ### The agents directory: `mcp__hive__agents`
 

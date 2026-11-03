@@ -8,7 +8,7 @@ import {
 } from '@shared/hook-contract';
 import { HIVE_TOOLS } from '@shared/ledger-tools';
 import type { CallToolResult } from '@shared/mcp-contract';
-import { createToolHandlers } from '@shared/mcp-tools';
+import { createToolHandlers, type ToolLane } from '@shared/mcp-tools';
 
 import { createReceiverClient } from './client';
 import type { RpcHandlers } from './rpc';
@@ -113,13 +113,16 @@ export function createHandlers(
   fetchImpl: typeof globalThis.fetch,
 ): RpcHandlers {
   const environment = readEnvironment(env);
+  // An agent run carries `HIVE_RUN_ID` (HIVE-128); a pty session never does (HIVE-368).
+  const run = env[HOOK_ENV_RUN];
+  const lane: ToolLane = run === undefined || run === '' ? 'session' : 'agent';
 
   if (environment === null) {
     return {
       // The same list the reachable path serves, deliberately: a tool set that
       // differed by how the process was started would make `/mcp` report a
       // different server than the one an agent actually gets.
-      listTools: () => [...HIVE_TOOLS],
+      listTools: () => HIVE_TOOLS.filter((tool) => lane === 'session' || tool.name !== 'session_done'),
       callTool: async () =>
         unreachable(
           'The ledger is not reachable: this process was started outside HiveTTY, or the app is not running. Nothing was written.',
@@ -137,5 +140,7 @@ export function createHandlers(
       fetch: fetchImpl,
     }),
     readGrants(env),
+    undefined,
+    lane,
   );
 }

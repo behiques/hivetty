@@ -477,6 +477,8 @@ login shell is typed, as Claude's is (`&& exit`, the task after `--`), flag by f
   is not used: a session's TUI asks for itself (D5).
 - `-c mcp_servers.hive.*`: the stdio host, `env_vars` forwarding the session's identity by name,
   so no token is on the argv. Omitted before the host script is written.
+- `-c mcp_servers.hive.tools.session_done.approval_mode="approve"`: `done` is one hive call, so it
+  never asks; the other hive tools keep Codex's default (HIVE-368). Only beside the hive server.
 - `--dangerously-bypass-hook-trust`: `-c` hooks fire only with it (P1); without it a "Hooks need
   review" dialog holds every hook. It also runs a repository's own `.codex` hooks (P2), so a
   session in a repository with its own `.codex` starts **without** it (D4): Codex shows its trust
@@ -663,7 +665,8 @@ typed into the login shell as Codex's is:
 ```
 unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSISTED_APPROVAL;
   copilot --session-id <uuid> [--model m]
-  [--reasoning-effort e] --plugin-dir '<state>/plugin' [--additional-mcp-config '<hive>'] [-i '<task>'] && exit
+  [--reasoning-effort e] --plugin-dir '<state>/plugin'
+  [--additional-mcp-config '<hive>' --allow-tool 'hive(session_done)'] [-i '<task>'] && exit
 ```
 
 - `unset …`, and the same three in `stripEnv` with the six parent-session keys: the user's own
@@ -682,6 +685,8 @@ unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSIS
   keystroke, failing the spawn with the path when it cannot.
 - `--additional-mcp-config`: the stdio hive host, its identity forwarded by `${VAR}` reference
   (`copilotMcpConfig`, shared with headless). Both add to the user's own hooks and servers (P7).
+- `--allow-tool 'hive(session_done)'`, beside the hive server only, for Codex's reason: `done` is
+  one hive call, so it never asks (HIVE-368). It is the one tool approved by name; no other.
 - No `--allow-all`, `--yolo`, `--trust-folder` or `--no-auto-update`: Copilot asks in its own TUI,
   and an untrusted folder shows its own trust dialog first. `/fence` is not used (D5).
 
@@ -792,12 +797,14 @@ names its folder and the files beside `skills/`:
 | adapter | `skills.dir` | extras |
 |---|---|---|
 | claude-code | `plugin` (the `--plugin-dir`) | `.claude-plugin/plugin.json`, `skills/done/SKILL.md` |
-| codex | `plugins/codex` | `catalog.md`, the block HIVE-360 hands the model as instructions |
-| copilot | `plugins/copilot` | `.claude-plugin/plugin.json` (its own string) |
+| codex | `plugins/codex` | `catalog.md`, the block HIVE-360 hands the model as instructions; `skills/done/SKILL.md` |
+| copilot | `plugins/copilot` | `.claude-plugin/plugin.json` (its own string), `skills/done/SKILL.md` |
 
 The runtime (`skills/index.ts`) renders all three on every `sync()`, each in its own `try`: one
 CLI's folder failing never drops another's, and `pluginDirPath(cli)` is `null` only for the one
-that failed. `/done` stays Claude-only until HIVE-368.
+that failed. Codex and Copilot get `done` from `harness/done-tool-skill.ts`: call
+`{{tool:session_done}}`, then stop, with Codex's `catalog.md` listing it last. Claude's keeps its
+`curl` (HIVE-368).
 
 **The portability check.** Settings › Skills runs `portabilityIssues(buffer, known)` over the open
 markdown file as it is typed. It flags `mcp__hive__x`, `hive-x` (a hive tool), `hive:x` or
@@ -807,7 +814,7 @@ skill may be meant for one CLI. `known.tools` is `HIVE_TOOL_NAMES` (`electron/sh
 the same `HIVE_TOOLS` list the MCP host serves.
 
 **Next.** HIVE-360 hands Codex `catalog.md` and maps its paths into containers; HIVE-362 passes
-Copilot's folder as a second `--plugin-dir`; HIVE-368 brings `/done` to both; HIVE-370 gives them
+Copilot's folder as a second `--plugin-dir`; HIVE-368 brought `done` to both; HIVE-370 gives them
 goal-on's stop hook; HIVE-371 words subagent dispatch per CLI.
 
 ## Adding a second harness

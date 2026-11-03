@@ -71,6 +71,8 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
           // On the argv as written: `hiveServer.env` must never carry a secret, which goes by name below.
           ...config(`mcp_servers.hive.env=${tomlTable(hiveServer.env)}`),
           ...config(`mcp_servers.hive.env_vars=${tomlList(HIVE_SESSION_ENV)}`),
+          // HIVE-368: `done` is this one call, so it must not ask; every other hive tool keeps Codex's default.
+          ...config('mcp_servers.hive.tools.session_done.approval_mode="approve"'),
         ]),
     ...(spec.bypassHookTrust === true ? ['--dangerously-bypass-hook-trust'] : []),
   ];

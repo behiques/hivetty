@@ -77,9 +77,9 @@ describe('createHandlers without an environment', () => {
     differed depending on how the process was started would make `/mcp` report
     a different server than the one an agent actually gets.
   */
-  it('still lists the eighteen tools, so /mcp shows the server connected', () => {
+  it('still lists the nineteen tools, so /mcp shows the server connected', () => {
     const handlers = createHandlers({}, vi.fn() as never);
-    expect(handlers.listTools()).toHaveLength(18);
+    expect(handlers.listTools()).toHaveLength(19);
     expect(handlers.listTools().map((tool) => tool.name)).toContain('project_auto_merge');
   });
 
@@ -122,5 +122,22 @@ describe('createHandlers with an environment', () => {
       'http://127.0.0.1:4100/ledger/read',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+});
+
+describe('createHandlers — the session lane (HIVE-368)', () => {
+  const SESSION = { HIVE_SESSION_ID: 'sess-a', HIVE_HOOK_TOKEN: 't', HIVE_RECEIVER_URL: 'http://127.0.0.1:1' };
+  const names = (env: NodeJS.ProcessEnv) =>
+    createHandlers(env, vi.fn() as never)
+      .listTools()
+      .map((tool) => tool.name);
+
+  it('lists session_done for a session, reachable or not', () => {
+    expect(names(SESSION)).toContain('session_done');
+    expect(names({})).toContain('session_done');
+  });
+  it('hides it from an agent run, reachable or not', () => {
+    expect(names({ ...SESSION, HIVE_RUN_ID: 'run-9', HIVE_RUN_TOKEN: 'rt' })).not.toContain('session_done');
+    expect(names({ HIVE_RUN_ID: 'run-9' })).not.toContain('session_done');
   });
 });

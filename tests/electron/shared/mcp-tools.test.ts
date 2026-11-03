@@ -25,6 +25,7 @@ const stub = (overrides: Partial<ReceiverClient> = {}): ReceiverClient => ({
   projectAutoMerge: vi.fn(async () => {
     throw new ReceiverError(409, 'auto-merge switching is not wired to this receiver; nothing was changed');
   }),
+  done: vi.fn(async () => {}),
   ...overrides,
 });
 
@@ -42,7 +43,7 @@ describe('createToolHandlers — listing', () => {
     `agents` (HIVE-127), then `approve` last — the tools a model is meant to
     call ahead of the one only the CLI ever reaches, on its behalf.
   */
-  it('lists the eighteen shared definitions unchanged', () => {
+  it('lists the nineteen shared definitions unchanged', () => {
     const handlers = createToolHandlers(stub());
     expect(handlers.listTools().map((tool) => tool.name)).toEqual([
       'ledger_read',
@@ -62,6 +63,7 @@ describe('createToolHandlers — listing', () => {
       'jira_comment',
       'jira_users',
       'project_auto_merge',
+      'session_done',
       'approve',
     ]);
   });
@@ -954,5 +956,39 @@ describe('createToolHandlers — the Jira tools (HIVE-174)', () => {
       { kind: 'quote', runs: [{ text: 'q', marks: [] }] },
       { kind: 'unknown', runs: [{ text: 'raw', marks: [] }] },
     ])).toBe('###### H\n1. one two\n> q\nraw');
+  });
+});
+
+describe('createToolHandlers — session_done (HIVE-368)', () => {
+  it('asks the receiver to finish the session and says the terminal closes at the end of the turn', async () => {
+    const done = vi.fn(async () => {});
+    const result = await createToolHandlers(stub({ done })).callTool('session_done', {});
+
+    expect(done).toHaveBeenCalledTimes(1);
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toBe(
+      'HiveTTY will close this session when this turn ends. Stop now: do not summarise or run anything else.',
+    );
+  });
+
+  it('turns a refusal into a sentence the model reads', async () => {
+    const done = vi.fn(async () => {
+      throw new ReceiverError(403, 'this session token was revoked');
+    });
+    const result = await createToolHandlers(stub({ done })).callTool('session_done', {});
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe('this session token was revoked');
+  });
+
+  it('is neither listed nor callable on an agent lane, which ends by exiting', async () => {
+    const done = vi.fn(async () => {});
+    const handlers = createToolHandlers(stub({ done }), [], undefined, 'agent');
+
+    expect(handlers.listTools().map((tool) => tool.name)).not.toContain('session_done');
+    const result = await handlers.callTool('session_done', {});
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe('session_done is for terminal sessions; an agent run ends by exiting.');
+    expect(done).not.toHaveBeenCalled();
   });
 });
