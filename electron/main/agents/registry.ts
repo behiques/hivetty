@@ -35,10 +35,13 @@ import {
   AGENT_NAME_PATTERN,
   KNOWN_AGENT_MCP,
   isReservedAgentName,
+  parseList,
+  readFrontmatter,
   type AgentsSnapshot,
   type AgentSummary,
   type AgentWriteResult,
 } from '@shared/agent-contract';
+import { isHarnessId, type HarnessId } from '@shared/harness-contract';
 
 import { parseAgent } from './definition';
 import { patchFrontmatter } from './patch';
@@ -104,6 +107,10 @@ export interface AgentRunFiles {
   carry: (from: string, to: string) => Promise<void>;
 }
 
+/** The CLIs a definition names, known ids only; `[]` when it names none (HIVE-367). */
+const clisOf = (source: string): HarnessId[] =>
+  (parseList(readFrontmatter(source)?.fields.get('harness')?.value ?? '[]') ?? []).filter(isHarnessId);
+
 interface RegistryOptions {
   root: string;
   /** See {@link AgentRunFiles}. */
@@ -114,8 +121,13 @@ interface RegistryOptions {
    * A function rather than a snapshot: skills can be written while the app
    * runs, and an agent naming one added a minute ago must validate against the
    * folders as they are now.
+   *
+   * `clis` is the definition's `harness:` list, known ids only, `[]` for none;
+   * the runtime picks the default (HIVE-367).
    */
-  skillNames: () => Promise<{ all: readonly string[]; hive: readonly string[]; places?: string }>;
+  skillNames: (
+    clis: readonly HarnessId[],
+  ) => Promise<{ all: readonly string[]; hive: readonly string[]; places?: string }>;
   watch?: WatchFactory;
 }
 
@@ -240,7 +252,7 @@ export function createAgentRegistry({
       return { ok: false, problems: [{ field: 'name', reason: 'Bad name.' }] };
     }
 
-    const result = parse(name, source, await skillNames());
+    const result = parse(name, source, await skillNames(clisOf(source)));
 
     if ('problems' in result) return { ok: false, problems: result.problems };
 
@@ -321,8 +333,15 @@ export function createAgentRegistry({
       }
 
       const agents: AgentSummary[] = [];
-      // One whole-machine scan for the whole listing, not one per agent.
-      const skills = await skillNames();
+      // One scan per CLI set for the whole listing, not one per agent.
+      const scans = new Map<string, ReturnType<typeof skillNames>>();
+      const skillsFor = (source: string) => {
+        const clis = clisOf(source);
+        const key = clis.join(',');
+        const hit = scans.get(key) ?? skillNames(clis);
+        scans.set(key, hit);
+        return hit;
+      };
 
       for (const folder of folders) {
         /*
@@ -368,7 +387,7 @@ export function createAgentRegistry({
         // A folder with no AGENT.md is not an agent — it is somebody's notes.
         if (source === null) continue;
 
-        const result = parse(folder, source, skills);
+        const result = parse(folder, source, await skillsFor(source));
 
         if ('def' in result) {
           const { def } = result;
