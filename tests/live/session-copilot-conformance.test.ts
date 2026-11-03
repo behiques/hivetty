@@ -121,6 +121,8 @@ def seen(text, since): return text.encode() in bytes(out[since:])
 pump(4)
 if seen('Resume anyway', 0): key('1'); pump(2)
 pump(4)
+for text in c.get('before', []):
+    key(text); pump(0.3); key('\r'); pump(3)
 for line in c['prompts']:
     mark = len(out)
     key(line); pump(0.3); key('\r')
@@ -350,6 +352,8 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     prompts: string[];
     answer?: string;
     after?: string[];
+    /** Typed and submitted before the prompts, three seconds each: a slash command that ends no turn. */
+    before?: string[];
     kill?: boolean;
     interrupt?: number;
     /** `/exit\r` in one write, as `EXIT_COMMAND` is, and report whether copilot exited. */
@@ -477,6 +481,73 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       expect(statuses.at(-1)?.signal).toBeUndefined();
       expect(dismissed.length).toBeGreaterThan(0);
       expect(existsSync(join(repo, 'nope.txt'))).toBe(false);
+    },
+    CASE_MS,
+  );
+
+  /*
+   * FINDINGS P12 (HIVE-383): every approval the user makes themselves fires permissionRequest the way
+   * --allow-tool does (P11), with no prompt drawn, so the card raised for it is cleared at tool-end.
+   * These hold what 1.0.105 does; the follow-up that stops the flash flips them.
+   */
+  const blocks = (): number => raised.filter((n) => n.kind === 'session.blocked').length;
+  const prompts = (log: string): number => flat(log).split('Doyouwant').length - 1;
+  /** beforeEach's repository skills answer any prompt with a word; a shell probe needs them gone. */
+  const plainRepo = (): void => {
+    for (const root of ['.github', '.agents', '.claude']) rmSync(join(repo, root), { recursive: true, force: true });
+  };
+
+  it(
+    "a call the user approved with \"don't ask again in this repo\" still fires permissionRequest (FINDINGS P12)",
+    async () => {
+      plainRepo();
+      // A redirect gets only Yes/No; a plain command gets the don't-ask-again option, 2.
+      const { log } = await run('p12-repo-approval', '11111111-2222-4333-8444-5555555555d1', {
+        prompts: ['Run the shell command: mkdir one', 'Run the shell command: mkdir two'],
+        answer: '2',
+      });
+      finding('p12-repo-approval', { log });
+      // Kept on disk per repository: the user's own allow-list.
+      const saved = readFileSync(join(home, 'permissions-config.json'), 'utf8');
+      expect(saved).toContain(repo);
+      expect(saved).toContain('"mkdir"');
+      expect(existsSync(join(repo, 'two'))).toBe(true);
+      expect(prompts(log)).toBe(1);
+      expect(blocks()).toBe(2);
+    },
+    CASE_MS,
+  );
+
+  it(
+    '/allow-all typed in the TUI still fires permissionRequest (FINDINGS P12)',
+    async () => {
+      plainRepo();
+      const { log } = await run('p12-allow-all', '11111111-2222-4333-8444-5555555555d2', {
+        before: ['/allow-all'],
+        prompts: ['Run the shell command: echo hive > made.txt'],
+      });
+      finding('p12-allow-all', { log });
+      expect(flat(log)).toContain('AllowAllforthissession');
+      expect(existsSync(join(repo, 'made.txt'))).toBe(true);
+      expect(prompts(log)).toBe(0);
+      expect(blocks()).toBe(1);
+    },
+    CASE_MS,
+  );
+
+  it(
+    "settings.json's defaultPermissionMode allow-all still fires permissionRequest (FINDINGS P12)",
+    async () => {
+      plainRepo();
+      // Where `copilot config defaultPermissionMode allow-all` writes it (probed): settings.json, not config.json.
+      writeFileSync(join(home, 'settings.json'), `${JSON.stringify({ defaultPermissionMode: 'allow-all' })}\n`);
+      const { log } = await run('p12-settings', '11111111-2222-4333-8444-5555555555d3', {
+        prompts: ['Run the shell command: echo hive > made.txt'],
+      });
+      finding('p12-settings', { log });
+      expect(existsSync(join(repo, 'made.txt'))).toBe(true);
+      expect(prompts(log)).toBe(0);
+      expect(blocks()).toBe(1);
     },
     CASE_MS,
   );

@@ -207,7 +207,7 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
       command: 'copilot',
       sessionUuid: '11111111-2222-4333-8444-555555555551',
       stateDir: '/s',
-      hiveServer: { command: '/app/electron', args: ['/app/mcp-host.js'] },
+      hiveServer: { command: '/app/electron', args: ['/app/mcp-host.js'], env: {} },
     });
     const allowed = [...command.matchAll(/--allow-tool '([^']+)'/g)].map((match) => match[1]!);
     expect(allowed).not.toEqual([]);
