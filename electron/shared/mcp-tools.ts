@@ -96,6 +96,9 @@ export const createCursorStore = (): CursorStore => {
   };
 };
 
+/** Who is calling (HIVE-368): a terminal session, or an agent run, which ends by exiting. */
+export type ToolLane = 'session' | 'agent';
+
 export function createToolHandlers(
   client: ReceiverClient,
   grants: readonly string[] = [],
@@ -106,6 +109,8 @@ export function createToolHandlers(
    * per-process cursor they had before. `POST /mcp` passes one keyed by session.
    */
   cursorStore: CursorStore = createCursorStore(),
+  /** Defaulted to `session`, the stdio host's lane for every pty; the run's id decides `agent`. */
+  lane: ToolLane = 'session',
 ): RpcHandlers {
 
   /** One write, with the refusal turned into text the model can read. */
@@ -609,7 +614,8 @@ export function createToolHandlers(
   return {
     // `approve` stays last: the tools a model is meant to call come first, and
     // that one is only ever reached by the CLI on its behalf.
-    listTools: (): readonly McpToolDefinition[] => [...HIVE_TOOLS],
+    listTools: (): readonly McpToolDefinition[] =>
+      lane === 'agent' ? HIVE_TOOLS.filter((tool) => tool.name !== 'session_done') : [...HIVE_TOOLS],
 
     async callTool(name, args): Promise<CallToolResult> {
       // `approve` must never surface as `isError` or throw — the CLI can only
@@ -664,6 +670,11 @@ export function createToolHandlers(
             return await write('failed', args);
           case 'ledger_handoff':
             return await write('handoff', args);
+          case 'session_done':
+            // Not listed for an agent, but a name can still be called.
+            if (lane === 'agent') return failed('session_done is for terminal sessions; an agent run ends by exiting.');
+            await client.done();
+            return ok('HiveTTY will close this session when this turn ends. Stop now: do not summarise or run anything else.');
           default:
             return failed(`no such tool: ${name}`);
         }
