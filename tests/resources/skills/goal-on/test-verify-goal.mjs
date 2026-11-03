@@ -6,10 +6,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, utimesSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, utimesSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   decide,
@@ -30,6 +31,7 @@ import {
   setHeaderStatus,
   setHeaderField,
   headerValue,
+  isSubagent,
 } from '../../../../resources/skills/goal-on/scripts/verify-goal.mjs';
 
 const brief = ({
@@ -430,6 +432,34 @@ test('Copilot keeps its agentStop shape unchanged', () => {
     decision: 'block',
     reason: 'because',
   });
+});
+
+// --- subagents ---------------------------------------------------------------
+
+const SCRIPT = fileURLToPath(new URL('../../../../resources/skills/goal-on/scripts/verify-goal.mjs', import.meta.url));
+/** The script as a CLI runs it: payload on stdin, no receiver. */
+const runHook = (payload, { env = {}, args = [] } = {}) =>
+  spawnSync(process.execPath, [SCRIPT, ...args], {
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+    env: { ...process.env, HIVE_RECEIVER_URL: '', HIVE_SESSION_ID: '', ...env },
+  });
+
+test('a subagent is either spelling of the agent id', () => {
+  assert.equal(isSubagent({ sessionId: 's', agentId: 'a1' }), true); // Copilot
+  assert.equal(isSubagent({ session_id: 's', agent_id: 'a1' }), true); // Codex
+  assert.equal(isSubagent({ sessionId: 's' }), false);
+  assert.equal(isSubagent(null), false);
+});
+
+test("a subagent's stop releases at once and leaves the brief alone", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-sub-'));
+  const path = join(dir, 'abc.md');
+  const md = brief({ outcome: '- [ ] not yet\n' });
+  writeFileSync(path, md);
+  const run = runHook({ sessionId: 'abc', agentId: 'sub-1' }, { env: { HIVE_GOALS_DIR: dir } });
+  assert.equal(run.stdout, '{"decision":"allow"}');
+  assert.equal(readFileSync(path, 'utf8'), md);
 });
 
 // --- finding the brief -------------------------------------------------------

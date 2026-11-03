@@ -107,6 +107,14 @@ export function sessionIdOf(payload) {
   return id;
 }
 
+/**
+ * A subagent's turn end (HIVE-370). Copilot sends `agentStop` with `agentId` for one; Codex
+ * names a subagent `agent_id` (on `SubagentStop`, never on `Stop` as of 0.166, FINDINGS P10).
+ * The receiver drops both (`copilot/hooks.ts`), and this hook, run directly by the CLI, must
+ * too, or it would spend the parent's budget and block a subagent on the parent's Outcome.
+ */
+export const isSubagent = (payload) => payload?.agentId !== undefined || payload?.agent_id !== undefined;
+
 export const briefDir = () => process.env.HIVE_GOALS_DIR || join(homedir(), '.hivetty', 'goals');
 
 /** Split a brief into { header, body }. Returns null if there is no frontmatter. */
@@ -586,6 +594,7 @@ function main() {
   const harness = harnessOf();
   try {
     const payload = readPayload();
+    if (isSubagent(payload)) return emit('allow', undefined, harness);
     const sessionId = sessionIdOf(payload);
     if (!sessionId) return emit('allow', undefined, harness);
 
