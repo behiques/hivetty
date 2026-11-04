@@ -331,7 +331,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       entitled: (id) => entitled(id),
       enabled: () => true,
       defaultCli: () => 'copilot',
-      // Settings › CLIs, read per call as `ipc/index.ts` reads it: the deny case writes it.
+      // Settings › Harnesses › Copilot, read per call as `ipc/index.ts` reads it: the deny case writes it.
       defaults: (id) => createCliGate(getConfig).defaults(id),
     };
 

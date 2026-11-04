@@ -8,7 +8,7 @@ import type { HarnessAdapter } from '../harness/port';
 const LITERAL_PREFIX = 'literal:';
 
 /**
- * What the licence (HIVE-332) and Settings › CLIs (HIVE-341) say about a CLI. Absent until they
+ * What the licence (HIVE-332) and Settings › Harnesses › <CLI> (HIVE-341, HIVE-376) say about a CLI. Absent until they
  * land: every CLI entitled and enabled, and no Settings default.
  */
 export interface HarnessGate {

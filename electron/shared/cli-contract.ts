@@ -1,5 +1,5 @@
 /**
- * Per-CLI settings (HIVE-341): what Settings › CLIs stores for each harness and the vocabulary its
+ * Per-CLI settings (HIVE-341): what Settings › Harnesses › <CLI> stores for each harness and the vocabulary its
  * fields take. Data and pure functions only: this module follows `electron/shared`'s rule.
  *
  * Its own module rather than `harness-contract.ts`: `session-contract` imports that one, and the

@@ -1706,24 +1706,25 @@ candidate that passes every check runs:
 1. it has a headless adapter in this build;
 2. its binary starts;
 3. the licence allows it (HIVE-332);
-4. it is enabled for agents in Settings › CLIs (HIVE-341);
+4. it is enabled for agents on its page in Settings › Harnesses (HIVE-341, HIVE-376);
 5. its fence can express every rule `HIVE_GRANTS` carries (HIVE-339);
 6. it reports cost in USD, if the agent sets `budget_usd` or `daily_usd`;
 7. it can serve every `mcp:` integration (`Capabilities.agentMcp`).
 
 When none passes, the run is refused as `invalid` with every candidate and its reason,
 for example: "No CLI can run reviewer: codex is not in your plan (Starter or higher);
-claude-code is turned off for agents in Settings › CLIs." A fence reason names tools,
+claude-code is turned off for agents in Settings › Harnesses." A fence reason names tools,
 never a rule's argument.
 
-An id the build does not know is a definition problem. Settings › CLIs (HIVE-341) is the
+An id the build does not know is a definition problem. Each CLI's Headless agents group in
+Settings › Harnesses › <CLI> (HIVE-341, HIVE-376) is the
 gate, read from `config.json` on every wake so an edit reaches the next one with no restart.
 Turning **Enabled for agents** off skips that CLI during resolution. `agentsDefaultCli` in
 `config.json` is the fallback candidate when a definition names no `harness:`; its select
-ships with HIVE-342. Until HIVE-332, every CLI counts as entitled.
+is "Default CLI for agents" at the top of Settings › Agents (HIVE-342, HIVE-376). Until HIVE-332, every CLI counts as entitled.
 
 `model:` and `effort:` are Claude's vocabulary and apply only on `claude-code`. Each one is
-taken from `AGENT.md` first, then from the CLI's card in Settings › CLIs, and when neither
+taken from `AGENT.md` first, then from the CLI's Headless agents group in Settings › Harnesses › <CLI>, and when neither
 names it the flag is omitted and the CLI picks.
 
 A conversation belongs to its CLI. The lane records `harness` beside `sessionUuid`;

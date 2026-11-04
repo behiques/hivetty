@@ -2771,7 +2771,7 @@ export function registerIpcHandlers(
     hookEnv: (name) => hooks.envFor(name),
     claudeCommand,
     subscriptionAuth: () => getConfig().subscriptionAuth,
-    // HIVE-341. Settings › CLIs: which CLI agents fall back to, whether each may run them, and its defaults.
+    // HIVE-341. Settings › Agents and Settings › Harnesses › <CLI>: which CLI agents fall back to, whether each may run them, and its defaults.
     gate: createCliGate(getConfig),
     state: agentState,
     env: () => process.env,

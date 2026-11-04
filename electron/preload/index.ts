@@ -348,7 +348,7 @@ const bridge: HiveBridge = {
     // reason Jira's token is on its own.
     setSlack: (request: SetSlackRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetSlack, request),
-    // HIVE-341. One CLI's headless agent defaults (Settings › CLIs).
+    // HIVE-341. One CLI's headless agent defaults (Settings › Harnesses › <CLI>).
     setCliAgents: (request: SetCliAgentsRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetCliAgents, request),
     setAgentsDefaultCli: (request: SetAgentsDefaultCliRequest): Promise<ConfigSnapshot> =>

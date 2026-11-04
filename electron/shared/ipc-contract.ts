@@ -312,7 +312,7 @@ export const CH = {
    * own — {@link CH.slackSetTokens}.
    */
   configSetSlack: 'config:set-slack',
-  /** HIVE-341. One CLI's headless agent defaults (Settings › CLIs). An ordinary settings write. */
+  /** HIVE-341. One CLI's headless agent defaults (Settings › Harnesses › <CLI>). An ordinary settings write. */
   configSetCliAgents: 'config:set-cli-agents',
   /** HIVE-342. The CLI an agent whose `AGENT.md` names no harness runs on. An ordinary settings write. */
   configSetAgentsDefaultCli: 'config:set-agents-default-cli',
