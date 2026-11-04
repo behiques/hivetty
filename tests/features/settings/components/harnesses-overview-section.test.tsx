@@ -69,6 +69,13 @@ describe('HarnessesOverviewSection (HIVE-375)', () => {
     rescan.mockClear();
   });
 
+  it("shows main's refusal of a write (HIVE-388)", () => {
+    snapshot = { ...emptySnapshot('/home/dev/.hive/config.json'), errors: ['every CLI cannot be off'] };
+    detected = detection;
+    render(<HarnessesOverviewSection />);
+    expect(screen.getByText('every CLI cannot be off')).toBeInTheDocument();
+  });
+
   it('lists each CLI: path and version, or the reason and its install hint', () => {
     renderWith({ detection, clis: resolveClis({}) });
     expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();

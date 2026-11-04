@@ -88,6 +88,13 @@ describe('HarnessPage (HIVE-376)', () => {
     expect(screen.getByText(PATH)).toBeInTheDocument();
   });
 
+  it.each(['claude-code', 'codex', 'copilot'] as const)("%s: shows main's refusal of a write (HIVE-388)", (cli) => {
+    snapshot = { ...emptySnapshot('/home/dev/.hive/config.json'), errors: ['EACCES; the previous config is unchanged'] };
+    detected = found;
+    render(<HarnessPage cli={cli} />);
+    expect(screen.getByText('EACCES; the previous config is unchanged')).toBeInTheDocument();
+  });
+
   it('a missing CLI shows its reason and install hint', () => {
     renderPage('copilot', { detection: { ...found, copilot: { missing: '`copilot` was not found on PATH.' } } });
     expect(screen.getByText('`copilot` was not found on PATH.', { exact: false })).toBeInTheDocument();
