@@ -153,11 +153,12 @@ export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
         ];
 
   // After `unset`, so it is decided after the profile ran; a statement, not a prefix, so it can be conditional.
+  // `:-` so a profile that sets nounset does not abort the line on an unset key.
   const otel =
     exportPath === undefined
       ? []
       : [
-          `[ -n "${COPILOT_OTEL_USER_KEYS.map((key) => `\${${key}}`).join('')}" ] || export ${COPILOT_OTEL_EXPORT_ENV}=${shellQuote(exportPath)};`,
+          `[ -n "${COPILOT_OTEL_USER_KEYS.map((key) => `\${${key}:-}`).join('')}" ] || export ${COPILOT_OTEL_EXPORT_ENV}=${shellQuote(exportPath)};`,
         ];
 
   return {

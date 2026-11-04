@@ -175,7 +175,7 @@ describe('the OTel export (HIVE-335)', () => {
   it('exports the file path, after the unset, only when the user has no OTel of their own', () => {
     const { command } = launchCopilotSession({ ...base, exportPath: '/state/otel/sess-07.jsonl' });
     expect(command).toContain(
-      `; [ -n "\${OTEL_EXPORTER_OTLP_ENDPOINT}\${COPILOT_OTEL_FILE_EXPORTER_PATH}\${COPILOT_OTEL_EXPORTER_TYPE}\${COPILOT_OTEL_ENABLED}" ] || export COPILOT_OTEL_FILE_EXPORTER_PATH='/state/otel/sess-07.jsonl'; `,
+      `; [ -n "\${OTEL_EXPORTER_OTLP_ENDPOINT:-}\${COPILOT_OTEL_FILE_EXPORTER_PATH:-}\${COPILOT_OTEL_EXPORTER_TYPE:-}\${COPILOT_OTEL_ENABLED:-}" ] || export COPILOT_OTEL_FILE_EXPORTER_PATH='/state/otel/sess-07.jsonl'; `,
     );
     expect(command.indexOf('export COPILOT_OTEL')).toBeGreaterThan(command.indexOf('unset '));
     expect(command.indexOf('export COPILOT_OTEL')).toBeLessThan(command.indexOf(' copilot '));
@@ -201,5 +201,15 @@ describe('the OTel export (HIVE-335)', () => {
     expect(run({ COPILOT_OTEL_FILE_EXPORTER_PATH: '/mine.jsonl' })).toBe('/mine.jsonl');
     expect(run({ COPILOT_OTEL_EXPORTER_TYPE: 'otlp-http' })).toBe('');
     expect(run({ COPILOT_OTEL_ENABLED: 'true' })).toBe('');
+  });
+  it('survives a profile that sets nounset: an unset key is not an error (HIVE-335)', () => {
+    const { command } = launchCopilotSession({ ...base, exportPath: '/state/otel/s.jsonl' });
+    const guard = /\[ -n .*?; /.exec(command)?.[0] ?? '';
+    const out = spawnSync('sh', ['-c', `set -u; ${guard} printf %s "$COPILOT_OTEL_FILE_EXPORTER_PATH"`], {
+      env: { PATH: process.env['PATH'] ?? '' },
+      encoding: 'utf8',
+    });
+    expect(out.stderr).toBe('');
+    expect(out.stdout).toBe('/state/otel/s.jsonl');
   });
 });
