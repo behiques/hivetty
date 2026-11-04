@@ -38,6 +38,9 @@ import {
 /** The most models a stepper draws as dots before its labels collide (HIVE-280). */
 const STEPPER_MAX = 8;
 
+/** Said when no CLI can start a session; the same words as the quick-start buttons' tooltip. */
+const NONE_AVAILABLE = 'No CLI is available for sessions';
+
 /** The concept pins the first four projects as one-click starts. */
 const PINNED_COUNT = 4;
 
@@ -80,7 +83,10 @@ export function NewSessionPicker() {
   const { pickerQuery, pickerTicket } = usePickerState();
   // Resolved against the account's Codex models, as the quick-start buttons resolve it.
   // The CLI too (HIVE-375): the pick this run, else the configured default, else the first one available.
-  const { cli, model, effort, efforts, defaultEffort, codexModels, availability } = useNewSessionPick(true);
+  const { cli, model, effort, efforts, defaultEffort, codexModels, availability, noneAvailable, detected } =
+    useNewSessionPick(true);
+  /** Nothing can run, and detection has said so: the fallback CLI would not start (HIVE-375). Not before it answers. */
+  const blocked = noneAvailable && detected;
   const ticket = useTicket(pickerTicket);
   const { closePicker, setPickerQuery, setNewCli, setNewModel, setNewEffort } =
     usePickerActions();
@@ -156,7 +162,7 @@ export function NewSessionPicker() {
     // Refused rather than trusted: every button that reaches here is already
     // disabled when the project has no real directory, but Enter in the search
     // box reaches here too (story 090).
-    if (!can.spawnSessionIn(projectId)) return;
+    if (blocked || !can.spawnSessionIn(projectId)) return;
     // Task is empty unless the picker came from a ticket: the picker starts a
     // session, and the first message gives it its job (story 043).
     // `spawnSession` opens the new tab, which also dismisses the picker.
@@ -242,6 +248,11 @@ export function NewSessionPicker() {
 
             {/* The CLI first, under the title (variant F): it decides what the rest of the form offers. */}
             <CliDock value={cli} onChange={setNewCli} unavailable={unavailableReasons(availability)} />
+            {blocked ? (
+              <p role="alert" className="text-center text-control text-red">
+                {NONE_AVAILABLE}
+              </p>
+            ) : null}
           </>
         )}
 
@@ -279,6 +290,7 @@ export function NewSessionPicker() {
             <PinnedProject
               key={project.id}
               project={project}
+              blocked={blocked}
               onSelect={spawn}
             />
           ))}
@@ -419,6 +431,7 @@ export function NewSessionPicker() {
                 <ProjectRow
                   key={project.id}
                   project={project}
+                  blocked={blocked}
                   onSelect={spawn}
                 />
               ))
@@ -448,9 +461,11 @@ export function NewSessionPicker() {
  */
 function PinnedProject({
   project,
+  blocked,
   onSelect,
 }: {
   project: ProjectRowData;
+  blocked: boolean;
   onSelect: (id: string) => void;
 }) {
   const { id, name, icon } = project;
@@ -460,8 +475,8 @@ function PinnedProject({
     <button
       type="button"
       onClick={() => onSelect(id)}
-      disabled={!access.spawnable}
-      title={access.reason ?? undefined}
+      disabled={!access.spawnable || blocked}
+      title={access.reason ?? (blocked ? NONE_AVAILABLE : undefined)}
       className="flex items-center gap-2 rounded-full border border-border bg-chip px-3.5 py-2 tabular-nums text-ui text-ink hover:border-brand hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:border-border disabled:hover:bg-chip"
     >
       <Icon
@@ -482,9 +497,11 @@ function PinnedProject({
 /** One search result. Owns its own count subscription. */
 function ProjectRow({
   project,
+  blocked,
   onSelect,
 }: {
   project: ProjectRowData;
+  blocked: boolean;
   onSelect: (id: string) => void;
 }) {
   /*
@@ -502,8 +519,8 @@ function ProjectRow({
     <button
       type="button"
       onClick={() => onSelect(id)}
-      disabled={!access.spawnable}
-      title={access.reason ?? undefined}
+      disabled={!access.spawnable || blocked}
+      title={access.reason ?? (blocked ? NONE_AVAILABLE : undefined)}
       className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover disabled:cursor-not-allowed disabled:hover:bg-transparent"
     >
       <Icon

@@ -25,7 +25,7 @@ const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolv
 vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels(), lastCodexModels: () => undefined }));
 
 /** `null`: an answered read that found nothing, every CLI available (the browser's answer, D10). */
-let detection: Record<string, unknown> | null = null;
+let detection: Record<string, unknown> | null | undefined = null;
 vi.mock('@lib/cli-detection', () => ({
   detectClis: () => Promise.resolve(detection),
   rescanClis: () => Promise.resolve(detection),
@@ -1087,8 +1087,15 @@ describe('NewSessionPicker — the ticket workflow', () => {
   });
 });
 
+const spawned = vi.fn();
+
 describe('NewSessionPicker and the CLIs on this machine (HIVE-375)', () => {
   beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    // A spy, as the ticket-workflow block above does: its own spy outlives `reset()`.
+    useHiveStore.setState({ spawnSession: spawned });
+    spawned.mockClear();
     useUiStore.getState().reset();
     useUiStore.getState().openPicker();
     resetProjectConfig();
@@ -1128,5 +1135,66 @@ describe('NewSessionPicker and the CLIs on this machine (HIVE-375)', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), CLI_VOCAB.copilot.models[1]!);
     expect(useUiStore.getState().newPicks.copilot.model).toBe(CLI_VOCAB.copilot.models[1]);
     expect(useUiStore.getState().newPicks['claude-code'].model).toBe('opus');
+  });
+
+  describe('with no CLI to start on', () => {
+    const allMissing = {
+      'claude-code': { missing: '`claude` was not found on PATH.' },
+      codex: { missing: '`codex` was not found on PATH.' },
+      copilot: { missing: '`copilot` was not found on PATH.' },
+    };
+
+    it('does not spawn from a click or Enter once detection is ready, and says why', async () => {
+      detection = allMissing;
+      const user = userEvent.setup();
+      render(<NewSessionPicker />);
+
+      expect(await screen.findByText('No CLI is available for sessions')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'design-system' })).toBeDisabled();
+      await user.click(screen.getByRole('button', { name: 'design-system' }));
+      await user.type(search(), 'referral{Enter}');
+
+      expect(spawned).not.toHaveBeenCalled();
+      expect(useUiStore.getState().picker).toBe(true);
+    });
+
+    it('does not spawn when every CLI is turned off', async () => {
+      setProjectConfigForTest({
+        ...projectConfigSnapshot()!,
+        clis: {
+          'claude-code': { sessions: false },
+          codex: { sessions: false },
+          copilot: { sessions: false },
+        },
+      } as ConfigSnapshot);
+      const user = userEvent.setup();
+      render(<NewSessionPicker />);
+
+      await user.type(search(), 'referral{Enter}');
+
+      expect(spawned).not.toHaveBeenCalled();
+      expect(screen.getByText('No CLI is available for sessions')).toBeInTheDocument();
+    });
+
+    it('still spawns while detection has not answered', async () => {
+      detection = undefined;
+      const user = userEvent.setup();
+      render(<NewSessionPicker />);
+
+      await user.type(search(), 'referral{Enter}');
+
+      expect(spawned).toHaveBeenCalledTimes(1);
+    });
+
+    it('still spawns with one CLI available', async () => {
+      detection = { ...allMissing, codex: { path: '/bin/codex', version: '0.165.2' } };
+      const user = userEvent.setup();
+      render(<NewSessionPicker />);
+
+      await screen.findByRole('radio', { name: 'Codex' });
+      await user.click(screen.getByRole('button', { name: 'design-system' }));
+
+      expect(spawned).toHaveBeenCalledTimes(1);
+    });
   });
 });

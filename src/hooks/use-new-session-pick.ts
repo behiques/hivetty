@@ -43,6 +43,8 @@ export function useNewSessionPick(fresh = false) {
     /** Whether each CLI may start a session, and why not. */
     availability,
     noneAvailable: resolved === null,
+    /** Whether detection has answered: until it has, `noneAvailable` is only the Settings switches' word. */
+    detected,
     /** Codex's list, detection, and a CLI to start on: a quick-start waits for all three (HIVE-375). */
     ready: (!codex || settled) && detected && resolved !== null,
   };
