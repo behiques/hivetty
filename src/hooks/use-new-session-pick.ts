@@ -1,4 +1,7 @@
+import { useCliDetection } from '@hooks/use-cli-detection';
 import { useCodexModels } from '@hooks/use-codex-models';
+import { useProjectConfig } from '@hooks/use-project-config';
+import { cliAvailability, resolveSessionCli } from '@lib/harness/session-cli';
 import { CLI_VOCAB } from '@shared/cli-contract';
 import { useNewSessionDefaults } from '@stores/ui-store';
 
@@ -11,10 +14,18 @@ import { useNewSessionDefaults } from '@stores/ui-store';
  * pick where it was (HIVE-100's rule). Claude's and Copilot's picks pass through untouched, and
  * Codex's list is read only while Codex is the pick. `fresh` is the picker's: it re-reads the list
  * where a quick-start button starts on the last answer.
+ *
+ * The CLI itself is resolved here too (HIVE-375 D2): the pick this run, else the configured default, else the
+ * first CLI that is installed and turned on. With none, `cli` stays claude-code so callers keep their types, and
+ * `noneAvailable` says why nothing can start.
  */
 export function useNewSessionPick(fresh = false) {
   const { newCli: picked, newPicks } = useNewSessionDefaults();
-  const newCli = picked ?? 'claude-code';
+  const snapshot = useProjectConfig();
+  const { detection, settled: detected } = useCliDetection();
+  const availability = cliAvailability(detection, snapshot?.clis ?? null);
+  const resolved = resolveSessionCli(picked, snapshot?.sessionsDefaultCli, availability);
+  const newCli = resolved ?? 'claude-code';
   const { model: newModel, effort: newEffort } = newPicks[newCli];
   const codex = newCli === 'codex';
   const { models: codexModels, settled } = useCodexModels(codex, fresh);
@@ -29,7 +40,10 @@ export function useNewSessionPick(fresh = false) {
     /** The picked Codex model's own default, for the stepper's mark; `undefined` on the other CLIs. */
     defaultEffort: codex ? codexPick.defaultEffort : undefined,
     codexModels,
-    /** Whether a start now uses the account's list; a quick-start waits for it rather than the fallback. */
-    ready: !codex || settled,
+    /** Whether each CLI may start a session, and why not. */
+    availability,
+    noneAvailable: resolved === null,
+    /** Codex's list, detection, and a CLI to start on: a quick-start waits for all three (HIVE-375). */
+    ready: (!codex || settled) && detected && resolved !== null,
   };
 }
