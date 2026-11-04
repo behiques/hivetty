@@ -825,6 +825,15 @@ own footer. It is not premium requests: `github.copilot.cost` is a request count
 holds. Headless runs keep `--usage-output-file` (HIVE-343). `pnpm test:session:copilot` proves a real turn's
 meters with no second hook, the totals growing across a resume, and a user's own endpoint left alone.
 
+**Context (HIVE-335 follow-up)** is the last `github.copilot.session.usage_info` event on a turn's top-level
+`invoke_agent` span: `contextWindow = token_limit`, `contextPct = ⌊current_tokens ÷ token_limit × 100⌋`, rounded
+down because that is what Copilot's own `/context` shows (29290 of 272000 read "28k/272k tokens (10%)"). A latest
+value, never summed. A subagent runs as a nested `invoke_agent <name>` span, but its own reading lands on the
+**session's** span while it runs (the explore agent's 4747 of 200000 between the main agent's two, in
+`tests/fixtures/copilot/otel-1.0.105/subagent.jsonl`), so an event inside a nested span's window of the same
+trace is skipped. A `/new` inside the same process reads the shared export on from where it was rather than
+from the start: the totals are the session's, and the old conversation's context never comes back.
+
 ## The fences
 
 Both are `import/no-restricted-paths` zones in `eslint.config.mjs`, and
