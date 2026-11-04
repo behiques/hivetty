@@ -133,7 +133,19 @@ vi.mock('../../../../electron/main/config/index', () => ({
   renameProject: vi.fn(() => snapshot),
   repointProject: vi.fn(() => snapshot),
   reorderProjects: vi.fn(() => snapshot),
+  setCliSessions: vi.fn(() => snapshot),
   configPath: vi.fn(() => '/tmp/config.json'),
+}));
+
+const detected = { 'claude-code': { path: '/bin/claude', version: '2.1.31' }, codex: { missing: 'no' }, copilot: { missing: 'no' } };
+vi.mock('../../../../electron/main/harness/detect', () => ({
+  detectClis: vi.fn(async () => detected),
+  rescanClis: vi.fn(async () => detected),
+}));
+
+vi.mock('../../../../electron/main/config/login-env', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  loginEnvStatus: vi.fn(async () => ({ state: 'imported' })),
 }));
 
 vi.mock('../../../../electron/main/harness/codex/models', () => ({
@@ -143,6 +155,7 @@ vi.mock('../../../../electron/main/harness/codex/models', () => ({
 
 const { CH } = await import('../../../../electron/shared/ipc-contract');
 const config = await import('../../../../electron/main/config/index');
+const detect = await import('../../../../electron/main/harness/detect');
 const { registerIpcHandlers, resetIpcHandlers } = await import(
   '../../../../electron/main/ipc'
 );
@@ -313,5 +326,24 @@ describe('cli:codex-models', () => {
       { slug: 'gpt-6-luna', description: 'Fast.', defaultEffort: 'medium', efforts: ['low', 'medium'] },
     ]);
     await expect(invoke(CH.cliCodexModels, untrustedEvent, undefined)).rejects.toThrow();
+  });
+});
+
+describe('harness:detect, harness:rescan and config:set-cli-sessions (HIVE-375)', () => {
+  it('answers detection to a trusted sender, with the env a top-level session sees', async () => {
+    await expect(invoke(CH.harnessDetect, trustedEvent, undefined)).resolves.toEqual(detected);
+    await expect(invoke(CH.harnessRescan, trustedEvent, undefined)).resolves.toEqual(detected);
+    await expect(invoke(CH.harnessDetect, untrustedEvent, undefined)).rejects.toThrow();
+
+    const deps = vi.mocked(detect.detectClis).mock.calls[0]![0];
+    expect(deps.claudeCommand()).toBe(snapshot.claudeCommand);
+    await expect(deps.env()).resolves.toMatchObject({ PATH: process.env.PATH });
+    expect(vi.mocked(detect.rescanClis).mock.calls[0]![0]).toBe(deps);
+  });
+
+  it('writes sessions through the guard, and refuses a payload it does not know', async () => {
+    await invoke(CH.configSetCliSessions, trustedEvent, { sessions: { codex: false }, defaultCli: null });
+    expect(config.setCliSessions).toHaveBeenCalledWith({ sessions: { codex: false }, defaultCli: null });
+    await expect(invoke(CH.configSetCliSessions, trustedEvent, { sessions: { gemini: false } })).rejects.toThrow();
   });
 });

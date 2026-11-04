@@ -33,10 +33,12 @@ import type {
 import type { ChangedFilesEvent, ChangedFilesSnapshot } from './changed-files-contract';
 import type {
   ClearCliTokenRequest,
+  CliDetection,
   CliModel,
   CliTokensState,
   SetAgentsDefaultCliRequest,
   SetCliAgentsRequest,
+  SetCliSessionsRequest,
   SetCliTokenRequest,
 } from './cli-contract';
 import type {
@@ -311,6 +313,8 @@ export const CH = {
   configSetCliAgents: 'config:set-cli-agents',
   /** HIVE-342. The CLI an agent whose `AGENT.md` names no harness runs on. An ordinary settings write. */
   configSetAgentsDefaultCli: 'config:set-agents-default-cli',
+  // HIVE-375. Which CLIs sessions may use, and the one they start with.
+  configSetCliSessions: 'config:set-cli-sessions',
   /**
    * A CLI's agent token (HIVE-343): presence, store, forget. Slack's rule: every answer is
    * presence only, and `CliTokens.read()` is main-internal with no channel. A `cli:` namespace
@@ -321,6 +325,9 @@ export const CH = {
   cliClearToken: 'cli:clear-token',
   /** The models the signed-in Codex account has, from its `models_cache.json`. No payload; `[]` means "use the fallback". */
   cliCodexModels: 'cli:codex-models',
+  // HIVE-375. The CLIs on this machine: path and version, or why one is missing. Rescan drops the memo.
+  harnessDetect: 'harness:detect',
+  harnessRescan: 'harness:rescan',
   /**
    * The container host alias, and where the receiver listens (HIVE-131, HIVE-134).
    *
@@ -2199,6 +2206,8 @@ export interface HiveBridge {
     setCliAgents(request: SetCliAgentsRequest): Promise<ConfigSnapshot>;
     /** The default CLI for agents (HIVE-342). `null` falls back to claude-code. */
     setAgentsDefaultCli(request: SetAgentsDefaultCliRequest): Promise<ConfigSnapshot>;
+    /** HIVE-375. Which CLIs sessions may use, and the default; the last one on cannot be turned off. */
+    setCliSessions(request: SetCliSessionsRequest): Promise<ConfigSnapshot>;
     /**
      * Change the container host alias (HIVE-131).
      *
@@ -2745,6 +2754,10 @@ export interface HiveBridge {
     clearToken(request: ClearCliTokenRequest): Promise<CliTokensState>;
     /** Codex's models for this account; `[]` when its cache cannot be read. */
     codexModels(): Promise<CliModel[]>;
+    /** HIVE-375. What was found for each CLI, read once per app run. */
+    detect(): Promise<Record<HarnessId, CliDetection>>;
+    /** HIVE-375. Look again, after an install. */
+    rescan(): Promise<Record<HarnessId, CliDetection>>;
   };
   /**
    * Slack — the MCP server (HIVE-123) and socket mode (HIVE-124).

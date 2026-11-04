@@ -112,6 +112,7 @@ import {
   parseSetServerRequest,
   parseSetSessionPluginRequest,
   parseSetAgentsDefaultCliRequest,
+  parseSetCliSessionsRequest,
   parseClearCliTokenRequest,
   parseSetCliAgentsRequest,
   parseSetCliTokenRequest,
@@ -244,6 +245,7 @@ import {
   setSlack,
   setAgentsDefaultCli,
   setCliAgents,
+  setCliSessions,
 } from '../config';
 import { diagnoseEnv } from '../config/env-diagnostic';
 import { loginEnvStatus } from '../config/login-env';
@@ -264,6 +266,7 @@ import {
   writeFileContent,
   type FsWatchLayer,
 } from '../fs';
+import { detectClis, rescanClis, type DetectDeps } from '../harness/detect';
 import type { PreparedFiles } from '../harness/port';
 import { adapterFor, sessionAdapter } from '../harness/registry';
 import { createHookRuntime } from '../hooks';
@@ -4270,6 +4273,10 @@ export function registerIpcHandlers(
   handle(CH.configSetAgentsDefaultCli, (_event, payload): ConfigSnapshot =>
     setAgentsDefaultCli(parseSetAgentsDefaultCliRequest(payload)),
   );
+  // HIVE-375. Which CLIs sessions may use; main refuses to turn the last one off.
+  handle(CH.configSetCliSessions, (_event, payload): ConfigSnapshot =>
+    setCliSessions(parseSetCliSessionsRequest(payload)),
+  );
   // HIVE-131. The container host alias — an ordinary settings write.
   handle(CH.configSetReceiver, (_event, payload): ConfigSnapshot =>
     setReceiver(parseSetReceiverRequest(payload)),
@@ -4560,6 +4567,16 @@ export function registerIpcHandlers(
   );
   // The account's Codex models for the picker; `[]` sends the renderer to its fallback list.
   handle(CH.cliCodexModels, (): Promise<CliModel[]> => adapterFor('codex').models?.() ?? Promise.resolve([]));
+  // HIVE-375: the CLIs on this machine, after the login-shell import, with the top-level runtime env (D6).
+  const detectDeps: DetectDeps = {
+    env: async () => {
+      await loginEnvStatus();
+      return { ...process.env, ...effectiveRuntime(getConfig(), null).env };
+    },
+    claudeCommand: () => effectiveRuntime(getConfig(), null).claudeCommand,
+  };
+  handle(CH.harnessDetect, () => detectClis(detectDeps));
+  handle(CH.harnessRescan, () => rescanClis(detectDeps));
 
   /**
    * Socket mode's own verbs (HIVE-124) — and the invariant they must not break.

@@ -79,8 +79,9 @@ import { isThisMachineAction } from './notification-contract';
  * 23 → 24 (HIVE-334): `SessionMetrics` (on `session:metrics`) gained `creditsBalance` and `creditsUnlimited`.
  * 24 → 25 (HIVE-381): `SessionMetrics.creditsBalance` and `creditsUnlimited` may be `null`, which clears them.
  * 25 → 26 (HIVE-367): `CH` gained `skills:cli-skills`.
+ * 26 → 27 (HIVE-375): `CH` gained `harness:detect`, `harness:rescan` and `config:set-cli-sessions`.
  */
-export const REMOTE_PROTOCOL_VERSION = 26;
+export const REMOTE_PROTOCOL_VERSION = 27;
 
 /**
  * What a frame is for.
@@ -168,10 +169,13 @@ export const FRAME_KIND = {
   [CH.configSetSlack]: 'call',
   [CH.configSetCliAgents]: 'call',
   [CH.configSetAgentsDefaultCli]: 'call',
+  [CH.configSetCliSessions]: 'call',
   [CH.cliTokensState]: 'call',
   [CH.cliSetToken]: 'call',
   [CH.cliClearToken]: 'call',
   [CH.cliCodexModels]: 'call',
+  [CH.harnessDetect]: 'call',
+  [CH.harnessRescan]: 'call',
   [CH.configSetReceiver]: 'call',
   [CH.configSetServer]: 'call',
   [CH.serverPair]: 'call',
@@ -475,10 +479,13 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.configSetSlack]: 'mutate',
   [CH.configSetCliAgents]: 'mutate',
   [CH.configSetAgentsDefaultCli]: 'mutate',
+  [CH.configSetCliSessions]: 'mutate',
   [CH.cliTokensState]: 'read',
   [CH.cliSetToken]: 'mutate',
   [CH.cliClearToken]: 'mutate',
   [CH.cliCodexModels]: 'read',
+  [CH.harnessDetect]: 'read',
+  [CH.harnessRescan]: 'read',
   [CH.configSetReceiver]: 'mutate',
   [CH.configSetServer]: 'mutate',
   [CH.serverPair]: 'execute',
