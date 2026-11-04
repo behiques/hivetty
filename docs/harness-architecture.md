@@ -33,7 +33,7 @@ Phase 2, headless runs through the adapter, is Epic HIVE-336 and is done: see
 | `readHook`, `contextReply` | HIVE-236 (landed); HIVE-237 and HIVE-238 (landed) change what it says |
 | `foldEdits` | HIVE-238 (landed) |
 | `record`, `meters` | HIVE-239 (landed) |
-| `foldMeters` | Optional, HIVE-334. Codex's: its rollout's lines folded into `SessionMetrics`, for a CLI with no status line. Absent on Claude Code, whose meters come from `meters(body)`. |
+| `foldMeters` | Optional, HIVE-334. Codex's: its rollout's lines folded into `SessionMetrics`, for a CLI with no status line; Copilot's (HIVE-335, with `meterExport`): its OTel export's chat spans summed onto `prior`. Absent on Claude Code, whose meters come from `meters(body)`. |
 | `recordAborted` | Optional, HIVE-365. Codex's (`turn_aborted`) and Copilot's (`abort`): whether record lines say the user aborted the turn, which fires no hook. `sessions/record-aborts.ts` reads what the record gained 500 ms and 2 s after a deciding key on a busy session, and `tracker.abort` ends the turn. Absent on Claude Code, whose hooks report every end. |
 | `promptMarker` | HIVE-240 (landed) |
 | `installed` | HIVE-345: the user's own skills and plugins (`skillNames`, `pluginNames`, `sessionOverrides`), reached per CLI by the agents runtime (an agent's `harness:`, else the agents default; HIVE-367), and through `sessionAdapter()` by the skills snapshot and the hook settings' `enabledPlugins`. `skillPlaces` (HIVE-344) words where `skillNames` looks, for the agents' missing-skill message. Codex's comes from `codex debug prompt-input` (`codex/installed.ts`). Probe (codex-cli 0.166.0, 2026-11-03): a headless `codex exec --ignore-user-config` run still loads `~/.codex/skills`, `~/.agents/skills` (with a symlinked skill's plugin prefix, `workstream:work-on`) and the bundled `.system` ones, but none of the `config.toml`-enabled plugins' skills. Ceiling: an agent's `skills:` accepts a Codex plugin skill a headless run will not load; the field is a declaration (HIVE-367). |
@@ -183,6 +183,11 @@ Meters have two sources, and an adapter has one of them:
   session, with what the record gained since the last read (the offset read it shares with the changed-files reader,
   `sessions/read-appended.ts`). There is no watcher: the CLI writes usage when it hears from the API, and a hook
   fires around every such moment. Before the first hook there is no record, so no meters.
+- **The CLI's telemetry export:** an adapter with `meterExport: true` (Copilot, HIVE-335) has `foldMeters` read
+  `LaunchSpec.exportPath` instead of its record. `foldMeters(lines, prior)` is handed the merge of every fold this
+  conversation has had, so a CLI that reports per call returns running totals; Codex's ignores it. Because the
+  export lands just after the hook, `record-meters` also makes one trailing read 1.5 s after each hook from such a
+  session (debounced, cancelled by `drop`). Still no watcher. A missing file is a quiet no-op for every adapter.
 
 ## Context delivery (HIVE-240)
 
@@ -805,6 +810,20 @@ Interactive: HIVE-280. Skills and ledger markers: HIVE-362 (a second `--plugin-d
 `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`; `installed` reads `copilot skill list --json`). Plan panel: its
 follow-up. Meters:
 HIVE-335. Plans: HIVE-352. Containers: refused.
+
+**Meters (HIVE-335)** come from Copilot's OpenTelemetry file export, not a status line (it has none, so
+`/statusline` stays 404). The session launch adds, after the `unset`, `[ -n "${OTEL_EXPORTER_OTLP_ENDPOINT:-}…" ] ||
+export COPILOT_OTEL_FILE_EXPORTER_PATH=<exportPath>;`: if the user's shell already routes Copilot's telemetry
+(`OTEL_EXPORTER_OTLP_ENDPOINT`, `COPILOT_OTEL_FILE_EXPORTER_PATH`, `COPILOT_OTEL_EXPORTER_TYPE` or
+`COPILOT_OTEL_ENABLED`), HiveTTY sets nothing and the strip shows only the model. `exportPath` is
+`<copilot state dir>/otel/<entityId>.jsonl`, keyed by entity id so a resume or `/clear` appends to the same file;
+the core creates the folder before the first keystroke. `foldCopilotMeters` (`copilot/meters.ts`) sums only the
+`chat` spans (each turn's `invoke_agent` span repeats the turn's totals): model (the last call's), input, output,
+cache-read and cache-write tokens, and **AI credits = `github.copilot.nano_aiu` ÷ 10⁹**, which matches Copilot's
+own footer. It is not premium requests: `github.copilot.cost` is a request count, and there is no
+`session.shutdown` or `total_premium_requests`. A boot sweep deletes exports whose session the history no longer
+holds. Headless runs keep `--usage-output-file` (HIVE-343). `pnpm test:session:copilot` proves a real turn's
+meters with no second hook, the totals growing across a resume, and a user's own endpoint left alone.
 
 ## The fences
 

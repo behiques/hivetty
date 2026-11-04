@@ -546,6 +546,20 @@ row; also what lets a quiet Hatchery draw its panel). The stage resolves to a
 
 `Pr` (and `PrRecord`) carry `mergedAt` and `mine`; `Pr` also carries `updatedAt`.
 
+### Session metrics (HIVE-333, HIVE-334, HIVE-335)
+
+`metrics` holds each session's latest `SessionMetrics`, merged per field from `session:metrics`. The strip shows
+only the fields of the meter kinds the session's CLI declares (`CAPABILITIES[cli].meters`); an absent field draws
+nothing, never 0 and never a dash. HIVE-335 added two kinds, both Copilot-only and both session totals (used, not a
+balance):
+
+- `tokens`: `tokensIn` (cached and written included), `tokensOut`, `tokensCached`, `tokensWritten`. The chip shows
+  `↑61.7k ↓109`; the tooltip adds cached and written.
+- `aiCredits`: `aiCredits`, Copilot's nano-AIU ÷ 10⁹, shown as `3.64 AI credits`. Separate from Codex's `credits`
+  balance (`creditsBalance`, `creditsUnlimited`).
+
+None of the five takes `null`: nothing ever clears a total. Remote protocol 31 carries them.
+
 ### Home's strip (HIVE-200)
 
 Every number Home's strip shows is derived from state the renderer already
