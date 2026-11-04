@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNewSessionPick } from '@hooks/use-new-session-pick';
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 import { type CliDetection, type CliModel, COPILOT_MODELS, resolveClis } from '@shared/cli-contract';
-import { emptySnapshot } from '@shared/config-contract';
+import { type ConfigSnapshot, emptySnapshot, type ProjectConfig } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
 import { useUiStore } from '@stores/ui-store';
 
@@ -138,5 +138,66 @@ describe('useNewSessionPick', () => {
     expect(result.current.noneAvailable).toBe(true);
     expect(result.current.cli).toBe('claude-code');
     expect(result.current.ready).toBe(false);
+  });
+});
+
+describe('useNewSessionPick for a project (HIVE-378)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    resetProjectConfig();
+    lastDetection = null;
+    detect.mockReset().mockResolvedValue(null);
+    codexModels.mockReset().mockResolvedValue([SOL, LUNA]);
+  });
+
+  const project = (id: string, name: string, harness?: HarnessId): ProjectConfig => ({
+    id,
+    key: id.slice(0, 2),
+    name,
+    path: `/repos/${id}`,
+    icon: 'ph-folder',
+    origin: 'local',
+    status: 'ok',
+    isRepo: true,
+    ...(harness ? { harness } : {}),
+  });
+  const seed = (extra: Partial<ConfigSnapshot> = {}) =>
+    setProjectConfigForTest({
+      ...emptySnapshot('/tmp/config.json'),
+      projects: [project('hive', 'hivetty', 'copilot'), project('plain', 'plain')],
+      ...extra,
+    });
+
+  it("starts on the project's CLI, captioned with its name", () => {
+    seed();
+    const { result } = renderHook(() => useNewSessionPick(false, 'hive'));
+    expect(result.current).toMatchObject({ cli: 'copilot', source: 'project', caption: 'Default for hivetty' });
+  });
+
+  it('a project with no CLI uses your default', () => {
+    seed({ sessionsDefaultCli: 'copilot' });
+    const { result } = renderHook(() => useNewSessionPick(false, 'plain'));
+    expect(result.current).toMatchObject({ cli: 'copilot', source: 'yours', caption: 'Your default' });
+  });
+
+  it("this run's pick beats the project", () => {
+    seed();
+    act(() => useUiStore.getState().setNewCli('claude-code'));
+    const { result } = renderHook(() => useNewSessionPick(false, 'hive'));
+    expect(result.current).toMatchObject({ cli: 'claude-code', source: 'picked', caption: null });
+  });
+
+  it('startFor resolves each row on its own', () => {
+    seed();
+    const { result } = renderHook(() => useNewSessionPick());
+    expect(result.current.cli).toBe('claude-code');
+    expect(result.current.startFor('hive')).toMatchObject({ cli: 'copilot', source: 'project', model: COPILOT_MODELS[0] });
+    expect(result.current.startFor('plain')).toMatchObject({ cli: 'claude-code', source: 'yours' });
+  });
+
+  it("reads Codex's list when a project names Codex, so a row click never waits", async () => {
+    setProjectConfigForTest({ ...emptySnapshot('/tmp/config.json'), projects: [project('hive', 'hivetty', 'codex')] });
+    const { result } = renderHook(() => useNewSessionPick());
+    await waitFor(() => expect(result.current.startFor('hive')).toMatchObject({ cli: 'codex', model: 'gpt-6.1-sol' }));
   });
 });
