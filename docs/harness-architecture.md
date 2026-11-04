@@ -131,6 +131,11 @@ adapter is a compile error, not a runtime miss.
 Outside `electron/main/harness/**` and the contract's `HarnessId` type, nothing names
 `claude-code`.
 
+`harness/detect.ts` (HIVE-375) finds each CLI with `probeCommand` after the login-shell import, runs it with
+`--version` without a shell, and memoises one answer per app run for `harness:detect`. `harness:rescan` drops it.
+Codex and Copilot are their bare names until HIVE-376 adds their commands. Settings › Harnesses › Overview and the
+new-session picker read the same answer, so a CLI the picker dims is the one the Overview says is missing.
+
 ## The hook body (HIVE-236)
 
 The receiver (`electron/main/hooks/receiver.ts`) owns the socket: authentication, the body
