@@ -81,7 +81,7 @@ const MAIN_ONLY: ReadonlyMap<string, FrameKind> = new Map([
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(173);
+    expect(entries).toHaveLength(174);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -141,6 +141,11 @@ describe('remote contract: coverage', () => {
     expect(frameKindOf(CH.configSetCliAgents)).toBe('call');
     expect(CHANNEL_AUTHORIZATION[CH.configSetCliAgents]).toBe('mutate');
   });
+
+  it('forwards config:set-project-harness as a mutate call (HIVE-378)', () => {
+    expect(frameKindOf(CH.configSetProjectHarness)).toBe('call');
+    expect(CHANNEL_AUTHORIZATION[CH.configSetProjectHarness]).toBe('mutate');
+  });
 });
 
 describe('remote contract: frame kinds match the preload bridge', () => {
@@ -165,11 +170,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 137 call, 6 notify and 30 event', () => {
+  it('splits 138 call, 6 notify and 30 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 137, notify: 6, event: 30 });
+    expect(tally).toEqual({ call: 138, notify: 6, event: 30 });
   });
 
   /**
@@ -242,11 +247,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 173 as 70 read, 51 mutate and 52 execute', () => {
+  it('grades the 174 as 70 read, 51 mutate and 53 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 70, mutate: 50, execute: 53 });
+    expect(tally).toEqual({ read: 70, mutate: 51, execute: 53 });
   });
 
   /**
@@ -607,7 +612,7 @@ describe('remote contract: the version handshake', () => {
   });
 
   it('is protocol 3: 2 carried a generation (HIVE-144), 3 caught up on unbumped channels (HIVE-140 audit)', () => {
-    expect(REMOTE_PROTOCOL_VERSION).toBe(28);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(29);
   });
 });
 
@@ -658,7 +663,7 @@ describe('remote contract: the attach snapshot (HIVE-144)', () => {
     expect(EVENT_CHANNELS).toContain(CH.changedFilesChanged);
     expect(frameKindOf(CH.changedFilesChanged)).toBe('event');
     expect(frameKindOf(CH.changedFilesList)).toBe('call');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(28);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(29);
   });
 
   it('snapshots the plans so a reattaching client sees the current plan (HIVE-179)', () => {

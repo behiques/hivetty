@@ -81,8 +81,9 @@ import { isThisMachineAction } from './notification-contract';
  * 25 → 26 (HIVE-367): `CH` gained `skills:cli-skills`.
  * 26 → 27 (HIVE-375): `CH` gained `harness:detect`, `harness:rescan` and `config:set-cli-sessions`.
  * 27 → 28 (HIVE-376): `CH` gained `config:set-cli` and `harness:sign-in`; `DiagnoseCommandRequest` gained `cli`.
+ * 28 → 29 (HIVE-378): `CH` gained `config:set-project-harness`; `ConfigSnapshot`'s projects gained `harness`.
  */
-export const REMOTE_PROTOCOL_VERSION = 28;
+export const REMOTE_PROTOCOL_VERSION = 29;
 
 /**
  * What a frame is for.
@@ -156,6 +157,7 @@ export const FRAME_KIND = {
   [CH.configReorderProjects]: 'call',
   [CH.configSetProjectKey]: 'call',
   [CH.configSetProjectAutoMerge]: 'call',
+  [CH.configSetProjectHarness]: 'call',
   [CH.configSetSessionPlugin]: 'call',
   [CH.configSetRuntime]: 'call',
   [CH.configSetProjectRuntime]: 'call',
@@ -471,6 +473,8 @@ export const CHANNEL_AUTHORIZATION = {
     unattended, which is the consequence that grade names.
   */
   [CH.configSetProjectAutoMerge]: 'execute',
+  /* HIVE-378: a config edit like rename; it widens nothing an agent may run. */
+  [CH.configSetProjectHarness]: 'mutate',
   /*
     HIVE-176. It only ever turns a plugin off for Hive sessions, never on, but
     a plugin carries hooks, and a user's guard plugin with a `PreToolUse` deny

@@ -26,6 +26,7 @@ import {
   parseRevokeDeviceRequest,
   parseSessionPrRequest,
   parseSetProjectAutoMergeRequest,
+  parseSetProjectHarnessRequest,
   parseSetProjectKeyRequest,
   parseSetProjectRuntimeRequest,
   parseSetReceiverRequest,
@@ -922,6 +923,27 @@ describe('parseSetProjectAutoMergeRequest', () => {
       expect(() => parseSetProjectAutoMergeRequest({ id: 'a', autoMerge: value })).toThrow();
     },
   );
+});
+
+describe('parseSetProjectHarnessRequest (HIVE-378)', () => {
+  it.each([['codex'], ['copilot'], ['claude-code'], [null]] as const)('accepts %s', (harness) => {
+    expect(parseSetProjectHarnessRequest({ id: 'the-hive', harness })).toEqual({ id: 'the-hive', harness });
+  });
+
+  it.each([['an unknown CLI', 'gemini'], ['a number', 1], ['absent', undefined]])(
+    'refuses %s for harness',
+    (_label, value) => {
+      expect(() => parseSetProjectHarnessRequest({ id: 'a', harness: value })).toThrow();
+    },
+  );
+
+  it('refuses an extra key', () => {
+    expect(() => parseSetProjectHarnessRequest({ id: 'a', harness: 'codex', path: '/x' })).toThrow();
+  });
+
+  it('refuses a missing harness key', () => {
+    expect(() => parseSetProjectHarnessRequest({ id: 'a' })).toThrow();
+  });
 });
 
 describe('parseSetProjectKeyRequest', () => {

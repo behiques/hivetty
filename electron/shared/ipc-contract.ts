@@ -76,6 +76,7 @@ import type {
   SetNotificationsRequest,
   SetSessionPluginRequest,
   SetProjectAutoMergeRequest,
+  SetProjectHarnessRequest,
   SetProjectKeyRequest,
   SetProjectRuntimeRequest,
   SetReceiverRequest,
@@ -222,6 +223,8 @@ export const CH = {
   configSetProjectKey: 'config:set-project-key',
   /** HIVE-166's per-project unattended-merge consent. `invoke`, like every config write. */
   configSetProjectAutoMerge: 'config:set-project-auto-merge',
+  /** HIVE-378's per-project default CLI. `invoke`, like every config write. */
+  configSetProjectHarness: 'config:set-project-harness',
   /** HIVE-176's plugins a Hive session does not load. `invoke`, like every config write. */
   configSetSessionPlugin: 'config:set-session-plugin',
   /**
@@ -2129,6 +2132,8 @@ export interface HiveBridge {
     setProjectKey(request: SetProjectKeyRequest): Promise<ConfigSnapshot>;
     /** Turn unattended merging on or off for one project (HIVE-166). */
     setProjectAutoMerge(request: SetProjectAutoMergeRequest): Promise<ConfigSnapshot>;
+    /** Set or clear the CLI one project's new sessions start with (HIVE-378). */
+    setProjectHarness(request: SetProjectHarnessRequest): Promise<ConfigSnapshot>;
     /** Which plugins a Hive session does not load (HIVE-176). */
     setSessionPlugin(request: SetSessionPluginRequest): Promise<ConfigSnapshot>;
     /**

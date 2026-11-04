@@ -963,6 +963,11 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
      * renderer's snapshot may be stale, and the bytes being written may not be.
      */
     'setProjectAutoMerge',
+    /**
+     * HIVE-378: one closed-alphabet field (a `HarnessId` or `null`) on one entry; it cannot name a path, a
+     * command or a destination.
+     */
+    'setProjectHarness',
     'setProjectKey',
     'setProjectRuntime',
     /**
