@@ -24,6 +24,11 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('readSignIn (HIVE-376)', () => {
+  it('Codex: the method is read from stderr too, where codex 0.166 prints it', async () => {
+    const run: RunVersion = vi.fn(async () => ({ code: 0, stdout: '', stderr: 'Logged in using ChatGPT\n', timedOut: false }));
+    expect(await readSignIn('codex', { command: 'codex', env, run })).toEqual({ state: 'in', label: 'Signed in with ChatGPT' });
+  });
+
   it('a command only a shell can read is unchecked, never run and never "not found" (detection\'s rule, #201)', async () => {
     for (const [cli, command, verb] of [
       ['claude-code', 'true; false', 'claude auth status'],

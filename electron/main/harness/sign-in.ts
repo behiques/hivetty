@@ -42,7 +42,8 @@ export async function readSignIn(cli: HarnessId, deps: SignInDeps): Promise<CliS
         label: `\`${VERB[cli]}\` did not answer within ${String(VERSION_TIMEOUT_MS / 1000)}s.`,
       };
     }
-    return cli === 'codex' ? codex(answer.code, answer.stdout) : claude(answer.stdout);
+    // Codex 0.166 prints its login line on stderr, not stdout.
+    return cli === 'codex' ? codex(answer.code, `${answer.stdout}\n${answer.stderr}`) : claude(answer.stdout);
   } catch {
     return { state: 'unknown', label: `\`${VERB[cli]}\` could not run.` };
   }
