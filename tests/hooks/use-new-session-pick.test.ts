@@ -15,10 +15,21 @@ type Detection = Record<HarnessId, CliDetection>;
 /** `null` is an answered read with nothing found (the browser): every CLI available, ready at once. */
 let lastDetection: Detection | null | undefined = null;
 const detect = vi.fn<() => Promise<Detection | null>>(() => Promise.resolve(null));
+/** The real module's contract: an answer lands in the shared cache, then every subscriber hears it. */
+const listeners = new Set<() => void>();
+const land = async () => {
+  lastDetection = await detect();
+  for (const listener of listeners) listener();
+  return lastDetection;
+};
 vi.mock('@lib/cli-detection', () => ({
-  detectClis: () => detect(),
-  rescanClis: () => detect(),
+  detectClis: () => land(),
+  rescanClis: () => land(),
   lastCliDetection: () => lastDetection,
+  subscribeCliDetection: (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  },
 }));
 
 const SOL: CliModel = { slug: 'gpt-6.1-sol', description: '', defaultEffort: 'low', efforts: ['low', 'medium', 'ultra'] };

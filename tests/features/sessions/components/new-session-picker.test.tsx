@@ -30,6 +30,7 @@ vi.mock('@lib/cli-detection', () => ({
   detectClis: () => Promise.resolve(detection),
   rescanClis: () => Promise.resolve(detection),
   lastCliDetection: () => detection,
+  subscribeCliDetection: () => () => {},
 }));
 
 const search = () => screen.getByRole('textbox', { name: 'Search all projects' });

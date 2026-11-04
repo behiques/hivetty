@@ -1,27 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
-import { detectClis, lastCliDetection, rescanClis } from '@lib/cli-detection';
+import { detectClis, lastCliDetection, rescanClis, subscribeCliDetection } from '@lib/cli-detection';
 
 /**
  * The CLIs main found (HIVE-375): the last answer at once, read when there is none. `settled` once any read
- * answered.
+ * answered. Every caller reads the one shared answer (HIVE-376), so a rescan started on a CLI's page also reaches
+ * Overview and the picker.
  */
 export function useCliDetection() {
-  const [answer, setAnswer] = useState(lastCliDetection);
+  const answer = useSyncExternalStore(subscribeCliDetection, lastCliDetection);
   const [rescanning, setRescanning] = useState(false);
   useEffect(() => {
-    if (answer !== undefined) return;
-    let current = true;
-    void detectClis().then((next) => {
-      if (current) setAnswer(next);
-    });
-    return () => {
-      current = false;
-    };
+    if (answer === undefined) void detectClis();
   }, [answer]);
   const rescan = useCallback(async () => {
     setRescanning(true);
-    setAnswer(await rescanClis());
+    await rescanClis();
     setRescanning(false);
   }, []);
   return { detection: answer ?? null, settled: answer !== undefined, rescan, rescanning };

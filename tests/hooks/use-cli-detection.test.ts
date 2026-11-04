@@ -29,6 +29,15 @@ describe('useCliDetection (HIVE-375)', () => {
     expect(result.current.rescanning).toBe(false);
   });
 
+  it('a rescan from one caller reaches every mounted caller (HIVE-376)', async () => {
+    bridge({ detect: vi.fn(async () => one), rescan: vi.fn(async () => two) });
+    const page = renderHook(() => useCliDetection());
+    const overview = renderHook(() => useCliDetection());
+    await waitFor(() => expect(overview.result.current.detection).toEqual(one));
+    await act(() => page.result.current.rescan());
+    expect(overview.result.current.detection).toEqual(two);
+  });
+
   it('starts on the last answer without reading again', async () => {
     const detect = vi.fn(async () => one);
     bridge({ detect });
