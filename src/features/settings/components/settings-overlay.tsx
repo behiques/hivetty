@@ -15,8 +15,8 @@ import type { SettingsSection } from '@/types/settings';
 import { AdvancedSection } from '@features/settings/components/advanced-section';
 import { AgentsSection } from '@features/settings/components/agents-section';
 import { AppearanceSection } from '@features/settings/components/appearance-section';
-import { ClisSection } from '@features/settings/components/clis-section';
 import { EditorSection } from '@features/settings/components/editor-section';
+import { HarnessesOverviewSection } from '@features/settings/components/harnesses-overview-section';
 import { IntegrationsSection } from '@features/settings/components/integrations-section';
 import { NotificationsSection } from '@features/settings/components/notifications-section';
 import { ProjectsSection } from '@features/settings/components/projects-section';
@@ -71,7 +71,7 @@ const GROUPS: readonly {
   {
     group: 'Harnesses',
     panes: [
-      { id: 'harnesses-overview', label: 'CLIs' },
+      { id: 'harnesses-overview', label: 'Overview' },
       { id: 'shell', label: 'Runtime' },
     ],
   },
@@ -136,7 +136,7 @@ type SectionId = SettingsSection;
 const PANES: Record<SectionId, ComponentType> = {
   projects: ProjectsSection,
   shell: RuntimeSection,
-  'harnesses-overview': ClisSection,
+  'harnesses-overview': HarnessesOverviewSection,
   skills: SkillsSection,
   agents: AgentsSection,
   appearance: AppearanceSection,
