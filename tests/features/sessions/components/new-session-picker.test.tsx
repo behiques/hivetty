@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CLI_VOCAB, type CliModel, COPILOT_MODELS } from '@shared/cli-contract';
+import { CLI_VOCAB, type CliModel, COPILOT_MODELS, resolveClis } from '@shared/cli-contract';
 import {
   emptySnapshot,
   type ConfigSnapshot,
@@ -1296,6 +1296,19 @@ describe('NewSessionPicker — per-project default CLI (HIVE-378)', () => {
 
     await user.click(cliRadio(/Codex/));
     expect(within(resultRow('design-system')).queryByTitle(/Starts on/)).toBeNull();
+  });
+
+  it("dims a row's project default that cannot run, and says why (HIVE-387)", () => {
+    withHarness({ 'design-system': 'copilot' });
+    setProjectConfigForTest({ ...projectConfigSnapshot()!, clis: resolveClis({ copilot: { sessions: false } }) });
+    render(<NewSessionPicker />);
+
+    const mark = within(resultRow('design-system')).getByTitle(
+      "Copilot, the default for design-system, isn't available · starting on Claude Code (your default)",
+    );
+    expect(mark).toHaveAttribute('data-skipped', 'true');
+    expect(within(resultRow('design-system')).queryByTitle(/^Starts on/)).toBeNull();
+    expect(within(resultRow('nova-web')).queryByTitle(/isn't available/)).toBeNull();
   });
 
   it("types a ticket's first message for the row's CLI", async () => {

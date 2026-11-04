@@ -463,6 +463,8 @@ export function NewSessionPicker() {
               matches.map((project) => {
                 // The row's own CLI, marked only when it is the project's (HIVE-378): a run pick starts every row.
                 const rowStart = startFor(project.id);
+                // HIVE-387: the project's own CLI, when it was skipped, and the caption that says why.
+                const skipped = rowStart.skipped.find((entry) => entry.source === 'project');
                 return (
                   <ProjectRow
                     key={project.id}
@@ -470,6 +472,8 @@ export function NewSessionPicker() {
                     blocked={blocked}
                     onSelect={spawn}
                     startsOn={rowStart.source === 'project' ? rowStart.cli : undefined}
+                    skippedCli={skipped?.cli}
+                    skippedReason={skipped === undefined ? undefined : (rowStart.caption ?? undefined)}
                   />
                 );
               })
@@ -538,12 +542,18 @@ function ProjectRow({
   blocked,
   onSelect,
   startsOn,
+  skippedCli,
+  skippedReason,
 }: {
   project: ProjectRowData;
   blocked: boolean;
   onSelect: (id: string) => void;
   /** The project's own CLI, when the row starts on it rather than on this run's pick (HIVE-378). */
   startsOn?: HarnessId;
+  /** The project's own CLI, when it cannot run and the row starts on the next one (HIVE-387). */
+  skippedCli?: HarnessId;
+  /** Why it was skipped and what the row starts on instead: the dock's caption for this row. */
+  skippedReason?: string;
 }) {
   /*
     Destructured here rather than threaded in as four primitives, which is what
@@ -590,6 +600,12 @@ function ProjectRow({
       {startsOn === undefined ? null : (
         <span title={`Starts on ${CLI_NAMES[startsOn]}`} className="shrink-0 text-subtle">
           <CliMark cli={startsOn} className="size-3.5" />
+        </span>
+      )}
+      {/* HIVE-387: the project's own CLI cannot run; drawn dimmed with the reason, never silently swapped. */}
+      {skippedCli === undefined ? null : (
+        <span title={skippedReason} data-skipped="true" className="shrink-0 text-subtle opacity-45">
+          <CliMark cli={skippedCli} className="size-3.5" />
         </span>
       )}
       {/*
