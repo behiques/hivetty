@@ -50,7 +50,7 @@ export function NewSessionLink({
 }: NewSessionLinkProps) {
   const access = useProjectAccess(projectId);
   const spawnSession = useSpawnSession();
-  const { cli, model, effort, ready } = useNewSessionPick();
+  const { cli, model, effort, ready, noneAvailable } = useNewSessionPick();
 
   return (
     <button
@@ -69,7 +69,14 @@ export function NewSessionLink({
         the pair costs a tooltip and removes the only thing the picker offered
         that this does not: sight of the model before you start on it.
       */
-      title={access.reason ?? (ready ? `Starts on ${model} · ${effort}` : 'Reading your Codex models…')}
+      title={
+        access.reason ??
+        (noneAvailable
+          ? 'No CLI is available for sessions'
+          : ready
+            ? `Starts on ${model} · ${effort}`
+            : 'Reading your Codex models…')
+      }
       aria-label={`New session in ${projectName}`}
       className="rounded-full p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-transparent"
     >

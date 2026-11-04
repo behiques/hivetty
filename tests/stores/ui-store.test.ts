@@ -114,7 +114,7 @@ describe('ui-store — view state', () => {
 
   it('keeps model and effort per CLI, and finds them again on the way back (HIVE-279)', () => {
     const ui = useUiStore.getState();
-    expect(useUiStore.getState().newCli).toBe('claude-code');
+    expect(useUiStore.getState().newCli).toBeNull();
     ui.setNewModel('haiku');
     ui.setNewCli('codex');
     expect(useUiStore.getState().newPicks.codex).toEqual({ model: 'gpt-6.1-sol', effort: 'medium' });
@@ -125,6 +125,15 @@ describe('ui-store — view state', () => {
       codex: { model: 'gpt-6.1-sol', effort: 'xhigh' },
       copilot: { model: 'auto', effort: 'medium' },
     });
+  });
+
+  it('writes a model and effort for the cli it is given, the pick unchanged (HIVE-375)', () => {
+    const ui = useUiStore.getState();
+    ui.setNewModel('gpt-6-luna', 'codex');
+    ui.setNewEffort('high', 'codex');
+    expect(useUiStore.getState().newPicks.codex).toEqual({ model: 'gpt-6-luna', effort: 'high' });
+    expect(useUiStore.getState().newPicks['claude-code']).toEqual({ model: 'opus', effort: 'high' });
+    expect(useUiStore.getState().newCli).toBeNull();
   });
 
   it('starts copilot on its first model at medium effort, and keeps its pick (HIVE-280)', () => {

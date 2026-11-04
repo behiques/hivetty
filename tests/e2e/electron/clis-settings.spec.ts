@@ -24,9 +24,9 @@ const openClis = async (page: Page): Promise<void> => {
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'CLIs' })
+    .getByRole('button', { name: 'Overview' })
     .click();
-  await expect(page.getByRole('heading', { name: 'CLIs', level: 2 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', level: 2 })).toBeVisible();
 };
 
 test('the card writes the file, and off disables the defaults', async ({}, testInfo) => {
@@ -110,7 +110,7 @@ const setMode = async (page: Page, mode: 'Light' | 'Dark'): Promise<void> => {
   await page.getByRole('radiogroup', { name: 'Mode' }).getByRole('radio', { name: mode }).click();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'CLIs' })
+    .getByRole('button', { name: 'Overview' })
     .click();
 };
 

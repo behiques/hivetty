@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isSession } from '@/types/entity';
 
-import type { CliModel } from '@shared/cli-contract';
+import { type CliModel, resolveClis } from '@shared/cli-contract';
 import {
   emptySnapshot,
   type ConfigSnapshot,
@@ -136,6 +136,17 @@ describe('NewSessionLink', () => {
     await userEvent.click(screen.getByRole('button'));
 
     expect(lastSession()).toMatchObject({ harness: 'codex', model: 'gpt-6-luna', effort: 'medium' });
+  });
+
+  it('says no CLI is available, and starts nothing, when every CLI is off for sessions (HIVE-375)', async () => {
+    setProjectConfigForTest({
+      ...snapshot([{ id: PROJECT, status: 'ok' }]),
+      clis: resolveClis({ 'claude-code': { sessions: false }, codex: { sessions: false }, copilot: { sessions: false } }),
+    });
+
+    render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
+    await waitFor(() => expect(screen.getByRole('button')).toHaveAttribute('title', 'No CLI is available for sessions'));
+    expect(screen.getByRole('button')).toBeDisabled();
   });
 
   it("waits for the account's Codex models before it starts a Codex session", async () => {

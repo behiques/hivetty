@@ -358,6 +358,9 @@ export function writeConfig(
       ...(validated.agentsDefaultCli === undefined
         ? {}
         : { agentsDefaultCli: validated.agentsDefaultCli }),
+      ...(validated.sessionsDefaultCli === undefined
+        ? {}
+        : { sessionsDefaultCli: validated.sessionsDefaultCli }),
       errors: validated.errors,
     },
   };

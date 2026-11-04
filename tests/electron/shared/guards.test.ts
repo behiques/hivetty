@@ -32,6 +32,7 @@ import {
   parseSetRemoteRequest,
   parseSetServerRequest,
   parseSetAgentsDefaultCliRequest,
+  parseSetCliSessionsRequest,
   parseClearCliTokenRequest,
   parseSetCliAgentsRequest,
   parseSetCliTokenRequest,
@@ -2142,5 +2143,24 @@ describe('parseSetCliAgentsRequest (HIVE-341)', () => {
     [{ enabled: true }, /cli/],
   ])('refuses %j', (input, message) => {
     expect(() => parseSetCliAgentsRequest(input)).toThrow(message);
+  });
+});
+
+describe('parseSetCliSessionsRequest (HIVE-375)', () => {
+  it('passes known CLIs, booleans and a nullable default', () => {
+    expect(parseSetCliSessionsRequest({ sessions: { codex: false }, defaultCli: null })).toEqual({
+      sessions: { codex: false },
+      defaultCli: null,
+    });
+    expect(parseSetCliSessionsRequest({ defaultCli: 'copilot' })).toEqual({ defaultCli: 'copilot' });
+    expect(parseSetCliSessionsRequest({})).toEqual({});
+  });
+
+  it('refuses an unknown CLI, a non-boolean, a non-object and an unknown default', () => {
+    expect(() => parseSetCliSessionsRequest({ sessions: { gemini: true } })).toThrow();
+    expect(() => parseSetCliSessionsRequest({ sessions: { codex: 'off' } })).toThrow();
+    expect(() => parseSetCliSessionsRequest({ sessions: ['codex'] })).toThrow();
+    expect(() => parseSetCliSessionsRequest({ defaultCli: 'gemini' })).toThrow();
+    expect(() => parseSetCliSessionsRequest({ other: 1 })).toThrow();
   });
 });

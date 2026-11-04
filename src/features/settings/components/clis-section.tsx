@@ -43,8 +43,11 @@ const options = (values: readonly string[], saved?: string) => [
 /**
  * Settings › CLIs (HIVE-341): each CLI's headless agent defaults. HIVE-332 adds the CLI's command,
  * version and sign-in above the Headless agents group, on this same page.
+ *
+ * Since HIVE-375 it sits below Settings › Harnesses › Overview, `embedded` in that pane's scroller and
+ * titled "Headless agents", until HIVE-376 gives each CLI its own page (D7).
  */
-export function ClisSection() {
+export function ClisSection({ title = 'CLIs', embedded = false }: { title?: string; embedded?: boolean }) {
   const snapshot = useProjectConfig();
   // Fresh: Settings is where the user chooses, so it reads the account as it is now.
   const { models: codexModels, settled: codexSettled } = useCodexModels(true, true);
@@ -52,18 +55,15 @@ export function ClisSection() {
   if (!snapshot) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
-        <SettingsSectionHeader
-          title="CLIs"
-          description="CLI settings are only available in the desktop app."
-        />
+        <SettingsSectionHeader title={title} description="CLI settings are only available in the desktop app." />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
+    <div className={embedded ? 'flex flex-col gap-6' : 'flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4'}>
       <SettingsSectionHeader
-        title="CLIs"
+        title={title}
         description="The agent CLIs this app drives, and how each one runs headless agents."
       />
       <SelectField

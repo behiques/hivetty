@@ -156,18 +156,42 @@ export interface CliAgents {
 
 export interface CliConfig {
   agents: CliAgents;
+  /** HIVE-375. Whether the picker offers this CLI for sessions; absent in the file means on. */
+  sessions: boolean;
 }
 
 /** Every CLI, always resolved: a CLI the file never names is enabled with no defaults. */
 export type ClisConfig = Record<HarnessId, CliConfig>;
 
 /** The `clis` block as the file declared it, kept partial so a write can tell chosen from absent. */
-export type RawClis = Partial<Record<HarnessId, { agents?: Partial<CliAgents> }>>;
+export type RawClis = Partial<Record<HarnessId, { agents?: Partial<CliAgents>; sessions?: boolean }>>;
 
 export function resolveClis(raw: RawClis | undefined): ClisConfig {
   return Object.fromEntries(
-    HARNESS_IDS.map((id) => [id, { agents: { enabled: true, ...raw?.[id]?.agents } }]),
+    HARNESS_IDS.map((id) => [
+      id,
+      { agents: { enabled: true, ...raw?.[id]?.agents }, sessions: raw?.[id]?.sessions ?? true },
+    ]),
   ) as ClisConfig;
+}
+
+/** What HiveTTY found for one CLI on this machine (HIVE-375). Never raw output beyond the matched version. */
+export type CliDetection = { path: string; version: string | null } | { missing: string };
+
+/** The one line that installs each CLI, shown under a missing row (HIVE-375). */
+export const CLI_INSTALL_HINTS: Record<HarnessId, string> = {
+  'claude-code': 'npm i -g @anthropic-ai/claude-code',
+  codex: 'brew install codex',
+  copilot: 'npm i -g @github/copilot',
+};
+
+/**
+ * Payload of `config:set-cli-sessions` (HIVE-375). `sessions[id]: true` deletes the key (absent means on),
+ * `false` writes it; `defaultCli: null` deletes `sessionsDefaultCli`. An absent field is left alone.
+ */
+export interface SetCliSessionsRequest {
+  sessions?: Partial<Record<HarnessId, boolean>>;
+  defaultCli?: HarnessId | null;
 }
 
 /**

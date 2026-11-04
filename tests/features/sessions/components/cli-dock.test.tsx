@@ -6,9 +6,26 @@ import { describe, expect, it, vi } from 'vitest';
 import { CliDock } from '@features/sessions/components/cli-dock';
 import type { HarnessId } from '@shared/harness-contract';
 
-function Harness({ onChange = () => {} }: { onChange?: (cli: HarnessId) => void }) {
-  const [cli, setCli] = useState<HarnessId>('claude-code');
-  return <CliDock value={cli} onChange={(next) => { setCli(next); onChange(next); }} />;
+function Harness({
+  onChange = () => {},
+  unavailable,
+  start = 'claude-code',
+}: {
+  onChange?: (cli: HarnessId) => void;
+  unavailable?: Partial<Record<HarnessId, string>>;
+  start?: HarnessId;
+}) {
+  const [cli, setCli] = useState<HarnessId>(start);
+  return (
+    <CliDock
+      value={cli}
+      unavailable={unavailable}
+      onChange={(next) => {
+        setCli(next);
+        onChange(next);
+      }}
+    />
+  );
 }
 
 describe('CliDock', () => {
@@ -66,5 +83,48 @@ describe('CliDock', () => {
     // Any other key does nothing.
     await user.keyboard('a');
     expect(screen.getByRole('radio', { name: 'Claude Code' })).toBeChecked();
+  });
+
+  it('dims an unavailable CLI, names why, refuses the click and steps past it (HIVE-375)', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onChange={onChange} unavailable={{ codex: '`codex` was not found on PATH.' }} />);
+
+    const codex = screen.getByRole('radio', { name: 'Codex: `codex` was not found on PATH.' });
+    expect(codex).toHaveAttribute('aria-disabled', 'true');
+    expect(codex).toHaveAttribute('title', 'Codex: `codex` was not found on PATH.');
+    expect(screen.getByRole('radio', { name: 'Copilot' })).not.toHaveAttribute('aria-disabled');
+    expect(screen.getByText("Codex isn't available: `codex` was not found on PATH.")).toBeInTheDocument();
+
+    await user.click(codex);
+    expect(onChange).not.toHaveBeenCalled();
+
+    screen.getByRole('radio', { name: 'Claude Code' }).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onChange).toHaveBeenLastCalledWith('copilot');
+    await user.keyboard('{ArrowLeft}');
+    expect(onChange).toHaveBeenLastCalledWith('claude-code');
+  });
+
+  it('jumps Home and End to the first and last CLI that is available (HIVE-375)', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onChange={onChange} start="codex" unavailable={{ 'claude-code': 'off', copilot: 'off' }} />);
+
+    screen.getByRole('radio', { name: 'Codex' }).focus();
+    await user.keyboard('{Home}');
+    expect(onChange).toHaveBeenLastCalledWith('codex');
+    await user.keyboard('{End}');
+    expect(onChange).toHaveBeenLastCalledWith('codex');
+  });
+
+  it('steps from the first available CLI when the current one is itself unavailable (HIVE-375)', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onChange={onChange} unavailable={{ 'claude-code': 'off' }} />);
+
+    screen.getByRole('radio', { name: 'Claude Code: off' }).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onChange).toHaveBeenLastCalledWith('copilot');
   });
 });

@@ -17,10 +17,12 @@ import type {
 import type { ChangedFilesEvent, ChangedFilesSnapshot } from '@shared/changed-files-contract';
 import type {
   ClearCliTokenRequest,
+  CliDetection,
   CliModel,
   CliTokensState,
   SetAgentsDefaultCliRequest,
   SetCliAgentsRequest,
+  SetCliSessionsRequest,
   SetCliTokenRequest,
 } from '@shared/cli-contract';
 import type {
@@ -98,6 +100,7 @@ import type {
   RunRef,
   UserReposSnapshot,
 } from '@shared/github-contract';
+import type { HarnessId } from '@shared/harness-contract';
 import {
   CH,
   type AckRequest,
@@ -347,6 +350,9 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.configSetCliAgents, request),
     setAgentsDefaultCli: (request: SetAgentsDefaultCliRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetAgentsDefaultCli, request),
+    // HIVE-375. Which CLIs sessions may use, and the default.
+    setCliSessions: (request: SetCliSessionsRequest): Promise<ConfigSnapshot> =>
+      ipcRenderer.invoke(CH.configSetCliSessions, request),
     // HIVE-131. The name a container resolves to reach this host.
     setReceiver: (request: SetReceiverRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetReceiver, request),
@@ -758,6 +764,9 @@ const bridge: HiveBridge = {
     clearToken: (request: ClearCliTokenRequest): Promise<CliTokensState> =>
       ipcRenderer.invoke(CH.cliClearToken, request),
     codexModels: (): Promise<CliModel[]> => ipcRenderer.invoke(CH.cliCodexModels),
+    // HIVE-375. The CLIs on this machine.
+    detect: (): Promise<Record<HarnessId, CliDetection>> => ipcRenderer.invoke(CH.harnessDetect),
+    rescan: (): Promise<Record<HarnessId, CliDetection>> => ipcRenderer.invoke(CH.harnessRescan),
   },
   /*
     HIVE-123. Four verbs, none of them returning a credential — see the

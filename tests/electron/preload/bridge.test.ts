@@ -464,6 +464,11 @@ describe('exposed surface', () => {
 
     await cli().codexModels();
     expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.cliCodexModels);
+
+    await cli().detect();
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.harnessDetect);
+    await cli().rescan();
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.harnessRescan);
   });
 
   it('passes no payload to any slack verb, whatever the caller tries to smuggle in', async () => {

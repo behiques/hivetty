@@ -39,7 +39,22 @@ found, and which variables your rc file overrode.
 { "id": "nova-web", "path": "~/repos/nova-web", "claudeCommand": "~/bin/claude-nova" }
 ```
 
-## CLIs
+## Overview
+
+Settings › Harnesses › Overview lists Claude Code, Codex and Copilot. Each row shows the binary HiveTTY found on
+this Mac, or on the server you are attached to, and its version. A CLI that is not there shows why, with the line
+that installs it. **Rescan** looks again after you install one. **Use for sessions** takes a CLI out of the new-session
+picker, though at least one stays on. **Default** is the CLI a new session starts with; the picker remembers what you
+last picked until the app restarts. A CLI that is missing or turned off shows dimmed in the picker, with the reason.
+
+**Example.** Start new sessions on Codex, and keep Copilot out of the picker:
+
+```json
+"sessionsDefaultCli": "codex",
+"clis": { "copilot": { "sessions": false } }
+```
+
+### Headless agents
 
 How each agent CLI runs [agents](agents.md). Claude Code's **Headless agents** group has
 **Enabled for agents**, and a default **Model** and **Effort** for agent runs. An agent's own

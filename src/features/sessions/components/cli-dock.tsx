@@ -16,9 +16,21 @@ const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -
  * Not `SegmentedControl`: that one takes an `Icon` registry name and draws 22px glyphs, and these
  * are brand marks at 26px in 56px squares. The keyboard contract is the same radio group's: one tab
  * stop, arrows choose as they move and wrap, Home and End jump to the ends.
+ *
+ * An unavailable CLI (HIVE-375: missing, or turned off in Settings) stays drawn, dimmed, with its reason as its
+ * name; a click on it does nothing and the keys step past it.
  */
-export function CliDock({ value, onChange }: { value: HarnessId; onChange: (cli: HarnessId) => void }) {
+export function CliDock({
+  value,
+  onChange,
+  unavailable = {},
+}: {
+  value: HarnessId;
+  onChange: (cli: HarnessId) => void;
+  unavailable?: Partial<Record<HarnessId, string>>;
+}) {
   const refs = useRef(new Map<HarnessId, HTMLButtonElement>());
+  const open = HARNESS_IDS.filter((cli) => unavailable[cli] === undefined);
 
   const choose = (cli: HarnessId) => {
     onChange(cli);
@@ -28,8 +40,10 @@ export function CliDock({ value, onChange }: { value: HarnessId; onChange: (cli:
   return (
     <div className="flex flex-col items-center gap-2.5">
       <div role="radiogroup" aria-label="cli" className="flex gap-3.5">
-        {HARNESS_IDS.map((cli, index) => {
+        {HARNESS_IDS.map((cli) => {
           const selected = cli === value;
+          const reason = unavailable[cli];
+          const label = reason === undefined ? CLI_NAMES[cli] : `${CLI_NAMES[cli]}: ${reason}`;
           return (
             <button
               key={cli}
@@ -40,21 +54,28 @@ export function CliDock({ value, onChange }: { value: HarnessId; onChange: (cli:
               type="button"
               role="radio"
               aria-checked={selected}
-              aria-label={CLI_NAMES[cli]}
-              title={CLI_NAMES[cli]}
+              aria-label={label}
+              aria-disabled={reason === undefined ? undefined : true}
+              title={label}
               tabIndex={selected ? 0 : -1}
-              onClick={() => onChange(cli)}
+              onClick={() => {
+                if (reason === undefined) onChange(cli);
+              }}
               onKeyDown={(event) => {
                 const step = STEP[event.key];
-                const total = HARNESS_IDS.length;
+                const total = open.length;
+                // An unavailable current CLI is not in `open`: step from its start.
+                const index = Math.max(open.indexOf(cli), 0);
                 const target =
-                  step !== undefined
-                    ? HARNESS_IDS[(index + step + total) % total]
-                    : event.key === 'Home'
-                      ? HARNESS_IDS[0]
-                      : event.key === 'End'
-                        ? HARNESS_IDS[total - 1]
-                        : undefined;
+                  total === 0
+                    ? undefined
+                    : step !== undefined
+                      ? open[(index + step + total) % total]
+                      : event.key === 'Home'
+                        ? open[0]
+                        : event.key === 'End'
+                          ? open[total - 1]
+                          : undefined;
                 if (target === undefined) return;
                 event.preventDefault();
                 choose(target);
@@ -64,6 +85,8 @@ export function CliDock({ value, onChange }: { value: HarnessId; onChange: (cli:
                 selected
                   ? 'border-brand bg-chip text-ink motion-safe:-translate-y-0.5'
                   : 'border-border bg-term-input text-muted hover:bg-hover hover:text-ink',
+                reason !== undefined &&
+                  'cursor-not-allowed border-dashed opacity-45 hover:bg-term-input hover:text-muted',
               )}
             >
               <CliMark cli={cli} className="size-[26px]" />
@@ -75,6 +98,11 @@ export function CliDock({ value, onChange }: { value: HarnessId; onChange: (cli:
       <span aria-hidden="true" className="text-ui-sm text-ink">
         {CLI_NAMES[value]}
       </span>
+      {HARNESS_IDS.filter((cli) => unavailable[cli] !== undefined).map((cli) => (
+        <span key={cli} className="max-w-[380px] text-center text-ui-sm text-subtle">
+          {`${CLI_NAMES[cli]} isn't available: ${unavailable[cli]!}`}
+        </span>
+      ))}
     </div>
   );
 }

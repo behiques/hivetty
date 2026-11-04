@@ -162,9 +162,10 @@ interface UiState {
   /** The pane `openSettings` was asked for, or `null` for the default. */
   settingsSection: SettingsSection | null;
   /**
-   * The CLI the picker starts, and what was last picked on each (HIVE-279). Not persisted.
+   * The CLI picked this run, and what was last picked on each (HIVE-279). Not persisted. `newCli` is `null`
+   * until one is picked, so the configured default leads (HIVE-375 D1); `useNewSessionPick` resolves it.
    */
-  newCli: HarnessId;
+  newCli: HarnessId | null;
   newPicks: Record<HarnessId, { model: Model; effort: Effort }>;
   /** Which place the round-two bar has open (HIVE-195). Every launch starts on Home. */
   place: Place;
@@ -309,9 +310,9 @@ interface UiState {
   setWhatsNewOpen: (open: boolean) => void;
   setPickerQuery: (query: string) => void;
   setNewCli: (cli: HarnessId) => void;
-  /** Both act on the CLI the picker is on (HIVE-279). */
-  setNewModel: (model: Model) => void;
-  setNewEffort: (effort: Effort) => void;
+  /** Both act on the CLI they are given, else the one picked, else claude-code (HIVE-279, HIVE-375). */
+  setNewModel: (model: Model, cli?: HarnessId) => void;
+  setNewEffort: (effort: Effort, cli?: HarnessId) => void;
   toggleExplorerDir: (projectId: string, relPath: string) => void;
   collapseExplorer: () => void;
   bumpFsRevision: () => void;
@@ -422,7 +423,7 @@ const initialUiState = {
    * so the rule below still holds for every route that does not name a pane.
    */
   settingsSection: null as SettingsSection | null,
-  newCli: 'claude-code' as HarnessId,
+  newCli: null as HarnessId | null,
   newPicks: INITIAL_PICKS,
   place: 'home' as Place,
   sessionsTab: 'orch' as 'orch' | string,
@@ -666,10 +667,16 @@ export const useUiStore = create<UiState>()((set) => ({
   setPickerQuery: (query) => set({ pickerQuery: query }),
 
   setNewCli: (cli) => set({ newCli: cli }),
-  setNewModel: (model) =>
-    set((s) => ({ newPicks: { ...s.newPicks, [s.newCli]: { ...s.newPicks[s.newCli], model } } })),
-  setNewEffort: (effort) =>
-    set((s) => ({ newPicks: { ...s.newPicks, [s.newCli]: { ...s.newPicks[s.newCli], effort } } })),
+  setNewModel: (model, cli) =>
+    set((s) => {
+      const id = cli ?? s.newCli ?? 'claude-code';
+      return { newPicks: { ...s.newPicks, [id]: { ...s.newPicks[id], model } } };
+    }),
+  setNewEffort: (effort, cli) =>
+    set((s) => {
+      const id = cli ?? s.newCli ?? 'claude-code';
+      return { newPicks: { ...s.newPicks, [id]: { ...s.newPicks[id], effort } } };
+    }),
 
   toggleExplorerDir: (projectId, relPath) =>
     set((state) => {
@@ -795,9 +802,8 @@ export const useUiStore = create<UiState>()((set) => ({
  */
 const newSessionDefaultsSelector = (state: UiState) => ({
   newCli: state.newCli,
-  // Derived, not stored twice: the pick for the CLI the picker is on.
-  newModel: state.newPicks[state.newCli].model,
-  newEffort: state.newPicks[state.newCli].effort,
+  // The CLI a session starts on needs config and detection, so `useNewSessionPick` reads the pick for it.
+  newPicks: state.newPicks,
 });
 
 const pickerStateSelector = (state: UiState) => ({

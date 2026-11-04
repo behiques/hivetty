@@ -59,7 +59,7 @@ describe('SettingsOverlay', () => {
     for (const present of [
       'Projects',
       'Runtime',
-      'CLIs',
+      'Overview',
       'Skills',
       'Agents',
       'Appearance',
@@ -75,9 +75,9 @@ describe('SettingsOverlay', () => {
     render(<SettingsOverlay />);
 
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
-    await user.click(within(nav).getByRole('button', { name: 'CLIs' }));
+    await user.click(within(nav).getByRole('button', { name: 'Overview' }));
 
-    expect(screen.getByRole('heading', { name: 'CLIs', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Overview', level: 2 })).toBeInTheDocument();
   });
 
   /**
@@ -100,7 +100,7 @@ describe('SettingsOverlay', () => {
           .map((button) => button.textContent),
       ),
     ).toEqual([
-      ['CLIs', 'Runtime'],
+      ['Overview', 'Runtime'],
       ['Agents', 'Skills'],
       ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
       ['Advanced'],
@@ -111,7 +111,7 @@ describe('SettingsOverlay', () => {
   });
 
   it.each([
-    ['harnesses-overview', 'CLIs'],
+    ['harnesses-overview', 'Overview'],
     ['shell', 'Runtime'],
     ['agents', 'Agents'],
     ['skills', 'Skills'],
@@ -130,7 +130,7 @@ describe('SettingsOverlay', () => {
 
   it.each([
     ['runtime', 'Runtime'],
-    ['clis', 'CLIs'],
+    ['clis', 'Overview'],
     ['advanced', 'Advanced'],
   ] as const)('the legacy id %s opens its new pane', (legacy, label) => {
     useUiStore.getState().openSettings(legacy);
@@ -185,8 +185,8 @@ describe('SettingsOverlay', () => {
     expect(within(nav).getByRole('button', { name: 'Advanced' })).toHaveFocus();
 
     await user.keyboard('{Home}');
-    expect(within(nav).getByRole('button', { name: 'CLIs' })).toHaveFocus();
-    expect(screen.getByRole('heading', { name: 'CLIs', level: 2 })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Overview' })).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Overview', level: 2 })).toBeInTheDocument();
   });
 
   /**

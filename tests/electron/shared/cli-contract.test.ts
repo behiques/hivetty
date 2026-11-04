@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   cliAcceptsModel,
+  CLI_INSTALL_HINTS,
   cliTakesEffort,
   CLI_VOCAB,
   CODEX_EFFORTS,
@@ -67,9 +68,9 @@ describe('cli-contract (HIVE-341)', () => {
 
   it('resolves an absent block to every CLI enabled, with no defaults', () => {
     expect(resolveClis(undefined)).toEqual({
-      'claude-code': { agents: { enabled: true } },
-      codex: { agents: { enabled: true } },
-      copilot: { agents: { enabled: true } },
+      'claude-code': { agents: { enabled: true }, sessions: true },
+      codex: { agents: { enabled: true }, sessions: true },
+      copilot: { agents: { enabled: true }, sessions: true },
     });
   });
 
@@ -77,9 +78,9 @@ describe('cli-contract (HIVE-341)', () => {
     expect(
       resolveClis({ 'claude-code': { agents: { enabled: false, model: 'haiku' } } }),
     ).toEqual({
-      'claude-code': { agents: { enabled: false, model: 'haiku' } },
-      codex: { agents: { enabled: true } },
-      copilot: { agents: { enabled: true } },
+      'claude-code': { agents: { enabled: false, model: 'haiku' }, sessions: true },
+      codex: { agents: { enabled: true }, sessions: true },
+      copilot: { agents: { enabled: true }, sessions: true },
     });
   });
 
@@ -102,5 +103,23 @@ describe('cliTakesEffort (HIVE-279)', () => {
         expect(CLI_VOCAB[cli].models as readonly string[]).toContain(model);
       }
     }
+  });
+});
+
+describe('resolveClis sessions (HIVE-375)', () => {
+  it('turns every CLI on for sessions unless the file says off', () => {
+    const clis = resolveClis({ codex: { sessions: false } });
+    expect(clis['claude-code'].sessions).toBe(true);
+    expect(clis.codex.sessions).toBe(false);
+    expect(clis.codex.agents.enabled).toBe(true);
+    expect(clis.copilot.sessions).toBe(true);
+  });
+
+  it('has an install hint per CLI', () => {
+    expect(CLI_INSTALL_HINTS).toEqual({
+      'claude-code': 'npm i -g @anthropic-ai/claude-code',
+      codex: 'brew install codex',
+      copilot: 'npm i -g @github/copilot',
+    });
   });
 });
