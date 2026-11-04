@@ -25,6 +25,23 @@ const TOKENS = {
 
 type TokenField = (typeof TOKENS)[keyof typeof TOKENS];
 
+/**
+ * Context used, from the turn's last `github.copilot.session.usage_info` event (HIVE-335 follow-up).
+ * Rounded down, as Copilot's own `/context` shows it: 29290 of 272000 read "(10%)" there, measured on
+ * 1.0.105 (tests/fixtures/copilot/otel-1.0.105/context.jsonl). A latest value, never summed.
+ */
+function readContext(out: SessionMetrics, events: unknown): void {
+  if (!Array.isArray(events)) return;
+  for (const event of events) {
+    if (!isObject(event) || event.name !== 'github.copilot.session.usage_info' || !isObject(event.attributes)) continue;
+    const limit = num(event.attributes['github.copilot.token_limit']);
+    const current = num(event.attributes['github.copilot.current_tokens']);
+    if (limit === undefined || current === undefined || limit <= 0) continue;
+    out.contextWindow = limit;
+    out.contextPct = Math.min(100, Math.max(0, Math.floor((current / limit) * 100)));
+  }
+}
+
 /** Export lines folded onto `prior`'s totals; a field no span reported stays out (HIVE-335). */
 export function foldCopilotMeters(lines: readonly string[], prior: SessionMetrics = {}): SessionMetrics {
   const out: SessionMetrics = {};
@@ -42,6 +59,10 @@ export function foldCopilotMeters(lines: readonly string[], prior: SessionMetric
     }
     if (!isObject(record) || record.type !== 'span' || !isObject(record.attributes)) continue;
     const attrs = record.attributes;
+    // A subagent's own invoke_agent sits under the tool call that ran it; only the session's counts.
+    if (attrs['gen_ai.operation.name'] === 'invoke_agent' && record.parentSpanId === undefined) {
+      readContext(out, record.events);
+    }
     if (attrs['gen_ai.operation.name'] !== 'chat') continue;
     if (typeof attrs['gen_ai.request.model'] === 'string') out.model = attrs['gen_ai.request.model'];
     for (const [attr, field] of Object.entries(TOKENS) as [keyof typeof TOKENS, TokenField][]) {

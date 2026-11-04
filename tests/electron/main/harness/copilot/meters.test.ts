@@ -56,3 +56,52 @@ describe('foldCopilotMeters (HIVE-335)', () => {
     expect(foldCopilotMeters([])).toEqual({});
   });
 });
+
+const context = readFileSync(join(__dirname, '../../../../fixtures/copilot/otel-1.0.105/context.jsonl'), 'utf8').split('\n');
+
+/** A turn's `invoke_agent` span carrying `usage_info` events, as 1.0.105 writes it; top-level unless given a parent. */
+const agentSpan = (usage: [current: number, limit: number][], parentSpanId?: string): string =>
+  JSON.stringify({
+    type: 'span',
+    name: 'invoke_agent',
+    ...(parentSpanId === undefined ? {} : { parentSpanId }),
+    attributes: { 'gen_ai.operation.name': 'invoke_agent' },
+    events: usage.map(([current, limit]) => ({
+      name: 'github.copilot.session.usage_info',
+      attributes: { 'github.copilot.token_limit': limit, 'github.copilot.current_tokens': current },
+    })),
+  });
+
+describe('foldCopilotMeters context (HIVE-335 follow-up)', () => {
+  it('reads the turn’s last usage_info, rounded down as /context shows it', () => {
+    // Copilot's `/context` on this very turn: "28k/272k tokens (10%)". 29290 / 272000 = 10.77%.
+    expect(foldCopilotMeters(context)).toMatchObject({ contextPct: 10, contextWindow: 272000 });
+  });
+
+  it('the latest turn wins, and a smaller one after /compact replaces it', () => {
+    expect(foldCopilotMeters([agentSpan([[100_000, 200_000]]), agentSpan([[30_000, 200_000]])])).toMatchObject({
+      contextPct: 15,
+      contextWindow: 200_000,
+    });
+  });
+
+  it('ignores a subagent’s own context: its invoke_agent is nested under a tool call', () => {
+    expect(
+      foldCopilotMeters([agentSpan([[20_000, 200_000]]), agentSpan([[190_000, 200_000]], 'abc123')]),
+    ).toMatchObject({ contextPct: 10 });
+    expect(foldCopilotMeters([agentSpan([[190_000, 200_000]], 'abc123')])).toEqual({});
+  });
+
+  it('leaves context out when a span reports no usable window, and clamps an overfull one', () => {
+    expect(foldCopilotMeters([agentSpan([])])).toEqual({});
+    expect(foldCopilotMeters([agentSpan([[5, 0]])])).toEqual({});
+    expect(foldCopilotMeters([agentSpan([[300_000, 200_000]])])).toMatchObject({ contextPct: 100 });
+  });
+
+  it('is a latest value, not a total: prior context neither adds up nor repeats', () => {
+    expect(foldCopilotMeters([agentSpan([[50_000, 200_000]])], { contextPct: 90, contextWindow: 200_000 })).toMatchObject({
+      contextPct: 25,
+    });
+    expect(foldCopilotMeters([], { contextPct: 90, contextWindow: 200_000 })).toEqual({});
+  });
+});
