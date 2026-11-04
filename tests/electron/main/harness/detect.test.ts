@@ -36,6 +36,42 @@ describe('detectCli (HIVE-375)', () => {
     await expect(detectCli('claude --tel', { PATH: dir }, run)).resolves.toEqual({ path, version: '2.1.31' });
   });
 
+  it('skips leading NAME=value words and probes the binary after them (D4)', async () => {
+    const path = bin('claude');
+    const run = answer({ stdout: '2.1.31 (Claude Code)' });
+    await expect(detectCli('FOO=1 claude --tel', { PATH: dir, FOO: 'x' }, run)).resolves.toEqual({
+      path,
+      version: '2.1.31',
+    });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith(path, ['--version'], 5_000);
+  });
+
+  it('expands a leading ~/ to the home directory, and only a leading one (D4)', async () => {
+    const home = process.env.HOME;
+    process.env.HOME = dir;
+    try {
+      const path = bin('claude');
+      const run = answer({ stdout: '2.1.31' });
+      await expect(detectCli('~/claude', { PATH: '' }, run)).resolves.toEqual({ path, version: '2.1.31' });
+      expect(run).toHaveBeenCalledWith(path, ['--version'], 5_000);
+
+      const other = answer({});
+      await expect(detectCli('a/~/claude', { PATH: dir }, other)).resolves.toMatchObject({ missing: expect.any(String) });
+      expect(other).not.toHaveBeenCalled();
+    } finally {
+      if (home === undefined) delete process.env.HOME;
+      else process.env.HOME = home;
+    }
+  });
+
+  it('reports a command of only NAME=value words as missing, and runs nothing', async () => {
+    bin('claude');
+    const run = answer({});
+    await expect(detectCli('FOO=1 BAR=2', { PATH: dir }, run)).resolves.toEqual({ missing: 'No command is configured.' });
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it('leaves the sentence’s full stop off a version (HIVE-375, seen on Copilot)', async () => {
     bin('copilot');
     await expect(

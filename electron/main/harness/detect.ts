@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { basename, isAbsolute } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, isAbsolute, join } from 'node:path';
 
 import type { CliDetection } from '../../shared/cli-contract';
 import { HARNESS_IDS, type HarnessId } from '../../shared/harness-contract';
@@ -65,8 +66,13 @@ export const runVersion: RunVersion = (file, args, timeoutMs) =>
   });
 
 export async function detectCli(command: string, env: NodeJS.ProcessEnv, run: RunVersion): Promise<CliDetection> {
-  // D4: sessions type the whole string into a shell; the binary is its first word.
-  const word = command.trim().split(/\s+/)[0] ?? '';
+  // D4: sessions type the whole string into a shell; the binary is its first word after any leading NAME=value
+  // assignments (the shell's own rule). Those never reach the probe: it runs with a constant argv, no shell.
+  const words = command.trim().split(/\s+/);
+  while (words.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]!)) words.shift();
+  let word = words[0] ?? '';
+  // Only a leading "~/" is the home directory; the shell would expand it, execFile does not.
+  if (word.startsWith('~/')) word = join(homedir(), word.slice(2));
   if (word === '') return { missing: 'No command is configured.' };
 
   const { resolved } = probeCommand(word, env.PATH ?? '');
