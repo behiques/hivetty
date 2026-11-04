@@ -76,9 +76,10 @@ export function NewSessionPicker() {
   /** One creature per opening, drawn at random from the picker's four. */
   const [creature] = useState(() => PICKER_CREATURES[Math.floor(Math.random() * PICKER_CREATURES.length)]!);
   const spawnSession = useSpawnSession();
-  const { pickerQuery, pickerTicket, newCli, newModel } = usePickerState();
+  const { pickerQuery, pickerTicket } = usePickerState();
   // Resolved against the account's Codex models, as the quick-start buttons resolve it.
-  const { model, effort, efforts, defaultEffort, codexModels } = useNewSessionPick(true);
+  const { cli: newCli, model, effort, efforts, defaultEffort, codexModels } = useNewSessionPick(true);
+  const newModel = model;
   const ticket = useTicket(pickerTicket);
   const { closePicker, setPickerQuery, setNewCli, setNewModel, setNewEffort } =
     usePickerActions();

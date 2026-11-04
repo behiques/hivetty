@@ -13,7 +13,9 @@ import { useNewSessionDefaults } from '@stores/ui-store';
  * where a quick-start button starts on the last answer.
  */
 export function useNewSessionPick(fresh = false) {
-  const { newCli, newModel, newEffort } = useNewSessionDefaults();
+  const { newCli: picked, newPicks } = useNewSessionDefaults();
+  const newCli = picked ?? 'claude-code';
+  const { model: newModel, effort: newEffort } = newPicks[newCli];
   const codex = newCli === 'codex';
   const { models: codexModels, settled } = useCodexModels(codex, fresh);
   const codexPick = codexModels.find((model) => model.slug === newModel) ?? codexModels[0]!;

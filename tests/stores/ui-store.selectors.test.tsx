@@ -50,9 +50,8 @@ describe('ui-store selectors', () => {
       picker: false,
       pickerQuery: '',
       pickerTicket: null,
-      newCli: 'claude-code',
-      newModel: 'opus',
-      newEffort: 'high',
+      newCli: null,
+      newPicks: expect.objectContaining({ 'claude-code': { model: 'opus', effort: 'high' } }),
     });
 
     act(() => {
@@ -68,9 +67,8 @@ describe('ui-store selectors', () => {
       // The header's entry point — no ticket, and `openPicker` assigns it on
       // every open rather than leaving whatever was there before (HIVE-73).
       pickerTicket: null,
-      newCli: 'claude-code',
-      newModel: 'sonnet',
-      newEffort: 'max',
+      newCli: null,
+      newPicks: expect.objectContaining({ 'claude-code': { model: 'sonnet', effort: 'max' } }),
     });
 
     act(() => {
