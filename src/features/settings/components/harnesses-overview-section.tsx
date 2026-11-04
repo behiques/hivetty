@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { CliMark } from '@/components/ui/cli-mark';
 import { Switch } from '@/components/ui/switch';
 
+import { ConfigErrors } from '@features/settings/components/config-errors';
 import { capabilitySummary } from '@features/settings/components/harness-capabilities';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { useCliDetection } from '@hooks/use-cli-detection';
@@ -51,6 +52,7 @@ export function HarnessesOverviewSection() {
           <ArrowClockwise aria-hidden="true" /> Rescan
         </Button>
       </div>
+      <ConfigErrors errors={snapshot.errors} />
       <ul className="flex flex-col divide-y divide-border-soft rounded-lg border border-border bg-panel">
         {HARNESS_IDS.map((cli) => {
           const found = detection?.[cli];

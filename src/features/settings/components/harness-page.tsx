@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { TextField } from '@/components/ui/text-field';
 
 import { CommandDiagnosticView } from '@features/settings/components/command-diagnostic-view';
+import { ConfigErrors } from '@features/settings/components/config-errors';
 import { CopilotToken, HarnessAgentsGroup } from '@features/settings/components/harness-agents-group';
 import { HarnessCapabilities } from '@features/settings/components/harness-capabilities';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
@@ -105,6 +106,7 @@ export function HarnessPage({ cli }: { cli: HarnessId }) {
           />
         </div>
       </div>
+      <ConfigErrors errors={snapshot.errors} />
       <SettingsGroup title="Sign-in" description={SIGN_IN_COPY[cli]}>
         <SignInLine signIn={signIn} />
         {cli === 'copilot' && <CopilotToken />}

@@ -582,9 +582,7 @@ test('a write that cannot land leaves the old file and no temp file behind', asy
     await field.fill('claude --never-lands');
     await field.blur();
 
-    // Refused, in main's words. The CLI pages draw no `snapshot.errors` (HIVE-376 moved the field off Runtime and
-    // left that behind), so the refusal is read where a pane still draws it: Shell & environment.
-    await openPane(page, 'shell');
+    // Refused, in main's words, on the page that made the write (HIVE-388).
     await expect(page.getByText(/previous config is unchanged/i)).toBeVisible();
     expect(readFileSync(configPath, 'utf8')).toBe(seed);
     expect(readdirSync(dir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
