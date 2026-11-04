@@ -12,6 +12,7 @@ import {
   setCliSessions,
 } from '../../../../electron/main/config';
 import { parseConfig } from '../../../../electron/main/config/parse';
+import { resolveClis } from '../../../../electron/shared/cli-contract';
 import { CONFIG_PATH_ENV, emptySnapshot } from '../../../../electron/shared/config-contract';
 
 const doc = (extra: object) => JSON.stringify({ version: 2, projects: [], ...extra });
@@ -350,5 +351,50 @@ describe('sessions (HIVE-375)', () => {
       'config.clis.codex.sessions: expected a boolean — ignored',
       'config.sessionsDefaultCli: expected one of claude-code, codex, copilot — ignored',
     ]);
+  });
+});
+
+describe('command and session defaults (HIVE-376)', () => {
+  it('reads command, sessionModel and sessionEffort', () => {
+    const parsed = parseConfig(
+      doc({
+        clis: {
+          codex: { command: '/opt/codex/bin/codex', sessionModel: 'gpt-6-luna', sessionEffort: 'high' },
+        },
+      }),
+      'config',
+    );
+    expect(parsed.clis).toEqual({
+      codex: { command: '/opt/codex/bin/codex', sessionModel: 'gpt-6-luna', sessionEffort: 'high' },
+    });
+    expect(parsed.errors).toEqual([]);
+  });
+
+  it('refuses a command on claude-code, an empty command, and words outside the vocabulary', () => {
+    const parsed = parseConfig(
+      doc({
+        clis: {
+          'claude-code': { command: 'claude', sessionModel: 'gpt-6', sessionEffort: 'ultra' },
+          copilot: { command: '   ' },
+        },
+      }),
+      'config',
+    );
+    expect(parsed.clis).toEqual({ 'claude-code': {}, copilot: {} });
+    expect(parsed.errors).toEqual([
+      'config.clis.claude-code.command: claude-code runs claudeCommand — ignored',
+      expect.stringMatching(/^config\.clis\.claude-code\.sessionModel: expected one of /),
+      expect.stringMatching(/^config\.clis\.claude-code\.sessionEffort: expected one of /),
+      'config.clis.copilot.command: expected a non-empty string — ignored',
+    ]);
+  });
+
+  it('resolves them through to the snapshot', () => {
+    expect(resolveClis({ copilot: { command: 'gh-copilot', sessionModel: 'auto' } }).copilot).toEqual({
+      agents: { enabled: true },
+      sessions: true,
+      command: 'gh-copilot',
+      sessionModel: 'auto',
+    });
   });
 });

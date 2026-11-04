@@ -158,20 +158,32 @@ export interface CliConfig {
   agents: CliAgents;
   /** HIVE-375. Whether the picker offers this CLI for sessions; absent in the file means on. */
   sessions: boolean;
+  /** HIVE-376. Codex and Copilot only: the command HiveTTY runs. Absent runs the bare name on PATH. */
+  command?: string;
+  /** HIVE-376. What the picker starts this CLI on when nothing was picked this run. */
+  sessionModel?: string;
+  sessionEffort?: string;
 }
 
 /** Every CLI, always resolved: a CLI the file never names is enabled with no defaults. */
 export type ClisConfig = Record<HarnessId, CliConfig>;
 
 /** The `clis` block as the file declared it, kept partial so a write can tell chosen from absent. */
-export type RawClis = Partial<Record<HarnessId, { agents?: Partial<CliAgents>; sessions?: boolean }>>;
+export interface RawCli {
+  agents?: Partial<CliAgents>;
+  sessions?: boolean;
+  command?: string;
+  sessionModel?: string;
+  sessionEffort?: string;
+}
+export type RawClis = Partial<Record<HarnessId, RawCli>>;
 
 export function resolveClis(raw: RawClis | undefined): ClisConfig {
   return Object.fromEntries(
-    HARNESS_IDS.map((id) => [
-      id,
-      { agents: { enabled: true, ...raw?.[id]?.agents }, sessions: raw?.[id]?.sessions ?? true },
-    ]),
+    HARNESS_IDS.map((id) => {
+      const { agents, sessions, ...rest } = raw?.[id] ?? {};
+      return [id, { ...rest, agents: { enabled: true, ...agents }, sessions: sessions ?? true }];
+    }),
   ) as ClisConfig;
 }
 

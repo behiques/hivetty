@@ -6,6 +6,7 @@ import {
   HEADLESS_SANDBOXES,
   type CliAgents,
   type HeadlessSandbox,
+  type RawCli,
   type RawClis,
 } from '@shared/cli-contract';
 import {
@@ -1327,7 +1328,7 @@ function optionalSlack(
   return slack;
 }
 
-const CLI_KEYS = ['agents', 'sessions'] as const;
+const CLI_KEYS = ['agents', 'sessions', 'command', 'sessionModel', 'sessionEffort'] as const;
 const CLI_AGENT_KEYS = ['enabled', 'model', 'effort', 'sandbox', 'deny'] as const;
 
 /**
@@ -1361,13 +1362,37 @@ function optionalClis(
       continue;
     }
     if (!checkKeys(entry, CLI_KEYS, cliAt, errors)) continue;
-    const sessions: { sessions?: boolean } = {};
+    const top: Omit<RawCli, 'agents'> = {};
     if (entry.sessions !== undefined) {
-      if (typeof entry.sessions === 'boolean') sessions.sessions = entry.sessions;
+      if (typeof entry.sessions === 'boolean') top.sessions = entry.sessions;
       else errors.push(`${cliAt}.sessions: expected a boolean — ignored`);
     }
+    if (entry.command !== undefined) {
+      if (id === 'claude-code') {
+        errors.push(`${cliAt}.command: claude-code runs claudeCommand — ignored`);
+      } else if (typeof entry.command === 'string' && entry.command.trim() !== '') {
+        top.command = entry.command.trim();
+      } else errors.push(`${cliAt}.command: expected a non-empty string — ignored`);
+    }
+    if (entry.sessionModel !== undefined) {
+      if (typeof entry.sessionModel === 'string' && cliAcceptsModel(id, entry.sessionModel)) {
+        top.sessionModel = entry.sessionModel;
+      } else {
+        errors.push(
+          `${cliAt}.sessionModel: expected ${id === 'codex' ? 'a codex model id' : `one of ${CLI_VOCAB[id].models.join(', ')}`} — ignored`,
+        );
+      }
+    }
+    if (entry.sessionEffort !== undefined) {
+      const sessionEfforts: readonly string[] = CLI_VOCAB[id].efforts;
+      if (typeof entry.sessionEffort === 'string' && sessionEfforts.includes(entry.sessionEffort)) {
+        top.sessionEffort = entry.sessionEffort;
+      } else {
+        errors.push(`${cliAt}.sessionEffort: expected one of ${sessionEfforts.join(', ')} — ignored`);
+      }
+    }
     if (entry.agents === undefined) {
-      clis[id] = sessions;
+      clis[id] = top;
       continue;
     }
 
@@ -1433,7 +1458,7 @@ function optionalClis(
       }
     }
 
-    clis[id] = { ...sessions, agents };
+    clis[id] = { ...top, agents };
   }
 
   return clis;
