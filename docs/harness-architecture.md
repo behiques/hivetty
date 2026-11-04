@@ -134,7 +134,9 @@ Outside `electron/main/harness/**` and the contract's `HarnessId` type, nothing 
 `harness/detect.ts` (HIVE-375) finds each CLI with `probeCommand` after the login-shell import, runs it with
 `--version` without a shell, and memoises one answer per app run for `harness:detect`. `harness:rescan` drops it.
 Codex and Copilot are their bare names until HIVE-376 adds their commands. Settings › Harnesses › Overview and the
-new-session picker read the same answer, so a CLI the picker dims is the one the Overview says is missing.
+new-session picker read the same answer, so a CLI the picker dims is the one the Overview says is missing. A command
+holding shell syntax (quotes, `$`, operators), `env` or `~user` answers `unchecked` and runs nothing: only a session's
+shell can resolve it, so the CLI stays available rather than being refused for a command that works.
 
 ## The hook body (HIVE-236)
 

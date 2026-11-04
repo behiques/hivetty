@@ -78,6 +78,13 @@ describe('HarnessesOverviewSection (HIVE-375)', () => {
     expect(screen.getByText(/found on this Mac/)).toBeInTheDocument();
   });
 
+  it('says when it cannot check a command, with no install hint (HIVE-375 follow-up)', () => {
+    const reason = "HiveTTY can't check `$HOME/bin/claude` without a shell. Sessions still run it as written.";
+    renderWith({ detection: { ...detection, 'claude-code': { unchecked: reason } }, clis: resolveClis({}) });
+    expect(screen.getByText(reason)).toBeInTheDocument();
+    expect(screen.queryByText('npm i -g @anthropic-ai/claude-code')).not.toBeInTheDocument();
+  });
+
   it('writes the switch and the radio, and disables the last switch still on', async () => {
     const user = userEvent.setup();
     renderWith({ detection, clis: resolveClis({ codex: { sessions: false }, copilot: { sessions: false } }) });

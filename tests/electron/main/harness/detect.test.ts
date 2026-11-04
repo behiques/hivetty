@@ -65,6 +65,26 @@ describe('detectCli (HIVE-375)', () => {
     }
   });
 
+  it.each([
+    '$HOME/bin/claude',
+    '${HOME}/bin/claude',
+    'env FOO=1 claude',
+    'FOO="a b" claude',
+    "FOO='a b' claude",
+    'PATH=/x:$PATH claude',
+    'A=1;claude',
+    'claude | tee log',
+    '~me/bin/claude',
+    '`which claude`',
+  ])('cannot check %s without a shell, so says so and runs nothing (HIVE-375 follow-up)', async (command) => {
+    bin('claude');
+    const run = answer({});
+    await expect(detectCli(command, { PATH: dir }, run)).resolves.toEqual({
+      unchecked: `HiveTTY can't check \`${command}\` without a shell. Sessions still run it as written.`,
+    });
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it('reports a command of only NAME=value words as missing, and runs nothing', async () => {
     bin('claude');
     const run = answer({});
