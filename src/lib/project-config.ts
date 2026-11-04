@@ -1,5 +1,9 @@
 import { containsPath } from '@lib/explorer/session-root';
-import type { SetAgentsDefaultCliRequest, SetCliAgentsRequest } from '@shared/cli-contract';
+import type {
+  SetAgentsDefaultCliRequest,
+  SetCliAgentsRequest,
+  SetCliSessionsRequest,
+} from '@shared/cli-contract';
 import type {
   AddProjectRequest,
   BrowseListing,
@@ -308,6 +312,10 @@ export const setCliAgentsConfig = (request: SetCliAgentsRequest): Promise<void> 
 /** The default CLI for agents (HIVE-342). `null` falls back to claude-code. Same `mutate` path as every write. */
 export const setAgentsDefaultCliConfig = (request: SetAgentsDefaultCliRequest): Promise<void> =>
   mutate((bridge) => bridge.config.setAgentsDefaultCli(request));
+
+/** Which CLIs sessions may use, and the default (HIVE-375). Main refuses to turn the last one off. */
+export const setCliSessionsConfig = (request: SetCliSessionsRequest): Promise<void> =>
+  mutate((bridge) => bridge.config.setCliSessions(request));
 
 /**
  * Change one project's overrides (story 104).
