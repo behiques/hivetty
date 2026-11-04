@@ -20,7 +20,14 @@ export type RunVersion = (
   file: string,
   args: readonly string[],
   timeoutMs: number,
-) => Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>;
+) => Promise<{
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  /** Set when a signal HiveTTY did not send ended the run (a crash, an OOM kill). */
+  signal?: string;
+}>;
 
 export const runVersion: RunVersion = (file, args, timeoutMs) =>
   new Promise((resolve, reject) => {
@@ -34,9 +41,14 @@ export const runVersion: RunVersion = (file, args, timeoutMs) =>
           resolve({ code: 0, stdout, stderr, timedOut: false });
           return;
         }
-        const failed = error as NodeJS.ErrnoException & { killed?: boolean; code?: number | string };
+        const failed = error as NodeJS.ErrnoException & { killed?: boolean; code?: number | string; signal?: string | null };
         if (failed.killed === true) {
           resolve({ code: null, stdout, stderr, timedOut: true });
+          return;
+        }
+        // Node's message for this one is "Command failed" plus the raw stderr; answer the signal alone instead.
+        if (typeof failed.signal === 'string') {
+          resolve({ code: null, stdout, stderr, timedOut: false, signal: failed.signal });
           return;
         }
         if (typeof failed.code === 'number') {
@@ -68,6 +80,7 @@ export async function detectCli(command: string, env: NodeJS.ProcessEnv, run: Ru
     if (out.timedOut) {
       return { missing: `\`${name} --version\` did not answer within ${String(VERSION_TIMEOUT_MS / 1000)}s.` };
     }
+    if (out.signal !== undefined) return { missing: `\`${name} --version\` was killed by ${out.signal}.` };
     if (out.code !== 0) return { missing: `\`${name} --version\` exited ${String(out.code)}.` };
     return { path: resolved, version: VERSION.exec(out.stdout)?.[0] ?? VERSION.exec(out.stderr)?.[0] ?? null };
   } catch (cause) {

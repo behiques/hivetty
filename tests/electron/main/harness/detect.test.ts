@@ -100,7 +100,31 @@ describe('runVersion (HIVE-375)', () => {
   });
 
   it('kills a run that outlives the timeout', async () => {
-    await expect(runVersion(script('slow', 'sleep 5'), [], 100)).resolves.toMatchObject({ code: null, timedOut: true });
+    await expect(runVersion(script('slow', 'exec sleep 30'), [], 100)).resolves.toMatchObject({
+      code: null,
+      timedOut: true,
+    });
+  });
+
+  it('is bounded even when a child it left behind holds the output open', async () => {
+    const started = Date.now();
+    const out = await runVersion(script('forks', 'sleep 30 &\necho 1.2.3'), [], 300);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(out).toMatchObject({ code: 0, stdout: '1.2.3\n', timedOut: false });
+  });
+
+  it('kills the whole group on a timeout, the children it started included', async () => {
+    const started = Date.now();
+    const out = await runVersion(script('hangs', 'sleep 30 &\nexec sleep 30'), [], 200);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(out).toMatchObject({ code: null, timedOut: true });
+  });
+
+  it('answers a signal it did not send, and never the raw output, as a reason', async () => {
+    const path = script('crash', 'echo secret-stderr >&2; kill -SEGV $$');
+    await expect(runVersion(path, [], 5_000)).resolves.toMatchObject({ code: null, signal: 'SIGSEGV', timedOut: false });
+    const found = await detectCli(path, { PATH: '' }, runVersion);
+    expect(found).toEqual({ missing: '`crash --version` was killed by SIGSEGV.' });
   });
 
   it('rejects when the file cannot be run', async () => {
