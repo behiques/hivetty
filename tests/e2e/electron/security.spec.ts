@@ -97,8 +97,17 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     cli: Object.keys(window.hive!.cli).sort(),
   }));
 
-  // HIVE-343. A fifth verb here would be one that reads a stored token back.
-  expect(surface.cli).toEqual(['clearToken', 'codexModels', 'setToken', 'tokensState']);
+  // HIVE-343: no verb here reads a stored token back. HIVE-375 added detect and rescan (a CLI's path and version),
+  // HIVE-376 signIn (a label from the CLI's own status verb). None of the three returns a credential.
+  expect(surface.cli).toEqual([
+    'clearToken',
+    'codexModels',
+    'detect',
+    'rescan',
+    'setToken',
+    'signIn',
+    'tokensState',
+  ]);
 
   // Widening any of these lists is the alarm this test exists to raise.
   /**
@@ -433,7 +442,9 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * payload, so the page cannot point it anywhere, and a server refuses it.
    */
   expect(surface.remote).toEqual(['dialNow', 'forget', 'onLinkStatus', 'pair']);
+  // HIVE-367: cliSkills lists the user's own CLI skills by name, read-only.
   expect(surface.skills).toEqual([
+    'cliSkills',
     'fileDrop',
     'fileImport',
     'fileMkdir',
@@ -870,11 +881,22 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
      */
     'setAgentsDefaultCli',
     /**
+     * HIVE-376's per-CLI command and session defaults, checked by `parseSetCliRequest`. `command` names
+     * the binary host sessions and wakes run, so the remote contract grades it `execute`, as it does
+     * `setRuntime`'s `claudeCommand`. No credential.
+     */
+    'setCli',
+    /**
      * HIVE-341's per-CLI headless agent defaults: a model, an effort and an
      * on/off switch, each checked against a closed list by
      * `parseSetCliAgentsRequest`. No path, no command, no credential.
      */
     'setCliAgents',
+    /**
+     * HIVE-375's per-CLI sessions switch and the session default: booleans and one CLI id from a
+     * closed list, checked by `parseSetCliSessionsRequest`. No path, no command, no credential.
+     */
+    'setCliSessions',
     /**
      * HIVE-67's connection settings — the site and the account email.
      *
