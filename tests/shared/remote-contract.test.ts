@@ -121,11 +121,11 @@ describe('remote contract: coverage', () => {
     expect(CHANNEL_AUTHORIZATION[CH.cliCodexModels]).toBe('read');
   });
 
-  it('classifies harness:detect and harness:rescan as read calls, config:set-cli-sessions as a mutating one (HIVE-375)', () => {
+  it('classifies harness:detect and harness:rescan as execute calls (they run each CLI), config:set-cli-sessions as mutate (HIVE-375)', () => {
     expect(frameKindOf(CH.harnessDetect)).toBe('call');
-    expect(CHANNEL_AUTHORIZATION[CH.harnessDetect]).toBe('read');
+    expect(CHANNEL_AUTHORIZATION[CH.harnessDetect]).toBe('execute');
     expect(frameKindOf(CH.harnessRescan)).toBe('call');
-    expect(CHANNEL_AUTHORIZATION[CH.harnessRescan]).toBe('read');
+    expect(CHANNEL_AUTHORIZATION[CH.harnessRescan]).toBe('execute');
     expect(frameKindOf(CH.configSetCliSessions)).toBe('call');
     expect(CHANNEL_AUTHORIZATION[CH.configSetCliSessions]).toBe('mutate');
   });
@@ -235,11 +235,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 171 as 72 read, 50 mutate and 49 execute', () => {
+  it('grades the 171 as 70 read, 50 mutate and 51 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 72, mutate: 50, execute: 49 });
+    expect(tally).toEqual({ read: 70, mutate: 50, execute: 51 });
   });
 
   /**

@@ -351,7 +351,7 @@ export const FRAME_KIND = {
  * `pty:ack` and `pty:prompt` above. Grading a channel by the tone of its name is
  * how both of those came out wrong on the first pass.
  *
- * The thirty-three `execute` entries, each with its reason. The list is long
+ * The thirty-five `execute` entries, each with its reason. The list is long
  * because the rule was applied by reading each handler rather than by trusting
  * the channel's name, and a surprising number of innocuously-named reads spawn a
  * process:
@@ -392,6 +392,10 @@ export const FRAME_KIND = {
  *   `github:user-repos`, `integrations:status` — spawn `gh`. The handler comment at
  *   `ipc/index.ts:1064` says of `integrations:status` that it
  *   "**executes `gh`**", which is as clear a statement as the codebase offers.
+ * - `harness:detect`, `harness:rescan` (HIVE-375) — run each CLI's resolved binary
+ *   with `--version`. No payload and a constant argv, but a process runs, and
+ *   rescan runs it again on every call. A device without `execute` gets no
+ *   detection, and its picker treats every CLI as available (D10).
  * - `integrations:login-env` — spawns the login shell to snapshot its
  *   environment. It takes no payload, which bounds the injection surface but not
  *   the fact that a process runs.
@@ -484,8 +488,8 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.cliSetToken]: 'mutate',
   [CH.cliClearToken]: 'mutate',
   [CH.cliCodexModels]: 'read',
-  [CH.harnessDetect]: 'read',
-  [CH.harnessRescan]: 'read',
+  [CH.harnessDetect]: 'execute',
+  [CH.harnessRescan]: 'execute',
   [CH.configSetReceiver]: 'mutate',
   [CH.configSetServer]: 'mutate',
   [CH.serverPair]: 'execute',
