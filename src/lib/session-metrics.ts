@@ -114,6 +114,29 @@ export function creditsLabel(metrics: SessionMetrics | undefined): string | null
     : value.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
+/** A token count as Copilot's footer spells it: `109`, `61.7k`, `2.3M`; a trailing `.0` dropped (HIVE-335). */
+export function tokenCount(n: number): string {
+  const compact = (value: number, unit: string) => `${Number(value.toFixed(1))}${unit}`;
+  if (n >= 1_000_000) return compact(n / 1_000_000, 'M');
+  if (n >= 1_000) return compact(n / 1_000, 'k');
+  return String(n);
+}
+
+/** The tokens stat: `↑in ↓out`, each side only when reported, `null` for neither (HIVE-335). */
+export function tokensLabel(metrics: SessionMetrics | undefined): string | null {
+  const parts = [
+    metrics?.tokensIn === undefined ? null : `↑${tokenCount(metrics.tokensIn)}`,
+    metrics?.tokensOut === undefined ? null : `↓${tokenCount(metrics.tokensOut)}`,
+  ].filter((part): part is string => part !== null);
+  return parts.length === 0 ? null : parts.join(' ');
+}
+
+/** AI credits used, two decimals at most, digit-grouped; `null` when not reported (HIVE-335). */
+export function aiCreditsLabel(metrics: SessionMetrics | undefined): string | null {
+  const used = metrics?.aiCredits;
+  return used === undefined ? null : used.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
 /** Claude's ids get their product name; every other CLI's model is shown as it is spelled (HIVE-279). */
 export function modelLabel(model: Model = DEFAULT_MODEL): string {
   return MODEL_LABELS[model] ?? model;
