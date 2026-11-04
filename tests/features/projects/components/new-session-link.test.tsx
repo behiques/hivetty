@@ -137,6 +137,8 @@ describe('NewSessionLink', () => {
         "Copilot, the default for nova-web, isn't available · starting on Claude Code (your default)",
       ),
     );
+    // The reason is the button's description too, so a screen reader reads it, not only a hover (HIVE-387).
+    expect(screen.getByRole('button')).toHaveAccessibleDescription("Copilot, the default for nova-web, isn't available · starting on Claude Code (your default)");
   });
 
   it('starts on the picker’s CLI (HIVE-279)', async () => {

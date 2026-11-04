@@ -35,7 +35,11 @@ export interface SessionCliChoice {
   /** `null` only when no CLI is available. */
   cli: HarnessId | null;
   source: CliSource | null;
-  /** Each rung that named a CLI that cannot run, highest first; never silently passed over ("no quiet downgrade"). */
+  /**
+   * Each rung that named a CLI that cannot run, highest first; never silently passed over ("no quiet downgrade").
+   * Every rung is recorded, the same CLI twice included, so a project's skip is on record even when a stale run
+   * pick named the same CLI first (HIVE-387).
+   */
   skipped: { cli: HarnessId; source: CliRung; reason: string }[];
 }
 
@@ -55,7 +59,7 @@ export function resolveSessionCli(
   ];
   const skipped: SessionCliChoice['skipped'] = [];
   for (const [cli, source] of rungs) {
-    if (cli === null || cli === undefined || skipped.some((entry) => entry.cli === cli)) continue;
+    if (cli === null || cli === undefined) continue;
     const entry = availability[cli];
     if (entry.ok) return { cli, source, skipped };
     skipped.push({ cli, source, reason: entry.reason });
@@ -75,7 +79,8 @@ export function cliCaption(choice: SessionCliChoice, projectName?: string): stri
   const { cli, source, skipped } = choice;
   if (cli === null || source === null) return null;
   const words = rungWords(projectName);
-  const first = skipped[0];
+  // The project's skip first: a stale run pick is already dimmed in the dock with its reason (HIVE-387).
+  const first = skipped.find((entry) => entry.source === 'project') ?? skipped[0];
   if (first !== undefined) {
     const after = source === 'fallback' || source === 'picked' ? '' : ` (${words[source]})`;
     return `${CLI_NAMES[first.cli]}, ${words[first.source]}, isn't available · starting on ${CLI_NAMES[cli]}${after}`;

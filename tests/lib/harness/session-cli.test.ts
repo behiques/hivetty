@@ -100,10 +100,18 @@ describe('resolveSessionCli (HIVE-378)', () => {
     });
   });
 
-  it('records a CLI named by two rungs once', () => {
+  it('records every rung that named an unavailable CLI, even the same one twice', () => {
     expect(
       resolveSessionCli({ picked: null, project: 'codex', sessionsDefault: 'codex' }, off('codex')).skipped,
-    ).toEqual([{ cli: 'codex', source: 'project', reason: 'codex off' }]);
+    ).toEqual([
+      { cli: 'codex', source: 'project', reason: 'codex off' },
+      { cli: 'codex', source: 'yours', reason: 'codex off' },
+    ]);
+    // A stale run pick that is also the project's CLI: the project's skip is still on record, so its row dims.
+    expect(resolveSessionCli({ picked: 'copilot', project: 'copilot' }, off('copilot')).skipped).toEqual([
+      { cli: 'copilot', source: 'picked', reason: 'copilot off' },
+      { cli: 'copilot', source: 'project', reason: 'copilot off' },
+    ]);
   });
 
   it('falls back to the first available CLI when every rung is out', () => {
@@ -145,6 +153,16 @@ describe('cliCaption (HIVE-378)', () => {
     expect(
       cliCaption(choice({ cli: 'codex', source: 'yours', skipped: [{ cli: 'copilot', source: 'picked', reason: 'x' }] })),
     ).toBe("Copilot, your pick, isn't available · starting on Codex (your default)");
+  });
+
+  it("names the project's skipped default before a stale run pick", () => {
+    const skipped = [
+      { cli: 'copilot' as const, source: 'picked' as const, reason: 'x' },
+      { cli: 'codex' as const, source: 'project' as const, reason: 'y' },
+    ];
+    expect(cliCaption(choice({ cli: 'claude-code', source: 'yours', skipped }), 'incorpx')).toBe(
+      "Codex, the default for incorpx, isn't available · starting on Claude Code (your default)",
+    );
   });
 });
 
