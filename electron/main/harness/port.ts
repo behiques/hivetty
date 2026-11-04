@@ -46,6 +46,8 @@ export interface HarnessAdapter {
    * running totals (HIVE-335); one that reports the latest value ignores it. `{}` for none.
    */
   foldMeters?(lines: readonly string[], prior: SessionMetrics): SessionMetrics;
+  /** `foldMeters` reads the session's telemetry export (`LaunchSpec.exportPath`), not its record (HIVE-335). */
+  readonly meterExport?: true;
   /**
    * Whether these record lines say the user aborted the turn (HIVE-365), for a CLI that fires no
    * hook on an Esc or a declined approval. Absent: only hooks and `answersBlock` end a turn.
@@ -359,6 +361,8 @@ export interface LaunchSpec {
   bypassHookTrust?: boolean;
   /** An app-owned directory for what a launch writes: Copilot's hooks plugin (HIVE-280). */
   stateDir?: string;
+  /** Where a `meterExport` harness writes its telemetry for `foldMeters` (HIVE-335). */
+  exportPath?: string;
 }
 
 /** What a harness answers a {@link LaunchSpec} with (HIVE-234). */
