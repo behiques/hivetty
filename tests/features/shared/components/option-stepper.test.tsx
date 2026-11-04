@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { OptionStepper } from '@features/sessions/components/option-stepper';
+import { OptionStepper } from '@features/shared/components/option-stepper';
 
 const OPTIONS = ['low', 'medium', 'high', 'max'] as const;
 
