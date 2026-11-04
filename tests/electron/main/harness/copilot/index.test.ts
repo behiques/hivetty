@@ -24,7 +24,7 @@ describe('copilotAdapter', () => {
   it('declares what copilot -p can and cannot do', () => {
     expect(copilotAdapter.capabilities).toEqual({
       resume: 'by-id',
-      meters: [],
+      meters: ['model', 'tokens', 'aiCredits'],
       contextDelivery: 'prompt-marker',
       reportsCostUsd: false,
       enforcesTurns: false,
