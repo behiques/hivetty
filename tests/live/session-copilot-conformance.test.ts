@@ -5,7 +5,7 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { copilotAdapter } from '../../electron/main/harness/copilot';
 import { shellQuote } from '../../electron/main/container/shell-quote';
@@ -40,6 +40,7 @@ import { CH } from '../../electron/shared/ipc-contract';
 import type { SessionMetrics, SessionMetricsEvent } from '../../electron/shared/metrics-contract';
 import type { LedgerEntry, LedgerReadQuery, LedgerSnapshot, OpenAsk } from '../../electron/shared/ledger-contract';
 import type { HiveNotification } from '../../electron/shared/notification-contract';
+import type { PlanUpdate } from '../../electron/shared/plan-contract';
 import { typedSkill } from '../../electron/shared/skill-render';
 
 /**
@@ -223,8 +224,11 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
   let ledger: ReturnType<typeof createLedger>;
   /** HIVE-370: goal-on's briefs, inside the repo; every run's verifier reads here, never ~/.hivetty. */
   let goals: string;
+  /** HIVE-361: every plan the receiver read, from the session's own sql todo list. */
+  let plans: PlanUpdate[];
 
   beforeEach(async () => {
+    plans = [];
     statuses = [];
     raised = [];
     dismissed = [];
@@ -341,7 +345,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
         observe(derived.status, e.signal, e.sessionUuid);
         if (e.signal.kind === 'turn-end') writeFileSync(stop, '');
       },
-      onPlan: () => {},
+      onPlan: (update) => plans.push(update),
       onTicketIntent: () => undefined,
       onPromptName: () => {},
       onCleared: () => undefined,
@@ -358,6 +362,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     await receiver.stop();
     // The evidence stays; the login's copy does not.
     rmSync(join(home, 'config.json'), { force: true });
@@ -504,6 +509,37 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       expect(statuses[idle]!.signal?.kind).toBe('turn-end');
       expect(statuses.filter((s) => s.sessionUuid !== undefined).every((s) => s.sessionUuid === UUID)).toBe(true);
       expect(existsSync(marker)).toBe(true);
+    },
+    CASE_MS,
+  );
+
+  /*
+    HIVE-361, FINDINGS P4: Copilot's todo list is a table in session-state/<id>/session.db that its sql
+    tool writes one statement at a time. The receiver reads the main process's COPILOT_HOME, so the
+    case points it at the session's scratch home, as a user's own COPILOT_HOME would be.
+  */
+  it(
+    'builds the plan from its sql todo list, in order (HIVE-361)',
+    async () => {
+      vi.stubEnv('COPILOT_HOME', home);
+      await run('plan', '11111111-2222-4333-8444-5555555555f1', {
+        prompts: [
+          'Use your sql tool to keep a todo list: insert todos Alpha, Beta, Gamma, all pending, in one call; ' +
+            'then, in a second call, set Alpha to done. Reply DONE.',
+        ],
+      });
+      finding('plan', { plans });
+
+      const last = plans.filter((update) => update.op.kind === 'tasks-replaced').at(-1);
+      expect(last).toMatchObject({ entityId: SESSION, cwd: repo });
+      expect(last?.op).toMatchObject({
+        kind: 'tasks-replaced',
+        tasks: [
+          { title: 'Alpha', status: 'completed' },
+          { title: 'Beta', status: 'pending' },
+          { title: 'Gamma', status: 'pending' },
+        ],
+      });
     },
     CASE_MS,
   );

@@ -1,0 +1,14 @@
+{
+  "sessionId": "11111111-2222-4333-8444-555555555561",
+  "timestamp": 1793823747864,
+  "cwd": "/tmp/copilot-fixture/work",
+  "toolName": "sql",
+  "toolArgs": {
+    "description": "Update statuses",
+    "query": "UPDATE todos SET status = CASE id WHEN 'alpha' THEN 'in_progress' WHEN 'gamma' THEN 'blocked' END WHERE id IN ('alpha','gamma');"
+  },
+  "toolResult": {
+    "resultType": "success",
+    "textResultForLlm": "2 row(s) updated."
+  }
+}

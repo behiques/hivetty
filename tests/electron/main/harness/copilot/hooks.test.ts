@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
 import { readCopilotHook } from '../../../../../electron/main/harness/copilot/hooks';
@@ -251,5 +252,75 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
   it('still raises a block for any other hive tool', () => {
     const other = { ...tui('permission-request-hive-session-done.json'), toolName: 'hive/ledger_post' };
     expect(track(prompted(other)).held.blocked).toBe(1);
+  });
+});
+
+describe('readCopilotHook, the sql todo list (HIVE-361)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  /** The recorded UPDATE, with the session.db it left behind under a scratch `COPILOT_HOME`. */
+  const recorded = (db = true): Record<string, unknown> => {
+    const payload = tui('post-tool-use-sql-update.json');
+    const home = mkdtempSync(join(tmpdir(), 'cop-hooks-'));
+    const dir = join(home, 'session-state', String(payload['sessionId']));
+    mkdirSync(dir, { recursive: true });
+    if (db) copyFileSync(join(LIVE, 'session-todos.db'), join(dir, 'session.db'));
+    vi.stubEnv('COPILOT_HOME', home);
+    return payload;
+  };
+  const plans = (reading: HookReading) => reading.effects.filter((effect) => effect.kind === 'plan');
+
+  it("adds the whole table as the plan, in order, to the sql call's own reading", () => {
+    const payload = recorded();
+    const reading = readCopilotHook(session(wrapped(payload, 'postToolUse')));
+    const base = claude({
+      hook_event_name: 'PostToolUse',
+      session_id: payload['sessionId'],
+      cwd: payload['cwd'],
+      tool_name: 'sql',
+      tool_input: payload['toolArgs'],
+    });
+
+    expect(reading.effects.slice(0, base.effects.length)).toEqual(base.effects);
+    expect(plans(reading)).toEqual([
+      {
+        kind: 'plan',
+        update: {
+          entityId: 'cop-sess',
+          cwd: '/tmp/copilot-fixture/work',
+          op: {
+            kind: 'tasks-replaced',
+            tasks: [
+              { id: '1', title: 'Alpha', status: 'completed' },
+              { id: '2', title: 'Beta', status: 'pending' },
+              { id: '3', title: 'Gamma', status: 'pending' },
+            ],
+          },
+        },
+      },
+    ]);
+  });
+
+  it.each([
+    ["a subagent's call: its rows reach the plan on the parent's next one", { agentId: '00000000-0000-4000-8000-000000000002' }],
+    ['a query that never names todos', { toolArgs: { query: 'SELECT 1;' } }],
+    ['any other tool', { toolName: 'bash' }],
+  ])('reads no plan from %s', (_case, change) => {
+    const payload = { ...recorded(), ...change };
+    expect(plans(readCopilotHook(session(wrapped(payload, 'postToolUse'))))).toEqual([]);
+  });
+
+  it('reads no plan, and keeps the rest of the reading, when the session has no database', () => {
+    const payload = recorded(false);
+    const reading = readCopilotHook(session(wrapped(payload, 'postToolUse')));
+    expect(plans(reading)).toEqual([]);
+    expect(reading.effects.length).toBeGreaterThan(0);
+  });
+
+  it('reads no plan on the agent lane: its tool calls go through /fence', () => {
+    const payload = recorded();
+    expect(readCopilotHook(agent(wrapped(payload, 'postToolUse')))).toEqual({ effects: [] });
   });
 });

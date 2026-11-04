@@ -1,5 +1,8 @@
 import { claudeCodeAdapter } from '../claude-code';
+import { planOpOf } from '../claude-code/plan-ops';
 import type { HookInput, HookReading } from '../port';
+
+import { readCopilotTodos } from './todos';
 
 /** Copilot's session events in Claude's spelling (HIVE-280, FINDINGS P0 and P1). */
 const CLAUDE_EVENT: Record<string, string> = {
@@ -94,5 +97,33 @@ export function readCopilotHook(input: HookInput): HookReading {
             ? {}
             : { tool_name: toolName, tool_input: payload['toolInput'] ?? payload['toolArgs'] }),
         };
-  return claudeCodeAdapter.readHook({ ...input, body: JSON.stringify(body) });
+  const reading = claudeCodeAdapter.readHook({ ...input, body: JSON.stringify(body) });
+  if (input.lane !== 'session' || event !== 'postToolUse' || toolName !== 'sql' || sessionId === undefined) return reading;
+  return withTodoPlan(reading, input.entityId, sessionId, cwd, payload);
+}
+
+/** Whether a `sql` call's statements name the todo table: only those can have changed the list. */
+const TODOS = /\btodos\b/i;
+
+/**
+ * A main-agent `sql` call that touched `todos`, with the whole list as its plan (HIVE-361, FINDINGS P4).
+ * A subagent writes the same session-wide table, so its call is skipped: the parent's next call reads it.
+ */
+function withTodoPlan(
+  reading: HookReading,
+  entityId: string,
+  sessionId: string,
+  cwd: string | undefined,
+  payload: Record<string, unknown>,
+): HookReading {
+  if (payload['agentId'] !== undefined) return reading;
+  const query = (payload['toolArgs'] as { query?: unknown } | null | undefined)?.query;
+  if (typeof query !== 'string' || !TODOS.test(query)) return reading;
+  const todos = readCopilotTodos(sessionId);
+  const op = todos === undefined ? undefined : planOpOf('TodoWrite', { todos }, undefined);
+  if (op === undefined) return reading;
+  return {
+    ...reading,
+    effects: [...reading.effects, { kind: 'plan', update: { entityId, op, ...(cwd === undefined || cwd === '' ? {} : { cwd }) } }],
+  };
 }
