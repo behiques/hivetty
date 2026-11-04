@@ -11,7 +11,6 @@ import { Button } from '@components/ui/button';
 import { Switch } from '@components/ui/switch';
 import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { ConfigResetConfirm } from '@features/settings/components/config-reset-confirm';
-import { ContainerAliasGroup } from '@features/settings/components/container-alias-group';
 import { ServerModeGroup } from '@features/settings/components/server-mode-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SettingsGroup } from '@features/shared/components/settings-group';
@@ -454,11 +453,6 @@ export function AdvancedSection() {
           <p className="text-ui-sm text-amber-text">Restart to apply: {restart.join(', ')}.</p>
         )}
       </SettingsGroup>
-
-      <ContainerAliasGroup
-        hostAlias={snapshot.receiver.hostAlias}
-        bind={snapshot.receiver.bind}
-      />
 
       {/*
         `attachedServerName` comes from the runtime, not the snapshot beside
