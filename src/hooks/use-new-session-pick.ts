@@ -1,7 +1,7 @@
 import { useCliDetection } from '@hooks/use-cli-detection';
 import { useCodexModels } from '@hooks/use-codex-models';
 import { useProjectConfig } from '@hooks/use-project-config';
-import { cliAvailability, resolveSessionCli } from '@lib/harness/session-cli';
+import { cliAvailability, resolvePick, resolveSessionCli } from '@lib/harness/session-cli';
 import { CLI_VOCAB } from '@shared/cli-contract';
 import { useNewSessionDefaults } from '@stores/ui-store';
 
@@ -26,7 +26,7 @@ export function useNewSessionPick(fresh = false) {
   const availability = cliAvailability(detection, snapshot?.clis ?? null);
   const resolved = resolveSessionCli(picked, snapshot?.sessionsDefaultCli, availability);
   const newCli = resolved ?? 'claude-code';
-  const { model: newModel, effort: newEffort } = newPicks[newCli];
+  const { model: newModel, effort: newEffort } = resolvePick(newCli, newPicks, snapshot?.clis ?? null);
   const codex = newCli === 'codex';
   const { models: codexModels, settled } = useCodexModels(codex, fresh);
   const codexPick = codexModels.find((model) => model.slug === newModel) ?? codexModels[0]!;

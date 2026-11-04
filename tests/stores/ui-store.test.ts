@@ -103,12 +103,14 @@ describe('ui-store — view state', () => {
     expect(useUiStore.getState().pickerQuery).toBe('');
   });
 
-  it('defaults new sessions to opus / high and lets both change', () => {
-    expect(useUiStore.getState().newPicks['claude-code']).toEqual({ model: 'opus', effort: 'high' });
+  it('starts with no picks this run, so resolvePick fills them (HIVE-376)', () => {
+    expect(useUiStore.getState().newPicks).toEqual({});
+  });
 
-    useUiStore.getState().setNewModel('haiku');
-    useUiStore.getState().setNewEffort('low');
-
+  it('records only the field that was picked, and keeps the other on the next pick (HIVE-376)', () => {
+    useUiStore.getState().setNewModel('haiku', 'claude-code');
+    expect(useUiStore.getState().newPicks['claude-code']).toEqual({ model: 'haiku' });
+    useUiStore.getState().setNewEffort('low', 'claude-code');
     expect(useUiStore.getState().newPicks['claude-code']).toEqual({ model: 'haiku', effort: 'low' });
   });
 
@@ -117,13 +119,11 @@ describe('ui-store — view state', () => {
     expect(useUiStore.getState().newCli).toBeNull();
     ui.setNewModel('haiku');
     ui.setNewCli('codex');
-    expect(useUiStore.getState().newPicks.codex).toEqual({ model: 'gpt-6.1-sol', effort: 'medium' });
     ui.setNewEffort('xhigh');
     ui.setNewCli('claude-code');
     expect(useUiStore.getState().newPicks).toEqual({
-      'claude-code': { model: 'haiku', effort: 'high' },
-      codex: { model: 'gpt-6.1-sol', effort: 'xhigh' },
-      copilot: { model: 'auto', effort: 'medium' },
+      'claude-code': { model: 'haiku' },
+      codex: { effort: 'xhigh' },
     });
   });
 
@@ -132,18 +132,17 @@ describe('ui-store — view state', () => {
     ui.setNewModel('gpt-6-luna', 'codex');
     ui.setNewEffort('high', 'codex');
     expect(useUiStore.getState().newPicks.codex).toEqual({ model: 'gpt-6-luna', effort: 'high' });
-    expect(useUiStore.getState().newPicks['claude-code']).toEqual({ model: 'opus', effort: 'high' });
+    expect(useUiStore.getState().newPicks['claude-code']).toBeUndefined();
     expect(useUiStore.getState().newCli).toBeNull();
   });
 
-  it('starts copilot on its first model at medium effort, and keeps its pick (HIVE-280)', () => {
+  it('keeps a copilot pick across switching away and back (HIVE-280)', () => {
     const ui = useUiStore.getState();
     ui.setNewCli('copilot');
-    expect(useUiStore.getState().newPicks.copilot).toEqual({ model: 'auto', effort: 'medium' });
     ui.setNewModel('claude-sonnet-5.5');
     ui.setNewCli('claude-code');
     ui.setNewCli('copilot');
-    expect(useUiStore.getState().newPicks.copilot).toEqual({ model: 'claude-sonnet-5.5', effort: 'medium' });
+    expect(useUiStore.getState().newPicks.copilot).toEqual({ model: 'claude-sonnet-5.5' });
   });
 
   it('tracks the orchestrator table selection by id', () => {

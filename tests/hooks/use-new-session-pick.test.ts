@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNewSessionPick } from '@hooks/use-new-session-pick';
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
-import { type CliDetection, type CliModel, resolveClis } from '@shared/cli-contract';
+import { type CliDetection, type CliModel, COPILOT_MODELS, resolveClis } from '@shared/cli-contract';
 import { emptySnapshot } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
 import { useUiStore } from '@stores/ui-store';
@@ -72,7 +72,19 @@ describe('useNewSessionPick', () => {
     const { result } = renderHook(() => useNewSessionPick());
     await waitFor(() => expect(codexModels).toHaveBeenCalled());
     expect(result.current).toMatchObject({ model: 'gpt-6-luna', effort: 'medium' });
-    expect(useUiStore.getState().newPicks.codex.effort).toBe('ultra');
+    expect(useUiStore.getState().newPicks.codex?.effort).toBe('ultra');
+  });
+
+  it("starts on Settings' session model, until a pick this run replaces it (HIVE-376)", () => {
+    setProjectConfigForTest({
+      ...emptySnapshot('/tmp/config.json'),
+      clis: resolveClis({ copilot: { sessionModel: COPILOT_MODELS[1] } }),
+    });
+    act(() => useUiStore.getState().setNewCli('copilot'));
+    const { result } = renderHook(() => useNewSessionPick());
+    expect(result.current.model).toBe(COPILOT_MODELS[1]);
+    act(() => useUiStore.getState().setNewModel(COPILOT_MODELS[0], 'copilot'));
+    expect(result.current.model).toBe(COPILOT_MODELS[0]);
   });
 
   it('starts on the configured default when nothing was picked this run (HIVE-375)', async () => {

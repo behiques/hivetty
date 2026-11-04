@@ -234,7 +234,7 @@ describe('NewSessionPicker', () => {
       expect(model).toHaveValue('auto');
 
       await user.selectOptions(model, 'claude-sonnet-5.5');
-      expect(useUiStore.getState().newPicks.copilot).toEqual({ model: 'claude-sonnet-5.5', effort: 'medium' });
+      expect(useUiStore.getState().newPicks.copilot).toEqual({ model: 'claude-sonnet-5.5' });
     });
 
     it('dims the effort beside the select for a Copilot model with no effort scale (FINDINGS P8)', async () => {
@@ -1133,8 +1133,8 @@ describe('NewSessionPicker and the CLIs on this machine (HIVE-375)', () => {
 
     expect(await screen.findByRole('radio', { name: 'Copilot' })).toBeChecked();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), CLI_VOCAB.copilot.models[1]!);
-    expect(useUiStore.getState().newPicks.copilot.model).toBe(CLI_VOCAB.copilot.models[1]);
-    expect(useUiStore.getState().newPicks['claude-code'].model).toBe('opus');
+    expect(useUiStore.getState().newPicks.copilot?.model).toBe(CLI_VOCAB.copilot.models[1]);
+    expect(useUiStore.getState().newPicks['claude-code']).toBeUndefined();
   });
 
   describe('with no CLI to start on', () => {

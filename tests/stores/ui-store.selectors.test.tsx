@@ -51,7 +51,7 @@ describe('ui-store selectors', () => {
       pickerQuery: '',
       pickerTicket: null,
       newCli: null,
-      newPicks: expect.objectContaining({ 'claude-code': { model: 'opus', effort: 'high' } }),
+      newPicks: {},
     });
 
     act(() => {
@@ -68,7 +68,7 @@ describe('ui-store selectors', () => {
       // every open rather than leaving whatever was there before (HIVE-73).
       pickerTicket: null,
       newCli: null,
-      newPicks: expect.objectContaining({ 'claude-code': { model: 'sonnet', effort: 'max' } }),
+      newPicks: { 'claude-code': { model: 'sonnet', effort: 'max' } },
     });
 
     act(() => {

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { cliAvailability, resolveSessionCli, TURNED_OFF, unavailableReasons } from '@lib/harness/session-cli';
+import {
+  BUILT_IN_PICKS,
+  cliAvailability,
+  resolvePick,
+  resolveSessionCli,
+  TURNED_OFF,
+  unavailableReasons,
+} from '@lib/harness/session-cli';
 import { resolveClis } from '@shared/cli-contract';
 
 const all = cliAvailability(null, null);
@@ -64,5 +71,19 @@ describe('resolveSessionCli (D2)', () => {
   it('answers null when nothing is available', () => {
     const none = { 'claude-code': no('a'), codex: no('b'), copilot: no('c') };
     expect(resolveSessionCli(null, undefined, none)).toBeNull();
+  });
+});
+
+describe('resolvePick (HIVE-376)', () => {
+  const clis = resolveClis({ codex: { sessionModel: 'gpt-6-terra', sessionEffort: 'high' } });
+  it('a pick wins, field by field', () => {
+    expect(resolvePick('codex', { codex: { effort: 'low' } }, clis)).toEqual({ model: 'gpt-6-terra', effort: 'low' });
+  });
+  it('the configured default applies with no pick', () => {
+    expect(resolvePick('codex', {}, clis)).toEqual({ model: 'gpt-6-terra', effort: 'high' });
+  });
+  it('the built-in pick applies when neither is set, and with no config', () => {
+    expect(resolvePick('claude-code', {}, clis)).toEqual(BUILT_IN_PICKS['claude-code']);
+    expect(resolvePick('copilot', {}, null)).toEqual(BUILT_IN_PICKS.copilot);
   });
 });
