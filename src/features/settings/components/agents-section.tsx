@@ -19,22 +19,6 @@ import { CLI_NAMES } from '@lib/harness/cli-names';
 import { setAgentsDefaultCliConfig } from '@lib/project-config';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
-/**
- * The Agents section of settings (HIVE-114): the list, New agent, and the
- * editor beside them.
- *
- * Settings edits in place, with Form | Source tabs: its detail pane is too
- * narrow for the two side by side. The agent page shows the same editor
- * (`features/shared`) side by side, and both edit the one editor-store draft,
- * so an edit made in one shows in the other. A row opens its agent here and New
- * agent a never-saved one; neither leaves Settings. The list keeps what it
- * always said about each agent: its glyph, its name, the shipped dot and its
- * state.
- *
- * A broken definition's row is not disabled — unlike an invalid skill's. The
- * folder names it, so there is always a file to open, and the user has to be
- * able to open it to fix the key they were told about.
- */
 const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli] }));
 
 /**
@@ -56,6 +40,22 @@ function DefaultCliForAgents() {
   );
 }
 
+/**
+ * The Agents section of settings (HIVE-114): the list, New agent, and the
+ * editor beside them.
+ *
+ * Settings edits in place, with Form | Source tabs: its detail pane is too
+ * narrow for the two side by side. The agent page shows the same editor
+ * (`features/shared`) side by side, and both edit the one editor-store draft,
+ * so an edit made in one shows in the other. A row opens its agent here and New
+ * agent a never-saved one; neither leaves Settings. The list keeps what it
+ * always said about each agent: its glyph, its name, the shipped dot and its
+ * state.
+ *
+ * A broken definition's row is not disabled — unlike an invalid skill's. The
+ * folder names it, so there is always a file to open, and the user has to be
+ * able to open it to fix the key they were told about.
+ */
 export function AgentsSection() {
   const snapshot = useAgents();
   const phrase = useSwarmPhrase('empty.settingsSkills');

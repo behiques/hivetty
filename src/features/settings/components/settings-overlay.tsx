@@ -132,17 +132,17 @@ function step(current: SettingsSection, key: string): SettingsSection | null {
 */
 type SectionId = SettingsSection;
 
+/** One component serves every CLI's page (HIVE-376 D9); each pane is a one-line wrapper. */
+const ClaudeCodePage = () => <HarnessPage cli="claude-code" />;
+const CodexPage = () => <HarnessPage cli="codex" />;
+const CopilotPage = () => <HarnessPage cli="copilot" />;
+
 /**
  * Section id → pane, the same shape `list-panel.tsx` uses for its panels.
  *
  * A map rather than a chain of ternaries: adding story 104's section should be
  * two lines and no control flow.
  */
-/** One component serves every CLI's page (HIVE-376 D9); each pane is a one-line wrapper. */
-const ClaudeCodePage = () => <HarnessPage cli="claude-code" />;
-const CodexPage = () => <HarnessPage cli="codex" />;
-const CopilotPage = () => <HarnessPage cli="copilot" />;
-
 const PANES: Record<SectionId, ComponentType> = {
   projects: ProjectsSection,
   shell: RuntimeSection,
