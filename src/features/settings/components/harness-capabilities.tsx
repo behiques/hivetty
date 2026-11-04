@@ -27,6 +27,7 @@ const ROWS: readonly Row[] = [
   { label: 'Agent budget limit', key: 'enforcesBudget', read: (c) => yes(c.enforcesBudget) },
   { label: 'MCP status in agent runs', key: 'reportsMcpStatus', read: (c) => yes(c.reportsMcpStatus) },
   { label: 'Integrations in agent runs', key: 'agentMcp', read: (c) => list(c.agentMcp) },
+  { label: 'Runs in a container', key: 'container', read: (c) => yes(c.container) },
 ];
 
 /** Open work on a gap, by ticket key. Plain text, never a link: customers cannot open the HIVE Jira (D2). */
