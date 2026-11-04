@@ -2379,11 +2379,12 @@ export function parseSetProjectRuntimeRequest(
 export function parseDiagnoseCommandRequest(
   input: unknown,
 ): DiagnoseCommandRequest {
-  const raw = assertShape(input, [], 'diagnoseCommand', ['id']);
+  const raw = assertShape(input, [], 'diagnoseCommand', ['id', 'cli']);
   return {
     ...(raw.id !== undefined
       ? { id: assertId(raw.id, 'diagnoseCommand.id') }
       : {}),
+    ...(raw.cli === undefined ? {} : { cli: assertOneOf(raw.cli, HARNESS_IDS, 'diagnoseCommand.cli') }),
   };
 }
 

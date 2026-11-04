@@ -34,6 +34,7 @@ import {
   parseSetAgentsDefaultCliRequest,
   parseSetCliSessionsRequest,
   parseSetCliRequest,
+  parseDiagnoseCommandRequest,
   parseClearCliTokenRequest,
   parseSetCliAgentsRequest,
   parseSetCliTokenRequest,
@@ -2187,5 +2188,12 @@ describe('parseSetCliRequest (HIVE-376)', () => {
     expect(() => parseSetCliRequest({ cli: 'codex', sessionEffort: 'loud' })).toThrow();
     expect(() => parseSetCliRequest({ cli: 'codex', command: 3 })).toThrow();
     expect(() => parseSetCliRequest({ cli: 'codex', agents: {} })).toThrow();
+  });
+});
+
+describe('parseDiagnoseCommandRequest cli (HIVE-376)', () => {
+  it('takes a known CLI and refuses an unknown one', () => {
+    expect(parseDiagnoseCommandRequest({ cli: 'codex' })).toEqual({ cli: 'codex' });
+    expect(() => parseDiagnoseCommandRequest({ cli: 'gemini' })).toThrow();
   });
 });

@@ -267,7 +267,7 @@ import {
   type FsWatchLayer,
 } from '../fs';
 import { cliCommand } from '../harness/cli-command';
-import { detectClis, rescanClis, type DetectDeps } from '../harness/detect';
+import { commandWord, detectClis, rescanClis, type DetectDeps } from '../harness/detect';
 import type { PreparedFiles } from '../harness/port';
 import { adapterFor, sessionAdapter } from '../harness/registry';
 import { createHookRuntime } from '../hooks';
@@ -3836,9 +3836,17 @@ export function registerIpcHandlers(
           ? null
           : (snapshot.projects.find((entry) => entry.id === request.id) ?? null);
 
+      const runtime = effectiveRuntime(snapshot, project);
+      // HIVE-376: another CLI's command is probed by its first word, the binary detection would find.
+      if (request.cli === undefined || request.cli === 'claude-code') {
+        return await diagnoseCommand(runtime, project?.id ?? null);
+      }
       return await diagnoseCommand(
-        effectiveRuntime(snapshot, project),
+        runtime,
         project?.id ?? null,
+        process.env,
+        undefined,
+        commandWord(cliCommand(request.cli, snapshot.clis, runtime.claudeCommand)),
       );
     },
   );

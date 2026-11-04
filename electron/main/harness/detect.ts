@@ -67,15 +67,22 @@ export const runVersion: RunVersion = (file, args, timeoutMs) =>
     child.stdin?.end();
   });
 
-export async function detectCli(command: string, env: NodeJS.ProcessEnv, run: RunVersion): Promise<CliDetection> {
-  // Sessions type the whole string into a shell; the binary is its first word after any leading NAME=value
-  // assignments (the shell's own rule). Those never reach the probe: it runs with a constant argv, no shell.
-  const trimmed = command.trim();
-  const words = trimmed.split(/\s+/);
+/**
+ * The binary a command string runs (HIVE-376, from `detectCli`). Sessions type the whole string into a shell; the
+ * binary is its first word after any leading NAME=value assignments (the shell's own rule). Those never reach a
+ * probe: it runs with a constant argv, no shell. Only a leading "~/" is the home directory; the shell would expand
+ * it, execFile does not.
+ */
+export function commandWord(command: string): string {
+  const words = command.trim().split(/\s+/);
   while (words.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]!)) words.shift();
-  let word = words[0] ?? '';
-  // Only a leading "~/" is the home directory; the shell would expand it, execFile does not.
-  if (word.startsWith('~/')) word = join(homedir(), word.slice(2));
+  const word = words[0] ?? '';
+  return word.startsWith('~/') ? join(homedir(), word.slice(2)) : word;
+}
+
+export async function detectCli(command: string, env: NodeJS.ProcessEnv, run: RunVersion): Promise<CliDetection> {
+  const trimmed = command.trim();
+  const word = commandWord(trimmed);
   /*
     A command only a shell can read is not missing, it is uncheckable: calling it missing would make the picker
     refuse a CLI that sessions start fine (HIVE-375 follow-up). `env` and `~user` are the shell's too. Checked before

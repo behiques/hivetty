@@ -188,8 +188,9 @@ export async function diagnoseCommand(
   projectId: string | null,
   baseEnv: NodeJS.ProcessEnv = process.env,
   run: RunProbe = runProbeCommand,
+  /** HIVE-376: what to probe. Claude's `claudeCommand` unless the handler asks about another CLI. */
+  command: string = runtime.claudeCommand,
 ): Promise<CommandDiagnostic> {
-  const command = runtime.claudeCommand;
   const path = runtime.env.PATH ?? baseEnv.PATH ?? '';
 
   // The search itself lives in `probe.ts` (story 106), because `gh` detection
@@ -199,7 +200,8 @@ export async function diagnoseCommand(
   const { isPath, resolved, probes } = probeCommand(command, path);
 
   const base = { projectId, command, isPath, resolved, path, probes };
-  if (runtime.container === undefined) return base;
+  // The container precondition is Claude's; Codex and Copilot in containers are HIVE-377's.
+  if (runtime.container === undefined || command !== runtime.claudeCommand) return base;
 
   return {
     ...base,

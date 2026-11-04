@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resolveClis } from '../../../../electron/shared/cli-contract';
 import { emptySnapshot } from '../../../../electron/shared/config-contract';
 
 /**
@@ -138,7 +139,8 @@ vi.mock('../../../../electron/main/config/index', () => ({
 }));
 
 const detected = { 'claude-code': { path: '/bin/claude', version: '2.1.31' }, codex: { missing: 'no' }, copilot: { missing: 'no' } };
-vi.mock('../../../../electron/main/harness/detect', () => ({
+vi.mock('../../../../electron/main/harness/detect', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   detectClis: vi.fn(async () => detected),
   rescanClis: vi.fn(async () => detected),
 }));
@@ -340,6 +342,16 @@ describe('harness:detect, harness:rescan and config:set-cli-sessions (HIVE-375)'
     expect(deps.command('codex')).toBe('codex');
     await expect(deps.env()).resolves.toMatchObject({ PATH: process.env.PATH });
     expect(vi.mocked(detect.rescanClis).mock.calls[0]![0]).toBe(deps);
+  });
+
+  it('diagnoses the command of the CLI it is asked about (HIVE-376)', async () => {
+    vi.mocked(config.getConfig).mockReturnValueOnce({
+      ...snapshot,
+      clis: resolveClis({ copilot: { command: 'copilot-x --banner' } }),
+    });
+    await expect(invoke(CH.configDiagnoseCommand, trustedEvent, { cli: 'copilot' })).resolves.toMatchObject({
+      command: 'copilot-x',
+    });
   });
 
   it('writes sessions through the guard, and refuses a payload it does not know', async () => {
