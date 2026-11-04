@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { basename, isAbsolute } from 'node:path';
 
 import type { CliDetection } from '../../shared/cli-contract';
+import { HARNESS_IDS, type HarnessId } from '../../shared/harness-contract';
 import { probeCommand } from '../config/probe';
 
 /**
@@ -86,4 +87,52 @@ export async function detectCli(command: string, env: NodeJS.ProcessEnv, run: Ru
   } catch (cause) {
     return { missing: cause instanceof Error ? cause.message : String(cause) };
   }
+}
+
+/** Codex and Copilot run as their bare names until HIVE-376 adds their command settings (D4). */
+const COMMANDS: Record<HarnessId, (claudeCommand: string) => string> = {
+  'claude-code': (claudeCommand) => claudeCommand,
+  codex: () => 'codex',
+  copilot: () => 'copilot',
+};
+
+export interface DetectDeps {
+  /** The env a session would see, after the login-shell import (D6). */
+  env: () => Promise<NodeJS.ProcessEnv>;
+  claudeCommand: () => string;
+  run?: RunVersion;
+}
+
+/** One answer per app run, the `login-env.ts` memo: concurrent callers share it, `rescanClis` drops it. */
+let inFlight: Promise<Record<HarnessId, CliDetection>> | null = null;
+
+export function detectClis(deps: DetectDeps): Promise<Record<HarnessId, CliDetection>> {
+  if (inFlight !== null) return inFlight;
+  const answer = (async () => {
+    const env = await deps.env();
+    const run = deps.run ?? runVersion;
+    const answers = await Promise.all(
+      HARNESS_IDS.map((id) => detectCli(COMMANDS[id](deps.claudeCommand()), env, run)),
+    );
+    return Object.fromEntries(HARNESS_IDS.map((id, index) => [id, answers[index]!])) as Record<
+      HarnessId,
+      CliDetection
+    >;
+  })();
+  // A failed read (the env, not a CLI: detectCli never throws) is not kept, so the next ask tries again.
+  answer.catch(() => {
+    if (inFlight === answer) inFlight = null;
+  });
+  inFlight = answer;
+  return answer;
+}
+
+export function rescanClis(deps: DetectDeps): Promise<Record<HarnessId, CliDetection>> {
+  inFlight = null;
+  return detectClis(deps);
+}
+
+/** Test seam. */
+export function resetCliDetection(): void {
+  inFlight = null;
 }

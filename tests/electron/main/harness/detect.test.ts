@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { detectCli, runVersion, type RunVersion } from '../../../../electron/main/harness/detect';
+import { detectCli, detectClis, rescanClis, resetCliDetection, runVersion, type RunVersion } from '../../../../electron/main/harness/detect';
 
 let dir: string;
 const bin = (name: string, mode = 0o755) => {
@@ -113,7 +113,7 @@ describe('runVersion (HIVE-375)', () => {
     expect(out).toMatchObject({ code: 0, stdout: '1.2.3\n', timedOut: false });
   });
 
-  it('kills the whole group on a timeout, the children it started included', async () => {
+  it('is bounded on a timeout even when a child it started holds the output open', async () => {
     const started = Date.now();
     const out = await runVersion(script('hangs', 'sleep 30 &\nexec sleep 30'), [], 200);
     expect(Date.now() - started).toBeLessThan(2_000);
@@ -129,5 +129,55 @@ describe('runVersion (HIVE-375)', () => {
 
   it('rejects when the file cannot be run', async () => {
     await expect(runVersion(join(dir, 'absent'), [], 5_000)).rejects.toThrow(/ENOENT/);
+  });
+});
+
+describe('detectClis (HIVE-375)', () => {
+  afterEach(() => resetCliDetection());
+
+  it('answers all three, waiting for the env, and runs once per app run', async () => {
+    bin('claude');
+    bin('codex');
+    const run = answer({ stdout: '1.2.3' });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const deps = {
+      env: async () => {
+        await gate;
+        return { PATH: dir };
+      },
+      claudeCommand: () => 'claude --tel',
+      run,
+    };
+
+    const pending = detectClis(deps);
+    await Promise.resolve();
+    expect(run).not.toHaveBeenCalled();
+    release();
+    const first = await pending;
+    await detectClis(deps);
+
+    expect(first).toEqual({
+      'claude-code': { path: join(dir, 'claude'), version: '1.2.3' },
+      codex: { path: join(dir, 'codex'), version: '1.2.3' },
+      copilot: { missing: '`copilot` was not found on PATH.' },
+    });
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('rescan drops the memo and looks again', async () => {
+    const deps = { env: async () => ({ PATH: dir }), claudeCommand: () => 'claude', run: answer({ stdout: '1.0.0' }) };
+    expect((await detectClis(deps)).copilot).toEqual({ missing: '`copilot` was not found on PATH.' });
+    bin('copilot');
+    expect((await rescanClis(deps)).copilot).toEqual({ path: join(dir, 'copilot'), version: '1.0.0' });
+  });
+
+  it('does not keep a failed read', async () => {
+    const env = vi.fn().mockRejectedValueOnce(new Error('login shell')).mockResolvedValue({ PATH: dir });
+    const deps = { env, claudeCommand: () => 'claude', run: answer({}) };
+    await expect(detectClis(deps)).rejects.toThrow('login shell');
+    await expect(detectClis(deps)).resolves.toMatchObject({ codex: { missing: '`codex` was not found on PATH.' } });
   });
 });
