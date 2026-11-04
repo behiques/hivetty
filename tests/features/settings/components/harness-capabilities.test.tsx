@@ -27,7 +27,7 @@ describe('HarnessCapabilities (HIVE-376)', () => {
   });
   it('lists the meters Copilot reports (HIVE-335)', () => {
     render(<HarnessCapabilities cli="copilot" />);
-    expect(screen.getByRole('row', { name: /Meters/ })).toHaveTextContent('model, tokens, aiCredits');
+    expect(screen.getByRole('row', { name: /Meters/ })).toHaveTextContent('model, context, tokens, aiCredits');
   });
   it('counts the supported rows', () => {
     expect(capabilitySummary('claude-code')).toEqual({ supported: 9, total: 9 });

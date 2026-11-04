@@ -299,13 +299,15 @@ describe('creditsLabel (HIVE-334)', () => {
 });
 
 describe('declaredMetrics for Copilot (HIVE-335)', () => {
-  it('keeps model, tokens and AI credits, and nothing Copilot does not declare', () => {
+  it('keeps model, context, tokens and AI credits, and nothing Copilot does not declare', () => {
     expect(
       declaredMetrics(
         {
           model: 'claude-sonnet-5.5',
           effort: 'high',
           contextPct: 40,
+          contextWindow: 272000,
+          fiveHourPct: 12,
           tokensIn: 61741,
           tokensOut: 109,
           tokensCached: 49589,
@@ -317,6 +319,9 @@ describe('declaredMetrics for Copilot (HIVE-335)', () => {
       ),
     ).toEqual({
       model: 'claude-sonnet-5.5',
+      // The HIVE-335 follow-up: Copilot's export carries its context use (usage_info).
+      contextPct: 40,
+      contextWindow: 272000,
       tokensIn: 61741,
       tokensOut: 109,
       tokensCached: 49589,
