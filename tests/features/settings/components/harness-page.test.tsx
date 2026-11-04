@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,10 +10,16 @@ import { emptySnapshot, type ConfigSnapshot } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
 
 const setCliSessionsConfig = vi.fn();
+const setRuntimeConfig = vi.fn(async (_request: unknown) => {});
+const setCliConfig = vi.fn(async (_request: unknown) => {});
+const diagnoseAgentCommand = vi.fn(async (_request: unknown) => null);
 vi.mock('@/lib/project-config', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   setCliSessionsConfig: (request: unknown) => setCliSessionsConfig(request),
   setCliAgentsConfig: vi.fn(),
+  setRuntimeConfig: (request: unknown) => setRuntimeConfig(request),
+  setCliConfig: (request: unknown) => setCliConfig(request),
+  diagnoseAgentCommand: (request: unknown) => diagnoseAgentCommand(request),
 }));
 
 let snapshot: ConfigSnapshot | null = null;
@@ -56,6 +62,10 @@ function renderPage(cli: HarnessId, opts: { clis?: ClisConfig; detection?: Detec
 
 beforeEach(() => {
   setCliSessionsConfig.mockReset();
+  setRuntimeConfig.mockClear();
+  setCliConfig.mockClear();
+  diagnoseAgentCommand.mockClear();
+  rescan.mockClear();
   cliTokensState.mockReset().mockResolvedValue({ copilot: false, encryptionAvailable: true });
   vi.mocked(readCliSignIn).mockReset().mockResolvedValue({ state: 'in', label: 'Signed in as dev@example.com' });
 });
@@ -133,5 +143,64 @@ describe('HarnessPage (HIVE-376)', () => {
     render(<HarnessPage cli="codex" />);
     expect(screen.getByRole('heading', { level: 2, name: /Codex/ })).toBeInTheDocument();
     expect(screen.getByText('CLI settings are only available in the desktop app.')).toBeInTheDocument();
+  });
+});
+
+describe('HarnessPage: the command (HIVE-376)', () => {
+  it('Claude: commits the global command through setRuntimeConfig, then rescans', async () => {
+    const user = userEvent.setup();
+    renderPage('claude-code');
+    const field = screen.getByLabelText('Command');
+    expect(field).toHaveValue('claude');
+    await user.clear(field);
+    await user.type(field, 'claude --x');
+    await user.tab();
+    expect(setRuntimeConfig).toHaveBeenCalledWith({ claudeCommand: 'claude --x' });
+    await waitFor(() => expect(rescan).toHaveBeenCalled());
+  });
+
+  it('Claude: an empty commit restores the field and writes nothing', async () => {
+    const user = userEvent.setup();
+    renderPage('claude-code');
+    const field = screen.getByLabelText('Command');
+    await user.clear(field);
+    await user.tab();
+    expect(field).toHaveValue('claude');
+    expect(setRuntimeConfig).not.toHaveBeenCalled();
+  });
+
+  it('Codex: commits clis.codex.command, and empty writes null; the placeholder is its bare name', async () => {
+    const user = userEvent.setup();
+    renderPage('codex');
+    const field = screen.getByLabelText('Command');
+    expect(field).toHaveAttribute('placeholder', 'codex');
+    await user.type(field, 'codex-x');
+    await user.tab();
+    expect(setCliConfig).toHaveBeenCalledWith({ cli: 'codex', command: 'codex-x' });
+    await waitFor(() => expect(rescan).toHaveBeenCalled());
+  });
+
+  it('Codex: clearing a saved command writes null', async () => {
+    const user = userEvent.setup();
+    renderPage('codex', { clis: resolveClis({ codex: { command: 'codex-x' } }) });
+    const field = screen.getByLabelText('Command');
+    expect(field).toHaveValue('codex-x');
+    await user.clear(field);
+    await user.tab();
+    expect(setCliConfig).toHaveBeenCalledWith({ cli: 'codex', command: null });
+  });
+
+  it.each(['claude-code', 'codex', 'copilot'] as const)('%s: diagnoses its own command on mount', async (cli) => {
+    renderPage(cli);
+    await waitFor(() => expect(diagnoseAgentCommand).toHaveBeenCalledWith({ cli }));
+  });
+
+  it('re-diagnoses once the snapshot reflects a commit', async () => {
+    const view = renderPage('copilot');
+    await waitFor(() => expect(diagnoseAgentCommand).toHaveBeenCalledTimes(1));
+    snapshot = { ...snapshot!, clis: resolveClis({ copilot: { command: '/opt/copilot' } }) };
+    view.rerender(<HarnessPage cli="copilot" />);
+    await waitFor(() => expect(diagnoseAgentCommand).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText('Command')).toHaveValue('/opt/copilot');
   });
 });

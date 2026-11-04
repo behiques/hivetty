@@ -1,9 +1,11 @@
 import { CheckCircle, WarningCircle } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { CliMark } from '@/components/ui/cli-mark';
 import { Switch } from '@/components/ui/switch';
+import { TextField } from '@/components/ui/text-field';
 
+import { CommandDiagnosticView } from '@features/settings/components/command-diagnostic-view';
 import { CopilotToken, HarnessAgentsGroup } from '@features/settings/components/harness-agents-group';
 import { HarnessCapabilities } from '@features/settings/components/harness-capabilities';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
@@ -12,8 +14,9 @@ import { useCliDetection } from '@hooks/use-cli-detection';
 import { useAttachedServer, useProjectConfig } from '@hooks/use-project-config';
 import { readCliSignIn } from '@lib/cli-sign-in';
 import { CLI_NAMES } from '@lib/harness/cli-names';
-import { setCliSessionsConfig } from '@lib/project-config';
+import { diagnoseAgentCommand, setCliConfig, setCliSessionsConfig, setRuntimeConfig } from '@lib/project-config';
 import { CLI_INSTALL_HINTS, type CliDetection, type CliSignIn } from '@shared/cli-contract';
+import type { CommandDiagnostic, ConfigSnapshot } from '@shared/config-contract';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
 const SIGN_IN_COPY: Record<HarnessId, string> = {
@@ -29,7 +32,7 @@ const SIGN_IN_COPY: Record<HarnessId, string> = {
 export function HarnessPage({ cli }: { cli: HarnessId }) {
   const snapshot = useProjectConfig();
   const server = useAttachedServer();
-  const { detection } = useCliDetection();
+  const { detection, rescan } = useCliDetection();
   const [signIn, setSignIn] = useState<CliSignIn | null>(null);
 
   // Read fresh each time the page opens (D7); a page left for another CLI drops a late answer.
@@ -87,9 +90,68 @@ export function HarnessPage({ cli }: { cli: HarnessId }) {
         <SignInLine signIn={signIn} />
         {cli === 'copilot' && <CopilotToken />}
       </SettingsGroup>
+      <CommandGroup cli={cli} snapshot={snapshot} rescan={rescan} />
       <HarnessAgentsGroup cli={cli} agents={snapshot.clis[cli].agents} />
       <HarnessCapabilities cli={cli} />
     </div>
+  );
+}
+
+/**
+ * What HiveTTY runs for the CLI, and why it was or wasn't found (HIVE-376). Claude's is the global `claudeCommand`,
+ * moved from Runtime (D10), and never empty; Codex's and Copilot's are `clis.<id>.command`, where empty runs the bare
+ * name from the login shell's PATH (D3). The diagnostic re-runs once the snapshot reflects a write.
+ */
+function CommandGroup({
+  cli,
+  snapshot,
+  rescan,
+}: {
+  cli: HarnessId;
+  snapshot: ConfigSnapshot;
+  rescan: () => Promise<void>;
+}) {
+  const saved = cli === 'claude-code' ? snapshot.claudeCommand : (snapshot.clis[cli].command ?? '');
+  const [draft, setDraft] = useState(saved);
+  const [diagnostic, setDiagnostic] = useState<CommandDiagnostic | null>(null);
+
+  useEffect(() => setDraft(saved), [saved]);
+
+  const diagnose = useCallback(async () => setDiagnostic(await diagnoseAgentCommand({ cli })), [cli]);
+
+  useEffect(() => {
+    void diagnose();
+  }, [diagnose, saved]);
+
+  const commit = async () => {
+    const next = draft.trim();
+    if (cli === 'claude-code' && next === '') {
+      setDraft(saved);
+      return;
+    }
+    if (next === saved) return;
+    if (cli === 'claude-code') await setRuntimeConfig({ claudeCommand: next });
+    else await setCliConfig({ cli, command: next === '' ? null : next });
+    await rescan();
+  };
+
+  return (
+    <SettingsGroup title="Command" description={`What HiveTTY runs for ${CLI_NAMES[cli]}, in sessions and agent runs.`}>
+      <TextField
+        className="max-w-md"
+        label="Command"
+        value={draft}
+        onChange={setDraft}
+        onCommit={() => void commit()}
+        placeholder={cli === 'claude-code' ? 'claude' : cli}
+        hint={
+          cli === 'claude-code'
+            ? 'Typed into a login shell, arguments included.'
+            : `Empty runs ${cli} from the login shell's PATH.`
+        }
+      />
+      {diagnostic ? <CommandDiagnosticView diagnostic={diagnostic} /> : null}
+    </SettingsGroup>
   );
 }
 
