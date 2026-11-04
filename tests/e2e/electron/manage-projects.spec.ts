@@ -199,6 +199,41 @@ test('the menu reaches the same order a drag does', async ({}, testInfo) => {
   }
 });
 
+/**
+ * The reorder's permutation check, against a file edited behind the running app (HIVE-60, from HIVE-55's note).
+ * Nothing watches `config.json`, so the app's list is the one it last read; an ordering built from it no longer
+ * names every entry, and main must refuse it rather than write the three it knows and drop the fourth.
+ */
+test('an ordering built before an out-of-band edit is refused, and the file is left byte-identical', async ({}, testInfo) => {
+  const { app, page, configPath } = await launchWithThree((name) =>
+    testInfo.outputPath(name),
+  );
+
+  try {
+    // Launch writes each entry's missing key; let that settle before editing behind it.
+    await expect
+      .poll(() => JSON.parse(readFileSync(configPath, 'utf8')).projects.every((entry: { key?: string }) => entry.key))
+      .toBe(true);
+    await openSettings(page);
+    await expect(page.getByRole('listitem')).toHaveCount(3);
+
+    const delta = testInfo.outputPath('delta');
+    mkdirSync(join(delta, '.git'), { recursive: true });
+    const file = JSON.parse(readFileSync(configPath, 'utf8'));
+    file.projects.push({ id: 'delta', name: 'delta', key: 'dlt', path: delta, origin: 'local' });
+    const edited = JSON.stringify(file, null, 2);
+    writeFileSync(configPath, edited);
+
+    await openRowMenu(page, 'alpha');
+    await page.getByRole('menuitem', { name: 'Move down' }).click();
+
+    await expect(page.getByText(/the requested order does not match the projects on disk/)).toBeVisible();
+    expect(readFileSync(configPath, 'utf8')).toBe(edited);
+  } finally {
+    await app.close();
+  }
+});
+
 test('renaming writes the file and never touches the id', async ({}, testInfo) => {
   const { app, page, configPath } = await launchWithThree((name) =>
     testInfo.outputPath(name),
