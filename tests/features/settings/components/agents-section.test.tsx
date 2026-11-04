@@ -306,3 +306,35 @@ describe('AgentsSection: the default CLI for agents (HIVE-376 D6, from HIVE-342)
   });
 });
 
+
+describe('AgentsSection: which CLIs each agent runs on (HIVE-379)', () => {
+  const marks = (name: string) =>
+    [...row(name).querySelectorAll('[data-cli]')].map((mark) => mark.getAttribute('data-cli'));
+
+  it('shows the marks of its harness: list, in order, with their names', async () => {
+    stub([agent('multi', { harness: ['codex', 'claude-code'] })]);
+    render(<AgentsSection />);
+
+    await screen.findByRole('button', { name: /multi/ });
+    expect(marks('multi')).toEqual(['codex', 'claude-code']);
+    expect(within(row('multi')).getByTitle('Runs on Codex, Claude Code')).toBeInTheDocument();
+    expect(row('multi')).toHaveAccessibleName(/Runs on Codex, Claude Code/);
+  });
+
+  it('shows the agents default when it names none', async () => {
+    stub([agent('plain')]);
+    setProjectConfigForTest({ ...emptySnapshot('/home/dev/.hive/config.json'), agentsDefaultCli: 'copilot' });
+    render(<AgentsSection />);
+
+    await screen.findByRole('button', { name: /plain/ });
+    expect(marks('plain')).toEqual(['copilot']);
+  });
+
+  it('falls back to Claude Code with no default set', async () => {
+    stub([agent('plain')]);
+    render(<AgentsSection />);
+
+    await screen.findByRole('button', { name: /plain/ });
+    expect(marks('plain')).toEqual(['claude-code']);
+  });
+});

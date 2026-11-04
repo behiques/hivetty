@@ -957,7 +957,7 @@ describe('NewSessionPicker · opened for a ticket', () => {
 });
 
 /**
- * Settings › Jira › Ticket workflow, as the picker carries it out: the first
+ * Settings › Automation › Ticket workflow, as the picker carries it out: the first
  * message filled from the setting and editable for one start, ⌥↵ to start
  * empty, and an agent woken instead of a session.
  */

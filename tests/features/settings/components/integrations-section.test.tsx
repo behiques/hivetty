@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -19,6 +19,7 @@ import { PHRASES } from '@lib/swarm/phrases';
 import { IntegrationsSection } from '@features/settings/components/integrations-section';
 import { resetAgents, setAgentsForTest } from '@lib/agents';
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
+import { useUiStore } from '@stores/ui-store';
 
 const setNotificationPrefs = vi.fn();
 const readIntegrationsStatus = vi.fn();
@@ -408,6 +409,19 @@ describe('IntegrationsSection — Jira', () => {
     expect(screen.getByLabelText('Site')).toBeInTheDocument();
     expect(screen.getByLabelText('Account email')).toBeInTheDocument();
     expect(screen.getByLabelText('API token')).toBeInTheDocument();
+  });
+
+  it('links to the Ticket workflow pane instead of holding its controls (HIVE-379)', async () => {
+    render(<IntegrationsSection />);
+
+    const jira = await screen.findByRole('region', { name: 'Jira' });
+    await within(jira).findByRole('heading', { name: 'Site' });
+    expect(
+      screen.queryByRole('radiogroup', { name: 'When a session starts from a ticket' }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(within(jira).getByRole('button', { name: 'Open Ticket workflow' }));
+    expect(useUiStore.getState().settingsSection).toBe('ticket-workflow');
   });
 
   it('says it is checking until the status arrives', () => {

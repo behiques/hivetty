@@ -416,6 +416,7 @@ export function createAgentRegistry({
             // by `ipc/index.ts` beside the schedule and read off this listing.
             parallel: def.limits.parallel,
             ...(def.lane === undefined ? {} : { lane: def.lane }),
+            ...(def.harness === undefined ? {} : { harness: def.harness }),
             // The registry has never seen a run; `mergeRunState` fills this.
             runs: [],
             // HIVE-134 follow-up: `ipc/index.ts` reads `container?.hostAlias`

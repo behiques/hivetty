@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
+import { Button } from '@components/ui/button';
 import { JiraConnectionGroup } from '@features/settings/components/jira-connection-group';
 import { JiraCredentialGroup } from '@features/settings/components/jira-credential-group';
 import { JiraQueryGroup } from '@features/settings/components/jira-query-group';
@@ -10,7 +11,6 @@ import { PathProbes } from '@features/settings/components/path-probes';
 import { SettingsProviderGroup } from '@features/settings/components/settings-provider-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SlackGroup } from '@features/settings/components/slack-group';
-import { TicketWorkflowGroup } from '@features/settings/components/ticket-workflow-group';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useAgents } from '@hooks/use-agents';
 import { useProjectConfig } from '@hooks/use-project-config';
@@ -23,6 +23,7 @@ import type {
 } from '@shared/ipc-contract';
 import type { JiraStatus } from '@shared/jira-contract';
 import { SLACK_SERVER_KEY } from '@shared/slack-contract';
+import { useSettingsActions } from '@stores/ui-store';
 
 /**
  * Integrations (story 106).
@@ -219,6 +220,7 @@ function GhSummary({
 
 export function IntegrationsSection() {
   const snapshot = useProjectConfig();
+  const { openSettings } = useSettingsActions();
   /**
    * One phrase for the whole section, not one per probe. Four different verbs
    * stacked down a settings pane reads as noise; the same one four times reads
@@ -364,7 +366,14 @@ export function IntegrationsSection() {
                   jira.credential.kind === 'env')
               }
             />
-            <TicketWorkflowGroup workflow={snapshot.jira.workflow} />
+            <SettingsGroup
+              title="Ticket workflow"
+              description="What a session started from a ticket does first lives under Automation now."
+            >
+              <Button size="sm" className="w-fit" onClick={() => openSettings('ticket-workflow')}>
+                Open Ticket workflow
+              </Button>
+            </SettingsGroup>
           </>
         )}
       </SettingsProviderGroup>

@@ -24,6 +24,7 @@ import { NotificationsSection } from '@features/settings/components/notification
 import { ProjectsSection } from '@features/settings/components/projects-section';
 import { ShellSection } from '@features/settings/components/shell-section';
 import { SkillsSection } from '@features/settings/components/skills-section';
+import { TicketWorkflowSection } from '@features/settings/components/ticket-workflow-section';
 import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
 
 
@@ -87,6 +88,7 @@ const GROUPS: readonly {
     panes: [
       { id: 'agents', label: 'Agents' },
       { id: 'skills', label: 'Skills' },
+      { id: 'ticket-workflow', label: 'Ticket workflow' },
     ],
   },
   {
@@ -155,6 +157,7 @@ const PANES: Record<SectionId, ComponentType> = {
   copilot: CopilotPage,
   skills: SkillsSection,
   agents: AgentsSection,
+  'ticket-workflow': TicketWorkflowSection,
   appearance: AppearanceSection,
   editor: EditorSection,
   integrations: IntegrationsSection,

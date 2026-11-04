@@ -20,6 +20,7 @@ export type SettingsSection =
   | 'containers'
   | 'agents'
   | 'skills'
+  | 'ticket-workflow'
   | 'projects'
   | 'appearance'
   | 'editor'

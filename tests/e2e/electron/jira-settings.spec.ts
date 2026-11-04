@@ -41,6 +41,16 @@ import { launchHive } from './fixtures/hive-app';
 /** A launch environment with no ambient Jira settings at all. */
 const CLEAN = { JIRA_API_KEY: '', JIRA_DOMAIN: '' };
 
+/** Automation › Ticket workflow (HIVE-379), out of the Jira band. */
+const openTicketWorkflow = async (page: Page): Promise<void> => {
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Ticket workflow' })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Ticket workflow', level: 2 })).toBeVisible();
+};
+
 const openIntegrations = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Settings' }).click();
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
@@ -139,7 +149,7 @@ test('a ticket workflow reaches the config file, and the reader takes it back on
   let app = await launch();
   let page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
-  await openIntegrations(page);
+  await openTicketWorkflow(page);
 
   const group = page.getByRole('radiogroup', { name: 'When a session starts from a ticket' });
   await group.getByRole('radio', { name: 'Run a skill' }).click();
@@ -156,7 +166,7 @@ test('a ticket workflow reaches the config file, and the reader takes it back on
   app = await launch();
   page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
-  await openIntegrations(page);
+  await openTicketWorkflow(page);
   await expect(page.getByRole('radio', { name: 'Run a skill' })).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByLabel('Extra prompt (optional)')).toHaveValue('keep {key} to one PR');
   await page.getByTestId('ticket-workflow-preview').scrollIntoViewIfNeeded();

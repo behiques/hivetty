@@ -6,7 +6,7 @@ and editor preferences stay on this machine.
 
 **On this page:** [Projects](#projects) · [Overview](#overview) ·
 [Shell & environment](#shell--environment) · [Containers](#containers) · [Skills](#skills) ·
-[Agents](#agents) · [Appearance](#appearance) · [Editor](#editor) ·
+[Agents](#agents) · [Ticket workflow](#ticket-workflow) · [Appearance](#appearance) · [Editor](#editor) ·
 [Integrations](#integrations) · [Notifications](#notifications) · [Advanced](#advanced)
 
 | Where it is stored | What |
@@ -98,9 +98,15 @@ Create, import and edit [custom skills](skills.md).
 
 ## Agents
 
-Create and edit [agents](agents.md) with a form or as source.
+Create and edit [agents](agents.md) with a form or as source. Each row shows the marks of the CLIs it runs on:
+its `harness:` list in order, or the default CLI for agents at the top of the pane.
 
 ![Settings › Agents](../assets/guide/15-settings-agents.png)
+
+## Ticket workflow
+
+What a session started from a Jira ticket does first: just open, run a skill, or hand the ticket to an agent.
+See [The ticket workflow](work-and-prs.md#the-ticket-workflow).
 
 ## Appearance
 

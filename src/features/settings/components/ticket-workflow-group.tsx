@@ -33,7 +33,7 @@ const VIAS = [
 ] as const;
 
 /**
- * Settings › Jira › Ticket workflow: what a session started from a ticket in
+ * Settings › Automation › Ticket workflow (HIVE-379): what a session started from a ticket in
  * Work does first. A skill becomes the session's first message, `/skill KEY
  * prompt`; an agent is handed the ticket as a ledger ask, by the new session
  * or instead of one. The picker shows the result and lets one start change it.

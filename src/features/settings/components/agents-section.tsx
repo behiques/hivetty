@@ -6,6 +6,7 @@ import { loadShipped } from '@/lib/shipped';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@components/ui/button';
+import { CliMark } from '@components/ui/cli-mark';
 import { Icon } from '@components/ui/icon';
 import { SelectField } from '@components/ui/select-field';
 import { SwarmCreature } from '@components/ui/swarm-creature';
@@ -40,6 +41,19 @@ function DefaultCliForAgents() {
   );
 }
 
+/** The CLIs an agent runs on (HIVE-379): its `harness:` list in order, else the agents default. */
+function RunsOn({ clis }: { clis: HarnessId[] }) {
+  const names = `Runs on ${clis.map((cli) => CLI_NAMES[cli]).join(', ')}`;
+  return (
+    <span className="flex shrink-0 items-center gap-0.5 text-subtle" title={names}>
+      {clis.map((cli) => (
+        <CliMark key={cli} cli={cli} className="size-3.5" />
+      ))}
+      <span className="sr-only">{names}</span>
+    </span>
+  );
+}
+
 /**
  * The Agents section of settings (HIVE-114): the list, New agent, and the
  * editor beside them.
@@ -58,6 +72,7 @@ function DefaultCliForAgents() {
  */
 export function AgentsSection() {
   const snapshot = useAgents();
+  const config = useProjectConfig();
   const phrase = useSwarmPhrase('empty.settingsSkills');
 
   /** The agent open beside the list: a name, `null` for a never-saved one, or nothing open. */
@@ -78,6 +93,7 @@ export function AgentsSection() {
   }, [snapshot]);
 
   const agents = snapshot?.agents ?? [];
+  const defaultCli = config?.agentsDefaultCli ?? 'claude-code';
   const empty = agents.length === 0;
 
   const newAgent = (): void => setOpen({ name: null });
@@ -173,6 +189,7 @@ export function AgentsSection() {
                 <Icon name={agent.icon} size={14} className="shrink-0 text-brand" />
                 <span className="truncate tabular-nums">{agent.name}</span>
                 <ShippedDot status={shipped.get(agent.name)} />
+                <RunsOn clis={agent.harness ?? [defaultCli]} />
                 {broken ? (
                   <span className="ml-auto shrink-0 text-micro text-amber-text">invalid</span>
                 ) : (

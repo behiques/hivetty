@@ -392,6 +392,8 @@ export interface AgentSummary {
    */
   mcp: string[];
   tools: string[];
+  /** `harness:` from the definition, in order (HIVE-379): the CLI marks on its Settings row. Absent when it names none. */
+  harness?: HarnessId[];
   lastRunAt?: number;
   nextRunAt?: number;
   /** Present once the agent has run at least once (HIVE-115). */
