@@ -1,6 +1,7 @@
-import { Brain, Coins } from '@phosphor-icons/react';
+import { ArrowsDownUp, Brain, Coins } from '@phosphor-icons/react';
 
 import {
+  aiCreditsLabel,
   chipLabel,
   chipParts,
   clockLabel,
@@ -9,6 +10,7 @@ import {
   declaredMetrics,
   pctLabel,
   pctOrNull,
+  tokensLabel,
 } from '@/lib/session-metrics';
 import { isSession } from '@/types/entity';
 
@@ -188,6 +190,17 @@ export function ModelChip() {
   const fiveHour = pctOrNull(metrics?.fiveHourPct);
   const sevenDay = pctOrNull(metrics?.sevenDayPct);
   const credits = creditsLabel(metrics);
+  const tokens = tokensLabel(metrics);
+  const aiCredits = aiCreditsLabel(metrics);
+  const tokensDetail =
+    metrics?.tokensIn === undefined
+      ? null
+      : [
+          metrics.tokensCached === undefined ? null : `${metrics.tokensCached.toLocaleString('en-US')} cached`,
+          metrics.tokensWritten === undefined ? null : `${metrics.tokensWritten.toLocaleString('en-US')} written`,
+        ]
+          .filter((part): part is string => part !== null)
+          .join(', ');
 
   const parts = chipParts(metrics, entity.model, entity.effort, fallbackEffort);
   /*
@@ -220,6 +233,12 @@ export function ModelChip() {
       ? null
       : `weekly limit ${pctLabel(sevenDay)}${sevenDayReset === null ? '' : `, resets ${sevenDayReset}`}`,
     credits === null ? null : `credits ${credits}`,
+    tokens === null
+      ? null
+      : `tokens${metrics?.tokensIn === undefined ? '' : ` ↑${metrics.tokensIn.toLocaleString('en-US')}`}${
+          tokensDetail ? ` (${tokensDetail})` : ''
+        }${metrics?.tokensOut === undefined ? '' : ` ↓${metrics.tokensOut.toLocaleString('en-US')}`}`,
+    aiCredits === null ? null : `AI credits ${aiCredits}`,
   ]
     .filter((part): part is string => part !== null)
     .join(' · ');
@@ -315,6 +334,50 @@ export function ModelChip() {
             </span>
             <span data-detail="credits" className="text-subtle @max-[1040px]:hidden">
               credits
+            </span>
+          </span>
+        )}
+
+        {tokens === null ? null : (
+          /* Session totals, used, not a share of anything: a text stat like credits (HIVE-335). */
+          <span
+            data-stat="tokens"
+            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[560px]:hidden"
+          >
+            <ArrowsDownUp
+              size={13}
+              weight="regular"
+              role="img"
+              aria-label={`tokens: ${tokens}`}
+              className="shrink-0 text-subtle"
+            />
+            <span data-detail="tokens" className="text-ink @max-[1040px]:hidden">
+              {tokens}
+            </span>
+            <span data-detail="tokens" className="text-subtle @max-[1040px]:hidden">
+              tokens
+            </span>
+          </span>
+        )}
+
+        {aiCredits === null ? null : (
+          /* Copilot's own word for it; spent this session, unlike Codex's `credits` balance (HIVE-335). */
+          <span
+            data-stat="aiCredits"
+            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[560px]:hidden"
+          >
+            <Coins
+              size={13}
+              weight="regular"
+              role="img"
+              aria-label={`AI credits: ${aiCredits}`}
+              className="shrink-0 text-subtle"
+            />
+            <span data-detail="aiCredits" className="text-ink @max-[1040px]:hidden">
+              {aiCredits}
+            </span>
+            <span data-detail="aiCredits" className="text-subtle @max-[1040px]:hidden">
+              AI credits
             </span>
           </span>
         )}

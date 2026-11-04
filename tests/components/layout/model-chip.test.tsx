@@ -295,6 +295,13 @@ describe('ModelChip', () => {
       fiveHourResetsAt: new Date(2026, 7, 11, 14, 30).getTime() / 1000,
       sevenDayPct: 71,
     };
+    /*
+      Copilot declares `model` since HIVE-335, so a reported model would replace the picked one; the
+      cases about the picked model are handed everything else.
+    */
+    const FULL_BUT_MODEL: SessionMetrics = Object.fromEntries(
+      Object.entries(FULL).filter(([key]) => key !== 'model'),
+    );
 
     const show = (id: string, metrics: SessionMetrics = FULL) => {
       useHiveStore.getState().setSessionMetrics(id, metrics);
@@ -310,7 +317,7 @@ describe('ModelChip', () => {
 
     it('shows a Copilot session its CLI and picked model, and no meter', () => {
       const id = useHiveStore.getState().spawnSession('nova-web', '', 'copilot', 'gpt-5.2', 'medium');
-      const chip = show(id);
+      const chip = show(id, FULL_BUT_MODEL);
       expect(chip.getAttribute('title')).toBe('Copilot · gpt-5.2 · medium');
       expect(chip.textContent).not.toMatch(/%|ctx|N\/A|Opus|xhigh/);
       expect(chip.querySelector('svg[data-cli="copilot"]')).toBeInTheDocument();
@@ -318,12 +325,54 @@ describe('ModelChip', () => {
 
     it('invents no effort for a CLI session that recorded none', () => {
       // A spawn always records one; a session restored without it has none to show.
-      // Copilot declares no meters, so the effort its metrics report cannot fill the gap (HIVE-334).
+      // Copilot declares no effort meter, so the effort its metrics report cannot fill the gap (HIVE-334).
       const id = useHiveStore.getState().spawnSession('nova-web', '', 'copilot', 'gpt-5.2', 'medium');
       useHiveStore.setState((state) => ({
         entities: { ...state.entities, [id]: { ...(state.entities[id] as Session), effort: undefined } },
       }));
-      expect(show(id).getAttribute('title')).toBe('Copilot · gpt-5.2');
+      expect(show(id, FULL_BUT_MODEL).getAttribute('title')).toBe('Copilot · gpt-5.2');
+    });
+
+    it('shows a Copilot session its tokens and AI credits used (HIVE-335)', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web', '', 'copilot', 'gpt-5.2', 'high');
+      const chip = show(id, {
+        model: 'claude-sonnet-5.5',
+        tokensIn: 61741,
+        tokensOut: 109,
+        tokensCached: 49589,
+        tokensWritten: 12146,
+        aiCredits: 3.64259,
+        contextPct: 40,
+      });
+      expect(chip.getAttribute('title')).toBe(
+        'Copilot · claude-sonnet-5.5 · high · tokens ↑61,741 (49,589 cached, 12,146 written) ↓109 · AI credits 3.64',
+      );
+      expect(chip.textContent).toContain('↑61.7k ↓109tokens');
+      expect(chip.textContent).toContain('3.64AI credits');
+      expect(screen.getByRole('img', { name: 'tokens: ↑61.7k ↓109' })).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'AI credits: 3.64' })).toBeInTheDocument();
+      for (const stat of ['tokens', 'aiCredits']) {
+        const details = chip.querySelectorAll(`[data-detail="${stat}"]`);
+        expect(details).toHaveLength(2);
+        for (const detail of details) expect(detail).toHaveClass('@max-[1040px]:hidden');
+        expect(chip.querySelector(`[data-stat="${stat}"]`)).toHaveClass('@max-[560px]:hidden');
+      }
+      // Undeclared for Copilot: context stays hidden.
+      expect(chip.textContent).not.toContain('40%');
+    });
+
+    it('draws neither stat before Copilot reports usage (HIVE-335)', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web', '', 'copilot', 'gpt-5.2', 'high');
+      const chip = show(id, { model: 'claude-sonnet-5.5' });
+      expect(chip.querySelector('[data-stat="tokens"]')).toBeNull();
+      expect(chip.querySelector('[data-stat="aiCredits"]')).toBeNull();
+    });
+
+    it('a Codex session never draws Copilot’s stats (HIVE-335)', () => {
+      const id = useHiveStore.getState().spawnSession('nova-web', '', 'codex', 'gpt-6-luna', 'high');
+      const chip = show(id, { tokensIn: 5, aiCredits: 1 });
+      expect(chip.querySelector('[data-stat="tokens"]')).toBeNull();
+      expect(chip.querySelector('[data-stat="aiCredits"]')).toBeNull();
     });
 
     it('shows a Codex session what it reported, credits included (HIVE-334)', () => {
