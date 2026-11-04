@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNewSessionPick } from '@hooks/use-new-session-pick';
+import { TURNED_OFF } from '@lib/harness/session-cli';
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 import { type CliDetection, type CliModel, COPILOT_MODELS, resolveClis } from '@shared/cli-contract';
 import { type ConfigSnapshot, emptySnapshot, type ProjectConfig } from '@shared/config-contract';
@@ -193,6 +194,15 @@ describe('useNewSessionPick for a project (HIVE-378)', () => {
     expect(result.current.cli).toBe('claude-code');
     expect(result.current.startFor('hive')).toMatchObject({ cli: 'copilot', source: 'project', model: COPILOT_MODELS[0] });
     expect(result.current.startFor('plain')).toMatchObject({ cli: 'claude-code', source: 'yours' });
+  });
+
+  it('startFor names a project default it had to skip (HIVE-387)', () => {
+    seed({ clis: resolveClis({ copilot: { sessions: false } }) });
+    const { result } = renderHook(() => useNewSessionPick());
+    const row = result.current.startFor('hive');
+    expect(row).toMatchObject({ cli: 'claude-code', source: 'yours' });
+    expect(row.skipped).toEqual([{ cli: 'copilot', source: 'project', reason: TURNED_OFF }]);
+    expect(row.caption).toBe("Copilot, the default for hivetty, isn't available · starting on Claude Code (your default)");
   });
 
   it("reads Codex's list when a project names Codex, so a row click never waits", async () => {

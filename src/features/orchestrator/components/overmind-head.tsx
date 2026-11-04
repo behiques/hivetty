@@ -92,7 +92,7 @@ export function OvermindHead() {
 /** Starts one directly in the filtered project, as `NewSessionLink` does (spec, Decisions). */
 function NewSessionHere({ projectId, projectName }: { projectId: string; projectName: string }) {
   const spawnSession = useSpawnSession();
-  const { cli, model, effort, ready, noneAvailable } = useNewSessionPick(false, projectId);
+  const { cli, model, effort, ready, noneAvailable, skipped, caption } = useNewSessionPick(false, projectId);
   const access = useProjectAccess(projectId);
 
   return (
@@ -106,7 +106,10 @@ function NewSessionHere({ projectId, projectName }: { projectId: string; project
         (noneAvailable
           ? 'No CLI is available for sessions'
           : ready
-            ? `Starts on ${model} · ${effort}`
+            ? // HIVE-387: the project's own CLI was skipped, so say why and what it starts on instead.
+              skipped.some((entry) => entry.source === 'project') && caption !== null
+              ? caption
+              : `Starts on ${model} · ${effort}`
             : 'Reading your Codex models…')
       }
       className="flex items-center gap-1.5 rounded-r-none"
