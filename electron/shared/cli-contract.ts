@@ -197,6 +197,15 @@ export type CliDetection =
   | { missing: string }
   | { unchecked: string };
 
+/**
+ * Whether a CLI is signed in, as its own status verb says (HIVE-376). Only a label, never raw output:
+ * `fix` is the command a person runs in a terminal.
+ */
+export type CliSignIn =
+  | { state: 'in'; label: string }
+  | { state: 'out'; label: string; fix: string }
+  | { state: 'unknown'; label: string };
+
 /** The one line that installs each CLI, shown under a missing row (HIVE-375). */
 export const CLI_INSTALL_HINTS: Record<HarnessId, string> = {
   'claude-code': 'npm i -g @anthropic-ai/claude-code',
