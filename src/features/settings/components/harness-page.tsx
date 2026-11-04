@@ -50,7 +50,11 @@ export function HarnessPage({ cli }: { cli: HarnessId }) {
   const { detection, rescan } = useCliDetection();
   const [signIn, setSignIn] = useState<CliSignIn | null>(null);
 
-  // Read fresh each time the page opens (D7); a page left for another CLI drops a late answer.
+  // The command sign-in runs: a saved change re-reads it, so the line never describes the previous binary.
+  const command =
+    snapshot === null ? '' : cli === 'claude-code' ? snapshot.claudeCommand : (snapshot.clis[cli].command ?? '');
+
+  // Read fresh each time the page opens (D7) or the command changes; a page left for another CLI drops a late answer.
   useEffect(() => {
     let current = true;
     setSignIn(null);
@@ -60,7 +64,7 @@ export function HarnessPage({ cli }: { cli: HarnessId }) {
     return () => {
       current = false;
     };
-  }, [cli]);
+  }, [cli, command]);
 
   const found = detection?.[cli];
 

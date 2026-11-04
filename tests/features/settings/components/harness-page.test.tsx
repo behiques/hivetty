@@ -110,6 +110,22 @@ describe('HarnessPage (HIVE-376)', () => {
     expect(screen.getByRole('switch', { name: 'Use for sessions' })).toBeDisabled();
   });
 
+  it('sign-in is read again when the saved command changes, and not on an unrelated config change', async () => {
+    const { rerender } = renderPage('codex');
+    expect(await screen.findByText('Signed in as dev@example.com')).toBeInTheDocument();
+    expect(readCliSignIn).toHaveBeenCalledTimes(1);
+
+    snapshot = { ...snapshot!, clis: resolveClis({ codex: { sessionModel: 'gpt-6-luna' } }) };
+    rerender(<HarnessPage cli="codex" />);
+    expect(readCliSignIn).toHaveBeenCalledTimes(1);
+
+    vi.mocked(readCliSignIn).mockResolvedValueOnce({ state: 'out', label: 'Not signed in', fix: 'codex login' });
+    snapshot = { ...snapshot, clis: resolveClis({ codex: { command: '/opt/bin/codex' } }) };
+    rerender(<HarnessPage cli="codex" />);
+    expect(await screen.findByText('Not signed in')).toBeInTheDocument();
+    expect(readCliSignIn).toHaveBeenCalledTimes(2);
+  });
+
   it('sign-in: in, out with its fix, unknown', async () => {
     const { unmount } = renderPage('claude-code');
     expect(await screen.findByText('Signed in as dev@example.com')).toBeInTheDocument();

@@ -10,6 +10,20 @@ let last: Detection | null | undefined;
 
 export const lastCliDetection = (): Detection | null | undefined => last;
 
+/** Who is told when `last` changes (HIVE-376): a rescan from one page must reach Overview and the picker too. */
+const listeners = new Set<() => void>();
+
+export function subscribeCliDetection(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function land(answer: Detection | null): Detection | null {
+  last = answer;
+  for (const listener of listeners) listener();
+  return answer;
+}
+
 /** Test seam. */
 export function resetCliDetectionCache(): void {
   inFlight = null;
@@ -32,11 +46,11 @@ export const rescanClis = (): Promise<Detection | null> => read('rescan');
 
 async function read(verb: 'detect' | 'rescan'): Promise<Detection | null> {
   const bridge = window.hive;
-  if (!bridge) return (last = null);
+  if (!bridge) return land(null);
   try {
-    return (last = await bridge.cli[verb]());
+    return land(await bridge.cli[verb]());
   } catch (cause) {
     console.error(`[hive] cli.${verb} failed:`, cause);
-    return (last = null);
+    return land(null);
   }
 }
