@@ -18,6 +18,8 @@ export const VERSION_TIMEOUT_MS = 5_000;
 const MAX_BUFFER = 64 * 1024;
 // A pre-release or build suffix may follow, but never ends on punctuation: Copilot prints "CLI 1.0.105.".
 const VERSION = /\d+\.\d+\.\d+(?:[\w.+-]*\w)?/;
+/** Quoting, expansion, substitution and operators: what only a shell can resolve. */
+const SHELL_SYNTAX = /[$`"'\\;|&<>(){}*?[\]]/;
 
 export type RunVersion = (
   file: string,
@@ -68,11 +70,20 @@ export const runVersion: RunVersion = (file, args, timeoutMs) =>
 export async function detectCli(command: string, env: NodeJS.ProcessEnv, run: RunVersion): Promise<CliDetection> {
   // D4: sessions type the whole string into a shell; the binary is its first word after any leading NAME=value
   // assignments (the shell's own rule). Those never reach the probe: it runs with a constant argv, no shell.
-  const words = command.trim().split(/\s+/);
+  const trimmed = command.trim();
+  const words = trimmed.split(/\s+/);
   while (words.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]!)) words.shift();
   let word = words[0] ?? '';
   // Only a leading "~/" is the home directory; the shell would expand it, execFile does not.
   if (word.startsWith('~/')) word = join(homedir(), word.slice(2));
+  /*
+    A command only a shell can read is not missing, it is uncheckable: calling it missing would make the picker
+    refuse a CLI that sessions start fine (HIVE-375 follow-up). `env` and `~user` are the shell's too. Checked before
+    the empty case, because `A=1;claude` reads as one assignment word to the split above.
+  */
+  if (SHELL_SYNTAX.test(trimmed) || word === 'env' || word.startsWith('~')) {
+    return { unchecked: `HiveTTY can't check \`${trimmed}\` without a shell. Sessions still run it as written.` };
+  }
   if (word === '') return { missing: 'No command is configured.' };
 
   const { resolved } = probeCommand(word, env.PATH ?? '');

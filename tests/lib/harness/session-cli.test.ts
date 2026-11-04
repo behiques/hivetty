@@ -32,6 +32,24 @@ describe('cliAvailability (HIVE-375)', () => {
   });
 });
 
+describe('cliAvailability, a command detection cannot check (HIVE-375 follow-up)', () => {
+  it('keeps the CLI available: only a session can run it', () => {
+    const availability = cliAvailability(
+      { 'claude-code': { unchecked: 'cannot check' }, codex: { path: '/x', version: null }, copilot: { path: '/p', version: null } },
+      resolveClis({}),
+    );
+    expect(availability['claude-code']).toEqual({ ok: true });
+  });
+
+  it('still honours the switch', () => {
+    const availability = cliAvailability(
+      { 'claude-code': { unchecked: 'cannot check' }, codex: { path: '/x', version: null }, copilot: { path: '/p', version: null } },
+      resolveClis({ 'claude-code': { sessions: false } }),
+    );
+    expect(availability['claude-code']).toEqual(no(TURNED_OFF));
+  });
+});
+
 describe('resolveSessionCli (D2)', () => {
   const offClaude = { ...all, 'claude-code': no('off') };
 

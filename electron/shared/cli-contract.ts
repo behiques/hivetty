@@ -175,8 +175,15 @@ export function resolveClis(raw: RawClis | undefined): ClisConfig {
   ) as ClisConfig;
 }
 
-/** What HiveTTY found for one CLI on this machine (HIVE-375). Never raw output beyond the matched version. */
-export type CliDetection = { path: string; version: string | null } | { missing: string };
+/**
+ * What HiveTTY found for one CLI on this machine (HIVE-375). Never raw output beyond the matched version.
+ * `unchecked`: the command needs a shell to mean anything (`$HOME/…`, quotes, `env …`), so only a session can tell;
+ * the CLI stays available.
+ */
+export type CliDetection =
+  | { path: string; version: string | null }
+  | { missing: string }
+  | { unchecked: string };
 
 /** The one line that installs each CLI, shown under a missing row (HIVE-375). */
 export const CLI_INSTALL_HINTS: Record<HarnessId, string> = {

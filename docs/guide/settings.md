@@ -46,6 +46,8 @@ this Mac, or on the server you are attached to, and its version. A CLI that is n
 that installs it. **Rescan** looks again after you install one. **Use for sessions** takes a CLI out of the new-session
 picker, though at least one stays on. **Default** is the CLI a new session starts with; the picker remembers what you
 last picked until the app restarts. A CLI that is missing or turned off shows dimmed in the picker, with the reason.
+A Claude command that needs a shell to read, such as `$HOME/bin/claude` or `env FOO=1 claude`, can't be checked: the
+row says so and Claude Code stays in the picker.
 
 **Example.** Start new sessions on Codex, and keep Copilot out of the picker:
 

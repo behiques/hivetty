@@ -58,6 +58,9 @@ export function HarnessesOverviewSection() {
                   {located?.version != null && <span className="text-muted">{located.version}</span>}
                 </span>
                 {located !== null && <code className="truncate text-ui-sm text-subtle">{located.path}</code>}
+                {found !== undefined && 'unchecked' in found && (
+                  <span className="text-ui-sm text-subtle">{found.unchecked}</span>
+                )}
                 {missing !== null && (
                   <span className="text-ui-sm text-subtle">
                     {missing} Install it with{' '}
