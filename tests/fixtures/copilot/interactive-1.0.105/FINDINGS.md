@@ -76,7 +76,8 @@ Answered (a second run typed `blue` into the dialog): `postToolUse` (`ask_user`,
 **Consequence.** Claude's `Notification` vocabulary has no `elicitation_dialog`, so the session lane
 reads that notification as Claude's `PermissionRequest` for `AskUserQuestion` (a question block),
 and spells `ask_user`'s `postToolUse` as `AskUserQuestion` so the answer clears it.
-`permission_prompt` is left out: `permissionRequest` already gives that signal.
+`permission_prompt` was left out here as an echo of `permissionRequest`; HIVE-385 found it is the
+only signal that a prompt was drawn, and reads the card off it (P12).
 
 ## P3: resume
 
@@ -215,7 +216,7 @@ HIVE-382 probed the rest (`copilot --plugin-dir <p> skill list --json` in a scra
 **Consequence.**
 - `promptMarker` is Claude's.
 - `contextDelivery` is `'prompt-marker'`.
-- The launch's `--allow-tool` list and the filter are one list, `COPILOT_SESSION_PREAPPROVED`, in one spelling: the filter derives `server/tool` from `server(tool)`, and a unit test reads every `--allow-tool` off a real launch line and checks each is dropped (HIVE-383).
+- The launch's `--allow-tool` list is `COPILOT_SESSION_PREAPPROVED`. HIVE-383 filtered the hook by the same list; HIVE-385 deleted the filter, since an allowed call draws no prompt and so fires no `permission_prompt` (P12). A unit test reads every `--allow-tool` off a real launch line and checks each raises no card.
 
 ## P12: the user's own approvals (HIVE-383)
 
@@ -228,7 +229,8 @@ HIVE-382 probed the rest (`copilot --plugin-dir <p> skill list --json` in a scra
 
 **Consequence.**
 - A fixed list cannot see these approvals: they live in Copilot's own state, and two of them change mid-session. `COPILOT_SESSION_PREAPPROVED` stays HiveTTY's own launch list.
-- Stopping the flash is a follow-up story. The lead: the prompt Copilot actually draws is the `notification` of type `permission_prompt` (P2), which the reader skips today.
+- **HIVE-385 probe (1.0.105, the three cases plus `done`)**: `permission_prompt` fires only for a prompt Copilot drew, 19 ms after its `permissionRequest`, carrying `sessionId`, `cwd`, `message` and `title` but no tool. None of the four approvals (repo, `/allow-all`, `defaultPermissionMode`, `--allow-tool`) sent one; `postToolUse` followed the request about 35 ms later.
+- So `readCopilotHook` holds each session's `permissionRequest` and raises its card only when `permission_prompt` follows. A `postToolUse` or `agentStop` first forgets it. The three cases now expect no card for an approved call.
 
 ## P13: agentStop block (HIVE-370), copilot 1.0.105
 

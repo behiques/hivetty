@@ -533,9 +533,17 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     CASE_MS * 2,
   );
 
+  const blocks = (): number => raised.filter((n) => n.kind === 'session.blocked').length;
+  const prompts = (log: string): number => flat(log).split('Doyouwant').length - 1;
+  /** beforeEach's repository skills answer any prompt with a word; a shell probe needs them gone. */
+  const plainRepo = (): void => {
+    for (const root of ['.github', '.agents', '.claude']) rmSync(join(repo, root), { recursive: true, force: true });
+  };
+
   it(
     'raises a permission card and needs-you for a shell call; approving clears both',
     async () => {
+      plainRepo();
       await run('permission', UUID, { prompts: ['Run the shell command: echo hive > made.txt'], answer: '\r' });
       finding('permission', {});
 
@@ -553,6 +561,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
   it(
     'clears the card and needs-you on an Esc denial, which fires no hook (D5 amended)',
     async () => {
+      plainRepo();
       await run('denial', UUID, { prompts: ['Run the shell command: echo nope > nope.txt'], answer: '\x1b' });
       finding('denial', {});
 
@@ -570,18 +579,11 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
 
   /*
    * FINDINGS P12 (HIVE-383): every approval the user makes themselves fires permissionRequest the way
-   * --allow-tool does (P11), with no prompt drawn, so the card raised for it is cleared at tool-end.
-   * These hold what 1.0.105 does; the follow-up that stops the flash flips them.
+   * --allow-tool does (P11), with no prompt drawn. The card comes only from the permission_prompt
+   * notification Copilot sends for a prompt it drew (HIVE-385), so none of these raises one.
    */
-  const blocks = (): number => raised.filter((n) => n.kind === 'session.blocked').length;
-  const prompts = (log: string): number => flat(log).split('Doyouwant').length - 1;
-  /** beforeEach's repository skills answer any prompt with a word; a shell probe needs them gone. */
-  const plainRepo = (): void => {
-    for (const root of ['.github', '.agents', '.claude']) rmSync(join(repo, root), { recursive: true, force: true });
-  };
-
   it(
-    "a call the user approved with \"don't ask again in this repo\" still fires permissionRequest (FINDINGS P12)",
+    "a call the user approved with \"don't ask again in this repo\" raises no card; the prompt drawn before it does (FINDINGS P12)",
     async () => {
       plainRepo();
       // A redirect gets only Yes/No; a plain command gets the don't-ask-again option, 2.
@@ -596,13 +598,13 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       expect(saved).toContain('"mkdir"');
       expect(existsSync(join(repo, 'two'))).toBe(true);
       expect(prompts(log)).toBe(1);
-      expect(blocks()).toBe(2);
+      expect(blocks()).toBe(1);
     },
     CASE_MS,
   );
 
   it(
-    '/allow-all typed in the TUI still fires permissionRequest (FINDINGS P12)',
+    '/allow-all typed in the TUI raises no card for the calls it approves (FINDINGS P12)',
     async () => {
       plainRepo();
       const { log } = await run('p12-allow-all', '11111111-2222-4333-8444-5555555555d2', {
@@ -613,13 +615,13 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       expect(flat(log)).toContain('AllowAllforthissession');
       expect(existsSync(join(repo, 'made.txt'))).toBe(true);
       expect(prompts(log)).toBe(0);
-      expect(blocks()).toBe(1);
+      expect(blocks()).toBe(0);
     },
     CASE_MS,
   );
 
   it(
-    "settings.json's defaultPermissionMode allow-all still fires permissionRequest (FINDINGS P12)",
+    "settings.json's defaultPermissionMode allow-all raises no card (FINDINGS P12)",
     async () => {
       plainRepo();
       // Where `copilot config defaultPermissionMode allow-all` writes it (probed): settings.json, not config.json.
@@ -630,7 +632,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       finding('p12-settings', { log });
       expect(existsSync(join(repo, 'made.txt'))).toBe(true);
       expect(prompts(log)).toBe(0);
-      expect(blocks()).toBe(1);
+      expect(blocks()).toBe(0);
     },
     CASE_MS,
   );

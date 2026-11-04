@@ -728,8 +728,8 @@ unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSIS
 - `--allow-tool 'hive(session_done)'`, beside the hive server only, for Codex's reason: `done` is
   one hive call, so it never asks (HIVE-368). It is the one tool approved by name; no other. The
   list is `COPILOT_SESSION_PREAPPROVED` (`copilot/preapproved.ts`). Copilot still fires
-  `permissionRequest` for the call and only skips the prompt, so `readCopilotHook` drops that
-  request by the same list (HIVE-362, P11).
+  `permissionRequest` for the call and only skips the prompt (HIVE-362, P11); no card follows,
+  because a card waits for a drawn prompt (below).
 - No `--allow-all`, `--yolo`, `--trust-folder` or `--no-auto-update`: Copilot asks in its own TUI,
   and an untrusted folder shows its own trust dialog first. `/fence` is not used (D5).
 
@@ -740,16 +740,23 @@ status, the inbox and the tracker see one shape:
 | --- | --- | --- |
 | `sessionStart` | `SessionStart` | fires at the first prompt, not at boot |
 | `userPromptSubmitted` | `UserPromptSubmit` | |
-| `permissionRequest` | `PermissionRequest` | raises the card and "needs you" |
-| `postToolUse` | `PostToolUse` | clears it by tool name: no `tool_use_id` |
-| `agentStop` | `Stop` | a subagent's (`agentId` set) is ignored |
+| `permissionRequest` | nothing yet | held per session until its prompt is drawn |
+| `notification` `permission_prompt` | the held `PermissionRequest` | raises the card and "needs you": the prompt is drawn |
+| `postToolUse` | `PostToolUse` | clears it by tool name: no `tool_use_id`; forgets a held request |
+| `agentStop` | `Stop` | a subagent's (`agentId` set) is ignored; forgets a held request |
+| `notification` `elicitation_dialog` | `PermissionRequest` for `AskUserQuestion` | an `ask_user` question fires no `permissionRequest` (P2) |
+
+Copilot fires `permissionRequest` for every call, a call the user already approved included: a
+repo approval in `permissions-config.json`, `/allow-all`, `defaultPermissionMode: "allow-all"` in
+`settings.json`, and `--allow-tool`. It sends `permission_prompt` only for a prompt it actually
+draws, about 20 ms after the request, and that notification names no tool. So the card is the held
+request, read when its prompt arrives, and an approved call raises none (HIVE-385, FINDINGS P12).
 
 With the skills rendered, the hooks plugin's `agentStop` carries a second command after the status
 hook: goal-on's verifier (`goalVerifierCommand`, `--harness=copilot`, 30 s, HIVE-370). Copilot
 continues the turn on its `{"decision":"block"}`, releases on `allow` or silence, and stops honouring
 blocks after 8 in a row (FINDINGS P13). The verifier drops a subagent's stop itself, since it is
 not the receiver.
-| `notification` `elicitation_dialog` | `PermissionRequest` for `AskUserQuestion` | an `ask_user` question fires no `permissionRequest` (P2) |
 
 File writes pair by one name, `edit`: the permission names its kind (`edit`) while `postToolUse`
 names the tool (`create`, `edit`, `apply_patch`), so all four are spelled `edit`; `ask_user` is

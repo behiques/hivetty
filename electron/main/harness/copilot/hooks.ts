@@ -1,16 +1,15 @@
 import { claudeCodeAdapter } from '../claude-code';
 import type { HookInput, HookReading } from '../port';
 
-import { copilotPreapproved } from './preapproved';
-
 /** Copilot's session events in Claude's spelling (HIVE-280, FINDINGS P0 and P1). */
 const CLAUDE_EVENT: Record<string, string> = {
   sessionStart: 'SessionStart',
   userPromptSubmitted: 'UserPromptSubmit',
+  // Read only once its prompt is drawn, off the `permission_prompt` that follows it (FINDINGS P12).
   permissionRequest: 'PermissionRequest',
   postToolUse: 'PostToolUse',
   agentStop: 'Stop',
-  // Only an `ask_user` dialog: it fires no `permissionRequest` (FINDINGS P2). Read below.
+  // `ask_user`'s dialog, and the prompt drawn for a `permissionRequest` (FINDINGS P2, P12). Read below.
   notification: 'PermissionRequest',
 };
 
@@ -32,6 +31,16 @@ const claudeToolName = (tool: string | undefined): string | undefined =>
 const text = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
 
 /**
+ * Each session's last `permissionRequest`, until the `permission_prompt` that says Copilot drew it.
+ * Copilot fires the request for every call, the user's own approvals and `--allow-tool` included, and
+ * draws the prompt only for a call nobody approved (FINDINGS P11, P12). The notification names no tool,
+ * so the card is read off the request it follows. It always follows: Copilot waits on the request's hook
+ * before deciding to draw. A `postToolUse` or `agentStop` with no prompt between forgets the request.
+ */
+// ponytail: a session killed between a request and its result keeps one entry; key by lifetime if that ever adds up.
+const unprompted = new Map<string, Record<string, unknown>>();
+
+/**
  * A Copilot hook (HIVE-343 agents, HIVE-280 sessions). Copilot's bodies name no event, so the hook
  * command wraps each as `{"event":…,"payload":…}` (`hook-commands.ts`). The body is re-spelled as
  * Claude's and read by Claude's reader, so status, the inbox and the tracker see one shape, as
@@ -47,17 +56,27 @@ export function readCopilotHook(input: HookInput): HookReading {
   } catch {
     return { malformed: true, effects: [] };
   }
-  const { event, payload } = (envelope ?? {}) as { event?: unknown; payload?: Record<string, unknown> };
+  let { event, payload } = (envelope ?? {}) as { event?: unknown; payload?: Record<string, unknown> };
   if (typeof event !== 'string' || typeof payload !== 'object' || payload === null) return { effects: [] };
   if (input.lane === 'agent' && event !== 'agentStop') return { effects: [] };
   const name = CLAUDE_EVENT[event];
   if (name === undefined) return { effects: [] };
   if (event === 'agentStop' && payload['agentId'] !== undefined) return { effects: [] };
-  // `permission_prompt` echoes a `permissionRequest` already read; no other type is read (P2).
-  if (event === 'notification' && payload['notification_type'] !== 'elicitation_dialog') return { effects: [] };
 
-  // Copilot asks the hook even for a call `--allow-tool` approved; nobody needs to answer it (FINDINGS P11).
-  if (event === 'permissionRequest' && copilotPreapproved(text(payload['toolName']))) return { effects: [] };
+  if (event === 'permissionRequest') {
+    unprompted.set(input.entityId, payload);
+    return { effects: [] };
+  }
+  if (event === 'postToolUse' || event === 'agentStop') unprompted.delete(input.entityId);
+  if (event === 'notification' && payload['notification_type'] === 'permission_prompt') {
+    const request = unprompted.get(input.entityId);
+    unprompted.delete(input.entityId);
+    if (request === undefined) return { effects: [] };
+    event = 'permissionRequest';
+    payload = request;
+  } else if (event === 'notification' && payload['notification_type'] !== 'elicitation_dialog') {
+    return { effects: [] };
+  }
 
   const sessionId = text(payload['sessionId']);
   const cwd = text(payload['cwd']);

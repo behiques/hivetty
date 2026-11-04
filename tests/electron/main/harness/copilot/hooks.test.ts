@@ -63,6 +63,11 @@ const tui = (name: string): Record<string, unknown> =>
   JSON.parse(readFileSync(join(LIVE, name), 'utf8')) as Record<string, unknown>;
 const session = (body: string): HookInput => ({ lane: 'session', entityId: 'cop-sess', body, truncated: false });
 const claude = (body: Record<string, unknown>) => claudeCodeAdapter.readHook(session(JSON.stringify(body)));
+/** A request whose prompt Copilot then drew: the prompt's reading, which is the one that raises the card (P12). */
+const prompted = (request: Record<string, unknown>, entityId = 'cop-sess'): HookReading => {
+  readCopilotHook({ ...session(wrapped(request, 'permissionRequest')), entityId });
+  return readCopilotHook({ ...session(wrapped(tui('notification-permission_prompt.json'), 'notification')), entityId });
+};
 
 /** Feeds each reading's status effects to a real tracker, and answers its last derived status. */
 const track = (...readings: HookReading[]) => {
@@ -92,9 +97,15 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
     );
   });
 
-  it('raises a permission block from permissionRequest, with no tool_use_id so the tracker clears it by name', () => {
+  it('raises nothing from permissionRequest alone: a call the user approved fires it with no prompt (FINDINGS P12)', () => {
+    expect(readCopilotHook(session(wrapped(tui('permission-request-bash.json'), 'permissionRequest')))).toEqual({
+      effects: [],
+    });
+  });
+
+  it("raises the request's permission block once Copilot draws its prompt, with no tool_use_id so the tracker clears it by name", () => {
     const payload = tui('permission-request-bash.json');
-    const reading = readCopilotHook(session(wrapped(payload, 'permissionRequest')));
+    const reading = prompted(payload);
     expect(reading).toEqual(
       claude({
         hook_event_name: 'PermissionRequest',
@@ -118,7 +129,7 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
         tool_input: payload['toolArgs'],
       }),
     );
-    const request = readCopilotHook(session(wrapped(tui('permission-request-bash.json'), 'permissionRequest')));
+    const request = prompted(tui('permission-request-bash.json'));
     expect(track(request).held.blocked).toBe(1);
     expect(track(request, readCopilotHook(session(wrapped(payload, 'postToolUse')))).held.blocked).toBe(0);
   });
@@ -127,7 +138,7 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
     ['create', 'permission-request-create.json', 'post-tool-use-create.json'],
     ['apply_patch', 'permission-request-edit.json', 'post-tool-use-apply-patch.json'],
   ])("spells a %s write as the permission kind 'edit', so the write clears its own card", (_tool, request, done) => {
-    const asked = readCopilotHook(session(wrapped(tui(request), 'permissionRequest')));
+    const asked = prompted(tui(request));
     const wrote = readCopilotHook(session(wrapped(tui(done), 'postToolUse')));
     const names = [asked, wrote].map(
       (reading) => reading.effects.find((effect) => effect.kind === 'status')?.event.toolName,
@@ -137,7 +148,7 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
   });
 
   it("does not clear an edit block from a bash call's postToolUse", () => {
-    const asked = readCopilotHook(session(wrapped(tui('permission-request-edit.json'), 'permissionRequest')));
+    const asked = prompted(tui('permission-request-edit.json'));
     const ran = readCopilotHook(session(wrapped(tui('post-tool-use-bash.json'), 'postToolUse')));
     expect(track(asked, ran).held.blocked).toBe(1);
   });
@@ -177,10 +188,31 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
     expect(track(asked, answered).held.blocked).toBe(0);
   });
 
-  it('reads a permission_prompt notification as nothing: permissionRequest already raised the card', () => {
+  it('reads a permission_prompt with no request before it as nothing: it names no tool', () => {
+    const prompt = session(wrapped(tui('notification-permission_prompt.json'), 'notification'));
+    expect(readCopilotHook(prompt)).toEqual({ effects: [] });
+    // One prompt per request: a second is not read off the first's request again.
+    prompted(tui('permission-request-bash.json'));
+    expect(readCopilotHook(prompt)).toEqual({ effects: [] });
+  });
+
+  it.each([
+    ['postToolUse', 'post-tool-use-bash.json'],
+    ['agentStop', 'agent-stop.json'],
+  ])('forgets a request its %s followed with no prompt: an approved call leaves nothing to raise later', (event, file) => {
+    readCopilotHook(session(wrapped(tui('permission-request-bash.json'), 'permissionRequest')));
+    readCopilotHook(session(wrapped(tui(file), event)));
     expect(
       readCopilotHook(session(wrapped(tui('notification-permission_prompt.json'), 'notification'))),
     ).toEqual({ effects: [] });
+  });
+
+  it("pairs a prompt only with its own session's request", () => {
+    readCopilotHook({ ...session(wrapped(tui('permission-request-bash.json'), 'permissionRequest')), entityId: 'other' });
+    expect(
+      readCopilotHook(session(wrapped(tui('notification-permission_prompt.json'), 'notification'))),
+    ).toEqual({ effects: [] });
+    expect(track(prompted(tui('permission-request-bash.json'), 'other')).last).toBeDefined();
   });
 
   it('reads no notification on the agent lane', () => {
@@ -195,14 +227,7 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
     });
   });
 
-  it("reads no block for a call the launch pre-approved: Copilot fires permissionRequest anyway (HIVE-362, FINDINGS P11)", () => {
-    const asked = readCopilotHook(
-      session(wrapped(tui('permission-request-hive-session-done.json'), 'permissionRequest')),
-    );
-    expect(asked).toEqual({ effects: [] });
-  });
-
-  it("reads no block for any tool the launch's --allow-tool approves: one list for both (HIVE-383)", () => {
+  it("raises no block for any tool the launch's --allow-tool approves: Copilot draws no prompt for it (FINDINGS P11, P12)", () => {
     const { command } = launchCopilotSession({
       command: 'copilot',
       sessionUuid: '11111111-2222-4333-8444-555555555551',
@@ -214,13 +239,17 @@ describe('readCopilotHook, session lane (HIVE-280)', () => {
     for (const allowTool of allowed) {
       // Copilot's permissionRequest spells `server(tool)` as `server/tool` (FINDINGS P11).
       const toolName = allowTool.replace(/^([^(]+)\((.+)\)$/, '$1/$2');
-      const asked = { ...(tui('permission-request-hive-session-done.json') as object), toolName };
-      expect(readCopilotHook(session(wrapped(asked, 'permissionRequest'))), allowTool).toEqual({ effects: [] });
+      const asked = { ...tui('permission-request-hive-session-done.json'), toolName };
+      const ran = { ...tui('post-tool-use-bash.json'), toolName: toolName.replace('/', '-') };
+      const readings = [wrapped(asked, 'permissionRequest'), wrapped(ran, 'postToolUse')].map((body) =>
+        readCopilotHook(session(body)),
+      );
+      expect(track(...readings).held.blocked, allowTool).toBe(0);
     }
   });
 
   it('still raises a block for any other hive tool', () => {
-    const other = { ...(tui('permission-request-hive-session-done.json') as object), toolName: 'hive/ledger_post' };
-    expect(track(readCopilotHook(session(wrapped(other, 'permissionRequest')))).held.blocked).toBe(1);
+    const other = { ...tui('permission-request-hive-session-done.json'), toolName: 'hive/ledger_post' };
+    expect(track(prompted(other)).held.blocked).toBe(1);
   });
 });
