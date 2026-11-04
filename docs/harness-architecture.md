@@ -222,7 +222,8 @@ Meters have two sources, and an adapter has one of them:
   `fence.express` on the `HIVE_GRANTS` list less the fence's own `grants`, and a CLI that cannot
   express a rule is skipped, never run unfenced. A hook-fenced CLI adds `translate`, `read` and
   `reply` (HIVE-342, HIVE-343); `grants` names the built-ins every run on the CLI needs (HIVE-344).
-- `HarnessGate` (`agents/resolve-harness.ts`) is what the licence and Settings › CLIs say about a
+- `HarnessGate` (`agents/resolve-harness.ts`) is what the licence and each CLI's Headless agents settings
+  (Settings › Harnesses › <CLI>) say about a
   CLI. It is wired as `createCliGate(getConfig)` (`agents/cli-gate.ts`, HIVE-341): `enabled`,
   `defaultCli` and `defaults` (the card's model, effort and Codex's sandbox; on Claude under
   `AGENT.md`'s model and effort, which are Claude's vocabulary and never reach another CLI) read the config
@@ -637,7 +638,7 @@ session re-reads a changed one (probed).
 answer presence only (`CliTokensState`); `read()` has no channel. A wake gets it as
 `COPILOT_GITHUB_TOKEN` on the child's env, written after the strip, and nowhere else: never in
 `config.json`, on the argv or in a log line. No stored token refuses the run: "copilot cannot
-start: no Copilot token: add one in Settings › CLIs".
+start: no Copilot token: add one in Settings › Harnesses › Copilot".
 
 **`finish()` and the usage file.** `RunEventReader.finish(exit, stderrTail)` runs after the exit
 flush, for what only the exit can tell. Copilot's reads `tokenDetails` from the usage file into
@@ -650,11 +651,11 @@ stays synchronous.
 **Failures** (`classifyFailure`, over the last 4 KiB of stderr): a refused token (Copilot's own
 "Authentication token found but could not be validated", "Bad credentials" or "PAT user login
 (401)"; a bare 401 is any server's, so it is not one) reads "the Copilot token was refused: replace it in Settings ›
-CLIs". A missing subscription and an org-disabled CLI have their own lines, but their patterns are
+Harnesses › Copilot". A missing subscription and an org-disabled CLI have their own lines, but their patterns are
 **unverified**: no account could produce them, so they are upgraded from the first real failure's
 text. Anything else is stderr's last line, else the exit.
 
-**Settings › CLIs** gives the Copilot card a write-only Token field and a Deny patterns list
+**Settings › Harnesses › Copilot** gives Copilot a write-only Token field under Sign-in, and a Deny patterns list in its Headless agents group
 (`kind(argument)`, at most 50, each a `--deny-tool`). **Containers are refused**, as for Codex.
 
 **The fence** (`copilot/fence.ts`, the receiver's `POST /fence`), Codex's in all but its reader:
@@ -885,7 +886,7 @@ The checklist, member by member, with the live suite that proves each:
 - [ ] A `test:agent:<id>` script with a pinned CLI version, skipped when the CLI is absent or signed out.
 - [ ] The entitlement key: what `HarnessGate.entitled` answers for it (pending HIVE-332; every CLI is entitled today).
 - [ ] A row in `CLI_VOCAB` (`electron/shared/cli-contract.ts`).
-- [ ] The `clis.<id>.agents` fields in `electron/main/config/parse.ts`, `parseSetCliAgentsRequest` and `setCliAgents`, and a band in `src/features/settings/components/clis-section.tsx`.
+- [ ] The `clis.<id>.agents` fields in `electron/main/config/parse.ts`, `parseSetCliAgentsRequest` and `setCliAgents`, and the fields in `src/features/settings/components/harness-agents-group.tsx`.
 - [ ] What `createCliGate` (`electron/main/agents/cli-gate.ts`) answers for the new CLI.
 - [ ] `installed.skillPlaces`, '' when it reads no skills of its own.
 - [ ] `prepare` (`test:hooks`, `test:skills`, `test:mcp-http`, `test:container`).
@@ -901,6 +902,11 @@ The checklist, member by member, with the live suite that proves each:
 - [ ] Re-run both greps (phase 1's and the agents grep, [Headless runs](#headless-runs-phase-2)).
 
 The wiring, in order:
+
+**Its Settings page (HIVE-376).** A new CLI gets a pane id in `SettingsSection` (`src/types/settings.ts`), a
+`GROUPS` row under Harnesses and a `PANES` entry rendering `HarnessPage` (`settings-overlay.tsx`), an `ARGS`/`FIX`
+entry in `electron/main/harness/sign-in.ts` for its sign-in line, and a `CAPABILITIES` row, which
+`harness-capabilities.tsx` reads for its "What it supports" table.
 
 1. Add its id to `HarnessId` in `electron/shared/harness-contract.ts`.
 2. Add `electron/main/harness/<id>/index.ts` exporting a `HarnessAdapter`.

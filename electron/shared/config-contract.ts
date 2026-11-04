@@ -2409,6 +2409,8 @@ export interface SetProjectRuntimeRequest {
 /** Which command to explain. Omitted id means the top-level command. */
 export interface DiagnoseCommandRequest {
   id?: string;
+  /** HIVE-376. Whose command to probe; absent is Claude's. */
+  cli?: HarnessId;
 }
 
 /**

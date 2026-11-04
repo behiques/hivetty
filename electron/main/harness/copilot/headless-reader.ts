@@ -26,12 +26,12 @@ const ORG_DISABLED = /disabled by (your |an )?(organization|enterprise|admin)|or
 
 /** The reason a person reads on a failed run: a licence problem by name, else stderr's last line. */
 export function classifyFailure(stderr: string, exit: number | null): string {
-  if (TOKEN_REFUSED.test(stderr)) return 'the Copilot token was refused: replace it in Settings › CLIs';
+  if (TOKEN_REFUSED.test(stderr)) return 'the Copilot token was refused: replace it in Settings › Harnesses › Copilot';
   if (CLASSIC_TOKEN.test(stderr)) {
-    return 'Copilot does not accept classic tokens (ghp_): store a fine-grained token in Settings › CLIs';
+    return 'Copilot does not accept classic tokens (ghp_): store a fine-grained token in Settings › Harnesses › Copilot';
   }
   if (NO_TOKEN.test(stderr)) {
-    return 'Copilot found no token it could use: store an OAuth or fine-grained token in Settings › CLIs';
+    return 'Copilot found no token it could use: store an OAuth or fine-grained token in Settings › Harnesses › Copilot';
   }
   if (TOKEN_UNCHECKED.test(stderr)) {
     // Its last line is a sign-in hint that reads as advice; the detail line is what happened.

@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetAgents } from '@/lib/agents';
 import { resetShippedState } from '@/lib/shipped';
+import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 
 import { AgentsSection } from '@features/settings/components/agents-section';
 import { useEditorStore } from '@stores/editor-store';
 import { useUiStore } from '@stores/ui-store';
 
 import type { AgentSummary } from '@shared/agent-contract';
+import { emptySnapshot } from '@shared/config-contract';
 
 import { shippedStatus } from '../../../support/shipped';
 
@@ -50,6 +52,12 @@ const stub = (agents: AgentSummary[], over: Record<string, unknown> = {}) => {
   return bridge;
 };
 
+const setAgentsDefaultCliConfig = vi.fn();
+vi.mock('@/lib/project-config', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  setAgentsDefaultCliConfig: (request: unknown) => setAgentsDefaultCliConfig(request),
+}));
+
 const row = (name: string) => screen.getByRole('button', { name: new RegExp(name) });
 
 beforeEach(() => {
@@ -58,6 +66,8 @@ beforeEach(() => {
   resetShippedState();
   useEditorStore.getState().reset();
   useUiStore.getState().reset();
+  resetProjectConfig();
+  setAgentsDefaultCliConfig.mockReset();
   vi.restoreAllMocks();
 });
 
@@ -262,3 +272,37 @@ describe('AgentsSection — shipped agents the user changed', () => {
     expect(within(row('pr-patrol')).queryByRole('img')).toBeNull();
   });
 });
+
+describe('AgentsSection: the default CLI for agents (HIVE-376 D6, from HIVE-342)', () => {
+  it('shows it at the top, claude-code when unset, and writes a choice', async () => {
+    stub([]);
+    setProjectConfigForTest(emptySnapshot('/home/dev/.hive/config.json'));
+    render(<AgentsSection />);
+
+    const select = await screen.findByLabelText('Default CLI for agents');
+    expect(select).toHaveValue('claude-code');
+    expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      'Claude Code',
+      'Codex',
+      'Copilot',
+    ]);
+    await userEvent.selectOptions(select, 'codex');
+    expect(setAgentsDefaultCliConfig).toHaveBeenCalledWith({ cli: 'codex' });
+  });
+
+  it('shows the default the snapshot names, beside a listed agent too', async () => {
+    stub([agent('slack-watcher')]);
+    setProjectConfigForTest({ ...emptySnapshot('/home/dev/.hive/config.json'), agentsDefaultCli: 'codex' });
+    render(<AgentsSection />);
+
+    expect(await screen.findByLabelText('Default CLI for agents')).toHaveValue('codex');
+  });
+
+  it('is hidden with no config snapshot', async () => {
+    stub([]);
+    render(<AgentsSection />);
+    await screen.findByRole('button', { name: /New agent/ });
+    expect(screen.queryByLabelText('Default CLI for agents')).not.toBeInTheDocument();
+  });
+});
+

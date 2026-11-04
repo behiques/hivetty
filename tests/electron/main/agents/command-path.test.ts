@@ -71,7 +71,7 @@ describe('resolveCommand', () => {
       problem:
         'The configured claude command `claude --tel` carries arguments. ' +
         'An agent is spawned without a shell, so it needs a single ' +
-        'executable — set Settings › Runtime to a plain path.',
+        'executable — set Settings › Harnesses to a plain path.',
     });
     expect(resolveCommand('', '/a', executable(), 'codex')).toEqual({
       problem: 'No codex command is configured.',

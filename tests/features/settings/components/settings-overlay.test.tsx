@@ -60,6 +60,9 @@ describe('SettingsOverlay', () => {
       'Projects',
       'Runtime',
       'Overview',
+      'Claude Code',
+      'Codex',
+      'Copilot',
       'Skills',
       'Agents',
       'Appearance',
@@ -100,7 +103,7 @@ describe('SettingsOverlay', () => {
           .map((button) => button.textContent),
       ),
     ).toEqual([
-      ['Overview', 'Runtime'],
+      ['Overview', 'Claude Code', 'Codex', 'Copilot', 'Runtime'],
       ['Agents', 'Skills'],
       ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
       ['Advanced'],
@@ -112,6 +115,9 @@ describe('SettingsOverlay', () => {
 
   it.each([
     ['harnesses-overview', 'Overview'],
+    ['claude-code', 'Claude Code'],
+    ['codex', 'Codex'],
+    ['copilot', 'Copilot'],
     ['shell', 'Runtime'],
     ['agents', 'Agents'],
     ['skills', 'Skills'],
@@ -187,6 +193,19 @@ describe('SettingsOverlay', () => {
     await user.keyboard('{Home}');
     expect(within(nav).getByRole('button', { name: 'Overview' })).toHaveFocus();
     expect(screen.getByRole('heading', { name: 'Overview', level: 2 })).toBeInTheDocument();
+  });
+
+  it('steps from Overview to Claude Code on ArrowDown (HIVE-376)', async () => {
+    const user = userEvent.setup();
+    useUiStore.getState().openSettings('harnesses-overview');
+    render(<SettingsOverlay />);
+
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+    within(nav).getByRole('button', { name: 'Overview' }).focus();
+    await user.keyboard('{ArrowDown}');
+
+    expect(within(nav).getByRole('button', { name: 'Claude Code' })).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Claude Code', level: 2 })).toBeInTheDocument();
   });
 
   /**

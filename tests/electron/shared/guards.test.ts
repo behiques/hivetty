@@ -33,6 +33,9 @@ import {
   parseSetServerRequest,
   parseSetAgentsDefaultCliRequest,
   parseSetCliSessionsRequest,
+  parseSetCliRequest,
+  parseHarnessSignInRequest,
+  parseDiagnoseCommandRequest,
   parseClearCliTokenRequest,
   parseSetCliAgentsRequest,
   parseSetCliTokenRequest,
@@ -2162,5 +2165,45 @@ describe('parseSetCliSessionsRequest (HIVE-375)', () => {
     expect(() => parseSetCliSessionsRequest({ sessions: ['codex'] })).toThrow();
     expect(() => parseSetCliSessionsRequest({ defaultCli: 'gemini' })).toThrow();
     expect(() => parseSetCliSessionsRequest({ other: 1 })).toThrow();
+  });
+});
+
+describe('parseSetCliRequest (HIVE-376)', () => {
+  it('takes each field, null clearing', () => {
+    expect(parseSetCliRequest({ cli: 'copilot', command: ' copilot-x ', sessionModel: null })).toEqual({
+      cli: 'copilot',
+      command: 'copilot-x',
+      sessionModel: null,
+    });
+    expect(parseSetCliRequest({ cli: 'copilot', command: '' })).toEqual({ cli: 'copilot', command: null });
+    expect(parseSetCliRequest({ cli: 'codex', sessionEffort: 'high', sessionModel: 'gpt-6-luna' })).toEqual({
+      cli: 'codex',
+      sessionEffort: 'high',
+      sessionModel: 'gpt-6-luna',
+    });
+  });
+
+  it('refuses a command on claude-code, an unknown model or effort, and stray keys', () => {
+    expect(() => parseSetCliRequest({ cli: 'claude-code', command: 'claude' })).toThrow();
+    expect(() => parseSetCliRequest({ cli: 'claude-code', sessionModel: 'gpt-6' })).toThrow();
+    expect(() => parseSetCliRequest({ cli: 'codex', sessionEffort: 'loud' })).toThrow();
+    expect(() => parseSetCliRequest({ cli: 'codex', command: 3 })).toThrow();
+    expect(() => parseSetCliRequest({ cli: 'codex', agents: {} })).toThrow();
+  });
+});
+
+describe('parseDiagnoseCommandRequest cli (HIVE-376)', () => {
+  it('takes a known CLI and refuses an unknown one', () => {
+    expect(parseDiagnoseCommandRequest({ cli: 'codex' })).toEqual({ cli: 'codex' });
+    expect(() => parseDiagnoseCommandRequest({ cli: 'gemini' })).toThrow();
+  });
+});
+
+describe('parseHarnessSignInRequest (HIVE-376)', () => {
+  it('takes a known CLI and nothing else', () => {
+    expect(parseHarnessSignInRequest({ cli: 'codex' })).toEqual({ cli: 'codex' });
+    expect(() => parseHarnessSignInRequest({})).toThrow();
+    expect(() => parseHarnessSignInRequest({ cli: 'gemini' })).toThrow();
+    expect(() => parseHarnessSignInRequest({ cli: 'codex', command: 'x' })).toThrow();
   });
 });

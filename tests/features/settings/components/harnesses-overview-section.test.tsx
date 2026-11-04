@@ -7,6 +7,7 @@ import { emptySnapshot, type ConfigSnapshot } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
 
 import { HarnessesOverviewSection } from '@features/settings/components/harnesses-overview-section';
+import { useUiStore } from '@stores/ui-store';
 
 const setCliSessionsConfig = vi.fn();
 vi.mock('@/lib/project-config', async (importOriginal) => ({
@@ -126,10 +127,13 @@ describe('HarnessesOverviewSection (HIVE-375)', () => {
     expect(screen.getByRole('button', { name: 'Rescan' })).toHaveAttribute('aria-busy', 'true');
   });
 
-  it('keeps the headless agent settings below (D7)', () => {
+  it('opens each CLI page from its supported summary (HIVE-376 D13)', async () => {
+    const user = userEvent.setup();
     renderWith({ detection, clis: resolveClis({}) });
-    expect(screen.getByRole('heading', { name: 'Headless agents', level: 2 })).toBeInTheDocument();
-    expect(screen.getByText('Default CLI for agents')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Headless agents' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /supported · Open Codex/ }));
+    expect(useUiStore.getState().settingsSection).toBe('codex');
+    expect(screen.getByRole('button', { name: /^8 of 8 supported · Open Claude Code$/ })).toBeInTheDocument();
   });
 
   it('says it is desktop-only with no config (the browser target)', () => {

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { CliMark } from '@/components/ui/cli-mark';
 import { Switch } from '@/components/ui/switch';
 
-import { ClisSection } from '@features/settings/components/clis-section';
+import { capabilitySummary } from '@features/settings/components/harness-capabilities';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { useCliDetection } from '@hooks/use-cli-detection';
 import { useAttachedServer, useProjectConfig } from '@hooks/use-project-config';
@@ -13,19 +13,27 @@ import { cliAvailability, resolveSessionCli } from '@lib/harness/session-cli';
 import { setCliSessionsConfig } from '@lib/project-config';
 import { CLI_INSTALL_HINTS } from '@shared/cli-contract';
 import { HARNESS_IDS } from '@shared/harness-contract';
+import { useSettingsActions } from '@stores/ui-store';
 
 /**
  * Settings › Harnesses › Overview (HIVE-375): what was found, what sessions may use, and what they start on.
- * Detection runs where the sessions run, so attached to a server it names that machine (D9). The headless agent
- * settings stay below until HIVE-376 gives each CLI its own page (D7).
+ * Detection runs where the sessions run, so attached to a server it names that machine (D9). Each row opens that
+ * CLI's own page, with how much of what HiveTTY can do it supports (HIVE-376 D13).
  */
 export function HarnessesOverviewSection() {
   const snapshot = useProjectConfig();
   const server = useAttachedServer();
   const { detection, rescan, rescanning } = useCliDetection();
+  const { openSettings } = useSettingsActions();
 
-  // The browser target has no config: the same "only in the desktop app" line the CLIs pane says.
-  if (!snapshot) return <ClisSection title="Overview" />;
+  // The browser target has no config, so nothing here can be read or set.
+  if (!snapshot) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
+        <SettingsSectionHeader title="Overview" description="CLI settings are only available in the desktop app." />
+      </div>
+    );
+  }
 
   const configuredDefault = snapshot.sessionsDefaultCli ?? 'claude-code';
   const availability = cliAvailability(detection, snapshot.clis);
@@ -49,6 +57,7 @@ export function HarnessesOverviewSection() {
           const missing = found !== undefined && 'missing' in found ? found.missing : null;
           const located = found !== undefined && 'path' in found ? found : null;
           const on = snapshot.clis[cli].sessions;
+          const summary = capabilitySummary(cli);
           return (
             <li key={cli} className="flex flex-wrap items-start gap-4 px-4 py-3.5">
               <CliMark cli={cli} className="mt-0.5 size-7 shrink-0" />
@@ -67,6 +76,13 @@ export function HarnessesOverviewSection() {
                     <code className="rounded bg-chip px-1 text-ink">{CLI_INSTALL_HINTS[cli]}</code>, then Rescan.
                   </span>
                 )}
+                <button
+                  type="button"
+                  className="self-start text-ui-sm text-brand hover:underline"
+                  onClick={() => openSettings(cli)}
+                >
+                  {`${String(summary.supported)} of ${String(summary.total)} supported · Open ${CLI_NAMES[cli]}`}
+                </button>
                 {cli === configuredDefault && startsOn !== null && startsOn !== cli && (
                   <span className="text-ui-sm text-amber-text">{`New sessions start on ${CLI_NAMES[startsOn]} instead`}</span>
                 )}
@@ -94,7 +110,6 @@ export function HarnessesOverviewSection() {
           );
         })}
       </ul>
-      <ClisSection title="Headless agents" embedded />
     </div>
   );
 }

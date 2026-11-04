@@ -57,6 +57,7 @@ import {
   type HookAgentEvent,
   type HookStatusEvent,
 } from '../../electron/shared/hook-contract';
+import { resolveClis } from '../../electron/shared/cli-contract';
 import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
 import { LEDGER_DIR, OVERMIND } from '../../electron/shared/ledger-contract';
 import { laneOfRun } from '../../electron/shared/ledger-derive';
@@ -1291,6 +1292,7 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
         [HOOK_ENV_RECEIVER_URL]: receiver?.origin ?? '',
       }),
       claudeCommand: () => 'claude',
+      clis: () => resolveClis(undefined),
       // HIVE-137. This suite's agents run on the host; the container gate is
       // `container-conformance.test.ts`'s.
       userDataPath: () => userDataPath,

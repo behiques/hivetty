@@ -509,6 +509,24 @@ describe('diagnoseCommand container precondition', () => {
     );
   });
 
+  it('probes the command it is given, and skips the container for a non-Claude CLI (HIVE-376)', async () => {
+    const run = fakeRun(0);
+    const result = await diagnoseCommand(
+      runtime({
+        claudeCommand: 'docker exec {env} devbox claude',
+        container: { ...container, probe: 'docker exec devbox true' },
+      }),
+      'p',
+      { PATH: '/nowhere' },
+      run,
+      'codex',
+    );
+
+    expect(result.command).toBe('codex');
+    expect(result.container).toBeUndefined();
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it('runs no probe at all for a host project', async () => {
     const run = fakeRun(0);
     await diagnoseCommand(runtime({ claudeCommand: 'claude' }), null, process.env, run);

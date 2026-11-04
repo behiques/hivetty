@@ -27,7 +27,9 @@ import type {
 import type { LoginEnvStatus } from '@shared/ipc-contract';
 
 /**
- * Runtime settings — shell, agent command, per-project overrides (story 104).
+ * Runtime settings — shell and per-project overrides (story 104). The global
+ * agent command and its diagnostic moved to Settings › Harnesses › Claude Code
+ * (HIVE-376 D10); a project's own command override and its check stay here.
  *
  * The section answers the epic's opening complaint: a user launches the app,
  * tries to start a session, and it fails with one line on a console they were
@@ -44,14 +46,13 @@ export function RuntimeSection() {
   const snapshot = useProjectConfig();
 
   /**
-   * Draft state for the two top-level fields.
+   * Draft state for the top-level shell.
    *
    * Seeded from the snapshot and re-seeded whenever it changes — an explicit
    * reload, or another verb returning a fresh one, must not leave a stale
    * value sitting in an input the user is not looking at.
    */
   const [shell, setShell] = useState('');
-  const [command, setCommand] = useState('');
   const [selectedId, setSelectedId] = useState('');
   const [diagnostic, setDiagnostic] = useState<CommandDiagnostic | null>(null);
   const [envDiagnostic, setEnvDiagnostic] = useState<EnvDiagnostic | null>(null);
@@ -84,7 +85,6 @@ export function RuntimeSection() {
   useEffect(() => {
     if (!snapshot) return;
     setShell(snapshot.shell);
-    setCommand(snapshot.claudeCommand);
   }, [snapshot]);
 
   /**
@@ -144,22 +144,10 @@ export function RuntimeSection() {
     if (next !== snapshot.shell) void setRuntimeConfig({ shell: next });
   };
 
-  const commitCommand = () => {
-    const next = command.trim();
-    if (next === '') {
-      setCommand(snapshot.claudeCommand);
-      return;
-    }
-    if (next !== snapshot.claudeCommand) {
-      void setRuntimeConfig({ claudeCommand: next });
-    }
-  };
-
+  /** A project's own command (D10). The default command's check is on the Claude Code page. */
   const runDiagnostic = async () => {
-    const result = await diagnoseAgentCommand(
-      selectedId === '' ? {} : { id: selectedId },
-    );
-    setDiagnostic(result);
+    if (selectedId === '') return;
+    setDiagnostic(await diagnoseAgentCommand({ id: selectedId }));
   };
 
   const runEnvDiagnostic = async () => {
@@ -202,14 +190,6 @@ export function RuntimeSection() {
             onCommit={commitShell}
             placeholder="/bin/zsh"
             hint="Started as a login shell."
-          />
-          <TextField
-            label="Agent command"
-            value={command}
-            onChange={setCommand}
-            onCommit={commitCommand}
-            placeholder="claude"
-            hint="Typed into the shell when a session starts."
           />
         </div>
 
@@ -351,22 +331,22 @@ export function RuntimeSection() {
       */}
       <PathSourceGroup loginEnv={loginEnv} />
 
-      <SettingsGroup
-        title="Command diagnostic"
-        description="Where the agent command is looked for, and whether it was found."
-      >
-        <button
-          type="button"
-          onClick={() => void runDiagnostic()}
-          className="w-fit rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
+      {selectedId === '' ? null : (
+        <SettingsGroup
+          title="Command diagnostic"
+          description="Where this project’s agent command is looked for, and whether it was found. The default command’s check is in Harnesses › Claude Code."
         >
-          {selectedId === ''
-            ? 'Check the default command'
-            : 'Check this project’s command'}
-        </button>
+          <button
+            type="button"
+            onClick={() => void runDiagnostic()}
+            className="w-fit rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
+          >
+            Check this project’s command
+          </button>
 
-        {diagnostic ? <CommandDiagnosticView diagnostic={diagnostic} /> : null}
-      </SettingsGroup>
+          {diagnostic ? <CommandDiagnosticView diagnostic={diagnostic} /> : null}
+        </SettingsGroup>
+      )}
 
       <SettingsGroup
         title="Environment diagnostic"

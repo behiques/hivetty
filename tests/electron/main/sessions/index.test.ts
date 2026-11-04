@@ -16,6 +16,7 @@ import type {
   HookAgentEvent,
   HookStatusEvent,
 } from '../../../../electron/shared/hook-contract';
+import { resolveClis } from '../../../../electron/shared/cli-contract';
 import type { StatusSignal } from '../../../../electron/shared/harness-contract';
 import { CH } from '../../../../electron/shared/ipc-contract';
 import type { SessionRecord } from '../../../../electron/shared/session-history-contract';
@@ -4053,6 +4054,16 @@ describe('codex sessions (HIVE-279)', () => {
 
     expect(typed().some((line) => /^(unset [A-Z_ ]+; )?codex -m gpt-6-luna .* && exit$/.test(line))).toBe(true);
     expect(typed().some((line) => line.includes('claude'))).toBe(false);
+  });
+
+  it('types the configured clis.codex.command when one is set (HIVE-376)', () => {
+    instance = build([], { config: { ...CONFIG, clis: resolveClis({ codex: { command: '/opt/bin/codex' } }) } });
+    instance.open(codexOpen);
+    bootTo(mintedFor('hero-refresh'));
+
+    expect(typed().some((line) => /^(unset [A-Z_ ]+; )?\/opt\/bin\/codex -m gpt-6-luna .* && exit$/.test(line))).toBe(
+      true,
+    );
   });
 
   it('hands codex its own skills folder, not Claude’s (HIVE-360)', () => {

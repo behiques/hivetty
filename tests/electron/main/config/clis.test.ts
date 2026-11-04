@@ -8,10 +8,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   reloadConfig,
   setAgentsDefaultCli,
+  setCli,
   setCliAgents,
   setCliSessions,
 } from '../../../../electron/main/config';
 import { parseConfig } from '../../../../electron/main/config/parse';
+import { resolveClis } from '../../../../electron/shared/cli-contract';
 import { CONFIG_PATH_ENV, emptySnapshot } from '../../../../electron/shared/config-contract';
 
 const doc = (extra: object) => JSON.stringify({ version: 2, projects: [], ...extra });
@@ -329,6 +331,46 @@ describe('the snapshot (HIVE-341)', () => {
     expect(snapshot.clis.codex.sessions).toBe(false);
     expect(snapshot.clis['claude-code'].sessions).toBe(true);
   });
+
+  it('setCli writes command and session defaults, keeping agents, sessions and unknown keys (HIVE-376)', () => {
+    writeFileSync(
+      process.env[CONFIG_PATH_ENV]!,
+      JSON.stringify({
+        version: 2,
+        projects: [],
+        clis: { codex: { sessions: false, agents: { model: 'gpt-6-luna' }, future: 1 } },
+      }),
+    );
+    reloadConfig();
+    let snapshot = setCli({
+      cli: 'codex',
+      command: '/opt/bin/codex',
+      sessionModel: 'gpt-6-terra',
+      sessionEffort: 'high',
+    });
+    expect(snapshot.clis.codex).toMatchObject({
+      command: '/opt/bin/codex',
+      sessionModel: 'gpt-6-terra',
+      sessionEffort: 'high',
+      sessions: false,
+    });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis.codex).toEqual({
+      sessions: false,
+      agents: { model: 'gpt-6-luna' },
+      future: 1,
+      command: '/opt/bin/codex',
+      sessionModel: 'gpt-6-terra',
+      sessionEffort: 'high',
+    });
+    snapshot = setCli({ cli: 'codex', command: null, sessionEffort: null });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis.codex).toEqual({
+      sessions: false,
+      agents: { model: 'gpt-6-luna' },
+      future: 1,
+      sessionModel: 'gpt-6-terra',
+    });
+    expect(snapshot.clis.codex.command).toBeUndefined();
+  });
 });
 
 describe('sessions (HIVE-375)', () => {
@@ -350,5 +392,50 @@ describe('sessions (HIVE-375)', () => {
       'config.clis.codex.sessions: expected a boolean — ignored',
       'config.sessionsDefaultCli: expected one of claude-code, codex, copilot — ignored',
     ]);
+  });
+});
+
+describe('command and session defaults (HIVE-376)', () => {
+  it('reads command, sessionModel and sessionEffort', () => {
+    const parsed = parseConfig(
+      doc({
+        clis: {
+          codex: { command: '/opt/codex/bin/codex', sessionModel: 'gpt-6-luna', sessionEffort: 'high' },
+        },
+      }),
+      'config',
+    );
+    expect(parsed.clis).toEqual({
+      codex: { command: '/opt/codex/bin/codex', sessionModel: 'gpt-6-luna', sessionEffort: 'high' },
+    });
+    expect(parsed.errors).toEqual([]);
+  });
+
+  it('refuses a command on claude-code, an empty command, and words outside the vocabulary', () => {
+    const parsed = parseConfig(
+      doc({
+        clis: {
+          'claude-code': { command: 'claude', sessionModel: 'gpt-6', sessionEffort: 'ultra' },
+          copilot: { command: '   ' },
+        },
+      }),
+      'config',
+    );
+    expect(parsed.clis).toEqual({ 'claude-code': {}, copilot: {} });
+    expect(parsed.errors).toEqual([
+      'config.clis.claude-code.command: claude-code runs claudeCommand — ignored',
+      expect.stringMatching(/^config\.clis\.claude-code\.sessionModel: expected one of /),
+      expect.stringMatching(/^config\.clis\.claude-code\.sessionEffort: expected one of /),
+      'config.clis.copilot.command: expected a non-empty string — ignored',
+    ]);
+  });
+
+  it('resolves them through to the snapshot', () => {
+    expect(resolveClis({ copilot: { command: 'gh-copilot', sessionModel: 'auto' } }).copilot).toEqual({
+      agents: { enabled: true },
+      sessions: true,
+      command: 'gh-copilot',
+      sessionModel: 'auto',
+    });
   });
 });

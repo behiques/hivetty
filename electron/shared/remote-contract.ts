@@ -80,8 +80,9 @@ import { isThisMachineAction } from './notification-contract';
  * 24 → 25 (HIVE-381): `SessionMetrics.creditsBalance` and `creditsUnlimited` may be `null`, which clears them.
  * 25 → 26 (HIVE-367): `CH` gained `skills:cli-skills`.
  * 26 → 27 (HIVE-375): `CH` gained `harness:detect`, `harness:rescan` and `config:set-cli-sessions`.
+ * 27 → 28 (HIVE-376): `CH` gained `config:set-cli` and `harness:sign-in`; `DiagnoseCommandRequest` gained `cli`.
  */
-export const REMOTE_PROTOCOL_VERSION = 27;
+export const REMOTE_PROTOCOL_VERSION = 28;
 
 /**
  * What a frame is for.
@@ -170,12 +171,14 @@ export const FRAME_KIND = {
   [CH.configSetCliAgents]: 'call',
   [CH.configSetAgentsDefaultCli]: 'call',
   [CH.configSetCliSessions]: 'call',
+  [CH.configSetCli]: 'call',
   [CH.cliTokensState]: 'call',
   [CH.cliSetToken]: 'call',
   [CH.cliClearToken]: 'call',
   [CH.cliCodexModels]: 'call',
   [CH.harnessDetect]: 'call',
   [CH.harnessRescan]: 'call',
+  [CH.harnessSignIn]: 'call',
   [CH.configSetReceiver]: 'call',
   [CH.configSetServer]: 'call',
   [CH.serverPair]: 'call',
@@ -376,6 +379,9 @@ export const FRAME_KIND = {
  *   `mutate`: an empty directory is structure, not content.
  * - `config:set-runtime`, `config:set-project-runtime` — name the command a
  *   session spawns. Whoever writes this writes what `pty:spawn` runs.
+ * - `config:set-cli` (HIVE-376) — writes `clis.<id>.command`, the binary every
+ *   Codex and Copilot session and wake then runs on the host. The same reason as
+ *   `config:set-runtime`: whoever writes the command writes what runs.
  * - `config:clone-start` — runs `git clone` against a caller-supplied URL.
  * - `config:diagnose-command` — runs its probe through `/bin/sh -c` on the host
  *   (`config/runtime.ts:195`). `tests/e2e/electron/security.spec.ts` already
@@ -396,6 +402,8 @@ export const FRAME_KIND = {
  *   with `--version`. No payload and a constant argv, but a process runs, and
  *   rescan runs it again on every call. A device without `execute` gets no
  *   detection, and its picker treats every CLI as available (D10).
+ * - `harness:sign-in` (HIVE-376) — runs each CLI's resolved binary (and `gh` for
+ *   Copilot) to read its sign-in state. A process runs on the host per call.
  * - `integrations:login-env` — spawns the login shell to snapshot its
  *   environment. It takes no payload, which bounds the injection surface but not
  *   the fact that a process runs.
@@ -484,12 +492,15 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.configSetCliAgents]: 'mutate',
   [CH.configSetAgentsDefaultCli]: 'mutate',
   [CH.configSetCliSessions]: 'mutate',
+  [CH.configSetCli]: 'execute',
   [CH.cliTokensState]: 'read',
   [CH.cliSetToken]: 'mutate',
   [CH.cliClearToken]: 'mutate',
   [CH.cliCodexModels]: 'read',
   [CH.harnessDetect]: 'execute',
   [CH.harnessRescan]: 'execute',
+  // HIVE-376. Runs the CLI's own status verb on the server's host.
+  [CH.harnessSignIn]: 'execute',
   [CH.configSetReceiver]: 'mutate',
   [CH.configSetServer]: 'mutate',
   [CH.serverPair]: 'execute',

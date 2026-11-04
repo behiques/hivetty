@@ -27,6 +27,7 @@ import { createPlans } from '../../electron/main/plans';
 import { agentMcpConfigFile } from '../../electron/main/mcp';
 import { createSkillsRuntime } from '../../electron/main/skills';
 import { hiveServerSpec } from '../../electron/main/mcp/config';
+import { resolveClis } from '../../electron/shared/cli-contract';
 import type { AgentRunState, RunLine } from '../../electron/shared/agent-contract';
 import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
 import {
@@ -272,6 +273,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
         [HOOK_ENV_RECEIVER_URL]: receiver?.origin ?? '',
       }),
       claudeCommand: () => 'claude',
+      clis: () => resolveClis(undefined),
       userDataPath: () => userDataPath,
       hostAlias: () => 'host.docker.internal',
       agentContainerSettingsPath: () => null,

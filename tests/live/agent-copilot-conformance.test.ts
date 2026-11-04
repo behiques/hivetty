@@ -32,6 +32,7 @@ import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
 import { createLedger, type Ledger } from '../../electron/main/ledger';
 import { agentMcpConfigFile } from '../../electron/main/mcp';
 import { hiveServerSpec } from '../../electron/main/mcp/config';
+import { resolveClis } from '../../electron/shared/cli-contract';
 import type { AgentRunState, RunLine, WakeSpec } from '../../electron/shared/agent-contract';
 import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
 import { isHarnessId } from '../../electron/shared/harness-contract';
@@ -330,7 +331,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
       entitled: (id) => entitled(id),
       enabled: () => true,
       defaultCli: () => 'copilot',
-      // Settings › CLIs, read per call as `ipc/index.ts` reads it: the deny case writes it.
+      // Settings › Harnesses › Copilot, read per call as `ipc/index.ts` reads it: the deny case writes it.
       defaults: (id) => createCliGate(getConfig).defaults(id),
     };
 
@@ -365,6 +366,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
         [HOOK_ENV_RECEIVER_URL]: receiver?.origin ?? '',
       }),
       claudeCommand: () => 'claude',
+      clis: () => resolveClis(undefined),
       userDataPath: () => userDataPath,
       hostAlias: () => 'host.docker.internal',
       agentContainerSettingsPath: () => null,

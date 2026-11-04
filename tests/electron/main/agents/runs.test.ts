@@ -670,7 +670,7 @@ describe('createRunTracker', () => {
 
       expect(state.read('a').runs.at(-1)).toMatchObject({ outcome: 'failed' });
       expect(lines.flatMap((entry) => entry.pushed).map((line) => line.text).join('\n')).toContain(
-        'the Copilot token was refused: replace it in Settings › CLIs',
+        'the Copilot token was refused: replace it in Settings › Harnesses › Copilot',
       );
     });
 

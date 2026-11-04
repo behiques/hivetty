@@ -8,7 +8,7 @@ import type { HarnessAdapter } from '../harness/port';
 const LITERAL_PREFIX = 'literal:';
 
 /**
- * What the licence (HIVE-332) and Settings › CLIs (HIVE-341) say about a CLI. Absent until they
+ * What the licence (HIVE-332) and Settings › Harnesses › <CLI> (HIVE-341, HIVE-376) say about a CLI. Absent until they
  * land: every CLI entitled and enabled, and no Settings default.
  */
 export interface HarnessGate {
@@ -85,7 +85,7 @@ function check(
   if (locked !== null) return { fail: `${id} is ${locked}` };
 
   if (deps.gate !== undefined && !deps.gate.enabled(id)) {
-    return { fail: `${id} is turned off for agents in Settings › CLIs` };
+    return { fail: `${id} is turned off for agents in Settings › Harnesses` };
   }
 
   /*

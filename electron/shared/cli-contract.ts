@@ -1,5 +1,5 @@
 /**
- * Per-CLI settings (HIVE-341): what Settings › CLIs stores for each harness and the vocabulary its
+ * Per-CLI settings (HIVE-341): what Settings › Harnesses › <CLI> stores for each harness and the vocabulary its
  * fields take. Data and pure functions only: this module follows `electron/shared`'s rule.
  *
  * Its own module rather than `harness-contract.ts`: `session-contract` imports that one, and the
@@ -158,20 +158,32 @@ export interface CliConfig {
   agents: CliAgents;
   /** HIVE-375. Whether the picker offers this CLI for sessions; absent in the file means on. */
   sessions: boolean;
+  /** HIVE-376. Codex and Copilot only: the command HiveTTY runs. Absent runs the bare name on PATH. */
+  command?: string;
+  /** HIVE-376. What the picker starts this CLI on when nothing was picked this run. */
+  sessionModel?: string;
+  sessionEffort?: string;
 }
 
 /** Every CLI, always resolved: a CLI the file never names is enabled with no defaults. */
 export type ClisConfig = Record<HarnessId, CliConfig>;
 
 /** The `clis` block as the file declared it, kept partial so a write can tell chosen from absent. */
-export type RawClis = Partial<Record<HarnessId, { agents?: Partial<CliAgents>; sessions?: boolean }>>;
+export interface RawCli {
+  agents?: Partial<CliAgents>;
+  sessions?: boolean;
+  command?: string;
+  sessionModel?: string;
+  sessionEffort?: string;
+}
+export type RawClis = Partial<Record<HarnessId, RawCli>>;
 
 export function resolveClis(raw: RawClis | undefined): ClisConfig {
   return Object.fromEntries(
-    HARNESS_IDS.map((id) => [
-      id,
-      { agents: { enabled: true, ...raw?.[id]?.agents }, sessions: raw?.[id]?.sessions ?? true },
-    ]),
+    HARNESS_IDS.map((id) => {
+      const { agents, sessions, ...rest } = raw?.[id] ?? {};
+      return [id, { ...rest, agents: { enabled: true, ...agents }, sessions: sessions ?? true }];
+    }),
   ) as ClisConfig;
 }
 
@@ -184,6 +196,20 @@ export type CliDetection =
   | { path: string; version: string | null }
   | { missing: string }
   | { unchecked: string };
+
+/**
+ * Whether a CLI is signed in, as its own status verb says (HIVE-376). Only a label, never raw output:
+ * `fix` is the command a person runs in a terminal.
+ */
+export type CliSignIn =
+  | { state: 'in'; label: string }
+  | { state: 'out'; label: string; fix: string }
+  | { state: 'unknown'; label: string };
+
+/** Payload of `harness:sign-in` (HIVE-376). */
+export interface HarnessSignInRequest {
+  cli: HarnessId;
+}
 
 /** The one line that installs each CLI, shown under a missing row (HIVE-375). */
 export const CLI_INSTALL_HINTS: Record<HarnessId, string> = {
@@ -199,6 +225,17 @@ export const CLI_INSTALL_HINTS: Record<HarnessId, string> = {
 export interface SetCliSessionsRequest {
   sessions?: Partial<Record<HarnessId, boolean>>;
   defaultCli?: HarnessId | null;
+}
+
+/**
+ * Payload of `config:set-cli` (HIVE-376). `null` deletes the key; an absent field is left alone.
+ * No `command` on claude-code: it runs `claudeCommand`.
+ */
+export interface SetCliRequest {
+  cli: HarnessId;
+  command?: string | null;
+  sessionModel?: string | null;
+  sessionEffort?: string | null;
 }
 
 /**

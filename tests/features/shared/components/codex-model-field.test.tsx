@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { CodexModelField } from '@features/sessions/components/codex-model-field';
+import { CodexModelField } from '@features/shared/components/codex-model-field';
 import type { CliModel } from '@shared/cli-contract';
 
 const model = (slug: string, description = ''): CliModel => ({ slug, description, defaultEffort: 'medium', efforts: ['medium'] });

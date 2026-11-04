@@ -16,6 +16,7 @@ import { AdvancedSection } from '@features/settings/components/advanced-section'
 import { AgentsSection } from '@features/settings/components/agents-section';
 import { AppearanceSection } from '@features/settings/components/appearance-section';
 import { EditorSection } from '@features/settings/components/editor-section';
+import { HarnessPage } from '@features/settings/components/harness-page';
 import { HarnessesOverviewSection } from '@features/settings/components/harnesses-overview-section';
 import { IntegrationsSection } from '@features/settings/components/integrations-section';
 import { NotificationsSection } from '@features/settings/components/notifications-section';
@@ -58,8 +59,9 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
  * Adding a pane is still a row here and an entry in `PANES`, and no control
  * flow anywhere in this file.
  *
- * The CLIs and Runtime panes keep their labels until HIVE-376 and HIVE-377
- * replace those sections; their ids already name what replaces them.
+ * Each CLI has its own page under Harnesses (HIVE-376). The Runtime pane keeps
+ * its label until HIVE-377 replaces that section; its id already names what
+ * replaces it.
  *
  * Advanced sits last. It answers questions about the app rather than setting
  * anything in it, and the destructive verb in the product lives there.
@@ -72,6 +74,9 @@ const GROUPS: readonly {
     group: 'Harnesses',
     panes: [
       { id: 'harnesses-overview', label: 'Overview' },
+      { id: 'claude-code', label: 'Claude Code' },
+      { id: 'codex', label: 'Codex' },
+      { id: 'copilot', label: 'Copilot' },
       { id: 'shell', label: 'Runtime' },
     ],
   },
@@ -127,6 +132,11 @@ function step(current: SettingsSection, key: string): SettingsSection | null {
 */
 type SectionId = SettingsSection;
 
+/** One component serves every CLI's page (HIVE-376 D9); each pane is a one-line wrapper. */
+const ClaudeCodePage = () => <HarnessPage cli="claude-code" />;
+const CodexPage = () => <HarnessPage cli="codex" />;
+const CopilotPage = () => <HarnessPage cli="copilot" />;
+
 /**
  * Section id → pane, the same shape `list-panel.tsx` uses for its panels.
  *
@@ -137,6 +147,9 @@ const PANES: Record<SectionId, ComponentType> = {
   projects: ProjectsSection,
   shell: RuntimeSection,
   'harnesses-overview': HarnessesOverviewSection,
+  'claude-code': ClaudeCodePage,
+  codex: CodexPage,
+  copilot: CopilotPage,
   skills: SkillsSection,
   agents: AgentsSection,
   appearance: AppearanceSection,

@@ -28,6 +28,7 @@ import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
 import { PLUGIN_DIR } from '../../electron/main/skills/paths';
 import { renderSkills } from '../../electron/main/skills/render';
 import type { SkillsRead } from '../../electron/main/skills/read';
+import { resolveClis } from '../../electron/shared/cli-contract';
 import type { RunLine } from '../../electron/shared/agent-contract';
 import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
 import {
@@ -832,6 +833,7 @@ tool it names, and nothing more. Never ask a question.
       agentMcpFile: (name) => agentMcpConfigFile(userData, name),
       hookEnv: (name) => hooks.envFor(name),
       claudeCommand: () => 'claude',
+      clis: () => resolveClis(undefined),
       subscriptionAuth: () => false,
       state: agentState,
       env: () => process.env,

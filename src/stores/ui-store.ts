@@ -9,7 +9,7 @@ import {
   type SettingsSection,
 } from '@/types/settings';
 
-import { CODEX_MODELS, COPILOT_MODELS } from '@shared/cli-contract';
+import type { Picks } from '@lib/harness/session-cli';
 import type { FsSearchMode } from '@shared/fs-contract';
 import type { HarnessId } from '@shared/harness-contract';
 import type { JiraStatusCategory } from '@shared/jira-contract';
@@ -166,7 +166,8 @@ interface UiState {
    * until one is picked, so the configured default leads (HIVE-375 D1); `useNewSessionPick` resolves it.
    */
   newCli: HarnessId | null;
-  newPicks: Record<HarnessId, { model: Model; effort: Effort }>;
+  /** This run's picks only; `resolvePick` fills the rest (HIVE-376). */
+  newPicks: Picks;
   /** Which place the round-two bar has open (HIVE-195). Every launch starts on Home. */
   place: Place;
   /**
@@ -392,16 +393,6 @@ interface UiState {
  */
 export const NEWS_SECTION = '#news';
 
-/** What the picker starts each CLI on (HIVE-279), until the user picks otherwise. */
-const INITIAL_PICKS: Record<HarnessId, { model: Model; effort: Effort }> = {
-  // Unchanged from before this story: what every Claude chip has said since story 044.
-  'claude-code': { model: 'opus', effort: 'high' },
-  // Codex's own default model (CLI_VOCAB lists it first) at a middle effort.
-  codex: { model: CODEX_MODELS[0], effort: 'medium' },
-  // Copilot's `auto` (CLI_VOCAB lists it first) at a middle effort, as Codex's (HIVE-280).
-  copilot: { model: COPILOT_MODELS[0], effort: 'medium' },
-};
-
 const initialUiState = {
   activeTab: 'orch' as 'orch' | string,
   selId: null as string | null,
@@ -424,7 +415,7 @@ const initialUiState = {
    */
   settingsSection: null as SettingsSection | null,
   newCli: null as HarnessId | null,
-  newPicks: INITIAL_PICKS,
+  newPicks: {} as Picks,
   place: 'home' as Place,
   sessionsTab: 'orch' as 'orch' | string,
   panelOpen: true,

@@ -34,10 +34,13 @@ import type { ChangedFilesEvent, ChangedFilesSnapshot } from './changed-files-co
 import type {
   ClearCliTokenRequest,
   CliDetection,
+  CliSignIn,
+  HarnessSignInRequest,
   CliModel,
   CliTokensState,
   SetAgentsDefaultCliRequest,
   SetCliAgentsRequest,
+  SetCliRequest,
   SetCliSessionsRequest,
   SetCliTokenRequest,
 } from './cli-contract';
@@ -309,12 +312,14 @@ export const CH = {
    * own — {@link CH.slackSetTokens}.
    */
   configSetSlack: 'config:set-slack',
-  /** HIVE-341. One CLI's headless agent defaults (Settings › CLIs). An ordinary settings write. */
+  /** HIVE-341. One CLI's headless agent defaults (Settings › Harnesses › <CLI>). An ordinary settings write. */
   configSetCliAgents: 'config:set-cli-agents',
   /** HIVE-342. The CLI an agent whose `AGENT.md` names no harness runs on. An ordinary settings write. */
   configSetAgentsDefaultCli: 'config:set-agents-default-cli',
   // HIVE-375. Which CLIs sessions may use, and the one they start with.
   configSetCliSessions: 'config:set-cli-sessions',
+  // HIVE-376. One CLI's command and session defaults (`clis.<id>.command`, `sessionModel`, `sessionEffort`).
+  configSetCli: 'config:set-cli',
   /**
    * A CLI's agent token (HIVE-343): presence, store, forget. Slack's rule: every answer is
    * presence only, and `CliTokens.read()` is main-internal with no channel. A `cli:` namespace
@@ -328,6 +333,8 @@ export const CH = {
   // HIVE-375. The CLIs on this machine: path and version, or why one is missing. Rescan drops the memo.
   harnessDetect: 'harness:detect',
   harnessRescan: 'harness:rescan',
+  // HIVE-376. Whether one CLI is signed in, read fresh by its Settings page. Only a label comes back.
+  harnessSignIn: 'harness:sign-in',
   /**
    * The container host alias, and where the receiver listens (HIVE-131, HIVE-134).
    *
@@ -2208,6 +2215,8 @@ export interface HiveBridge {
     setAgentsDefaultCli(request: SetAgentsDefaultCliRequest): Promise<ConfigSnapshot>;
     /** HIVE-375. Which CLIs sessions may use, and the default; the last one on cannot be turned off. */
     setCliSessions(request: SetCliSessionsRequest): Promise<ConfigSnapshot>;
+    /** HIVE-376. One CLI's command and session defaults; `null` clears a key. */
+    setCli(request: SetCliRequest): Promise<ConfigSnapshot>;
     /**
      * Change the container host alias (HIVE-131).
      *
@@ -2758,6 +2767,8 @@ export interface HiveBridge {
     detect(): Promise<Record<HarnessId, CliDetection>>;
     /** HIVE-375. Look again, after an install. */
     rescan(): Promise<Record<HarnessId, CliDetection>>;
+    /** HIVE-376. Whether a CLI is signed in, as its own status verb says. */
+    signIn(request: HarnessSignInRequest): Promise<CliSignIn>;
   };
   /**
    * Slack — the MCP server (HIVE-123) and socket mode (HIVE-124).

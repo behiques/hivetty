@@ -1,6 +1,6 @@
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { SelectField } from '@components/ui/select-field';
-import { OptionStepper } from '@features/sessions/components/option-stepper';
+import { OptionStepper } from '@features/shared/components/option-stepper';
 import { CODEX_CLASSES, codexFamily, type CliModel, type CodexClass } from '@shared/cli-contract';
 
 /** What each class is for, under its stop. HiveTTY's words; Codex's description sits under the field. */

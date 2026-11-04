@@ -7,26 +7,21 @@ import { SelectField } from '@/components/ui/select-field';
 import { Switch } from '@/components/ui/switch';
 import { TextField } from '@/components/ui/text-field';
 
-import { SettingsProviderGroup } from '@features/settings/components/settings-provider-group';
-import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useCodexModels } from '@hooks/use-codex-models';
-import { useProjectConfig } from '@hooks/use-project-config';
 import { clearCliToken, cliTokensState, setCliToken } from '@lib/cli-tokens';
 import { CLI_NAMES } from '@lib/harness/cli-names';
-import { setAgentsDefaultCliConfig, setCliAgentsConfig } from '@lib/project-config';
+import { setCliAgentsConfig } from '@lib/project-config';
 import {
   CLI_VOCAB,
   COPILOT_DENY_PATTERN,
   HEADLESS_SANDBOXES,
   type CliAgents,
-  type CliModel,
   type CliTokensState,
   type HeadlessSandbox,
 } from '@shared/cli-contract';
-import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
+import type { HarnessId } from '@shared/harness-contract';
 
-const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli] }));
 // workspace-write first: it is what an unset card runs (HIVE-342). No "CLI default": codex's own is not ours.
 const SANDBOX_OPTIONS = HEADLESS_SANDBOXES.map((value) => ({ value, label: value })).reverse();
 
@@ -41,57 +36,12 @@ const options = (values: readonly string[], saved?: string) => [
 ];
 
 /**
- * Settings › CLIs (HIVE-341): each CLI's headless agent defaults. HIVE-332 adds the CLI's command,
- * version and sign-in above the Headless agents group, on this same page.
- *
- * Since HIVE-375 it sits below Settings › Harnesses › Overview, `embedded` in that pane's scroller and
- * titled "Headless agents", until HIVE-376 gives each CLI its own page (D7).
+ * A CLI's headless agent defaults (HIVE-341), on its harness page since HIVE-376. Copilot's deny patterns render
+ * inside it. Codex's list is read here, fresh: Settings is where the user chooses, so it reads the account as it is
+ * now.
  */
-export function ClisSection({ title = 'CLIs', embedded = false }: { title?: string; embedded?: boolean }) {
-  const snapshot = useProjectConfig();
-  // Fresh: Settings is where the user chooses, so it reads the account as it is now.
-  const { models: codexModels, settled: codexSettled } = useCodexModels(true, true);
-
-  if (!snapshot) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
-        <SettingsSectionHeader title={title} description="CLI settings are only available in the desktop app." />
-      </div>
-    );
-  }
-
-  return (
-    <div className={embedded ? 'flex flex-col gap-6' : 'flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4'}>
-      <SettingsSectionHeader
-        title={title}
-        description="The agent CLIs this app drives, and how each one runs headless agents."
-      />
-      <SelectField
-        className="max-w-xs"
-        label="Default CLI for agents"
-        value={snapshot.agentsDefaultCli ?? 'claude-code'}
-        options={CLI_OPTIONS}
-        onChange={(value) => void setAgentsDefaultCliConfig({ cli: value as HarnessId })}
-        hint="For agents whose AGENT.md has no harness: field."
-      />
-      {HARNESS_IDS.map((cli) => (
-        <CliCard key={cli} cli={cli} agents={snapshot.clis[cli].agents} codexModels={codexModels} codexSettled={codexSettled} />
-      ))}
-    </div>
-  );
-}
-
-function CliCard({
-  cli,
-  agents,
-  codexModels,
-  codexSettled,
-}: {
-  cli: HarnessId;
-  agents: CliAgents;
-  codexModels: readonly CliModel[];
-  codexSettled: boolean;
-}) {
+export function HarnessAgentsGroup({ cli, agents }: { cli: HarnessId; agents: CliAgents }) {
+  const { models: codexModels, settled: codexSettled } = useCodexModels(cli === 'codex', true);
   const name = CLI_NAMES[cli];
   // Codex's list is the account's, and each model takes its own efforts; Claude's and Copilot's are static.
   const live = cli === 'codex' ? codexModels : undefined;
@@ -112,78 +62,68 @@ function CliCard({
   };
 
   return (
-    <SettingsProviderGroup name={name}>
-      {cli === 'copilot' && (
-        <SettingsGroup
-          title="Sign-in"
-          description="Copilot agents sign in with a token HiveTTY holds, never your own copilot login."
-        >
-          <CopilotToken />
-          <DenyPatterns deny={agents.deny ?? NO_PATTERNS} />
-        </SettingsGroup>
-      )}
-      <SettingsGroup
-        title="Headless agents"
-        description={`Defaults for agent runs on ${name}. ${
-          cli === 'claude-code'
-            ? "An agent's own model: or effort: in AGENT.md wins."
-            : "AGENT.md's model: and effort: are Claude's, so these always apply."
-        }`}
-      >
-        <Switch
-          label="Enabled for agents"
-          checked={agents.enabled}
-          onCheckedChange={(enabled) => void setCliAgentsConfig({ cli, enabled })}
-          description={
-            agents.enabled
-              ? `Agents run on ${name} unless their harness: says otherwise.`
-              : `Off: agents skip ${name}, and with no other CLI enabled they refuse to run.`
+    <SettingsGroup
+      title="Headless agents"
+      description={`Defaults for agent runs on ${name}. ${
+        cli === 'claude-code'
+          ? "An agent's own model: or effort: in AGENT.md wins."
+          : "AGENT.md's model: and effort: are Claude's, so these always apply."
+      }`}
+    >
+      <Switch
+        label="Enabled for agents"
+        checked={agents.enabled}
+        onCheckedChange={(enabled) => void setCliAgentsConfig({ cli, enabled })}
+        description={
+          agents.enabled
+            ? `Agents run on ${name} unless their harness: says otherwise.`
+            : `Off: agents skip ${name}, and with no other CLI enabled they refuse to run.`
+        }
+      />
+      {/* A native fieldset disables both selects at once; the dim says they are inert. */}
+      <fieldset disabled={!agents.enabled} className="flex gap-3 disabled:opacity-50">
+        {/*
+          Codex's model and effort also wait for the account's list, so a pick is never judged
+          against the fallback's efforts. `contents` keeps the row's layout; the sandbox stays free.
+        */}
+        <fieldset disabled={cli === 'codex' && !codexSettled} className="contents">
+        <SelectField
+          className="min-w-0 flex-1"
+          label="Model"
+          value={agents.model ?? ''}
+          options={options(models, agents.model)}
+          onChange={pickModel}
+        />
+        <SelectField
+          className="min-w-0 flex-1"
+          label="Effort"
+          value={agents.effort ?? ''}
+          options={options(efforts, agents.effort)}
+          onChange={(value) =>
+            void setCliAgentsConfig({ cli, effort: value || null })
           }
         />
-        {/* A native fieldset disables both selects at once; the dim says they are inert. */}
-        <fieldset disabled={!agents.enabled} className="flex gap-3 disabled:opacity-50">
-          {/*
-            Codex's model and effort also wait for the account's list, so a pick is never judged
-            against the fallback's efforts. `contents` keeps the row's layout; the sandbox stays free.
-          */}
-          <fieldset disabled={cli === 'codex' && !codexSettled} className="contents">
+        </fieldset>
+        {cli === 'codex' && (
           <SelectField
             className="min-w-0 flex-1"
-            label="Model"
-            value={agents.model ?? ''}
-            options={options(models, agents.model)}
-            onChange={pickModel}
-          />
-          <SelectField
-            className="min-w-0 flex-1"
-            label="Effort"
-            value={agents.effort ?? ''}
-            options={options(efforts, agents.effort)}
+            label="Sandbox"
+            value={agents.sandbox ?? 'workspace-write'}
+            options={SANDBOX_OPTIONS}
             onChange={(value) =>
-              void setCliAgentsConfig({ cli, effort: value || null })
+              void setCliAgentsConfig({ cli, sandbox: value as HeadlessSandbox })
             }
           />
-          </fieldset>
-          {cli === 'codex' && (
-            <SelectField
-              className="min-w-0 flex-1"
-              label="Sandbox"
-              value={agents.sandbox ?? 'workspace-write'}
-              options={SANDBOX_OPTIONS}
-              onChange={(value) =>
-                void setCliAgentsConfig({ cli, sandbox: value as HeadlessSandbox })
-              }
-            />
-          )}
-        </fieldset>
-        <p className="text-ui-sm text-subtle">CLI default leaves the flag off, so {name} picks.</p>
-        {cli === 'codex' && (
-          <p className="text-ui-sm text-subtle">
-            The sandbox defaults to workspace-write: an agent writes only inside its own workdir.
-          </p>
         )}
-      </SettingsGroup>
-    </SettingsProviderGroup>
+      </fieldset>
+      <p className="text-ui-sm text-subtle">CLI default leaves the flag off, so {name} picks.</p>
+      {cli === 'codex' && (
+        <p className="text-ui-sm text-subtle">
+          The sandbox defaults to workspace-write: an agent writes only inside its own workdir.
+        </p>
+      )}
+      {cli === 'copilot' && <DenyPatterns deny={agents.deny ?? NO_PATTERNS} />}
+    </SettingsGroup>
   );
 }
 
@@ -212,7 +152,7 @@ function useCliTokens(): [CliTokensState | null, (next: CliTokensState) => void]
 }
 
 /** Copilot's token: write-only, presence described by the placeholder (HIVE-343). */
-function CopilotToken() {
+export function CopilotToken() {
   const [tokens, setTokens] = useCliTokens();
   const [draft, setDraft] = useState('');
 

@@ -39,7 +39,7 @@ interface AgentsRuntimeOptions {
    * needs `agents.json`, which only `ipc/index.ts` opens.
    */
   runFiles?: AgentRunFiles;
-  /** Settings › CLIs' agents default (HIVE-341): the CLI a definition with no `harness:` runs on, so its skills are the ones checked (HIVE-367). */
+  /** Settings › Agents' default CLI (HIVE-341): the CLI a definition with no `harness:` runs on, so its skills are the ones checked (HIVE-367). */
   defaultCli?: () => HarnessId | undefined;
 }
 

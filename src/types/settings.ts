@@ -13,6 +13,9 @@
  */
 export type SettingsSection =
   | 'harnesses-overview'
+  | 'claude-code'
+  | 'codex'
+  | 'copilot'
   | 'shell'
   | 'agents'
   | 'skills'

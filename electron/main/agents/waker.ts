@@ -57,7 +57,7 @@ interface WakeInput {
   /** The CLI the lane's last conversation ran on, when this wake starts fresh on another (HIVE-340). */
   switchedFrom?: HarnessId;
   def: AgentDefinition;
-  /** Settings › CLIs' model, effort, sandbox and deny for this CLI (HIVE-341, HIVE-342, HIVE-343). */
+  /** Settings › Harnesses › <CLI>'s model, effort, sandbox and deny for this CLI (HIVE-341, HIVE-342, HIVE-343). */
   defaults?: Pick<CliAgents, 'model' | 'effort' | 'sandbox' | 'deny'>;
   /** Absent on the very first run, which mints one instead. */
   sessionUuid?: string;

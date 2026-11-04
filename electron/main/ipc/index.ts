@@ -29,7 +29,7 @@ import {
   type AgentStatusPush,
   type WakeSpec,
 } from '@shared/agent-contract';
-import type { CliModel, CliTokensState } from '@shared/cli-contract';
+import type { CliModel, CliSignIn, CliTokensState } from '@shared/cli-contract';
 import { AUTH_ENV_KEYS } from '@shared/config-contract';
 import type {
   BrowseListing,
@@ -112,6 +112,8 @@ import {
   parseSetServerRequest,
   parseSetSessionPluginRequest,
   parseSetAgentsDefaultCliRequest,
+  parseHarnessSignInRequest,
+  parseSetCliRequest,
   parseSetCliSessionsRequest,
   parseClearCliTokenRequest,
   parseSetCliAgentsRequest,
@@ -245,6 +247,7 @@ import {
   setSlack,
   setAgentsDefaultCli,
   setCliAgents,
+  setCli,
   setCliSessions,
 } from '../config';
 import { diagnoseEnv } from '../config/env-diagnostic';
@@ -266,9 +269,11 @@ import {
   writeFileContent,
   type FsWatchLayer,
 } from '../fs';
-import { detectClis, rescanClis, type DetectDeps } from '../harness/detect';
+import { cliCommand } from '../harness/cli-command';
+import { commandWord, detectClis, rescanClis, type DetectDeps } from '../harness/detect';
 import type { PreparedFiles } from '../harness/port';
 import { adapterFor, sessionAdapter } from '../harness/registry';
+import { readSignIn } from '../harness/sign-in';
 import { createHookRuntime } from '../hooks';
 import { readGhStatus, runCommand } from '../integrations/gh';
 import { createGithub } from '../integrations/github';
@@ -2746,6 +2751,7 @@ export function registerIpcHandlers(
   });
 
   const buildWakeCommand = createWakeCommand({
+    clis: () => getConfig().clis,
     agentsRoot,
     workdir: laneWorkdir,
     cliHome,
@@ -2765,7 +2771,7 @@ export function registerIpcHandlers(
     hookEnv: (name) => hooks.envFor(name),
     claudeCommand,
     subscriptionAuth: () => getConfig().subscriptionAuth,
-    // HIVE-341. Settings › CLIs: which CLI agents fall back to, whether each may run them, and its defaults.
+    // HIVE-341. Settings › Agents and Settings › Harnesses › <CLI>: which CLI agents fall back to, whether each may run them, and its defaults.
     gate: createCliGate(getConfig),
     state: agentState,
     env: () => process.env,
@@ -3834,9 +3840,17 @@ export function registerIpcHandlers(
           ? null
           : (snapshot.projects.find((entry) => entry.id === request.id) ?? null);
 
+      const runtime = effectiveRuntime(snapshot, project);
+      // HIVE-376: another CLI's command is probed by its first word, the binary detection would find.
+      if (request.cli === undefined || request.cli === 'claude-code') {
+        return await diagnoseCommand(runtime, project?.id ?? null);
+      }
       return await diagnoseCommand(
-        effectiveRuntime(snapshot, project),
+        runtime,
         project?.id ?? null,
+        process.env,
+        undefined,
+        commandWord(cliCommand(request.cli, snapshot.clis, runtime.claudeCommand)),
       );
     },
   );
@@ -4277,6 +4291,8 @@ export function registerIpcHandlers(
   handle(CH.configSetCliSessions, (_event, payload): ConfigSnapshot =>
     setCliSessions(parseSetCliSessionsRequest(payload)),
   );
+  // HIVE-376. One CLI's command and session defaults; claude-code's command stays `claudeCommand`.
+  handle(CH.configSetCli, (_event, payload): ConfigSnapshot => setCli(parseSetCliRequest(payload)));
   // HIVE-131. The container host alias — an ordinary settings write.
   handle(CH.configSetReceiver, (_event, payload): ConfigSnapshot =>
     setReceiver(parseSetReceiverRequest(payload)),
@@ -4573,10 +4589,16 @@ export function registerIpcHandlers(
       await loginEnvStatus();
       return { ...process.env, ...effectiveRuntime(getConfig(), null).env };
     },
-    claudeCommand: () => effectiveRuntime(getConfig(), null).claudeCommand,
+    command: (id) => cliCommand(id, getConfig().clis, effectiveRuntime(getConfig(), null).claudeCommand),
   };
   handle(CH.harnessDetect, () => detectClis(detectDeps));
   handle(CH.harnessRescan, () => rescanClis(detectDeps));
+  // HIVE-376. Read fresh each time a harness page opens; nothing cached. The env is detection's.
+  handle(CH.harnessSignIn, async (_event, payload): Promise<CliSignIn> => {
+    const { cli } = parseHarnessSignInRequest(payload);
+    const env = await detectDeps.env();
+    return readSignIn(cli, { command: detectDeps.command(cli), env, gh: () => readGhStatus(env, runCommand) });
+  });
 
   /**
    * Socket mode's own verbs (HIVE-124) — and the invariant they must not break.

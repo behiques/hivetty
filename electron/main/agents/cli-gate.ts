@@ -3,7 +3,7 @@ import type { ConfigSnapshot } from '@shared/config-contract';
 import type { HarnessGate } from './resolve-harness';
 
 /**
- * Settings › CLIs as HIVE-340's gate (HIVE-341). Reads config per call, never captured, so a card
+ * Each CLI's Headless agents settings (Settings › Harnesses › <CLI>) as HIVE-340's gate (HIVE-341). Reads config per call, never captured, so a card
  * edited in Settings reaches the next wake with no restart. Entitlement is HIVE-332's: until a
  * lease exists every CLI is allowed.
  */

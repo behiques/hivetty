@@ -67,15 +67,22 @@ export const runVersion: RunVersion = (file, args, timeoutMs) =>
     child.stdin?.end();
   });
 
-export async function detectCli(command: string, env: NodeJS.ProcessEnv, run: RunVersion): Promise<CliDetection> {
-  // D4: sessions type the whole string into a shell; the binary is its first word after any leading NAME=value
-  // assignments (the shell's own rule). Those never reach the probe: it runs with a constant argv, no shell.
-  const trimmed = command.trim();
-  const words = trimmed.split(/\s+/);
+/**
+ * The binary a command string runs (HIVE-376, from `detectCli`). Sessions type the whole string into a shell; the
+ * binary is its first word after any leading NAME=value assignments (the shell's own rule). Those never reach a
+ * probe: it runs with a constant argv, no shell. Only a leading "~/" is the home directory; the shell would expand
+ * it, execFile does not.
+ */
+export function commandWord(command: string): string {
+  const words = command.trim().split(/\s+/);
   while (words.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]!)) words.shift();
-  let word = words[0] ?? '';
-  // Only a leading "~/" is the home directory; the shell would expand it, execFile does not.
-  if (word.startsWith('~/')) word = join(homedir(), word.slice(2));
+  const word = words[0] ?? '';
+  return word.startsWith('~/') ? join(homedir(), word.slice(2)) : word;
+}
+
+export async function detectCli(command: string, env: NodeJS.ProcessEnv, run: RunVersion): Promise<CliDetection> {
+  const trimmed = command.trim();
+  const word = commandWord(trimmed);
   /*
     A command only a shell can read is not missing, it is uncheckable: calling it missing would make the picker
     refuse a CLI that sessions start fine (HIVE-375 follow-up). `env` and `~user` are the shell's too. Checked before
@@ -107,17 +114,11 @@ export async function detectCli(command: string, env: NodeJS.ProcessEnv, run: Ru
   }
 }
 
-/** Codex and Copilot run as their bare names until HIVE-376 adds their command settings (D4). */
-const COMMANDS: Record<HarnessId, (claudeCommand: string) => string> = {
-  'claude-code': (claudeCommand) => claudeCommand,
-  codex: () => 'codex',
-  copilot: () => 'copilot',
-};
-
 export interface DetectDeps {
   /** The env a session would see, after the login-shell import (D6). */
   env: () => Promise<NodeJS.ProcessEnv>;
-  claudeCommand: () => string;
+  /** What each CLI runs, `cliCommand` (HIVE-376). */
+  command: (id: HarnessId) => string;
   run?: RunVersion;
 }
 
@@ -130,7 +131,7 @@ export function detectClis(deps: DetectDeps): Promise<Record<HarnessId, CliDetec
     const env = await deps.env();
     const run = deps.run ?? runVersion;
     const answers = await Promise.all(
-      HARNESS_IDS.map((id) => detectCli(COMMANDS[id](deps.claudeCommand()), env, run)),
+      HARNESS_IDS.map((id) => detectCli(deps.command(id), env, run)),
     );
     return Object.fromEntries(HARNESS_IDS.map((id, index) => [id, answers[index]!])) as Record<
       HarnessId,

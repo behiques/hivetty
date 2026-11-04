@@ -57,7 +57,7 @@ export const BRIDGE_SLACK_KEYS = [
 ] as const satisfies readonly (keyof HiveBridge['slack'])[];
 
 export const BRIDGE_CLI_KEYS = [
-  'tokensState', 'setToken', 'clearToken', 'codexModels', 'detect', 'rescan',
+  'tokensState', 'setToken', 'clearToken', 'codexModels', 'detect', 'rescan', 'signIn',
 ] as const satisfies readonly (keyof HiveBridge['cli'])[];
 
 export const BRIDGE_NOTIFICATIONS_KEYS = [
@@ -86,7 +86,7 @@ export const BRIDGE_CONFIG_KEYS = [
   'renameProject', 'repointProject', 'reorderProjects', 'setProjectKey', 'setProjectAutoMerge',
   'setSessionPlugin', 'startClone', 'cancelClone', 'onCloneDone', 'onConfigChanged',
   'setRuntime', 'setProjectRuntime', 'diagnoseCommand', 'diagnoseEnv', 'setNotifications',
-  'revealConfig', 'resetConfig', 'setJira', 'setSlack', 'setCliAgents', 'setAgentsDefaultCli', 'setCliSessions', 'setReceiver', 'setServer', 'setRemote',
+  'revealConfig', 'resetConfig', 'setJira', 'setSlack', 'setCliAgents', 'setAgentsDefaultCli', 'setCliSessions', 'setCli', 'setReceiver', 'setServer', 'setRemote',
   'getRemote',
 ] as const satisfies readonly (keyof HiveBridge['config'])[];
 

@@ -1,4 +1,6 @@
-import type { CliDetection, ClisConfig } from '@shared/cli-contract';
+import type { Effort, Model } from '@/types/entity';
+
+import { type CliDetection, type ClisConfig, CODEX_MODELS, COPILOT_MODELS } from '@shared/cli-contract';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
 export type CliAvailability = Record<HarnessId, { ok: true } | { ok: false; reason: string }>;
@@ -42,4 +44,26 @@ export function unavailableReasons(availability: CliAvailability): Partial<Recor
       return entry.ok ? [] : [[id, entry.reason]];
     }),
   );
+}
+
+/** What a new session starts each CLI on (HIVE-279) when neither this run's pick nor Settings names one. */
+export const BUILT_IN_PICKS: Record<HarnessId, { model: Model; effort: Effort }> = {
+  // Unchanged from before this story: what every Claude chip has said since story 044.
+  'claude-code': { model: 'opus', effort: 'high' },
+  // Codex's own default model (CLI_VOCAB lists it first) at a middle effort.
+  codex: { model: CODEX_MODELS[0], effort: 'medium' },
+  // Copilot's `auto` (CLI_VOCAB lists it first) at a middle effort, as Codex's (HIVE-280).
+  copilot: { model: COPILOT_MODELS[0], effort: 'medium' },
+};
+
+/** This run's picks, each field only once it was picked (HIVE-376). */
+export type Picks = Partial<Record<HarnessId, { model?: Model; effort?: Effort }>>;
+
+/** What a new session starts a CLI on (HIVE-376 D5): this run's pick, else Settings' default, else the built-in, each field on its own. */
+export function resolvePick(cli: HarnessId, picks: Picks, clis: ClisConfig | null): { model: Model; effort: Effort } {
+  const built = BUILT_IN_PICKS[cli];
+  return {
+    model: picks[cli]?.model ?? (clis?.[cli].sessionModel as Model | undefined) ?? built.model,
+    effort: picks[cli]?.effort ?? (clis?.[cli].sessionEffort as Effort | undefined) ?? built.effort,
+  };
 }
