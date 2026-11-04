@@ -18,10 +18,13 @@ import type { ChangedFilesEvent, ChangedFilesSnapshot } from '@shared/changed-fi
 import type {
   ClearCliTokenRequest,
   CliDetection,
+  CliSignIn,
+  HarnessSignInRequest,
   CliModel,
   CliTokensState,
   SetAgentsDefaultCliRequest,
   SetCliAgentsRequest,
+  SetCliRequest,
   SetCliSessionsRequest,
   SetCliTokenRequest,
 } from '@shared/cli-contract';
@@ -353,6 +356,8 @@ const bridge: HiveBridge = {
     // HIVE-375. Which CLIs sessions may use, and the default.
     setCliSessions: (request: SetCliSessionsRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetCliSessions, request),
+    // HIVE-376. One CLI's command and session defaults.
+    setCli: (request: SetCliRequest): Promise<ConfigSnapshot> => ipcRenderer.invoke(CH.configSetCli, request),
     // HIVE-131. The name a container resolves to reach this host.
     setReceiver: (request: SetReceiverRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetReceiver, request),
@@ -767,6 +772,8 @@ const bridge: HiveBridge = {
     // HIVE-375. The CLIs on this machine.
     detect: (): Promise<Record<HarnessId, CliDetection>> => ipcRenderer.invoke(CH.harnessDetect),
     rescan: (): Promise<Record<HarnessId, CliDetection>> => ipcRenderer.invoke(CH.harnessRescan),
+    // HIVE-376. Whether one CLI is signed in.
+    signIn: (request: HarnessSignInRequest): Promise<CliSignIn> => ipcRenderer.invoke(CH.harnessSignIn, request),
   },
   /*
     HIVE-123. Four verbs, none of them returning a credential — see the

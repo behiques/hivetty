@@ -17,6 +17,7 @@ import {
   HEADLESS_SANDBOXES,
   type ClearCliTokenRequest,
   type SetAgentsDefaultCliRequest,
+  type HarnessSignInRequest,
   type SetCliRequest,
   type SetCliSessionsRequest,
   type SetCliAgentsRequest,
@@ -1916,6 +1917,12 @@ export function parseSetCliRequest(input: unknown): SetCliRequest {
         : assertOneOf(raw.sessionEffort, CLI_VOCAB[cli].efforts, 'setCli.sessionEffort');
   }
   return out;
+}
+
+/** `harness:sign-in` (HIVE-376): which CLI to read. */
+export function parseHarnessSignInRequest(input: unknown): HarnessSignInRequest {
+  const raw = assertShape(input, ['cli'], 'harnessSignIn');
+  return { cli: assertOneOf(raw.cli, HARNESS_IDS, 'harnessSignIn.cli') };
 }
 
 /** The token, on its way to `safeStorage`. The first payload carrying a secret. */

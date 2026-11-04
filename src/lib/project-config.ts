@@ -2,6 +2,7 @@ import { containsPath } from '@lib/explorer/session-root';
 import type {
   SetAgentsDefaultCliRequest,
   SetCliAgentsRequest,
+  SetCliRequest,
   SetCliSessionsRequest,
 } from '@shared/cli-contract';
 import type {
@@ -316,6 +317,10 @@ export const setAgentsDefaultCliConfig = (request: SetAgentsDefaultCliRequest): 
 /** Which CLIs sessions may use, and the default (HIVE-375). Main refuses to turn the last one off. */
 export const setCliSessionsConfig = (request: SetCliSessionsRequest): Promise<void> =>
   mutate((bridge) => bridge.config.setCliSessions(request));
+
+/** One CLI's command and session defaults (HIVE-376). `null` clears a key. */
+export const setCliConfig = (request: SetCliRequest): Promise<void> =>
+  mutate((bridge) => bridge.config.setCli(request));
 
 /**
  * Change one project's overrides (story 104).

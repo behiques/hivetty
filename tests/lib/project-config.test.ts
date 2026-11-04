@@ -29,6 +29,7 @@ import {
   revealConfigFile,
   revokeDevice,
   setAgentsDefaultCliConfig,
+  setCliConfig,
   setCliSessionsConfig,
   setProjectConfigForTest,
   setServerConfig,
@@ -468,6 +469,19 @@ describe('setCliSessionsConfig (HIVE-375)', () => {
     await setCliSessionsConfig({ defaultCli: 'codex' });
 
     expect(setCliSessions).toHaveBeenCalledWith({ defaultCli: 'codex' });
+    expect(projectConfigSnapshot()).toBe(next);
+  });
+});
+
+describe('setCliConfig (HIVE-376)', () => {
+  it('calls the bridge and installs the snapshot main returns', async () => {
+    const next = snapshot([]);
+    const setCli = vi.fn().mockResolvedValue(next);
+    (window as { hive?: unknown }).hive = { config: { setCli } };
+
+    await setCliConfig({ cli: 'codex', command: 'codex-x' });
+
+    expect(setCli).toHaveBeenCalledWith({ cli: 'codex', command: 'codex-x' });
     expect(projectConfigSnapshot()).toBe(next);
   });
 });

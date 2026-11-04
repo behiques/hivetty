@@ -80,8 +80,9 @@ import { isThisMachineAction } from './notification-contract';
  * 24 → 25 (HIVE-381): `SessionMetrics.creditsBalance` and `creditsUnlimited` may be `null`, which clears them.
  * 25 → 26 (HIVE-367): `CH` gained `skills:cli-skills`.
  * 26 → 27 (HIVE-375): `CH` gained `harness:detect`, `harness:rescan` and `config:set-cli-sessions`.
+ * 27 → 28 (HIVE-376): `CH` gained `config:set-cli` and `harness:sign-in`; `DiagnoseCommandRequest` gained `cli`.
  */
-export const REMOTE_PROTOCOL_VERSION = 27;
+export const REMOTE_PROTOCOL_VERSION = 28;
 
 /**
  * What a frame is for.
@@ -170,12 +171,14 @@ export const FRAME_KIND = {
   [CH.configSetCliAgents]: 'call',
   [CH.configSetAgentsDefaultCli]: 'call',
   [CH.configSetCliSessions]: 'call',
+  [CH.configSetCli]: 'call',
   [CH.cliTokensState]: 'call',
   [CH.cliSetToken]: 'call',
   [CH.cliClearToken]: 'call',
   [CH.cliCodexModels]: 'call',
   [CH.harnessDetect]: 'call',
   [CH.harnessRescan]: 'call',
+  [CH.harnessSignIn]: 'call',
   [CH.configSetReceiver]: 'call',
   [CH.configSetServer]: 'call',
   [CH.serverPair]: 'call',
@@ -484,12 +487,15 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.configSetCliAgents]: 'mutate',
   [CH.configSetAgentsDefaultCli]: 'mutate',
   [CH.configSetCliSessions]: 'mutate',
+  [CH.configSetCli]: 'mutate',
   [CH.cliTokensState]: 'read',
   [CH.cliSetToken]: 'mutate',
   [CH.cliClearToken]: 'mutate',
   [CH.cliCodexModels]: 'read',
   [CH.harnessDetect]: 'execute',
   [CH.harnessRescan]: 'execute',
+  // HIVE-376. Runs the CLI's own status verb on the server's host.
+  [CH.harnessSignIn]: 'execute',
   [CH.configSetReceiver]: 'mutate',
   [CH.configSetServer]: 'mutate',
   [CH.serverPair]: 'execute',

@@ -34,6 +34,7 @@ import {
   parseSetAgentsDefaultCliRequest,
   parseSetCliSessionsRequest,
   parseSetCliRequest,
+  parseHarnessSignInRequest,
   parseDiagnoseCommandRequest,
   parseClearCliTokenRequest,
   parseSetCliAgentsRequest,
@@ -2195,5 +2196,14 @@ describe('parseDiagnoseCommandRequest cli (HIVE-376)', () => {
   it('takes a known CLI and refuses an unknown one', () => {
     expect(parseDiagnoseCommandRequest({ cli: 'codex' })).toEqual({ cli: 'codex' });
     expect(() => parseDiagnoseCommandRequest({ cli: 'gemini' })).toThrow();
+  });
+});
+
+describe('parseHarnessSignInRequest (HIVE-376)', () => {
+  it('takes a known CLI and nothing else', () => {
+    expect(parseHarnessSignInRequest({ cli: 'codex' })).toEqual({ cli: 'codex' });
+    expect(() => parseHarnessSignInRequest({})).toThrow();
+    expect(() => parseHarnessSignInRequest({ cli: 'gemini' })).toThrow();
+    expect(() => parseHarnessSignInRequest({ cli: 'codex', command: 'x' })).toThrow();
   });
 });

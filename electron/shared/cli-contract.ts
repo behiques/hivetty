@@ -206,6 +206,11 @@ export type CliSignIn =
   | { state: 'out'; label: string; fix: string }
   | { state: 'unknown'; label: string };
 
+/** Payload of `harness:sign-in` (HIVE-376). */
+export interface HarnessSignInRequest {
+  cli: HarnessId;
+}
+
 /** The one line that installs each CLI, shown under a missing row (HIVE-375). */
 export const CLI_INSTALL_HINTS: Record<HarnessId, string> = {
   'claude-code': 'npm i -g @anthropic-ai/claude-code',

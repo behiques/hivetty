@@ -135,10 +135,14 @@ vi.mock('../../../../electron/main/config/index', () => ({
   repointProject: vi.fn(() => snapshot),
   reorderProjects: vi.fn(() => snapshot),
   setCliSessions: vi.fn(() => snapshot),
+  setCli: vi.fn(() => snapshot),
   configPath: vi.fn(() => '/tmp/config.json'),
 }));
 
 const detected = { 'claude-code': { path: '/bin/claude', version: '2.1.31' }, codex: { missing: 'no' }, copilot: { missing: 'no' } };
+vi.mock('../../../../electron/main/harness/sign-in', () => ({
+  readSignIn: vi.fn(async () => ({ state: 'in', label: 'GitHub: octo' })),
+}));
 vi.mock('../../../../electron/main/harness/detect', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   detectClis: vi.fn(async () => detected),
@@ -157,6 +161,7 @@ vi.mock('../../../../electron/main/harness/codex/models', () => ({
 
 const { CH } = await import('../../../../electron/shared/ipc-contract');
 const config = await import('../../../../electron/main/config/index');
+const signIn = await import('../../../../electron/main/harness/sign-in');
 const detect = await import('../../../../electron/main/harness/detect');
 const { registerIpcHandlers, resetIpcHandlers } = await import(
   '../../../../electron/main/ipc'
@@ -358,5 +363,27 @@ describe('harness:detect, harness:rescan and config:set-cli-sessions (HIVE-375)'
     await invoke(CH.configSetCliSessions, trustedEvent, { sessions: { codex: false }, defaultCli: null });
     expect(config.setCliSessions).toHaveBeenCalledWith({ sessions: { codex: false }, defaultCli: null });
     await expect(invoke(CH.configSetCliSessions, trustedEvent, { sessions: { gemini: false } })).rejects.toThrow();
+  });
+});
+
+describe('config:set-cli and harness:sign-in (HIVE-376)', () => {
+  it('writes a CLI through the guard, and refuses a command on claude-code', async () => {
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', command: 'codex-x' });
+    expect(config.setCli).toHaveBeenCalledWith({ cli: 'codex', command: 'codex-x' });
+    await expect(invoke(CH.configSetCli, trustedEvent, { cli: 'claude-code', command: 'x' })).rejects.toThrow();
+    await expect(invoke(CH.configSetCli, untrustedEvent, { cli: 'codex', command: 'x' })).rejects.toThrow();
+  });
+
+  it('reads a sign-in for a trusted sender only, with the command detection probes', async () => {
+    await expect(invoke(CH.harnessSignIn, trustedEvent, { cli: 'copilot' })).resolves.toEqual({
+      state: 'in',
+      label: 'GitHub: octo',
+    });
+    const [cli, deps] = vi.mocked(signIn.readSignIn).mock.calls[0]!;
+    expect(cli).toBe('copilot');
+    expect(deps.command).toBe('copilot');
+    expect(typeof deps.gh).toBe('function');
+    await expect(invoke(CH.harnessSignIn, untrustedEvent, { cli: 'codex' })).rejects.toThrow();
+    await expect(invoke(CH.harnessSignIn, trustedEvent, { cli: 'gemini' })).rejects.toThrow();
   });
 });
