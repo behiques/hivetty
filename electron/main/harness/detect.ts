@@ -15,7 +15,8 @@ import { probeCommand } from '../config/probe';
  */
 export const VERSION_TIMEOUT_MS = 5_000;
 const MAX_BUFFER = 64 * 1024;
-const VERSION = /\d+\.\d+\.\d+[\w.+-]*/;
+// A pre-release or build suffix may follow, but never ends on punctuation: Copilot prints "CLI 1.0.105.".
+const VERSION = /\d+\.\d+\.\d+(?:[\w.+-]*\w)?/;
 
 export type RunVersion = (
   file: string,

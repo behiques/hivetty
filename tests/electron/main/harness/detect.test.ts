@@ -36,6 +36,16 @@ describe('detectCli (HIVE-375)', () => {
     await expect(detectCli('claude --tel', { PATH: dir }, run)).resolves.toEqual({ path, version: '2.1.31' });
   });
 
+  it('leaves the sentence’s full stop off a version (HIVE-375, seen on Copilot)', async () => {
+    bin('copilot');
+    await expect(
+      detectCli('copilot', { PATH: dir }, answer({ stdout: 'GitHub Copilot CLI 1.0.105.\nRun copilot update.' })),
+    ).resolves.toMatchObject({ version: '1.0.105' });
+    await expect(detectCli('copilot', { PATH: dir }, answer({ stdout: '2.0.0-beta.1+build.7' }))).resolves.toMatchObject({
+      version: '2.0.0-beta.1+build.7',
+    });
+  });
+
   it('reads the version off stderr when stdout has none, and is still found without one', async () => {
     bin('copilot');
     await expect(detectCli('copilot', { PATH: dir }, answer({ stderr: 'v1.0.105' }))).resolves.toMatchObject({
