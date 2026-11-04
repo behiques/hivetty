@@ -58,6 +58,7 @@ import {
 } from '../container/generated';
 import { createPathMap } from '../container/path-map';
 import { sessionRoot } from '../fs/session-roots';
+import { cliCommand } from '../harness/cli-command';
 import type { HarnessAdapter, PreparedFiles } from '../harness/port';
 import { createHarnessRegistry, sessionAdapter } from '../harness/registry';
 import type { HookRuntime } from '../hooks';
@@ -2581,8 +2582,8 @@ export function createSessions(options: SessionsOptions): Sessions {
      * Opus and said so on the meta bar.
      */
     const plan = adapter.launch({
-      // `codex` on PATH until HIVE-332 (D7); Claude's is the configured `claudeCommand`.
-      command: harness === 'claude-code' ? runtime.claudeCommand : harness,
+      // Claude's `claudeCommand`, the others' `clis.<id>.command`, else the bare name (HIVE-376).
+      command: cliCommand(harness, snapshot.clis, runtime.claudeCommand),
       ...(request.model === undefined ? {} : { model: request.model }),
       ...(request.effort === undefined ? {} : { effort: request.effort }),
       /**
