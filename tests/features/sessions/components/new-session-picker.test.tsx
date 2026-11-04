@@ -24,6 +24,14 @@ import { testProjectKey } from '@tests/support/project-key';
 const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolve(null));
 vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels(), lastCodexModels: () => undefined }));
 
+/** `null`: an answered read that found nothing, every CLI available (the browser's answer, D10). */
+let detection: Record<string, unknown> | null = null;
+vi.mock('@lib/cli-detection', () => ({
+  detectClis: () => Promise.resolve(detection),
+  rescanClis: () => Promise.resolve(detection),
+  lastCliDetection: () => detection,
+}));
+
 const search = () => screen.getByRole('textbox', { name: 'Search all projects' });
 const rowsFor = (name: RegExp) => screen.getAllByRole('button', { name });
 
@@ -1076,5 +1084,49 @@ describe('NewSessionPicker — the ticket workflow', () => {
     withWorkflow({ kind: 'agent', agent: 'builder', via: 'session' });
     render(<NewSessionPicker />);
     expect((firstMessage() as HTMLInputElement).value).toMatch(/^Hand HIVE-226 to the builder agent: call ledger_ask/);
+  });
+});
+
+describe('NewSessionPicker and the CLIs on this machine (HIVE-375)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    useUiStore.getState().openPicker();
+    resetProjectConfig();
+    seedDemoProjectConfig();
+  });
+
+  afterEach(() => {
+    detection = null;
+    resetProjectConfig();
+  });
+
+  it('opens on the configured default and dims a missing CLI', async () => {
+    detection = {
+      'claude-code': { path: '/bin/claude', version: '2.1.31' },
+      codex: { path: '/bin/codex', version: '0.165.2' },
+      copilot: { missing: '`copilot` was not found on PATH.' },
+    };
+    setProjectConfigForTest({ ...projectConfigSnapshot()!, sessionsDefaultCli: 'codex' });
+    const user = userEvent.setup();
+    render(<NewSessionPicker />);
+
+    expect(await screen.findByRole('radio', { name: 'Codex' })).toBeChecked();
+    const copilot = screen.getByRole('radio', { name: /^Copilot: / });
+    expect(copilot).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText("Copilot isn't available: `copilot` was not found on PATH.")).toBeInTheDocument();
+
+    await user.click(copilot);
+    expect(screen.getByRole('radio', { name: 'Codex' })).toBeChecked();
+  });
+
+  it('writes a model for the CLI it opened on, not the one never picked', async () => {
+    setProjectConfigForTest({ ...projectConfigSnapshot()!, sessionsDefaultCli: 'copilot' });
+    const user = userEvent.setup();
+    render(<NewSessionPicker />);
+
+    expect(await screen.findByRole('radio', { name: 'Copilot' })).toBeChecked();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), CLI_VOCAB.copilot.models[1]!);
+    expect(useUiStore.getState().newPicks.copilot.model).toBe(CLI_VOCAB.copilot.models[1]);
+    expect(useUiStore.getState().newPicks['claude-code'].model).toBe('opus');
   });
 });

@@ -19,6 +19,7 @@ import { OptionStepper } from '@features/sessions/components/option-stepper';
 import { useNewSessionPick } from '@hooks/use-new-session-pick';
 import { useProjectAccess, useProjectConfig } from '@hooks/use-project-config';
 import { CLI_NAMES } from '@lib/harness/cli-names';
+import { unavailableReasons } from '@lib/harness/session-cli';
 import { CLI_VOCAB, cliTakesEffort } from '@shared/cli-contract';
 import { ticketStart, type TicketFacts } from '@shared/ticket-workflow';
 import {
@@ -78,8 +79,8 @@ export function NewSessionPicker() {
   const spawnSession = useSpawnSession();
   const { pickerQuery, pickerTicket } = usePickerState();
   // Resolved against the account's Codex models, as the quick-start buttons resolve it.
-  const { cli: newCli, model, effort, efforts, defaultEffort, codexModels } = useNewSessionPick(true);
-  const newModel = model;
+  // The CLI too (HIVE-375): the pick this run, else the configured default, else the first one available.
+  const { cli, model, effort, efforts, defaultEffort, codexModels, availability } = useNewSessionPick(true);
   const ticket = useTicket(pickerTicket);
   const { closePicker, setPickerQuery, setNewCli, setNewModel, setNewEffort } =
     usePickerActions();
@@ -114,7 +115,7 @@ export function NewSessionPicker() {
           ...(ticket?.issueType === undefined ? {} : { type: ticket.issueType }),
           ...(ticket?.url === undefined ? {} : { url: ticket.url }),
         };
-  const start = facts === null ? null : ticketStart(workflow, facts, newCli);
+  const start = facts === null ? null : ticketStart(workflow, facts, cli);
   const [edited, setEdited] = useState<string | null>(null);
   const [sessionInstead, setSessionInstead] = useState(false);
   const [wakeProblem, setWakeProblem] = useState<string | null>(null);
@@ -167,7 +168,7 @@ export function NewSessionPicker() {
     //
     // From a ticket, the first message is the workflow's (or the edit made
     // here); ⌥↵ and the wake card's projects start empty.
-    spawnSession(projectId, empty || wake !== null ? '' : firstMessage.trim(), newCli, model, effort, pickerTicket ?? undefined);
+    spawnSession(projectId, empty || wake !== null ? '' : firstMessage.trim(), cli, model, effort, pickerTicket ?? undefined);
   };
 
   return (
@@ -235,12 +236,12 @@ export function NewSessionPicker() {
               </DialogPrimitive.Title>
               <span className="text-ui text-subtle">
                 {ticket?.title ??
-                  `Pick a project — a ${CLI_NAMES[newCli]} terminal will open for it`}
+                  `Pick a project — a ${CLI_NAMES[cli]} terminal will open for it`}
               </span>
             </div>
 
             {/* The CLI first, under the title (variant F): it decides what the rest of the form offers. */}
-            <CliDock value={newCli} onChange={setNewCli} />
+            <CliDock value={cli} onChange={setNewCli} unavailable={unavailableReasons(availability)} />
           </>
         )}
 
@@ -288,22 +289,22 @@ export function NewSessionPicker() {
             The CLI's own words (HIVE-279): Claude's list is not Codex's. A list too long for a
             stepper's dots (Copilot's 32, HIVE-280) is the platform's select, in the same column.
           */}
-          {newCli === 'codex' ? (
-            <CodexModelField models={codexModels} value={model} onChange={setNewModel} />
-          ) : CLI_VOCAB[newCli].models.length > STEPPER_MAX ? (
+          {cli === 'codex' ? (
+            <CodexModelField models={codexModels} value={model} onChange={(value) => setNewModel(value, cli)} />
+          ) : CLI_VOCAB[cli].models.length > STEPPER_MAX ? (
             <SelectField
               className="min-w-0 flex-1"
               label="Model"
-              value={newModel}
-              options={CLI_VOCAB[newCli].models.map((model) => ({ value: model, label: model }))}
-              onChange={setNewModel}
+              value={model}
+              options={CLI_VOCAB[cli].models.map((option) => ({ value: option, label: option }))}
+              onChange={(value) => setNewModel(value, cli)}
             />
           ) : (
             <OptionStepper
               label="model"
-              options={CLI_VOCAB[newCli].models}
-              value={newModel}
-              onChange={setNewModel}
+              options={CLI_VOCAB[cli].models}
+              value={model}
+              onChange={(value) => setNewModel(value, cli)}
             />
           )}
           {/*
@@ -322,9 +323,9 @@ export function NewSessionPicker() {
             label="thinking effort"
             options={efforts}
             value={effort}
-            onChange={setNewEffort}
+            onChange={(value) => setNewEffort(value, cli)}
             marks={defaultEffort === undefined ? undefined : { [defaultEffort]: 'default' }}
-            disabled={!cliTakesEffort(newCli, model)}
+            disabled={!cliTakesEffort(cli, model)}
             disabledReason={`not for ${model}`}
           />
         </div>
