@@ -516,6 +516,59 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     from the TUI is not cheap, and `hooks-1.0.104/agent-stop-subagent.json` plus the unit test cover it.
   */
   it(
+    'meters a real turn from its OTel export with no second hook (HIVE-335)',
+    async () => {
+      await run('meters', '11111111-2222-4333-8444-5555555555e1', {
+        spec: { exportPath: exportFile },
+        prompts: ['Reply with the single word READY.'],
+      });
+      finding('meters', { metrics, exportFile });
+      const last = Object.assign({}, ...metrics) as SessionMetrics;
+      expect(typeof last.model).toBe('string');
+      expect(last.tokensIn).toBeGreaterThan(0);
+      expect(last.tokensOut).toBeGreaterThan(0);
+      expect(last.aiCredits).toBeGreaterThan(0);
+    },
+    CASE_MS,
+  );
+
+  it(
+    'a resume on the same session appends, and the totals grow (HIVE-335)',
+    async () => {
+      const uuid = '11111111-2222-4333-8444-5555555555e2';
+      await run('meters-1', uuid, { spec: { exportPath: exportFile }, prompts: ['Reply with the single word ONE.'] });
+      const first = (Object.assign({}, ...metrics) as SessionMetrics).tokensIn ?? 0;
+      expect(first).toBeGreaterThan(0);
+      // A fresh reader, as after an app restart: run() dropped it, so it rebuilds the totals from the whole file.
+      metrics.length = 0;
+      await run('meters-2', uuid, {
+        spec: { exportPath: exportFile, resume: true },
+        prompts: ['Reply with the single word TWO.'],
+      });
+      finding('meters-resume', { first, metrics });
+      expect((Object.assign({}, ...metrics) as SessionMetrics).tokensIn).toBeGreaterThan(first);
+    },
+    CASE_MS * 2,
+  );
+
+  it(
+    'leaves the user’s own OTel endpoint alone: no export is written (HIVE-335)',
+    async () => {
+      await run('meters-user-otel', '11111111-2222-4333-8444-5555555555e3', {
+        spec: { exportPath: exportFile },
+        // An https endpoint nobody answers: Copilot drops the export and carries on.
+        env: { OTEL_EXPORTER_OTLP_ENDPOINT: 'https://127.0.0.1:9' },
+        prompts: ['Reply with the single word READY.'],
+      });
+      finding('meters-user-otel', { metrics });
+      expect(statuses.map((s) => s.status)).toContain('idle');
+      expect(existsSync(exportFile)).toBe(false);
+      expect(metrics).toEqual([]);
+    },
+    CASE_MS,
+  );
+
+  it(
     'holds a turn end on an unticked Outcome, releases once it is ticked, and posts receipts (HIVE-370)',
     async () => {
       plainRepo();
