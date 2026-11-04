@@ -38,9 +38,11 @@ import {
   type AgentDefinition,
   type RunKind,
 } from '@shared/agent-contract';
+import type { ClisConfig } from '@shared/cli-contract';
 import type { HarnessId } from '@shared/harness-contract';
 
 import { CONTAINER_DIR, CONTAINER_MCP_FILE } from '../container/generated';
+import { cliCommand } from '../harness/cli-command';
 import type { HarnessAdapter } from '../harness/port';
 import { headlessAdapter } from '../harness/registry';
 import { agentMcpConfig, type McpServerSpec } from '../mcp/agent-config';
@@ -125,6 +127,8 @@ export interface WakeCommandDeps {
   /** `hooks.envFor(name)` — the three variables that make a hook attributable. */
   hookEnv: (name: string) => Record<string, string>;
   claudeCommand: () => string;
+  /** Settings › Harnesses (HIVE-376): read per call, so a command edited in Settings applies to the next wake. */
+  clis: () => ClisConfig;
   subscriptionAuth: () => boolean;
   /**
    * Read for `sessionUuid`, `runsSinceRotate` and the rotation the close left
@@ -328,8 +332,8 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       host binary, or one whose command carries arguments, can still wake
       an agent whose image has one. `wakeCommand` puts `container.command`
       after the container's name; `binaryPath` is what a *host* wake spawns.
-      On the host each CLI resolves its own: Claude through `claudeCommand`, Codex as `codex` on
-      PATH until HIVE-332 adds its setting (HIVE-342).
+      On the host each CLI resolves through `cliCommand` (HIVE-376): Claude's `claudeCommand`, the
+      others' `clis.<id>.command`, else the bare name on PATH.
     */
     const binary = (id: HarnessId) => {
       const cli = id === 'claude-code' ? 'claude' : id;
@@ -338,9 +342,9 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
         return { path: def.container.command ?? (deps.adapter ?? headlessAdapter)(id)?.headless.containerCommand ?? cli };
       }
       if (id === 'copilot' && deps.cliToken('copilot') === null) {
-        return { problem: 'no Copilot token: add one in Settings › CLIs' };
+        return { problem: 'no Copilot token: add one in Settings › Harnesses › Copilot' };
       }
-      const command = id === 'claude-code' ? deps.claudeCommand() : id;
+      const command = cliCommand(id, deps.clis(), deps.claudeCommand());
       return deps.isExecutable === undefined
         ? resolveCommand(command, deps.env()['PATH'], undefined, cli)
         : resolveCommand(command, deps.env()['PATH'], deps.isExecutable, cli);

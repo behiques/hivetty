@@ -151,7 +151,7 @@ describe('resolveHarness: availability (HIVE-340)', () => {
 
     expect(result).toEqual({
       problem:
-        'No CLI can run reviewer: codex is not in your plan (Starter or higher); claude-code is turned off for agents in Settings › CLIs.',
+        'No CLI can run reviewer: codex is not in your plan (Starter or higher); claude-code is turned off for agents in Settings › Harnesses.',
     });
   });
 

@@ -15,6 +15,7 @@ import { COPILOT_TOKEN_ENV, copilotSettings } from '../../../../electron/main/ha
 import type { HarnessAdapter, HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { McpServerSpec } from '../../../../electron/main/mcp/agent-config';
 import { STANDING_LANE, type AgentRunState } from '../../../../electron/shared/agent-contract';
+import { resolveClis } from '../../../../electron/shared/cli-contract';
 import type { HarnessId } from '../../../../electron/shared/harness-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '../../../../electron/shared/ledger-tools';
@@ -131,6 +132,7 @@ const build = (over: Partial<WakeCommandDeps> = {}) =>
     agentMcpFile: (name) => `/data/hive/agents/${name}.mcp.json`,
     hookEnv: (name) => ({ HIVE_SESSION_ID: name, HIVE_HOOK_TOKEN: 'tok' }),
     claudeCommand: () => '/usr/local/bin/claude',
+    clis: () => resolveClis(undefined),
     cliToken: () => null,
     subscriptionAuth: () => true,
     state: state(),
@@ -678,6 +680,7 @@ Read the channel and report.
       agentMcpFile: (name) => `/userData/hive/agents/${name}.mcp.json`,
       hookEnv: (name) => ({ HIVE_SESSION_ID: name, HIVE_HOOK_TOKEN: 'tok' }),
       claudeCommand: () => '/usr/local/bin/claude',
+      clis: () => resolveClis(undefined),
       cliToken: () => null,
       subscriptionAuth: () => true,
       // HIVE-137. Host agents only in this describe.
@@ -1323,6 +1326,20 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
     expect(built.harness).toBe('codex');
   });
 
+  it('a host wake runs clis.codex.command when one is set (HIVE-376)', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD;
+    const built = build({
+      adapter,
+      clis: () => resolveClis({ codex: { command: '/srv/tools/codex-x' } }),
+      env: () => ({ PATH: '/bin:/opt/bin', HOME: '/home/u' }),
+      isExecutable: (path) => path === '/opt/bin/codex' || path === '/srv/tools/codex-x',
+    })('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+
+    expect(built.file).toBe('/srv/tools/codex-x');
+  });
+
   it('hands each run its own CLI’s skills folder (HIVE-360)', () => {
     const seen: HeadlessSpec[] = [];
     const spying = (base: HarnessAdapter): HarnessAdapter => ({
@@ -1493,7 +1510,7 @@ describe('a copilot wake (HIVE-343)', () => {
   it('refuses with no stored token, and says where to add one', () => {
     expect(copilot({ cliToken: () => null })('slack-watcher', 'manual')).toEqual({
       problem:
-        'No CLI can run slack-watcher: copilot cannot start: no Copilot token: add one in Settings › CLIs.',
+        'No CLI can run slack-watcher: copilot cannot start: no Copilot token: add one in Settings › Harnesses › Copilot.',
     });
   });
 

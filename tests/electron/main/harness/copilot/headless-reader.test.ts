@@ -109,7 +109,7 @@ describe('readCopilotHeadless', () => {
       {
         kind: 'end',
         stop: 'error',
-        detail: 'the Copilot token was refused: replace it in Settings › CLIs',
+        detail: 'the Copilot token was refused: replace it in Settings › Harnesses › Copilot',
       },
     ]);
   });
@@ -137,19 +137,19 @@ describe('classifyFailure', () => {
 
   it('still names a refused token on the 401 line', () => {
     expect(classifyFailure(readFileSync(join(FIX, 'stderr-bad-token-1.0.104.txt'), 'utf8'), 1)).toBe(
-      'the Copilot token was refused: replace it in Settings › CLIs',
+      'the Copilot token was refused: replace it in Settings › Harnesses › Copilot',
     );
   });
 
   it('names a classic token by what to store instead', () => {
     expect(classifyFailure(readFileSync(join(FIX, 'stderr-classic-pat-1.0.104.txt'), 'utf8'), 1)).toBe(
-      'Copilot does not accept classic tokens (ghp_): store a fine-grained token in Settings › CLIs',
+      'Copilot does not accept classic tokens (ghp_): store a fine-grained token in Settings › Harnesses › Copilot',
     );
   });
 
   it('names a token Copilot could not use at all, rather than its sign-in hint (HIVE-357)', () => {
     expect(classifyFailure(readFileSync(join(FIX, 'stderr-no-auth-1.0.104.txt'), 'utf8'), 1)).toBe(
-      'Copilot found no token it could use: store an OAuth or fine-grained token in Settings › CLIs',
+      'Copilot found no token it could use: store an OAuth or fine-grained token in Settings › Harnesses › Copilot',
     );
   });
 

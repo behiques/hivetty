@@ -2746,6 +2746,7 @@ export function registerIpcHandlers(
   });
 
   const buildWakeCommand = createWakeCommand({
+    clis: () => getConfig().clis,
     agentsRoot,
     workdir: laneWorkdir,
     cliHome,

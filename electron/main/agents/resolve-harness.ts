@@ -85,7 +85,7 @@ function check(
   if (locked !== null) return { fail: `${id} is ${locked}` };
 
   if (deps.gate !== undefined && !deps.gate.enabled(id)) {
-    return { fail: `${id} is turned off for agents in Settings › CLIs` };
+    return { fail: `${id} is turned off for agents in Settings › Harnesses` };
   }
 
   /*
