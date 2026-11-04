@@ -208,6 +208,7 @@ export function loadConfig(): ConfigSnapshot {
     // HIVE-341. Every CLI resolved, enabled unless the file says otherwise.
     clis: resolveClis(parsed.clis),
     ...(parsed.agentsDefaultCli === undefined ? {} : { agentsDefaultCli: parsed.agentsDefaultCli }),
+    ...(parsed.sessionsDefaultCli === undefined ? {} : { sessionsDefaultCli: parsed.sessionsDefaultCli }),
     errors: parsed.errors,
   };
 

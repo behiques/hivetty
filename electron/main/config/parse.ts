@@ -225,6 +225,8 @@ export interface ParsedConfig {
   clis?: RawClis;
   /** HIVE-341. Absent when the file names none or names a CLI this build cannot run. */
   agentsDefaultCli?: HarnessId;
+  /** HIVE-375. The CLI a new session starts with; absent when the file names none or names one this build cannot run. */
+  sessionsDefaultCli?: HarnessId;
   errors: string[];
   /** The version the file declared, or `null` when it was unreadable. */
   version: number | null;
@@ -299,6 +301,8 @@ const TOP_LEVEL_KEYS = [
   // HIVE-341. Per-CLI headless agent defaults, and which CLI agents fall back to.
   'clis',
   'agentsDefaultCli',
+  // HIVE-375. The CLI a new session starts with.
+  'sessionsDefaultCli',
 ];
 /**
  * `shell`, `claudeCommand` and `env` are story 104's per-project overrides.
@@ -1323,7 +1327,7 @@ function optionalSlack(
   return slack;
 }
 
-const CLI_KEYS = ['agents'] as const;
+const CLI_KEYS = ['agents', 'sessions'] as const;
 const CLI_AGENT_KEYS = ['enabled', 'model', 'effort', 'sandbox', 'deny'] as const;
 
 /**
@@ -1357,8 +1361,13 @@ function optionalClis(
       continue;
     }
     if (!checkKeys(entry, CLI_KEYS, cliAt, errors)) continue;
+    const sessions: { sessions?: boolean } = {};
+    if (entry.sessions !== undefined) {
+      if (typeof entry.sessions === 'boolean') sessions.sessions = entry.sessions;
+      else errors.push(`${cliAt}.sessions: expected a boolean — ignored`);
+    }
     if (entry.agents === undefined) {
-      clis[id] = {};
+      clis[id] = sessions;
       continue;
     }
 
@@ -1424,7 +1433,7 @@ function optionalClis(
       }
     }
 
-    clis[id] = { agents };
+    clis[id] = { ...sessions, agents };
   }
 
   return clis;
@@ -1440,6 +1449,19 @@ function optionalAgentsDefaultCli(
   if (value === undefined) return undefined;
   if (typeof value === 'string' && isHarnessId(value)) return value;
   errors.push(`${label}.agentsDefaultCli: expected one of ${HARNESS_IDS.join(', ')} — ignored`);
+  return undefined;
+}
+
+/** `sessionsDefaultCli` (HIVE-375): the CLI a new session starts with, else ignored (claude-code). */
+function optionalSessionsDefaultCli(
+  record: Record<string, unknown>,
+  label: string,
+  errors: string[],
+): HarnessId | undefined {
+  const value = record.sessionsDefaultCli;
+  if (value === undefined) return undefined;
+  if (typeof value === 'string' && isHarnessId(value)) return value;
+  errors.push(`${label}.sessionsDefaultCli: expected one of ${HARNESS_IDS.join(', ')} — ignored`);
   return undefined;
 }
 
@@ -1500,6 +1522,7 @@ export function parseConfig(text: string, label: string): ParsedConfig {
   const slack = optionalSlack(document, label, errors);
   const clis = optionalClis(document, label, errors);
   const agentsDefaultCli = optionalAgentsDefaultCli(document, label, errors);
+  const sessionsDefaultCli = optionalSessionsDefaultCli(document, label, errors);
   const subscriptionAuth = optionalBoolean(
     document,
     'subscriptionAuth',
@@ -1543,6 +1566,7 @@ export function parseConfig(text: string, label: string): ParsedConfig {
       slack,
       ...(clis === undefined ? {} : { clis }),
       ...(agentsDefaultCli === undefined ? {} : { agentsDefaultCli }),
+      ...(sessionsDefaultCli === undefined ? {} : { sessionsDefaultCli }),
       projects: [],
       errors,
       version,
@@ -1567,6 +1591,7 @@ export function parseConfig(text: string, label: string): ParsedConfig {
       slack,
       ...(clis === undefined ? {} : { clis }),
       ...(agentsDefaultCli === undefined ? {} : { agentsDefaultCli }),
+      ...(sessionsDefaultCli === undefined ? {} : { sessionsDefaultCli }),
       projects: [],
       errors,
       version,
@@ -1687,6 +1712,7 @@ export function parseConfig(text: string, label: string): ParsedConfig {
     slack,
     ...(clis === undefined ? {} : { clis }),
     ...(agentsDefaultCli === undefined ? {} : { agentsDefaultCli }),
+    ...(sessionsDefaultCli === undefined ? {} : { sessionsDefaultCli }),
     projects,
     errors,
     version,

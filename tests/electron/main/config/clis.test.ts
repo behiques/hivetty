@@ -281,4 +281,37 @@ describe('the snapshot (HIVE-341)', () => {
       copilot: { agents: { enabled: true }, sessions: true },
     });
   });
+
+  it('carries sessionsDefaultCli and each CLI’s sessions into the snapshot (HIVE-375)', () => {
+    writeFileSync(
+      process.env[CONFIG_PATH_ENV]!,
+      doc({ sessionsDefaultCli: 'copilot', clis: { codex: { sessions: false } } }),
+    );
+    const snapshot = reloadConfig();
+    expect(snapshot.sessionsDefaultCli).toBe('copilot');
+    expect(snapshot.clis.codex.sessions).toBe(false);
+    expect(snapshot.clis['claude-code'].sessions).toBe(true);
+  });
+});
+
+describe('sessions (HIVE-375)', () => {
+  it('reads clis.<id>.sessions beside agents, and sessionsDefaultCli', () => {
+    const parsed = parseConfig(
+      doc({ clis: { codex: { sessions: false, agents: { enabled: false } } }, sessionsDefaultCli: 'codex' }),
+      'config',
+    );
+    expect(parsed.clis).toEqual({ codex: { sessions: false, agents: { enabled: false } } });
+    expect(parsed.sessionsDefaultCli).toBe('codex');
+    expect(parsed.errors).toEqual([]);
+  });
+
+  it('ignores a non-boolean sessions and an unknown default, and says so', () => {
+    const parsed = parseConfig(doc({ clis: { codex: { sessions: 'no' } }, sessionsDefaultCli: 'gemini' }), 'config');
+    expect(parsed.clis).toEqual({ codex: {} });
+    expect(parsed.sessionsDefaultCli).toBeUndefined();
+    expect(parsed.errors).toEqual([
+      'config.clis.codex.sessions: expected a boolean — ignored',
+      'config.sessionsDefaultCli: expected one of claude-code, codex, copilot — ignored',
+    ]);
+  });
 });
