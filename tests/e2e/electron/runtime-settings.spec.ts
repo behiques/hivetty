@@ -322,8 +322,12 @@ test('the diagnostic reports the PATH it actually searched', async ({}, testInfo
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
+  // The default command's diagnostic lives on the Claude Code page since HIVE-376 (D10), and runs on open.
   await openRuntime(page);
-  await page.getByRole('button', { name: 'Check the default command' }).click();
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Claude Code' })
+    .click();
 
   /**
    * `claude` is genuinely unlikely to be on the PATH of a CI runner, and that

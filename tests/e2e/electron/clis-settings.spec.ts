@@ -8,7 +8,8 @@ import { goToPlace } from '../fixtures/places';
 import { launchHive } from './fixtures/hive-app';
 
 /**
- * Settings › CLIs, driven through the real app (HIVE-341).
+ * Each CLI's headless agent settings, driven through the real app (HIVE-341). Since HIVE-376 they sit on
+ * Settings › Harnesses › <CLI>, and the default CLI for agents on Settings › Agents.
  *
  * The unit suite proves the parser, the guard, the setter and the card against fakes. This proves
  * the card's write reaches the file, and that the next wake reads it: the model lands on the argv
@@ -19,15 +20,20 @@ import { launchHive } from './fixtures/hive-app';
 
 const read = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
 
-const openClis = async (page: Page): Promise<void> => {
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-  await page
-    .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Overview' })
-    .click();
-  await expect(page.getByRole('heading', { name: 'Overview', level: 2 })).toBeVisible();
+/** Opens Settings on a pane by its nav label: a CLI's page, or Agents. */
+const openPane = async (page: Page, label: string): Promise<void> => {
+  const nav = page.getByRole('navigation', { name: 'Settings sections' });
+  if (!(await nav.isVisible())) {
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  }
+  await nav.getByRole('button', { name: label, exact: true }).click();
+  await expect(page.getByRole('heading', { name: new RegExp(`^${label}`), level: 2 })).toBeVisible();
 };
+
+/** The page's Headless agents group: the agents settings on a CLI's page. */
+const agentsGroup = (page: Page) =>
+  page.locator('section').filter({ has: page.getByRole('heading', { name: 'Headless agents' }) });
 
 test('the card writes the file, and off disables the defaults', async ({}, testInfo) => {
   const configPath = testInfo.outputPath('hive-config.json');
@@ -38,10 +44,9 @@ test('the card writes the file, and off disables the defaults', async ({}, testI
 
   try {
     await page.waitForSelector('nav[aria-label="Places"]');
-    await openClis(page);
+    await openPane(page, 'Claude Code');
 
-    // A card per CLI since HIVE-342: everything below is the Claude Code card's.
-    const claude = page.getByRole('region', { name: 'Claude Code' });
+    const claude = agentsGroup(page);
     const model = claude.getByRole('combobox', { name: 'Model' });
     await expect(model).toHaveValue('');
     await model.selectOption('haiku');
@@ -76,23 +81,23 @@ test("the default CLI and codex's sandbox write the file (HIVE-342)", async ({},
 
   try {
     await page.waitForSelector('nav[aria-label="Places"]');
-    await openClis(page);
+    await openPane(page, 'Agents');
 
     const fallback = page.getByRole('combobox', { name: 'Default CLI for agents' });
     await expect(fallback).toHaveValue('claude-code');
     await fallback.selectOption('codex');
     await expect.poll(() => read(configPath).agentsDefaultCli).toBe('codex');
 
-    const codex = page.getByRole('region', { name: 'Codex' });
+    await openPane(page, 'Codex');
+    const codex = agentsGroup(page);
     const sandbox = codex.getByRole('combobox', { name: 'Sandbox' });
     await expect(sandbox).toHaveValue('workspace-write');
     await sandbox.selectOption('read-only');
     await expect.poll(() => read(configPath).clis?.codex?.agents?.sandbox).toBe('read-only');
     await codex.getByRole('combobox', { name: 'Model' }).selectOption('gpt-6-luna');
     await expect.poll(() => read(configPath).clis.codex.agents.model).toBe('gpt-6-luna');
-    await expect(
-      page.getByRole('region', { name: 'Claude Code' }).getByRole('combobox', { name: 'Sandbox' }),
-    ).toHaveCount(0);
+    await openPane(page, 'Claude Code');
+    await expect(agentsGroup(page).getByRole('combobox', { name: 'Sandbox' })).toHaveCount(0);
 
     await page.waitForFunction(() => document.getAnimations().length === 0);
     await page.screenshot({ path: testInfo.outputPath('clis-codex.png'), fullPage: true });
@@ -101,7 +106,7 @@ test("the default CLI and codex's sandbox write the file (HIVE-342)", async ({},
   }
 });
 
-/** Settings › Appearance › Mode, then back to CLIs. */
+/** Settings › Appearance › Mode, then back to Copilot's page. */
 const setMode = async (page: Page, mode: 'Light' | 'Dark'): Promise<void> => {
   await page
     .getByRole('navigation', { name: 'Settings sections' })
@@ -110,7 +115,7 @@ const setMode = async (page: Page, mode: 'Light' | 'Dark'): Promise<void> => {
   await page.getByRole('radiogroup', { name: 'Mode' }).getByRole('radio', { name: mode }).click();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Overview' })
+    .getByRole('button', { name: 'Copilot', exact: true })
     .click();
 };
 
@@ -128,9 +133,9 @@ test("copilot's deny patterns write the file, and its token field is write-only 
 
   try {
     await page.waitForSelector('nav[aria-label="Places"]');
-    await openClis(page);
+    await openPane(page, 'Copilot');
 
-    const copilot = page.getByRole('region', { name: 'Copilot' });
+    const copilot = page.getByRole('dialog');
     await expect(copilot.getByRole('textbox', { name: 'Token' })).toHaveAttribute('placeholder', 'gho_… or github_pat_…');
     await expect(copilot.getByRole('textbox', { name: 'Token' })).toHaveAttribute('type', 'password');
     await expect(copilot.getByRole('button', { name: 'Clear token' })).toHaveCount(0);
@@ -149,14 +154,12 @@ test("copilot's deny patterns write the file, and its token field is write-only 
     for (const mode of ['Dark', 'Light'] as const) {
       await setMode(page, mode);
       await page.waitForFunction(() => document.getAnimations().length === 0);
-      await page
-        .getByRole('region', { name: 'Copilot' })
-        .screenshot({ path: testInfo.outputPath(`clis-copilot-${mode.toLowerCase()}.png`) });
+      await agentsGroup(page).screenshot({ path: testInfo.outputPath(`clis-copilot-${mode.toLowerCase()}.png`) });
     }
 
     // The mode switch remounted the card from the file, so the unsaved invalid row is gone.
     // Removing the last pattern writes an empty list, which deletes the key.
-    const card = page.getByRole('region', { name: 'Copilot' });
+    const card = agentsGroup(page);
     await expect(card.getByRole('textbox', { name: 'Deny pattern 2', exact: true })).toHaveCount(0);
     await card.getByRole('button', { name: 'Remove deny pattern 1' }).click();
     await expect.poll(() => read(configPath).clis.copilot.agents.deny).toBeUndefined();
@@ -244,7 +247,7 @@ test('a wake with Claude turned off is refused, and says why', async ({}, testIn
     await runSweeper(page);
 
     await expect(
-      page.getByText(/claude-code is turned off for agents in Settings › CLIs/).first(),
+      page.getByText(/claude-code is turned off for agents in Settings › Harnesses/).first(),
     ).toBeVisible({ timeout: 30_000 });
     expect(existsSync(argvFile)).toBe(false);
     await page.screenshot({ path: testInfo.outputPath('clis-refused.png') });

@@ -7,12 +7,17 @@ import { cn } from '@/lib/utils';
 
 import { Button } from '@components/ui/button';
 import { Icon } from '@components/ui/icon';
+import { SelectField } from '@components/ui/select-field';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { AgentDefinition } from '@features/shared/components/agent-definition';
 import { ShippedDot } from '@features/shared/components/shipped-marker';
 import { useAgents } from '@hooks/use-agents';
+import { useProjectConfig } from '@hooks/use-project-config';
 import { useShipped } from '@hooks/use-shipped';
+import { CLI_NAMES } from '@lib/harness/cli-names';
+import { setAgentsDefaultCliConfig } from '@lib/project-config';
+import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
 /**
  * The Agents section of settings (HIVE-114): the list, New agent, and the
@@ -30,6 +35,27 @@ import { useShipped } from '@hooks/use-shipped';
  * folder names it, so there is always a file to open, and the user has to be
  * able to open it to fix the key they were told about.
  */
+const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli] }));
+
+/**
+ * Which CLI an agent runs on when its AGENT.md names none (HIVE-342), at the top of this pane since HIVE-376 (D6).
+ * Hidden with no config snapshot: there is nothing to read or write.
+ */
+function DefaultCliForAgents() {
+  const config = useProjectConfig();
+  if (!config) return null;
+  return (
+    <SelectField
+      className="max-w-xs"
+      label="Default CLI for agents"
+      value={config.agentsDefaultCli ?? 'claude-code'}
+      options={CLI_OPTIONS}
+      onChange={(value) => void setAgentsDefaultCliConfig({ cli: value as HarnessId })}
+      hint="For agents whose AGENT.md has no harness: field."
+    />
+  );
+}
+
 export function AgentsSection() {
   const snapshot = useAgents();
   const phrase = useSwarmPhrase('empty.settingsSkills');
@@ -83,6 +109,7 @@ export function AgentsSection() {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 py-4">
         <SettingsSectionHeader title="Agents" description={description} />
+        <DefaultCliForAgents />
 
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border px-4 py-6 text-center">
           <SwarmCreature creature="mutalisk" size={120} className="mb-9" />
@@ -113,6 +140,7 @@ export function AgentsSection() {
   return (
     <div className="@container flex min-h-0 flex-1 flex-col gap-3.5 overflow-hidden px-5 py-4">
       <SettingsSectionHeader title="Agents" description={description} />
+      <DefaultCliForAgents />
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,10rem)_minmax(0,1fr)] gap-3 @min-[520px]:grid-cols-[190px_minmax(0,1fr)] @min-[520px]:grid-rows-1">
         <div className="flex min-h-0 flex-col overflow-y-auto rounded-lg border border-border">

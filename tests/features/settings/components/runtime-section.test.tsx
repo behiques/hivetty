@@ -90,14 +90,12 @@ afterEach(() => {
 });
 
 describe('RuntimeSection — defaults', () => {
-  it('shows the current shell and command', () => {
+  it('shows the current shell, and no global agent command: it moved to Claude Code (HIVE-376)', () => {
     install({ shell: '/bin/zsh', claudeCommand: 'my-claude' });
     render(<RuntimeSection />);
 
     expect(screen.getByRole('textbox', { name: 'Shell' })).toHaveValue('/bin/zsh');
-    expect(screen.getByRole('textbox', { name: 'Agent command' })).toHaveValue(
-      'my-claude',
-    );
+    expect(screen.queryByRole('textbox', { name: 'Agent command' })).not.toBeInTheDocument();
   });
 
   it('saves a changed shell on Enter', async () => {
@@ -518,16 +516,12 @@ describe('RuntimeSection — diagnostic', () => {
     probes: [{ directory: '/usr/bin', found: true }],
   };
 
-  it('asks about the top-level command when no project is picked', async () => {
-    const user = userEvent.setup();
-    diagnoseAgentCommand.mockResolvedValue(found);
+  it('offers no default-command check with no project picked: it moved to Claude Code (HIVE-376)', () => {
     install();
     render(<RuntimeSection />);
 
-    await user.click(screen.getByRole('button', { name: 'Check the default command' }));
-
-    expect(diagnoseAgentCommand).toHaveBeenCalledWith({});
-    expect(await screen.findByText('/usr/bin/claude')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Check the default command' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Command diagnostic' })).not.toBeInTheDocument();
   });
 
   it('asks about the selected project', async () => {
