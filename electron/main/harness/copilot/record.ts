@@ -4,9 +4,9 @@ import { join } from 'node:path';
 
 import type { HarnessRecord } from '../port';
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const defaultHome = (): string => process.env['COPILOT_HOME'] ?? join(homedir(), '.copilot');
+export const defaultHome = (): string => process.env['COPILOT_HOME'] ?? join(homedir(), '.copilot');
 
 /**
  * Copilot's record (HIVE-280): a conversation is `$COPILOT_HOME/session-state/<id>/events.jsonl`

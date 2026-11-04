@@ -46,3 +46,11 @@ wrapped as HiveTTY's hook command wraps them (`{"event":…,"payload":…}`). `e
 hook denies every `task` call. Scrubbed, per directory and nothing else: the scratch directory → `/tmp/copilot-fixture`,
 the home directory → `/Users/me`, every UUID → `00000000-0000-4000-8000-00000000000N` by first appearance, and every
 `toolu_<24>` id → `toolu_<N as 24 hex>` on the same counter.
+
+`interactive-1.0.105/post-tool-use-sql-update.json` and `session-todos.db` (HIVE-361, recorded 2026-11-04 against
+`GitHub Copilot CLI 1.0.105`) are from `todos_probe.py`: one `copilot -p … -s --no-ask-user --disable-builtin-mcps
+--allow-all-tools --session-id 11111111-2222-4333-8444-555555555561` with a scratch `COPILOT_HOME` whose `settings.json`
+saves every `postToolUse` body and, in the same hook, the `todos` table as it stood then. The prompt asks for three `sql`
+calls: insert Alpha, Beta and Gamma pending; Alpha in_progress and Gamma blocked; Alpha done. The JSON is the second
+call's body (one `UPDATE … CASE id WHEN …`); the database is the session's `session.db` after the third, holding only
+`todos` and `todo_deps`. Scrubbed: `cwd` → `/tmp/copilot-fixture/work`, and nothing else.

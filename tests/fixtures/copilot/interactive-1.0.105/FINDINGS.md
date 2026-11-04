@@ -102,9 +102,12 @@ restarts fresh". The transcript is `session-state/<id>/events.jsonl`.
 (id, title, description, status) …` and `UPDATE todos SET status = 'done' WHERE id = …`. A call
 carries one statement, not the whole list, and status words are `pending`/`in_progress`/`done`.
 
-**Evidence.** `post-tool-use-sql.json`.
+**Evidence.** `post-tool-use-sql.json`; `post-tool-use-sql-update.json` and `session-todos.db` (HIVE-361).
 
-**Consequence.** plan: out (follow-up). Rebuilding the list means parsing SQL across calls.
+**Consequence.** plan: in (HIVE-361), read from the table, not the statements. The table is
+`todos(id, title, description, status ∈ pending|in_progress|done|blocked, created_at, updated_at)`
+in `session-state/<id>/session.db`, committed by each call's `postToolUse`, and one UPDATE can set
+several rows through `CASE id WHEN …`, which a statement reader would have had to parse.
 
 ## P5: initial task
 

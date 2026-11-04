@@ -380,7 +380,7 @@ rg -n --type ts -e "'(PreToolUse|PostToolUse|Stop|SubagentStop|SessionStart|Sess
 ### Follow-ups
 
 - HIVE-279's follow-up: HiveTTY skills and prompt markers in Codex sessions landed with HIVE-360.
-  The same for Copilot sessions (HIVE-280 D1), with Copilot's plan panel (its todo list is SQL, FINDINGS P4).
+  The same for Copilot sessions (HIVE-280 D1) landed with HIVE-362; its plan panel with HIVE-361.
 - HIVE-358: plans in agent runs.
 - HIVE-353: the rotation handoff's late-id gap.
 - HIVE-354: the `approve` hang.
@@ -807,9 +807,19 @@ process to exit. The newline is Alt+Enter (ESC CR, P6); the console's seed reads
   translates `task` to `Task`, so an agent's `Task` deny rule holds.
 
 Interactive: HIVE-280. Skills and ledger markers: HIVE-362 (a second `--plugin-dir`, the marker rule in
-`COPILOT_CUSTOM_INSTRUCTIONS_DIRS`; `installed` reads `copilot skill list --json`). Plan panel: its
-follow-up. Meters:
-HIVE-335. Plans: HIVE-352. Containers: refused.
+`COPILOT_CUSTOM_INSTRUCTIONS_DIRS`; `installed` reads `copilot skill list --json`). Plan panel:
+HIVE-361. Meters: HIVE-335. Agent-run plans: HIVE-358. Containers: refused.
+
+**Plans (HIVE-361)** (`copilot/hooks.ts`, `copilot/todos.ts`). Copilot has no plan tool that carries
+the list: it keeps a `todos` table in `$COPILOT_HOME/session-state/<id>/session.db` and writes it one
+`sql` call at a time, `UPDATE … CASE id WHEN …` included (FINDINGS P4). So the statements are never
+parsed. A main-agent `postToolUse` for `sql` whose query names `todos` re-reads the whole table,
+read-only through `node:sqlite` (`process.getBuiltinModule`, since Vite's client bundling refuses the
+import), `ORDER BY created_at, rowid`, as one `tasks-replaced` through Claude's `TodoWrite` mapping.
+The call has committed by its hook (recorded: each hook read the row it had just written). `done` reads
+as `completed`, and `blocked`, which the plan has no status for, as `pending`. A subagent writes the
+same session-wide table, so its call (`agentId` set) is skipped and the parent's next call reads its
+rows. No database or no table: no plan effect, the rest of the reading stands.
 
 **Meters (HIVE-335)** come from Copilot's OpenTelemetry file export, not a status line (it has none, so
 `/statusline` stays 404). The session launch adds, after the `unset`, `[ -n "${OTEL_EXPORTER_OTLP_ENDPOINT:-}…" ] ||
