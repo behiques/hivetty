@@ -64,8 +64,12 @@ export function createRecordMeters({
       // `/new`: a new file with no usage in it yet. The old context is not this conversation's;
       // limits and credits are the account's, so they stay.
       state.uuid = transcript.sessionUuid;
-      state.offset = 0;
-      state.metrics = {};
+      // An export is the session's one file, not the conversation's (HIVE-335 follow-up): reading
+      // on from where it was keeps the session's totals and never brings back the old context.
+      if (adapter.meterExport !== true) {
+        state.offset = 0;
+        state.metrics = {};
+      }
       publish(entityId, { contextPct: null });
     }
     const path =
