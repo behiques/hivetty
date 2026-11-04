@@ -24,7 +24,7 @@ export function useNewSessionPick(fresh = false) {
   const snapshot = useProjectConfig();
   const { detection, settled: detected } = useCliDetection();
   const availability = cliAvailability(detection, snapshot?.clis ?? null);
-  const resolved = resolveSessionCli(picked, snapshot?.sessionsDefaultCli, availability);
+  const resolved = resolveSessionCli({ picked, sessionsDefault: snapshot?.sessionsDefaultCli }, availability).cli;
   const newCli = resolved ?? 'claude-code';
   const { model: newModel, effort: newEffort } = resolvePick(newCli, newPicks, snapshot?.clis ?? null);
   const codex = newCli === 'codex';

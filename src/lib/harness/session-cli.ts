@@ -1,5 +1,6 @@
 import type { Effort, Model } from '@/types/entity';
 
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import { type CliDetection, type ClisConfig, CODEX_MODELS, COPILOT_MODELS } from '@shared/cli-contract';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
@@ -26,14 +27,62 @@ export function cliAvailability(
   ) as CliAvailability;
 }
 
-/** The picker's first choice (D2): the pick, the default, then the first available. `null` only when none is. */
+/** Where the picker's CLI came from (HIVE-378): this run's pick, the project's default, yours, or the first available. */
+export type CliSource = 'picked' | 'project' | 'yours' | 'fallback';
+export type CliRung = Exclude<CliSource, 'fallback'>;
+
+export interface SessionCliChoice {
+  /** `null` only when no CLI is available. */
+  cli: HarnessId | null;
+  source: CliSource | null;
+  /** Each rung that named a CLI that cannot run, highest first; never silently passed over ("no quiet downgrade"). */
+  skipped: { cli: HarnessId; source: CliRung; reason: string }[];
+}
+
+/**
+ * The CLI a new session starts on (HIVE-378): this run's pick, then the project's default, then yours
+ * (`sessionsDefaultCli`, absent meaning claude-code), then the first available. A rung naming an unavailable CLI
+ * is skipped and recorded, so the dock can say so.
+ */
 export function resolveSessionCli(
-  picked: HarnessId | null,
-  configuredDefault: HarnessId | undefined,
+  { picked, project, sessionsDefault }: { picked: HarnessId | null; project?: HarnessId; sessionsDefault?: HarnessId },
   availability: CliAvailability,
-): HarnessId | null {
-  const order = [picked, configuredDefault ?? 'claude-code', ...HARNESS_IDS];
-  return order.find((id): id is HarnessId => id !== null && availability[id].ok) ?? null;
+): SessionCliChoice {
+  const rungs: [HarnessId | null | undefined, CliRung][] = [
+    [picked, 'picked'],
+    [project, 'project'],
+    [sessionsDefault ?? 'claude-code', 'yours'],
+  ];
+  const skipped: SessionCliChoice['skipped'] = [];
+  for (const [cli, source] of rungs) {
+    if (cli === null || cli === undefined || skipped.some((entry) => entry.cli === cli)) continue;
+    const entry = availability[cli];
+    if (entry.ok) return { cli, source, skipped };
+    skipped.push({ cli, source, reason: entry.reason });
+  }
+  const first = HARNESS_IDS.find((id) => availability[id].ok) ?? null;
+  return { cli: first, source: first === null ? null : 'fallback', skipped };
+}
+
+const rungWords = (projectName: string | undefined): Record<CliRung, string> => ({
+  picked: 'your pick',
+  project: `the default for ${projectName ?? 'this project'}`,
+  yours: 'your default',
+});
+
+/** The dock's caption (HIVE-378): where the CLI came from, and what was skipped to reach it. `null` says nothing. */
+export function cliCaption(choice: SessionCliChoice, projectName?: string): string | null {
+  const { cli, source, skipped } = choice;
+  if (cli === null || source === null) return null;
+  const words = rungWords(projectName);
+  const first = skipped[0];
+  if (first !== undefined) {
+    const after = source === 'fallback' || source === 'picked' ? '' : ` (${words[source]})`;
+    return `${CLI_NAMES[first.cli]}, ${words[first.source]}, isn't available · starting on ${CLI_NAMES[cli]}${after}`;
+  }
+  if (source === 'project') return `Default for ${projectName ?? 'this project'}`;
+  if (source === 'yours') return 'Your default';
+  return null;
 }
 
 /** Why each unavailable CLI is, for the dock; an available one has no entry. */
