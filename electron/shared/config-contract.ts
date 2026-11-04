@@ -1980,6 +1980,17 @@ export interface SetProjectAutoMergeRequest {
 }
 
 /**
+ * Payload of `config:set-project-harness` (HIVE-378).
+ *
+ * The CLI a project's new sessions start with. `null` deletes the key, so the project uses the global default
+ * again: absent and "use the global default" are the same state.
+ */
+export interface SetProjectHarnessRequest {
+  id: string;
+  harness: HarnessId | null;
+}
+
+/**
  * Payload of `config:repoint-project` (story 103).
  *
  * The path is re-validated in main from scratch, exactly like
