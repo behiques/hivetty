@@ -118,6 +118,9 @@ export function HarnessPage({ cli }: { cli: HarnessId }) {
  * moved from Runtime (D10), and never empty; Codex's and Copilot's are `clis.<id>.command`, where empty runs the bare
  * name from the login shell's PATH (D3). The diagnostic re-runs once the snapshot reflects a write.
  */
+/** What a session accepts but an agent run refuses (`resolveCommand`): arguments, a leading NAME=val, a leading ~/. */
+const NEEDS_SHELL = /\s|^[A-Za-z_][A-Za-z0-9_]*=|^~\//;
+
 function CommandGroup({
   cli,
   snapshot,
@@ -161,9 +164,11 @@ function CommandGroup({
         onCommit={() => void commit()}
         placeholder={cli === 'claude-code' ? 'claude' : cli}
         hint={
-          cli === 'claude-code'
-            ? 'Typed into a login shell, arguments included.'
-            : `Empty runs ${cli} from the login shell's PATH.`
+          NEEDS_SHELL.test(draft.trim())
+            ? 'Sessions accept this; agent runs need a plain command.'
+            : cli === 'claude-code'
+              ? 'Typed into a login shell, arguments included.'
+              : `Empty runs ${cli} from the login shell's PATH.`
         }
       />
       {diagnostic ? <CommandDiagnosticView diagnostic={diagnostic} /> : null}

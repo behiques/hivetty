@@ -69,7 +69,7 @@ export function resolveCommand(
       problem:
         `The configured ${named}command \`${trimmed}\` carries arguments. ` +
         'An agent is spawned without a shell, so it needs a single ' +
-        'executable — set Settings › Runtime to a plain path.',
+        'executable — set Settings › Harnesses to a plain path.',
     };
   }
 

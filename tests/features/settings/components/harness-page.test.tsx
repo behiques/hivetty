@@ -200,6 +200,25 @@ describe('HarnessPage: the command (HIVE-376)', () => {
     expect(setCliConfig).toHaveBeenCalledWith({ cli: 'codex', command: null });
   });
 
+  it.each(['codex --flag', 'FOO=1 codex', '~/bin/codex'])('hints that agent runs need a plain command for %s', async (typed) => {
+    const user = userEvent.setup();
+    renderPage('codex');
+    expect(screen.queryByText(/agent runs need a plain command/)).toBeNull();
+    await user.type(screen.getByLabelText('Command'), typed);
+    expect(screen.getByText('Sessions accept this; agent runs need a plain command.')).toBeInTheDocument();
+  });
+
+  it('shows no such hint for a plain command, and still saves one that has it', async () => {
+    const user = userEvent.setup();
+    renderPage('codex');
+    await user.type(screen.getByLabelText('Command'), '/opt/codex');
+    expect(screen.queryByText(/agent runs need a plain command/)).toBeNull();
+    await user.clear(screen.getByLabelText('Command'));
+    await user.type(screen.getByLabelText('Command'), 'codex --x');
+    await user.tab();
+    expect(setCliConfig).toHaveBeenCalledWith({ cli: 'codex', command: 'codex --x' });
+  });
+
   it.each(['claude-code', 'codex', 'copilot'] as const)('%s: diagnoses its own command on mount', async (cli) => {
     renderPage(cli);
     await waitFor(() => expect(diagnoseAgentCommand).toHaveBeenCalledWith({ cli }));
