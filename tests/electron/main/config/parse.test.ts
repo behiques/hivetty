@@ -993,3 +993,25 @@ describe('the remote block (HIVE-144)', () => {
     expect(parsed.errors.join(' ')).toContain('unknown key "token"');
   });
 });
+
+describe('parseConfig — project harness (HIVE-378)', () => {
+  it('keeps a known CLI on the entry', () => {
+    const parsed = parseConfig(
+      JSON.stringify({ version: 2, projects: [{ id: 'a', path: '/a', harness: 'codex' }] }),
+      'config',
+    );
+
+    expect(parsed.projects[0]?.harness).toBe('codex');
+    expect(parsed.errors).toEqual([]);
+  });
+
+  it('drops an unknown CLI with an error, so the project falls back to the global default', () => {
+    const parsed = parseConfig(
+      JSON.stringify({ version: 2, projects: [{ id: 'a', path: '/a', harness: 'gemini' }] }),
+      'config',
+    );
+
+    expect(parsed.projects[0]).not.toHaveProperty('harness');
+    expect(parsed.errors.join('\n')).toMatch(/harness: expected one of claude-code, codex, copilot/);
+  });
+});

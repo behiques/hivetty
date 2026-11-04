@@ -254,3 +254,13 @@ describe('resolveProject — container', () => {
     expect(resolved.container).toEqual(container);
   });
 });
+
+describe('resolveProject — harness (HIVE-378)', () => {
+  it('carries a project default CLI through, and leaves it absent when unset', () => {
+    const dir = join(root, 'cli');
+    mkdirSync(dir, { recursive: true });
+
+    expect(resolveProject({ id: 'cli', path: dir, harness: 'copilot' }).harness).toBe('copilot');
+    expect(resolveProject({ id: 'cli', path: dir })).not.toHaveProperty('harness');
+  });
+});

@@ -120,6 +120,11 @@ export interface ProjectConfig {
    * as a permission card. Absent means `false`.
    */
   autoMerge?: boolean;
+  /**
+   * The CLI this project's new sessions start with (HIVE-378), when nothing was picked this run. Absent means
+   * the global default (`sessionsDefaultCli`). Agents never read it.
+   */
+  harness?: HarnessId;
 }
 
 /**
