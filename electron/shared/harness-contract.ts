@@ -145,7 +145,8 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   },
   copilot: {
     resume: 'by-id',
-    meters: ['model', 'tokens', 'aiCredits'],
+    // From its OTel export (HIVE-335); context from the turn's usage_info, as `/context` shows it.
+    meters: ['model', 'context', 'tokens', 'aiCredits'],
     // HIVE-362: the marker rule in COPILOT_CUSTOM_INSTRUCTIONS_DIRS gets the entry read (FINDINGS P11).
     contextDelivery: 'prompt-marker',
     reportsCostUsd: false,

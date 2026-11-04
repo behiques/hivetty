@@ -528,6 +528,51 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       expect(last.tokensIn).toBeGreaterThan(0);
       expect(last.tokensOut).toBeGreaterThan(0);
       expect(last.aiCredits).toBeGreaterThan(0);
+      // The follow-up: context from the turn's usage_info, the gauge `/context` shows.
+      expect(last.contextWindow).toBeGreaterThan(0);
+      expect(last.contextPct).toBeGreaterThanOrEqual(0);
+      expect(last.contextPct).toBeLessThanOrEqual(100);
+    },
+    CASE_MS,
+  );
+
+  it(
+    'a subagent’s own context stays out of the session’s (HIVE-335 follow-up)',
+    async () => {
+      await run('meters-subagent', '11111111-2222-4333-8444-5555555555e4', {
+        spec: { exportPath: exportFile },
+        prompts: [
+          'Use the task tool to run the explore agent with the prompt "Reply with the single word FOUND." Then reply with the single word DONE.',
+        ],
+        seconds: 240,
+      });
+      type Time = [number, number];
+      type Event = { name: string; time: Time; attributes: Record<string, number> };
+      const spans = readFileSync(exportFile, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { type: string; name?: string; parentSpanId?: string; startTime: Time; endTime: Time; events?: Event[] })
+        // `invoke_agent` for the session, `invoke_agent explore` for the subagent (measured, 1.0.105).
+        .filter((record) => record.type === 'span' && record.name?.startsWith('invoke_agent') === true);
+      const ms = ([sec, nanos]: Time) => sec * 1e3 + nanos / 1e6;
+      const nested = spans.filter((record) => record.parentSpanId !== undefined);
+      const inside = (event: Event) => nested.some((span) => ms(event.time) >= ms(span.startTime) && ms(event.time) <= ms(span.endTime));
+      const readings = spans
+        .filter((record) => record.parentSpanId === undefined)
+        .flatMap((record) => record.events ?? [])
+        .filter((event) => event.name === 'github.copilot.session.usage_info');
+      const main = readings.filter((event) => !inside(event)).at(-1);
+      finding('meters-subagent', { metrics, readings, nested: nested.map((span) => [span.name, span.startTime, span.endTime]) });
+      // The premise, as measured: the subagent runs as a nested invoke_agent, and its own reading lands
+      // on the session's span inside that window.
+      expect(nested.length).toBeGreaterThan(0);
+      expect(readings.some(inside)).toBe(true);
+      expect(main).toBeDefined();
+      const limit = main!.attributes['github.copilot.token_limit']!;
+      const current = main!.attributes['github.copilot.current_tokens']!;
+      const last = Object.assign({}, ...metrics) as SessionMetrics;
+      expect(last.contextWindow).toBe(limit);
+      expect(last.contextPct).toBe(Math.min(100, Math.floor((current / limit) * 100)));
     },
     CASE_MS,
   );

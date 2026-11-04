@@ -170,6 +170,45 @@ describe('an export-read CLI (HIVE-335)', () => {
     meters.drop('sess-01');
   });
 
+  it('a new conversation keeps reading the shared export where it was, and clears only the context', async () => {
+    const usage = (current: number) =>
+      JSON.stringify({
+        type: 'span',
+        attributes: { 'gen_ai.operation.name': 'invoke_agent' },
+        events: [
+          {
+            name: 'github.copilot.session.usage_info',
+            attributes: { 'github.copilot.token_limit': 100, 'github.copilot.current_tokens': current },
+          },
+        ],
+      }) + '\n';
+    let uuid = 'u1';
+    const send = vi.fn();
+    const adapter = { ...claudeCodeAdapter, foldMeters: foldCopilotMeters, meterExport: true } as HarnessAdapter;
+    const meters = createRecordMeters({
+      send,
+      transcriptOf: () => ({ cwd: '/repo', sessionUuid: uuid }),
+      adapterOf: () => adapter,
+      exportPathOf: () => exportFile,
+    });
+    writeFileSync(exportFile, span(10) + usage(60));
+    await meters.onHook('sess-01');
+    // `/new`: same process, same file. Re-reading it from the start would bring back 60%.
+    uuid = 'u2';
+    await meters.onHook('sess-01');
+    expect(send.mock.calls.slice(1).map((call) => (call[1] as { metrics: unknown }).metrics)).toEqual([
+      { contextPct: null },
+    ]);
+    appendFileSync(exportFile, span(5) + usage(7));
+    await meters.onHook('sess-01');
+    // The session's totals carry on; the new conversation's context arrives with its first turn.
+    expect(send).toHaveBeenLastCalledWith(CH.sessionMetrics, {
+      entityId: 'sess-01',
+      metrics: { tokensIn: 15, contextPct: 7, contextWindow: 100 },
+    });
+    meters.drop('sess-01');
+  });
+
   it('a hook before the export exists sends nothing and warns nothing', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { send, meters } = make();

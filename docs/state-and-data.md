@@ -560,6 +560,10 @@ balance):
 
 None of the five takes `null`: nothing ever clears a total. Remote protocol 31 carries them.
 
+Copilot also declares `context` (HIVE-335 follow-up): the existing `contextPct` and `contextWindow`, read from its
+export's `usage_info`, so no new field and no protocol change. A `/new` clears `contextPct` with `null` as it does
+for Codex; the totals carry on.
+
 ### Home's strip (HIVE-200)
 
 Every number Home's strip shows is derived from state the renderer already
