@@ -80,15 +80,25 @@ export function commandWord(command: string): string {
   return word.startsWith('~/') ? join(homedir(), word.slice(2)) : word;
 }
 
+/**
+ * Whether only a shell can read `command`, so no probe may run it (HIVE-375 follow-up). `env` and `~user` are the
+ * shell's too. Detection and sign-in both ask, so they never disagree about one command.
+ */
+export function needsShell(command: string): boolean {
+  const trimmed = command.trim();
+  const word = commandWord(trimmed);
+  return SHELL_SYNTAX.test(trimmed) || word === 'env' || word.startsWith('~');
+}
+
 export async function detectCli(command: string, env: NodeJS.ProcessEnv, run: RunVersion): Promise<CliDetection> {
   const trimmed = command.trim();
   const word = commandWord(trimmed);
   /*
     A command only a shell can read is not missing, it is uncheckable: calling it missing would make the picker
-    refuse a CLI that sessions start fine (HIVE-375 follow-up). `env` and `~user` are the shell's too. Checked before
-    the empty case, because `A=1;claude` reads as one assignment word to the split above.
+    refuse a CLI that sessions start fine. Checked before the empty case, because `A=1;claude` reads as one
+    assignment word to `commandWord`'s split.
   */
-  if (SHELL_SYNTAX.test(trimmed) || word === 'env' || word.startsWith('~')) {
+  if (needsShell(trimmed)) {
     return { unchecked: `HiveTTY can't check \`${trimmed}\` without a shell. Sessions still run it as written.` };
   }
   if (word === '') return { missing: 'No command is configured.' };

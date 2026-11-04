@@ -24,6 +24,22 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('readSignIn (HIVE-376)', () => {
+  it('a command only a shell can read is unchecked, never run and never "not found" (detection\'s rule, #201)', async () => {
+    for (const [cli, command, verb] of [
+      ['claude-code', 'true; false', 'claude auth status'],
+      ['claude-code', '$HOME/bin/claude', 'claude auth status'],
+      ['codex', 'env FOO=1 codex', 'codex login status'],
+      ['codex', '~other/codex', 'codex login status'],
+    ] as const) {
+      const run = answer('{}');
+      expect(await readSignIn(cli, { command, env, run })).toEqual({
+        state: 'unknown',
+        label: `HiveTTY can't check the sign-in of \`${command}\` without a shell. Run \`${verb}\` in a terminal.`,
+      });
+      expect(run).not.toHaveBeenCalled();
+    }
+  });
+
   it('Claude: the email and plan from `auth status`', async () => {
     const run = answer(JSON.stringify({ loggedIn: true, email: 'a@b.c', subscriptionType: 'max' }));
     expect(await readSignIn('claude-code', { command: 'claude', env, run })).toEqual({

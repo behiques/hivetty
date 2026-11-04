@@ -2,7 +2,7 @@ import type { CliSignIn } from '../../shared/cli-contract';
 import type { HarnessId } from '../../shared/harness-contract';
 import { probeCommand } from '../config/probe';
 
-import { commandWord, runVersion, VERSION_TIMEOUT_MS, type RunVersion } from './detect';
+import { commandWord, needsShell, runVersion, VERSION_TIMEOUT_MS, type RunVersion } from './detect';
 
 export interface SignInDeps {
   /** What HiveTTY runs for the CLI, `cliCommand`. Only its first word is run. */
@@ -24,6 +24,13 @@ const out = (cli: 'claude-code' | 'codex'): CliSignIn => ({ state: 'out', label:
  */
 export async function readSignIn(cli: HarnessId, deps: SignInDeps): Promise<CliSignIn> {
   if (cli === 'copilot') return copilot(deps);
+  // Detection's rule: a command only a shell can read is never probed, and is not "not found" either.
+  if (needsShell(deps.command)) {
+    return {
+      state: 'unknown',
+      label: `HiveTTY can't check the sign-in of \`${deps.command.trim()}\` without a shell. Run \`${VERB[cli]}\` in a terminal.`,
+    };
+  }
   const word = commandWord(deps.command);
   const { resolved } = probeCommand(word, deps.env.PATH ?? '');
   if (resolved === null) return { state: 'unknown', label: `\`${word}\` was not found.` };
