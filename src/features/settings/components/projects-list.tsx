@@ -6,6 +6,7 @@ import {
   reorderProjectsInConfig,
   repointProjectInConfig,
   setProjectAutoMergeInConfig,
+  setProjectHarnessInConfig,
   setProjectKeyInConfig,
 } from '@/lib/project-config';
 
@@ -263,6 +264,10 @@ export function ProjectsList({ entries, onRuntimeOverrides }: ProjectsListProps)
                     id: project.id,
                     autoMerge: project.autoMerge !== true,
                   })
+                }
+                harness={project.harness}
+                onSetHarness={(harness) =>
+                  void setProjectHarnessInConfig({ id: project.id, harness })
                 }
               />
             }

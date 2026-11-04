@@ -29,6 +29,8 @@ function setup(overrides: Partial<Props> = {}) {
     onRemove: vi.fn(),
     autoMerge: false,
     onToggleAutoMerge: vi.fn(),
+    harness: undefined,
+    onSetHarness: vi.fn(),
     ...overrides,
   };
   render(<ProjectRowMenu {...props} />);
@@ -88,6 +90,40 @@ describe('ProjectRowMenu', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: pattern }));
 
     expect(props[handler]).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers a Default CLI choice with exactly one checked (HIVE-378)', async () => {
+    setup({ harness: 'codex' });
+    await open();
+
+    expect(screen.getByText('Default CLI')).toBeInTheDocument();
+    const checked = (name: RegExp) => screen.getByRole('menuitemcheckbox', { name }).getAttribute('aria-checked');
+    expect(checked(/^codex$/i)).toBe('true');
+    expect(checked(/^claude code$/i)).toBe('false');
+    expect(checked(/^copilot$/i)).toBe('false');
+    expect(checked(/use the global default/i)).toBe('false');
+  });
+
+  it('checks "Use the global default" when the project names none (HIVE-378)', async () => {
+    setup();
+    await open();
+
+    expect(screen.getByRole('menuitemcheckbox', { name: /use the global default/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+  });
+
+  it.each([
+    [/^copilot$/i, 'copilot'],
+    [/use the global default/i, null],
+  ] as const)('sets the default CLI from %s (HIVE-378)', async (name, expected) => {
+    const props = setup({ harness: 'codex' });
+    await open();
+
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name }));
+
+    expect(props.onSetHarness).toHaveBeenCalledWith(expected);
   });
 
   it('puts Runtime overrides… after Change folder…, before Remove (HIVE-377)', async () => {
