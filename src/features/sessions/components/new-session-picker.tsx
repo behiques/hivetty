@@ -571,7 +571,9 @@ function ProjectRow({
       type="button"
       onClick={() => onSelect(id)}
       disabled={!access.spawnable || blocked}
-      title={access.reason ?? (blocked ? NONE_AVAILABLE : undefined)}
+      // A skipped project CLI's reason is the row's own title (HIVE-387): the button's accessible description,
+      // so a screen reader reads it, and a tooltip over the whole row rather than over a 14px mark.
+      title={access.reason ?? (blocked ? NONE_AVAILABLE : skippedReason)}
       className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover disabled:cursor-not-allowed disabled:hover:bg-transparent"
     >
       <Icon
@@ -602,9 +604,9 @@ function ProjectRow({
           <CliMark cli={startsOn} className="size-3.5" />
         </span>
       )}
-      {/* HIVE-387: the project's own CLI cannot run; drawn dimmed with the reason, never silently swapped. */}
+      {/* HIVE-387: the project's own CLI cannot run; drawn dimmed, its reason on the row's title, never silently swapped. */}
       {skippedCli === undefined ? null : (
-        <span title={skippedReason} data-skipped="true" className="shrink-0 text-subtle opacity-45">
+        <span data-skipped="true" className="shrink-0 text-subtle opacity-45">
           <CliMark cli={skippedCli} className="size-3.5" />
         </span>
       )}

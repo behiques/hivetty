@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -1303,12 +1303,28 @@ describe('NewSessionPicker — per-project default CLI (HIVE-378)', () => {
     setProjectConfigForTest({ ...projectConfigSnapshot()!, clis: resolveClis({ copilot: { sessions: false } }) });
     render(<NewSessionPicker />);
 
-    const mark = within(resultRow('design-system')).getByTitle(
+    const row = resultRow('design-system');
+    const reason = "Copilot, the default for design-system, isn't available · starting on Claude Code (your default)";
+    expect(row.querySelector('[data-skipped="true"]')).not.toBeNull();
+    // On the row button itself, so a screen reader announces it and the tooltip shows over the whole row.
+    expect(row).toHaveAccessibleDescription(reason);
+    expect(row).toHaveAttribute('title', reason);
+    expect(within(row).queryByTitle(/^Starts on/)).toBeNull();
+    expect(resultRow('nova-web')).not.toHaveAccessibleDescription(/isn't available/);
+  });
+
+  it("dims the row when this run's stale pick is also the project's CLI", async () => {
+    withHarness({ 'design-system': 'copilot' });
+    const user = userEvent.setup();
+    render(<NewSessionPicker />);
+    await user.click(cliRadio(/Copilot/));
+    act(() => setProjectConfigForTest({ ...projectConfigSnapshot()!, clis: resolveClis({ copilot: { sessions: false } }) }));
+
+    const row = resultRow('design-system');
+    expect(row.querySelector('[data-skipped="true"]')).not.toBeNull();
+    expect(row).toHaveAccessibleDescription(
       "Copilot, the default for design-system, isn't available · starting on Claude Code (your default)",
     );
-    expect(mark).toHaveAttribute('data-skipped', 'true');
-    expect(within(resultRow('design-system')).queryByTitle(/^Starts on/)).toBeNull();
-    expect(within(resultRow('nova-web')).queryByTitle(/isn't available/)).toBeNull();
   });
 
   it("types a ticket's first message for the row's CLI", async () => {

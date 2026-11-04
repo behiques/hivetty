@@ -72,6 +72,8 @@ describe('OvermindHead (HIVE-197)', () => {
         "Copilot, the default for nova-web, isn't available · starting on Claude Code (your default)",
       ),
     );
+    // The reason is the button's description too, so a screen reader reads it, not only a hover (HIVE-387).
+    expect(screen.getByRole('button', { name: 'New session in nova-web' })).toHaveAccessibleDescription("Copilot, the default for nova-web, isn't available · starting on Claude Code (your default)");
   });
 
   it('carries the terminal chevron beside New session, filtered or not, and it opens a terminal', async () => {
