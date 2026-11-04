@@ -84,6 +84,7 @@ export const BRIDGE_UI_KEYS = [
 export const BRIDGE_CONFIG_KEYS = [
   'get', 'reload', 'chooseDirectory', 'browseDirectory', 'addProject', 'removeProject',
   'renameProject', 'repointProject', 'reorderProjects', 'setProjectKey', 'setProjectAutoMerge',
+  'setProjectHarness',
   'setSessionPlugin', 'startClone', 'cancelClone', 'onCloneDone', 'onConfigChanged',
   'setRuntime', 'setProjectRuntime', 'diagnoseCommand', 'diagnoseEnv', 'setNotifications',
   'revealConfig', 'resetConfig', 'setJira', 'setSlack', 'setCliAgents', 'setAgentsDefaultCli', 'setCliSessions', 'setCli', 'setReceiver', 'setServer', 'setRemote',

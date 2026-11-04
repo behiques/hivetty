@@ -6,9 +6,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@components/ui/dropdown-menu';
+import { CLI_NAMES } from '@lib/harness/cli-names';
+import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
 interface ProjectRowMenuProps {
   /** Named in the trigger's accessible name — every row has one of these. */
@@ -29,6 +32,10 @@ interface ProjectRowMenuProps {
    */
   autoMerge: boolean;
   onToggleAutoMerge: () => void;
+  /** The project's own default CLI for new sessions (HIVE-378); absent uses the global default. */
+  harness?: HarnessId;
+  /** Set the project's default CLI, or `null` to go back to the global default (HIVE-378). */
+  onSetHarness: (harness: HarnessId | null) => void;
 }
 
 /**
@@ -73,6 +80,8 @@ export function ProjectRowMenu({
   onRemove,
   autoMerge,
   onToggleAutoMerge,
+  harness,
+  onSetHarness,
 }: ProjectRowMenuProps) {
   /**
    * Whether the chosen item replaces the row with something that focuses itself.
@@ -172,6 +181,28 @@ export function ProjectRowMenu({
         >
           Runtime overrides…
         </DropdownMenuItem>
+
+        {/*
+          HIVE-378. Checkbox items like *Merge PRs unattended*, exactly one checked, so the state lives in
+          `aria-checked` and no new menu primitive is needed.
+        */}
+        <DropdownMenuSeparator className="my-1 bg-border-soft" />
+        <DropdownMenuLabel>Default CLI</DropdownMenuLabel>
+        {HARNESS_IDS.map((id) => (
+          <DropdownMenuCheckboxItem
+            key={id}
+            checked={harness === id}
+            onSelect={() => select(() => onSetHarness(id))}
+          >
+            {CLI_NAMES[id]}
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuCheckboxItem
+          checked={harness === undefined}
+          onSelect={() => select(() => onSetHarness(null))}
+        >
+          Use the global default
+        </DropdownMenuCheckboxItem>
 
         <DropdownMenuSeparator className="my-1 bg-border-soft" />
 

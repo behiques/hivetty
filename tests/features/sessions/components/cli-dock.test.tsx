@@ -128,3 +128,15 @@ describe('CliDock', () => {
     expect(onChange).toHaveBeenLastCalledWith('copilot');
   });
 });
+
+describe('CliDock caption (HIVE-378)', () => {
+  it('writes the source caption under the name', () => {
+    render(<CliDock value="codex" onChange={vi.fn()} caption="Default for hivetty" />);
+    expect(screen.getByText('Default for hivetty')).toBeInTheDocument();
+  });
+
+  it('draws no caption when there is none', () => {
+    const { container } = render(<CliDock value="codex" onChange={vi.fn()} caption={null} />);
+    expect(container.querySelector('[data-slot="cli-caption"]')).toBeNull();
+  });
+});

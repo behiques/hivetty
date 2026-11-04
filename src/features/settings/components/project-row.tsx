@@ -1,9 +1,11 @@
 import { DotsSixVertical } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
+import { CliMark } from '@components/ui/cli-mark';
 import { Icon } from '@components/ui/icon';
 import { ProjectKey } from '@components/ui/project-key';
 import { Tag } from '@components/ui/tag';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import type { ProjectConfig } from '@shared/config-contract';
 
 interface ProjectRowProps {
@@ -116,6 +118,13 @@ export function ProjectRow({
         )}
         <span className="truncate text-ui-sm text-subtle">{detail}</span>
       </div>
+
+      {/* HIVE-378: the CLI this project's sessions start with, when it names one. */}
+      {project.harness === undefined ? null : (
+        <span title={`Default CLI: ${CLI_NAMES[project.harness]}`} className="shrink-0 text-subtle">
+          <CliMark cli={project.harness} className="size-[13px]" />
+        </span>
+      )}
 
       {!project.isRepo ? (
         /*

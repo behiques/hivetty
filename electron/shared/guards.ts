@@ -65,6 +65,7 @@ import type {
   SetSessionPluginRequest,
   ProjectAutoMergeRequest,
   SetProjectAutoMergeRequest,
+  SetProjectHarnessRequest,
   SetProjectKeyRequest,
   SetProjectRuntimeRequest,
   SetReceiverRequest,
@@ -817,6 +818,15 @@ export function parseSetProjectAutoMergeRequest(input: unknown): SetProjectAutoM
   return {
     id: assertId(raw.id, 'setProjectAutoMerge.id'),
     autoMerge: raw.autoMerge,
+  };
+}
+
+/** Payload guard for `config:set-project-harness` (HIVE-378). `null` clears the project's default CLI. */
+export function parseSetProjectHarnessRequest(input: unknown): SetProjectHarnessRequest {
+  const raw = assertShape(input, ['id', 'harness'], 'setProjectHarness');
+  return {
+    id: assertId(raw.id, 'setProjectHarness.id'),
+    harness: raw.harness === null ? null : assertOneOf(raw.harness, HARNESS_IDS, 'setProjectHarness.harness'),
   };
 }
 

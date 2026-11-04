@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { OvermindHead } from '@features/orchestrator/components/overmind-head';
-import { resetProjectConfig } from '@lib/project-config';
+import { projectConfigSnapshot, resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
+import { COPILOT_MODELS } from '@shared/cli-contract';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
@@ -37,6 +38,21 @@ describe('OvermindHead (HIVE-197)', () => {
     expect(useHiveStore.getState().order.length).toBe(before + 1);
     await userEvent.click(screen.getByRole('button', { name: 'Overmind' }));
     expect(useUiStore.getState().sessionsProject).toBeNull();
+  });
+
+  it("starts New session in the project on that project's own CLI (HIVE-378)", async () => {
+    const current = projectConfigSnapshot()!;
+    setProjectConfigForTest({
+      ...current,
+      projects: current.projects.map((project) =>
+        project.id === 'nova-web' ? { ...project, harness: 'copilot' as const } : project,
+      ),
+    });
+    useUiStore.getState().setSessionsProject('nova-web');
+    render(<OvermindHead />);
+    await userEvent.click(screen.getByRole('button', { name: 'New session in nova-web' }));
+    const { order, entities } = useHiveStore.getState();
+    expect(entities[order.at(-1)!]).toMatchObject({ project: 'nova-web', harness: 'copilot', model: COPILOT_MODELS[0] });
   });
 
   it('carries the terminal chevron beside New session, filtered or not, and it opens a terminal', async () => {

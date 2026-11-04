@@ -203,3 +203,15 @@ describe('ProjectRow · the key chip', () => {
     expect(screen.queryByTitle(/wherever a project is asked for/)).toBeNull();
   });
 });
+
+describe('ProjectRow default CLI mark (HIVE-378)', () => {
+  it('marks a project that names a default CLI', () => {
+    setup({ project: entry({ id: 'the-hive', name: 'The Hive', harness: 'codex' }) });
+    expect(screen.getByTitle('Default CLI: Codex')).toBeInTheDocument();
+  });
+
+  it('draws no mark without one', () => {
+    setup();
+    expect(screen.queryByTitle(/Default CLI:/)).toBeNull();
+  });
+});

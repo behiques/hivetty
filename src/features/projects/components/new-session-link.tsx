@@ -50,7 +50,7 @@ export function NewSessionLink({
 }: NewSessionLinkProps) {
   const access = useProjectAccess(projectId);
   const spawnSession = useSpawnSession();
-  const { cli, model, effort, ready, noneAvailable } = useNewSessionPick();
+  const { cli, model, effort, ready, noneAvailable } = useNewSessionPick(false, projectId);
 
   return (
     <button

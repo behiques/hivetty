@@ -25,6 +25,7 @@ import type {
   SetNotificationsRequest,
   SetSessionPluginRequest,
   SetProjectAutoMergeRequest,
+  SetProjectHarnessRequest,
   SetProjectKeyRequest,
   SetProjectRuntimeRequest,
   SetReceiverRequest,
@@ -860,6 +861,11 @@ export const setSessionPluginInConfig = (
 export const setProjectAutoMergeInConfig = (
   request: SetProjectAutoMergeRequest,
 ): Promise<void> => mutate((bridge) => bridge.config.setProjectAutoMerge(request));
+
+/** Set or clear the CLI one project's new sessions start with (HIVE-378). */
+export const setProjectHarnessInConfig = (
+  request: SetProjectHarnessRequest,
+): Promise<void> => mutate((bridge) => bridge.config.setProjectHarness(request));
 
 /** Point a project at a folder that moved (story 103). */
 export const repointProjectInConfig = (

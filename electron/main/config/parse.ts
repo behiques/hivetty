@@ -101,6 +101,8 @@ export interface RawProject {
   container?: ContainerConfig;
   /** HIVE-166's unattended-merge consent. Absent means `false`. */
   autoMerge?: boolean;
+  /** HIVE-378's default CLI for this project's new sessions. Absent means the global default. */
+  harness?: HarnessId;
 }
 
 export interface ParsedConfig {
@@ -326,6 +328,7 @@ const PROJECT_KEYS = [
   'env',
   'container',
   'autoMerge',
+  'harness',
 ];
 
 /**
@@ -1477,6 +1480,19 @@ function optionalAgentsDefaultCli(
   return undefined;
 }
 
+/** A project's `harness` (HIVE-378): a CLI this build can run, else ignored (the global default). */
+function optionalProjectHarness(
+  record: Record<string, unknown>,
+  label: string,
+  errors: string[],
+): HarnessId | undefined {
+  const value = record.harness;
+  if (value === undefined) return undefined;
+  if (typeof value === 'string' && isHarnessId(value)) return value;
+  errors.push(`${label}.harness: expected one of ${HARNESS_IDS.join(', ')} — ignored`);
+  return undefined;
+}
+
 /** `sessionsDefaultCli` (HIVE-375): the CLI a new session starts with, else ignored (claude-code). */
 function optionalSessionsDefaultCli(
   record: Record<string, unknown>,
@@ -1703,6 +1719,7 @@ export function parseConfig(text: string, label: string): ParsedConfig {
     const env = optionalEnv(entry, at, errors);
     const container = optionalContainer(entry, at, errors);
     const autoMerge = optionalBoolean(entry, 'autoMerge', at, errors);
+    const harness = optionalProjectHarness(entry, at, errors);
 
     // Conditional spread, matching `parseSpawnRequest`: an `undefined`-valued
     // own key would be reported as unknown the next time this file is read.
@@ -1718,6 +1735,7 @@ export function parseConfig(text: string, label: string): ParsedConfig {
       ...(env !== undefined ? { env } : {}),
       ...(container !== undefined ? { container } : {}),
       ...(autoMerge !== null ? { autoMerge } : {}),
+      ...(harness !== undefined ? { harness } : {}),
     });
   });
 

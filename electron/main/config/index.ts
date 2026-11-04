@@ -37,6 +37,7 @@ import {
   type SetNotificationsRequest,
   type SetSessionPluginRequest,
   type SetProjectAutoMergeRequest,
+  type SetProjectHarnessRequest,
   type SetProjectKeyRequest,
   type SetProjectRuntimeRequest,
   type SetReceiverRequest,
@@ -683,6 +684,32 @@ export function setProjectAutoMerge(request: SetProjectAutoMergeRequest): Config
             ? { ...(entry as Record<string, unknown>), autoMerge: request.autoMerge }
             : entry,
         ),
+      };
+    }),
+  );
+}
+
+/**
+ * Set or clear the CLI one project's new sessions start with (HIVE-378).
+ *
+ * The sibling of {@link setProjectAutoMerge}, except that `null` deletes the key rather than writing it: there
+ * is no "explicitly the global default" to record, only an override or its absence.
+ */
+export function setProjectHarness(request: SetProjectHarnessRequest): ConfigSnapshot {
+  return commit(
+    writeConfig((draft) => {
+      const entries = projectsOf(draft);
+      if (!entries.some((entry) => idOf(entry) === request.id)) {
+        throw new WriteRefused(`no project with id "${request.id}"`);
+      }
+      return {
+        ...draft,
+        projects: entries.map((entry) => {
+          if (idOf(entry) !== request.id) return entry;
+          const rest = { ...(entry as Record<string, unknown>) };
+          delete rest.harness;
+          return request.harness === null ? rest : { ...rest, harness: request.harness };
+        }),
       };
     }),
   );

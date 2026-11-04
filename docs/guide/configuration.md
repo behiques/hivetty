@@ -93,6 +93,7 @@ Any key not in this list makes the whole file invalid, and Settings says which.
 | `shell`, `claudeCommand`, `env` | per-project overrides |
 | `container` | run sessions in a container ([Containers](containers.md)) |
 | `autoMerge` | `true` lets the shipper agent merge this project's pull requests without asking ([Agents › The tools fence](agents.md#the-tools-fence)) |
+| `harness` | the CLI this project's new sessions start with (`claude-code`, `codex` or `copilot`); absent uses `sessionsDefaultCli` ([Settings › Projects](settings.md#projects)) |
 
 A project whose path does not exist shows **unmapped** in the Sessions panel, with the reason, and
 cannot start sessions.

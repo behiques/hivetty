@@ -3,12 +3,15 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILT_IN_PICKS,
   cliAvailability,
+  cliCaption,
   resolvePick,
   resolveSessionCli,
+  type SessionCliChoice,
   TURNED_OFF,
   unavailableReasons,
 } from '@lib/harness/session-cli';
 import { resolveClis } from '@shared/cli-contract';
+import type { HarnessId } from '@shared/harness-contract';
 
 const all = cliAvailability(null, null);
 const no = (reason: string) => ({ ok: false as const, reason });
@@ -57,20 +60,91 @@ describe('cliAvailability, a command detection cannot check (HIVE-375 follow-up)
   });
 });
 
-describe('resolveSessionCli (D2)', () => {
-  const offClaude = { ...all, 'claude-code': no('off') };
+describe('resolveSessionCli (HIVE-378)', () => {
+  const off = (...ids: HarnessId[]) => ({ ...all, ...Object.fromEntries(ids.map((id) => [id, no(`${id} off`)])) });
 
-  it('takes the pick, then the default, then claude-code, then the first available', () => {
-    expect(resolveSessionCli('copilot', 'codex', all)).toBe('copilot');
-    expect(resolveSessionCli(null, 'codex', all)).toBe('codex');
-    expect(resolveSessionCli(null, undefined, all)).toBe('claude-code');
-    expect(resolveSessionCli(null, undefined, offClaude)).toBe('codex');
-    expect(resolveSessionCli('claude-code', 'copilot', offClaude)).toBe('copilot');
+  it('takes the run pick first, then the project, then your default, then claude-code', () => {
+    expect(resolveSessionCli({ picked: 'copilot', project: 'codex', sessionsDefault: 'codex' }, all)).toEqual({
+      cli: 'copilot',
+      source: 'picked',
+      skipped: [],
+    });
+    expect(resolveSessionCli({ picked: null, project: 'codex', sessionsDefault: 'copilot' }, all)).toMatchObject({
+      cli: 'codex',
+      source: 'project',
+    });
+    expect(resolveSessionCli({ picked: null, sessionsDefault: 'copilot' }, all)).toMatchObject({
+      cli: 'copilot',
+      source: 'yours',
+    });
+    expect(resolveSessionCli({ picked: null }, all)).toMatchObject({ cli: 'claude-code', source: 'yours' });
+  });
+
+  it.each([['missing'], ['turned off']])('skips a %s project CLI and says so', (reason) => {
+    const availability = { ...all, codex: no(reason) };
+    expect(resolveSessionCli({ picked: null, project: 'codex' }, availability)).toEqual({
+      cli: 'claude-code',
+      source: 'yours',
+      skipped: [{ cli: 'codex', source: 'project', reason }],
+    });
+  });
+
+  it('skips an unavailable pick and an unavailable default', () => {
+    expect(resolveSessionCli({ picked: 'copilot', sessionsDefault: 'codex' }, off('copilot', 'codex'))).toEqual({
+      cli: 'claude-code',
+      source: 'fallback',
+      skipped: [
+        { cli: 'copilot', source: 'picked', reason: 'copilot off' },
+        { cli: 'codex', source: 'yours', reason: 'codex off' },
+      ],
+    });
+  });
+
+  it('records a CLI named by two rungs once', () => {
+    expect(
+      resolveSessionCli({ picked: null, project: 'codex', sessionsDefault: 'codex' }, off('codex')).skipped,
+    ).toEqual([{ cli: 'codex', source: 'project', reason: 'codex off' }]);
+  });
+
+  it('falls back to the first available CLI when every rung is out', () => {
+    expect(resolveSessionCli({ picked: null }, off('claude-code'))).toMatchObject({ cli: 'codex', source: 'fallback' });
   });
 
   it('answers null when nothing is available', () => {
-    const none = { 'claude-code': no('a'), codex: no('b'), copilot: no('c') };
-    expect(resolveSessionCli(null, undefined, none)).toBeNull();
+    expect(resolveSessionCli({ picked: null }, off('claude-code', 'codex', 'copilot'))).toMatchObject({
+      cli: null,
+      source: null,
+    });
+  });
+});
+
+describe('cliCaption (HIVE-378)', () => {
+  const choice = (over: Partial<SessionCliChoice>): SessionCliChoice => ({
+    cli: 'codex',
+    source: 'yours',
+    skipped: [],
+    ...over,
+  });
+
+  it('names the source', () => {
+    expect(cliCaption(choice({ source: 'project' }), 'hivetty')).toBe('Default for hivetty');
+    expect(cliCaption(choice({ source: 'yours' }))).toBe('Your default');
+    expect(cliCaption(choice({ source: 'picked' }))).toBeNull();
+    expect(cliCaption(choice({ source: 'fallback' }))).toBeNull();
+    expect(cliCaption(choice({ cli: null, source: null }))).toBeNull();
+  });
+
+  it('says what was skipped and what it starts on instead', () => {
+    const skipped = [{ cli: 'copilot' as const, source: 'project' as const, reason: 'x' }];
+    expect(cliCaption(choice({ cli: 'claude-code', source: 'yours', skipped }), 'incorpx')).toBe(
+      "Copilot, the default for incorpx, isn't available · starting on Claude Code (your default)",
+    );
+    expect(
+      cliCaption(choice({ cli: 'codex', source: 'fallback', skipped: [{ cli: 'claude-code', source: 'yours', reason: 'x' }] })),
+    ).toBe("Claude Code, your default, isn't available · starting on Codex");
+    expect(
+      cliCaption(choice({ cli: 'codex', source: 'yours', skipped: [{ cli: 'copilot', source: 'picked', reason: 'x' }] })),
+    ).toBe("Copilot, your pick, isn't available · starting on Codex (your default)");
   });
 });
 

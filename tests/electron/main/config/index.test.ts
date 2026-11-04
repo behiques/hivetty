@@ -1623,6 +1623,42 @@ describe('project keys', () => {
     });
   });
 
+  describe('setProjectHarness (HIVE-378)', () => {
+    it('writes the CLI onto the entry, clears it with null, and keeps keys it does not own', async () => {
+      const one = join(sandbox, 'one');
+      mkdirSync(one);
+      const path = writeConfig({
+        version: 2,
+        projects: [{ id: 'one', name: 'one', path: one, key: 'on', autoMerge: true, note: 'keep me' }],
+      });
+      const module = await mutable();
+
+      let snapshot = module.setProjectHarness({ id: 'one', harness: 'codex' });
+      expect(snapshot.errors.filter((error) => !/unknown key/.test(error))).toEqual([]);
+      expect(snapshot.projects[0]?.harness).toBe('codex');
+      expect(entriesOnDisk(path)[0]).toMatchObject({ harness: 'codex', autoMerge: true, note: 'keep me' });
+
+      snapshot = module.setProjectHarness({ id: 'one', harness: null });
+      // Deleted, not written as null: absent is what "use the global default" looks like.
+      expect(entriesOnDisk(path)[0]).not.toHaveProperty('harness');
+      expect(entriesOnDisk(path)[0]).toMatchObject({ autoMerge: true, note: 'keep me' });
+      expect(snapshot.projects[0]).not.toHaveProperty('harness');
+    });
+
+    it('refuses an unknown project, writing nothing', async () => {
+      const one = join(sandbox, 'one');
+      mkdirSync(one);
+      const path = writeConfig({ version: 2, projects: [{ id: 'one', name: 'one', path: one, key: 'on' }] });
+      const module = await mutable();
+      const before = readFileSync(path, 'utf8');
+
+      const snapshot = module.setProjectHarness({ id: 'nope', harness: 'codex' });
+
+      expect(snapshot.errors[0]).toMatch(/no project with id "nope"/);
+      expect(readFileSync(path, 'utf8')).toBe(before);
+    });
+  });
+
   describe('setProjectKey', () => {
     /**
      * Two projects, both with declared keys.

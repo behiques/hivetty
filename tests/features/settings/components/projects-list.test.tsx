@@ -22,6 +22,7 @@ const repointProjectInConfig = vi.fn();
 const reorderProjectsInConfig = vi.fn();
 const setProjectKeyInConfig = vi.fn();
 const setProjectAutoMergeInConfig = vi.fn();
+const setProjectHarnessInConfig = vi.fn();
 
 vi.mock('@/lib/project-config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/project-config')>();
@@ -37,6 +38,7 @@ vi.mock('@/lib/project-config', async (importOriginal) => {
       reorderProjectsInConfig(request),
     setProjectKeyInConfig: (request: unknown) => setProjectKeyInConfig(request),
     setProjectAutoMergeInConfig: (request: unknown) => setProjectAutoMergeInConfig(request),
+    setProjectHarnessInConfig: (request: unknown) => setProjectHarnessInConfig(request),
   };
 });
 
@@ -448,6 +450,14 @@ describe('ProjectsList · changing a key', () => {
     await userEvent.click(screen.getByRole('menuitemcheckbox', { name: /merge prs unattended/i }));
 
     expect(setProjectAutoMergeInConfig).toHaveBeenCalledWith({ id: 'a', autoMerge: true });
+  });
+
+  it('writes the default CLI chosen in the row menu (HIVE-378)', async () => {
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
+    await openMenu('a');
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: /^copilot$/i }));
+
+    expect(setProjectHarnessInConfig).toHaveBeenCalledWith({ id: 'a', harness: 'copilot' });
   });
 
   it('posts the new key and closes the editor', async () => {

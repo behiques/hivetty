@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isSession } from '@/types/entity';
 
-import { type CliModel, resolveClis } from '@shared/cli-contract';
+import { type CliModel, COPILOT_MODELS, resolveClis } from '@shared/cli-contract';
 import {
   emptySnapshot,
   type ConfigSnapshot,
@@ -109,6 +109,16 @@ describe('NewSessionLink', () => {
     const session = lastSession();
     expect(session.model).toBe('sonnet');
     expect(session.effort).toBe('low');
+  });
+
+  it("starts on its project's own CLI when nothing was picked this run (HIVE-378)", async () => {
+    const base = snapshot([{ id: PROJECT, status: 'ok' }]);
+    setProjectConfigForTest({ ...base, projects: base.projects.map((project) => ({ ...project, harness: 'copilot' })) });
+
+    render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
+    await userEvent.click(screen.getByRole('button'));
+
+    expect(lastSession()).toMatchObject({ harness: 'copilot', model: COPILOT_MODELS[0] });
   });
 
   it('starts on the picker’s CLI (HIVE-279)', async () => {

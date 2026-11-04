@@ -58,6 +58,7 @@ import type {
   SetNotificationsRequest,
   SetSessionPluginRequest,
   SetProjectAutoMergeRequest,
+  SetProjectHarnessRequest,
   SetProjectKeyRequest,
   SetProjectRuntimeRequest,
   SetReceiverRequest,
@@ -311,6 +312,9 @@ const bridge: HiveBridge = {
     // HIVE-166. A boolean on the entry, the way `key` is a string on it.
     setProjectAutoMerge: (request: SetProjectAutoMergeRequest): Promise<ConfigSnapshot> =>
       ipcRenderer.invoke(CH.configSetProjectAutoMerge, request),
+    // HIVE-378. A CLI id or null on the entry, the way `autoMerge` is a boolean on it.
+    setProjectHarness: (request: SetProjectHarnessRequest): Promise<ConfigSnapshot> =>
+      ipcRenderer.invoke(CH.configSetProjectHarness, request),
     // HIVE-176. The whole list, as the Settings switches show it.
     setSessionPlugin: (
       request: SetSessionPluginRequest,

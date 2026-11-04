@@ -34,12 +34,24 @@ Blank inherits [Shell & environment](#shell--environment).
 { "id": "nova-web", "path": "~/repos/nova-web", "claudeCommand": "~/bin/claude-nova" }
 ```
 
+**Default CLI** in a project's ⋯ menu picks the CLI that project's new sessions start with: Claude Code, Codex,
+Copilot, or **Use the global default**. A project that names one shows its logo in the list. In the new-session
+picker, a CLI you picked this run still wins. Otherwise each project starts on its own default, and the line under
+the CLIs says where the choice came from. If the project's CLI is missing or turned off, the picker says so and
+starts on the next one.
+
+**Example.** Start one project's sessions on Codex:
+
+```json
+{ "id": "hivetty-cloud", "path": "~/repos/hivetty-cloud", "harness": "codex" }
+```
+
 ## Overview
 
 Settings › Harnesses › Overview lists Claude Code, Codex and Copilot. Each row shows the binary HiveTTY found on
 this Mac, or on the server you are attached to, and its version. A CLI that is not there shows why, with the line
 that installs it. **Rescan** looks again after you install one. **Use for sessions** takes a CLI out of the new-session
-picker, though at least one stays on. **Default** is the CLI a new session starts with; the picker remembers what you
+picker, though at least one stays on. **Default** is the CLI a new session starts with, unless its project names its own ([Projects](#projects)); the picker remembers what you
 last picked until the app restarts. A CLI that is missing or turned off shows dimmed in the picker, with the reason.
 A Claude command that needs a shell to read, such as `$HOME/bin/claude` or `env FOO=1 claude`, can't be checked: the
 row says so and Claude Code stays in the picker.

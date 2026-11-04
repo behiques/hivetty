@@ -37,7 +37,7 @@ export function HarnessesOverviewSection() {
 
   const configuredDefault = snapshot.sessionsDefaultCli ?? 'claude-code';
   const availability = cliAvailability(detection, snapshot.clis);
-  const startsOn = resolveSessionCli(null, snapshot.sessionsDefaultCli, availability);
+  const startsOn = resolveSessionCli({ picked: null, sessionsDefault: snapshot.sessionsDefaultCli }, availability).cli;
   const onCount = HARNESS_IDS.filter((id) => snapshot.clis[id].sessions).length;
 
   return (

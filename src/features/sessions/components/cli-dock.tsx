@@ -24,10 +24,13 @@ export function CliDock({
   value,
   onChange,
   unavailable = {},
+  caption = null,
 }: {
   value: HarnessId;
   onChange: (cli: HarnessId) => void;
   unavailable?: Partial<Record<HarnessId, string>>;
+  /** Where the choice came from (HIVE-378), drawn under the name; `null` draws nothing. */
+  caption?: string | null;
 }) {
   const refs = useRef(new Map<HarnessId, HTMLButtonElement>());
   const open = HARNESS_IDS.filter((cli) => unavailable[cli] === undefined);
@@ -98,6 +101,12 @@ export function CliDock({
       <span aria-hidden="true" className="text-ui-sm text-ink">
         {CLI_NAMES[value]}
       </span>
+      {/* Where the choice came from (HIVE-378): "Default for <project>", "Your default", or what was skipped. */}
+      {caption === null ? null : (
+        <span data-slot="cli-caption" className="max-w-[380px] text-center text-ui-sm text-subtle">
+          {caption}
+        </span>
+      )}
       {HARNESS_IDS.filter((cli) => unavailable[cli] !== undefined).map((cli) => (
         <span key={cli} className="max-w-[380px] text-center text-ui-sm text-subtle">
           {`${CLI_NAMES[cli]} isn't available: ${unavailable[cli]!}`}

@@ -105,6 +105,7 @@ import {
   parseSetJiraTokenRequest,
   parseSetNotificationsRequest,
   parseSetProjectAutoMergeRequest,
+  parseSetProjectHarnessRequest,
   parseSetProjectKeyRequest,
   parseSetProjectRuntimeRequest,
   parseSetReceiverRequest,
@@ -239,6 +240,7 @@ import {
   setNotifications,
   setSessionPlugin,
   setProjectAutoMerge,
+  setProjectHarness,
   setProjectKey,
   setProjectRuntime,
   setReceiver,
@@ -3777,6 +3779,13 @@ export function registerIpcHandlers(
     CH.configSetProjectAutoMerge,
     (_event, payload): ConfigSnapshot =>
       setProjectAutoMerge(parseSetProjectAutoMergeRequest(payload)),
+  );
+
+  /* HIVE-378. A project's default CLI for new sessions; the picker reads it from the snapshot. */
+  handle(
+    CH.configSetProjectHarness,
+    (_event, payload): ConfigSnapshot =>
+      setProjectHarness(parseSetProjectHarnessRequest(payload)),
   );
 
   /*
