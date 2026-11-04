@@ -266,6 +266,7 @@ import {
   writeFileContent,
   type FsWatchLayer,
 } from '../fs';
+import { cliCommand } from '../harness/cli-command';
 import { detectClis, rescanClis, type DetectDeps } from '../harness/detect';
 import type { PreparedFiles } from '../harness/port';
 import { adapterFor, sessionAdapter } from '../harness/registry';
@@ -4574,7 +4575,7 @@ export function registerIpcHandlers(
       await loginEnvStatus();
       return { ...process.env, ...effectiveRuntime(getConfig(), null).env };
     },
-    claudeCommand: () => effectiveRuntime(getConfig(), null).claudeCommand,
+    command: (id) => cliCommand(id, getConfig().clis, effectiveRuntime(getConfig(), null).claudeCommand),
   };
   handle(CH.harnessDetect, () => detectClis(detectDeps));
   handle(CH.harnessRescan, () => rescanClis(detectDeps));

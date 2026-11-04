@@ -336,7 +336,8 @@ describe('harness:detect, harness:rescan and config:set-cli-sessions (HIVE-375)'
     await expect(invoke(CH.harnessDetect, untrustedEvent, undefined)).rejects.toThrow();
 
     const deps = vi.mocked(detect.detectClis).mock.calls[0]![0];
-    expect(deps.claudeCommand()).toBe(snapshot.claudeCommand);
+    expect(deps.command('claude-code')).toBe(snapshot.claudeCommand);
+    expect(deps.command('codex')).toBe('codex');
     await expect(deps.env()).resolves.toMatchObject({ PATH: process.env.PATH });
     expect(vi.mocked(detect.rescanClis).mock.calls[0]![0]).toBe(deps);
   });

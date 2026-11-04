@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { detectCli, detectClis, rescanClis, resetCliDetection, runVersion, type RunVersion } from '../../../../electron/main/harness/detect';
+import type { HarnessId } from '../../../../electron/shared/harness-contract';
 
 let dir: string;
 const bin = (name: string, mode = 0o755) => {
@@ -214,7 +215,7 @@ describe('detectClis (HIVE-375)', () => {
         await gate;
         return { PATH: dir };
       },
-      claudeCommand: () => 'claude --tel',
+      command: (id: HarnessId) => (id === 'claude-code' ? 'claude --tel' : id),
       run,
     };
 
@@ -234,15 +235,28 @@ describe('detectClis (HIVE-375)', () => {
   });
 
   it('rescan drops the memo and looks again', async () => {
-    const deps = { env: async () => ({ PATH: dir }), claudeCommand: () => 'claude', run: answer({ stdout: '1.0.0' }) };
+    const deps = { env: async () => ({ PATH: dir }), command: (id: HarnessId) => (id === 'claude-code' ? 'claude' : id), run: answer({ stdout: '1.0.0' }) };
     expect((await detectClis(deps)).copilot).toEqual({ missing: '`copilot` was not found on PATH.' });
     bin('copilot');
     expect((await rescanClis(deps)).copilot).toEqual({ path: join(dir, 'copilot'), version: '1.0.0' });
   });
 
+  it('probes the configured command for each CLI (HIVE-376)', async () => {
+    bin('claude');
+    bin('codex-x');
+    bin('copilot');
+    const run = answer({ stdout: '1.2.3' });
+    const command = (id: HarnessId) => (id === 'codex' ? 'codex-x --flag' : id === 'copilot' ? 'copilot' : 'claude');
+
+    const found = await detectClis({ env: async () => ({ PATH: dir }), command, run });
+
+    expect(found.codex).toEqual({ path: join(dir, 'codex-x'), version: '1.2.3' });
+    expect(vi.mocked(run).mock.calls.map((call) => call[0])).toContain(join(dir, 'codex-x'));
+  });
+
   it('does not keep a failed read', async () => {
     const env = vi.fn().mockRejectedValueOnce(new Error('login shell')).mockResolvedValue({ PATH: dir });
-    const deps = { env, claudeCommand: () => 'claude', run: answer({}) };
+    const deps = { env, command: (id: HarnessId) => (id === 'claude-code' ? 'claude' : id), run: answer({}) };
     await expect(detectClis(deps)).rejects.toThrow('login shell');
     await expect(detectClis(deps)).resolves.toMatchObject({ codex: { missing: '`codex` was not found on PATH.' } });
   });
