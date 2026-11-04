@@ -30,6 +30,7 @@ describe('copilotAdapter', () => {
       enforcesTurns: false,
       enforcesBudget: false,
       reportsMcpStatus: false,
+      container: false,
       agentMcp: [],
       conversationId: 'argv',
       skills: { toolPrefix: 'hive-', refPrefix: '/hive:hive-', typedPrefix: '/hive:hive-', namePrefix: 'hive-', pluginRoot: null },

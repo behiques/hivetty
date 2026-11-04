@@ -635,6 +635,7 @@ describe('createDeliver', () => {
         enforcesTurns: false,
         enforcesBudget: false,
         reportsMcpStatus: false,
+        container: false,
         agentMcp: [],
         conversationId: 'argv',
         skills: { toolPrefix: 'hive-', refPrefix: '/', typedPrefix: '/', namePrefix: '', pluginRoot: '$HIVE_PLUGIN_ROOT' },

@@ -61,3 +61,11 @@ describe('context delivery', () => {
     expect(CAPABILITIES.codex.contextDelivery).toBe('prompt-marker');
   });
 });
+
+describe('containers', () => {
+  it('only Claude Code runs in a container today (HIVE-342, HIVE-343, HIVE-377)', () => {
+    expect(CAPABILITIES['claude-code'].container).toBe(true);
+    expect(CAPABILITIES.codex.container).toBe(false);
+    expect(CAPABILITIES.copilot.container).toBe(false);
+  });
+});
