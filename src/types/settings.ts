@@ -26,6 +26,8 @@ export type SettingsSection =
   | 'editor'
   | 'integrations'
   | 'notifications'
+  | 'server-mode'
+  | 'updates-about'
   | 'advanced';
 
 /**

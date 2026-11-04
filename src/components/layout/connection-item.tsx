@@ -96,16 +96,16 @@ export function ConnectionItem() {
   };
   const label = LABEL[top];
 
-  const settingsLink = (group: string) => (
+  const settingsLink = (pane: 'server-mode' | 'containers', path: string) => (
     <button
       type="button"
       onClick={() => {
         setOpen(false);
-        openSettings('advanced');
+        openSettings(pane);
       }}
       className="text-brand hover:underline"
     >
-      Settings › Advanced › {group}
+      Settings › {path}
     </button>
   );
 
@@ -116,7 +116,7 @@ export function ConnectionItem() {
       body: (
         <>
           Serving its sessions to {devices === 1 ? '1 paired device' : `${String(devices)} paired devices`} on{' '}
-          {serving}. {settingsLink('Server mode')}
+          {serving}. {settingsLink('server-mode', 'Machines › Server mode')}
         </>
       ),
     },
@@ -157,7 +157,7 @@ export function ConnectionItem() {
       title: `Exposed on ${exposed ?? ''}`,
       body: (
         <>
-          The receiver accepts connections on {exposed}, not only loopback. {settingsLink('Containers')}
+          The receiver accepts connections on {exposed}, not only loopback. {settingsLink('containers', 'Harnesses › Containers')}
         </>
       ),
     },

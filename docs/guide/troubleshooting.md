@@ -71,4 +71,4 @@ The error names the exact key, like `modes.dark.terminal.bg`. The usual cause is
 ## Still stuck
 
 [Open an issue](https://github.com/behiques/hivetty/issues) with the version from
-**Settings › Advanced › About**.
+**Settings › Updates & about**.

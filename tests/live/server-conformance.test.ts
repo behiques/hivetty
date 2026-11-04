@@ -3748,24 +3748,29 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         return el ? document.getElementById(el.htmlFor) : null;
       })()`;
       const addressField = `${FIELD('Server address')} !== null`;
+      /*
+        Reload lives in Advanced and the switch in Machines › Server mode
+        (HIVE-380), so this case walks between the two panes by nav button.
+      */
+      const PANE = (label: string): string =>
+        `[...document.querySelectorAll('[aria-label="Settings sections"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
+      const reloadIn = async (expected: RegExp, why: string): Promise<void> => {
+        await ui.evaluate(`${PANE('Advanced')}.click()`);
+        await untilUi(
+          `[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Reload')`,
+          'the Advanced pane to render its Reload control',
+        );
+        await ui.evaluate(
+          `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Reload').click()`,
+        );
+        await untilUi(`${expected.toString()}.test(document.body.innerText)`, why);
+        await ui.evaluate(`${PANE('Server mode')}.click()`);
+        await untilUi(`${SWITCH} !== null`, 'the Attach to a server switch to render');
+      };
 
       await ui.evaluate(`[...document.querySelectorAll('nav[aria-label="Places"] button')].find((b) => b.textContent.trim() === 'Settings').click()`);
-      await untilUi(
-        `[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Advanced')`,
-        'the Settings overlay to offer an Advanced section',
-      );
-      await ui.evaluate(
-        `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Advanced').click()`,
-      );
-      await untilUi(`${SWITCH} !== null`, 'the Attach to a server switch to render');
-
-      await ui.evaluate(
-        `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Reload').click()`,
-      );
-      await untilUi(
-        `/Reloaded —/.test(document.body.innerText)`,
-        'the Reload to land, so the store holds this machine’s own file',
-      );
+      await untilUi(`${PANE('Advanced')} !== undefined`, 'the Settings overlay to offer an Advanced section');
+      await reloadIn(/Reloaded —/, 'the Reload to land, so the store holds this machine’s own file');
 
       /*
         Detached to begin with, which 21g left it as — and the panel is
@@ -3836,13 +3841,11 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         projects and the server has one, which is what
         {@link clientProjectId2} exists for.
       */
-      await ui.evaluate(
-        `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Reload').click()`,
-      );
-      await untilUi(
-        `/Reloaded — 1 project[.;]/.test(document.body.innerText)`,
+      await reloadIn(
+        /Reloaded — 1 project[.;]/,
         "a Reload answered by the server, which is what puts this window in a boot-attached client's state",
       );
+      await untilUi(`/Attached to/.test(document.body.innerText)`, 'the Server mode pane to redraw as attached');
 
       /*
         What an attached client now shows, which is the whole of Ruling 29:

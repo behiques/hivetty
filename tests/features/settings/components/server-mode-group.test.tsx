@@ -594,7 +594,7 @@ describe('ServerModeGroup', () => {
   });
 
   /**
-   * The pane is never remounted (`advanced-section.tsx`'s `!snapshot` early
+   * The pane is never remounted (`server-mode-section.tsx`'s `!snapshot` early
    * return only fires before the first load), so the switch and the bind
    * drafts have to follow the snapshot the same way `ContainerAliasGroup`'s
    * do.

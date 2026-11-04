@@ -1,44 +1,26 @@
-import {
-  ArrowCircleUp,
-  ArrowClockwise,
-  FolderOpen,
-} from '@phosphor-icons/react';
+import { ArrowClockwise, FolderOpen } from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
-
-import { Button } from '@components/ui/button';
-import { Switch } from '@components/ui/switch';
 import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { ConfigResetConfirm } from '@features/settings/components/config-reset-confirm';
-import { ServerModeGroup } from '@features/settings/components/server-mode-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SettingsGroup } from '@features/shared/components/settings-group';
-import {
-  useAttachedServer,
-  useLocalRemote,
-  useProjectConfig,
-  useRemoteCapabilities,
-  useServing,
-} from '@hooks/use-project-config';
+import { useProjectConfig, useRemoteCapabilities } from '@hooks/use-project-config';
 import {
   readAppInfo,
   reloadProjectConfig,
   resetConfigToTemplate,
   revealConfigFile,
 } from '@lib/project-config';
-import { checkForUpdates, readUpdateStatus } from '@lib/updates';
 import type { AppInfo, PtyDiagnostics } from '@shared/ipc-contract';
-import type { UpdateStatus } from '@shared/update-contract';
-import { useWhatsNewPrefs } from '@stores/appearance-store';
-import { useRemoteLink } from '@stores/hive-store';
-import { useSetWhatsNewOpen } from '@stores/ui-store';
 
 /**
  * Advanced & diagnostics (story 107).
  *
- * The last of the epic's section slots, and the only one that answers questions
- * about the app rather than setting anything in it.
+ * The config file, Reset and the diagnostics: the pane that answers questions
+ * about the app rather than setting anything in it. Server mode moved to
+ * Machines, and the versions, updates and What's new to General › Updates &
+ * about (HIVE-380).
  *
  * ## Why there is a Reload button at all
  *
@@ -72,16 +54,6 @@ function fileManager(platform: string | undefined): string {
   if (platform === 'win32') return 'Reveal in Explorer';
   // Linux and everything else: there is no one file manager to name.
   return 'Show in file manager';
-}
-
-/** One label/value row — the shape every fact in this pane takes. */
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4">
-      <span className="text-control text-subtle">{label}</span>
-      <span className="truncate tabular-nums text-ui-sm text-ink">{value}</span>
-    </div>
-  );
 }
 
 /**
@@ -150,108 +122,10 @@ function PtyCounters({ rows }: { rows: readonly PtyDiagnostics[] }) {
   );
 }
 
-/**
- * One line describing where the app is in the update cycle.
- *
- * A function rather than a map, because two of the seven states need the
- * version interpolated and a map would either lose that or store a template.
- */
-function updateLine(
-  status: UpdateStatus,
-  /**
-   * Drawn by the caller, not here.
-   *
-   * This function runs on every render of the section, so a `pickPhrase` inside
-   * it would re-roll the wording while the user watched a download progress —
-   * the exact flicker `use-swarm-phrase` exists to prevent. The component holds
-   * the phrase steady and passes it down.
-   */
-  phrases: { downloading: string; ready: string },
-): string {
-  switch (status.state) {
-    case 'unsupported':
-      return `Version ${status.currentVersion}.`;
-    case 'checking':
-      return 'Checking…';
-    case 'available':
-      return `Version ${status.availableVersion} is available.`;
-    case 'downloading':
-      return `Downloading ${status.availableVersion}… · ${phrases.downloading}`;
-    case 'ready':
-      return `Version ${status.availableVersion} is ready — restart to install. · ${phrases.ready}`;
-    case 'error':
-      return 'The last check did not complete.';
-    default:
-      /**
-       * `idle` is also the state before the first check has run — thirty
-       * seconds of every launch — so "up to date" has to be earned by an actual
-       * answer from the server. Saying it unconditionally was a claim the app
-       * had not established, and it was visibly wrong in Settings while a newer
-       * release sat published.
-       */
-      return status.checked
-        ? `Version ${status.currentVersion} — up to date.`
-        : `Version ${status.currentVersion}.`;
-  }
-}
-
-/**
- * What the screen reader hears: only an answer to a check, never the steps on
- * the way or the rotating phrase (HIVE-226). Empty means "say nothing".
- */
-export function announceLine(status: UpdateStatus): string {
-  switch (status.state) {
-    case 'available':
-      return `Version ${status.availableVersion} is available.`;
-    case 'ready':
-      return `Version ${status.availableVersion} is ready — restart to install.`;
-    case 'error':
-      return 'The last check did not complete.';
-    case 'idle':
-      return status.checked ? `Version ${status.currentVersion} — up to date.` : '';
-    default:
-      return '';
-  }
-}
-
 export function AdvancedSection() {
   const snapshot = useProjectConfig();
-  const whatsNew = useWhatsNewPrefs();
-  const setWhatsNewOpen = useSetWhatsNewOpen();
   const { revealConfig } = useRemoteCapabilities();
-  /*
-    The runtime half of the attach half's state (Ruling 29). Read through the
-    shared hook rather than off `info` below, which is this section's own
-    one-shot `app:info` for the About box: that read never repeats, and this
-    value changes the moment a socket opens or closes.
-  */
-  const attachedServerName = useAttachedServer();
-  /*
-    What that attachment is doing, for the pane's status line (HIVE-150).
-    `attachedServerName` above answers *whether* this window drives another
-    machine; this answers whether that machine is reachable right now, which
-    only the status line asks.
-  */
-  const remoteLink = useRemoteLink();
-  /*
-    The third runtime-derived field the attach half needs (HIVE-144 review,
-    I3) — whether *this* process was launched to serve. Not
-    `snapshot.server.enabled` beside it, which while attached describes the
-    server's file: see `ServerModeGroupProps.serving`.
-  */
-  const serving = useServing();
-  /*
-    The only one of these that is config rather than runtime status (HIVE-149):
-    this machine's own `remote` block, for the two address fields whose subject
-    is this window. `snapshot.remote` below cannot answer them while attached,
-    because that snapshot comes from the server.
-  */
-  const localRemote = useLocalRemote();
-  const downloadingPhrase = useSwarmPhrase('loading.update');
-  const readyPhrase = useSwarmPhrase('complete.update');
   const [info, setInfo] = useState<AppInfo | null>(null);
-  const [update, setUpdate] = useState<UpdateStatus | null>(null);
-  const [checking, setChecking] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [reloaded, setReloaded] = useState<string | null>(null);
   // What the last reload read but the running app cannot apply (launch-only).
@@ -271,8 +145,8 @@ export function AdvancedSection() {
    *
    * The trap story 106 documents: every mutating verb installs a fresh
    * `ConfigSnapshot` object, so an effect depending on `snapshot` would re-run
-   * on every save. Here that would re-ask main for versions that cannot have
-   * changed, on each click of a button in this very pane.
+   * on every save. Here that would re-ask main for diagnostics on each click
+   * of a button in this very pane, which Refresh exists to do on purpose.
    */
   const hasSnapshot = snapshot !== null;
 
@@ -287,36 +161,11 @@ export function AdvancedSection() {
     void readAppInfo().then((next) => {
       if (!cancelled) setInfo(next);
     });
-    /**
-     * Re-read on mount, not on a timer.
-     *
-     * The status changes only in response to something the user did — opening
-     * this pane, pressing Check now, clicking an inbox row — and the capability
-     * probe settles within a second of launch, long before any settings pane is
-     * open. Polling would re-render for a value that is almost always identical.
-     */
-    void readUpdateStatus().then((next) => {
-      if (!cancelled) setUpdate(next);
-    });
 
     return () => {
       cancelled = true;
     };
   }, [hasSnapshot]);
-
-  /**
-   * Main raises its own dialog and this resolves once the user has answered it,
-   * so the re-read afterwards reports the state the answer produced.
-   */
-  const onCheck = useCallback(async (): Promise<void> => {
-    setChecking(true);
-    try {
-      await checkForUpdates();
-      setUpdate(await readUpdateStatus());
-    } finally {
-      setChecking(false);
-    }
-  }, []);
 
   /**
    * Report what the reload found, from the snapshot it installed.
@@ -380,7 +229,7 @@ export function AdvancedSection() {
     <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
       <SettingsSectionHeader
         title="Advanced"
-        description="The config file itself, and what this build is made of."
+        description="The config file itself, and where to look when something goes wrong."
       />
 
       {/*
@@ -454,27 +303,6 @@ export function AdvancedSection() {
         )}
       </SettingsGroup>
 
-      {/*
-        `attachedServerName` comes from the runtime, not the snapshot beside
-        it (HIVE-144, Ruling 29) — see `ServerModeGroupProps`' own two doc
-        comments for why the attach half needs both sources and which question
-        each one answers. `useLocalRemote` is the newest of them (HIVE-149):
-        the address fields describe this window, which `snapshot.remote` cannot
-        say while attached. `useAttachedServer` is the one hook that answers
-        whether a socket is open, so no two readers can disagree about it.
-      */}
-      <ServerModeGroup
-        enabled={snapshot.server.enabled}
-        bind={snapshot.server.bind}
-        devices={snapshot.server.devices}
-        remote={snapshot.remote}
-        localRemote={localRemote}
-        attachedServer={snapshot.attachedServer}
-        attachedServerName={attachedServerName}
-        serving={serving}
-        link={remoteLink}
-      />
-
       <SettingsGroup
         title="Reset"
         description="Put the file back to the commented template it started as."
@@ -497,79 +325,6 @@ export function AdvancedSection() {
             Reset to template
           </button>
         )}
-      </SettingsGroup>
-
-      <SettingsGroup title="About" description="What this build is made of.">
-        {info === null ? (
-          <p className="text-control text-subtle">Reading…</p>
-        ) : (
-          <div className="flex flex-col gap-1 rounded-lg border border-border-soft p-3">
-            <Fact label="HiveTTY" value={info.version} />
-            <Fact label="Electron" value={info.electron} />
-            <Fact label="Chromium" value={info.chrome} />
-            <Fact label="Node" value={info.node} />
-            <Fact label="Platform" value={info.platform} />
-          </div>
-        )}
-      </SettingsGroup>
-
-      <SettingsGroup
-        title="Updates"
-        description="Where a new version comes from, and whether this copy can install one."
-      >
-        {update === null ? (
-          <p className="text-control text-subtle">
-            Updates are only available in the desktop app.
-          </p>
-        ) : (
-          <>
-            <div className="flex items-center justify-between gap-2">
-              {/* Shown, not announced: the steps and the phrase change too often to read out (HIVE-226). */}
-              <p className="text-control text-muted">{updateLine(update, { downloading: downloadingPhrase, ready: readyPhrase })}</p>
-              {/* Always mounted, so a check's result is announced; empty while nothing has been answered (HIVE-225, HIVE-226). */}
-              <p role="status" data-testid="update-announce" className="sr-only">{announceLine(update)}</p>
-              <Button
-                variant="ghost"
-                disabled={!update.capability.canCheck}
-                pending={checking}
-                onClick={() => void onCheck()}
-                className="flex shrink-0 items-center gap-1.5 rounded-md border-border px-3 py-1.5 text-control leading-normal text-muted hover:bg-hover hover:text-ink disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted"
-              >
-                <ArrowCircleUp size={12} weight="bold" />
-                {checking ? 'Checking…' : 'Check now'}
-              </Button>
-            </div>
-            {/*
-              The capability sentence, always, not only when something is
-              wrong. A user whose app sends them to a web page is owed the
-              reason at the moment they wonder — and on a build that *can*
-              self-install, the same line is the reassurance that it will.
-            */}
-            <p className="text-ui-sm text-subtle">
-              {update.capability.reason}
-            </p>
-          </>
-        )}
-      </SettingsGroup>
-
-      <SettingsGroup
-        title="What’s new"
-        description="The three-slide card a new major version opens with."
-      >
-        <Switch
-          label="Show What’s new after an update"
-          checked={!whatsNew.off}
-          onCheckedChange={(on) => whatsNew.setOff(!on)}
-        />
-        <div>
-          <button
-            type="button"
-            onClick={() => setWhatsNewOpen(true)}
-            className="rounded-full border border-edge px-4 py-1.5 text-control font-semibold text-ink hover:bg-hover"
-          >
-            Open What’s new
-          </button>
-        </div>
       </SettingsGroup>
 
       <SettingsGroup

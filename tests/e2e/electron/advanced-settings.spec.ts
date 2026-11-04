@@ -47,6 +47,29 @@ const openContainers = async (page: Page): Promise<void> => {
   ).toBeVisible();
 };
 
+/** HIVE-380: Server mode left Advanced for Machines › Server mode. */
+const openServerMode = async (page: Page): Promise<void> => {
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Server mode' })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Server mode', level: 2 }),
+  ).toBeVisible();
+};
+
+/** HIVE-380: the versions and updates left Advanced for General › Updates & about. */
+const openUpdatesAbout = async (page: Page): Promise<void> => {
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Updates & about' })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Updates & about', level: 2 }),
+  ).toBeVisible();
+};
+
 /**
  * A config with one real project, a comment, and an unknown key.
  *
@@ -102,13 +125,16 @@ test('reports the config path and this build’s versions', async ({}, testInfo)
     `~/Library/Logs/Electron`, so a loose "Electron" also matches the log path
     two groups below and the assertion stops meaning what it says.
   */
-  await expect(page.getByText('Electron', { exact: true })).toBeVisible();
-  await expect(page.getByText('Chromium', { exact: true })).toBeVisible();
   await expect(page.getByText(/writes no log file/i)).toBeVisible();
 
   // Nothing has spawned in this window, so the omitted-not-empty distinction
   // main keeps must reach the screen as a sentence.
   await expect(page.getByText(/no session has run yet/i)).toBeVisible();
+
+  // The versions live in General › Updates & about since HIVE-380.
+  await openUpdatesAbout(page);
+  await expect(page.getByText('Electron', { exact: true })).toBeVisible();
+  await expect(page.getByText('Chromium', { exact: true })).toBeVisible();
 
   await app.close();
 });
@@ -514,14 +540,10 @@ test('the connection item survives the switch going loopback — it reports the 
 });
 
 /**
- * HIVE-142's Server mode group, placed after Config file and before Reset
- * (`advanced-section.tsx`); the alias group that once sat above it moved to
- * Harnesses › Containers (HIVE-377). Asserted by heading order rather than by
- * DOM position directly — Playwright has no ordinal locator for "the group
- * between these two" — which is exactly what a component landing in the
- * wrong slot would fail.
+ * HIVE-142's Server mode group has its own pane, Machines › Server mode
+ * (HIVE-380); Advanced keeps the config file, Reset and the diagnostics.
  */
-test('the Server mode group renders between Config file and Reset', async ({}, testInfo) => {
+test('the Server mode group renders on its own pane, and no longer in Advanced', async ({}, testInfo) => {
   const { configPath } = seed((name) => testInfo.outputPath(name));
   const app = await launchHive({
     userDataDir: testInfo.outputPath('user-data'),
@@ -532,15 +554,16 @@ test('the Server mode group renders between Config file and Reset', async ({}, t
 
   await openAdvanced(page);
 
-  const headings = await page.getByRole('heading', { level: 3 }).allTextContents();
-  const configFile = headings.indexOf('Config file');
-  const server = headings.indexOf('Server mode');
-  const reset = headings.indexOf('Reset');
+  await expect
+    .poll(() => page.getByRole('heading', { level: 3 }).allTextContents())
+    .toEqual(['Config file', 'Reset', 'Diagnostics']);
 
-  expect(configFile).toBeGreaterThanOrEqual(0);
-  expect(headings).not.toContain('Reaching this app');
-  expect(server).toBeGreaterThan(configFile);
-  expect(reset).toBeGreaterThan(server);
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Server mode' })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Server mode', level: 3 })).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Serve this machine' })).toBeVisible();
 
   await app.close();
 });
@@ -561,7 +584,7 @@ test('the Serve this machine switch is off, and its fields are hidden, by defaul
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openAdvanced(page);
+  await openServerMode(page);
 
   const toggle = page.getByRole('switch', { name: 'Serve this machine' });
   await expect(toggle).toBeVisible();
@@ -586,7 +609,7 @@ test('turning server mode on reveals the bind fields and writes enabled: true', 
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openAdvanced(page);
+  await openServerMode(page);
 
   await page.getByRole('switch', { name: 'Serve this machine' }).click();
 
@@ -615,7 +638,7 @@ test('the Attach to a server switch is off, and its fields are hidden, by defaul
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openAdvanced(page);
+  await openServerMode(page);
 
   const toggle = page.getByRole('switch', { name: 'Attach to a server' });
   await expect(toggle).toBeVisible();
@@ -649,7 +672,7 @@ test('the attach address field refuses a public address, and writes nothing', as
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openAdvanced(page);
+  await openServerMode(page);
 
   await page.getByRole('switch', { name: 'Attach to a server' }).click();
 
