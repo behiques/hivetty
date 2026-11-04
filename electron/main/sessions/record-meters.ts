@@ -29,7 +29,7 @@ export function createRecordMeters({
   transcriptOf: (entityId: string) => { cwd: string; sessionUuid: string } | undefined;
   adapterOf: (entityId: string) => HarnessAdapter;
 }): RecordMeters {
-  const sessions = new Map<string, { uuid: string; offset: number }>();
+  const sessions = new Map<string, { uuid: string; offset: number; metrics: SessionMetrics }>();
   /** One read in flight per session; a hook during it chains behind it. */
   const queues = new Map<string, Promise<void>>();
   /** Bumped by `drop`: a read from before it is stale. */
@@ -44,13 +44,14 @@ export function createRecordMeters({
     if (generationOf(entityId) !== generation || adapter.foldMeters === undefined || transcript === undefined) return;
     let state = sessions.get(entityId);
     if (state === undefined) {
-      state = { uuid: transcript.sessionUuid, offset: 0 };
+      state = { uuid: transcript.sessionUuid, offset: 0, metrics: {} };
       sessions.set(entityId, state);
     } else if (state.uuid !== transcript.sessionUuid) {
       // `/new`: a new file with no usage in it yet. The old context is not this conversation's;
       // limits and credits are the account's, so they stay.
       state.uuid = transcript.sessionUuid;
       state.offset = 0;
+      state.metrics = {};
       publish(entityId, { contextPct: null });
     }
     const path = adapter.record.transcriptPath(transcript.cwd, transcript.sessionUuid);
@@ -58,7 +59,8 @@ export function createRecordMeters({
     const read = await readAppended(path, state.offset);
     if (read === null || generationOf(entityId) !== generation || sessions.get(entityId) !== state) return;
     state.offset = read.offset;
-    const metrics = adapter.foldMeters(read.text.split('\n'));
+    const metrics = adapter.foldMeters(read.text.split('\n'), state.metrics);
+    state.metrics = { ...state.metrics, ...metrics };
     if (Object.keys(metrics).length > 0) publish(entityId, metrics);
   }
 

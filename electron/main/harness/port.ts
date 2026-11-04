@@ -40,8 +40,12 @@ export interface HarnessAdapter {
   foldEdits(tallies: Map<string, FileTally>, lines: readonly string[]): Map<string, FileTally>;
   /** A status-line body read into metrics; `null` for one that is not an object, which the receiver answers 400 (HIVE-239). */
   meters(body: string): SessionMetrics | null;
-  /** Record lines folded into a metrics patch, the last value each field took (`{}` for none), for a CLI with no status line (HIVE-334). */
-  foldMeters?(lines: readonly string[]): SessionMetrics;
+  /**
+   * Record lines folded into a metrics patch, for a CLI with no status line (HIVE-334). `prior` is
+   * the merge of every fold this conversation has had, so a CLI that reports per call can return
+   * running totals (HIVE-335); one that reports the latest value ignores it. `{}` for none.
+   */
+  foldMeters?(lines: readonly string[], prior: SessionMetrics): SessionMetrics;
   /**
    * Whether these record lines say the user aborted the turn (HIVE-365), for a CLI that fires no
    * hook on an Esc or a declined approval. Absent: only hooks and `answersBlock` end a turn.

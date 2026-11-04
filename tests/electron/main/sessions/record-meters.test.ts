@@ -9,6 +9,7 @@ import { foldCodexMeters } from '../../../../electron/main/harness/codex/meters'
 import type { HarnessAdapter } from '../../../../electron/main/harness/port';
 import { createRecordMeters } from '../../../../electron/main/sessions/record-meters';
 import { CH } from '../../../../electron/shared/ipc-contract';
+import type { SessionMetrics } from '../../../../electron/shared/metrics-contract';
 
 const ctx = (model: string) => JSON.stringify({ type: 'turn_context', payload: { model } }) + '\n';
 
@@ -99,5 +100,34 @@ describe('createRecordMeters (HIVE-334)', () => {
     meters.drop('sess-01');
     await pending;
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe('prior totals (HIVE-335)', () => {
+  it('hands each fold the merge of every fold before it, and a new conversation none', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hive-meters-'));
+    const file = (uuid: string) => join(dir, `${uuid}.jsonl`);
+    let transcript = { cwd: '/repo', sessionUuid: 'u1' };
+    const priors: unknown[] = [];
+    const fold = (lines: readonly string[], prior: SessionMetrics): SessionMetrics => {
+      priors.push(prior);
+      return { tokensIn: (prior.tokensIn ?? 0) + lines.filter(Boolean).length };
+    };
+    const adapter = {
+      ...claudeCodeAdapter,
+      record: { ...claudeCodeAdapter.record, transcriptPath: (_c: string, u: string) => file(u) },
+      foldMeters: fold,
+    } as HarnessAdapter;
+    const send = vi.fn();
+    const meters = createRecordMeters({ send, transcriptOf: () => transcript, adapterOf: () => adapter });
+    writeFileSync(file('u1'), 'a\n');
+    await meters.onHook('sess-01');
+    appendFileSync(file('u1'), 'b\nc\n');
+    await meters.onHook('sess-01');
+    expect(send).toHaveBeenLastCalledWith(CH.sessionMetrics, { entityId: 'sess-01', metrics: { tokensIn: 3 } });
+    writeFileSync(file('u2'), 'x\n');
+    transcript = { cwd: '/repo', sessionUuid: 'u2' };
+    await meters.onHook('sess-01');
+    expect(priors).toEqual([{}, { tokensIn: 1 }, {}]);
   });
 });
