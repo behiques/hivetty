@@ -179,9 +179,9 @@ describe('the snapshot (HIVE-341)', () => {
     const snapshot = reloadConfig();
 
     expect(snapshot.clis).toEqual({
-      'claude-code': { agents: { enabled: true } },
-      codex: { agents: { enabled: true } },
-      copilot: { agents: { enabled: true } },
+      'claude-code': { agents: { enabled: true }, sessions: true },
+      codex: { agents: { enabled: true }, sessions: true },
+      copilot: { agents: { enabled: true }, sessions: true },
     });
     expect(snapshot.agentsDefaultCli).toBeUndefined();
   });
@@ -276,9 +276,9 @@ describe('the snapshot (HIVE-341)', () => {
 
   it('an empty snapshot has every CLI enabled', () => {
     expect(emptySnapshot('/tmp/config.json').clis).toEqual({
-      'claude-code': { agents: { enabled: true } },
-      codex: { agents: { enabled: true } },
-      copilot: { agents: { enabled: true } },
+      'claude-code': { agents: { enabled: true }, sessions: true },
+      codex: { agents: { enabled: true }, sessions: true },
+      copilot: { agents: { enabled: true }, sessions: true },
     });
   });
 });

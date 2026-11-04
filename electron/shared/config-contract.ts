@@ -1331,6 +1331,8 @@ export interface ConfigSnapshot {
   clis: ClisConfig;
   /** "Default CLI for agents" (HIVE-341). Absent: resolution falls back to `claude-code`. */
   agentsDefaultCli?: HarnessId;
+  /** HIVE-375. The CLI a new session starts with; absent means claude-code. */
+  sessionsDefaultCli?: HarnessId;
   /**
    * Whether sessions authenticate on the Claude.ai plan (HIVE-79).
    *
