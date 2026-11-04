@@ -66,6 +66,7 @@ describe('SettingsOverlay', () => {
       'Copilot',
       'Skills',
       'Agents',
+      'Ticket workflow',
       'Appearance',
       'Integrations',
       'Advanced',
@@ -105,7 +106,7 @@ describe('SettingsOverlay', () => {
       ),
     ).toEqual([
       ['Overview', 'Claude Code', 'Codex', 'Copilot', 'Shell & environment', 'Containers'],
-      ['Agents', 'Skills'],
+      ['Agents', 'Skills', 'Ticket workflow'],
       ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
       ['Advanced'],
     ]);
@@ -123,6 +124,7 @@ describe('SettingsOverlay', () => {
     ['containers', 'Containers'],
     ['agents', 'Agents'],
     ['skills', 'Skills'],
+    ['ticket-workflow', 'Ticket workflow'],
     ['projects', 'Projects'],
     ['appearance', 'Appearance'],
     ['editor', 'Editor'],
@@ -176,11 +178,11 @@ describe('SettingsOverlay', () => {
 
     await user.keyboard('{ArrowUp}');
 
-    const skills = within(nav).getByRole('button', { name: 'Skills' });
-    expect(skills).toHaveFocus();
-    expect(skills).toHaveAttribute('aria-current', 'page');
-    expect(skills).toHaveAttribute('tabindex', '0');
-    expect(screen.getByRole('heading', { name: 'Skills', level: 2 })).toBeInTheDocument();
+    const workflow = within(nav).getByRole('button', { name: 'Ticket workflow' });
+    expect(workflow).toHaveFocus();
+    expect(workflow).toHaveAttribute('aria-current', 'page');
+    expect(workflow).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('heading', { name: 'Ticket workflow', level: 2 })).toBeInTheDocument();
 
     await user.keyboard('{ArrowDown}{ArrowDown}');
     expect(within(nav).getByRole('button', { name: 'Appearance' })).toHaveFocus();

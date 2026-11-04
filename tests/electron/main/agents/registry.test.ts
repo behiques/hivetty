@@ -175,6 +175,17 @@ describe('list', () => {
     expect(byName.get('plain')).not.toHaveProperty('lane');
   });
 
+  it('carries the CLIs a definition names, in order, and none when it names none (HIVE-379)', async () => {
+    seed('multi', GOOD.replace('slack-watcher', 'multi').replace('icon: ChatCircleDots', 'icon: ChatCircleDots\nharness: [codex, claude-code]'));
+    seed('plain', GOOD.replace('slack-watcher', 'plain'));
+
+    const { agents } = await registry().list();
+    const byName = new Map(agents.map((agent) => [agent.name, agent]));
+
+    expect(byName.get('multi')?.harness).toEqual(['codex', 'claude-code']);
+    expect(byName.get('plain')).not.toHaveProperty('harness');
+  });
+
   it('names the offending field in the invalid reason', async () => {
     seed('broken', GOOD.replace('slack-watcher', 'broken').replace('icon: ChatCircleDots', 'icon: ChatCircleDots\nnope: 1'));
 
