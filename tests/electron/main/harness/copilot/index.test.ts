@@ -14,6 +14,7 @@ import { launchCopilotHeadless } from '../../../../../electron/main/harness/copi
 import { readCopilotHeadless } from '../../../../../electron/main/harness/copilot/headless-reader';
 import { readCopilotHook } from '../../../../../electron/main/harness/copilot/hooks';
 import { launchCopilotSession } from '../../../../../electron/main/harness/copilot/launch';
+import { foldCopilotMeters } from '../../../../../electron/main/harness/copilot/meters';
 import { copilotRecordAborted } from '../../../../../electron/main/harness/copilot/record';
 
 describe('copilotAdapter', () => {
@@ -35,6 +36,12 @@ describe('copilotAdapter', () => {
       conversationId: 'argv',
       skills: { toolPrefix: 'hive-', refPrefix: '/hive:hive-', typedPrefix: '/hive:hive-', namePrefix: 'hive-', pluginRoot: null },
     });
+  });
+
+  it('reads its meters from its OTel export (HIVE-335)', () => {
+    expect(copilotAdapter.meterExport).toBe(true);
+    expect(copilotAdapter.foldMeters).toBe(foldCopilotMeters);
+    expect(copilotAdapter.meters('{}')).toBeNull(); // still no status line: /statusline stays 404
   });
 
   it("names where it reads the user's Copilot skills (HIVE-362)", () => {

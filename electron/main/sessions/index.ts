@@ -13,7 +13,7 @@ import {
   type ProjectConfig,
 } from '@shared/config-contract';
 import type { PrLookup, PrLookupReply } from '@shared/github-contract';
-import { CAPABILITIES, type HarnessId, type StatusSignal } from '@shared/harness-contract';
+import { CAPABILITIES, HARNESS_IDS, type HarnessId, type StatusSignal } from '@shared/harness-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   type IdleDetail,
@@ -79,6 +79,7 @@ import { EXIT_COMMAND } from './exit-command';
 import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
 import { archiveStaleBriefs } from './goal-briefs';
 import type { SessionHistory } from './history';
+import { meterExportPath, sweepMeterExports } from './meter-exports';
 import { createRecordAborts } from './record-aborts';
 import { createRecordMeters } from './record-meters';
 import { createSessionRegistry, type SessionRegistry } from './registry';
@@ -748,6 +749,11 @@ export function createSessions(options: SessionsOptions): Sessions {
     const harness = harnesses.harnessOf(entityId);
     return harness === undefined ? sessionAdapter() : harnesses.adapterFor(harness);
   };
+  /** A `meterExport` session's telemetry file (HIVE-335); `null` for every other CLI. */
+  const exportPathFor = (harness: HarnessId, entityId: string): string | null =>
+    harnessStateDir !== undefined && harnesses.adapterFor(harness).meterExport === true
+      ? meterExportPath(harnessStateDir(harness), entityId)
+      : null;
 
   function settleCommand(entityId: string, result: CommandExit): void {
     const onExit = commandExit.get(entityId);
@@ -921,6 +927,10 @@ export function createSessions(options: SessionsOptions): Sessions {
     send,
     transcriptOf: (entityId) => transcripts.get(entityId),
     adapterOf,
+    exportPathOf: (entityId) => {
+      const harness = harnesses.harnessOf(entityId);
+      return harness === undefined ? null : exportPathFor(harness, entityId);
+    },
   });
 
   /** A turn the user aborted with no hook to say so, from the CLI's own record (HIVE-365). */
@@ -1121,6 +1131,14 @@ export function createSessions(options: SessionsOptions): Sessions {
    * on it, and its own failure path is non-fatal.
    */
   void skills?.sync();
+
+  /* HIVE-335: an export outlives its session's end (a resume appends to it) but not its history row. */
+  if (harnessStateDir !== undefined && history !== undefined) {
+    const keep = new Set(history.all().map((record) => record.id));
+    for (const id of HARNESS_IDS) {
+      if (harnesses.adapterFor(id).meterExport === true) void sweepMeterExports(harnessStateDir(id), keep);
+    }
+  }
 
   void hooks?.start({
     knowsSession: (entityId) => registry.sessionFor(entityId) !== undefined,
@@ -2606,6 +2624,7 @@ export function createSessions(options: SessionsOptions): Sessions {
      * story at all — so a session started as Haiku with low effort opened as
      * Opus and said so on the meta bar.
      */
+    const exportPath = exportPathFor(harness, request.entityId);
     const plan = adapter.launch({
       // Claude's `claudeCommand`, the others' `clis.<id>.command`, else the bare name (HIVE-376).
       command: cliCommand(harness, snapshot.clis, runtime.claudeCommand),
@@ -2674,6 +2693,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       ...(harnessStateDir === undefined || harness === 'claude-code'
         ? {}
         : { stateDir: harnessStateDir(harness) }),
+      ...(exportPath === null ? {} : { exportPath }),
       /*
         One file for every session since HIVE-82: nothing in it varies by
         theme any more, because Claude's is pinned to `dark-ansi` and the
@@ -2749,6 +2769,14 @@ export function createSessions(options: SessionsOptions): Sessions {
         renameSync(partial, file.path);
       } catch (error) {
         throw new Error(`${CLI_LABELS[harness]}: could not write ${file.path}: ${(error as Error).message}`);
+      }
+    }
+    // HIVE-335: Copilot writes its export into this folder and does not make it.
+    if (exportPath !== null) {
+      try {
+        mkdirSync(dirname(exportPath), { recursive: true });
+      } catch (error) {
+        throw new Error(`${CLI_LABELS[harness]}: could not create ${dirname(exportPath)}: ${(error as Error).message}`);
       }
     }
 

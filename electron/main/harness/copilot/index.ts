@@ -10,6 +10,7 @@ import { readCopilotHeadless } from './headless-reader';
 import { readCopilotHook } from './hooks';
 import { createCopilotInstalled } from './installed';
 import { launchCopilotSession } from './launch';
+import { foldCopilotMeters } from './meters';
 import { copilotRecord, copilotRecordAborted } from './record';
 import { copilotSkills } from './skills';
 
@@ -55,6 +56,9 @@ export const copilotAdapter: HarnessAdapter = {
   promptMarker: claudeCodeAdapter.promptMarker,
   foldEdits: () => new Map(),
   meters: () => null,
+  // HIVE-335: no status line; its OTel export, summed. `foldMeters` also keeps `/statusline` 404.
+  foldMeters: foldCopilotMeters,
+  meterExport: true,
   record: copilotRecord(),
   installed: createCopilotInstalled(),
   skills: copilotSkills,
