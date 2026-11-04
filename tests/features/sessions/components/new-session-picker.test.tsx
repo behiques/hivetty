@@ -2,12 +2,14 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CLI_VOCAB, type CliModel } from '@shared/cli-contract';
+import { CLI_VOCAB, type CliModel, COPILOT_MODELS } from '@shared/cli-contract';
 import {
   emptySnapshot,
   type ConfigSnapshot,
   type ProjectStatus,
 } from '@shared/config-contract';
+import type { HarnessId } from '@shared/harness-contract';
+import { ticketStart } from '@shared/ticket-workflow';
 
 import { NewSessionPicker } from '@features/sessions/components/new-session-picker';
 import {
@@ -1197,5 +1199,136 @@ describe('NewSessionPicker and the CLIs on this machine (HIVE-375)', () => {
 
       expect(spawned).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+/**
+ * A project's own default CLI (HIVE-378): each row starts on its project's CLI unless one was picked this run,
+ * the dock follows a single search match, and a ticket's first message is typed for the row's CLI.
+ */
+describe('NewSessionPicker — per-project default CLI (HIVE-378)', () => {
+  /** Give the demo config's projects a `harness` each, by id. */
+  const withHarness = (harness: Record<string, HarnessId>) => {
+    const current = projectConfigSnapshot()!;
+    setProjectConfigForTest({
+      ...current,
+      projects: current.projects.map((project) =>
+        harness[project.id] === undefined ? project : { ...project, harness: harness[project.id] },
+      ),
+    });
+  };
+  /** A search result row, not the pinned pill: its name leads with the key chip and carries a count. */
+  const resultRow = (id: string) => rowsFor(new RegExp(`^[a-z]{2} ${id} .*active$`))[0]!;
+  const cliRadio = (name: RegExp) => within(screen.getByRole('radiogroup', { name: 'cli' })).getByRole('radio', { name });
+  // A spy, as the ticket-workflow block above does: its own spy outlives `reset()`.
+  const spawnSession = vi.fn();
+  /** `spawnSession(project, task, cli, model, effort, ticket)`'s project, CLI and model. */
+  const spawned = () => {
+    const [project, , cli, model] = spawnSession.mock.lastCall ?? [];
+    return { project, cli, model };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useHiveStore.setState({ spawnSession });
+    useUiStore.getState().reset();
+    useUiStore.getState().openPicker();
+    resetProjectConfig();
+    seedDemoProjectConfig();
+    codexModels.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    resetProjectConfig();
+  });
+
+  it("starts a row on its project's CLI", async () => {
+    withHarness({ 'design-system': 'copilot' });
+    const user = userEvent.setup();
+    render(<NewSessionPicker />);
+
+    await user.click(resultRow('design-system'));
+    expect(spawned()).toEqual({ project: 'design-system', cli: 'copilot', model: COPILOT_MODELS[0] });
+  });
+
+  it('starts a row with no project CLI on your default', async () => {
+    withHarness({ 'design-system': 'copilot' });
+    const user = userEvent.setup();
+    render(<NewSessionPicker />);
+
+    await user.click(resultRow('nova-web'));
+    expect(spawned()).toMatchObject({ project: 'nova-web', cli: 'claude-code' });
+  });
+
+  it('the dock follows a single match, captioned, and goes back to yours when the search clears', async () => {
+    withHarness({ 'design-system': 'copilot' });
+    const user = userEvent.setup();
+    render(<NewSessionPicker />);
+
+    await user.type(search(), 'design-sys');
+    expect(cliRadio(/Copilot/)).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('Default for design-system')).toBeInTheDocument();
+
+    await user.clear(search());
+    expect(cliRadio(/Claude Code/)).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('Your default')).toBeInTheDocument();
+  });
+
+  it("this run's pick beats the project", async () => {
+    withHarness({ 'design-system': 'copilot' });
+    const user = userEvent.setup();
+    render(<NewSessionPicker />);
+
+    await user.click(cliRadio(/Codex/));
+    await user.click(resultRow('design-system'));
+    expect(spawned()).toMatchObject({ project: 'design-system', cli: 'codex' });
+  });
+
+  it('marks a row that starts on its own CLI, until something is picked this run', async () => {
+    withHarness({ 'design-system': 'copilot' });
+    const user = userEvent.setup();
+    render(<NewSessionPicker />);
+
+    expect(within(resultRow('design-system')).getByTitle('Starts on Copilot')).toBeInTheDocument();
+    expect(within(resultRow('nova-web')).queryByTitle(/Starts on/)).toBeNull();
+
+    await user.click(cliRadio(/Codex/));
+    expect(within(resultRow('design-system')).queryByTitle(/Starts on/)).toBeNull();
+  });
+
+  it("types a ticket's first message for the row's CLI", async () => {
+    const workflow = { kind: 'skill', skill: 'hive:work-on' } as const;
+    const current = projectConfigSnapshot()!;
+    setProjectConfigForTest({ ...current, jira: { ...current.jira, workflow } });
+    withHarness({ 'design-system': 'codex' });
+    useHiveStore.getState().hydrateTickets(
+      [
+        {
+          key: 'HIVE-226',
+          summary: 'Ticket workflow',
+          status: 'To Do',
+          statusCategory: 'todo',
+          issueType: 'Story',
+          priority: null,
+          assignee: null,
+          updated: '2026-10-05T00:00:00.000+0000',
+          url: 'https://example.test/HIVE-226',
+        },
+      ],
+      false,
+    );
+    useUiStore.getState().openPicker('HIVE-226');
+    const user = userEvent.setup();
+    render(<NewSessionPicker />);
+
+    await user.click(resultRow('design-system'));
+    const facts = { key: 'HIVE-226', title: 'Ticket workflow', type: 'Story', url: 'https://example.test/HIVE-226' };
+    const expected = ticketStart(workflow, facts, 'codex');
+    expect(expected.kind).toBe('message');
+    expect(spawnSession.mock.lastCall?.[1]).toBe(expected.kind === 'message' ? expected.text : null);
+    expect(spawnSession.mock.lastCall?.[1]).toMatch(/^\$hive-/);
+    expect(spawnSession.mock.lastCall?.[2]).toBe('codex');
   });
 });

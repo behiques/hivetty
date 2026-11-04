@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import type { ProjectRow as ProjectRowData } from '@/types/entity';
 
 import { Button } from '@components/ui/button';
+import { CliMark } from '@components/ui/cli-mark';
 import { Icon } from '@components/ui/icon';
 import { ProjectKey } from '@components/ui/project-key';
 import { SelectField } from '@components/ui/select-field';
@@ -21,6 +22,7 @@ import { useProjectAccess, useProjectConfig } from '@hooks/use-project-config';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { unavailableReasons } from '@lib/harness/session-cli';
 import { CLI_VOCAB, cliTakesEffort } from '@shared/cli-contract';
+import type { HarnessId } from '@shared/harness-contract';
 import { ticketStart, type TicketFacts } from '@shared/ticket-workflow';
 import {
   useProjectLiveCount,
@@ -81,10 +83,40 @@ export function NewSessionPicker() {
   const [creature] = useState(() => PICKER_CREATURES[Math.floor(Math.random() * PICKER_CREATURES.length)]!);
   const spawnSession = useSpawnSession();
   const { pickerQuery, pickerTicket } = usePickerState();
+  /*
+    Case-insensitive substring match across all three things a project answers
+    to (HIVE-94) — its key, its id and its display name. Substring here, unlike
+    the console's `resolveProjectRef`, and deliberately so: this is a search box
+    whose results the user then *clicks*, so a loose match costs a glance, where
+    the console's would spawn an agent in the wrong folder.
+  */
+  const query = pickerQuery.trim().toLowerCase();
+  const matches =
+    query === ''
+      ? projects
+      : projects.filter((project) =>
+          [project.key, project.id, project.name].some((field) =>
+            field.toLowerCase().includes(query),
+          ),
+        );
+
   // Resolved against the account's Codex models, as the quick-start buttons resolve it.
   // The CLI too (HIVE-375): the pick this run, else the configured default, else the first one available.
-  const { cli, model, effort, efforts, defaultEffort, codexModels, availability, noneAvailable, detected } =
-    useNewSessionPick(true);
+  // HIVE-378: the dock is for the single match, when there is one, so it shows what Enter would start.
+  const dockProject = matches.length === 1 ? matches[0]!.id : null;
+  const {
+    cli,
+    model,
+    effort,
+    efforts,
+    defaultEffort,
+    codexModels,
+    availability,
+    noneAvailable,
+    detected,
+    caption,
+    startFor,
+  } = useNewSessionPick(true, dockProject);
   /** Nothing can run, and detection has said so: the fallback CLI would not start (HIVE-375). Not before it answers. */
   const blocked = noneAvailable && detected;
   const ticket = useTicket(pickerTicket);
@@ -139,23 +171,6 @@ export function NewSessionPicker() {
       });
   };
 
-  /*
-    Case-insensitive substring match across all three things a project answers
-    to (HIVE-94) — its key, its id and its display name. Substring here, unlike
-    the console's `resolveProjectRef`, and deliberately so: this is a search box
-    whose results the user then *clicks*, so a loose match costs a glance, where
-    the console's would spawn an agent in the wrong folder.
-  */
-  const query = pickerQuery.trim().toLowerCase();
-  const matches =
-    query === ''
-      ? projects
-      : projects.filter((project) =>
-          [project.key, project.id, project.name].some((field) =>
-            field.toLowerCase().includes(query),
-          ),
-        );
-
   // Always a project **id** — the rows carry it, and `spawnSession` stores it
   // on the entity (HIVE-94).
   const spawn = (projectId: string, empty = false) => {
@@ -174,7 +189,20 @@ export function NewSessionPicker() {
     //
     // From a ticket, the first message is the workflow's (or the edit made
     // here); ⌥↵ and the wake card's projects start empty.
-    spawnSession(projectId, empty || wake !== null ? '' : firstMessage.trim(), cli, model, effort, pickerTicket ?? undefined);
+    //
+    // Each row starts on its own project's CLI unless one was picked this run (HIVE-378), and a ticket's first
+    // message is typed for that CLI: Codex's skills are `$hive-…`, Claude's `/hive:…`. An edit is sent as written.
+    const row = startFor(projectId);
+    const rowStart = facts === null ? null : ticketStart(workflow, facts, row.cli);
+    const message = edited ?? (rowStart?.kind === 'message' ? rowStart.text : '');
+    spawnSession(
+      projectId,
+      empty || wake !== null ? '' : message.trim(),
+      row.cli,
+      row.model,
+      row.effort,
+      pickerTicket ?? undefined,
+    );
   };
 
   return (
@@ -247,7 +275,12 @@ export function NewSessionPicker() {
             </div>
 
             {/* The CLI first, under the title (variant F): it decides what the rest of the form offers. */}
-            <CliDock value={cli} onChange={setNewCli} unavailable={unavailableReasons(availability)} />
+            <CliDock
+              value={cli}
+              onChange={setNewCli}
+              unavailable={unavailableReasons(availability)}
+              caption={caption}
+            />
             {blocked ? (
               <p role="alert" className="text-center text-control text-red">
                 {NONE_AVAILABLE}
@@ -427,14 +460,19 @@ export function NewSessionPicker() {
                 </p>
               </div>
             ) : (
-              matches.map((project) => (
-                <ProjectRow
-                  key={project.id}
-                  project={project}
-                  blocked={blocked}
-                  onSelect={spawn}
-                />
-              ))
+              matches.map((project) => {
+                // The row's own CLI, marked only when it is the project's (HIVE-378): a run pick starts every row.
+                const rowStart = startFor(project.id);
+                return (
+                  <ProjectRow
+                    key={project.id}
+                    project={project}
+                    blocked={blocked}
+                    onSelect={spawn}
+                    startsOn={rowStart.source === 'project' ? rowStart.cli : undefined}
+                  />
+                );
+              })
             )}
           </div>
         </div>
@@ -499,10 +537,13 @@ function ProjectRow({
   project,
   blocked,
   onSelect,
+  startsOn,
 }: {
   project: ProjectRowData;
   blocked: boolean;
   onSelect: (id: string) => void;
+  /** The project's own CLI, when the row starts on it rather than on this run's pick (HIVE-378). */
+  startsOn?: HarnessId;
 }) {
   /*
     Destructured here rather than threaded in as four primitives, which is what
@@ -550,6 +591,12 @@ function ProjectRow({
         that cannot be started has nothing useful to say about how many
         sessions it is running (story 090).
       */}
+      {/* `CliMark` is `aria-hidden` and takes no title, so the span carries it (HIVE-378). */}
+      {startsOn === undefined ? null : (
+        <span title={`Starts on ${CLI_NAMES[startsOn]}`} className="shrink-0 text-subtle">
+          <CliMark cli={startsOn} className="size-3.5" />
+        </span>
+      )}
       <span className="shrink-0 tabular-nums text-micro text-subtle">
         {access.spawnable ? `${live} active` : 'unmapped'}
       </span>
