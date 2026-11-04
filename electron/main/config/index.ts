@@ -2,9 +2,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 
 import {
+  type RawClis,
   resolveClis,
   type SetAgentsDefaultCliRequest,
   type SetCliAgentsRequest,
+  type SetCliSessionsRequest,
 } from '@shared/cli-contract';
 import {
   DEFAULT_BIND,
@@ -43,6 +45,7 @@ import {
   type SetSlackRequest,
   DEFAULT_DISABLED_SESSION_PLUGINS,
 } from '@shared/config-contract';
+import { HARNESS_IDS } from '@shared/harness-contract';
 import { resolveNotificationPrefs } from '@shared/notification-contract';
 import type { TicketWorkflow } from '@shared/ticket-workflow';
 
@@ -1284,6 +1287,36 @@ export function setAgentsDefaultCli({ cli }: SetAgentsDefaultCliRequest): Config
     writeConfig((draft) => {
       const { agentsDefaultCli: _old, ...rest } = draft;
       return cli === null ? rest : { ...rest, agentsDefaultCli: cli };
+    }),
+  );
+}
+
+export const LAST_CLI_ON = 'At least one CLI must stay on for sessions.';
+
+/**
+ * Which CLIs sessions may use, and the one they start with (HIVE-375). `true` deletes the key because absent means on;
+ * `null` deletes the default. Every other key under `clis.<id>` survives. A write that would leave every CLI off is
+ * refused before anything is written (D3).
+ */
+export function setCliSessions(request: SetCliSessionsRequest): ConfigSnapshot {
+  return commit(
+    writeConfig((draft) => {
+      const clis = objectOrEmpty(draft.clis);
+      const next: Record<string, unknown> = { ...clis };
+      for (const [id, on] of Object.entries(request.sessions ?? {})) {
+        const { sessions: _old, ...cli } = objectOrEmpty(clis[id]);
+        next[id] = on ? cli : { ...cli, sessions: false };
+      }
+      const resolved = resolveClis(next as RawClis);
+      if (HARNESS_IDS.every((id) => !resolved[id].sessions)) throw new WriteRefused(LAST_CLI_ON);
+
+      const { sessionsDefaultCli: oldDefault, ...rest } = draft;
+      const defaultCli = request.defaultCli === undefined ? oldDefault : request.defaultCli;
+      return {
+        ...rest,
+        clis: next,
+        ...(defaultCli === null || defaultCli === undefined ? {} : { sessionsDefaultCli: defaultCli }),
+      };
     }),
   );
 }

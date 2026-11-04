@@ -17,6 +17,7 @@ import {
   HEADLESS_SANDBOXES,
   type ClearCliTokenRequest,
   type SetAgentsDefaultCliRequest,
+  type SetCliSessionsRequest,
   type SetCliAgentsRequest,
   type SetCliTokenRequest,
 } from './cli-contract';
@@ -1867,6 +1868,29 @@ export function parseSetAgentsDefaultCliRequest(input: unknown): SetAgentsDefaul
   return {
     cli: raw.cli === null ? null : assertOneOf(raw.cli, HARNESS_IDS, 'setAgentsDefaultCli.cli'),
   };
+}
+
+/** Which CLIs sessions may use and the default (HIVE-375). Both fields optional; `defaultCli: null` clears it. */
+export function parseSetCliSessionsRequest(input: unknown): SetCliSessionsRequest {
+  const raw = assertShape(input, [], 'setCliSessions', ['sessions', 'defaultCli']);
+  const out: SetCliSessionsRequest = {};
+  if (raw.sessions !== undefined) {
+    if (typeof raw.sessions !== 'object' || raw.sessions === null || Array.isArray(raw.sessions)) {
+      return fail('setCliSessions.sessions: expected an object');
+    }
+    const sessions: Partial<Record<HarnessId, boolean>> = {};
+    for (const [id, on] of Object.entries(raw.sessions as Record<string, unknown>)) {
+      const cli = assertOneOf(id, HARNESS_IDS, 'setCliSessions.sessions');
+      if (typeof on !== 'boolean') return fail(`setCliSessions.sessions.${cli}: expected a boolean`);
+      sessions[cli] = on;
+    }
+    out.sessions = sessions;
+  }
+  if (raw.defaultCli !== undefined) {
+    out.defaultCli =
+      raw.defaultCli === null ? null : assertOneOf(raw.defaultCli, HARNESS_IDS, 'setCliSessions.defaultCli');
+  }
+  return out;
 }
 
 /** The token, on its way to `safeStorage`. The first payload carrying a secret. */

@@ -9,6 +9,7 @@ import {
   reloadConfig,
   setAgentsDefaultCli,
   setCliAgents,
+  setCliSessions,
 } from '../../../../electron/main/config';
 import { parseConfig } from '../../../../electron/main/config/parse';
 import { CONFIG_PATH_ENV, emptySnapshot } from '../../../../electron/shared/config-contract';
@@ -280,6 +281,42 @@ describe('the snapshot (HIVE-341)', () => {
       codex: { agents: { enabled: true }, sessions: true },
       copilot: { agents: { enabled: true }, sessions: true },
     });
+  });
+
+  it('writes sessions and the default, keeping agents and unknown keys (HIVE-375)', () => {
+    writeFileSync(
+      process.env[CONFIG_PATH_ENV]!,
+      JSON.stringify({ version: 2, projects: [], future: 1, clis: { codex: { agents: { model: 'gpt-6-luna' } } } }),
+    );
+    reloadConfig();
+
+    let snapshot = setCliSessions({ sessions: { codex: false }, defaultCli: 'copilot' });
+    expect(snapshot.clis.codex.sessions).toBe(false);
+    expect(snapshot.sessionsDefaultCli).toBe('copilot');
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8'))).toMatchObject({
+      future: 1,
+      sessionsDefaultCli: 'copilot',
+      clis: { codex: { sessions: false, agents: { model: 'gpt-6-luna' } } },
+    });
+
+    snapshot = setCliSessions({ sessions: { codex: true } });
+    expect(snapshot.sessionsDefaultCli).toBe('copilot');
+    snapshot = setCliSessions({ sessions: { codex: true }, defaultCli: null });
+    const file = JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8'));
+    expect(file.clis.codex).toEqual({ agents: { model: 'gpt-6-luna' } });
+    expect(file).not.toHaveProperty('sessionsDefaultCli');
+    expect(snapshot.clis.codex.sessions).toBe(true);
+  });
+
+  it('refuses to turn the last CLI off, and writes nothing (HIVE-375)', () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({ clis: { codex: { sessions: false } } }));
+    reloadConfig();
+    const before = readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8');
+
+    const snapshot = setCliSessions({ sessions: { 'claude-code': false, copilot: false } });
+    expect(snapshot.errors).toEqual([expect.stringContaining('At least one CLI must stay on for sessions.')]);
+    expect(snapshot.clis['claude-code'].sessions).toBe(true);
+    expect(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).toBe(before);
   });
 
   it('carries sessionsDefaultCli and each CLI’s sessions into the snapshot (HIVE-375)', () => {
