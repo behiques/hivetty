@@ -85,10 +85,40 @@ describe('foldCopilotMeters context (HIVE-335 follow-up)', () => {
     });
   });
 
-  it('ignores a subagent’s own context: its invoke_agent is nested under a tool call', () => {
-    expect(
-      foldCopilotMeters([agentSpan([[20_000, 200_000]]), agentSpan([[190_000, 200_000]], 'abc123')]),
-    ).toMatchObject({ contextPct: 10 });
+  it('ignores a subagent’s context, which 1.0.105 writes on the main span while the subagent runs', () => {
+    // Live run: the main span's usage_info reads 19360/272000, then the explore agent's 4747/200000
+    // (inside `invoke_agent explore`'s window), then the main agent's closing 19640/272000.
+    const subagent = readFileSync(join(__dirname, '../../../../fixtures/copilot/otel-1.0.105/subagent.jsonl'), 'utf8').split('\n');
+    expect(foldCopilotMeters(subagent)).toMatchObject({ contextPct: 7, contextWindow: 272000 });
+  });
+
+  it('a turn that ends inside its subagent keeps the main agent’s last reading', () => {
+    // Aborted mid-subagent: no closing call, so the subagent's event is the last one on the main span.
+    const at = (sec: number): [number, number] => [sec, 0];
+    const main = JSON.stringify({
+      type: 'span',
+      traceId: 't1',
+      attributes: { 'gen_ai.operation.name': 'invoke_agent' },
+      events: [
+        { name: 'github.copilot.session.usage_info', time: at(10), attributes: { 'github.copilot.token_limit': 272_000, 'github.copilot.current_tokens': 27_200 } },
+        { name: 'github.copilot.session.usage_info', time: at(21), attributes: { 'github.copilot.token_limit': 200_000, 'github.copilot.current_tokens': 150_000 } },
+      ],
+    });
+    const nested = JSON.stringify({
+      type: 'span',
+      traceId: 't1',
+      parentSpanId: 'tool',
+      startTime: at(20),
+      endTime: at(30),
+      attributes: { 'gen_ai.operation.name': 'invoke_agent' },
+      events: [],
+    });
+    expect(foldCopilotMeters([nested, main])).toMatchObject({ contextPct: 10, contextWindow: 272_000 });
+    // Another trace's subagent says nothing about this one.
+    expect(foldCopilotMeters([nested.replace('"t1"', '"t2"'), main])).toMatchObject({ contextPct: 75 });
+  });
+
+  it('a nested invoke_agent’s own events are never the session’s', () => {
     expect(foldCopilotMeters([agentSpan([[190_000, 200_000]], 'abc123')])).toEqual({});
   });
 
