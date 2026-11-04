@@ -2,6 +2,7 @@ import { CheckCircle, WarningCircle } from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { CliMark } from '@/components/ui/cli-mark';
+import { SelectField } from '@/components/ui/select-field';
 import { Switch } from '@/components/ui/switch';
 import { TextField } from '@/components/ui/text-field';
 
@@ -9,15 +10,29 @@ import { CommandDiagnosticView } from '@features/settings/components/command-dia
 import { CopilotToken, HarnessAgentsGroup } from '@features/settings/components/harness-agents-group';
 import { HarnessCapabilities } from '@features/settings/components/harness-capabilities';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
+import { CodexModelField } from '@features/shared/components/codex-model-field';
+import { OptionStepper } from '@features/shared/components/option-stepper';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useCliDetection } from '@hooks/use-cli-detection';
+import { useCodexModels } from '@hooks/use-codex-models';
 import { useAttachedServer, useProjectConfig } from '@hooks/use-project-config';
 import { readCliSignIn } from '@lib/cli-sign-in';
 import { CLI_NAMES } from '@lib/harness/cli-names';
+import { resolvePick } from '@lib/harness/session-cli';
 import { diagnoseAgentCommand, setCliConfig, setCliSessionsConfig, setRuntimeConfig } from '@lib/project-config';
-import { CLI_INSTALL_HINTS, type CliDetection, type CliSignIn } from '@shared/cli-contract';
+import {
+  CLI_INSTALL_HINTS,
+  CLI_VOCAB,
+  cliTakesEffort,
+  type CliDetection,
+  type ClisConfig,
+  type CliSignIn,
+} from '@shared/cli-contract';
 import type { CommandDiagnostic, ConfigSnapshot } from '@shared/config-contract';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
+
+/** A model list longer than this is a select, as in the picker (`new-session-picker.tsx`, HIVE-280). */
+const STEPPER_MAX = 8;
 
 const SIGN_IN_COPY: Record<HarnessId, string> = {
   'claude-code': 'The account claude reports.',
@@ -91,6 +106,7 @@ export function HarnessPage({ cli }: { cli: HarnessId }) {
         {cli === 'copilot' && <CopilotToken />}
       </SettingsGroup>
       <CommandGroup cli={cli} snapshot={snapshot} rescan={rescan} />
+      <SessionDefaultsGroup cli={cli} clis={snapshot.clis} />
       <HarnessAgentsGroup cli={cli} agents={snapshot.clis[cli].agents} />
       <HarnessCapabilities cli={cli} />
     </div>
@@ -151,6 +167,57 @@ function CommandGroup({
         }
       />
       {diagnostic ? <CommandDiagnosticView diagnostic={diagnostic} /> : null}
+    </SettingsGroup>
+  );
+}
+
+/**
+ * What the picker starts the CLI on (HIVE-376 D4, D5), with the picker's own controls (D12). The values shown are the
+ * configured default, else the built-in one. A Codex model that does not take the saved effort clears it in the same
+ * write, the agents group's `pickModel` rule.
+ */
+function SessionDefaultsGroup({ cli, clis }: { cli: HarnessId; clis: ClisConfig }) {
+  const { model, effort } = resolvePick(cli, {}, clis);
+  const { models: codexModels } = useCodexModels(cli === 'codex', true);
+  const codexPick = cli === 'codex' ? (codexModels.find((each) => each.slug === model) ?? codexModels[0]) : undefined;
+  const efforts: readonly string[] = codexPick?.efforts ?? CLI_VOCAB[cli].efforts;
+  const savedEffort = clis[cli].sessionEffort;
+
+  const pickModel = (next: string) => {
+    const nextEfforts = cli === 'codex' ? codexModels.find((each) => each.slug === next)?.efforts : undefined;
+    const stale = savedEffort !== undefined && nextEfforts !== undefined && !nextEfforts.includes(savedEffort);
+    void setCliConfig({ cli, sessionModel: next, ...(stale ? { sessionEffort: null } : {}) });
+  };
+
+  return (
+    <SettingsGroup
+      title="New sessions"
+      description={`What the picker starts ${CLI_NAMES[cli]} on. A pick you make in the picker wins until the app restarts.`}
+    >
+      <div className="flex flex-wrap items-end gap-6">
+        {cli === 'codex' && codexPick !== undefined ? (
+          <CodexModelField models={codexModels} value={codexPick.slug} onChange={pickModel} />
+        ) : CLI_VOCAB[cli].models.length > STEPPER_MAX ? (
+          <SelectField
+            className="min-w-0 flex-1"
+            label="Model"
+            value={model}
+            options={CLI_VOCAB[cli].models.map((option) => ({ value: option, label: option }))}
+            onChange={pickModel}
+          />
+        ) : (
+          <OptionStepper label="model" options={CLI_VOCAB[cli].models} value={model} onChange={pickModel} />
+        )}
+        <OptionStepper
+          label="thinking effort"
+          options={efforts}
+          value={effort}
+          onChange={(next) => void setCliConfig({ cli, sessionEffort: next })}
+          marks={codexPick === undefined ? undefined : { [codexPick.defaultEffort]: 'default' }}
+          disabled={!cliTakesEffort(cli, model)}
+          disabledReason={`not for ${model}`}
+        />
+      </div>
     </SettingsGroup>
   );
 }

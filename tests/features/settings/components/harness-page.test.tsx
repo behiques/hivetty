@@ -1,11 +1,19 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HarnessPage } from '@features/settings/components/harness-page';
+import { BUILT_IN_PICKS } from '@lib/harness/session-cli';
 import { readCliSignIn } from '@lib/cli-sign-in';
 import { CLI_NAMES } from '@lib/harness/cli-names';
-import { CLI_INSTALL_HINTS, resolveClis, type CliDetection, type ClisConfig } from '@shared/cli-contract';
+import {
+  CLI_INSTALL_HINTS,
+  COPILOT_MODELS,
+  resolveClis,
+  type CliDetection,
+  type CliModel,
+  type ClisConfig,
+} from '@shared/cli-contract';
 import { emptySnapshot, type ConfigSnapshot } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
 
@@ -36,7 +44,9 @@ vi.mock('@hooks/use-cli-detection', () => ({
   useCliDetection: () => ({ detection: detected, settled: true, rescan, rescanning: false }),
 }));
 
-vi.mock('@hooks/use-codex-models', () => ({ useCodexModels: () => ({ models: [], settled: true }) }));
+const SOL: CliModel = { slug: 'gpt-6.1-sol', description: '', defaultEffort: 'low', efforts: ['low', 'ultra'] };
+const LUNA: CliModel = { slug: 'gpt-6-luna', description: '', defaultEffort: 'medium', efforts: ['low', 'medium'] };
+vi.mock('@hooks/use-codex-models', () => ({ useCodexModels: () => ({ models: [SOL, LUNA], settled: true }) }));
 const cliTokensState = vi.fn();
 vi.mock('@lib/cli-tokens', () => ({
   cliTokensState: () => cliTokensState(),
@@ -202,5 +212,46 @@ describe('HarnessPage: the command (HIVE-376)', () => {
     view.rerender(<HarnessPage cli="copilot" />);
     await waitFor(() => expect(diagnoseAgentCommand).toHaveBeenCalledTimes(2));
     expect(screen.getByLabelText('Command')).toHaveValue('/opt/copilot');
+  });
+});
+
+describe('HarnessPage: new sessions (HIVE-376)', () => {
+  const group = () => within(screen.getByRole('heading', { name: 'New sessions' }).closest('section')!);
+
+  it('Claude: stepping the model writes sessionModel', async () => {
+    const user = userEvent.setup();
+    renderPage('claude-code');
+    await user.click(group().getByRole('radio', { name: /haiku/ }));
+    expect(setCliConfig).toHaveBeenCalledWith({ cli: 'claude-code', sessionModel: 'haiku' });
+  });
+
+  it('Copilot: selecting a model writes sessionModel', async () => {
+    const user = userEvent.setup();
+    renderPage('copilot');
+    await user.selectOptions(group().getByRole('combobox', { name: 'Model' }), COPILOT_MODELS[1]);
+    expect(setCliConfig).toHaveBeenCalledWith({ cli: 'copilot', sessionModel: COPILOT_MODELS[1] });
+  });
+
+  it('stepping the effort writes sessionEffort', async () => {
+    const user = userEvent.setup();
+    renderPage('claude-code');
+    await user.click(within(group().getByRole('radiogroup', { name: /effort/ })).getByRole('radio', { name: /^max/ }));
+    expect(setCliConfig).toHaveBeenCalledWith({ cli: 'claude-code', sessionEffort: 'max' });
+  });
+
+  it("Codex: a model that lacks the saved effort clears it in the same write", async () => {
+    const user = userEvent.setup();
+    renderPage('codex', { clis: resolveClis({ codex: { sessionModel: SOL.slug, sessionEffort: 'ultra' } }) });
+    await user.click(group().getByRole('radio', { name: /luna/ }));
+    expect(setCliConfig).toHaveBeenCalledWith({ cli: 'codex', sessionModel: LUNA.slug, sessionEffort: null });
+  });
+
+  it('shows the built-in pick with nothing configured, and the configured one when set', () => {
+    const first = renderPage('claude-code');
+    expect(group().getByRole('radio', { name: new RegExp(BUILT_IN_PICKS['claude-code'].model) })).toBeChecked();
+    first.unmount();
+
+    renderPage('copilot', { clis: resolveClis({ copilot: { sessionModel: COPILOT_MODELS[2] } }) });
+    expect(group().getByRole('combobox', { name: 'Model' })).toHaveValue(COPILOT_MODELS[2]);
   });
 });
