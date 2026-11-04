@@ -58,7 +58,8 @@ describe('SettingsOverlay', () => {
     */
     for (const present of [
       'Projects',
-      'Runtime',
+      'Shell & environment',
+      'Containers',
       'Overview',
       'Claude Code',
       'Codex',
@@ -103,7 +104,7 @@ describe('SettingsOverlay', () => {
           .map((button) => button.textContent),
       ),
     ).toEqual([
-      ['Overview', 'Claude Code', 'Codex', 'Copilot', 'Runtime'],
+      ['Overview', 'Claude Code', 'Codex', 'Copilot', 'Shell & environment', 'Containers'],
       ['Agents', 'Skills'],
       ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
       ['Advanced'],
@@ -118,7 +119,8 @@ describe('SettingsOverlay', () => {
     ['claude-code', 'Claude Code'],
     ['codex', 'Codex'],
     ['copilot', 'Copilot'],
-    ['shell', 'Runtime'],
+    ['shell', 'Shell & environment'],
+    ['containers', 'Containers'],
     ['agents', 'Agents'],
     ['skills', 'Skills'],
     ['projects', 'Projects'],
@@ -135,7 +137,7 @@ describe('SettingsOverlay', () => {
   });
 
   it.each([
-    ['runtime', 'Runtime'],
+    ['runtime', 'Shell & environment'],
     ['clis', 'Overview'],
     ['advanced', 'Advanced'],
   ] as const)('the legacy id %s opens its new pane', (legacy, label) => {

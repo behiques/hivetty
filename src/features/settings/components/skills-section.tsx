@@ -835,7 +835,7 @@ export function SkillsSection() {
 
   /*
     No snapshot is the browser demo, which has no bridge to ask and no disk to
-    write to — the same header-only shape `runtime-section.tsx` uses, and for
+    write to — the same header-only shape `shell-section.tsx` uses, and for
     the same reason: a pane of dead controls teaches the user the app is broken.
   */
   if (!snapshot) {

@@ -204,7 +204,7 @@ export function ContainerGroup({
       One accessible name for the whole block, distinct from every other group
       in this pane. `EnvEditor` accepts no aria-label prop and repeats its
       control names verbatim wherever it is used — see the comment at
-      `runtime-section.tsx:206-217`, and the test that pins it.
+      the workspace env group in `shell-section.tsx`, and the test that pins it.
     */
     <div role="group" aria-label="Container settings">
       {/*
