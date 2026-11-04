@@ -50,7 +50,7 @@ export function NewSessionLink({
 }: NewSessionLinkProps) {
   const access = useProjectAccess(projectId);
   const spawnSession = useSpawnSession();
-  const { cli, model, effort, ready, noneAvailable } = useNewSessionPick(false, projectId);
+  const { cli, model, effort, ready, noneAvailable, skipped, caption } = useNewSessionPick(false, projectId);
 
   return (
     <button
@@ -74,7 +74,10 @@ export function NewSessionLink({
         (noneAvailable
           ? 'No CLI is available for sessions'
           : ready
-            ? `Starts on ${model} · ${effort}`
+            ? // HIVE-387: the project's own CLI was skipped, so say why and what it starts on instead.
+              skipped.some((entry) => entry.source === 'project') && caption !== null
+              ? caption
+              : `Starts on ${model} · ${effort}`
             : 'Reading your Codex models…')
       }
       aria-label={`New session in ${projectName}`}

@@ -121,6 +121,24 @@ describe('NewSessionLink', () => {
     expect(lastSession()).toMatchObject({ harness: 'copilot', model: COPILOT_MODELS[0] });
   });
 
+  it("says when its project's own CLI was skipped, and what it starts on instead (HIVE-387)", async () => {
+    const base = snapshot([{ id: PROJECT, status: 'ok' }]);
+    setProjectConfigForTest({
+      ...base,
+      projects: base.projects.map((project) => ({ ...project, harness: 'copilot' })),
+      clis: resolveClis({ copilot: { sessions: false } }),
+    });
+
+    render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button')).toHaveAttribute(
+        'title',
+        "Copilot, the default for nova-web, isn't available · starting on Claude Code (your default)",
+      ),
+    );
+  });
+
   it('starts on the picker’s CLI (HIVE-279)', async () => {
     setProjectConfigForTest(snapshot([{ id: PROJECT, status: 'ok' }]));
     useUiStore.getState().setNewCli('codex');
