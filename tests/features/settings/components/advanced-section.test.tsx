@@ -4,9 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { emptySnapshot, type ConfigSnapshot } from '@shared/config-contract';
 import type { AppInfo } from '@shared/ipc-contract';
-import type { UpdateStatus } from '@shared/update-contract';
 
-import { AdvancedSection, announceLine } from '@features/settings/components/advanced-section';
+import { AdvancedSection } from '@features/settings/components/advanced-section';
 import {
   resetProjectConfig,
   setAttachedServerForTest,
@@ -37,12 +36,6 @@ vi.mock('@/lib/project-config', async (importOriginal) => {
     resetConfigToTemplate: () => resetConfigToTemplate(),
     reloadProjectConfig: () => reloadProjectConfig(),
   };
-});
-
-const readUpdateStatus = vi.fn();
-vi.mock('@/lib/updates', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/updates')>();
-  return { ...actual, readUpdateStatus: () => readUpdateStatus(), checkForUpdates: vi.fn() };
 });
 
 const CONFIG_PATH = '/Users/me/.hive/config.json';
@@ -84,7 +77,6 @@ beforeEach(() => {
   revealConfigFile.mockResolvedValue(undefined);
   resetConfigToTemplate.mockResolvedValue(undefined);
   reloadProjectConfig.mockResolvedValue([]);
-  readUpdateStatus.mockResolvedValue(null);
   install();
 });
 
@@ -256,14 +248,10 @@ describe('AdvancedSection', () => {
     expect(screen.getByText(/2 projects,/)).toBeInTheDocument();
   });
 
-  it('shows the versions and the log path, and is honest about the log', async () => {
+  it('shows the log path, and is honest about the log', async () => {
     render(<AdvancedSection />);
 
-    expect(await screen.findByText('0.1.0')).toBeInTheDocument();
-    expect(screen.getByText('38.0.0')).toBeInTheDocument();
-    expect(screen.getByText('140.0.0')).toBeInTheDocument();
-    expect(screen.getByText('22.0.0')).toBeInTheDocument();
-    expect(screen.getByText('/Users/me/Library/Logs/The Hive')).toBeInTheDocument();
+    expect(await screen.findByText('/Users/me/Library/Logs/The Hive')).toBeInTheDocument();
     expect(screen.getByText(/writes no log file/i)).toBeInTheDocument();
   });
 
@@ -348,15 +336,14 @@ describe('AdvancedSection', () => {
    * A failed channel is *not* "nothing has run" — that would assert a fact the
    * pane does not have, which is the one thing this surface must never do.
    */
-  it('says so rather than inventing versions when the channel fails', async () => {
+  it('says so rather than inventing a log path when the channel fails', async () => {
     readAppInfo.mockResolvedValue(null);
     render(<AdvancedSection />);
 
-    expect(await screen.findByText('Reading…')).toBeInTheDocument();
-    expect(screen.queryByText(/writes no log file/i)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/could not read diagnostics/i),
+      await screen.findByText(/could not read diagnostics/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/writes no log file/i)).not.toBeInTheDocument();
     // The claim it must not make: nothing was asked, so nothing is known.
     expect(screen.queryByText(/no session has run yet/i)).not.toBeInTheDocument();
   });
@@ -438,71 +425,21 @@ describe('AdvancedSection — container aliases', () => {
   });
 });
 
-/** What's new (1.0): turned back on, or opened, from here. */
-describe('AdvancedSection — What’s new', () => {
-  it('shows the switch on by default and turns future screens off and on', async () => {
-    const { useAppearanceStore } = await import('@stores/appearance-store');
-    useAppearanceStore.getState().reset();
-    const user = userEvent.setup();
+/**
+ * Server mode moved to Machines › Server mode, and the versions, updates and
+ * What's new to General › Updates & about (HIVE-380).
+ */
+describe('AdvancedSection — what moved out', () => {
+  it('keeps only the config file, reset and diagnostics', () => {
     render(<AdvancedSection />);
 
-    const toggle = screen.getByRole('switch', { name: 'Show What’s new after an update' });
-    expect(toggle).toBeChecked();
-    await user.click(toggle);
-    expect(useAppearanceStore.getState().whatsNewOff).toBe(true);
-    await user.click(toggle);
-    expect(useAppearanceStore.getState().whatsNewOff).toBe(false);
-  });
-
-  it('opens the card from Settings', async () => {
-    const { useUiStore } = await import('@stores/ui-store');
-    const user = userEvent.setup();
-    render(<AdvancedSection />);
-    await user.click(screen.getByRole('button', { name: 'Open What’s new' }));
-    expect(useUiStore.getState().whatsNewOpen).toBe(true);
-  });
-});
-
-const at = (over: Partial<UpdateStatus>): UpdateStatus => ({
-  state: 'idle',
-  checked: false,
-  currentVersion: '1.1.2',
-  availableVersion: '1.2.0',
-  percent: null,
-  capability: { canCheck: true, mode: 'self-install', reason: '' },
-  releaseUrl: 'https://example.invalid/releases',
-  error: null,
-  ...over,
-});
-
-describe('announceLine (HIVE-226)', () => {
-  it.each([
-    ['checking', at({ state: 'checking' })],
-    ['downloading', at({ state: 'downloading', percent: 40 })],
-    ['unsupported', at({ state: 'unsupported' })],
-    ['idle before any check', at({ state: 'idle', checked: false })],
-  ])('says nothing while %s', (_, status) => {
-    expect(announceLine(status)).toBe('');
-  });
-
-  it('announces each result', () => {
-    expect(announceLine(at({ state: 'idle', checked: true }))).toBe('Version 1.1.2 — up to date.');
-    expect(announceLine(at({ state: 'available' }))).toBe('Version 1.2.0 is available.');
-    expect(announceLine(at({ state: 'ready' }))).toBe('Version 1.2.0 is ready — restart to install.');
-    expect(announceLine(at({ state: 'error', error: 'offline' }))).toBe('The last check did not complete.');
-  });
-
-  it('shows the download step but announces nothing, then announces the result', async () => {
-    readUpdateStatus.mockResolvedValue(at({ state: 'downloading', percent: 40 }));
-    const { unmount } = render(<AdvancedSection />);
-    const visible = await screen.findByText(/Downloading 1\.2\.0…/);
-    expect(visible.closest('[role="status"]')).toBeNull();
-    expect(screen.getByTestId('update-announce')).toHaveTextContent(/^$/);
-    unmount();
-
-    readUpdateStatus.mockResolvedValue(at({ state: 'ready' }));
-    render(<AdvancedSection />);
-    await screen.findByText(/is ready — restart to install\. ·/);
-    expect(screen.getByTestId('update-announce')).toHaveTextContent('Version 1.2.0 is ready — restart to install.');
+    expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+      'Config file',
+      'Reset',
+      'Diagnostics',
+    ]);
+    expect(screen.queryByRole('switch', { name: 'Serve this machine' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Check now' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open What’s new' })).not.toBeInTheDocument();
   });
 });

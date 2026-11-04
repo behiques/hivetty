@@ -69,6 +69,8 @@ describe('SettingsOverlay', () => {
       'Ticket workflow',
       'Appearance',
       'Integrations',
+      'Server mode',
+      'Updates & about',
       'Advanced',
     ]) {
       expect(within(nav).getByRole('button', { name: present })).toBeInTheDocument();
@@ -87,9 +89,10 @@ describe('SettingsOverlay', () => {
 
   /**
    * The grouped nav (HIVE-374). Groups are labels, not buttons, and a group
-   * with no pane yet is absent: Machines and Account arrive with their panes.
+   * with no pane yet is absent: Account arrives with its panes. Machines
+   * arrived with Server mode (HIVE-380).
    */
-  it('reads in four groups, in the epic order, with no empty group', () => {
+  it('reads in five groups, in the epic order, with no empty group', () => {
     render(<SettingsOverlay />);
 
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
@@ -97,7 +100,7 @@ describe('SettingsOverlay', () => {
     const heading = (group: HTMLElement) =>
       document.getElementById(group.getAttribute('aria-labelledby') ?? '')?.textContent;
 
-    expect(groups.map(heading)).toEqual(['Harnesses', 'Automation', 'Workspace', 'General']);
+    expect(groups.map(heading)).toEqual(['Harnesses', 'Automation', 'Workspace', 'Machines', 'General']);
     expect(
       groups.map((group) =>
         within(group)
@@ -108,9 +111,9 @@ describe('SettingsOverlay', () => {
       ['Overview', 'Claude Code', 'Codex', 'Copilot', 'Shell & environment', 'Containers'],
       ['Agents', 'Skills', 'Ticket workflow'],
       ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
-      ['Advanced'],
+      ['Server mode'],
+      ['Updates & about', 'Advanced'],
     ]);
-    expect(within(nav).queryByText('Machines')).not.toBeInTheDocument();
     expect(within(nav).queryByText('Account')).not.toBeInTheDocument();
     expect(within(nav).queryByRole('button', { name: 'Harnesses' })).not.toBeInTheDocument();
   });
@@ -130,6 +133,8 @@ describe('SettingsOverlay', () => {
     ['editor', 'Editor'],
     ['integrations', 'Integrations'],
     ['notifications', 'Notifications'],
+    ['server-mode', 'Server mode'],
+    ['updates-about', 'Updates & about'],
     ['advanced', 'Advanced'],
   ] as const)('pane id %s renders its section', (id, title) => {
     useUiStore.getState().openSettings(id);

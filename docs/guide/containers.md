@@ -16,9 +16,7 @@ inside it.
 
 The container reaches the app through a host alias: `host.docker.internal` for Docker
 Desktop, OrbStack and Rancher; `host.containers.internal` for Podman. Set it in
-**Settings › Advanced › Containers**.
-
-![Settings › Advanced: the container host alias and server mode](../assets/guide/19-settings-advanced.png)
+**Settings › Harnesses › Containers**.
 
 ## A containerised session
 

@@ -120,7 +120,7 @@ digest of each, in the config file, and needs no keychain to check one.
 
 ## 2. Write the server block
 
-In the server's `~/.hivetty/config.json` (or in Settings, Advanced, *Serve this
+In the server's `~/.hivetty/config.json` (or in Settings, Machines, Server mode, *Serve this
 machine*, from a screen-sharing session):
 
 ```json
@@ -248,7 +248,7 @@ hivetty --devices            # who is paired
 hivetty --revoke "MacBook"   # cut one device off, at once
 ```
 
-On the client: Settings, Advanced, *Attach to a server*. Fill in *Server
+On the client: Settings, Machines, Server mode, *Attach to a server*. Fill in *Server
 address* (the exact `bind.host`), *Port*, *Device id* and *Pairing token*, then
 *Attach*. The token goes into the client's own keychain, never into its config
 file. Two refusals you may meet:

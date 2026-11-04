@@ -22,9 +22,11 @@ import { HarnessesOverviewSection } from '@features/settings/components/harnesse
 import { IntegrationsSection } from '@features/settings/components/integrations-section';
 import { NotificationsSection } from '@features/settings/components/notifications-section';
 import { ProjectsSection } from '@features/settings/components/projects-section';
+import { ServerModeSection } from '@features/settings/components/server-mode-section';
 import { ShellSection } from '@features/settings/components/shell-section';
 import { SkillsSection } from '@features/settings/components/skills-section';
 import { TicketWorkflowSection } from '@features/settings/components/ticket-workflow-section';
+import { UpdatesAboutSection } from '@features/settings/components/updates-about-section';
 import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
 
 
@@ -65,8 +67,10 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
  * and Containers took Runtime's place (HIVE-377); a project's own overrides
  * open from its row in Projects.
  *
- * Advanced sits last. It answers questions about the app rather than setting
- * anything in it, and the destructive verb in the product lives there.
+ * Machines holds what this Mac is to other machines: Server mode (HIVE-380),
+ * then Runners and Relay with their own stories. General holds Updates &
+ * about, and Advanced last: it answers questions about the app rather than
+ * setting anything in it, and the destructive verb in the product lives there.
  */
 const GROUPS: readonly {
   group: string;
@@ -101,7 +105,14 @@ const GROUPS: readonly {
       { id: 'notifications', label: 'Notifications' },
     ],
   },
-  { group: 'General', panes: [{ id: 'advanced', label: 'Advanced' }] },
+  { group: 'Machines', panes: [{ id: 'server-mode', label: 'Server mode' }] },
+  {
+    group: 'General',
+    panes: [
+      { id: 'updates-about', label: 'Updates & about' },
+      { id: 'advanced', label: 'Advanced' },
+    ],
+  },
 ];
 
 /** Every pane in nav order, for the arrow keys, which cross group lines. */
@@ -162,6 +173,8 @@ const PANES: Record<SectionId, ComponentType> = {
   editor: EditorSection,
   integrations: IntegrationsSection,
   notifications: NotificationsSection,
+  'server-mode': ServerModeSection,
+  'updates-about': UpdatesAboutSection,
   advanced: AdvancedSection,
 };
 

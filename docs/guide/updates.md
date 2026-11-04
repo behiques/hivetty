@@ -19,7 +19,7 @@ HiveTTY updates itself, but never without asking.
 
 ## Check by hand
 
-The app menu's **Check for Updates…**, or **Settings › Advanced › Updates › Check now**. Every
+The app menu's **Check for Updates…**, or **Settings › Updates & about › Check now**. Every
 outcome gets a dialog.
 
 ## What's new
@@ -27,7 +27,7 @@ outcome gets a dialog.
 After an update to a new major version, or a minor we chose to highlight, the app opens a
 three-slide **What's new** card once the splash has closed and the window has painted. Back
 and Next (or ← and →) walk it, Esc or × closes it, and it never shows twice for the same
-version. Tick **Don't show What's new again** to stop future ones. **Settings › Advanced ›
+version. Tick **Don't show What's new again** to stop future ones. **Settings › Updates & about ›
 What's new** turns them back on and opens the latest card at any time. A first launch shows
 the first-run page instead. Patch releases never show a card.
 

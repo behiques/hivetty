@@ -38,7 +38,7 @@ Short version (the runbook has every command):
 3. Start it at login with a LaunchAgent, so it restarts itself and after updates.
 
 `0.0.0.0` is refused on purpose: bind the tailnet address only. **Serve this machine** in
-**Settings › Advanced** edits the same block.
+**Settings › Server mode** edits the same block.
 
 ## Pair a device
 
@@ -55,7 +55,7 @@ the config.
 
 ## Attach from a laptop
 
-**Settings › Advanced › Attach to a server**: enter the server address, port, device id and
+**Settings › Server mode › Attach to a server**: enter the server address, port, device id and
 token, then **Attach**. The token is stored encrypted (via the Keychain) in `remote-credential.bin`, in the app's data folder.
 
 You cannot attach while sessions are running locally; the refusal lists them.

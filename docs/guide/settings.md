@@ -1,13 +1,14 @@
 # Settings
 
-Open Settings with the gear at the foot of the bar. Nine sections, top to bottom. Almost everything
-here is written to `~/.hivetty/config.json` ([The config file](configuration.md)); appearance
-and editor preferences stay on this machine.
+Open Settings with the gear at the foot of the bar. Its panes sit under Harnesses, Automation,
+Workspace, Machines and General. Almost everything here is written to `~/.hivetty/config.json`
+([The config file](configuration.md)); appearance and editor preferences stay on this machine.
 
 **On this page:** [Projects](#projects) · [Overview](#overview) ·
 [Shell & environment](#shell--environment) · [Containers](#containers) · [Skills](#skills) ·
 [Agents](#agents) · [Ticket workflow](#ticket-workflow) · [Appearance](#appearance) · [Editor](#editor) ·
-[Integrations](#integrations) · [Notifications](#notifications) · [Advanced](#advanced)
+[Integrations](#integrations) · [Notifications](#notifications) · [Server mode](#server-mode) ·
+[Updates & about](#updates--about) · [Advanced](#advanced)
 
 | Where it is stored | What |
 | --- | --- |
@@ -130,6 +131,18 @@ and [Slack](slack.md).
 
 One row per event: Off, Inbox or Both. See [The inbox](inbox.md#choosing-what-reaches-you).
 
+## Server mode
+
+Under **Machines**. **Serve this machine**, paired devices, and **Attach to a server**
+([Remote](remote.md)). While this window is attached, the bind fields and the device roster are
+the server's, and the pane says so.
+
+## Updates & about
+
+Under **General**. **About** (the HiveTTY, Electron, Chromium and Node versions, and the
+platform), **Updates › Check now** with where updates come from, and **What's new**
+([Updates](updates.md)).
+
 ## Advanced
 
 - **Config file**: its path, **Reveal in Finder**, **Reload**. The file is not watched: edit
@@ -137,10 +150,4 @@ One row per event: Off, Inbox or Both. See [The inbox](inbox.md#choosing-what-re
   the next session and agent run use them. A running session keeps what it started with, and
   the few fields read only at launch (receiver bind, server mode and bind, login environment,
   remote attach) are named under the button as needing a restart.
-- **Containers**: the host alias, and **Accept connections off loopback**
-  ([Containers](containers.md)).
-- **Server mode**: **Serve this machine**, **Attach to a server**, paired devices
-  ([Remote](remote.md)).
-- **Reset to template**, **About** (versions), **Updates › Check now**, **Diagnostics**.
-
-![Settings › Advanced](../assets/guide/19-settings-advanced.png)
+- **Reset to template**, **Diagnostics**.
