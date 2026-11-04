@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
@@ -7,6 +7,7 @@ import { strToU8, zipSync } from 'fflate';
 import { goToOvermind, openProject, overmindNewSession } from '../fixtures/places';
 
 import { launchHive, SHIPPED_SKILLS } from './fixtures/hive-app';
+import { openPane, readConfig, settingsNav } from './fixtures/settings';
 
 /** The skill folders a spec wrote: the shipped ones are seeded beside them (HIVE-162). */
 const authoredSkills = (skillsDir: string): string[] =>
@@ -512,6 +513,118 @@ test('imports a zip as a new skill, and a delete confirm is the only set of butt
     await ask.getByRole('button', { name: 'Keep editing' }).click();
     await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Delete' })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+/*
+  The write path's conformance, against the running app (HIVE-60). The unit suite proves each property against a
+  temp file; these prove the built app keeps them: nothing on launch or on a read rewrites someone's file, a failed
+  write leaves the old one, and a hand-written refusal in the file never stops the app starting.
+
+  Every seed's project carries its `key`: launch writes a missing one (`withKeys`), and that write is not the
+  property under test.
+*/
+
+const SEED_V1 = `${JSON.stringify(
+  {
+    '//': 'a comment the app must not eat',
+    version: 1,
+    futureKey: { kept: true },
+    projects: [{ id: 'nova-web', name: 'nova-web', key: 'nova', path: '/nowhere/that/exists', mine: 'kept' }],
+  },
+  null,
+  2,
+)}\n`;
+
+test('a v1 file is not rewritten by launching or browsing every pane, and the first save keeps what it does not know', async ({}, testInfo) => {
+  const { app, page, configPath } = await launchWithConfig((name) => testInfo.outputPath(name), SEED_V1);
+
+  try {
+    // Every pane, so every read-only verb behind one runs: the command diagnostic on each CLI page,
+    // integrations:status on Integrations, the notification defaults applied in memory only.
+    await openSettings(page);
+    const panes = await settingsNav(page)
+      .locator('[data-pane]')
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-pane') ?? ''));
+    expect(panes.length).toBeGreaterThan(10);
+    for (const id of panes) await openPane(page, id);
+    await openPane(page, 'integrations');
+    await expect(page.locator('[data-probing]')).toHaveCount(0);
+
+    expect(readFileSync(configPath, 'utf8')).toBe(SEED_V1);
+
+    // The first save migrates, and keeps the comment, the unknown top-level key and the entry's own key.
+    await openPane(page, 'harnesses-overview');
+    await page.getByRole('radio', { name: 'Codex is the default for new sessions' }).check();
+    await expect.poll(() => readConfig(configPath).sessionsDefaultCli).toBe('codex');
+    const after = readConfig(configPath);
+    expect(after).toMatchObject({ version: 2, '//': 'a comment the app must not eat', futureKey: { kept: true } });
+    expect(after.projects).toEqual([JSON.parse(SEED_V1).projects[0]]);
+    expect(after.notifications).toBeUndefined();
+  } finally {
+    await app.close();
+  }
+});
+
+test('a write that cannot land leaves the old file and no temp file behind', async ({}, testInfo) => {
+  const seed = `${JSON.stringify({ version: 2, shell: '/bin/sh', claudeCommand: 'claude', projects: [] }, null, 2)}\n`;
+  const { app, page, configPath } = await launchWithConfig((name) => testInfo.outputPath(name), seed);
+  const dir = dirname(configPath);
+
+  try {
+    await openPane(page, 'claude-code');
+    // The folder read-only: the temp file cannot be created, the rename cannot happen. The stand-in for a crash
+    // between the two, which no hook in the app can stage.
+    chmodSync(dir, 0o500);
+    const field = page.getByLabel('Command', { exact: true });
+    await field.fill('claude --never-lands');
+    await field.blur();
+
+    // Refused, in main's words. The CLI pages draw no `snapshot.errors` (HIVE-376 moved the field off Runtime and
+    // left that behind), so the refusal is read where a pane still draws it: Shell & environment.
+    await openPane(page, 'shell');
+    await expect(page.getByText(/previous config is unchanged/i)).toBeVisible();
+    expect(readFileSync(configPath, 'utf8')).toBe(seed);
+    expect(readdirSync(dir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+  } finally {
+    chmodSync(dir, 0o700);
+    await app.close();
+  }
+});
+
+test('a hand-written LD_PRELOAD drops the project env, and the app still launches', async ({}, testInfo) => {
+  const repo = testInfo.outputPath('nova-web');
+  mkdirSync(repo, { recursive: true });
+  const seed = `${JSON.stringify(
+    {
+      version: 2,
+      shell: '/bin/sh',
+      projects: [
+        { id: 'nova-web', name: 'nova-web', key: 'nova', path: repo, env: { LD_PRELOAD: '/tmp/evil.so', FOO: 'bar' } },
+      ],
+    },
+    null,
+    2,
+  )}\n`;
+  const { app, page, configPath } = await launchWithConfig((name) => testInfo.outputPath(name), seed);
+
+  try {
+    // Launched, and the project is listed and usable.
+    const list = await openProject(page, 'nova-web');
+    await expect(list.getByRole('button', { name: /^nova-web/ })).not.toContainText('unmapped');
+
+    // The overrides view shows no env at all: the reader refused the whole map, not just the one key.
+    await openPane(page, 'projects');
+    await page.getByRole('button', { name: 'Actions for nova-web' }).click();
+    await page.getByRole('menuitem', { name: 'Runtime overrides…' }).click();
+    const env = page.getByRole('group', { name: 'Project environment variables' });
+    await expect(env).toContainText('No variables.');
+    await expect(env).not.toContainText('LD_PRELOAD');
+
+    // Refused on read, never "fixed" on disk behind the user's back.
+    expect(readFileSync(configPath, 'utf8')).toBe(seed);
   } finally {
     await app.close();
   }
