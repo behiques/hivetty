@@ -79,12 +79,14 @@ export function useNewSessionPick(fresh = false, projectId: string | null = null
     source: choice.source,
     skipped: choice.skipped,
     caption: cliCaption(choice, projects.find((project) => project.id === projectId)?.name),
-    /** What one picker row starts on (HIVE-378): the same order, for that row's project. */
+    /** What one picker row starts on (HIVE-378): the same order, for that row's project, and what it skipped (HIVE-387). */
     startFor: (id: string) => {
       const row = choose(id);
       const cli = row.cli ?? 'claude-code';
       const { model, effort } = pickFor(cli);
-      return { cli, model, effort, source: row.source };
+      const name = projects.find((project) => project.id === id)?.name;
+      // HIVE-387: a row says when its project's own CLI was skipped, as the dock's caption does.
+      return { cli, model, effort, source: row.source, skipped: row.skipped, caption: cliCaption(row, name) };
     },
     noneAvailable: choice.cli === null,
     /** Whether detection has answered: until it has, `noneAvailable` is only the Settings switches' word. */
