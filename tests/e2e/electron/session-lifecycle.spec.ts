@@ -29,6 +29,14 @@ const SESSION = 'sess-01';
 const PROJECT = 'nova-web';
 
 /**
+ * First line of every stub: CLI detection runs `<claudeCommand> --version`
+ * (HIVE-375), and a stub that recorded that run satisfied each test's "the
+ * session ran" wait before any session existed (HIVE-386). Answer it the way a
+ * real CLI does and record nothing; only a session's own run writes a marker.
+ */
+const VERSION_ANSWER = `[ "$1" = --version ] && { echo 'stub 1.0.0'; exit 0; }\n`;
+
+/**
  * A stand-in for `claude`: records that it ran, with its cwd, then exits.
  *
  * **The exit code is load-bearing now.** The bootstrap is `claude && exit`
@@ -43,7 +51,7 @@ const PROJECT = 'nova-web';
 function writeStubCommand(path: string, marker: string, exitCode = 1): void {
   writeFileSync(
     path,
-    `#!/bin/sh\nprintf 'stub-claude-started\\n'\npwd > '${marker}'\nexit ${exitCode}\n`,
+    `#!/bin/sh\n${VERSION_ANSWER}printf 'stub-claude-started\\n'\npwd > '${marker}'\nexit ${exitCode}\n`,
     { encoding: 'utf8' },
   );
   chmodSync(path, 0o755);
@@ -61,7 +69,7 @@ function writeStubCommand(path: string, marker: string, exitCode = 1): void {
 function writeCleanStub(path: string, marker: string, shellPid: string): void {
   writeFileSync(
     path,
-    `#!/bin/sh\nprintf 'stub-claude-started\\n'\npwd > '${marker}'\necho $PPID > '${shellPid}'\nexit 0\n`,
+    `#!/bin/sh\n${VERSION_ANSWER}printf 'stub-claude-started\\n'\npwd > '${marker}'\necho $PPID > '${shellPid}'\nexit 0\n`,
     { encoding: 'utf8' },
   );
   chmodSync(path, 0o755);
@@ -80,7 +88,7 @@ function writeCleanStub(path: string, marker: string, shellPid: string): void {
  * test can keep inspecting.
  */
 function writeArgsStub(path: string, argsFile: string): void {
-  writeFileSync(path, `#!/bin/sh\nprintf '%s' "$*" > '${argsFile}'\nexit 1\n`, {
+  writeFileSync(path, `#!/bin/sh\n${VERSION_ANSWER}printf '%s' "$*" > '${argsFile}'\nexit 1\n`, {
     encoding: 'utf8',
   });
   chmodSync(path, 0o755);
