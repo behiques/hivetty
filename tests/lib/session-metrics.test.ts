@@ -295,3 +295,35 @@ describe('creditsLabel (HIVE-334)', () => {
     expect(creditsLabel({ creditsBalance: null, creditsUnlimited: null })).toBeNull();
   });
 });
+
+describe('declaredMetrics for Copilot (HIVE-335)', () => {
+  it('keeps model, tokens and AI credits, and nothing Copilot does not declare', () => {
+    expect(
+      declaredMetrics(
+        {
+          model: 'claude-sonnet-5.5',
+          effort: 'high',
+          contextPct: 40,
+          tokensIn: 61741,
+          tokensOut: 109,
+          tokensCached: 49589,
+          tokensWritten: 12146,
+          aiCredits: 3.64259,
+          creditsBalance: '5',
+        },
+        CAPABILITIES.copilot.meters,
+      ),
+    ).toEqual({
+      model: 'claude-sonnet-5.5',
+      tokensIn: 61741,
+      tokensOut: 109,
+      tokensCached: 49589,
+      tokensWritten: 12146,
+      aiCredits: 3.64259,
+    });
+  });
+  it('Claude and Codex do not gain the new kinds', () => {
+    expect(CAPABILITIES['claude-code'].meters).not.toContain('tokens');
+    expect(CAPABILITIES.codex.meters).not.toContain('aiCredits');
+  });
+});

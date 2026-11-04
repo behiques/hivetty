@@ -16,10 +16,19 @@ export const isHarnessId = (value: string): value is HarnessId =>
   (HARNESS_IDS as readonly string[]).includes(value);
 
 /**
- * The meters the session strip can show (HIVE-333). Credits joined with HIVE-334; tokens join with
- * the story that reads them.
+ * The meters the session strip can show (HIVE-333). Credits (a balance) joined with HIVE-334;
+ * tokens and AI credits (both used, session totals) with HIVE-335.
  */
-export const METER_KINDS = ['model', 'effort', 'context', 'fiveHour', 'sevenDay', 'credits'] as const;
+export const METER_KINDS = [
+  'model',
+  'effort',
+  'context',
+  'fiveHour',
+  'sevenDay',
+  'credits',
+  'tokens',
+  'aiCredits',
+] as const;
 
 /** One meter a harness reports. */
 export type MeterKind = (typeof METER_KINDS)[number];
@@ -136,7 +145,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
   },
   copilot: {
     resume: 'by-id',
-    meters: [],
+    meters: ['model', 'tokens', 'aiCredits'],
     // HIVE-362: the marker rule in COPILOT_CUSTOM_INSTRUCTIONS_DIRS gets the entry read (FINDINGS P11).
     contextDelivery: 'prompt-marker',
     reportsCostUsd: false,
