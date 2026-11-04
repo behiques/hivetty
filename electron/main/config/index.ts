@@ -6,6 +6,7 @@ import {
   resolveClis,
   type SetAgentsDefaultCliRequest,
   type SetCliAgentsRequest,
+  type SetCliRequest,
   type SetCliSessionsRequest,
 } from '@shared/cli-contract';
 import {
@@ -1317,6 +1318,22 @@ export function setCliSessions(request: SetCliSessionsRequest): ConfigSnapshot {
         clis: next,
         ...(defaultCli === null || defaultCli === undefined ? {} : { sessionsDefaultCli: defaultCli }),
       };
+    }),
+  );
+}
+
+/** One CLI's command and session defaults (HIVE-376). `null` deletes; every other key under `clis.<id>` survives. */
+export function setCli(request: SetCliRequest): ConfigSnapshot {
+  return commit(
+    writeConfig((draft) => {
+      const clis = objectOrEmpty(draft.clis);
+      const cli: Record<string, unknown> = { ...objectOrEmpty(clis[request.cli]) };
+      for (const key of ['command', 'sessionModel', 'sessionEffort'] as const) {
+        const next = request[key];
+        if (next === null) delete cli[key];
+        else if (next !== undefined) cli[key] = next;
+      }
+      return { ...draft, clis: { ...clis, [request.cli]: cli } };
     }),
   );
 }

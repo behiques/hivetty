@@ -17,6 +17,7 @@ import {
   HEADLESS_SANDBOXES,
   type ClearCliTokenRequest,
   type SetAgentsDefaultCliRequest,
+  type SetCliRequest,
   type SetCliSessionsRequest,
   type SetCliAgentsRequest,
   type SetCliTokenRequest,
@@ -1889,6 +1890,30 @@ export function parseSetCliSessionsRequest(input: unknown): SetCliSessionsReques
   if (raw.defaultCli !== undefined) {
     out.defaultCli =
       raw.defaultCli === null ? null : assertOneOf(raw.defaultCli, HARNESS_IDS, 'setCliSessions.defaultCli');
+  }
+  return out;
+}
+
+/** `config:set-cli` (HIVE-376). An empty command clears it; claude-code takes no command. */
+export function parseSetCliRequest(input: unknown): SetCliRequest {
+  const raw = assertShape(input, ['cli'], 'setCli', ['command', 'sessionModel', 'sessionEffort']);
+  const cli = assertOneOf(raw.cli, HARNESS_IDS, 'setCli.cli');
+  const out: SetCliRequest = { cli };
+  if (raw.command !== undefined) {
+    if (cli === 'claude-code') return fail('setCli.command: claude-code runs claudeCommand');
+    if (raw.command !== null && typeof raw.command !== 'string') return fail('setCli.command: expected a string');
+    const command = raw.command?.trim() ?? '';
+    out.command = command === '' ? null : command;
+  }
+  if (raw.sessionModel !== undefined) {
+    out.sessionModel =
+      raw.sessionModel === null ? null : assertModel(raw.sessionModel, cli, 'setCli.sessionModel');
+  }
+  if (raw.sessionEffort !== undefined) {
+    out.sessionEffort =
+      raw.sessionEffort === null
+        ? null
+        : assertOneOf(raw.sessionEffort, CLI_VOCAB[cli].efforts, 'setCli.sessionEffort');
   }
   return out;
 }

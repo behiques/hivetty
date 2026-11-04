@@ -214,6 +214,17 @@ export interface SetCliSessionsRequest {
 }
 
 /**
+ * Payload of `config:set-cli` (HIVE-376). `null` deletes the key; an absent field is left alone.
+ * No `command` on claude-code: it runs `claudeCommand`.
+ */
+export interface SetCliRequest {
+  cli: HarnessId;
+  command?: string | null;
+  sessionModel?: string | null;
+  sessionEffort?: string | null;
+}
+
+/**
  * Payload of `config:set-cli-agents` (HIVE-341). An absent field is left alone; `null` clears a
  * default back to the CLI's own.
  */
