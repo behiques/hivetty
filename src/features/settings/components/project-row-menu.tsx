@@ -20,6 +20,8 @@ interface ProjectRowMenuProps {
   onRename: () => void;
   onChangeKey: () => void;
   onRepoint: () => void;
+  /** Opens this project's shell, command, env and container overrides (HIVE-377). */
+  onRuntimeOverrides: () => void;
   onRemove: () => void;
   /**
    * Whether the shipper agent may merge this project's PRs without a card
@@ -67,6 +69,7 @@ export function ProjectRowMenu({
   onRename,
   onChangeKey,
   onRepoint,
+  onRuntimeOverrides,
   onRemove,
   autoMerge,
   onToggleAutoMerge,
@@ -159,6 +162,15 @@ export function ProjectRowMenu({
           onSelect={() => select(onRepoint)}
         >
           Change folder…
+        </DropdownMenuItem>
+        {/*
+          Takes focus: the overrides view replaces the whole list and focuses
+          its own Back button (HIVE-377).
+        */}
+        <DropdownMenuItem
+          onSelect={() => select(onRuntimeOverrides, true)}
+        >
+          Runtime overrides…
         </DropdownMenuItem>
 
         <DropdownMenuSeparator className="my-1 bg-border-soft" />

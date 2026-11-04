@@ -85,7 +85,7 @@ describe('ProjectsList', () => {
   });
 
   it('renders one row per entry, in the order given', () => {
-    render(<ProjectsList entries={abc} />);
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
 
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
     expect(
@@ -99,7 +99,7 @@ describe('ProjectsList', () => {
 
   describe('reordering by menu', () => {
     it('posts the whole new order when moving a row down', async () => {
-      render(<ProjectsList entries={abc} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
 
       await openMenu('a');
       await choose(/move down/i);
@@ -110,7 +110,7 @@ describe('ProjectsList', () => {
     });
 
     it('posts the whole new order when moving a row up', async () => {
-      render(<ProjectsList entries={abc} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
 
       await openMenu('c');
       await choose(/move up/i);
@@ -121,7 +121,7 @@ describe('ProjectsList', () => {
     });
 
     it('disables the move that would fall off either end', async () => {
-      render(<ProjectsList entries={abc} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
 
       await openMenu('a');
       expect(screen.getByRole('menuitem', { name: /move up/i })).toHaveAttribute(
@@ -139,7 +139,7 @@ describe('ProjectsList', () => {
 
   describe('reordering by drag', () => {
     it('reorders when a row is dropped on another', () => {
-      render(<ProjectsList entries={abc} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
       const rows = screen.getAllByRole('listitem');
 
       fireEvent.dragStart(rows[0]!);
@@ -152,7 +152,7 @@ describe('ProjectsList', () => {
     });
 
     it('writes nothing when a drag ends where it began', () => {
-      render(<ProjectsList entries={abc} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
       const rows = screen.getAllByRole('listitem');
 
       fireEvent.dragStart(rows[0]!);
@@ -173,6 +173,7 @@ describe('ProjectsList', () => {
     it('follows the pointer back up again, and can return a row to the top', () => {
       render(
         <ProjectsList
+          onRuntimeOverrides={vi.fn()}
           entries={[entry({ id: 'a' }), entry({ id: 'b' }), entry({ id: 'c' })]}
         />,
       );
@@ -193,6 +194,7 @@ describe('ProjectsList', () => {
     it('paints a live preview of where the row will land', () => {
       render(
         <ProjectsList
+          onRuntimeOverrides={vi.fn()}
           entries={[entry({ id: 'a' }), entry({ id: 'b' }), entry({ id: 'c' })]}
         />,
       );
@@ -223,7 +225,7 @@ describe('ProjectsList', () => {
      * user backed out of, so the write belongs on `drop`.
      */
     it('writes nothing when a drag is abandoned rather than dropped', () => {
-      render(<ProjectsList entries={abc} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
       const rows = screen.getAllByRole('listitem');
 
       fireEvent.dragStart(rows[0]!);
@@ -236,7 +238,7 @@ describe('ProjectsList', () => {
 
   describe('renaming', () => {
     it('writes the new name', async () => {
-      render(<ProjectsList entries={[entry({ id: 'a', name: 'Old' })]} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={[entry({ id: 'a', name: 'Old' })]} />);
 
       await openMenu('Old');
       await choose(/rename/i);
@@ -250,7 +252,7 @@ describe('ProjectsList', () => {
     });
 
     it('leaves the editor and writes nothing when cancelled', async () => {
-      render(<ProjectsList entries={[entry({ id: 'a', name: 'Old' })]} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={[entry({ id: 'a', name: 'Old' })]} />);
 
       await openMenu('Old');
       await choose(/rename/i);
@@ -263,7 +265,7 @@ describe('ProjectsList', () => {
 
   describe('re-pointing', () => {
     it('asks main for a directory and writes the one it returns', async () => {
-      render(<ProjectsList entries={[entry({ id: 'a' })]} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={[entry({ id: 'a' })]} />);
 
       await openMenu('a');
       await choose(/change folder/i);
@@ -278,7 +280,7 @@ describe('ProjectsList', () => {
     /** Cancelled dialog: nothing to write, and nothing to say. */
     it('writes nothing when the dialog is cancelled', async () => {
       chooseProjectDirectory.mockResolvedValue(null);
-      render(<ProjectsList entries={[entry({ id: 'a' })]} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={[entry({ id: 'a' })]} />);
 
       await openMenu('a');
       await choose(/change folder/i);
@@ -312,7 +314,7 @@ describe('ProjectsList', () => {
         // reads 'local' (HIVE-144 review, C1).
         setAttachedServerForTest('mini.tail1234.ts.net');
 
-        render(<ProjectsList entries={[entry({ id: 'a' })]} />);
+        render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={[entry({ id: 'a' })]} />);
         await openMenu('a');
 
         const item = screen.getByRole('menuitem', { name: /change folder/i });
@@ -334,7 +336,7 @@ describe('ProjectsList', () => {
         // reads 'local' (HIVE-144 review, C1).
         setAttachedServerForTest('mini.tail1234.ts.net');
 
-        render(<ProjectsList entries={[entry({ id: 'a' })]} />);
+        render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={[entry({ id: 'a' })]} />);
         await openMenu('a');
         await choose(/change folder/i);
 
@@ -346,7 +348,7 @@ describe('ProjectsList', () => {
 
   describe('removing', () => {
     it('removes a project with no live sessions in one click', async () => {
-      render(<ProjectsList entries={[entry({ id: 'a' })]} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={[entry({ id: 'a' })]} />);
 
       await openMenu('a');
       await choose(/remove/i);
@@ -356,7 +358,7 @@ describe('ProjectsList', () => {
     });
 
     it('confirms first when the project owns live sessions', async () => {
-      render(<ProjectsList entries={[entry({ id: 'nova-web', name: 'NOVA' })]} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={[entry({ id: 'nova-web', name: 'NOVA' })]} />);
 
       await openMenu('NOVA');
       await choose(/remove/i);
@@ -369,7 +371,7 @@ describe('ProjectsList', () => {
     });
 
     it('writes nothing when the confirmation is cancelled', async () => {
-      render(<ProjectsList entries={[entry({ id: 'nova-web', name: 'NOVA' })]} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={[entry({ id: 'nova-web', name: 'NOVA' })]} />);
 
       await openMenu('NOVA');
       await choose(/remove/i);
@@ -400,7 +402,7 @@ describe('ProjectsList', () => {
       // The fixtures are the point of this test; guard against them changing.
       expect(live).toBeGreaterThan(1);
 
-      render(<ProjectsList entries={[entry({ id: 'nova-web', name: 'NOVA' })]} />);
+      render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={[entry({ id: 'nova-web', name: 'NOVA' })]} />);
       await openMenu('NOVA');
       await choose(/remove/i);
 
@@ -431,7 +433,7 @@ describe('ProjectsList · changing a key', () => {
   const keyField = () => screen.getByRole('textbox', { name: 'Project key' });
 
   it('opens the key editor from the menu, on that row only', async () => {
-    render(<ProjectsList entries={abc} />);
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
 
     await openMenu('a');
     await choose(/change key…/i);
@@ -441,7 +443,7 @@ describe('ProjectsList · changing a key', () => {
   });
 
   it('toggles unattended merging for the row through the config (HIVE-166)', async () => {
-    render(<ProjectsList entries={abc} />);
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
     await openMenu('a');
     await userEvent.click(screen.getByRole('menuitemcheckbox', { name: /merge prs unattended/i }));
 
@@ -449,7 +451,7 @@ describe('ProjectsList · changing a key', () => {
   });
 
   it('posts the new key and closes the editor', async () => {
-    render(<ProjectsList entries={abc} />);
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
     await openMenu('a');
     await choose(/change key…/i);
 
@@ -463,7 +465,7 @@ describe('ProjectsList · changing a key', () => {
   });
 
   it('refuses a key another row already holds, and writes nothing', async () => {
-    render(<ProjectsList entries={abc} />);
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
     await openMenu('a');
     await choose(/change key…/i);
 
@@ -490,7 +492,7 @@ describe('ProjectsList · changing a key', () => {
       entry({ id: 'frontend', name: 'Frontend', key: 'fro' }),
       entry({ id: 'web', name: 'Web', key: 'we' }),
     ];
-    render(<ProjectsList entries={rows} />);
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={rows} />);
     await openMenu('Frontend');
     await choose(/change key…/i);
 
@@ -508,7 +510,7 @@ describe('ProjectsList · changing a key', () => {
     pressing Enter is a no-op rather than a refusal against itself.
   */
   it('does not treat the row’s own key as taken', async () => {
-    render(<ProjectsList entries={abc} />);
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
     await openMenu('a');
     await choose(/change key…/i);
 
@@ -519,7 +521,7 @@ describe('ProjectsList · changing a key', () => {
   });
 
   it('closes without writing when the edit is abandoned', async () => {
-    render(<ProjectsList entries={abc} />);
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={abc} />);
     await openMenu('a');
     await choose(/change key…/i);
 

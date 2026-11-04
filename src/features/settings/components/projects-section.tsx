@@ -6,6 +6,7 @@ import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 import { Button } from '@components/ui/button';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { CloneRepoView } from '@features/settings/components/clone-repo-view';
+import { ProjectOverridesView } from '@features/settings/components/project-overrides-view';
 import { ProjectsList } from '@features/settings/components/projects-list';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { DirectoryPicker } from '@features/shared/components/directory-picker';
@@ -55,14 +56,27 @@ export function ProjectsSection() {
    * and this is scoped to one section and dies with it — the same reasoning as
    * `choosing` above. Cloning is also the reason the flag is not in
    * `resolve-view.ts`: settings is already the fifth view state, and a clone is
-   * a step inside it, not a sixth.
+   * a step inside it, not a sixth. A project's runtime overrides are a step
+   * inside the section too, opened from its row menu (HIVE-377).
    */
-  const [view, setView] = useState<'list' | 'clone'>('list');
+  const [view, setView] = useState<'list' | 'clone' | { overrides: string }>(
+    'list',
+  );
 
   const declared = snapshot?.projects ?? [];
 
   if (view === 'clone') {
     return <CloneRepoView onDone={() => setView('list')} />;
+  }
+
+  if (typeof view === 'object') {
+    return (
+      <ProjectOverridesView
+        key={view.overrides}
+        projectId={view.overrides}
+        onDone={() => setView('list')}
+      />
+    );
   }
 
   return (
@@ -81,7 +95,10 @@ export function ProjectsSection() {
           </span>
         </div>
       ) : (
-        <ProjectsList entries={declared} />
+        <ProjectsList
+          entries={declared}
+          onRuntimeOverrides={(id) => setView({ overrides: id })}
+        />
       )}
 
       {/*

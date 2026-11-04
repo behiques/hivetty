@@ -25,6 +25,7 @@ function setup(overrides: Partial<Props> = {}) {
     onRename: vi.fn(),
     onChangeKey: vi.fn(),
     onRepoint: vi.fn(),
+    onRuntimeOverrides: vi.fn(),
     onRemove: vi.fn(),
     autoMerge: false,
     onToggleAutoMerge: vi.fn(),
@@ -55,6 +56,7 @@ describe('ProjectRowMenu', () => {
       /move down/i,
       /rename/i,
       /change folder/i,
+      /runtime overrides/i,
       /remove/i,
     ]) {
       expect(screen.getByRole('menuitem', { name: label })).toBeInTheDocument();
@@ -78,6 +80,7 @@ describe('ProjectRowMenu', () => {
     ['Move down', /move down/i, 'onMoveDown'],
     ['Rename', /rename/i, 'onRename'],
     ['Change folder', /change folder/i, 'onRepoint'],
+    ['Runtime overrides', /runtime overrides/i, 'onRuntimeOverrides'],
     ['Remove', /remove/i, 'onRemove'],
   ] as const)('calls the handler for %s', async (_label, pattern, handler) => {
     const props = setup();
@@ -85,6 +88,18 @@ describe('ProjectRowMenu', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: pattern }));
 
     expect(props[handler]).toHaveBeenCalledTimes(1);
+  });
+
+  it('puts Runtime overrides… after Change folder…, before Remove (HIVE-377)', async () => {
+    setup();
+    await open();
+
+    const labels = screen
+      .getAllByRole('menuitem')
+      .map((item) => item.textContent);
+
+    expect(labels.indexOf('Runtime overrides…')).toBe(labels.indexOf('Change folder…') + 1);
+    expect(labels.indexOf('Remove')).toBe(labels.indexOf('Runtime overrides…') + 1);
   });
 
   it('disables Move up on the first row', async () => {

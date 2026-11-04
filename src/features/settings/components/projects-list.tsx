@@ -23,6 +23,8 @@ import { useLiveSessionCounts } from '@stores/hive-store';
 interface ProjectsListProps {
   /** The config's own entries, in file order. */
   entries: readonly ProjectConfig[];
+  /** Opens a project's runtime overrides, which replace the list (HIVE-377). */
+  onRuntimeOverrides: (id: string) => void;
 }
 
 /** Which row, if any, has replaced its resting state with something else. */
@@ -73,7 +75,7 @@ function keysTakenBy(
  * promoting it to `ui-store` would put view state nobody else reads into a
  * store shared with thirteen live terminals.
  */
-export function ProjectsList({ entries }: ProjectsListProps) {
+export function ProjectsList({ entries, onRuntimeOverrides }: ProjectsListProps) {
   /*
     Counts, not membership. The confirmation says the number out loud, and the
     membership selector deduplicates by design, so counting it always gave 1 —
@@ -253,6 +255,7 @@ export function ProjectsList({ entries }: ProjectsListProps) {
                   setMode({ id: project.id, kind: 'change-key' })
                 }
                 onRepoint={() => onRepoint(project.id)}
+                onRuntimeOverrides={() => onRuntimeOverrides(project.id)}
                 onRemove={() => onRemove(project.id)}
                 autoMerge={project.autoMerge === true}
                 onToggleAutoMerge={() =>
