@@ -100,6 +100,16 @@ export interface SessionMetrics {
   creditsBalance?: string | null;
   /** Codex's `rate_limits.credits.unlimited` (HIVE-334); `null` clears it, as {@link SessionMetrics.creditsBalance}. */
   creditsUnlimited?: boolean | null;
+  /** Session total input tokens, cached and written included (Copilot's OTel `gen_ai.usage.input_tokens`, HIVE-335). */
+  tokensIn?: number;
+  /** Session total output tokens (`gen_ai.usage.output_tokens`, HIVE-335). */
+  tokensOut?: number;
+  /** Of `tokensIn`, read from the prompt cache (`gen_ai.usage.cache_read.input_tokens`, HIVE-335). */
+  tokensCached?: number;
+  /** Of `tokensIn`, written to the prompt cache (`gen_ai.usage.cache_write.input_tokens`, HIVE-335). */
+  tokensWritten?: number;
+  /** AI credits used this session: Copilot's `github.copilot.nano_aiu` summed, ÷ 10⁹ (HIVE-335). Not a balance. */
+  aiCredits?: number;
 }
 
 /**

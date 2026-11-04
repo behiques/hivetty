@@ -21,6 +21,7 @@ import type { StatusSignal } from '../../../../electron/shared/harness-contract'
 import { CH } from '../../../../electron/shared/ipc-contract';
 import type { SessionRecord } from '../../../../electron/shared/session-history-contract';
 
+import { shellQuote } from '../../../../electron/main/container/shell-quote';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { sessionAdapter } from '../../../../electron/main/harness/registry';
 import type { RunAsync } from '../../../../electron/main/integrations/github/run';
@@ -4381,6 +4382,7 @@ describe('copilot sessions (HIVE-280)', () => {
       harnessStateDir?: (harness: string) => string;
       hiveServer?: () => typeof HIVE | null;
       config?: ConfigSnapshot;
+      all?: () => SessionRecord[];
     } = {},
   ) =>
     createSessions({
@@ -4409,7 +4411,7 @@ describe('copilot sessions (HIVE-280)', () => {
           written.push({ id, patch: { ...patch } });
         },
         resumable: (id) => over.resumable?.[id],
-        all: () => [],
+        all: over.all ?? (() => []),
         flush: () => {},
         dispose: () => {},
       },
@@ -4466,7 +4468,8 @@ describe('copilot sessions (HIVE-280)', () => {
     });
     instance.open(copilotOpen);
 
-    expect(asked).toEqual(['copilot']);
+    // Asked for Copilot's folder only: by the launch, its meter export and the boot sweep (HIVE-335).
+    expect(new Set(asked)).toEqual(new Set(['copilot']));
     expect(existsSync(join(state, 'plugin', 'plugin.json'))).toBe(true);
     expect(readFileSync(join(state, 'plugin', 'hooks', 'hooks.json'), 'utf8')).toContain('"agentStop"');
     // Pinned on the record, as Claude's is: `--session-id` both starts and resumes.
@@ -4475,11 +4478,44 @@ describe('copilot sessions (HIVE-280)', () => {
     expect(
       typed().some((line) =>
         new RegExp(
-          `^unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSISTED_APPROVAL; copilot --session-id ${TEST_UUID} --model auto .*--plugin-dir .* && exit$`,
+          `^unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSISTED_APPROVAL; .*copilot --session-id ${TEST_UUID} --model auto .*--plugin-dir .* && exit$`,
         ).test(line),
       ),
     ).toBe(true);
     expect(typed().some((line) => line.includes('claude'))).toBe(false);
+  });
+
+  it('a Copilot spawn gets its meter export path, and its folder exists (HIVE-335)', () => {
+    const state = stateDir();
+    instance = build([], { harnessStateDir: () => state });
+    instance.open(copilotOpen);
+    bootTo(mintedFor('hero-refresh'));
+    expect(typed().some((line) =>
+      line.includes(`export COPILOT_OTEL_FILE_EXPORTER_PATH=${shellQuote(join(state, 'otel', 'hero-refresh.jsonl'))};`),
+    )).toBe(true);
+    expect(existsSync(join(state, 'otel'))).toBe(true);
+  });
+
+  it('a Codex spawn gets none (HIVE-335)', () => {
+    const state = stateDir();
+    instance = build([], { harnessStateDir: () => state });
+    instance.open({ ...OPEN, harness: 'codex' as const, model: 'gpt-6-luna' });
+    bootTo(mintedFor('hero-refresh'));
+    expect(typed().length).toBeGreaterThan(0);
+    expect(typed().some((line) => line.includes('OTEL'))).toBe(false);
+    expect(existsSync(join(state, 'otel'))).toBe(false);
+  });
+
+  it('the boot sweep drops an export whose session the history no longer holds (HIVE-335)', async () => {
+    const state = stateDir();
+    mkdirSync(join(state, 'otel'));
+    for (const id of ['kept', 'gone']) writeFileSync(join(state, 'otel', `${id}.jsonl`), '{}\n');
+    instance = build([], {
+      harnessStateDir: () => state,
+      all: () => [{ id: 'kept' } as SessionRecord],
+    });
+    await vi.waitFor(() => expect(existsSync(join(state, 'otel', 'gone.jsonl'))).toBe(false));
+    expect(existsSync(join(state, 'otel', 'kept.jsonl'))).toBe(true);
   });
 
   it('gives copilot the hive server, as codex', () => {

@@ -2,13 +2,19 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { copilotAdapter } from '../../electron/main/harness/copilot';
-import { COPILOT_INSTRUCTIONS_ENV, launchCopilotSession } from '../../electron/main/harness/copilot/launch';
+import { shellQuote } from '../../electron/main/container/shell-quote';
+import {
+  COPILOT_INSTRUCTIONS_ENV,
+  COPILOT_OTEL_EXPORT_ENV,
+  COPILOT_OTEL_USER_KEYS,
+  launchCopilotSession,
+} from '../../electron/main/harness/copilot/launch';
 import { copilotRecord } from '../../electron/main/harness/copilot/record';
 import type { LaunchSpec } from '../../electron/main/harness/port';
 import { createHarnessRegistry } from '../../electron/main/harness/registry';
@@ -18,7 +24,9 @@ import { createLedger } from '../../electron/main/ledger';
 import type { StdioServerSpec } from '../../electron/main/mcp/agent-config';
 import { hiveServerSpec } from '../../electron/main/mcp/config';
 import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
+import { meterExportPath } from '../../electron/main/sessions/meter-exports';
 import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
+import { createRecordMeters, METER_EXPORT_SETTLE_MS, type RecordMeters } from '../../electron/main/sessions/record-meters';
 import { readUserSkills } from '../../electron/main/skills/read';
 import { renderSkills } from '../../electron/main/skills/render';
 import {
@@ -29,6 +37,7 @@ import {
   type HookStatusEvent,
 } from '../../electron/shared/hook-contract';
 import { CH } from '../../electron/shared/ipc-contract';
+import type { SessionMetrics, SessionMetricsEvent } from '../../electron/shared/metrics-contract';
 import type { LedgerEntry, LedgerReadQuery, LedgerSnapshot, OpenAsk } from '../../electron/shared/ledger-contract';
 import type { HiveNotification } from '../../electron/shared/notification-contract';
 import { typedSkill } from '../../electron/shared/skill-render';
@@ -65,12 +74,12 @@ const SESSION = 'sess-cp';
 const CASE_MS = 240_000;
 const HOST = join(process.cwd(), 'out', 'main', 'mcp-host.js');
 
-/** Every ambient `HIVE_*`, `COPILOT_*`, `GH_TOKEN` and `GITHUB_TOKEN` out. */
+/** Every ambient `HIVE_*`, `COPILOT_*`, `OTEL_*` (HIVE-335), `GH_TOKEN` and `GITHUB_TOKEN` out. */
 const strippedEnv = (): Record<string, string> =>
   Object.fromEntries(
     Object.entries(process.env).filter(
       (entry): entry is [string, string] =>
-        entry[1] !== undefined && !/^(HIVE_|COPILOT_|GH_TOKEN$|GITHUB_TOKEN$)/.test(entry[0]),
+        entry[1] !== undefined && !/^(HIVE_|COPILOT_|OTEL_|GH_TOKEN$|GITHUB_TOKEN$)/.test(entry[0]),
     ),
   );
 
@@ -200,6 +209,10 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
   let stop: string;
   let observe: (status: string, signal?: HookStatusEvent['signal'], sessionUuid?: string) => void;
   let aborts: RecordAborts;
+  /** HIVE-335: the real export reader `sessions/index.ts` runs, and every metrics payload it sent. */
+  let meters: RecordMeters;
+  let metrics: SessionMetrics[];
+  let exportFile: string;
   let transcript: { cwd: string; sessionUuid: string } | undefined;
   let source: string;
   let rendered: string;
@@ -292,6 +305,14 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       now: () => Date.now(),
     });
     const notifier = createNotifier({ hub, isForeground: () => false, isForegroundEverywhere: () => false });
+    metrics = [];
+    exportFile = meterExportPath(join(scratch, 'state'), SESSION) ?? '';
+    meters = createRecordMeters({
+      send: (_channel, payload) => metrics.push((payload as SessionMetricsEvent).metrics),
+      transcriptOf: () => transcript,
+      adapterOf: () => copilotAdapter,
+      exportPathOf: () => exportFile,
+    });
     observe = (status, signal, sessionUuid) => {
       const event = {
         entityId: SESSION,
@@ -301,6 +322,8 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       };
       statuses.push(event);
       notifier.observe(CH.sessionStatus, event as unknown as Record<string, unknown>);
+      // As the core does on every hook: a meters read, and for Copilot one trailing read (HIVE-335).
+      void meters.onHook(SESSION);
     };
     receiver = createReceiver({
       knowsSession: (id) => id === SESSION,
@@ -370,6 +393,8 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     stop?: string;
     /** How long the drive may run, 180 s by default. */
     seconds?: number;
+    /** Extra env for the session's shell, as a user's profile would set it (HIVE-335). */
+    env?: Record<string, string>;
   }
 
   /** One launch, its prompts, one turn each. Resolves with the pty log's path, and whether `exitRaw` exited. */
@@ -383,12 +408,28 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     const head = 'unset COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN COPILOT_ALLOW_ALL COPILOT_ASSISTED_APPROVAL; ';
     expect(plan.command.startsWith(head)).toBe(true);
     expect(plan.command.endsWith(' && exit')).toBe(true);
-    const split = spawnSync('python3', ['-c', 'import json,shlex,sys; print(json.dumps(shlex.split(sys.argv[1])))', plan.command.slice(head.length, -' && exit'.length)], {
+    let rest = plan.command.slice(head.length, -' && exit'.length);
+    const env = strippedEnv();
+    Object.assign(env, drive.env ?? {});
+    // HIVE-335: the OTel guard, a statement of its own; applied as the login shell would.
+    const exportPath = drive.spec?.exportPath;
+    if (rest.startsWith('[ -n "')) {
+      const end = rest.indexOf('; ') + '; '.length;
+      expect(exportPath).toBeDefined();
+      expect(rest.slice(0, end)).toBe(
+        `[ -n "${COPILOT_OTEL_USER_KEYS.map((key) => `\${${key}:-}`).join('')}" ] || export ${COPILOT_OTEL_EXPORT_ENV}=${shellQuote(exportPath ?? '')}; `,
+      );
+      rest = rest.slice(end);
+      if (exportPath !== undefined) {
+        mkdirSync(dirname(exportPath), { recursive: true });
+        if (COPILOT_OTEL_USER_KEYS.every((key) => (env[key] ?? '') === '')) env[COPILOT_OTEL_EXPORT_ENV] = exportPath;
+      }
+    }
+    const split = spawnSync('python3', ['-c', 'import json,shlex,sys; print(json.dumps(shlex.split(sys.argv[1])))', rest], {
       encoding: 'utf8',
     });
     const argv = JSON.parse(split.stdout) as string[];
 
-    const env = strippedEnv();
     // The instructions prefix, expanded as the login shell would with no user value (all COPILOT_* are stripped).
     const assign = /^([A-Z_]+)=(.*)$/s.exec(argv[0] ?? '');
     if (assign !== null) {
@@ -404,7 +445,8 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       HIVE_GOALS_DIR: goals,
     });
     const log = join(scratch, `${name}.pty.log`);
-    const config = { argv, env, cwd: repo, seconds: 180, log, stop, ...drive };
+    const { env: _driveEnv, ...driven } = drive;
+    const config = { argv, env, cwd: repo, seconds: 180, log, stop, ...driven };
     const stderr: Buffer[] = [];
     transcript = { cwd: repo, sessionUuid };
     let exited = false;
@@ -427,6 +469,9 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
       child.on('exit', () => resolve());
     });
+    // HIVE-335: the turn's spans land just after its hook; let the trailing read see them. Real timers: a live suite.
+    await new Promise((resolve) => setTimeout(resolve, METER_EXPORT_SETTLE_MS + 500));
+    meters.drop(SESSION);
     aborts.drop(SESSION);
     if (stderr.length > 0) console.info('DRIVER   ', Buffer.concat(stderr).toString('utf8'));
     return { log, exited };
@@ -470,6 +515,59 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     status hook, so the drive waits for the brief to settle instead. No subagent case: driving one
     from the TUI is not cheap, and `hooks-1.0.104/agent-stop-subagent.json` plus the unit test cover it.
   */
+  it(
+    'meters a real turn from its OTel export with no second hook (HIVE-335)',
+    async () => {
+      await run('meters', '11111111-2222-4333-8444-5555555555e1', {
+        spec: { exportPath: exportFile },
+        prompts: ['Reply with the single word READY.'],
+      });
+      finding('meters', { metrics, exportFile });
+      const last = Object.assign({}, ...metrics) as SessionMetrics;
+      expect(typeof last.model).toBe('string');
+      expect(last.tokensIn).toBeGreaterThan(0);
+      expect(last.tokensOut).toBeGreaterThan(0);
+      expect(last.aiCredits).toBeGreaterThan(0);
+    },
+    CASE_MS,
+  );
+
+  it(
+    'a resume on the same session appends, and the totals grow (HIVE-335)',
+    async () => {
+      const uuid = '11111111-2222-4333-8444-5555555555e2';
+      await run('meters-1', uuid, { spec: { exportPath: exportFile }, prompts: ['Reply with the single word ONE.'] });
+      const first = (Object.assign({}, ...metrics) as SessionMetrics).tokensIn ?? 0;
+      expect(first).toBeGreaterThan(0);
+      // A fresh reader, as after an app restart: run() dropped it, so it rebuilds the totals from the whole file.
+      metrics.length = 0;
+      await run('meters-2', uuid, {
+        spec: { exportPath: exportFile, resume: true },
+        prompts: ['Reply with the single word TWO.'],
+      });
+      finding('meters-resume', { first, metrics });
+      expect((Object.assign({}, ...metrics) as SessionMetrics).tokensIn).toBeGreaterThan(first);
+    },
+    CASE_MS * 2,
+  );
+
+  it(
+    'leaves the user’s own OTel endpoint alone: no export is written (HIVE-335)',
+    async () => {
+      await run('meters-user-otel', '11111111-2222-4333-8444-5555555555e3', {
+        spec: { exportPath: exportFile },
+        // An https endpoint nobody answers: Copilot drops the export and carries on.
+        env: { OTEL_EXPORTER_OTLP_ENDPOINT: 'https://127.0.0.1:9' },
+        prompts: ['Reply with the single word READY.'],
+      });
+      finding('meters-user-otel', { metrics });
+      expect(statuses.map((s) => s.status)).toContain('idle');
+      expect(existsSync(exportFile)).toBe(false);
+      expect(metrics).toEqual([]);
+    },
+    CASE_MS,
+  );
+
   it(
     'holds a turn end on an unticked Outcome, releases once it is ticked, and posts receipts (HIVE-370)',
     async () => {

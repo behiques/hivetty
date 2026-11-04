@@ -1,5 +1,8 @@
+import { spawnSync } from 'node:child_process';
+
 import { describe, expect, it } from 'vitest';
 
+import { shellQuote } from '../../../../../electron/main/container/shell-quote';
 import {
   COPILOT_SESSION_EVENTS,
   copilotPluginFiles,
@@ -164,5 +167,49 @@ describe('copilotPluginFiles', () => {
       { type: 'command', bash: goalVerifierCommand('/skills', 'copilot'), timeoutSec: 30 },
     ]);
     for (const event of COPILOT_SESSION_EVENTS.filter((e) => e !== 'agentStop')) expect(hooks.hooks[event]).toHaveLength(1);
+  });
+});
+
+describe('the OTel export (HIVE-335)', () => {
+  const base = { command: 'copilot', sessionUuid: '11111111-2222-4333-8444-555555555555', stateDir: '/state' };
+  it('exports the file path, after the unset, only when the user has no OTel of their own', () => {
+    const { command } = launchCopilotSession({ ...base, exportPath: '/state/otel/sess-07.jsonl' });
+    expect(command).toContain(
+      `; [ -n "\${OTEL_EXPORTER_OTLP_ENDPOINT:-}\${COPILOT_OTEL_FILE_EXPORTER_PATH:-}\${COPILOT_OTEL_EXPORTER_TYPE:-}\${COPILOT_OTEL_ENABLED:-}" ] || export COPILOT_OTEL_FILE_EXPORTER_PATH='/state/otel/sess-07.jsonl'; `,
+    );
+    expect(command.indexOf('export COPILOT_OTEL')).toBeGreaterThan(command.indexOf('unset '));
+    expect(command.indexOf('export COPILOT_OTEL')).toBeLessThan(command.indexOf(' copilot '));
+  });
+  it('quotes a path with a quote in it', () => {
+    const { command } = launchCopilotSession({ ...base, exportPath: "/it's/otel/s.jsonl" });
+    expect(command).toContain(`export COPILOT_OTEL_FILE_EXPORTER_PATH=${shellQuote("/it's/otel/s.jsonl")};`);
+  });
+  it('adds nothing without an export path', () => {
+    expect(launchCopilotSession(base).command).not.toContain('OTEL');
+  });
+  it('really decides in a shell: the user’s endpoint wins, else ours is exported', () => {
+    const { command } = launchCopilotSession({ ...base, exportPath: '/state/otel/s.jsonl' });
+    const guard = /\[ -n .*?; /.exec(command)?.[0] ?? '';
+    expect(guard).not.toBe('');
+    const run = (env: Record<string, string>) =>
+      spawnSync('sh', ['-c', `${guard} printf %s "$COPILOT_OTEL_FILE_EXPORTER_PATH"`], {
+        env: { PATH: process.env['PATH'] ?? '', ...env },
+        encoding: 'utf8',
+      }).stdout;
+    expect(run({})).toBe('/state/otel/s.jsonl');
+    expect(run({ OTEL_EXPORTER_OTLP_ENDPOINT: 'https://c:4318' })).toBe('');
+    expect(run({ COPILOT_OTEL_FILE_EXPORTER_PATH: '/mine.jsonl' })).toBe('/mine.jsonl');
+    expect(run({ COPILOT_OTEL_EXPORTER_TYPE: 'otlp-http' })).toBe('');
+    expect(run({ COPILOT_OTEL_ENABLED: 'true' })).toBe('');
+  });
+  it('survives a profile that sets nounset: an unset key is not an error (HIVE-335)', () => {
+    const { command } = launchCopilotSession({ ...base, exportPath: '/state/otel/s.jsonl' });
+    const guard = /\[ -n .*?; /.exec(command)?.[0] ?? '';
+    const out = spawnSync('sh', ['-c', `set -u; ${guard} printf %s "$COPILOT_OTEL_FILE_EXPORTER_PATH"`], {
+      env: { PATH: process.env['PATH'] ?? '' },
+      encoding: 'utf8',
+    });
+    expect(out.stderr).toBe('');
+    expect(out.stdout).toBe('/state/otel/s.jsonl');
   });
 });

@@ -22,10 +22,22 @@ import { COPILOT_SESSION_PREAPPROVED } from './preapproved';
  *   `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` so its marker rule stands in the session's instructions.
  * - With the skills rendered, `agentStop` also runs goal-on's verifier beside the status hook (HIVE-370;
  *   FINDINGS P13: the block is honoured, eight in a row at most).
+ * - Meters (HIVE-335): the session's OTel spans go to `exportPath` unless the user's own OTel env is set.
  */
 
 /** Copilot reads `<dir>/instructions/*.instructions.md` from each listed dir (spec, fact 3). */
 export const COPILOT_INSTRUCTIONS_ENV = 'COPILOT_CUSTOM_INSTRUCTIONS_DIRS';
+
+/** Copilot writes its OTel spans as JSON lines here (HIVE-335; `copilot help monitoring`). */
+export const COPILOT_OTEL_EXPORT_ENV = 'COPILOT_OTEL_FILE_EXPORTER_PATH';
+
+/** Any of these set means the user routes Copilot's telemetry themselves; HiveTTY then sets nothing (spec D3). */
+export const COPILOT_OTEL_USER_KEYS = [
+  'OTEL_EXPORTER_OTLP_ENDPOINT',
+  COPILOT_OTEL_EXPORT_ENV,
+  'COPILOT_OTEL_EXPORTER_TYPE',
+  'COPILOT_OTEL_ENABLED',
+] as const;
 
 /** What a session reports (P0, P1), and `notification` for an `ask_user` dialog (P2). */
 export const COPILOT_SESSION_EVENTS = [
@@ -99,7 +111,7 @@ export const copilotPluginFiles = (dir: string, skillsDir?: string): { path: str
 
 /** `unset …; copilot --session-id <id> … [-i '<task>'] && exit`, typed into a login shell like Codex's. */
 export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
-  const { model, effort, sessionUuid, resume = false, task, hiveServer, stateDir, pluginDir: skillsDir } = spec;
+  const { model, effort, sessionUuid, resume = false, task, hiveServer, stateDir, pluginDir: skillsDir, exportPath } = spec;
   if (sessionUuid === undefined || !UUID.test(sessionUuid)) {
     throw new Error('copilot: a session needs a pinned uuid.');
   }
@@ -140,11 +152,26 @@ export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
           `${COPILOT_INSTRUCTIONS_ENV}="\${${COPILOT_INSTRUCTIONS_ENV}:+$${COPILOT_INSTRUCTIONS_ENV},}"${shellQuote(skillsDir)}`,
         ];
 
+  // After `unset`, so it is decided after the profile ran; a statement, not a prefix, so it can be conditional.
+  // `:-` so a profile that sets nounset does not abort the line on an unset key.
+  const otel =
+    exportPath === undefined
+      ? []
+      : [
+          `[ -n "${COPILOT_OTEL_USER_KEYS.map((key) => `\${${key}:-}`).join('')}" ] || export ${COPILOT_OTEL_EXPORT_ENV}=${shellQuote(exportPath)};`,
+        ];
+
   return {
     // As Codex's: the login shell re-sources the profile after `stripEnv`, so `unset` runs after it.
-    command: [`unset ${UNSET_KEYS.join(' ')};`, ...instructions, spec.command, ...flags, ...initialPrompt, '&& exit'].join(
-      ' ',
-    ),
+    command: [
+      `unset ${UNSET_KEYS.join(' ')};`,
+      ...otel,
+      ...instructions,
+      spec.command,
+      ...flags,
+      ...initialPrompt,
+      '&& exit',
+    ].join(' '),
     stripEnv: [...COPILOT_SESSION_ENV_KEYS, ...UNSET_KEYS],
     submitDelayMs: SUBMIT_DELAY_MS,
     files: copilotPluginFiles(hooksDir, skillsDir),

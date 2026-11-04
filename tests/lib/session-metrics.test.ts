@@ -13,6 +13,8 @@ import {
   pctOrNull,
   resetsDayLabel,
   timeLeftLabel,
+  tokensLabel,
+  aiCreditsLabel,
 } from '@/lib/session-metrics';
 import { CAPABILITIES } from '@shared/harness-contract';
 
@@ -293,5 +295,62 @@ describe('creditsLabel (HIVE-334)', () => {
   });
   it('is null when the credits were cleared (HIVE-381)', () => {
     expect(creditsLabel({ creditsBalance: null, creditsUnlimited: null })).toBeNull();
+  });
+});
+
+describe('declaredMetrics for Copilot (HIVE-335)', () => {
+  it('keeps model, tokens and AI credits, and nothing Copilot does not declare', () => {
+    expect(
+      declaredMetrics(
+        {
+          model: 'claude-sonnet-5.5',
+          effort: 'high',
+          contextPct: 40,
+          tokensIn: 61741,
+          tokensOut: 109,
+          tokensCached: 49589,
+          tokensWritten: 12146,
+          aiCredits: 3.64259,
+          creditsBalance: '5',
+        },
+        CAPABILITIES.copilot.meters,
+      ),
+    ).toEqual({
+      model: 'claude-sonnet-5.5',
+      tokensIn: 61741,
+      tokensOut: 109,
+      tokensCached: 49589,
+      tokensWritten: 12146,
+      aiCredits: 3.64259,
+    });
+  });
+  it('Claude and Codex do not gain the new kinds', () => {
+    expect(CAPABILITIES['claude-code'].meters).not.toContain('tokens');
+    expect(CAPABILITIES.codex.meters).not.toContain('aiCredits');
+  });
+});
+
+describe('tokensLabel (HIVE-335)', () => {
+  it('is in and out, compact, as Copilot’s footer', () => {
+    expect(tokensLabel({ tokensIn: 61741, tokensOut: 109 })).toBe('↑61.7k ↓109');
+    expect(tokensLabel({ tokensIn: 2_345_678, tokensOut: 12_000 })).toBe('↑2.3M ↓12k');
+    expect(tokensLabel({ tokensIn: 999, tokensOut: 0 })).toBe('↑999 ↓0');
+  });
+  it('shows only the side reported, and null for neither', () => {
+    expect(tokensLabel({ tokensIn: 1500 })).toBe('↑1.5k');
+    expect(tokensLabel({ tokensOut: 7 })).toBe('↓7');
+    expect(tokensLabel({})).toBeNull();
+    expect(tokensLabel(undefined)).toBeNull();
+  });
+});
+describe('aiCreditsLabel (HIVE-335)', () => {
+  it('rounds to two decimals and groups digits', () => {
+    expect(aiCreditsLabel({ aiCredits: 3.64259 })).toBe('3.64');
+    expect(aiCreditsLabel({ aiCredits: 1234.5 })).toBe('1,234.5');
+    expect(aiCreditsLabel({ aiCredits: 0 })).toBe('0');
+  });
+  it('is null when not reported', () => {
+    expect(aiCreditsLabel({})).toBeNull();
+    expect(aiCreditsLabel(undefined)).toBeNull();
   });
 });

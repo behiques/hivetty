@@ -31,9 +31,7 @@ const ROWS: readonly Row[] = [
 ];
 
 /** Open work on a gap, by ticket key. Plain text, never a link: customers cannot open the HIVE Jira (D2). */
-export const CAPABILITY_GAPS: Partial<Record<HarnessId, Partial<Record<keyof Capabilities, string>>>> = {
-  copilot: { meters: 'HIVE-335' },
-};
+export const CAPABILITY_GAPS: Partial<Record<HarnessId, Partial<Record<keyof Capabilities, string>>>> = {};
 
 /** How many of the rows a CLI supports, for the Overview's one-line summary. */
 export function capabilitySummary(cli: HarnessId) {

@@ -83,8 +83,9 @@ import { isThisMachineAction } from './notification-contract';
  * 27 → 28 (HIVE-376): `CH` gained `config:set-cli` and `harness:sign-in`; `DiagnoseCommandRequest` gained `cli`.
  * 28 → 29 (HIVE-378): `CH` gained `config:set-project-harness`; `ConfigSnapshot`'s projects gained `harness`.
  * 29 → 30 (HIVE-379): `AgentSummary` (on `agents:list`) gained an optional `harness`, the CLIs an agent row runs on.
+ * 30 → 31 (HIVE-335): `SessionMetrics` (on `session:metrics`) gained `tokensIn`, `tokensOut`, `tokensCached`, `tokensWritten` and `aiCredits`.
  */
-export const REMOTE_PROTOCOL_VERSION = 30;
+export const REMOTE_PROTOCOL_VERSION = 31;
 
 /**
  * What a frame is for.
