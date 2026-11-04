@@ -12,13 +12,13 @@ The problems people hit first, and the fix for each.
 
 Opened from Finder, a Mac app gets a short `PATH` that misses Homebrew and `~/.local/bin`.
 
-1. **Settings › Runtime › Import my login shell's PATH at startup** should be on (it is by
+1. **Settings › Harnesses › Shell & environment › Import my login shell's PATH at startup** should be on (it is by
    default). Restart the app after turning it on.
-2. Open the **Command diagnostic** in the same section. It shows the `PATH` searched and where
-   `claude` was, or was not, found.
-3. Or set **Agent command** to the full path, like `/opt/homebrew/bin/claude`.
+2. Open **Settings › Harnesses › Claude Code**. Its command check shows the `PATH` searched and
+   where `claude` was, or was not, found.
+3. Or set its **Agent command** to the full path, like `/opt/homebrew/bin/claude`.
 
-![Settings › Runtime: shell, agent command, login shell PATH](../assets/guide/18-settings-runtime.png)
+![Settings › Shell & environment](../assets/guide/18-settings-runtime.png)
 
 ## posix_spawnp failed
 

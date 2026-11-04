@@ -16,7 +16,14 @@ describe('HarnessCapabilities (HIVE-376)', () => {
     expect(screen.queryByRole('link')).toBeNull();
   });
   it('counts the supported rows', () => {
-    expect(capabilitySummary('claude-code')).toEqual({ supported: 8, total: 8 });
-    expect(capabilitySummary('codex').supported).toBeLessThan(8);
+    expect(capabilitySummary('claude-code')).toEqual({ supported: 9, total: 9 });
+    expect(capabilitySummary('codex').supported).toBeLessThan(9);
+  });
+  it('says whether the CLI runs in a container (HIVE-377)', () => {
+    const { unmount } = render(<HarnessCapabilities cli="claude-code" />);
+    expect(screen.getByRole('row', { name: /Runs in a container/ })).toHaveTextContent('Yes');
+    unmount();
+    render(<HarnessCapabilities cli="codex" />);
+    expect(screen.getByRole('row', { name: /Runs in a container/ })).toHaveTextContent('Not supported');
   });
 });

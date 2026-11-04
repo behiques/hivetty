@@ -13,7 +13,7 @@ import {
   type ProjectConfig,
 } from '@shared/config-contract';
 import type { PrLookup, PrLookupReply } from '@shared/github-contract';
-import type { HarnessId, StatusSignal } from '@shared/harness-contract';
+import { CAPABILITIES, type HarnessId, type StatusSignal } from '@shared/harness-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   type IdleDetail,
@@ -567,11 +567,12 @@ const CLI_LABELS: Record<HarnessId, string> = {
 };
 
 /**
- * What a session cannot run on yet: a non-Claude session in a container has no hive server there
- * (HIVE-279 D7). A thrown refusal names the reason, where a pty that never started would not.
+ * What a session cannot run on yet: `CAPABILITIES[harness].container` decides which CLIs run in a
+ * container (HIVE-377); the others have no hive server there (HIVE-279 D7). A thrown refusal names
+ * the reason, where a pty that never started would not.
  */
 function refuseUnlaunchable(harness: HarnessId, inContainer: boolean): void {
-  if (harness !== 'claude-code' && inContainer) {
+  if (inContainer && !CAPABILITIES[harness].container) {
     throw new Error(`${CLI_LABELS[harness]} sessions cannot run in a container yet.`);
   }
 }

@@ -4,7 +4,8 @@ Open Settings with the gear at the foot of the bar. Nine sections, top to bottom
 here is written to `~/.hivetty/config.json` ([The config file](configuration.md)); appearance
 and editor preferences stay on this machine.
 
-**On this page:** [Projects](#projects) · [Runtime](#runtime) · [Skills](#skills) ·
+**On this page:** [Projects](#projects) · [Overview](#overview) ·
+[Shell & environment](#shell--environment) · [Containers](#containers) · [Skills](#skills) ·
 [Agents](#agents) · [Appearance](#appearance) · [Editor](#editor) ·
 [Integrations](#integrations) · [Notifications](#notifications) · [Advanced](#advanced)
 
@@ -23,15 +24,9 @@ most recently pushed, filtered as you type, through `gh`); pick one, or paste an
 
 ![Settings › Projects](../assets/guide/11-settings-projects.png)
 
-## Runtime
-
-What a session spawns. **Shell** (started as a login shell) and **Agent command**
-(default `claude`) for every project, plus environment variables. **Per-project overrides**
-change any of these for one project. **Import my login shell's PATH at startup** lets a
-Finder-launched app find Homebrew tools. Two diagnostics explain why `claude` was or was not
-found, and which variables your rc file overrode.
-
-![Settings › Runtime](../assets/guide/18-settings-runtime.png)
+**Runtime overrides…** in a project's ⋯ menu changes the shell, the agent command, the
+environment and the container for that one project, and checks where its command is found.
+Blank inherits [Shell & environment](#shell--environment).
 
 **Example.** Point one project at a wrapper script:
 
@@ -69,6 +64,19 @@ their row says why.
 ```json
 "clis": { "claude-code": { "agents": { "enabled": true, "model": "haiku" } } }
 ```
+
+## Shell & environment
+
+What every session starts in, for every CLI. **Shell** (started as a login shell) and environment variables for
+every project. **Import my login shell's PATH at startup** lets a Finder-launched app find Homebrew tools, and the
+environment diagnostic shows which variables your rc file overrode. The agent command is on each CLI's page.
+
+![Settings › Shell & environment](../assets/guide/18-settings-runtime.png)
+
+## Containers
+
+Which CLIs can run in a project's container (Claude Code today), which of your projects do, and the **Host alias**
+and **Bind address** a container uses to reach HiveTTY. A container profile belongs to its project.
 
 ## Skills
 

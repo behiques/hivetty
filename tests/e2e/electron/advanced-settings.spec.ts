@@ -35,6 +35,18 @@ const openAdvanced = async (page: Page): Promise<void> => {
   ).toBeVisible();
 };
 
+/** HIVE-377: the alias and bind fields left Advanced for Harnesses › Containers. */
+const openContainers = async (page: Page): Promise<void> => {
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Containers' })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Containers', level: 2 }),
+  ).toBeVisible();
+};
+
 /**
  * A config with one real project, a comment, and an unknown key.
  *
@@ -257,13 +269,14 @@ test('cancelling the confirmation leaves the file alone', async ({}, testInfo) =
 });
 
 /**
- * HIVE-131's Containers group.
+ * HIVE-131's alias group, "Reaching this app" in Harnesses › Containers since
+ * HIVE-377.
  *
  * The seed names no `receiver` block, so the value on screen can only have come
  * from `DEFAULT_RECEIVER` travelling the whole read path — parse, resolve,
  * `config:get`, snapshot — which no unit test exercises end to end.
  */
-test('the Containers group shows the resolved host alias', async ({}, testInfo) => {
+test('the Reaching this app group shows the resolved host alias', async ({}, testInfo) => {
   const { configPath } = seed((name) => testInfo.outputPath(name));
   const app = await launchHive({
     userDataDir: testInfo.outputPath('user-data'),
@@ -272,10 +285,10 @@ test('the Containers group shows the resolved host alias', async ({}, testInfo) 
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openAdvanced(page);
+  await openContainers(page);
 
   await expect(
-    page.getByRole('heading', { name: 'Containers', level: 3 }),
+    page.getByRole('heading', { name: 'Reaching this app', level: 3 }),
   ).toBeVisible();
 
   const field = page.getByLabel('Host alias');
@@ -303,7 +316,7 @@ test('typing an alias writes it to the file and preserves the rest', async ({}, 
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openAdvanced(page);
+  await openContainers(page);
 
   const field = page.getByLabel('Host alias');
   await field.fill('host.containers.internal');
@@ -342,7 +355,7 @@ test('the off-loopback bind is off, and its fields are hidden, by default', asyn
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openAdvanced(page);
+  await openContainers(page);
 
   const toggle = page.getByRole('switch', { name: /off loopback/i });
   await expect(toggle).toBeVisible();
@@ -377,7 +390,7 @@ test('turning the bind switch on reveals the fields and writes an address', asyn
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openAdvanced(page);
+  await openContainers(page);
 
   await page.getByRole('switch', { name: /off loopback/i }).click();
 
@@ -479,7 +492,7 @@ test('the connection item survives the switch going loopback — it reports the 
   await expect(page.getByRole('dialog', { name: 'Connection' })).toContainText('0.0.0.0');
   await page.keyboard.press('Escape');
 
-  await openAdvanced(page);
+  await openContainers(page);
   await page.getByRole('switch', { name: /off loopback/i }).click();
 
   // The file, proving the toggle really did rewrite it to loopback — the
@@ -501,13 +514,14 @@ test('the connection item survives the switch going loopback — it reports the 
 });
 
 /**
- * HIVE-142's Server mode group, placed between `ContainerAliasGroup` and
- * Reset (`advanced-section.tsx`). Asserted by heading order rather than by
+ * HIVE-142's Server mode group, placed after Config file and before Reset
+ * (`advanced-section.tsx`); the alias group that once sat above it moved to
+ * Harnesses › Containers (HIVE-377). Asserted by heading order rather than by
  * DOM position directly — Playwright has no ordinal locator for "the group
  * between these two" — which is exactly what a component landing in the
  * wrong slot would fail.
  */
-test('the Server mode group renders between Containers and Reset', async ({}, testInfo) => {
+test('the Server mode group renders between Config file and Reset', async ({}, testInfo) => {
   const { configPath } = seed((name) => testInfo.outputPath(name));
   const app = await launchHive({
     userDataDir: testInfo.outputPath('user-data'),
@@ -519,12 +533,13 @@ test('the Server mode group renders between Containers and Reset', async ({}, te
   await openAdvanced(page);
 
   const headings = await page.getByRole('heading', { level: 3 }).allTextContents();
-  const containers = headings.indexOf('Containers');
+  const configFile = headings.indexOf('Config file');
   const server = headings.indexOf('Server mode');
   const reset = headings.indexOf('Reset');
 
-  expect(containers).toBeGreaterThanOrEqual(0);
-  expect(server).toBeGreaterThan(containers);
+  expect(configFile).toBeGreaterThanOrEqual(0);
+  expect(headings).not.toContain('Reaching this app');
+  expect(server).toBeGreaterThan(configFile);
   expect(reset).toBeGreaterThan(server);
 
   await app.close();
@@ -534,7 +549,7 @@ test('the Server mode group renders between Containers and Reset', async ({}, te
  * The default: nothing paired, nothing configured, so the switch reads off
  * and the bind fields are absent rather than merely collapsed — the same
  * `toBeHidden()` distinction `the off-loopback bind is off…` above draws for
- * `ContainerAliasGroup`, and for the identical reason: `ServerModeGroup`
+ * `ContainerAliasGroup` (in Containers now), and for the identical reason: `ServerModeGroup`
  * renders its fields conditionally (`open ? <> … </> : null`).
  */
 test('the Serve this machine switch is off, and its fields are hidden, by default', async ({}, testInfo) => {

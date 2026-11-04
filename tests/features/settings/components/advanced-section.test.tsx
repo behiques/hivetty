@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_BIND, emptySnapshot, type ConfigSnapshot } from '@shared/config-contract';
+import { emptySnapshot, type ConfigSnapshot } from '@shared/config-contract';
 import type { AppInfo } from '@shared/ipc-contract';
 import type { UpdateStatus } from '@shared/update-contract';
 
@@ -415,13 +415,11 @@ describe('AdvancedSection — revealing the config file while attached (HIVE-144
 });
 
 /**
- * HIVE-131's Containers group.
- *
- * Its own behaviour lives in `container-alias-group.test.tsx`; what this pins is
- * *placement* — the pane's top half, with the controls that change behaviour,
- * rather than down among About/Updates/Diagnostics, which only answer questions.
+ * HIVE-131's alias group moved to Harnesses › Containers (HIVE-377); its own
+ * behaviour lives in `container-alias-group.test.tsx`, its placement in
+ * `containers-section.test.tsx`.
  */
-describe('AdvancedSection — the Containers group (HIVE-131)', () => {
+describe('AdvancedSection — container aliases', () => {
   beforeEach(() => {
     readAppInfo.mockResolvedValue(info());
     install();
@@ -432,37 +430,11 @@ describe('AdvancedSection — the Containers group (HIVE-131)', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the host alias between Config file and Reset', () => {
+  it('no longer holds the container aliases: they live in Harnesses › Containers (HIVE-377)', () => {
     render(<AdvancedSection />);
 
-    const headings = screen
-      .getAllByRole('heading', { level: 3 })
-      .map((node) => node.textContent);
-
-    expect(headings).toContain('Containers');
-    expect(headings.indexOf('Containers')).toBeGreaterThan(
-      headings.indexOf('Config file'),
-    );
-    expect(headings.indexOf('Containers')).toBeLessThan(
-      headings.indexOf('Reset'),
-    );
-  });
-
-  it('shows the resolved default when the file names no block', () => {
-    render(<AdvancedSection />);
-
-    expect(screen.getByLabelText('Host alias')).toHaveValue(
-      'host.docker.internal',
-    );
-  });
-
-  it('shows a configured alias over the default', () => {
-    install({ receiver: { hostAlias: 'host.containers.internal', bind: DEFAULT_BIND } });
-    render(<AdvancedSection />);
-
-    expect(screen.getByLabelText('Host alias')).toHaveValue(
-      'host.containers.internal',
-    );
+    expect(screen.queryByLabelText('Host alias')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Reaching this app' })).not.toBeInTheDocument();
   });
 });
 

@@ -61,22 +61,22 @@ const NOISY_ENTRY =
   '/opt/hive-noisy/bin\nUnknown command - bin\n\nTo see a list of supported npm commands, run\n  npm help';
 
 /**
- * Runtime, not Integrations.
+ * Shell & environment (Runtime until HIVE-377), not Integrations.
  *
  * The PATH source group moved here with the hierarchy pass: it reports the
  * environment every session spawns into, and the switch that decides it —
  * "Login shell environment" — has always been in this pane. Integrations only
  * ever borrowed it to explain a missing `gh`, and now links here instead.
  */
-const openRuntime = async (page: Page): Promise<void> => {
+const openShell = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Settings' }).click();
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Runtime' })
+    .getByRole('button', { name: 'Shell & environment' })
     .click();
   await expect(
-    page.getByRole('heading', { name: 'Runtime', level: 2 }),
+    page.getByRole('heading', { name: 'Shell & environment', level: 2 }),
   ).toBeVisible();
 };
 
@@ -151,7 +151,7 @@ test('adopts the login shell PATH when launched with launchd’s', async ({}, te
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openRuntime(page);
+  await openShell(page);
   await expect(page.locator('[data-probing]').first()).toBeHidden({
     timeout: 15_000,
   });
@@ -190,7 +190,7 @@ test('names an imported token but never renders its value', async ({}, testInfo)
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openRuntime(page);
+  await openShell(page);
   await expect(page.locator('[data-probing]').first()).toBeHidden({
     timeout: 15_000,
   });
@@ -218,7 +218,7 @@ test('honours importLoginEnv: false, and says the PATH is the inherited one', as
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openRuntime(page);
+  await openShell(page);
   await expect(page.locator('[data-probing]').first()).toBeHidden({
     timeout: 15_000,
   });
@@ -249,7 +249,7 @@ test('reports a broken login shell without breaking the pane', async ({}, testIn
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openRuntime(page);
+  await openShell(page);
   await expect(page.locator('[data-probing]').first()).toBeHidden({
     timeout: 15_000,
   });
@@ -269,7 +269,7 @@ test('reports a broken login shell without breaking the pane', async ({}, testIn
  * suite is: only a real launch can prove a click reaches main, main's write
  * produces a file the reader accepts, and the write is partial.
  */
-test('the Runtime switch writes the key without disturbing the file', async ({}, testInfo) => {
+test('the Shell & environment switch writes the key without disturbing the file', async ({}, testInfo) => {
   const configPath = seed((name) => testInfo.outputPath(name));
   const app = await launchHive({
     userDataDir: testInfo.outputPath('user-data'),
@@ -282,7 +282,7 @@ test('the Runtime switch writes the key without disturbing the file', async ({},
   await page.getByRole('button', { name: 'Settings' }).click();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Runtime' })
+    .getByRole('button', { name: 'Shell & environment' })
     .click();
 
   const toggle = page.getByRole('switch', { name: /Import my login shell/ });

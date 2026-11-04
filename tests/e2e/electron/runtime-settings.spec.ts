@@ -6,7 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { launchHive } from './fixtures/hive-app';
 
 /**
- * Runtime settings, driven through the real app (story 104).
+ * Shell & environment and a project's runtime overrides, driven through the
+ * real app (story 104, HIVE-377).
  *
  * The unit suite proves the pieces against fakes — a guard rejects a payload, a
  * mocked bridge routes a verb, a stubbed snapshot renders a row. None of that
@@ -18,14 +19,34 @@ import { launchHive } from './fixtures/hive-app';
  * developer's own `~/.hivetty/config.json`.
  */
 
-const openRuntime = async (page: Page): Promise<void> => {
+const openShell = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Settings' }).click();
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Runtime' })
+    .getByRole('button', { name: 'Shell & environment' })
     .click();
-  await expect(page.getByRole('heading', { name: 'Runtime', level: 2 })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Shell & environment', level: 2 }),
+  ).toBeVisible();
+};
+
+/**
+ * HIVE-377: a project's overrides open from its row in Projects. Settings is
+ * opened only when it is not already: a test that did the workspace half in
+ * Shell & environment comes here by the nav item.
+ */
+const openOverrides = async (page: Page, project: string): Promise<void> => {
+  const nav = page.getByRole('navigation', { name: 'Settings sections' });
+  if (!(await nav.isVisible())) {
+    await page.getByRole('button', { name: 'Settings' }).click();
+  }
+  await nav.getByRole('button', { name: 'Projects' }).click();
+  await page.getByRole('button', { name: `Actions for ${project}` }).click();
+  await page.getByRole('menuitem', { name: 'Runtime overrides…' }).click();
+  await expect(
+    page.getByRole('heading', { name: `${project}: runtime overrides`, level: 2 }),
+  ).toBeVisible();
 };
 
 /** A config with one real project directory, and a comment the UI must not eat. */
@@ -96,7 +117,7 @@ test('edits the default shell and preserves the file’s comments', async ({}, t
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openRuntime(page);
+  await openShell(page);
 
   const shell = page.getByRole('textbox', { name: 'Shell' });
   await expect(shell).toHaveValue('/bin/sh');
@@ -124,10 +145,7 @@ test('sets and clears a per-project override', async ({}, testInfo) => {
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openRuntime(page);
-  await page
-    .getByRole('combobox', { name: 'Project' })
-    .selectOption('scratch-repo');
+  await openOverrides(page, 'scratch-repo');
 
   const override = page.getByRole('textbox', { name: 'Shell override' });
   // Empty means inherit; the inherited value is only a placeholder.
@@ -160,10 +178,7 @@ test('saves per-project environment variables', async ({}, testInfo) => {
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openRuntime(page);
-  await page
-    .getByRole('combobox', { name: 'Project' })
-    .selectOption('scratch-repo');
+  await openOverrides(page, 'scratch-repo');
 
   // Scoped to the project's own named group (story 108): the Defaults group
   // now carries its own `EnvEditor` too, so an unscoped query is ambiguous
@@ -197,7 +212,7 @@ test('adds a workspace environment variable and writes a top-level env block', a
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openRuntime(page);
+  await openShell(page);
 
   // The workspace editor, not the per-project one — no project is selected
   // yet, so `ProjectOverrides` has not mounted and this is the only
@@ -241,7 +256,7 @@ test('a per-project override wins over the workspace value for the same key', as
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openRuntime(page);
+  await openShell(page);
 
   // Same key in both layers, deliberately: the point is precedence, not mere
   // presence. If the two layers were merged in the wrong order, both halves
@@ -266,9 +281,7 @@ test('a per-project override wins over the workspace value for the same key', as
     .poll(() => read(configPath).env)
     .toEqual({ [KEY]: WORKSPACE_VALUE });
 
-  await page
-    .getByRole('combobox', { name: 'Project' })
-    .selectOption('scratch-repo');
+  await openOverrides(page, 'scratch-repo');
 
   const projectGroup = page.getByRole('group', {
     name: 'Project environment variables',
@@ -323,7 +336,7 @@ test('the diagnostic reports the PATH it actually searched', async ({}, testInfo
   await page.waitForSelector('nav[aria-label="Places"]');
 
   // The default command's diagnostic lives on the Claude Code page since HIVE-376 (D10), and runs on open.
-  await openRuntime(page);
+  await openShell(page);
   await page
     .getByRole('navigation', { name: 'Settings sections' })
     .getByRole('button', { name: 'Claude Code' })
@@ -354,7 +367,7 @@ test('the diagnostic reports the PATH it actually searched', async ({}, testInfo
  * The unit suite renders `ContainerGroup` in isolation and proves its own
  * markup; none of it proves the nesting actually resolves once the component
  * is mounted where it really lives — a provider deep in `ProjectOverrides`
- * inside `RuntimeSection`'s own tree — or that a commit survives a real
+ * inside `ProjectOverridesView`'s own tree — or that a commit survives a real
  * whole-file write and comes back out through `config.reload()`'s parser.
  * Fix round 1, Finding 4.
  */
@@ -370,10 +383,7 @@ test('renders the nested Container group, switches freshness, and writes an edit
   const page = await app.firstWindow();
   await page.waitForSelector('nav[aria-label="Places"]');
 
-  await openRuntime(page);
-  await page
-    .getByRole('combobox', { name: 'Project' })
-    .selectOption('scratch-repo');
+  await openOverrides(page, 'scratch-repo');
 
   // The nesting claim, verified in situ rather than in a standalone render:
   // `SettingsGroup` only drops to `h4` and suppresses its rule when it reads

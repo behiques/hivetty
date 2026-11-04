@@ -15,13 +15,14 @@ import type { SettingsSection } from '@/types/settings';
 import { AdvancedSection } from '@features/settings/components/advanced-section';
 import { AgentsSection } from '@features/settings/components/agents-section';
 import { AppearanceSection } from '@features/settings/components/appearance-section';
+import { ContainersSection } from '@features/settings/components/containers-section';
 import { EditorSection } from '@features/settings/components/editor-section';
 import { HarnessPage } from '@features/settings/components/harness-page';
 import { HarnessesOverviewSection } from '@features/settings/components/harnesses-overview-section';
 import { IntegrationsSection } from '@features/settings/components/integrations-section';
 import { NotificationsSection } from '@features/settings/components/notifications-section';
 import { ProjectsSection } from '@features/settings/components/projects-section';
-import { RuntimeSection } from '@features/settings/components/runtime-section';
+import { ShellSection } from '@features/settings/components/shell-section';
 import { SkillsSection } from '@features/settings/components/skills-section';
 import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
 
@@ -59,9 +60,9 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
  * Adding a pane is still a row here and an entry in `PANES`, and no control
  * flow anywhere in this file.
  *
- * Each CLI has its own page under Harnesses (HIVE-376). The Runtime pane keeps
- * its label until HIVE-377 replaces that section; its id already names what
- * replaces it.
+ * Each CLI has its own page under Harnesses (HIVE-376). Shell & environment
+ * and Containers took Runtime's place (HIVE-377); a project's own overrides
+ * open from its row in Projects.
  *
  * Advanced sits last. It answers questions about the app rather than setting
  * anything in it, and the destructive verb in the product lives there.
@@ -77,7 +78,8 @@ const GROUPS: readonly {
       { id: 'claude-code', label: 'Claude Code' },
       { id: 'codex', label: 'Codex' },
       { id: 'copilot', label: 'Copilot' },
-      { id: 'shell', label: 'Runtime' },
+      { id: 'shell', label: 'Shell & environment' },
+      { id: 'containers', label: 'Containers' },
     ],
   },
   {
@@ -145,7 +147,8 @@ const CopilotPage = () => <HarnessPage cli="copilot" />;
  */
 const PANES: Record<SectionId, ComponentType> = {
   projects: ProjectsSection,
-  shell: RuntimeSection,
+  shell: ShellSection,
+  containers: ContainersSection,
   'harnesses-overview': HarnessesOverviewSection,
   'claude-code': ClaudeCodePage,
   codex: CodexPage,

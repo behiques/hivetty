@@ -46,6 +46,7 @@ describe('harness registry', () => {
       enforcesTurns: true,
       enforcesBudget: true,
       reportsMcpStatus: true,
+      container: true,
       agentMcp: ['slack'],
       conversationId: 'argv',
       skills: {

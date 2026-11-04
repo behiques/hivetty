@@ -8,15 +8,16 @@ import type { LoginEnvStatus } from '@shared/ipc-contract';
 /**
  * Which environment this app is searching, and where it came from.
  *
- * ## Why this lives in Runtime and not in Integrations
+ * ## Why this lives in Shell & environment and not in Integrations
  *
  * It was written for story 106's Integrations pane, where it answered a
  * question that pane genuinely raises: `gh` was not found, and the reason is
  * the `PATH`. But the fact it reports is not about GitHub at all — it is the
  * environment *every* session spawns into, and the switch that decides it
  * (`Login shell environment`) has always been one group above this one, in
- * Runtime. So the pane that owned the answer could not own the control, and had
- * to send the reader to Runtime by name to change anything.
+ * Runtime (now Shell & environment, HIVE-377). So the pane that owned the
+ * answer could not own the control, and had to send the reader there by name
+ * to change anything.
  *
  * Now it sits directly under the switch it reports on, and Integrations points
  * here instead — the direction that costs one link rather than one round trip.

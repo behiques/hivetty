@@ -62,10 +62,10 @@ Any key not in this list makes the whole file invalid, and Settings says which.
 | Key | Holds | Guide |
 | --- | --- | --- |
 | `version` | `2` | |
-| `shell` | the login shell sessions start in | [Settings › Runtime](settings.md#runtime) |
-| `claudeCommand` | what is typed to start Claude; default `claude` | [Settings › Runtime](settings.md#runtime) |
-| `env` | variables for every session (not `TERM`, `COLORTERM`, `PWD`) | [Settings › Runtime](settings.md#runtime) |
-| `importLoginEnv` | adopt your login shell's `PATH` at startup; default on | [Settings › Runtime](settings.md#runtime) |
+| `shell` | the login shell sessions start in | [Settings › Shell & environment](settings.md#shell--environment) |
+| `claudeCommand` | what is typed to start Claude; default `claude` | [Settings › Overview](settings.md#overview) |
+| `env` | variables for every session (not `TERM`, `COLORTERM`, `PWD`) | [Settings › Shell & environment](settings.md#shell--environment) |
+| `importLoginEnv` | adopt your login shell's `PATH` at startup; default on | [Settings › Shell & environment](settings.md#shell--environment) |
 | `projects` | the project list | below |
 | `notifications` | kind → `off`, `inbox`, `both` | [The inbox](inbox.md#choosing-what-reaches-you) |
 | `jira` | `site`, `email`, `jql`, `workflow` | [Jira and pull requests](work-and-prs.md#connect-jira) · [Ticket workflow](work-and-prs.md#the-ticket-workflow) |
@@ -73,7 +73,7 @@ Any key not in this list makes the whole file invalid, and Settings says which.
 | `clis` | per CLI, `agents`: `enabled`, `model`, `effort`; `sessions`: whether the picker offers it (default on) | [Settings › Overview](settings.md#overview) |
 | `agentsDefaultCli` | the CLI an agent with no `harness:` falls back to; default `claude-code` | [Settings › Overview](settings.md#headless-agents) |
 | `sessionsDefaultCli` | the CLI a new session starts with; default `claude-code` | [Settings › Overview](settings.md#overview) |
-| `receiver` | `hostAlias`, `bind` for containers | [Containers](containers.md) |
+| `receiver` | `hostAlias`, `bind` for containers | [Containers](containers.md) · [Settings › Containers](settings.md#containers) |
 | `server` | serve this machine | [Remote](remote.md#serve-from-an-always-on-mac) |
 | `remote` | attach to a server | [Remote](remote.md#attach-from-a-laptop) |
 | `subscriptionAuth` | sessions drop `ANTHROPIC_API_KEY` so `claude` uses your Claude plan; default on | [Tour › The stage](tour.md#the-stage) |

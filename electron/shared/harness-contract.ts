@@ -59,6 +59,11 @@ export interface Capabilities {
   /** The run's output says which MCP servers connected (the Slack chip, HIVE-123). */
   reportsMcpStatus: boolean;
   /**
+   * A session or agent on this CLI can run in a project's container (HIVE-377). Claude's only: the container's hive
+   * server is HTTP and its image has no signed-in codex or copilot (HIVE-342, HIVE-343).
+   */
+  container: boolean;
+  /**
    * The `mcp:` integrations a headless run on this CLI can be given (HIVE-340). An agent naming
    * one that is not here does not resolve to this CLI.
    */
@@ -96,6 +101,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     enforcesTurns: true,
     enforcesBudget: true,
     reportsMcpStatus: true,
+    container: true,
     agentMcp: ['slack'],
     conversationId: 'argv',
     skills: {
@@ -114,6 +120,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     enforcesTurns: false,
     enforcesBudget: false,
     reportsMcpStatus: false,
+    container: false,
     agentMcp: [],
     conversationId: 'first-hook',
     skills: {
@@ -136,6 +143,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     enforcesTurns: false,
     enforcesBudget: false,
     reportsMcpStatus: false,
+    container: false,
     agentMcp: [],
     conversationId: 'argv',
     skills: {

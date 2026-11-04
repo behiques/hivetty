@@ -62,10 +62,10 @@ import { SLACK_SERVER_KEY } from '@shared/slack-contract';
  * - **Token source rose above the `gh` probe's siblings**, because the token is
  *   what a reader opens this pane to check; where `gh` lives is the supporting
  *   fact, not the headline.
- * - **PATH source left the pane entirely**, for Runtime — see
+ * - **PATH source left the pane entirely**, for Shell & environment — see
  *   `path-source-group.tsx`. It answered a question this pane raises, but it
  *   describes the environment every session spawns into, and the switch that
- *   decides it was always in Runtime. What stays here is `PathProbes`: the list
+ *   decides it was always in Shell & environment. What stays here is `PathProbes`: the list
  *   of directories `gh` was actually looked for in, which is about `gh` and
  *   nothing else.
  */
@@ -115,7 +115,7 @@ function TokenSourceLine({ gh }: { gh: GhStatus }) {
  * Why `gh` was not found, in terms of the environment that was searched.
  *
  * Each branch used to end by pointing *down* the pane at the PATH source group.
- * That group is in Runtime now, so every one of them points there instead —
+ * That group is in Shell & environment now, so every one of them points there instead —
  * which is also where the switch is, so a reader following the sentence lands
  * somewhere they can act rather than somewhere they can only read.
  */
@@ -126,7 +126,7 @@ function NotFoundReason({ loginEnv }: { loginEnv: LoginEnvStatus }) {
         This app searched the <code className="font-mono">PATH</code> it was
         launched with, not your shell&rsquo;s — the import did not run.{' '}
         <strong className="font-normal text-muted">
-          Settings → Runtime → PATH source
+          Settings → Harnesses → Shell & environment → PATH source
         </strong>{' '}
         says why.
       </p>
@@ -140,7 +140,9 @@ function NotFoundReason({ loginEnv }: { loginEnv: LoginEnvStatus }) {
         launched with — for a desktop app opened from Finder, launchd&rsquo;s
         four entries rather than your shell&rsquo;s. Switch the login-shell
         import on in{' '}
-        <strong className="font-normal text-muted">Settings → Runtime</strong>,
+        <strong className="font-normal text-muted">
+          Settings → Harnesses → Shell & environment
+        </strong>,
         or install <code className="font-mono">gh</code> where this PATH can see
         it.
       </p>

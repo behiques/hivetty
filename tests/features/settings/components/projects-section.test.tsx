@@ -318,4 +318,21 @@ describe('cloning a repository (story 102)', () => {
       screen.getByRole('button', { name: /add project/i }),
     ).toBeInTheDocument();
   });
+
+  it('opens a project’s runtime overrides from its row, and comes back (HIVE-377)', async () => {
+    const user = userEvent.setup();
+    seed([entry({ id: 'scratch' })]);
+    render(<ProjectsSection />);
+
+    await user.click(screen.getByRole('button', { name: 'Actions for scratch' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Runtime overrides…' }));
+
+    expect(
+      screen.getByRole('heading', { name: 'scratch: runtime overrides', level: 2 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Projects', level: 2 })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Back to Projects' }));
+    expect(screen.getByRole('heading', { name: 'Projects', level: 2 })).toBeInTheDocument();
+  });
 });

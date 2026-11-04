@@ -39,7 +39,7 @@ import {
   type RunKind,
 } from '@shared/agent-contract';
 import type { ClisConfig } from '@shared/cli-contract';
-import type { HarnessId } from '@shared/harness-contract';
+import { CAPABILITIES, type HarnessId } from '@shared/harness-contract';
 
 import { CONTAINER_DIR, CONTAINER_MCP_FILE } from '../container/generated';
 import { cliCommand } from '../harness/cli-command';
@@ -457,8 +457,9 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
 
     const { adapter } = resolved;
 
-    // The container's hive server is HTTP and its image has no signed-in codex or copilot (HIVE-342, HIVE-343).
-    if (def.container !== undefined && adapter.id !== 'claude-code') {
+    // The container's hive server is HTTP and its image has no signed-in codex or copilot (HIVE-342, HIVE-343);
+    // CAPABILITIES[id].container is where that is decided (HIVE-377).
+    if (def.container !== undefined && !CAPABILITIES[adapter.id].container) {
       return {
         problem: `${name} runs in a container, and ${adapter.id} agents cannot yet — run it on the host, or name claude-code first in harness:.`,
       };

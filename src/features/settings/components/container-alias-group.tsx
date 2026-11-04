@@ -279,7 +279,7 @@ export function ContainerAliasGroup({ hostAlias, bind }: ContainerAliasGroupProp
 
   return (
     <SettingsGroup
-      title="Containers"
+      title="Reaching this app"
       description="How a session running inside a container addresses this app."
     >
       <TextField
