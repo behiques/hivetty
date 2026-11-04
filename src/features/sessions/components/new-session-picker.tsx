@@ -586,17 +586,17 @@ function ProjectRow({
       >
         {name}
       </span>
-      {/*
-        The refusal replaces the session count rather than joining it: a row
-        that cannot be started has nothing useful to say about how many
-        sessions it is running (story 090).
-      */}
       {/* `CliMark` is `aria-hidden` and takes no title, so the span carries it (HIVE-378). */}
       {startsOn === undefined ? null : (
         <span title={`Starts on ${CLI_NAMES[startsOn]}`} className="shrink-0 text-subtle">
           <CliMark cli={startsOn} className="size-3.5" />
         </span>
       )}
+      {/*
+        The refusal replaces the session count rather than joining it: a row
+        that cannot be started has nothing useful to say about how many
+        sessions it is running (story 090).
+      */}
       <span className="shrink-0 tabular-nums text-micro text-subtle">
         {access.spawnable ? `${live} active` : 'unmapped'}
       </span>
