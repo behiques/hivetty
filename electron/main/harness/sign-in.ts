@@ -65,6 +65,12 @@ function codex(code: number | null, stdout: string): CliSignIn {
   return { state: 'in', label: 'Signed in' };
 }
 
-function copilot(_deps: SignInDeps): CliSignIn {
-  return { state: 'unknown', label: 'Not read yet.' };
+/** Copilot sessions sign in through the gh login; agents use the stored token instead. */
+function copilot(deps: SignInDeps): CliSignIn {
+  const gh = deps.gh?.();
+  if (gh === undefined || !gh.installed) {
+    return { state: 'unknown', label: '`gh` was not found, so the GitHub login cannot be read.' };
+  }
+  if (!gh.authenticated) return { state: 'out', label: 'Not signed in to GitHub', fix: 'gh auth login' };
+  return { state: 'in', label: gh.account === null ? 'Signed in to GitHub' : `GitHub: ${gh.account}` };
 }

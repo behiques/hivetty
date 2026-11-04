@@ -85,4 +85,24 @@ describe('readSignIn (HIVE-376)', () => {
       label: '`claude auth status` could not run.',
     });
   });
+
+  it('Copilot: the gh account, else gh auth login', async () => {
+    const gh = (authenticated: boolean, installed = true, account: string | null = authenticated ? 'octo' : null) =>
+      () => ({ installed, authenticated, account });
+    expect(await readSignIn('copilot', { command: 'copilot', env, gh: gh(true) })).toEqual({
+      state: 'in',
+      label: 'GitHub: octo',
+    });
+    expect(await readSignIn('copilot', { command: 'copilot', env, gh: gh(true, true, null) })).toEqual({
+      state: 'in',
+      label: 'Signed in to GitHub',
+    });
+    expect(await readSignIn('copilot', { command: 'copilot', env, gh: gh(false) })).toEqual({
+      state: 'out',
+      label: 'Not signed in to GitHub',
+      fix: 'gh auth login',
+    });
+    expect((await readSignIn('copilot', { command: 'copilot', env, gh: gh(false, false) })).state).toBe('unknown');
+    expect((await readSignIn('copilot', { command: 'copilot', env })).state).toBe('unknown');
+  });
 });
