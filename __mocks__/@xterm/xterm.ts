@@ -219,8 +219,12 @@ export class MockTerminal {
     terminalInstances.push(this);
   }
 
+  /** xterm's root element: set by `open()`, undefined before it. */
+  element: HTMLElement | undefined;
+
   open(element: HTMLElement) {
     this.opened = element;
+    this.element = element;
   }
 
   /**

@@ -809,6 +809,99 @@ describe('TerminalSurface', () => {
       expect(terminalInstances).toHaveLength(1);
     });
 
+    /**
+     * HIVE-389. xterm pauses its renderer while an IntersectionObserver says
+     * the screen is off, and a fit landing in that window measures against the
+     * old canvas: a shrink that pushes lines into scrollback clamps the
+     * viewport to the top, and a console parked at its newest line stops
+     * following it. So every refit waits for the renderer to be live again.
+     */
+    describe('while xterm’s renderer is paused', () => {
+      let intersect: (isIntersecting: boolean) => void = () => {};
+      let resize = () => {};
+      const observed: Element[] = [];
+
+      beforeEach(() => {
+        observed.length = 0;
+        vi.stubGlobal(
+          'IntersectionObserver',
+          class {
+            constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+              intersect = (isIntersecting) => act(() => cb([{ isIntersecting }]));
+            }
+            observe = (target: Element) => observed.push(target);
+            disconnect = vi.fn();
+          },
+        );
+        vi.stubGlobal(
+          'ResizeObserver',
+          class {
+            constructor(cb: () => void) {
+              resize = cb;
+            }
+            observe = vi.fn();
+            unobserve = vi.fn();
+            disconnect = vi.fn();
+          },
+        );
+      });
+
+      afterEach(() => vi.unstubAllGlobals());
+
+      const hideThenReveal = () => {
+        const { transport } = fakeTransport();
+        const { rerender } = render(
+          <TerminalSurface transport={transport} palette={TERM} visible />,
+        );
+        const [fitAddon] = fitAddonInstances as MockFitAddon[];
+        rerender(
+          <TerminalSurface transport={transport} palette={TERM} visible={false} />,
+        );
+        intersect(false);
+        fitAddon.fit.mockClear();
+        terminal().focus.mockClear();
+        rerender(
+          <TerminalSurface transport={transport} palette={TERM} visible />,
+        );
+        return fitAddon;
+      };
+
+      it('watches the element xterm itself watches', () => {
+        render(<TerminalSurface transport={fakeTransport().transport} palette={TERM} />);
+        expect(observed).toEqual([terminal().element]);
+      });
+
+      it('does not fit on reveal, or on the box growing, until the renderer is back', () => {
+        const fitAddon = hideThenReveal();
+        resize();
+
+        expect(fitAddon.fit).not.toHaveBeenCalled();
+        expect(terminal().focus).not.toHaveBeenCalled();
+
+        intersect(true);
+
+        expect(fitAddon.fit).toHaveBeenCalledTimes(1);
+        expect(terminal().focus).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not fit when the renderer resumes behind a hidden surface', () => {
+        const { transport } = fakeTransport();
+        const { rerender } = render(
+          <TerminalSurface transport={transport} palette={TERM} visible />,
+        );
+        const [fitAddon] = fitAddonInstances as MockFitAddon[];
+        rerender(
+          <TerminalSurface transport={transport} palette={TERM} visible={false} />,
+        );
+        intersect(false);
+        fitAddon.fit.mockClear();
+
+        intersect(true);
+
+        expect(fitAddon.fit).not.toHaveBeenCalled();
+      });
+    });
+
     it('takes the keyboard when it becomes visible', () => {
       /**
        * Opening a session and finding the keyboard pointed at nothing means the

@@ -472,6 +472,25 @@ export function TerminalSurface({
   visibleRef.current = visible;
 
   /**
+   * Whether xterm's renderer is running (HIVE-389): no fit while it is not.
+   *
+   * xterm pauses its renderer while its own IntersectionObserver says the
+   * screen is off, and keeps the canvas size it had until it resumes. Being
+   * `visible` is not enough: React reveals the surface a frame before xterm's
+   * observer reports it, and a fit in that frame resizes the buffer while the
+   * renderer still holds the old canvas. xterm's viewport syncs against that
+   * stale height, finds no room to scroll, and clamps to the top. A console
+   * that was following its newest line now reads as a reader in scrollback,
+   * and it stops following. `scrollToBottom` cannot recover it, because it
+   * clamps against the same stale size. Not fitting until the renderer is back
+   * avoids it.
+   *
+   * Starts `true`, as xterm's renderer does. Without an IntersectionObserver
+   * it never changes, which is the behaviour from before.
+   */
+  const liveRef = useRef(true);
+
+  /**
    * The last input-box report sent, so an unchanged answer is not resent
    * (HIVE-135). Null between reveals: hiding reports `unfocused` and the next
    * reveal must report afresh even if the box reads the same as before.
@@ -807,15 +826,39 @@ export function TerminalSurface({
      * the reveal effect below re-fits it when there is something to measure.
      */
     const resizeObserver = new ResizeObserver(() => {
-      if (!visibleRef.current) return;
+      if (!visibleRef.current || !liveRef.current) return;
       fitAndReport({ terminal, fitAddon }, transportRef.current);
     });
     resizeObserver.observe(container);
+
+    /**
+     * xterm's renderer pause, mirrored (HIVE-389). See {@link liveRef}.
+     *
+     * The same element xterm watches, observed after `open()`, so this
+     * callback runs after xterm's in the same task: by the time it reads
+     * "intersecting", xterm has unpaused and applied the resize it parked. The
+     * resume is the reveal's real moment, so the reveal's fit and focus happen
+     * here when the surface is the visible one.
+     */
+    const element = terminal.element;
+    const liveObserver =
+      element && typeof IntersectionObserver !== 'undefined'
+        ? new IntersectionObserver((entries) => {
+            const live = entries.some((entry) => entry.isIntersecting);
+            const resumed = live && !liveRef.current;
+            liveRef.current = live;
+            if (!resumed || !visibleRef.current) return;
+            fitAndReport({ terminal, fitAddon }, transportRef.current);
+            if (!readOnly) terminal.focus();
+          })
+        : null;
+    if (element) liveObserver?.observe(element);
 
     setInstance({ terminal, fitAddon });
 
     return () => {
       resizeObserver.disconnect();
+      liveObserver?.disconnect();
       fileLinks.dispose();
       osc52.dispose();
       terminal.dispose();
@@ -901,7 +944,7 @@ export function TerminalSurface({
     terminal.options.fontFamily = fontFamily;
     terminal.options.fontSize = fontSize;
     terminal.options.scrollback = scrollback;
-    if (visible) fitAndReport(instance, transportRef.current);
+    if (visible && liveRef.current) fitAndReport(instance, transportRef.current);
   }, [instance, fontFamily, fontSize, scrollback, visible]);
 
   /** Backend output in, keystrokes out. */
@@ -1094,8 +1137,11 @@ export function TerminalSurface({
       }
     }
 
-    fitAndReport(instance, transportRef.current);
-    if (!readOnly) terminal.focus();
+    // Paused renderer: the live observer fits and focuses when it resumes ({@link liveRef}).
+    if (liveRef.current) {
+      fitAndReport(instance, transportRef.current);
+      if (!readOnly) terminal.focus();
+    }
 
     return () => {
       lost?.dispose();
