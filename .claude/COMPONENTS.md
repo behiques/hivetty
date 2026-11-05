@@ -353,8 +353,9 @@ seam. Each place's own story replaces its entry.
 `src/components/layout/rail-handle.tsx` — built. `rowRef`, `rail: 'list' | 'session'`,
 `label: string`, `width: number`, `onWidth(px: number): void`.
 
-The seam between a rail and the stage: a vertical `SplitHandle` with `grip`,
-12px wide. The store keeps pixels and `SplitHandle` speaks ratios of the row, so
+The seam between a rail and the stage: a vertical `SplitHandle` with `grip="slim"`,
+5px wide in the stage's colour with one pill, the panel's border the visible seam
+and a hidden span widening the target to ~13px. The store keeps pixels and `SplitHandle` speaks ratios of the row, so
 it converts both ways, measuring the row with a `ResizeObserver`. The ratio is
 the seam's centre, so a drag keeps the grip under the cursor. Bounds come from
 `PANEL_WIDTHS`; a double-click resets to the initial width.

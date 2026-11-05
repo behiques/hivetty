@@ -487,7 +487,7 @@ Canvas loops, rAF work and SVG SMIL are out of its reach and must read
   `--cc-session-strip-w: 46px` (HIVE-201) are fixed, not density-dependent.
   The list panel `--cc-list-w: 300px` (220–400) and the open session panel
   `--cc-session-panel-w: 320px` (260–480) start there and drag from their
-  seams, a 12px gutter with a grip; `AppShell` sets both tokens from
+  seams, a 5px band with a slim pill grip; `AppShell` sets both tokens from
   `appearance-store`, and a double-click on the seam resets it.
   A bar item is 52px wide, a 19px icon over an 11px/500 label (`text-micro`); active is
   `text-ink` on `bg-panel-2`, the rest `text-muted`.
