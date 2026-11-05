@@ -1116,7 +1116,7 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
     let allowed = true;
     const wake = build({
       gate: {
-        entitled: () => (allowed ? null : 'not in your plan (Starter or higher)'),
+        entitled: () => (allowed ? null : 'not in your plan (Solo or higher)'),
         enabled: () => true,
         defaultCli: () => undefined,
         defaults: () => ({}),
@@ -1126,7 +1126,7 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
     expect(wake('slack-watcher', 'manual')).not.toHaveProperty('problem');
     allowed = false;
     expect(wake('slack-watcher', 'manual')).toEqual({
-      problem: 'No CLI can run slack-watcher: claude-code is not in your plan (Starter or higher).',
+      problem: 'No CLI can run slack-watcher: claude-code is not in your plan (Solo or higher).',
     });
   });
 

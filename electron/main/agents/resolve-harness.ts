@@ -12,7 +12,7 @@ const LITERAL_PREFIX = 'literal:';
  * land: every CLI entitled and enabled, and no Settings default.
  */
 export interface HarnessGate {
-  /** `null` when the lease allows it, else why not ("not in your plan (Starter or higher)"). */
+  /** `null` when the lease allows it, else why not ("not in your plan (Solo or higher)"). */
   entitled(id: HarnessId): string | null;
   /** The per-CLI "Enabled for agents" switch. */
   enabled(id: HarnessId): boolean;
