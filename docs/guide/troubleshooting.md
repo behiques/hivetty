@@ -12,13 +12,13 @@ The problems people hit first, and the fix for each.
 
 Opened from Finder, a Mac app gets a short `PATH` that misses Homebrew and `~/.local/bin`.
 
-1. **Settings › Harnesses › Shell & environment › Import my login shell's PATH at startup** should be on (it is by
+1. **Settings › Harnesses › Runtime › Import my login shell's PATH at startup** should be on (it is by
    default). Restart the app after turning it on.
 2. Open **Settings › Harnesses › Claude Code**. Its command check shows the `PATH` searched and
    where `claude` was, or was not, found.
 3. Or set its **Agent command** to the full path, like `/opt/homebrew/bin/claude`.
 
-![Settings › Shell & environment](../assets/guide/18-settings-runtime.png)
+![Settings › Runtime](../assets/guide/18-settings-runtime.png)
 
 ## posix_spawnp failed
 
@@ -71,4 +71,4 @@ The error names the exact key, like `modes.dark.terminal.bg`. The usual cause is
 ## Still stuck
 
 [Open an issue](https://github.com/behiques/hivetty/issues) with the version from
-**Settings › Updates & about**.
+**Settings › Updates & About**.

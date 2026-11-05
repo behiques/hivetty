@@ -82,10 +82,10 @@ afterEach(() => {
 });
 
 describe('ShellSection — the pane (HIVE-377)', () => {
-  it('is titled Shell & environment and says it applies to every CLI', () => {
+  it('is titled Runtime and says it applies to every CLI', () => {
     install();
     render(<ShellSection />);
-    expect(screen.getByRole('heading', { name: 'Shell & environment', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Runtime', level: 2 })).toBeInTheDocument();
     expect(screen.getByText(/every CLI/)).toBeInTheDocument();
   });
   it('has no project picker: overrides open from the project row (HIVE-377)', () => {
@@ -323,7 +323,7 @@ describe('ShellSection — no bridge', () => {
     render(<ShellSection />);
 
     expect(
-      screen.getByRole('heading', { name: 'Shell & environment', level: 2 }),
+      screen.getByRole('heading', { name: 'Runtime', level: 2 }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/only available in the desktop app/),

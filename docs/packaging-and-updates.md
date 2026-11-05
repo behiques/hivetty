@@ -277,7 +277,7 @@ Two entry points, one code path, two ways of answering:
 - **Background** — thirty seconds after launch, then every six hours. Silent
   when there is nothing. Raises an `app.update_available` Inbox row when there
   is, keyed on the *version* so six-hourly checks cannot re-announce one release.
-- **"Check for Updates…"** (app menu, and the button in Settings → Updates & about) —
+- **"Check for Updates…"** (app menu, and the button in Settings → Updates & About) —
   a human asked, so every outcome gets a dialog, including "You're up to date".
   A found release gets a confirm dialog rather than an Inbox row; the user is
   right there.

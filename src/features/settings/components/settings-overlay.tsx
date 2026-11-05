@@ -63,8 +63,8 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
  * Adding a pane is still a row here and an entry in `PANES`, and no control
  * flow anywhere in this file.
  *
- * Each CLI has its own page under Harnesses (HIVE-376). Shell & environment
- * and Containers took Runtime's place (HIVE-377); a project's own overrides
+ * Each CLI has its own page under Harnesses (HIVE-376). Runtime (named Shell &
+ * environment by HIVE-377) and Containers split the old pane; a project's own overrides
  * open from its row in Projects.
  *
  * Machines holds what this Mac is to other machines: Server mode (HIVE-380),
@@ -83,7 +83,7 @@ const GROUPS: readonly {
       { id: 'claude-code', label: 'Claude Code' },
       { id: 'codex', label: 'Codex' },
       { id: 'copilot', label: 'Copilot' },
-      { id: 'shell', label: 'Shell & environment' },
+      { id: 'shell', label: 'Runtime' },
       { id: 'containers', label: 'Containers' },
     ],
   },
@@ -109,7 +109,7 @@ const GROUPS: readonly {
   {
     group: 'General',
     panes: [
-      { id: 'updates-about', label: 'Updates & about' },
+      { id: 'updates-about', label: 'Updates & About' },
       { id: 'advanced', label: 'Advanced' },
     ],
   },
@@ -424,7 +424,7 @@ export function SettingsOverlay() {
                         onKeyDown={onNavKeyDown}
                         onClick={() => openPane(pane.id)}
                         className={cn(
-                          'flex items-center justify-between rounded-md px-2.5 py-1 text-left text-ui outline-none',
+                          'flex items-center justify-between rounded-md px-2.5 py-1 text-left text-ui whitespace-nowrap outline-none',
                           'focus-visible:ring-1 focus-visible:ring-brand',
                           // A touch-sized row when it is the whole list.
                           '@max-xl:min-h-11',

@@ -16,7 +16,7 @@ import { useWhatsNewPrefs } from '@stores/appearance-store';
 import { useSetWhatsNewOpen } from '@stores/ui-store';
 
 /**
- * General › Updates & about (HIVE-380): which build this is, whether a newer
+ * General › Updates & About (HIVE-380): which build this is, whether a newer
  * one exists, and What's new. Moved out of Advanced unchanged.
  *
  * There is no update channel to pick: the app has one release feed. The
@@ -157,7 +157,7 @@ export function UpdatesAboutSection() {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
         <SettingsSectionHeader
-          title="Updates & about"
+          title="Updates & About"
           description="Versions and updates are only available in the desktop app."
         />
       </div>
@@ -167,7 +167,7 @@ export function UpdatesAboutSection() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
       <SettingsSectionHeader
-        title="Updates & about"
+        title="Updates & About"
         description="Which build this is, and whether a newer one is out."
       />
 

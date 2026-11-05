@@ -427,7 +427,7 @@ describe('AdvancedSection — container aliases', () => {
 
 /**
  * Server mode moved to Machines › Server mode, and the versions, updates and
- * What's new to General › Updates & about (HIVE-380).
+ * What's new to General › Updates & About (HIVE-380).
  */
 describe('AdvancedSection — what moved out', () => {
   it('keeps only the config file, reset and diagnostics', () => {

@@ -50,7 +50,7 @@ export function SettingsGroup({
     <section
       className={cn(
         'flex flex-col gap-2',
-        !nested && 'border-b border-border-soft pb-5 last:border-b-0 last:pb-0',
+        !nested && 'mt-4 border-b border-border-soft pb-8 last:border-b-0 last:pb-0',
       )}
     >
       <div className="flex flex-col gap-0.5">

@@ -35,7 +35,7 @@ describe('SettingsGroup', () => {
     const group = screen.getByRole('heading', { name: 'Defaults' }).closest('section');
 
     expect(group?.className).toContain('border-b');
-    expect(group?.className).toContain('pb-5');
+    expect(group?.className).toContain('pb-8');
   });
 
   it('is h3 outside a band — a pane’s own groups are not nested', () => {
@@ -75,7 +75,7 @@ describe('SettingsGroup', () => {
       const group = screen.getByRole('heading', { name: 'Site' }).closest('section');
 
       expect(group?.className).not.toContain('border-b');
-      expect(group?.className).not.toContain('pb-5');
+      expect(group?.className).not.toContain('pb-8');
     });
 
     it('drops a heading level, so the band outranks it', () => {
