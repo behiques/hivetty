@@ -51,8 +51,14 @@ interface SplitHandleProps {
    * The hover and focus fills move to the dots for the same reason: a 12px band
    * flooding brand-blue is a much louder answer to a pointer than a hairline
    * doing it.
+   *
+   * `'slim'` is the quieter grip for the rails' seams: one short pill instead
+   * of the dots, in a band the caller keeps narrow (a few px, in the stage's
+   * own colour), so the panel's border is the visible seam. The band is too
+   * thin to aim at, so an invisible span widens the target 4px either side;
+   * `z-10` lifts it over the neighbours, as for the hairline.
    */
-  grip?: boolean;
+  grip?: boolean | 'slim';
   /** Extra classes for positioning. */
   className?: string;
 }
@@ -241,7 +247,22 @@ export function SplitHandle({
         className,
       )}
     >
-      {grip ? (
+      {grip === 'slim' ? (
+        <>
+          <span
+            aria-hidden="true"
+            className={cn('absolute', vertical ? '-inset-x-1 inset-y-0' : 'inset-x-0 -inset-y-1')}
+          />
+          <span
+            aria-hidden="true"
+            className={cn(
+              'pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full',
+              'bg-border transition-colors group-hover:bg-muted group-focus-visible:bg-brand',
+              vertical ? 'h-7 w-[3px]' : 'h-[3px] w-7',
+            )}
+          />
+        </>
+      ) : grip ? (
         /*
           The grip. Three dots centred in the band the caller sized, and the
           only thing that answers the pointer here — see {@link

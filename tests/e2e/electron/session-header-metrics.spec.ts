@@ -22,14 +22,14 @@ import { launchHive, writeProjectConfig } from './fixtures/hive-app';
  * the status word stay; with the session panel open beside it, the word goes too.
  *
  * Measured here with this label, the header's content box needs about 861px
- * for the resets, hence 880px. The word's breakpoint is 720px of content box:
- * each open rail's grip gutter (#71) takes 12px, so at 1200px the stage is
- * 778px and leaves 738px after `px-5`, where the word must stay drawn; the
+ * for the resets, hence the step at 900px. The word's breakpoint is 720px of content box:
+ * each open rail's grip gutter takes 5px, so at 1200px the stage is
+ * 785px and leaves 745px after `px-5`, where the word must stay drawn; the
  * row needs about 705px with it. Playwright counts `sr-only`'s 1px box as
  * visible (HIVE-219), hence `wordDrawn` below.
  *
- * With the session panel open as well (HIVE-220), the header is 692px of
- * content at 1440 and 452px at 1200. There the chip's own steps take it down
+ * With the session panel open as well (HIVE-220), the header is 706px of
+ * content at 1440 and 480px at 1200. There the chip's own steps take it down
  * to the brain icon and three percentages (195px), and below 500px the title's
  * floor drops to 96px so the model slot has room for them.
  */
@@ -284,8 +284,8 @@ test('a Codex strip with credits gives way like Claude\'s, down to 1100px (HIVE-
 
     /*
       What credits show at each width (header content in brackets): the balance only on a wide
-      header (1920 [~1170]); the coin alone below 1040px (1440 [~690], 1100 [~950], where the
-      list panel folds and the header grows); nothing under 560px, where the label goes too
+      header (1920 [~1170]); the coin alone below 1040px (1440 [~706], 1100 [~950], where the
+      list panel folds and the header grows); nothing under 600px, where the label goes too
       (1300, 1200). The tooltip keeps the balance at every width.
     */
     const coin = chip.getByRole('img', { name: 'credits: 123,456' });

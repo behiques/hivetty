@@ -3,9 +3,9 @@ import { useLayoutEffect, useState, type RefObject } from 'react';
 import { SplitHandle } from '@components/ui/split-handle';
 import { PANEL_WIDTHS, STAGE_MIN, type PanelRail } from '@stores/appearance-store';
 
-/** The handle is `w-3`. */
-const HANDLE = 12;
-/** Half the handle's `w-3`: the ratio is the seam's centre, the stored width stops at its near edge. */
+/** The handle is `w-[5px]`. */
+const HANDLE = 5;
+/** Half the handle's width: the ratio is the seam's centre, the stored width stops at its near edge. */
 const HALF_HANDLE = HANDLE / 2;
 
 interface Geometry {
@@ -27,8 +27,8 @@ interface RailHandleProps {
 }
 
 /**
- * The seam between a rail and the stage: the overmind's gutter-with-a-grip,
- * stood on its side. The store keeps pixels and `SplitHandle` speaks ratios of
+ * The seam between a rail and the stage: a 5px band in the stage's colour
+ * with a slim pill grip, so the panel's own border reads as the seam. The store keeps pixels and `SplitHandle` speaks ratios of
  * its container, so this converts both ways against the row's width.
  */
 export function RailHandle({ rowRef, rail, label, width, onWidth }: RailHandleProps) {
@@ -73,8 +73,8 @@ export function RailHandle({ rowRef, rail, label, width, onWidth }: RailHandlePr
   return (
     <SplitHandle
       axis="vertical"
-      grip
-      className="w-3 bg-bg"
+      grip="slim"
+      className="w-[5px] bg-panel-2"
       containerRef={rowRef}
       label={label}
       value={rowWidth > 0 ? toRatio(shown) : 0}
