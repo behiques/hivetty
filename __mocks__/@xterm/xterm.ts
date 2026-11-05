@@ -225,6 +225,10 @@ export class MockTerminal {
   open(element: HTMLElement) {
     this.opened = element;
     this.element = element;
+    // xterm watches its `.xterm-screen` child, not the root (6.0.0 RenderService).
+    const screen = element.ownerDocument.createElement('div');
+    screen.className = 'xterm-screen';
+    element.appendChild(screen);
   }
 
   /**

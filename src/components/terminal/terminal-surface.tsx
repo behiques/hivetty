@@ -491,6 +491,14 @@ export function TerminalSurface({
   const liveRef = useRef(true);
 
   /**
+   * A reveal whose fit and focus are waiting for the renderer to resume. Only
+   * a resume that completes a reveal takes the keyboard: a visible surface
+   * whose renderer pauses and resumes (scrolled or occluded out and back) must
+   * not pull focus from whatever the user is typing in.
+   */
+  const revealPendingRef = useRef(false);
+
+  /**
    * The last input-box report sent, so an unchanged answer is not resent
    * (HIVE-135). Null between reveals: hiding reports `unfocused` and the next
    * reveal must report afresh even if the box reads the same as before.
@@ -834,22 +842,30 @@ export function TerminalSurface({
     /**
      * xterm's renderer pause, mirrored (HIVE-389). See {@link liveRef}.
      *
-     * The same element xterm watches, observed after `open()`, so this
-     * callback runs after xterm's in the same task: by the time it reads
-     * "intersecting", xterm has unpaused and applied the resize it parked. The
-     * resume is the reveal's real moment, so the reveal's fit and focus happen
-     * here when the surface is the visible one.
+     * The element xterm watches (`.xterm-screen`, the one its RenderService
+     * observes in 6.0.0), observed after `open()`, so this callback runs after
+     * xterm's in the same task: by the time it reads "intersecting", xterm has
+     * unpaused and applied the resize it parked. Like xterm, only the latest
+     * entry counts. The resume is the reveal's real moment, so the reveal's fit
+     * happens here when the surface is the visible one, and focus only when a
+     * reveal is waiting on it ({@link revealPendingRef}).
      */
-    const element = terminal.element;
+    const element =
+      terminal.element?.querySelector('.xterm-screen') ?? terminal.element;
     const liveObserver =
       element && typeof IntersectionObserver !== 'undefined'
         ? new IntersectionObserver((entries) => {
-            const live = entries.some((entry) => entry.isIntersecting);
+            const last = entries[entries.length - 1];
+            if (!last) return;
+            const live = last.isIntersecting;
             const resumed = live && !liveRef.current;
             liveRef.current = live;
             if (!resumed || !visibleRef.current) return;
             fitAndReport({ terminal, fitAddon }, transportRef.current);
-            if (!readOnly) terminal.focus();
+            if (revealPendingRef.current) {
+              revealPendingRef.current = false;
+              if (!readOnly) terminal.focus();
+            }
           })
         : null;
     if (element) liveObserver?.observe(element);
@@ -1123,7 +1139,8 @@ export function TerminalSurface({
         const hadFocus = document.activeElement === terminal.textarea;
         addon?.dispose();
         addon = null;
-        fitAndReport(instance, transportRef.current);
+        // Paused renderer: the resume fits ({@link liveRef}).
+        if (liveRef.current) fitAndReport(instance, transportRef.current);
         if (hadFocus) terminal.focus();
       });
 
@@ -1139,8 +1156,11 @@ export function TerminalSurface({
 
     // Paused renderer: the live observer fits and focuses when it resumes ({@link liveRef}).
     if (liveRef.current) {
+      revealPendingRef.current = false;
       fitAndReport(instance, transportRef.current);
       if (!readOnly) terminal.focus();
+    } else {
+      revealPendingRef.current = true;
     }
 
     return () => {

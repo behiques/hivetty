@@ -819,6 +819,7 @@ describe('TerminalSurface', () => {
     describe('while xterm’s renderer is paused', () => {
       let intersect: (isIntersecting: boolean) => void = () => {};
       let resize = () => {};
+      let lastCallback: (entries: { isIntersecting: boolean }[]) => void = () => {};
       const observed: Element[] = [];
 
       beforeEach(() => {
@@ -827,6 +828,7 @@ describe('TerminalSurface', () => {
           'IntersectionObserver',
           class {
             constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+              lastCallback = cb;
               intersect = (isIntersecting) => act(() => cb([{ isIntersecting }]));
             }
             observe = (target: Element) => observed.push(target);
@@ -866,9 +868,41 @@ describe('TerminalSurface', () => {
         return fitAddon;
       };
 
-      it('watches the element xterm itself watches', () => {
+      it('watches the screen element xterm itself watches, not its root', () => {
         render(<TerminalSurface transport={fakeTransport().transport} palette={TERM} />);
-        expect(observed).toEqual([terminal().element]);
+        const screen = terminal().element?.querySelector('.xterm-screen');
+        expect(screen).toBeTruthy();
+        expect(observed).toEqual([screen]);
+      });
+
+      it('goes by the latest observer entry, as xterm does', () => {
+        const fitAddon = hideThenReveal();
+        // Two entries in one callback: the last one says the screen is off.
+        act(() => lastCallback([{ isIntersecting: true }, { isIntersecting: false }]));
+        expect(fitAddon.fit).not.toHaveBeenCalled();
+      });
+
+      it('does not take focus when a visible surface’s renderer merely resumes', () => {
+        const { transport } = fakeTransport();
+        render(<TerminalSurface transport={transport} palette={TERM} visible />);
+        intersect(false);
+        terminal().focus.mockClear();
+
+        intersect(true);
+
+        expect(terminal().focus).not.toHaveBeenCalled();
+      });
+
+      it('does not refit on a WebGL context loss while the renderer is paused', () => {
+        const { transport } = fakeTransport();
+        render(<TerminalSurface transport={transport} palette={TERM} readOnly={false} visible />);
+        const [fitAddon] = fitAddonInstances as MockFitAddon[];
+        intersect(false);
+        fitAddon.fit.mockClear();
+
+        webglAddonInstances[0]!.emitContextLoss();
+
+        expect(fitAddon.fit).not.toHaveBeenCalled();
       });
 
       it('does not fit on reveal, or on the box growing, until the renderer is back', () => {
