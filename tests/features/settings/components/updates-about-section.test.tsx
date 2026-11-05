@@ -13,7 +13,7 @@ import {
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 
 /**
- * General › Updates & about (HIVE-380): the version facts, the update check
+ * General › Updates & About (HIVE-380): the version facts, the update check
  * and What's new, moved out of Advanced unchanged.
  */
 
@@ -78,7 +78,7 @@ describe('UpdatesAboutSection', () => {
   it('shows what this build is made of', async () => {
     render(<UpdatesAboutSection />);
 
-    expect(screen.getByRole('heading', { name: 'Updates & about', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Updates & About', level: 2 })).toBeInTheDocument();
     expect(await screen.findByText('0.1.0')).toBeInTheDocument();
     expect(screen.getByText('38.0.0')).toBeInTheDocument();
     expect(screen.getByText('140.0.0')).toBeInTheDocument();

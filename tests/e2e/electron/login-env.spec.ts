@@ -61,7 +61,7 @@ const NOISY_ENTRY =
   '/opt/hive-noisy/bin\nUnknown command - bin\n\nTo see a list of supported npm commands, run\n  npm help';
 
 /**
- * Shell & environment (Runtime until HIVE-377), not Integrations.
+ * Runtime (Shell & environment until this rename), not Integrations.
  *
  * The PATH source group moved here with the hierarchy pass: it reports the
  * environment every session spawns into, and the switch that decides it —
@@ -73,10 +73,10 @@ const openShell = async (page: Page): Promise<void> => {
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Shell & environment' })
+    .getByRole('button', { name: 'Runtime' })
     .click();
   await expect(
-    page.getByRole('heading', { name: 'Shell & environment', level: 2 }),
+    page.getByRole('heading', { name: 'Runtime', level: 2 }),
   ).toBeVisible();
 };
 
@@ -269,7 +269,7 @@ test('reports a broken login shell without breaking the pane', async ({}, testIn
  * suite is: only a real launch can prove a click reaches main, main's write
  * produces a file the reader accepts, and the write is partial.
  */
-test('the Shell & environment switch writes the key without disturbing the file', async ({}, testInfo) => {
+test('the Runtime switch writes the key without disturbing the file', async ({}, testInfo) => {
   const configPath = seed((name) => testInfo.outputPath(name));
   const app = await launchHive({
     userDataDir: testInfo.outputPath('user-data'),
@@ -282,7 +282,7 @@ test('the Shell & environment switch writes the key without disturbing the file'
   await page.getByRole('button', { name: 'Settings' }).click();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Shell & environment' })
+    .getByRole('button', { name: 'Runtime' })
     .click();
 
   const toggle = page.getByRole('switch', { name: /Import my login shell/ });

@@ -62,10 +62,10 @@ Any key not in this list makes the whole file invalid, and Settings says which.
 | Key | Holds | Guide |
 | --- | --- | --- |
 | `version` | `2` | |
-| `shell` | the login shell sessions start in | [Settings › Shell & environment](settings.md#shell--environment) |
+| `shell` | the login shell sessions start in | [Settings › Runtime](settings.md#runtime) |
 | `claudeCommand` | what is typed to start Claude; default `claude` | [Settings › Overview](settings.md#overview) |
-| `env` | variables for every session (not `TERM`, `COLORTERM`, `PWD`) | [Settings › Shell & environment](settings.md#shell--environment) |
-| `importLoginEnv` | adopt your login shell's `PATH` at startup; default on | [Settings › Shell & environment](settings.md#shell--environment) |
+| `env` | variables for every session (not `TERM`, `COLORTERM`, `PWD`) | [Settings › Runtime](settings.md#runtime) |
+| `importLoginEnv` | adopt your login shell's `PATH` at startup; default on | [Settings › Runtime](settings.md#runtime) |
 | `projects` | the project list | below |
 | `notifications` | kind → `off`, `inbox`, `both` | [The inbox](inbox.md#choosing-what-reaches-you) |
 | `jira` | `site`, `email`, `jql`, `workflow` | [Jira and pull requests](work-and-prs.md#connect-jira) · [Ticket workflow](work-and-prs.md#the-ticket-workflow) |

@@ -68,9 +68,9 @@ export function OptionStepper<T extends string>({
   const buttons = useRef(new Map<T, HTMLButtonElement | null>());
 
   /**
-   * Percentage across the *centres* of the first and last dots, not the width
-   * of the container: the fill has to stop under a dot, and dots sit at the
-   * ends rather than inset.
+   * Percentage of the rail, which runs from the first dot's centre to the
+   * last's. The dots sit at the same fractions of it (see the radiogroup), so
+   * the fill ends exactly under the selected dot.
    */
   const fill = options.length > 1 ? (index / (options.length - 1)) * 100 : 0;
 
@@ -123,16 +123,26 @@ export function OptionStepper<T extends string>({
         ) : null}
       </span>
 
-      <div className="relative px-[7px]">
+      {/*
+        The rail is inset by the thumb's radius, so its two ends are the
+        centres of the end dots. Every stop is a 16px button with -8px margins
+        either side, so it takes no width in the row and `justify-between`
+        centres stop i at exactly i/(n-1) of the rail, the fraction the fill
+        uses. A label wider than the box overflows it centred; the end stops
+        align theirs to the outer edge instead, their dots still on the point.
+        The line sits at the dots' vertical centre, half the 16px dot box.
+        Not zero-width: a box with no size reads as invisible to Playwright.
+      */}
+      <div className="relative mx-2">
         {/* Track and fill are decorative; the dots below carry the semantics. */}
         <div
           aria-hidden="true"
-          className="absolute inset-x-[7px] top-[6px] h-0.5 rounded bg-term-track"
+          className="absolute inset-x-0 top-2 h-0.5 -translate-y-1/2 rounded bg-term-track"
         />
         <div
           aria-hidden="true"
-          className="absolute top-[6px] left-[7px] h-0.5 rounded bg-green transition-[width] duration-250"
-          style={{ width: `calc(${fill}% - ${(fill / 100) * 14}px)` }}
+          className="absolute top-2 left-0 h-0.5 -translate-y-1/2 rounded bg-green transition-[width] duration-250"
+          style={{ width: `${fill}%` }}
         />
 
         <div
@@ -146,9 +156,9 @@ export function OptionStepper<T extends string>({
             operable.
           */
           aria-disabled={disabled || undefined}
-          className="relative flex"
+          className="relative flex justify-between"
         >
-          {options.map((option) => {
+          {options.map((option, position) => {
             const selected = option === value;
 
             return (
@@ -176,26 +186,33 @@ export function OptionStepper<T extends string>({
                 }}
                 onClick={() => onChange(option)}
                 onKeyDown={step}
-                className="flex flex-1 flex-col items-center gap-2 first:items-start last:items-end"
+                className={cn(
+                  'group -mx-2 flex w-4 flex-col items-center gap-2 outline-none',
+                  'first:items-start last:items-end',
+                )}
               >
+                {/* A fixed box the size of the biggest dot, so every dot centres on the line. */}
+                <span className="grid size-4 place-items-center rounded-full group-focus-visible:ring-2 group-focus-visible:ring-brand">
+                  <span
+                    className={cn(
+                      'rounded-full border transition-all',
+                      selected
+                        ? 'size-4 border-green bg-green shadow-[0_0_8px_var(--cc-green)]'
+                        : 'size-[10px] bg-term-bg',
+                      !selected && (position < index ? 'border-green' : 'border-term-track'),
+                    )}
+                  />
+                </span>
                 <span
                   className={cn(
-                    'rounded-full border transition-all',
-                    selected
-                      ? 'size-[14px] border-green bg-green shadow-[0_0_8px_var(--cc-green)]'
-                      : 'size-[10px] border-term-track bg-term-bg',
-                  )}
-                />
-                <span
-                  className={cn(
-                    'tabular-nums text-micro',
+                    'whitespace-nowrap tabular-nums text-micro',
                     selected ? 'font-bold text-ink' : 'text-subtle',
                   )}
                 >
                   {option}
                 </span>
                 {marks === undefined ? null : (
-                  <span className="h-4 text-micro text-subtle">{marks[option]}</span>
+                  <span className="h-4 whitespace-nowrap text-micro text-subtle">{marks[option]}</span>
                 )}
               </button>
             );

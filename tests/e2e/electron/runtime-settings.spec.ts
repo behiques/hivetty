@@ -6,7 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { launchHive } from './fixtures/hive-app';
 
 /**
- * Shell & environment and a project's runtime overrides, driven through the
+ * Runtime and a project's runtime overrides, driven through the
  * real app (story 104, HIVE-377).
  *
  * The unit suite proves the pieces against fakes — a guard rejects a payload, a
@@ -24,17 +24,17 @@ const openShell = async (page: Page): Promise<void> => {
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Shell & environment' })
+    .getByRole('button', { name: 'Runtime' })
     .click();
   await expect(
-    page.getByRole('heading', { name: 'Shell & environment', level: 2 }),
+    page.getByRole('heading', { name: 'Runtime', level: 2 }),
   ).toBeVisible();
 };
 
 /**
  * HIVE-377: a project's overrides open from its row in Projects. Settings is
  * opened only when it is not already: a test that did the workspace half in
- * Shell & environment comes here by the nav item.
+ * Runtime comes here by the nav item.
  */
 const openOverrides = async (page: Page, project: string): Promise<void> => {
   const nav = page.getByRole('navigation', { name: 'Settings sections' });

@@ -87,7 +87,7 @@ export function ProjectOverridesView({
 
       <SettingsSectionHeader
         title={`${project.name}: runtime overrides`}
-        description="This project’s own shell, command and environment. Blank inherits Harnesses › Shell & environment."
+        description="This project’s own shell, command and environment. Blank inherits Harnesses › Runtime."
       />
 
       <ProjectOverrides

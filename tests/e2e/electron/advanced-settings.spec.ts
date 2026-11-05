@@ -59,14 +59,14 @@ const openServerMode = async (page: Page): Promise<void> => {
   ).toBeVisible();
 };
 
-/** HIVE-380: the versions and updates left Advanced for General › Updates & about. */
+/** HIVE-380: the versions and updates left Advanced for General › Updates & About. */
 const openUpdatesAbout = async (page: Page): Promise<void> => {
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Updates & about' })
+    .getByRole('button', { name: 'Updates & About' })
     .click();
   await expect(
-    page.getByRole('heading', { name: 'Updates & about', level: 2 }),
+    page.getByRole('heading', { name: 'Updates & About', level: 2 }),
   ).toBeVisible();
 };
 
@@ -131,7 +131,7 @@ test('reports the config path and this build’s versions', async ({}, testInfo)
   // main keeps must reach the screen as a sentence.
   await expect(page.getByText(/no session has run yet/i)).toBeVisible();
 
-  // The versions live in General › Updates & about since HIVE-380.
+  // The versions live in General › Updates & About since HIVE-380.
   await openUpdatesAbout(page);
   await expect(page.getByText('Electron', { exact: true })).toBeVisible();
   await expect(page.getByText('Chromium', { exact: true })).toBeVisible();

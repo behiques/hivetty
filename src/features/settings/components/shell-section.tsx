@@ -18,7 +18,7 @@ import type { EnvDiagnostic } from '@shared/config-contract';
 import type { LoginEnvStatus } from '@shared/ipc-contract';
 
 /**
- * Harnesses › Shell & environment (HIVE-377): what every session starts in,
+ * Harnesses › Runtime (HIVE-377): what every session starts in,
  * for every CLI. A project's own overrides open from its row in Workspace ›
  * Projects (`project-overrides-view.tsx`). The global agent command and its
  * diagnostic are on Settings › Harnesses › Claude Code (HIVE-376 D10).
@@ -106,7 +106,7 @@ export function ShellSection() {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
         <SettingsSectionHeader
-          title="Shell & environment"
+          title="Runtime"
           description="Shell and environment settings are only available in the desktop app."
         />
       </div>
@@ -138,7 +138,7 @@ export function ShellSection() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
       <SettingsSectionHeader
-        title="Shell & environment"
+        title="Runtime"
         description="What every session starts in, for every CLI. A project can override these from Workspace › Projects › ⋯ › Runtime overrides."
       />
 

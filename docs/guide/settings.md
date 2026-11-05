@@ -5,10 +5,10 @@ Workspace, Machines and General. Almost everything here is written to `~/.hivett
 ([The config file](configuration.md)); appearance and editor preferences stay on this machine.
 
 **On this page:** [Projects](#projects) · [Overview](#overview) ·
-[Shell & environment](#shell--environment) · [Containers](#containers) · [Skills](#skills) ·
+[Runtime](#runtime) · [Containers](#containers) · [Skills](#skills) ·
 [Agents](#agents) · [Ticket workflow](#ticket-workflow) · [Appearance](#appearance) · [Editor](#editor) ·
 [Integrations](#integrations) · [Notifications](#notifications) · [Server mode](#server-mode) ·
-[Updates & about](#updates--about) · [Advanced](#advanced)
+[Updates & About](#updates--about) · [Advanced](#advanced)
 
 | Where it is stored | What |
 | --- | --- |
@@ -27,7 +27,7 @@ most recently pushed, filtered as you type, through `gh`); pick one, or paste an
 
 **Runtime overrides…** in a project's ⋯ menu changes the shell, the agent command, the
 environment and the container for that one project, and checks where its command is found.
-Blank inherits [Shell & environment](#shell--environment).
+Blank inherits [Runtime](#runtime).
 
 **Example.** Point one project at a wrapper script:
 
@@ -78,13 +78,13 @@ their row says why.
 "clis": { "claude-code": { "agents": { "enabled": true, "model": "haiku" } } }
 ```
 
-## Shell & environment
+## Runtime
 
 What every session starts in, for every CLI. **Shell** (started as a login shell) and environment variables for
 every project. **Import my login shell's PATH at startup** lets a Finder-launched app find Homebrew tools, and the
 environment diagnostic shows which variables your rc file overrode. The agent command is on each CLI's page.
 
-![Settings › Shell & environment](../assets/guide/18-settings-runtime.png)
+![Settings › Runtime](../assets/guide/18-settings-runtime.png)
 
 ## Containers
 
@@ -137,7 +137,7 @@ Under **Machines**. **Serve this machine**, paired devices, and **Attach to a se
 ([Remote](remote.md)). While this window is attached, the bind fields and the device roster are
 the server's, and the pane says so.
 
-## Updates & about
+## Updates & About
 
 Under **General**. **About** (the HiveTTY, Electron, Chromium and Node versions, and the
 platform), **Updates › Check now** with where updates come from, and **What's new**

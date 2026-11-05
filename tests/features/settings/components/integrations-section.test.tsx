@@ -222,7 +222,7 @@ describe('IntegrationsSection — why gh was not found', () => {
   /**
    * The cross-pane pointer, which is the only thing keeping this copy honest.
    *
-   * PATH source lives in Shell & environment now, so these branches send the reader there
+   * PATH source lives in Runtime now, so these branches send the reader there
    * by name. That sentence is the one part of the move a rename or another
    * shuffle can silently break — the pane it names is not this one, so nothing
    * else in this file would notice. It was left with no assertion at all when
@@ -244,7 +244,7 @@ describe('IntegrationsSection — why gh was not found', () => {
     render(<IntegrationsSection />);
 
     expect(
-      await screen.findByText(/Settings → Harnesses → Shell & environment → PATH source/),
+      await screen.findByText(/Settings → Harnesses → Runtime → PATH source/),
     ).toBeInTheDocument();
     // And it does not claim to show the PATH itself — that group left.
     expect(screen.queryByText(/the PATH below/)).not.toBeInTheDocument();
@@ -501,7 +501,7 @@ describe('IntegrationsSection — the provider bands', () => {
   });
 
   /**
-   * PATH source is Shell & environment's now — it describes the environment every session
+   * PATH source is Runtime's now — it describes the environment every session
    * spawns into, not GitHub. What stays is the probe list, which is about `gh`
    * and nothing else.
    */

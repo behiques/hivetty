@@ -64,7 +64,7 @@ export function Button({
       aria-busy={pending || undefined}
       onClick={pending ? (event) => event.preventDefault() : onClick}
       className={cn(
-        'shrink-0 leading-none disabled:opacity-60 aria-disabled:cursor-default aria-disabled:opacity-60',
+        'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap leading-none disabled:opacity-60 aria-disabled:cursor-default aria-disabled:opacity-60',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
         VARIANT[variant],
         SIZE[size],

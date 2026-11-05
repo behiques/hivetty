@@ -12,12 +12,12 @@ import { useIsNestedGroup } from '@features/settings/components/settings-nesting
  *
  * ## The rhythm
  *
- * `pb-5` above the rule, against the pane container's `gap-6` below it. The two
- * used to be `pb-4` and `gap-4`, which put the rule exactly halfway between the
- * group it ends and the group it starts — equidistant reads as belonging to
- * neither, so a rule that was meant to be a floor rendered as a divider between
- * equals. The shorter gap ties it to the block above; the longer one is the
- * actual break.
+ * `pb-8` above the rule, against the pane container's `gap-6` plus this
+ * section's `mt-4` below it (40px). The two used to be `pb-4` and `gap-4`, which
+ * put the rule exactly halfway between the group it ends and the group it
+ * starts — equidistant reads as belonging to neither, so a rule that was meant
+ * to be a floor rendered as a divider between equals. The shorter gap ties it
+ * to the block above; the longer one is the actual break.
  *
  * Both numbers live apart (one here, one in each pane), so they are changed
  * together or the asymmetry inverts.
@@ -50,7 +50,7 @@ export function SettingsGroup({
     <section
       className={cn(
         'flex flex-col gap-2',
-        !nested && 'border-b border-border-soft pb-5 last:border-b-0 last:pb-0',
+        !nested && 'mt-4 border-b border-border-soft pb-8 last:border-b-0 last:pb-0',
       )}
     >
       <div className="flex flex-col gap-0.5">

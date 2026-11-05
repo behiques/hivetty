@@ -490,7 +490,7 @@ The rules the module holds to:
 - a failed probe is a failed *observation*: the inherited environment is kept and
   the reason is reported, never treated as a configuration error
 
-`importLoginEnv` in the config file turns it off (Settings → Shell & environment), for the rc
+`importLoginEnv` in the config file turns it off (Settings → Runtime), for the rc
 file this app should not fight. Settings → Integrations reports which environment
 is in force, because the difference is otherwise invisible and a user who cannot
 see it cannot tell a broken import from a missing binary.

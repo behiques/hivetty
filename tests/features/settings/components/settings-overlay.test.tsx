@@ -58,7 +58,7 @@ describe('SettingsOverlay', () => {
     */
     for (const present of [
       'Projects',
-      'Shell & environment',
+      'Runtime',
       'Containers',
       'Overview',
       'Claude Code',
@@ -70,7 +70,7 @@ describe('SettingsOverlay', () => {
       'Appearance',
       'Integrations',
       'Server mode',
-      'Updates & about',
+      'Updates & About',
       'Advanced',
     ]) {
       expect(within(nav).getByRole('button', { name: present })).toBeInTheDocument();
@@ -108,11 +108,11 @@ describe('SettingsOverlay', () => {
           .map((button) => button.textContent),
       ),
     ).toEqual([
-      ['Overview', 'Claude Code', 'Codex', 'Copilot', 'Shell & environment', 'Containers'],
+      ['Overview', 'Claude Code', 'Codex', 'Copilot', 'Runtime', 'Containers'],
       ['Agents', 'Skills', 'Ticket workflow'],
       ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
       ['Server mode'],
-      ['Updates & about', 'Advanced'],
+      ['Updates & About', 'Advanced'],
     ]);
     expect(within(nav).queryByText('Account')).not.toBeInTheDocument();
     expect(within(nav).queryByRole('button', { name: 'Harnesses' })).not.toBeInTheDocument();
@@ -123,7 +123,7 @@ describe('SettingsOverlay', () => {
     ['claude-code', 'Claude Code'],
     ['codex', 'Codex'],
     ['copilot', 'Copilot'],
-    ['shell', 'Shell & environment'],
+    ['shell', 'Runtime'],
     ['containers', 'Containers'],
     ['agents', 'Agents'],
     ['skills', 'Skills'],
@@ -134,7 +134,7 @@ describe('SettingsOverlay', () => {
     ['integrations', 'Integrations'],
     ['notifications', 'Notifications'],
     ['server-mode', 'Server mode'],
-    ['updates-about', 'Updates & about'],
+    ['updates-about', 'Updates & About'],
     ['advanced', 'Advanced'],
   ] as const)('pane id %s renders its section', (id, title) => {
     useUiStore.getState().openSettings(id);
@@ -144,7 +144,7 @@ describe('SettingsOverlay', () => {
   });
 
   it.each([
-    ['runtime', 'Shell & environment'],
+    ['runtime', 'Runtime'],
     ['clis', 'Overview'],
     ['advanced', 'Advanced'],
   ] as const)('the legacy id %s opens its new pane', (legacy, label) => {
