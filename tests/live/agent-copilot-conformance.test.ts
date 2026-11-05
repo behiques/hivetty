@@ -778,7 +778,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     expect(existsSync(join(cliHome('copilot'), 'usage', `${last?.sessionUuid ?? ''}.json`))).toBe(false);
   });
 
-  it('a Starter lease refuses Copilot with the reason, a Team lease resolves it', async (ctx) => {
+  it('a Solo lease refuses Copilot with the reason, a Team lease resolves it', async (ctx) => {
     if (skipReason !== undefined) ctx.skip(skipReason);
     // Resolved: every wake above ran on copilot with `entitled` answering null.
     expect((await persisted(CP)).runs.every((run) => run.harness === 'copilot')).toBe(true);

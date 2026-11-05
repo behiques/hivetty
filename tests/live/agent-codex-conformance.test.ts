@@ -465,18 +465,18 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
     expect(last?.costUsd).toBeUndefined();
   });
 
-  it('a Starter lease resolves Codex, a Community lease refuses', async (ctx) => {
+  it('a Solo lease resolves Codex, a Community lease refuses', async (ctx) => {
     if (skipReason !== undefined) ctx.skip(skipReason);
     // Resolved: every wake above ran on codex with `entitled` answering null.
     expect((await persisted(CX)).runs.every((run) => run.harness === 'codex')).toBe(true);
 
-    entitled = (id) => (id === 'codex' ? 'not in your plan (Starter or higher)' : null);
+    entitled = (id) => (id === 'codex' ? 'not in your plan (Solo or higher)' : null);
     const before = spawns.length;
     try {
       const refused = runs.run(CX, 'manual');
       expect(refused).toMatchObject({ started: false });
       expect(JSON.stringify(refused)).toContain(
-        `No CLI can run ${CX}: codex is not in your plan (Starter or higher).`,
+        `No CLI can run ${CX}: codex is not in your plan (Solo or higher).`,
       );
       expect(spawns).toHaveLength(before);
     } finally {

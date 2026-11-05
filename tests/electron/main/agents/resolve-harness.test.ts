@@ -129,7 +129,7 @@ describe('resolveHarness: availability (HIVE-340)', () => {
 
   it('skips a CLI the licence does not allow', () => {
     const result = resolveHarness(prefer, [], deps(both, {
-      gate: gate({ entitled: (id) => (id === cli('codex') ? 'not in your plan (Starter or higher)' : null) }),
+      gate: gate({ entitled: (id) => (id === cli('codex') ? 'not in your plan (Solo or higher)' : null) }),
     }));
 
     expect(result).toMatchObject({ adapter: both['claude-code'] });
@@ -144,20 +144,20 @@ describe('resolveHarness: availability (HIVE-340)', () => {
   it('names every candidate and why, when none can run', () => {
     const result = resolveHarness(prefer, [], deps(both, {
       gate: gate({
-        entitled: (id) => (id === cli('codex') ? 'not in your plan (Starter or higher)' : null),
+        entitled: (id) => (id === cli('codex') ? 'not in your plan (Solo or higher)' : null),
         enabled: (id) => id !== 'claude-code',
       }),
     }));
 
     expect(result).toEqual({
       problem:
-        'No CLI can run reviewer: codex is not in your plan (Starter or higher); claude-code is turned off for agents in Settings › Harnesses.',
+        'No CLI can run reviewer: codex is not in your plan (Solo or higher); claude-code is turned off for agents in Settings › Harnesses.',
     });
   });
 
   it('resolves again on every call: a lapse between two wakes moves the next one', () => {
     let entitled = true;
-    const lapsing = gate({ entitled: (id) => (id === cli('codex') && !entitled ? 'not in your plan (Starter or higher)' : null) });
+    const lapsing = gate({ entitled: (id) => (id === cli('codex') && !entitled ? 'not in your plan (Solo or higher)' : null) });
 
     expect(resolveHarness(prefer, [], deps(both, { gate: lapsing }))).toMatchObject({ adapter: both.codex });
     entitled = false;

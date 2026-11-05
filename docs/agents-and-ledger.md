@@ -1712,7 +1712,7 @@ candidate that passes every check runs:
 7. it can serve every `mcp:` integration (`Capabilities.agentMcp`).
 
 When none passes, the run is refused as `invalid` with every candidate and its reason,
-for example: "No CLI can run reviewer: codex is not in your plan (Starter or higher);
+for example: "No CLI can run reviewer: codex is not in your plan (Solo or higher);
 claude-code is turned off for agents in Settings › Harnesses." A fence reason names tools,
 never a rule's argument.
 
