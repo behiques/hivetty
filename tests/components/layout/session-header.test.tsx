@@ -61,7 +61,7 @@ describe('SessionHeader (HIVE-197)', () => {
   it('moves the status word to the dot title for the narrowest step (HIVE-213)', () => {
     render(<SessionHeader entity={hero()} />);
     const status = screen.getByTestId('session-status');
-    // 720px of content: the row needs ~705 with the word, and 1200px with one rail open leaves 738 (the rails' grip gutters, #71).
+    // 720px of content: the row needs ~705 with the word, and 1200px with one rail open leaves 745.
     expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[720px]:sr-only');
     expect(status.getAttribute('title')).not.toBeNull();
   });

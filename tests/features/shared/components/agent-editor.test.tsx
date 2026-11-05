@@ -123,7 +123,7 @@ describe('AgentEditor', () => {
     );
   });
 
-  it('puts a resize seam between Form and Source, wide only, drawn as the rails’ grip gutter', () => {
+  it('puts a resize seam between Form and Source, wide only, drawn as a 12px grip gutter', () => {
     setup();
 
     const seam = screen.getByRole('slider', { name: 'Resize the form and the source' });
