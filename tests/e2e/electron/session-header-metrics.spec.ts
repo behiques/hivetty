@@ -30,7 +30,7 @@ import { launchHive, writeProjectConfig } from './fixtures/hive-app';
  *
  * With the session panel open as well (HIVE-220), the header is 706px of
  * content at 1440 and 480px at 1200. There the chip's own steps take it down
- * to the brain icon and three percentages (195px), and below 500px the title's
+ * to the brain icon and three percentages (up to 207px), and below 500px the title's
  * floor drops to 96px so the model slot has room for them.
  */
 const PROJECT = 'nova-web';
