@@ -48,17 +48,17 @@ function Stat({ pct, detail, short, label }: StatProps) {
       <GaugeRing pct={pct} label={label} />
       <span className={TONE_TEXT[gaugeTone(pct)]}>{pctLabel(pct)}</span>
       {short === undefined ? (
-        <span data-detail="only" className="text-subtle @max-[620px]:hidden">
+        <span data-detail="only" className="text-subtle @max-[660px]:hidden">
           {detail}
         </span>
       ) : (
         <>
-          <span data-detail="long" className="text-subtle @max-[880px]:hidden">
+          <span data-detail="long" className="text-subtle @max-[900px]:hidden">
             {detail}
           </span>
           <span
             data-detail="short"
-            className="hidden text-subtle @max-[880px]:inline @max-[620px]:hidden"
+            className="hidden text-subtle @max-[900px]:inline @max-[660px]:hidden"
           >
             {short}
           </span>
@@ -151,21 +151,23 @@ function Stat({ pct, detail, short, label }: StatProps) {
  * 1. the title truncates; ≤ 1040px, credits give way to their coin, the balance
  *    left to its label and the tooltip (HIVE-334: measured, the full row with a
  *    balance needs ~980px; at 1100px the slot was 30px short);
- * 2. ≤ 880px, the resets give way to `5h` / `wk` (both spans render; the
+ * 2. ≤ 900px, the resets give way to `5h` / `wk` (both spans render; the
  *    container picks one);
- * 3. ≤ 720px, the header's status word hides (its dot keeps it as a title);
- *    measured, the row needs ~705px with the word and this label (HIVE-219;
- *    retuned to 720px for the rails' grip gutters, #71);
- * 4. ≤ 700px, the label shortens to the model name, window and effort left to
+ * 3. ≤ 820px, the label shortens to the model name, window and effort left to
  *    the tooltip;
- * 5. ≤ 620px, the detail words go: each stat is its ring and percentage;
- * 6. ≤ 560px, the label goes: the brain icon alone; credits go too, to the
- *    tooltip (HIVE-334: measured, the coin was 7px over at 1200px);
+ * 4. ≤ 720px, the header's status word hides (its dot keeps it as a title);
+ * 5. ≤ 660px, the detail words go: each stat is its ring and percentage;
+ * 6. ≤ 600px, the label goes: the brain icon alone; credits go too, to the
+ *    tooltip;
  * 7. ≤ 500px, the title column's floor drops from 140px to 96px.
  *
- * Each breakpoint sits above the width its row needs with the steps before it
- * (690, 603, 541, 475px), so the header at 1200px with both panels open (452px, the rails' grip gutters included)
- * fits with the icon alone and room to spare.
+ * Measured with both panels open and the widest real strip, Codex with credits
+ * (`gpt-6.1-sol · medium`), the chip needs 553 / 461 / 364 / 306 / 207px at the
+ * steps from 2 down, and the slot gets the header's width less 345px with the
+ * status word and less 294px without it. Each breakpoint sits above the width
+ * where its step's chip fits (898, 806, 709, 658, 600px), so no width from
+ * 1920px down to 1200px clips; the old 700 / 620 / 560px steps were set for
+ * Claude's shorter label and clipped Codex's between them.
  *
  * The three percentages never go. The full string, model, window, effort,
  * both resets and credits included, stays in `title` at every step. The header's model slot
@@ -272,12 +274,12 @@ export function ModelChip() {
       <CliMark cli={cli} />
       <span className="flex items-center gap-2">
         {/* Both render; the header's width picks one, or neither (HIVE-220). */}
-        <span data-label="full" className="shrink-0 @max-[700px]:hidden">
+        <span data-label="full" className="shrink-0 @max-[820px]:hidden">
           {label}
         </span>
         <span
           data-label="model"
-          className="hidden shrink-0 @max-[700px]:inline @max-[560px]:hidden"
+          className="hidden shrink-0 @max-[820px]:inline @max-[600px]:hidden"
         >
           {parts.name}
         </span>
@@ -316,11 +318,11 @@ export function ModelChip() {
             does. The balance and its word need a wide header (≤ 1040px they go, the coin's label
             carrying both): measured, the full row with a balance needs ~980px, and at 1440px with
             the session panel open the slot has about 56px for a fourth stat, too little for any
-            balance beside a coin. At 560px, where the label goes, the coin goes too.
+            balance beside a coin. At 600px, where the label goes, the coin goes too.
           */
           <span
             data-stat="credits"
-            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[560px]:hidden"
+            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[600px]:hidden"
           >
             <Coins
               size={13}
@@ -342,7 +344,7 @@ export function ModelChip() {
           /* Session totals, used, not a share of anything: a text stat like credits (HIVE-335). */
           <span
             data-stat="tokens"
-            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[560px]:hidden"
+            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[600px]:hidden"
           >
             <ArrowsDownUp
               size={13}
@@ -364,7 +366,7 @@ export function ModelChip() {
           /* Copilot's own word for it; spent this session, unlike Codex's `credits` balance (HIVE-335). */
           <span
             data-stat="aiCredits"
-            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[560px]:hidden"
+            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[600px]:hidden"
           >
             <Coins
               size={13}
