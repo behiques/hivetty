@@ -10,6 +10,7 @@ import {
   installSuspender,
   isLapsed,
   releaseForQuit,
+  releaseNow,
   RESUME_NOTICE,
   runContainer,
   type Suspender,
@@ -227,6 +228,44 @@ describe('createSuspender', () => {
   });
 });
 
+describe('releaseNow (HIVE-267)', () => {
+  it('continues everything synchronously, without a notice, and latches', async () => {
+    const { s, log } = harness();
+    await s.onState(LAPSED);
+    log.length = 0;
+
+    s.releaseNow();
+
+    expect(log).toEqual(['pty:cont:', 'runs:SIGCONT', 'unpause:box']);
+    expect(s.lapsed()).toBe(false);
+    await s.onState(LAPSED);
+    expect(log.filter((l) => l === 'pty:stop')).toHaveLength(0);
+  });
+
+  it('is a no-op when nothing is suspended, and a step that throws does not skip the rest', async () => {
+    const idle = harness();
+    idle.s.releaseNow();
+    expect(idle.log).toEqual([]);
+
+    const { s, deps, log } = harness();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    deps.container.mockImplementation(async (_r: string, verb: string, name: string) => {
+      log.push(`${verb}:${name}`);
+      if (verb === 'unpause') throw new Error('gone');
+    });
+    await s.onState(LAPSED);
+    log.length = 0;
+    deps.ptyHost.resumeAll.mockImplementationOnce(() => {
+      throw new Error('host gone');
+    });
+
+    expect(() => s.releaseNow()).not.toThrow();
+    expect(log).toEqual(['runs:SIGCONT', 'unpause:box']);
+    await Promise.resolve();
+    info.mockRestore();
+  });
+});
+
 describe('the installed suspender', () => {
   afterEach(() => {
     installSuspender(null);
@@ -235,6 +274,7 @@ describe('the installed suspender', () => {
   it('isLapsed is false and releaseForQuit resolves with nothing installed', async () => {
     expect(isLapsed()).toBe(false);
     await expect(releaseForQuit()).resolves.toBeUndefined();
+    expect(() => releaseNow()).not.toThrow();
   });
 
   it('isLapsed follows the installed suspender, and releaseForQuit reaches it', async () => {
@@ -242,12 +282,15 @@ describe('the installed suspender', () => {
       onState: vi.fn(async () => undefined),
       lapsed: vi.fn(() => true),
       releaseForQuit: vi.fn(async () => undefined),
+      releaseNow: vi.fn(),
     };
     installSuspender(fake);
 
     expect(isLapsed()).toBe(true);
     await releaseForQuit();
     expect(fake.releaseForQuit).toHaveBeenCalled();
+    releaseNow();
+    expect(fake.releaseNow).toHaveBeenCalled();
   });
 });
 

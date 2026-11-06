@@ -1347,13 +1347,21 @@ describe('the licence suspender (HIVE-267)', () => {
     expect(trackerDeps?.lapsed?.()).toBe(true);
   });
 
-  it('reset unsubscribes and uninstalls it', async () => {
+  it('reset continues what a lapse stopped before it closes the runs, then unsubscribes and uninstalls', async () => {
+    await emit(LAPSED);
+    const order: string[] = [];
+    hostResumeAll.mockImplementation(() => order.push('pty:cont'));
+    trackerSignalAll.mockImplementation((signal: string) => order.push(`runs:${signal}`));
+    trackerCloseAll.mockImplementation(() => order.push('closeAll'));
+
     resetIpcHandlers();
 
+    expect(order).toEqual(['pty:cont', 'runs:SIGCONT', 'closeAll']);
     expect(licenceSeam.listeners.size).toBe(0);
     expect(trackerDeps?.lapsed?.()).toBe(false);
+
     registerIpcHandlers();
     await settle();
+    expect(licenceSeam.listeners.size).toBe(1);
   });
 });
-

@@ -23,6 +23,12 @@ export interface Suspender {
   lapsed(): boolean;
   /** Before quit: continue everything, without a notice. */
   releaseForQuit(): Promise<void>;
+  /**
+   * Before the IPC layers are torn down (a mode switch): continue everything **now**, synchronously, without a
+   * notice, and stop for good. Synchronous because the teardown closes the runs on its next line, and a run
+   * closed while stopped is never continued.
+   */
+  releaseNow(): void;
 }
 
 export function createSuspender(deps: SuspenderDeps): Suspender {
@@ -96,6 +102,16 @@ export function createSuspender(deps: SuspenderDeps): Suspender {
         if (suspended) await resume();
       });
     },
+    releaseNow() {
+      released = true;
+      if (!suspended) return;
+      step('resume of the pty-host', () => deps.ptyHost.resumeAll());
+      step('SIGCONT of the runs', () => deps.runs.signalAll('SIGCONT'));
+      // Fire and forget: the unpauses outlive the teardown, and `container` logs its own failures.
+      void settle(paused.map((c) => deps.container(c.runtime, 'unpause', c.name)));
+      paused = [];
+      suspended = false;
+    },
   };
 }
 
@@ -113,6 +129,10 @@ export function isLapsed(): boolean {
 
 export function releaseForQuit(): Promise<void> {
   return installed?.releaseForQuit() ?? Promise.resolve();
+}
+
+export function releaseNow(): void {
+  installed?.releaseNow();
 }
 
 /** `<runtime> pause|unpause <name>`, capped at {@link CONTAINER_TIMEOUT_MS}. Resolves either way, logging a failure. */

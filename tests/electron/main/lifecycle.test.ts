@@ -308,7 +308,7 @@ describe('before-quit', () => {
 
 describe('before-quit releases a licence suspension first (HIVE-267)', () => {
   const suspenderReleasing = (releaseForQuit: () => Promise<void>) => {
-    installSuspender({ onState: async () => undefined, lapsed: () => true, releaseForQuit });
+    installSuspender({ onState: async () => undefined, lapsed: () => true, releaseForQuit, releaseNow: () => undefined });
   };
 
   afterEach(() => {

@@ -298,7 +298,7 @@ import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
 import { ACCOUNT_CALLS, LICENCE_CALLS, licence, onLicenceChange } from '../licence';
-import { createSuspender, installSuspender, isLapsed, runContainer } from '../licence/suspend';
+import { createSuspender, installSuspender, isLapsed, releaseNow, runContainer } from '../licence/suspend';
 import { agentMcpConfigFile, createMcpRuntime } from '../mcp';
 import {
   createNotificationHub,
@@ -5739,6 +5739,8 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
   bindings.unbindAll();
   stopDisplayWake?.();
   stopDisplayWake = null;
+  // HIVE-267: continue what a lapse stopped before `closeAll` below closes runs that could not act on it.
+  releaseNow();
   stopSuspender?.();
   stopSuspender = null;
   installSuspender(null);
