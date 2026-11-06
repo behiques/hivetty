@@ -137,3 +137,74 @@ describe('a renewal that finds no token mid sign-in (Task 4 review)', () => {
     expect(h.machine.state()).toEqual({ kind: 'grace', ...terms() });
   });
 });
+
+describe('licence state transitions', () => {
+  const started = async (opts: Parameters<typeof harness>[0]) => {
+    const h = harness(opts);
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    return h;
+  };
+
+  it('a renewed lease replaces lease.jws and is licensed', async () => {
+    const fresh = signer.sign(claimsFor({ jti: 'ls_2', exp: NOW_S + 30 * 86_400 }));
+    const h = await started({ stored: signer.sign(claimsFor()), renew: [{ kind: 'lease', jws: fresh }] });
+    expect(h.stored()).toBe(fresh);
+    expect(h.machine.state()).toEqual({ kind: 'licensed', ...terms({ exp: NOW_S + 30 * 86_400 }) });
+  });
+
+  it('a refusal lapses at once, even with days left on the lease', async () => {
+    const h = await started({
+      stored: signer.sign(claimsFor()),
+      renew: [{ kind: 'refused', reason: 'payment_failed' }],
+    });
+    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'payment_failed' });
+  });
+
+  it('a renewed lease that does not verify is a failure, not a licence', async () => {
+    const forged = makeSigner('kid-x').sign(claimsFor());
+    const h = await started({ stored: signer.sign(claimsFor()), renew: [{ kind: 'lease', jws: forged }] });
+    expect(h.stored()).not.toBe(forged);
+    expect(h.machine.state().kind).toBe('grace');
+  });
+
+  it('an expired lease renewed on launch is licensed again', async () => {
+    const h = await started({
+      stored: signer.sign(claimsFor({ exp: NOW_S - 1 })),
+      renew: [{ kind: 'lease', jws: signer.sign(claimsFor({ jti: 'ls_3' })) }],
+    });
+    expect(h.machine.state().kind).toBe('licensed');
+  });
+
+  it('a device_revoked sign-out lapses {device_revoked}; any other sign-out with a lease, {signed_out}', async () => {
+    const a = await started({ stored: signer.sign(claimsFor()) });
+    a.setAccount({ kind: 'signed-out', reason: 'device-revoked' });
+    expect(a.machine.state()).toEqual({ kind: 'lapsed', reason: 'device_revoked' });
+
+    const b = await started({ stored: signer.sign(claimsFor()) });
+    b.setAccount({ kind: 'signed-out' });
+    expect(b.machine.state()).toEqual({ kind: 'lapsed', reason: 'signed_out' });
+  });
+
+  it('a sign-out with no lease is unlicensed, and a sign-in renews', async () => {
+    const h = await started({ account: { kind: 'signed-out' } });
+    h.setAccount({ kind: 'signed-out' });
+    expect(h.machine.state()).toEqual({ kind: 'unlicensed' });
+    h.setAccount(SIGNED_IN);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.renew).toHaveBeenCalledTimes(1);
+  });
+
+  it('a renewal that finds no token reads the file again', async () => {
+    const h = await started({ stored: signer.sign(claimsFor()), renew: [{ kind: 'signed-out' }] });
+    expect(h.machine.state().kind).toBe('licensed');
+  });
+
+  it('a renew that throws is a failure', async () => {
+    const h = harness({ stored: signer.sign(claimsFor()) });
+    h.renew.mockRejectedValueOnce(new Error('boom'));
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.machine.state().kind).toBe('grace');
+  });
+});
