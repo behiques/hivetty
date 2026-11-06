@@ -47,6 +47,7 @@ import {
   type TerminalEnding,
 } from '@shared/session-contract';
 
+import { LICENCE_LAPSED } from '../agents/runs';
 import { effectiveRuntime } from '../config/runtime';
 import {
   CONTAINER_ALIASES_DIR,
@@ -265,6 +266,8 @@ export interface SessionsOptions {
    * plugin. `cliHome('<id>-session')` in production, beside the headless home and never in it.
    */
   harnessStateDir?: (harness: HarnessId) => string;
+  /** HIVE-267: while true, a spawn or a restart is refused. Injected; `sessions/` never imports `licence/`. */
+  lapsed?: () => boolean;
 }
 
 /**
@@ -620,7 +623,13 @@ export function createSessions(options: SessionsOptions): Sessions {
     onAgentTurnEnded,
     hiveServer,
     harnessStateDir,
+    lapsed,
   } = options;
+
+  /** HIVE-267: no new work while the licence is lapsed. Reattaching to a live session is not new work. */
+  function refuseWhileLapsed(): void {
+    if (lapsed?.() === true) throw new Error(LICENCE_LAPSED);
+  }
 
   /** Every session's plan (HIVE-179). Main owns the rules; the renderer mirrors them. */
   const plans = createPlans({
@@ -2138,6 +2147,8 @@ export function createSessions(options: SessionsOptions): Sessions {
    * generation genuinely new.
    */
   async function restartOnce(request: OpenRequest): Promise<void> {
+    // HIVE-267: first, so a refused restart neither kills the row nor withdraws its `/done`.
+    refuseWhileLapsed();
     /*
       Before the kill, not after it (HIVE-93). A restart while a `/done` is
       still armed would otherwise reach `settleExit` with the declaration on
@@ -2353,6 +2364,7 @@ export function createSessions(options: SessionsOptions): Sessions {
 
   /** Refuse with a message the user can act on, never a generic failure. */
   function spawn(request: OpenRequest): void {
+    refuseWhileLapsed();
     const harness = request.harness ?? 'claude-code';
     const snapshot = config();
 

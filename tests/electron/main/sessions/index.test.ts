@@ -4683,3 +4683,48 @@ describe('copilot sessions (HIVE-280)', () => {
     });
   });
 });
+
+describe('licence lapse (HIVE-267)', () => {
+  let lapsed: boolean;
+  let gated: ReturnType<typeof createSessions>;
+
+  beforeEach(() => {
+    lapsed = false;
+    gated = createSessions({
+      supervisor,
+      send: (channel, payload) => sent.push({ channel, payload: payload as Record<string, unknown> }),
+      config: () => CONFIG,
+      userDataPath: USER_DATA_PATH,
+      newSessionUuid: () => TEST_UUID,
+      lapsed: () => lapsed,
+    });
+  });
+
+  afterEach(() => {
+    gated.dispose();
+  });
+
+  it('refuses a spawn while the licence is lapsed', () => {
+    lapsed = true;
+
+    expect(() => gated.open(OPEN)).toThrow(/licence has lapsed/);
+    expect(spawned).toHaveLength(0);
+  });
+
+  it('refuses a restart before it kills, so the row is not left dead', async () => {
+    gated.open(OPEN);
+    lapsed = true;
+
+    await expect(gated.restart(OPEN)).rejects.toThrow(/licence has lapsed/);
+    expect(killed).toEqual([]);
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('still reattaches a live session while lapsed', () => {
+    gated.open(OPEN);
+    lapsed = true;
+
+    expect(() => gated.open(OPEN)).not.toThrow();
+    expect(spawned).toHaveLength(1);
+  });
+});
