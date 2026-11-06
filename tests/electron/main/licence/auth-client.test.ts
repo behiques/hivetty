@@ -10,12 +10,29 @@ import {
   generateDeviceKey,
   SIGN_IN_DEADLINE_MS,
 } from '../../../../electron/main/licence/auth-client';
-import type { Cloud } from '../../../../electron/main/licence/cloud';
+import { type Cloud, CloudError, type TokenResponse } from '../../../../electron/main/licence/cloud';
 
 const KEY = {
   publicJwk: { kty: 'OKP', crv: 'Ed25519', x: 'pub' },
   privateJwk: { kty: 'OKP', crv: 'Ed25519', x: 'pub', d: 'priv' },
 };
+
+const STORED: StoredAccount = {
+  refreshToken: 'rt-0',
+  deviceId: 'dev-0',
+  deviceKey: KEY,
+  email: 'ada@example.com',
+  name: 'Ada',
+};
+
+const tokens = (n: number, over: Partial<TokenResponse> = {}): TokenResponse => ({
+  accessToken: `at-${String(n)}`,
+  expiresIn: 900,
+  refreshToken: `rt-${String(n)}`,
+  deviceId: 'dev-0',
+  user: { email: 'ada@example.com', name: 'Ada' },
+  ...over,
+});
 
 function memoryStore(initial: StoredAccount | null = null, writable = true) {
   let value = initial;
@@ -154,5 +171,186 @@ describe('generateDeviceKey', () => {
     expect(key.publicJwk).toMatchObject({ kty: 'OKP', crv: 'Ed25519' });
     expect(key.publicJwk).not.toHaveProperty('d');
     expect(key.privateJwk).toHaveProperty('d');
+  });
+});
+
+describe('the callback', () => {
+  it('exchanges the code with verifier, redirect, device name and a public-only key, then stores the account', async () => {
+    const { client, cloud, store, callback, states } = harness();
+    cloud.token.mockResolvedValueOnce(tokens(1));
+    await client.signIn();
+    await callback();
+
+    const form = cloud.token.mock.calls[0]![0] as Record<string, string>;
+    expect(form).toEqual({
+      grant_type: 'authorization_code',
+      code: 'code-1',
+      code_verifier: Buffer.alloc(32, 1).toString('base64url'),
+      redirect_uri: 'hivetty://auth/callback',
+      device_name: 'ada-mbp',
+      device_public_key: JSON.stringify({ kty: 'OKP', crv: 'Ed25519', x: 'pub' }),
+    });
+    expect(JSON.parse(form.device_public_key!)).not.toHaveProperty('d');
+    expect(store.value()).toEqual({
+      refreshToken: 'rt-1',
+      deviceId: 'dev-0',
+      deviceKey: KEY,
+      email: 'ada@example.com',
+      name: 'Ada',
+    });
+    expect(states.at(-1)).toEqual({ kind: 'signed-in', email: 'ada@example.com', name: 'Ada', deviceId: 'dev-0' });
+    await expect(client.getAccessToken()).resolves.toBe('at-1');
+  });
+
+  it('sends the stored device id and reuses the stored key on a re-sign-in', async () => {
+    const { client, cloud, callback } = harness({ stored: STORED });
+    cloud.token.mockResolvedValue(tokens(1));
+    await client.signIn();
+    await callback();
+    const form = cloud.token.mock.calls[0]![0] as Record<string, string>;
+    expect(form.device_id).toBe('dev-0');
+    expect(JSON.parse(form.device_public_key!)).toEqual({ kty: 'OKP', crv: 'Ed25519', x: 'pub' });
+  });
+
+  it.each([
+    ['a wrong state', (state: string) => `hivetty://auth/callback?code=c&state=${state}x`],
+    ['a non-callback URL', (state: string) => `hivetty://auth/other?code=c&state=${state}`],
+    ['the dev scheme', (state: string) => `hivetty-dev://auth/callback?code=c&state=${state}`],
+  ])('ignores %s and makes no request', async (_name, build) => {
+    const { client, cloud, lastState } = harness();
+    await client.signIn();
+    await client.handleCallback(build(lastState()));
+    expect(cloud.token).not.toHaveBeenCalled();
+    expect(client.state()).toEqual({ kind: 'signing-in' });
+  });
+
+  it('ignores a callback with nothing pending', async () => {
+    const { client, cloud } = harness();
+    await client.handleCallback('hivetty://auth/callback?code=c&state=s');
+    expect(cloud.token).not.toHaveBeenCalled();
+  });
+
+  it('ignores a second delivery of the same link (/signed-in repeats it)', async () => {
+    const { client, cloud, callback, lastState } = harness();
+    cloud.token.mockResolvedValue(tokens(1));
+    await client.signIn();
+    const state = lastState();
+    await callback(state);
+    await callback(state);
+    expect(cloud.token).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends signed-out with the keychain message when the store refuses the write', async () => {
+    const { client, cloud, callback, store } = harness({ writable: false });
+    cloud.token.mockResolvedValue(tokens(1));
+    await client.signIn();
+    await callback();
+    expect(client.state()).toEqual({ kind: 'signed-out', reason: 'error', message: expect.stringContaining('keychain') });
+    expect(store.value()).toBeNull();
+  });
+
+  it('ends signed-out with the cloud reason when the exchange fails', async () => {
+    const { client, cloud, callback } = harness();
+    cloud.token.mockRejectedValue(new CloudError('invalid_grant', 'invalid_grant'));
+    await client.signIn();
+    await callback();
+    expect(client.state()).toEqual({ kind: 'signed-out', reason: 'error', message: 'invalid_grant: invalid_grant' });
+  });
+
+  it('a failed re-sign-in returns to the signed-in account and resumes refreshing', async () => {
+    const { client, cloud, callback } = harness({ stored: STORED });
+    cloud.token.mockResolvedValueOnce(tokens(1)); // start()'s refresh
+    client.start();
+    await vi.advanceTimersByTimeAsync(0); // settle start()'s refresh only, not the 840 s timer it schedules
+    cloud.token.mockReset();
+    cloud.token.mockRejectedValueOnce(new CloudError('network', 'offline')).mockResolvedValue(tokens(2));
+    await client.signIn();
+    await callback();
+    expect(client.state()).toMatchObject({ kind: 'signed-in' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cloud.token).toHaveBeenLastCalledWith({ grant_type: 'refresh_token', refresh_token: 'rt-1' });
+  });
+
+  it('drops an exchange that resolves after a sign-out', async () => {
+    const { client, cloud, callback, store } = harness();
+    let resolve!: (value: TokenResponse) => void;
+    cloud.token.mockReturnValue(new Promise<TokenResponse>((r) => (resolve = r)));
+    await client.signIn();
+    const exchanging = callback();
+    await client.signOut();
+    resolve(tokens(1));
+    await exchanging;
+    expect(store.value()).toBeNull();
+    expect(client.state()).toEqual({ kind: 'signed-out' });
+  });
+});
+
+describe('races around the exchange (task 6 review)', () => {
+  it('a refresh asked for during the exchange makes no request with the old token', async () => {
+    const { client, cloud, callback, store } = harness({ stored: STORED });
+    let resolve!: (value: TokenResponse) => void;
+    cloud.token.mockReturnValueOnce(new Promise<TokenResponse>((r) => (resolve = r)));
+    await client.signIn();
+    const exchanging = callback();
+    await expect(client.getAccessToken()).resolves.toBeNull();
+    expect(cloud.token).toHaveBeenCalledTimes(1);
+    resolve(tokens(1));
+    await exchanging;
+    expect(store.value()?.refreshToken).toBe('rt-1');
+    await expect(client.getAccessToken()).resolves.toBe('at-1');
+  });
+
+  it('waits for a refresh already in flight, so the rotated token is not lost, then exchanges', async () => {
+    const { client, cloud, callback, store } = harness({ stored: STORED });
+    let resolveRefresh!: (value: TokenResponse) => void;
+    cloud.token
+      .mockReturnValueOnce(new Promise<TokenResponse>((r) => (resolveRefresh = r)))
+      .mockRejectedValueOnce(new CloudError('network', 'offline'))
+      .mockResolvedValue(tokens(3));
+    const refreshing = client.getAccessToken();
+    await client.signIn();
+    const exchanging = callback();
+    resolveRefresh(tokens(1));
+    await refreshing;
+    await exchanging;
+    expect(store.value()?.refreshToken).toBe('rt-1');
+    expect(client.state()).toMatchObject({ kind: 'signed-in' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cloud.token).toHaveBeenLastCalledWith({ grant_type: 'refresh_token', refresh_token: 'rt-1' });
+  });
+
+  it('a re-sign-in whose account cannot be saved signs out fully: no old token, no old account', async () => {
+    const { client, cloud, callback, store } = harness({ stored: STORED });
+    cloud.token.mockResolvedValueOnce(tokens(1));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    (store.write as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    cloud.token.mockResolvedValue(tokens(2));
+    await client.signIn();
+    await callback();
+    expect(client.state()).toEqual({ kind: 'signed-out', reason: 'error', message: expect.stringContaining('keychain') });
+    expect(store.value()).toBeNull();
+    await expect(client.getAccessToken()).resolves.toBeNull();
+  });
+
+  it('a device revoked by refresh during a sign-in keeps the sign-in open', async () => {
+    const { client, cloud, callback, store } = harness({ stored: STORED });
+    cloud.token.mockRejectedValueOnce(new CloudError('invalid_grant', 'device_revoked')).mockResolvedValue(tokens(1));
+    await client.signIn();
+    await client.getAccessToken();
+    expect(store.value()).toBeNull();
+    expect(client.state()).toEqual({ kind: 'signing-in' });
+    await callback();
+    expect(client.state()).toMatchObject({ kind: 'signed-in' });
+    expect(cloud.token.mock.calls[1]![0]).not.toHaveProperty('device_id');
+  });
+
+  it('cancel after a revoke during sign-in returns to the revoked state', async () => {
+    const { client, cloud } = harness({ stored: STORED });
+    cloud.token.mockRejectedValueOnce(new CloudError('invalid_grant', 'device_revoked'));
+    await client.signIn();
+    await client.getAccessToken();
+    client.cancel();
+    expect(client.state()).toEqual({ kind: 'signed-out', reason: 'device-revoked' });
   });
 });
