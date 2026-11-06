@@ -7,6 +7,7 @@ import {
   createCloud,
   DEV_CLOUD_URL,
   PROD_CLOUD_URL,
+  REQUEST_TIMEOUT_MS,
   resolveCloudUrl,
   stringField,
 } from '../../../../electron/main/licence/cloud';
@@ -157,6 +158,24 @@ describe('createCloud', () => {
     expect(url).toBe('https://c.test/api/lease');
     expect(init.method).toBe('POST');
     expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe('request timeout', () => {
+  it('gives every call a 15 s AbortSignal.timeout', async () => {
+    const spy = vi.spyOn(AbortSignal, 'timeout');
+    const fetch = vi.fn().mockResolvedValue(new Response('ok'));
+    await createCloud({ baseUrl: 'https://c.test', fetch }).request('/x');
+    expect(REQUEST_TIMEOUT_MS).toBe(15_000);
+    expect(spy).toHaveBeenCalledWith(REQUEST_TIMEOUT_MS);
+    spy.mockRestore();
+  });
+
+  it('turns a timeout abort into a network error', async () => {
+    const fetch = vi.fn().mockRejectedValue(new DOMException('timed out', 'TimeoutError'));
+    await expect(createCloud({ baseUrl: 'https://c.test', fetch }).token({})).rejects.toMatchObject({
+      kind: 'network',
+    });
   });
 });
 
