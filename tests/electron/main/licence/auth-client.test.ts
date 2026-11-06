@@ -566,3 +566,49 @@ describe('authedFetch', () => {
     await expect(client.authedFetch('/x')).rejects.toMatchObject({ kind: 'network' });
   });
 });
+
+describe('races around the exchange (tasks 7-9 review)', () => {
+  it('a device_revoked 401 during the exchange does not strand it', async () => {
+    const { client, cloud, callback } = harness({ stored: STORED });
+    cloud.token.mockResolvedValueOnce(tokens(1));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    let resolve!: (value: TokenResponse) => void;
+    cloud.token.mockReturnValueOnce(new Promise<TokenResponse>((r) => (resolve = r)));
+    cloud.request.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'invalid_token', error_description: 'device_revoked' }), { status: 401 }),
+    );
+    await client.signIn();
+    const exchanging = callback();
+    await client.authedFetch('/api/lease');
+    resolve(tokens(2));
+    await exchanging;
+    expect(client.state()).toMatchObject({ kind: 'signed-in' });
+    await expect(client.getAccessToken()).resolves.toBe('at-2');
+  });
+
+  it('the deadline after a revoke during sign-in ends signed out, not on the dropped account', async () => {
+    const { client, cloud, store } = harness({ stored: STORED });
+    cloud.token.mockResolvedValueOnce(tokens(1));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    cloud.token.mockRejectedValueOnce(new CloudError('invalid_grant', 'device_revoked'));
+    await client.signIn();
+    vi.setSystemTime(Date.now() + 900_000); // the access token has expired
+    await client.getAccessToken();
+    vi.advanceTimersByTime(SIGN_IN_DEADLINE_MS);
+    expect(client.state()).toEqual({ kind: 'signed-out', reason: 'timeout' });
+    expect(store.value()).toBeNull();
+  });
+
+  it('a late browser failure from a replaced attempt leaves the newer attempt alone', async () => {
+    const { client, openExternal } = harness();
+    let reject!: (cause: Error) => void;
+    openExternal.mockReturnValueOnce(new Promise<void>((_, r) => (reject = r)));
+    const first = client.signIn();
+    await client.signIn();
+    reject(new Error('no browser'));
+    await first;
+    expect(client.state()).toEqual({ kind: 'signing-in' });
+  });
+});

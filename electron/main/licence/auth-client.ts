@@ -77,8 +77,12 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
   let backoffMs = BACKOFF_START_MS;
   /** Bumped by every sign-out and every exchange: a result from an older generation never lands. */
   let generation = 0;
-  /** A code exchange is under way: no refresh may start with the old token meanwhile. */
-  let exchanging = false;
+  /**
+   * The code exchange under way (0: none). No refresh may start with the old token meanwhile. Its own
+   * token, not the generation: a revoked account (`forget`) must not strand a sign-in that replaces it.
+   */
+  let activeExchange = 0;
+  let exchangeSeq = 0;
 
   const set = (next: AccountState): void => {
     current = next;
@@ -125,7 +129,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
   const signOutLocally = (why?: SignedOutReason, message?: string): void => {
     forget();
     clearPending();
-    exchanging = false;
+    activeExchange = 0;
     set(signedOut(why, message));
   };
 
@@ -136,7 +140,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
   const dropAccount = (why?: SignedOutReason, message?: string): void => {
     forget();
     if (pending) pending.restore = signedOut(why, message);
-    else if (!exchanging) set(signedOut(why, message));
+    else if (!activeExchange) set(signedOut(why, message));
   };
 
   /** Store first: an account that cannot be saved is not signed in. The caller announces it. */
@@ -164,7 +168,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
   /** One refresh in flight, always: rotation makes a second one look like token reuse. */
   const refresh = (): Promise<string | null> => {
     if (refreshing) return refreshing;
-    if (exchanging) return Promise.resolve(null);
+    if (activeExchange) return Promise.resolve(null);
     const stored = store.read();
     if (!stored) return Promise.resolve(null);
     const gen = generation;
@@ -178,7 +182,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
           return null;
         }
         // Mid-exchange, the exchange announces the outcome; a flash of signed-in would be wrong.
-        if (!exchanging) announce(account);
+        if (!activeExchange) announce(account);
         return response.accessToken;
       } catch (cause) {
         if (gen !== generation) return null;
@@ -226,16 +230,22 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
       const state = deps.randomBytes(16).toString('base64url');
       const codeChallenge = createHash('sha256').update(verifier).digest('base64url');
       const timer = setTimeout(() => {
+        // pending.restore, not the captured one: a revoke or a refresh may have moved it since.
+        const back = pending?.restore ?? restore;
         pending = null;
-        set(restore.kind === 'signed-in' ? restore : { kind: 'signed-out', reason: 'timeout' });
+        set(back.kind === 'signed-in' ? back : { kind: 'signed-out', reason: 'timeout' });
       }, SIGN_IN_DEADLINE_MS);
       pending = { verifier, state, timer, restore };
       set({ kind: 'signing-in' });
       try {
         await deps.openExternal(cloud.authorizeUrl({ redirectUri, codeChallenge, state }));
       } catch (cause) {
-        clearPending();
-        set(restore);
+        // A replaced, cancelled or answered attempt is no longer this call's to undo.
+        if (pending?.state === state) {
+          const back = pending.restore;
+          clearPending();
+          set(back);
+        }
         return { error: `Could not open the browser: ${reason(cause)}` };
       }
       return { ok: true };
@@ -253,12 +263,13 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
       if (!callback || !pending || callback.state !== pending.state) return;
       const { verifier } = pending;
       clearPending(); // consumed: a second delivery of the same link is ignored
-      exchanging = true;
+      exchangeSeq += 1;
+      const attempt = exchangeSeq;
+      activeExchange = attempt;
       // A refresh already in flight has rotated the token at the cloud: let it land, or it is lost.
       if (refreshing) await refreshing;
-      if (!exchanging) return; // signed out meanwhile
-      generation += 1;
-      const gen = generation;
+      if (activeExchange !== attempt) return; // signed out, or a newer exchange took over, meanwhile
+      generation += 1; // any refresh still settling belongs to the account this exchange replaces
       refreshing = null;
       clearRefreshTimer();
       const stored = store.read();
@@ -275,14 +286,14 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
       if (stored) form.device_id = stored.deviceId;
       try {
         const response = await cloud.token(form);
-        if (gen !== generation) return;
-        exchanging = false;
+        if (activeExchange !== attempt) return;
+        activeExchange = 0;
         const account = accept(response, deviceKey);
         if (account) announce(account);
         else signOutLocally('error', NO_ENCRYPTION); // never leave the old account usable behind it
       } catch (cause) {
-        if (gen !== generation) return;
-        exchanging = false;
+        if (activeExchange !== attempt) return;
+        activeExchange = 0;
         const kept = store.read();
         if (kept) {
           announce(kept);
