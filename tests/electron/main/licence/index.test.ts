@@ -80,6 +80,7 @@ describe('licence composition', () => {
     await ACCOUNT_CALLS[CH.accountSignIn]();
     expect(new URL(openExternal.mock.calls[0]![0] as string).origin).toBe('https://hive.acme.test');
   });
+
   it('answers unlicensed before it starts, and refresh is safe', async () => {
     expect(licence()).toEqual({ kind: 'unlicensed' });
     expect(LICENCE_CALLS[CH.licenceState]()).toEqual({ kind: 'unlicensed' });

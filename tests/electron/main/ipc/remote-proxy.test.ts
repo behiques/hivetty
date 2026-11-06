@@ -602,10 +602,6 @@ describe('registerRemoteProxy', () => {
       expect(client.call).not.toHaveBeenCalled();
     });
 
-    /*
-      HIVE-211. Try now restarts this process's reconnect loop, and the moment
-      it matters is the moment the socket is down, so it never reaches it.
-    */
     it('answers the licence calls from LICENCE_CALLS, never client.call (HIVE-267)', async () => {
       const client = fakeClient();
       registerRemoteProxy({ client, broadcaster: fakeBroadcaster() });
@@ -617,6 +613,10 @@ describe('registerRemoteProxy', () => {
       expect(client.call).not.toHaveBeenCalled();
     });
 
+    /*
+      HIVE-211. Try now restarts this process's reconnect loop, and the moment
+      it matters is the moment the socket is down, so it never reaches it.
+    */
     it('answers remote:dial-now from localDialNow, never client.call', async () => {
       const client = fakeClient();
       const localDialNow = vi.fn();
