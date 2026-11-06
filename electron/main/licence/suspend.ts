@@ -46,6 +46,12 @@ export function createSuspender(deps: SuspenderDeps): Suspender {
   async function suspend(): Promise<void> {
     // Before the first await: a spawn arriving mid-suspend is already refused.
     suspended = true;
+    /*
+      shortcut: only container *runs* are paused (D3). An interactive container session names its container
+      only inside the user's free-form `claudeCommand`, so there is no name to pause: the PTY walk stops its
+      `docker exec` client, and the agent inside blocks once nothing reads its output. A session sharing a
+      container with a live run is paused along with it. Upgrade: give sessions a structured container name.
+    */
     paused = deps.runs.containers();
     await settle(paused.map((c) => deps.container(c.runtime, 'pause', c.name)));
     // Quit released while the pause was pending: stop nothing it would have to continue.

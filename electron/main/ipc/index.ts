@@ -297,7 +297,8 @@ import { createSlackTokens } from '../integrations/slack/tokens';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
-import { ACCOUNT_CALLS, LICENCE_CALLS } from '../licence';
+import { ACCOUNT_CALLS, LICENCE_CALLS, licence, onLicenceChange } from '../licence';
+import { createSuspender, installSuspender, isLapsed, runContainer } from '../licence/suspend';
 import { agentMcpConfigFile, createMcpRuntime } from '../mcp';
 import {
   createNotificationHub,
@@ -813,6 +814,8 @@ const progressOfBuilds = (): BuilderProgress | null => {
 };
 /** Releases the wake subscription `registerIpcHandlers` makes for `sessions`. */
 let stopDisplayWake: (() => void) | null = null;
+/** HIVE-267: unsubscribes the suspender from the licence; `resetIpcHandlers` calls it. */
+let stopSuspender: (() => void) | null = null;
 /**
  * The session history (HIVE-87), or `null` before registration.
  *
@@ -2986,6 +2989,8 @@ export function registerIpcHandlers(
     onRunClosed: (name) => scheduler?.onRunClosed(name),
     now: () => Date.now(),
     newRunId: () => randomUUID(),
+    // HIVE-267: no wake starts while the licence is lapsed.
+    lapsed: isLapsed,
   });
 
   /**
@@ -3066,6 +3071,8 @@ export function registerIpcHandlers(
       append: (request) => ledger.append(request),
     },
     now: () => Date.now(),
+    // HIVE-267: a schedule due while lapsed re-arms and does not run.
+    lapsed: isLapsed,
   });
 
   /**
@@ -3342,7 +3349,19 @@ export function registerIpcHandlers(
     hiveServer: () => mcp.hiveServerSpec(),
     // Copilot's hooks plugin (HIVE-280): beside the headless home `cliHome('copilot')`, never in it.
     harnessStateDir: (harness) => cliHome(`${harness}-session`),
+    // HIVE-267: no spawn or restart while the licence is lapsed.
+    lapsed: isLapsed,
   });
+
+  /*
+    HIVE-267. Suspend on a lapse, resume on renewal. Installed here because this is where the pty-host, the run
+    tracker and the scheduler meet. Fed the current state once, so a launch that is already lapsed refuses from
+    the start (there is nothing running yet to stop).
+  */
+  const suspender = createSuspender({ ptyHost: supervisor, runs, container: runContainer });
+  installSuspender(suspender);
+  void suspender.onState(licence());
+  stopSuspender = onLicenceChange((state) => void suspender.onState(state));
 
   /*
     A wake, or a display coming back, is when Claude Code loses its size and
@@ -5720,6 +5739,9 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
   bindings.unbindAll();
   stopDisplayWake?.();
   stopDisplayWake = null;
+  stopSuspender?.();
+  stopSuspender = null;
+  installSuspender(null);
   sessions?.dispose();
   sessions = null;
   builderProgress = null;
