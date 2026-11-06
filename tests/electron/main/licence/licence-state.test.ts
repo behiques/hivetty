@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AccountState } from '../../../../electron/shared/account-contract';
 import type { RenewResult } from '../../../../electron/main/licence/lease';
-import { createLicenceState } from '../../../../electron/main/licence/licence-state';
+import {
+  createLicenceState,
+  GRACE_RETRY_MS,
+  PURCHASE_POLL_MS,
+  PURCHASE_WATCH_MS,
+  RENEW_EVERY_MS,
+} from '../../../../electron/main/licence/licence-state';
 import { claimsFor, DEVICE, ISS, makeSigner, NOW_S } from '../../../support/lease';
 
 const signer = makeSigner('kid-1');
@@ -206,5 +212,123 @@ describe('licence state transitions', () => {
     h.machine.start();
     await vi.advanceTimersByTimeAsync(0);
     expect(h.machine.state().kind).toBe('grace');
+  });
+});
+
+describe('licence clocks', () => {
+  it('renews every 24 h, and each new lease replaces lease.jws', async () => {
+    const leases = [1, 2, 3].map((n) => signer.sign(claimsFor({ jti: `ls_${String(n)}` })));
+    const h = harness({
+      stored: signer.sign(claimsFor()),
+      renew: leases.map((jws) => ({ kind: 'lease', jws }) as const),
+    });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(RENEW_EVERY_MS);
+    await vi.advanceTimersByTimeAsync(RENEW_EVERY_MS);
+    expect(h.renew).toHaveBeenCalledTimes(3);
+    expect(h.stored()).toBe(leases[2]);
+  });
+
+  it('a lease expiring while offline moves grace to lapsed {offline}', async () => {
+    const h = harness({ stored: signer.sign(claimsFor({ exp: NOW_S + 3600 })) });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.machine.state().kind).toBe('grace');
+    await vi.advanceTimersByTimeAsync(3600_000);
+    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'offline' });
+  });
+
+  it('a 30-day lease lapses on day 30, not early (no setTimeout overflow)', async () => {
+    const h = harness({ stored: signer.sign(claimsFor({ exp: NOW_S + 30 * 86_400 })) });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(29 * 86_400_000);
+    expect(h.machine.state().kind).toBe('grace');
+    await vi.advanceTimersByTimeAsync(86_400_000);
+    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'offline' });
+  });
+
+  it('grace retries every 5 min, and stops once licensed', async () => {
+    const h = harness({ stored: signer.sign(claimsFor()) });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.renew.mockResolvedValueOnce({ kind: 'lease', jws: signer.sign(claimsFor({ jti: 'ls_9' })) });
+    await vi.advanceTimersByTimeAsync(GRACE_RETRY_MS);
+    expect(h.machine.state().kind).toBe('licensed');
+    const calls = h.renew.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(GRACE_RETRY_MS * 3);
+    expect(h.renew.mock.calls.length).toBe(calls);
+  });
+
+  it('joins a renewal already in flight', async () => {
+    const h = harness({ stored: signer.sign(claimsFor()) });
+    let release!: (r: RenewResult) => void;
+    h.renew.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    h.machine.start();
+    const a = h.machine.refresh();
+    const b = h.machine.refresh();
+    release({ kind: 'refused', reason: 'trial_ended' });
+    await expect(Promise.all([a, b])).resolves.toEqual([
+      { kind: 'lapsed', reason: 'trial_ended' },
+      { kind: 'lapsed', reason: 'trial_ended' },
+    ]);
+    expect(h.renew).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps renewing after a refusal, so a fixed payment comes back', async () => {
+    const h = harness({
+      stored: signer.sign(claimsFor()),
+      renew: [{ kind: 'refused', reason: 'payment_failed' }],
+    });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.renew.mockResolvedValueOnce({ kind: 'lease', jws: signer.sign(claimsFor({ jti: 'ls_4' })) });
+    await vi.advanceTimersByTimeAsync(RENEW_EVERY_MS);
+    expect(h.machine.state().kind).toBe('licensed');
+  });
+
+  it('watchPurchase polls every 5 s until licensed', async () => {
+    const h = harness({ account: SIGNED_IN, renew: [{ kind: 'refused', reason: 'no_plan' }] });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.machine.watchPurchase(true);
+    await vi.advanceTimersByTimeAsync(PURCHASE_POLL_MS * 2);
+    expect(h.renew).toHaveBeenCalledTimes(3);
+    h.renew.mockResolvedValueOnce({ kind: 'lease', jws: signer.sign(claimsFor({ jti: 'ls_5' })) });
+    await vi.advanceTimersByTimeAsync(PURCHASE_POLL_MS);
+    expect(h.machine.state().kind).toBe('licensed');
+    const calls = h.renew.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(PURCHASE_POLL_MS * 4);
+    expect(h.renew.mock.calls.length).toBe(calls);
+  });
+
+  it('watchPurchase gives up after 15 min, and watchPurchase(false) stops it', async () => {
+    const h = harness({ account: SIGNED_IN });
+    h.machine.start();
+    h.machine.watchPurchase(true);
+    await vi.advanceTimersByTimeAsync(PURCHASE_WATCH_MS + PURCHASE_POLL_MS);
+    const calls = h.renew.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(PURCHASE_POLL_MS * 4);
+    // Only the 5-min grace retry may still fire; the 5 s poll must not.
+    expect(h.renew.mock.calls.length - calls).toBeLessThanOrEqual(1);
+    h.machine.watchPurchase(true);
+    h.machine.watchPurchase(false);
+    const after = h.renew.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(PURCHASE_POLL_MS * 2);
+    expect(h.renew.mock.calls.length).toBe(after);
+  });
+
+  it('dispose stops every clock', async () => {
+    const h = harness({ stored: signer.sign(claimsFor()) });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.machine.dispose();
+    await vi.advanceTimersByTimeAsync(RENEW_EVERY_MS * 2);
+    expect(h.renew).toHaveBeenCalledTimes(1);
   });
 });
