@@ -73,6 +73,8 @@ describe('createScheduler', () => {
   let reenter: boolean;
   /** Lane directories the scheduler asked to remove, as `<agent>:<lane>` (HIVE-188). */
   let removed: string[];
+  /** HIVE-267: what the injected licence gate answers. */
+  let lapsed: boolean;
 
   /** Fire every armed interval once — the sweep and the schedule tick. */
   const tick = (): void => {
@@ -125,6 +127,7 @@ describe('createScheduler', () => {
         },
       },
       now: () => clock,
+      lapsed: () => lapsed,
       setIntervalFn: ((handler: () => void) => {
         const id = nextTimerId;
         nextTimerId += 1;
@@ -157,6 +160,7 @@ describe('createScheduler', () => {
     liveLanes = null;
     reenter = false;
     removed = [];
+    lapsed = false;
     state = createAgentState({ path: '/dev/null/agents.json', debounceMs: 1 });
     state.patch(AGENT, { status: 'sleeping' });
 
@@ -2463,4 +2467,64 @@ describe('createScheduler', () => {
       expect(state.read(AGENT).today?.capped).toBeUndefined();
     });
   });
+
+  describe('licence lapse (HIVE-267)', () => {
+    const HOUR = 60 * 60_000;
+    const hourly: WakeSpec = { everyMs: HOUR, check: 'always', on: [] };
+
+    it('a schedule due while lapsed does not run, then or after renewal, and its next regular tick runs', () => {
+      scheduler.start();
+      schedules.set(AGENT, { wake: hourly });
+      state.patch(AGENT, { nextRunAt: 60_000 });
+
+      lapsed = true;
+      clock = 2 * 60_000;
+      tick();
+      expect(woke).toEqual([]);
+      expect(state.read(AGENT).nextRunAt).toBeGreaterThan(clock);
+
+      lapsed = false;
+      clock = 4 * 60_000;
+      tick();
+      expect(woke).toEqual([]); // not caught up on renewal
+
+      clock = 2 * 60_000 + HOUR;
+      tick();
+      expect(woke).toEqual([{ name: AGENT, trigger: 'interval' }]); // the next regular tick
+    });
+
+    it('the launch catch-up tick skips too while lapsed', () => {
+      schedules.set(AGENT, { wake: hourly });
+      state.patch(AGENT, { nextRunAt: 1 });
+      clock = 10 * HOUR;
+      lapsed = true;
+
+      scheduler.start();
+
+      expect(woke).toEqual([]);
+      expect(state.read(AGENT).nextRunAt).toBeGreaterThan(clock);
+    });
+
+    it('a repo lane due while lapsed re-arms without running', () => {
+      laneMode = 'repo';
+      liveLanes = new Set();
+      scheduler = build();
+      schedules.set(AGENT, { wake: { everyMs: 600_000, on: ['ledger'], check: 'onchange' } as WakeSpec });
+      scheduler.start();
+      state.patchLane(AGENT, 'repo:a/x', { runsSinceRotate: 0 });
+      entries.push(
+        entry({ id: 's1', from: AGENT, to: undefined, kind: 'event', body: 'run.started — ledger', meta: { run: 'r1', lane: 'repo:a/x' } }),
+        entry({ id: 'c1', from: AGENT, to: undefined, kind: 'claim', body: 'claimed a/x#1', meta: { task: 'a/x#1', run: 'r1' } }),
+      );
+      tick(); // arms repo:a/x
+
+      lapsed = true;
+      clock = 600_000;
+      tick();
+
+      expect(woke.some((w) => w.lane === 'repo:a/x')).toBe(false);
+      expect(state.lane(AGENT, 'repo:a/x').nextRunAt).toBeGreaterThan(clock);
+    });
+  });
 });
+

@@ -232,6 +232,8 @@ interface SchedulerDeps {
   /** Injected by the unit test, as in `splash.ts`. */
   setIntervalFn?: typeof setInterval;
   clearIntervalFn?: typeof clearInterval;
+  /** HIVE-267: while true, a due schedule re-arms and does not run, so renewal never catches it up. */
+  lapsed?: () => boolean;
 }
 
 export interface Scheduler {
@@ -778,6 +780,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         one either, so it leaves the skip count where it is.
       */
       arm(name, due, next);
+      if (deps.lapsed?.() === true) continue;
       deps.run(name, wake.everyMs === undefined ? CALENDAR_TRIGGER : INTERVAL_TRIGGER);
     }
 
@@ -819,6 +822,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         if (now < lane.nextRunAt) continue;
 
         deps.state.patchLane(name, key, { nextRunAt: next });
+        if (deps.lapsed?.() === true) continue;
         deps.run(name, INTERVAL_TRIGGER, undefined, { lane: key });
       }
     }
