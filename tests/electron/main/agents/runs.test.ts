@@ -2500,6 +2500,36 @@ describe('createRunTracker', () => {
       }
     });
 
+    it('the stall watchdog does not kill a run a lapse has stopped, and gives it a fresh grace once continued', () => {
+      const tracker = make(hostCommand);
+      tracker.run('a', 'test');
+      const child = childInstances[0]!;
+      child.pid = 4242;
+      tracker.noteTurnEnded('a', 'u-1');
+
+      tracker.signalAll('SIGSTOP');
+      vi.advanceTimersByTime((AGENT_STALL_GRACE_MS + AGENT_KILL_GRACE_MS) * 3);
+      expect(child.kill).not.toHaveBeenCalled();
+      expect(tracker.live()).toEqual(['a']);
+
+      tracker.signalAll('SIGCONT');
+      vi.advanceTimersByTime(AGENT_STALL_GRACE_MS * 2 + 1);
+      // Continued and still silent: now it is a stall like any other.
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    });
+
+    it('signalAll never signals pid 0 or 1, which would reach main itself or every process', () => {
+      const tracker = make(hostCommand);
+      tracker.run('a', 'test');
+      childInstances[0]!.pid = 1;
+      tracker.run('b', 'test');
+      childInstances[1]!.pid = 0;
+
+      tracker.signalAll('SIGSTOP');
+
+      expect(killGroup).not.toHaveBeenCalled();
+    });
+
     it('containers() lists each live container run once, and no host run', () => {
       const boxes = make(boxCommand);
       boxes.run('a', 'test');

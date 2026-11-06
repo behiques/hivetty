@@ -484,6 +484,11 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
   const grace = AGENT_KILL_GRACE_MS;
   const stallGrace = AGENT_STALL_GRACE_MS;
   /**
+   * HIVE-267: true between `signalAll('SIGSTOP')` and `signalAll('SIGCONT')`. A stopped run is silent because
+   * it is stopped, not stalled, so the watchdog waits it out rather than killing work a lapse only paused.
+   */
+  let stopped = false;
+  /**
    * Several runs per name since HIVE-128 — one standing, plus task runs up to
    * the definition's cap. A name with nothing in flight is deleted rather than
    * left holding an empty list, because {@link RunTracker.live} is the set of
@@ -1464,12 +1469,18 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
       if (live === undefined || live.closed || live.watchdog !== null) return;
 
-      const timer = setTimeout(() => {
-        if (!live.closed) escalate(live, 'stalled');
-      }, stallGrace);
+      const arm = (): void => {
+        const timer = setTimeout(() => {
+          if (live.closed) return;
+          // Stopped by a licence lapse (HIVE-267): a fresh grace from whenever it is continued.
+          if (stopped) arm();
+          else escalate(live, 'stalled');
+        }, stallGrace);
 
-      timer.unref?.();
-      live.watchdog = timer;
+        timer.unref?.();
+        live.watchdog = timer;
+      };
+      arm();
     },
 
     killAll(reason) {
@@ -1496,11 +1507,13 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     liveRuns: (name) => liveOf(name).map(describe),
 
     signalAll(signal) {
+      stopped = signal === 'SIGSTOP';
       const killGroup = deps.killGroup ?? ((pgid: number, sig: NodeJS.Signals) => process.kill(-pgid, sig));
       for (const runs of running.values()) {
         for (const live of runs) {
           const pid = live.child.pid;
-          if (pid === undefined || pid < 2) continue;
+          // 0 would signal main's own group and -1 every process; a closed run's leader is already reaped.
+          if (live.closed || pid === undefined || pid < 2) continue;
           try {
             killGroup(pid, signal);
           } catch {
