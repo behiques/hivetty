@@ -27,41 +27,65 @@ export interface Suspender {
 
 export function createSuspender(deps: SuspenderDeps): Suspender {
   let suspended = false;
+  /** Set by `releaseForQuit`, for good: nothing is stopped again on the way out. */
+  let released = false;
   let paused: { runtime: string; name: string }[] = [];
   let chain: Promise<void> = Promise.resolve();
 
   const settle = (work: Promise<void>[]): Promise<void> => Promise.allSettled(work).then(() => undefined);
+
+  /** One step's failure is logged and never skips the next: a half-done resume leaves work stopped. */
+  const step = (what: string, work: () => void): void => {
+    try {
+      work();
+    } catch (error) {
+      console.info(`[hive] licence ${what} failed (${error instanceof Error ? error.message : String(error)})`);
+    }
+  };
 
   async function suspend(): Promise<void> {
     // Before the first await: a spawn arriving mid-suspend is already refused.
     suspended = true;
     paused = deps.runs.containers();
     await settle(paused.map((c) => deps.container(c.runtime, 'pause', c.name)));
-    deps.ptyHost.suspendAll();
-    deps.runs.signalAll('SIGSTOP');
+    // Quit released while the pause was pending: stop nothing it would have to continue.
+    if (released) return;
+    step('suspend of the pty-host', () => deps.ptyHost.suspendAll());
+    step('SIGSTOP of the runs', () => deps.runs.signalAll('SIGSTOP'));
   }
 
   async function resume(notice?: string): Promise<void> {
-    deps.ptyHost.resumeAll(notice);
-    deps.runs.signalAll('SIGCONT');
-    const toUnpause = paused;
-    paused = [];
-    await settle(toUnpause.map((c) => deps.container(c.runtime, 'unpause', c.name)));
-    suspended = false;
+    try {
+      step('resume of the pty-host', () => deps.ptyHost.resumeAll(notice));
+      step('SIGCONT of the runs', () => deps.runs.signalAll('SIGCONT'));
+      const toUnpause = paused;
+      paused = [];
+      await settle(toUnpause.map((c) => deps.container(c.runtime, 'unpause', c.name)));
+    } finally {
+      suspended = false;
+    }
   }
 
-  /** One transition at a time, so a fast lapse-then-renew never interleaves. A failed one does not wedge the next. */
-  const queue = (work: () => Promise<void>): Promise<void> => (chain = chain.then(work, work));
+  /**
+   * One transition at a time, so a fast lapse-then-renew never interleaves. A failed one neither wedges the next
+   * nor rejects: callers `void` these.
+   */
+  const queue = (work: () => Promise<void>): Promise<void> =>
+    (chain = chain.then(work).catch((error: unknown) => {
+      console.info(`[hive] licence transition failed (${error instanceof Error ? error.message : String(error)})`);
+    }));
 
   return {
     lapsed: () => suspended,
     onState(state) {
       return queue(async () => {
+        if (released) return;
         if (state.kind === 'lapsed' && !suspended) await suspend();
         else if (state.kind !== 'lapsed' && suspended) await resume(RESUME_NOTICE);
       });
     },
     releaseForQuit() {
+      released = true;
       return queue(async () => {
         if (suspended) await resume();
       });

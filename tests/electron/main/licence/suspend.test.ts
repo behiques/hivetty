@@ -130,13 +130,16 @@ describe('createSuspender', () => {
   });
 
   it('releaseForQuit continues everything without a notice, and is a no-op when not suspended', async () => {
+    const idle = harness();
+    await idle.s.releaseForQuit();
+    expect(idle.log).toEqual([]);
+
     const { s, log } = harness();
-    await s.releaseForQuit();
-    expect(log).toEqual([]);
     await s.onState(LAPSED);
     log.length = 0;
     await s.releaseForQuit();
     expect(log).toEqual(['pty:cont:', 'runs:SIGCONT', 'unpause:box']);
+    expect(s.lapsed()).toBe(false);
   });
 
   it('a container that fails to pause does not stop the rest', async () => {
@@ -146,15 +149,81 @@ describe('createSuspender', () => {
     expect(log).toEqual(['pty:stop', 'runs:SIGSTOP']);
   });
 
-  it('a step that throws does not wedge the queue for the next transition', async () => {
+  it('a step that throws does not wedge the queue, does not reject, and the rest of the suspend still runs', async () => {
     const { s, deps } = harness();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     deps.ptyHost.suspendAll.mockImplementationOnce(() => {
       throw new Error('host gone');
     });
-    await expect(s.onState(LAPSED)).rejects.toThrow('host gone');
+
+    await expect(s.onState(LAPSED)).resolves.toBeUndefined();
+    expect(deps.runs.signalAll).toHaveBeenCalledWith('SIGSTOP');
+
     await s.onState(LICENSED);
     expect(deps.ptyHost.resumeAll).toHaveBeenCalledWith(RESUME_NOTICE);
     expect(s.lapsed()).toBe(false);
+    info.mockRestore();
+  });
+
+  it('a resume step that throws still continues the runs, unpauses, and lowers the flag', async () => {
+    const { s, deps, log } = harness();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    await s.onState(LAPSED);
+    log.length = 0;
+    deps.ptyHost.resumeAll.mockImplementationOnce(() => {
+      throw new Error('host gone');
+    });
+
+    await expect(s.onState(LICENSED)).resolves.toBeUndefined();
+
+    expect(log).toEqual(['runs:SIGCONT', 'unpause:box']);
+    expect(s.lapsed()).toBe(false);
+    info.mockRestore();
+  });
+
+  it('keeps the flag up until the unpause has finished', async () => {
+    const { s, deps } = harness();
+    await s.onState(LAPSED);
+    let release: () => void = () => undefined;
+    deps.container.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
+
+    const resuming = s.onState(LICENSED);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(s.lapsed()).toBe(true);
+
+    release();
+    await resuming;
+    expect(s.lapsed()).toBe(false);
+  });
+
+  it('once released for quit, a later lapse stops nothing', async () => {
+    const { s, log } = harness();
+    await s.releaseForQuit();
+
+    await s.onState(LAPSED);
+
+    expect(log).toEqual([]);
+    expect(s.lapsed()).toBe(false);
+  });
+
+  it('a suspend still waiting on its pause when quit releases stops nothing after it', async () => {
+    const { s, deps, log } = harness();
+    let release: () => void = () => undefined;
+    deps.container.mockImplementationOnce(async (_r: string, verb: string, name: string) => {
+      await new Promise<void>((resolve) => (release = resolve));
+      log.push(`${verb}:${name}`);
+    });
+
+    const suspending = s.onState(LAPSED);
+    await Promise.resolve();
+    const releasing = s.releaseForQuit();
+    release();
+    await Promise.all([suspending, releasing]);
+
+    expect(log).not.toContain('pty:stop');
+    expect(log).not.toContain('runs:SIGSTOP');
+    expect(log).toContain('unpause:box');
   });
 });
 
