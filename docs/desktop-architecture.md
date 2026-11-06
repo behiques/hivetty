@@ -1129,3 +1129,21 @@ is not honoured there either.
 When packaging lands, one constraint is already known: the `.node` binary must be
 **unpacked from the asar** (`asarUnpack`), because `dlopen` cannot load from
 inside an archive.
+
+## The licence slice and the deep link (HIVE-264)
+
+`electron/main/licence/` is HiveTTY Pro's paid code. `cloud.ts` talks to the cloud (`api.hivetty.dev`
+packaged, `api.dev.hivetty.dev` unpackaged; `account.cloudUrl` overrides both, `HIVETTY_CLOUD_URL` only
+unpackaged), `account-store.ts` keeps `<userData>/account.bin` through safeStorage, `deep-link.ts` owns the
+scheme, and `auth-client.ts` is the sign-in state machine; `index.ts` composes them into one client that
+`ipc/index.ts` and `ipc/remote-proxy.ts` both answer from.
+
+The scheme is `hivetty` in a packaged build (Info.plist, via `electron-builder.yml`'s `protocols`) and
+`hivetty-dev` unpackaged (`setAsDefaultProtocolClient` at launch). On macOS the link arrives as `open-url`,
+whose listener `index.ts` installs in `will-finish-launching` so a link that cold-starts the app is not
+missed; links are held until the licence starts at `whenReady`. `second-instance` argv is scanned too, for
+Windows and Linux. Only `…://auth/callback` with the pending `state` is ever acted on.
+
+The account calls (`account:state`, `account:sign-in`, `account:cancel`, `account:sign-out`) are
+`PROCESS_LOCAL` and `account:changed` is `LOCAL_ONLY_EVENTS`: an attached window never signs the server in.
+In a dev build a link reaches a running app only: macOS ignores `setAsDefaultProtocolClient`'s arguments.

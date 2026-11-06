@@ -172,6 +172,18 @@ describe('activate', () => {
 });
 
 describe('second-instance', () => {
+  it('hands the second instance argv to onSecondInstanceArgv, then still focuses (HIVE-264)', async () => {
+    const focus = vi.fn();
+    const onSecondInstanceArgv = vi.fn();
+    windows.push({ isMinimized: () => false, restore: vi.fn(), focus, isDestroyed: () => false });
+    await register({ createWindow: vi.fn(), platform: 'darwin', onSecondInstanceArgv });
+
+    await fire('second-instance', {}, ['/app', 'hivetty://auth/callback?code=x&state=y']);
+
+    expect(onSecondInstanceArgv).toHaveBeenCalledWith(['/app', 'hivetty://auth/callback?code=x&state=y']);
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
   it('focuses the existing window rather than creating another', async () => {
     // The guard against two agents editing the same working tree (story 092).
     const focus = vi.fn();

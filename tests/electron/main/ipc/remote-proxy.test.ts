@@ -222,7 +222,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(138);
+    expect(callChannels.length).toBe(142);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -239,7 +239,7 @@ describe('registerRemoteProxy', () => {
   });
 
   it('binds no handler for an event channel', () => {
-    expect(eventChannels.length).toBe(30);
+    expect(eventChannels.length).toBe(31);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -345,7 +345,7 @@ describe('registerRemoteProxy', () => {
    * the very first one that isn't `pty:data`.
    */
   it('pumps a client event into the broadcaster on the same channel', () => {
-    expect(eventChannels.length).toBe(30);
+    expect(eventChannels.length).toBe(31);
 
     const client = fakeClient();
     const broadcaster = fakeBroadcaster();
@@ -532,7 +532,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(144);
+    expect(remoteProxyBindingsSize()).toBe(148);
   });
 
   /**
@@ -546,10 +546,14 @@ describe('registerRemoteProxy', () => {
    * `remote:forget` (HIVE-153).
    */
   describe('PROCESS_LOCAL channels (HIVE-144 Rulings 24 and 28, HIVE-153, HIVE-149, HIVE-151)', () => {
-    it('names exactly ten channels', () => {
-      expect(PROCESS_LOCAL.length).toBe(10);
+    it('names exactly fourteen channels', () => {
+      expect(PROCESS_LOCAL.length).toBe(14);
       expect([...PROCESS_LOCAL].sort()).toEqual(
         [
+          'account:cancel',
+          'account:sign-in',
+          'account:sign-out',
+          'account:state',
           'app:info',
           'config:get-remote',
           'config:set-remote',
@@ -1142,8 +1146,8 @@ describe('registerRemoteProxy', () => {
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(144);
-    expect(removeAllListeners).toHaveBeenCalledTimes(144);
+    expect(removeHandler).toHaveBeenCalledTimes(148);
+    expect(removeAllListeners).toHaveBeenCalledTimes(148);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

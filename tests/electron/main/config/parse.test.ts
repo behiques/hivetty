@@ -1015,3 +1015,41 @@ describe('parseConfig — project harness (HIVE-378)', () => {
     expect(parsed.errors.join('\n')).toMatch(/harness: expected one of claude-code, codex, copilot/);
   });
 });
+
+describe('account (HIVE-264)', () => {
+  const parse = (extra: object) => parseConfig(doc(extra), 'config');
+
+  it('leaves account undefined when the file has no block', () => {
+    expect(parse({}).account).toBeUndefined();
+  });
+
+  it('reads an https cloudUrl', () => {
+    const parsed = parse({ account: { cloudUrl: 'https://hive.acme.test' } });
+    expect(parsed.account).toEqual({ cloudUrl: 'https://hive.acme.test' });
+    expect(parsed.errors).toEqual([]);
+  });
+
+  it('reads an http loopback cloudUrl', () => {
+    expect(parse({ account: { cloudUrl: 'http://127.0.0.1:4010' } }).account).toEqual({
+      cloudUrl: 'http://127.0.0.1:4010',
+    });
+  });
+
+  it.each([['http://hive.acme.test'], ['ftp://x'], ['not a url'], [7]])('reports and ignores %s', (cloudUrl) => {
+    const parsed = parse({ account: { cloudUrl } });
+    expect(parsed.account).toBeUndefined();
+    expect(parsed.fatal).toBe(false);
+    expect(parsed.errors).toEqual([expect.stringContaining('account.cloudUrl')]);
+  });
+
+  it('reports an unknown key and a non-object block', () => {
+    expect(parse({ account: { token: 'x' } }).errors).toEqual([expect.stringContaining('"token"')]);
+    expect(parse({ account: 'x' }).errors).toEqual([expect.stringContaining('account: expected an object')]);
+  });
+
+  it('keeps the block when projects is missing or not an array', () => {
+    const account = { cloudUrl: 'https://hive.acme.test' };
+    expect(parseConfig(JSON.stringify({ version: 2, account }), 'config').account).toEqual(account);
+    expect(parseConfig(JSON.stringify({ version: 2, projects: 'x', account }), 'config').account).toEqual(account);
+  });
+});

@@ -1,8 +1,9 @@
 import { dirname, join } from 'node:path';
 
-import { app, dialog, powerSaveBlocker } from 'electron';
+import { app, dialog, net, powerSaveBlocker, safeStorage, shell } from 'electron';
 
 import { APP_NAME, DEV_USER_DATA_NAME } from '@shared/app-name';
+import { CH } from '@shared/ipc-contract';
 
 import { applyDevDockIcon } from './app-icon';
 import { primaryWindow } from './aux-windows';
@@ -17,7 +18,10 @@ import {
   remoteListenerBoundAddress,
   startRemoteListener,
 } from './ipc';
+import { createWindowBroadcaster } from './ipc/broadcaster';
 import { registerIpc, switchIpcMode } from './ipc/router';
+import { startLicence } from './licence';
+import { installDeepLinks } from './licence/deep-link';
 import { registerLifecycle } from './lifecycle';
 import { bindUntilBound } from './server/bind-retry';
 import {
@@ -134,6 +138,24 @@ if (invocation.kind === 'update') {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  /*
+    HIVE-264. Before anything else in this branch, and before `whenReady`: a link that launched the app
+    arrives as `open-url` straight after `will-finish-launching`. The router holds it until the licence
+    exists, at `whenReady` (safeStorage is unavailable before that).
+  */
+  const deepLinks = installDeepLinks({ app, execPath: process.execPath, argv1: process.argv[1] });
+  void app.whenReady().then(() => {
+    const licence = startLicence({
+      app,
+      safeStorage,
+      openExternal: (url) => shell.openExternal(url),
+      cloudUrl: getConfig().account?.cloudUrl,
+      env: process.env,
+      fetch: (input, init) => net.fetch(input, init),
+      broadcast: (state) => createWindowBroadcaster().emit(CH.accountChanged, state),
+    });
+    deepLinks.attach((url) => void licence.handleCallback(url));
+  });
   /**
    * Registers every channel, and with them the pty-host supervisor and its
    * teardown. None of it **starts** a process (story 091): the host is forked
@@ -425,6 +447,6 @@ if (!app.requestSingleInstanceLock()) {
   */
   onShutdown(() => serverTray?.destroy());
 
-  registerLifecycle({ createWindow, serverMode });
+  registerLifecycle({ createWindow, serverMode, onSecondInstanceArgv: deepLinks.deliverArgv });
 }
 }

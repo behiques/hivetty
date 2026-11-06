@@ -141,3 +141,21 @@ describe('the boot path holds one hive folder (HIVE-227)', () => {
     expect(source).toContain('if (!serverMode) dialog.showErrorBox');
   });
 });
+
+describe('deep links and the licence (HIVE-264)', () => {
+  const lockHeld = source.slice(source.indexOf('if (!app.requestSingleInstanceLock())'));
+
+  it('installs the deep-link listener first in the lock-held branch, before anything awaits whenReady', () => {
+    const install = lockHeld.indexOf('installDeepLinks(');
+    expect(install, 'the lock-held branch must call installDeepLinks').toBeGreaterThan(-1);
+    expect(install).toBeLessThan(lockHeld.indexOf('app.whenReady()'));
+    expect(install).toBeLessThan(lockHeld.indexOf("registerIpc('local')"));
+  });
+
+  it('starts the licence at whenReady, attaches the router to it, and forwards second-instance argv', () => {
+    expect(lockHeld).toMatch(/app\.whenReady\(\)\.then\(\(\) => \{\s*const licence = startLicence\(/);
+    expect(lockHeld).toContain('deepLinks.attach((url) => void licence.handleCallback(url))');
+    expect(lockHeld).toContain('cloudUrl: getConfig().account?.cloudUrl');
+    expect(lockHeld).toContain('onSecondInstanceArgv: deepLinks.deliverArgv');
+  });
+});

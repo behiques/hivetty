@@ -31,6 +31,8 @@ interface LifecycleDeps {
    * branched on, defeating the entire feature.
    */
   serverMode?: boolean;
+  /** HIVE-264. Windows and Linux carry a deep link in a second launch's argv; macOS uses `open-url`. */
+  onSecondInstanceArgv?: (argv: readonly string[]) => void;
 }
 
 /** Set once `before-quit` fires, so teardown runs exactly once. */
@@ -46,6 +48,7 @@ export function registerLifecycle({
   platform = process.platform,
   isDev = Boolean(process.env.ELECTRON_RENDERER_URL),
   serverMode = false,
+  onSecondInstanceArgv,
 }: LifecycleDeps): void {
   const isMac = platform === 'darwin';
 
@@ -83,7 +86,8 @@ export function registerLifecycle({
    * single-instance lock handed this process the event, `primaryWindow()`
    * answered `undefined`, and the handler returned.
    */
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv: string[]) => {
+    onSecondInstanceArgv?.(argv);
     // The *app's* window, not merely the first one open — with the About panel
     // up and the main window closed, the first one is the panel.
     const existing = primaryWindow();

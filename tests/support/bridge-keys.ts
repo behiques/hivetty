@@ -8,7 +8,7 @@ import type { HiveBridge } from '../../electron/shared/ipc-contract';
  */
 
 export const BRIDGE_KEYS = [
-  'agents', 'appInfo', 'changedFiles', 'cli', 'config', 'fs', 'github', 'integrations', 'jira', 'ledger',
+  'account', 'agents', 'appInfo', 'changedFiles', 'cli', 'config', 'fs', 'github', 'integrations', 'jira', 'ledger',
   'notifications', 'plans', 'pty', 'remote', 'server', 'session', 'shipped', 'skills', 'slack', 'ui',
   'updates',
 ] as const satisfies readonly (keyof HiveBridge)[];
@@ -72,6 +72,10 @@ export const BRIDGE_LEDGER_KEYS = [
 export const BRIDGE_PLANS_KEYS = [
   'list', 'onChanged',
 ] as const satisfies readonly (keyof HiveBridge['plans'])[];
+
+export const BRIDGE_ACCOUNT_KEYS = [
+  'state', 'signIn', 'cancel', 'signOut', 'onChanged',
+] as const satisfies readonly (keyof HiveBridge['account'])[];
 
 export const BRIDGE_UPDATES_KEYS = [
   'status', 'check',

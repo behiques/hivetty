@@ -178,6 +178,16 @@ describe('writeConfig — the round trip', () => {
 });
 
 describe('writeConfig — preservation', () => {
+  it('keeps a hand-written account.cloudUrl through an unrelated write, and returns it (HIVE-264)', () => {
+    seed({ version: 2, projects: [], account: { cloudUrl: 'https://hive.acme.test' } });
+
+    const result = writeConfig((draft) => ({ ...draft, shell: '/bin/zsh' }));
+
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.snapshot.account).toEqual({ cloudUrl: 'https://hive.acme.test' });
+    expect(JSON.parse(readFileSync(path, 'utf8')).account).toEqual({ cloudUrl: 'https://hive.acme.test' });
+  });
+
   /**
    * The template is deliberately comment-heavy. A UI that ate those comments
    * the first time the user clicked a button would make hand-editing and the

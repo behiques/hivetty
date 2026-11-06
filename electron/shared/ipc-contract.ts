@@ -17,6 +17,7 @@
  * that proves the whole path.
  */
 
+import type { AccountState, SignInResult } from './account-contract';
 import type {
   AgentLinesPush,
   AgentNameRequest,
@@ -875,6 +876,16 @@ export const CH = {
    * of what checking means.
    */
   updatesCheck: 'updates:check',
+  /** The signed-in HiveTTY account (HIVE-264). Process-local: a remote window never signs the server in. */
+  accountState: 'account:state',
+  /** Open the cloud's sign-in page in the browser; resolves once it is open. */
+  accountSignIn: 'account:sign-in',
+  /** Drop the pending sign-in. */
+  accountCancel: 'account:cancel',
+  /** Revoke (best effort) and forget this device's account. */
+  accountSignOut: 'account:sign-out',
+  /** A push: the account state changed. Local-only, never from a socket. */
+  accountChanged: 'account:changed',
   configCloneStart: 'config:clone-start',
   configCloneCancel: 'config:clone-cancel',
   configCloneDone: 'config:clone-done', // main → renderer
@@ -3136,6 +3147,14 @@ export interface HiveBridge {
     status(): Promise<UpdateStatus>;
     /** Look now. Reports its own result in a dialog; resolves when done. */
     check(): Promise<void>;
+  };
+  /** The HiveTTY account (HIVE-264). The screens are HIVE-265's. */
+  account: {
+    state(): Promise<AccountState>;
+    signIn(): Promise<SignInResult>;
+    cancel(): Promise<void>;
+    signOut(): Promise<void>;
+    onChanged(callback: (state: AccountState) => void): () => void;
   };
   /** Real session lifecycle, derived in main (story 096). */
   session: {

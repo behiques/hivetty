@@ -27,8 +27,10 @@ import {
   isHostAlias,
   isOrigin,
   isRemoteTarget,
+  isLoopbackHost,
   isServerBindHost,
   unsafeEnvReason,
+  type AccountConfig,
   type ContainerConfig,
   type JiraConfig,
   type NotificationPrefs,
@@ -213,6 +215,7 @@ export interface ParsedConfig {
    * comment.
    */
   remote?: Partial<RemoteConfig>;
+  account?: AccountConfig;
   /**
    * HIVE-124's slack block, exactly as the file declared it.
    *
@@ -288,6 +291,8 @@ const TOP_LEVEL_KEYS = [
   // server elsewhere on the tailnet; the device credential is a secret and is
   // deliberately not in this file — see `RemoteConfig`'s doc comment.
   'remote',
+  // HIVE-264, for the same reason. Only the cloud URL; the account is in safeStorage.
+  'account',
   // HIVE-124, for the same reason. The socket-mode switch and the commander
   // allow-list; the two Slack tokens are secrets and are deliberately not in
   // this file.
@@ -1194,6 +1199,35 @@ function optionalServer(
 
 const REMOTE_MODES: readonly RemoteMode[] = ['local', 'remote'];
 
+function optionalAccount(
+  record: Record<string, unknown>,
+  label: string,
+  errors: string[],
+): AccountConfig | undefined {
+  const value = record.account;
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) {
+    errors.push(`${label}.account: expected an object — ignored`);
+    return undefined;
+  }
+  const at = `${label}.account`;
+  if (!checkKeys(value, ['cloudUrl'], at, errors)) return undefined;
+  const cloudUrl = value.cloudUrl;
+  if (cloudUrl === undefined) return undefined;
+  if (typeof cloudUrl === 'string' && isCloudUrl(cloudUrl)) return { cloudUrl };
+  errors.push(`${at}.cloudUrl: expected an https URL (or http on loopback) — using the default cloud`);
+  return undefined;
+}
+
+function isCloudUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || (url.protocol === 'http:' && isLoopbackHost(url.hostname));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * HIVE-144's remote block.
  *
@@ -1560,6 +1594,7 @@ export function parseConfig(text: string, label: string): ParsedConfig {
   const receiver = optionalReceiver(document, label, errors);
   const server = optionalServer(document, label, errors);
   const remote = optionalRemote(document, label, errors);
+  const account = optionalAccount(document, label, errors);
   const slack = optionalSlack(document, label, errors);
   const clis = optionalClis(document, label, errors);
   const agentsDefaultCli = optionalAgentsDefaultCli(document, label, errors);
@@ -1604,6 +1639,7 @@ export function parseConfig(text: string, label: string): ParsedConfig {
       receiver,
       server,
       remote,
+      ...(account === undefined ? {} : { account }),
       slack,
       ...(clis === undefined ? {} : { clis }),
       ...(agentsDefaultCli === undefined ? {} : { agentsDefaultCli }),
@@ -1629,6 +1665,7 @@ export function parseConfig(text: string, label: string): ParsedConfig {
       receiver,
       server,
       remote,
+      ...(account === undefined ? {} : { account }),
       slack,
       ...(clis === undefined ? {} : { clis }),
       ...(agentsDefaultCli === undefined ? {} : { agentsDefaultCli }),
@@ -1752,6 +1789,7 @@ export function parseConfig(text: string, label: string): ParsedConfig {
     receiver,
     server,
     remote,
+    ...(account === undefined ? {} : { account }),
     slack,
     ...(clis === undefined ? {} : { clis }),
     ...(agentsDefaultCli === undefined ? {} : { agentsDefaultCli }),
