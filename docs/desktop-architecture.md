@@ -1147,3 +1147,19 @@ Windows and Linux. Only `…://auth/callback` with the pending `state` is ever a
 The account calls (`account:state`, `account:sign-in`, `account:cancel`, `account:sign-out`) are
 `PROCESS_LOCAL` and `account:changed` is `LOCAL_ONLY_EVENTS`: an attached window never signs the server in.
 In a dev build a link reaches a running app only: macOS ignores `setAsDefaultProtocolClient`'s arguments.
+
+## The lease (HIVE-267)
+
+- `<userData>/lease.jws` holds the cloud's signed lease, plain text, written atomically (`lease.ts`). It is
+  kept on sign-out; the device id stops it working anywhere else.
+- `verify.ts` checks it offline with `node:crypto` (ES256, P1363), against the current and next keys
+  committed in `keys.ts` and refreshed by `pnpm licence:keys`. Prod's list stays empty until the prod cloud
+  exists, so a packaged build accepts no lease.
+- `licence-state.ts` reports `unlicensed`, `licensed`, `grace` (the last renewal failed, the lease still
+  holds) or `lapsed {reason}`. Only `lapsed` will enforce (PR 2); a refusal lapses at once, and the lease's
+  own length is the offline grace.
+- It renews at launch, every 24 h, on wake (`powerMonitor` `resume`), on `licence:refresh`, every 5 min while
+  in grace, and every 5 s for up to 15 min under `licence:watch-purchase`. One renewal at a time, and one
+  from before a sign-out never lands.
+- Main reads `licence()` (and `onLicenceChange`); the licence calls answer from `LICENCE_CALLS` and are
+  `PROCESS_LOCAL`, `licence:changed` is `LOCAL_ONLY_EVENTS`; the renderer reads `useLicence()`.

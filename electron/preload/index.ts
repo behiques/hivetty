@@ -152,6 +152,7 @@ import type {
   LedgerResult,
   LedgerSnapshot,
 } from '@shared/ledger-contract';
+import type { LicenceState } from '@shared/licence-contract';
 import type { SessionMetricsEvent } from '@shared/metrics-contract';
 import type {
   HiveNotification,
@@ -891,6 +892,14 @@ const bridge: HiveBridge = {
     signOut: (): Promise<void> => ipcRenderer.invoke(CH.accountSignOut) as Promise<void>,
     onChanged: (callback: (state: AccountState) => void) =>
       subscribe<AccountState>(CH.accountChanged, callback),
+  },
+  licence: {
+    state: (): Promise<LicenceState> => ipcRenderer.invoke(CH.licenceState) as Promise<LicenceState>,
+    refresh: (): Promise<LicenceState> => ipcRenderer.invoke(CH.licenceRefresh) as Promise<LicenceState>,
+    watchPurchase: (on: boolean): Promise<void> =>
+      ipcRenderer.invoke(CH.licenceWatchPurchase, on) as Promise<void>,
+    onChanged: (callback: (state: LicenceState) => void) =>
+      subscribe<LicenceState>(CH.licenceChanged, callback),
   },
   session: {
     onStatus: (callback: (event: SessionStatusEvent) => void) =>

@@ -297,7 +297,7 @@ import { createSlackTokens } from '../integrations/slack/tokens';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
-import { ACCOUNT_CALLS } from '../licence';
+import { ACCOUNT_CALLS, LICENCE_CALLS } from '../licence';
 import { agentMcpConfigFile, createMcpRuntime } from '../mcp';
 import {
   createNotificationHub,
@@ -1972,6 +1972,10 @@ export function registerIpcHandlers(
   handle(CH.accountSignIn, () => ACCOUNT_CALLS[CH.accountSignIn]());
   handle(CH.accountCancel, () => ACCOUNT_CALLS[CH.accountCancel]());
   handle(CH.accountSignOut, () => ACCOUNT_CALLS[CH.accountSignOut]());
+  // HIVE-267. Process-local: the remote proxy answers the same three from `LICENCE_CALLS`.
+  handle(CH.licenceState, () => LICENCE_CALLS[CH.licenceState]());
+  handle(CH.licenceRefresh, () => LICENCE_CALLS[CH.licenceRefresh]());
+  handle(CH.licenceWatchPurchase, (_event, on: unknown) => LICENCE_CALLS[CH.licenceWatchPurchase](on === true));
 
   /**
    * The hook pipeline is constructed here and started by `createSessions`

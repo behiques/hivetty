@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BRIDGE_ACCOUNT_KEYS,
+  BRIDGE_LICENCE_KEYS,
   BRIDGE_AGENTS_KEYS,
   BRIDGE_CLI_KEYS,
   BRIDGE_CONFIG_KEYS,
@@ -107,6 +108,8 @@ const updates = () =>
   exposed.updates as Record<string, (...args: unknown[]) => unknown>;
 const account = () =>
   exposed.account as Record<string, (...args: unknown[]) => unknown>;
+const licence = () =>
+  exposed.licence as Record<string, (...args: unknown[]) => unknown>;
 const ui = () =>
   exposed.ui as Record<string, (...args: unknown[]) => unknown>;
 
@@ -210,6 +213,8 @@ describe('exposed surface', () => {
     ].sort());
     // HIVE-264: sign in, cancel, sign out and the state. No verb hands a token to the renderer.
     expect(Object.keys(account()).sort()).toEqual([...BRIDGE_ACCOUNT_KEYS].sort());
+    // HIVE-267: the licence's state, a renewal, the purchase watch and the push.
+    expect(Object.keys(licence()).sort()).toEqual([...BRIDGE_LICENCE_KEYS].sort());
     /**
      * The fifth time, and this one had already happened.
      *
@@ -992,5 +997,25 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
     (account().onChanged as (cb: unknown) => () => void)(callback);
     listeners.get(CH.accountChanged)?.[0]?.({}, { kind: 'signing-in' });
     expect(callback).toHaveBeenCalledWith({ kind: 'signing-in' });
+  });
+});
+
+describe('the licence verbs route to their channels (HIVE-267)', () => {
+  it('invokes each call channel, watchPurchase with its flag', async () => {
+    await licence().state();
+    await licence().refresh();
+    await licence().watchPurchase(true);
+    expect(ipcRendererMock.invoke.mock.calls).toEqual([
+      [CH.licenceState],
+      [CH.licenceRefresh],
+      [CH.licenceWatchPurchase, true],
+    ]);
+  });
+
+  it('onChanged hands the pushed state over, payload only', () => {
+    const callback = vi.fn();
+    (licence().onChanged as (cb: unknown) => () => void)(callback);
+    listeners.get(CH.licenceChanged)?.[0]?.({}, { kind: 'lapsed', reason: 'offline' });
+    expect(callback).toHaveBeenCalledWith({ kind: 'lapsed', reason: 'offline' });
   });
 });

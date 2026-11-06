@@ -1,6 +1,6 @@
 import { dirname, join } from 'node:path';
 
-import { app, dialog, net, powerSaveBlocker, safeStorage, shell } from 'electron';
+import { app, dialog, net, powerMonitor, powerSaveBlocker, safeStorage, shell } from 'electron';
 
 import { APP_NAME, DEV_USER_DATA_NAME } from '@shared/app-name';
 import { CH } from '@shared/ipc-contract';
@@ -153,6 +153,8 @@ if (!app.requestSingleInstanceLock()) {
       env: process.env,
       fetch: (input, init) => net.fetch(input, init),
       broadcast: (state) => createWindowBroadcaster().emit(CH.accountChanged, state),
+      broadcastLicence: (state) => createWindowBroadcaster().emit(CH.licenceChanged, state),
+      onWake: (listener) => powerMonitor.on('resume', listener),
     });
     deepLinks.attach((url) => void licence.handleCallback(url));
   });
