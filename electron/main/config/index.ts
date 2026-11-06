@@ -203,6 +203,7 @@ export function loadConfig(): ConfigSnapshot {
     // the line that makes `DEFAULT_REMOTE` — `mode: 'local'`, no target — the
     // outcome for every existing install rather than `undefined`.
     remote,
+    ...(parsed.account === undefined ? {} : { account: parsed.account }),
     // `remote.host` is the only handle the file carries for the far end — see
     // `ConfigSnapshot.attachedServer`'s own doc comment for why this is a
     // config-derived control's readout, not the header chip's runtime one.

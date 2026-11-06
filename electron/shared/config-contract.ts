@@ -868,6 +868,14 @@ export interface RemoteConfig {
 }
 
 /**
+ * HIVE-264. Only where the cloud is, for self-hosted Enterprise (HIVE-316); hand-edited, read at launch.
+ * No credential ever goes here: the account lives in safeStorage (`<userData>/account.bin`).
+ */
+export interface AccountConfig {
+  cloudUrl?: string;
+}
+
+/**
  * Every install that has never attached carries exactly this. `host` is
  * empty because there is nothing to validate in `'local'` mode — see
  * {@link isRemoteTarget}. The port is 7434, one above The Hive's default, so
@@ -1281,6 +1289,8 @@ export interface ConfigSnapshot {
    * place for the same fact to drift from this one.
    */
   remote: RemoteConfig;
+  /** HIVE-264. Present only when the file names a valid `account.cloudUrl`. */
+  account?: AccountConfig;
   /**
    * What this window is attached to over a socket, or `null` in `'local'`
    * mode (HIVE-144).

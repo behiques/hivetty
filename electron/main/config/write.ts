@@ -341,6 +341,7 @@ export function writeConfig(
         field the way `server` has.
       */
       remote,
+      ...(validated.account === undefined ? {} : { account: validated.account }),
       // `remote.host` is the only handle the file carries for the far end —
       // see `ConfigSnapshot.attachedServer`'s own doc comment.
       attachedServer:
