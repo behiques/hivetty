@@ -474,3 +474,95 @@ describe('refresh', () => {
     expect(cloud.token).not.toHaveBeenCalled();
   });
 });
+
+describe('sign-out', () => {
+  it('revokes the refresh token and clears the store', async () => {
+    const { client, cloud, store } = harness({ stored: STORED });
+    client.start();
+    await client.signOut();
+    expect(cloud.revoke).toHaveBeenCalledWith('rt-0');
+    expect(store.value()).toBeNull();
+    expect(client.state()).toEqual({ kind: 'signed-out' });
+  });
+
+  it('clears the store even when offline', async () => {
+    const { client, cloud, store } = harness({ stored: STORED });
+    cloud.revoke.mockRejectedValue(new CloudError('network', 'offline'));
+    await expect(client.signOut()).resolves.toBeUndefined();
+    expect(store.value()).toBeNull();
+  });
+
+  it('makes no revoke call with nothing stored', async () => {
+    const { client, cloud } = harness();
+    await client.signOut();
+    expect(cloud.revoke).not.toHaveBeenCalled();
+  });
+
+  it('drops a refresh that resolves after the sign-out', async () => {
+    const { client, cloud, store } = harness({ stored: STORED });
+    let resolve!: (value: TokenResponse) => void;
+    cloud.token.mockReturnValue(new Promise<TokenResponse>((r) => (resolve = r)));
+    const refreshing = client.getAccessToken();
+    await client.signOut();
+    resolve(tokens(1));
+    await expect(refreshing).resolves.toBeNull();
+    expect(store.value()).toBeNull();
+  });
+
+  it('stops the scheduled refresh', async () => {
+    const { client, cloud } = harness({ stored: STORED });
+    cloud.token.mockResolvedValue(tokens(1));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await client.signOut();
+    await vi.advanceTimersByTimeAsync(BACKOFF_MAX_MS * 4);
+    expect(cloud.token).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('authedFetch', () => {
+  const unauthorized = (description?: string) =>
+    new Response(JSON.stringify({ error: 'invalid_token', ...(description ? { error_description: description } : {}) }), {
+      status: 401,
+    });
+
+  it('adds the bearer token and returns the response', async () => {
+    const { client, cloud } = harness({ stored: STORED });
+    cloud.token.mockResolvedValue(tokens(1));
+    cloud.request.mockResolvedValue(new Response('ok'));
+    const response = await client.authedFetch('/api/lease', { method: 'POST' });
+    expect(await response.text()).toBe('ok');
+    const [path, init] = cloud.request.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe('/api/lease');
+    expect(new Headers(init.headers).get('authorization')).toBe('Bearer at-1');
+  });
+
+  it('a device_revoked 401 signs the device out with that reason', async () => {
+    const { client, cloud, store } = harness({ stored: STORED });
+    cloud.token.mockResolvedValue(tokens(1));
+    cloud.request.mockResolvedValue(unauthorized('device_revoked'));
+    const response = await client.authedFetch('/api/lease');
+    expect(response.status).toBe(401);
+    expect(store.value()).toBeNull();
+    expect(client.state()).toEqual({ kind: 'signed-out', reason: 'device-revoked' });
+  });
+
+  it('any other 401 drops the access token so the next call refreshes', async () => {
+    const { client, cloud } = harness({ stored: STORED });
+    cloud.token.mockResolvedValueOnce(tokens(1)).mockResolvedValueOnce(tokens(2));
+    cloud.request.mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(new Response('ok'));
+    await client.authedFetch('/api/lease');
+    expect(client.state()).toMatchObject({ kind: 'signed-in' });
+    await client.authedFetch('/api/lease');
+    expect(cloud.token).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws refused when signed out and network when signed in but offline', async () => {
+    await expect(harness().client.authedFetch('/x')).rejects.toMatchObject({ kind: 'refused' });
+    const { client, cloud } = harness({ stored: STORED });
+    cloud.token.mockRejectedValue(new CloudError('network', 'offline'));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(client.authedFetch('/x')).rejects.toMatchObject({ kind: 'network' });
+  });
+});
