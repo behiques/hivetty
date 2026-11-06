@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 /**
  * The `hivetty://` deep link (HIVE-264). Packaged builds own `hivetty` (Info.plist, through
  * electron-builder's `protocols`); unpackaged builds register `hivetty-dev` at runtime, so a dev build
@@ -60,4 +62,35 @@ export function createDeepLinkRouter(scheme: Scheme): DeepLinkRouter {
       for (const url of held.splice(0)) next(url);
     },
   };
+}
+
+export type DeepLinkApp = Pick<Electron.App, 'on' | 'isPackaged' | 'setAsDefaultProtocolClient'>;
+
+/**
+ * Call at module load, before `whenReady`: macOS sends a link that launched the app as `open-url` right
+ * after `will-finish-launching`, and a listener added later misses it.
+ */
+export function installDeepLinks({
+  app,
+  execPath,
+  argv1,
+}: {
+  app: DeepLinkApp;
+  execPath: string;
+  argv1?: string;
+}): DeepLinkRouter & { scheme: Scheme } {
+  const scheme = schemeFor(app.isPackaged);
+  const router = createDeepLinkRouter(scheme);
+  app.on('will-finish-launching', () => {
+    app.on('open-url', (event, url) => {
+      event.preventDefault();
+      router.deliver(url);
+    });
+  });
+  if (!app.isPackaged) {
+    // shortcut: macOS ignores these args, so a dev cold start opens bare Electron; links reach a running
+    // dev app only. Fine for development; packaged builds are unaffected.
+    app.setAsDefaultProtocolClient('hivetty-dev', execPath, argv1 ? [resolve(argv1)] : []);
+  }
+  return { ...router, scheme };
 }

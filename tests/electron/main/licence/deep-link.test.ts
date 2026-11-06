@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createDeepLinkRouter,
   findDeepLink,
+  installDeepLinks,
   parseCallback,
   redirectUriFor,
   schemeFor,
@@ -80,5 +81,55 @@ describe('createDeepLinkRouter', () => {
     router.deliverArgv(['/app', 'hivetty://auth/callback?code=x&state=y']);
     router.deliverArgv(['/app']);
     expect(handler.mock.calls).toEqual([['hivetty://auth/callback?code=x&state=y']]);
+  });
+});
+
+function fakeApp(isPackaged: boolean) {
+  const handlers = new Map<string, (...args: unknown[]) => void>();
+  return {
+    isPackaged,
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => handlers.set(event, handler)),
+    setAsDefaultProtocolClient: vi.fn(() => true),
+    fire: (event: string, ...args: unknown[]) => handlers.get(event)?.(...args),
+  };
+}
+
+describe('installDeepLinks', () => {
+  it('listens for open-url inside will-finish-launching, so a cold start link is seen', () => {
+    const app = fakeApp(true);
+    const links = installDeepLinks({ app: app as never, execPath: '/x' });
+    expect(app.on).toHaveBeenCalledTimes(1);
+    expect(app.on).toHaveBeenCalledWith('will-finish-launching', expect.any(Function));
+
+    app.fire('will-finish-launching');
+    const preventDefault = vi.fn();
+    app.fire('open-url', { preventDefault }, 'hivetty://auth/callback?code=x&state=y');
+
+    const handler = vi.fn();
+    links.attach(handler);
+    expect(preventDefault).toHaveBeenCalled();
+    expect(handler).toHaveBeenCalledWith('hivetty://auth/callback?code=x&state=y');
+    expect(links.scheme).toBe('hivetty');
+  });
+
+  it('registers nothing at runtime when packaged: Info.plist owns hivetty', () => {
+    const app = fakeApp(true);
+    installDeepLinks({ app: app as never, execPath: '/x', argv1: 'out/main/index.js' });
+    expect(app.setAsDefaultProtocolClient).not.toHaveBeenCalled();
+  });
+
+  it('registers hivetty-dev with the resolved entry script when unpackaged', () => {
+    const app = fakeApp(false);
+    const links = installDeepLinks({ app: app as never, execPath: '/electron', argv1: 'out/main/index.js' });
+    expect(app.setAsDefaultProtocolClient).toHaveBeenCalledWith('hivetty-dev', '/electron', [
+      expect.stringMatching(/\/out\/main\/index\.js$/),
+    ]);
+    expect(links.scheme).toBe('hivetty-dev');
+  });
+
+  it('registers hivetty-dev with no args when there is no entry script', () => {
+    const app = fakeApp(false);
+    installDeepLinks({ app: app as never, execPath: '/electron' });
+    expect(app.setAsDefaultProtocolClient).toHaveBeenCalledWith('hivetty-dev', '/electron', []);
   });
 });
