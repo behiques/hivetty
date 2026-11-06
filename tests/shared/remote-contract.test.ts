@@ -81,7 +81,7 @@ const MAIN_ONLY: ReadonlyMap<string, FrameKind> = new Map([
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(174);
+    expect(entries).toHaveLength(179);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -170,11 +170,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 138 call, 6 notify and 30 event', () => {
+  it('splits 142 call, 6 notify and 31 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 138, notify: 6, event: 30 });
+    expect(tally).toEqual({ call: 142, notify: 6, event: 31 });
   });
 
   /**
@@ -188,7 +188,7 @@ describe('remote contract: frame kinds match the preload bridge', () => {
    * that forwarded only `EVENT_CHANNELS` would show an empty inbox on a busy
    * server, so the asymmetry is asserted rather than left to be rediscovered.
    */
-  it('covers EVENT_CHANNELS and the six pushes it omits', () => {
+  it('covers EVENT_CHANNELS and the seven pushes it omits', () => {
     for (const channel of EVENT_CHANNELS) expect(frameKindOf(channel)).toBe('event');
 
     const listed: ReadonlySet<string> = new Set(EVENT_CHANNELS);
@@ -197,6 +197,8 @@ describe('remote contract: frame kinds match the preload bridge', () => {
       .map(([channel]) => channel);
 
     expect(pushed.filter((channel) => !listed.has(channel)).sort()).toEqual([
+      // HIVE-264: local-only like remote:link-status; the account is this machine's own.
+      'account:changed',
       'notifications:dismissed',
       'notifications:new',
       'notifications:read',
@@ -228,7 +230,7 @@ describe('remote contract: frame kinds match the preload bridge', () => {
       expect(isLocalOnlyEvent(channel)).toBe(true);
     }
 
-    expect([...LOCAL_ONLY_EVENTS]).toEqual([CH.remoteLinkStatus]);
+    expect([...LOCAL_ONLY_EVENTS]).toEqual([CH.remoteLinkStatus, CH.accountChanged]);
     // The channels a server may genuinely push are not caught by it.
     expect(isLocalOnlyEvent(CH.ptyData)).toBe(false);
     expect(isLocalOnlyEvent(CH.notificationsNew)).toBe(false);
@@ -247,11 +249,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 174 as 70 read, 51 mutate and 53 execute', () => {
+  it('grades the 179 as 72 read, 52 mutate and 55 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 70, mutate: 51, execute: 53 });
+    expect(tally).toEqual({ read: 72, mutate: 52, execute: 55 });
   });
 
   /**
@@ -612,7 +614,7 @@ describe('remote contract: the version handshake', () => {
   });
 
   it('is protocol 3: 2 carried a generation (HIVE-144), 3 caught up on unbumped channels (HIVE-140 audit)', () => {
-    expect(REMOTE_PROTOCOL_VERSION).toBe(31);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(32);
   });
 });
 
@@ -663,7 +665,7 @@ describe('remote contract: the attach snapshot (HIVE-144)', () => {
     expect(EVENT_CHANNELS).toContain(CH.changedFilesChanged);
     expect(frameKindOf(CH.changedFilesChanged)).toBe('event');
     expect(frameKindOf(CH.changedFilesList)).toBe('call');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(31);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(32);
   });
 
   it('snapshots the plans so a reattaching client sees the current plan (HIVE-179)', () => {
@@ -774,7 +776,7 @@ describe('WINDOW_BOUND', () => {
  * admitted and nobody had applied it to.
  */
 describe('PROCESS_LOCAL', () => {
-  it('names exactly ten channels', () => {
+  it('names exactly fourteen channels', () => {
     expect([...PROCESS_LOCAL].sort()).toEqual(
       [
         CH.appInfo,
@@ -787,6 +789,10 @@ describe('PROCESS_LOCAL', () => {
         CH.notificationsDelivery,
         CH.notificationsBadge,
         CH.remoteDialNow,
+        CH.accountState,
+        CH.accountSignIn,
+        CH.accountCancel,
+        CH.accountSignOut,
       ].sort(),
     );
   });
@@ -941,5 +947,16 @@ describe('PAYLOAD_SCOPED', () => {
     expect(payloadScopeFor(CH.configGet)).toBeNull();
     expect(payloadScopeFor(CH.appInfo)).toBeNull();
     expect(payloadScopeFor('not:a:channel')).toBeNull();
+  });
+});
+
+describe('account channels (HIVE-264)', () => {
+  it('are four process-local calls and one local-only push', () => {
+    for (const channel of [CH.accountState, CH.accountSignIn, CH.accountCancel, CH.accountSignOut]) {
+      expect(frameKindOf(channel)).toBe('call');
+      expect(isProcessLocal(channel)).toBe(true);
+    }
+    expect(frameKindOf(CH.accountChanged)).toBe('event');
+    expect(isLocalOnlyEvent(CH.accountChanged)).toBe(true);
   });
 });

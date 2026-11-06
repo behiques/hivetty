@@ -84,8 +84,9 @@ import { isThisMachineAction } from './notification-contract';
  * 28 → 29 (HIVE-378): `CH` gained `config:set-project-harness`; `ConfigSnapshot`'s projects gained `harness`.
  * 29 → 30 (HIVE-379): `AgentSummary` (on `agents:list`) gained an optional `harness`, the CLIs an agent row runs on.
  * 30 → 31 (HIVE-335): `SessionMetrics` (on `session:metrics`) gained `tokensIn`, `tokensOut`, `tokensCached`, `tokensWritten` and `aiCredits`.
+ * 31 → 32 (HIVE-264): `CH` gained `account:state`, `account:sign-in`, `account:cancel`, `account:sign-out` (process-local) and `account:changed` (local-only).
  */
-export const REMOTE_PROTOCOL_VERSION = 31;
+export const REMOTE_PROTOCOL_VERSION = 32;
 
 /**
  * What a frame is for.
@@ -97,11 +98,11 @@ export const REMOTE_PROTOCOL_VERSION = 31;
  * promote a `notify` to a `call` and the typing path acquires a round trip.
  *
  * - `call` — request/response. The client asks, the server answers with
- *   `result` or `error`. 100 channels.
+ *   `result` or `error`. 104 channels.
  * - `notify` — fire and forget, client to server, ordered per session. 6
  *   channels. Ordering between a `pty:write` and a `pty:resize` is observable,
  *   so a transport may not reorder them.
- * - `event` — server to client push. 26 channels, including `pty:data`, the
+ * - `event` — server to client push. 27 channels, including `pty:data`, the
  *   only hot path.
  * - `attach` — the handshake, and the only frame that may precede a version
  *   check. Exactly one per connection.
@@ -265,6 +266,11 @@ export const FRAME_KIND = {
   [CH.changedFilesChanged]: 'event',
   [CH.updatesStatus]: 'call',
   [CH.updatesCheck]: 'call',
+  [CH.accountState]: 'call',
+  [CH.accountSignIn]: 'call',
+  [CH.accountCancel]: 'call',
+  [CH.accountSignOut]: 'call',
+  [CH.accountChanged]: 'event',
   [CH.configCloneStart]: 'call',
   [CH.configCloneCancel]: 'call',
   [CH.configCloneDone]: 'event',
@@ -583,6 +589,11 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.changedFilesChanged]: 'read',
   [CH.updatesStatus]: 'read',
   [CH.updatesCheck]: 'execute',
+  [CH.accountState]: 'read',
+  [CH.accountSignIn]: 'execute',
+  [CH.accountCancel]: 'mutate',
+  [CH.accountSignOut]: 'execute',
+  [CH.accountChanged]: 'read',
   [CH.configCloneStart]: 'execute',
   [CH.configCloneCancel]: 'mutate',
   [CH.configCloneDone]: 'read',
@@ -928,6 +939,14 @@ const PROCESS_LOCAL_REFUSALS = {
   */
   [CH.remoteDialNow]:
     "remote:dial-now restarts the answering process's own reconnect loop. A server has no loop of a peer's to restart, so the asking machine dials for itself and a server refuses it.",
+  [CH.accountState]:
+    "account:state describes the HiveTTY account this machine signed in with. A server's answer would pass its own account off as the peer's, so the asking machine answers it and a server refuses it.",
+  [CH.accountSignIn]:
+    "account:sign-in signs the answering machine in to HiveTTY. A server refuses to start a sign-in for its own account on a peer's say-so; the asking machine signs itself in.",
+  [CH.accountCancel]:
+    "account:cancel drops the answering machine's own pending sign-in. A server refuses it from a peer; the asking machine cancels its own.",
+  [CH.accountSignOut]:
+    "account:sign-out forgets the answering machine's own account. A server refuses to sign itself out on a peer's say-so; the asking machine signs itself out.",
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**
@@ -962,7 +981,7 @@ export function isProcessLocal(channel: string): boolean {
  * somewhere would push its own reconnect state down to every client, and each
  * client's header chip would start describing a socket it has no part in.
  */
-export const LOCAL_ONLY_EVENTS: readonly Channel[] = [CH.remoteLinkStatus];
+export const LOCAL_ONLY_EVENTS: readonly Channel[] = [CH.remoteLinkStatus, CH.accountChanged];
 
 /** Whether `channel` is a push this process raises about itself. */
 export function isLocalOnlyEvent(channel: string): boolean {

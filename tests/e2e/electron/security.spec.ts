@@ -309,6 +309,12 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * `paused` until somebody changes it.
    */
   expect(surface.top).toEqual([
+    /*
+      HIVE-264 adds `account`: read the account state, open the cloud's sign-in page in the system
+      browser, cancel it, sign out. No verb takes an argument and none returns a token: the refresh token
+      lives in `account.bin` through safeStorage and the access token only in main's memory.
+    */
+    'account',
     'agents',
     'appInfo',
     // HIVE-201: read-only, like `plans`: a session's changed files, listed and pushed.

@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  BRIDGE_ACCOUNT_KEYS,
   BRIDGE_AGENTS_KEYS,
   BRIDGE_CLI_KEYS,
   BRIDGE_CONFIG_KEYS,
@@ -104,6 +105,8 @@ const shipped = () =>
   exposed.shipped as Record<string, (...args: unknown[]) => unknown>;
 const updates = () =>
   exposed.updates as Record<string, (...args: unknown[]) => unknown>;
+const account = () =>
+  exposed.account as Record<string, (...args: unknown[]) => unknown>;
 const ui = () =>
   exposed.ui as Record<string, (...args: unknown[]) => unknown>;
 
@@ -205,6 +208,8 @@ describe('exposed surface', () => {
     expect(Object.keys(updates()).sort()).toEqual([
       ...BRIDGE_UPDATES_KEYS,
     ].sort());
+    // HIVE-264: sign in, cancel, sign out and the state. No verb hands a token to the renderer.
+    expect(Object.keys(account()).sort()).toEqual([...BRIDGE_ACCOUNT_KEYS].sort());
     /**
      * The fifth time, and this one had already happened.
      *
@@ -968,5 +973,24 @@ describe('subscriptions', () => {
   it('keeps onData and onExit on separate channels', () => {
     pty().onData(vi.fn());
     expect(listeners.get(CH.ptyExit) ?? []).toHaveLength(0);
+  });
+});
+
+describe('the account verbs route to their channels (HIVE-264)', () => {
+  it('invokes each call channel with no payload', async () => {
+    await account().state();
+    await account().signIn();
+    await account().cancel();
+    await account().signOut();
+    expect((ipcRendererMock.invoke.mock.calls as unknown as [string][]).map(([channel]) => channel)).toEqual([
+      CH.accountState, CH.accountSignIn, CH.accountCancel, CH.accountSignOut,
+    ]);
+  });
+
+  it('onChanged hands the pushed state over, payload only', () => {
+    const callback = vi.fn();
+    (account().onChanged as (cb: unknown) => () => void)(callback);
+    listeners.get(CH.accountChanged)?.[0]?.({}, { kind: 'signing-in' });
+    expect(callback).toHaveBeenCalledWith({ kind: 'signing-in' });
   });
 });

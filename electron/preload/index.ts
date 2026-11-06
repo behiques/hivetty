@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 
 
+import type { AccountState, SignInResult } from '@shared/account-contract';
 import type {
   AgentLinesPush,
   AgentNameRequest,
@@ -882,6 +883,14 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.updatesStatus) as Promise<UpdateStatus>,
     check: (): Promise<void> =>
       ipcRenderer.invoke(CH.updatesCheck) as Promise<void>,
+  },
+  account: {
+    state: (): Promise<AccountState> => ipcRenderer.invoke(CH.accountState) as Promise<AccountState>,
+    signIn: (): Promise<SignInResult> => ipcRenderer.invoke(CH.accountSignIn) as Promise<SignInResult>,
+    cancel: (): Promise<void> => ipcRenderer.invoke(CH.accountCancel) as Promise<void>,
+    signOut: (): Promise<void> => ipcRenderer.invoke(CH.accountSignOut) as Promise<void>,
+    onChanged: (callback: (state: AccountState) => void) =>
+      subscribe<AccountState>(CH.accountChanged, callback),
   },
   session: {
     onStatus: (callback: (event: SessionStatusEvent) => void) =>
