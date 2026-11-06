@@ -13,6 +13,7 @@ import {
 } from '@shared/remote-contract';
 
 import { RemoteCallError, type RemoteClient } from '../../remote-client/socket';
+import { ACCOUNT_CALLS } from '../licence';
 import { activateOnThisMachine } from '../notifications/activate-here';
 import { notificationDelivery } from '../notifications/delivery';
 import { badgeDock, clearDockBadgeWithLastWindow } from '../notifications/dock-badge';
@@ -132,6 +133,15 @@ function localAnswerFor(
     */
     case CH.remoteDialNow:
       return () => deps.localDialNow();
+    /*
+      HIVE-264. The account is this machine's own: a server signing in, or reporting its account, on a
+      peer's say-so would pass its identity off as the peer's. Imported for `CH.updatesStatus`'s reason.
+    */
+    case CH.accountState:
+    case CH.accountSignIn:
+    case CH.accountCancel:
+    case CH.accountSignOut:
+      return () => ACCOUNT_CALLS[channel]();
     default:
       return null;
   }
