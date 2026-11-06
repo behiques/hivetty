@@ -50,6 +50,11 @@ export function createLicenceState(deps: LicenceStateDeps): LicenceStateMachine 
   let claims: LeaseClaims | null = null;
   let started = false;
   let inFlight: Promise<LicenceState> | null = null;
+  /** Bumped by every sign-out: a renewal from an older generation never lands. */
+  let generation = 0;
+  let inFlightGeneration = 0;
+  let disposed = false;
+  let accountKind: AccountState['kind'] = 'signed-out';
   let renewTimer: ReturnType<typeof setInterval> | null = null;
   let graceTimer: ReturnType<typeof setInterval> | null = null;
   let expiryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -147,32 +152,45 @@ export function createLicenceState(deps: LicenceStateDeps): LicenceStateMachine 
     }
   }
 
+  /**
+   * One renewal at a time; a call made while one is out joins it. A renewal from before a sign-out (or a
+   * dispose) lands nowhere: its answer belongs to an account that is gone, and it must not overturn
+   * `lapsed {signed_out}` or `{device_revoked}`. A sign-in after that starts its own renewal.
+   */
   function refresh(): Promise<LicenceState> {
-    if (!signedIn()) return Promise.resolve(current);
-    inFlight ??= deps
+    if (disposed || !signedIn()) return Promise.resolve(current);
+    if (inFlight !== null && inFlightGeneration === generation) return inFlight;
+    const mine = generation;
+    const land = (next: () => LicenceState): LicenceState => {
+      if (mine === generation && !disposed) set(next());
+      return current;
+    };
+    const run: Promise<LicenceState> = deps
       .renew()
       .then(
-        (result) => {
-          set(apply(result));
-          return current;
-        },
-        () => {
-          set(failed());
-          return current;
-        },
+        (result) => land(() => apply(result)),
+        () => land(failed),
       )
       .finally(() => {
-        inFlight = null;
+        if (inFlight === run) inFlight = null;
       });
-    return inFlight;
+    inFlight = run;
+    inFlightGeneration = mine;
+    return run;
   }
 
   function onAccount(account: AccountState): void {
+    const was = accountKind;
+    accountKind = account.kind;
     if (account.kind === 'signed-out') {
+      generation += 1;
       if (account.reason === 'device-revoked') set({ kind: 'lapsed', reason: 'device_revoked' });
       else if (deps.file.read() !== null) set({ kind: 'lapsed', reason: 'signed_out' });
       else set({ kind: 'unlicensed' });
     } else if (account.kind === 'signed-in') {
+      // Coming back from a sign-out, the file speaks first (licensed, then grace if the renewal fails). A
+      // repeated signed-in notice (a token rotation) only renews, so it never re-reads over a refusal.
+      if (was !== 'signed-in') set(fromFile());
       void refresh();
     }
   }
@@ -191,6 +209,7 @@ export function createLicenceState(deps: LicenceStateDeps): LicenceStateMachine 
     start() {
       if (started) return;
       started = true;
+      accountKind = deps.account.state().kind;
       set(fromFile());
       unsubscribe = deps.account.onChange(onAccount);
       renewTimer = setInterval(() => void refresh(), RENEW_EVERY_MS);
@@ -207,6 +226,7 @@ export function createLicenceState(deps: LicenceStateDeps): LicenceStateMachine 
       }, PURCHASE_POLL_MS);
     },
     dispose() {
+      disposed = true;
       unsubscribe?.();
       for (const timer of [renewTimer, graceTimer, purchaseTimer]) if (timer !== null) clearInterval(timer);
       if (expiryTimer !== null) clearTimeout(expiryTimer);

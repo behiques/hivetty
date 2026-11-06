@@ -332,3 +332,91 @@ describe('licence clocks', () => {
     expect(h.renew).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('a renewal that lands late (Tasks 5-7 review)', () => {
+  const deferred = (h: ReturnType<typeof harness>) => {
+    let release!: (r: RenewResult) => void;
+    h.renew.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    return (r: RenewResult) => release(r);
+  };
+
+  it('never overturns a sign-out made while it was out', async () => {
+    const h = harness({ stored: signer.sign(claimsFor()) });
+    const release = deferred(h);
+    h.machine.start();
+    h.setAccount({ kind: 'signed-out' });
+    release({ kind: 'lease', jws: signer.sign(claimsFor({ jti: 'ls_late' })) });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'signed_out' });
+  });
+
+  it('keeps {device_revoked} when the refresh grant revokes the device mid-renewal', async () => {
+    const h = harness({ stored: signer.sign(claimsFor()) });
+    h.renew.mockImplementationOnce(async () => {
+      h.setAccount({ kind: 'signed-out', reason: 'device-revoked' });
+      return { kind: 'signed-out' };
+    });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'device_revoked' });
+  });
+
+  it('arms nothing once disposed', async () => {
+    const h = harness({ stored: signer.sign(claimsFor()) });
+    const release = deferred(h);
+    h.machine.start();
+    h.machine.dispose();
+    release({ kind: 'failed', detail: 'offline' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(h.machine.refresh()).resolves.toEqual({ kind: 'licensed', ...terms() });
+    expect(h.renew).toHaveBeenCalledTimes(1);
+  });
+
+  it('a sign-in after a sign-out renews afresh rather than joining the old renewal', async () => {
+    const h = harness({ stored: signer.sign(claimsFor()) });
+    const release = deferred(h);
+    h.machine.start();
+    h.setAccount({ kind: 'signed-out' });
+    h.setAccount(SIGNED_IN);
+    expect(h.renew).toHaveBeenCalledTimes(2);
+    release({ kind: 'failed', detail: 'offline' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.machine.state()).toEqual({ kind: 'grace', ...terms() });
+  });
+});
+
+describe('signing back in (Tasks 5-7 review)', () => {
+  it('reads the file again, so an offline sign-in with a valid lease is licensed, then grace', async () => {
+    const h = harness({ stored: signer.sign(claimsFor()), renew: [{ kind: 'failed', detail: 'offline' }] });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.setAccount({ kind: 'signed-out' });
+    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'signed_out' });
+    const seen: string[] = [];
+    h.machine.onChange((s) => seen.push(s.kind));
+    h.setAccount(SIGNED_IN);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(seen).toEqual(['licensed', 'grace']);
+  });
+
+  it('a repeated signed-in notice does not re-read the file over a refusal', async () => {
+    const h = harness({
+      stored: signer.sign(claimsFor()),
+      renew: [{ kind: 'refused', reason: 'payment_failed' }, { kind: 'refused', reason: 'payment_failed' }],
+    });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const seen: string[] = [];
+    h.machine.onChange((s) => seen.push(s.kind));
+    h.setAccount(SIGNED_IN);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(seen).toEqual([]);
+    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'payment_failed' });
+  });
+});
