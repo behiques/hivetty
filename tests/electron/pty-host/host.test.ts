@@ -61,6 +61,8 @@ function recordingSessions() {
     pause: vi.fn(),
     resume: vi.fn(),
     killAll: vi.fn(),
+    suspendAll: vi.fn(),
+    resumeAll: vi.fn(),
   };
 }
 

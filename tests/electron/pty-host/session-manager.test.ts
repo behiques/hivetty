@@ -1058,3 +1058,164 @@ describe('foreground (terminals)', () => {
     expect(foregroundNames()).toEqual([null]);
   });
 });
+
+describe('suspendAll / resumeAll (HIVE-267)', () => {
+  const NOTICE_TEXT = 'Resumed after licence renewal.';
+
+  /** Two live sessions whose shells are pids 100 and 200 (node-pty setsids the shell, so pgid = pid). */
+  function twoSessions(): { emitted: Map<string, HostMessage[]> } {
+    const pids = [100, 200];
+    manager = build({
+      spawn: ((...args: Parameters<typeof mockSpawn>) => {
+        const made = mockSpawn(...args);
+        made.pid = pids.shift()!;
+        return made;
+      }) as never,
+    });
+    const emitted = new Map<string, HostMessage[]>();
+    for (const sessionId of ['s1', 's2']) {
+      emitted.set(sessionId, []);
+      manager.spawn({ ...SPAWN, sessionId }, (message) =>
+        emitted.get(sessionId)!.push(message),
+      );
+    }
+    signals.length = 0;
+    return { emitted };
+  }
+
+  const tree: Descendant[] = [
+    { pid: 101, pgid: 101 },
+    { pid: 102, pgid: 101 },
+    { pid: 201, pgid: 201 },
+    { pid: 202, pgid: 200 },
+  ];
+
+  const groupSignals = () => signals.filter((s) => s.startsWith('group '));
+
+  it('SIGSTOPs each shell group then each distinct descendant group, and SIGCONTs the same list in the same order', async () => {
+    twoSessions();
+    control.descendants.mockResolvedValue(tree);
+
+    await manager.suspendAll();
+    expect(control.descendants).toHaveBeenCalledWith([100, 200]);
+    expect(groupSignals()).toEqual([
+      'group 100 SIGSTOP',
+      'group 200 SIGSTOP',
+      'group 101 SIGSTOP',
+      'group 201 SIGSTOP',
+    ]);
+
+    signals.length = 0;
+    await manager.resumeAll(NOTICE_TEXT);
+    expect(groupSignals()).toEqual([
+      'group 100 SIGCONT',
+      'group 200 SIGCONT',
+      'group 101 SIGCONT',
+      'group 201 SIGCONT',
+    ]);
+  });
+
+  it('writes the notice into every live session as data, and into its replay', async () => {
+    const { emitted } = twoSessions();
+
+    await manager.suspendAll();
+    await manager.resumeAll(NOTICE_TEXT);
+
+    const chunk = `\r\n\x1b[2m[HiveTTY] ${NOTICE_TEXT}\x1b[0m\r\n`;
+    expect(emitted.get('s1')).toContainEqual({ type: 'data', sessionId: 's1', chunk });
+    expect(emitted.get('s2')).toContainEqual({ type: 'data', sessionId: 's2', chunk });
+    expect(manager.replay('s1')).toContain(NOTICE_TEXT);
+  });
+
+  it('writes no notice into a session that has exited', async () => {
+    const { emitted } = twoSessions();
+    await manager.suspendAll();
+    ptyInstances[1]!.emitExit(0);
+
+    await manager.resumeAll(NOTICE_TEXT);
+
+    expect(manager.replay('s2')).not.toContain(NOTICE_TEXT);
+    expect(emitted.get('s1')!.some((m) => m.type === 'data')).toBe(true);
+  });
+
+  it('resumeAll with no notice continues the groups and writes nothing', async () => {
+    const { emitted } = twoSessions();
+    await manager.suspendAll();
+
+    await manager.resumeAll();
+
+    expect(groupSignals().filter((s) => s.endsWith('SIGCONT'))).toHaveLength(2);
+    expect(emitted.get('s1')!.some((m) => m.type === 'data')).toBe(false);
+  });
+
+  it('resumeAll with no suspension, or a second resumeAll, signals nothing', async () => {
+    twoSessions();
+
+    await manager.resumeAll('x');
+    expect(groupSignals()).toEqual([]);
+
+    await manager.suspendAll();
+    await manager.resumeAll();
+    signals.length = 0;
+    await manager.resumeAll();
+    expect(groupSignals()).toEqual([]);
+  });
+
+  it('a second suspendAll while suspended stops nothing twice', async () => {
+    twoSessions();
+    await manager.suspendAll();
+    signals.length = 0;
+
+    await manager.suspendAll();
+
+    expect(groupSignals()).toEqual([]);
+  });
+
+  it('suspendAll with no live session signals nothing', async () => {
+    await manager.suspendAll();
+    expect(control.signalGroup).not.toHaveBeenCalled();
+  });
+
+  it('a resume that arrives while suspendAll is still reading ps waits for it, so nothing is left stopped', async () => {
+    twoSessions();
+    let release: (value: Descendant[]) => void = () => undefined;
+    control.descendants.mockImplementation(
+      () => new Promise<Descendant[]>((resolve) => (release = resolve)),
+    );
+
+    const suspending = manager.suspendAll();
+    const resuming = manager.resumeAll();
+    // Let the chain reach the `ps` read before it answers.
+    await Promise.resolve();
+    await Promise.resolve();
+    release([]);
+    await Promise.all([suspending, resuming]);
+
+    expect(groupSignals().map((s) => s.split(' ')[2])).toEqual([
+      'SIGSTOP',
+      'SIGSTOP',
+      'SIGCONT',
+      'SIGCONT',
+    ]);
+  });
+
+  it('stops the shells even when the tree cannot be read', async () => {
+    twoSessions();
+    control.descendants.mockRejectedValue(new Error('ps exploded'));
+
+    await manager.suspendAll();
+
+    expect(groupSignals()).toEqual(['group 100 SIGSTOP', 'group 200 SIGSTOP']);
+  });
+
+  it('tolerates a group that is already gone (ESRCH)', async () => {
+    twoSessions();
+    control.descendants.mockResolvedValue(tree);
+    control.signalGroup.mockImplementation((pgid) => {
+      if (pgid === 101) throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
+    });
+
+    await expect(manager.suspendAll()).resolves.toBeUndefined();
+    await expect(manager.resumeAll()).resolves.toBeUndefined();
+  });
+});
