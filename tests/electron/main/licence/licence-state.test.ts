@@ -15,7 +15,9 @@ import { claimsFor, DEVICE, ISS, makeSigner, NOW_S } from '../../../support/leas
 const signer = makeSigner('kid-1');
 const SIGNED_IN: AccountState = { kind: 'signed-in', email: 'a@b.c', name: 'A', deviceId: DEVICE };
 
-function harness(opts: { stored?: string | null; account?: AccountState; renew?: RenewResult[] } = {}) {
+function harness(
+  opts: { stored?: string | null; account?: AccountState; renew?: RenewResult[]; failWrite?: boolean } = {},
+) {
   let account = opts.account ?? SIGNED_IN;
   const listeners = new Set<(state: AccountState) => void>();
   let stored = opts.stored ?? null;
@@ -32,6 +34,7 @@ function harness(opts: { stored?: string | null; account?: AccountState; renew?:
     file: {
       read: () => stored,
       write: (jws) => {
+        if (opts.failWrite) throw new Error('ENOSPC: no space left on device');
         stored = jws;
       },
     },
@@ -204,6 +207,18 @@ describe('licence state transitions', () => {
   it('a renewal that finds no token reads the file again', async () => {
     const h = await started({ stored: signer.sign(claimsFor()), renew: [{ kind: 'signed-out' }] });
     expect(h.machine.state().kind).toBe('licensed');
+  });
+
+  it('a renewed lease that cannot be written is still licensed, and refresh resolves', async () => {
+    const stale = signer.sign(claimsFor());
+    const fresh = signer.sign(claimsFor({ jti: 'ls_4', exp: NOW_S + 30 * 86_400 }));
+    const h = harness({ stored: stale, failWrite: true, renew: [{ kind: 'lease', jws: fresh }] });
+    h.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.stored()).toBe(stale);
+    expect(h.machine.state()).toEqual({ kind: 'licensed', ...terms({ exp: NOW_S + 30 * 86_400 }) });
+    h.renew.mockResolvedValueOnce({ kind: 'lease', jws: fresh });
+    await expect(h.machine.refresh()).resolves.toEqual({ kind: 'licensed', ...terms({ exp: NOW_S + 30 * 86_400 }) });
   });
 
   it('a renew that throws is a failure', async () => {

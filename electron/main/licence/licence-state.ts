@@ -137,7 +137,12 @@ export function createLicenceState(deps: LicenceStateDeps): LicenceStateMachine 
           now: deps.now(),
         });
         if (!verdict.ok) return failed();
-        deps.file.write(result.jws);
+        try {
+          deps.file.write(result.jws);
+        } catch {
+          // A full or read-only disk: the cloud said yes and the lease verified, so hold it in memory. The
+          // next renewal writes it again; until then a relaunch reads the older lease.
+        }
         claims = verdict.claims;
         return { kind: 'licensed', ...termsOf(verdict.claims) };
       }
