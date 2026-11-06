@@ -1,5 +1,5 @@
 import type { JsonWebKey } from 'node:crypto';
-import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 
 /**
  * `<userData>/account.bin`: the signed-in account (HIVE-264), one safeStorage-encrypted JSON.
@@ -80,9 +80,18 @@ export function createAccountStore({
     },
     write(account) {
       if (!safeStorage.isEncryptionAvailable()) return false;
-      writeFileSync(filePath, safeStorage.encryptString(JSON.stringify(account)), { mode: 0o600 });
-      chmodSync(filePath, 0o600); // the mode above applies only on create
-      return true;
+      // A rotated refresh token must never be half-written or lost to a throw: write a sibling, then
+      // rename it over the old blob, and answer false on any failure so the caller can say so.
+      const tmp = `${filePath}.tmp`;
+      try {
+        writeFileSync(tmp, safeStorage.encryptString(JSON.stringify(account)), { mode: 0o600 });
+        chmodSync(tmp, 0o600); // the mode above applies only on create
+        renameSync(tmp, filePath);
+        return true;
+      } catch {
+        rmSync(tmp, { force: true });
+        return false;
+      }
     },
     clear() {
       rmSync(filePath, { force: true });

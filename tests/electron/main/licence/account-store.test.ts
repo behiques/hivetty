@@ -79,6 +79,32 @@ describe('createAccountStore', () => {
     expect(store.read()).toBeNull();
   });
 
+  it('answers false instead of throwing when the write fails, keeping the old account', () => {
+    const safeStorage = fakeSafeStorage();
+    const store = createAccountStore({ safeStorage, filePath });
+    store.write(ACCOUNT);
+    const failing = createAccountStore({
+      safeStorage: {
+        ...safeStorage,
+        encryptString: () => {
+          throw new Error('keychain locked');
+        },
+      },
+      filePath,
+    });
+    expect(failing.write({ ...ACCOUNT, refreshToken: 'rt-2' })).toBe(false);
+    expect(store.read()).toEqual(ACCOUNT);
+    const unwritable = createAccountStore({ safeStorage, filePath: join(dir, 'missing', 'account.bin') });
+    expect(unwritable.write(ACCOUNT)).toBe(false);
+  });
+
+  it('tightens an existing file to 0600 and keeps the private key off disk', () => {
+    writeFileSync(filePath, 'old', { mode: 0o644 });
+    createAccountStore({ safeStorage: fakeSafeStorage(), filePath }).write(ACCOUNT);
+    expect(statSync(filePath).mode & 0o777).toBe(0o600);
+    expect(readFileSync(filePath, 'utf8')).not.toContain('priv');
+  });
+
   it('clears idempotently', () => {
     const store = createAccountStore({ safeStorage: fakeSafeStorage(), filePath });
     store.write(ACCOUNT);
