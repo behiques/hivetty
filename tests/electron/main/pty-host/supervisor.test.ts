@@ -503,3 +503,26 @@ describe('foreground (terminals)', () => {
     expect(host().sent.find((c) => c.type === 'spawn')).toMatchObject({ foreground: true });
   });
 });
+
+describe('suspendAll / resumeAll (HIVE-267)', () => {
+  it('posts suspend-all and resume-all to a running host', () => {
+    const child = spawnSession();
+
+    supervisor.suspendAll();
+    supervisor.resumeAll('n');
+    supervisor.resumeAll();
+
+    expect(child.commandsOfType('suspend-all')).toEqual([{ type: 'suspend-all' }]);
+    expect(child.commandsOfType('resume-all')).toEqual([
+      { type: 'resume-all', notice: 'n' },
+      { type: 'resume-all' },
+    ]);
+  });
+
+  it('is a no-op with no host, and forks nothing', () => {
+    supervisor.suspendAll();
+    supervisor.resumeAll('n');
+
+    expect(hosts).toHaveLength(0);
+  });
+});
