@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccountState } from '../../../../electron/shared/account-contract';
 import type { AccountStore, StoredAccount } from '../../../../electron/main/licence/account-store';
 import {
+  BACKOFF_MAX_MS,
+  BACKOFF_START_MS,
   createAuthClient,
   generateDeviceKey,
   SIGN_IN_DEADLINE_MS,
@@ -352,5 +354,123 @@ describe('races around the exchange (task 6 review)', () => {
     await client.getAccessToken();
     client.cancel();
     expect(client.state()).toEqual({ kind: 'signed-out', reason: 'device-revoked' });
+  });
+});
+
+describe('refresh', () => {
+  it('start() with a stored account is signed in at once and refreshes, rotating the stored token', async () => {
+    const { client, cloud, store, states } = harness({ stored: STORED });
+    cloud.token.mockResolvedValue(tokens(1));
+    client.start();
+    expect(states[0]).toEqual({ kind: 'signed-in', email: 'ada@example.com', name: 'Ada', deviceId: 'dev-0' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cloud.token).toHaveBeenCalledWith({ grant_type: 'refresh_token', refresh_token: 'rt-0' });
+    expect(store.value()?.refreshToken).toBe('rt-1');
+    expect(store.value()?.deviceKey).toEqual(KEY);
+  });
+
+  it('start() with nothing stored stays signed out and makes no request', () => {
+    const { client, cloud, states } = harness();
+    client.start();
+    expect(states).toEqual([]);
+    expect(cloud.token).not.toHaveBeenCalled();
+  });
+
+  it('refreshes 60 s before expiry', async () => {
+    const { client, cloud } = harness({ stored: STORED });
+    cloud.token.mockResolvedValueOnce(tokens(1)).mockResolvedValueOnce(tokens(2));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(840_000 - 1);
+    expect(cloud.token).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(cloud.token).toHaveBeenCalledTimes(2);
+    expect(cloud.token).toHaveBeenLastCalledWith({ grant_type: 'refresh_token', refresh_token: 'rt-1' });
+  });
+
+  it('two triggers at once make one request', async () => {
+    const { client, cloud } = harness({ stored: STORED });
+    cloud.token.mockResolvedValue(tokens(1));
+    const [a, b] = await Promise.all([client.getAccessToken(), client.getAccessToken()]);
+    expect(a).toBe('at-1');
+    expect(b).toBe('at-1');
+    expect(cloud.token).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers the cached token without a request while it has more than a minute left', async () => {
+    const { client, cloud } = harness({ stored: STORED });
+    cloud.token.mockResolvedValue(tokens(1));
+    await client.getAccessToken();
+    await client.getAccessToken();
+    expect(cloud.token).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalid_grant clears the store and emits a plain signed-out', async () => {
+    const { client, cloud, store } = harness({ stored: STORED });
+    cloud.token.mockRejectedValue(new CloudError('invalid_grant', 'invalid_grant'));
+    await expect(client.getAccessToken()).resolves.toBeNull();
+    expect(store.value()).toBeNull();
+    expect(client.state()).toEqual({ kind: 'signed-out' });
+  });
+
+  it('invalid_grant with device_revoked carries the reason', async () => {
+    const { client, cloud } = harness({ stored: STORED });
+    cloud.token.mockRejectedValue(new CloudError('invalid_grant', 'device_revoked'));
+    await client.getAccessToken();
+    expect(client.state()).toEqual({ kind: 'signed-out', reason: 'device-revoked' });
+  });
+
+  it('a network error keeps the store and the signed-in state, and backs off 5 s doubling to 5 min', async () => {
+    const { client, cloud, store } = harness({ stored: STORED });
+    cloud.token.mockRejectedValue(new CloudError('network', 'offline'));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.value()).toEqual(STORED);
+    expect(client.state()).toMatchObject({ kind: 'signed-in' });
+
+    // No getAccessToken() here: an on-demand refresh would reschedule and shift the sequence.
+    const delays = [5_000, 10_000, 20_000, 40_000, 80_000, 160_000, 300_000, 300_000];
+    expect(delays[0]).toBe(BACKOFF_START_MS);
+    expect(delays.at(-1)).toBe(BACKOFF_MAX_MS);
+    for (const delay of delays) {
+      const before = cloud.token.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(cloud.token.mock.calls.length).toBe(before);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(cloud.token.mock.calls.length).toBe(before + 1);
+    }
+  });
+
+  it('a refused answer backs off like a network error', async () => {
+    const { client, cloud, store } = harness({ stored: STORED });
+    cloud.token.mockRejectedValueOnce(new CloudError('refused', 'HTTP 502')).mockResolvedValue(tokens(1));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.value()).toEqual(STORED);
+    await vi.advanceTimersByTimeAsync(BACKOFF_START_MS);
+    expect(store.value()?.refreshToken).toBe('rt-1');
+  });
+
+  it('a rotated token the store cannot save signs out with the keychain message', async () => {
+    const { client, cloud } = harness({ stored: STORED, writable: false });
+    cloud.token.mockResolvedValue(tokens(1));
+    await client.getAccessToken();
+    expect(client.state()).toEqual({ kind: 'signed-out', reason: 'error', message: expect.stringContaining('keychain') });
+  });
+
+  it('a refresh landing during a new sign-in keeps the UI on signing-in', async () => {
+    const { client, cloud } = harness({ stored: STORED });
+    cloud.token.mockResolvedValue(tokens(1));
+    await client.signIn();
+    await client.getAccessToken();
+    expect(client.state()).toEqual({ kind: 'signing-in' });
+    client.cancel();
+    expect(client.state()).toMatchObject({ kind: 'signed-in' });
+  });
+
+  it('getAccessToken answers null with nothing stored', async () => {
+    const { client, cloud } = harness();
+    await expect(client.getAccessToken()).resolves.toBeNull();
+    expect(cloud.token).not.toHaveBeenCalled();
   });
 });
