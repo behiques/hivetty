@@ -11,7 +11,11 @@ import {
   spawnCalls,
 } from '../../../../__mocks__/child-process';
 import { createAgentState } from '../../../../electron/main/agents/state';
-import { createRunTracker, FINISH_WINDOW_MS } from '../../../../electron/main/agents/runs';
+import {
+  createRunTracker,
+  FINISH_WINDOW_MS,
+  LICENCE_LAPSED,
+} from '../../../../electron/main/agents/runs';
 import {
   AGENT_KILL_GRACE_MS,
   AGENT_STALL_GRACE_MS,
@@ -1971,7 +1975,7 @@ describe('createRunTracker', () => {
       // No `env` and no `cwd`: the client inherits main's environment (it
       // has to find `docker`), hands none of it on, and the exec's cwd is the
       // container's — everything the container gets is on the argv above.
-      expect(call?.options).toEqual({ stdio: ['ignore', 'pipe', 'pipe'] });
+      expect(call?.options).toEqual({ stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     });
 
     it('registers the grants before the spawn and clears them when the run closes', () => {
@@ -2363,4 +2367,154 @@ describe('createRunTracker', () => {
       expect(abandoned()).toEqual([]);
     });
   });
+
+  describe('licence lapse (HIVE-267)', () => {
+    let lapsed: boolean;
+    let killGroup: ReturnType<typeof vi.fn<(pgid: number, signal: NodeJS.Signals) => void>>;
+
+    const hostCommand = () => ({
+      file: '/opt/bin/claude',
+      args: ['-p', 'do it'],
+      env: { HIVE_AGENT: '1' },
+      cwd: '/tmp/work',
+      sessionUuid: 'u-1',
+      namesConversation: true,
+      lastTurn: false,
+      kind: 'standing' as const,
+    });
+
+    const boxCommand = () => ({
+      ...hostCommand(),
+      container: {
+        runtime: 'docker',
+        name: 'box',
+        command: 'claude',
+        envArg: '-e {name}={value}',
+        workspace: '/work',
+        sessionUuid: 'u-1',
+      },
+    });
+
+    let ids: number;
+    const make = (command: () => ReturnType<typeof hostCommand>) =>
+      createRunTracker({
+        spawn,
+        command,
+        parallelFor: () => 1,
+        state,
+        appendLedger: (entry) => ledger.push(entry),
+        openAsksFor: () => false,
+        hasOpenAsk: () => false,
+        handoffFor: () => undefined,
+        newUuid: () => 'uuid-minted',
+        pushStatus: (name) => statuses.push(name),
+        pushLines: (name, pushed) => lines.push({ name, count: pushed.length, pushed: [...pushed] }),
+        now: () => 1_000,
+        newRunId: () => `run-${String((ids += 1))}`,
+        lapsed: () => lapsed,
+        killGroup,
+      });
+
+    beforeEach(() => {
+      lapsed = false;
+      ids = 0;
+      killGroup = vi.fn<(pgid: number, signal: NodeJS.Signals) => void>();
+    });
+
+    it('spawns host runs and container clients detached, so each leads its own process group', () => {
+      make(hostCommand).run('a', 'test');
+      make(boxCommand).run('b', 'test');
+
+      expect(spawnCalls[0]?.options).toMatchObject({ detached: true });
+      expect(spawnCalls[1]?.file).toBe('docker');
+      expect(spawnCalls[1]?.options).toMatchObject({ detached: true });
+    });
+
+    it('refuses every run while lapsed, before anything is reserved', () => {
+      lapsed = true;
+      const tracker = make(hostCommand);
+
+      expect(tracker.run('a', 'test')).toEqual({
+        started: false,
+        refused: 'invalid',
+        reason: LICENCE_LAPSED,
+      });
+      expect(spawnCalls).toHaveLength(0);
+      expect(tracker.live()).toEqual([]);
+    });
+
+    it('signalAll sends the signal to every live run group', () => {
+      const tracker = make(hostCommand);
+      tracker.run('a', 'test');
+      childInstances[0]!.pid = 4242;
+      tracker.run('b', 'test');
+      childInstances[1]!.pid = 4243;
+
+      tracker.signalAll('SIGSTOP');
+
+      expect(killGroup.mock.calls).toEqual([
+        [4242, 'SIGSTOP'],
+        [4243, 'SIGSTOP'],
+      ]);
+    });
+
+    it('signalAll tolerates a group that is gone and a child with no pid', () => {
+      const tracker = make(hostCommand);
+      tracker.run('a', 'test');
+      tracker.run('b', 'test');
+      childInstances[1]!.pid = undefined;
+      killGroup.mockImplementation(() => {
+        throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
+      });
+
+      expect(() => tracker.signalAll('SIGCONT')).not.toThrow();
+      expect(killGroup).toHaveBeenCalledTimes(1);
+    });
+
+    it('signalAll defaults to signalling the negative pid, the whole group', () => {
+      const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+      try {
+        const tracker = createRunTracker({
+          spawn,
+          command: hostCommand,
+          parallelFor: () => 1,
+          state,
+          appendLedger: (entry) => ledger.push(entry),
+          openAsksFor: () => false,
+          hasOpenAsk: () => false,
+          handoffFor: () => undefined,
+          newUuid: () => 'uuid-minted',
+          pushStatus: (name) => statuses.push(name),
+          pushLines: (name, pushed) => lines.push({ name, count: pushed.length, pushed: [...pushed] }),
+          now: () => 1_000,
+          newRunId: () => 'run-x',
+        });
+        tracker.run('a', 'test');
+        childInstances[0]!.pid = 4242;
+
+        tracker.signalAll('SIGSTOP');
+
+        expect(kill).toHaveBeenCalledWith(-4242, 'SIGSTOP');
+      } finally {
+        kill.mockRestore();
+      }
+    });
+
+    it('containers() lists each live container run once, and no host run', () => {
+      const boxes = make(boxCommand);
+      boxes.run('a', 'test');
+      boxes.run('b', 'test');
+      make(hostCommand).run('c', 'test');
+
+      expect(boxes.containers()).toEqual([{ runtime: 'docker', name: 'box' }]);
+    });
+
+    it('containers() is empty with only host runs', () => {
+      const tracker = make(hostCommand);
+      tracker.run('a', 'test');
+
+      expect(tracker.containers()).toEqual([]);
+    });
+  });
 });
+

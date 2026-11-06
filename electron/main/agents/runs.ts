@@ -111,6 +111,9 @@ const STDERR_TAIL = 4096;
 /** How long a closed run waits on its reader's `finish` before it settles without it (HIVE-343). */
 export const FINISH_WINDOW_MS = 5_000;
 
+/** HIVE-267: why a run is refused while the licence is lapsed. Sessions throw the same sentence. */
+export const LICENCE_LAPSED = "HiveTTY Pro's licence has lapsed. Renew it to start work again.";
+
 export type RunStart =
   | { started: true; run: string; kind: RunKind }
   | {
@@ -248,6 +251,10 @@ export interface RunTrackerDeps {
    * exists. Optional so a host-only spec needs none.
    */
   runToken?: (run: string) => string | null;
+  /** HIVE-267: while true, every `run` is refused. Injected; `agents/` never imports `licence/`. */
+  lapsed?: () => boolean;
+  /** HIVE-267: signal a whole process group. Defaults to `process.kill(-pgid, signal)`; a seam so no test signals a real process. */
+  killGroup?: (pgid: number, signal: NodeJS.Signals) => void;
 }
 
 export interface ChildLike {
@@ -255,6 +262,8 @@ export interface ChildLike {
   stderr: { on(event: 'data', cb: (chunk: Buffer) => void): unknown };
   on(event: string, cb: (...args: never[]) => void): unknown;
   kill(signal?: string): boolean;
+  /** Absent when the spawn failed before a process existed. */
+  pid?: number;
 }
 
 export interface RunTracker {
@@ -319,6 +328,13 @@ export interface RunTracker {
   live(): string[];
   /** What this agent has in flight, in the order it started (HIVE-128). */
   liveRuns(name: string): LiveRunSummary[];
+  /**
+   * HIVE-267: SIGSTOP or SIGCONT every live run's process group (a licence lapse). Each run leads its own
+   * group (it spawns detached), so one signal reaches the CLI and every child it spawned.
+   */
+  signalAll(signal: 'SIGSTOP' | 'SIGCONT'): void;
+  /** HIVE-267: the distinct containers live runs execute in, for `<runtime> pause|unpause`. */
+  containers(): { runtime: string; name: string }[];
 }
 
 interface LiveRun {
@@ -355,6 +371,8 @@ interface LiveRun {
    * conversation the output names later is not on the argv.
    */
   stop: ((signal: 'TERM' | 'KILL') => void) | null;
+  /** The container this run executes in (HIVE-267), or `null` for a host run. */
+  container: { runtime: string; name: string } | null;
   /** This run's stdout, read by the harness that launched it (HIVE-338). */
   reader: RunEventReader;
   /** The run's last {@link STDERR_TAIL} characters of stderr, for the reader's `finish` (HIVE-343). */
@@ -1010,6 +1028,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
   return {
     run(name, trigger, extra, options) {
+      // HIVE-267: no wake starts while the licence is lapsed. The scheduler retries a refused wake each minute.
+      if (deps.lapsed?.() === true) return { started: false, refused: 'invalid', reason: LICENCE_LAPSED };
       const live = liveOf(name);
       const parallel = deps.parallelFor(name);
       /*
@@ -1208,7 +1228,9 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
           ? {
               file: command.file,
               args: command.args,
-              options: { cwd: command.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] },
+              // Leads its own group (HIVE-267): a licence lapse stops the CLI and every child it spawned with
+              // one SIGSTOP. Not `unref`'d: main still waits on the run.
+              options: { cwd: command.cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
             }
           : {
               file: container.runtime,
@@ -1221,7 +1243,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
                 container.command,
                 ...command.args,
               ],
-              options: { stdio: ['ignore', 'pipe', 'pipe'] },
+              options: { stdio: ['ignore', 'pipe', 'pipe'], detached: true },
             };
 
       let child: ChildLike;
@@ -1291,6 +1313,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         startsRotation: command.startsRotation === true,
         outputConfirmsStart: command.outputConfirmsStart === true,
         child,
+        container: container === undefined ? null : { runtime: container.runtime, name: container.name },
         stop:
           container === undefined
             ? null
@@ -1471,5 +1494,30 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     live: () => [...running.keys()],
 
     liveRuns: (name) => liveOf(name).map(describe),
+
+    signalAll(signal) {
+      const killGroup = deps.killGroup ?? ((pgid: number, sig: NodeJS.Signals) => process.kill(-pgid, sig));
+      for (const runs of running.values()) {
+        for (const live of runs) {
+          const pid = live.child.pid;
+          if (pid === undefined || pid < 2) continue;
+          try {
+            killGroup(pid, signal);
+          } catch {
+            // ESRCH: it ended between the decision and the signal.
+          }
+        }
+      }
+    },
+
+    containers() {
+      const seen = new Map<string, { runtime: string; name: string }>();
+      for (const runs of running.values()) {
+        for (const live of runs) {
+          if (live.container) seen.set(`${live.container.runtime}\0${live.container.name}`, live.container);
+        }
+      }
+      return [...seen.values()];
+    },
   };
 }
