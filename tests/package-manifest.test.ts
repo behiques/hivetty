@@ -78,6 +78,11 @@ describe('package.json', () => {
 describe('electron-builder.yml', () => {
   const config = readFileSync(join(process.cwd(), 'electron-builder.yml'), 'utf8');
 
+  it('registers the hivetty scheme, and only that one (HIVE-264)', () => {
+    expect(config).toMatch(/^protocols:\n {2}- name: HiveTTY Pro\n {4}schemes:\n {6}- hivetty\n/m);
+    expect(config).not.toContain('hivetty-dev');
+  });
+
   it('runs the composed afterPack hook, not the signer alone', () => {
     expect(config).toMatch(/^afterPack: scripts\/after-pack\.mjs$/m);
   });
