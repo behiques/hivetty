@@ -146,6 +146,7 @@ import type {
   LedgerResult,
   LedgerSnapshot,
 } from './ledger-contract';
+import type { LicenceState } from './licence-contract';
 import type { SessionMetricsEvent } from './metrics-contract';
 import type {
   HiveNotification,
@@ -886,6 +887,14 @@ export const CH = {
   accountSignOut: 'account:sign-out',
   /** A push: the account state changed. Local-only, never from a socket. */
   accountChanged: 'account:changed',
+  /** The licence (HIVE-267). Process-local, like the account: a remote window reads its own. */
+  licenceState: 'licence:state',
+  /** Renew the lease now; resolves to the state after. */
+  licenceRefresh: 'licence:refresh',
+  /** HIVE-265's Choose a plan: `true` renews every 5 s for up to 15 min, `false` stops. */
+  licenceWatchPurchase: 'licence:watch-purchase',
+  /** A push: the licence changed. Local-only, never from a socket. */
+  licenceChanged: 'licence:changed',
   configCloneStart: 'config:clone-start',
   configCloneCancel: 'config:clone-cancel',
   configCloneDone: 'config:clone-done', // main → renderer
@@ -3155,6 +3164,13 @@ export interface HiveBridge {
     cancel(): Promise<void>;
     signOut(): Promise<void>;
     onChanged(callback: (state: AccountState) => void): () => void;
+  };
+  /** The licence (HIVE-267). The gate is HIVE-265's. */
+  licence: {
+    state(): Promise<LicenceState>;
+    refresh(): Promise<LicenceState>;
+    watchPurchase(on: boolean): Promise<void>;
+    onChanged(callback: (state: LicenceState) => void): () => void;
   };
   /** Real session lifecycle, derived in main (story 096). */
   session: {

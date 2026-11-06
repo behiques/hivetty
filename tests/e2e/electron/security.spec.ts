@@ -339,6 +339,11 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
       post as anyone else (`docs/agents-and-ledger.md`, *The party rule*).
     */
     'ledger',
+    /*
+      HIVE-267 adds `licence`: read this machine's licence state, renew the lease now, poll for a purchase,
+      and hear changes. The lease is signed, not secret; no verb hands over a token.
+    */
+    'licence',
     'notifications',
     'plans',
     'pty',

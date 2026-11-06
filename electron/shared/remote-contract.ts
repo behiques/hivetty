@@ -85,8 +85,9 @@ import { isThisMachineAction } from './notification-contract';
  * 29 → 30 (HIVE-379): `AgentSummary` (on `agents:list`) gained an optional `harness`, the CLIs an agent row runs on.
  * 30 → 31 (HIVE-335): `SessionMetrics` (on `session:metrics`) gained `tokensIn`, `tokensOut`, `tokensCached`, `tokensWritten` and `aiCredits`.
  * 31 → 32 (HIVE-264): `CH` gained `account:state`, `account:sign-in`, `account:cancel`, `account:sign-out` (process-local) and `account:changed` (local-only).
+ * 32 → 33 (HIVE-267): `CH` gained `licence:state`, `licence:refresh`, `licence:watch-purchase` (process-local) and `licence:changed` (local-only).
  */
-export const REMOTE_PROTOCOL_VERSION = 32;
+export const REMOTE_PROTOCOL_VERSION = 33;
 
 /**
  * What a frame is for.
@@ -271,6 +272,10 @@ export const FRAME_KIND = {
   [CH.accountCancel]: 'call',
   [CH.accountSignOut]: 'call',
   [CH.accountChanged]: 'event',
+  [CH.licenceState]: 'call',
+  [CH.licenceRefresh]: 'call',
+  [CH.licenceWatchPurchase]: 'call',
+  [CH.licenceChanged]: 'event',
   [CH.configCloneStart]: 'call',
   [CH.configCloneCancel]: 'call',
   [CH.configCloneDone]: 'event',
@@ -594,6 +599,10 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.accountCancel]: 'mutate',
   [CH.accountSignOut]: 'execute',
   [CH.accountChanged]: 'read',
+  [CH.licenceState]: 'read',
+  [CH.licenceRefresh]: 'execute',
+  [CH.licenceWatchPurchase]: 'execute',
+  [CH.licenceChanged]: 'read',
   [CH.configCloneStart]: 'execute',
   [CH.configCloneCancel]: 'mutate',
   [CH.configCloneDone]: 'read',
@@ -947,6 +956,12 @@ const PROCESS_LOCAL_REFUSALS = {
     "account:cancel drops the answering machine's own pending sign-in. A server refuses it from a peer; the asking machine cancels its own.",
   [CH.accountSignOut]:
     "account:sign-out forgets the answering machine's own account. A server refuses to sign itself out on a peer's say-so; the asking machine signs itself out.",
+  [CH.licenceState]:
+    "licence:state describes the answering machine's own HiveTTY Pro licence. A server's answer would pass its licence off as the peer's, so the asking machine answers it and a server refuses it.",
+  [CH.licenceRefresh]:
+    "licence:refresh renews the answering machine's own lease. A server refuses to renew on a peer's say-so; the asking machine renews its own.",
+  [CH.licenceWatchPurchase]:
+    "licence:watch-purchase polls for the answering machine's own new lease. A server refuses it from a peer; the asking machine watches for its own purchase.",
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**
@@ -981,7 +996,7 @@ export function isProcessLocal(channel: string): boolean {
  * somewhere would push its own reconnect state down to every client, and each
  * client's header chip would start describing a socket it has no part in.
  */
-export const LOCAL_ONLY_EVENTS: readonly Channel[] = [CH.remoteLinkStatus, CH.accountChanged];
+export const LOCAL_ONLY_EVENTS: readonly Channel[] = [CH.remoteLinkStatus, CH.accountChanged, CH.licenceChanged];
 
 /** Whether `channel` is a push this process raises about itself. */
 export function isLocalOnlyEvent(channel: string): boolean {

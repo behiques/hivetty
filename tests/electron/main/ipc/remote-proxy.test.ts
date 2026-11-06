@@ -222,7 +222,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(142);
+    expect(callChannels.length).toBe(145);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -239,7 +239,7 @@ describe('registerRemoteProxy', () => {
   });
 
   it('binds no handler for an event channel', () => {
-    expect(eventChannels.length).toBe(31);
+    expect(eventChannels.length).toBe(32);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -345,7 +345,7 @@ describe('registerRemoteProxy', () => {
    * the very first one that isn't `pty:data`.
    */
   it('pumps a client event into the broadcaster on the same channel', () => {
-    expect(eventChannels.length).toBe(31);
+    expect(eventChannels.length).toBe(32);
 
     const client = fakeClient();
     const broadcaster = fakeBroadcaster();
@@ -532,7 +532,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(148);
+    expect(remoteProxyBindingsSize()).toBe(151);
   });
 
   /**
@@ -546,8 +546,8 @@ describe('registerRemoteProxy', () => {
    * `remote:forget` (HIVE-153).
    */
   describe('PROCESS_LOCAL channels (HIVE-144 Rulings 24 and 28, HIVE-153, HIVE-149, HIVE-151)', () => {
-    it('names exactly fourteen channels', () => {
-      expect(PROCESS_LOCAL.length).toBe(14);
+    it('names exactly seventeen channels', () => {
+      expect(PROCESS_LOCAL.length).toBe(17);
       expect([...PROCESS_LOCAL].sort()).toEqual(
         [
           'account:cancel',
@@ -557,6 +557,9 @@ describe('registerRemoteProxy', () => {
           'app:info',
           'config:get-remote',
           'config:set-remote',
+          'licence:refresh',
+          'licence:state',
+          'licence:watch-purchase',
           'notifications:badge',
           'notifications:delivery',
           'remote:dial-now',
@@ -603,6 +606,17 @@ describe('registerRemoteProxy', () => {
       HIVE-211. Try now restarts this process's reconnect loop, and the moment
       it matters is the moment the socket is down, so it never reaches it.
     */
+    it('answers the licence calls from LICENCE_CALLS, never client.call (HIVE-267)', async () => {
+      const client = fakeClient();
+      registerRemoteProxy({ client, broadcaster: fakeBroadcaster() });
+
+      await expect(invoke('licence:state', trustedEvent, undefined)).resolves.toEqual({ kind: 'unlicensed' });
+      await expect(invoke('licence:refresh', trustedEvent, undefined)).resolves.toEqual({ kind: 'unlicensed' });
+      await expect(invoke('licence:watch-purchase', trustedEvent, true)).resolves.toBeUndefined();
+
+      expect(client.call).not.toHaveBeenCalled();
+    });
+
     it('answers remote:dial-now from localDialNow, never client.call', async () => {
       const client = fakeClient();
       const localDialNow = vi.fn();
@@ -1146,8 +1160,8 @@ describe('registerRemoteProxy', () => {
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(148);
-    expect(removeAllListeners).toHaveBeenCalledTimes(148);
+    expect(removeHandler).toHaveBeenCalledTimes(151);
+    expect(removeAllListeners).toHaveBeenCalledTimes(151);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

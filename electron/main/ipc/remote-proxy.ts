@@ -13,7 +13,7 @@ import {
 } from '@shared/remote-contract';
 
 import { RemoteCallError, type RemoteClient } from '../../remote-client/socket';
-import { ACCOUNT_CALLS } from '../licence';
+import { ACCOUNT_CALLS, LICENCE_CALLS } from '../licence';
 import { activateOnThisMachine } from '../notifications/activate-here';
 import { notificationDelivery } from '../notifications/delivery';
 import { badgeDock, clearDockBadgeWithLastWindow } from '../notifications/dock-badge';
@@ -142,6 +142,12 @@ function localAnswerFor(
     case CH.accountCancel:
     case CH.accountSignOut:
       return () => ACCOUNT_CALLS[channel]();
+    /* HIVE-267. The licence is this machine's own, like the account (D9). */
+    case CH.licenceState:
+    case CH.licenceRefresh:
+      return () => LICENCE_CALLS[channel]();
+    case CH.licenceWatchPurchase:
+      return (on: unknown) => LICENCE_CALLS[CH.licenceWatchPurchase](on === true);
     default:
       return null;
   }
