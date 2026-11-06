@@ -1208,6 +1208,35 @@ describe('suspendAll / resumeAll (HIVE-267)', () => {
     expect(groupSignals()).toEqual(['group 100 SIGSTOP', 'group 200 SIGSTOP']);
   });
 
+  it('a kill while suspended continues that session after the hangup, so the shell can act on it', async () => {
+    twoSessions();
+    control.descendants.mockResolvedValue([{ pid: 101, pgid: 101 }]);
+    await manager.suspendAll();
+    control.descendants.mockResolvedValue([{ pid: 101, pgid: 101 }]);
+    signals.length = 0;
+
+    manager.kill('s1');
+    await vi.waitFor(() => expect(groupSignals()).toContain('group 100 SIGCONT'));
+    const hangup = groupSignals().indexOf('group 100 SIGHUP');
+    expect(hangup).toBeGreaterThanOrEqual(0);
+    expect(groupSignals().indexOf('group 100 SIGCONT')).toBeGreaterThan(hangup);
+    expect(groupSignals()).toContain('group 101 SIGCONT');
+    ptyInstances[0]!.emitExit(0);
+
+    signals.length = 0;
+    await manager.resumeAll();
+    // Only s2's group is left to continue.
+    expect(groupSignals()).toEqual(['group 200 SIGCONT']);
+  });
+
+  it('a kill with nothing suspended sends no SIGCONT', async () => {
+    twoSessions();
+    manager.kill('s1');
+    await vi.waitFor(() => expect(groupSignals()).toContain('group 100 SIGHUP'));
+    ptyInstances[0]!.emitExit(0);
+    expect(groupSignals().some((s) => s.endsWith('SIGCONT'))).toBe(false);
+  });
+
   it('tolerates a group that is already gone (ESRCH)', async () => {
     twoSessions();
     control.descendants.mockResolvedValue(tree);

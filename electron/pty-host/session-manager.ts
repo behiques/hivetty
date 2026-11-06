@@ -443,6 +443,18 @@ export function createSessionManager(
     void settled.finally(() => inFlight.delete(settled));
   }
 
+  /**
+   * HIVE-267: a session killed while a lapse has it stopped. The hangup is queued, not delivered, until the
+   * group continues, so continue it right after the signal and forget it. Otherwise the shell never hangs up
+   * its jobs and the teardown waits out its whole grace before SIGKILL.
+   */
+  function continueStopped(targets: readonly Session[], snapshot: readonly Descendant[]): void {
+    if (stoppedGroups.length === 0) return;
+    const mine = new Set([...targets.map((session) => session.pid), ...snapshot.map((d) => d.pgid)]);
+    for (const pgid of stoppedGroups) if (mine.has(pgid)) signalGroup(pgid, 'SIGCONT');
+    stoppedGroups = stoppedGroups.filter((pgid) => !mine.has(pgid));
+  }
+
   /** The one teardown both `kill` and `killAll` run. */
   async function teardown(
     targets: readonly Session[],
@@ -475,6 +487,7 @@ export function createSessionManager(
       });
 
     for (const session of targets) signalGroup(session.pid, sig);
+    continueStopped(targets, snapshot);
 
     await waitForExit(targets, deadline);
 
