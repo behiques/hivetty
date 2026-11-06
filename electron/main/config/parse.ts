@@ -1199,21 +1199,6 @@ function optionalServer(
 
 const REMOTE_MODES: readonly RemoteMode[] = ['local', 'remote'];
 
-/**
- * HIVE-144's remote block.
- *
- * Structurally {@link optionalServer}'s twin, per-field salvage rather than
- * whole-block: a file naming a bad `port` alongside a good `mode` and `host`
- * should not lose the two fields it got right.
- *
- * `host`'s validation is the one field-order dependency in this function —
- * `mode` is read first because Ruling 3 (HIVE-144) says `host` is checked by
- * {@link isRemoteTarget} only when *this block's own* `mode` is `'remote'`.
- * An absent `mode` falls back to {@link DEFAULT_REMOTE}'s `'local'` for this
- * purpose, which is what keeps a file naming only `host` (or naming neither)
- * from reporting an error on the empty default every never-attached install
- * carries.
- */
 function optionalAccount(
   record: Record<string, unknown>,
   label: string,
@@ -1243,6 +1228,21 @@ function isCloudUrl(value: string): boolean {
   }
 }
 
+/**
+ * HIVE-144's remote block.
+ *
+ * Structurally {@link optionalServer}'s twin, per-field salvage rather than
+ * whole-block: a file naming a bad `port` alongside a good `mode` and `host`
+ * should not lose the two fields it got right.
+ *
+ * `host`'s validation is the one field-order dependency in this function —
+ * `mode` is read first because Ruling 3 (HIVE-144) says `host` is checked by
+ * {@link isRemoteTarget} only when *this block's own* `mode` is `'remote'`.
+ * An absent `mode` falls back to {@link DEFAULT_REMOTE}'s `'local'` for this
+ * purpose, which is what keeps a file naming only `host` (or naming neither)
+ * from reporting an error on the empty default every never-attached install
+ * carries.
+ */
 function optionalRemote(
   record: Record<string, unknown>,
   label: string,
