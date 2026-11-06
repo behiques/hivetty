@@ -36,9 +36,7 @@ fork of the free Apache-2.0 **HiveTTY** (`yunidbauza/hivetty`) that no longer tr
   never an `isPro` check in a core file. Everything HiveTTY does stays in Community.
 - Pro's data lives in `~/.hivetty`. `~/.hive` is HiveTTY's: only the importer (HIVE-269) reads it,
   as a copy the user starts, and nothing writes there. Pro's name, bundle ID, data folders and
-  release feed are its own (HIVE-350).
-- The `hivetty://` URL scheme is Pro's (HIVE-264): sign-in returns on `hivetty://auth/callback`. The free
-  HiveTTY must never register it, and unpackaged dev builds use `hivetty-dev://` so they never steal it.
+  release feed are its own (HIVE-350). So is the `hivetty://` scheme sign-in returns on (HIVE-264): the free HiveTTY must never register it, and unpackaged dev builds use `hivetty-dev://` so they never steal it.
 
 ## Essential commands
 
