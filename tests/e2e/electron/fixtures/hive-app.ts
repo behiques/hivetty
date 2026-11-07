@@ -394,14 +394,22 @@ export function writeProjectConfig(
     path,
     env,
     importLoginEnv,
-  }: { id: string; name?: string; path: string; env?: Record<string, string>; importLoginEnv?: boolean },
+    claudeCommand,
+  }: {
+    id: string;
+    name?: string;
+    path: string;
+    env?: Record<string, string>;
+    importLoginEnv?: boolean;
+    claudeCommand?: string;
+  },
 ): void {
   writeFileSync(
     configPath,
     JSON.stringify({
       version: 2,
       shell: '/bin/sh',
-      claudeCommand: STUB_CLAUDE_COMMAND,
+      claudeCommand: claudeCommand ?? STUB_CLAUDE_COMMAND,
       ...(env === undefined ? {} : { env }),
       ...(importLoginEnv === undefined ? {} : { importLoginEnv }),
       projects: [{ id, name: name ?? id, path, icon: 'ph-cube' }],
