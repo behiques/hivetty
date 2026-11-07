@@ -114,6 +114,11 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
    */
   let activeExchange = 0;
   let exchangeSeq = 0;
+  /**
+   * HIVE-266: the refresh token this process last read or wrote. A different one in `account.bin` is another
+   * process's write (`--login --force` on the same Device and account), even when the identity is unchanged.
+   */
+  let knownRefreshToken: string | null = null;
   /** A device-flow sign-in under way: the browser `pending`'s twin. */
   let codeFlow: { controller: AbortController; restore: AccountState } | null = null;
 
@@ -162,6 +167,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
     access = null;
     refreshing = null;
     backoffMs = BACKOFF_START_MS;
+    knownRefreshToken = null;
     store.clear();
   };
 
@@ -195,6 +201,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
       name: response.user.name,
     };
     if (!store.write(account)) return null;
+    knownRefreshToken = account.refreshToken;
     access = { token: response.accessToken, expiresAt: Date.now() + response.expiresIn * 1000 };
     backoffMs = BACKOFF_START_MS;
     schedule(Math.max(0, response.expiresIn * 1000 - REFRESH_LEAD_MS));
@@ -277,6 +284,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
     start() {
       const stored = store.read();
       if (!stored) return;
+      knownRefreshToken = stored.refreshToken;
       set(signedInFrom(stored));
       void refresh();
     },
@@ -454,13 +462,17 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
         if (current.kind === 'signed-in' && !store.exists()) dropAccount();
         return;
       }
-      if (current.kind === 'signed-in' && current.deviceId === stored.deviceId && current.email === stored.email) return;
+      const sameAccount =
+        current.kind === 'signed-in' && current.deviceId === stored.deviceId && current.email === stored.email;
+      if (sameAccount && stored.refreshToken === knownRefreshToken) return;
+      // Another process's account, or a new token family for this one: what this process holds is stale.
       generation += 1;
       access = null;
-      refreshing = null; // the old account's refresh, if any, settles into nothing
+      refreshing = null; // the old token's refresh, if any, settles into nothing
       clearRefreshTimer();
       backoffMs = BACKOFF_START_MS;
-      set(signedInFrom(stored));
+      knownRefreshToken = stored.refreshToken;
+      if (!sameAccount) set(signedInFrom(stored));
       void refresh();
     },
 

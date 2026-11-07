@@ -995,7 +995,8 @@ describe('reload (another process wrote account.bin)', () => {
     h.client.reload();
     expect(h.client.state()).toEqual({ kind: 'signing-in' });
   });
-  it("a refresh of the old account still in flight cannot overwrite the new one", async () => {
+
+  it('a refresh of the old account still in flight cannot overwrite the new one', async () => {
     const h = harness({ stored: STORED });
     let resolveOld!: (value: TokenResponse) => void;
     h.cloud.token
@@ -1010,5 +1011,55 @@ describe('reload (another process wrote account.bin)', () => {
     expect(h.cloud.token).toHaveBeenLastCalledWith({ grant_type: 'refresh_token', refresh_token: 'rt-new' });
     expect(h.store.value()).toMatchObject({ deviceId: 'dev-9', refreshToken: 'rt-9' });
     expect(h.client.state()).toMatchObject({ kind: 'signed-in', email: 'bo@example.com' });
+  });
+  it('a new token for the same account and Device (--login --force) drops the old refresh in flight', async () => {
+    const h = harness({ stored: STORED });
+    let resolveOld!: (value: TokenResponse) => void;
+    h.cloud.token
+      .mockReturnValueOnce(new Promise<TokenResponse>((r) => (resolveOld = r)))
+      .mockResolvedValue(tokens(7));
+    h.client.start();
+    h.store.write({ ...STORED, refreshToken: 'rt-new' });
+    const before = h.states.length;
+    h.client.reload();
+    expect(h.states.length).toBe(before); // the same account: no flicker
+    resolveOld(tokens(1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.cloud.token).toHaveBeenLastCalledWith({ grant_type: 'refresh_token', refresh_token: 'rt-new' });
+    expect(h.store.value()?.refreshToken).toBe('rt-7');
+    await expect(h.client.getAccessToken()).resolves.toBe('at-7');
+  });
+
+  it("this process's own rotation is not mistaken for another process's write", async () => {
+    const h = harness({ stored: STORED });
+    h.cloud.token.mockResolvedValue(tokens(1));
+    h.client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.store.value()?.refreshToken).toBe('rt-1');
+    h.client.reload();
+    expect(h.cloud.token).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays out of the way while a browser sign-in is open', async () => {
+    const h = harness();
+    await h.client.signIn();
+    h.store.write(STORED);
+    h.client.reload();
+    expect(h.client.state()).toEqual({ kind: 'signing-in' });
+  });
+
+  it('stays out of the way while a code exchange is under way', async () => {
+    const h = harness({ stored: STORED });
+    let resolve!: (value: TokenResponse) => void;
+    h.cloud.token.mockReturnValueOnce(new Promise<TokenResponse>((r) => (resolve = r)));
+    await h.client.signIn();
+    const exchanging = h.callback();
+    h.store.write({ ...STORED, deviceId: 'dev-9', email: 'bo@example.com', refreshToken: 'rt-9' });
+    h.client.reload();
+    expect(h.client.state()).toEqual({ kind: 'signing-in' });
+    expect(h.cloud.token).toHaveBeenCalledTimes(1);
+    resolve(tokens(1));
+    await exchanging;
+    expect(h.store.value()?.refreshToken).toBe('rt-1');
   });
 });
