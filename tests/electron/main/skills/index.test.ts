@@ -1339,3 +1339,16 @@ describe('createSkillsRuntime per CLI (HIVE-369)', () => {
     expect(skills.pluginDirPath()).toBe(join(userDataPath, 'hive', 'plugin'));
   });
 });
+
+describe('the Codex marketplace (HIVE-372)', () => {
+  it('writes the Codex marketplace beside the Codex folder and tells onRendered', async () => {
+    const onRendered = vi.fn();
+    const skills = createSkillsRuntime({ userDataPath, version: '1.0.0', onRendered });
+    expect(skills.codexMarketplace()).toBeNull();
+    await skills.sync();
+    const marketplace = skills.codexMarketplace();
+    expect(marketplace?.dir).toBe(join(userDataPath, 'hive', 'plugins', 'codex-marketplace'));
+    expect(marketplace?.version).toMatch(/^1\.0\.0\+[0-9a-f]{8}$/);
+    expect(onRendered).toHaveBeenCalledTimes(1);
+  });
+});

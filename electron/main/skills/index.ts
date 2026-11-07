@@ -21,6 +21,7 @@ import {
 
 import { adapterFor } from '../harness/registry';
 
+import { type CodexMarketplace, writeCodexMarketplace } from './codex-marketplace';
 import { copyInto } from './import';
 import { importSkill as importPackage, isSkillPackage } from './import-skill';
 import { isSkillManifest, resolveInSkill, skillsRoot } from './paths';
@@ -58,6 +59,8 @@ export interface SkillsRuntime {
    * better than a session pointed at a directory that is not there.
    */
   pluginDirPath(cli?: HarnessId): string | null;
+  /** The folder and version `codex plugin` installs from (HIVE-372); `null` until written. */
+  codexMarketplace(): CodexMarketplace | null;
   /** The snapshot the Settings pane renders. */
   list(): Promise<SkillsSnapshot>;
   /** One file, for the editor. */
@@ -186,6 +189,8 @@ interface SkillsRuntimeOptions {
    * that failed already reported itself, and the tree is what it is.
    */
   ready?: Promise<unknown>;
+  /** HIVE-372: after every regeneration, so the Codex plugin installer can follow a changed skill. */
+  onRendered?: () => void;
 }
 
 export function createSkillsRuntime({
@@ -194,11 +199,13 @@ export function createSkillsRuntime({
   doneUrl,
   ready,
   installedPlugins,
+  onRendered,
 }: SkillsRuntimeOptions): SkillsRuntime {
   const hiveRoot = join(userDataPath, 'hive');
   const folderFor = (cli: HarnessId): string =>
     join(hiveRoot, adapterFor(cli).skills.dir);
   const written = new Set<HarnessId>();
+  let marketplace: CodexMarketplace | null = null;
 
   /**
    * Every path this module touches is built here, from a name.
@@ -264,6 +271,17 @@ export function createSkillsRuntime({
         );
       }
     }
+
+    try {
+      marketplace = await writeCodexMarketplace(join(hiveRoot, 'plugins', 'codex-marketplace'), read, {
+        version,
+        doneUrl: doneUrl?.() ?? null,
+      });
+    } catch (cause) {
+      marketplace = null;
+      console.info(`[hive] the Codex plugin folder could not be written — the opt-in install waits (${String(cause)})`);
+    }
+    onRendered?.();
 
     return read;
   };
@@ -382,6 +400,8 @@ export function createSkillsRuntime({
     pluginDirPath(cli: HarnessId = 'claude-code'): string | null {
       return written.has(cli) ? folderFor(cli) : null;
     },
+
+    codexMarketplace: () => marketplace,
 
     async list(): Promise<SkillsSnapshot> {
       return snapshot(await sync());
