@@ -104,11 +104,11 @@ export function parseInvocation(argv: readonly string[], packaged: boolean): Inv
     return { kind: 'devices' };
   }
 
-  // HIVE-266. `--force` means something only beside `--login`; alone it is ignored.
   if (args.includes('--logout')) {
     return { kind: 'logout' };
   }
 
+  // HIVE-266. `--force` means something only beside `--login`; alone it is ignored.
   if (args.includes('--login')) {
     return { kind: 'login', force: args.includes('--force') };
   }
