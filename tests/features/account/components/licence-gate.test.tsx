@@ -4,7 +4,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LicenceGate } from '@features/account/components/licence-gate';
 import { useUiStore } from '@stores/ui-store';
 
-const state = vi.hoisted(() => ({ off: false as boolean | null, account: null as unknown, licence: null as unknown }));
+const state = vi.hoisted(() => ({
+  off: false as boolean | null,
+  account: null as unknown,
+  licence: null as unknown,
+  host: null as unknown,
+  link: null as unknown,
+}));
+vi.mock('@features/account/hooks/use-host-licence', () => ({ useHostLicence: () => state.host }));
+vi.mock('@stores/hive-store', () => ({ useRemoteLink: () => state.link }));
+vi.mock('@features/account/components/host-lapsed', () => ({
+  HostLapsed: ({ serverName }: { serverName: string }) => <div>host-lapsed:{serverName}</div>,
+}));
 vi.mock('@features/account/hooks/use-gate-off', () => ({ useGateOff: () => state.off }));
 vi.mock('@features/account/hooks/use-code-sign-in', () => ({
   useCodeSignIn: () => ({ active: false, code: null, error: null, start: vi.fn() }),
@@ -21,7 +32,7 @@ const shell = <main>workspace</main>;
 
 beforeEach(() => {
   useUiStore.getState().reset();
-  Object.assign(state, { off: false, account: null, licence: null });
+  Object.assign(state, { off: false, account: null, licence: null, host: null, link: null });
 });
 
 describe('LicenceGate (HIVE-265)', () => {
@@ -58,6 +69,36 @@ describe('LicenceGate (HIVE-265)', () => {
     rerender(<LicenceGate>{shell}</LicenceGate>);
     expect(screen.queryByText(/^gate:/)).toBeNull();
     expect(useUiStore.getState().gated).toBe(false);
+  });
+
+  describe('an attached server that lapsed', () => {
+    const ATTACHED = { state: 'attached', epoch: 1, serverName: 'studio-mac' };
+    const HOST_LAPSED = { lapsed: true, paused: { sessions: 2, agents: 1 } };
+
+    it('licensed here: the host card over the inert shell, and gated', () => {
+      Object.assign(state, { account: IN, licence: LICENSED, link: ATTACHED, host: HOST_LAPSED });
+      render(<LicenceGate>{shell}</LicenceGate>);
+      expect(screen.getByText('host-lapsed:studio-mac')).toBeInTheDocument();
+      expect(screen.getByText('workspace').closest('[inert]')).not.toBeNull();
+      expect(useUiStore.getState().gated).toBe(true);
+    });
+
+    it('this machine gated too: its own gate comes first', () => {
+      Object.assign(state, { account: IN, licence: LICENSED, link: ATTACHED, host: HOST_LAPSED });
+      const { rerender } = render(<LicenceGate>{shell}</LicenceGate>);
+      state.licence = { kind: 'lapsed', reason: 'trial_ended' };
+      rerender(<LicenceGate>{shell}</LicenceGate>);
+      expect(screen.getByText('gate:lapsed')).toBeInTheDocument();
+      expect(screen.queryByText(/^host-lapsed:/)).toBeNull();
+    });
+
+    it('a host that is not lapsed: nothing over the shell', () => {
+      Object.assign(state, { account: IN, licence: LICENSED, link: ATTACHED, host: { ...HOST_LAPSED, lapsed: false } });
+      render(<LicenceGate>{shell}</LicenceGate>);
+      expect(screen.queryByText(/^host-lapsed:/)).toBeNull();
+      expect(screen.getByText('workspace').closest('[inert]')).toBeNull();
+      expect(useUiStore.getState().gated).toBe(false);
+    });
   });
 
   it('gate off: the shell at once, whatever the licence says', () => {

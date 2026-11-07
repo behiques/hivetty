@@ -71,8 +71,9 @@ describe('createSocketBroadcaster', () => {
 
     for (const channel of pushed) broadcaster.emit(channel, null);
 
-    // 30 graded `event`, less the one `LOCAL_ONLY_EVENTS` holds back (HIVE-150).
-    expect(only.send).toHaveBeenCalledTimes(29);
+    // 34 graded `event`, less the four `LOCAL_ONLY_EVENTS` holds back (HIVE-150); HIVE-265's server:licence-changed crosses.
+    expect(only.send).toHaveBeenCalledTimes(30);
+    expect(only.send).toHaveBeenCalledWith(expect.objectContaining({ channel: 'server:licence-changed' }));
     // The regression this guards: forwarding EVENT_CHANNELS would be 20, and
     // would silently drop every notification the remote inbox needs.
     expect(pushed.length).toBeGreaterThan(EVENT_CHANNELS.length);

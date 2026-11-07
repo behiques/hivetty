@@ -14,6 +14,7 @@ import {
   RELOAD_EVERY_MS,
   resetLicence,
   runAccountCommand,
+  hostLicence,
   setPausedCensus,
   startLicence,
 } from '../../../../electron/main/licence';
@@ -199,6 +200,31 @@ describe('licence composition', () => {
     startLicence(boot);
     expect(licence()).toEqual({ kind: 'lapsed', reason: 'signed_out' });
     expect(LICENCE_CALLS[CH.licencePaused]()).toEqual({ sessions: [], agents: [] });
+  });
+
+  it('hostLicence is not lapsed and counts nothing before start (HIVE-265)', () => {
+    setPausedCensus(() => ({ sessions: ['api', 'web'], agents: ['shipper'] }));
+    expect(hostLicence()).toEqual({ lapsed: false, paused: { sessions: 0, agents: 0 } });
+  });
+
+  it('hostLicence reports a lapse with the census counted, never named (HIVE-265)', () => {
+    const signer = makeSigner('kid-host');
+    writeFileSync(join(dir, 'lease.jws'), signer.sign(claimsFor()));
+    setPausedCensus(() => ({ sessions: ['api', 'web'], agents: ['shipper'] }));
+    startLicence({
+      app: { isPackaged: false, getPath: () => dir },
+      safeStorage,
+      openExternal: vi.fn(),
+      env: { HIVETTY_LEASE_KEYS: JSON.stringify([signer.jwk]), HIVETTY_CLOUD_URL: ISS },
+      fetch: vi.fn(),
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
+    });
+    expect(licence()).toEqual({ kind: 'lapsed', reason: 'signed_out' });
+    expect(hostLicence()).toEqual({ lapsed: true, paused: { sessions: 2, agents: 1 } });
   });
 
   it('account:devices and licence:start-trial run through the started client', async () => {

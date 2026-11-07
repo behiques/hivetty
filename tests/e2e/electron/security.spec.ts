@@ -431,8 +431,11 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * destroys one by name. A third here is a change to what a device can do
    * to every session on this machine, which is exactly the kind of widening
    * this whole test exists to make impossible to add quietly.
+   *
+   * HIVE-265 adds two reads, not writes: `licence` (the attached server's licence, as counts) and `onLicence`
+   * (its relayed push). Neither changes what a device can do.
    */
-  expect(surface.server).toEqual(['pair', 'revoke']);
+  expect(surface.server).toEqual(['licence', 'onLicence', 'pair', 'revoke']);
   /**
    * HIVE-144. Two credential verbs, and **not** `server` above pointing the
    * same way: `pair` here stores a `deviceId`/`token` pair this machine was

@@ -297,7 +297,7 @@ import { createSlackTokens } from '../integrations/slack/tokens';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
-import { ACCOUNT_CALLS, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
+import { ACCOUNT_CALLS, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
 import { createSuspender, installSuspender, isLapsed, releaseNow, runContainer } from '../licence/suspend';
 import { agentMcpConfigFile, createMcpRuntime } from '../mcp';
 import {
@@ -816,6 +816,8 @@ const progressOfBuilds = (): BuilderProgress | null => {
 let stopDisplayWake: (() => void) | null = null;
 /** HIVE-267: unsubscribes the suspender from the licence; `resetIpcHandlers` calls it. */
 let stopSuspender: (() => void) | null = null;
+/** HIVE-265: the `server:licence-changed` relay's subscription, stopped beside the suspender's. */
+let stopHostLicence: (() => void) | null = null;
 /**
  * The session history (HIVE-87), or `null` before registration.
  *
@@ -1985,6 +1987,8 @@ export function registerIpcHandlers(
   handle(CH.accountDevices, () => ACCOUNT_CALLS[CH.accountDevices]());
   handle(CH.licenceStartTrial, () => LICENCE_CALLS[CH.licenceStartTrial]());
   handle(CH.licencePaused, () => LICENCE_CALLS[CH.licencePaused]());
+  // HIVE-265: forwarded, not process-local; a client attached here reads this machine's licence, as counts.
+  handle(CH.serverLicence, () => hostLicence());
   // HIVE-265: the gate's Quit. window.close() would leave the app running in the dock.
   handle(CH.appQuit, () => app.quit());
 
@@ -3375,6 +3379,12 @@ export function registerIpcHandlers(
   }));
   void suspender.onState(licence());
   stopSuspender = onLicenceChange((state) => void suspender.onState(state));
+  /*
+    HIVE-265: an attached client draws "<server>'s licence has lapsed" from this. Through `send`, not the window
+    broadcaster, so it reaches attached sockets too.
+  */
+  stopHostLicence?.();
+  stopHostLicence = onLicenceChange(() => send(CH.serverLicenceChanged, hostLicence()));
 
   /*
     A wake, or a display coming back, is when Claude Code loses its size and
@@ -5758,6 +5768,8 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
   releaseNow();
   stopSuspender?.();
   stopSuspender = null;
+  stopHostLicence?.();
+  stopHostLicence = null;
   installSuspender(null);
   sessions?.dispose();
   sessions = null;

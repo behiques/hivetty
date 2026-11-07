@@ -225,7 +225,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(151);
+    expect(callChannels.length).toBe(152);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -242,7 +242,7 @@ describe('registerRemoteProxy', () => {
   });
 
   it('binds no handler for an event channel', () => {
-    expect(eventChannels.length).toBe(33);
+    expect(eventChannels.length).toBe(34);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -259,6 +259,15 @@ describe('registerRemoteProxy', () => {
     await invoke('config:get', trustedEvent, undefined);
 
     expect(client.call).toHaveBeenCalledWith('config:get', undefined);
+  });
+
+  it('forwards server:licence to the server, not answered here (HIVE-265)', async () => {
+    const client = fakeClient();
+    registerRemoteProxy({ client, broadcaster: fakeBroadcaster() });
+
+    await invoke('server:licence', trustedEvent, undefined);
+
+    expect(client.call).toHaveBeenCalledWith('server:licence', undefined);
   });
 
   it('forwards a notify channel to client.notify, not client.call', () => {
@@ -348,7 +357,7 @@ describe('registerRemoteProxy', () => {
    * the very first one that isn't `pty:data`.
    */
   it('pumps a client event into the broadcaster on the same channel', () => {
-    expect(eventChannels.length).toBe(33);
+    expect(eventChannels.length).toBe(34);
 
     const client = fakeClient();
     const broadcaster = fakeBroadcaster();
@@ -535,7 +544,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(157);
+    expect(remoteProxyBindingsSize()).toBe(158);
   });
 
   /**
@@ -1201,8 +1210,8 @@ describe('registerRemoteProxy', () => {
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(157);
-    expect(removeAllListeners).toHaveBeenCalledTimes(157);
+    expect(removeHandler).toHaveBeenCalledTimes(158);
+    expect(removeAllListeners).toHaveBeenCalledTimes(158);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

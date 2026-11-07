@@ -159,7 +159,7 @@ import type {
   LedgerResult,
   LedgerSnapshot,
 } from '@shared/ledger-contract';
-import type { LicenceState, Paused } from '@shared/licence-contract';
+import type { HostLicence, LicenceState, Paused } from '@shared/licence-contract';
 import type { SessionMetricsEvent } from '@shared/metrics-contract';
 import type {
   HiveNotification,
@@ -427,6 +427,9 @@ const bridge: HiveBridge = {
       request: DeviceNameRequest,
     ): Promise<{ revoked: true } | { error: string }> =>
       ipcRenderer.invoke(CH.serverRevoke, request),
+    // HIVE-265: the attached server's licence, and its relayed push.
+    licence: (): Promise<HostLicence> => ipcRenderer.invoke(CH.serverLicence) as Promise<HostLicence>,
+    onLicence: (callback: (state: HostLicence) => void) => subscribe<HostLicence>(CH.serverLicenceChanged, callback),
   },
   // HIVE-144. Storing and forgetting the credential this machine was handed
   // to attach outward, as a client, to someone else's server. Its own
