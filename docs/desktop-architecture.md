@@ -1155,6 +1155,13 @@ token, and opens the one-time link it answers only if it is http(s) on the cloud
 sentence in `{ error }`; it never throws. The renderer reaches it through `openAccountWeb(path)` in
 `src/lib/account.ts`, never as a raw link.
 
+The gate's code sign-in is HIVE-266's `account:sign-in-code`, the code shown from `account:device-code`.
+
+HIVE-265 adds four channels, all `PROCESS_LOCAL`, under one `REMOTE_PROTOCOL_VERSION` bump to 35:
+`account:devices` (this account's live devices from the cloud, shape-checked at the trust boundary),
+`licence:start-trial` (the one 14-day trial, `POST /api/trial`), `licence:paused` (what a lapse paused) and
+`app:quit` (the gate's Quit; a peer never quits a server).
+
 ## The lease (HIVE-267)
 
 - `<userData>/lease.jws` holds the cloud's signed lease, plain text, written atomically (`lease.ts`). It is
@@ -1184,4 +1191,17 @@ sentence in `{ error }`; it never throws. The renderer reaches it through `openA
   stall watchdog waits rather than firing. Quit releases everything first (`releaseForQuit`, capped at 5 s),
   and the pty-host's own `shutdown` continues before it kills. Limits: a setsid'd or double-forked process
   escapes the walk. An interactive container session only has its `docker exec` client stopped (D3). In
-  `pnpm dev`, a terminal Ctrl-C no longer reaches headless runs. `unlicensed` enforces nothing until HIVE-265.
+  `pnpm dev`, a terminal Ctrl-C no longer reaches headless runs. `unlicensed` suspends nothing in main; the
+  renderer's gate (below) is what stops it.
+- The terms carry `iat` (HIVE-265), when the lease was issued. Every offline lapse carries `checkedAt`, when it
+  last tried, for the gate's "Last checked …", and a `lapsed {offline}` retries every 5 min as grace does, so
+  the app recovers when the network comes back.
+- `licence:paused` answers the lapsed gate's "Paused: N sessions, M agents", by name. It reads a census that
+  `ipc/index.ts` installs beside the suspender (`setPausedCensus`: live session titles and running agents), at
+  call time, and answers empty unless lapsed.
+- The gate (HIVE-265) is `LicenceGate` in `src/features/account/`, wrapping `<AppShell>` in `app.tsx`. Until the
+  window first sees a licence it renders **instead of** the shell, so no watcher, chord or subscription runs.
+  After that a lapse renders it **over** the shell, which stays mounted, `inert` and dimmed, so the terminals
+  keep their buffers for the resume; `ui-store`'s `gated` tells window keydown listeners to stand down.
+  `AppInfo.gateOff` turns it off, and only an unpackaged build with `HIVE_E2E` set gets it, so the Playwright
+  suite reaches the workspace with no cloud.

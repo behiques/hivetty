@@ -8,7 +8,7 @@ Workspace, Machines, Account and General. Almost everything here is written to `
 [Runtime](#runtime) · [Containers](#containers) · [Skills](#skills) ·
 [Agents](#agents) · [Ticket workflow](#ticket-workflow) · [Appearance](#appearance) · [Editor](#editor) ·
 [Integrations](#integrations) · [Notifications](#notifications) · [Server mode](#server-mode) ·
-[Plan & licence](#plan--licence) · [Updates & About](#updates--about) · [Advanced](#advanced)
+[Account & devices](#account--devices) · [Plan & licence](#plan--licence) · [Updates & About](#updates--about) · [Advanced](#advanced)
 
 | Where it is stored | What |
 | --- | --- |
@@ -136,6 +136,12 @@ One row per event: Off, Inbox or Both. See [The inbox](inbox.md#choosing-what-re
 Under **Machines**. **Serve this machine**, paired devices, and **Attach to a server**
 ([Remote](remote.md)). While this window is attached, the bind fields and the device roster are
 the server's, and the pane says so.
+
+## Account & devices
+
+Under **Account**. Your name, email and plan, with **Sign out**, and this account's devices, this Mac first.
+**Manage devices** opens your account's devices page in the browser, already signed in; revoking a device happens
+there. Signed out, the pane says **Sign in to see your account.**
 
 ## Plan & licence
 

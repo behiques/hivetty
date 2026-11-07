@@ -39,6 +39,9 @@ the picker from re-rendering thirteen live terminals.
   `place` (`'home'` on every launch), `panelOpen` (`true`) and `narrow`
   (HIVE-195, HIVE-211). None persists: a launch always opens on Home with its
   panel open.
+  The licence gate adds (HIVE-265), neither persisted: `gated` (a gate is up over the
+  shell, so window keydown listeners stand down) and `dismissedTrialThreshold` (`3`, `1` or
+  `null`, the trial banner's threshold last dismissed; a relaunch shows the banner again).
   The Sessions place adds (HIVE-197), none persisted: `sessionsProject`
   (the overmind's project filter, `null` for all), `sessionsFilter`
   (`'all' | 'live' | 'ended'`), `endedExpanded` ("N more ›" pressed) and
