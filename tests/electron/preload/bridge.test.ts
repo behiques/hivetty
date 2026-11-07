@@ -992,6 +992,11 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
     ]);
   });
 
+  it('openWeb invokes account:open-web with the path (HIVE-268)', async () => {
+    await (account().openWeb as (p: string) => Promise<unknown>)('/account/plan');
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.accountOpenWeb, '/account/plan');
+  });
+
   it('onChanged hands the pushed state over, payload only', () => {
     const callback = vi.fn();
     (account().onChanged as (cb: unknown) => () => void)(callback);
