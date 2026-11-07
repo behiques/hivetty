@@ -2,29 +2,48 @@ import type { Effort, Model } from '@/types/entity';
 
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { type CliDetection, type ClisConfig, CODEX_MODELS, COPILOT_MODELS } from '@shared/cli-contract';
+import { cliEntitlementOf } from '@shared/entitlement';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
+import type { LicenceState } from '@shared/licence-contract';
 
-export type CliAvailability = Record<HarnessId, { ok: true } | { ok: false; reason: string }>;
+/** `plan` is set only for a plan lock (HIVE-332): it is what tells the dock to draw the lock and Upgrade. */
+export type CliAvailability = Record<HarnessId, { ok: true } | { ok: false; reason: string; plan?: string | null }>;
 
 /** Read mid-sentence, after "<name> isn't available:" in the picker. */
 export const TURNED_OFF = 'turned off in Settings › Harnesses';
 
 /**
- * Whether each CLI may start a session (HIVE-375). No detection (the browser, or not yet answered) counts as found
- * (D10); a missing CLI's reason wins over its switch.
+ * Whether each CLI may start a session (HIVE-375, HIVE-332). No detection (the browser, or not yet answered) counts
+ * as found (D10) and no licence as unlocked (D10 again: main is the authority). Order: the plan lock, then missing,
+ * then the switch.
  */
 export function cliAvailability(
   detection: Record<HarnessId, CliDetection> | null,
   clis: ClisConfig | null,
+  licence: LicenceState | null = null,
 ): CliAvailability {
   return Object.fromEntries(
     HARNESS_IDS.map((id) => {
+      if (licence !== null) {
+        const verdict = cliEntitlementOf(licence, id);
+        if (!verdict.allowed) return [id, { ok: false, reason: verdict.reason, plan: verdict.plan }];
+      }
       const found = detection?.[id];
       if (found !== undefined && 'missing' in found) return [id, { ok: false, reason: found.missing }];
       if (clis !== null && !clis[id].sessions) return [id, { ok: false, reason: TURNED_OFF }];
       return [id, { ok: true }];
     }),
   ) as CliAvailability;
+}
+
+/** The CLIs the plan locks, and why (HIVE-332), for the dock's lock badge and Upgrade line. */
+export function lockedClis(availability: CliAvailability): Partial<Record<HarnessId, string>> {
+  return Object.fromEntries(
+    HARNESS_IDS.flatMap((id) => {
+      const entry = availability[id];
+      return !entry.ok && entry.plan !== undefined ? [[id, entry.reason]] : [];
+    }),
+  );
 }
 
 /** Where the picker's CLI came from (HIVE-378): this run's pick, the project's default, yours, or the first available. */
