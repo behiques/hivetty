@@ -21,7 +21,7 @@ import { OptionStepper } from '@features/shared/components/option-stepper';
 import { useNewSessionPick } from '@hooks/use-new-session-pick';
 import { useProjectAccess, useProjectConfig } from '@hooks/use-project-config';
 import { CLI_NAMES } from '@lib/harness/cli-names';
-import { unavailableReasons } from '@lib/harness/session-cli';
+import { lockedClis, unavailableReasons } from '@lib/harness/session-cli';
 import { CLI_VOCAB, cliTakesEffort } from '@shared/cli-contract';
 import type { HarnessId } from '@shared/harness-contract';
 import { ticketStart, type TicketFacts } from '@shared/ticket-workflow';
@@ -280,6 +280,7 @@ export function NewSessionPicker() {
               value={cli}
               onChange={setNewCli}
               unavailable={unavailableReasons(availability)}
+              locked={lockedClis(availability)}
               caption={caption}
             />
             {blocked ? (

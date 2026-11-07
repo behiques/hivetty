@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils';
 
 import { CliMark } from '@components/ui/cli-mark';
 import { Hint } from '@components/ui/hint';
+import { Icon } from '@components/ui/icon';
+import { UpgradeLink } from '@components/ui/lock';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
@@ -19,17 +21,21 @@ const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -
  * stop, arrows choose as they move and wrap, Home and End jump to the ends.
  *
  * An unavailable CLI (HIVE-375: missing, or turned off in Settings) stays drawn, dimmed, with its reason as its
- * name and its hover hint; a click on it does nothing and the keys step past it.
+ * name and its hover hint; a click on it does nothing and the keys step past it. A plan lock (HIVE-332) adds a lock
+ * badge, and a line under the dock reads the reason with Upgrade.
  */
 export function CliDock({
   value,
   onChange,
   unavailable = {},
+  locked = {},
   caption = null,
 }: {
   value: HarnessId;
   onChange: (cli: HarnessId) => void;
   unavailable?: Partial<Record<HarnessId, string>>;
+  /** The plan's locks (HIVE-332), a subset of `unavailable`: drawn with a lock and an Upgrade line. */
+  locked?: Partial<Record<HarnessId, string>>;
   /** Where the choice came from (HIVE-378), drawn under the name; `null` draws nothing. */
   caption?: string | null;
 }) {
@@ -84,7 +90,7 @@ export function CliDock({
                   choose(target);
                 }}
                 className={cn(
-                  'grid size-14 place-items-center rounded-2xl border outline-none focus-visible:ring-1 focus-visible:ring-brand motion-safe:transition-transform',
+                  'relative grid size-14 place-items-center rounded-2xl border outline-none focus-visible:ring-1 focus-visible:ring-brand motion-safe:transition-transform',
                   selected
                     ? 'border-brand bg-chip text-ink motion-safe:-translate-y-0.5'
                     : 'border-border bg-term-input text-muted hover:bg-hover hover:text-ink',
@@ -93,6 +99,15 @@ export function CliDock({
                 )}
               >
                 <CliMark cli={cli} className="size-[26px]" />
+                {locked[cli] !== undefined && (
+                  <span
+                    data-slot="cli-lock"
+                    aria-hidden="true"
+                    className="absolute -right-1 -bottom-1 grid size-5 place-items-center rounded-full border border-border bg-chip text-ink"
+                  >
+                    <Icon name="ph-lock" size={11} />
+                  </span>
+                )}
               </button>
             </Hint>
           );
@@ -108,6 +123,12 @@ export function CliDock({
           {caption}
         </span>
       )}
+      {/* A plan lock (HIVE-332) says why and offers Upgrade; other unavailable CLIs keep their reason in the hint. */}
+      {HARNESS_IDS.filter((cli) => locked[cli] !== undefined).map((cli) => (
+        <span key={cli} className="flex max-w-[380px] items-center gap-1.5 text-center text-ui-sm text-subtle">
+          <span>{locked[cli]}</span> · <UpgradeLink />
+        </span>
+      ))}
     </div>
   );
 }
