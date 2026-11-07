@@ -19,6 +19,7 @@ const appRoot = fileURLToPath(new URL('.', import.meta.url)).replace(/\/$/, '');
  * silently becomes importable from everywhere.
  */
 const FEATURE_SLICES = [
+  'account',
   'agents',
   'editor',
   'explorer',
