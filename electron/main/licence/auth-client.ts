@@ -1,6 +1,8 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
 
-import type { AccountState, SignedOutReason, SignInResult } from '@shared/account-contract';
+import type { AccountState, OpenWebResult, SignedOutReason, SignInResult } from '@shared/account-contract';
+
+import { isSafeExternalUrl } from '../external-links';
 
 import { type AccountStore, type DeviceKey, NO_ENCRYPTION, type StoredAccount } from './account-store';
 import { type Cloud, CloudError, stringField, type TokenResponse } from './cloud';
@@ -41,7 +43,16 @@ export interface AuthClient {
   getAccessToken(): Promise<string | null>;
   /** A cloud call with the bearer token; a `device_revoked` 401 signs this device out. */
   authedFetch(path: string, init?: RequestInit): Promise<Response>;
+  /**
+   * HIVE-268: open `path` of the account site, signed in through a one-time link (`POST /api/oauth/web-session`).
+   * `path` is `unknown` because it crosses IPC. Never throws: every failure is a sentence in `{ error }`.
+   */
+  openWeb(path: unknown): Promise<OpenWebResult>;
 }
+
+/** The longest `next` path `openWeb` passes on. */
+export const OPEN_WEB_MAX_PATH = 2048;
+const OPEN_WEB_FAILED = "HiveTTY couldn't open that page. Try again.";
 
 export function generateDeviceKey(): DeviceKey {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -329,6 +340,37 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
         }
       }
       return response;
+    },
+
+    async openWeb(path) {
+      // The path crosses IPC: a same-site path only, the shape the cloud's safeNextPath accepts.
+      if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.length > OPEN_WEB_MAX_PATH) {
+        return { error: 'That is not a page of the HiveTTY site.' };
+      }
+      if (current.kind !== 'signed-in') return { error: 'Sign in to HiveTTY first.' };
+      let response: Response;
+      try {
+        response = await this.authedFetch('/api/oauth/web-session', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ next: path }),
+        });
+      } catch {
+        return { error: "Couldn't reach HiveTTY. Try again." };
+      }
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok) return { error: stringField(body, 'error_description') ?? OPEN_WEB_FAILED };
+      // The URL comes off the network: http(s) only, and only on the cloud's own origin.
+      const url = stringField(body, 'url');
+      if (!url || !isSafeExternalUrl(url) || new URL(url).origin !== new URL(cloud.baseUrl).origin) {
+        return { error: OPEN_WEB_FAILED };
+      }
+      try {
+        await deps.openExternal(url);
+      } catch {
+        return { error: "The browser didn't open." };
+      }
+      return { ok: true };
     },
   };
 }
