@@ -539,6 +539,46 @@ so the strip agrees with the TUI's "% context left"; the 5-hour and weekly limit
 and 10080), never by slot, since the slots differ by plan; and credits as a text stat. A Free plan's 30-day
 window shows no gauge. `codex exec` gets the parser only, with no UI. `/statusline` stays 404 for Codex.
 
+**The opt-in plugin** (HIVE-372). Settings › Harnesses › Codex's **Install HiveTTY's skills into Codex**
+(`clis.codex.installSkills`, absent means off) installs the same skills as a Codex plugin, `hive@hivetty`, so
+Codex's own `/skills` list and `$` completion show them as `hive:hive-<name>`. HiveTTY never writes under
+`$CODEX_HOME`; only `codex plugin` does.
+
+- *The marketplace.* After every render, `skills/codex-marketplace.ts` writes the Codex rendering a second time
+  into `<userData>/hive/plugins/codex-marketplace`: `.agents/plugins/marketplace.json` (marketplace `hivetty`,
+  one local plugin at `./plugins/hive`) and `plugins/hive/.codex-plugin/plugin.json`. Every `SKILL.md` there
+  goes through `guardSkill` (`shared/skill-render.ts`), which tells the model to stop unless
+  `HIVE_RECEIVER_URL` is set, because an installed plugin also loads in Codex sessions HiveTTY did not start.
+  `plugins/codex`, which sessions read through `catalog.md`, stays unguarded. The version is
+  `<app>+<hash8>`, the first 8 hex of a sha256 over the rendered `skills/` tree. Codex keys its cache by version
+  and prunes the old folder (probed on 0.167.0), so a changed skill is a new version.
+  `SkillsRuntime.codexMarketplace()` answers the folder and version, `null` until a write succeeds.
+- *The installer.* `harness/codex/plugin-install.ts`, reached through the port's optional `skillsPlugin()` (the
+  HIVE-233 fence keeps `ipc/` out of `harness/codex/`). It reads `config.toml` read-only with `smol-toml`:
+  installed is `[plugins."hive@hivetty"]`, marketplace is `[marketplaces.hivetty]`, and current is installed
+  plus `plugins/cache/hivetty/hive/<version>/` existing. Wanted and not current: `codex plugin marketplace add
+  <dir>`, then `codex plugin add hive@hivetty` (both idempotent). Not wanted: `codex plugin remove hive@hivetty`
+  when installed, then `codex plugin marketplace remove hivetty` when the marketplace is there, in that order,
+  because `marketplace remove` leaves the plugin table behind. Anything else runs nothing, which is every user
+  who never turned it on. The first failure stops the run, and the status carries Codex's own stderr (else
+  stdout, the exit code, or "timed out after 30 s"). Runs are serialized on a promise chain, as `skills.sync`
+  is. Codex runs in its sessions' env (main's over the runtime env), so the plugin lands in the
+  `CODEX_HOME` they read.
+- *Triggers.* `onRendered`, which the skills runtime calls after every regeneration (each spawn, and every
+  skills read), and `config:set-cli` when it carries `installSkills`. When current, a trigger is a file read
+  and a stat. `cli:codex-plugin-status` answers the last result, running a reconcile when none has run yet;
+  Settings shows it under the switch.
+- *No double listing.* `codexDeveloperInstructions` leaves `catalog.md` out when `userConfig` is true and the
+  plugin is enabled. Headless runs pass `--ignore-user-config`, which drops plugins too (HIVE-367), so they keep
+  the block.
+- *Hidden from "Your CLI skills".* `parseCodexSkillCatalog` (`codex/installed.ts`) drops every skill whose path
+  is under `/plugins/cache/hivetty/`: by path, so another marketplace's plugin named `hive` still lists.
+
+Codex leaves an empty `plugins/cache/hivetty/` behind after a remove; it stays, since HiveTTY does not touch
+`~/.codex`. Cloud sync (HIVE-284) must not carry `clis.codex.installSkills`: it changes a machine's `~/.codex`.
+`pnpm test:codex-plugin` installs the real skills into a scratch `CODEX_HOME`, checks `codex debug prompt-input`
+lists each as `hive:hive-<name>`, and removes them.
+
 **Declines and interrupts** (HIVE-365) fire no hook at 0.165: an Esc, option 3 (by arrows, wrap included), `n` or `3` on the approval prompt, and Esc mid-turn, all print `■ Conversation interrupted` and write `event_msg` `turn_aborted` to the rollout. `answersBlock` clears the card on the key and `recordAborted` ends the turn (`interactive-0.164/FINDINGS.md`, P8).
 
 **Subagent fan-out** (HIVE-371, probed 2026-11-02 against `codex-cli 0.165.0`, fixtures in
@@ -575,7 +615,7 @@ window shows no gauge. `codex exec` gets the parser only, with no UI. `/statusli
   an agent's `Task` deny rule does not stop a Codex spawn. The subagent's own calls do go through
   the fence's `PreToolUse`.
 
-Interactive: HIVE-279 (sessions); skills and markers HIVE-360. Meters: HIVE-334 (done). Agent-run plans: HIVE-358. Containers: refused.
+Interactive: HIVE-279 (sessions); skills and markers HIVE-360; the opt-in plugin HIVE-372. Meters: HIVE-334 (done). Agent-run plans: HIVE-358. Containers: refused.
 
 ## Copilot (headless, HIVE-343; sessions, HIVE-280)
 
