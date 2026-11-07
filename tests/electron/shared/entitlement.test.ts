@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { entitlementOf, UPGRADE_PATH } from '../../../electron/shared/entitlement';
+import { CLI_FEATURES, cliEntitlementOf, entitlementOf, UPGRADE_PATH } from '../../../electron/shared/entitlement';
 import type { LicenceState } from '../../../electron/shared/licence-contract';
 
 const terms = (plan: string, features: string[], extra: { trialEnds?: number } = {}) => ({
@@ -73,5 +73,30 @@ describe('entitlementOf', () => {
 
   it('upgrades through the account plan page', () => {
     expect(UPGRADE_PATH).toBe('/account/plan');
+  });
+});
+
+describe('cliEntitlementOf (HIVE-332)', () => {
+  it('maps each CLI to its lease feature, Claude to none', () => {
+    expect(CLI_FEATURES).toEqual({ 'claude-code': null, codex: 'cli.codex', copilot: 'cli.copilot' });
+  });
+
+  it('always allows Claude Code, licensed or not', () => {
+    expect(cliEntitlementOf(null, 'claude-code')).toEqual({ allowed: true });
+    expect(cliEntitlementOf({ kind: 'unlicensed' }, 'claude-code')).toEqual({ allowed: true });
+  });
+
+  it('allows Codex on Solo and locks Copilot there with its plan', () => {
+    const solo = licensed('solo', ['cli.codex']);
+    expect(cliEntitlementOf(solo, 'codex')).toEqual({ allowed: true });
+    expect(cliEntitlementOf(solo, 'copilot')).toEqual({
+      allowed: false,
+      reason: 'Copilot is in Team and above',
+      plan: 'Team',
+    });
+  });
+
+  it('fails closed with no licence', () => {
+    expect(cliEntitlementOf(null, 'codex')).toEqual({ allowed: false, reason: 'Sign in to use Codex', plan: 'Solo' });
   });
 });

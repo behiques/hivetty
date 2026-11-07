@@ -1,4 +1,5 @@
 import { FEATURE_PLANS, PLAN_NAMES, type PlanKey } from './feature-plans';
+import type { HarnessId } from './harness-contract';
 import type { LicenceState } from './licence-contract';
 
 /**
@@ -37,4 +38,17 @@ export function entitlementOf(
     return { allowed: false, reason, plan };
   }
   return { allowed: false, reason: `${label} is in ${PLAN_NAMES[key]} and above`, plan };
+}
+
+/** The lease feature each CLI needs (HIVE-332). Claude Code is every plan's, so it needs none. */
+export const CLI_FEATURES: Readonly<Record<HarnessId, string | null>> = {
+  'claude-code': null,
+  codex: 'cli.codex',
+  copilot: 'cli.copilot',
+};
+
+/** May this CLI run on this licence? Both processes ask through here, so main and the renderer agree. */
+export function cliEntitlementOf(state: LicenceState | null, id: HarnessId): Entitlement {
+  const feature = CLI_FEATURES[id];
+  return feature === null ? { allowed: true } : entitlementOf(state, feature);
 }
