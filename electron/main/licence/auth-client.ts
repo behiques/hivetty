@@ -333,7 +333,8 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
       abortCodeFlow();
       const mine = { controller: new AbortController(), restore };
       codeFlow = mine;
-      signal?.addEventListener('abort', () => mine.controller.abort(), { once: true });
+      const onCallerAbort = (): void => mine.controller.abort();
+      signal?.addEventListener('abort', onCallerAbort, { once: true });
       set({ kind: 'signing-in' });
 
       const stored = store.read();
@@ -357,9 +358,16 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
           set(mine.restore);
         }
         return { error: FLOW_MESSAGES[failure], failure };
+      } finally {
+        signal?.removeEventListener('abort', onCallerAbort);
       }
       if (codeFlow !== mine) return { error: FLOW_MESSAGES.aborted, failure: 'aborted' };
       codeFlow = null;
+      // Cancelled as the token arrived: the person asked to stop, so nothing is stored.
+      if (mine.controller.signal.aborted) {
+        set(mine.restore);
+        return { error: FLOW_MESSAGES.aborted, failure: 'aborted' };
+      }
 
       // The same finish as handleCallback: let a refresh in flight land, then replace the account.
       exchangeSeq += 1;

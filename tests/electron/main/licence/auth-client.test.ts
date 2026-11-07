@@ -905,4 +905,38 @@ describe('signInWithCode races (HIVE-266)', () => {
     await expect(done).resolves.toEqual({ error: expect.any(String), failure: 'refused' });
     expect(h.client.state()).toEqual({ kind: 'signed-out' });
   });
+  it('the caller signal aborting mid-flow restores the state and stores nothing (Ctrl-C)', async () => {
+    const h = harness({ stored: STORED });
+    h.client.start();
+    const controller = new AbortController();
+    const done = h.client.signInWithCode({ onCode: vi.fn(), signal: controller.signal });
+    expect(h.client.state()).toEqual({ kind: 'signing-in' });
+    controller.abort();
+    await expect(done).resolves.toMatchObject({ failure: 'aborted' });
+    expect(h.client.state()).toMatchObject({ kind: 'signed-in', deviceId: 'dev-0' });
+    expect(h.store.value()).toEqual(STORED);
+  });
+
+  it('stops listening to the caller signal once the flow ends', async () => {
+    const h = harness();
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    const done = h.client.signInWithCode({ onCode: vi.fn(), signal: controller.signal });
+    h.flow().resolve(tokens(1));
+    await done;
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
+  it('an abort that lands as the token arrives stores nothing', async () => {
+    const h = harness();
+    const controller = new AbortController();
+    let resolveFlow!: (t: TokenResponse) => void;
+    h.runDeviceFlow.mockImplementationOnce(() => new Promise<TokenResponse>((r) => (resolveFlow = r)));
+    const done = h.client.signInWithCode({ onCode: vi.fn(), signal: controller.signal });
+    resolveFlow(tokens(1));
+    controller.abort();
+    await expect(done).resolves.toMatchObject({ failure: 'aborted' });
+    expect(h.store.value()).toBeNull();
+    expect(h.client.state()).toEqual({ kind: 'signed-out' });
+  });
 });
