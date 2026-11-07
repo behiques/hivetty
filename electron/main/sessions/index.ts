@@ -268,6 +268,11 @@ export interface SessionsOptions {
   harnessStateDir?: (harness: HarnessId) => string;
   /** HIVE-267: while true, a spawn or a restart is refused. Injected; `sessions/` never imports `licence/`. */
   lapsed?: () => boolean;
+  /**
+   * HIVE-332: why this CLI may not start, or `null` when the plan includes it. Injected; `sessions/` never imports
+   * `licence/`. Absent refuses every CLI but Claude Code (fail closed).
+   */
+  entitled?: (harness: HarnessId) => string | null;
 }
 
 /**
@@ -624,11 +629,24 @@ export function createSessions(options: SessionsOptions): Sessions {
     hiveServer,
     harnessStateDir,
     lapsed,
+    entitled,
   } = options;
 
   /** HIVE-267: no new work while the licence is lapsed. Reattaching to a live session is not new work. */
   function refuseWhileLapsed(): void {
     if (lapsed?.() === true) throw new Error(LICENCE_LAPSED);
+  }
+
+  /** HIVE-332: no new session of a CLI the plan lacks. A running one is untouched; this runs only on spawn and restart. */
+  function refuseLocked(harness: HarnessId): void {
+    const reason =
+      entitled === undefined
+        ? harness === 'claude-code'
+          ? null
+          : `${CLI_LABELS[harness]} is not available: no licence gate.`
+        : entitled(harness);
+
+    if (reason !== null) throw new Error(reason);
   }
 
   /** Every session's plan (HIVE-179). Main owns the rules; the renderer mirrors them. */
@@ -2168,7 +2186,10 @@ export function createSessions(options: SessionsOptions): Sessions {
       agentSessions.get(request.entityId) ??
       history?.all().find((record) => record.id === request.entityId)?.harness;
     // Before the kill too: a restart refused after it would leave the row dead.
-    if (harness !== undefined) refuseUnlaunchable(harness, inContainer(request.projectId));
+    if (harness !== undefined) {
+      refuseLocked(harness);
+      refuseUnlaunchable(harness, inContainer(request.projectId));
+    }
 
     const sessionId = registry.sessionFor(request.entityId);
 
@@ -2366,6 +2387,7 @@ export function createSessions(options: SessionsOptions): Sessions {
   function spawn(request: OpenRequest): void {
     refuseWhileLapsed();
     const harness = request.harness ?? 'claude-code';
+    refuseLocked(harness);
     const snapshot = config();
 
     const project = requireMappedProject(snapshot, request.projectId);

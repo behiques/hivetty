@@ -17,7 +17,7 @@ import type {
   HookStatusEvent,
 } from '../../../../electron/shared/hook-contract';
 import { resolveClis } from '../../../../electron/shared/cli-contract';
-import type { StatusSignal } from '../../../../electron/shared/harness-contract';
+import type { HarnessId, StatusSignal } from '../../../../electron/shared/harness-contract';
 import { CH } from '../../../../electron/shared/ipc-contract';
 import type { SessionRecord } from '../../../../electron/shared/session-history-contract';
 
@@ -4051,6 +4051,7 @@ describe('codex sessions (HIVE-279)', () => {
       config: () => over.config ?? CONFIG,
       userDataPath: USER_DATA_PATH,
       newSessionUuid: () => TEST_UUID,
+      entitled: () => null,
       ...(over.hiveServer === undefined ? {} : { hiveServer: over.hiveServer }),
       hooks: {
         settingsPathFor: () => undefined,
@@ -4391,6 +4392,7 @@ describe('copilot sessions (HIVE-280)', () => {
       config: () => over.config ?? CONFIG,
       userDataPath: USER_DATA_PATH,
       newSessionUuid: () => TEST_UUID,
+      entitled: () => null,
       ...(over.hiveServer === undefined ? {} : { hiveServer: over.hiveServer }),
       ...(over.harnessStateDir === undefined ? {} : { harnessStateDir: over.harnessStateDir }),
       hooks: {
@@ -4726,5 +4728,77 @@ describe('licence lapse (HIVE-267)', () => {
 
     expect(() => gated.open(OPEN)).not.toThrow();
     expect(spawned).toHaveLength(1);
+  });
+});
+
+describe('CLI plan lock (HIVE-332)', () => {
+  const HIVE = { command: '/app/electron', args: ['/app/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } };
+  const codexOpen = { ...OPEN, harness: 'codex' as const, model: 'gpt-6-luna' };
+  let lockReason: string | null;
+  let lapsed: boolean;
+  let gated: ReturnType<typeof createSessions>;
+
+  const make = (over: { entitled?: false } = {}) =>
+    createSessions({
+      supervisor,
+      send: (channel, payload) => sent.push({ channel, payload: payload as Record<string, unknown> }),
+      config: () => CONFIG,
+      userDataPath: USER_DATA_PATH,
+      newSessionUuid: () => TEST_UUID,
+      hiveServer: () => HIVE,
+      lapsed: () => lapsed,
+      ...(over.entitled === false
+        ? {}
+        : { entitled: (harness: HarnessId) => (harness === 'claude-code' ? null : lockReason) }),
+    });
+
+  beforeEach(() => {
+    lockReason = null;
+    lapsed = false;
+    gated = make();
+  });
+
+  afterEach(() => {
+    gated.dispose();
+  });
+
+  it('refuses a spawn of a CLI the plan lacks, with its reason, and spawns nothing', () => {
+    lockReason = 'Codex is in Solo and above';
+
+    expect(() => gated.open(codexOpen)).toThrow('Codex is in Solo and above');
+    expect(spawned).toHaveLength(0);
+  });
+
+  it('refuses a restart before the kill, so the running row stays alive', async () => {
+    gated.open(codexOpen);
+    lockReason = 'Codex is in Solo and above';
+
+    await expect(gated.restart(codexOpen)).rejects.toThrow('Codex is in Solo and above');
+    expect(killed).toEqual([]);
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('leaves a running session alone when the lease changes, and reattaches it', () => {
+    gated.open(codexOpen);
+    lockReason = 'Codex is in Solo and above';
+
+    expect(() => gated.open(codexOpen)).not.toThrow();
+    expect(killed).toEqual([]);
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('says lapsed, not locked, when both hold', () => {
+    lapsed = true;
+    lockReason = 'Codex is in Solo and above';
+
+    expect(() => gated.open(codexOpen)).toThrow(/licence has lapsed/);
+  });
+
+  it('with no entitled option, refuses Codex and still spawns Claude', () => {
+    gated.dispose();
+    gated = make({ entitled: false });
+
+    expect(() => gated.open(codexOpen)).toThrow('Codex is not available: no licence gate.');
+    expect(() => gated.open(OPEN)).not.toThrow();
   });
 });
