@@ -82,6 +82,9 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+export const USER_CODE = 'WDJB-MJHT';
+const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
+
 export async function startStubCloud(): Promise<StubCloud> {
   const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
   const jwk = { ...publicKey.export({ format: 'jwk' }), alg: 'ES256', kid: KID };
@@ -100,6 +103,7 @@ export async function startStubCloud(): Promise<StubCloud> {
   };
   const calls: StubCall[] = [];
   let url = '';
+  let deviceCodeDeviceId: string | undefined;
 
   const lease = (): string => {
     const iat = state.next.iat ?? nowS();
@@ -135,6 +139,23 @@ export async function startStubCloud(): Promise<StubCloud> {
     return false;
   };
 
+  /** The code grant's token response, as `parseTokenResponse` reads it. A sent `device_id` is kept (HIVE-266 reuse). */
+  const tokens = (sentDeviceId?: string) => {
+    if (sentDeviceId) state.deviceId = sentDeviceId;
+    const access = `at-${randomUUID()}`;
+    const refresh = `rt-${randomUUID()}`;
+    state.access.add(access);
+    state.refresh.add(refresh);
+    return {
+      access_token: access,
+      refresh_token: refresh,
+      token_type: 'Bearer',
+      expires_in: 3600,
+      device_id: state.deviceId,
+      user: STUB_USER,
+    };
+  };
+
   const route = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const path = new URL(req.url ?? '/', 'http://stub').pathname;
     const body = await readBody(req);
@@ -151,7 +172,51 @@ export async function startStubCloud(): Promise<StubCloud> {
       if (reason !== null) return send(res, 403, { error: 'lease_refused', reason });
       return send(res, 200, { lease: lease() });
     }
-    // Task 4: the OAuth, trial, web-session and devices routes go here.
+    if (req.method === 'POST' && path === '/api/oauth/token') {
+      if (body.grant_type === 'authorization_code') return send(res, 200, tokens(body.device_id));
+      if (body.grant_type === 'refresh_token') {
+        if (state.revoked) return send(res, 400, { error: 'invalid_grant', error_description: 'device_revoked' });
+        if (!state.refresh.has(body.refresh_token ?? '')) return send(res, 400, { error: 'invalid_grant' });
+        return send(res, 200, tokens());
+      }
+      if (body.grant_type === DEVICE_GRANT) {
+        if (state.deviceCode === 'denied') return send(res, 400, { error: 'access_denied' });
+        if (state.deviceCode !== 'approved') return send(res, 400, { error: 'authorization_pending' });
+        return send(res, 200, tokens(deviceCodeDeviceId));
+      }
+      return send(res, 400, { error: 'unsupported_grant_type' });
+    }
+    if (req.method === 'POST' && path === '/api/oauth/device/code') {
+      if (state.deviceCode === 'fail') return send(res, 500, { error: 'server_error' });
+      deviceCodeDeviceId = body.device_id;
+      return send(res, 200, {
+        device_code: `dc-${randomUUID()}`,
+        user_code: USER_CODE,
+        verification_uri: `${url}/device`,
+        verification_uri_complete: `${url}/device?user_code=${USER_CODE}`,
+        expires_in: 600,
+        interval: 1,
+      });
+    }
+    if (req.method === 'POST' && path === '/api/oauth/revoke') return send(res, 200, {});
+    if (req.method === 'POST' && path === '/api/oauth/web-session') {
+      if (unauthorised(req, res)) return;
+      return send(res, 200, { url: `${url}/redeem?next=${encodeURIComponent(body.next ?? '/')}` });
+    }
+    if (req.method === 'POST' && path === '/api/trial') {
+      if (unauthorised(req, res)) return;
+      if (state.trialUsed) return send(res, 409, { error: 'trial_used' });
+      state.trialUsed = true;
+      Object.assign(state, { plan: 'team', trialEnds: nowS() + 14 * DAY_S, refusal: null, next: {} });
+      return send(res, 201, {});
+    }
+    if (req.method === 'GET' && path === '/api/account/devices') {
+      if (unauthorised(req, res)) return;
+      const at = new Date().toISOString();
+      return send(res, 200, {
+        devices: [{ id: state.deviceId, name: 'Test Mac', lastSeenAt: at, createdAt: at, current: true }],
+      });
+    }
     send(res, 404, { error: 'not_found' });
   };
 
