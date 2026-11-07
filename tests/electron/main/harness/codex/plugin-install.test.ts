@@ -82,4 +82,94 @@ describe('the Codex plugin installer (HIVE-372)', () => {
     await installer().reconcile();
     expect(args()).toEqual(['plugin marketplace remove hivetty']);
   });
+
+  it('stops at the first failure and carries Codex’s own stderr', async () => {
+    wanted = true;
+    run.mockImplementationOnce(async () => ok).mockImplementationOnce(async () => ({
+      code: 1,
+      stdout: '',
+      stderr: 'Error: plugin `hive` was not found in marketplace `hivetty`\n',
+      timedOut: false,
+    }));
+    expect(await installer().reconcile()).toEqual({
+      state: 'failed',
+      command: 'codex plugin add hive@hivetty',
+      message: 'Error: plugin `hive` was not found in marketplace `hivetty`',
+    });
+  });
+
+  it('stops before plugin add when marketplace add fails', async () => {
+    wanted = true;
+    run.mockImplementationOnce(async () => ({ code: 1, stdout: '', stderr: 'Error: bad\n', timedOut: false }));
+    expect(await installer().reconcile()).toMatchObject({ state: 'failed', command: 'codex plugin marketplace add /m' });
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to stdout, then to the exit code, when stderr is empty', async () => {
+    wanted = true;
+    run.mockImplementationOnce(async () => ({ code: 2, stdout: 'bad dir\n', stderr: '', timedOut: false }));
+    expect(await installer().reconcile()).toMatchObject({ state: 'failed', message: 'bad dir' });
+    run.mockImplementationOnce(async () => ({ code: 3, stdout: '', stderr: '', timedOut: false }));
+    expect(await installer().reconcile()).toMatchObject({ state: 'failed', message: 'exited with code 3' });
+  });
+
+  it('reports a timeout', async () => {
+    wanted = true;
+    run.mockImplementationOnce(async () => ({ code: null, stdout: '', stderr: '', timedOut: true }) as never);
+    expect(await installer().reconcile()).toMatchObject({ state: 'failed', message: 'timed out after 30 s' });
+  });
+
+  it('reports a codex command that cannot be resolved, and runs nothing', async () => {
+    wanted = true;
+    const broken = createCodexPluginInstaller({
+      run: run as never,
+      command: () => ({ problem: 'No codex command is configured.' }),
+      codexHome: () => home,
+      marketplace: () => ({ dir: '/m', version: 'v' }),
+      wanted: () => true,
+    });
+    expect(await broken.reconcile()).toEqual({ state: 'failed', command: 'codex', message: 'No codex command is configured.' });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('fails without running anything when the plugin folder was never written', async () => {
+    wanted = true;
+    expect(await installer(null).reconcile()).toEqual({
+      state: 'failed',
+      command: 'codex plugin add hive@hivetty',
+      message: 'HiveTTY could not write the plugin folder.',
+    });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('answers a thrown run as a failure and keeps serving the next reconcile', async () => {
+    wanted = true;
+    run.mockImplementationOnce(async () => {
+      throw new Error('spawn EACCES');
+    });
+    const subject = installer();
+    expect(await subject.reconcile()).toEqual({ state: 'failed', command: 'codex', message: 'Error: spawn EACCES' });
+    expect(await subject.reconcile()).toEqual({ state: 'installed', version: '1.0.0+abcd1234' });
+  });
+
+  it('runs one reconcile at a time, and status() waits for the one in flight', async () => {
+    wanted = true;
+    let release!: () => void;
+    run.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(ok);
+        }),
+    );
+    const subject = installer();
+    const first = subject.reconcile();
+    const second = subject.reconcile();
+    const status = subject.status();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(run).toHaveBeenCalledTimes(1);
+    release();
+    await first;
+    await second;
+    expect(await status).toEqual(await second);
+  });
 });

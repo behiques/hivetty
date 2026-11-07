@@ -63,16 +63,18 @@ export interface CodexPluginInstaller {
  * HIVE-372: the opt-in `hive@hivetty` Codex plugin, installed, updated and removed only through `codex plugin`.
  * Runs nothing when the setting is off and nothing is installed, or when the installed version is current.
  */
+const failed = (command: string, message: string): CodexPluginStatus => ({ state: 'failed', command, message });
+
 export function createCodexPluginInstaller(deps: CodexPluginInstallerDeps): CodexPluginInstaller {
-  const once = async (): Promise<CodexPluginStatus> => {
+  const attempt = async (): Promise<CodexPluginStatus> => {
     const home = deps.codexHome();
     const state = readCodexPluginState(home);
     const steps: string[][] = [];
     let installedVersion: string | null = null;
     if (deps.wanted()) {
       const marketplace = deps.marketplace();
-      // Task 8: a null marketplace fails
-      const { dir, version } = marketplace as { dir: string; version: string };
+      if (marketplace === null) return failed(`codex plugin add ${CODEX_PLUGIN_ID}`, 'HiveTTY could not write the plugin folder.');
+      const { dir, version } = marketplace;
       // Codex keys its cache by version and prunes the old folder, so the folder is the "current" answer (D2).
       const current = state.installed && existsSync(join(home, 'plugins', 'cache', MARKETPLACE, PLUGIN, version));
       if (!current) steps.push(['plugin', 'marketplace', 'add', dir], ['plugin', 'add', CODEX_PLUGIN_ID]);
@@ -84,17 +86,34 @@ export function createCodexPluginInstaller(deps: CodexPluginInstallerDeps): Code
     }
     if (steps.length > 0) {
       const command = deps.command();
-      // Task 8: a command problem fails
+      if ('problem' in command) return failed('codex', command.problem);
+      // The first failure stops the run; the next trigger retries from whatever state it left.
       for (const args of steps) {
-        await deps.run((command as { path: string }).path, args, TIMEOUT_MS, { env: deps.env?.() });
-        // Task 8: a non-zero exit or a timeout fails
+        const result = await deps.run(command.path, args, TIMEOUT_MS, { env: deps.env?.() });
+        const named = `codex ${args.join(' ')}`;
+        if (result.timedOut) return failed(named, `timed out after ${TIMEOUT_MS / 1000} s`);
+        if (result.code !== 0) {
+          return failed(
+            named,
+            result.stderr.trim() || result.stdout.trim() || `exited with code ${String(result.code ?? result.signal)}`,
+          );
+        }
       }
     }
     return installedVersion === null ? { state: 'off' } : { state: 'installed', version: installedVersion };
   };
+  // Never rejects, so the chain below cannot wedge.
+  const once = async (): Promise<CodexPluginStatus> => {
+    try {
+      return await attempt();
+    } catch (cause) {
+      return failed('codex', String(cause));
+    }
+  };
+  // Serialized like skills.sync: a spawn's reconcile and a toggle's must not interleave their commands.
   let last: Promise<CodexPluginStatus> = Promise.resolve({ state: 'off' });
   return {
-    reconcile: () => (last = once()),
+    reconcile: () => (last = last.then(once, once)),
     status: () => last,
   };
 }
