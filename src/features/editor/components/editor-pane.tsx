@@ -16,7 +16,7 @@ import { languageFor } from '@lib/explorer/language';
 import { humanSize } from '@lib/human-size';
 import { useEditorAppearance, useEditorLayout } from '@stores/appearance-store';
 import { useActiveFile, useEditorActions } from '@stores/editor-store';
-import { usePickerState, useSettingsOpen } from '@stores/ui-store';
+import { useGated, usePickerState, useSettingsOpen } from '@stores/ui-store';
 
 /**
  * The document half of the stage: notices, then the editor.
@@ -49,10 +49,11 @@ export function EditorPane() {
   const markdown = useMarkdownView();
   const paneRef = useRef<HTMLDivElement>(null);
   const readingPhrase = useSwarmPhrase('loading.file');
-  /** Escape belongs to whichever overlay is up, not to this pane. */
+  /** Escape belongs to whichever overlay is up, not to this pane. The licence gate counts (HIVE-265). */
   const settingsOpen = useSettingsOpen();
   const { picker } = usePickerState();
-  const overlayOpen = settingsOpen || picker;
+  const gated = useGated();
+  const overlayOpen = settingsOpen || picker || gated;
 
   const fileName = file?.name;
 

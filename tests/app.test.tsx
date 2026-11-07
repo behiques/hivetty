@@ -27,4 +27,21 @@ describe('App', () => {
     expect(screen.getByRole('main')).toBeInTheDocument();
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
+
+  it('with a bridge and no licence, no workspace mounts (HIVE-265)', async () => {
+    (window as { hive?: unknown }).hive = {
+      appInfo: () => Promise.resolve({}),
+      account: {
+        state: () => Promise.resolve({ kind: 'signed-out' }),
+        onChanged: () => () => undefined,
+        onDeviceCode: () => () => undefined,
+      },
+      licence: { state: () => Promise.resolve({ kind: 'unlicensed' }), onChanged: () => () => undefined },
+      appQuit: vi.fn(),
+    };
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Sign in to HiveTTY Pro' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Places' })).toBeNull();
+    delete (window as { hive?: unknown }).hive;
+  });
 });

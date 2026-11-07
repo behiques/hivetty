@@ -132,6 +132,25 @@ describe('useAppChords', () => {
     expect(useUiStore.getState().panelOpen).toBe(true);
   });
 
+  it('stands down while gated (HIVE-265)', () => {
+    useUiStore.getState().setGated(true);
+    renderHook(() => useAppChords());
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', metaKey: true, bubbles: true }));
+    });
+    expect(useUiStore.getState().panelOpen).toBe(true);
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(TERMINAL_CHORD_EVENT, {
+          detail: { chord: 'rail-left' } satisfies TerminalChordDetail,
+        }),
+      );
+    });
+    expect(useUiStore.getState().panelOpen).toBe(true);
+  });
+
   describe('terminal-here', () => {
     it('opens a sibling terminal for the active session on a window keydown', () => {
       const session = useHiveStore.getState().spawnSession('nova-web');

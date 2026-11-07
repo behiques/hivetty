@@ -1,12 +1,13 @@
 import { AppShell } from '@components/layout/app-shell';
 import { TooltipProvider } from '@components/ui/tooltip';
+import { LicenceGate } from '@features/account/components/licence-gate';
 
 /**
  * Composition root.
  *
  * Everything the user sees lives under `<AppShell />` (story 020). This stays a
  * one-liner on purpose: providers belong here when they arrive, layout does
- * not.
+ * not. `LicenceGate` (HIVE-265) is the one wrapper: it is a gate, not layout.
  *
  * `TooltipProvider` is the one provider so far. Its own default `delayDuration`
  * is `0`, which fires on incidental mouse transit across a strip of 44px icon
@@ -16,7 +17,9 @@ import { TooltipProvider } from '@components/ui/tooltip';
 export function App() {
   return (
     <TooltipProvider delayDuration={300}>
-      <AppShell />
+      <LicenceGate>
+        <AppShell />
+      </LicenceGate>
     </TooltipProvider>
   );
 }
