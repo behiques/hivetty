@@ -1,4 +1,8 @@
 // @vitest-environment node
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveClis } from '../../../../electron/shared/cli-contract';
@@ -105,7 +109,7 @@ const agentsList = vi.fn(() => Promise.resolve({ agents: [], agentsRoot: '/tmp/.
 
 vi.mock('../../../../electron/main/skills', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  createSkillsRuntime: () => ({ sync: skillsSync, pluginDirPath: () => null, list: vi.fn() }),
+  createSkillsRuntime: () => ({ sync: skillsSync, pluginDirPath: () => null, codexMarketplace: () => null, list: vi.fn() }),
 }));
 
 vi.mock('../../../../electron/main/agents', async (importOriginal) => ({
@@ -339,6 +343,44 @@ describe('cli:codex-models', () => {
       { slug: 'gpt-6-luna', description: 'Fast.', defaultEffort: 'medium', efforts: ['low', 'medium'] },
     ]);
     await expect(invoke(CH.cliCodexModels, untrustedEvent, undefined)).rejects.toThrow();
+  });
+});
+
+describe('cli:codex-plugin-status (HIVE-372)', () => {
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env['CODEX_HOME'];
+    // Never the real ~/.codex: the installer reads its config.toml.
+    process.env['CODEX_HOME'] = mkdtempSync(join(tmpdir(), 'codex-home-'));
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env['CODEX_HOME'];
+    else process.env['CODEX_HOME'] = saved;
+  });
+
+  it('answers the installer’s status, trusted callers only', async () => {
+    await expect(invoke(CH.cliCodexPluginStatus, trustedEvent, undefined)).resolves.toEqual({ state: 'off' });
+    await expect(invoke(CH.cliCodexPluginStatus, untrustedEvent, undefined)).rejects.toThrow();
+  });
+
+  it('reconciles after a config:set-cli that carries installSkills, and the status follows', async () => {
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', installSkills: false });
+    expect(config.setCli).toHaveBeenCalledWith({ cli: 'codex', installSkills: false });
+    await expect(invoke(CH.cliCodexPluginStatus, trustedEvent, undefined)).resolves.toEqual({ state: 'off' });
+  });
+
+  it('reports the unwritten plugin folder when installSkills is on and no skills render has run', async () => {
+    vi.mocked(config.getConfig).mockReturnValue({
+      ...snapshot,
+      clis: resolveClis({ codex: { installSkills: true } }),
+    });
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', installSkills: true });
+    await expect(invoke(CH.cliCodexPluginStatus, trustedEvent, undefined)).resolves.toEqual({
+      state: 'failed',
+      command: 'codex plugin add hive@hivetty',
+      message: 'HiveTTY could not write the plugin folder.',
+    });
+    vi.mocked(config.getConfig).mockReturnValue(snapshot);
   });
 });
 

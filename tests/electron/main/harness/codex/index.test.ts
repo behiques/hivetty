@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -113,5 +114,26 @@ describe('codex adapter models', () => {
     ]);
     expect(claudeCodeAdapter.models).toBeUndefined();
     expect(copilotAdapter.models).toBeUndefined();
+  });
+});
+
+describe('codexAdapter.skillsPlugin (HIVE-372)', () => {
+  it('installs into the CODEX_HOME its env names, and only Codex has one', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'codex-home-'));
+    writeFileSync(join(home, 'config.toml'), '[plugins."hive@hivetty"]\nenabled = true\n');
+    const run = vi.fn(async () => ({ code: 0, stdout: '', stderr: '', timedOut: false }));
+    const installer = codexAdapter.skillsPlugin!({
+      run,
+      command: () => ({ path: '/bin/codex' }),
+      env: () => ({ CODEX_HOME: home }),
+      marketplace: () => null,
+      wanted: () => false,
+    });
+    expect(await installer.reconcile()).toEqual({ state: 'off' });
+    expect(run).toHaveBeenCalledWith('/bin/codex', ['plugin', 'remove', 'hive@hivetty'], 30_000, {
+      env: { CODEX_HOME: home },
+    });
+    expect(claudeCodeAdapter.skillsPlugin).toBeUndefined();
+    expect(copilotAdapter.skillsPlugin).toBeUndefined();
   });
 });

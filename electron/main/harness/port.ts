@@ -1,6 +1,6 @@
 import type { RunUsage } from '@shared/agent-contract';
 import type { ChangeMark } from '@shared/changed-files-contract';
-import type { CliModel, HeadlessSandbox } from '@shared/cli-contract';
+import type { CliModel, CodexPluginStatus, HeadlessSandbox } from '@shared/cli-contract';
 import type { ContainerFreshness, ResolvedContainer } from '@shared/config-contract';
 import type { Capabilities, HarnessId } from '@shared/harness-contract';
 import type { HookAgentEvent, HookIdentity, HookStatusEvent } from '@shared/hook-contract';
@@ -12,6 +12,8 @@ import type { ContainerOrigins } from '../container/layout';
 import type { PathMap } from '../container/path-map';
 import type { McpServerSpec, StdioServerSpec } from '../mcp/agent-config';
 import type { McpConfigOptions } from '../mcp/config';
+
+import type { RunVersion } from './detect';
 
 /**
  * The port every harness adapter implements (HIVE-233).
@@ -68,6 +70,32 @@ export interface HarnessAdapter {
   answersBlock?(data: string): BlockAnswer | null;
   /** The models this account has, for the picker; `[]` when the CLI cannot say. Absent: the CLI's static list. */
   models?(): Promise<CliModel[]>;
+  /**
+   * HIVE-372. Installs HiveTTY's skills through the CLI's own plugin commands (Codex: `codex plugin add
+   * hive@hivetty`). Absent: the CLI has none, and its skills reach sessions only as HiveTTY renders them.
+   */
+  skillsPlugin?(deps: SkillsPluginDeps): SkillsPluginInstaller;
+}
+
+/** What `skillsPlugin` is given by the composition root (HIVE-372). The adapter knows its own home. */
+export interface SkillsPluginDeps {
+  run: RunVersion;
+  /** The resolved CLI command, or why it could not be resolved. */
+  command: () => { path: string } | { problem: string };
+  /** The environment the CLI's commands run in: its sessions'. */
+  env: () => NodeJS.ProcessEnv;
+  /** The folder and version to install from; `null` until the skills runtime has written it. */
+  marketplace: () => { dir: string; version: string } | null;
+  /** Whether the user turned the install on. */
+  wanted: () => boolean;
+}
+
+/** HIVE-372. Brings the CLI's plugin state in line with the setting, one run at a time. */
+export interface SkillsPluginInstaller {
+  /** Run the CLI's commands, if any, that bring its plugin state in line with the setting. */
+  reconcile(): Promise<CodexPluginStatus>;
+  /** The last reconcile's answer, waiting for one in flight. */
+  status(): Promise<CodexPluginStatus>;
 }
 
 /** How the user answered a CLI's prompt in the terminal (HIVE-280). */

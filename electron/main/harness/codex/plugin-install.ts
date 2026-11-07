@@ -6,6 +6,7 @@ import { parse } from 'smol-toml';
 import type { CodexPluginStatus } from '@shared/cli-contract';
 
 import type { RunVersion } from '../detect';
+import type { SkillsPluginInstaller } from '../port';
 
 export const CODEX_PLUGIN_ID = 'hive@hivetty';
 const MARKETPLACE = 'hivetty';
@@ -57,12 +58,7 @@ export interface CodexPluginInstallerDeps {
   wanted: () => boolean;
 }
 
-export interface CodexPluginInstaller {
-  /** Run the Codex commands, if any, that bring `~/.codex` in line with the setting. */
-  reconcile(): Promise<CodexPluginStatus>;
-  /** The last reconcile's answer, waiting for one in flight. */
-  status(): Promise<CodexPluginStatus>;
-}
+export type CodexPluginInstaller = SkillsPluginInstaller;
 
 const failed = (command: string, message: string): CodexPluginStatus => ({ state: 'failed', command, message });
 
