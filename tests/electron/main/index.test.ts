@@ -103,6 +103,16 @@ describe('the boot path of a served machine', () => {
     expect(source).not.toMatch(/void startRemoteListener\(\)/);
   });
 
+  it('binds only behind the licence, never while unlicensed (HIVE-265)', () => {
+    expect(servedBlock).toContain(
+      'startWhenLicensed(() => onShutdown(bindUntilBound(startRemoteListener)), licence, onLicenceChange)',
+    );
+    // The bind call appears once, and only inside the gate.
+    expect(count('bindUntilBound(startRemoteListener)')).toBe(1);
+    // startLicence's whenReady callback is registered first, so licence() is live when the gate reads it.
+    expect(source.indexOf('const licence = startLicence(')).toBeLessThan(source.indexOf('startWhenLicensed('));
+  });
+
   it('makes the updater unattended behind the server lock, before the updater is built', () => {
     // The config decides, not `--server`: a one-off trial run has a person at
     // it and no launchd behind it.

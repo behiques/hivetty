@@ -21,8 +21,9 @@ import {
 } from './ipc';
 import { createWindowBroadcaster } from './ipc/broadcaster';
 import { registerIpc, switchIpcMode } from './ipc/router';
-import { runAccountCommand, startLicence } from './licence';
+import { licence, onLicenceChange, runAccountCommand, startLicence } from './licence';
 import { installDeepLinks } from './licence/deep-link';
+import { startWhenLicensed } from './licence/serve-gate';
 import { registerLifecycle } from './lifecycle';
 import { bindUntilBound } from './server/bind-retry';
 import {
@@ -402,9 +403,9 @@ if (!app.requestSingleInstanceLock()) {
         bind is retried until it lands. The result is not needed here —
         `remoteListenerBoundAddress()` below reads it back once it lands,
         exactly as `AppInfo` reads the receiver's own `boundHost` rather than
-        the promise `hooks.start()` returned.
+        the promise `hooks.start()` returned. HIVE-265: not before the licence is anything but `unlicensed`.
       */
-      onShutdown(bindUntilBound(startRemoteListener));
+      startWhenLicensed(() => onShutdown(bindUntilBound(startRemoteListener)), licence, onLicenceChange);
       /*
         Held in a module-level binding, not discarded (HIVE-142 review, I2).
         Inside `createServerTray`, the only remaining references form a
