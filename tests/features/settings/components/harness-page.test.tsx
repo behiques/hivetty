@@ -104,7 +104,7 @@ describe('HarnessPage (HIVE-376)', () => {
 
   it('names the server it is attached to', () => {
     renderPage('codex', { server: 'mac-mini' });
-    expect(screen.getByText(/On mac-mini/)).toBeInTheDocument();
+    expect(screen.getByText(/On mac-mini\./)).toBeInTheDocument();
   });
 
   it('the switch writes sessions, and is disabled when last on', async () => {
