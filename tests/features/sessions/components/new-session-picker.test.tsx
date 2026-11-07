@@ -1123,7 +1123,7 @@ describe('NewSessionPicker and the CLIs on this machine (HIVE-375)', () => {
     expect(await screen.findByRole('radio', { name: 'Codex' })).toBeChecked();
     const copilot = screen.getByRole('radio', { name: /^Copilot: / });
     expect(copilot).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByText("Copilot isn't available: `copilot` was not found on PATH.")).toBeInTheDocument();
+    expect(copilot).toHaveAttribute('title', "Copilot isn't available: `copilot` was not found on PATH.");
 
     await user.click(copilot);
     expect(screen.getByRole('radio', { name: 'Codex' })).toBeChecked();

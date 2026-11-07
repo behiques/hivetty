@@ -18,7 +18,7 @@ const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -
  * stop, arrows choose as they move and wrap, Home and End jump to the ends.
  *
  * An unavailable CLI (HIVE-375: missing, or turned off in Settings) stays drawn, dimmed, with its reason as its
- * name; a click on it does nothing and the keys step past it.
+ * name and its hover hint; a click on it does nothing and the keys step past it.
  */
 export function CliDock({
   value,
@@ -59,7 +59,7 @@ export function CliDock({
               aria-checked={selected}
               aria-label={label}
               aria-disabled={reason === undefined ? undefined : true}
-              title={label}
+              title={reason === undefined ? label : `${CLI_NAMES[cli]} isn't available: ${reason}`}
               tabIndex={selected ? 0 : -1}
               onClick={() => {
                 if (reason === undefined) onChange(cli);
@@ -107,11 +107,6 @@ export function CliDock({
           {caption}
         </span>
       )}
-      {HARNESS_IDS.filter((cli) => unavailable[cli] !== undefined).map((cli) => (
-        <span key={cli} className="max-w-[380px] text-center text-ui-sm text-subtle">
-          {`${CLI_NAMES[cli]} isn't available: ${unavailable[cli]!}`}
-        </span>
-      ))}
     </div>
   );
 }
