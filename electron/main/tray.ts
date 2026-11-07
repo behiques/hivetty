@@ -8,8 +8,10 @@ import {
   type NativeImage,
 } from 'electron';
 
+import type { AccountState } from '@shared/account-contract';
 import { APP_NAME } from '@shared/app-name';
 import type { ServerDevice } from '@shared/config-contract';
+import type { LicenceState } from '@shared/licence-contract';
 
 import { trayIconPath } from './app-icon';
 
@@ -78,6 +80,15 @@ interface TrayDeps {
    * indistinguishable from "still starting".
    */
   bindError: () => string | null;
+  /** HIVE-265: what the menu is for. Getters, read on every open, like `devices`. */
+  licence: () => LicenceState;
+  account: () => AccountState;
+  /** The lapse's census, counted. */
+  paused: () => { sessions: number; agents: number };
+  /** Choose a plan…: the plan page, signed in, and the purchase watch. */
+  onChoosePlan: () => void;
+  /** Retry: renew now. */
+  onRetry: () => void;
 }
 
 /**
@@ -101,6 +112,26 @@ function autoPairingName(now: Date = new Date()): string {
  * that the bound address renders, without booting Electron at all.
  */
 export function buildTrayTemplate(deps: TrayDeps): MenuItemConstructorOptions[] {
+  const state = deps.licence();
+  const signedIn = deps.account().kind === 'signed-in';
+  const quit: MenuItemConstructorOptions = { label: 'Quit', role: 'quit' };
+  const separator: MenuItemConstructorOptions = { type: 'separator' };
+  const count = (n: number, one: string): string => `${String(n)} ${one}${n === 1 ? '' : 's'}`;
+
+  // HIVE-265: a machine with no lease serves nothing (startWhenLicensed); the way out is the console's gate or the plan page.
+  if (state.kind === 'unlicensed') {
+    return [
+      { label: signedIn ? 'No licence' : 'Not signed in', enabled: false },
+      { label: 'Not serving', enabled: false },
+      separator,
+      signedIn
+        ? { label: 'Choose a plan…', click: () => deps.onChoosePlan() }
+        : { label: 'Sign in…', click: () => deps.onOpenConsole() },
+      separator,
+      quit,
+    ];
+  }
+
   const devices = deps.devices();
 
   const pairedSubmenu: MenuItemConstructorOptions[] =
@@ -160,6 +191,41 @@ export function buildTrayTemplate(deps: TrayDeps): MenuItemConstructorOptions[] 
 
   const address = deps.boundAddress();
   const bindError = deps.bindError();
+  /*
+    Three distinguishable states, not two (HIVE-142 review, I3): a bind
+    that failed (port conflict, or a `bind.host` that does not resolve to
+    a local interface yet — Tailscale not up) used to render the exact
+    same "Not yet listening" a socket that is merely still starting does,
+    which makes the two indistinguishable on an unattended machine with
+    nobody to notice the difference except by symptom.
+  */
+  const serving: MenuItemConstructorOptions = {
+    label:
+      address !== null
+        ? `Serving ${address}`
+        : bindError !== null
+          ? `Not serving — ${bindError}`
+          : 'Not yet listening',
+    enabled: false,
+  };
+
+  // HIVE-265: a lapse keeps the listener up, so clients see it; the tray offers the ways back.
+  if (state.kind === 'lapsed') {
+    const paused = deps.paused();
+    return [
+      { label: 'Licence lapsed', enabled: false },
+      ...(paused.sessions + paused.agents > 0
+        ? [{ label: `${count(paused.sessions, 'session')}, ${count(paused.agents, 'agent')} paused`, enabled: false }]
+        : []),
+      serving,
+      separator,
+      { label: 'Choose a plan…', click: () => deps.onChoosePlan() },
+      { label: 'Sign in again…', click: () => deps.onOpenConsole() },
+      { label: 'Retry', click: () => deps.onRetry() },
+      separator,
+      quit,
+    ];
+  }
 
   return [
     {
@@ -208,27 +274,11 @@ export function buildTrayTemplate(deps: TrayDeps): MenuItemConstructorOptions[] 
       label: `Paired devices (${devices.length})`,
       submenu: pairedSubmenu,
     },
-    { type: 'separator' },
-    {
-      /*
-        Three distinguishable states, not two (HIVE-142 review, I3): a bind
-        that failed (port conflict, or a `bind.host` that does not resolve to
-        a local interface yet — Tailscale not up) used to render the exact
-        same "Not yet listening" a socket that is merely still starting does,
-        which makes the two indistinguishable on an unattended machine with
-        nobody to notice the difference except by symptom.
-      */
-      label:
-        address !== null
-          ? `Serving ${address}`
-          : bindError !== null
-            ? `Not serving — ${bindError}`
-            : 'Not yet listening',
-      enabled: false,
-    },
+    separator,
+    serving,
     { label: `Open ${APP_NAME}`, click: () => deps.onOpenConsole() },
-    { type: 'separator' },
-    { label: 'Quit', role: 'quit' },
+    separator,
+    quit,
   ];
 }
 

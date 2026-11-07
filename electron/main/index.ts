@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { app, dialog, net, powerMonitor, powerSaveBlocker, safeStorage, shell } from 'electron';
 
 import { APP_NAME, DEV_USER_DATA_NAME } from '@shared/app-name';
+import { UPGRADE_PATH } from '@shared/entitlement';
 import { CH } from '@shared/ipc-contract';
 
 import { applyDevDockIcon } from './app-icon';
@@ -21,7 +22,7 @@ import {
 } from './ipc';
 import { createWindowBroadcaster } from './ipc/broadcaster';
 import { registerIpc, switchIpcMode } from './ipc/router';
-import { licence, onLicenceChange, runAccountCommand, startLicence } from './licence';
+import { ACCOUNT_CALLS, LICENCE_CALLS, licence, onLicenceChange, runAccountCommand, startLicence } from './licence';
 import { installDeepLinks } from './licence/deep-link';
 import { startWhenLicensed } from './licence/serve-gate';
 import { registerLifecycle } from './lifecycle';
@@ -471,6 +472,18 @@ if (!app.requestSingleInstanceLock()) {
         // The cause of a bind failure, for the same reason (HIVE-142
         // review, I3).
         bindError: remoteListenerBindError,
+        // HIVE-265: the tray's not-signed-in, no-licence and lapsed menus. The console `onOpenConsole` opens shows the gate.
+        licence,
+        account: () => ACCOUNT_CALLS[CH.accountState](),
+        paused: () => {
+          const { sessions, agents } = LICENCE_CALLS[CH.licencePaused]();
+          return { sessions: sessions.length, agents: agents.length };
+        },
+        onChoosePlan: () => {
+          void ACCOUNT_CALLS[CH.accountOpenWeb](UPGRADE_PATH);
+          LICENCE_CALLS[CH.licenceWatchPurchase](true);
+        },
+        onRetry: () => void LICENCE_CALLS[CH.licenceRefresh](),
       });
     }
   });

@@ -3,7 +3,9 @@ import { fileURLToPath } from 'node:url';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { AccountState } from '../../../electron/shared/account-contract';
 import type { ServerDevice } from '../../../electron/shared/config-contract';
+import type { LicenceState } from '../../../electron/shared/licence-contract';
 
 /**
  * The server-mode tray's content and wiring (HIVE-142).
@@ -92,6 +94,9 @@ function makeDevices(): ServerDevice[] {
   ];
 }
 
+const LICENSED: LicenceState = { kind: 'licensed', plan: 'team', features: [], limits: {}, exp: 2e9, iat: 1.9e9 };
+const SIGNED_IN: AccountState = { kind: 'signed-in', email: 'a@b.c', name: 'A', deviceId: 'dev_1' };
+
 type PairAttempt = { token: string; deviceId: string } | { error: string };
 type RevokeAttempt = { revoked: true } | { error: string };
 
@@ -101,8 +106,16 @@ function makeDeps(overrides: {
   bindError?: () => string | null;
   onPair?: (name: string) => PairAttempt;
   onRevoke?: (name: string) => RevokeAttempt;
+  licence?: () => LicenceState;
+  account?: () => AccountState;
+  paused?: () => { sessions: number; agents: number };
 } = {}) {
   return {
+    licence: overrides.licence ?? ((): LicenceState => LICENSED),
+    account: overrides.account ?? ((): AccountState => SIGNED_IN),
+    paused: overrides.paused ?? (() => ({ sessions: 0, agents: 0 })),
+    onChoosePlan: vi.fn(),
+    onRetry: vi.fn(),
     devices: overrides.devices ?? (() => makeDevices()),
     onPair: vi.fn(
       overrides.onPair ??
@@ -396,6 +409,79 @@ describe('buildTrayTemplate', () => {
     for (const call of showMessageBox.mock.calls) {
       expect(call).toHaveLength(1);
     }
+  });
+});
+
+describe('the licence states (HIVE-265)', () => {
+  const labels = (t: MenuItem[]) => t.filter((i) => (i as { type?: string }).type !== 'separator').map((i) => i.label);
+  const byLabel = (t: MenuItem[], label: string) => t.find((i) => i.label === label)!;
+
+  it('never signed in: "Not signed in", "Not serving", Sign in… opens the console, Quit', () => {
+    const d = makeDeps({ licence: () => ({ kind: 'unlicensed' }), account: () => ({ kind: 'signed-out' }) });
+    const t = buildTrayTemplate(d) as MenuItem[];
+    expect(labels(t)).toEqual(['Not signed in', 'Not serving', 'Sign in…', 'Quit']);
+    expect(byLabel(t, 'Not signed in').enabled).toBe(false);
+    expect(byLabel(t, 'Not serving').enabled).toBe(false);
+    expect(byLabel(t, 'Quit').role).toBe('quit');
+    byLabel(t, 'Sign in…').click!();
+    expect(d.onOpenConsole).toHaveBeenCalled();
+  });
+
+  it('signed in with no lease: "No licence", Choose a plan…', () => {
+    const d = makeDeps({ licence: () => ({ kind: 'unlicensed' }) });
+    const t = buildTrayTemplate(d) as MenuItem[];
+    expect(labels(t)).toEqual(['No licence', 'Not serving', 'Choose a plan…', 'Quit']);
+    byLabel(t, 'Choose a plan…').click!();
+    expect(d.onChoosePlan).toHaveBeenCalled();
+  });
+
+  it('lapsed: the counts, the serving line, Choose a plan…, Sign in again…, Retry, Quit', () => {
+    const d = makeDeps({
+      licence: () => ({ kind: 'lapsed', reason: 'trial_ended' }),
+      paused: () => ({ sessions: 3, agents: 1 }),
+      boundAddress: () => '100.64.0.7:7420',
+    });
+    const t = buildTrayTemplate(d) as MenuItem[];
+    expect(labels(t)).toEqual([
+      'Licence lapsed',
+      '3 sessions, 1 agent paused',
+      'Serving 100.64.0.7:7420',
+      'Choose a plan…',
+      'Sign in again…',
+      'Retry',
+      'Quit',
+    ]);
+    byLabel(t, 'Retry').click!();
+    expect(d.onRetry).toHaveBeenCalled();
+    byLabel(t, 'Sign in again…').click!();
+    expect(d.onOpenConsole).toHaveBeenCalled();
+    byLabel(t, 'Choose a plan…').click!();
+    expect(d.onChoosePlan).toHaveBeenCalled();
+  });
+
+  it('lapsed with nothing paused: no counts line, and a bind error still shows on the serving line', () => {
+    const t = buildTrayTemplate(
+      makeDeps({
+        licence: () => ({ kind: 'lapsed', reason: 'offline' }),
+        boundAddress: () => null,
+        bindError: () => 'EADDRINUSE',
+      }),
+    ) as MenuItem[];
+    expect(labels(t)).toEqual(['Licence lapsed', 'Not serving — EADDRINUSE', 'Choose a plan…', 'Sign in again…', 'Retry', 'Quit']);
+  });
+
+  it('lapsed with one session and two agents: singular and plural', () => {
+    const t = buildTrayTemplate(
+      makeDeps({ licence: () => ({ kind: 'lapsed', reason: 'offline' }), paused: () => ({ sessions: 1, agents: 2 }) }),
+    ) as MenuItem[];
+    expect(labels(t)).toContain('1 session, 2 agents paused');
+  });
+
+  it('grace keeps today\'s menu', () => {
+    const t = buildTrayTemplate(
+      makeDeps({ licence: () => ({ ...(LICENSED as Extract<LicenceState, { kind: 'licensed' }>), kind: 'grace' }) }),
+    ) as MenuItem[];
+    expect(labels(t)[0]).toBe('Pair a device…');
   });
 });
 
