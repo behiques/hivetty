@@ -8,13 +8,21 @@ import { useApplyModeChange } from '@stores/hive-store';
 export function HostLapsed({ serverName }: { serverName: string }) {
   const applyModeChange = useApplyModeChange();
   const [leaving, setLeaving] = useState(false);
+  const [failed, setFailed] = useState(false);
   const disconnect = (): void => {
     setLeaving(true);
-    void setRemoteConfig({ mode: 'local' }).then(({ changed }) => {
-      setLeaving(false);
-      // As server-mode-group's handleDetach: coming back to this machine clears the server's fleet.
-      if (changed) applyModeChange(changed);
-    });
+    setFailed(false);
+    void setRemoteConfig({ mode: 'local' }).then(
+      ({ changed }) => {
+        setLeaving(false);
+        // As server-mode-group's handleDetach: coming back to this machine clears the server's fleet.
+        if (changed) applyModeChange(changed);
+      },
+      () => {
+        setLeaving(false);
+        setFailed(true);
+      },
+    );
   };
   return (
     <div className="flex w-full max-w-[460px] flex-col gap-4 rounded-xl border border-border bg-panel p-6">
@@ -25,10 +33,11 @@ export function HostLapsed({ serverName }: { serverName: string }) {
           <p className="text-control text-muted">Its sessions are paused.</p>
         </div>
       </div>
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1.5">
         <Button pending={leaving} disabled={leaving} onClick={disconnect}>
           Disconnect
         </Button>
+        {failed ? <p className="text-ui-sm text-red">Couldn&apos;t disconnect. Try again.</p> : null}
       </div>
     </div>
   );

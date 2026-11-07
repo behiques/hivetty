@@ -28,4 +28,14 @@ describe('HostLapsed (HIVE-265)', () => {
     expect(setRemoteConfig).toHaveBeenCalled();
     expect(applyModeChange).not.toHaveBeenCalled();
   });
+
+  it('a rejected detach re-enables Disconnect and says it failed', async () => {
+    setRemoteConfig.mockRejectedValue(new Error('ipc down'));
+    applyModeChange.mockClear();
+    render(<HostLapsed serverName="studio-mac" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+    expect(await screen.findByText("Couldn't disconnect. Try again.")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeEnabled();
+    expect(applyModeChange).not.toHaveBeenCalled();
+  });
 });
