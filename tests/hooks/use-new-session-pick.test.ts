@@ -7,7 +7,23 @@ import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config
 import { type CliDetection, type CliModel, COPILOT_MODELS, resolveClis } from '@shared/cli-contract';
 import { type ConfigSnapshot, emptySnapshot, type ProjectConfig } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
+import type { LicenceState } from '@shared/licence-contract';
 import { useUiStore } from '@stores/ui-store';
+
+let locks: { licence: LicenceState | null; settled: boolean } = { licence: null, settled: true };
+vi.mock('@hooks/use-licence-locks', () => ({ useLicenceLocks: () => locks }));
+const SOLO = {
+  kind: 'licensed',
+  plan: 'solo',
+  features: ['cli.codex'],
+  limits: {},
+  exp: 2_000_000_000,
+  iat: 1_800_000_000,
+} as LicenceState;
+
+beforeEach(() => {
+  locks = { licence: null, settled: true };
+});
 
 const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolve(null));
 vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels(), lastCodexModels: () => undefined }));
@@ -209,5 +225,30 @@ describe('useNewSessionPick for a project (HIVE-378)', () => {
     setProjectConfigForTest({ ...emptySnapshot('/tmp/config.json'), projects: [project('hive', 'hivetty', 'codex')] });
     const { result } = renderHook(() => useNewSessionPick());
     await waitFor(() => expect(result.current.startFor('hive')).toMatchObject({ cli: 'codex', model: 'gpt-6.1-sol' }));
+  });
+});
+
+describe('useNewSessionPick: the plan lock (HIVE-332)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+    resetProjectConfig();
+    lastDetection = null;
+    detect.mockReset().mockResolvedValue(null);
+    codexModels.mockReset().mockResolvedValue([SOL, LUNA]);
+  });
+
+  it('skips a plan-locked default and is not ready until the licence is read', async () => {
+    setProjectConfigForTest({ ...emptySnapshot('/tmp/config.json'), sessionsDefaultCli: 'copilot' });
+    locks = { licence: null, settled: false };
+    const { result, rerender } = renderHook(() => useNewSessionPick());
+    expect(result.current.ready).toBe(false);
+    locks = { licence: SOLO, settled: true };
+    rerender();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.cli).toBe('claude-code');
+    expect(result.current.skipped).toEqual([
+      { cli: 'copilot', source: 'yours', reason: 'Copilot is in Team and above' },
+    ]);
+    expect(result.current.availability.copilot).toMatchObject({ ok: false, plan: 'Team' });
   });
 });
