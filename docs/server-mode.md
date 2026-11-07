@@ -332,7 +332,7 @@ A server serves only once it holds a licence (HIVE-265).
 - **Licensed, or in grace:** today's menu.
 - **Lapsed:** the listener stays up, so attached clients see the lapse instead of a
   dropped connection. The menu says **Licence lapsed**, how many sessions and agents
-  the lapse paused, and the serving line, and offers **Choose a plan…**, **Sign in
+  the lapse paused (when any are), and the serving line, and offers **Choose a plan…**, **Sign in
   again…** and **Retry** (renew now).
 
 An attached client whose server has lapsed draws "*server*'s licence has lapsed" and
