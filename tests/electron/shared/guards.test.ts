@@ -2212,6 +2212,13 @@ describe('parseSetCliRequest (HIVE-376)', () => {
     expect(() => parseSetCliRequest({ cli: 'codex', command: 3 })).toThrow();
     expect(() => parseSetCliRequest({ cli: 'codex', agents: {} })).toThrow();
   });
+
+  it('takes installSkills for codex only, as a boolean (HIVE-372)', () => {
+    expect(parseSetCliRequest({ cli: 'codex', installSkills: true })).toEqual({ cli: 'codex', installSkills: true });
+    expect(parseSetCliRequest({ cli: 'codex', installSkills: false })).toEqual({ cli: 'codex', installSkills: false });
+    expect(() => parseSetCliRequest({ cli: 'copilot', installSkills: true })).toThrow();
+    expect(() => parseSetCliRequest({ cli: 'codex', installSkills: 'yes' })).toThrow();
+  });
 });
 
 describe('parseDiagnoseCommandRequest cli (HIVE-376)', () => {

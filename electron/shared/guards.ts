@@ -1907,7 +1907,7 @@ export function parseSetCliSessionsRequest(input: unknown): SetCliSessionsReques
 
 /** `config:set-cli` (HIVE-376). An empty command clears it; claude-code takes no command. */
 export function parseSetCliRequest(input: unknown): SetCliRequest {
-  const raw = assertShape(input, ['cli'], 'setCli', ['command', 'sessionModel', 'sessionEffort']);
+  const raw = assertShape(input, ['cli'], 'setCli', ['command', 'sessionModel', 'sessionEffort', 'installSkills']);
   const cli = assertOneOf(raw.cli, HARNESS_IDS, 'setCli.cli');
   const out: SetCliRequest = { cli };
   if (raw.command !== undefined) {
@@ -1925,6 +1925,11 @@ export function parseSetCliRequest(input: unknown): SetCliRequest {
       raw.sessionEffort === null
         ? null
         : assertOneOf(raw.sessionEffort, CLI_VOCAB[cli].efforts, 'setCli.sessionEffort');
+  }
+  if (raw.installSkills !== undefined) {
+    if (cli !== 'codex') return fail('setCli.installSkills: only codex installs HiveTTY’s skills');
+    if (typeof raw.installSkills !== 'boolean') return fail('setCli.installSkills: expected a boolean');
+    out.installSkills = raw.installSkills;
   }
   return out;
 }
