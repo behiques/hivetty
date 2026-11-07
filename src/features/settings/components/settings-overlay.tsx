@@ -31,7 +31,7 @@ import { ShellSection } from '@features/settings/components/shell-section';
 import { SkillsSection } from '@features/settings/components/skills-section';
 import { TicketWorkflowSection } from '@features/settings/components/ticket-workflow-section';
 import { UpdatesAboutSection } from '@features/settings/components/updates-about-section';
-import { useLicence } from '@hooks/use-licence';
+import { useLicenceLocks } from '@hooks/use-licence-locks';
 import { entitlementOf } from '@shared/entitlement';
 import type { LicenceState } from '@shared/licence-contract';
 import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
@@ -83,7 +83,7 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
 export type SettingsPane = {
   id: SettingsSection;
   label: string;
-  /** HIVE-268: the lease feature this pane needs. A pane the plan lacks is shown locked, never hidden. HIVE-332 sets the CLIs'. */
+  /** HIVE-268: the lease feature this pane needs. A pane the plan lacks is shown locked, never hidden. The CLIs carry theirs (HIVE-332). */
   feature?: string;
 };
 
@@ -95,8 +95,8 @@ export const SETTINGS_GROUPS: SettingsGroups = [
     panes: [
       { id: 'harnesses-overview', label: 'Overview' },
       { id: 'claude-code', label: 'Claude Code' },
-      { id: 'codex', label: 'Codex' },
-      { id: 'copilot', label: 'Copilot' },
+      { id: 'codex', label: 'Codex', feature: 'cli.codex' },
+      { id: 'copilot', label: 'Copilot', feature: 'cli.copilot' },
       { id: 'shell', label: 'Runtime' },
       { id: 'containers', label: 'Containers' },
     ],
@@ -242,7 +242,8 @@ export function paneLock(
 
 /** `groups` is a test seam for a gated pane; the app always renders {@link SETTINGS_GROUPS}. */
 export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: SettingsGroups } = {}) {
-  const licence = useLicence();
+  // HIVE-332: `null` locks nothing (the gate off, or the licence unread); main refuses regardless.
+  const { licence } = useLicenceLocks();
   const { closeSettings, clearSettingsSection } = useSettingsActions();
 
   /**
@@ -283,7 +284,7 @@ export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: Setting
   }, [requested, clearSettingsSection]);
   const Pane = PANES[section];
   const entry = groups.flatMap((g) => g.panes).find((pane) => pane.id === section);
-  const openLock = paneLock(entry?.feature, licence);
+  const openLock = licence === null ? null : paneLock(entry?.feature, licence);
 
   const navRef = useRef<HTMLElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
@@ -448,7 +449,7 @@ export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: Setting
                   </span>
                   {group.panes.map((pane) => {
                     const active = pane.id === section;
-                    const lock = paneLock(pane.feature, licence);
+                    const lock = licence === null ? null : paneLock(pane.feature, licence);
 
                     return (
                       <button

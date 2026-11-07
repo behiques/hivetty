@@ -1,8 +1,9 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { emptySnapshot } from '@shared/config-contract';
+import type { LicenceState } from '@shared/licence-contract';
 
 import {
   SETTINGS_GROUPS,
@@ -13,6 +14,17 @@ import {
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
+
+let locks: { licence: LicenceState | null; settled: boolean } = { licence: null, settled: true };
+vi.mock('@hooks/use-licence-locks', () => ({ useLicenceLocks: () => locks }));
+const SOLO = {
+  kind: 'licensed',
+  plan: 'solo',
+  features: ['cli.codex'],
+  limits: {},
+  exp: 2_000_000_000,
+  iat: 1_800_000_000,
+} as LicenceState;
 
 /**
  * The settings overlay shell (story 101).
@@ -530,6 +542,10 @@ describe('escapeIsClaimed', () => {
 });
 
 describe('Account › Plan & licence (HIVE-268)', () => {
+  beforeEach(() => {
+    locks = { licence: null, settled: true };
+  });
+
   it('opens from the nav between Machines and General', async () => {
     const user = userEvent.setup();
     render(<SettingsOverlay />);
@@ -539,24 +555,30 @@ describe('Account › Plan & licence (HIVE-268)', () => {
     expect(screen.getByText('Sign in to see your plan.')).toBeInTheDocument();
   });
 
-  it('no default pane is gated yet (HIVE-332 sets the CLIs)', () => {
-    expect(SETTINGS_GROUPS.flatMap((g) => g.panes).filter((p) => p.feature !== undefined)).toEqual([]);
+  it('the Codex and Copilot panes carry their lease features (HIVE-332)', () => {
+    const panes = SETTINGS_GROUPS.flatMap((g) => g.panes).filter((p) => p.feature !== undefined);
+    expect(panes.map((p) => [p.id, p.feature])).toEqual([
+      ['codex', 'cli.codex'],
+      ['copilot', 'cli.copilot'],
+    ]);
   });
 
-  it('a locked pane shows the lock and plan chip in the nav, and the Lock instead of its controls', async () => {
+  it('on a Solo lease the Copilot pane shows Locked: Team and the Lock, and Codex is open (HIVE-332)', async () => {
+    locks = { licence: SOLO, settled: true };
     const user = userEvent.setup();
-    const groups = SETTINGS_GROUPS.map((g) => ({
-      ...g,
-      panes: g.panes.map((p) => (p.id === 'copilot' ? { ...p, feature: 'cli.copilot' } : p)),
-    }));
-    render(<SettingsOverlay groups={groups} />);
+    render(<SettingsOverlay />);
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
-    const row = within(nav).getByRole('button', { name: /Copilot/ });
+    expect(within(nav.querySelector('[data-pane="codex"]') as HTMLElement).queryByLabelText(/Locked/)).toBeNull();
+    const row = nav.querySelector('[data-pane="copilot"]') as HTMLElement;
     expect(within(row).getByLabelText('Locked: Team')).toBeInTheDocument();
     await user.click(row);
-    expect(screen.getByRole('note', { name: 'Sign in to use Copilot' })).toBeInTheDocument();
+    expect(screen.getByRole('note', { name: 'Copilot is in Team and above' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
-    expect(screen.queryByText('Sign-in')).toBeNull();
+  });
+
+  it('locks no pane while the licence locks nothing (gate off, unread) (HIVE-332)', () => {
+    render(<SettingsOverlay />);
+    expect(screen.queryByLabelText(/Locked/)).toBeNull();
   });
 });
 
