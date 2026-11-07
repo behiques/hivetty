@@ -52,7 +52,9 @@ export function runOneShot(
     case 'devices':
       return runDevices(io);
     case 'update':
-      // `index.ts` routes this asynchronous command through `runHeadlessUpdate`.
+    case 'login':
+    case 'logout':
+      // `index.ts` routes these asynchronous commands itself, after `whenReady`.
       return 1;
     case 'usage':
       io.print(invocation.message);

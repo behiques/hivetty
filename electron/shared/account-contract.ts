@@ -14,3 +14,12 @@ export type SignInResult = { ok: true } | { error: string };
 
 /** `account:open-web` (HIVE-268): opens a page of the cloud's site in the browser, already signed in. */
 export type OpenWebResult = { ok: true } | { error: string };
+
+/** `account:device-code` (HIVE-266): what the person types, and where, for a device-flow sign-in. */
+export interface DeviceCode {
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete: string;
+  /** Seconds the code lives. */
+  expiresIn: number;
+}

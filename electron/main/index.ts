@@ -1,3 +1,4 @@
+import { watch } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { app, dialog, net, powerMonitor, powerSaveBlocker, safeStorage, shell } from 'electron';
@@ -20,7 +21,7 @@ import {
 } from './ipc';
 import { createWindowBroadcaster } from './ipc/broadcaster';
 import { registerIpc, switchIpcMode } from './ipc/router';
-import { startLicence } from './licence';
+import { runAccountCommand, startLicence } from './licence';
 import { installDeepLinks } from './licence/deep-link';
 import { registerLifecycle } from './lifecycle';
 import { bindUntilBound } from './server/bind-retry';
@@ -121,6 +122,32 @@ if (invocation.kind === 'update') {
       console.log(`[hive] could not update: ${cause instanceof Error ? cause.message : String(cause)}`);
       app.exit(1);
     });
+} else if (invocation.kind === 'login' || invocation.kind === 'logout') {
+  /*
+    HIVE-266. Like --update: after whenReady (safeStorage needs it), no window, before the single-instance lock,
+    so it runs beside a served instance, which notices account.bin change on its own (fs.watch + 30 s).
+  */
+  const controller = new AbortController();
+  process.once('SIGINT', () => controller.abort());
+  void app
+    .whenReady()
+    .then(() =>
+      runAccountCommand(invocation, {
+        app,
+        safeStorage,
+        cloudUrl: getConfig().account?.cloudUrl,
+        env: process.env,
+        fetch: (input, init) => net.fetch(input, init),
+        print: (line) => console.log(line),
+        signal: controller.signal,
+      }),
+    )
+    .then((code) => app.exit(code))
+    .catch((cause: unknown) => {
+      const verb = invocation.kind === 'login' ? 'sign in' : 'sign out';
+      console.log(`[hive] could not ${verb}: ${cause instanceof Error ? cause.message : String(cause)}`);
+      app.exit(2);
+    });
 } else if (invocation.kind !== 'app') {
   process.exit(runOneShot(invocation, fileBackedIo()));
 } else {
@@ -155,6 +182,13 @@ if (!app.requestSingleInstanceLock()) {
       broadcast: (state) => createWindowBroadcaster().emit(CH.accountChanged, state),
       broadcastLicence: (state) => createWindowBroadcaster().emit(CH.licenceChanged, state),
       onWake: (listener) => powerMonitor.on('resume', listener),
+      // HIVE-266: follow account.bin written by `hivetty --login`/`--logout` in another process.
+      watch: (dir, onChange) => {
+        const watcher = watch(dir, (_event, file) => onChange(file));
+        watcher.on('error', () => undefined);
+        return () => watcher.close();
+      },
+      broadcastDeviceCode: (code) => createWindowBroadcaster().emit(CH.accountDeviceCode, code),
     });
     deepLinks.attach((url) => void licence.handleCallback(url));
   });

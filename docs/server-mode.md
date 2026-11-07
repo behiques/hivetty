@@ -20,6 +20,7 @@ that the machine looks after itself.
 > - It needs automatic login plus a LaunchAgent (the Keychain), `pmset autorestart`, and
 >   Tailscale with key expiry off.
 > - `hivetty --pair`, `--devices` and `--revoke` manage device tokens; only hashes are stored.
+> - `hivetty --login` and `--logout` sign the server in and out of HiveTTY over SSH, with a code.
 > - The hook receiver stays on loopback. Exposure rests on Tailscale first, then tokens.
 
 <picture>
@@ -33,6 +34,7 @@ that the machine looks after itself.
 [2. Write the server block](#2-write-the-server-block) ·
 [3. Start it at login](#3-start-it-at-login-keep-it-running) ·
 [4. Pair each client](#4-pair-each-client) ·
+[Sign the server in](#sign-the-server-in) ·
 [5. Check it survives a reboot](#5-check-it-survives-a-reboot) ·
 [Updates](#updates) ·
 [What an attached device can do](#what-an-attached-device-can-do) ·
@@ -264,6 +266,60 @@ reconnects by itself. A terminal survives the disconnect: the client names the
 last output it saw and the server replays the rest, or marks a gap when its
 buffer no longer reaches back that far.
 
+## Sign the server in
+
+A server has no one at its screen to finish a browser sign-in, so it signs in with a
+code you approve on any other device. Over SSH:
+
+```sh
+hivetty --login
+```
+
+```text
+To sign in this machine, open:
+  https://api.hivetty.dev/device
+and enter the code:  WDJB-MJHT
+Or open: https://api.hivetty.dev/device?code=WDJB-MJHT
+Waiting… (expires in 10 minutes, Ctrl-C to cancel)
+Signed in as ana@example.com on studio-mac · plan team
+```
+
+Open the link on your laptop or phone, sign in there, and approve the code. The
+command waits for the approval, stores the account in the server's keychain, and
+fetches the plan. When the plan cannot be fetched, it still signs in and says
+`plan pending (the app will fetch it)`; a refused plan reads `no plan (<reason>)`.
+
+The command runs while the server is running, and the running server notices the
+new account at once through a watch on its data folder, or within 30 seconds at the
+latest. There is no restart.
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | Signed in, or already signed in (nothing changed) |
+| 1 | The code was denied, or expired before it was approved |
+| 2 | HiveTTY could not be reached, or refused the request |
+| 3 | The keychain cannot store a sign-in; nothing was written. See [The keychain requirement](#the-keychain-requirement) |
+| 130 | Cancelled with Ctrl-C |
+
+An already signed-in server says who it is signed in as and stops. To sign in again,
+as the same account or another, add `--force`:
+
+```sh
+hivetty --login --force
+```
+
+`--force` reuses the server's Device, so the cloud keeps one Device for this Mac.
+
+To hand the server to someone else, sign it out first:
+
+```sh
+hivetty --logout
+```
+
+It revokes the server's sign-in (best effort, so it works offline too) and clears it
+from the keychain. The running server notices and locks its Pro features, as it would
+after signing out from Settings. It also exits 3 when the keychain cannot be opened.
+
 ## 5. Check it survives a reboot
 
 ```sh
@@ -437,4 +493,5 @@ bytes at normal flush sizes.
 | Jira or Slack shows signed out after a reboot | The login keychain is locked: automatic login is off, or the keychain password differs from the account password. |
 | Log says another server is already running for this config | Two copies started. Remove HiveTTY from Login Items; keep only the LaunchAgent. |
 | Server never updates | Something is always live. Check for a long-lived session or a busy agent schedule, or update by hand. |
+| `hivetty --login` exits 3 | The keychain is locked: nobody is logged in to the Mac's desktop. Log in once, in person or over Screen Sharing, so the login keychain unlocks, then run it again. See [The keychain requirement](#the-keychain-requirement). |
 | Menu-bar item shows the text "Hive" | The bundle is missing `Contents/Resources/tray/`. Reinstall. |

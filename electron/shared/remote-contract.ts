@@ -273,7 +273,9 @@ export const FRAME_KIND = {
   [CH.accountCancel]: 'call',
   [CH.accountSignOut]: 'call',
   [CH.accountOpenWeb]: 'call',
+  [CH.accountSignInCode]: 'call',
   [CH.accountChanged]: 'event',
+  [CH.accountDeviceCode]: 'event',
   [CH.licenceState]: 'call',
   [CH.licenceRefresh]: 'call',
   [CH.licenceWatchPurchase]: 'call',
@@ -601,7 +603,9 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.accountCancel]: 'mutate',
   [CH.accountSignOut]: 'execute',
   [CH.accountOpenWeb]: 'execute',
+  [CH.accountSignInCode]: 'execute',
   [CH.accountChanged]: 'read',
+  [CH.accountDeviceCode]: 'read',
   [CH.licenceState]: 'read',
   [CH.licenceRefresh]: 'execute',
   [CH.licenceWatchPurchase]: 'execute',
@@ -961,6 +965,8 @@ const PROCESS_LOCAL_REFUSALS = {
     "account:sign-out forgets the answering machine's own account. A server refuses to sign itself out on a peer's say-so; the asking machine signs itself out.",
   [CH.accountOpenWeb]:
     "account:open-web opens the answering machine's browser, signed in as the answering machine's account. A server refuses to open its own account's pages on a peer's say-so; the asking machine opens its own.",
+  [CH.accountSignInCode]:
+    "account:sign-in-code signs the answering machine in to HiveTTY with a code. A server refuses to start a sign-in for its own account on a peer's say-so; the asking machine signs itself in.",
   [CH.licenceState]:
     "licence:state describes the answering machine's own HiveTTY Pro licence. A server's answer would pass its licence off as the peer's, so the asking machine answers it and a server refuses it.",
   [CH.licenceRefresh]:
@@ -1001,7 +1007,12 @@ export function isProcessLocal(channel: string): boolean {
  * somewhere would push its own reconnect state down to every client, and each
  * client's header chip would start describing a socket it has no part in.
  */
-export const LOCAL_ONLY_EVENTS: readonly Channel[] = [CH.remoteLinkStatus, CH.accountChanged, CH.licenceChanged];
+export const LOCAL_ONLY_EVENTS: readonly Channel[] = [
+  CH.remoteLinkStatus,
+  CH.accountChanged,
+  CH.accountDeviceCode,
+  CH.licenceChanged,
+];
 
 /** Whether `channel` is a push this process raises about itself. */
 export function isLocalOnlyEvent(channel: string): boolean {

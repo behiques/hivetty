@@ -67,7 +67,7 @@ export function stringField(body: unknown, name: string): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
-function parseTokenResponse(body: unknown): TokenResponse | null {
+export function parseTokenResponse(body: unknown): TokenResponse | null {
   const accessToken = stringField(body, 'access_token');
   const refreshToken = stringField(body, 'refresh_token');
   const deviceId = stringField(body, 'device_id');

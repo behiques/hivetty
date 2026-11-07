@@ -164,3 +164,12 @@ describe('runOneShot --devices', () => {
     expect(lines.join('\n')).toMatch(/no devices/i);
   });
 });
+
+describe('runOneShot asynchronous commands', () => {
+  it.each([{ kind: 'update' }, { kind: 'login', force: false }, { kind: 'logout' }] as const)(
+    'returns 1 for %o, which index.ts routes itself',
+    (invocation) => {
+      expect(runOneShot(invocation, io().io)).toBe(1);
+    },
+  );
+});

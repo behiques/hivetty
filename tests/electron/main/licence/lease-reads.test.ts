@@ -4,10 +4,16 @@ import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-/** HIVE-268: every caller goes through `licence()`; only the licence module touches the stored lease. */
+/**
+ * HIVE-268: every caller goes through `licence()`; only the licence module touches the stored lease.
+ * HIVE-266: `account-command.ts` is `hivetty --login`, a one-shot with no `licence()` to ask; it verifies the first
+ * lease against this device before saving it, so the running app reads a lease it would have accepted itself.
+ */
 const ROOT = join(__dirname, '../../../..');
 const ALLOWED = new Set(
-  ['index.ts', 'lease.ts', 'licence-state.ts', 'verify.ts'].map((f) => `electron/main/licence/${f}`),
+  ['account-command.ts', 'index.ts', 'lease.ts', 'licence-state.ts', 'verify.ts'].map(
+    (f) => `electron/main/licence/${f}`,
+  ),
 );
 const NEEDLES = ['lease.jws', 'createLeaseFile', 'verifyLease'];
 

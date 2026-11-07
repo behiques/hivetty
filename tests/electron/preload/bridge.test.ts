@@ -997,6 +997,19 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.accountOpenWeb, '/account/plan');
   });
 
+  it('signInWithCode invokes account:sign-in-code (HIVE-266)', async () => {
+    await (account().signInWithCode as () => Promise<unknown>)();
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.accountSignInCode);
+  });
+
+  it('onDeviceCode hands the pushed code over, payload only (HIVE-266)', () => {
+    const callback = vi.fn();
+    const code = { userCode: 'WDJB-MJHT', verificationUri: 'https://c.test/device', verificationUriComplete: 'https://c.test/device?code=WDJB-MJHT', expiresIn: 600 };
+    (account().onDeviceCode as (cb: unknown) => () => void)(callback);
+    listeners.get(CH.accountDeviceCode)?.[0]?.({}, code);
+    expect(callback).toHaveBeenCalledWith(code);
+  });
+
   it('onChanged hands the pushed state over, payload only', () => {
     const callback = vi.fn();
     (account().onChanged as (cb: unknown) => () => void)(callback);

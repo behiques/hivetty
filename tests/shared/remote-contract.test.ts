@@ -81,7 +81,7 @@ const MAIN_ONLY: ReadonlyMap<string, FrameKind> = new Map([
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(184);
+    expect(entries).toHaveLength(186);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -170,11 +170,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 146 call, 6 notify and 32 event', () => {
+  it('splits 147 call, 6 notify and 33 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 146, notify: 6, event: 32 });
+    expect(tally).toEqual({ call: 147, notify: 6, event: 33 });
   });
 
   /**
@@ -188,7 +188,7 @@ describe('remote contract: frame kinds match the preload bridge', () => {
    * that forwarded only `EVENT_CHANNELS` would show an empty inbox on a busy
    * server, so the asymmetry is asserted rather than left to be rediscovered.
    */
-  it('covers EVENT_CHANNELS and the seven pushes it omits', () => {
+  it('covers EVENT_CHANNELS and the eight pushes it omits', () => {
     for (const channel of EVENT_CHANNELS) expect(frameKindOf(channel)).toBe('event');
 
     const listed: ReadonlySet<string> = new Set(EVENT_CHANNELS);
@@ -199,6 +199,8 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(pushed.filter((channel) => !listed.has(channel)).sort()).toEqual([
       // HIVE-264: local-only like remote:link-status; the account is this machine's own.
       'account:changed',
+      // HIVE-266: local-only too; the device-flow code is this machine's own sign-in.
+      'account:device-code',
       // HIVE-267: local-only too; the licence is this machine's own.
       'licence:changed',
       'notifications:dismissed',
@@ -232,7 +234,12 @@ describe('remote contract: frame kinds match the preload bridge', () => {
       expect(isLocalOnlyEvent(channel)).toBe(true);
     }
 
-    expect([...LOCAL_ONLY_EVENTS]).toEqual([CH.remoteLinkStatus, CH.accountChanged, CH.licenceChanged]);
+    expect([...LOCAL_ONLY_EVENTS]).toEqual([
+      CH.remoteLinkStatus,
+      CH.accountChanged,
+      CH.accountDeviceCode,
+      CH.licenceChanged,
+    ]);
     // The channels a server may genuinely push are not caught by it.
     expect(isLocalOnlyEvent(CH.ptyData)).toBe(false);
     expect(isLocalOnlyEvent(CH.notificationsNew)).toBe(false);
@@ -251,11 +258,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 184 as 74 read, 52 mutate and 58 execute', () => {
+  it('grades the 186 as 75 read, 52 mutate and 59 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 74, mutate: 52, execute: 58 });
+    expect(tally).toEqual({ read: 75, mutate: 52, execute: 59 });
   });
 
   /**
@@ -796,6 +803,7 @@ describe('PROCESS_LOCAL', () => {
         CH.accountCancel,
         CH.accountSignOut,
         CH.accountOpenWeb,
+        CH.accountSignInCode,
         CH.licenceState,
         CH.licenceRefresh,
         CH.licenceWatchPurchase,
@@ -970,5 +978,13 @@ describe('account channels (HIVE-264)', () => {
     expect(CH.accountOpenWeb).toBe('account:open-web');
     expect(frameKindOf(CH.accountOpenWeb)).toBe('call');
     expect(isProcessLocal(CH.accountOpenWeb)).toBe(true);
+  });
+
+  it('account:sign-in-code is a process-local call and account:device-code a local-only push (HIVE-266)', () => {
+    expect(CH.accountSignInCode).toBe('account:sign-in-code');
+    expect(frameKindOf(CH.accountSignInCode)).toBe('call');
+    expect(isProcessLocal(CH.accountSignInCode)).toBe(true);
+    expect(frameKindOf(CH.accountDeviceCode)).toBe('event');
+    expect(isLocalOnlyEvent(CH.accountDeviceCode)).toBe(true);
   });
 });

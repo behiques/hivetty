@@ -1,12 +1,13 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
 
-import type { AccountState, OpenWebResult, SignedOutReason, SignInResult } from '@shared/account-contract';
+import type { AccountState, DeviceCode, OpenWebResult, SignedOutReason, SignInResult } from '@shared/account-contract';
 
 import { isSafeExternalUrl } from '../external-links';
 
 import { type AccountStore, type DeviceKey, NO_ENCRYPTION, type StoredAccount } from './account-store';
 import { type Cloud, CloudError, stringField, type TokenResponse } from './cloud';
 import { parseCallback, redirectUriFor, type Scheme } from './deep-link';
+import { DeviceFlowError, type DeviceFlowFailure, type DeviceFlowInput } from './device-flow';
 
 /**
  * Signing in to the HiveTTY cloud (HIVE-264): PKCE in the system browser, the deep-link callback, and
@@ -28,6 +29,8 @@ export interface AuthClientDeps {
   randomBytes: (size: number) => Buffer;
   generateDeviceKey: () => DeviceKey;
   scheme: Scheme;
+  /** HIVE-266: the device flow, bound to this client's cloud. */
+  runDeviceFlow: (input: DeviceFlowInput) => Promise<TokenResponse>;
 }
 
 export interface AuthClient {
@@ -36,6 +39,8 @@ export interface AuthClient {
   /** At launch: a stored account is signed in at once, then refreshed. */
   start(): void;
   signIn(): Promise<SignInResult>;
+  /** HIVE-266: sign in with a code typed on another device. Resolves when the flow ends; the state follows. */
+  signInWithCode(opts: { onCode: (code: DeviceCode) => void; signal?: AbortSignal }): Promise<CodeSignInResult>;
   cancel(): void;
   handleCallback(url: string): Promise<void>;
   signOut(): Promise<void>;
@@ -48,7 +53,19 @@ export interface AuthClient {
    * `path` is `unknown` because it crosses IPC. Never throws: every failure is a sentence in `{ error }`.
    */
   openWeb(path: unknown): Promise<OpenWebResult>;
+  /** HIVE-266: re-read `account.bin` after another process (`hivetty --login`/`--logout`) wrote it. */
+  reload(): void;
 }
+
+export type CodeSignInResult = { ok: true } | { error: string; failure: DeviceFlowFailure | 'storage' };
+
+const FLOW_MESSAGES: Record<DeviceFlowFailure, string> = {
+  denied: 'The sign-in was denied.',
+  expired: 'The code expired before it was approved.',
+  network: "Couldn't reach HiveTTY.",
+  refused: 'HiveTTY refused the sign-in.',
+  aborted: 'Sign-in cancelled.',
+};
 
 /** The longest `next` path `openWeb` passes on. */
 export const OPEN_WEB_MAX_PATH = 2048;
@@ -97,6 +114,20 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
    */
   let activeExchange = 0;
   let exchangeSeq = 0;
+  /**
+   * HIVE-266: the refresh token this process last read or wrote. A different one in `account.bin` is another
+   * process's write (`--login --force` on the same Device and account), even when the identity is unchanged.
+   */
+  let knownRefreshToken: string | null = null;
+  /** A device-flow sign-in under way: the browser `pending`'s twin. */
+  let codeFlow: { controller: AbortController; restore: AccountState } | null = null;
+
+  const abortCodeFlow = (): void => {
+    if (!codeFlow) return;
+    const { controller } = codeFlow;
+    codeFlow = null; // first: the aborted call must not restore over whatever replaces it
+    controller.abort();
+  };
 
   const set = (next: AccountState): void => {
     current = next;
@@ -136,6 +167,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
     access = null;
     refreshing = null;
     backoffMs = BACKOFF_START_MS;
+    knownRefreshToken = null;
     store.clear();
   };
 
@@ -143,6 +175,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
   const signOutLocally = (why?: SignedOutReason, message?: string): void => {
     forget();
     clearPending();
+    abortCodeFlow();
     activeExchange = 0;
     set(signedOut(why, message));
   };
@@ -154,6 +187,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
   const dropAccount = (why?: SignedOutReason, message?: string): void => {
     forget();
     if (pending) pending.restore = signedOut(why, message);
+    else if (codeFlow) codeFlow.restore = signedOut(why, message);
     else if (!activeExchange) set(signedOut(why, message));
   };
 
@@ -167,6 +201,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
       name: response.user.name,
     };
     if (!store.write(account)) return null;
+    knownRefreshToken = account.refreshToken;
     access = { token: response.accessToken, expiresAt: Date.now() + response.expiresIn * 1000 };
     backoffMs = BACKOFF_START_MS;
     schedule(Math.max(0, response.expiresIn * 1000 - REFRESH_LEAD_MS));
@@ -176,6 +211,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
   /** A new sign-in that is open keeps the UI on signing-in; it returns to this account if cancelled. */
   const announce = (account: StoredAccount): void => {
     if (pending) pending.restore = signedInFrom(account);
+    else if (codeFlow) codeFlow.restore = signedInFrom(account);
     else set(signedInFrom(account));
   };
 
@@ -248,6 +284,7 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
     start() {
       const stored = store.read();
       if (!stored) return;
+      knownRefreshToken = stored.refreshToken;
       set(signedInFrom(stored));
       void refresh();
     },
@@ -255,8 +292,9 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
     async signIn() {
       if (!deps.encryptionAvailable()) return { error: NO_ENCRYPTION };
       const restore: AccountState =
-        pending?.restore ?? (current.kind === 'signed-in' ? current : { kind: 'signed-out' });
+        pending?.restore ?? codeFlow?.restore ?? (current.kind === 'signed-in' ? current : { kind: 'signed-out' });
       clearPending();
+      abortCodeFlow();
       const verifier = deps.randomBytes(32).toString('base64url');
       const state = deps.randomBytes(16).toString('base64url');
       const codeChallenge = createHash('sha256').update(verifier).digest('base64url');
@@ -283,10 +321,81 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
     },
 
     cancel() {
+      if (codeFlow) {
+        const { restore } = codeFlow;
+        abortCodeFlow();
+        set(restore);
+        return;
+      }
       if (!pending) return;
       const { restore } = pending;
       clearPending();
       set(restore);
+    },
+
+    async signInWithCode({ onCode, signal }) {
+      if (!deps.encryptionAvailable()) return { error: NO_ENCRYPTION, failure: 'storage' };
+      // Cancelled before it began: nothing to start, and nothing replaced.
+      if (signal?.aborted) return { error: FLOW_MESSAGES.aborted, failure: 'aborted' };
+      const restore: AccountState =
+        pending?.restore ?? codeFlow?.restore ?? (current.kind === 'signed-in' ? current : { kind: 'signed-out' });
+      clearPending();
+      abortCodeFlow();
+      const mine = { controller: new AbortController(), restore };
+      codeFlow = mine;
+      const onCallerAbort = (): void => mine.controller.abort();
+      signal?.addEventListener('abort', onCallerAbort, { once: true });
+      set({ kind: 'signing-in' });
+
+      const stored = store.read();
+      const deviceKey = stored?.deviceKey ?? deps.generateDeviceKey();
+      const { kty, crv, x } = deviceKey.publicJwk;
+      let response: TokenResponse;
+      try {
+        response = await deps.runDeviceFlow({
+          device: {
+            name: deps.hostname(),
+            publicKey: JSON.stringify({ kty, crv, x }),
+            ...(stored ? { id: stored.deviceId } : {}),
+          },
+          onCode,
+          signal: mine.controller.signal,
+        });
+      } catch (cause) {
+        const failure: DeviceFlowFailure = cause instanceof DeviceFlowError ? cause.kind : 'refused';
+        if (codeFlow === mine) {
+          codeFlow = null;
+          set(mine.restore);
+        }
+        return { error: FLOW_MESSAGES[failure], failure };
+      } finally {
+        signal?.removeEventListener('abort', onCallerAbort);
+      }
+      if (codeFlow !== mine) return { error: FLOW_MESSAGES.aborted, failure: 'aborted' };
+      codeFlow = null;
+      // Cancelled as the token arrived: the person asked to stop, so nothing is stored.
+      if (mine.controller.signal.aborted) {
+        set(mine.restore);
+        return { error: FLOW_MESSAGES.aborted, failure: 'aborted' };
+      }
+
+      // The same finish as handleCallback: let a refresh in flight land, then replace the account.
+      exchangeSeq += 1;
+      const attempt = exchangeSeq;
+      activeExchange = attempt;
+      if (refreshing) await refreshing;
+      if (activeExchange !== attempt) return { error: FLOW_MESSAGES.aborted, failure: 'aborted' };
+      activeExchange = 0;
+      generation += 1;
+      refreshing = null;
+      clearRefreshTimer();
+      const account = accept(response, deviceKey);
+      if (!account) {
+        signOutLocally('error', NO_ENCRYPTION);
+        return { error: NO_ENCRYPTION, failure: 'storage' };
+      }
+      announce(account);
+      return { ok: true };
     },
 
     async handleCallback(url) {
@@ -341,6 +450,30 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
       const stored = store.read();
       signOutLocally();
       if (stored) await cloud.revoke(stored.refreshToken).catch(() => undefined);
+    },
+
+    reload() {
+      // This process's own sign-in decides the outcome; the next reload sees the result. A refresh in flight
+      // does not: it belongs to the account being replaced, and the generation bump below drops its result.
+      if (pending || codeFlow || activeExchange) return;
+      const stored = store.read();
+      if (!stored) {
+        // Only a missing file is a sign-out: a null read with the file present is a keychain that would not open.
+        if (current.kind === 'signed-in' && !store.exists()) dropAccount();
+        return;
+      }
+      const sameAccount =
+        current.kind === 'signed-in' && current.deviceId === stored.deviceId && current.email === stored.email;
+      if (sameAccount && stored.refreshToken === knownRefreshToken) return;
+      // Another process's account, or a new token family for this one: what this process holds is stale.
+      generation += 1;
+      access = null;
+      refreshing = null; // the old token's refresh, if any, settles into nothing
+      clearRefreshTimer();
+      backoffMs = BACKOFF_START_MS;
+      knownRefreshToken = stored.refreshToken;
+      if (!sameAccount) set(signedInFrom(stored));
+      void refresh();
     },
 
     getAccessToken,

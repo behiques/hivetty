@@ -120,4 +120,30 @@ describe('parseInvocation', () => {
     const result = parseInvocation(packagedArgv('--pair', 'Mac\nBook'), true);
     expect(result.kind).toBe('usage');
   });
+
+  it('reads --login, --login --force and --logout in both argv shapes', () => {
+    expect(parseInvocation(packagedArgv('--login'), true)).toEqual({ kind: 'login', force: false });
+    expect(parseInvocation(devArgv('--login', '--force'), false)).toEqual({ kind: 'login', force: true });
+    expect(parseInvocation(packagedArgv('--force', '--login'), true)).toEqual({ kind: 'login', force: true });
+    expect(parseInvocation(packagedArgv('--logout'), true)).toEqual({ kind: 'logout' });
+  });
+
+  it('ignores --force without --login', () => {
+    expect(parseInvocation(packagedArgv('--force'), true)).toEqual({ kind: 'app', server: false });
+  });
+
+  it('ranks pair > revoke > devices > logout > login > update > server', () => {
+    expect(parseInvocation(packagedArgv('--login', '--pair', 'iPad'), true)).toEqual({ kind: 'pair', name: 'iPad' });
+    expect(parseInvocation(packagedArgv('--logout', '--revoke', 'iPad'), true)).toEqual({ kind: 'revoke', name: 'iPad' });
+    expect(parseInvocation(packagedArgv('--login', '--devices'), true)).toEqual({ kind: 'devices' });
+    expect(parseInvocation(packagedArgv('--login', '--logout'), true)).toEqual({ kind: 'logout' });
+    expect(parseInvocation(packagedArgv('--update', '--login'), true)).toEqual({ kind: 'login', force: false });
+    expect(parseInvocation(packagedArgv('--server', '--logout'), true)).toEqual({ kind: 'logout' });
+  });
+
+  it('refuses a --pair name that is really --login, --logout or --force', () => {
+    for (const flag of ['--login', '--logout', '--force']) {
+      expect(parseInvocation(packagedArgv('--pair', flag), true)).toMatchObject({ kind: 'usage' });
+    }
+  });
 });

@@ -41,6 +41,13 @@ describe('createAccountStore', () => {
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
+  it('exists says whether the file is there, whatever the keychain says', () => {
+    const store = createAccountStore({ safeStorage: fakeSafeStorage(false), filePath });
+    expect(store.exists()).toBe(false);
+    writeFileSync(filePath, 'x');
+    expect(store.exists()).toBe(true);
+  });
+
   it('round-trips an account, encrypted, mode 0600', () => {
     const store = createAccountStore({ safeStorage: fakeSafeStorage(), filePath });
     expect(store.write(ACCOUNT)).toBe(true);
