@@ -89,8 +89,9 @@ import { isThisMachineAction } from './notification-contract';
  * 33 → 34 (HIVE-268): `CH` gained `account:open-web` (process-local).
  * 34 → 35 (HIVE-265): `CH` gained `account:devices`, `licence:start-trial`, `licence:paused` and `app:quit` (process-local).
  * 35 → 36 (HIVE-265): CH gained server:licence (a forwarded read) and server:licence-changed (a relayed event).
+ * 36 → 37 (HIVE-372): `CH` gained `cli:codex-plugin-status`; `CliConfig` and `SetCliRequest` gained `installSkills`.
  */
-export const REMOTE_PROTOCOL_VERSION = 36;
+export const REMOTE_PROTOCOL_VERSION = 37;
 
 /**
  * What a frame is for.
@@ -185,6 +186,7 @@ export const FRAME_KIND = {
   [CH.cliSetToken]: 'call',
   [CH.cliClearToken]: 'call',
   [CH.cliCodexModels]: 'call',
+  [CH.cliCodexPluginStatus]: 'call',
   [CH.harnessDetect]: 'call',
   [CH.harnessRescan]: 'call',
   [CH.harnessSignIn]: 'call',
@@ -526,6 +528,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.cliSetToken]: 'mutate',
   [CH.cliClearToken]: 'mutate',
   [CH.cliCodexModels]: 'read',
+  [CH.cliCodexPluginStatus]: 'read',
   [CH.harnessDetect]: 'execute',
   [CH.harnessRescan]: 'execute',
   // HIVE-376. Runs the CLI's own status verb on the server's host.

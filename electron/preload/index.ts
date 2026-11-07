@@ -30,6 +30,7 @@ import type {
   HarnessSignInRequest,
   CliModel,
   CliTokensState,
+  CodexPluginStatus,
   SetAgentsDefaultCliRequest,
   SetCliAgentsRequest,
   SetCliRequest,
@@ -786,6 +787,7 @@ const bridge: HiveBridge = {
     clearToken: (request: ClearCliTokenRequest): Promise<CliTokensState> =>
       ipcRenderer.invoke(CH.cliClearToken, request),
     codexModels: (): Promise<CliModel[]> => ipcRenderer.invoke(CH.cliCodexModels),
+    codexPluginStatus: (): Promise<CodexPluginStatus> => ipcRenderer.invoke(CH.cliCodexPluginStatus),
     // HIVE-375. The CLIs on this machine.
     detect: (): Promise<Record<HarnessId, CliDetection>> => ipcRenderer.invoke(CH.harnessDetect),
     rescan: (): Promise<Record<HarnessId, CliDetection>> => ipcRenderer.invoke(CH.harnessRescan),

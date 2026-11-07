@@ -57,7 +57,7 @@ export const BRIDGE_SLACK_KEYS = [
 ] as const satisfies readonly (keyof HiveBridge['slack'])[];
 
 export const BRIDGE_CLI_KEYS = [
-  'tokensState', 'setToken', 'clearToken', 'codexModels', 'detect', 'rescan', 'signIn',
+  'tokensState', 'setToken', 'clearToken', 'codexModels', 'codexPluginStatus', 'detect', 'rescan', 'signIn',
 ] as const satisfies readonly (keyof HiveBridge['cli'])[];
 
 export const BRIDGE_NOTIFICATIONS_KEYS = [

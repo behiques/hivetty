@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   dropKeysFor,
   fillPlaceholders,
+  guardSkill,
   makePortable,
   portabilityIssues,
   renderSkillText,
+  SKILL_GUARD,
   typedSkill,
 } from '../../../electron/shared/skill-render';
 
@@ -203,5 +205,21 @@ describe('makePortable', () => {
     const text = makePortable('mcp__hive__ledger_ask', KNOWN);
     expect(makePortable(text, KNOWN)).toBe(text);
     expect(portabilityIssues(text, KNOWN)).toEqual([]);
+  });
+});
+
+describe('guardSkill (HIVE-372)', () => {
+  it('goes right after the frontmatter', () => {
+    expect(guardSkill('---\nname: hive-x\ndescription: d\n---\n# X\nbody\n')).toBe(
+      `---\nname: hive-x\ndescription: d\n---\n\n${SKILL_GUARD}\n\n# X\nbody\n`,
+    );
+  });
+  it('goes first when there is no frontmatter, or it never closes', () => {
+    expect(guardSkill('# X\n')).toBe(`${SKILL_GUARD}\n\n# X\n`);
+    expect(guardSkill('---\nname: x\n')).toBe(`${SKILL_GUARD}\n\n---\nname: x\n`);
+  });
+  it('names the variable and the sentence the ticket fixed', () => {
+    expect(SKILL_GUARD).toContain('HIVE_RECEIVER_URL');
+    expect(SKILL_GUARD).toContain('this skill needs a HiveTTY session');
   });
 });

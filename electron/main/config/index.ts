@@ -1361,6 +1361,9 @@ export function setCli(request: SetCliRequest): ConfigSnapshot {
         if (next === null) delete cli[key];
         else if (next !== undefined) cli[key] = next;
       }
+      // HIVE-372: absent means off, so off is written as no key at all.
+      if (request.installSkills === true) cli['installSkills'] = true;
+      else if (request.installSkills === false) delete cli['installSkills'];
       return { ...draft, clis: { ...clis, [request.cli]: cli } };
     }),
   );

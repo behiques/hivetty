@@ -225,7 +225,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(152);
+    expect(callChannels.length).toBe(153);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -544,7 +544,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(158);
+    expect(remoteProxyBindingsSize()).toBe(159);
   });
 
   /**
@@ -1210,8 +1210,8 @@ describe('registerRemoteProxy', () => {
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(158);
-    expect(removeAllListeners).toHaveBeenCalledTimes(158);
+    expect(removeHandler).toHaveBeenCalledTimes(159);
+    expect(removeAllListeners).toHaveBeenCalledTimes(159);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

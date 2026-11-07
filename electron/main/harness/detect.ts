@@ -25,6 +25,8 @@ export type RunVersion = (
   file: string,
   args: readonly string[],
   timeoutMs: number,
+  /** HIVE-372: the Codex plugin installer's live test points `CODEX_HOME` at a scratch folder. Absent inherits. */
+  options?: { env?: NodeJS.ProcessEnv },
 ) => Promise<{
   code: number | null;
   stdout: string;
@@ -34,13 +36,20 @@ export type RunVersion = (
   signal?: string;
 }>;
 
-export const runVersion: RunVersion = (file, args, timeoutMs) =>
+export const runVersion: RunVersion = (file, args, timeoutMs, options) =>
   new Promise((resolve, reject) => {
     const child = execFile(
       file,
       [...args],
       // SIGKILL because a trapped TERM once blocked main for 20s against a 2s timeout (login-env.ts).
-      { timeout: timeoutMs, killSignal: 'SIGKILL', maxBuffer: MAX_BUFFER, encoding: 'utf8', shell: false },
+      {
+        timeout: timeoutMs,
+        killSignal: 'SIGKILL',
+        maxBuffer: MAX_BUFFER,
+        encoding: 'utf8',
+        shell: false,
+        ...(options?.env === undefined ? {} : { env: options.env }),
+      },
       (error, stdout, stderr) => {
         if (error === null) {
           resolve({ code: 0, stdout, stderr, timedOut: false });

@@ -2743,6 +2743,8 @@ export function createSessions(options: SessionsOptions): Sessions {
         what each half does.
       */
       ...(containerSpawn === undefined ? {} : { container: containerSpawn }),
+      // HIVE-372: a host pty runs with this over main's env, so Codex reads its CODEX_HOME from here.
+      ...(containerSpawn === undefined ? { env: runtime.env } : {}),
       /*
         Belt *and* braces, deliberately. `stripEnv` below covers the ambient
         environment and a project's own `env` block; this covers the login

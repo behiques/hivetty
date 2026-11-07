@@ -82,6 +82,18 @@ export function renderSkillText(text: string, cli: HarnessId, root?: string): st
   return fillPlaceholders(prefixFrontmatterName(kept, CAPABILITIES[cli].skills.namePrefix), cli, root);
 }
 
+/** HIVE-372: the plugin Codex installs also loads outside HiveTTY, where the hive tools and receiver are absent. */
+export const SKILL_GUARD =
+  'Before anything else, run `printenv HIVE_RECEIVER_URL`. If it prints nothing, tell the user "this skill needs a HiveTTY session" and stop.';
+
+/** `text` with {@link SKILL_GUARD} as its first paragraph after the frontmatter. */
+export function guardSkill(text: string): string {
+  const lines = text.split('\n');
+  const close = lines[0]?.trim() === '---' ? lines.findIndex((line, index) => index > 0 && line.trim() === '---') : -1;
+  if (close === -1) return `${SKILL_GUARD}\n\n${text}`;
+  return [...lines.slice(0, close + 1), '', SKILL_GUARD, '', ...lines.slice(close + 1)].join('\n');
+}
+
 /** The names a skill may point at: hive tools and skills, `done` included. */
 export interface PortabilityKnown {
   tools: readonly string[];

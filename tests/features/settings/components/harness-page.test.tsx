@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -28,6 +28,7 @@ vi.mock('@/lib/project-config', async (importOriginal) => ({
   setRuntimeConfig: (request: unknown) => setRuntimeConfig(request),
   setCliConfig: (request: unknown) => setCliConfig(request),
   diagnoseAgentCommand: (request: unknown) => diagnoseAgentCommand(request),
+  readCodexPluginStatus: async () => ({ state: 'off' }),
 }));
 
 let snapshot: ConfigSnapshot | null = null;
@@ -103,7 +104,7 @@ describe('HarnessPage (HIVE-376)', () => {
 
   it('names the server it is attached to', () => {
     renderPage('codex', { server: 'mac-mini' });
-    expect(screen.getByText(/On mac-mini/)).toBeInTheDocument();
+    expect(screen.getByText(/On mac-mini\./)).toBeInTheDocument();
   });
 
   it('the switch writes sessions, and is disabled when last on', async () => {
@@ -295,5 +296,15 @@ describe('HarnessPage: new sessions (HIVE-376)', () => {
 
     renderPage('copilot', { clis: resolveClis({ copilot: { sessionModel: COPILOT_MODELS[2] } }) });
     expect(group().getByRole('combobox', { name: 'Model' })).toHaveValue(COPILOT_MODELS[2]);
+  });
+});
+
+describe('the Codex plugin group (HIVE-372)', () => {
+  it('is on the Codex page and nowhere else', async () => {
+    renderPage('codex');
+    expect(await screen.findByRole('switch', { name: "Install HiveTTY's skills into Codex" })).toBeInTheDocument();
+    cleanup();
+    renderPage('copilot');
+    expect(screen.queryByRole('switch', { name: "Install HiveTTY's skills into Codex" })).not.toBeInTheDocument();
   });
 });

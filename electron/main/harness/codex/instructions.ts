@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { parse } from 'smol-toml';
 
+import { codexPluginStateOf } from './plugin-install';
+
 export interface CodexInstructionsInput {
   /** The CLI's plugin folder (`<userData>/hive/plugins/codex`); `undefined` = none written. */
   pluginDir?: string;
@@ -22,12 +24,12 @@ const read = (path: string): string | undefined => {
   }
 };
 
-const usersOwn = (codexHome: string): string | undefined => {
+/** The user's `config.toml`, parsed once, or `undefined` when missing or malformed. */
+const usersConfig = (codexHome: string): Record<string, unknown> | undefined => {
   const text = read(join(codexHome, 'config.toml'));
   if (text === undefined) return undefined;
   try {
-    const value = parse(text)['developer_instructions'];
-    return typeof value === 'string' ? value : undefined;
+    return parse(text);
   } catch {
     return undefined;
   }
@@ -48,10 +50,14 @@ export function codexDeveloperInstructions({
   own,
   userConfig,
 }: CodexInstructionsInput): string | undefined {
+  const config = userConfig ? usersConfig(codexHome) : undefined;
+  const usersOwn = config?.['developer_instructions'];
+  // HIVE-372: the installed plugin already lists these skills; the block would show each one twice.
+  const pluginListsThem = config !== undefined && codexPluginStateOf(config).enabled;
   const parts = [
-    userConfig ? usersOwn(codexHome) : undefined,
+    typeof usersOwn === 'string' ? usersOwn : undefined,
     own,
-    pluginDir === undefined ? undefined : read(join(pluginDir, 'catalog.md')),
+    pluginDir === undefined || pluginListsThem ? undefined : read(join(pluginDir, 'catalog.md')),
   ]
     .map((part) => part?.trim())
     .filter((part): part is string => part !== undefined && part !== '');

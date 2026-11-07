@@ -1,4 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
@@ -251,6 +252,49 @@ test('a wake with Claude turned off is refused, and says why', async ({}, testIn
     ).toBeVisible({ timeout: 30_000 });
     expect(existsSync(argvFile)).toBe(false);
     await page.screenshot({ path: testInfo.outputPath('clis-refused.png') });
+  } finally {
+    await app.close();
+  }
+});
+
+/** The real codex on this machine, for the plugin install below; the spec skips without one (HIVE-372). */
+const realCodex = spawnSync('/bin/sh', ['-lc', 'command -v codex'], { encoding: 'utf8' }).stdout.trim();
+
+test("installing HiveTTY's skills into Codex, on and off, against a scratch CODEX_HOME (HIVE-372)", async ({}, testInfo) => {
+  test.skip(realCodex === '', 'codex is not installed on this machine');
+  test.setTimeout(120_000);
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeFileSync(configPath, JSON.stringify({ version: 2, projects: [], clis: { codex: { command: realCodex } } }));
+  // Never the real ~/.codex: Codex writes only here.
+  const codexHome = testInfo.outputPath('codex-home');
+  mkdirSync(codexHome, { recursive: true });
+  const configToml = join(codexHome, 'config.toml');
+
+  const app = await launchHive({
+    userDataDir: testInfo.outputPath('user-data'),
+    configPath,
+    env: { CODEX_HOME: codexHome },
+  });
+  const page = await app.firstWindow();
+
+  try {
+    await page.waitForSelector('nav[aria-label="Places"]');
+    await openPane(page, 'Codex');
+    const toggle = page.getByRole('switch', { name: "Install HiveTTY's skills into Codex" });
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+    await toggle.click();
+    await expect.poll(() => read(configPath).clis.codex.installSkills).toBe(true);
+    await expect(page.getByText(/^Installed as hive@hivetty \S+\+[0-9a-f]{8}$/)).toBeVisible({ timeout: 60_000 });
+    expect(readFileSync(configToml, 'utf8')).toContain('[plugins."hive@hivetty"]');
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+    await page.screenshot({ path: testInfo.outputPath('codex-plugin-on.png') });
+
+    await toggle.click();
+    await expect.poll(() => read(configPath).clis.codex.installSkills).toBeUndefined();
+    await expect(page.getByText(/^Installed as hive@hivetty/)).toBeHidden({ timeout: 60_000 });
+    await expect.poll(() => readFileSync(configToml, 'utf8')).not.toContain('hivetty');
+    await page.screenshot({ path: testInfo.outputPath('codex-plugin-off.png') });
   } finally {
     await app.close();
   }

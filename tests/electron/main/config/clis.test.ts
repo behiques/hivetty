@@ -439,3 +439,49 @@ describe('command and session defaults (HIVE-376)', () => {
     });
   });
 });
+
+describe('clis.codex.installSkills (HIVE-372)', () => {
+  let dir: string;
+  let saved: string | undefined;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-clis-'));
+    saved = process.env[CONFIG_PATH_ENV];
+    process.env[CONFIG_PATH_ENV] = join(dir, 'config.json');
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env[CONFIG_PATH_ENV];
+    else process.env[CONFIG_PATH_ENV] = saved;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('reads clis.codex.installSkills and ignores it on another CLI', () => {
+    writeFileSync(
+      process.env[CONFIG_PATH_ENV]!,
+      doc({ clis: { codex: { installSkills: true }, copilot: { installSkills: true } } }),
+    );
+    const snapshot = reloadConfig();
+    expect(snapshot.clis.codex.installSkills).toBe(true);
+    expect(snapshot.clis.copilot.installSkills).toBeUndefined();
+    expect(snapshot.errors.some((error) => error.includes('copilot.installSkills'))).toBe(true);
+  });
+
+  it('refuses a non-boolean', () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({ clis: { codex: { installSkills: 'yes' } } }));
+    const snapshot = reloadConfig();
+    expect(snapshot.clis.codex.installSkills).toBeUndefined();
+    expect(snapshot.errors.some((error) => error.includes('codex.installSkills: expected a boolean'))).toBe(true);
+  });
+
+  it('setCli writes installSkills true and deletes it on false', () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({ clis: { codex: { command: '/opt/codex' } } }));
+    reloadConfig();
+    expect(setCli({ cli: 'codex', installSkills: true }).clis.codex).toMatchObject({
+      installSkills: true,
+      command: '/opt/codex',
+    });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis.codex.installSkills).toBe(true);
+    setCli({ cli: 'codex', installSkills: false });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis.codex).toEqual({ command: '/opt/codex' });
+  });
+});

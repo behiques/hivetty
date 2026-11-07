@@ -78,6 +78,23 @@ their row says why.
 "clis": { "claude-code": { "agents": { "enabled": true, "model": "haiku" } } }
 ```
 
+### Codex's own skill list
+
+HiveTTY's skills already reach every Codex session HiveTTY starts. Settings › Harnesses › Codex has
+**Install HiveTTY's skills into Codex**, off by default. Turn it on and HiveTTY installs them as a Codex
+plugin, `hive@hivetty`, using Codex's own `codex plugin` commands, so they also appear in Codex's `/skills`
+list and `$` completion, named like `hive:hive-work-on`. Codex writes the plugin into `~/.codex` on this Mac,
+or on the server you are attached to, and `codex plugin list` shows it. HiveTTY keeps it current as your
+skills change. The plugin also loads when you run Codex outside HiveTTY; there each skill only says it needs a
+HiveTTY session. Turn the setting off and HiveTTY removes the plugin. If a Codex command fails, the row shows
+the command and Codex's own message, and the next session start tries again.
+
+**Example.**
+
+```json
+"clis": { "codex": { "installSkills": true } }
+```
+
 ## Runtime
 
 What every session starts in, for every CLI. **Shell** (started as a login shell) and environment variables for

@@ -6,6 +6,7 @@ import { SelectField } from '@/components/ui/select-field';
 import { Switch } from '@/components/ui/switch';
 import { TextField } from '@/components/ui/text-field';
 
+import { CodexPluginGroup } from '@features/settings/components/codex-plugin-group';
 import { CommandDiagnosticView } from '@features/settings/components/command-diagnostic-view';
 import { ConfigErrors } from '@features/settings/components/config-errors';
 import { CopilotToken, HarnessAgentsGroup } from '@features/settings/components/harness-agents-group';
@@ -113,6 +114,7 @@ export function HarnessPage({ cli }: { cli: HarnessId }) {
       </SettingsGroup>
       <CommandGroup cli={cli} snapshot={snapshot} rescan={rescan} />
       <SessionDefaultsGroup cli={cli} clis={snapshot.clis} />
+      {cli === 'codex' && <CodexPluginGroup snapshot={snapshot} server={server} />}
       <HarnessAgentsGroup cli={cli} agents={snapshot.clis[cli].agents} />
       <HarnessCapabilities cli={cli} />
     </div>

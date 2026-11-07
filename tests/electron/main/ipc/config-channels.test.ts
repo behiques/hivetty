@@ -1,4 +1,8 @@
 // @vitest-environment node
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveClis } from '../../../../electron/shared/cli-contract';
@@ -101,11 +105,18 @@ vi.mock('../../../../electron/main/shutdown', () => ({
   covered in `tests/electron/main/skills` and `tests/electron/main/agents`.
 */
 const skillsSync = vi.fn(() => Promise.resolve({} as never));
+/** HIVE-372: what the stubbed runtime was built with and answers, so a spec can fire a render and stage a marketplace. */
+const skillsRuntime: { onRendered?: () => void; marketplace: { dir: string; version: string } | null } = {
+  marketplace: null,
+};
 const agentsList = vi.fn(() => Promise.resolve({ agents: [], agentsRoot: '/tmp/.hive/agents' }));
 
 vi.mock('../../../../electron/main/skills', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  createSkillsRuntime: () => ({ sync: skillsSync, pluginDirPath: () => null, list: vi.fn() }),
+  createSkillsRuntime: (options: { onRendered?: () => void }) => {
+    skillsRuntime.onRendered = options.onRendered;
+    return { sync: skillsSync, pluginDirPath: () => null, codexMarketplace: () => skillsRuntime.marketplace, list: vi.fn() };
+  },
 }));
 
 vi.mock('../../../../electron/main/agents', async (importOriginal) => ({
@@ -339,6 +350,85 @@ describe('cli:codex-models', () => {
       { slug: 'gpt-6-luna', description: 'Fast.', defaultEffort: 'medium', efforts: ['low', 'medium'] },
     ]);
     await expect(invoke(CH.cliCodexModels, untrustedEvent, undefined)).rejects.toThrow();
+  });
+});
+
+describe('cli:codex-plugin-status (HIVE-372)', () => {
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env['CODEX_HOME'];
+    // Never the real ~/.codex: the installer reads its config.toml.
+    process.env['CODEX_HOME'] = mkdtempSync(join(tmpdir(), 'codex-home-'));
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env['CODEX_HOME'];
+    else process.env['CODEX_HOME'] = saved;
+    skillsRuntime.marketplace = null;
+    vi.mocked(config.getConfig).mockReturnValue(snapshot);
+  });
+
+  it('answers the installer’s status, trusted callers only', async () => {
+    await expect(invoke(CH.cliCodexPluginStatus, trustedEvent, undefined)).resolves.toEqual({ state: 'off' });
+    await expect(invoke(CH.cliCodexPluginStatus, untrustedEvent, undefined)).rejects.toThrow();
+  });
+
+  it('reconciles after a config:set-cli that carries installSkills, and the status follows', async () => {
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', installSkills: false });
+    expect(config.setCli).toHaveBeenCalledWith({ cli: 'codex', installSkills: false });
+    await expect(invoke(CH.cliCodexPluginStatus, trustedEvent, undefined)).resolves.toEqual({ state: 'off' });
+  });
+
+  it('reports the unwritten plugin folder when installSkills is on and no skills render has run', async () => {
+    vi.mocked(config.getConfig).mockReturnValue({
+      ...snapshot,
+      clis: resolveClis({ codex: { installSkills: true } }),
+    });
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', installSkills: true });
+    await expect(invoke(CH.cliCodexPluginStatus, trustedEvent, undefined)).resolves.toEqual({
+      state: 'failed',
+      command: 'codex plugin add hive@hivetty',
+      message: 'HiveTTY could not write the plugin folder.',
+    });
+  });
+
+  it('renders the skills first when turned on before any render wrote the plugin folder', async () => {
+    vi.mocked(config.getConfig).mockReturnValue({
+      ...snapshot,
+      clis: resolveClis({ codex: { installSkills: true } }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const before = skillsSync.mock.calls.length;
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', installSkills: true });
+    expect(skillsSync.mock.calls.length).toBe(before + 1);
+  });
+
+  it('does not render for a turn-off, or when the folder is already written', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const before = skillsSync.mock.calls.length;
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', installSkills: false });
+    skillsRuntime.marketplace = { dir: '/m', version: '1.0.0+abcd1234' };
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', installSkills: true });
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', command: 'codex-x' });
+    expect(skillsSync.mock.calls.length).toBe(before);
+  });
+
+  it('runs codex after a skills render, with nothing asked of the status channel', async () => {
+    const bin = mkdtempSync(join(tmpdir(), 'codex-bin-'));
+    const marker = join(bin, 'calls');
+    const codex = join(bin, 'codex');
+    writeFileSync(codex, `#!/bin/sh\necho "$@" >> '${marker}'\n`);
+    chmodSync(codex, 0o755);
+    vi.mocked(config.getConfig).mockReturnValue({
+      ...snapshot,
+      clis: resolveClis({ codex: { installSkills: true, command: codex } }),
+    });
+    skillsRuntime.marketplace = { dir: '/m', version: '1.0.0+abcd1234' };
+    skillsRuntime.onRendered?.();
+    await vi.waitFor(() => expect(readFileSync(marker, 'utf8')).toBe('plugin marketplace add /m\nplugin add hive@hivetty\n'));
+    await expect(invoke(CH.cliCodexPluginStatus, trustedEvent, undefined)).resolves.toEqual({
+      state: 'installed',
+      version: '1.0.0+abcd1234',
+    });
   });
 });
 

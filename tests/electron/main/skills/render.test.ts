@@ -780,3 +780,20 @@ describe('per CLI (HIVE-369)', () => {
     }
   });
 });
+
+describe('renderSkills transform (HIVE-372)', () => {
+  it('applies transform to every SKILL.md, done included, and to nothing else', async () => {
+    await writeSkill('tdd', '---\nname: tdd\ndescription: t\n---\nbody\n');
+    await mkdir(join(source, 'tdd', 'refs'), { recursive: true });
+    await writeFile(join(source, 'tdd', 'refs', 'more.md'), 'more\n');
+    await renderSkills(pluginRoot, 'codex', await readUserSkills(source), {
+      version: '1.0.0',
+      doneUrl: null,
+      transform: (text) => `MARK\n${text}`,
+    });
+    expect(readFileSync(join(pluginRoot, 'skills', 'tdd', 'SKILL.md'), 'utf8').startsWith('MARK\n')).toBe(true);
+    expect(readFileSync(join(pluginRoot, 'skills', 'done', 'SKILL.md'), 'utf8').startsWith('MARK\n')).toBe(true);
+    expect(readFileSync(join(pluginRoot, 'skills', 'tdd', 'refs', 'more.md'), 'utf8')).toBe('more\n');
+    expect(readFileSync(join(pluginRoot, 'catalog.md'), 'utf8').startsWith('MARK')).toBe(false);
+  });
+});
