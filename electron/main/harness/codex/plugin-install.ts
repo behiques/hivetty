@@ -59,12 +59,12 @@ export interface CodexPluginInstaller {
   status(): Promise<CodexPluginStatus>;
 }
 
+const failed = (command: string, message: string): CodexPluginStatus => ({ state: 'failed', command, message });
+
 /**
  * HIVE-372: the opt-in `hive@hivetty` Codex plugin, installed, updated and removed only through `codex plugin`.
  * Runs nothing when the setting is off and nothing is installed, or when the installed version is current.
  */
-const failed = (command: string, message: string): CodexPluginStatus => ({ state: 'failed', command, message });
-
 export function createCodexPluginInstaller(deps: CodexPluginInstallerDeps): CodexPluginInstaller {
   const attempt = async (): Promise<CodexPluginStatus> => {
     const home = deps.codexHome();
