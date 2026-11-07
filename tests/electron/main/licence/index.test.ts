@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -11,7 +11,9 @@ import {
   LICENCE_CALLS,
   licence,
   onLicenceChange,
+  RELOAD_EVERY_MS,
   resetLicence,
+  runAccountCommand,
   startLicence,
 } from '../../../../electron/main/licence';
 import { ISS, makeSigner, claimsFor } from '../../../support/lease';
@@ -52,6 +54,8 @@ describe('licence composition', () => {
       broadcast,
       broadcastLicence: vi.fn(),
       onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
     });
 
     await expect(ACCOUNT_CALLS[CH.accountSignIn]()).resolves.toEqual({ ok: true });
@@ -77,6 +81,8 @@ describe('licence composition', () => {
       broadcast: vi.fn(),
       broadcastLicence: vi.fn(),
       onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
     });
     await ACCOUNT_CALLS[CH.accountSignIn]();
     expect(new URL(openExternal.mock.calls[0]![0] as string).origin).toBe('https://hive.acme.test');
@@ -103,6 +109,8 @@ describe('licence composition', () => {
       onWake: (listener) => {
         wake = listener;
       },
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
     });
     expect(licence()).toEqual({ kind: 'unlicensed' });
     expect(wake).toBeTypeOf('function');
@@ -124,6 +132,8 @@ describe('licence composition', () => {
       broadcast: vi.fn(),
       broadcastLicence,
       onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
     });
     expect(early.mock.calls).toEqual([[{ kind: 'lapsed', reason: 'signed_out' }]]);
     expect(broadcastLicence).toHaveBeenCalledWith({ kind: 'lapsed', reason: 'signed_out' });
@@ -145,9 +155,126 @@ describe('licence composition', () => {
       broadcast: vi.fn(),
       broadcastLicence: vi.fn(),
       onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
     });
     expect(early).not.toHaveBeenCalled();
     resetLicence();
     expect(licence()).toEqual({ kind: 'unlicensed' });
+  });
+});
+
+describe('the running instance follows account.bin (HIVE-266)', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-licence-'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    resetLicence();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const boot = (watch = vi.fn((_dir: string, _on: (file: string | null) => void) => () => undefined)) =>
+    startLicence({
+      app: { isPackaged: false, getPath: () => dir },
+      safeStorage,
+      openExternal: vi.fn(),
+      env: { HIVETTY_CLOUD_URL: ISS },
+      fetch: vi.fn().mockRejectedValue(new Error('offline')),
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch,
+      broadcastDeviceCode: vi.fn(),
+    });
+  const ACCOUNT = {
+    refreshToken: 'rt-1',
+    deviceId: 'dev-1',
+    deviceKey: { publicJwk: { kty: 'OKP', crv: 'Ed25519', x: 'p' }, privateJwk: { kty: 'OKP', crv: 'Ed25519', x: 'p', d: 'q' } },
+    email: 'ana@example.com',
+    name: 'Ana',
+  };
+
+  it('watches the folder and reloads on account.bin (or an unnamed event), not on the temp file', () => {
+    let fire: (file: string | null) => void = () => undefined;
+    const watch = vi.fn((_dir: string, on: (file: string | null) => void) => {
+      fire = on;
+      return () => undefined;
+    });
+    boot(watch);
+    expect(watch).toHaveBeenCalledWith(dir, expect.any(Function));
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    fire('account.bin.tmp');
+    expect(ACCOUNT_CALLS[CH.accountState]()).toEqual({ kind: 'signed-out' });
+    fire('account.bin');
+    expect(ACCOUNT_CALLS[CH.accountState]()).toMatchObject({ kind: 'signed-in', email: 'ana@example.com' });
+    rmSync(join(dir, 'account.bin'));
+    fire(null);
+    expect(ACCOUNT_CALLS[CH.accountState]()).toMatchObject({ kind: 'signed-out' });
+  });
+
+  it('reloads every 30 s even with no watch event', async () => {
+    vi.useFakeTimers();
+    boot();
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    await vi.advanceTimersByTimeAsync(RELOAD_EVERY_MS);
+    expect(ACCOUNT_CALLS[CH.accountState]()).toMatchObject({ kind: 'signed-in' });
+  });
+
+  it('a watch that throws (folder missing) leaves the 30 s reload to cover it', () => {
+    expect(() => boot(vi.fn(() => {
+      throw new Error('ENOENT');
+    }))).not.toThrow();
+  });
+
+  it('resetLicence stops watching and reloading', () => {
+    const stop = vi.fn();
+    boot(vi.fn(() => stop));
+    resetLicence();
+    expect(stop).toHaveBeenCalled();
+  });
+});
+
+describe('runAccountCommand (HIVE-266)', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-licence-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const run = (invocation: Parameters<typeof runAccountCommand>[0], over: { encryptThrows?: boolean } = {}) => {
+    const lines: string[] = [];
+    const code = runAccountCommand(invocation, {
+      app: { isPackaged: false, getPath: () => dir },
+      safeStorage: {
+        ...safeStorage,
+        encryptString: (plain: string) => {
+          if (over.encryptThrows) throw new Error('keychain locked');
+          return safeStorage.encryptString(plain);
+        },
+      },
+      env: { HIVETTY_CLOUD_URL: ISS },
+      fetch: vi.fn().mockRejectedValue(new Error('offline')),
+      print: (line) => lines.push(line),
+      signal: new AbortController().signal,
+    });
+    return { code, lines };
+  };
+
+  it('--login exits 3 when a trial encrypt throws, and writes nothing', async () => {
+    const { code } = run({ kind: 'login', force: false }, { encryptThrows: true });
+    await expect(code).resolves.toBe(3);
+    expect(existsSync(join(dir, 'account.bin'))).toBe(false);
+  });
+
+  it('--login against an unreachable cloud exits 2', async () => {
+    await expect(run({ kind: 'login', force: false }).code).resolves.toBe(2);
+  });
+
+  it('--logout with nothing stored exits 0', async () => {
+    const { code, lines } = run({ kind: 'logout' });
+    await expect(code).resolves.toBe(0);
+    expect(lines).toEqual(['Not signed in.']);
   });
 });

@@ -1,3 +1,4 @@
+import { watch } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { app, dialog, net, powerMonitor, powerSaveBlocker, safeStorage, shell } from 'electron';
@@ -155,6 +156,13 @@ if (!app.requestSingleInstanceLock()) {
       broadcast: (state) => createWindowBroadcaster().emit(CH.accountChanged, state),
       broadcastLicence: (state) => createWindowBroadcaster().emit(CH.licenceChanged, state),
       onWake: (listener) => powerMonitor.on('resume', listener),
+      // HIVE-266: follow account.bin written by `hivetty --login`/`--logout` in another process.
+      watch: (dir, onChange) => {
+        const watcher = watch(dir, (_event, file) => onChange(file));
+        watcher.on('error', () => undefined);
+        return () => watcher.close();
+      },
+      broadcastDeviceCode: (code) => createWindowBroadcaster().emit('account:device-code', code),
     });
     deepLinks.attach((url) => void licence.handleCallback(url));
   });

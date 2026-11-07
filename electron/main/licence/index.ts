@@ -1,11 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { hostname } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
-import type { AccountState, OpenWebResult, SignInResult } from '@shared/account-contract';
+import type { AccountState, DeviceCode, OpenWebResult, SignInResult } from '@shared/account-contract';
 import { CH } from '@shared/ipc-contract';
 import type { LicenceState } from '@shared/licence-contract';
 
+import { runLogin, runLogout } from './account-command';
 import { type AccountSafeStorage, createAccountStore } from './account-store';
 import { type AuthClient, createAuthClient, generateDeviceKey } from './auth-client';
 import { createCloud, type Fetch, resolveCloudUrl } from './cloud';
@@ -25,25 +26,29 @@ let licenceState: LicenceStateMachine | null = null;
 /** Module-level, so a subscriber made before or after `startLicence` hears every change (PR 2's suspender). */
 const licenceListeners = new Set<(state: LicenceState) => void>();
 
-export function startLicence(deps: {
+export const ACCOUNT_FILE = 'account.bin';
+/** HIVE-266: how often a running instance re-reads account.bin, in case a watch event was missed. */
+export const RELOAD_EVERY_MS = 30_000;
+
+interface AccountBoot {
   app: { isPackaged: boolean; getPath(name: 'userData'): string };
   safeStorage: AccountSafeStorage;
-  openExternal: (url: string) => Promise<void>;
   cloudUrl?: string;
   env: Record<string, string | undefined>;
   fetch: Fetch;
-  broadcast: (state: AccountState) => void;
-  /** HIVE-267: the licence's push to every window. */
-  broadcastLicence: (state: LicenceState) => void;
-  /** HIVE-267: the OS woke from sleep (`powerMonitor` `resume`); the lease renews. */
-  onWake: (listener: () => void) => void;
-}): AuthClient {
+}
+
+/** The cloud, the store and the client, built the same way for the app and for a one-shot (HIVE-266). */
+function buildAccount(deps: AccountBoot & { openExternal: (url: string) => Promise<void> }) {
   const { app, safeStorage } = deps;
   const baseUrl = resolveCloudUrl({ isPackaged: app.isPackaged, configUrl: deps.cloudUrl, env: deps.env });
   const cloud = createCloud({ baseUrl, fetch: deps.fetch });
-  const next = createAuthClient({
+  const userData = app.getPath('userData');
+  const accountPath = join(userData, ACCOUNT_FILE);
+  const store = createAccountStore({ safeStorage, filePath: accountPath });
+  const built = createAuthClient({
     cloud,
-    store: createAccountStore({ safeStorage, filePath: join(app.getPath('userData'), 'account.bin') }),
+    store,
     encryptionAvailable: () => safeStorage.isEncryptionAvailable(),
     openExternal: deps.openExternal,
     hostname,
@@ -52,6 +57,37 @@ export function startLicence(deps: {
     scheme: schemeFor(app.isPackaged),
     runDeviceFlow: (input) => runDeviceFlow({ request: cloud.request, sleep: abortableSleep, now: Date.now }, input),
   });
+  return {
+    baseUrl,
+    store,
+    client: built,
+    accountPath,
+    leaseFile: createLeaseFile(join(userData, 'lease.jws')),
+    keys: leaseKeys({ isPackaged: app.isPackaged, env: deps.env }),
+  };
+}
+
+/** HIVE-266: stops the account.bin watch and the 30 s reload. */
+let stopFollowing: (() => void) | null = null;
+/** HIVE-266: the device-flow code's push to every window. */
+let pushDeviceCode: (code: DeviceCode) => void = () => undefined;
+
+export function startLicence(
+  deps: AccountBoot & {
+    openExternal: (url: string) => Promise<void>;
+    broadcast: (state: AccountState) => void;
+    /** HIVE-267: the licence's push to every window. */
+    broadcastLicence: (state: LicenceState) => void;
+    /** HIVE-267: the OS woke from sleep (`powerMonitor` `resume`); the lease renews. */
+    onWake: (listener: () => void) => void;
+    /** HIVE-266: watch a folder; `file` is the changed name, or null when the OS does not say. Returns a disposer. */
+    watch: (dir: string, onChange: (file: string | null) => void) => () => void;
+    /** HIVE-266: the `account:device-code` push to every window. */
+    broadcastDeviceCode: (code: DeviceCode) => void;
+  },
+): AuthClient {
+  const built = buildAccount(deps);
+  const next = built.client;
   next.onChange(deps.broadcast);
   client = next;
   next.start();
@@ -60,10 +96,10 @@ export function startLicence(deps: {
   licenceState?.dispose();
   const state = createLicenceState({
     account: next,
-    file: createLeaseFile(join(app.getPath('userData'), 'lease.jws')),
+    file: built.leaseFile,
     renew: () => renewLease((path, init) => next.authedFetch(path, init)),
-    keys: leaseKeys({ isPackaged: app.isPackaged, env: deps.env }),
-    iss: baseUrl,
+    keys: built.keys,
+    iss: built.baseUrl,
     now: Date.now,
   });
   licenceState = state;
@@ -73,6 +109,24 @@ export function startLicence(deps: {
   });
   state.start();
   deps.onWake(() => void state.refresh());
+
+  // HIVE-266. `hivetty --login`/`--logout` in another process write account.bin; follow it with no restart.
+  stopFollowing?.();
+  let stopWatch: () => void = () => undefined;
+  try {
+    stopWatch = deps.watch(dirname(built.accountPath), (file) => {
+      // A rename lands as the final name; macOS may report no name at all.
+      if (file === null || file === ACCOUNT_FILE) next.reload();
+    });
+  } catch {
+    // No folder to watch yet: the interval below still notices.
+  }
+  const reloadTimer = setInterval(() => next.reload(), RELOAD_EVERY_MS);
+  stopFollowing = () => {
+    stopWatch();
+    clearInterval(reloadTimer);
+  };
+  pushDeviceCode = deps.broadcastDeviceCode;
   return next;
 }
 
@@ -82,6 +136,9 @@ export function resetLicence(): void {
   licenceState?.dispose();
   licenceState = null;
   licenceListeners.clear();
+  stopFollowing?.();
+  stopFollowing = null;
+  pushDeviceCode = () => undefined;
 }
 
 /** Main's one read of the licence (HIVE-267; HIVE-268's single licence read). */
@@ -104,6 +161,9 @@ export const ACCOUNT_CALLS = {
   [CH.accountSignOut]: (): Promise<void> => client?.signOut() ?? Promise.resolve(),
   [CH.accountOpenWeb]: (path: unknown): Promise<OpenWebResult> =>
     client?.openWeb(path) ?? Promise.resolve({ error: NOT_READY }),
+  /** HIVE-266: sign in with a code; the code goes to every window on account:device-code. */
+  ['account:sign-in-code']: (): Promise<SignInResult> =>
+    client?.signInWithCode({ onCode: (code) => pushDeviceCode(code) }) ?? Promise.resolve({ error: NOT_READY }),
 } as const;
 
 /** What each licence call answers, for `ipc/index.ts` and `ipc/remote-proxy.ts` alike (process-local, D9). */
@@ -112,3 +172,34 @@ export const LICENCE_CALLS = {
   [CH.licenceRefresh]: (): Promise<LicenceState> => licenceState?.refresh() ?? Promise.resolve(licence()),
   [CH.licenceWatchPurchase]: (on: boolean): void => licenceState?.watchPurchase(on),
 } as const;
+
+export type AccountCommandBoot = AccountBoot & { print: (line: string) => void; signal: AbortSignal };
+
+/** `hivetty --login` / `--logout` (HIVE-266), after `whenReady`. Returns the exit code. */
+export function runAccountCommand(
+  invocation: { kind: 'login'; force: boolean } | { kind: 'logout' },
+  boot: AccountCommandBoot,
+): Promise<number> {
+  const built = buildAccount({ ...boot, openExternal: () => Promise.reject(new Error('no browser in a one-shot')) });
+  const deps = {
+    client: built.client,
+    store: built.store,
+    canEncrypt: () => {
+      if (!boot.safeStorage.isEncryptionAvailable()) return false;
+      try {
+        boot.safeStorage.encryptString('hivetty-probe');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    lease: built.leaseFile,
+    keys: built.keys,
+    iss: built.baseUrl,
+    now: Date.now,
+    hostname,
+    print: boot.print,
+    signal: boot.signal,
+  };
+  return invocation.kind === 'login' ? runLogin({ force: invocation.force }, deps) : runLogout(deps);
+}
