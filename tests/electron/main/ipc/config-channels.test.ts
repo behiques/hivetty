@@ -391,6 +391,27 @@ describe('cli:codex-plugin-status (HIVE-372)', () => {
     });
   });
 
+  it('renders the skills first when turned on before any render wrote the plugin folder', async () => {
+    vi.mocked(config.getConfig).mockReturnValue({
+      ...snapshot,
+      clis: resolveClis({ codex: { installSkills: true } }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const before = skillsSync.mock.calls.length;
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', installSkills: true });
+    expect(skillsSync.mock.calls.length).toBe(before + 1);
+  });
+
+  it('does not render for a turn-off, or when the folder is already written', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const before = skillsSync.mock.calls.length;
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', installSkills: false });
+    skillsRuntime.marketplace = { dir: '/m', version: '1.0.0+abcd1234' };
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', installSkills: true });
+    await invoke(CH.configSetCli, trustedEvent, { cli: 'codex', command: 'codex-x' });
+    expect(skillsSync.mock.calls.length).toBe(before);
+  });
+
   it('runs codex after a skills render, with nothing asked of the status channel', async () => {
     const bin = mkdtempSync(join(tmpdir(), 'codex-bin-'));
     const marker = join(bin, 'calls');

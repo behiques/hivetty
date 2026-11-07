@@ -4378,11 +4378,17 @@ export function registerIpcHandlers(
     setCliSessions(parseSetCliSessionsRequest(payload)),
   );
   // HIVE-376. One CLI's command and session defaults; claude-code's command stays `claudeCommand`.
-  handle(CH.configSetCli, (_event, payload): ConfigSnapshot => {
+  handle(CH.configSetCli, async (_event, payload): Promise<ConfigSnapshot> => {
     const request = parseSetCliRequest(payload);
     const snapshot = setCli(request);
     // HIVE-372: the install runs on this machine, the serving Mac when a remote client toggled it.
-    if (request.installSkills !== undefined) void codexPlugin.reconcile();
+    if (request.installSkills === true && skills !== null && skills.codexMarketplace() === null) {
+      // Turned on before any spawn rendered the plugin folder: render it now; `onRendered` reconciles, and a
+      // status read right after this answer waits for that run.
+      await skills.sync();
+    } else if (request.installSkills !== undefined) {
+      void codexPlugin.reconcile();
+    }
     return snapshot;
   });
   // HIVE-131. The container host alias — an ordinary settings write.
