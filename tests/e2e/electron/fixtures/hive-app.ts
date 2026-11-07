@@ -29,7 +29,7 @@ import { STUB_PR, STUB_REPO } from './gh-stub';
  */
 
 const APP_ROOT = join(import.meta.dirname, '../../../..');
-const MAIN_ENTRY = join(APP_ROOT, 'out/main/index.js');
+export const MAIN_ENTRY = join(APP_ROOT, 'out/main/index.js');
 
 /** What the app ships and seeds beside the config on every launch (HIVE-162). */
 const SHIPPED_ROOT = join(APP_ROOT, 'resources');
@@ -80,6 +80,27 @@ export function startUnseeded(configPath: string): void {
 }
 
 /**
+ * The keys a Hive agent or a Claude Code session puts in its own environment:
+ * who it is (`HIVE_*`) and that it is inside Claude Code (`CLAUDECODE`,
+ * `CLAUDE_CODE_*`). None of them is the app under test's (retro D).
+ */
+const INHERITED_IDENTITY = /^(HIVE_|CLAUDECODE$|CLAUDE_CODE_)/;
+
+/**
+ * The runner's environment minus whoever launched it (retro D), with a UTF-8 `LANG` when it has none.
+ *
+ * The locale is retro D too. A person's terminal always sets `LANG`; a headless agent's environment has no
+ * `LANG` and no `LC_*` at all. Without one the session's shell never ran the bootstrap stub, and both
+ * `interactive-terminal` Claude-prompt specs failed in an agent's run while passing in a person's.
+ */
+export function scrubbedEnv(): Record<string, string> {
+  const kept = Object.entries(process.env).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined && !INHERITED_IDENTITY.test(entry[0]),
+  );
+  return { ...Object.fromEntries(kept), ...(process.env['LANG'] === undefined ? { LANG: 'en_US.UTF-8' } : {}) };
+}
+
+/**
  * Launch the built app against a specific profile.
  *
  * Exported because `window-state.spec.ts` needs **two** launches sharing one
@@ -92,9 +113,12 @@ export async function launchHive({
   configPath,
   env: extraEnv,
   unseeded = false,
+  args: extraArgs = [],
 }: {
   userDataDir: string;
   configPath: string;
+  /** Extra switches after `--user-data-dir` (HIVE-270: `--use-mock-keychain`). */
+  args?: string[];
   /** Start with no shipped agents or skills: see {@link startUnseeded}. */
   unseeded?: boolean;
   /**
@@ -122,6 +146,7 @@ export async function launchHive({
        * actual window.
        */
       `--user-data-dir=${userDataDir}`,
+      ...extraArgs,
     ],
     env: {
       /**
@@ -132,17 +157,7 @@ export async function launchHive({
        * fixture's own `HIVE_*` keys below, and `extraEnv`, are set on purpose
        * after it.
        */
-      ...Object.fromEntries(
-        Object.entries(process.env).filter(([key]) => !INHERITED_IDENTITY.test(key)),
-      ),
-      /**
-       * A UTF-8 locale when the runner has none (retro D). A person's terminal
-       * always sets `LANG`; a headless agent's environment has no `LANG` and no
-       * `LC_*` at all. Without one the session's shell never ran the
-       * bootstrap stub, and both `interactive-terminal` Claude-prompt specs
-       * failed in an agent's run while passing in a person's.
-       */
-      ...(process.env['LANG'] === undefined ? { LANG: 'en_US.UTF-8' } : {}),
+      ...scrubbedEnv(),
       /**
        * Disables the simulation clock and animation-driven timing — the same
        * determinism concern `?sim=0` handles for the web project (story 061).
@@ -159,13 +174,6 @@ export async function launchHive({
     },
   });
 }
-
-/**
- * The keys a Hive agent or a Claude Code session puts in its own environment:
- * who it is (`HIVE_*`) and that it is inside Claude Code (`CLAUDECODE`,
- * `CLAUDE_CODE_*`). None of them is the app under test's (retro D).
- */
-const INHERITED_IDENTITY = /^(HIVE_|CLAUDECODE$|CLAUDE_CODE_)/;
 
 export const test = base.extend<{
   hive: ElectronApplication;
