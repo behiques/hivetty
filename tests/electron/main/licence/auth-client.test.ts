@@ -627,7 +627,7 @@ describe('openWeb (HIVE-268)', () => {
     return h;
   }
 
-  it.each([[42], [''], ['account/plan'], ['//evil.test/x'], ['/' + 'a'.repeat(2048)]])(
+  it.each([[42], [''], ['account/plan'], ['//evil.test/x'], ['/\\evil.test'], ['/\t/evil.test'], ['/\n/evil.test'], ['/' + 'a'.repeat(2048)]])(
     'refuses %j and opens nothing',
     async (path) => {
       const { client, cloud, openExternal } = await signedInHarness();
@@ -697,6 +697,28 @@ describe('openWeb (HIVE-268)', () => {
     const { client, cloud } = await signedInHarness();
     cloud.request.mockResolvedValueOnce(new Response('<html>', { status: 500 }));
     await expect(client.openWeb('/account')).resolves.toEqual({ error: "HiveTTY couldn't open that page. Try again." });
+  });
+
+  it('a revoked device is signed out, told to sign in, and opens nothing', async () => {
+    const { client, cloud, openExternal } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(answer({ error: 'invalid_token', error_description: 'device_revoked' }, 401));
+    await expect(client.openWeb('/account')).resolves.toEqual({ error: 'Sign in to HiveTTY first.' });
+    expect(client.state()).toEqual({ kind: 'signed-out', reason: 'device-revoked' });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('any other 401 is a generic sentence, never the raw code', async () => {
+    const { client, cloud, openExternal } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(answer({ error: 'invalid_token', error_description: 'expired' }, 401));
+    await expect(client.openWeb('/account')).resolves.toEqual({ error: "HiveTTY couldn't open that page. Try again." });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('works when called unbound, as an IPC table may hold it', async () => {
+    const { client, cloud } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(answer({ url: 'https://c.test/redeem?code=abc' }));
+    const { openWeb } = client;
+    await expect(openWeb('/account')).resolves.toEqual({ ok: true });
   });
 
   it("says the browser didn't open when opening fails", async () => {

@@ -53,6 +53,9 @@ export interface AuthClient {
 /** The longest `next` path `openWeb` passes on. */
 export const OPEN_WEB_MAX_PATH = 2048;
 const OPEN_WEB_FAILED = "HiveTTY couldn't open that page. Try again.";
+/** A backslash or a control character: one a browser may fold into `//`. */
+const unsafePathChar = (path: string): boolean =>
+  [...path].some((char) => char === '\\' || char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f);
 
 export function generateDeviceKey(): DeviceKey {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -215,6 +218,23 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
   const getAccessToken = (): Promise<string | null> =>
     access && access.expiresAt - Date.now() > REFRESH_LEAD_MS ? Promise.resolve(access.token) : refresh();
 
+  const authedFetch = async (path: string, init: RequestInit = {}): Promise<Response> => {
+    const token = await getAccessToken();
+    if (!token) throw new CloudError(current.kind === 'signed-in' ? 'network' : 'refused', 'no access token');
+    const headers = new Headers(init.headers);
+    headers.set('authorization', `Bearer ${token}`);
+    const response = await cloud.request(path, { ...init, headers });
+    if (response.status === 401) {
+      const body: unknown = await response.clone().json().catch(() => null);
+      if (stringField(body, 'error') === 'invalid_token' && stringField(body, 'error_description') === 'device_revoked') {
+        dropAccount('device-revoked');
+      } else {
+        access = null; // the next call refreshes
+      }
+    }
+    return response;
+  };
+
   return {
     state: () => current,
 
@@ -325,32 +345,23 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
 
     getAccessToken,
 
-    async authedFetch(path, init = {}) {
-      const token = await getAccessToken();
-      if (!token) throw new CloudError(current.kind === 'signed-in' ? 'network' : 'refused', 'no access token');
-      const headers = new Headers(init.headers);
-      headers.set('authorization', `Bearer ${token}`);
-      const response = await cloud.request(path, { ...init, headers });
-      if (response.status === 401) {
-        const body: unknown = await response.clone().json().catch(() => null);
-        if (stringField(body, 'error') === 'invalid_token' && stringField(body, 'error_description') === 'device_revoked') {
-          dropAccount('device-revoked');
-        } else {
-          access = null; // the next call refreshes
-        }
-      }
-      return response;
-    },
+    authedFetch,
 
     async openWeb(path) {
       // The path crosses IPC: a same-site path only, the shape the cloud's safeNextPath accepts.
-      if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.length > OPEN_WEB_MAX_PATH) {
+      if (
+        typeof path !== 'string' ||
+        !path.startsWith('/') ||
+        path.startsWith('//') ||
+        path.length > OPEN_WEB_MAX_PATH ||
+        unsafePathChar(path)
+      ) {
         return { error: 'That is not a page of the HiveTTY site.' };
       }
       if (current.kind !== 'signed-in') return { error: 'Sign in to HiveTTY first.' };
       let response: Response;
       try {
-        response = await this.authedFetch('/api/oauth/web-session', {
+        response = await authedFetch('/api/oauth/web-session', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ next: path }),
@@ -359,6 +370,10 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
         return { error: "Couldn't reach HiveTTY. Try again." };
       }
       const body: unknown = await response.json().catch(() => null);
+      if (response.status === 401) {
+        // authedFetch has already signed a revoked device out; a raw token code is no sentence for a person.
+        return { error: current.kind === 'signed-in' ? OPEN_WEB_FAILED : 'Sign in to HiveTTY first.' };
+      }
       if (!response.ok) return { error: stringField(body, 'error_description') ?? OPEN_WEB_FAILED };
       // The URL comes off the network: http(s) only, and only on the cloud's own origin.
       const url = stringField(body, 'url');
