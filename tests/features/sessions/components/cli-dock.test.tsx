@@ -163,4 +163,18 @@ describe('CliDock caption (HIVE-378)', () => {
     await user.click(screen.getByRole('button', { name: 'Upgrade' }));
     expect(openAccountWeb).toHaveBeenCalledWith('/account/plan');
   });
+
+  it('two CLIs locked for the same reason share one Upgrade line (HIVE-332)', () => {
+    const reason = 'Your licence has lapsed';
+    render(
+      <Harness
+        onChange={vi.fn()}
+        unavailable={{ codex: reason, copilot: reason }}
+        locked={{ codex: reason, copilot: reason }}
+      />,
+    );
+
+    expect(screen.getAllByText(reason)).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Upgrade' })).toHaveLength(1);
+  });
 });

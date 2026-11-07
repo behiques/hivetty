@@ -56,7 +56,7 @@ function DefaultCliForAgents() {
         onChange={(next) => void setAgentsDefaultCliConfig({ cli: next as HarnessId })}
         hint={
           saved
-            ? `${saved.reason}. Agents with no harness: field fall back to Claude Code.`
+            ? `${saved.reason}. Agents with no harness: field will not run until you pick another default or upgrade.`
             : 'For agents whose AGENT.md has no harness: field.'
         }
       />

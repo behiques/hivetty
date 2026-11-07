@@ -1135,7 +1135,7 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
     expect(wake('slack-watcher', 'manual')).not.toHaveProperty('problem');
     allowed = false;
     expect(wake('slack-watcher', 'manual')).toEqual({
-      problem: 'No CLI can run slack-watcher: claude-code is not in your plan (Solo or higher).',
+      problem: 'No CLI can run slack-watcher: claude-code: not in your plan (Solo or higher).',
     });
   });
 

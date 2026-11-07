@@ -363,7 +363,9 @@ describe('AgentsSection: the plan lock (HIVE-332)', () => {
     expect(await screen.findByRole('option', { name: 'Copilot · Locked: Team' })).toBeDisabled();
     expect(screen.getByRole('option', { name: 'Codex' })).toBeEnabled();
     expect(
-      screen.getByText(/Copilot is in Team and above\. Agents with no harness: field fall back/),
+      screen.getByText(
+        'Copilot is in Team and above. Agents with no harness: field will not run until you pick another default or upgrade.',
+      ),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
   });

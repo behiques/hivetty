@@ -787,7 +787,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real copilot', () => {
     const count = spawns.length;
     try {
       expect(buildWakeCommand(CP, 'manual')).toEqual({
-        problem: `No CLI can run ${CP}: copilot is not in your plan (Team or higher).`,
+        problem: `No CLI can run ${CP}: copilot: not in your plan (Team or higher).`,
       });
       expect(runs.run(CP, 'manual')).toMatchObject({ started: false, refused: 'invalid' });
       expect(spawns).toHaveLength(count);

@@ -123,10 +123,10 @@ export function CliDock({
           {caption}
         </span>
       )}
-      {/* A plan lock (HIVE-332) says why and offers Upgrade; other unavailable CLIs keep their reason in the hint. */}
-      {HARNESS_IDS.filter((cli) => locked[cli] !== undefined).map((cli) => (
-        <span key={cli} className="flex max-w-[380px] items-center gap-1.5 text-center text-ui-sm text-subtle">
-          <span>{locked[cli]}</span> · <UpgradeLink />
+      {/* A plan lock (HIVE-332) says why and offers Upgrade, once per reason; other unavailable CLIs keep theirs in the hint. */}
+      {[...new Set(HARNESS_IDS.flatMap((cli) => locked[cli] ?? []))].map((reason) => (
+        <span key={reason} className="flex max-w-[380px] items-center gap-1.5 text-center text-ui-sm text-subtle">
+          <span>{reason}</span> · <UpgradeLink />
         </span>
       ))}
     </div>

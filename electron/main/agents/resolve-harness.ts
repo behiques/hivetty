@@ -12,7 +12,7 @@ const LITERAL_PREFIX = 'literal:';
  * Claude Code is entitled (fail closed), every CLI enabled, no Settings default.
  */
 export interface HarnessGate {
-  /** `null` when the lease allows it, else why not ("not in your plan (Solo or higher)"). */
+  /** `null` when the lease allows it, else the sentence a person reads ("Copilot is in Team and above"). */
   entitled(id: HarnessId): string | null;
   /** The per-CLI "Enabled for agents" switch. */
   enabled(id: HarnessId): boolean;
@@ -84,7 +84,7 @@ function check(
   const locked =
     deps.gate === undefined ? (id === 'claude-code' ? null : 'not entitled: no licence gate') : deps.gate.entitled(id);
 
-  if (locked !== null) return { fail: `${id} is ${locked}` };
+  if (locked !== null) return { fail: `${id}: ${locked}` };
 
   if (deps.gate !== undefined && !deps.gate.enabled(id)) {
     return { fail: `${id} is turned off for agents in Settings › Harnesses` };
