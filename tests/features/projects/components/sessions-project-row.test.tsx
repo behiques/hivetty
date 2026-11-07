@@ -10,6 +10,7 @@ import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
 import { testProjectKey } from '@tests/support/project-key';
+import { getByHint, queryByHint } from '@tests/support/hint';
 
 // nova-web: hero-refresh working, lead-form waiting, e2e-quote idle — 1 needs you, 2 other.
 const nova: ProjectRow = {
@@ -39,21 +40,21 @@ describe('SessionsProjectRow (HIVE-197)', () => {
     render(<SessionsProjectRow project={nova} />);
     expect(screen.getByRole('button', { name: 'Unfold nova-web' })).toHaveAttribute('aria-expanded', 'false');
     // Needs-you wins the badge; the live count waits behind it.
-    expect(screen.getByTitle('1 need you')).toHaveClass('bg-amber');
-    expect(screen.queryByTitle(/live$/)).toBeNull();
+    expect(getByHint(document.body, '1 need you')).toHaveClass('bg-amber');
+    expect(queryByHint(document.body, /live$/)).toBeNull();
   });
 
   it('badges a folded project green with its live count when nothing needs you', () => {
     act(() => useHiveStore.getState().appendEntityLines('lead-form', [], 'working'));
     render(<SessionsProjectRow project={nova} />);
-    expect(screen.getByTitle('3 live')).toHaveClass('bg-green');
-    expect(screen.queryByTitle(/need you$/)).toBeNull();
+    expect(getByHint(document.body, '3 live')).toHaveClass('bg-green');
+    expect(queryByHint(document.body, /need you$/)).toBeNull();
   });
 
   it('drops the badge once unfolded, where the sessions speak for themselves', () => {
     useUiStore.getState().expandProject('nova-web');
     render(<SessionsProjectRow project={nova} />);
-    expect(screen.queryByTitle(/need you$|live$/)).toBeNull();
+    expect(queryByHint(document.body, /need you$|live$/)).toBeNull();
   });
 
   it('clicking the name filters the Overmind and unfolds the project', async () => {
@@ -101,7 +102,7 @@ describe('SessionsProjectRow (HIVE-197)', () => {
   it('shows no label and no badge when nothing is live', () => {
     render(<SessionsProjectRow project={empty} />);
     expect(screen.queryByText('no sessions')).toBeNull();
-    expect(screen.queryByTitle(/live$/)).toBeNull();
+    expect(queryByHint(document.body, /live$/)).toBeNull();
   });
 });
 
@@ -118,7 +119,7 @@ describe('SessionsProjectRow, an unmapped project (HIVE-211 sweep, HIVE-197 row)
     const ghost: ProjectRow = { id: 'ghost', key: testProjectKey('ghost'), name: 'ghost', icon: 'ph-folder' };
     render(<SessionsProjectRow project={ghost} />);
     const tag = screen.getByText('unmapped');
-    expect(tag.getAttribute('title') ?? '').not.toBe('');
+    expect(tag.getAttribute('aria-description') ?? '').not.toBe('');
     // It gives way to the hover actions.
     expect(tag.parentElement).toHaveClass('group-hover:invisible', 'group-has-[:focus-visible]:invisible');
     expect(tag.parentElement).not.toHaveClass('group-focus-within:invisible');

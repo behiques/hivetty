@@ -22,6 +22,7 @@ import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
 
 import { testProjectKey } from '@tests/support/project-key';
+import { getByHint, queryByHint } from '@tests/support/hint';
 
 const codexModels = vi.fn<() => Promise<CliModel[] | null>>(() => Promise.resolve(null));
 vi.mock('@lib/cli-models', () => ({ codexModels: () => codexModels(), lastCodexModels: () => undefined }));
@@ -711,8 +712,7 @@ describe('NewSessionPicker · unmapped projects', () => {
     const pinned = screen.getByRole('button', { name: 'nova-web' });
 
     expect(pinned).toBeDisabled();
-    expect(pinned).toHaveAttribute(
-      'title',
+    expect(pinned).toHaveAttribute('aria-description',
       expect.stringContaining(CONFIG_PATH),
     );
     expect(screen.getByRole('button', { name: 'referral-api' })).toBeEnabled();
@@ -739,7 +739,7 @@ describe('NewSessionPicker · unmapped projects', () => {
 
     const row = screen.getByRole('button', { name: 'no nova-web unmapped' });
     expect(row).toBeDisabled();
-    expect(row).toHaveAttribute('title', expect.stringContaining('missing'));
+    expect(row).toHaveAttribute('aria-description', expect.stringContaining('missing'));
   });
 
   it('refuses Enter on an unmapped project rather than spawning into nowhere', async () => {
@@ -1123,7 +1123,7 @@ describe('NewSessionPicker and the CLIs on this machine (HIVE-375)', () => {
     expect(await screen.findByRole('radio', { name: 'Codex' })).toBeChecked();
     const copilot = screen.getByRole('radio', { name: /^Copilot: / });
     expect(copilot).toHaveAttribute('aria-disabled', 'true');
-    expect(copilot).toHaveAttribute('title', "Copilot isn't available: `copilot` was not found on PATH.");
+    expect(copilot).toHaveAttribute('aria-description', "Copilot isn't available: `copilot` was not found on PATH.");
 
     await user.click(copilot);
     expect(screen.getByRole('radio', { name: 'Codex' })).toBeChecked();
@@ -1291,11 +1291,11 @@ describe('NewSessionPicker — per-project default CLI (HIVE-378)', () => {
     const user = userEvent.setup();
     render(<NewSessionPicker />);
 
-    expect(within(resultRow('design-system')).getByTitle('Starts on Copilot')).toBeInTheDocument();
-    expect(within(resultRow('nova-web')).queryByTitle(/Starts on/)).toBeNull();
+    expect(getByHint(resultRow('design-system'), 'Starts on Copilot')).toBeInTheDocument();
+    expect(queryByHint(resultRow('nova-web'), /Starts on/)).toBeNull();
 
     await user.click(cliRadio(/Codex/));
-    expect(within(resultRow('design-system')).queryByTitle(/Starts on/)).toBeNull();
+    expect(queryByHint(resultRow('design-system'), /Starts on/)).toBeNull();
   });
 
   it("dims a row's project default that cannot run, and says why (HIVE-387)", () => {
@@ -1308,8 +1308,8 @@ describe('NewSessionPicker — per-project default CLI (HIVE-378)', () => {
     expect(row.querySelector('[data-skipped="true"]')).not.toBeNull();
     // On the row button itself, so a screen reader announces it and the tooltip shows over the whole row.
     expect(row).toHaveAccessibleDescription(reason);
-    expect(row).toHaveAttribute('title', reason);
-    expect(within(row).queryByTitle(/^Starts on/)).toBeNull();
+    expect(row).toHaveAttribute('aria-description', reason);
+    expect(queryByHint(row, /^Starts on/)).toBeNull();
     expect(resultRow('nova-web')).not.toHaveAccessibleDescription(/isn't available/);
   });
 

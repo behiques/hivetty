@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SegmentedControl } from '@components/ui/segmented-control';
+import { hintOf } from '@tests/support/hint';
 
 const OPTIONS = [
   { value: 'system', label: 'System' },
@@ -225,14 +226,14 @@ describe('SegmentedControl', () => {
       { value: 'preview', label: 'Preview', icon: 'ph-eye' },
     ] as const;
 
-    it('draws the glyph instead of the label, which stays the name and the tooltip', () => {
+    it('draws the glyph instead of the label, which stays the name and the tooltip', async () => {
       render(<SegmentedControl label="View" value="source" onChange={() => {}} options={ICON_OPTIONS} />);
 
       for (const option of ICON_OPTIONS) {
         const radio = screen.getByRole('radio', { name: option.label });
         expect(radio.querySelector('svg')).toBeInTheDocument();
         expect(radio).not.toHaveTextContent(option.label);
-        expect(radio).toHaveAttribute('title', option.label);
+        expect(await hintOf(radio)).toBe(option.label);
       }
     });
 
@@ -252,7 +253,7 @@ describe('SegmentedControl', () => {
       renderControl();
       expect(screen.getByRole('radiogroup')).toHaveClass('border', 'rounded-full', 'bg-panel-2');
       expect(screen.getByRole('radio', { name: 'Dark' })).toHaveClass('rounded-full', 'px-3', 'text-control');
-      expect(screen.getByRole('radio', { name: 'Dark' })).not.toHaveAttribute('title');
+      expect(screen.getByRole('radio', { name: 'Dark' })).not.toHaveAttribute('aria-description');
     });
   });
 });

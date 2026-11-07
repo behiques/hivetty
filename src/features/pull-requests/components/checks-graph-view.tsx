@@ -5,6 +5,7 @@ import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { NODE_H, NODE_W, type ChecksGraph, type EdgeState, type GraphNode } from '@/lib/checks-graph';
 import { cn } from '@/lib/utils';
 
+import { Hint } from '@components/ui/hint';
 import { StateIcon } from '@features/pull-requests/components/state-icon';
 import { useMeasuredWidth } from '@features/pull-requests/components/timeline-lane';
 
@@ -89,18 +90,26 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
   return (
     <div className="mx-6 mt-3">
       <div role="group" aria-label="Zoom" className="ml-auto flex w-fit items-center gap-0.5 rounded-full border border-border-soft bg-panel p-0.5">
-        <button type="button" aria-label="Zoom out" title="Zoom out" disabled={scale <= ZOOM_MIN} onClick={() => step(-ZOOM_STEP)} className={ZOOM_BUTTON}>
-          <MagnifyingGlassMinus size={14} aria-hidden />
-        </button>
-        <button type="button" aria-label="Reset zoom" title="Back to 100%" onClick={() => setZoom(1)} className="h-7 min-w-11 rounded-full px-1 tabular-nums text-ui-sm text-muted hover:bg-hover hover:text-ink">
-          {`${String(Math.round(scale * 100))}%`}
-        </button>
-        <button type="button" aria-label="Zoom in" title="Zoom in" disabled={scale >= ZOOM_MAX} onClick={() => step(ZOOM_STEP)} className={ZOOM_BUTTON}>
-          <MagnifyingGlassPlus size={14} aria-hidden />
-        </button>
-        <button type="button" aria-label="Fit to width" title="Fit to width" aria-pressed={zoom === 'fit'} onClick={() => setZoom('fit')} className={ZOOM_BUTTON}>
-          <ArrowsIn size={14} aria-hidden />
-        </button>
+        <Hint label="Zoom out">
+          <button type="button" aria-label="Zoom out" disabled={scale <= ZOOM_MIN} onClick={() => step(-ZOOM_STEP)} className={ZOOM_BUTTON}>
+            <MagnifyingGlassMinus size={14} aria-hidden />
+          </button>
+        </Hint>
+        <Hint label="Back to 100%">
+          <button type="button" aria-label="Reset zoom" onClick={() => setZoom(1)} className="h-7 min-w-11 rounded-full px-1 tabular-nums text-ui-sm text-muted hover:bg-hover hover:text-ink">
+            {`${String(Math.round(scale * 100))}%`}
+          </button>
+        </Hint>
+        <Hint label="Zoom in">
+          <button type="button" aria-label="Zoom in" disabled={scale >= ZOOM_MAX} onClick={() => step(ZOOM_STEP)} className={ZOOM_BUTTON}>
+            <MagnifyingGlassPlus size={14} aria-hidden />
+          </button>
+        </Hint>
+        <Hint label="Fit to width">
+          <button type="button" aria-label="Fit to width" aria-pressed={zoom === 'fit'} onClick={() => setZoom('fit')} className={ZOOM_BUTTON}>
+            <ArrowsIn size={14} aria-hidden />
+          </button>
+        </Hint>
       </div>
       <div ref={ref} className="overflow-x-auto pt-2 pb-3">
         <div style={{ width: graph.width * scale, height: graph.height * scale }}>
@@ -125,30 +134,30 @@ export function ChecksGraphView({ graph, onJob, onExpand }: { graph: ChecksGraph
               /** Waiting and skipped dim the icon, and step the text down a token; opacity never touches text (HIVE-225). */
               const dim = node.state === 'waiting' || node.state === 'skipped';
               return (
-                <button
-                  key={node.key}
-                  type="button"
-                  data-state={node.state}
-                  aria-label={`${label}, ${node.state}, ${node.time}`}
-                  title={label}
-                  onClick={() => {
-                    if (node.matrix !== null) onExpand(node.matrix);
-                    else if (node.jobId !== null) onJob(node.jobId);
-                  }}
-                  className={cn('absolute flex items-center gap-2.5 overflow-hidden rounded-xl border bg-panel px-3 text-left hover:bg-hover', NODE[node.state])}
-                  style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
-                >
-                  <span className={cn('grid shrink-0', dim && 'opacity-60')}><StateIcon state={node.state} /></span>
-                  <span className="flex min-w-0 flex-col gap-px">
-                    <b className={cn('truncate tabular-nums text-control', dim ? 'text-muted' : 'text-ink')}>{label}</b>
-                    <span className={cn('truncate tabular-nums text-micro', dim ? 'text-subtle' : 'text-muted')}>{node.time}</span>
-                  </span>
-                  {node.progress === null ? null : (
-                    <span role="progressbar" aria-label={`${node.label} progress`} aria-valuenow={Math.round(node.progress * 100)} aria-valuemin={0} aria-valuemax={100} className="absolute inset-x-0 bottom-0 h-[3px] bg-border">
-                      <span className="block h-full bg-green" style={{ width: `${String(node.progress * 100)}%` }} />
+                <Hint key={node.key} label={label}>
+                  <button
+                    type="button"
+                    data-state={node.state}
+                    aria-label={`${label}, ${node.state}, ${node.time}`}
+                    onClick={() => {
+                      if (node.matrix !== null) onExpand(node.matrix);
+                      else if (node.jobId !== null) onJob(node.jobId);
+                    }}
+                    className={cn('absolute flex items-center gap-2.5 overflow-hidden rounded-xl border bg-panel px-3 text-left hover:bg-hover', NODE[node.state])}
+                    style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
+                  >
+                    <span className={cn('grid shrink-0', dim && 'opacity-60')}><StateIcon state={node.state} /></span>
+                    <span className="flex min-w-0 flex-col gap-px">
+                      <b className={cn('truncate tabular-nums text-control', dim ? 'text-muted' : 'text-ink')}>{label}</b>
+                      <span className={cn('truncate tabular-nums text-micro', dim ? 'text-subtle' : 'text-muted')}>{node.time}</span>
                     </span>
-                  )}
-                </button>
+                    {node.progress === null ? null : (
+                      <span role="progressbar" aria-label={`${node.label} progress`} aria-valuenow={Math.round(node.progress * 100)} aria-valuemin={0} aria-valuemax={100} className="absolute inset-x-0 bottom-0 h-[3px] bg-border">
+                        <span className="block h-full bg-green" style={{ width: `${String(node.progress * 100)}%` }} />
+                      </span>
+                    )}
+                  </button>
+                </Hint>
               );
             })}
           </div>

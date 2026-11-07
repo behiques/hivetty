@@ -10,6 +10,7 @@ import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
+import { hintOf } from '@tests/support/hint';
 import { prRecord } from '@tests/support/prs';
 
 const renderBar = () =>
@@ -180,13 +181,10 @@ describe('the theme toggle (HIVE-213)', () => {
     useAppearanceStore.getState().reset();
   });
 
-  it('is named for the theme it switches to', () => {
+  it('is named for the theme it switches to', async () => {
     useAppearanceStore.setState({ theme: 'dark' });
     const { unmount } = renderBar();
-    expect(screen.getByRole('button', { name: 'Switch to light theme' })).toHaveAttribute(
-      'title',
-      'Switch to light theme',
-    );
+    expect(await hintOf(screen.getByRole('button', { name: 'Switch to light theme' }))).toBe('Switch to light theme');
     unmount();
 
     useAppearanceStore.setState({ theme: 'light' });

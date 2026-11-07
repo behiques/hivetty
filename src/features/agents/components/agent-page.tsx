@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { isAgent } from '@/types/entity';
 
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { AgentView } from '@features/agents/components/agent-view';
@@ -95,14 +96,15 @@ export function AgentPage({ name }: { name: string | null }) {
           Native `title`, as the editor's footer button had it: it previews the
           refusal a click would give, and the click still answers with it.
         */}
-        <button
-          type="button"
-          onClick={runNow}
-          title={refusal ?? 'Wake this agent once, now.'}
-          className="rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
-        >
-          Run now
-        </button>
+        <Hint label={refusal ?? 'Wake this agent once, now.'}>
+          <button
+            type="button"
+            onClick={runNow}
+            className="rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
+          >
+            Run now
+          </button>
+        </Hint>
       </header>
       {view === 'activity' && agent !== undefined ? (
         <AgentView entity={agent} notice={notice} onNotice={setNotice} />

@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 
 import { ConnectionItem } from '@components/layout/connection-item';
+import { Hint } from '@components/ui/hint';
 import { AccountMenu } from '@features/account/components/account-menu';
 import { useResolvedTheme, useToggleTheme } from '@stores/appearance-store';
 import { useCounts, usePrNeedsYouCount, useTabGone, useWorkingAgentCount } from '@stores/hive-store';
@@ -108,16 +109,17 @@ export function ActivityBar() {
 
       <AccountMenu />
 
-      <button
-        type="button"
-        aria-label={themeLabel}
-        title={themeLabel}
-        onClick={toggleTheme}
-        className={cn(ITEM, 'text-muted hover:bg-hover')}
-      >
-        <ThemeIcon size={19} aria-hidden />
-        Theme
-      </button>
+      <Hint label={themeLabel}>
+        <button
+          type="button"
+          aria-label={themeLabel}
+          onClick={toggleTheme}
+          className={cn(ITEM, 'text-muted hover:bg-hover')}
+        >
+          <ThemeIcon size={19} aria-hidden />
+          Theme
+        </button>
+      </Hint>
 
       <button
         type="button"

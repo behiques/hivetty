@@ -67,8 +67,7 @@ describe('OvermindHead (HIVE-197)', () => {
     useUiStore.getState().setSessionsProject('nova-web');
     render(<OvermindHead />);
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'New session in nova-web' })).toHaveAttribute(
-        'title',
+      expect(screen.getByRole('button', { name: 'New session in nova-web' })).toHaveAttribute('aria-description',
         "Copilot, the default for nova-web, isn't available · starting on Claude Code (your default)",
       ),
     );

@@ -95,8 +95,7 @@ describe('NewTerminalLink', () => {
     setProjectConfigForTest(snapshot([{ id: PROJECT, status: 'ok' }]));
     render(<NewTerminalLink projectId={PROJECT} projectName={PROJECT_NAME} />);
 
-    expect(screen.getByRole('button')).toHaveAttribute(
-      'title',
+    expect(screen.getByRole('button')).toHaveAttribute('aria-description',
       'Opens a login shell at the project root',
     );
   });
@@ -107,7 +106,7 @@ describe('NewTerminalLink', () => {
 
     const link = screen.getByRole('button');
     expect(link).toBeDisabled();
-    expect(link).toHaveAttribute('title', expect.stringContaining(CONFIG_PATH));
+    expect(link).toHaveAttribute('aria-description', expect.stringContaining(CONFIG_PATH));
 
     await userEvent.click(link);
     expect(useHiveStore.getState().order).toHaveLength(0);
@@ -128,7 +127,7 @@ describe('NewTerminalLink', () => {
     // The trap is adjacency: an unlabelled terminal beside containerised
     // sessions reads as the container and lands on the Mac.
     expect(link).toHaveAccessibleName(`Terminal in ${PROJECT_NAME} · host`);
-    expect(link).toHaveAttribute('title', expect.stringMatching(/container/i));
+    expect(link).toHaveAttribute('aria-description', expect.stringMatching(/container/i));
     expect(link).toBeEnabled();
   });
 });

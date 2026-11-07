@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { Hint } from '@components/ui/hint';
+
 export type TagTone = 'brand' | 'green' | 'amber' | 'red' | 'subtle';
 
 /** Text colour per tone. The superset; every other tone map in the app is a subset of this one. */
@@ -39,13 +41,9 @@ interface TagProps {
   /** The surface behind the tag. Defaults to the flat panel. */
   surface?: TagSurface;
   /**
-   * Native tooltip text, exactly as `Chip` already takes it.
-   *
-   * The Radix `Tooltip` atom is the richer answer, but its trigger cannot be
-   * nested inside the Sessions panel's project row — that row *is* a `<button>`,
-   * and a button inside a button is invalid markup that React will warn about
-   * and screen readers will read wrong. `title` is announced by assistive tech
-   * and needs no wrapper (story 090).
+   * Hover hint text, exactly as `Chip` already takes it. Drawn by `Hint`, whose
+   * `asChild` trigger is this `<span>` itself, so it nests inside the Sessions
+   * panel's project row (a `<button>`) without adding a button of its own.
    */
   title?: string;
   className?: string;
@@ -70,16 +68,17 @@ export function Tag({
   className,
 }: TagProps) {
   return (
-    <span
-      title={title}
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-micro font-semibold',
-        SURFACE_FILL[surface],
-        TONE_TEXT[tone],
-        className,
-      )}
-    >
-      {children}
-    </span>
+    <Hint label={title}>
+      <span
+        className={cn(
+          'inline-flex items-center rounded-full px-2 py-0.5 text-micro font-semibold',
+          SURFACE_FILL[surface],
+          TONE_TEXT[tone],
+          className,
+        )}
+      >
+        {children}
+      </span>
+    </Hint>
   );
 }

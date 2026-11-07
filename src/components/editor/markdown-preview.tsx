@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 import { MarkdownCode } from '@components/editor/markdown-code';
+import { Hint } from '@components/ui/hint';
 import { classifyHref, type RelativeHref } from '@lib/markdown/href';
 import type { MdBlock, MdDocument, MdInline } from '@lib/markdown/model';
 
@@ -78,14 +79,15 @@ function Link({ href, children, ctx }: { href: string; children: MdInline[]; ctx
       // A button, not an href: a relative href would resolve against the
       // renderer's own origin, which in dev is an http URL main would open.
       return (
-        <button
-          type="button"
-          className={LINK}
-          title={target.path}
-          onClick={() => ctx.onOpenLink(target)}
-        >
-          {label}
-        </button>
+        <Hint label={target.path}>
+          <button
+            type="button"
+            className={LINK}
+            onClick={() => ctx.onOpenLink(target)}
+          >
+            {label}
+          </button>
+        </Hint>
       );
     case 'refused':
       return <span>{label}</span>;
@@ -138,12 +140,13 @@ function renderInline(node: MdInline, ctx: LinkContext): ReactNode {
       // A placeholder: the CSP admits no remote image, and repo images need a
       // contained fs verb that is a follow-up.
       return (
-        <span
-          title={node.src}
-          className="inline-flex items-center rounded-xs border border-dashed border-border px-1.5 text-micro text-subtle"
-        >
-          {node.alt === '' ? node.src : node.alt}
-        </span>
+        <Hint label={node.src}>
+          <span
+            className="inline-flex items-center rounded-xs border border-dashed border-border px-1.5 text-micro text-subtle"
+          >
+            {node.alt === '' ? node.src : node.alt}
+          </span>
+        </Hint>
       );
     case 'link':
       return (

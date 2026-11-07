@@ -11,6 +11,7 @@ import { fileKey, useEditorStore } from '@stores/editor-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
+import { hintOf } from '@tests/support/hint';
 
 const { resolvePaths } = vi.hoisted(() => ({ resolvePaths: vi.fn() }));
 
@@ -246,13 +247,13 @@ describe('SessionPanel: the Ticket tab (HIVE-202)', () => {
     expect(screen.getByText('ticket HIVE-193')).toBeInTheDocument();
   });
 
-  it('closed, the strip says the key and status, and opens the panel on Ticket', () => {
+  it('closed, the strip says the key and status, and opens the panel on Ticket', async () => {
     act(() => {
       useAppearanceStore.getState().setSessionPanelOpen(false);
     });
     render(<SessionPanel rowRef={createRef()} />);
     const fact = screen.getByRole('button', { name: 'HIVE-193 · In Progress' });
-    expect(fact).toHaveAttribute('title', 'HIVE-193 · In Progress');
+    expect(await hintOf(fact)).toBe('HIVE-193 · In Progress');
 
     fireEvent.click(fact);
 
@@ -260,14 +261,14 @@ describe('SessionPanel: the Ticket tab (HIVE-202)', () => {
     expect(screen.getByText('ticket HIVE-193')).toBeInTheDocument();
   });
 
-  it('closed, the strip says the key alone before the ticket is read', () => {
+  it('closed, the strip says the key alone before the ticket is read', async () => {
     useHiveStore.setState({ tickets: [] });
     act(() => {
       useAppearanceStore.getState().setSessionPanelOpen(false);
     });
     render(<SessionPanel rowRef={createRef()} />);
 
-    expect(screen.getByRole('button', { name: 'HIVE-193' })).toHaveAttribute('title', 'HIVE-193');
+    expect(await hintOf(screen.getByRole('button', { name: 'HIVE-193' }))).toBe('HIVE-193');
   });
 
   it('a session on no ticket has no Ticket tab', () => {

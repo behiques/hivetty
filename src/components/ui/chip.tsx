@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import type { Tone } from '@/types/notification';
 
+import { Hint } from '@components/ui/hint';
 import { TONE_TEXT } from '@components/ui/tag';
 
 interface ChipProps {
@@ -23,15 +24,16 @@ interface ChipProps {
  */
 export function Chip({ children, tone, title, className }: ChipProps) {
   return (
-    <span
-      title={title}
-      className={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-chip px-3 py-1 tabular-nums text-ui-sm',
-        tone ? TONE_TEXT[tone] : 'text-muted',
-        className,
-      )}
-    >
-      {children}
-    </span>
+    <Hint label={title}>
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-chip px-3 py-1 tabular-nums text-ui-sm',
+          tone ? TONE_TEXT[tone] : 'text-muted',
+          className,
+        )}
+      >
+        {children}
+      </span>
+    </Hint>
   );
 }

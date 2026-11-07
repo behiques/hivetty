@@ -1,6 +1,7 @@
 import { ArrowClockwise, FolderOpen } from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { Hint } from '@components/ui/hint';
 import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { ConfigResetConfirm } from '@features/settings/components/config-reset-confirm';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
@@ -255,19 +256,20 @@ export function AdvancedSection() {
           {snapshot.configPath}
         </p>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (!revealConfig) return;
-              void revealConfigFile();
-            }}
-            disabled={!revealConfig}
-            title={revealConfig ? undefined : REMOTE_DISABLED_REASON.revealConfig}
-            className="flex w-fit items-center gap-1.5 rounded-full border border-edge px-4 py-1.5 text-control font-semibold text-ink hover:bg-hover disabled:opacity-60"
-          >
-            <FolderOpen size={12} weight="bold" />
-            {fileManager(info?.platform)}
-          </button>
+          <Hint label={revealConfig ? undefined : REMOTE_DISABLED_REASON.revealConfig}>
+            <button
+              type="button"
+              onClick={() => {
+                if (!revealConfig) return;
+                void revealConfigFile();
+              }}
+              disabled={!revealConfig}
+              className="flex w-fit items-center gap-1.5 rounded-full border border-edge px-4 py-1.5 text-control font-semibold text-ink hover:bg-hover disabled:opacity-60"
+            >
+              <FolderOpen size={12} weight="bold" />
+              {fileManager(info?.platform)}
+            </button>
+          </Hint>
           <button
             type="button"
             onClick={() => void onReload()}

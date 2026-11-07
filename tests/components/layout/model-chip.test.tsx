@@ -8,6 +8,7 @@ import type { SessionMetrics } from '@shared/metrics-contract';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
+import { getByHint } from '@tests/support/hint';
 
 /**
  * The chip is conditional on *what kind of thing* the active tab is — the
@@ -90,7 +91,7 @@ describe('ModelChip', () => {
 
       render(<ModelChip />);
 
-      expect(screen.getByTitle('Opus 4.5 · high')).toBeInTheDocument();
+      expect(getByHint(document.body, 'Opus 4.5 · high')).toBeInTheDocument();
     });
   });
 
@@ -141,7 +142,7 @@ describe('ModelChip', () => {
     it('leaves the context out of the tooltip too', () => {
       render(<ModelChip />);
 
-      const title = screen.getByTitle(/weekly limit/).getAttribute('title');
+      const title = getByHint(document.body, /weekly limit/).getAttribute('aria-description');
       expect(title).toContain('session limit 3%');
       expect(title).not.toContain('context');
     });
@@ -224,12 +225,12 @@ describe('ModelChip', () => {
     it('spells everything out in the tooltip, so truncation loses no meaning', () => {
       render(<ModelChip />);
 
-      const title = screen.getByTitle(/weekly limit/);
-      expect(title.getAttribute('title')).toContain('context 46%');
-      expect(title.getAttribute('title')).toContain(
+      const title = getByHint(document.body, /weekly limit/);
+      expect(title.getAttribute('aria-description')).toContain('context 46%');
+      expect(title.getAttribute('aria-description')).toContain(
         'session limit 12%, resets 2:30p',
       );
-      expect(title.getAttribute('title')).toContain(
+      expect(title.getAttribute('aria-description')).toContain(
         'weekly limit 63%, resets Thu 5p',
       );
     });
@@ -312,14 +313,14 @@ describe('ModelChip', () => {
 
     it('leaves Claude’s strip byte-identical', () => {
       const id = useHiveStore.getState().spawnSession('nova-web', '', 'claude-code', 'opus', 'high');
-      expect(show(id).outerHTML).toMatchInlineSnapshot(`"<span title="Opus 4.5 (1M) · xhigh · context 46% · session limit 12%, resets 2:30p · weekly limit 71%" data-testid="model-chip" class="flex items-center gap-1.5 whitespace-nowrap tabular-nums text-xs text-muted"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 256 256" class="shrink-0 text-brand"><path d="M248,124a56.11,56.11,0,0,0-32-50.61V72a48,48,0,0,0-88-26.49A48,48,0,0,0,40,72v1.39a56,56,0,0,0,0,101.2V176a48,48,0,0,0,88,26.49A48,48,0,0,0,216,176v-1.41A56.09,56.09,0,0,0,248,124ZM88,208a32,32,0,0,1-31.81-28.56A55.87,55.87,0,0,0,64,180h8a8,8,0,0,0,0-16H64A40,40,0,0,1,50.67,86.27,8,8,0,0,0,56,78.73V72a32,32,0,0,1,64,0v68.26A47.8,47.8,0,0,0,88,128a8,8,0,0,0,0,16,32,32,0,0,1,0,64Zm104-44h-8a8,8,0,0,0,0,16h8a55.87,55.87,0,0,0,7.81-.56A32,32,0,1,1,168,144a8,8,0,0,0,0-16,47.8,47.8,0,0,0-32,12.26V72a32,32,0,0,1,64,0v6.73a8,8,0,0,0,5.33,7.54A40,40,0,0,1,192,164Zm16-52a8,8,0,0,1-8,8h-4a36,36,0,0,1-36-36V80a8,8,0,0,1,16,0v4a20,20,0,0,0,20,20h4A8,8,0,0,1,208,112ZM60,120H56a8,8,0,0,1,0-16h4A20,20,0,0,0,80,84V80a8,8,0,0,1,16,0v4A36,36,0,0,1,60,120Z"></path></svg><svg aria-hidden="true" data-cli="claude-code" viewBox="0 0 24 24" fill="currentColor" class="size-4 shrink-0"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"></path></svg><span class="flex items-center gap-2"><span data-label="full" class="shrink-0 @max-[820px]:hidden">Opus 4.5 (1M) · xhigh</span><span data-label="model" class="hidden shrink-0 @max-[820px]:inline @max-[600px]:hidden">Opus 4.5</span><span class="flex shrink-0 items-center gap-1 border-l border-border pl-2"><svg width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="context: 46%" class="shrink-0"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" class="text-border"></circle><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.69911184307752" stroke-dashoffset="20.35752039526186" transform="rotate(-90 7 7)" class="text-brand"></circle></svg><span class="text-brand">46%</span><span data-detail="only" class="text-subtle @max-[660px]:hidden">ctx</span></span><span class="flex shrink-0 items-center gap-1 border-l border-border pl-2"><svg width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="session limit: 12%" class="shrink-0"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" class="text-border"></circle><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.69911184307752" stroke-dashoffset="33.17521842190821" transform="rotate(-90 7 7)" class="text-brand"></circle></svg><span class="text-brand">12%</span><span data-detail="long" class="text-subtle @max-[900px]:hidden">↻ 2:30p</span><span data-detail="short" class="hidden text-subtle @max-[900px]:inline @max-[660px]:hidden">5h</span></span><span class="flex shrink-0 items-center gap-1 border-l border-border pl-2"><svg width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="weekly limit: 71%" class="shrink-0"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" class="text-border"></circle><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.69911184307752" stroke-dashoffset="10.932742434492482" transform="rotate(-90 7 7)" class="text-amber-text"></circle></svg><span class="text-amber-text">71%</span><span data-detail="long" class="text-subtle @max-[900px]:hidden">week</span><span data-detail="short" class="hidden text-subtle @max-[900px]:inline @max-[660px]:hidden">wk</span></span></span></span>"`);
+      expect(show(id).outerHTML).toMatchInlineSnapshot(`"<span data-testid="model-chip" class="flex items-center gap-1.5 whitespace-nowrap tabular-nums text-xs text-muted" aria-description="Opus 4.5 (1M) · xhigh · context 46% · session limit 12%, resets 2:30p · weekly limit 71%" data-state="closed" data-slot="tooltip-trigger"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 256 256" class="shrink-0 text-brand"><path d="M248,124a56.11,56.11,0,0,0-32-50.61V72a48,48,0,0,0-88-26.49A48,48,0,0,0,40,72v1.39a56,56,0,0,0,0,101.2V176a48,48,0,0,0,88,26.49A48,48,0,0,0,216,176v-1.41A56.09,56.09,0,0,0,248,124ZM88,208a32,32,0,0,1-31.81-28.56A55.87,55.87,0,0,0,64,180h8a8,8,0,0,0,0-16H64A40,40,0,0,1,50.67,86.27,8,8,0,0,0,56,78.73V72a32,32,0,0,1,64,0v68.26A47.8,47.8,0,0,0,88,128a8,8,0,0,0,0,16,32,32,0,0,1,0,64Zm104-44h-8a8,8,0,0,0,0,16h8a55.87,55.87,0,0,0,7.81-.56A32,32,0,1,1,168,144a8,8,0,0,0,0-16,47.8,47.8,0,0,0-32,12.26V72a32,32,0,0,1,64,0v6.73a8,8,0,0,0,5.33,7.54A40,40,0,0,1,192,164Zm16-52a8,8,0,0,1-8,8h-4a36,36,0,0,1-36-36V80a8,8,0,0,1,16,0v4a20,20,0,0,0,20,20h4A8,8,0,0,1,208,112ZM60,120H56a8,8,0,0,1,0-16h4A20,20,0,0,0,80,84V80a8,8,0,0,1,16,0v4A36,36,0,0,1,60,120Z"></path></svg><svg aria-hidden="true" data-cli="claude-code" viewBox="0 0 24 24" fill="currentColor" class="size-4 shrink-0"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"></path></svg><span class="flex items-center gap-2"><span data-label="full" class="shrink-0 @max-[820px]:hidden">Opus 4.5 (1M) · xhigh</span><span data-label="model" class="hidden shrink-0 @max-[820px]:inline @max-[600px]:hidden">Opus 4.5</span><span class="flex shrink-0 items-center gap-1 border-l border-border pl-2"><svg width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="context: 46%" class="shrink-0"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" class="text-border"></circle><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.69911184307752" stroke-dashoffset="20.35752039526186" transform="rotate(-90 7 7)" class="text-brand"></circle></svg><span class="text-brand">46%</span><span data-detail="only" class="text-subtle @max-[660px]:hidden">ctx</span></span><span class="flex shrink-0 items-center gap-1 border-l border-border pl-2"><svg width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="session limit: 12%" class="shrink-0"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" class="text-border"></circle><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.69911184307752" stroke-dashoffset="33.17521842190821" transform="rotate(-90 7 7)" class="text-brand"></circle></svg><span class="text-brand">12%</span><span data-detail="long" class="text-subtle @max-[900px]:hidden">↻ 2:30p</span><span data-detail="short" class="hidden text-subtle @max-[900px]:inline @max-[660px]:hidden">5h</span></span><span class="flex shrink-0 items-center gap-1 border-l border-border pl-2"><svg width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="weekly limit: 71%" class="shrink-0"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" class="text-border"></circle><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.69911184307752" stroke-dashoffset="10.932742434492482" transform="rotate(-90 7 7)" class="text-amber-text"></circle></svg><span class="text-amber-text">71%</span><span data-detail="long" class="text-subtle @max-[900px]:hidden">week</span><span data-detail="short" class="hidden text-subtle @max-[900px]:inline @max-[660px]:hidden">wk</span></span></span></span>"`);
     });
 
     it('shows a Copilot session its CLI, picked model and context, and neither limit', () => {
       const id = useHiveStore.getState().spawnSession('nova-web', '', 'copilot', 'gpt-5.2', 'medium');
       const chip = show(id, FULL_BUT_MODEL);
       // Context joined in the HIVE-335 follow-up (its OTel usage_info); the limits stay undeclared.
-      expect(chip.getAttribute('title')).toBe('Copilot · gpt-5.2 (1M) · medium · context 46%');
+      expect(chip.getAttribute('aria-description')).toBe('Copilot · gpt-5.2 (1M) · medium · context 46%');
       expect(chip.textContent).toContain('46%');
       expect(chip.textContent).not.toMatch(/12%|71%|N\/A|Opus|xhigh/);
       expect(chip.querySelector('svg[data-cli="copilot"]')).toBeInTheDocument();
@@ -332,7 +333,7 @@ describe('ModelChip', () => {
       useHiveStore.setState((state) => ({
         entities: { ...state.entities, [id]: { ...(state.entities[id] as Session), effort: undefined } },
       }));
-      expect(show(id, FULL_BUT_MODEL).getAttribute('title')).toBe('Copilot · gpt-5.2 (1M) · context 46%');
+      expect(show(id, FULL_BUT_MODEL).getAttribute('aria-description')).toBe('Copilot · gpt-5.2 (1M) · context 46%');
     });
 
     it('shows a Copilot session its tokens and AI credits used (HIVE-335)', () => {
@@ -348,7 +349,7 @@ describe('ModelChip', () => {
         contextWindow: 272000,
         fiveHourPct: 40,
       });
-      expect(chip.getAttribute('title')).toBe(
+      expect(chip.getAttribute('aria-description')).toBe(
         'Copilot · claude-sonnet-5.5 · high · context 10% · tokens ↑61,741 (49,589 cached, 12,146 written) ↓109 · AI credits 3.64',
       );
       expect(chip.textContent).toContain('↑61.7k ↓109tokens');
@@ -392,7 +393,7 @@ describe('ModelChip', () => {
         creditsBalance: '1234',
         creditsUnlimited: false,
       });
-      expect(chip.getAttribute('title')).toBe(
+      expect(chip.getAttribute('aria-description')).toBe(
         'Codex · gpt-6.1-sol · medium · context 12% · session limit 18% · weekly limit 3% · credits 1,234',
       );
       expect(chip.textContent).toContain('1,234credits');
@@ -417,7 +418,7 @@ describe('ModelChip', () => {
       const chip = show(id);
       expect(chip.textContent).toContain('12%');
       expect(chip.textContent).not.toContain('credits');
-      expect(chip.getAttribute('title')).not.toContain('credits');
+      expect(chip.getAttribute('aria-description')).not.toContain('credits');
     });
 
     it('never shows credits on a Claude session (HIVE-334)', () => {
@@ -425,7 +426,7 @@ describe('ModelChip', () => {
       useHiveStore.getState().setSessionMetrics(id, { creditsBalance: '5' });
       const chip = show(id);
       expect(chip.textContent).not.toContain('credits');
-      expect(chip.getAttribute('title')).not.toContain('credits');
+      expect(chip.getAttribute('aria-description')).not.toContain('credits');
     });
   });
 
@@ -461,7 +462,7 @@ describe('ModelChip', () => {
     const shorts = [...chip.querySelectorAll('[data-detail="short"]')].map((n) => n.textContent);
     expect(shorts).toEqual(['5h', 'wk']);
     expect(chip.querySelectorAll('[data-detail="long"]')).toHaveLength(2);
-    expect(chip.getAttribute('title')).toMatch(/session limit 12%, resets .+ · weekly limit 46%, resets /);
+    expect(chip.getAttribute('aria-description')).toMatch(/session limit 12%, resets .+ · weekly limit 46%, resets /);
   });
 
   describe('the steps with both panels open (HIVE-220)', () => {
@@ -509,7 +510,7 @@ describe('ModelChip', () => {
 
     it('keeps model, window, effort, every stat and both resets in the tooltip', () => {
       render(<ModelChip />);
-      const title = screen.getByTestId('model-chip').getAttribute('title')!;
+      const title = screen.getByTestId('model-chip').getAttribute('aria-description')!;
       expect(title).toContain('Opus 4.5 (1M) · high');
       expect(title).toContain('context 46%');
       expect(title).toContain('session limit 12%, resets 2:30p');

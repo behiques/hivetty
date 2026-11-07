@@ -9,6 +9,7 @@ import {
 } from '@shared/agent-contract';
 import { useAppearanceStore, useTerminalAppearance } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
+import { getAllByHint, getByHint } from '@tests/support/hint';
 
 /*
   Counts AgentRunLog's own renders (HIVE-225). The component calls
@@ -451,7 +452,7 @@ describe('AgentRunLog', () => {
 
       render(<AgentRunLog name="watcher" />);
 
-      const cell = within(screen.getByTestId('run-receipts')).getByTitle('failed · app closed');
+      const cell = getByHint(screen.getByTestId('run-receipts'), 'failed · app closed');
       expect(cell).toHaveTextContent(/^failed · app closed$/);
       expect(cell).toHaveStyle({ color: palette().red });
       expect(cell).toHaveClass('truncate');
@@ -474,7 +475,7 @@ describe('AgentRunLog', () => {
       render(<AgentRunLog name="watcher" />);
 
       expect(outcomeCell('done')).not.toHaveAttribute('style');
-      expect(outcomeCell('done')).toHaveAttribute('title', 'done');
+      expect(outcomeCell('done')).toHaveAttribute('aria-description', 'done');
     });
   });
 
@@ -931,13 +932,12 @@ describe('AgentRunLog', () => {
       render(<AgentRunLog name="watcher" />);
 
       const receipts = screen.getByTestId('run-receipts');
-      const ids = within(receipts)
-        .getAllByTitle(/standing run|task run/)
+      const ids = getAllByHint(receipts, /standing run|task run/)
         .map((el) => el.textContent);
 
       expect(ids).toEqual(['●#live-sta', '○#live-tas', '○#live-tas']);
       expect(within(receipts).getAllByText('running')).toHaveLength(3);
-      expect(within(receipts).getAllByTitle('standing run')).toHaveLength(1);
+      expect(getAllByHint(receipts, 'standing run')).toHaveLength(1);
       // The finished receipt survives beside them rather than being replaced.
       expect(within(receipts).getByText('#r1')).toBeInTheDocument();
       expect(screen.queryByText(/Running now/)).toBeNull();
@@ -1081,7 +1081,7 @@ describe('AgentRunLog', () => {
 
       expect(row.textContent).toContain('a/x');
       // The whole key, so a hover tells two lanes apart even across days.
-      expect(within(row).getByTitle('repo:a/x lane')).toBeInTheDocument();
+      expect(getByHint(row, 'repo:a/x lane')).toBeInTheDocument();
     });
 
     it('groups the output by run, standing first, and labels each group', () => {
@@ -1211,7 +1211,7 @@ describe('AgentRunLog', () => {
       expect(
         container.querySelector('[data-region="run-columns"]'),
       ).not.toBeNull();
-      expect(within(receipts).getByTitle('standing run')).toBeInTheDocument();
+      expect(getByHint(receipts, 'standing run')).toBeInTheDocument();
     });
   });
 });
@@ -1225,7 +1225,7 @@ describe('the CLI a run ran on (HIVE-340)', () => {
 
     const { container } = render(<AgentRunLog name="watcher" />);
 
-    const mark = within(receipts(container)).getByTitle('Ran on Codex');
+    const mark = getByHint(receipts(container), 'Ran on Codex');
     expect(mark.querySelector('svg[data-cli="codex"]')).toBeInTheDocument();
     expect(within(mark).getByText('Codex')).toHaveClass('sr-only');
   });
@@ -1235,6 +1235,6 @@ describe('the CLI a run ran on (HIVE-340)', () => {
 
     const { container } = render(<AgentRunLog name="watcher" />);
 
-    expect(within(receipts(container)).getAllByTitle('Ran on Claude Code')).toHaveLength(2);
+    expect(getAllByHint(receipts(container), 'Ran on Claude Code')).toHaveLength(2);
   });
 });

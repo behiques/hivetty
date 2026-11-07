@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import type {
   BundleEntry,
@@ -372,19 +373,19 @@ export function SkillBundle({
               ],
             ] as const
           ).map(([label, act, disabled, reason]) => (
-            <button
-              key={label}
-              type="button"
-              disabled={disabled}
-              title={reason ?? undefined}
-              onClick={() => {
-                setAdding(false);
-                act();
-              }}
-              className="px-2.5 py-1.5 text-left text-control text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
-            >
-              {label}
-            </button>
+            <Hint key={label} label={reason ?? undefined}>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  setAdding(false);
+                  act();
+                }}
+                className="px-2.5 py-1.5 text-left text-control text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
+              >
+                {label}
+              </button>
+            </Hint>
           ))}
           <button
             type="button"

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 
+import { Hint } from '@components/ui/hint';
 import { SearchBox } from '@components/ui/search-box';
 import { GH_MERGED_PAGE, GH_OPEN_PAGE } from '@shared/github-contract';
 import {
@@ -154,27 +155,28 @@ export function PrSearchRow({ projectId, focusOnMount }: PrSearchRowProps) {
       */}
       {term === '' ? null : (
         <div className="flex items-center justify-between gap-2 px-0.5">
-          <label
-            className={`flex items-center gap-1.5 text-micro ${
-              noSession ? 'text-subtle' : 'cursor-pointer text-muted'
-            }`}
-            title={
+          <Hint label={
               noSession
                 ? 'No session is being watched, so there is no single project to search.'
                 : 'Search every mapped project instead of this session’s.'
-            }
-          >
-            <input
-              type="checkbox"
-              checked={wide}
-              disabled={noSession}
-              onChange={(event) => {
-                setAllRepos(event.target.checked);
-              }}
-              className="size-3 accent-brand-fill"
-            />
-            All repos
-          </label>
+            }>
+            <label
+              className={`flex items-center gap-1.5 text-micro ${
+              noSession ? 'text-subtle' : 'cursor-pointer text-muted'
+            }`}
+            >
+              <input
+                type="checkbox"
+                checked={wide}
+                disabled={noSession}
+                onChange={(event) => {
+                  setAllRepos(event.target.checked);
+                }}
+                className="size-3 accent-brand-fill"
+              />
+              All repos
+            </label>
+          </Hint>
 
           {/*
             The count says "all authors" in words. The whole point of the row is

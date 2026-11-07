@@ -9,6 +9,7 @@ import {
   editorTabId,
 } from '@features/editor/components/editor-tab-strip';
 import { fileKey, useEditorStore } from '@stores/editor-store';
+import { getByHint } from '@tests/support/hint';
 
 /**
  * The open-files strip.
@@ -107,7 +108,7 @@ describe('EditorTabStrip', () => {
     await openTwoFiles();
     render(<EditorTabStrip showTerminalTab />);
 
-    await userEvent.click(screen.getByTitle('Close a.ts'));
+    await userEvent.click(getByHint(document.body, 'Close a.ts'));
 
     expect(store().openFiles.map((f) => f.name)).toEqual(['b.ts']);
   });
@@ -128,7 +129,7 @@ describe('EditorTabStrip', () => {
     expect(
       screen.getByRole('tab', { name: /a\.ts.*unsaved changes/ }),
     ).toBeInTheDocument();
-    expect(screen.getByTitle('Close a.ts')).toBeInTheDocument();
+    expect(getByHint(document.body, 'Close a.ts')).toBeInTheDocument();
   });
 
   it('is a WAI-ARIA tablist: only tabs inside, roving tabIndex, arrows wrap, panels named (HIVE-225)', async () => {

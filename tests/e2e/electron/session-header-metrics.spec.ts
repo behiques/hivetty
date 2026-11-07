@@ -186,7 +186,7 @@ test('at 1440px the stats row is whole; at 1200px resets give way and the title 
       .click();
     await expect(page.getByRole('tablist')).toBeVisible();
     await expect.poll(() => wordDrawn(header)).toBe(false);
-    await expect(header.getByTestId('session-status')).toHaveAttribute('title', /\S/);
+    await expect(header.getByTestId('session-status')).toHaveAttribute('aria-description', /\S/);
   } finally {
     await app.close();
   }
@@ -227,7 +227,7 @@ test('with both panels open the header gives way and keeps the menu, down to 110
       const button = (await menu.boundingBox())!;
       expect(button.x + button.width, `menu inside the header at ${width}px`).toBeLessThanOrEqual(row.x + row.width);
       for (const pct of await chip.getByText(/%$/).all()) await expect(pct).toBeVisible();
-      await expect(chip).toHaveAttribute('title', /Opus 4\.5 \(1M\) · high · context 46% · session limit 12%, resets .+ · weekly limit 63%, resets /);
+      await expect(chip).toHaveAttribute('aria-description', /Opus 4\.5 \(1M\) · high · context 46% · session limit 12%, resets .+ · weekly limit 63%, resets /);
     }
   } finally {
     await app.close();
@@ -298,7 +298,7 @@ test('a Codex strip with credits gives way like Claude\'s, down to 1100px (HIVE-
       for (const pct of await chip.getByText(/%$/).all()) await expect(pct).toBeVisible();
       await (coinShown ? expect(coin).toBeVisible() : expect(coin).toBeHidden());
       await (balanceShown ? expect(balance).toBeVisible() : expect(balance).toBeHidden());
-      await expect(chip).toHaveAttribute('title', / · credits 123,456$/);
+      await expect(chip).toHaveAttribute('aria-description', / · credits 123,456$/);
     }
   } finally {
     await app.close();

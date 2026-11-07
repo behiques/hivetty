@@ -1715,7 +1715,7 @@ describe('ServerModeGroup', () => {
 
       const attach = screen.getByRole('button', { name: /^attach$/i });
       expect(attach).toBeDisabled();
-      expect(attach).toHaveAttribute('title', expect.stringContaining('server or the client'));
+      expect(attach).toHaveAttribute('aria-description', expect.stringContaining('server or the client'));
     });
 
     it('disables the serve switch on an attached window, and says why', () => {

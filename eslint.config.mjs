@@ -569,6 +569,19 @@ export default tseslint.config(
     },
   },
   {
+    // A hover hint is the `Hint` atom (the Radix tooltip), never the browser's native `title`.
+    files: ['src/**/*.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "JSXOpeningElement[name.name=/^[a-z]/] > JSXAttribute[name.name='title']",
+          message: "Use `<Hint label=…>` from '@components/ui/hint' for a hover hint, not a native `title`.",
+        },
+      ],
+    },
+  },
+  {
     // Config and tooling run on Node, not in the browser. So does a shipped
     // skill's script (HIVE-163): a hook process is plain Node, no bundler.
     files: [

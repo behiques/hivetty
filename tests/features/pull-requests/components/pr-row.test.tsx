@@ -18,7 +18,7 @@ describe('PrRow', () => {
   it("carries GitHub's words in its name and tooltip", () => {
     render(<PrRow row={row} open={false} onOpen={() => {}} />);
     const button = screen.getByRole('button', { name: /MUTATING: Open · 2 open findings, fixer on it/ });
-    expect(button).toHaveAttribute('title', 'Open · 2 open findings, fixer on it');
+    expect(button).toHaveAttribute('aria-description', 'Open · 2 open findings, fixer on it');
   });
 
   it('marks the open PR', () => {

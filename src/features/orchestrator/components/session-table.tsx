@@ -15,6 +15,7 @@ import {
 } from '@/types/entity';
 
 import { CliMark } from '@components/ui/cli-mark';
+import { Hint } from '@components/ui/hint';
 import { StatusComb } from '@components/ui/status-comb';
 import { statusLabel, statusText } from '@components/ui/status-dot';
 import { SwarmCreature } from '@components/ui/swarm-creature';
@@ -411,15 +412,21 @@ export function SessionTable() {
           shortens them rather than letting them overflow. `PROJE…` is still
           recognisable, but only the tooltip makes it certain.
         */}
-        <span className={COL.session} title="SESSION">
-          SESSION
-        </span>
-        <span className={COL.project} title="PROJECT">
-          PROJECT
-        </span>
-        <span className={COL.branch} title="BRANCH">
-          BRANCH
-        </span>
+        <Hint label="SESSION">
+          <span className={COL.session}>
+            SESSION
+          </span>
+        </Hint>
+        <Hint label="PROJECT">
+          <span className={COL.project}>
+            PROJECT
+          </span>
+        </Hint>
+        <Hint label="BRANCH">
+          <span className={COL.branch}>
+            BRANCH
+          </span>
+        </Hint>
         {/*
           A second measurement handle, for `COL`'s width note. The status column
           is the only one that must never truncate — a branch cut to a prefix is
@@ -446,9 +453,11 @@ export function SessionTable() {
           shortens the label now instead of letting it overflow, and `LAST US…`
           should still be certain.
         */}
-        <span className={COL.lastUsed} data-col="last-used" title="LAST USED">
-          LAST USED
-        </span>
+        <Hint label="LAST USED">
+          <span className={COL.lastUsed} data-col="last-used">
+            LAST USED
+          </span>
+        </Hint>
         </div>
         {/*
           `data-col` is a measurement handle, not a style hook (HIVE-100). The
@@ -741,109 +750,118 @@ function SessionTableRow({
         selected ? 'bg-term-row-active' : 'hover:bg-term-row-hover',
       )}
     >
-    <button
-      type="button"
-      disabled={!openable}
-      title={ended ? reason : undefined}
-      onClick={() => {
-        // Click both selects and opens: the caret should follow the user's
-        // last action, or the keyboard and the mouse end up disagreeing about
-        // where "here" is.
-        setSelId(id);
-        openEntity(id);
-      }}
-      aria-current={activeTab === id ? 'true' : undefined}
-      className={cn(
-        'flex min-w-0 flex-1 items-center gap-2 py-[3px] text-left',
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(COL.caret, 'text-green', selected ? 'visible' : 'invisible')}
-      >
-        ▸
-      </span>
-      <StatusComb status={entity.status} detail={entity.idleDetail} className={COL.comb} />
-      {/*
-        `title` on every truncating column, so a value the width cuts short is
-        still readable on hover. Without it the ellipsis is a dead end — the
-        agent picks these names and they can be longer than any column.
-      */}
-      <span
-        className={cn(COL.session, 'flex items-center gap-1.5', ended ? 'text-subtle' : 'text-ink')}
-        title={entityLabel(entity)}
-      >
-        {/* The CLI first, Claude's included: a mixed fleet reads at a glance. */}
-        <CliMark cli={entity.harness ?? 'claude-code'} className="text-muted" />
-        <span className="sr-only">{CLI_NAMES[entity.harness ?? 'claude-code']}</span>
-        <span className="min-w-0 truncate">{entityLabel(entity)}</span>
-      </span>
-      <span className={cn(COL.project, 'text-subtle')} title={entity.project}>
-        {entity.project}
-      </span>
-      <span
-        className={cn(COL.branch, 'text-ui-sm text-subtle')}
-        title={branchLabel(entity)}
-      >
-        {branchLabel(entity)}
-      </span>
-      <span
-        className={cn(COL.status, statusText(entity.status, entity.idleDetail))}
-        data-col="status"
-        title={delegateTitle ?? undefined}
-      >
-        {statusLabel(entity.status, entity.idleDetail, delegate)}
-      </span>
-      {/*
-        The session's plan progress (HIVE-182), a bar and `done/total` in its own
-        column since HIVE-197 — it used to ride in the status cell after the label.
-      */}
-      <span className={cn(COL.plan, 'flex items-center gap-2 text-subtle')} data-col="plan">
-        {progress === undefined ? null : (
-          <>
-            <span
-              role="progressbar"
-              aria-label="tasks done"
-              aria-valuemin={0}
-              aria-valuemax={progress.total}
-              aria-valuenow={progress.done}
-              className={cn('h-1 w-11 shrink-0 overflow-hidden rounded-full bg-chip', ended && 'opacity-60')}
-            >
-              <span
-                className="block h-full rounded-full bg-green"
-                style={{
-                  width: `${String(progress.total > 0 ? (progress.done / progress.total) * 100 : 0)}%`,
-                }}
-              />
-            </span>
-            {`${String(progress.done)}/${String(progress.total)}`}
-          </>
+    <Hint label={ended ? reason : undefined}>
+      <button
+        type="button"
+        disabled={!openable}
+        onClick={() => {
+          // Click both selects and opens: the caret should follow the user's
+          // last action, or the keyboard and the mouse end up disagreeing about
+          // where "here" is.
+          setSelId(id);
+          openEntity(id);
+        }}
+        aria-current={activeTab === id ? 'true' : undefined}
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-2 py-[3px] text-left',
         )}
-      </span>
-      {/*
-        Inside the button, unlike `PR` and Resume: it is text and not a control,
-        so nothing forces it out — and a cell that stays in is one more cell
-        dividing the same leftover as its header, which is what the docblock
-        above means by the two shrinking identically.
-
-        `title` carries the exact moment, which is the one question the relative
-        label cannot answer. Between them the cell says both how long ago and
-        when, without spending a fixed column on a date it could not truncate.
-      */}
-      <span
-        className={cn(COL.lastUsed, 'text-subtle')}
-        data-col="last-used"
-        title={usedAt > 0 ? new Date(usedAt).toLocaleString() : undefined}
       >
-        {usedAt > 0 ? (
-          lastUsed
-        ) : (
-          <span title="no recorded activity">
-            —<span className="sr-only"> no recorded activity</span>
+        <span
+          aria-hidden="true"
+          className={cn(COL.caret, 'text-green', selected ? 'visible' : 'invisible')}
+        >
+          ▸
+        </span>
+        <StatusComb status={entity.status} detail={entity.idleDetail} className={COL.comb} />
+        {/*
+          `title` on every truncating column, so a value the width cuts short is
+          still readable on hover. Without it the ellipsis is a dead end — the
+          agent picks these names and they can be longer than any column.
+        */}
+        <Hint label={entityLabel(entity)}>
+        <span
+            className={cn(COL.session, 'flex items-center gap-1.5', ended ? 'text-subtle' : 'text-ink')}
+          >
+            {/* The CLI first, Claude's included: a mixed fleet reads at a glance. */}
+            <CliMark cli={entity.harness ?? 'claude-code'} className="text-muted" />
+            <span className="sr-only">{CLI_NAMES[entity.harness ?? 'claude-code']}</span>
+            <span className="min-w-0 truncate">{entityLabel(entity)}</span>
           </span>
-        )}
-      </span>
-    </button>
+      </Hint>
+        <Hint label={entity.project}>
+        <span className={cn(COL.project, 'text-subtle')}>
+            {entity.project}
+          </span>
+      </Hint>
+        <Hint label={branchLabel(entity)}>
+        <span
+            className={cn(COL.branch, 'text-ui-sm text-subtle')}
+          >
+            {branchLabel(entity)}
+          </span>
+      </Hint>
+        <Hint label={delegateTitle ?? undefined}>
+        <span
+            className={cn(COL.status, statusText(entity.status, entity.idleDetail))}
+            data-col="status"
+          >
+            {statusLabel(entity.status, entity.idleDetail, delegate)}
+          </span>
+      </Hint>
+        {/*
+          The session's plan progress (HIVE-182), a bar and `done/total` in its own
+          column since HIVE-197 — it used to ride in the status cell after the label.
+        */}
+        <span className={cn(COL.plan, 'flex items-center gap-2 text-subtle')} data-col="plan">
+          {progress === undefined ? null : (
+            <>
+              <span
+                role="progressbar"
+                aria-label="tasks done"
+                aria-valuemin={0}
+                aria-valuemax={progress.total}
+                aria-valuenow={progress.done}
+                className={cn('h-1 w-11 shrink-0 overflow-hidden rounded-full bg-chip', ended && 'opacity-60')}
+              >
+                <span
+                  className="block h-full rounded-full bg-green"
+                  style={{
+                    width: `${String(progress.total > 0 ? (progress.done / progress.total) * 100 : 0)}%`,
+                  }}
+                />
+              </span>
+              {`${String(progress.done)}/${String(progress.total)}`}
+            </>
+          )}
+        </span>
+        {/*
+          Inside the button, unlike `PR` and Resume: it is text and not a control,
+          so nothing forces it out — and a cell that stays in is one more cell
+          dividing the same leftover as its header, which is what the docblock
+          above means by the two shrinking identically.
+  
+          `title` carries the exact moment, which is the one question the relative
+          label cannot answer. Between them the cell says both how long ago and
+          when, without spending a fixed column on a date it could not truncate.
+        */}
+        <Hint label={usedAt > 0 ? new Date(usedAt).toLocaleString() : undefined}>
+        <span
+            className={cn(COL.lastUsed, 'text-subtle')}
+            data-col="last-used"
+          >
+            {usedAt > 0 ? (
+              lastUsed
+            ) : (
+              <Hint label="no recorded activity">
+            <span>
+                  —<span className="sr-only"> no recorded activity</span>
+                </span>
+          </Hint>
+            )}
+          </span>
+      </Hint>
+      </button>
+    </Hint>
     {/*
       The PR cell, and the second thing this row cannot keep inside its button:
       `#123` opens GitHub, and an anchor nested in a button is invalid markup
@@ -861,57 +879,60 @@ function SessionTableRow({
     */}
     <span className={COL.pr} data-col="pr">
       {pr ? (
-        <a
-          href={pr.url}
-          target="_blank"
-          rel="noreferrer"
-          /*
-            Underlined at rest, not on hover. In a plain table `#123` is
-            otherwise just the cell's value — the same weight and shape as the
-            branch beside it — and nothing would suggest it leaves the app.
-            `pr-card` can afford `hover:underline` because its `#123` sits next
-            to a title and an arrow glyph; there is no room for either here.
-          */
-          className={cn(
-            'underline underline-offset-2',
-            /*
-              Neutral for a **remembered** PR — one the current sweep cannot
-              see, offered from `Session.lastPr`. Every colour in `prStateText`
-              asserts something current about GitHub (green is "alive and not
-              yet landed"), and a number the app wrote down days ago has no
-              standing to assert any of them. `text-subtle` is the same
-              treatment the `—` beside it gets, which is the honest neighbour:
-              this cell knows a number and nothing else about it.
-            */
-            pr.state === undefined ? 'text-subtle' : prStateText(pr.state),
-            'hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
-            ended && 'text-subtle',
-          )}
-          title={
+        <Hint label={
             pr.state === undefined
               ? `#${String(pr.n)} · last seen on this session — open on GitHub`
               : `#${String(pr.n)} · ${pr.state} — open on GitHub`
-          }
-          /*
-            The state is *in* the label rather than in an `sr-only` span beside
-            it. An `aria-label` replaces an element's content for accessibility
-            purposes, so the visually-hidden word the cell used to carry would
-            have been computed away here and announced to nobody — the colour
-            would then have been the only carrier of the state, which is the one
-            thing this cell has always refused to do.
-          */
-          aria-label={
-            pr.state === undefined
-              ? `Open PR #${String(pr.n)} on GitHub — last seen on this session`
-              : `Open PR #${String(pr.n)} on GitHub — ${pr.state}`
-          }
-        >
-          #{pr.n}
-        </a>
+          }>
+          <a
+            href={pr.url}
+            target="_blank"
+            rel="noreferrer"
+            /*
+              Underlined at rest, not on hover. In a plain table `#123` is
+              otherwise just the cell's value — the same weight and shape as the
+              branch beside it — and nothing would suggest it leaves the app.
+              `pr-card` can afford `hover:underline` because its `#123` sits next
+              to a title and an arrow glyph; there is no room for either here.
+            */
+            className={cn(
+              'underline underline-offset-2',
+              /*
+                Neutral for a **remembered** PR — one the current sweep cannot
+                see, offered from `Session.lastPr`. Every colour in `prStateText`
+                asserts something current about GitHub (green is "alive and not
+                yet landed"), and a number the app wrote down days ago has no
+                standing to assert any of them. `text-subtle` is the same
+                treatment the `—` beside it gets, which is the honest neighbour:
+                this cell knows a number and nothing else about it.
+              */
+              pr.state === undefined ? 'text-subtle' : prStateText(pr.state),
+              'hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
+              ended && 'text-subtle',
+            )}
+            /*
+              The state is *in* the label rather than in an `sr-only` span beside
+              it. An `aria-label` replaces an element's content for accessibility
+              purposes, so the visually-hidden word the cell used to carry would
+              have been computed away here and announced to nobody — the colour
+              would then have been the only carrier of the state, which is the one
+              thing this cell has always refused to do.
+            */
+            aria-label={
+              pr.state === undefined
+                ? `Open PR #${String(pr.n)} on GitHub — last seen on this session`
+                : `Open PR #${String(pr.n)} on GitHub — ${pr.state}`
+            }
+          >
+            #{pr.n}
+          </a>
+        </Hint>
       ) : (
-        <span className="text-subtle" title="no pull request">
-          —<span className="sr-only"> no pull request</span>
-        </span>
+        <Hint label="no pull request">
+          <span className="text-subtle">
+            —<span className="sr-only"> no pull request</span>
+          </span>
+        </Hint>
       )}
     </span>
     {/*
@@ -927,27 +948,28 @@ function SessionTableRow({
     {reserveAction ? (
       <span className={cn(COL.action, 'flex justify-end')} data-col="action">
         {resumable ? (
-          <button
-            type="button"
-            /*
-              Named for its row, not just "resume". The visible word is enough
-              beside the session it belongs to, but a screen reader reaching the
-              fifth of five identical "resume" buttons has been told nothing
-              about which conversation it reopens.
-            */
-            aria-label={`resume ${entityLabel(entity)}`}
-            title={`resume ${entityLabel(entity)} — continues the conversation`}
-            onClick={() => {
-              setSelId(id);
-              resumeSession(id);
-            }}
-            className={cn(
-              'rounded-full px-2 py-[1px] text-micro text-subtle',
-              'hover:bg-term-row-hover hover:text-ink',
-            )}
-          >
-            resume
-          </button>
+          <Hint label={`resume ${entityLabel(entity)} — continues the conversation`}>
+            <button
+              type="button"
+              /*
+                Named for its row, not just "resume". The visible word is enough
+                beside the session it belongs to, but a screen reader reaching the
+                fifth of five identical "resume" buttons has been told nothing
+                about which conversation it reopens.
+              */
+              aria-label={`resume ${entityLabel(entity)}`}
+              onClick={() => {
+                setSelId(id);
+                resumeSession(id);
+              }}
+              className={cn(
+                'rounded-full px-2 py-[1px] text-micro text-subtle',
+                'hover:bg-term-row-hover hover:text-ink',
+              )}
+            >
+              resume
+            </button>
+          </Hint>
         ) : null}
       </span>
     ) : null}
@@ -1060,9 +1082,11 @@ function AgentTableRow({
           lets a test read the name out of a row whose cells run together in
           `textContent`.
         */}
-        <span className={cn(COL.session, 'text-ink')} data-col="session" title={id}>
-          {id}
-        </span>
+        <Hint label={id}>
+          <span className={cn(COL.session, 'text-ink')} data-col="session">
+            {id}
+          </span>
+        </Hint>
         {/*
           The status glyph is the comb at the row's start (HIVE-229), never a
           dot beside the word: a glyph inside `STATUS` on agent rows only would
@@ -1074,13 +1098,14 @@ function AgentTableRow({
           for the reason every truncating cell carries one: `describeWake` has
           no upper bound, since a calendar agent can name five weekdays.
         */}
-        <span
-          className={cn(COL.wake, 'text-subtle')}
-          data-col="wake"
-          title={describeWake(entity.wake)}
-        >
-          {describeWake(entity.wake)}
-        </span>
+        <Hint label={describeWake(entity.wake)}>
+          <span
+            className={cn(COL.wake, 'text-subtle')}
+            data-col="wake"
+          >
+            {describeWake(entity.wake)}
+          </span>
+        </Hint>
         <span
           className={cn(COL.status, statusText(entity.status))}
           data-col="status"
@@ -1089,21 +1114,24 @@ function AgentTableRow({
         </span>
         {/* An agent has no plan; the cell holds the column's width. */}
         <span className={COL.plan} data-col="plan" />
-        <span
-          className={cn(COL.lastUsed, 'text-subtle')}
-          data-col="last-used"
-          title={
+        <Hint label={
             lastRunAt > 0 ? new Date(lastRunAt).toLocaleString() : undefined
-          }
-        >
-          {lastRunAt > 0 ? (
-            lastUsed
-          ) : (
-            <span title="has never run">
-              —<span className="sr-only"> has never run</span>
-            </span>
-          )}
-        </span>
+          }>
+          <span
+            className={cn(COL.lastUsed, 'text-subtle')}
+            data-col="last-used"
+          >
+            {lastRunAt > 0 ? (
+              lastUsed
+            ) : (
+              <Hint label="has never run">
+              <span>
+                  —<span className="sr-only"> has never run</span>
+                </span>
+            </Hint>
+            )}
+          </span>
+        </Hint>
       </button>
       {/*
         Outside the button for `SessionTableRow`'s reason: `#123` is an anchor,
@@ -1118,9 +1146,11 @@ function AgentTableRow({
       */}
       <span className={COL.pr} data-col="pr">
         {pr === null ? (
-          <span className="text-subtle" title="no pull request">
-            —<span className="sr-only"> no pull request</span>
-          </span>
+          <Hint label="no pull request">
+            <span className="text-subtle">
+              —<span className="sr-only"> no pull request</span>
+            </span>
+          </Hint>
         ) : pr.url === undefined ? (
           /*
             A number the sweep does not know, rendered as text rather than as a
@@ -1129,27 +1159,29 @@ function AgentTableRow({
             a GitHub-wide search for the integer looks like a destination while
             landing on thousands of unrelated results.
           */
-          <span
-            className="text-subtle"
-            title={`#${String(pr.n)} · reported by ${id} — not in the current PR sweep`}
-          >
-            #{pr.n}
-            <span className="sr-only"> reported by {id}, no link available</span>
-          </span>
+          <Hint label={`#${String(pr.n)} · reported by ${id} — not in the current PR sweep`}>
+            <span
+              className="text-subtle"
+            >
+              #{pr.n}
+              <span className="sr-only"> reported by {id}, no link available</span>
+            </span>
+          </Hint>
         ) : (
-          <a
-            href={pr.url}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(
-              'text-subtle underline underline-offset-2',
-              'hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
-            )}
-            title={`#${String(pr.n)} · last reported by ${id} — open on GitHub`}
-            aria-label={`#${String(pr.n)}, last reported by ${id} — open on GitHub`}
-          >
-            #{pr.n}
-          </a>
+          <Hint label={`#${String(pr.n)} · last reported by ${id} — open on GitHub`}>
+            <a
+              href={pr.url}
+              target="_blank"
+              rel="noreferrer"
+              className={cn(
+                'text-subtle underline underline-offset-2',
+                'hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
+              )}
+              aria-label={`#${String(pr.n)}, last reported by ${id} — open on GitHub`}
+            >
+              #{pr.n}
+            </a>
+          </Hint>
         )}
       </span>
       {/*

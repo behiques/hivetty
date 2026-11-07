@@ -437,7 +437,7 @@ test('launching backfills a key for every project, on disk and on the row', asyn
     // nobody can type.
     for (const entry of written) {
       await expect(
-        page.getByTitle(`type "${entry.key}" wherever a project is asked for`),
+        page.locator(`[aria-description='type "${entry.key}" wherever a project is asked for']`),
       ).toBeVisible();
     }
 
@@ -474,7 +474,7 @@ test('changing a key writes the file and never touches the id', async ({}, testI
     await input.press('Enter');
 
     await expect(
-      page.getByTitle('type "zz" wherever a project is asked for'),
+      page.locator(`[aria-description='type "zz" wherever a project is asked for']`),
     ).toBeVisible();
 
     const written = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -511,7 +511,7 @@ test('a duplicate key is refused in the editor and never written', async ({}, te
 
     await input.press('Enter');
     await expect(
-      page.getByTitle('type "alp" wherever a project is asked for'),
+      page.locator(`[aria-description='type "alp" wherever a project is asked for']`),
     ).toBeVisible();
     expect(JSON.parse(readFileSync(configPath, 'utf8')).projects[0].key).toBe(
       'alp',
@@ -544,7 +544,7 @@ test('cancelling a key change leaves settings open and the key unchanged', async
 
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
     await expect(
-      page.getByTitle('type "alp" wherever a project is asked for'),
+      page.locator(`[aria-description='type "alp" wherever a project is asked for']`),
     ).toBeVisible();
     expect(JSON.parse(readFileSync(configPath, 'utf8')).projects[0].key).toBe(
       'alp',

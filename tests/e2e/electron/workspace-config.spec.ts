@@ -123,7 +123,7 @@ test('an invalid entry surfaces its reason without blocking launch', async ({}, 
     // Off the row first: hovered, a row hides its tags so its actions can show.
     await page.mouse.move(0, 0);
     // The status reason travels all the way to the tooltip, verbatim.
-    await expect(row.getByTitle(/missing/)).toBeVisible();
+    await expect(row.locator('[aria-description*="missing"]')).toBeVisible();
   } finally {
     await app.close();
   }

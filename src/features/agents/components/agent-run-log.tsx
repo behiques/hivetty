@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import type { TermLine } from '@/types/terminal';
 
 import { CliMark } from '@components/ui/cli-mark';
+import { Hint } from '@components/ui/hint';
 import { SplitHandle } from '@components/ui/split-handle';
 import { formatDuration } from '@lib/format-duration';
 import { CLI_NAMES } from '@lib/harness/cli-names';
@@ -924,20 +925,23 @@ function LiveRow({
       {...jumpProps(onJump)}
     >
       <div className={RECEIPT_GRID}>
-        <span
-          className="truncate"
-          style={{ color: brand }}
-          title={lane === null ? (standing ? 'standing run' : 'task run') : `${run.lane ?? lane} lane`}
-        >
-          <span aria-hidden="true" className="mr-[0.5ch]" style={{ color: green }}>
-            {standing ? '●' : '○'}
+        <Hint label={lane === null ? (standing ? 'standing run' : 'task run') : `${run.lane ?? lane} lane`}>
+          <span
+            className="truncate"
+            style={{ color: brand }}
+          >
+            <span aria-hidden="true" className="mr-[0.5ch]" style={{ color: green }}>
+              {standing ? '●' : '○'}
+            </span>
+            {`#${run.run.slice(0, 8)}`}
+            {lane === null ? null : ` · ${lane}`}
           </span>
-          {`#${run.run.slice(0, 8)}`}
-          {lane === null ? null : ` · ${lane}`}
-        </span>
-        <span className="truncate" title={run.trigger}>
-          {run.trigger}
-        </span>
+        </Hint>
+        <Hint label={run.trigger}>
+          <span className="truncate">
+            {run.trigger}
+          </span>
+        </Hint>
         <span className="truncate tabular-nums">{at}</span>
         <span className="truncate" style={{ color: green }}>
           running
@@ -956,12 +960,13 @@ function LiveRow({
         The standing run has none — it was not asked anything, it simply woke.
       */}
       {run.extra === undefined ? null : (
-        <p
-          className="pl-[11ch] break-words whitespace-pre-wrap [contain:inline-size]"
-          title={run.extra}
-        >
-          {run.extra}
-        </p>
+        <Hint label={run.extra}>
+          <p
+            className="pl-[11ch] break-words whitespace-pre-wrap [contain:inline-size]"
+          >
+            {run.extra}
+          </p>
+        </Hint>
       )}
     </div>
   );
@@ -1051,26 +1056,33 @@ function RunHeader({ run, dim, brand, first, selected, amber, red, onJump }: Run
         every other column combined — and eight is what already distinguishes a
         conversation on the Session tile.
       */}
-      <span className="flex min-w-0 items-baseline gap-1.5" style={{ color: brand }} title={run.run}>
-        <span className="truncate">{`#${run.run.slice(0, 8)}`}</span>
-        {/* The CLI on every run, Claude's included; a run from before HIVE-340 ran on Claude. */}
-        <span className="flex shrink-0 self-center" title={`Ran on ${CLI_NAMES[run.harness ?? 'claude-code']}`}>
-          <CliMark cli={run.harness ?? 'claude-code'} className="size-3.5" />
-          <span className="sr-only">{CLI_NAMES[run.harness ?? 'claude-code']}</span>
+      <Hint label={run.run}>
+        <span className="flex min-w-0 items-baseline gap-1.5" style={{ color: brand }}>
+          <span className="truncate">{`#${run.run.slice(0, 8)}`}</span>
+          {/* The CLI on every run, Claude's included; a run from before HIVE-340 ran on Claude. */}
+          <Hint label={`Ran on ${CLI_NAMES[run.harness ?? 'claude-code']}`}>
+          <span className="flex shrink-0 self-center">
+              <CliMark cli={run.harness ?? 'claude-code'} className="size-3.5" />
+              <span className="sr-only">{CLI_NAMES[run.harness ?? 'claude-code']}</span>
+            </span>
+        </Hint>
         </span>
-      </span>
-      <span className="truncate" title={run.trigger}>
-        {run.trigger}
-      </span>
+      </Hint>
+      <Hint label={run.trigger}>
+        <span className="truncate">
+          {run.trigger}
+        </span>
+      </Hint>
       <span className="truncate tabular-nums">{at}</span>
-      <span
-        className="truncate"
-        title={outcome}
-        style={outcomeColor === undefined ? undefined : { color: outcomeColor }}
-      >
-        {run.outcome}
-        {run.reason === undefined ? null : <span style={{ color: dim }}>{` · ${run.reason}`}</span>}
-      </span>
+      <Hint label={outcome}>
+        <span
+          className="truncate"
+          style={outcomeColor === undefined ? undefined : { color: outcomeColor }}
+        >
+          {run.outcome}
+          {run.reason === undefined ? null : <span style={{ color: dim }}>{` · ${run.reason}`}</span>}
+        </span>
+      </Hint>
       {/*
         An em dash rather than a blank for a run that reported no turn count and
         no cost: a cell that is simply empty reads as a column that does not

@@ -387,8 +387,8 @@ describe('AdvancedSection — revealing the config file while attached (HIVE-144
 
     const button = await screen.findByRole('button', { name: /reveal in finder/i });
     expect(button).toBeDisabled();
-    expect(button.getAttribute('title')).toMatch(/Finder/);
-    expect(button.getAttribute('title')).toMatch(/server/);
+    expect(button.getAttribute('aria-description')).toMatch(/Finder/);
+    expect(button.getAttribute('aria-description')).toMatch(/server/);
   });
 
   it('never reaches the bridge when the disabled button is clicked', async () => {

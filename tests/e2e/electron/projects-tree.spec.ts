@@ -167,7 +167,7 @@ test('a project whose path does not resolve offers a refusal, not a start', asyn
     });
     await expect(refused).toBeVisible();
     await expect(refused).toBeDisabled();
-    await expect(refused).toHaveAttribute('title', /nowhere\/that\/exists|missing/);
+    await expect(refused).toHaveAttribute('aria-description', /nowhere\/that\/exists|missing/);
 
     await expect(
       (await openProject(page, 'nova-web')).getByRole('button', { name: 'New session in nova-web' }),

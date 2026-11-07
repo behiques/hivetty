@@ -2,6 +2,7 @@ import { WarningCircle } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { Button } from '@components/ui/button';
+import { Hint } from '@components/ui/hint';
 import { Switch } from '@components/ui/switch';
 import { TextField } from '@components/ui/text-field';
 import { SettingsGroup } from '@features/shared/components/settings-group';
@@ -1190,17 +1191,18 @@ export function ServerModeGroup({
             story's own note said it would.
           */}
           {attached ? null : (
-          <Button
-            variant="primary"
-            size="sm"
-            className="w-fit"
-            disabled={serving}
-            pending={attaching}
-            title={serving ? NO_ATTACH_WHILE_SERVING : undefined}
-            onClick={handleAttach}
-          >
-            {attaching ? 'Attaching…' : 'Attach'}
-          </Button>
+          <Hint label={serving ? NO_ATTACH_WHILE_SERVING : undefined}>
+            <Button
+              variant="primary"
+              size="sm"
+              className="w-fit"
+              disabled={serving}
+              pending={attaching}
+              onClick={handleAttach}
+            >
+              {attaching ? 'Attaching…' : 'Attach'}
+            </Button>
+          </Hint>
           )}
 
           {/* Always mounted: the attach or detach result lands here, and a live region that mounts with its text is not reliably announced (HIVE-225). */}

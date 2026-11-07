@@ -184,8 +184,8 @@ test('draws two live task runs and counts them in the rail and the fleet', async
 
     // The prompt each job was given rides on its row — which is what tells the
     // two apart, since neither has a receipt yet.
-    await expect(receipts.getByTitle('say alpha')).toBeVisible();
-    await expect(receipts.getByTitle('say beta')).toBeVisible();
+    await expect(receipts.locator('[aria-description="say alpha"]')).toBeVisible();
+    await expect(receipts.locator('[aria-description="say beta"]')).toBeVisible();
 
     // Both processes really ran: the output half holds each run's own line,
     // grouped by the run that wrote it.

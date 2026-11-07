@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { Chip } from '@components/ui/chip';
+import { getByHint } from '@tests/support/hint';
 
 describe('Chip', () => {
   it('renders its children', () => {
@@ -22,7 +23,7 @@ describe('Chip', () => {
   it('exposes a title for the truncated case', () => {
     render(<Chip title="the full story">short</Chip>);
 
-    expect(screen.getByTitle('the full story')).toBeInTheDocument();
+    expect(getByHint(document.body, 'the full story')).toBeInTheDocument();
   });
 
   it('never wraps — a chip that wraps would break the 56px header row', () => {

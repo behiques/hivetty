@@ -92,7 +92,7 @@ describe('CliDock', () => {
 
     const codex = screen.getByRole('radio', { name: 'Codex: `codex` was not found on PATH.' });
     expect(codex).toHaveAttribute('aria-disabled', 'true');
-    expect(codex).toHaveAttribute('title', "Codex isn't available: `codex` was not found on PATH.");
+    expect(codex).toHaveAttribute('aria-description', "Codex isn't available: `codex` was not found on PATH.");
     expect(screen.getByRole('radio', { name: 'Copilot' })).not.toHaveAttribute('aria-disabled');
     // The reason is a hover hint, not a line under the dock.
     expect(screen.queryByText(/isn't available/)).toBeNull();

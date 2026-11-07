@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { Hint } from '@components/ui/hint';
+
 /** A strip column's head (HIVE-200): sans 600 10.5px, uppercase, 0.06em, subtle. */
 export function StripHead({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
@@ -39,12 +41,16 @@ export function StripRow({ icon, name, detail, value, valueClass, title, onClick
   );
   const cls = 'flex min-w-0 items-center gap-2.5 rounded-md px-1 py-[5px] text-ui';
   return onClick === undefined ? (
-    <div className={cls} title={title}>
-      {body}
-    </div>
+    <Hint label={title}>
+      <div className={cls}>
+        {body}
+      </div>
+    </Hint>
   ) : (
-    <button type="button" className={cn(cls, 'w-full hover:bg-chip')} title={title} onClick={onClick}>
-      {body}
-    </button>
+    <Hint label={title}>
+      <button type="button" className={cn(cls, 'w-full hover:bg-chip')} onClick={onClick}>
+        {body}
+      </button>
+    </Hint>
   );
 }

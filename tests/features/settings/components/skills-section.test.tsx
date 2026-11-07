@@ -1573,7 +1573,7 @@ describe('SkillsSection — attached to a remote server', () => {
       name: 'Add from your computer',
     });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('title', REMOTE_DISABLED_REASON.importSkillFiles);
+    expect(button).toHaveAttribute('aria-description', REMOTE_DISABLED_REASON.importSkillFiles);
 
     await userEvent.click(button);
     expect(importIntoSkill).not.toHaveBeenCalled();
@@ -1588,7 +1588,7 @@ describe('SkillsSection — attached to a remote server', () => {
     const button = screen.getByRole('button', { name: 'Import skill' });
 
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('title', REMOTE_DISABLED_REASON.importSkill);
+    expect(button).toHaveAttribute('aria-description', REMOTE_DISABLED_REASON.importSkill);
     await userEvent.click(button);
     expect(importNewSkill).not.toHaveBeenCalled();
   });

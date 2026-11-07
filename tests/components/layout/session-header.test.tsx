@@ -23,7 +23,7 @@ describe('SessionHeader (HIVE-197)', () => {
     useUiStore.getState().openTab('hero-refresh', 'sessions');
     render(<SessionHeader entity={hero()} />);
     expect(screen.getByRole('button', { name: 'Back to overmind' })).toBeInTheDocument();
-    expect(screen.getByText('hero-refresh')).toHaveAttribute('title', hero().task);
+    expect(screen.getByText('hero-refresh')).toHaveAttribute('aria-description', hero().task);
     expect(screen.getByText('nova-web · feat/hero-refresh')).toBeInTheDocument();
     expect(screen.getByText('working')).toBeInTheDocument();
     const slot = screen.getByTestId('session-header').querySelector('[data-slot="model"]');
@@ -34,7 +34,7 @@ describe('SessionHeader (HIVE-197)', () => {
     render(<SessionHeader entity={hero()} />);
     const back = screen.getByRole('button', { name: 'Back to overmind' });
     expect(back).toHaveTextContent(/^$/);
-    expect(back.getAttribute('title')).toMatch(/^Back to overmind \(/);
+    expect(back.getAttribute('aria-description')).toMatch(/^Back to overmind \(/);
     expect(back.className).toContain('size-7');
   });
 
@@ -63,7 +63,7 @@ describe('SessionHeader (HIVE-197)', () => {
     const status = screen.getByTestId('session-status');
     // 720px of content: the row needs ~705 with the word, and 1200px with one rail open leaves 745.
     expect(within(status).getByText(/./, { selector: '[data-word]' }).className).toContain('@max-[720px]:sr-only');
-    expect(status.getAttribute('title')).not.toBeNull();
+    expect(status.getAttribute('aria-description')).not.toBeNull();
   });
 
   it('lets the model slot clip at its end rather than push the menu out (HIVE-220)', () => {
@@ -90,14 +90,13 @@ describe('SessionHeader (HIVE-197)', () => {
     const spy = vi.spyOn(platform, 'isMacPlatform');
     spy.mockReturnValue(false);
     const { unmount } = render(<SessionHeader entity={hero()} />);
-    expect(screen.getByRole('button', { name: 'Back to overmind' })).toHaveAttribute(
-      'title',
+    expect(screen.getByRole('button', { name: 'Back to overmind' })).toHaveAttribute('aria-description',
       'Back to overmind (Ctrl+Shift+←)',
     );
     unmount();
     spy.mockReturnValue(true);
     render(<SessionHeader entity={hero()} />);
-    expect(screen.getByRole('button', { name: 'Back to overmind' })).toHaveAttribute('title', 'Back to overmind (⌘[)');
+    expect(screen.getByRole('button', { name: 'Back to overmind' })).toHaveAttribute('aria-description', 'Back to overmind (⌘[)');
     spy.mockRestore();
   });
 
@@ -168,7 +167,7 @@ describe('SessionHeader, an ended session (HIVE-211)', () => {
     render(<SessionHeader entity={ended} />);
     const status = screen.getByLabelText(`Ended: ${endedReason(ended)}`);
     expect(status).toHaveTextContent('Ended');
-    expect(status).toHaveAttribute('title', endedReason(ended));
+    expect(status).toHaveAttribute('aria-description', endedReason(ended));
     expect(status).toHaveClass('text-muted');
   });
 

@@ -16,6 +16,7 @@ import { isSession } from '@/types/entity';
 
 import { CliMark } from '@components/ui/cli-mark';
 import { GaugeRing, gaugeTone } from '@components/ui/gauge-ring';
+import { Hint } from '@components/ui/hint';
 import { TONE_TEXT } from '@components/ui/tag';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { CAPABILITIES } from '@shared/harness-contract';
@@ -246,144 +247,145 @@ export function ModelChip() {
     .join(' · ');
 
   return (
-    <span
-      title={title}
-      /*
-        A stable handle for the layout specs.
-        The Electron suite used to find this element by `getByTitle(/\(1M\)/)`,
-        which stopped working the moment the window suffix became *derived* from
-        `metrics.contextWindow`: that suite stubs `claude` out entirely
-        (`true; false`), so no status line ever reports a window and the label is
-        correctly `Opus 4.5 · high`. A locator that depends on a session's
-        reported context window cannot find a chip in a suite that has no
-        sessions reporting anything — and the alignment those specs measure has
-        nothing to do with the model anyway.
-      */
-      data-testid="model-chip"
-      /*
-        Plain text, not a pill.
-
-        This used to be a `Chip` — `rounded-full bg-chip px-3 py-1`. The fill
-        implied the metrics were a distinct object you could act on. They are a
-        readout, so they render like one: `tabular-nums text-xs text-muted` rather
-        than the chip's `text-ui-sm`.
-      */
-      className="flex items-center gap-1.5 whitespace-nowrap tabular-nums text-xs text-muted"
-    >
-      <Brain size={13} weight="regular" className="shrink-0 text-brand" />
-      <CliMark cli={cli} />
-      <span className="flex items-center gap-2">
-        {/* Both render; the header's width picks one, or neither (HIVE-220). */}
-        <span data-label="full" className="shrink-0 @max-[820px]:hidden">
-          {label}
-        </span>
-        <span
-          data-label="model"
-          className="hidden shrink-0 @max-[820px]:inline @max-[600px]:hidden"
-        >
-          {parts.name}
-        </span>
-
-        {context === null ? null : (
-          <Stat pct={context} detail="ctx" label="context" />
-        )}
-
-        {fiveHour === null ? null : (
-          <Stat
-            pct={fiveHour}
-            label="session limit"
-            short="5h"
+    <Hint label={title}>
+      <span
+        /*
+          A stable handle for the layout specs.
+          The Electron suite used to find this element by `getByTitle(/\(1M\)/)`,
+          which stopped working the moment the window suffix became *derived* from
+          `metrics.contextWindow`: that suite stubs `claude` out entirely
+          (`true; false`), so no status line ever reports a window and the label is
+          correctly `Opus 4.5 · high`. A locator that depends on a session's
+          reported context window cannot find a chip in a suite that has no
+          sessions reporting anything — and the alignment those specs measure has
+          nothing to do with the model anyway.
+        */
+        data-testid="model-chip"
+        /*
+          Plain text, not a pill.
+  
+          This used to be a `Chip` — `rounded-full bg-chip px-3 py-1`. The fill
+          implied the metrics were a distinct object you could act on. They are a
+          readout, so they render like one: `tabular-nums text-xs text-muted` rather
+          than the chip's `text-ui-sm`.
+        */
+        className="flex items-center gap-1.5 whitespace-nowrap tabular-nums text-xs text-muted"
+      >
+        <Brain size={13} weight="regular" className="shrink-0 text-brand" />
+        <CliMark cli={cli} />
+        <span className="flex items-center gap-2">
+          {/* Both render; the header's width picks one, or neither (HIVE-220). */}
+          <span data-label="full" className="shrink-0 @max-[820px]:hidden">
+            {label}
+          </span>
+          <span
+            data-label="model"
+            className="hidden shrink-0 @max-[820px]:inline @max-[600px]:hidden"
+          >
+            {parts.name}
+          </span>
+  
+          {context === null ? null : (
+            <Stat pct={context} detail="ctx" label="context" />
+          )}
+  
+          {fiveHour === null ? null : (
+            <Stat
+              pct={fiveHour}
+              label="session limit"
+              short="5h"
+              /*
+                The window's *name* when the percentage arrived without a reset,
+                not a second em dash. The two travel together in every payload
+                observed, but they are independently optional in the contract, and
+                a lone number needs to say which of the two windows it counts.
+              */
+              detail={fiveHourReset === null ? 'session' : `↻ ${fiveHourReset}`}
+            />
+          )}
+  
+          {sevenDay === null ? null : (
+            <Stat
+              pct={sevenDay}
+              label="weekly limit"
+              short="wk"
+              detail={sevenDayReset === null ? 'week' : `↻ ${sevenDayReset}`}
+            />
+          )}
+  
+          {credits === null ? null : (
             /*
-              The window's *name* when the percentage arrived without a reset,
-              not a second em dash. The two travel together in every payload
-              observed, but they are independently optional in the contract, and
-              a lone number needs to say which of the two windows it counts.
+              A balance, not a share of anything, so no ring (D4). It owns its separator, as a Stat
+              does. The balance and its word need a wide header (≤ 1040px they go, the coin's label
+              carrying both): measured, the full row with a balance needs ~980px, and at 1440px with
+              the session panel open the slot has about 56px for a fourth stat, too little for any
+              balance beside a coin. At 600px, where the label goes, the coin goes too.
             */
-            detail={fiveHourReset === null ? 'session' : `↻ ${fiveHourReset}`}
-          />
-        )}
-
-        {sevenDay === null ? null : (
-          <Stat
-            pct={sevenDay}
-            label="weekly limit"
-            short="wk"
-            detail={sevenDayReset === null ? 'week' : `↻ ${sevenDayReset}`}
-          />
-        )}
-
-        {credits === null ? null : (
-          /*
-            A balance, not a share of anything, so no ring (D4). It owns its separator, as a Stat
-            does. The balance and its word need a wide header (≤ 1040px they go, the coin's label
-            carrying both): measured, the full row with a balance needs ~980px, and at 1440px with
-            the session panel open the slot has about 56px for a fourth stat, too little for any
-            balance beside a coin. At 600px, where the label goes, the coin goes too.
-          */
-          <span
-            data-stat="credits"
-            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[600px]:hidden"
-          >
-            <Coins
-              size={13}
-              weight="regular"
-              role="img"
-              aria-label={`credits: ${credits}`}
-              className="shrink-0 text-subtle"
-            />
-            <span data-detail="credits" className="text-ink @max-[1040px]:hidden">
-              {credits}
+            <span
+              data-stat="credits"
+              className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[600px]:hidden"
+            >
+              <Coins
+                size={13}
+                weight="regular"
+                role="img"
+                aria-label={`credits: ${credits}`}
+                className="shrink-0 text-subtle"
+              />
+              <span data-detail="credits" className="text-ink @max-[1040px]:hidden">
+                {credits}
+              </span>
+              <span data-detail="credits" className="text-subtle @max-[1040px]:hidden">
+                credits
+              </span>
             </span>
-            <span data-detail="credits" className="text-subtle @max-[1040px]:hidden">
-              credits
+          )}
+  
+          {tokens === null ? null : (
+            /* Session totals, used, not a share of anything: a text stat like credits (HIVE-335). */
+            <span
+              data-stat="tokens"
+              className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[600px]:hidden"
+            >
+              <ArrowsDownUp
+                size={13}
+                weight="regular"
+                role="img"
+                aria-label={`tokens: ${tokens}`}
+                className="shrink-0 text-subtle"
+              />
+              <span data-detail="tokens" className="text-ink @max-[1040px]:hidden">
+                {tokens}
+              </span>
+              <span data-detail="tokens" className="text-subtle @max-[1040px]:hidden">
+                tokens
+              </span>
             </span>
-          </span>
-        )}
-
-        {tokens === null ? null : (
-          /* Session totals, used, not a share of anything: a text stat like credits (HIVE-335). */
-          <span
-            data-stat="tokens"
-            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[600px]:hidden"
-          >
-            <ArrowsDownUp
-              size={13}
-              weight="regular"
-              role="img"
-              aria-label={`tokens: ${tokens}`}
-              className="shrink-0 text-subtle"
-            />
-            <span data-detail="tokens" className="text-ink @max-[1040px]:hidden">
-              {tokens}
+          )}
+  
+          {aiCredits === null ? null : (
+            /* Copilot's own word for it; spent this session, unlike Codex's `credits` balance (HIVE-335). */
+            <span
+              data-stat="aiCredits"
+              className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[600px]:hidden"
+            >
+              <Coins
+                size={13}
+                weight="regular"
+                role="img"
+                aria-label={`AI credits: ${aiCredits}`}
+                className="shrink-0 text-subtle"
+              />
+              <span data-detail="aiCredits" className="text-ink @max-[1040px]:hidden">
+                {aiCredits}
+              </span>
+              <span data-detail="aiCredits" className="text-subtle @max-[1040px]:hidden">
+                AI credits
+              </span>
             </span>
-            <span data-detail="tokens" className="text-subtle @max-[1040px]:hidden">
-              tokens
-            </span>
-          </span>
-        )}
-
-        {aiCredits === null ? null : (
-          /* Copilot's own word for it; spent this session, unlike Codex's `credits` balance (HIVE-335). */
-          <span
-            data-stat="aiCredits"
-            className="flex shrink-0 items-center gap-1 border-l border-border pl-2 @max-[600px]:hidden"
-          >
-            <Coins
-              size={13}
-              weight="regular"
-              role="img"
-              aria-label={`AI credits: ${aiCredits}`}
-              className="shrink-0 text-subtle"
-            />
-            <span data-detail="aiCredits" className="text-ink @max-[1040px]:hidden">
-              {aiCredits}
-            </span>
-            <span data-detail="aiCredits" className="text-subtle @max-[1040px]:hidden">
-              AI credits
-            </span>
-          </span>
-        )}
+          )}
+        </span>
       </span>
-    </span>
+    </Hint>
   );
 }

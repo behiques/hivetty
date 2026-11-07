@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
 import { EmptyState, EmptyStatePath } from '@components/ui/empty-state';
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import { ChangedFiles } from '@features/explorer/components/changed-files';
 import { ExplorerResults } from '@features/explorer/components/explorer-results';
@@ -277,19 +278,20 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
           somewhere else. The in-project case keeps `display`, because there the
           prefix is the renderer's own and main honours it by construction.
         */}
-        <span
-          className="flex-1 truncate tabular-nums text-ui-sm tracking-wide text-subtle uppercase"
-          title={
+        <Hint label={
             explorerRoot?.widened === true
               ? explorerRoot.path
               : (display.full ?? project.name)
-          }
-        >
-          {project.name}
-          {rootSuffix === '' ? null : (
-            <span className="text-muted"> · {rootSuffix}</span>
-          )}
-        </span>
+          }>
+          <span
+            className="flex-1 truncate tabular-nums text-ui-sm tracking-wide text-subtle uppercase"
+          >
+            {project.name}
+            {rootSuffix === '' ? null : (
+              <span className="text-muted"> · {rootSuffix}</span>
+            )}
+          </span>
+        </Hint>
 
         {/*
           The branch, when one has been observed.
@@ -301,33 +303,36 @@ export function ExplorerPanel({ changesId }: { changesId?: string } = {}) {
           second em dash in a 320px column is noise rather than an answer.
         */}
         {branch === undefined ? null : (
-          <span
-            className="max-w-[110px] shrink-0 truncate rounded-full border border-border bg-chip px-1.5 py-px tabular-nums text-micro text-brand"
-            title={`On branch ${branch}`}
-          >
-            {branch}
-          </span>
+          <Hint label={`On branch ${branch}`}>
+            <span
+              className="max-w-[110px] shrink-0 truncate rounded-full border border-border bg-chip px-1.5 py-px tabular-nums text-micro text-brand"
+            >
+              {branch}
+            </span>
+          </Hint>
         )}
 
-        <button
-          type="button"
-          onClick={refresh}
-          title="Refresh"
-          className="rounded-full p-1.5 text-subtle hover:bg-hover hover:text-muted"
-        >
-          <Icon name="ph-arrows-clockwise" size={13} />
-          <span className="sr-only">Refresh the tree</span>
-        </button>
+        <Hint label="Refresh">
+          <button
+            type="button"
+            onClick={refresh}
+            className="rounded-full p-1.5 text-subtle hover:bg-hover hover:text-muted"
+          >
+            <Icon name="ph-arrows-clockwise" size={13} />
+            <span className="sr-only">Refresh the tree</span>
+          </button>
+        </Hint>
 
-        <button
-          type="button"
-          onClick={collapseAll}
-          title="Collapse all"
-          className="rounded-full p-1.5 text-subtle hover:bg-hover hover:text-muted"
-        >
-          <Icon name="ph-arrows-in-simple" size={13} />
-          <span className="sr-only">Collapse every folder</span>
-        </button>
+        <Hint label="Collapse all">
+          <button
+            type="button"
+            onClick={collapseAll}
+            className="rounded-full p-1.5 text-subtle hover:bg-hover hover:text-muted"
+          >
+            <Icon name="ph-arrows-in-simple" size={13} />
+            <span className="sr-only">Collapse every folder</span>
+          </button>
+        </Hint>
       </div>
 
       {/*
@@ -437,9 +442,11 @@ function SearchView({
     return (
       <div className="flex flex-col gap-[3px] px-2 py-3">
         <p className="text-ui-sm text-muted">{phrase}</p>
-        <p className="truncate text-ui-sm text-subtle" title={query}>
-          nothing matches “{query}”
-        </p>
+        <Hint label={query}>
+          <p className="truncate text-ui-sm text-subtle">
+            nothing matches “{query}”
+          </p>
+        </Hint>
       </div>
     );
   }

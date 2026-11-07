@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { SessionPanelStrip, type StripTab } from '@components/layout/session-panel-strip';
 import type { SessionPlan } from '@shared/plan-contract';
+import { hintOf } from '@tests/support/hint';
 
 const plan: SessionPlan = {
   entityId: 's',
@@ -36,14 +37,14 @@ describe('SessionPanelStrip (HIVE-201)', () => {
     expect(within(screen.getByRole('button', { name: 'Files' })).queryByTestId('pr-dot')).toBeNull();
   });
 
-  it('draws the plan rings, then each other tab with its fact; each opens its tab', () => {
+  it('draws the plan rings, then each other tab with its fact; each opens its tab', async () => {
     const onOpen = vi.fn();
     render(<SessionPanelStrip plan={plan} tabs={[files(2)]} onOpen={onOpen} />);
 
     const planButton = screen.getByRole('button', { name: 'Plan, 1 of 2 done' });
     expect(planButton).toHaveTextContent('1/2');
     const filesButton = screen.getByRole('button', { name: '2 files changed' });
-    expect(filesButton).toHaveAttribute('title', '2 files changed');
+    expect(await hintOf(filesButton)).toBe('2 files changed');
     expect(filesButton).toHaveTextContent('2');
 
     fireEvent.click(planButton);

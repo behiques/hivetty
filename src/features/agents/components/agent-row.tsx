@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { isAgent } from '@/types/entity';
 
+import { Hint } from '@components/ui/hint';
 import { STATUS_LABEL } from '@components/ui/status-dot';
 import { AgentTile, type TileTone } from '@features/shared/components/agent-tile';
 import { useAge } from '@hooks/use-relative-time';
@@ -191,25 +192,27 @@ export function AgentRow({ id }: AgentRowProps) {
       >
         {/* A paused agent refuses a run, and its Resume is a play icon too: one ▶, not two. */}
         {paused ? null : (
+          <Hint label="Wake this agent once, now.">
+            <button
+              type="button"
+              aria-label={`Run ${id} now`}
+              onClick={runNow}
+              className="rounded-full p-0.5 text-muted hover:text-ink"
+            >
+              <Play size={13} aria-hidden="true" />
+            </button>
+          </Hint>
+        )}
+        <Hint label={paused ? 'Let this agent wake again' : 'Stop this agent waking. A turn already running finishes.'}>
           <button
             type="button"
-            aria-label={`Run ${id} now`}
-            title="Wake this agent once, now."
-            onClick={runNow}
+            aria-label={paused ? `Resume ${id}` : `Pause ${id}`}
+            onClick={togglePause}
             className="rounded-full p-0.5 text-muted hover:text-ink"
           >
-            <Play size={13} aria-hidden="true" />
+            {paused ? <Play size={13} aria-hidden="true" /> : <Pause size={13} aria-hidden="true" />}
           </button>
-        )}
-        <button
-          type="button"
-          aria-label={paused ? `Resume ${id}` : `Pause ${id}`}
-          title={paused ? 'Let this agent wake again' : 'Stop this agent waking. A turn already running finishes.'}
-          onClick={togglePause}
-          className="rounded-full p-0.5 text-muted hover:text-ink"
-        >
-          {paused ? <Play size={13} aria-hidden="true" /> : <Pause size={13} aria-hidden="true" />}
-        </button>
+        </Hint>
       </span>
     </div>
   );

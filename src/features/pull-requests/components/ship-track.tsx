@@ -5,6 +5,7 @@ import { formatDuration } from '@/lib/format-duration';
 import { cn } from '@/lib/utils';
 import type { Pr } from '@/types/pull-request';
 
+import { Hint } from '@components/ui/hint';
 import { holderIcon } from '@features/pull-requests/holder-icon';
 import { bandStops, stopTitle, type BandStop } from '@features/pull-requests/ship-band';
 import { useHolderPost, useShipTrack } from '@stores/hive-store';
@@ -55,31 +56,34 @@ export function ShipTrack({ pr }: { pr: Pr }) {
                 )}
               />
             )}
-            <li
-              data-state={stop.state}
-              title={stopTitle(stop)}
-              className={cn(
-                'flex items-center gap-[5px] whitespace-nowrap',
-                stop.state === 'now' ? 'font-semibold text-green' : stop.state === 'done' ? 'text-muted' : 'text-subtle',
-              )}
-            >
-              <span className={cn('grid size-3.5 place-items-center rounded-full border-[1.5px]', DOT[stop.state])}>
-                {stop.state === 'done' ? <Check size={9} weight="bold" aria-hidden /> : null}
-              </span>
-              <span className={cn(stop.state !== 'now' && '@max-[760px]:sr-only')}>{stop.label}</span>
-              {stop.state === 'now' && stop.spentMs !== null ? (
-                <span className="tabular-nums text-micro font-normal text-muted">{formatDuration(stop.spentMs)}</span>
-              ) : null}
-            </li>
+            <Hint label={stopTitle(stop)}>
+              <li
+                data-state={stop.state}
+                className={cn(
+                  'flex items-center gap-[5px] whitespace-nowrap',
+                  stop.state === 'now' ? 'font-semibold text-green' : stop.state === 'done' ? 'text-muted' : 'text-subtle',
+                )}
+              >
+                <span className={cn('grid size-3.5 place-items-center rounded-full border-[1.5px]', DOT[stop.state])}>
+                  {stop.state === 'done' ? <Check size={9} weight="bold" aria-hidden /> : null}
+                </span>
+                <span className={cn(stop.state !== 'now' && '@max-[760px]:sr-only')}>{stop.label}</span>
+                {stop.state === 'now' && stop.spentMs !== null ? (
+                  <span className="tabular-nums text-micro font-normal text-muted">{formatDuration(stop.spentMs)}</span>
+                ) : null}
+              </li>
+            </Hint>
           </Fragment>
         ))}
       </ol>
       {current !== null && holder !== null && HolderIcon !== null ? (
         <span data-note className="flex min-w-0 basis-full items-center gap-1.5 text-green">
           <HolderIcon size={13} aria-hidden className="shrink-0" />
-          <span className="truncate" title={note}>
-            {note}
-          </span>
+          <Hint label={note}>
+            <span className="truncate">
+              {note}
+            </span>
+          </Hint>
         </span>
       ) : null}
     </div>

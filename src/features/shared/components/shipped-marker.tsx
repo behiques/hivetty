@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { Hint } from '@components/ui/hint';
 import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import type { ShippedStatus } from '@shared/shipped-contract';
 
@@ -28,12 +29,13 @@ export function ShippedDot({ status }: { status: ShippedStatus | undefined }) {
     : 'Changed from the shipped version';
 
   return (
-    <span
-      role="img"
-      aria-label={label}
-      title={label}
-      className={`size-1.5 shrink-0 rounded-full ${status.held ? 'bg-amber' : 'bg-brand'}`}
-    />
+    <Hint label={label}>
+      <span
+        role="img"
+        aria-label={label}
+        className={`size-1.5 shrink-0 rounded-full ${status.held ? 'bg-amber' : 'bg-brand'}`}
+      />
+    </Hint>
   );
 }
 

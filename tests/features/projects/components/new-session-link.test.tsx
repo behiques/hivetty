@@ -17,6 +17,7 @@ import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 
 import { testProjectKey } from '@tests/support/project-key';
+import { findByHint } from '@tests/support/hint';
 
 /**
  * Starting a session from the projects tree.
@@ -132,8 +133,7 @@ describe('NewSessionLink', () => {
     render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
 
     await waitFor(() =>
-      expect(screen.getByRole('button')).toHaveAttribute(
-        'title',
+      expect(screen.getByRole('button')).toHaveAttribute('aria-description',
         "Copilot, the default for nova-web, isn't available · starting on Claude Code (your default)",
       ),
     );
@@ -162,7 +162,7 @@ describe('NewSessionLink', () => {
 
     render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
     await waitFor(() => expect(codexModels).toHaveBeenCalled());
-    await screen.findByTitle(/gpt-6-luna · medium/);
+    await findByHint(document.body, /gpt-6-luna · medium/);
     await userEvent.click(screen.getByRole('button'));
 
     expect(lastSession()).toMatchObject({ harness: 'codex', model: 'gpt-6-luna', effort: 'medium' });
@@ -175,7 +175,7 @@ describe('NewSessionLink', () => {
     });
 
     render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
-    await waitFor(() => expect(screen.getByRole('button')).toHaveAttribute('title', 'No CLI is available for sessions'));
+    await waitFor(() => expect(screen.getByRole('button')).toHaveAttribute('aria-description', 'No CLI is available for sessions'));
     expect(screen.getByRole('button')).toBeDisabled();
   });
 
@@ -188,7 +188,7 @@ describe('NewSessionLink', () => {
     render(<NewSessionLink projectId={PROJECT} projectName={PROJECT_NAME} />);
     expect(screen.getByRole('button')).toBeDisabled();
     // Says why it waits, rather than naming a model it cannot start yet.
-    expect(screen.getByRole('button')).toHaveAttribute('title', 'Reading your Codex models…');
+    expect(screen.getByRole('button')).toHaveAttribute('aria-description', 'Reading your Codex models…');
 
     answer(null);
     await waitFor(() => expect(screen.getByRole('button')).toBeEnabled());
@@ -231,7 +231,7 @@ describe('NewSessionLink', () => {
 
     const link = screen.getByRole('button');
     expect(link).toBeDisabled();
-    expect(link).toHaveAttribute('title', expect.stringContaining(CONFIG_PATH));
+    expect(link).toHaveAttribute('aria-description', expect.stringContaining(CONFIG_PATH));
 
     await userEvent.click(link);
     expect(useHiveStore.getState().order).toHaveLength(0);
@@ -243,7 +243,7 @@ describe('NewSessionLink', () => {
 
     const link = screen.getByRole('button');
     expect(link).toBeDisabled();
-    expect(link).toHaveAttribute('title', expect.stringContaining('missing'));
+    expect(link).toHaveAttribute('aria-description', expect.stringContaining('missing'));
   });
 
   it('says what it is about to start on', () => {
@@ -256,8 +256,7 @@ describe('NewSessionLink', () => {
     // The steppers that decide this live in the picker, and the picker is not
     // open. Without the tooltip the click commits to a model the user cannot
     // see from here.
-    expect(screen.getByRole('button')).toHaveAttribute(
-      'title',
+    expect(screen.getByRole('button')).toHaveAttribute('aria-description',
       'Starts on haiku · max',
     );
   });

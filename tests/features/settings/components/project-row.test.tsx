@@ -6,6 +6,7 @@ import type { ProjectConfig } from '@shared/config-contract';
 import { ProjectRow } from '@features/settings/components/project-row';
 
 import { testProjectKey } from '@tests/support/project-key';
+import { getByHint, queryByHint } from '@tests/support/hint';
 
 /**
  * One row of the settings projects list (stories 101, 103).
@@ -174,8 +175,7 @@ describe('ProjectRow · the key chip', () => {
   it('explains what the key is for', () => {
     setup({ project: entry({ id: 'the-hive', key: 'hive' }) });
 
-    expect(screen.getByText('hive')).toHaveAttribute(
-      'title',
+    expect(screen.getByText('hive')).toHaveAttribute('aria-description',
       'type "hive" wherever a project is asked for',
     );
   });
@@ -200,18 +200,18 @@ describe('ProjectRow · the key chip', () => {
     });
 
     expect(screen.getByRole('textbox', { name: 'Project key' })).toBeInTheDocument();
-    expect(screen.queryByTitle(/wherever a project is asked for/)).toBeNull();
+    expect(queryByHint(document.body, /wherever a project is asked for/)).toBeNull();
   });
 });
 
 describe('ProjectRow default CLI mark (HIVE-378)', () => {
   it('marks a project that names a default CLI', () => {
     setup({ project: entry({ id: 'the-hive', name: 'The Hive', harness: 'codex' }) });
-    expect(screen.getByTitle('Default CLI: Codex')).toBeInTheDocument();
+    expect(getByHint(document.body, 'Default CLI: Codex')).toBeInTheDocument();
   });
 
   it('draws no mark without one', () => {
     setup();
-    expect(screen.queryByTitle(/Default CLI:/)).toBeNull();
+    expect(queryByHint(document.body, /Default CLI:/)).toBeNull();
   });
 });

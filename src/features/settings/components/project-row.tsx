@@ -2,6 +2,7 @@ import { DotsSixVertical } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { CliMark } from '@components/ui/cli-mark';
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import { ProjectKey } from '@components/ui/project-key';
 import { Tag } from '@components/ui/tag';
@@ -121,9 +122,11 @@ export function ProjectRow({
 
       {/* HIVE-378: the CLI this project's sessions start with, when it names one. */}
       {project.harness === undefined ? null : (
-        <span title={`Default CLI: ${CLI_NAMES[project.harness]}`} className="shrink-0 text-subtle">
-          <CliMark cli={project.harness} className="size-[13px]" />
-        </span>
+        <Hint label={`Default CLI: ${CLI_NAMES[project.harness]}`}>
+          <span className="shrink-0 text-subtle">
+            <CliMark cli={project.harness} className="size-[13px]" />
+          </span>
+        </Hint>
       )}
 
       {!project.isRepo ? (
