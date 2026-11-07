@@ -87,8 +87,9 @@ import { isThisMachineAction } from './notification-contract';
  * 31 → 32 (HIVE-264): `CH` gained `account:state`, `account:sign-in`, `account:cancel`, `account:sign-out` (process-local) and `account:changed` (local-only).
  * 32 → 33 (HIVE-267): `CH` gained `licence:state`, `licence:refresh`, `licence:watch-purchase` (process-local) and `licence:changed` (local-only).
  * 33 → 34 (HIVE-268): `CH` gained `account:open-web` (process-local).
+ * 34 → 35 (HIVE-265): `CH` gained `account:devices`, `licence:start-trial`, `licence:paused` and `app:quit` (process-local).
  */
-export const REMOTE_PROTOCOL_VERSION = 34;
+export const REMOTE_PROTOCOL_VERSION = 35;
 
 /**
  * What a frame is for.
@@ -280,6 +281,10 @@ export const FRAME_KIND = {
   [CH.licenceRefresh]: 'call',
   [CH.licenceWatchPurchase]: 'call',
   [CH.licenceChanged]: 'event',
+  [CH.accountDevices]: 'call',
+  [CH.licenceStartTrial]: 'call',
+  [CH.licencePaused]: 'call',
+  [CH.appQuit]: 'call',
   [CH.configCloneStart]: 'call',
   [CH.configCloneCancel]: 'call',
   [CH.configCloneDone]: 'event',
@@ -610,6 +615,10 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.licenceRefresh]: 'execute',
   [CH.licenceWatchPurchase]: 'execute',
   [CH.licenceChanged]: 'read',
+  [CH.accountDevices]: 'read',
+  [CH.licenceStartTrial]: 'execute',
+  [CH.licencePaused]: 'read',
+  [CH.appQuit]: 'execute',
   [CH.configCloneStart]: 'execute',
   [CH.configCloneCancel]: 'mutate',
   [CH.configCloneDone]: 'read',
@@ -973,6 +982,14 @@ const PROCESS_LOCAL_REFUSALS = {
     "licence:refresh renews the answering machine's own lease. A server refuses to renew on a peer's say-so; the asking machine renews its own.",
   [CH.licenceWatchPurchase]:
     "licence:watch-purchase polls for the answering machine's own new lease. A server refuses it from a peer; the asking machine watches for its own purchase.",
+  [CH.accountDevices]:
+    "account:devices lists the devices of the answering machine's own account. A server refuses to show its account's devices to a peer; the asking machine lists its own.",
+  [CH.licenceStartTrial]:
+    "licence:start-trial spends the answering machine's account's one trial. A server refuses to spend it on a peer's say-so; the asking machine starts its own.",
+  [CH.licencePaused]:
+    "licence:paused names what the answering machine's own lapse paused. A server's answer would describe its fleet as the peer's, so the asking machine answers it and a server refuses it.",
+  [CH.appQuit]:
+    "app:quit quits the answering machine's app. A server refuses to quit on a peer's say-so; the asking machine quits itself.",
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**

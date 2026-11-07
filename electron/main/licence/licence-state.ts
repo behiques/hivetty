@@ -36,6 +36,7 @@ const termsOf = (c: LeaseClaims): LicenceTerms => ({
   features: c.features,
   limits: c.limits,
   exp: c.exp,
+  iat: c.iat,
   ...(c.trialEnds === undefined ? {} : { trialEnds: c.trialEnds }),
 });
 
@@ -68,6 +69,9 @@ export function createLicenceState(deps: LicenceStateDeps): LicenceStateMachine 
     return account.kind === 'signed-in' ? account.deviceId : null;
   };
   const signedIn = (): boolean => deps.account.state().kind === 'signed-in';
+  const nowS = (): number => Math.floor(deps.now() / 1000);
+  /** "Last checked …" on the gate (HIVE-265): every offline lapse says when it last tried. */
+  const offline = (): LicenceState => ({ kind: 'lapsed', reason: 'offline', checkedAt: nowS() });
 
   function set(next: LicenceState): void {
     if (same(current, next)) return;
@@ -85,18 +89,19 @@ export function createLicenceState(deps: LicenceStateDeps): LicenceStateMachine 
     const left = claims.exp * 1000 - deps.now();
     expiryTimer = setTimeout(
       () => {
-        if (claims !== null && claims.exp * 1000 <= deps.now()) set({ kind: 'lapsed', reason: 'offline' });
+        if (claims !== null && claims.exp * 1000 <= deps.now()) set(offline());
         else armExpiry();
       },
       Math.max(0, Math.min(left, RENEW_EVERY_MS)),
     );
   }
 
-  /** "When the network comes back": the app has no online event, so grace retries every 5 min. */
+  /** "When the network comes back": no online event, so grace and an offline lapse retry every 5 min. */
   function armGrace(): void {
-    if (current.kind === 'grace' && graceTimer === null) {
+    const retrying = current.kind === 'grace' || (current.kind === 'lapsed' && current.reason === 'offline');
+    if (retrying && graceTimer === null) {
       graceTimer = setInterval(() => void refresh(), GRACE_RETRY_MS);
-    } else if (current.kind !== 'grace' && graceTimer !== null) {
+    } else if (!retrying && graceTimer !== null) {
       clearInterval(graceTimer);
       graceTimer = null;
     }
@@ -110,7 +115,7 @@ export function createLicenceState(deps: LicenceStateDeps): LicenceStateMachine 
     const verdict = verifyLease(jws, { keys: deps.keys, iss: deps.iss, deviceId: deviceId(), now: deps.now() });
     if (!verdict.ok && verdict.why !== 'expired') return { kind: 'unlicensed' };
     if (!signedIn()) return { kind: 'lapsed', reason: 'signed_out' };
-    if (!verdict.ok) return { kind: 'lapsed', reason: 'offline' };
+    if (!verdict.ok) return offline();
     claims = verdict.claims;
     return { kind: 'licensed', ...termsOf(verdict.claims) };
   }
@@ -124,7 +129,8 @@ export function createLicenceState(deps: LicenceStateDeps): LicenceStateMachine 
     ) {
       return { kind: 'grace', ...termsOf(claims) };
     }
-    return current.kind === 'lapsed' ? current : fromFile();
+    if (current.kind === 'lapsed') return current.reason === 'offline' ? offline() : current;
+    return fromFile();
   }
 
   function apply(result: RenewResult): LicenceState {

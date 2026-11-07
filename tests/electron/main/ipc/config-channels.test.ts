@@ -26,8 +26,14 @@ const handlers = new Map<
 
 const shutdownHooks: (() => void)[] = [];
 
+/** HIVE-265: `app:info`'s `gateOff` reads `app.isPackaged`, so each test sets it. */
+const electronApp = vi.hoisted(() => ({ isPackaged: false }));
+
 vi.mock('electron', () => ({
   app: {
+    get isPackaged() {
+      return electronApp.isPackaged;
+    },
     getVersion: () => '0.0.0',
     on: vi.fn(),
     // HIVE-81 review: `registerIpcHandlers` now wires app-level window focus
@@ -385,5 +391,28 @@ describe('config:set-cli and harness:sign-in (HIVE-376)', () => {
     expect(typeof deps.gh).toBe('function');
     await expect(invoke(CH.harnessSignIn, untrustedEvent, { cli: 'codex' })).rejects.toThrow();
     await expect(invoke(CH.harnessSignIn, trustedEvent, { cli: 'gemini' })).rejects.toThrow();
+  });
+});
+
+describe('app:info gateOff (HIVE-265)', () => {
+  afterEach(() => {
+    electronApp.isPackaged = false;
+    vi.unstubAllEnvs();
+  });
+
+  it('is absent in a packaged build, even with HIVE_E2E set', async () => {
+    electronApp.isPackaged = true;
+    vi.stubEnv('HIVE_E2E', '1');
+    await expect(invoke(CH.appInfo, trustedEvent, undefined)).resolves.not.toHaveProperty('gateOff');
+  });
+
+  it('is true unpackaged with HIVE_E2E set', async () => {
+    vi.stubEnv('HIVE_E2E', '1');
+    await expect(invoke(CH.appInfo, trustedEvent, undefined)).resolves.toMatchObject({ gateOff: true });
+  });
+
+  it('is absent unpackaged when HIVE_E2E is empty', async () => {
+    vi.stubEnv('HIVE_E2E', '');
+    await expect(invoke(CH.appInfo, trustedEvent, undefined)).resolves.not.toHaveProperty('gateOff');
   });
 });

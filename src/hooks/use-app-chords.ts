@@ -10,7 +10,7 @@ import {
 } from '@lib/terminal/keymap';
 import { useToggleSessionPanel } from '@stores/appearance-store';
 import { useSpawnTerminalBeside } from '@stores/hive-store';
-import { useActiveTab, useTogglePanel } from '@stores/ui-store';
+import { useActiveTab, useGated, useTogglePanel } from '@stores/ui-store';
 
 /**
  * One chord, both ways it can arrive.
@@ -48,6 +48,12 @@ export function useAppChords(): void {
   useEffect(() => {
     activeTabRef.current = activeTab;
   }, [activeTab]);
+  // The licence gate is up (HIVE-265): `inert` does not reach `window`, so the chords stand down themselves.
+  const gated = useGated();
+  const gatedRef = useRef(gated);
+  useEffect(() => {
+    gatedRef.current = gated;
+  }, [gated]);
 
   const togglePanel = useTogglePanel();
 
@@ -80,6 +86,7 @@ export function useAppChords(): void {
     ];
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (gatedRef.current) return;
       /*
         A terminal already dispatched a chord event for this keystroke.
         Handling both would run the action twice — for a toggle, that lands
@@ -95,6 +102,7 @@ export function useAppChords(): void {
     };
 
     const onChord = (event: Event) => {
+      if (gatedRef.current) return;
       const { detail } = event as CustomEvent<TerminalChordDetail>;
       chords.find((candidate) => candidate.name === detail?.chord)?.run();
     };

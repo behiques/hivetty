@@ -8,6 +8,7 @@ const terms = (plan: string, features: string[], extra: { trialEnds?: number } =
   features,
   limits: { devices: 3 },
   exp: 2_000_000_000,
+  iat: 1_800_000_000,
   ...extra,
 });
 const licensed = (plan: string, features: string[], extra = {}): LicenceState => ({

@@ -17,7 +17,14 @@
  * that proves the whole path.
  */
 
-import type { AccountState, DeviceCode, OpenWebResult, SignInResult } from './account-contract';
+import type {
+  AccountState,
+  DeviceCode,
+  DevicesResult,
+  OpenWebResult,
+  SignInResult,
+  TrialResult,
+} from './account-contract';
 import type {
   AgentLinesPush,
   AgentNameRequest,
@@ -146,7 +153,7 @@ import type {
   LedgerResult,
   LedgerSnapshot,
 } from './ledger-contract';
-import type { LicenceState } from './licence-contract';
+import type { LicenceState, Paused } from './licence-contract';
 import type { SessionMetricsEvent } from './metrics-contract';
 import type {
   HiveNotification,
@@ -901,6 +908,12 @@ export const CH = {
   licenceWatchPurchase: 'licence:watch-purchase',
   /** A push: the licence changed. Local-only, never from a socket. */
   licenceChanged: 'licence:changed',
+  /** This account's live devices, from the cloud (HIVE-265, HIVE-262). */
+  accountDevices: 'account:devices',
+  /** Start the one 14-day trial (HIVE-265, HIVE-275). */
+  licenceStartTrial: 'licence:start-trial',
+  /** What a lapse paused: session titles and agent names. Empty unless lapsed (HIVE-265). */
+  licencePaused: 'licence:paused',
   configCloneStart: 'config:clone-start',
   configCloneCancel: 'config:clone-cancel',
   configCloneDone: 'config:clone-done', // main → renderer
@@ -1259,6 +1272,8 @@ export const CH = {
   /** A batch of run-log lines. */
   agentsLines: 'agents:lines',
   appInfo: 'app:info',
+  /** Quit the app: the gate's Quit (HIVE-265). Process-local: a peer never quits a server. */
+  appQuit: 'app:quit',
   /**
   /**
    * Which session's terminal is on the centre stage, renderer → main (HIVE-81).
@@ -1981,6 +1996,8 @@ export interface AppInfo {
    * and guessing. Absent when no session has ever run.
    */
   pty?: PtyDiagnostics[];
+  /** Unpackaged with HIVE_E2E set: the licence gate is off, so the Playwright suite reaches the workspace with no cloud (HIVE-265). HIVE-270 drives the gate itself. */
+  gateOff?: true;
 }
 
 /** What the diagnostics counter set records for one session. */
@@ -2100,6 +2117,8 @@ export interface PtyDiagnostics {
  */
 export interface HiveBridge {
   appInfo(): Promise<AppInfo>;
+  /** Quit the app: the gate's Quit (HIVE-265). */
+  appQuit(): Promise<void>;
   /**
    * The workspace config (stories 090, 101).
    *
@@ -3174,6 +3193,8 @@ export interface HiveBridge {
     /** HIVE-266: sign in with a code; resolves when the flow ends. The code arrives on `onDeviceCode`. */
     signInWithCode(): Promise<SignInResult>;
     onDeviceCode(callback: (code: DeviceCode) => void): () => void;
+    /** HIVE-265: this account's live devices, from the cloud. */
+    devices(): Promise<DevicesResult>;
   };
   /** The licence (HIVE-267). The gate is HIVE-265's. */
   licence: {
@@ -3181,6 +3202,10 @@ export interface HiveBridge {
     refresh(): Promise<LicenceState>;
     watchPurchase(on: boolean): Promise<void>;
     onChanged(callback: (state: LicenceState) => void): () => void;
+    /** HIVE-265: start the one 14-day trial. */
+    startTrial(): Promise<TrialResult>;
+    /** HIVE-265: what a lapse paused, by name. Empty unless lapsed. */
+    paused(): Promise<Paused>;
   };
   /** Real session lifecycle, derived in main (story 096). */
   session: {

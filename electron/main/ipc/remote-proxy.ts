@@ -1,4 +1,4 @@
-import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { app, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 
 import { parseNotificationAction } from '@shared/guards';
 import { CH, type AppInfo, type Channel } from '@shared/ipc-contract';
@@ -152,6 +152,14 @@ function localAnswerFor(
       return () => LICENCE_CALLS[channel]();
     case CH.licenceWatchPurchase:
       return (on: unknown) => LICENCE_CALLS[CH.licenceWatchPurchase](on === true);
+    /* HIVE-265. This machine's own account, licence and app, like the calls above. */
+    case CH.accountDevices:
+      return () => ACCOUNT_CALLS[channel]();
+    case CH.licenceStartTrial:
+    case CH.licencePaused:
+      return () => LICENCE_CALLS[channel]();
+    case CH.appQuit:
+      return () => app.quit();
     default:
       return null;
   }

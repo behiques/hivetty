@@ -297,7 +297,7 @@ import { createSlackTokens } from '../integrations/slack/tokens';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
-import { ACCOUNT_CALLS, LICENCE_CALLS, licence, onLicenceChange } from '../licence';
+import { ACCOUNT_CALLS, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
 import { createSuspender, installSuspender, isLapsed, releaseNow, runContainer } from '../licence/suspend';
 import { agentMcpConfigFile, createMcpRuntime } from '../mcp';
 import {
@@ -1981,6 +1981,12 @@ export function registerIpcHandlers(
   handle(CH.licenceState, () => LICENCE_CALLS[CH.licenceState]());
   handle(CH.licenceRefresh, () => LICENCE_CALLS[CH.licenceRefresh]());
   handle(CH.licenceWatchPurchase, (_event, on: unknown) => LICENCE_CALLS[CH.licenceWatchPurchase](on === true));
+  // HIVE-265. Process-local, like the calls above.
+  handle(CH.accountDevices, () => ACCOUNT_CALLS[CH.accountDevices]());
+  handle(CH.licenceStartTrial, () => LICENCE_CALLS[CH.licenceStartTrial]());
+  handle(CH.licencePaused, () => LICENCE_CALLS[CH.licencePaused]());
+  // HIVE-265: the gate's Quit. window.close() would leave the app running in the dock.
+  handle(CH.appQuit, () => app.quit());
 
   /**
    * The hook pipeline is constructed here and started by `createSessions`
@@ -3362,6 +3368,11 @@ export function registerIpcHandlers(
   */
   const suspender = createSuspender({ ptyHost: supervisor, runs, container: runContainer });
   installSuspender(suspender);
+  // HIVE-265: the lapsed gate's "Paused: N sessions, M agents", by name.
+  setPausedCensus(() => ({
+    sessions: (sessions?.entities() ?? []).map((id) => sessionNames.get(id) ?? id),
+    agents: runs?.live() ?? [],
+  }));
   void suspender.onState(licence());
   stopSuspender = onLicenceChange((state) => void suspender.onState(state));
 
@@ -3653,6 +3664,8 @@ export function registerIpcHandlers(
       // Omitted rather than empty when nothing has run, so the field's presence
       // means something.
       ...(diagnostics.length > 0 ? { pty: diagnostics } : {}),
+      // HIVE-265: the Playwright suite runs unpackaged with HIVE_E2E and no cloud, so the gate stays off.
+      ...(!app.isPackaged && process.env.HIVE_E2E ? { gateOff: true as const } : {}),
     };
   }
 

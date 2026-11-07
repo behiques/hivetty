@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { onLicenceChanged, readLicence, refreshLicence, trialDaysLeft, watchPurchase } from '@/lib/licence';
+import {
+  onLicenceChanged,
+  planLine,
+  readLicence,
+  readPaused,
+  refreshLicence,
+  startTrial,
+  trialDaysLeft,
+  watchPurchase,
+} from '@/lib/licence';
 
 const bridge = (licence: Record<string, unknown>): void => {
   (window as { hive?: unknown }).hive = { licence };
@@ -60,6 +69,7 @@ describe('trialDaysLeft (HIVE-268)', () => {
     features: [],
     limits: {},
     exp: 0,
+    iat: NOW / 1000,
     ...(trialEnds === undefined ? {} : { trialEnds }),
   });
 
@@ -77,5 +87,58 @@ describe('trialDaysLeft (HIVE-268)', () => {
     expect(trialDaysLeft({ kind: 'unlicensed' }, NOW)).toBeNull();
     expect(trialDaysLeft({ kind: 'lapsed', reason: 'trial_ended' }, NOW)).toBeNull();
     expect(trialDaysLeft(null, NOW)).toBeNull();
+  });
+});
+
+describe('startTrial (HIVE-265)', () => {
+  it('answers null with no bridge', async () => {
+    await expect(startTrial()).resolves.toBeNull();
+  });
+
+  it('passes the answer through', async () => {
+    bridge({ startTrial: vi.fn().mockResolvedValue({ error: 'trial_used' }) });
+    await expect(startTrial()).resolves.toEqual({ error: 'trial_used' });
+  });
+
+  it('answers null and logs when main refuses', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    bridge({ startTrial: vi.fn().mockRejectedValue(new Error('x')) });
+    await expect(startTrial()).resolves.toBeNull();
+    expect(console.error).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('readPaused (HIVE-265)', () => {
+  it('answers null with no bridge', async () => {
+    await expect(readPaused()).resolves.toBeNull();
+  });
+
+  it('passes the answer through', async () => {
+    bridge({ paused: vi.fn().mockResolvedValue({ sessions: ['s'], agents: ['a'] }) });
+    await expect(readPaused()).resolves.toEqual({ sessions: ['s'], agents: ['a'] });
+  });
+
+  it('answers null and logs when main refuses', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    bridge({ paused: vi.fn().mockRejectedValue(new Error('x')) });
+    await expect(readPaused()).resolves.toBeNull();
+    expect(console.error).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('planLine', () => {
+  const NOW = Date.UTC(2026, 10, 7);
+  const live = { kind: 'licensed' as const, plan: 'team', features: [], limits: {}, exp: NOW / 1000 + 86_400 * 30, iat: NOW / 1000 };
+  it('a trial reads "<Plan> trial · N days left", singular at one', () => {
+    expect(planLine({ ...live, trialEnds: NOW / 1000 + 2.5 * 86_400 }, NOW)).toBe('Team trial · 3 days left');
+    expect(planLine({ ...live, trialEnds: NOW / 1000 + 0.5 * 86_400 }, NOW)).toBe('Team trial · 1 day left');
+  });
+  it('a paid plan reads its display name; an unknown key reads as itself', () => {
+    expect(planLine(live, NOW)).toBe('Team');
+    expect(planLine({ ...live, plan: 'gold' }, NOW)).toBe('gold');
+  });
+  it('no live licence has no line', () => {
+    expect(planLine(null, NOW)).toBeNull();
+    expect(planLine({ kind: 'lapsed', reason: 'trial_ended' }, NOW)).toBeNull();
   });
 });

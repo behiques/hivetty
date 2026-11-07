@@ -27,6 +27,7 @@ export type SettingsSection =
   | 'integrations'
   | 'notifications'
   | 'server-mode'
+  | 'account-devices'
   | 'plan-licence'
   | 'updates-about'
   | 'advanced';

@@ -997,6 +997,26 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.accountOpenWeb, '/account/plan');
   });
 
+  it.each([
+    ['devices', CH.accountDevices],
+  ])('account.%s invokes its channel (HIVE-265)', async (verb, channel) => {
+    await (account()[verb] as () => Promise<unknown>)();
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(channel);
+  });
+
+  it.each([
+    ['startTrial', CH.licenceStartTrial],
+    ['paused', CH.licencePaused],
+  ])('licence.%s invokes its channel (HIVE-265)', async (verb, channel) => {
+    await (licence()[verb] as () => Promise<unknown>)();
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(channel);
+  });
+
+  it('appQuit invokes app:quit (HIVE-265)', async () => {
+    await (exposed.appQuit as () => Promise<unknown>)();
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.appQuit);
+  });
+
   it('signInWithCode invokes account:sign-in-code (HIVE-266)', async () => {
     await (account().signInWithCode as () => Promise<unknown>)();
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.accountSignInCode);

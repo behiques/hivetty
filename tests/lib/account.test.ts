@@ -1,6 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { cancelSignIn, onAccountChanged, openAccountWeb, readAccountState, signIn, signOut } from '@/lib/account';
+import {
+  cancelSignIn,
+  initialOf,
+  listDevices,
+  onAccountChanged,
+  onDeviceCode,
+  openAccountWeb,
+  readAccountState,
+  signIn,
+  signInWithCode,
+  signOut,
+} from '@/lib/account';
 
 const bridge = (account: Record<string, unknown>): void => {
   (window as { hive?: unknown }).hive = { account };
@@ -59,5 +70,64 @@ describe('src/lib/account', () => {
     await expect(cancelSignIn()).resolves.toBeUndefined();
     await expect(signOut()).resolves.toBeUndefined();
     await expect(openAccountWeb('/account/plan')).resolves.toBeNull();
+  });
+
+  describe('signInWithCode (HIVE-266 flow, HIVE-265 gate)', () => {
+    it('answers null with no bridge', async () => {
+      await expect(signInWithCode()).resolves.toBeNull();
+    });
+
+    it('passes the end of the flow through, failure and all', async () => {
+      const signInWithCodeCall = vi.fn().mockResolvedValue({ error: 'The sign-in was denied.', failure: 'denied' });
+      bridge({ signInWithCode: signInWithCodeCall });
+      await expect(signInWithCode()).resolves.toEqual({ error: 'The sign-in was denied.', failure: 'denied' });
+      expect(signInWithCodeCall).toHaveBeenCalledWith();
+    });
+
+    it('answers null and logs when main refuses', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      bridge({ signInWithCode: vi.fn().mockRejectedValue(new Error('x')) });
+      await expect(signInWithCode()).resolves.toBeNull();
+      expect(console.error).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('onDeviceCode', () => {
+    it('is a no-op unsubscribe with no bridge', () => {
+      expect(onDeviceCode(vi.fn())).toEqual(expect.any(Function));
+    });
+
+    it('subscribes through the bridge', () => {
+      const dispose = vi.fn();
+      const account = { onDeviceCode: vi.fn().mockReturnValue(dispose) };
+      bridge(account);
+      const callback = vi.fn();
+      expect(onDeviceCode(callback)).toBe(dispose);
+      expect(account.onDeviceCode).toHaveBeenCalledWith(callback);
+    });
+  });
+
+  describe('listDevices (HIVE-265)', () => {
+    it('answers null with no bridge', async () => {
+      await expect(listDevices()).resolves.toBeNull();
+    });
+
+    it('passes the devices through', async () => {
+      const devices = [{ id: 'd', name: 'Mac', lastSeenAt: '2026-11-07', createdAt: '2026-11-01', current: true }];
+      bridge({ devices: vi.fn().mockResolvedValue({ devices }) });
+      await expect(listDevices()).resolves.toEqual({ devices });
+    });
+
+    it('answers null and logs when main refuses', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      bridge({ devices: vi.fn().mockRejectedValue(new Error('x')) });
+      await expect(listDevices()).resolves.toBeNull();
+      expect(console.error).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('initialOf takes the name, else the email, upper-cased', () => {
+    expect(initialOf({ name: 'ana ruiz', email: 'x@y.z' })).toBe('A');
+    expect(initialOf({ name: '  ', email: 'zed@y.z' })).toBe('Z');
   });
 });

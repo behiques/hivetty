@@ -1,7 +1,14 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 
 
-import type { AccountState, DeviceCode, OpenWebResult, SignInResult } from '@shared/account-contract';
+import type {
+  AccountState,
+  DeviceCode,
+  DevicesResult,
+  OpenWebResult,
+  SignInResult,
+  TrialResult,
+} from '@shared/account-contract';
 import type {
   AgentLinesPush,
   AgentNameRequest,
@@ -152,7 +159,7 @@ import type {
   LedgerResult,
   LedgerSnapshot,
 } from '@shared/ledger-contract';
-import type { LicenceState } from '@shared/licence-contract';
+import type { LicenceState, Paused } from '@shared/licence-contract';
 import type { SessionMetricsEvent } from '@shared/metrics-contract';
 import type {
   HiveNotification,
@@ -283,6 +290,7 @@ const mintId = (): string => globalThis.crypto.randomUUID();
 
 const bridge: HiveBridge = {
   appInfo: (): Promise<AppInfo> => ipcRenderer.invoke(CH.appInfo),
+  appQuit: (): Promise<void> => ipcRenderer.invoke(CH.appQuit) as Promise<void>,
   config: {
     get: (): Promise<ConfigSnapshot> => ipcRenderer.invoke(CH.configGet),
     reload: (): Promise<ConfigReloadResult> => ipcRenderer.invoke(CH.configReload),
@@ -896,6 +904,7 @@ const bridge: HiveBridge = {
       subscribe<AccountState>(CH.accountChanged, callback),
     signInWithCode: (): Promise<SignInResult> => ipcRenderer.invoke(CH.accountSignInCode) as Promise<SignInResult>,
     onDeviceCode: (callback: (code: DeviceCode) => void) => subscribe<DeviceCode>(CH.accountDeviceCode, callback),
+    devices: (): Promise<DevicesResult> => ipcRenderer.invoke(CH.accountDevices) as Promise<DevicesResult>,
   },
   licence: {
     state: (): Promise<LicenceState> => ipcRenderer.invoke(CH.licenceState) as Promise<LicenceState>,
@@ -904,6 +913,8 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.licenceWatchPurchase, on) as Promise<void>,
     onChanged: (callback: (state: LicenceState) => void) =>
       subscribe<LicenceState>(CH.licenceChanged, callback),
+    startTrial: (): Promise<TrialResult> => ipcRenderer.invoke(CH.licenceStartTrial) as Promise<TrialResult>,
+    paused: (): Promise<Paused> => ipcRenderer.invoke(CH.licencePaused) as Promise<Paused>,
   },
   session: {
     onStatus: (callback: (event: SessionStatusEvent) => void) =>

@@ -7,7 +7,7 @@ afterEach(() => {
   delete (window as { hive?: unknown }).hive;
 });
 
-const lease = (features: string[]) => ({ kind: 'licensed', plan: 'solo', features, limits: {}, exp: 2_000_000_000 });
+const lease = (features: string[]) => ({ kind: 'licensed', plan: 'solo', features, limits: {}, exp: 2_000_000_000, iat: 1_800_000_000 });
 
 describe('useEntitlement', () => {
   it('is locked with no bridge, with the upgrade path', () => {

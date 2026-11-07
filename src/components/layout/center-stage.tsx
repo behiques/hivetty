@@ -21,6 +21,7 @@ import { TerminalHost } from '@components/terminal/terminal-host';
 import { SplitHandle } from '@components/ui/split-handle';
 import { TerminalHint } from '@components/ui/terminal-hint';
 import { can } from '@config/runtime';
+import { LicenceBanner } from '@features/account/components/licence-banner';
 import { AgentPage } from '@features/agents/components/agent-page';
 import { AgentsStage } from '@features/agents/components/agents-stage';
 import { EditorPane } from '@features/editor/components/editor-pane';
@@ -439,6 +440,7 @@ export function CenterStage() {
         picker and the stage keeps the rest of the column.
       */}
       <ReconnectLine />
+      <LicenceBanner />
       {showingPicker ? <NewSessionPicker /> : null}
       {view === 'settings' ? <SettingsOverlay /> : null}
       {view === 'home' ? <HomePage /> : null}

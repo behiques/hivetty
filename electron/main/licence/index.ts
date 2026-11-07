@@ -2,9 +2,16 @@ import { randomBytes } from 'node:crypto';
 import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import type { AccountState, DeviceCode, OpenWebResult, SignInResult } from '@shared/account-contract';
+import type {
+  AccountState,
+  DeviceCode,
+  DevicesResult,
+  OpenWebResult,
+  SignInResult,
+  TrialResult,
+} from '@shared/account-contract';
 import { CH } from '@shared/ipc-contract';
-import type { LicenceState } from '@shared/licence-contract';
+import type { LicenceState, Paused } from '@shared/licence-contract';
 
 import { runLogin, runLogout } from './account-command';
 import { type AccountSafeStorage, createAccountStore } from './account-store';
@@ -12,9 +19,11 @@ import { type AuthClient, createAuthClient, generateDeviceKey } from './auth-cli
 import { createCloud, type Fetch, resolveCloudUrl } from './cloud';
 import { schemeFor } from './deep-link';
 import { abortableSleep, runDeviceFlow } from './device-flow';
+import { listDevices } from './devices';
 import { leaseKeys } from './keys';
 import { createLeaseFile, renewLease } from './lease';
 import { createLicenceState, type LicenceStateMachine } from './licence-state';
+import { startTrial } from './trial';
 
 /**
  * HiveTTY Pro's licence slice (HIVE-264 onwards): one module-level client, like `updates/`, so both the
@@ -71,6 +80,14 @@ function buildAccount(deps: AccountBoot & { openExternal: (url: string) => Promi
 let stopFollowing: (() => void) | null = null;
 /** HIVE-266: the device-flow code's push to every window. */
 let pushDeviceCode: (code: DeviceCode) => void = () => undefined;
+
+const NOTHING_PAUSED: Paused = { sessions: [], agents: [] };
+let census: () => Paused = () => NOTHING_PAUSED;
+
+/** HIVE-265: what `licence:paused` names, read at call time. `ipc/index.ts` installs it beside the suspender. */
+export function setPausedCensus(read: () => Paused): void {
+  census = read;
+}
 
 export function startLicence(
   deps: AccountBoot & {
@@ -139,6 +156,7 @@ export function resetLicence(): void {
   stopFollowing?.();
   stopFollowing = null;
   pushDeviceCode = () => undefined;
+  census = () => NOTHING_PAUSED;
 }
 
 /** Main's one read of the licence (HIVE-267; HIVE-268's single licence read). */
@@ -164,6 +182,9 @@ export const ACCOUNT_CALLS = {
   /** HIVE-266: sign in with a code; the code goes to every window on account:device-code. */
   [CH.accountSignInCode]: (): Promise<SignInResult> =>
     client?.signInWithCode({ onCode: (code) => pushDeviceCode(code) }) ?? Promise.resolve({ error: NOT_READY }),
+  /** HIVE-265: this account's live devices, from the cloud. */
+  [CH.accountDevices]: (): Promise<DevicesResult> =>
+    client ? listDevices(client.authedFetch) : Promise.resolve({ error: NOT_READY }),
 } as const;
 
 /** What each licence call answers, for `ipc/index.ts` and `ipc/remote-proxy.ts` alike (process-local, D9). */
@@ -171,6 +192,14 @@ export const LICENCE_CALLS = {
   [CH.licenceState]: (): LicenceState => licence(),
   [CH.licenceRefresh]: (): Promise<LicenceState> => licenceState?.refresh() ?? Promise.resolve(licence()),
   [CH.licenceWatchPurchase]: (on: boolean): void => licenceState?.watchPurchase(on),
+  [CH.licenceStartTrial]: (): Promise<TrialResult> => {
+    const account = client;
+    const state = licenceState;
+    if (!account || !state) return Promise.resolve({ error: NOT_READY });
+    return startTrial({ authedFetch: account.authedFetch, refresh: () => state.refresh(), signOut: () => account.signOut() });
+  },
+  // Read at call time: while lapsed every live thing is paused and nothing new can start.
+  [CH.licencePaused]: (): Paused => (licence().kind === 'lapsed' ? census() : NOTHING_PAUSED),
 } as const;
 
 export type AccountCommandBoot = AccountBoot & { print: (line: string) => void; signal: AbortSignal };

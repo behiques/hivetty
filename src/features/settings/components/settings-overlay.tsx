@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import type { SettingsSection } from '@/types/settings';
 
 import { Lock, LockMark } from '@components/ui/lock';
+import { AccountDevicesSection } from '@features/settings/components/account-devices-section';
 import { AdvancedSection } from '@features/settings/components/advanced-section';
 import { AgentsSection } from '@features/settings/components/agents-section';
 import { AppearanceSection } from '@features/settings/components/appearance-section';
@@ -74,8 +75,8 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
  * open from its row in Projects.
  *
  * Machines holds what this Mac is to other machines: Server mode (HIVE-380),
- * then Runners and Relay with their own stories. Account holds Plan & licence
- * (HIVE-268); HIVE-265 adds Account & devices above it. General holds Updates &
+ * then Runners and Relay with their own stories. Account holds Account &
+ * devices (HIVE-265), then Plan & licence (HIVE-268). General holds Updates &
  * about, and Advanced last: it answers questions about the app rather than
  * setting anything in it, and the destructive verb in the product lives there.
  */
@@ -119,8 +120,13 @@ export const SETTINGS_GROUPS: SettingsGroups = [
     ],
   },
   { group: 'Machines', panes: [{ id: 'server-mode', label: 'Server mode' }] },
-  // HIVE-265 adds { id: 'account-devices', label: 'Account & devices' } first.
-  { group: 'Account', panes: [{ id: 'plan-licence', label: 'Plan & licence' }] },
+  {
+    group: 'Account',
+    panes: [
+      { id: 'account-devices', label: 'Account & devices' },
+      { id: 'plan-licence', label: 'Plan & licence' },
+    ],
+  },
   {
     group: 'General',
     panes: [
@@ -189,6 +195,7 @@ const PANES: Record<SectionId, ComponentType> = {
   integrations: IntegrationsSection,
   notifications: NotificationsSection,
   'server-mode': ServerModeSection,
+  'account-devices': AccountDevicesSection,
   'plan-licence': PlanLicenceSection,
   'updates-about': UpdatesAboutSection,
   advanced: AdvancedSection,

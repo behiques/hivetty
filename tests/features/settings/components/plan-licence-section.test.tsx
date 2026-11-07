@@ -13,7 +13,7 @@ vi.mock('@lib/account', () => ({ openAccountWeb }));
 
 const NOW = new Date('2026-11-07T12:00:00Z').getTime();
 const DAY_S = 86_400;
-const terms = { plan: 'team', features: [], limits: { devices: 3, runners: 5 }, exp: NOW / 1000 + 7 * DAY_S };
+const terms = { plan: 'team', features: [], limits: { devices: 3, runners: 5 }, exp: NOW / 1000 + 7 * DAY_S, iat: NOW / 1000 };
 
 describe('PlanLicenceSection', () => {
   beforeEach(() => {

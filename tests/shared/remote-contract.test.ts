@@ -81,7 +81,7 @@ const MAIN_ONLY: ReadonlyMap<string, FrameKind> = new Map([
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(186);
+    expect(entries).toHaveLength(190);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -170,11 +170,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 147 call, 6 notify and 33 event', () => {
+  it('splits 151 call, 6 notify and 33 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 147, notify: 6, event: 33 });
+    expect(tally).toEqual({ call: 151, notify: 6, event: 33 });
   });
 
   /**
@@ -258,11 +258,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 186 as 75 read, 52 mutate and 59 execute', () => {
+  it('grades the 190 as 77 read, 52 mutate and 61 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 75, mutate: 52, execute: 59 });
+    expect(tally).toEqual({ read: 77, mutate: 52, execute: 61 });
   });
 
   /**
@@ -623,7 +623,7 @@ describe('remote contract: the version handshake', () => {
   });
 
   it('is protocol 3: 2 carried a generation (HIVE-144), 3 caught up on unbumped channels (HIVE-140 audit)', () => {
-    expect(REMOTE_PROTOCOL_VERSION).toBe(34);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(35);
   });
 });
 
@@ -674,7 +674,7 @@ describe('remote contract: the attach snapshot (HIVE-144)', () => {
     expect(EVENT_CHANNELS).toContain(CH.changedFilesChanged);
     expect(frameKindOf(CH.changedFilesChanged)).toBe('event');
     expect(frameKindOf(CH.changedFilesList)).toBe('call');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(34);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(35);
   });
 
   it('snapshots the plans so a reattaching client sees the current plan (HIVE-179)', () => {
@@ -785,7 +785,7 @@ describe('WINDOW_BOUND', () => {
  * admitted and nobody had applied it to.
  */
 describe('PROCESS_LOCAL', () => {
-  it('names exactly seventeen channels', () => {
+  it('names exactly twenty-three channels', () => {
     expect([...PROCESS_LOCAL].sort()).toEqual(
       [
         CH.appInfo,
@@ -807,6 +807,10 @@ describe('PROCESS_LOCAL', () => {
         CH.licenceState,
         CH.licenceRefresh,
         CH.licenceWatchPurchase,
+        CH.accountDevices,
+        CH.licenceStartTrial,
+        CH.licencePaused,
+        CH.appQuit,
       ].sort(),
     );
   });
@@ -986,5 +990,19 @@ describe('account channels (HIVE-264)', () => {
     expect(isProcessLocal(CH.accountSignInCode)).toBe(true);
     expect(frameKindOf(CH.accountDeviceCode)).toBe('event');
     expect(isLocalOnlyEvent(CH.accountDeviceCode)).toBe(true);
+  });
+
+  it('the HIVE-265 channels are process-local calls, graded as they act', () => {
+    const grades = {
+      [CH.accountDevices]: 'read',
+      [CH.licenceStartTrial]: 'execute',
+      [CH.licencePaused]: 'read',
+      [CH.appQuit]: 'execute',
+    } as const;
+    for (const [channel, grade] of Object.entries(grades)) {
+      expect(frameKindOf(channel as Channel)).toBe('call');
+      expect(isProcessLocal(channel as Channel)).toBe(true);
+      expect(authorizationOf(channel as Channel)).toBe(grade);
+    }
   });
 });
