@@ -1162,6 +1162,19 @@ HIVE-265 adds four channels, all `PROCESS_LOCAL`, under one `REMOTE_PROTOCOL_VER
 `licence:start-trial` (the one 14-day trial, `POST /api/trial`), `licence:paused` (what a lapse paused) and
 `app:quit` (the gate's Quit; a peer never quits a server).
 
+Server mode sits behind the licence (HIVE-265, PR 2). `startWhenLicensed(start, licence, onLicenceChange)` in
+`licence/serve-gate.ts` binds the remote listener at once when the licence is `licensed`, `grace` or `lapsed`,
+and otherwise on the first change out of `unlicensed`. Once bound, nothing takes it down: a lapsed server keeps
+serving so its clients see the lapse. The tray's template takes the licence, the account and the paused counts.
+
+The host's licence reaches attached clients through two channels under one `REMOTE_PROTOCOL_VERSION` bump to
+36. `server:licence` is a forwarded `read` call, not `PROCESS_LOCAL`: the server answers `hostLicence()`,
+`{ lapsed, paused: { sessions, agents } }` as counts. `server:licence-changed` is a relayed event, not
+`LOCAL_ONLY_EVENTS`, emitted through `registerIpcHandlers`' fan-out on every licence change, so it reaches
+attached sockets as well as windows. The renderer's `useHostLicence()` reads the pair only while attached,
+again on every link `epoch`, and `LicenceGate` draws `HostLapsed` over the shell when this window's own gate
+is not showing.
+
 ## The lease (HIVE-267)
 
 - `<userData>/lease.jws` holds the cloud's signed lease, plain text, written atomically (`lease.ts`). It is

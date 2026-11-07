@@ -320,6 +320,30 @@ It revokes the server's sign-in (best effort, so it works offline too) and clear
 from the keychain. The running server notices and locks its Pro features, as it would
 after signing out from Settings. It also exits 3 when the keychain cannot be opened.
 
+### Serving behind the licence
+
+A server serves only once it holds a licence (HIVE-265).
+
+- **Never signed in, or signed in with no lease:** the listener does not bind. The
+  menu-bar item says **Not signed in** (or **No licence** when signed in) and **Not
+  serving**, and offers **Sign in…**, which opens the console window on the sign-in
+  gate, or **Choose a plan…**, which opens the plan page. The listener binds as soon as
+  the licence becomes anything else; there is no restart.
+- **Licensed, or in grace:** today's menu.
+- **Lapsed:** the listener stays up, so attached clients see the lapse instead of a
+  dropped connection. The menu says **Licence lapsed**, how many sessions and agents
+  the lapse paused, and the serving line, and offers **Choose a plan…**, **Sign in
+  again…** and **Retry** (renew now).
+
+An attached client whose server has lapsed draws "*server*'s licence has lapsed" and
+"Its sessions are paused." over its workspace, with **Disconnect**, which returns it
+to this Mac's own fleet. The client's own sign-in gate comes first.
+
+The one licence fact that crosses the socket is `server:licence`: whether the server
+has lapsed, and how many sessions and agents it paused, as counts. Names stay on the
+server. The server pushes it to attached clients as `server:licence-changed` on every
+change, and a client reads it again on every reattach.
+
 ## 5. Check it survives a reboot
 
 ```sh
