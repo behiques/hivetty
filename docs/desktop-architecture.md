@@ -1148,6 +1148,13 @@ The account calls (`account:state`, `account:sign-in`, `account:cancel`, `accoun
 `PROCESS_LOCAL` and `account:changed` is `LOCAL_ONLY_EVENTS`: an attached window never signs the server in.
 In a dev build a link reaches a running app only: macOS ignores `setAsDefaultProtocolClient`'s arguments.
 
+`account:open-web` (HIVE-268) is the fifth account call, `PROCESS_LOCAL` like the rest. It takes a path of the
+account site, refuses anything that is not a same-site path (it must start with one `/`, carry no backslash or
+control character, and be at most 2048 characters), POSTs `/api/oauth/web-session` `{ next }` with the bearer
+token, and opens the one-time link it answers only if it is http(s) on the cloud's own origin. Every failure is a
+sentence in `{ error }`; it never throws. The renderer reaches it through `openAccountWeb(path)` in
+`src/lib/account.ts`, never as a raw link.
+
 ## The lease (HIVE-267)
 
 - `<userData>/lease.jws` holds the cloud's signed lease, plain text, written atomically (`lease.ts`). It is
@@ -1163,6 +1170,11 @@ In a dev build a link reaches a running app only: macOS ignores `setAsDefaultPro
   from before a sign-out never lands.
 - Main reads `licence()` (and `onLicenceChange`); the licence calls answer from `LICENCE_CALLS` and are
   `PROCESS_LOCAL`, `licence:changed` is `LOCAL_ONLY_EVENTS`; the renderer reads `useLicence()`.
+- Entitlement (HIVE-268) is one pure function, `entitlementOf(state, feature)` in `electron/shared/entitlement.ts`,
+  fed by the generated `electron/shared/feature-plans.ts` (`pnpm plans:sync` reads hivetty-cloud's built
+  `@hivetty/plans`; the build never does). Main asks `entitled(feature)` (`null` means allowed), the renderer
+  `useEntitlement(feature)`, so both give the same reason. Only `licence/{index,lease,licence-state,verify}.ts`
+  touch the stored lease; `lease-reads.test.ts` holds that line.
 - Entering `lapsed` stops work in place, and leaving it continues that work (`suspend.ts`, installed in
   `ipc/index.ts`). The lapse flag goes up first. Then run containers get `<runtime> pause`, the pty-host gets
   `suspend-all` (a descendant walk, SIGSTOP to each process group), and each headless run's group gets SIGSTOP
