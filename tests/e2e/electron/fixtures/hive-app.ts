@@ -198,10 +198,13 @@ export function runHiveCli(input: {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
+    let stderr = '';
     child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
+    // Drained, so a chatty Chromium can never fill the pipe and hang the child; shown only on a timeout.
+    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')));
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
-      reject(new Error(`hive CLI ${input.args.join(' ')} did not exit; stdout:\n${stdout}`));
+      reject(new Error(`hive CLI ${input.args.join(' ')} did not exit; stdout:\n${stdout}\nstderr:\n${stderr}`));
     }, input.timeoutMs ?? 30_000);
     child.on('error', (cause) => {
       clearTimeout(timer);
