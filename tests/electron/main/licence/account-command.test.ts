@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   KEYCHAIN_HINT,
   runLogin,
+  runLogout,
   type AccountCommandDeps,
 } from '../../../../electron/main/licence/account-command';
 import type { StoredAccount } from '../../../../electron/main/licence/account-store';
@@ -86,6 +87,8 @@ describe('runLogin', () => {
     await expect(runLogin({ force: false }, h.deps)).resolves.toBe(3);
     expect(h.lines).toEqual([KEYCHAIN_HINT]);
     expect(h.client.signInWithCode).not.toHaveBeenCalled();
+    expect(h.client.authedFetch).not.toHaveBeenCalled();
+    expect(h.written).toEqual([]);
   });
 
   it('says who is signed in and exits 0 without --force', async () => {
@@ -137,6 +140,7 @@ describe('runLogin', () => {
     expect(h.lines.at(-1)).toBe('Signed in as ana@example.com on studio-mac · plan pending (the app will fetch it)');
     expect(h.written).toEqual([]);
   });
+
   it('a lease that verifies but cannot be saved leaves the plan to the app', async () => {
     const h = harness();
     h.deps.lease = {
@@ -147,5 +151,28 @@ describe('runLogin', () => {
     };
     await expect(runLogin({ force: false }, h.deps)).resolves.toBe(0);
     expect(h.lines.at(-1)).toBe('Signed in as ana@example.com on studio-mac · plan pending (the app will fetch it)');
+  });
+});
+
+describe('runLogout', () => {
+  it('revokes and clears through signOut, and names who left', async () => {
+    const h = harness({ stored: ACCOUNT });
+    await expect(runLogout(h.deps)).resolves.toBe(0);
+    expect(h.client.signOut).toHaveBeenCalled();
+    expect(h.lines).toEqual(['Signed out ana@example.com.']);
+  });
+
+  it('says so when nobody is signed in', async () => {
+    const h = harness();
+    await expect(runLogout(h.deps)).resolves.toBe(0);
+    expect(h.client.signOut).not.toHaveBeenCalled();
+    expect(h.lines).toEqual(['Not signed in.']);
+  });
+
+  it('exits 3 when the keychain cannot open the stored token', async () => {
+    const h = harness({ stored: ACCOUNT, canEncrypt: false });
+    await expect(runLogout(h.deps)).resolves.toBe(3);
+    expect(h.client.signOut).not.toHaveBeenCalled();
+    expect(h.lines).toEqual([KEYCHAIN_HINT]);
   });
 });

@@ -6,7 +6,8 @@ import { verifyLease } from './verify';
 
 /**
  * `hivetty --login` and `--logout` (HIVE-266), as exit codes. Pure behind its deps. The client is never
- * `start()`ed: a one-shot that refreshed would rotate the token from under a running server.
+ * `start()`ed: a one-shot that refreshed would rotate the token from under a running server. A sign-in still
+ * schedules its first refresh (`accept`), so the caller exits as soon as this resolves.
  */
 
 export const KEYCHAIN_HINT =
@@ -79,5 +80,21 @@ export async function runLogin({ force }: { force: boolean }, deps: AccountComma
   const account = deps.store.read();
   const who = `Signed in as ${account?.email ?? 'your account'} on ${deps.hostname()}`;
   print(`${who} · ${await planLine(deps, account?.deviceId ?? '')}`);
+  return 0;
+}
+
+/** `hivetty --logout`: revoke (best effort) and clear. A running instance sees account.bin go and gates. */
+export async function runLogout(deps: AccountCommandDeps): Promise<number> {
+  if (!deps.canEncrypt()) {
+    deps.print(KEYCHAIN_HINT);
+    return EXIT.storage;
+  }
+  const stored = deps.store.read();
+  if (!stored) {
+    deps.print('Not signed in.');
+    return 0;
+  }
+  await deps.client.signOut();
+  deps.print(`Signed out ${stored.email}.`);
   return 0;
 }
