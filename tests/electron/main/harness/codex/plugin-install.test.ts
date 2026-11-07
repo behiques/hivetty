@@ -172,4 +172,12 @@ describe('the Codex plugin installer (HIVE-372)', () => {
     await second;
     expect(await status).toEqual(await second);
   });
+
+  it('answers status() asked before any reconcile by running one, not with a stale off', async () => {
+    wanted = true;
+    writeFileSync(join(home, 'config.toml'), INSTALLED);
+    cached('1.0.0+abcd1234');
+    expect(await installer().status()).toEqual({ state: 'installed', version: '1.0.0+abcd1234' });
+    expect(run).not.toHaveBeenCalled();
+  });
 });

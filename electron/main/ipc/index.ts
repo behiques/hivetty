@@ -509,6 +509,12 @@ export function readRemoteCredential(): StoredDeviceCredential | null {
  */
 export type { ModeSwitcher };
 
+/** HIVE-372: the Codex adapter's skills plugin installer; without one, every answer is `off` and nothing runs. */
+const codexSkillsPlugin = (deps: SkillsPluginDeps): SkillsPluginInstaller => {
+  const off = (): Promise<CodexPluginStatus> => Promise.resolve({ state: 'off' });
+  return adapterFor('codex').skillsPlugin?.(deps) ?? { reconcile: off, status: off };
+};
+
 /**
  * The default {@link ModeSwitcher}: a loud failure, never a quiet success.
  *
@@ -519,12 +525,6 @@ export type { ModeSwitcher };
  * that never happened, which is the exact state Ruling 19 exists to make
  * impossible.
  */
-/** HIVE-372: the Codex adapter's skills plugin installer; without one, every answer is `off` and nothing runs. */
-const codexSkillsPlugin = (deps: SkillsPluginDeps): SkillsPluginInstaller => {
-  const off = (): Promise<CodexPluginStatus> => Promise.resolve({ state: 'off' });
-  return adapterFor('codex').skillsPlugin?.(deps) ?? { reconcile: off, status: off };
-};
-
 const noModeSwitcher: ModeSwitcher = () => {
   throw new Error(
     'config:set-remote reached a registration with no mode switcher. ' +

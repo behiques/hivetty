@@ -112,9 +112,11 @@ export function createCodexPluginInstaller(deps: CodexPluginInstallerDeps): Code
     }
   };
   // Serialized like skills.sync: a spawn's reconcile and a toggle's must not interleave their commands.
-  let last: Promise<CodexPluginStatus> = Promise.resolve({ state: 'off' });
+  let last: Promise<CodexPluginStatus> | null = null;
+  const reconcile = (): Promise<CodexPluginStatus> => (last = last === null ? once() : last.then(once, once));
   return {
-    reconcile: () => (last = last.then(once, once)),
-    status: () => last,
+    reconcile,
+    // Asked before any trigger ran (Settings opened before the first spawn): find out rather than answer `off`.
+    status: () => last ?? reconcile(),
   };
 }
