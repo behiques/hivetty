@@ -102,7 +102,11 @@ export async function runDeviceFlow(deps: DeviceFlowDeps, input: DeviceFlowInput
     );
   }
   const deadline = deps.now() + expiresIn * 1000;
-  let intervalMs = (positive(start.body, 'interval') ?? DEFAULT_INTERVAL_S) * 1000;
+  // A sub-second interval, or one past the code's life (1e10 s overflows a Node timer to 1 ms), would hammer the
+  // token endpoint for the whole wait: anything outside [1 s, expires_in] is the default.
+  const offered = positive(start.body, 'interval');
+  let intervalMs =
+    (offered !== undefined && offered >= 1 && offered <= expiresIn ? offered : DEFAULT_INTERVAL_S) * 1000;
   onCode({
     userCode,
     verificationUri,

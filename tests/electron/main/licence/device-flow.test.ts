@@ -119,6 +119,11 @@ describe('runDeviceFlow', () => {
       expect.objectContaining({ verificationUriComplete: 'https://c.test/device?code=WDJB-MJHT' }),
     );
   });
+  it.each([0.001, 0.5, 1e10, 601])('an interval of %s outside [1 s, expires_in] falls back to five seconds', async (interval) => {
+    const { deps, sleeps } = harness([json(200, { ...CODE, interval }), json(200, TOKEN)]);
+    await runDeviceFlow(deps, input());
+    expect(sleeps).toEqual([5000]);
+  });
   it.each([
     ['access_denied', 'denied'],
     ['expired_token', 'expired'],
