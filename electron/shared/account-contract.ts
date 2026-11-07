@@ -11,3 +11,6 @@ export type AccountState =
 
 /** `account:sign-in` resolves once the browser is open; the outcome arrives on `account:changed`. */
 export type SignInResult = { ok: true } | { error: string };
+
+/** `account:open-web` (HIVE-268): opens a page of the cloud's site in the browser, already signed in. */
+export type OpenWebResult = { ok: true } | { error: string };
