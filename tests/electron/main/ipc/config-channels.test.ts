@@ -415,4 +415,10 @@ describe('app:info gateOff (HIVE-265)', () => {
     vi.stubEnv('HIVE_E2E', '');
     await expect(invoke(CH.appInfo, trustedEvent, undefined)).resolves.not.toHaveProperty('gateOff');
   });
+
+  it('is absent unpackaged with HIVE_E2E when HIVE_E2E_GATE is set (HIVE-270)', async () => {
+    vi.stubEnv('HIVE_E2E', '1');
+    vi.stubEnv('HIVE_E2E_GATE', '1');
+    await expect(invoke(CH.appInfo, trustedEvent, undefined)).resolves.not.toHaveProperty('gateOff');
+  });
 });

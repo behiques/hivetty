@@ -1217,4 +1217,5 @@ is not showing.
   After that a lapse renders it **over** the shell, which stays mounted, `inert` and dimmed, so the terminals
   keep their buffers for the resume; `ui-store`'s `gated` tells window keydown listeners to stand down.
   `AppInfo.gateOff` turns it off, and only an unpackaged build with `HIVE_E2E` set gets it, so the Playwright
-  suite reaches the workspace with no cloud.
+  suite reaches the workspace with no cloud. `HIVE_E2E_GATE=1` keeps it on, for the licence specs that sign in
+  against a stub cloud (HIVE-270).

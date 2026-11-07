@@ -3675,7 +3675,8 @@ export function registerIpcHandlers(
       // means something.
       ...(diagnostics.length > 0 ? { pty: diagnostics } : {}),
       // HIVE-265: the Playwright suite runs unpackaged with HIVE_E2E and no cloud, so the gate stays off.
-      ...(!app.isPackaged && process.env.HIVE_E2E ? { gateOff: true as const } : {}),
+      // HIVE-270: the licence specs set HIVE_E2E_GATE to keep it on against their stub cloud.
+      ...(!app.isPackaged && process.env.HIVE_E2E && !process.env.HIVE_E2E_GATE ? { gateOff: true as const } : {}),
     };
   }
 
