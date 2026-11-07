@@ -1,4 +1,6 @@
+import { spawn } from 'node:child_process';
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 import {
@@ -30,6 +32,9 @@ import { STUB_PR, STUB_REPO } from './gh-stub';
 
 const APP_ROOT = join(import.meta.dirname, '../../../..');
 export const MAIN_ENTRY = join(APP_ROOT, 'out/main/index.js');
+
+/** The Electron binary, resolved the way `tests/live/server-conformance.test.ts` does it. */
+const ELECTRON_BINARY = createRequire(import.meta.url)('electron') as string;
 
 /** What the app ships and seeds beside the config on every launch (HIVE-162). */
 const SHIPPED_ROOT = join(APP_ROOT, 'resources');
@@ -172,6 +177,40 @@ export async function launchHive({
       HIVE_CONFIG_PATH: configPath,
       ...extraEnv,
     },
+  });
+}
+
+/**
+ * The built app as a one-shot CLI (HIVE-270: `--login`, `--logout`). It runs in a second process, so it
+ * can run beside a launched instance on the same `userData`: HIVE-266 runs these flags before the
+ * single-instance lock. Shaped after `tests/live/server-conformance.test.ts`'s `runOneShot`.
+ */
+export function runHiveCli(input: {
+  args: string[];
+  userDataDir: string;
+  configPath: string;
+  env?: Record<string, string>;
+  timeoutMs?: number;
+}): Promise<{ code: number | null; stdout: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(ELECTRON_BINARY, [MAIN_ENTRY, `--user-data-dir=${input.userDataDir}`, ...input.args], {
+      env: { ...scrubbedEnv(), HIVE_E2E: '1', HIVE_CONFIG_PATH: input.configPath, ...input.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`hive CLI ${input.args.join(' ')} did not exit; stdout:\n${stdout}`));
+    }, input.timeoutMs ?? 30_000);
+    child.on('error', (cause) => {
+      clearTimeout(timer);
+      reject(cause);
+    });
+    child.on('exit', (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout });
+    });
   });
 }
 
