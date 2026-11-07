@@ -8,8 +8,8 @@ import type { HarnessAdapter } from '../harness/port';
 const LITERAL_PREFIX = 'literal:';
 
 /**
- * What the licence (HIVE-332) and Settings › Harnesses › <CLI> (HIVE-341, HIVE-376) say about a CLI. Absent until they
- * land: every CLI entitled and enabled, and no Settings default.
+ * What the licence (HIVE-332) and Settings › Harnesses › <CLI> (HIVE-341, HIVE-376) say about a CLI. Absent: only
+ * Claude Code is entitled (fail closed), every CLI enabled, no Settings default.
  */
 export interface HarnessGate {
   /** `null` when the lease allows it, else why not ("not in your plan (Solo or higher)"). */
@@ -80,7 +80,9 @@ function check(
 
   if ('problem' in binary) return { fail: `${id} cannot start: ${binary.problem}` };
 
-  const locked = deps.gate?.entitled(id) ?? null;
+  // HIVE-332: fail closed. No gate means no licence was consulted, and only Claude is every plan's.
+  const locked =
+    deps.gate === undefined ? (id === 'claude-code' ? null : 'not entitled: no licence gate') : deps.gate.entitled(id);
 
   if (locked !== null) return { fail: `${id} is ${locked}` };
 

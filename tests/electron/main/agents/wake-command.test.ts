@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { HarnessGate } from '../../../../electron/main/agents/resolve-harness';
 import {
   CLI_TOKEN_ENV,
   createWakeCommand,
@@ -111,6 +112,14 @@ const state = (): AgentState => ({
   flush: vi.fn(),
   dispose: vi.fn(),
 });
+
+/** Every CLI entitled and enabled (HIVE-332): a missing gate refuses all but Claude Code. */
+const OPEN_GATE: HarnessGate = {
+  entitled: () => null,
+  enabled: () => true,
+  defaultCli: () => undefined,
+  defaults: () => ({}),
+};
 
 const build = (over: Partial<WakeCommandDeps> = {}) =>
   createWakeCommand({
@@ -1303,6 +1312,8 @@ describe('what a CLI without a settings file is handed (HIVE-342)', () => {
 });
 
 describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
+  // HIVE-332: a non-Claude CLI resolves only past a licence gate; these stand in an entitled one.
+  const openBuild = (over: Partial<WakeCommandDeps> = {}) => build({ gate: OPEN_GATE, ...over });
   const CODEX_MD = AGENT_MD.replace('limits:', 'harness: [codex]\nlimits:');
   // PR1's codex fence refuses everything; these tests stand in PR2's, which passes.
   const fenced: HarnessAdapter = {
@@ -1313,7 +1324,7 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
 
   it('resolves codex on PATH and runs codex exec', () => {
     files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD;
-    const built = build({
+    const built = openBuild({
       adapter,
       env: () => ({ PATH: '/bin:/opt/bin', HOME: '/home/u' }),
       isExecutable: (path) => path === '/opt/bin/codex',
@@ -1328,7 +1339,7 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
 
   it('a host wake runs clis.codex.command when one is set (HIVE-376)', () => {
     files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD;
-    const built = build({
+    const built = openBuild({
       adapter,
       clis: () => resolveClis({ codex: { command: '/srv/tools/codex-x' } }),
       env: () => ({ PATH: '/bin:/opt/bin', HOME: '/home/u' }),
@@ -1362,12 +1373,12 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
     };
 
     files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD;
-    const codexRun = build(deps)('slack-watcher', 'manual');
+    const codexRun = openBuild(deps)('slack-watcher', 'manual');
     if ('problem' in codexRun) throw new Error(codexRun.problem);
     expect(seen.at(-1)?.files.pluginDir).toBe('/data/hive/plugins/codex');
 
     files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = AGENT_MD;
-    const claudeRun = build(deps)('slack-watcher', 'manual');
+    const claudeRun = openBuild(deps)('slack-watcher', 'manual');
     if ('problem' in claudeRun) throw new Error(claudeRun.problem);
     expect(seen.at(-1)?.files.pluginDir).toBe('/data/hive/plugin');
   });
@@ -1382,7 +1393,7 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
       status: 'sleeping', runsSinceRotate: 0, runs: [], sessionUuid: 'old-thread', harness: 'codex',
       pendingSession: { uuid: 'b2e1-new', handoff: 'I watch #ops.' },
     };
-    const built = build({
+    const built = openBuild({
       adapter,
       env: () => ({ PATH: '/opt/bin', HOME: '/home/u' }),
       isExecutable: (path) => path === '/opt/bin/codex',
@@ -1404,7 +1415,7 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
       status: 'sleeping', runsSinceRotate: 0, runs: [], sessionUuid: 'old',
       pendingSession: { uuid: 'b2e1-new', handoff: 'I watch #ops.' },
     };
-    const built = build()('slack-watcher', 'schedule');
+    const built = openBuild()('slack-watcher', 'schedule');
 
     if ('problem' in built) throw new Error(built.problem);
 
@@ -1413,7 +1424,7 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
 
   it('says codex was not found when it is not on PATH', () => {
     files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = CODEX_MD;
-    const built = build({ adapter })('slack-watcher', 'manual');
+    const built = openBuild({ adapter })('slack-watcher', 'manual');
 
     expect('problem' in built ? built.problem : 'resolved').toMatch(
       /^No CLI can run slack-watcher: codex cannot start: `codex` was not found on PATH/,
@@ -1425,7 +1436,7 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
       'limits:',
       'container:\n  runtime: docker\n  name: devbox\n  workspace: /work\n  hive_dir: /hive\nlimits:',
     );
-    const built = build({
+    const built = openBuild({
       adapter,
       agentContainerSettingsPath: () => '/data/hive/container/claude-agent.settings.json',
     })('slack-watcher', 'manual');
@@ -1443,6 +1454,7 @@ describe('a copilot wake (HIVE-343)', () => {
   const WORKDIR = '/home/u/.hive/work/slack-watcher';
   const copilot = (over: Partial<WakeCommandDeps> = {}) =>
     build({
+      gate: OPEN_GATE,
       adapter: (id) => (id === 'copilot' ? copilotAdapter : claudeCodeAdapter),
       env: () => ({ PATH: '/opt/bin', HOME: '/home/u', GH_TOKEN: 'gh-leak' }),
       isExecutable: (path) => path === '/opt/bin/copilot',
