@@ -24,6 +24,8 @@ export interface SelectFieldOption {
   group?: string;
   /** The React key, when two options share a value. */
   key?: string;
+  /** Shown but not choosable: a plan lock (HIVE-332). */
+  disabled?: boolean;
 }
 
 interface SelectFieldProps {
@@ -56,7 +58,7 @@ export function SelectField({
     else runs.push({ group: option.group, options: [option] });
   }
   const item = (option: SelectFieldOption) => (
-    <option key={option.key ?? option.value} value={option.value}>
+    <option key={option.key ?? option.value} value={option.value} disabled={option.disabled}>
       {option.label}
     </option>
   );

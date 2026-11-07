@@ -9,48 +9,83 @@ import { Button } from '@components/ui/button';
 import { CliMark } from '@components/ui/cli-mark';
 import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
+import { UpgradeLink } from '@components/ui/lock';
 import { SelectField } from '@components/ui/select-field';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { AgentDefinition } from '@features/shared/components/agent-definition';
 import { ShippedDot } from '@features/shared/components/shipped-marker';
 import { useAgents } from '@hooks/use-agents';
+import { useLicenceLocks } from '@hooks/use-licence-locks';
 import { useProjectConfig } from '@hooks/use-project-config';
 import { useShipped } from '@hooks/use-shipped';
 import { CLI_NAMES } from '@lib/harness/cli-names';
+import { cliAvailability, lockedClis } from '@lib/harness/session-cli';
 import { setAgentsDefaultCliConfig } from '@lib/project-config';
+import { cliEntitlementOf } from '@shared/entitlement';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
-
-const CLI_OPTIONS = HARNESS_IDS.map((cli) => ({ value: cli, label: CLI_NAMES[cli] }));
 
 /**
  * Which CLI an agent runs on when its AGENT.md names none (HIVE-342), at the top of this pane since HIVE-376 (D6).
- * Hidden with no config snapshot: there is nothing to read or write.
+ * Hidden with no config snapshot: there is nothing to read or write. A CLI the plan lacks is shown but not
+ * choosable, and a saved default the plan lacks says why, with Upgrade (HIVE-332).
  */
 function DefaultCliForAgents() {
   const config = useProjectConfig();
+  const { licence } = useLicenceLocks();
   if (!config) return null;
+  const value = config.agentsDefaultCli ?? 'claude-code';
+  const lockOf = (cli: HarnessId) => {
+    const verdict = licence === null ? null : cliEntitlementOf(licence, cli);
+    return verdict && !verdict.allowed ? verdict : null;
+  };
+  const options = HARNESS_IDS.map((cli) => {
+    const lock = lockOf(cli);
+    return lock
+      ? { value: cli, label: `${CLI_NAMES[cli]} · Locked: ${lock.plan ?? 'plan'}`, disabled: true }
+      : { value: cli, label: CLI_NAMES[cli] };
+  });
+  const saved = lockOf(value);
   return (
-    <SelectField
-      className="max-w-xs"
-      label="Default CLI for agents"
-      value={config.agentsDefaultCli ?? 'claude-code'}
-      options={CLI_OPTIONS}
-      onChange={(value) => void setAgentsDefaultCliConfig({ cli: value as HarnessId })}
-      hint="For agents whose AGENT.md has no harness: field."
-    />
+    <div className="flex flex-col gap-1">
+      <SelectField
+        className="max-w-xs"
+        label="Default CLI for agents"
+        value={value}
+        options={options}
+        onChange={(next) => void setAgentsDefaultCliConfig({ cli: next as HarnessId })}
+        hint={
+          saved
+            ? `${saved.reason}. Agents with no harness: field fall back to Claude Code.`
+            : 'For agents whose AGENT.md has no harness: field.'
+        }
+      />
+      {saved && <UpgradeLink className="self-start text-ui-sm" />}
+    </div>
   );
 }
 
-/** The CLIs an agent runs on (HIVE-379): its `harness:` list in order, else the agents default. */
-function RunsOn({ clis }: { clis: HarnessId[] }) {
-  const names = `Runs on ${clis.map((cli) => CLI_NAMES[cli]).join(', ')}`;
+/**
+ * The CLIs an agent runs on (HIVE-379): its `harness:` list in order, else the agents default. A CLI the plan
+ * lacks is dimmed with a small lock, and its reason joins the hint (HIVE-332).
+ */
+function RunsOn({ clis, locks }: { clis: HarnessId[]; locks: Partial<Record<HarnessId, string>> }) {
+  const names = `Runs on ${clis.map((cli) => (locks[cli] ? `${CLI_NAMES[cli]} (${locks[cli]})` : CLI_NAMES[cli])).join(', ')}`;
   return (
     <Hint label={names}>
       <span className="flex shrink-0 items-center gap-0.5 text-subtle">
-        {clis.map((cli) => (
-          <CliMark key={cli} cli={cli} className="size-3.5" />
-        ))}
+        {clis.map((cli) =>
+          locks[cli] ? (
+            <span key={cli} className="relative opacity-45">
+              <CliMark cli={cli} className="size-3.5" />
+              <span aria-hidden="true" className="absolute -right-1 -bottom-1 text-ink">
+                <Icon name="ph-lock" size={8} />
+              </span>
+            </span>
+          ) : (
+            <CliMark key={cli} cli={cli} className="size-3.5" />
+          ),
+        )}
         <span className="sr-only">{names}</span>
       </span>
     </Hint>
@@ -97,6 +132,8 @@ export function AgentsSection() {
 
   const agents = snapshot?.agents ?? [];
   const defaultCli = config?.agentsDefaultCli ?? 'claude-code';
+  const { licence } = useLicenceLocks();
+  const cliLocks = licence === null ? {} : lockedClis(cliAvailability(null, null, licence));
   const empty = agents.length === 0;
 
   const newAgent = (): void => setOpen({ name: null });
@@ -191,7 +228,7 @@ export function AgentsSection() {
                   <Icon name={agent.icon} size={14} className="shrink-0 text-brand" />
                   <span className="truncate tabular-nums">{agent.name}</span>
                   <ShippedDot status={shipped.get(agent.name)} />
-                  <RunsOn clis={agent.harness ?? [defaultCli]} />
+                  <RunsOn clis={agent.harness ?? [defaultCli]} locks={cliLocks} />
                   {broken ? (
                     <span className="ml-auto shrink-0 text-micro text-amber-text">invalid</span>
                   ) : (
