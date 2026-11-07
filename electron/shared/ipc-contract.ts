@@ -17,7 +17,7 @@
  * that proves the whole path.
  */
 
-import type { AccountState, SignInResult } from './account-contract';
+import type { AccountState, OpenWebResult, SignInResult } from './account-contract';
 import type {
   AgentLinesPush,
   AgentNameRequest,
@@ -885,6 +885,8 @@ export const CH = {
   accountCancel: 'account:cancel',
   /** Revoke (best effort) and forget this device's account. */
   accountSignOut: 'account:sign-out',
+  /** Open a path of the account site in the browser, signed in through a one-time link (HIVE-268, HIVE-262). */
+  accountOpenWeb: 'account:open-web',
   /** A push: the account state changed. Local-only, never from a socket. */
   accountChanged: 'account:changed',
   /** The licence (HIVE-267). Process-local, like the account: a remote window reads its own. */
@@ -3163,6 +3165,7 @@ export interface HiveBridge {
     signIn(): Promise<SignInResult>;
     cancel(): Promise<void>;
     signOut(): Promise<void>;
+    openWeb(path: string): Promise<OpenWebResult>;
     onChanged(callback: (state: AccountState) => void): () => void;
   };
   /** The licence (HIVE-267). The gate is HIVE-265's. */

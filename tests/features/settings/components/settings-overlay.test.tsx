@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { emptySnapshot } from '@shared/config-contract';
 
 import {
+  SETTINGS_GROUPS,
   SettingsOverlay,
   escapeIsClaimed,
+  paneLock,
 } from '@features/settings/components/settings-overlay';
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 import { useHiveStore } from '@stores/hive-store';
@@ -70,6 +72,7 @@ describe('SettingsOverlay', () => {
       'Appearance',
       'Integrations',
       'Server mode',
+      'Plan & licence',
       'Updates & About',
       'Advanced',
     ]) {
@@ -89,10 +92,10 @@ describe('SettingsOverlay', () => {
 
   /**
    * The grouped nav (HIVE-374). Groups are labels, not buttons, and a group
-   * with no pane yet is absent: Account arrives with its panes. Machines
-   * arrived with Server mode (HIVE-380).
+   * with no pane yet is absent. Machines arrived with Server mode (HIVE-380),
+   * Account with Plan & licence (HIVE-268).
    */
-  it('reads in five groups, in the epic order, with no empty group', () => {
+  it('reads in six groups, in the epic order, with no empty group', () => {
     render(<SettingsOverlay />);
 
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
@@ -100,7 +103,7 @@ describe('SettingsOverlay', () => {
     const heading = (group: HTMLElement) =>
       document.getElementById(group.getAttribute('aria-labelledby') ?? '')?.textContent;
 
-    expect(groups.map(heading)).toEqual(['Harnesses', 'Automation', 'Workspace', 'Machines', 'General']);
+    expect(groups.map(heading)).toEqual(['Harnesses', 'Automation', 'Workspace', 'Machines', 'Account', 'General']);
     expect(
       groups.map((group) =>
         within(group)
@@ -112,9 +115,9 @@ describe('SettingsOverlay', () => {
       ['Agents', 'Skills', 'Ticket workflow'],
       ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
       ['Server mode'],
+      ['Plan & licence'],
       ['Updates & About', 'Advanced'],
     ]);
-    expect(within(nav).queryByText('Account')).not.toBeInTheDocument();
     expect(within(nav).queryByRole('button', { name: 'Harnesses' })).not.toBeInTheDocument();
   });
 
@@ -134,6 +137,7 @@ describe('SettingsOverlay', () => {
     ['integrations', 'Integrations'],
     ['notifications', 'Notifications'],
     ['server-mode', 'Server mode'],
+    ['plan-licence', 'Plan & licence'],
     ['updates-about', 'Updates & About'],
     ['advanced', 'Advanced'],
   ] as const)('pane id %s renders its section', (id, title) => {
@@ -519,5 +523,51 @@ describe('escapeIsClaimed', () => {
     // `event.target` is typed `EventTarget`; `document` has no `closest`.
     expect(escapeIsClaimed(null)).toBe(false);
     expect(escapeIsClaimed(document)).toBe(false);
+  });
+});
+
+describe('Account › Plan & licence (HIVE-268)', () => {
+  it('opens from the nav between Machines and General', async () => {
+    const user = userEvent.setup();
+    render(<SettingsOverlay />);
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+    await user.click(within(nav).getByRole('button', { name: 'Plan & licence' }));
+    expect(screen.getByRole('heading', { name: 'Plan & licence', level: 2 })).toBeInTheDocument();
+    expect(screen.getByText('Sign in to see your plan.')).toBeInTheDocument();
+  });
+
+  it('no default pane is gated yet (HIVE-332 sets the CLIs)', () => {
+    expect(SETTINGS_GROUPS.flatMap((g) => g.panes).filter((p) => p.feature !== undefined)).toEqual([]);
+  });
+
+  it('a locked pane shows the lock and plan chip in the nav, and the Lock instead of its controls', async () => {
+    const user = userEvent.setup();
+    const groups = SETTINGS_GROUPS.map((g) => ({
+      ...g,
+      panes: g.panes.map((p) => (p.id === 'copilot' ? { ...p, feature: 'cli.copilot' } : p)),
+    }));
+    render(<SettingsOverlay groups={groups} />);
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+    const row = within(nav).getByRole('button', { name: /Copilot/ });
+    expect(within(row).getByLabelText('Locked: Team')).toBeInTheDocument();
+    await user.click(row);
+    expect(screen.getByRole('note', { name: 'Sign in to use Copilot' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
+    expect(screen.queryByText('Sign-in')).toBeNull();
+  });
+});
+
+describe('paneLock (HIVE-268)', () => {
+  it('no feature, no lock', () => {
+    expect(paneLock(undefined, null)).toBeNull();
+  });
+  it('a feature the lease grants, no lock', () => {
+    expect(paneLock('cli.codex', { kind: 'licensed', plan: 'solo', features: ['cli.codex'], limits: {}, exp: 2e9 })).toBeNull();
+  });
+  it('a feature the lease lacks: its reason and plan', () => {
+    expect(paneLock('cli.copilot', { kind: 'licensed', plan: 'solo', features: [], limits: {}, exp: 2e9 })).toEqual({
+      reason: 'Copilot is in Team and above',
+      plan: 'Team',
+    });
   });
 });

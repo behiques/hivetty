@@ -74,7 +74,7 @@ export const BRIDGE_PLANS_KEYS = [
 ] as const satisfies readonly (keyof HiveBridge['plans'])[];
 
 export const BRIDGE_ACCOUNT_KEYS = [
-  'state', 'signIn', 'cancel', 'signOut', 'onChanged',
+  'state', 'signIn', 'cancel', 'signOut', 'openWeb', 'onChanged',
 ] as const satisfies readonly (keyof HiveBridge['account'])[];
 
 export const BRIDGE_LICENCE_KEYS = [

@@ -142,6 +142,9 @@ function localAnswerFor(
     case CH.accountCancel:
     case CH.accountSignOut:
       return () => ACCOUNT_CALLS[channel]();
+    /* HIVE-268. Opens this machine's browser as this machine's account; the path is validated in openWeb. */
+    case CH.accountOpenWeb:
+      return (path: unknown) => ACCOUNT_CALLS[CH.accountOpenWeb](path);
     /* HIVE-267. The licence is this machine's own, like the account (D9). */
     case CH.licenceState:
     case CH.licenceRefresh:

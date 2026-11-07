@@ -86,8 +86,9 @@ import { isThisMachineAction } from './notification-contract';
  * 30 → 31 (HIVE-335): `SessionMetrics` (on `session:metrics`) gained `tokensIn`, `tokensOut`, `tokensCached`, `tokensWritten` and `aiCredits`.
  * 31 → 32 (HIVE-264): `CH` gained `account:state`, `account:sign-in`, `account:cancel`, `account:sign-out` (process-local) and `account:changed` (local-only).
  * 32 → 33 (HIVE-267): `CH` gained `licence:state`, `licence:refresh`, `licence:watch-purchase` (process-local) and `licence:changed` (local-only).
+ * 33 → 34 (HIVE-268): `CH` gained `account:open-web` (process-local).
  */
-export const REMOTE_PROTOCOL_VERSION = 33;
+export const REMOTE_PROTOCOL_VERSION = 34;
 
 /**
  * What a frame is for.
@@ -271,6 +272,7 @@ export const FRAME_KIND = {
   [CH.accountSignIn]: 'call',
   [CH.accountCancel]: 'call',
   [CH.accountSignOut]: 'call',
+  [CH.accountOpenWeb]: 'call',
   [CH.accountChanged]: 'event',
   [CH.licenceState]: 'call',
   [CH.licenceRefresh]: 'call',
@@ -598,6 +600,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.accountSignIn]: 'execute',
   [CH.accountCancel]: 'mutate',
   [CH.accountSignOut]: 'execute',
+  [CH.accountOpenWeb]: 'execute',
   [CH.accountChanged]: 'read',
   [CH.licenceState]: 'read',
   [CH.licenceRefresh]: 'execute',
@@ -956,6 +959,8 @@ const PROCESS_LOCAL_REFUSALS = {
     "account:cancel drops the answering machine's own pending sign-in. A server refuses it from a peer; the asking machine cancels its own.",
   [CH.accountSignOut]:
     "account:sign-out forgets the answering machine's own account. A server refuses to sign itself out on a peer's say-so; the asking machine signs itself out.",
+  [CH.accountOpenWeb]:
+    "account:open-web opens the answering machine's browser, signed in as the answering machine's account. A server refuses to open its own account's pages on a peer's say-so; the asking machine opens its own.",
   [CH.licenceState]:
     "licence:state describes the answering machine's own HiveTTY Pro licence. A server's answer would pass its licence off as the peer's, so the asking machine answers it and a server refuses it.",
   [CH.licenceRefresh]:

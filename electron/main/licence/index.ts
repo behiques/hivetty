@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 
-import type { AccountState, SignInResult } from '@shared/account-contract';
+import type { AccountState, OpenWebResult, SignInResult } from '@shared/account-contract';
 import { CH } from '@shared/ipc-contract';
 import type { LicenceState } from '@shared/licence-contract';
 
@@ -99,6 +99,8 @@ export const ACCOUNT_CALLS = {
   [CH.accountSignIn]: (): Promise<SignInResult> => client?.signIn() ?? Promise.resolve({ error: NOT_READY }),
   [CH.accountCancel]: (): void => client?.cancel(),
   [CH.accountSignOut]: (): Promise<void> => client?.signOut() ?? Promise.resolve(),
+  [CH.accountOpenWeb]: (path: unknown): Promise<OpenWebResult> =>
+    client?.openWeb(path) ?? Promise.resolve({ error: NOT_READY }),
 } as const;
 
 /** What each licence call answers, for `ipc/index.ts` and `ipc/remote-proxy.ts` alike (process-local, D9). */

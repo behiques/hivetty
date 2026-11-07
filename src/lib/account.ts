@@ -1,4 +1,4 @@
-import type { AccountState, SignInResult } from '@shared/account-contract';
+import type { AccountState, OpenWebResult, SignInResult } from '@shared/account-contract';
 
 /**
  * The renderer's door onto the HiveTTY account (HIVE-264); HIVE-265's screens use it.
@@ -42,6 +42,18 @@ export async function signOut(): Promise<void> {
     await window.hive?.account.signOut();
   } catch (cause) {
     console.error('[hive] signing out failed:', cause);
+  }
+}
+
+/** HIVE-268: open a page of the account site, already signed in. HIVE-265 opens `/account` and `/account/devices` the same way. */
+export async function openAccountWeb(path: string): Promise<OpenWebResult | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.account.openWeb(path);
+  } catch (cause) {
+    console.error('[hive] opening the account site failed:', cause);
+    return null;
   }
 }
 

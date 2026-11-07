@@ -1975,6 +1975,7 @@ export function registerIpcHandlers(
   handle(CH.accountSignIn, () => ACCOUNT_CALLS[CH.accountSignIn]());
   handle(CH.accountCancel, () => ACCOUNT_CALLS[CH.accountCancel]());
   handle(CH.accountSignOut, () => ACCOUNT_CALLS[CH.accountSignOut]());
+  handle(CH.accountOpenWeb, (_event, path: unknown) => ACCOUNT_CALLS[CH.accountOpenWeb](path));
   // HIVE-267. Process-local: the remote proxy answers the same three from `LICENCE_CALLS`.
   handle(CH.licenceState, () => LICENCE_CALLS[CH.licenceState]());
   handle(CH.licenceRefresh, () => LICENCE_CALLS[CH.licenceRefresh]());

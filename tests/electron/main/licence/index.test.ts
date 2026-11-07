@@ -37,6 +37,7 @@ describe('licence composition', () => {
     await expect(ACCOUNT_CALLS[CH.accountSignIn]()).resolves.toEqual({ error: expect.any(String) });
     expect(() => ACCOUNT_CALLS[CH.accountCancel]()).not.toThrow();
     await expect(ACCOUNT_CALLS[CH.accountSignOut]()).resolves.toBeUndefined();
+    await expect(ACCOUNT_CALLS[CH.accountOpenWeb]('/account')).resolves.toEqual({ error: expect.any(String) });
   });
 
   it('opens the resolved cloud with the build scheme and broadcasts every change', async () => {

@@ -32,6 +32,7 @@
     "lint": "eslint .",
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
     "licence:keys": "node scripts/licence-keys.mjs",
+    "plans:sync": "node scripts/plans-sync.mjs",
     "seed:history": "node --experimental-strip-types scripts/shipped-history.mjs",
     "verify:bundle": "node scripts/verify-packaged-modules.mjs",
     "type-check": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.electron.json",

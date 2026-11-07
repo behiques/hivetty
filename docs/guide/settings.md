@@ -1,14 +1,14 @@
 # Settings
 
 Open Settings with the gear at the foot of the bar. Its panes sit under Harnesses, Automation,
-Workspace, Machines and General. Almost everything here is written to `~/.hivetty/config.json`
+Workspace, Machines, Account and General. Almost everything here is written to `~/.hivetty/config.json`
 ([The config file](configuration.md)); appearance and editor preferences stay on this machine.
 
 **On this page:** [Projects](#projects) · [Overview](#overview) ·
 [Runtime](#runtime) · [Containers](#containers) · [Skills](#skills) ·
 [Agents](#agents) · [Ticket workflow](#ticket-workflow) · [Appearance](#appearance) · [Editor](#editor) ·
 [Integrations](#integrations) · [Notifications](#notifications) · [Server mode](#server-mode) ·
-[Updates & About](#updates--about) · [Advanced](#advanced)
+[Plan & licence](#plan--licence) · [Updates & About](#updates--about) · [Advanced](#advanced)
 
 | Where it is stored | What |
 | --- | --- |
@@ -136,6 +136,14 @@ One row per event: Off, Inbox or Both. See [The inbox](inbox.md#choosing-what-re
 Under **Machines**. **Serve this machine**, paired devices, and **Attach to a server**
 ([Remote](remote.md)). While this window is attached, the bind fields and the device roster are
 the server's, and the pane says so.
+
+## Plan & licence
+
+Under **Account**. Your plan (with **Trial · N days left** during a trial), devices per seat, runners, and
+until when this Mac's licence works offline. **Refresh licence** renews it now; **Manage plan** opens your
+account's plan page in the browser, already signed in. Signed out, the pane says **Sign in to see your plan.**
+
+A feature your plan doesn't include is shown locked, with the reason and an **Upgrade** button, never hidden.
 
 ## Updates & About
 

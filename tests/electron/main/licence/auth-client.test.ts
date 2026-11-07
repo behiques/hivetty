@@ -612,3 +612,119 @@ describe('races around the exchange (tasks 7-9 review)', () => {
     expect(client.state()).toEqual({ kind: 'signing-in' });
   });
 });
+
+describe('openWeb (HIVE-268)', () => {
+  const answer = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  /** Signed in from the stored account, with `tokens(1)` behind the bearer. */
+  async function signedInHarness() {
+    const h = harness({ stored: STORED });
+    h.cloud.token.mockResolvedValue(tokens(1));
+    h.client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.client.state()).toMatchObject({ kind: 'signed-in' });
+    return h;
+  }
+
+  it.each([[42], [''], ['account/plan'], ['//evil.test/x'], ['/\\evil.test'], ['/\t/evil.test'], ['/\n/evil.test'], ['/' + 'a'.repeat(2048)]])(
+    'refuses %j and opens nothing',
+    async (path) => {
+      const { client, cloud, openExternal } = await signedInHarness();
+      await expect(client.openWeb(path)).resolves.toEqual({ error: expect.any(String) });
+      expect(cloud.request).not.toHaveBeenCalled();
+      expect(openExternal).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts a path of exactly 2048 characters', async () => {
+    const { client, cloud } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(answer({ url: 'https://c.test/redeem?code=abc' }));
+    await expect(client.openWeb('/' + 'a'.repeat(2047))).resolves.toEqual({ ok: true });
+  });
+
+  it('asks the cloud for a one-time link to the path and opens it', async () => {
+    const { client, cloud, openExternal } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(answer({ url: 'https://c.test/api/oauth/web-session/redeem?code=abc' }));
+    await expect(client.openWeb('/account/plan')).resolves.toEqual({ ok: true });
+    const [path, init] = cloud.request.mock.calls.at(-1) as [string, RequestInit];
+    expect(path).toBe('/api/oauth/web-session');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ next: '/account/plan' });
+    expect(new Headers(init.headers).get('authorization')).toBe('Bearer at-1');
+    expect(new Headers(init.headers).get('content-type')).toBe('application/json');
+    expect(openExternal).toHaveBeenCalledWith('https://c.test/api/oauth/web-session/redeem?code=abc');
+  });
+
+  it.each([
+    'https://evil.test/redeem?code=abc',
+    'http://c.test/redeem?code=abc',
+    'https://c.test.evil.test/redeem',
+    'file:///etc/passwd',
+    'not a url',
+    42,
+  ])('never opens %s', async (url) => {
+    const { client, cloud, openExternal } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(answer({ url }));
+    await expect(client.openWeb('/account')).resolves.toEqual({ error: "HiveTTY couldn't open that page. Try again." });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('says to sign in when signed out', async () => {
+    const { client, cloud, openExternal } = harness();
+    await expect(client.openWeb('/account')).resolves.toEqual({ error: 'Sign in to HiveTTY first.' });
+    expect(cloud.request).not.toHaveBeenCalled();
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it("says it couldn't reach HiveTTY on a network failure", async () => {
+    const { client, cloud, openExternal } = await signedInHarness();
+    cloud.request.mockRejectedValueOnce(new CloudError('network', 'offline'));
+    await expect(client.openWeb('/account')).resolves.toEqual({ error: "Couldn't reach HiveTTY. Try again." });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it("passes on the cloud's refusal", async () => {
+    const { client, cloud, openExternal } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(
+      answer({ error: 'invalid_request', error_description: 'next must be a path on this site' }, 400),
+    );
+    await expect(client.openWeb('/account')).resolves.toEqual({ error: 'next must be a path on this site' });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('a refusal with no description gets a sentence of its own', async () => {
+    const { client, cloud } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(new Response('<html>', { status: 500 }));
+    await expect(client.openWeb('/account')).resolves.toEqual({ error: "HiveTTY couldn't open that page. Try again." });
+  });
+
+  it('a revoked device is signed out, told to sign in, and opens nothing', async () => {
+    const { client, cloud, openExternal } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(answer({ error: 'invalid_token', error_description: 'device_revoked' }, 401));
+    await expect(client.openWeb('/account')).resolves.toEqual({ error: 'Sign in to HiveTTY first.' });
+    expect(client.state()).toEqual({ kind: 'signed-out', reason: 'device-revoked' });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('any other 401 is a generic sentence, never the raw code', async () => {
+    const { client, cloud, openExternal } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(answer({ error: 'invalid_token', error_description: 'expired' }, 401));
+    await expect(client.openWeb('/account')).resolves.toEqual({ error: "HiveTTY couldn't open that page. Try again." });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('works when called unbound, as an IPC table may hold it', async () => {
+    const { client, cloud } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(answer({ url: 'https://c.test/redeem?code=abc' }));
+    const { openWeb } = client;
+    await expect(openWeb('/account')).resolves.toEqual({ ok: true });
+  });
+
+  it("says the browser didn't open when opening fails", async () => {
+    const { client, cloud, openExternal } = await signedInHarness();
+    cloud.request.mockResolvedValueOnce(answer({ url: 'https://c.test/redeem?code=abc' }));
+    openExternal.mockRejectedValueOnce(new Error('x'));
+    await expect(client.openWeb('/account')).resolves.toEqual({ error: "The browser didn't open." });
+  });
+});

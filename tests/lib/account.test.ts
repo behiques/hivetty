@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { cancelSignIn, onAccountChanged, readAccountState, signIn, signOut } from '@/lib/account';
+import { cancelSignIn, onAccountChanged, openAccountWeb, readAccountState, signIn, signOut } from '@/lib/account';
 
 const bridge = (account: Record<string, unknown>): void => {
   (window as { hive?: unknown }).hive = { account };
@@ -17,6 +17,7 @@ describe('src/lib/account', () => {
     await expect(signIn()).resolves.toBeNull();
     await expect(cancelSignIn()).resolves.toBeUndefined();
     await expect(signOut()).resolves.toBeUndefined();
+    await expect(openAccountWeb('/account/plan')).resolves.toBeNull();
     expect(onAccountChanged(vi.fn())).toEqual(expect.any(Function));
   });
 
@@ -27,6 +28,7 @@ describe('src/lib/account', () => {
       signIn: vi.fn().mockResolvedValue({ ok: true }),
       cancel: vi.fn().mockResolvedValue(undefined),
       signOut: vi.fn().mockResolvedValue(undefined),
+      openWeb: vi.fn().mockResolvedValue({ error: 'Sign in to HiveTTY first.' }),
       onChanged: vi.fn().mockReturnValue(dispose),
     };
     bridge(account);
@@ -39,6 +41,8 @@ describe('src/lib/account', () => {
     expect(account.onChanged).toHaveBeenCalledWith(callback);
     expect(account.cancel).toHaveBeenCalled();
     expect(account.signOut).toHaveBeenCalled();
+    await expect(openAccountWeb('/account/plan')).resolves.toEqual({ error: 'Sign in to HiveTTY first.' });
+    expect(account.openWeb).toHaveBeenCalledWith('/account/plan');
   });
 
   it('answers null rather than throwing when main refuses', async () => {
@@ -48,10 +52,12 @@ describe('src/lib/account', () => {
       signIn: vi.fn().mockRejectedValue(new Error('x')),
       cancel: vi.fn().mockRejectedValue(new Error('x')),
       signOut: vi.fn().mockRejectedValue(new Error('x')),
+      openWeb: vi.fn().mockRejectedValue(new Error('x')),
     });
     await expect(readAccountState()).resolves.toBeNull();
     await expect(signIn()).resolves.toBeNull();
     await expect(cancelSignIn()).resolves.toBeUndefined();
     await expect(signOut()).resolves.toBeUndefined();
+    await expect(openAccountWeb('/account/plan')).resolves.toBeNull();
   });
 });
