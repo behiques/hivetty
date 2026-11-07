@@ -33,6 +33,8 @@ export interface LicenceTerms {
   features: string[];
   limits: Record<string, number>;
   exp: number;
+  /** Epoch s of the lease's issue: the last successful renewal. */
+  iat: number;
   trialEnds?: number;
 }
 
@@ -41,4 +43,15 @@ export type LicenceState =
   | ({ kind: 'licensed' } & LicenceTerms)
   /** The last renewal failed, but the lease is still valid. */
   | ({ kind: 'grace' } & LicenceTerms)
-  | { kind: 'lapsed'; reason: LapseReason };
+  | {
+      kind: 'lapsed';
+      reason: LapseReason;
+      /** Epoch s of the latest renewal attempt; set for offline only. */
+      checkedAt?: number;
+    };
+
+/** The sessions and agents a lapse paused (HIVE-265). */
+export interface Paused {
+  sessions: string[];
+  agents: string[];
+}

@@ -59,6 +59,7 @@ const terms = (overrides = {}) => ({
   features: ['agents'],
   limits: { sessions: 10 },
   exp: NOW_S + 7 * 86_400,
+  iat: NOW_S,
   ...overrides,
 });
 
@@ -83,6 +84,12 @@ describe('licence state at launch', () => {
     const { machine } = harness({ stored: signer.sign(claimsFor()) });
     machine.start();
     expect(machine.state()).toEqual({ kind: 'licensed', ...terms() });
+  });
+
+  it('copies the lease iat into the terms (HIVE-265: "Offline for N days")', () => {
+    const { machine } = harness({ stored: signer.sign(claimsFor({ iat: NOW_S - 3_600 })) });
+    machine.start();
+    expect(machine.state()).toMatchObject({ kind: 'licensed', iat: NOW_S - 3_600 });
   });
 
   it('is lapsed {offline} with a lease that has only expired', () => {

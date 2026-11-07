@@ -1332,7 +1332,7 @@ describe('the licence suspender (HIVE-267)', () => {
     expect(hostSuspendAll).toHaveBeenCalledTimes(1);
     expect(trackerSignalAll).toHaveBeenCalledWith('SIGSTOP');
 
-    await emit({ kind: 'licensed', plan: 'team', features: [], limits: {}, exp: 1 });
+    await emit({ kind: 'licensed', plan: 'team', features: [], limits: {}, exp: 1, iat: 0 });
     expect(hostResumeAll).toHaveBeenCalledWith('Resumed after licence renewal.');
     expect(trackerSignalAll).toHaveBeenCalledWith('SIGCONT');
     expect(trackerDeps?.lapsed?.()).toBe(false);

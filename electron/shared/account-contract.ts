@@ -23,3 +23,17 @@ export interface DeviceCode {
   /** Seconds the code lives. */
   expiresIn: number;
 }
+
+/** `licence:start-trial`. `trial_used` and `already_subscribed` are the cloud's 409 codes; anything else is a sentence. */
+export type TrialResult = { ok: true } | { error: string };
+
+/** One row of `GET /api/account/devices`. Dates are ISO strings. */
+export interface AccountDevice {
+  id: string;
+  name: string;
+  lastSeenAt: string;
+  createdAt: string;
+  current: boolean;
+}
+
+export type DevicesResult = { devices: AccountDevice[] } | { error: string };

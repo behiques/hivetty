@@ -36,6 +36,7 @@ const termsOf = (c: LeaseClaims): LicenceTerms => ({
   features: c.features,
   limits: c.limits,
   exp: c.exp,
+  iat: c.iat,
   ...(c.trialEnds === undefined ? {} : { trialEnds: c.trialEnds }),
 });
 

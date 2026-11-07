@@ -562,10 +562,10 @@ describe('paneLock (HIVE-268)', () => {
     expect(paneLock(undefined, null)).toBeNull();
   });
   it('a feature the lease grants, no lock', () => {
-    expect(paneLock('cli.codex', { kind: 'licensed', plan: 'solo', features: ['cli.codex'], limits: {}, exp: 2e9 })).toBeNull();
+    expect(paneLock('cli.codex', { kind: 'licensed', plan: 'solo', features: ['cli.codex'], limits: {}, exp: 2e9, iat: 1.8e9 })).toBeNull();
   });
   it('a feature the lease lacks: its reason and plan', () => {
-    expect(paneLock('cli.copilot', { kind: 'licensed', plan: 'solo', features: [], limits: {}, exp: 2e9 })).toEqual({
+    expect(paneLock('cli.copilot', { kind: 'licensed', plan: 'solo', features: [], limits: {}, exp: 2e9, iat: 1.8e9 })).toEqual({
       reason: 'Copilot is in Team and above',
       plan: 'Team',
     });

@@ -14,6 +14,7 @@ const lease = (plan: string, features: string[]): LicenceState => ({
   features,
   limits: {},
   exp: 2_000_000_000,
+  iat: 1_800_000_000,
 });
 const SOLO = ['cli.codex', 'relay', 'runners.byo', 'sync'];
 const TEAM = [...SOLO, 'cli.copilot', 'team.ledger'];

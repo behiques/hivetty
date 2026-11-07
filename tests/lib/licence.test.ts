@@ -60,6 +60,7 @@ describe('trialDaysLeft (HIVE-268)', () => {
     features: [],
     limits: {},
     exp: 0,
+    iat: NOW / 1000,
     ...(trialEnds === undefined ? {} : { trialEnds }),
   });
 
