@@ -6,7 +6,7 @@ import type { LicenceState } from '../../../../electron/shared/licence-contract'
 const state = vi.hoisted(() => ({ current: { kind: 'unlicensed' } as LicenceState }));
 vi.mock('../../../../electron/main/licence/index', () => ({ licence: () => state.current }));
 
-const { entitled } = await import('../../../../electron/main/licence/entitled');
+const { cliEntitled, entitled } = await import('../../../../electron/main/licence/entitled');
 
 const lease = (plan: string, features: string[]): LicenceState => ({
   kind: 'licensed',
@@ -42,5 +42,26 @@ describe('entitled', () => {
 
   it('fails closed when unlicensed', () => {
     expect(entitled('cli.codex')).toBe('Sign in to use Codex');
+  });
+});
+
+describe('cliEntitled (HIVE-332)', () => {
+  beforeEach(() => {
+    state.current = { kind: 'unlicensed' };
+  });
+
+  it('is null for Claude even unlicensed, and names the plan for a CLI the lease lacks', () => {
+    expect(cliEntitled('claude-code')).toBeNull();
+    state.current = lease('solo', SOLO);
+    expect(cliEntitled('codex')).toBeNull();
+    expect(cliEntitled('copilot')).toBe('Copilot is in Team and above');
+    state.current = lease('team', TEAM);
+    expect(cliEntitled('copilot')).toBeNull();
+  });
+
+  it('refuses Codex unlicensed and lapsed', () => {
+    expect(cliEntitled('codex')).toBe('Sign in to use Codex');
+    state.current = { kind: 'lapsed', reason: 'offline' } as LicenceState;
+    expect(cliEntitled('codex')).toBe('Your licence has lapsed');
   });
 });
