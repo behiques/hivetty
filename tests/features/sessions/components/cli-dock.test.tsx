@@ -4,15 +4,20 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { CliDock } from '@features/sessions/components/cli-dock';
+import { openAccountWeb } from '@lib/account';
 import type { HarnessId } from '@shared/harness-contract';
+
+vi.mock('@lib/account', () => ({ openAccountWeb: vi.fn(() => Promise.resolve(null)) }));
 
 function Harness({
   onChange = () => {},
   unavailable,
+  locked,
   start = 'claude-code',
 }: {
   onChange?: (cli: HarnessId) => void;
   unavailable?: Partial<Record<HarnessId, string>>;
+  locked?: Partial<Record<HarnessId, string>>;
   start?: HarnessId;
 }) {
   const [cli, setCli] = useState<HarnessId>(start);
@@ -20,6 +25,7 @@ function Harness({
     <CliDock
       value={cli}
       unavailable={unavailable}
+      locked={locked}
       onChange={(next) => {
         setCli(next);
         onChange(next);
@@ -139,5 +145,36 @@ describe('CliDock caption (HIVE-378)', () => {
   it('draws no caption when there is none', () => {
     const { container } = render(<CliDock value="codex" onChange={vi.fn()} caption={null} />);
     expect(container.querySelector('[data-slot="cli-caption"]')).toBeNull();
+  });
+
+  it('a plan-locked CLI is dimmed with a lock, refuses a click, and offers Upgrade (HIVE-332)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const reason = 'Copilot is in Team and above';
+    render(<Harness onChange={onChange} unavailable={{ copilot: reason }} locked={{ copilot: reason }} />);
+
+    const square = screen.getByRole('radio', { name: `Copilot: ${reason}` });
+    expect(square).toHaveAttribute('aria-disabled', 'true');
+    expect(square.querySelector('[data-slot="cli-lock"]')).not.toBeNull();
+    await user.click(square);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText(reason)).toBeInTheDocument();
+    expect(screen.queryByText(/isn't available/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Upgrade' }));
+    expect(openAccountWeb).toHaveBeenCalledWith('/account/plan');
+  });
+
+  it('two CLIs locked for the same reason share one Upgrade line (HIVE-332)', () => {
+    const reason = 'Your licence has lapsed';
+    render(
+      <Harness
+        onChange={vi.fn()}
+        unavailable={{ codex: reason, copilot: reason }}
+        locked={{ codex: reason, copilot: reason }}
+      />,
+    );
+
+    expect(screen.getAllByText(reason)).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Upgrade' })).toHaveLength(1);
   });
 });

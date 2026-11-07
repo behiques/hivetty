@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../../../electron/main/licence/entitled', () => ({
+  cliEntitled: (id: string) => (id === 'claude-code' ? null : 'Sign in to use it'),
+}));
 
 import { createCliGate } from '../../../../electron/main/agents/cli-gate';
 import { resolveClis } from '../../../../electron/shared/cli-contract';
@@ -44,5 +48,19 @@ describe('createCliGate (HIVE-341)', () => {
     }));
 
     expect(gate.defaults('copilot')).toEqual({ deny: ['shell(rm:*)'] });
+  });
+
+  it('answers entitled from the injected lease check (HIVE-332)', () => {
+    const gate = createCliGate(
+      () => ({ clis: resolveClis(undefined) }),
+      (id) => (id === 'copilot' ? 'Copilot is in Team and above' : null),
+    );
+
+    expect(gate.entitled('codex')).toBeNull();
+    expect(gate.entitled('copilot')).toBe('Copilot is in Team and above');
+  });
+
+  it('defaults entitled to the licence read (HIVE-332)', () => {
+    expect(createCliGate(() => ({ clis: resolveClis(undefined) })).entitled('codex')).toBe('Sign in to use it');
   });
 });

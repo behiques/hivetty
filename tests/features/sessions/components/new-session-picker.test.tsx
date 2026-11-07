@@ -982,7 +982,12 @@ describe('NewSessionPicker — the ticket workflow', () => {
     resetProjectConfig();
     seedDemoProjectConfig();
     post.mockResolvedValue({ ok: true, id: 'a1', ref: 'a1' });
-    window.hive = { ledger: { post } } as unknown as typeof window.hive;
+    // HIVE-332: the pick reads the licence; the gate off locks nothing, as an e2e run without HIVE_E2E_GATE does.
+    window.hive = {
+      ledger: { post },
+      appInfo: () => Promise.resolve({ gateOff: true }),
+      licence: { state: () => Promise.resolve(null), onChanged: () => () => {} },
+    } as unknown as typeof window.hive;
     useHiveStore.getState().hydrateTickets(
       [
         {

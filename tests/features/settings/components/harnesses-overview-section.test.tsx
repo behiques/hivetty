@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveClis, type CliDetection, type ClisConfig } from '@shared/cli-contract';
 import { emptySnapshot, type ConfigSnapshot } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
+import type { LicenceState } from '@shared/licence-contract';
 
 import { HarnessesOverviewSection } from '@features/settings/components/harnesses-overview-section';
 import { useUiStore } from '@stores/ui-store';
@@ -31,6 +32,18 @@ let rescanning = false;
 vi.mock('@hooks/use-cli-detection', () => ({
   useCliDetection: () => ({ detection: detected, settled: true, rescan, rescanning }),
 }));
+
+let locks: { licence: LicenceState | null; settled: boolean } = { licence: null, settled: true };
+vi.mock('@hooks/use-licence-locks', () => ({ useLicenceLocks: () => locks }));
+vi.mock('@lib/account', () => ({ openAccountWeb: vi.fn(() => Promise.resolve(null)) }));
+const SOLO = {
+  kind: 'licensed',
+  plan: 'solo',
+  features: ['cli.codex'],
+  limits: {},
+  exp: 2_000_000_000,
+  iat: 1_800_000_000,
+} as LicenceState;
 
 vi.mock('@hooks/use-codex-models', () => ({ useCodexModels: () => ({ models: [], settled: true }) }));
 vi.mock('@lib/cli-tokens', () => ({
@@ -67,6 +80,7 @@ describe('HarnessesOverviewSection (HIVE-375)', () => {
   beforeEach(() => {
     setCliSessionsConfig.mockReset();
     rescan.mockClear();
+    locks = { licence: null, settled: true };
   });
 
   it("shows main's refusal of a write (HIVE-388)", () => {
@@ -147,5 +161,28 @@ describe('HarnessesOverviewSection (HIVE-375)', () => {
     snapshot = null;
     render(<HarnessesOverviewSection />);
     expect(screen.getByText(/only available in the desktop app/)).toBeInTheDocument();
+  });
+
+  it('a plan-locked CLI shows its lock, reason and Upgrade, and cannot become the default (HIVE-332)', () => {
+    locks = { licence: SOLO, settled: true };
+    renderWith({
+      detection: { ...detection, copilot: { path: '/opt/homebrew/bin/copilot', version: '1.0.105' } },
+      clis: resolveClis(undefined),
+    });
+    expect(screen.getByLabelText('Locked: Team')).toBeInTheDocument();
+    expect(screen.getByText(/Copilot is in Team and above/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Copilot is the default for new sessions' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'Codex is the default for new sessions' })).toBeEnabled();
+    expect(screen.getByRole('switch', { name: 'Use Copilot for sessions' })).toBeEnabled();
+  });
+
+  it('a locked CLI that already is the default keeps its radio checked and says where sessions start (HIVE-332)', () => {
+    locks = { licence: SOLO, settled: true };
+    renderWith({ detection, clis: resolveClis(undefined), sessionsDefaultCli: 'copilot' });
+    const radio = screen.getByRole('radio', { name: 'Copilot is the default for new sessions' });
+    expect(radio).toBeChecked();
+    expect(radio).toBeEnabled();
+    expect(screen.getByText('New sessions start on Claude Code instead')).toBeInTheDocument();
   });
 });

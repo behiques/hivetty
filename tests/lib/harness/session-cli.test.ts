@@ -4,6 +4,7 @@ import {
   BUILT_IN_PICKS,
   cliAvailability,
   cliCaption,
+  lockedClis,
   resolvePick,
   resolveSessionCli,
   type SessionCliChoice,
@@ -12,6 +13,7 @@ import {
 } from '@lib/harness/session-cli';
 import { resolveClis } from '@shared/cli-contract';
 import type { HarnessId } from '@shared/harness-contract';
+import type { LicenceState } from '@shared/licence-contract';
 
 const all = cliAvailability(null, null);
 const no = (reason: string) => ({ ok: false as const, reason });
@@ -177,5 +179,62 @@ describe('resolvePick (HIVE-376)', () => {
   it('the built-in pick applies when neither is set, and with no config', () => {
     expect(resolvePick('claude-code', {}, clis)).toEqual(BUILT_IN_PICKS['claude-code']);
     expect(resolvePick('copilot', {}, null)).toEqual(BUILT_IN_PICKS.copilot);
+  });
+});
+
+const SOLO = {
+  kind: 'licensed',
+  plan: 'solo',
+  features: ['cli.codex'],
+  limits: {},
+  exp: 2_000_000_000,
+  iat: 1_800_000_000,
+} as LicenceState;
+
+describe('cliAvailability: the plan lock (HIVE-332)', () => {
+  it('locks a CLI the lease lacks, with its plan', () => {
+    const availability = cliAvailability(null, null, SOLO);
+    expect(availability.codex).toEqual({ ok: true });
+    expect(availability.copilot).toEqual({ ok: false, reason: 'Copilot is in Team and above', plan: 'Team' });
+    expect(lockedClis(availability)).toEqual({ copilot: 'Copilot is in Team and above' });
+  });
+
+  it('puts the lock before missing and turned off', () => {
+    const availability = cliAvailability(
+      {
+        'claude-code': { path: '/c', version: '1' },
+        codex: { path: '/x', version: '1' },
+        copilot: { missing: 'no copilot' },
+      },
+      resolveClis({ copilot: { sessions: false } }),
+      SOLO,
+    );
+    expect(availability.copilot).toMatchObject({ reason: 'Copilot is in Team and above' });
+  });
+
+  it('locks nothing with no licence (unread, the browser, gate off)', () => {
+    expect(cliAvailability(null, null, null)).toEqual(all);
+    expect(lockedClis(all)).toEqual({});
+  });
+
+  it('a missing CLI is unavailable but not locked', () => {
+    const availability = cliAvailability(
+      {
+        'claude-code': { path: '/c', version: '1' },
+        codex: { missing: 'gone' },
+        copilot: { path: '/p', version: null },
+      },
+      null,
+      null,
+    );
+    expect(lockedClis(availability)).toEqual({});
+  });
+
+  it('the resolver skips a locked default and says so', () => {
+    const choice = resolveSessionCli({ picked: null, sessionsDefault: 'copilot' }, cliAvailability(null, null, SOLO));
+    expect(choice).toMatchObject({
+      cli: 'claude-code',
+      skipped: [{ cli: 'copilot', source: 'yours', reason: 'Copilot is in Team and above' }],
+    });
   });
 });

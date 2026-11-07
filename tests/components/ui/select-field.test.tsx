@@ -97,4 +97,19 @@ describe('SelectField', () => {
     ]);
     expect(document.querySelector('select > option')?.textContent).toBe('Type another…');
   });
+
+  it('renders a disabled option (HIVE-332)', () => {
+    render(
+      <SelectField
+        label="CLI"
+        value="a"
+        onChange={() => {}}
+        options={[
+          { value: 'a', label: 'A' },
+          { value: 'b', label: 'B', disabled: true },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('option', { name: 'B' })).toBeDisabled();
+  });
 });

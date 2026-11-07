@@ -16,7 +16,7 @@ vi.mock('@stores/hive-store', () => ({ useRemoteLink: () => state.link }));
 vi.mock('@features/account/components/host-lapsed', () => ({
   HostLapsed: ({ serverName }: { serverName: string }) => <div>host-lapsed:{serverName}</div>,
 }));
-vi.mock('@features/account/hooks/use-gate-off', () => ({ useGateOff: () => state.off }));
+vi.mock('@hooks/use-gate-off', () => ({ useGateOff: () => state.off }));
 vi.mock('@features/account/hooks/use-code-sign-in', () => ({
   useCodeSignIn: () => ({ active: false, code: null, error: null, start: vi.fn() }),
 }));

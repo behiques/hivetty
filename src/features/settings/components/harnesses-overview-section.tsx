@@ -2,12 +2,14 @@ import { ArrowClockwise } from '@phosphor-icons/react';
 
 import { Button } from '@/components/ui/button';
 import { CliMark } from '@/components/ui/cli-mark';
+import { LockMark, UpgradeLink } from '@/components/ui/lock';
 import { Switch } from '@/components/ui/switch';
 
 import { ConfigErrors } from '@features/settings/components/config-errors';
 import { capabilitySummary } from '@features/settings/components/harness-capabilities';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { useCliDetection } from '@hooks/use-cli-detection';
+import { useLicenceLocks } from '@hooks/use-licence-locks';
 import { useAttachedServer, useProjectConfig } from '@hooks/use-project-config';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { cliAvailability, resolveSessionCli } from '@lib/harness/session-cli';
@@ -19,12 +21,14 @@ import { useSettingsActions } from '@stores/ui-store';
 /**
  * Settings › Harnesses › Overview (HIVE-375): what was found, what sessions may use, and what they start on.
  * Detection runs where the sessions run, so attached to a server it names that machine (D9). Each row opens that
- * CLI's own page, with how much of what HiveTTY can do it supports (HIVE-376 D13).
+ * CLI's own page, with how much of what HiveTTY can do it supports (HIVE-376 D13). A CLI the plan lacks shows its
+ * lock, reason and Upgrade, and cannot become the default unless it already is (HIVE-332 D8).
  */
 export function HarnessesOverviewSection() {
   const snapshot = useProjectConfig();
   const server = useAttachedServer();
   const { detection, rescan, rescanning } = useCliDetection();
+  const locks = useLicenceLocks();
   const { openSettings } = useSettingsActions();
 
   // The browser target has no config, so nothing here can be read or set.
@@ -37,7 +41,7 @@ export function HarnessesOverviewSection() {
   }
 
   const configuredDefault = snapshot.sessionsDefaultCli ?? 'claude-code';
-  const availability = cliAvailability(detection, snapshot.clis);
+  const availability = cliAvailability(detection, snapshot.clis, locks.licence);
   const startsOn = resolveSessionCli({ picked: null, sessionsDefault: snapshot.sessionsDefaultCli }, availability).cli;
   const onCount = HARNESS_IDS.filter((id) => snapshot.clis[id].sessions).length;
 
@@ -60,15 +64,23 @@ export function HarnessesOverviewSection() {
           const located = found !== undefined && 'path' in found ? found : null;
           const on = snapshot.clis[cli].sessions;
           const summary = capabilitySummary(cli);
+          const entry = availability[cli];
+          const lock = !entry.ok && entry.plan !== undefined ? entry : null;
           return (
             <li key={cli} className="flex flex-wrap items-start gap-4 px-4 py-3.5">
               <CliMark cli={cli} className="mt-0.5 size-7 shrink-0" />
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-ui text-ink">
-                  {CLI_NAMES[cli]}{' '}
+                <span className="flex items-center gap-2 text-ui text-ink">
+                  {CLI_NAMES[cli]}
                   {located?.version != null && <span className="text-muted">{located.version}</span>}
+                  {lock && <LockMark plan={lock.plan ?? null} className="ml-0" />}
                 </span>
                 {located !== null && <code className="truncate text-ui-sm text-subtle">{located.path}</code>}
+                {lock && (
+                  <span className="flex items-center gap-1.5 text-ui-sm text-subtle">
+                    {lock.reason} · <UpgradeLink />
+                  </span>
+                )}
                 {found !== undefined && 'unchecked' in found && (
                   <span className="text-ui-sm text-subtle">{found.unchecked}</span>
                 )}
@@ -104,6 +116,7 @@ export function HarnessesOverviewSection() {
                   className="size-4 accent-brand"
                   aria-label={`${CLI_NAMES[cli]} is the default for new sessions`}
                   checked={cli === configuredDefault}
+                  disabled={lock !== null && cli !== configuredDefault}
                   onChange={() => void setCliSessionsConfig({ defaultCli: cli })}
                 />
                 Default

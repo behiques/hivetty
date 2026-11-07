@@ -12,6 +12,7 @@ import { useUiStore } from '@stores/ui-store';
 
 import type { AgentSummary } from '@shared/agent-contract';
 import { emptySnapshot } from '@shared/config-contract';
+import type { LicenceState } from '@shared/licence-contract';
 
 import { shippedStatus } from '../../../support/shipped';
 import { getByHint } from '@tests/support/hint';
@@ -59,6 +60,18 @@ vi.mock('@/lib/project-config', async (importOriginal) => ({
   setAgentsDefaultCliConfig: (request: unknown) => setAgentsDefaultCliConfig(request),
 }));
 
+let locks: { licence: LicenceState | null; settled: boolean } = { licence: null, settled: true };
+vi.mock('@hooks/use-licence-locks', () => ({ useLicenceLocks: () => locks }));
+vi.mock('@lib/account', () => ({ openAccountWeb: vi.fn(() => Promise.resolve(null)) }));
+const SOLO = {
+  kind: 'licensed',
+  plan: 'solo',
+  features: ['cli.codex'],
+  limits: {},
+  exp: 2_000_000_000,
+  iat: 1_800_000_000,
+} as LicenceState;
+
 const row = (name: string) => screen.getByRole('button', { name: new RegExp(name) });
 
 beforeEach(() => {
@@ -70,6 +83,7 @@ beforeEach(() => {
   resetProjectConfig();
   setAgentsDefaultCliConfig.mockReset();
   vi.restoreAllMocks();
+  locks = { licence: null, settled: true };
 });
 
 describe('AgentsSection', () => {
@@ -337,5 +351,29 @@ describe('AgentsSection: which CLIs each agent runs on (HIVE-379)', () => {
 
     await screen.findByRole('button', { name: /plain/ });
     expect(marks('plain')).toEqual(['claude-code']);
+  });
+});
+
+describe('AgentsSection: the plan lock (HIVE-332)', () => {
+  it('the default CLI select locks Copilot on Solo, and a locked saved default says why', async () => {
+    locks = { licence: SOLO, settled: true };
+    setProjectConfigForTest({ ...emptySnapshot('/c.json'), agentsDefaultCli: 'copilot' });
+    stub([]);
+    render(<AgentsSection />);
+    expect(await screen.findByRole('option', { name: 'Copilot · Locked: Team' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Codex' })).toBeEnabled();
+    expect(
+      screen.getByText(
+        'Copilot is in Team and above. Agents with no harness: field will not run until you pick another default or upgrade.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
+  });
+
+  it("an agent's RunsOn marks a locked CLI", async () => {
+    locks = { licence: SOLO, settled: true };
+    stub([agent('reviewer', { harness: ['copilot', 'claude-code'] })]);
+    render(<AgentsSection />);
+    expect(await screen.findByText('Runs on Copilot (Copilot is in Team and above), Claude Code')).toBeInTheDocument();
   });
 });

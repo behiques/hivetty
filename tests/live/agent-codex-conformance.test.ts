@@ -476,7 +476,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
       const refused = runs.run(CX, 'manual');
       expect(refused).toMatchObject({ started: false });
       expect(JSON.stringify(refused)).toContain(
-        `No CLI can run ${CX}: codex is not in your plan (Solo or higher).`,
+        `No CLI can run ${CX}: codex: not in your plan (Solo or higher).`,
       );
       expect(spawns).toHaveLength(before);
     } finally {

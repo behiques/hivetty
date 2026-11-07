@@ -136,7 +136,7 @@ import {
   parseWriteFileRequest,
   parseWriteRequest,
 } from '@shared/guards';
-import { HARNESS_IDS } from '@shared/harness-contract';
+import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 import {
   CH,
   type AppInfo,
@@ -298,6 +298,7 @@ import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
 import { ACCOUNT_CALLS, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
+import { cliEntitled } from '../licence/entitled';
 import { createSuspender, installSuspender, isLapsed, releaseNow, runContainer } from '../licence/suspend';
 import { agentMcpConfigFile, createMcpRuntime } from '../mcp';
 import {
@@ -374,6 +375,13 @@ import { createSurfaceRegistry, deviceNameOf, type SurfaceId } from './surfaces'
  * `app:info` proved the path in story 082; `config:*` landed in 090; the PTY
  * channels and their flow control are story 093's.
  */
+
+/**
+ * HIVE-265 ruling 4: the Playwright suite runs unpackaged with HIVE_E2E and no cloud, so the licence gate stays off;
+ * HIVE-270's licence specs set HIVE_E2E_GATE to keep it on. HIVE-332's plan lock follows the same switch.
+ */
+const licenceGateOff = (): boolean => !app.isPackaged && Boolean(process.env.HIVE_E2E) && !process.env.HIVE_E2E_GATE;
+const entitledCli = (id: HarnessId): string | null => (licenceGateOff() ? null : cliEntitled(id));
 
 /**
  * Which handler answers which channel, for the remote path (HIVE-143).
@@ -2821,7 +2829,7 @@ export function registerIpcHandlers(
     claudeCommand,
     subscriptionAuth: () => getConfig().subscriptionAuth,
     // HIVE-341. Settings › Agents and Settings › Harnesses › <CLI>: which CLI agents fall back to, whether each may run them, and its defaults.
-    gate: createCliGate(getConfig),
+    gate: createCliGate(getConfig, entitledCli),
     state: agentState,
     env: () => process.env,
     newUuid,
@@ -3385,6 +3393,8 @@ export function registerIpcHandlers(
     harnessStateDir: (harness) => cliHome(`${harness}-session`),
     // HIVE-267: no spawn or restart while the licence is lapsed.
     lapsed: isLapsed,
+    // HIVE-332: no spawn or restart of a CLI the plan lacks.
+    entitled: entitledCli,
   });
 
   /*
@@ -3698,7 +3708,7 @@ export function registerIpcHandlers(
       ...(diagnostics.length > 0 ? { pty: diagnostics } : {}),
       // HIVE-265: the Playwright suite runs unpackaged with HIVE_E2E and no cloud, so the gate stays off.
       // HIVE-270: the licence specs set HIVE_E2E_GATE to keep it on against their stub cloud.
-      ...(!app.isPackaged && process.env.HIVE_E2E && !process.env.HIVE_E2E_GATE ? { gateOff: true as const } : {}),
+      ...(licenceGateOff() ? { gateOff: true as const } : {}),
     };
   }
 

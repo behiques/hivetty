@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { useGateOff } from '@features/account/hooks/use-gate-off';
+import { useGateOff } from '@hooks/use-gate-off';
 
 afterEach(() => {
   delete (window as { hive?: unknown }).hive;

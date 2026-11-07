@@ -151,7 +151,7 @@ describe('resolveHarness: availability (HIVE-340)', () => {
 
     expect(result).toEqual({
       problem:
-        'No CLI can run reviewer: codex is not in your plan (Solo or higher); claude-code is turned off for agents in Settings › Harnesses.',
+        'No CLI can run reviewer: codex: not in your plan (Solo or higher); claude-code is turned off for agents in Settings › Harnesses.',
     });
   });
 
@@ -208,14 +208,14 @@ describe('resolveHarness: can it honour this definition (HIVE-340)', () => {
       { turns: 40, rotateAfter: 50, parallel: 1, budgetUsd: 1 },
       { turns: 40, rotateAfter: 50, parallel: 1, dailyUsd: 5 },
     ]) {
-      const result = resolveHarness(def({ harness: [cli('codex')], limits }), [], deps(blind));
+      const result = resolveHarness(def({ harness: [cli('codex')], limits }), [], deps(blind, { gate: gate() }));
 
       expect(result).toEqual({
         problem: "No CLI can run reviewer: codex does not report cost in USD, which reviewer's budget limit needs.",
       });
     }
 
-    expect(resolveHarness(def({ harness: [cli('codex')] }), [], deps(blind))).toMatchObject({ adapter: blind.codex });
+    expect(resolveHarness(def({ harness: [cli('codex')] }), [], deps(blind, { gate: gate() }))).toMatchObject({ adapter: blind.codex });
   });
 
   it('skips a CLI that cannot serve an mcp: integration', () => {
@@ -223,12 +223,44 @@ describe('resolveHarness: can it honour this definition (HIVE-340)', () => {
     const result = resolveHarness(
       def({ harness: [cli('codex'), 'claude-code'], mcp: ['slack'] }),
       [],
-      deps(adapters),
+      deps(adapters, { gate: gate() }),
     );
 
     expect(result).toMatchObject({ adapter: claude });
     expect(
-      resolveHarness(def({ harness: [cli('codex')], mcp: ['slack'] }), [], deps(adapters)),
+      resolveHarness(def({ harness: [cli('codex')], mcp: ['slack'] }), [], deps(adapters, { gate: gate() })),
     ).toEqual({ problem: 'No CLI can run reviewer: codex cannot serve the slack integration.' });
+  });
+});
+
+describe('resolveHarness: fail closed (HIVE-332)', () => {
+  it('with no gate, refuses Codex and Copilot and still runs Claude', () => {
+    const claude = fake('claude-code');
+    const codex = fake('codex');
+    const copilot = fake('copilot');
+    const adapters = { 'claude-code': claude, codex, copilot };
+
+    expect(resolveHarness(def({ harness: [cli('codex')] }), [], deps(adapters))).toEqual({
+      problem: 'No CLI can run reviewer: codex: not entitled: no licence gate.',
+    });
+    expect(resolveHarness(def({ harness: [cli('copilot'), 'claude-code'] }), [], deps(adapters))).toMatchObject({
+      adapter: claude,
+    });
+  });
+
+  it("names the CLI before the licence's own sentence, which already reads whole", () => {
+    const copilot = fake('copilot');
+    const lease = gate({ entitled: (id) => (id === cli('copilot') ? 'Copilot is in Team and above' : null) });
+
+    expect(resolveHarness(def({ harness: [cli('copilot')] }), [], deps({ copilot }, { gate: lease }))).toEqual({
+      problem: 'No CLI can run reviewer: copilot: Copilot is in Team and above.',
+    });
+  });
+
+  it('with a gate, its entitled() decides', () => {
+    const codex = fake('codex');
+    expect(resolveHarness(def({ harness: [cli('codex')] }), [], deps({ codex }, { gate: gate() }))).toMatchObject({
+      adapter: codex,
+    });
   });
 });

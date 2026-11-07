@@ -1,5 +1,6 @@
 import { useCliDetection } from '@hooks/use-cli-detection';
 import { useCodexModels } from '@hooks/use-codex-models';
+import { useLicenceLocks } from '@hooks/use-licence-locks';
 import { useProjectConfig } from '@hooks/use-project-config';
 import { cliAvailability, cliCaption, resolvePick, resolveSessionCli } from '@lib/harness/session-cli';
 import { CLI_VOCAB } from '@shared/cli-contract';
@@ -24,13 +25,16 @@ import { useNewSessionDefaults } from '@stores/ui-store';
  * is the next rung after this run's pick. `startFor(id)` resolves one picker row the same way for its own
  * project, so each row starts on its project's CLI. Codex's list is read while any row could start on Codex,
  * so a row click never waits. `caption` says where the dock's choice came from.
+ *
+ * HIVE-332: a CLI the plan lacks is unavailable, and a quick-start waits until the licence is read.
  */
 export function useNewSessionPick(fresh = false, projectId: string | null = null) {
   const { newCli: picked, newPicks } = useNewSessionDefaults();
   const snapshot = useProjectConfig();
   const { detection, settled: detected } = useCliDetection();
   const clis = snapshot?.clis ?? null;
-  const availability = cliAvailability(detection, clis);
+  const locks = useLicenceLocks();
+  const availability = cliAvailability(detection, clis, locks.licence);
   const projects = snapshot?.projects ?? [];
   const choose = (id: string | null) =>
     resolveSessionCli(
@@ -91,7 +95,7 @@ export function useNewSessionPick(fresh = false, projectId: string | null = null
     noneAvailable: choice.cli === null,
     /** Whether detection has answered: until it has, `noneAvailable` is only the Settings switches' word. */
     detected,
-    /** Codex's list, detection, and a CLI to start on: a quick-start waits for all three (HIVE-375). */
-    ready: (!codex || settled) && detected && choice.cli !== null,
+    /** Codex's list, detection, the licence (HIVE-332), and a CLI to start on: a quick-start waits for all four. */
+    ready: (!codex || settled) && detected && locks.settled && choice.cli !== null,
   };
 }
