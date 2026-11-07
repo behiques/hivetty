@@ -1,5 +1,6 @@
 import { containsPath } from '@lib/explorer/session-root';
 import type {
+  CodexPluginStatus,
   SetAgentsDefaultCliRequest,
   SetCliAgentsRequest,
   SetCliRequest,
@@ -322,6 +323,18 @@ export const setCliSessionsConfig = (request: SetCliSessionsRequest): Promise<vo
 /** One CLI's command and session defaults (HIVE-376). `null` clears a key. */
 export const setCliConfig = (request: SetCliRequest): Promise<void> =>
   mutate((bridge) => bridge.config.setCli(request));
+
+/** HIVE-372. What the opt-in Codex plugin install last found or did; null outside the desktop app or on error. */
+export async function readCodexPluginStatus(): Promise<CodexPluginStatus | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.cli.codexPluginStatus();
+  } catch (cause) {
+    console.error('[hive] cli.codexPluginStatus failed:', cause);
+    return null;
+  }
+}
 
 /**
  * Change one project's overrides (story 104).

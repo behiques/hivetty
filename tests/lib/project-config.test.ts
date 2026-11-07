@@ -35,6 +35,7 @@ import {
   setServerConfig,
   subscribeProjectConfig,
   projectIdForPath,
+  readCodexPluginStatus,
 } from '@lib/project-config';
 
 /**
@@ -1162,5 +1163,20 @@ describe('watchProjectConfig (retro B)', () => {
   it('is a no-op with no bridge', () => {
     expect(() => watchProjectConfig()()).not.toThrow();
     expect(projectConfigSnapshot()).toBeNull();
+  });
+});
+
+describe('readCodexPluginStatus (HIVE-372)', () => {
+  it('asks the bridge, and is null without one or on error', async () => {
+    const codexPluginStatus = vi.fn(async () => ({ state: 'off' }) as const);
+    (window as { hive?: unknown }).hive = { cli: { codexPluginStatus } };
+    await expect(readCodexPluginStatus()).resolves.toEqual({ state: 'off' });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    codexPluginStatus.mockRejectedValueOnce(new Error('x'));
+    await expect(readCodexPluginStatus()).resolves.toBeNull();
+    expect(log).toHaveBeenCalledTimes(1);
+    log.mockRestore();
+    delete (window as { hive?: unknown }).hive;
+    await expect(readCodexPluginStatus()).resolves.toBeNull();
   });
 });

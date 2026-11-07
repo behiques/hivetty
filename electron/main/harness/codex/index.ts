@@ -12,7 +12,8 @@ import { createCodexInstalled } from './installed';
 import { launchCodexSession } from './launch';
 import { foldCodexMeters } from './meters';
 import { readCodexModels } from './models';
-import { codexRecord, codexRecordAborted } from './record';
+import { createCodexPluginInstaller } from './plugin-install';
+import { codexHome, codexRecord, codexRecordAborted } from './record';
 import { codexSkills } from './skills';
 
 /*
@@ -50,6 +51,8 @@ export const codexAdapter: HarnessAdapter = {
   skills: codexSkills,
   headless: { launch: launchCodexHeadless, reader: readCodexHeadless, fence: codexFence, containerCommand: 'codex' },
   models: () => readCodexModels(),
+  // HIVE-372: the same CODEX_HOME its sessions read, the runtime env's when it sets one.
+  skillsPlugin: (deps) => createCodexPluginInstaller({ ...deps, codexHome: () => deps.env()['CODEX_HOME'] ?? codexHome() }),
   answersBlock: blockAnswer,
   recordAborted: codexRecordAborted,
 };

@@ -62,7 +62,8 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
 
   const instructions = codexDeveloperInstructions({
     ...(spec.pluginDir === undefined ? {} : { pluginDir: spec.pluginDir }),
-    codexHome: codexHome(),
+    // The home the session runs in, which is where the installer put the plugin (HIVE-372).
+    codexHome: spec.env?.['CODEX_HOME'] ?? codexHome(),
     userConfig: true,
   });
 

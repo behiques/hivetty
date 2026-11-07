@@ -46,6 +46,7 @@ import type {
   HarnessSignInRequest,
   CliModel,
   CliTokensState,
+  CodexPluginStatus,
   SetAgentsDefaultCliRequest,
   SetCliAgentsRequest,
   SetCliRequest,
@@ -342,6 +343,8 @@ export const CH = {
   cliClearToken: 'cli:clear-token',
   /** The models the signed-in Codex account has, from its `models_cache.json`. No payload; `[]` means "use the fallback". */
   cliCodexModels: 'cli:codex-models',
+  /** HIVE-372. What the opt-in Codex plugin install last found or did. */
+  cliCodexPluginStatus: 'cli:codex-plugin-status',
   // HIVE-375. The CLIs on this machine: path and version, or why one is missing. Rescan drops the memo.
   harnessDetect: 'harness:detect',
   harnessRescan: 'harness:rescan',
@@ -2824,6 +2827,8 @@ export interface HiveBridge {
     clearToken(request: ClearCliTokenRequest): Promise<CliTokensState>;
     /** Codex's models for this account; `[]` when its cache cannot be read. */
     codexModels(): Promise<CliModel[]>;
+    /** HIVE-372. What the opt-in `codex plugin add hive@hivetty` last found or did. */
+    codexPluginStatus(): Promise<CodexPluginStatus>;
     /** HIVE-375. What was found for each CLI, read once per app run. */
     detect(): Promise<Record<HarnessId, CliDetection>>;
     /** HIVE-375. Look again, after an install. */

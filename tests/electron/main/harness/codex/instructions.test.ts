@@ -63,4 +63,18 @@ describe('codexDeveloperInstructions (HIVE-360)', () => {
       codexDeveloperInstructions({ pluginDir: join(root, 'missing'), codexHome: join(root, 'nohome'), userConfig: true }),
     ).toBeUndefined();
   });
+
+  it('leaves the catalog out when hive@hivetty is installed and enabled (HIVE-372)', () => {
+    catalog();
+    config('developer_instructions = "Be terse."\n\n[plugins."hive@hivetty"]\nenabled = true\n');
+    expect(codexDeveloperInstructions({ pluginDir: plugin, codexHome: home, userConfig: true })).toBe('Be terse.');
+  });
+
+  it('keeps the catalog when the plugin is disabled, and in headless runs (HIVE-372)', () => {
+    catalog();
+    config('[plugins."hive@hivetty"]\nenabled = false\n');
+    expect(codexDeveloperInstructions({ pluginDir: plugin, codexHome: home, userConfig: true })).toBe(CATALOG.trimEnd());
+    config('[plugins."hive@hivetty"]\nenabled = true\n');
+    expect(codexDeveloperInstructions({ pluginDir: plugin, codexHome: home, userConfig: false })).toBe(CATALOG.trimEnd());
+  });
 });

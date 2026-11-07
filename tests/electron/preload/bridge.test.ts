@@ -475,6 +475,9 @@ describe('exposed surface', () => {
     await cli().codexModels();
     expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.cliCodexModels);
 
+    await cli().codexPluginStatus();
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.cliCodexPluginStatus);
+
     await cli().detect();
     expect(ipcRenderer.invoke).toHaveBeenCalledWith(CH.harnessDetect);
     await cli().rescan();

@@ -29,7 +29,7 @@ import {
   type AgentStatusPush,
   type WakeSpec,
 } from '@shared/agent-contract';
-import type { CliModel, CliSignIn, CliTokensState } from '@shared/cli-contract';
+import type { CliModel, CliSignIn, CliTokensState, CodexPluginStatus } from '@shared/cli-contract';
 import { AUTH_ENV_KEYS } from '@shared/config-contract';
 import type {
   BrowseListing,
@@ -272,8 +272,8 @@ import {
   type FsWatchLayer,
 } from '../fs';
 import { cliCommand } from '../harness/cli-command';
-import { commandWord, detectClis, rescanClis, type DetectDeps } from '../harness/detect';
-import type { PreparedFiles } from '../harness/port';
+import { commandWord, detectClis, rescanClis, runVersion, type DetectDeps } from '../harness/detect';
+import type { PreparedFiles, SkillsPluginDeps, SkillsPluginInstaller } from '../harness/port';
 import { adapterFor, sessionAdapter } from '../harness/registry';
 import { readSignIn } from '../harness/sign-in';
 import { createHookRuntime } from '../hooks';
@@ -516,6 +516,12 @@ export function readRemoteCredential(): StoredDeviceCredential | null {
  * structural declaration would be free to drift from the switcher it describes.
  */
 export type { ModeSwitcher };
+
+/** HIVE-372: the Codex adapter's skills plugin installer; without one, every answer is `off` and nothing runs. */
+const codexSkillsPlugin = (deps: SkillsPluginDeps): SkillsPluginInstaller => {
+  const off = (): Promise<CodexPluginStatus> => Promise.resolve({ state: 'off' });
+  return adapterFor('codex').skillsPlugin?.(deps) ?? { reconcile: off, status: off };
+};
 
 /**
  * The default {@link ModeSwitcher}: a loud failure, never a quiet success.
@@ -2661,6 +2667,20 @@ export function registerIpcHandlers(
   */
   const seeded = seedShippedIntoHive();
 
+  /*
+    HIVE-372. The opt-in `codex plugin add hive@hivetty`. Codex runs in the env its sessions get (the top-level
+    runtime env over main's), so the plugin lands in the same CODEX_HOME they read. Nothing runs while the setting
+    is off and nothing is installed; `skills` is read lazily, so declaring this first is safe.
+  */
+  const codexEnv = (): NodeJS.ProcessEnv => ({ ...process.env, ...effectiveRuntime(getConfig(), null).env });
+  const codexPlugin = codexSkillsPlugin({
+    run: runVersion,
+    command: () => resolveCommand(cliCommand('codex', getConfig().clis, ''), codexEnv()['PATH'], undefined, 'codex'),
+    env: codexEnv,
+    marketplace: () => skills?.codexMarketplace() ?? null,
+    wanted: () => getConfig().clis.codex.installSkills === true,
+  });
+
   skills = createSkillsRuntime({
     userDataPath: app.getPath('userData'),
     version: app.getVersion(),
@@ -2673,6 +2693,8 @@ export function registerIpcHandlers(
     ready: seeded,
     // HIVE-176. The plugin names the Settings switches list.
     installedPlugins: () => sessionAdapter().installed.pluginNames(),
+    // HIVE-372: follow a changed skill or a new version. A read and a stat when current; no codex run when off and clean.
+    onRendered: () => void codexPlugin.reconcile(),
   });
 
   /*
@@ -4366,7 +4388,19 @@ export function registerIpcHandlers(
     setCliSessions(parseSetCliSessionsRequest(payload)),
   );
   // HIVE-376. One CLI's command and session defaults; claude-code's command stays `claudeCommand`.
-  handle(CH.configSetCli, (_event, payload): ConfigSnapshot => setCli(parseSetCliRequest(payload)));
+  handle(CH.configSetCli, async (_event, payload): Promise<ConfigSnapshot> => {
+    const request = parseSetCliRequest(payload);
+    const snapshot = setCli(request);
+    // HIVE-372: the install runs on this machine, the serving Mac when a remote client toggled it.
+    if (request.installSkills === true && skills !== null && skills.codexMarketplace() === null) {
+      // Turned on before any spawn rendered the plugin folder: render it now; `onRendered` reconciles, and a
+      // status read right after this answer waits for that run.
+      await skills.sync();
+    } else if (request.installSkills !== undefined) {
+      void codexPlugin.reconcile();
+    }
+    return snapshot;
+  });
   // HIVE-131. The container host alias — an ordinary settings write.
   handle(CH.configSetReceiver, (_event, payload): ConfigSnapshot =>
     setReceiver(parseSetReceiverRequest(payload)),
@@ -4657,6 +4691,8 @@ export function registerIpcHandlers(
   );
   // The account's Codex models for the picker; `[]` sends the renderer to its fallback list.
   handle(CH.cliCodexModels, (): Promise<CliModel[]> => adapterFor('codex').models?.() ?? Promise.resolve([]));
+  // HIVE-372: what the opt-in plugin install last found or did, waiting for a reconcile in flight.
+  handle(CH.cliCodexPluginStatus, (): Promise<CodexPluginStatus> => codexPlugin.status());
   // HIVE-375: the CLIs on this machine, after the login-shell import, with the top-level runtime env (D6).
   const detectDeps: DetectDeps = {
     env: async () => {

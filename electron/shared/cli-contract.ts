@@ -163,6 +163,8 @@ export interface CliConfig {
   /** HIVE-376. What the picker starts this CLI on when nothing was picked this run. */
   sessionModel?: string;
   sessionEffort?: string;
+  /** HIVE-372. Codex only: install HiveTTY's skills as the `hive@hivetty` Codex plugin. Absent means off. */
+  installSkills?: boolean;
 }
 
 /** Every CLI, always resolved: a CLI the file never names is enabled with no defaults. */
@@ -175,6 +177,7 @@ export interface RawCli {
   command?: string;
   sessionModel?: string;
   sessionEffort?: string;
+  installSkills?: boolean;
 }
 export type RawClis = Partial<Record<HarnessId, RawCli>>;
 
@@ -236,7 +239,15 @@ export interface SetCliRequest {
   command?: string | null;
   sessionModel?: string | null;
   sessionEffort?: string | null;
+  /** HIVE-372. Codex only. `false` deletes the key. */
+  installSkills?: boolean;
 }
+
+/** HIVE-372. What the opt-in Codex plugin install last found or did. */
+export type CodexPluginStatus =
+  | { state: 'off' }
+  | { state: 'installed'; version: string }
+  | { state: 'failed'; command: string; message: string };
 
 /**
  * Payload of `config:set-cli-agents` (HIVE-341). An absent field is left alone; `null` clears a
