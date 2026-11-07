@@ -112,6 +112,9 @@ export async function runDeviceFlow(deps: DeviceFlowDeps, input: DeviceFlowInput
     expiresIn,
   });
 
+  // A dropped request or an error-less 5xx in a ten-minute wait is weather, not an answer: keep polling, and only
+  // if the failure lasts to the deadline does it become the outcome.
+  let transient: DeviceFlowError | undefined;
   for (;;) {
     try {
       await deps.sleep(intervalMs, signal);
@@ -119,8 +122,22 @@ export async function runDeviceFlow(deps: DeviceFlowDeps, input: DeviceFlowInput
       throw new DeviceFlowError('aborted');
     }
     if (signal.aborted) throw new DeviceFlowError('aborted');
-    if (deps.now() >= deadline) throw new DeviceFlowError('expired');
-    const poll = await post(deps, '/api/oauth/token', { grant_type: DEVICE_GRANT, device_code: deviceCode }, signal);
+    if (deps.now() >= deadline) throw transient ?? new DeviceFlowError('expired');
+    let poll: { ok: boolean; body: unknown };
+    try {
+      poll = await post(deps, '/api/oauth/token', { grant_type: DEVICE_GRANT, device_code: deviceCode }, signal);
+    } catch (failure) {
+      if (failure instanceof DeviceFlowError && failure.kind === 'network') {
+        transient = failure;
+        continue;
+      }
+      throw failure;
+    }
+    if (!poll.ok && stringField(poll.body, 'error') === undefined) {
+      transient = new DeviceFlowError('refused', stringField(poll.body, 'error_description') ?? 'the cloud refused');
+      continue;
+    }
+    transient = undefined;
     if (poll.ok) {
       const token = parseTokenResponse(poll.body);
       if (!token) throw new DeviceFlowError('refused', 'the cloud answered with something that is not a token');

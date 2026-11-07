@@ -146,11 +146,43 @@ describe('runDeviceFlow', () => {
     await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind: 'refused' });
   });
 
-  it('a transport failure on either call is network', async () => {
-    const first = harness([new CloudError('network', 'ECONNREFUSED')]);
-    await expect(runDeviceFlow(first.deps, input())).rejects.toMatchObject({ kind: 'network' });
-    const second = harness([json(200, CODE), new CloudError('network', 'ETIMEDOUT')]);
-    await expect(runDeviceFlow(second.deps, input())).rejects.toMatchObject({ kind: 'network' });
+  it('a transport failure on the code request is network', async () => {
+    const { deps } = harness([new CloudError('network', 'ECONNREFUSED')]);
+    await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind: 'network' });
+  });
+
+  it('a transient poll failure keeps polling: a dropped request or an error-less 5xx', async () => {
+    const { deps, forms } = harness([
+      json(200, CODE),
+      new CloudError('network', 'ETIMEDOUT'),
+      new Response('bad gateway', { status: 502 }),
+      json(503, {}),
+      json(200, TOKEN),
+    ]);
+    await expect(runDeviceFlow(deps, input())).resolves.toMatchObject({ accessToken: 'at-1' });
+    expect(forms).toHaveLength(5);
+  });
+
+  it('poll failures that last to the deadline end as the last failure, not expired', async () => {
+    // Each sleep advances 400 s: polls at 400 s, then the 800 s check crosses expires_in 600.
+    const network = harness([json(200, CODE), new CloudError('network', 'ETIMEDOUT')], { clockStep: 400_000 });
+    await expect(runDeviceFlow(network.deps, input())).rejects.toMatchObject({
+      kind: 'network',
+      message: expect.stringContaining('ETIMEDOUT'),
+    });
+    const server = harness([json(200, CODE), new Response('not json', { status: 500 })], { clockStep: 400_000 });
+    await expect(runDeviceFlow(server.deps, input())).rejects.toMatchObject({
+      kind: 'refused',
+      message: 'refused: the cloud refused',
+    });
+  });
+
+  it('a pending poll after a transient failure clears it, so the deadline is expired again', async () => {
+    const { deps } = harness(
+      [json(200, CODE), new CloudError('network', 'ETIMEDOUT'), json(400, { error: 'authorization_pending' })],
+      { clockStep: 250_000 },
+    );
+    await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind: 'expired' });
   });
 
   it('expires locally once expires_in has passed, without another poll', async () => {
@@ -240,10 +272,8 @@ describe('runDeviceFlow', () => {
   it.each([
     [{ error: 'server_error', error_description: 'try later' }, 'refused: try later'],
     [{ error: 'server_error' }, 'refused: server_error'],
-    [null, 'refused: the cloud refused'],
   ])('a refused poll carries the best description it has (%o)', async (body, message) => {
-    const answer = body === null ? new Response('not json', { status: 500 }) : json(400, body);
-    const { deps } = harness([json(200, CODE), answer]);
+    const { deps } = harness([json(200, CODE), json(400, body)]);
     await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind: 'refused', message });
   });
 
